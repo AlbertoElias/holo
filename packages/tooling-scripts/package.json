@@ -1,0 +1,10 @@
+{
+  "name": "@holoim/tooling-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./doctor-core": "./src/doctor-core.mjs",
+    "./git-changed": "./src/git-changed.mjs"
+  }
+}

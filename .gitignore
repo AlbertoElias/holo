@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds and test outputs
+dist/
+coverage/
+output/
+playwright-report/
+test-results/
+
+# local runtime artifacts
+apps/viewer-api/uploads/
+apps/viewer-web/.cert/
+
+# env and logs
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# temp and editor files
+.DS_Store
+.tmp_*
+scratch/
+.agent/
+.claude/

@@ -1,0 +1,140 @@
+import { useRef, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
+import type { HologramDTO } from "@holoim/contracts";
+
+import { uploadHologram } from "../feed/api";
+
+type UploadPanelProps = {
+  onUploaded: (item: HologramDTO) => void;
+};
+
+const submittedByStorageKey = "holoim.upload.submittedBy";
+
+export function UploadPanel({ onUploaded }: UploadPanelProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [hologramName, setHologramName] = useState("");
+  const [isExpanded, setIsExpanded] = useState(() => {
+    // Start expanded on desktop (where toggle is hidden), collapsed on mobile
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.innerWidth > 768;
+  });
+  const [submittedBy, setSubmittedBy] = useState(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    return window.localStorage.getItem(submittedByStorageKey) ?? "";
+  });
+
+  function onFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setError(null);
+    const file = event.target.files?.[0];
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    setSelectedFile(file);
+    if (!hologramName.trim()) {
+      setHologramName(file.name.replace(/\.glb$/i, ""));
+    }
+  }
+
+  function onSubmittedByChange(event: ChangeEvent<HTMLInputElement>) {
+    const value = event.target.value;
+    setError(null);
+    setSubmittedBy(value);
+    window.localStorage.setItem(submittedByStorageKey, value);
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedFile) {
+      setError("Please choose a GLB file first.");
+      return;
+    }
+
+    const trimmedName = hologramName.trim();
+    const trimmedSubmittedBy = submittedBy.trim();
+    if (!trimmedName || !trimmedSubmittedBy) {
+      setError("Hologram name and submitted by are required.");
+      return;
+    }
+
+    setIsUploading(true);
+    setError(null);
+    try {
+      const uploaded = await uploadHologram({
+        file: selectedFile,
+        hologramName: trimmedName,
+        submittedBy: trimmedSubmittedBy
+      });
+      onUploaded(uploaded);
+      setSelectedFile(null);
+      setHologramName("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Upload failed");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  return (
+    <section className={`upload-panel ${isExpanded ? "upload-panel-expanded" : ""}`}>
+      <button
+        type="button"
+        className="upload-toggle"
+        onClick={() => setIsExpanded(!isExpanded)}
+        aria-label={isExpanded ? "Collapse upload panel" : "Expand upload panel"}
+      >
+        {isExpanded ? "✕" : "⬆ Upload"}
+      </button>
+      {isExpanded && (
+        <form onSubmit={onSubmit}>
+          <label htmlFor="glb-upload" className="upload-title">
+            Upload Hologram
+          </label>
+          <label className="upload-field">
+            Hologram name
+            <input
+              value={hologramName}
+              onChange={(event) => {
+                setError(null);
+                setHologramName(event.target.value);
+              }}
+              maxLength={120}
+              disabled={isUploading}
+            />
+          </label>
+          <label className="upload-field">
+            Submitted by
+            <input value={submittedBy} onChange={onSubmittedByChange} maxLength={80} disabled={isUploading} />
+          </label>
+          <input
+            ref={fileInputRef}
+            id="glb-upload"
+            type="file"
+            accept=".glb,model/gltf-binary"
+            onChange={onFileChange}
+            disabled={isUploading}
+          />
+          <p className="upload-caption">
+            {selectedFile ? `Selected: ${selectedFile.name}` : "GLB only, up to 25MB"}
+          </p>
+          <button type="submit" disabled={isUploading || !selectedFile}>
+            {isUploading ? "Uploading..." : "Upload"}
+          </button>
+          {error ? <p className="upload-error">{error}</p> : null}
+        </form>
+      )}
+    </section>
+  );
+}

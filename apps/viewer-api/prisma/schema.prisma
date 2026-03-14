@@ -1,0 +1,24 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Hologram {
+  id               String   @id @default(cuid())
+  filenameOriginal String
+  hologramName     String
+  submittedBy      String
+  filenameStored   String
+  mimeType         String
+  sizeBytes        Int
+  storagePath      String
+  durationSec      Float?
+  usdzPath         String?
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+}

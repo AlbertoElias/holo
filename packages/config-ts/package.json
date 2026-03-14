@@ -1,0 +1,11 @@
+{
+  "name": "@holoim/config-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "base.json",
+    "node.json",
+    "web.json"
+  ]
+}

@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.DS_Store
+
+# Local editor and temp files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Local runtime artifacts
+output/
+progress.md
+.tmp_web_game_playwright_client.js
+.vite-dev.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example

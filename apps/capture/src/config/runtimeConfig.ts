@@ -1,0 +1,49 @@
+export interface RuntimeConfig {
+  sceneUrl: string;
+  avatarUrl: string;
+  avatarHeightOverride: number;
+  avatarScaleMultiplier: number;
+  sceneScaleOverride: number;
+  sceneSpanAvatars: number;
+  embodyOffset: number;
+  avatarForwardOffset: number;
+  handTrackPitchDeg: number;
+  handTrackYawDeg: number;
+  handTrackRollDeg: number;
+  handTrackInwardYawDeg: number;
+  handFingerCurlGain: number;
+  handRetargetMode: 'hybrid' | 'legacy';
+  controllerTrackPitchDeg: number;
+  controllerTrackYawDeg: number;
+  controllerTrackRollDeg: number;
+  mockVrEnabledFromQuery: boolean;
+}
+
+export function loadRuntimeConfig(search = window.location.search): RuntimeConfig {
+  const query = new URLSearchParams(search);
+  const defaultSceneUrl = '/models/scene.glb';
+  const defaultAvatarUrl = '/models/avatar.glb';
+  const handRetargetModeQuery = (query.get('handRetargetMode') ?? 'hybrid').toLowerCase();
+  const handRetargetMode = handRetargetModeQuery === 'legacy' ? 'legacy' : 'hybrid';
+
+  return {
+    sceneUrl: query.get('scene') ?? defaultSceneUrl,
+    avatarUrl: query.get('avatar') ?? defaultAvatarUrl,
+    avatarHeightOverride: Number(query.get('avatarHeight')),
+    avatarScaleMultiplier: Number(query.get('avatarScale') ?? '1'),
+    sceneScaleOverride: Number(query.get('sceneScale')),
+    sceneSpanAvatars: Number(query.get('sceneSpanAvatars') ?? '72'),
+    embodyOffset: Number(query.get('embodyOffset') ?? '0'),
+    avatarForwardOffset: Number(query.get('avatarForwardOffset') ?? `${Math.PI}`),
+    handTrackPitchDeg: Number(query.get('handTrackPitchDeg') ?? '0'),
+    handTrackYawDeg: Number(query.get('handTrackYawDeg') ?? '180'),
+    handTrackRollDeg: Number(query.get('handTrackRollDeg') ?? '0'),
+    handTrackInwardYawDeg: Number(query.get('handTrackInwardYawDeg') ?? '30'),
+    handFingerCurlGain: Number(query.get('handFingerCurlGain') ?? '1.0'),
+    handRetargetMode,
+    controllerTrackPitchDeg: Number(query.get('controllerTrackPitchDeg') ?? '0'),
+    controllerTrackYawDeg: Number(query.get('controllerTrackYawDeg') ?? '180'),
+    controllerTrackRollDeg: Number(query.get('controllerTrackRollDeg') ?? '0'),
+    mockVrEnabledFromQuery: query.get('mockVr') === '1'
+  };
+}

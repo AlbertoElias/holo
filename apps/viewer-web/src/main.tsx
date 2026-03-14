@@ -1,0 +1,28 @@
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { RouterProvider } from "react-router-dom";
+
+import { router } from "./app/router";
+import "./styles/global.css";
+
+// Debug logging for development
+console.log("HoloIM Viewer starting...");
+console.log("API Origin:", import.meta.env.VITE_API_ORIGIN);
+console.log("WebXR available:", "xr" in navigator);
+
+// Only show alerts in development, and only for critical errors
+if (import.meta.env.DEV) {
+  window.addEventListener("error", (event) => {
+    console.error("Global error:", event.error);
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("Unhandled rejection:", event.reason);
+  });
+}
+
+createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <RouterProvider router={router} />
+  </React.StrictMode>
+);

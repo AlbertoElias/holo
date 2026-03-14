@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebXR Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      background: #f0f0f0;
+    }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+  <h1>WebXR Test Page</h1>
+  <div id="results"></div>
+
+  <script>
+    const results = document.getElementById('results');
+
+    function addStatus(message, isError = false) {
+      const div = document.createElement('div');
+      div.className = `status ${isError ? 'error' : 'success'}`;
+      div.textContent = message;
+      results.appendChild(div);
+    }
+
+    // Test 1: Basic page load
+    addStatus('✓ Page loaded successfully');
+
+    // Test 2: Check for WebXR API
+    if ('xr' in navigator) {
+      addStatus('✓ navigator.xr is available');
+
+      // Test 3: Check AR support
+      navigator.xr.isSessionSupported('immersive-ar')
+        .then(supported => {
+          if (supported) {
+            addStatus('✓ immersive-ar is supported!');
+          } else {
+            addStatus('✗ immersive-ar is NOT supported', true);
+          }
+        })
+        .catch(err => {
+          addStatus(`✗ Error checking AR support: ${err.message}`, true);
+        });
+    } else {
+      addStatus('✗ navigator.xr is NOT available', true);
+      addStatus('This browser does not support WebXR', true);
+    }
+
+    // Test 4: Check protocol
+    addStatus(`Protocol: ${window.location.protocol}`);
+    if (window.location.protocol === 'https:' || window.location.hostname === 'localhost') {
+      addStatus('✓ Protocol is suitable for WebXR');
+    } else {
+      addStatus('✗ HTTPS required for WebXR (except localhost)', true);
+    }
+
+    // Test 5: User agent
+    addStatus(`User Agent: ${navigator.userAgent}`);
+  </script>
+</body>
+</html>

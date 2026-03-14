@@ -1,0 +1,48 @@
+{
+  "name": "@holoim/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -p tsconfig.app.json && vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "test": "vitest run",
+    "verify:fast": "pnpm run lint && pnpm run typecheck",
+    "verify:full": "pnpm run verify:fast && pnpm run test && pnpm run build",
+    "test:e2e": "playwright test",
+    "test:e2e:mocked": "XR_TEST_MODE=polyfill playwright test e2e/hologram-feed.spec.ts",
+    "test:e2e:integration": "RUN_E2E_INTEGRATION=1 XR_TEST_MODE=polyfill playwright test e2e/hologram-feed.integration.spec.ts"
+  },
+  "dependencies": {
+    "@holoim/contracts": "workspace:*",
+    "@react-three/drei": "^9.120.4",
+    "@react-three/fiber": "^8.17.14",
+    "@react-three/xr": "^6.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.1.5",
+    "three": "^0.173.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@holoim/config-eslint": "workspace:*",
+    "@holoim/config-ts": "workspace:*",
+    "@holoim/tooling-testing": "workspace:*",
+    "@playwright/test": "^1.50.1",
+    "eslint": "^9.39.2",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/three": "^0.173.0",
+    "@vitejs/plugin-basic-ssl": "^2.1.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^26.0.0",
+    "webxr-polyfill": "^2.0.3",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  }
+}
