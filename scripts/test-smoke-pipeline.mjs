@@ -5,7 +5,7 @@ import { fetchWithRetry, findAvailablePort, runCommand, stopProcess, waitForServ
 
 const rootDir = process.cwd();
 const apiWorkingDir = path.join(rootDir, 'apps', 'viewer-api');
-const fixturePath = path.join(rootDir, 'apps', 'capture', 'public', 'models', 'avatar.glb');
+const fixturePath = path.join(rootDir, 'apps', 'capture', 'public', 'gltf', 'models', 'avatar.glb');
 const host = process.env.SMOKE_API_HOST ?? '127.0.0.1';
 const configuredPort = Number(process.env.SMOKE_API_PORT ?? '3001');
 const configuredBaseUrl = process.env.BASE_URL;
@@ -38,7 +38,7 @@ async function main() {
         env: {
           ...process.env,
           PORT: String(port),
-          WEB_ORIGIN: 'http://127.0.0.1:3174'
+          WEB_ORIGIN: 'https://localhost:3174'
         }
       });
     }

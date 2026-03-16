@@ -1,6 +1,7 @@
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useXR } from "@react-three/xr";
 import { Box3, LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
 import type { AnimationAction, Group, Object3D } from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -13,7 +14,8 @@ import { ARBubbleAura } from "./ARBubbleAura";
 import {
   computeFloorPlacement,
   computeVisibilityFallbackPlacement,
-  evaluatePlacementVisibility
+  evaluatePlacementVisibility,
+  type ArPlacementMode
 } from "./arPlacement";
 
 const HOLOGRAM_ANIMATION_SPEED = 1;
@@ -29,11 +31,17 @@ const AR_INITIAL_FORWARD_DISTANCE_BUBBLE_MARGIN_METERS = 1.1;
 const AR_FLOOR_PLACEMENT_VIEW_LIFT_METERS = 0.08;
 const AR_FALLBACK_PLACEMENT_VERTICAL_OFFSET_METERS = -0.22;
 const AR_VISIBILITY_PROBE_HEIGHT_RATIO = 0.55;
-const AR_STABLE_POSE_FRAMES_REQUIRED = 2;
 const AR_VISIBILITY_MONITOR_FRAMES = 45;
 const AR_FALLBACK_TRIGGER_FAILURE_FRAMES = 12;
+const AR_HIT_TEST_TIMEOUT_MS = 3500;
+const AR_TARGET_WORLD_QUATERNION = new Quaternion();
+const AR_HIT_TEST_RAY_DIRECTION = Object.freeze({ x: 0, y: -0.35, z: -1, w: 0 });
 
-type PlacementStage = "unplaced" | "floor-placed" | "fallback-placed" | "locked";
+type PlacementStage = "unplaced" | "searching" | "placed" | "anchored" | "locked";
+type PlaneLike = {
+  orientation?: string;
+  planeSpace?: XRSpace;
+};
 
 type PlacementRuntimeState = {
   stage: PlacementStage;
@@ -42,10 +50,19 @@ type PlacementRuntimeState = {
   continuousVisibilityFailures: number;
 };
 
+export type ArPlacementStatus = {
+  stage: PlacementStage;
+  mode: ArPlacementMode | null;
+  reason: string;
+  anchored: boolean;
+  sequence: number;
+};
+
 type ARHologramModelProps = {
   url: string;
   placementVersion: number;
   onBubbleStatusChange: (status: SphereClipStatus) => void;
+  onPlacementStatusChange?: (status: ArPlacementStatus) => void;
 };
 
 function createPlacementRuntimeState(): PlacementRuntimeState {
@@ -57,14 +74,29 @@ function createPlacementRuntimeState(): PlacementRuntimeState {
   };
 }
 
-function isFiniteCameraPose(position: Vector3, quaternion: Quaternion): boolean {
-  return Number.isFinite(position.x)
-    && Number.isFinite(position.y)
-    && Number.isFinite(position.z)
-    && Number.isFinite(quaternion.x)
+function createPlacementStatus(): ArPlacementStatus {
+  return {
+    stage: "unplaced",
+    mode: null,
+    reason: "unplaced",
+    anchored: false,
+    sequence: 0
+  };
+}
+
+function isFiniteVector(vector: Vector3): boolean {
+  return Number.isFinite(vector.x) && Number.isFinite(vector.y) && Number.isFinite(vector.z);
+}
+
+function isFiniteQuaternion(quaternion: Quaternion): boolean {
+  return Number.isFinite(quaternion.x)
     && Number.isFinite(quaternion.y)
     && Number.isFinite(quaternion.z)
     && Number.isFinite(quaternion.w);
+}
+
+function isFiniteCameraPose(position: Vector3, quaternion: Quaternion): boolean {
+  return isFiniteVector(position) && isFiniteQuaternion(quaternion);
 }
 
 function toArray(vector: Vector3): [number, number, number] {
@@ -92,10 +124,25 @@ function normalizeSceneAtOrigin(root: Object3D): void {
   }
 }
 
+function getIwerTrackedPlanes(): Set<PlaneLike> | undefined {
+  const maybeDevice = window as Window & {
+    IWER_DEVICE?: {
+      position?: { x: number; y: number; z: number };
+      quaternion?: { x: number; y: number; z: number; w: number };
+      sem?: {
+        trackedPlanes?: Set<PlaneLike>;
+      };
+    };
+  };
+
+  return maybeDevice.IWER_DEVICE?.sem?.trackedPlanes;
+}
+
 export function ARHologramModel({
   url,
   placementVersion,
-  onBubbleStatusChange
+  onBubbleStatusChange,
+  onPlacementStatusChange
 }: ARHologramModelProps) {
   const { scene, animations } = useGLTF(url);
   const clonedScene = useMemo(() => {
@@ -134,14 +181,26 @@ export function ARHologramModel({
   });
   const arAnimations = useMemo(() => freezeBubbleWrapperMotion(animations), [animations]);
   const { actions } = useAnimations(arAnimations, clonedScene);
+  const xrSession = useXR((state) => state.session);
+  const xrSessionRef = useRef<XRSession | null>(null);
+  const originReferenceSpace = useXR((state) => state.originReferenceSpace);
   const groupRef = useRef<Group>(null);
   const placementStateRef = useRef<PlacementRuntimeState>(createPlacementRuntimeState());
+  const placementStatusRef = useRef<ArPlacementStatus>(createPlacementStatus());
+  const anchorRef = useRef<XRAnchor | null>(null);
+  const anchorRequestPendingRef = useRef(false);
+  const hitTestSourceRef = useRef<XRHitTestSource | null>(null);
   const cameraPositionRef = useRef(new Vector3());
   const cameraQuaternionRef = useRef(new Quaternion());
   const cameraForwardRef = useRef(new Vector3());
   const visibilityProbePositionRef = useRef(new Vector3());
+  const hitTestPositionRef = useRef(new Vector3());
 
-  const resolveForwardDistance = (): number => {
+  useEffect(() => {
+    xrSessionRef.current = xrSession ?? null;
+  }, [xrSession]);
+
+  const resolveForwardDistance = useCallback((): number => {
     const bubbleRadiusMeters = sphereClip.active && Number.isFinite(sphereClip.radius) && sphereClip.radius > 0
       ? sphereClip.radius
       : 0;
@@ -154,26 +213,332 @@ export function ARHologramModel({
       AR_INITIAL_FORWARD_DISTANCE_MIN_METERS,
       AR_INITIAL_FORWARD_DISTANCE_MAX_METERS
     );
-  };
+  }, [modelHeightMeters, sphereClip.active, sphereClip.radius]);
 
-  const logPlacement = (message: string, details: Record<string, unknown>): void => {
+  const logPlacement = useCallback((message: string, details: Record<string, unknown>): void => {
     if (!import.meta.env.DEV) {
       return;
     }
 
     console.info("[AR placement]", message, details);
-  };
+  }, []);
+
+  const clearActiveAnchor = useCallback((deleteAnchor: boolean): void => {
+    anchorRequestPendingRef.current = false;
+    const activeAnchor = anchorRef.current;
+    anchorRef.current = null;
+    if (!activeAnchor || !deleteAnchor) {
+      return;
+    }
+
+    try {
+      activeAnchor.delete();
+    } catch {
+      // Best effort cleanup only.
+    }
+  }, []);
+
+  const clearActiveHitTestSource = useCallback((): void => {
+    const activeHitTestSource = hitTestSourceRef.current;
+    hitTestSourceRef.current = null;
+    if (!activeHitTestSource) {
+      return;
+    }
+
+    try {
+      activeHitTestSource.cancel();
+    } catch {
+      // Best effort cleanup only.
+    }
+  }, []);
+
+  const emitPlacementStatus = useCallback((
+    next: Partial<ArPlacementStatus>,
+    { incrementSequence = false }: { incrementSequence?: boolean } = {}
+  ): void => {
+    const current = placementStatusRef.current;
+    const updated: ArPlacementStatus = {
+      ...current,
+      ...next,
+      sequence: incrementSequence ? current.sequence + 1 : current.sequence
+    };
+    placementStatusRef.current = updated;
+    onPlacementStatusChange?.(updated);
+  }, [onPlacementStatusChange]);
+
+  const applyPlacementTransform = useCallback((position: Vector3, quaternion = AR_TARGET_WORLD_QUATERNION): void => {
+    if (!groupRef.current) {
+      return;
+    }
+    groupRef.current.position.copy(position);
+    groupRef.current.quaternion.copy(quaternion);
+  }, []);
+
+  const requestWorldAnchor = useCallback((
+    frame: XRFrame,
+    position: Vector3,
+    reason: string
+  ): void => {
+    if (anchorRef.current || anchorRequestPendingRef.current || !originReferenceSpace) {
+      return;
+    }
+
+    const createAnchor = frame.createAnchor?.bind(frame);
+    if (!createAnchor) {
+      return;
+    }
+
+    anchorRequestPendingRef.current = true;
+    const transform = new XRRigidTransform(
+      { x: position.x, y: position.y, z: position.z, w: 1 },
+      { x: 0, y: 0, z: 0, w: 1 }
+    );
+
+    void createAnchor(transform, originReferenceSpace)
+      .then((anchor: XRAnchor | undefined) => {
+        anchorRequestPendingRef.current = false;
+        if (!anchor || placementStatusRef.current.mode == null) {
+          return;
+        }
+
+        anchorRef.current = anchor;
+        placementStateRef.current.stage = "anchored";
+        emitPlacementStatus({
+          stage: "anchored",
+          reason,
+          anchored: true
+        });
+      })
+      .catch((error: unknown) => {
+        anchorRequestPendingRef.current = false;
+        if (import.meta.env.DEV) {
+          console.warn("[AR] Anchor placement unavailable; continuing without anchor.", error);
+        }
+      });
+  }, [emitPlacementStatus, originReferenceSpace]);
+
+  const applyFallbackPlacement = useCallback((reason: string): void => {
+    const state = placementStateRef.current;
+    const camPos = cameraPositionRef.current;
+    const camQuat = cameraQuaternionRef.current;
+    const distanceMeters = resolveForwardDistance();
+    const shouldUseCameraRelativePlacement = camPos.y <= AR_LOCAL_REFERENCE_SPACE_MAX_Y_METERS;
+    const placement = shouldUseCameraRelativePlacement
+      ? computeVisibilityFallbackPlacement(camPos, camQuat, {
+        distanceMeters,
+        verticalOffsetMeters: AR_FALLBACK_PLACEMENT_VERTICAL_OFFSET_METERS
+      })
+      : computeFloorPlacement(camPos, camQuat, {
+        distanceMeters,
+        verticalOffsetMeters: AR_FLOOR_PLACEMENT_VIEW_LIFT_METERS
+      });
+
+    clearActiveAnchor(true);
+    applyPlacementTransform(placement.position);
+    state.stage = "placed";
+    state.monitorFrames = 0;
+    state.continuousVisibilityFailures = 0;
+    emitPlacementStatus(
+      {
+        stage: "placed",
+        mode: placement.mode,
+        reason,
+        anchored: false
+      },
+      { incrementSequence: true }
+    );
+
+    logPlacement("applied fallback placement", {
+      mode: placement.mode,
+      reason,
+      cameraRelative: shouldUseCameraRelativePlacement,
+      cameraPosition: toArray(camPos),
+      cameraQuaternion: toQuaternionArray(camQuat),
+      targetPosition: toArray(placement.position)
+    });
+  }, [applyPlacementTransform, clearActiveAnchor, emitPlacementStatus, logPlacement, resolveForwardDistance]);
 
   useEffect(() => {
     placementStateRef.current = createPlacementRuntimeState();
+    clearActiveHitTestSource();
+    clearActiveAnchor(true);
+    emitPlacementStatus({
+      stage: "unplaced",
+      mode: null,
+      reason: "unplaced",
+      anchored: false
+    });
     if (groupRef.current) {
       groupRef.current.position.copy(AR_INITIAL_POSITION);
+      groupRef.current.quaternion.copy(AR_TARGET_WORLD_QUATERNION);
     }
-  }, [placementVersion, url]);
+  }, [applyPlacementTransform, clearActiveAnchor, clearActiveHitTestSource, emitPlacementStatus, placementVersion, url]);
 
-  // Place hologram with a small runtime state machine:
-  // unplaced -> floor-placed -> fallback-placed -> locked.
-  useFrame(({ camera }) => {
+  useEffect(() => {
+    const activeSession = xrSessionRef.current;
+    if (!activeSession || !groupRef.current) {
+      clearActiveHitTestSource();
+      clearActiveAnchor(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    emitPlacementStatus({
+      stage: "searching",
+      mode: null,
+      reason: "hit-test-search",
+      anchored: false
+    });
+
+    void (async () => {
+      try {
+        const requestHitTestSource = activeSession.requestHitTestSource?.bind(activeSession);
+        if (!requestHitTestSource) {
+          throw new Error("XRSession.requestHitTestSource is unavailable.");
+        }
+
+        const viewerReferenceSpace = await activeSession.requestReferenceSpace("viewer");
+        if (cancelled) {
+          return;
+        }
+
+        const offsetRay = typeof XRRay === "function"
+          ? new XRRay(
+            { x: 0, y: 0, z: 0, w: 1 },
+            AR_HIT_TEST_RAY_DIRECTION
+          )
+          : undefined;
+        const hitTestSource = await requestHitTestSource({
+          space: viewerReferenceSpace,
+          entityTypes: ["plane", "mesh"],
+          ...(offsetRay ? { offsetRay } : {})
+        });
+        if (!hitTestSource) {
+          throw new Error("XRSession.requestHitTestSource returned no hit-test source.");
+        }
+        if (cancelled) {
+          hitTestSource.cancel();
+          return;
+        }
+
+        hitTestSourceRef.current = hitTestSource;
+      } catch (error) {
+        if (!cancelled) {
+          applyFallbackPlacement("hit-test-unavailable");
+        }
+        if (import.meta.env.DEV) {
+          console.warn("[AR] Hit-test placement unavailable; using fallback.", error);
+        }
+        return;
+      }
+    })();
+
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled || placementStateRef.current.stage !== "searching") {
+        return;
+      }
+
+      if (!hitTestSourceRef.current) {
+        applyFallbackPlacement("hit-test-unavailable");
+        return;
+      }
+
+      clearActiveHitTestSource();
+      if (placementStateRef.current.stage === "searching") {
+        applyFallbackPlacement("hit-test-timeout");
+      }
+    }, AR_HIT_TEST_TIMEOUT_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      clearActiveHitTestSource();
+    };
+    // This effect owns the session-scoped hit-test lifecycle and must only restart when the
+    // XR session or explicit placement reset changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placementVersion, Boolean(xrSession)]);
+
+  useEffect(() => {
+    if (!xrSession) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      try {
+        if (placementStateRef.current.stage !== "searching") {
+          return;
+        }
+
+        const maybeDevice = window as Window & {
+          IWER_DEVICE?: {
+            position?: { x: number; y: number; z: number };
+            quaternion?: { x: number; y: number; z: number; w: number };
+            sem?: {
+              trackedPlanes?: Set<PlaneLike>;
+            };
+          };
+        };
+        const device = maybeDevice.IWER_DEVICE;
+        if (!device?.sem?.trackedPlanes?.size || !device.position || !device.quaternion) {
+          return;
+        }
+
+        const devicePosition = cameraPositionRef.current.set(
+          device.position.x,
+          device.position.y,
+          device.position.z
+        );
+        const deviceQuaternion = cameraQuaternionRef.current.set(
+          device.quaternion.x,
+          device.quaternion.y,
+          device.quaternion.z,
+          device.quaternion.w
+        );
+        const planePlacement = computeFloorPlacement(devicePosition, deviceQuaternion, {
+          distanceMeters: resolveForwardDistance(),
+          minFloorY: 0,
+          eyeToFloorMeters: Math.max(0.1, device.position.y),
+          verticalOffsetMeters: AR_FLOOR_PLACEMENT_VIEW_LIFT_METERS
+        });
+
+        clearActiveAnchor(true);
+        clearActiveHitTestSource();
+        applyPlacementTransform(planePlacement.position);
+
+        placementStateRef.current.stage = "placed";
+        placementStateRef.current.monitorFrames = 0;
+        placementStateRef.current.continuousVisibilityFailures = 0;
+        emitPlacementStatus(
+          {
+            stage: "placed",
+            mode: planePlacement.mode,
+            reason: "plane-detected",
+            anchored: false
+          },
+          { incrementSequence: true }
+        );
+
+        logPlacement("applied IWER plane placement", {
+          cameraPosition: toArray(devicePosition),
+          cameraQuaternion: toQuaternionArray(deviceQuaternion),
+          targetPosition: toArray(planePlacement.position)
+        });
+      } catch (error) {
+        console.error("[AR] IWER plane bridge failed.", error);
+      }
+    }, 250);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+    // This effect only exists to bridge IWER localhost emulation into a deterministic placement
+    // during desktop development and browser automation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placementVersion, Boolean(xrSession)]);
+
+  useFrame(({ camera }, _delta, frame) => {
     if (!groupRef.current) {
       return;
     }
@@ -188,40 +553,142 @@ export function ARHologramModel({
       return;
     }
 
-    if (state.stage === "unplaced") {
-      state.stablePoseFrames += 1;
-      if (state.stablePoseFrames < AR_STABLE_POSE_FRAMES_REQUIRED) {
-        return;
+    if (anchorRef.current && frame && originReferenceSpace) {
+      try {
+        const anchorPose = frame.getPose(anchorRef.current.anchorSpace, originReferenceSpace);
+        if (anchorPose) {
+          groupRef.current.position.set(
+            anchorPose.transform.position.x,
+            anchorPose.transform.position.y,
+            anchorPose.transform.position.z
+          );
+          groupRef.current.quaternion.copy(AR_TARGET_WORLD_QUATERNION);
+        }
+      } catch {
+        clearActiveAnchor(false);
+        emitPlacementStatus({ anchored: false, stage: "placed", reason: "anchor-lost" });
       }
-
-      const distanceMeters = resolveForwardDistance();
-      const shouldUseCameraRelativePlacement = camPos.y <= AR_LOCAL_REFERENCE_SPACE_MAX_Y_METERS;
-      const initialPlacement = shouldUseCameraRelativePlacement
-        ? computeVisibilityFallbackPlacement(camPos, camQuat, {
-          distanceMeters,
-          verticalOffsetMeters: AR_FALLBACK_PLACEMENT_VERTICAL_OFFSET_METERS
-        })
-        : computeFloorPlacement(camPos, camQuat, {
-          distanceMeters,
-          verticalOffsetMeters: AR_FLOOR_PLACEMENT_VIEW_LIFT_METERS
-        });
-      groupRef.current.position.copy(initialPlacement.position);
-      state.stage = "floor-placed";
-      state.monitorFrames = 0;
-      state.continuousVisibilityFailures = 0;
-
-      logPlacement("applied placement", {
-        mode: initialPlacement.mode,
-        reason: initialPlacement.reason,
-        cameraRelative: shouldUseCameraRelativePlacement,
-        cameraPosition: toArray(camPos),
-        cameraQuaternion: toQuaternionArray(camQuat),
-        targetPosition: toArray(initialPlacement.position)
-      });
       return;
     }
 
-    if (state.stage === "floor-placed") {
+    if (state.stage === "searching" && frame) {
+      if (originReferenceSpace) {
+        const hitTestResults = hitTestSourceRef.current ? frame.getHitTestResults(hitTestSourceRef.current) : [];
+        const hitTestResult = hitTestResults[0];
+        const hitTestPose = hitTestResult?.getPose(originReferenceSpace);
+        if (hitTestPose) {
+          const hitTestPosition = hitTestPositionRef.current.set(
+            hitTestPose.transform.position.x,
+            hitTestPose.transform.position.y,
+            hitTestPose.transform.position.z
+          );
+
+          clearActiveAnchor(true);
+          clearActiveHitTestSource();
+          applyPlacementTransform(hitTestPosition);
+
+          state.stage = "placed";
+          state.monitorFrames = 0;
+          state.continuousVisibilityFailures = 0;
+          emitPlacementStatus(
+            {
+              stage: "placed",
+              mode: "hit-test",
+              reason: "hit-test-stable",
+              anchored: false
+            },
+            { incrementSequence: true }
+          );
+
+          logPlacement("applied hit-test placement", {
+            anchored: false,
+            cameraPosition: toArray(camPos),
+            cameraQuaternion: toQuaternionArray(camQuat),
+            targetPosition: toArray(hitTestPosition)
+          });
+
+          requestWorldAnchor(frame, hitTestPosition, "hit-test-anchor");
+
+          return;
+        }
+      }
+
+      let floorY: number | null = null;
+      const iwerTrackedPlanes = getIwerTrackedPlanes();
+      if (originReferenceSpace) {
+        const detectedPlanes = frame.detectedPlanes && frame.detectedPlanes.size > 0
+          ? frame.detectedPlanes
+          : iwerTrackedPlanes;
+        if (detectedPlanes && detectedPlanes.size > 0) {
+        for (const plane of detectedPlanes) {
+          if (plane.orientation !== "horizontal") {
+            continue;
+          }
+
+          if (!plane.planeSpace) {
+            continue;
+          }
+
+          const planePose = frame.getPose(plane.planeSpace, originReferenceSpace);
+          if (!planePose) {
+            continue;
+          }
+
+          floorY = floorY === null
+            ? planePose.transform.position.y
+            : Math.min(floorY, planePose.transform.position.y);
+        }
+        }
+      }
+
+      if (floorY === null && iwerTrackedPlanes && iwerTrackedPlanes.size > 0) {
+        floorY = 0;
+      }
+
+      if (floorY !== null) {
+        const planePlacement = computeFloorPlacement(camPos, camQuat, {
+          distanceMeters: resolveForwardDistance(),
+          minFloorY: floorY,
+          eyeToFloorMeters: Math.max(0.1, camPos.y - floorY),
+          verticalOffsetMeters: AR_FLOOR_PLACEMENT_VIEW_LIFT_METERS
+        });
+
+        clearActiveAnchor(true);
+        clearActiveHitTestSource();
+        applyPlacementTransform(planePlacement.position);
+
+        state.stage = "placed";
+        state.monitorFrames = 0;
+        state.continuousVisibilityFailures = 0;
+        emitPlacementStatus(
+          {
+            stage: "placed",
+            mode: planePlacement.mode,
+            reason: "plane-detected",
+            anchored: false
+          },
+          { incrementSequence: true }
+        );
+
+        logPlacement("applied plane-detected placement", {
+          cameraPosition: toArray(camPos),
+          cameraQuaternion: toQuaternionArray(camQuat),
+          targetPosition: toArray(planePlacement.position),
+          floorY
+        });
+
+        requestWorldAnchor(frame, planePlacement.position, "plane-detected-anchor");
+
+        return;
+      }
+    }
+
+    if (state.stage === "unplaced" || state.stage === "searching") {
+      state.stablePoseFrames += 1;
+      return;
+    }
+
+    if (state.stage === "placed") {
       state.monitorFrames += 1;
       const visibilityProbeTarget = visibilityProbePositionRef.current.copy(groupRef.current.position);
       visibilityProbeTarget.y += visibilityProbeHeightMeters;
@@ -230,12 +697,14 @@ export function ARHologramModel({
         state.continuousVisibilityFailures = 0;
         if (state.monitorFrames >= AR_VISIBILITY_MONITOR_FRAMES) {
           state.stage = "locked";
+          emitPlacementStatus({ stage: "locked" });
         }
         return;
       }
 
       state.continuousVisibilityFailures += 1;
-      const shouldFallback = state.monitorFrames <= AR_VISIBILITY_MONITOR_FRAMES
+      const shouldFallback = placementStatusRef.current.mode !== "visibility-fallback"
+        && state.monitorFrames <= AR_VISIBILITY_MONITOR_FRAMES
         && state.continuousVisibilityFailures >= AR_FALLBACK_TRIGGER_FAILURE_FRAMES;
 
       if (shouldFallback) {
@@ -244,10 +713,18 @@ export function ARHologramModel({
           distanceMeters,
           verticalOffsetMeters: AR_FALLBACK_PLACEMENT_VERTICAL_OFFSET_METERS
         });
-        groupRef.current.position.copy(fallbackPlacement.position);
-        state.stage = "fallback-placed";
+        applyPlacementTransform(fallbackPlacement.position);
         state.monitorFrames = 0;
         state.continuousVisibilityFailures = 0;
+        emitPlacementStatus(
+          {
+            stage: "placed",
+            mode: fallbackPlacement.mode,
+            reason: visibility.reason,
+            anchored: false
+          },
+          { incrementSequence: true }
+        );
 
         logPlacement("switched to visibility fallback", {
           mode: fallbackPlacement.mode,
@@ -261,14 +738,7 @@ export function ARHologramModel({
 
       if (state.monitorFrames >= AR_VISIBILITY_MONITOR_FRAMES) {
         state.stage = "locked";
-      }
-      return;
-    }
-
-    if (state.stage === "fallback-placed") {
-      state.monitorFrames += 1;
-      if (state.monitorFrames >= AR_VISIBILITY_MONITOR_FRAMES) {
-        state.stage = "locked";
+        emitPlacementStatus({ stage: "locked" });
       }
     }
   });
@@ -313,7 +783,6 @@ export function ARHologramModel({
     primaryAction.setEffectiveTimeScale(HOLOGRAM_ANIMATION_SPEED);
     primaryAction.play();
 
-    // Keep extra clips running with lower weight.
     rankedActions.slice(1).forEach((action) => {
       action.reset();
       action.enabled = true;
@@ -328,6 +797,12 @@ export function ARHologramModel({
       rankedActions.forEach((action) => action.stop());
     };
   }, [actions]);
+
+  useEffect(() => {
+    return () => {
+      clearActiveAnchor(true);
+    };
+  }, [clearActiveAnchor]);
 
   return (
     <group ref={groupRef} scale={[modelScale, modelScale, modelScale]}>

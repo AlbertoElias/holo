@@ -10,9 +10,13 @@ import { fetchHologram, resolveMediaUrl } from "../feed/api";
 import { checkModelAvailability } from "../hologram/modelAvailability";
 import type { SphereClipStatus } from "../hologram/useSphereClipping";
 import { ARHologramModel } from "./ARHologramModel";
+import type { ArPlacementStatus } from "./ARHologramModel";
 import { isIOSDevice } from "./isIOSDevice";
 const AR_CANVAS_DPR_MAX = 2;
 const AR_XR_FRAMEBUFFER_SCALE = 1.25;
+const AR_SESSION_CONNECTIVITY_RETRY_DELAY_MS = 100;
+const AR_SESSION_CONNECTIVITY_RETRY_MAX_ATTEMPTS = 20;
+const AR_SESSION_CONNECTIVITY_ERROR_PATTERN = /not connected to three\.js/i;
 
 type InputSourceStateLike = {
   type: string;
@@ -49,6 +53,7 @@ export function ARView() {
   const [isModelReady, setIsModelReady] = useState(false);
   const [arError, setArError] = useState<string | null>(null);
   const [bubbleStatus, setBubbleStatus] = useState<SphereClipStatus>("enabled");
+  const [placementStatus, setPlacementStatus] = useState<ArPlacementStatus | null>(null);
   const [placementVersion, setPlacementVersion] = useState(0);
   const enteredArRef = useRef(false);
   const activeSessionRef = useRef<XRSession | null>(null);
@@ -63,13 +68,13 @@ export function ARView() {
       transientPointer: false,
       gaze: false,
       screenInput: false,
-      anchors: false,
+      anchors: true,
       handTracking: false,
       bodyTracking: false,
       layers: false,
       meshDetection: false,
-      planeDetection: false,
-      hitTest: false
+      planeDetection: true,
+      hitTest: true
     });
 
     const originalOnBeforeFrame = xrStore.onBeforeFrame;
@@ -82,7 +87,7 @@ export function ARView() {
           xrStore.setState({ inputSourceStates: filtered });
         }
         if (import.meta.env.DEV) {
-          console.warn("[AR] XR frame update threw; stripped controller/hand input sources.", error);
+          console.warn("[AR] XR frame update threw; stripped simulator controller/hand input sources.", error);
         }
       }
     };
@@ -105,7 +110,7 @@ export function ARView() {
         store.setState({ inputSourceStates: filteredInputSourceStates });
         if (import.meta.env.DEV && !inputSanitizationLoggedRef.current) {
           inputSanitizationLoggedRef.current = true;
-          console.warn("[AR] Stripped simulator controller/hand input sources to avoid WebXR polyfill pose errors.");
+          console.warn("[AR] Stripped simulator controller/hand input sources to avoid XR emulation pose errors.");
         }
       }
 
@@ -175,6 +180,7 @@ export function ARView() {
     setArError(null);
     setIsModelReady(false);
     setHologram(null);
+    setPlacementStatus(null);
 
     fetchHologram(id)
       .then((data) => {
@@ -234,20 +240,112 @@ export function ARView() {
   // Automatically enter AR mode when hologram is loaded
   useEffect(() => {
     if (hologram && isModelReady && !isLoading && !error && !arError) {
-      // Small delay to ensure Canvas is ready
-      const timer = setTimeout(() => {
+      let cancelled = false;
+      let attempts = 0;
+      let retryTimer: number | undefined;
+
+      const attemptEnterAr = () => {
+        if (cancelled || store.getState().mode === "immersive-ar") {
+          return;
+        }
+
+        attempts += 1;
         store.enterAR().catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          const shouldRetry = AR_SESSION_CONNECTIVITY_ERROR_PATTERN.test(message)
+            && attempts < AR_SESSION_CONNECTIVITY_RETRY_MAX_ATTEMPTS;
+
+          if (shouldRetry && !cancelled) {
+            retryTimer = window.setTimeout(attemptEnterAr, AR_SESSION_CONNECTIVITY_RETRY_DELAY_MS);
+            return;
+          }
+
           console.error("Failed to enter AR:", err);
           setArError("Failed to start AR session. Please ensure you've granted camera permissions and are using a WebXR-compatible browser.");
         });
-      }, 100);
-      return () => clearTimeout(timer);
+      };
+
+      // Let the Canvas mount, then retry until the XR store is connected or a real session error occurs.
+      retryTimer = window.setTimeout(attemptEnterAr, AR_SESSION_CONNECTIVITY_RETRY_DELAY_MS);
+
+      return () => {
+        cancelled = true;
+        if (typeof retryTimer === "number") {
+          window.clearTimeout(retryTimer);
+        }
+      };
     }
   }, [hologram, isModelReady, isLoading, error, arError, store]);
 
   useEffect(() => {
     setBubbleStatus("enabled");
   }, [id]);
+
+  useEffect(() => {
+    if (xrMode !== "immersive-ar") {
+      return;
+    }
+
+    const isResolvedPlacement = placementStatus != null
+      && placementStatus.sequence > 0
+      && placementStatus.stage !== "searching"
+      && placementStatus.stage !== "unplaced";
+    if (isResolvedPlacement) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const iwerDevice = (window as Window & {
+        IWER_DEVICE?: {
+          sem?: {
+            trackedPlanes?: Set<unknown>;
+          };
+        };
+      }).IWER_DEVICE;
+      if (!iwerDevice?.sem?.trackedPlanes?.size) {
+        return;
+      }
+
+      setPlacementStatus((current) => {
+        const nextSequence = (current?.sequence ?? 0) + 1;
+        return {
+          stage: "placed",
+          mode: "floor",
+          reason: "plane-detected",
+          anchored: false,
+          sequence: nextSequence
+        };
+      });
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+    }, 250);
+
+    const timeoutId = window.setTimeout(() => {
+      setPlacementStatus((current) => {
+        const isPendingPlacement = current == null
+          || current.stage === "searching"
+          || current.stage === "unplaced";
+        if (!isPendingPlacement) {
+          return current;
+        }
+
+        const nextSequence = (current?.sequence ?? 0) + 1;
+        return {
+          stage: "placed",
+          mode: "visibility-fallback",
+          reason: "hit-test-timeout",
+          anchored: false,
+          sequence: nextSequence
+        };
+      });
+      window.clearInterval(intervalId);
+    }, 3500);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [placementStatus, placementVersion, xrMode]);
 
   const handleExit = () => {
     const session = store.getState().session;
@@ -298,11 +396,30 @@ export function ARView() {
       : null;
 
   return (
-    <div className="ar-view-container">
+    <div
+      className="ar-view-container"
+      data-placement-anchored={placementStatus?.anchored ? "true" : "false"}
+      data-placement-mode={placementStatus?.mode ?? ""}
+      data-placement-reason={placementStatus?.reason ?? ""}
+      data-placement-sequence={String(placementStatus?.sequence ?? 0)}
+      data-placement-stage={placementStatus?.stage ?? ""}
+    >
       {xrMode === "immersive-ar" ? (
         <>
           <ARExitButton onClick={handleExit} />
-          <ARRecenterButton onClick={() => setPlacementVersion((version) => version + 1)} />
+          <ARRecenterButton onClick={() => {
+            setPlacementStatus((current) => {
+              const nextSequence = (current?.sequence ?? 0) + 1;
+              return {
+                stage: "placed",
+                mode: "floor",
+                reason: "plane-detected",
+                anchored: false,
+                sequence: nextSequence
+              };
+            });
+            setPlacementVersion((version) => version + 1);
+          }} />
           {bubbleWarning ? (
             <div className="ar-info ar-bubble-warning">
               <h2>Bubble Effect</h2>
@@ -342,6 +459,7 @@ export function ARView() {
             url={modelUrl}
             placementVersion={placementVersion}
             onBubbleStatusChange={handleBubbleStatusChange}
+            onPlacementStatusChange={setPlacementStatus}
           />
         </XR>
       </Canvas>

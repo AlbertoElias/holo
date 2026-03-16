@@ -337,6 +337,14 @@ export class XrSessionService {
   }
 
   syncYaw(lookYaw: number): number {
+    if (this.mockVrState.enabled) {
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.mockVrState.headQuaternion).projectOnPlane(new THREE.Vector3(0, 1, 0));
+      if (forward.lengthSq() > 1e-8) {
+        forward.normalize();
+        return Math.atan2(-forward.x, -forward.z);
+      }
+    }
+
     if (this.renderer.xr.isPresenting) {
       const xrCamQuat = new THREE.Quaternion();
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.renderer.xr.getCamera().getWorldQuaternion(xrCamQuat)).projectOnPlane(new THREE.Vector3(0, 1, 0));
@@ -347,14 +355,6 @@ export class XrSessionService {
       return lookYaw;
     }
 
-    if (this.mockVrState.enabled) {
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.mockVrState.headQuaternion).projectOnPlane(new THREE.Vector3(0, 1, 0));
-      if (forward.lengthSq() > 1e-8) {
-        forward.normalize();
-        return Math.atan2(-forward.x, -forward.z);
-      }
-    }
-
     return lookYaw;
   }
 
@@ -363,18 +363,21 @@ export class XrSessionService {
   }
 
   getCurrentHeadLocalY(): number | undefined {
+    if (this.mockVrState.enabled) {
+      return Number.isFinite(this.mockVrState.headPosition.y) ? this.mockVrState.headPosition.y : undefined;
+    }
+
     if (this.renderer.xr.isPresenting) {
       const localY = this.renderer.xr.getCamera().position.y;
       return Number.isFinite(localY) ? localY : undefined;
-    }
-    if (this.mockVrState.enabled) {
-      return Number.isFinite(this.mockVrState.headPosition.y) ? this.mockVrState.headPosition.y : undefined;
     }
     return undefined;
   }
 
   updateHandTrackingTargets(getEyeAnchorWorld: (out: THREE.Vector3) => THREE.Vector3): void {
-    if (this.mockVrState.enabled && !this.renderer.xr.isPresenting) {
+    if (this.mockVrState.enabled) {
+      // The deterministic test hook keeps using synthetic hand/joint payloads,
+      // even when an IWER XR session is active for camera/session emulation.
       for (const side of ['left', 'right'] as const) {
         const state = this.xrHandState[side];
         const mockHand = this.mockVrState.hands[side];

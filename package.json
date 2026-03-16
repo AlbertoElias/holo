@@ -15,13 +15,17 @@
     "test:capture": "pnpm --filter @holoim/capture test:vr:mock && pnpm --filter @holoim/capture test:vr:flows",
     "test:viewer": "pnpm --filter @holoim/contracts test && pnpm --filter @holoim/api test && pnpm --filter @holoim/web test",
     "test:all": "pnpm run test:capture && pnpm run test:viewer",
+    "test:xr:capture": "pnpm --filter @holoim/capture run test:xr:mock",
+    "test:xr:viewer": "pnpm --filter @holoim/web run test:e2e:mocked",
+    "test:xr:all": "pnpm run test:xr:capture && pnpm run test:xr:viewer",
     "test:smoke:pipeline": "node scripts/test-smoke-pipeline.mjs",
     "doctor": "node scripts/doctor.mjs",
     "verify:repo:capture": "pnpm --filter @holoim/capture verify:fast",
     "verify:repo:viewer": "pnpm --filter @holoim/contracts verify:fast && pnpm --filter @holoim/api verify:fast && pnpm --filter @holoim/web verify:fast",
     "verify:workspace": "pnpm run verify:repo:capture && pnpm run verify:repo:viewer",
     "verify:fast": "pnpm run doctor && pnpm run verify:workspace",
-    "verify:full": "pnpm run verify:fast && pnpm --filter @holoim/capture verify:full && pnpm --filter @holoim/contracts verify:full && pnpm --filter @holoim/api verify:full && pnpm --filter @holoim/web verify:full && pnpm run test:smoke:pipeline",
+    "verify:xr": "pnpm run test:xr:all",
+    "verify:full": "pnpm run verify:fast && pnpm run verify:xr && pnpm --filter @holoim/contracts verify:full && pnpm --filter @holoim/api verify:full && pnpm --filter @holoim/web verify:full && pnpm --filter @holoim/capture run build && pnpm run test:smoke:pipeline",
     "verify:changed": "node scripts/verify-changed.mjs"
   },
   "keywords": [

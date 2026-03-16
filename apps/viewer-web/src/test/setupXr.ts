@@ -1,13 +1,11 @@
-import WebXRPolyfill from "webxr-polyfill";
-
-type XrTestMode = "polyfill" | "shim" | "off";
+type XrTestMode = "shim" | "off";
 
 function resolveXrTestMode(): XrTestMode {
-  const raw = String(process.env.XR_TEST_MODE ?? "polyfill").toLowerCase();
-  if (raw === "polyfill" || raw === "shim" || raw === "off") {
-    return raw;
+  const raw = String(process.env.XR_TEST_MODE ?? "iwer").toLowerCase();
+  if (raw === "off") {
+    return "off";
   }
-  return "polyfill";
+  return "shim";
 }
 
 function installShim(): void {
@@ -30,18 +28,6 @@ function installShim(): void {
 export function installTestXrEnvironment(): void {
   const mode = resolveXrTestMode();
   if (mode === "off") return;
-
-  if (mode === "polyfill" && !("xr" in navigator)) {
-    try {
-      // Keep this test-only and avoid touching app runtime behavior.
-      (globalThis as { __webxrPolyfill?: unknown }).__webxrPolyfill = new WebXRPolyfill({
-        allowCardboardOnDesktop: true
-      });
-    } catch {
-      installShim();
-      return;
-    }
-  }
 
   if (!("xr" in navigator)) {
     installShim();

@@ -41,7 +41,9 @@ pnpm run typecheck:all
 pnpm run build:all
 pnpm run test:all
 pnpm run verify:fast
+pnpm run verify:xr
 pnpm run verify:full
+pnpm run test:xr:all
 ```
 
 ## Where to implement changes
@@ -55,16 +57,26 @@ pnpm run verify:full
 ## Ports
 
 - `apps/viewer-api`: `http://localhost:3001`
-- `apps/viewer-web`: `http://127.0.0.1:3174`
-- `apps/capture` dev: `http://localhost:5173`
-- `apps/capture` mock VR: `http://127.0.0.1:5174`
+- `apps/viewer-web`: `https://localhost:3174`
+- `apps/capture` dev: `https://localhost:5173`
+- `apps/capture` mock VR: `https://localhost:5174`
 
 ## Operating rules
 
 - Prefer app-scoped checks first, then workspace-wide checks.
 - Keep changes localized; cross-app refactors should move shared logic to `packages/*`.
 - Avoid parent-relative imports for shared tooling; use workspace packages.
+- Use `https://localhost:*` for desktop/local XR emulation and a non-localhost secure origin for native mobile/headset WebXR.
+- Browser XR automation is IWER-only at the workspace level; treat jsdom shims as unit-test internals.
 - If GLTF contract changes, validate export -> upload -> view with smoke pipeline.
+
+## gstack
+
+- `gstack` is vendored at `.claude/skills/gstack` for Claude Code and mirrored into the user skill dirs for local Codex/Claude sessions.
+- For browser-driven QA or site exploration, prefer the gstack `browse` skill/binary over generic browser tooling when the task is about interacting with a running app.
+- Available gstack modes: `plan-ceo-review`, `plan-eng-review`, `review`, `ship`, `browse`, `qa`, `setup-browser-cookies`, `retro`.
+- In Codex, if the user names one of those modes or asks for that style of workflow, open the matching `SKILL.md` under `.claude/skills/gstack/<mode>/` and follow it.
+- If project-local gstack skills stop working, run `cd .claude/skills/gstack && PATH="$HOME/.bun/bin:$PATH" ./setup`.
 
 ## Validation checklist before handoff
 

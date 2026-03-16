@@ -4,7 +4,16 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./dev-server": "./src/dev-server.mjs",
-    "./xr-env": "./src/xr-env.mjs"
+    "./dev-server": {
+      "types": "./src/dev-server.d.ts",
+      "default": "./src/dev-server.mjs"
+    },
+    "./xr-env": {
+      "types": "./src/xr-env.d.ts",
+      "default": "./src/xr-env.mjs"
+    }
+  },
+  "dependencies": {
+    "iwer": "^2.1.1"
   }
 }

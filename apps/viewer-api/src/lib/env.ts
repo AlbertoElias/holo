@@ -3,7 +3,7 @@ import { z } from "zod";
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1).default("file:./prisma/dev.db"),
   PORT: z.coerce.number().int().positive().default(3001),
-  WEB_ORIGIN: z.string().url().default("http://localhost:5173")
+  WEB_ORIGIN: z.string().url().default("https://localhost:3174")
 });
 
 export const env = envSchema.parse({

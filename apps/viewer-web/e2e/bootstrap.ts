@@ -8,6 +8,14 @@ const nonViewerBodyPattern = /Loading scene\.\.\./i;
 export const test = base.extend({
   page: async ({ page }, consumePage) => {
     await attachXrEnvironment(page, { mode: process.env.XR_TEST_MODE });
+    page.on("pageerror", (error) => {
+      console.error("viewer-pageerror", error);
+    });
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        console.error("viewer-console-error", message.text());
+      }
+    });
     await consumePage(page);
   }
 });

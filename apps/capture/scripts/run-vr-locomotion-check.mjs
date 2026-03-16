@@ -1,5 +1,11 @@
-import { spawn } from 'node:child_process';
-import { findAvailablePort, runCommand, stopProcess, waitForServer } from '@holoim/tooling-testing/dev-server';
+import {
+  createHttpsBaseUrl,
+  findAvailablePort,
+  runCommand,
+  startViteDevServer,
+  stopProcess,
+  waitForServer
+} from '@holoim/tooling-testing/dev-server';
 
 const host = process.env.DEV_HOST ?? '127.0.0.1';
 const configuredPort = Number(process.env.DEV_PORT ?? '5174');
@@ -18,18 +24,21 @@ try {
       port = configuredPort;
     }
   }
-  const baseUrl = configuredBaseUrl ?? `http://${host}:${port}/`;
+  const baseUrl = configuredBaseUrl ?? createHttpsBaseUrl(host, port);
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
   if (!reuseDevServer) {
-    devServer = spawn('pnpm', ['exec', 'vite', '--host', host, '--port', String(port), '--strictPort'], {
-      stdio: 'inherit',
-      env: process.env
+    devServer = startViteDevServer({
+      host,
+      port,
+      cwd: process.cwd(),
+      env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' }
     });
     await waitForServer(baseUrl, startupTimeoutMs, devServer);
   }
 
   await runCommand('node', ['scripts/ci-vr-locomotion-playwright.mjs'], {
-    env: { ...process.env, BASE_URL: baseUrl }
+    env: { ...process.env, BASE_URL: baseUrl, NODE_TLS_REJECT_UNAUTHORIZED: '0' }
   });
 } finally {
   await stopProcess(devServer);

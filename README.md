@@ -35,7 +35,9 @@ pnpm run dev
 ```bash
 pnpm run doctor
 pnpm run verify:fast
+pnpm run verify:xr
 pnpm run verify:full
+pnpm run test:xr:all
 pnpm run verify:changed
 pnpm run test:smoke:pipeline
 ```
@@ -51,9 +53,19 @@ pnpm run test:smoke:pipeline
 | Service | Port | URL |
 |---|---:|---|
 | viewer-api | 3001 | `http://localhost:3001` |
-| viewer-web | 3174 | `http://127.0.0.1:3174` |
-| capture dev | 5173 | `http://localhost:5173` |
-| capture mock VR | 5174 | `http://127.0.0.1:5174` |
+| viewer-web | 3174 | `https://localhost:3174` |
+| capture dev | 5173 | `https://localhost:5173` |
+| capture mock VR | 5174 | `https://localhost:5174` |
+
+Desktop/local XR emulation for `apps/viewer-web` now uses `https://localhost:3174`.
+Use a non-localhost secure origin for native mobile/headset AR so the localhost-only IWER activation does not override real WebXR.
+
+## XR And CI
+
+- Browser XR automation is standardized on IWSDK/IWER across the workspace.
+- Public `XR_TEST_MODE` values are `iwer` and `off`. The jsdom-only shim stays internal to unit tests.
+- CI installs a pinned `ktx` binary so capture builds use the full IWSDK texture compression path.
+- Local `ktx` is optional. If you install it, capture builds use the same higher-quality compression path as CI.
 
 ## Documentation
 

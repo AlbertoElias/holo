@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.29.3",
   "scripts": {
     "dev": "vite",
-    "dev:mock-vr": "vite --host 127.0.0.1 --port 5174",
+    "dev:mock-vr": "vite --host 127.0.0.1 --port 5174 --strictPort",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsgo --noEmit",
@@ -31,20 +31,22 @@
     "three": "^0.173.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.22.0",
     "@holoim/config-eslint": "workspace:*",
     "@holoim/tooling-scripts": "workspace:*",
     "@holoim/tooling-testing": "workspace:*",
-    "@eslint/js": "^9.22.0",
+    "@iwsdk/vite-plugin-gltf-optimizer": "^0.3.1",
+    "@iwsdk/vite-plugin-iwer": "^0.2.2",
     "@types/three": "^0.173.0",
     "@typescript/native-preview": "latest",
+    "@vitejs/plugin-basic-ssl": "^2.1.4",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
     "playwright": "^1.58.2",
-    "vitest": "^3.2.4",
-    "webxr-polyfill": "^2.0.3",
-    "typescript-eslint": "^8.26.1",
     "typescript": "^5.7.3",
-    "vite": "^6.1.0"
+    "typescript-eslint": "^8.26.1",
+    "vite": "^7.3.1",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=20 <21"

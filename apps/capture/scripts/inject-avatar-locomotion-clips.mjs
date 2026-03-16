@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as THREE from 'three';
 
-const avatarPath = path.resolve('public/models/avatar.glb');
+const avatarPath = path.resolve('public/gltf/models/avatar.glb');
 
 const GLB_MAGIC = 0x46546c67;
 const GLB_VERSION = 2;

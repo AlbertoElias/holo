@@ -24,11 +24,15 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 
 - `pnpm run doctor`
 - `pnpm run verify:fast`
+- `pnpm run verify:xr`
 - `pnpm run verify:full`
 - `pnpm run verify:workspace`
 - `pnpm run verify:repo:capture`
 - `pnpm run verify:repo:viewer`
 - `pnpm run verify:changed`
+- `pnpm run test:xr:capture`
+- `pnpm run test:xr:viewer`
+- `pnpm run test:xr:all`
 - `pnpm run test:smoke:pipeline`
 - `pnpm run dev`
 
@@ -62,8 +66,9 @@ Primary ports:
 
 Rules:
 
-- Viewer web E2E and smoke tests assume `http://127.0.0.1:3174`.
-- Capture XR checks prefer `http://127.0.0.1:5174`.
+- Viewer web E2E and smoke tests assume `https://localhost:3174`.
+- Capture XR checks prefer `https://127.0.0.1:5174`.
+- Use `https://localhost:*` for desktop/local XR emulation and a non-localhost secure origin for native mobile/headset WebXR.
 - When a required port is occupied, scripts should fail fast with a clear message.
 
 ## Test Environment Contract
@@ -73,10 +78,10 @@ Supported env vars for smoke and XR scripts:
 - `DEV_HOST` (default `127.0.0.1`)
 - `DEV_PORT` (default `5174` for capture checks)
 - `BASE_URL` (default derived from host/port)
-- `E2E_BASE_URL` (default `http://127.0.0.1:3174`)
+- `E2E_BASE_URL` (default `https://localhost:3174`)
 - `REUSE_DEV_SERVER` (`1` to reuse existing server)
 - `STARTUP_TIMEOUT_MS` (default `30000`)
-- `XR_TEST_MODE` (`polyfill`, `shim`, or `off`; default `polyfill`)
+- `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
 ## When-To-Run Matrix
@@ -87,6 +92,7 @@ Supported env vars for smoke and XR scripts:
 | Single-app code change | touched app/package `verify:fast` |
 | Multi-app change | `pnpm run doctor` + `pnpm run verify:workspace` |
 | API upload or GLTF contract change | `pnpm run verify:workspace` + `pnpm run test:smoke:pipeline` |
+| XR regression gate | `pnpm run verify:xr` |
 | Pre-merge confidence sweep | `pnpm run verify:full` |
 
 ## Git Conventions

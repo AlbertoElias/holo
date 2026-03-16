@@ -26,4 +26,7 @@ pnpm-debug.log*
 .tmp_*
 scratch/
 .agent/
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/gstack/

@@ -54,3 +54,10 @@ pnpm run test:smoke:pipeline
 - Keep API endpoints backward compatible unless versioning is explicit.
 - Validate GLTF export -> upload -> render whenever contracts or file processing change.
 - Prefer shared script helpers in `packages/tooling-*` over duplicating script logic.
+
+## gstack
+
+- Use the gstack `browse` skill for browser-based testing and page interaction work. Do not use `mcp__claude-in-chrome__*` tools in this repo.
+- Available gstack skills: `/plan-ceo-review`, `/plan-eng-review`, `/review`, `/ship`, `/browse`, `/qa`, `/setup-browser-cookies`, `/retro`.
+- Project-local gstack files live in `.claude/skills/gstack`.
+- If a project-local gstack skill is missing its binary or links, run `cd .claude/skills/gstack && PATH="$HOME/.bun/bin:$PATH" ./setup`.

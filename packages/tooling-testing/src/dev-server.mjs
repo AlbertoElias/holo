@@ -38,6 +38,28 @@ export async function findAvailablePort(host, startPort, span = 20) {
   throw new Error(`No available port found from ${startPort} to ${startPort + span - 1}.`);
 }
 
+export function createHttpsBaseUrl(host, port) {
+  return `https://${host}:${port}/`;
+}
+
+export function startViteDevServer({
+  host,
+  port,
+  cwd,
+  env,
+  viteArgs = []
+}) {
+  return spawn(
+    'pnpm',
+    ['exec', 'vite', '--host', host, '--port', String(port), '--strictPort', ...viteArgs],
+    {
+      cwd,
+      stdio: 'inherit',
+      env
+    }
+  );
+}
+
 export async function waitForServer(url, timeoutMs = 30000, processHandle) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {

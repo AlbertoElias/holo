@@ -16,34 +16,34 @@ npm install
 npm run dev
 ```
 
-3. Open the printed local URL (usually `http://localhost:5173`).
+3. Open the printed local URL (usually `https://localhost:5173`).
 
 ## Default assets
 
 The app now defaults to:
 
-- `/models/scene.glb`
-- `/models/avatar.glb`
+- `/gltf/models/scene.glb`
+- `/gltf/models/avatar.glb`
 
 You can override with URL params:
 
-- `scene`: `http://localhost:5173/?scene=/models/my-scene.glb`
-- `avatar`: `http://localhost:5173/?avatar=/models/my-avatar.glb`
-- `avatarHeight` (force avatar absolute height): `http://localhost:5173/?avatarHeight=12`
-- `avatarScale` (extra avatar scale multiplier): `http://localhost:5173/?avatarScale=2`
-- `sceneScale` (force scene scale multiplier): `http://localhost:5173/?sceneScale=0.25`
-- `sceneSpanAvatars` (auto scene span target in avatar-heights, default 46): `http://localhost:5173/?sceneSpanAvatars=46`
-- `embodyOffset` (vertical offset in VR first-person alignment): `http://localhost:5173/?embodyOffset=0.2`
-- `avatarForwardOffset` (radians for model forward fix, default `3.14159`): `http://localhost:5173/?avatarForwardOffset=0`
-- `handTrackPitchDeg` (tracked-hand orientation correction pitch, default `0`): `http://localhost:5173/?handTrackPitchDeg=0`
-- `handTrackYawDeg` (tracked-hand orientation correction yaw, default `180`): `http://localhost:5173/?handTrackYawDeg=180`
-- `handTrackRollDeg` (tracked-hand orientation correction roll, default `0`): `http://localhost:5173/?handTrackRollDeg=0`
-- `handTrackInwardYawDeg` (mirrored inward yaw correction for tracked hands, default `30`): `http://localhost:5173/?handTrackInwardYawDeg=30`
-- `handFingerCurlGain` (scales tracked axial finger twist, default `1.0` for neutral 1:1 behavior): `http://localhost:5173/?handFingerCurlGain=1.0`
-- `handRetargetMode` (finger retarget mode, `hybrid` or `legacy`, default `hybrid`): `http://localhost:5173/?handRetargetMode=legacy`
-- `controllerTrackPitchDeg` (controller orientation correction pitch, default `0`): `http://localhost:5173/?controllerTrackPitchDeg=0`
-- `controllerTrackYawDeg` (controller orientation correction yaw, default `180`): `http://localhost:5173/?controllerTrackYawDeg=180`
-- `controllerTrackRollDeg` (controller orientation correction roll, default `0`): `http://localhost:5173/?controllerTrackRollDeg=0`
+- `scene`: `https://localhost:5173/?scene=/gltf/models/my-scene.glb`
+- `avatar`: `https://localhost:5173/?avatar=/gltf/models/my-avatar.glb`
+- `avatarHeight` (force avatar absolute height): `https://localhost:5173/?avatarHeight=12`
+- `avatarScale` (extra avatar scale multiplier): `https://localhost:5173/?avatarScale=2`
+- `sceneScale` (force scene scale multiplier): `https://localhost:5173/?sceneScale=0.25`
+- `sceneSpanAvatars` (auto scene span target in avatar-heights, default 46): `https://localhost:5173/?sceneSpanAvatars=46`
+- `embodyOffset` (vertical offset in VR first-person alignment): `https://localhost:5173/?embodyOffset=0.2`
+- `avatarForwardOffset` (radians for model forward fix, default `3.14159`): `https://localhost:5173/?avatarForwardOffset=0`
+- `handTrackPitchDeg` (tracked-hand orientation correction pitch, default `0`): `https://localhost:5173/?handTrackPitchDeg=0`
+- `handTrackYawDeg` (tracked-hand orientation correction yaw, default `180`): `https://localhost:5173/?handTrackYawDeg=180`
+- `handTrackRollDeg` (tracked-hand orientation correction roll, default `0`): `https://localhost:5173/?handTrackRollDeg=0`
+- `handTrackInwardYawDeg` (mirrored inward yaw correction for tracked hands, default `30`): `https://localhost:5173/?handTrackInwardYawDeg=30`
+- `handFingerCurlGain` (scales tracked axial finger twist, default `1.0` for neutral 1:1 behavior): `https://localhost:5173/?handFingerCurlGain=1.0`
+- `handRetargetMode` (finger retarget mode, `hybrid` or `legacy`, default `hybrid`): `https://localhost:5173/?handRetargetMode=legacy`
+- `controllerTrackPitchDeg` (controller orientation correction pitch, default `0`): `https://localhost:5173/?controllerTrackPitchDeg=0`
+- `controllerTrackYawDeg` (controller orientation correction yaw, default `180`): `https://localhost:5173/?controllerTrackYawDeg=180`
+- `controllerTrackRollDeg` (controller orientation correction roll, default `0`): `https://localhost:5173/?controllerTrackRollDeg=0`
 
 ## Controls
 
@@ -67,9 +67,12 @@ Mode behavior:
 
 ## Notes
 
-- WebXR requires HTTPS in most cases, but localhost is typically allowed for development.
+- Local development now runs over HTTPS so the IWSDK/IWER toolchain behaves like a real secure WebXR origin.
+- Use `https://localhost:*` on desktop when you want IWER emulation; use the machine IP/network URL on a headset so the plugin's localhost-only activation does not override native WebXR.
 - Click the `Enter VR` button to start an immersive session when supported.
-- CI / non-headset testing: open with `?mockVr=1` and drive synthetic headset/hand poses via `window.__setMockVrPose(...)`.
+- Local desktop XR emulation uses IWSDK's IWER runtime on `https://localhost:*`.
+- CI installs `ktx` so production builds use the full IWSDK KTX2 compression path. Local `ktx` is optional but recommended if you want build parity with CI.
+- CI / non-headset testing now enters a real IWER-backed XR session and then drives deterministic poses via `window.__setMockVrPose(...)`.
 - Deterministic test hooks available for automation:
   - `window.advanceTime(ms)`
   - `window.render_game_to_text()`
@@ -77,6 +80,7 @@ Mode behavior:
   - `window.__setMockVrPose({ head?, hands?: { [side]: { tracked?, position?, quaternion?, joints? } } })`
   - `window.__captureHandCalibrationPose()` (captures known relaxed hand pose calibration)
   - `window.__resetHandCalibrationPose()`
+- `mockVr=1` remains as a legacy compatibility flag for the old in-app mock mode, but it is no longer the supported primary workflow.
 
 Mock VR per-joint payload (optional) for finger articulation tests:
 - `hands[side].joints[jointName].tracked`
@@ -114,7 +118,7 @@ npm run test:xr:flows
 npm run ci:vr:flows
 ```
 
-This suite runs in `?mockVr=1` mode and validates:
+This suite runs inside an IWER-backed VR session and validates:
 - forward locomotion
 - head-yaw-relative locomotion direction
 - strafe flow while yawed
@@ -173,12 +177,12 @@ npm run lint
 ```
 
 Optional env vars for mock VR scripts:
-- `BASE_URL` (default: `http://127.0.0.1:5174/`)
+- `BASE_URL` (default: `https://127.0.0.1:5174/`)
 - `SCREENSHOT_DIR` (legacy screenshot dir override)
 - `XR_TEST_ARTIFACT_DIR` (preferred screenshot/timeline dir override)
 - `DEV_HOST` (default for `test:xr:mock`: `127.0.0.1`)
 - `DEV_PORT` (default for `test:xr:mock`: `5174`)
 - `REUSE_DEV_SERVER=1` skips auto start/stop in `test:xr:mock`
 - `STARTUP_TIMEOUT_MS` (default: `30000`)
-- `XR_TEST_MODE` (`polyfill` | `shim` | `off`, default `polyfill`)
+- `XR_TEST_MODE` (`iwer` | `off`, default `iwer` for capture scripts; legacy aliases map to `iwer`)
 - `XR_SUPPORT_SHIM=0` (legacy alias that maps to `XR_TEST_MODE=off`)

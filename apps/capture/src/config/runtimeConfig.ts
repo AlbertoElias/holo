@@ -21,8 +21,8 @@ export interface RuntimeConfig {
 
 export function loadRuntimeConfig(search = window.location.search): RuntimeConfig {
   const query = new URLSearchParams(search);
-  const defaultSceneUrl = '/models/scene.glb';
-  const defaultAvatarUrl = '/models/avatar.glb';
+  const defaultSceneUrl = '/gltf/models/scene.glb';
+  const defaultAvatarUrl = '/gltf/models/avatar.glb';
   const handRetargetModeQuery = (query.get('handRetargetMode') ?? 'hybrid').toLowerCase();
   const handRetargetMode = handRetargetModeQuery === 'legacy' ? 'legacy' : 'hybrid';
 

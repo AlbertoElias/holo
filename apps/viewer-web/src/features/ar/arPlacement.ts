@@ -1,7 +1,7 @@
 import { MathUtils, Vector3 } from "three";
 import type { Quaternion } from "three";
 
-export type ArPlacementMode = "floor" | "visibility-fallback";
+export type ArPlacementMode = "hit-test" | "floor" | "visibility-fallback";
 
 export type ArPlacementResult = {
   position: Vector3;

@@ -6,6 +6,7 @@ import {
   createDoctorReporter,
   printDoctorResult
 } from "@holoim/tooling-scripts/doctor-core";
+import { spawnSync } from "node:child_process";
 
 const rootDir = process.cwd();
 const reporter = createDoctorReporter();
@@ -41,11 +42,21 @@ async function checkPorts() {
   }
 }
 
+function checkOptionalKtxCommand() {
+  const result = spawnSync("bash", ["-lc", "command -v ktx"], {
+    encoding: "utf8"
+  });
+  if (result.status !== 0) {
+    reporter.warn("Optional command 'ktx' is unavailable; GLTF builds will skip the highest-quality KTX2 texture compression path.");
+  }
+}
+
 async function main() {
   checkNodeVersion(reporter, 20);
   checkCommand(reporter, "pnpm");
-  checkPathExists(reporter, rootDir, "public/models/avatar.glb");
-  checkPathExists(reporter, rootDir, "public/models/scene.glb");
+  checkOptionalKtxCommand();
+  checkPathExists(reporter, rootDir, "public/gltf/models/avatar.glb");
+  checkPathExists(reporter, rootDir, "public/gltf/models/scene.glb");
   checkPathExists(reporter, rootDir, "scripts/ci-mock-vr-playwright.mjs");
 
   await checkPorts();

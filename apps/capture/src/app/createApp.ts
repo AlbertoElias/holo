@@ -1,5 +1,6 @@
 import { AppOrchestrator } from './AppOrchestrator';
 import { DebugBridge } from '../debug/DebugBridge';
+import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
 
 export interface AppRuntime {
   start: () => Promise<void>;
@@ -12,7 +13,10 @@ export function createApp(): AppRuntime {
   const debugBridge = new DebugBridge({
     renderGameToText: () => orchestrator.renderGameToText(),
     advanceTime: (ms) => orchestrator.advanceTime(ms),
-    setMockVrPose: (payload) => orchestrator.setMockVrPose(payload),
+    setMockVrPose: (payload) => {
+      applyIwerMockVrPoseInput(payload);
+      orchestrator.setMockVrPose(payload);
+    },
     setMockInput: (payload) => orchestrator.setMockInput(payload),
     captureHandCalibrationPose: () => orchestrator.captureHandCalibrationPose(),
     resetHandCalibrationPose: () => orchestrator.resetHandCalibrationPose()

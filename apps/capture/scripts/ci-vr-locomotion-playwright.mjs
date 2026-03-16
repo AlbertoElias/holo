@@ -1,7 +1,20 @@
-import { chromium } from 'playwright';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { attachXrEnvironment, resolveXrTestMode } from '@holoim/tooling-testing/xr-env';
+import { chromium } from 'playwright';
+
+import {
+  attachXrEnvironment,
+  createXrContext,
+  enterIwerSessionFromButton,
+  launchXrBrowser,
+  resolveXrTestMode,
+  waitForIwerRuntime,
+  waitForPageFunctions,
+  waitForTextContentPrefix,
+  wireXrConsoleErrors
+} from '@holoim/tooling-testing/xr-env';
+
+const DEFAULT_XR_TEST_MODE = 'iwer';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -30,67 +43,60 @@ function angleBetweenDeltas(a, b) {
   return Math.acos(dot);
 }
 
-const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:5174/';
+const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
 const url = new URL(baseUrl);
-url.searchParams.set('mockVr', '1');
 
 const screenshotDir = process.env.XR_TEST_ARTIFACT_DIR ?? process.env.SCREENSHOT_DIR ?? 'output/ci-vr-locomotion';
 await mkdir(screenshotDir, { recursive: true });
 
-const browser = await chromium.launch({
-  headless: true,
-  args: ['--use-gl=angle', '--use-angle=swiftshader']
-});
-
+const browser = await launchXrBrowser(chromium);
+const context = await createXrContext(browser);
 const consoleErrors = [];
+const resolvedMode = resolveXrTestMode(
+  process.env.XR_TEST_MODE
+    ?? (process.env.XR_SUPPORT_SHIM === '0' ? 'off' : DEFAULT_XR_TEST_MODE)
+);
 
 async function waitForReady(page) {
   await page.goto(url.href, { waitUntil: 'networkidle' });
 
-  let hooksReady = false;
-  for (let i = 0; i < 80; i += 1) {
-    hooksReady = await page.evaluate(
-      () =>
-        typeof window.__setMockVrPose === 'function' &&
-        typeof window.__setMockInput === 'function' &&
-        typeof window.advanceTime === 'function' &&
-        typeof window.render_game_to_text === 'function'
-    );
-    if (hooksReady) break;
-    await page.waitForTimeout(250);
+  try {
+    await waitForPageFunctions(page, [
+      '__setMockVrPose',
+      '__setMockInput',
+      'advanceTime',
+      'render_game_to_text'
+    ]);
+  } catch (error) {
+    throw new Error(`Mock VR hooks not ready. ${consoleErrors.join(' | ')}${error instanceof Error ? ` | ${error.message}` : ''}`);
   }
-  assert(hooksReady, `Mock VR hooks not ready. ${consoleErrors.join(' | ')}`);
 
-  await page.waitForFunction(
-    () => {
-      const statusEl = document.getElementById('status');
-      return Boolean(statusEl && statusEl.textContent && statusEl.textContent.toLowerCase().startsWith('loaded'));
-    },
-    null,
-    { timeout: 20000 }
-  );
+  await waitForTextContentPrefix(page, '#status', 'loaded');
 }
 
 async function withScenarioPage(label, callback) {
-  const page = await browser.newPage();
-  page.on('pageerror', (err) => {
-    consoleErrors.push(`${label} pageerror: ${err.message}`);
-  });
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') {
-      consoleErrors.push(`${label} console.error: ${msg.text()}`);
-    }
-  });
+  const page = await context.newPage();
+  wireXrConsoleErrors(page, consoleErrors, { label });
 
   try {
-    const mode = process.env.XR_TEST_MODE
-      ?? (process.env.XR_SUPPORT_SHIM === '0' ? 'off' : 'polyfill');
-    await attachXrEnvironment(page, { mode: resolveXrTestMode(mode) });
+    await attachXrEnvironment(page, { mode: resolvedMode });
     await waitForReady(page);
     return await callback(page);
   } finally {
     await page.close();
   }
+}
+
+async function withVrScenarioPage(label, callback) {
+  return withScenarioPage(label, async (page) => {
+    if (resolvedMode === 'iwer') {
+      await waitForIwerRuntime(page);
+      await enterIwerSessionFromButton(page, '#VRButton', {
+        readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr'
+      });
+    }
+    return callback(page);
+  });
 }
 
 async function setMockPose(page, yawRad, headY = 0) {
@@ -188,7 +194,7 @@ async function waitForState(page, label, predicate, options = {}) {
 }
 
 async function ensureGrounded(page) {
-  for (let i = 0; i < 20; i += 1) {
+  for (let index = 0; index < 20; index += 1) {
     const state = await snapshot(page);
     if (state.character?.grounded) return state;
     await advance(page, 120);
@@ -197,12 +203,12 @@ async function ensureGrounded(page) {
 }
 
 async function runMoveScenario(label, yawRad, inputPayload, durationMs, screenshotName) {
-  return withScenarioPage(label, async (page) => {
+  return withVrScenarioPage(label, async (page) => {
     await setMockPose(page, yawRad);
     await advance(page, 300);
     const start = await ensureGrounded(page);
 
-    assert(start.mode === 'mock-vr', `${label}: expected mock-vr mode, got ${start.mode}`);
+    assert(start.mode === 'vr', `${label}: expected vr mode, got ${start.mode}`);
     assert(start.tracking.left.poseValid && start.tracking.right.poseValid, `${label}: hand tracking invalid in baseline.`);
     assert(start.locomotion?.activeProfile === 'vr-lower-body', `${label}: expected vr-lower-body profile, got ${start.locomotion?.activeProfile}`);
     assert(start.locomotion?.state === 'idle', `${label}: expected idle locomotion at baseline, got ${start.locomotion?.state}`);
@@ -222,7 +228,7 @@ async function runMoveScenario(label, yawRad, inputPayload, durationMs, screensh
     let observedWalk = engaged.locomotion?.state === 'walk' && (engaged.locomotion?.horizontalSpeed ?? 0) >= 0.05;
     const movementSamples = 4;
     const movementStepMs = Math.max(50, Math.floor(durationMs / movementSamples));
-    for (let i = 0; i < movementSamples; i += 1) {
+    for (let index = 0; index < movementSamples; index += 1) {
       await advance(page, movementStepMs);
       const sample = await snapshot(page);
       if (sample.locomotion?.state === 'walk' && (sample.locomotion?.horizontalSpeed ?? 0) >= 0.05) {
@@ -251,7 +257,9 @@ function bestByDistance(trials) {
 }
 
 async function measureForwardDistanceForHeadY(label, headY, screenshotName) {
-  return withScenarioPage(label, async (page) => {
+  return withVrScenarioPage(label, async (page) => {
+    await setMockPose(page, 0, 0);
+    await advance(page, 240);
     await setMockPose(page, 0, headY);
     await advance(page, 320);
     const start = await ensureGrounded(page);
@@ -342,7 +350,7 @@ try {
     `Forward/strafe at yaw ${bestYawPair.yawId} were too similar (angle ${bestYawPair.angle.toFixed(3)} rad).`
   );
 
-  await withScenarioPage('jump', async (page) => {
+  await withVrScenarioPage('jump', async (page) => {
     await setMockPose(page, 0);
     await advance(page, 300);
 
@@ -371,7 +379,7 @@ try {
     await page.screenshot({ path: path.join(screenshotDir, '03-jump-landed.png') });
   });
 
-  await withScenarioPage('vr-crouch-state', async (page) => {
+  await withVrScenarioPage('vr-crouch-state', async (page) => {
     await setMockPose(page, 0, 0);
     await advance(page, 320);
     const standing = await ensureGrounded(page);
@@ -541,5 +549,6 @@ try {
   assert(consoleErrors.length === 0, `Console errors detected:\n${consoleErrors.join('\n')}`);
   console.log('Mock VR locomotion flow check passed.');
 } finally {
+  await context.close();
   await browser.close();
 }
