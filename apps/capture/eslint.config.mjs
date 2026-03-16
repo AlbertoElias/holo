@@ -1,12 +1,13 @@
-import js from '@eslint/js';
-import globals from 'globals';
-import tseslint from 'typescript-eslint';
-
-import { createWorkspaceTsEslintConfig } from '@holoim/config-eslint/base';
+import {
+  createWorkspaceTsEslintConfig,
+  tseslint,
+  jsConfig,
+  globals
+} from '@holoim/config-eslint/base';
 
 export default createWorkspaceTsEslintConfig({
   tseslint,
-  jsConfig: js.configs.recommended,
+  jsConfig: jsConfig.configs.recommended,
   ignores: ['output/**', '*.glb'],
   globals: {
     ...globals.browser,

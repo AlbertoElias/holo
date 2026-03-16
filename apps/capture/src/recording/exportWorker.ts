@@ -69,20 +69,20 @@ function vecApplyQuat(v: { x: number; y: number; z: number }, q: { x: number; y:
 
 self.onmessage = (e: MessageEvent<WorkerInput>) => {
   const { frames, boneNames, morphDescriptors, normalizeRootMotion } = e.data;
-  const t0 = frames.length > 0 ? frames[0].timeSec : 0;
+  const t0 = frames.length > 0 ? frames[0]!.timeSec : 0;
   const times = frames.map((f) => f.timeSec - t0);
 
   // Optional root-motion normalization:
   // - true: center avatar animation around origin (legacy standalone behavior)
   // - false: preserve world-space avatar transform (required when exporting scene geometry)
   const p0 = frames.length > 0
-    ? frames[0].rootPosition
+    ? frames[0]!.rootPosition
     : { x: 0, y: 0, z: 0 };
 
   // Normalize root rotation so the first frame faces forward (identity).
   // q_normalised = inverse(q0) * q
   const q0 = frames.length > 0
-    ? frames[0].rootQuaternion
+    ? frames[0]!.rootQuaternion
     : { x: 0, y: 0, z: 0, w: 1 };
   const q0Inv = quatInvert(q0);
 
@@ -161,7 +161,7 @@ self.onmessage = (e: MessageEvent<WorkerInput>) => {
         break;
       }
       for (let i = 0; i < descriptor.influenceCount; i += 1) {
-        valueTracks[i].push(influences[i] ?? 0);
+        valueTracks[i]!.push(influences[i] ?? 0);
       }
     }
 
@@ -170,7 +170,7 @@ self.onmessage = (e: MessageEvent<WorkerInput>) => {
       morphKeyframes.push({
         path: descriptor.path,
         index: i,
-        values: valueTracks[i]
+        values: valueTracks[i]!
       });
     }
   }

@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.29.3",
   "scripts": {
     "dev": "vite",
     "dev:mock-vr": "vite --host 127.0.0.1 --port 5174 --strictPort",
@@ -28,7 +27,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
-    "three": "^0.173.0"
+    "three": "catalog:"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
@@ -37,16 +36,17 @@
     "@holoim/tooling-testing": "workspace:*",
     "@iwsdk/vite-plugin-gltf-optimizer": "^0.3.1",
     "@iwsdk/vite-plugin-iwer": "^0.2.2",
-    "@types/three": "^0.173.0",
+    "@types/three": "catalog:",
     "@typescript/native-preview": "latest",
     "@vitejs/plugin-basic-ssl": "^2.1.4",
-    "eslint": "^9.22.0",
+    "eslint": "catalog:",
     "globals": "^16.0.0",
     "playwright": "^1.58.2",
-    "typescript": "^5.7.3",
+    "typescript": "catalog:",
     "typescript-eslint": "^8.26.1",
-    "vite": "^7.3.1",
-    "vitest": "^3.2.4"
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "webxr-polyfill": "catalog:"
   },
   "engines": {
     "node": ">=20 <21"

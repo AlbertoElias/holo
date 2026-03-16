@@ -80,7 +80,7 @@ export class SceneBubbleSampler {
     }
 
     if (this.sceneBubbleSamples.length > 0) {
-      const last = this.sceneBubbleSamples[this.sceneBubbleSamples.length - 1];
+      const last = this.sceneBubbleSamples[this.sceneBubbleSamples.length - 1]!;
       this.tmpSampleDelta.subVectors(source, last);
       const minDistanceSq = MIN_SCENE_SAMPLE_DISTANCE * MIN_SCENE_SAMPLE_DISTANCE;
       if (this.tmpSampleDelta.lengthSq() < minDistanceSq) {
@@ -91,7 +91,7 @@ export class SceneBubbleSampler {
     if (this.sceneBubbleSamples.length >= MAX_SCENE_SAMPLES) {
       const downsampled: THREE.Vector3[] = [];
       for (let i = 0; i < this.sceneBubbleSamples.length; i += 1) {
-        if (i % 2 === 0) downsampled.push(this.sceneBubbleSamples[i]);
+        if (i % 2 === 0) downsampled.push(this.sceneBubbleSamples[i]!);
       }
       this.sceneBubbleSamples.length = 0;
       this.sceneBubbleSamples.push(...downsampled);
@@ -118,11 +118,11 @@ export class SceneBubbleSampler {
     for (let triStart = 0; triStart + 2 < indexCount; triStart += 3) {
       while (
         groupCursor < groups.length - 1 &&
-        triStart >= groups[groupCursor].start + groups[groupCursor].count
+        triStart >= groups[groupCursor]!.start + groups[groupCursor]!.count
       ) {
         groupCursor += 1;
       }
-      const group = groups[groupCursor];
+      const group = groups[groupCursor]!;
       if (triStart < group.start || triStart + 2 >= group.start + group.count) {
         continue;
       }
@@ -226,26 +226,26 @@ export class SceneBubbleSampler {
     for (const [materialIndex, indices] of keptByMaterial) {
       let writeIndex = 0;
       for (let i = 0; i + 2 < indices.length; i += 3) {
-        this.tmpTriA.fromBufferAttribute(positionAttr, indices[i]).applyMatrix4(sourceMesh.matrixWorld);
-        this.tmpTriB.fromBufferAttribute(positionAttr, indices[i + 1]).applyMatrix4(sourceMesh.matrixWorld);
-        this.tmpTriC.fromBufferAttribute(positionAttr, indices[i + 2]).applyMatrix4(sourceMesh.matrixWorld);
+        this.tmpTriA.fromBufferAttribute(positionAttr, indices[i]!).applyMatrix4(sourceMesh.matrixWorld);
+        this.tmpTriB.fromBufferAttribute(positionAttr, indices[i + 1]!).applyMatrix4(sourceMesh.matrixWorld);
+        this.tmpTriC.fromBufferAttribute(positionAttr, indices[i + 2]!).applyMatrix4(sourceMesh.matrixWorld);
 
         this.tmpTriEdgeAB.subVectors(this.tmpTriB, this.tmpTriA);
         this.tmpTriEdgeAC.subVectors(this.tmpTriC, this.tmpTriA);
         this.tmpTriNormal.crossVectors(this.tmpTriEdgeAB, this.tmpTriEdgeAC);
         const triNormalLenSq = this.tmpTriNormal.lengthSq();
         if (triNormalLenSq < 1e-10) {
-          indices[writeIndex] = indices[i];
-          indices[writeIndex + 1] = indices[i + 1];
-          indices[writeIndex + 2] = indices[i + 2];
+          indices[writeIndex] = indices[i]!;
+          indices[writeIndex + 1] = indices[i + 1]!;
+          indices[writeIndex + 2] = indices[i + 2]!;
           writeIndex += 3;
           continue;
         }
         this.tmpTriNormal.multiplyScalar(1 / Math.sqrt(triNormalLenSq));
         if (Math.abs(this.tmpTriNormal.dot(SceneBubbleSampler.UP)) < OCCLUSION_TEST_MIN_NORMAL_Y_ABS) {
-          indices[writeIndex] = indices[i];
-          indices[writeIndex + 1] = indices[i + 1];
-          indices[writeIndex + 2] = indices[i + 2];
+          indices[writeIndex] = indices[i]!;
+          indices[writeIndex + 1] = indices[i + 1]!;
+          indices[writeIndex + 2] = indices[i + 2]!;
           writeIndex += 3;
           continue;
         }
@@ -263,9 +263,9 @@ export class SceneBubbleSampler {
         }
 
         if (!occluded) {
-          indices[writeIndex] = indices[i];
-          indices[writeIndex + 1] = indices[i + 1];
-          indices[writeIndex + 2] = indices[i + 2];
+          indices[writeIndex] = indices[i]!;
+          indices[writeIndex + 1] = indices[i + 1]!;
+          indices[writeIndex + 2] = indices[i + 2]!;
           writeIndex += 3;
         }
       }

@@ -1,3 +1,9 @@
+// Re-export ESLint ecosystem deps so consumers don't need direct dependencies.
+// Usage: import { tseslint, jsConfig, globals } from '@holoim/config-eslint/base';
+export { default as tseslint } from 'typescript-eslint';
+export { default as jsConfig } from '@eslint/js';
+export { default as globals } from 'globals';
+
 export const workspaceDefaultIgnores = [
   "**/dist/**",
   "**/coverage/**",

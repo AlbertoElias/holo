@@ -17,13 +17,13 @@
     "verify:full": "pnpm run verify:fast && pnpm run test && pnpm run build"
   },
   "dependencies": {
-    "zod": "^3.24.2"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@holoim/config-eslint": "workspace:*",
     "@holoim/config-ts": "workspace:*",
-    "eslint": "^9.39.2",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

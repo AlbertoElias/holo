@@ -39,7 +39,7 @@ interface SegmentCalibrationState {
 }
 
 interface SegmentRuntimeState {
-  calibration?: SegmentCalibrationState;
+  calibration: SegmentCalibrationState | undefined;
   hasHeldQuaternion: boolean;
   heldQuaternion: THREE.Quaternion;
   holdFramesRemaining: number;
@@ -47,7 +47,7 @@ interface SegmentRuntimeState {
 }
 
 interface SideRuntimeState {
-  chain?: HandFingerRetargetChain;
+  chain: HandFingerRetargetChain | undefined;
   segmentsByBoneUuid: Map<string, SegmentRuntimeState>;
   tipEntryByFinger: Partial<Record<HandFingerName, HandFingerRetargetEntry>>;
   quality: HandRetargetDataQuality;
@@ -96,7 +96,7 @@ export class HandFingerRetargeter {
   }
 
   setChain(side: VrHandSide, chain: HandFingerRetargetChain | undefined): void {
-    const nextState = this.sideState[side];
+    const nextState = this.sideState[side]!;
     nextState.chain = chain;
     nextState.tipEntryByFinger = {};
     this.resetQuality(nextState.quality);
@@ -117,7 +117,7 @@ export class HandFingerRetargeter {
   }
 
   apply(side: VrHandSide): void {
-    const sideState = this.sideState[side];
+    const sideState = this.sideState[side]!;
     const chain = sideState.chain;
     this.resetQuality(sideState.quality);
     if (!chain) return;
@@ -167,7 +167,7 @@ export class HandFingerRetargeter {
   resetCalibrationPose(side?: VrHandSide): void {
     const sides: readonly VrHandSide[] = side ? [side] : ['left', 'right'];
     for (const nextSide of sides) {
-      const sideState = this.sideState[nextSide];
+      const sideState = this.sideState[nextSide]!;
       for (const runtime of sideState.segmentsByBoneUuid.values()) {
         runtime.calibration = undefined;
         runtime.hasHeldQuaternion = false;
@@ -181,7 +181,7 @@ export class HandFingerRetargeter {
   resetRuntimeState(side?: VrHandSide): void {
     const sides: readonly VrHandSide[] = side ? [side] : ['left', 'right'];
     for (const nextSide of sides) {
-      const sideState = this.sideState[nextSide];
+      const sideState = this.sideState[nextSide]!;
       for (const runtime of sideState.segmentsByBoneUuid.values()) {
         runtime.hasHeldQuaternion = false;
         runtime.holdFramesRemaining = 0;
@@ -192,7 +192,7 @@ export class HandFingerRetargeter {
   }
 
   getDebugSnapshot(side: VrHandSide): HandRetargetDebugSnapshot {
-    const sideState = this.sideState[side];
+    const sideState = this.sideState[side]!;
     const fingerTips: Record<HandFingerName, Vec3Like | null> = {
       thumb: null,
       index: null,
@@ -261,7 +261,7 @@ export class HandFingerRetargeter {
   }
 
   private isSideCalibrated(side: VrHandSide): boolean {
-    const sideState = this.sideState[side];
+    const sideState = this.sideState[side]!;
     const chain = sideState.chain;
     if (!chain || chain.entries.length === 0) return false;
     for (const entry of chain.entries) {
@@ -272,7 +272,7 @@ export class HandFingerRetargeter {
   }
 
   private captureCalibrationForSide(side: VrHandSide): boolean {
-    const sideState = this.sideState[side];
+    const sideState = this.sideState[side]!;
     const chain = sideState.chain;
     if (!chain || chain.entries.length === 0) return false;
 

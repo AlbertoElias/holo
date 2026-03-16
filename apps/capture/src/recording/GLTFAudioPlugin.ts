@@ -92,7 +92,7 @@ export class GLTFAudioPlugin implements GLTFExporterPlugin {
 
     // Attach emitter reference to scene
     if (json.scenes && json.scenes.length > 0) {
-      const scene = json.scenes[0];
+      const scene = json.scenes[0]!;
       if (!scene.extensions) scene.extensions = {};
       scene.extensions['KHR_audio'] = { emitters: [0] };
     }

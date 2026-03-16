@@ -275,10 +275,10 @@ export class LocomotionAnimator {
 
   private quaternionSamplesMatch(values: THREE.TypedArray, aOffset: number, bOffset: number): boolean {
     const dot = Math.abs(
-      values[aOffset] * values[bOffset] +
-      values[aOffset + 1] * values[bOffset + 1] +
-      values[aOffset + 2] * values[bOffset + 2] +
-      values[aOffset + 3] * values[bOffset + 3]
+      values[aOffset]! * values[bOffset]! +
+      values[aOffset + 1]! * values[bOffset + 1]! +
+      values[aOffset + 2]! * values[bOffset + 2]! +
+      values[aOffset + 3]! * values[bOffset + 3]!
     );
     return Number.isFinite(dot) && dot >= WALK_LOOP_QUAT_MATCH_DOT;
   }
@@ -286,8 +286,8 @@ export class LocomotionAnimator {
   private parseTrackName(trackName: string): { nodeName: string; property: 'position' | 'quaternion' | 'scale' } | undefined {
     const match = /^(.+)\.(position|quaternion|scale)$/.exec(trackName);
     if (!match) return undefined;
-    const rawNodeName = match[1];
-    const rawProperty = match[2];
+    const rawNodeName = match[1]!;
+    const rawProperty = match[2]!;
 
     const pathLeaf = rawNodeName.split('/').pop() ?? rawNodeName;
     const bracketMatch = /\[([^[\]]+)\]/.exec(pathLeaf);

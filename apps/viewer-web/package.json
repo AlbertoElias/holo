@@ -23,8 +23,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.1.5",
-    "three": "^0.173.0",
-    "zod": "^3.24.2"
+    "three": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@holoim/config-eslint": "workspace:*",
@@ -32,17 +32,18 @@
     "@holoim/tooling-testing": "workspace:*",
     "@iwsdk/vite-plugin-iwer": "^0.2.2",
     "@playwright/test": "^1.50.1",
-    "eslint": "^9.39.2",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@types/three": "^0.173.0",
+    "@types/three": "catalog:",
     "@vitejs/plugin-basic-ssl": "^2.1.4",
     "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "catalog:",
     "jsdom": "^26.0.0",
-    "typescript": "^5.7.3",
-    "vite": "^7.3.1",
-    "vitest": "^3.2.4"
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "webxr-polyfill": "catalog:"
   }
 }

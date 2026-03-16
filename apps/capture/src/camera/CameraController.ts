@@ -169,7 +169,7 @@ export class CameraController {
         if (hits.length > 0) {
           const clearance = Math.max(0.08, avatarHeight * 0.08);
           const minDistance = Math.max(0.2, avatarHeight * 0.35);
-          const clampedDistance = Math.max(minDistance, hits[0].distance - clearance);
+          const clampedDistance = Math.max(minDistance, hits[0]!.distance - clearance);
           this.tmpCorrectedCam.copy(this.tmpTargetCam).addScaledVector(this.tmpCamRayDir, clampedDistance);
         }
       }

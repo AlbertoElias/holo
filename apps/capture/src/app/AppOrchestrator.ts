@@ -541,8 +541,8 @@ export class AppOrchestrator implements System {
     return JSON.stringify(payload);
   }
 
-  private getFingerDebugLocalQuaternions(side: VrHandSide): HandPoseSnapshot['fingerLocalQuaternions'] {
-    const names = FINGER_DEBUG_BONES[side];
+  private getFingerDebugLocalQuaternions(side: VrHandSide): { thumb: QuatLike | null; index: QuatLike | null; middle: QuatLike | null } {
+    const names = FINGER_DEBUG_BONES[side]!;
     return {
       thumb: this.getFingerDebugQuaternion(names.thumb),
       index: this.getFingerDebugQuaternion(names.index),
@@ -626,10 +626,14 @@ export class AppOrchestrator implements System {
   }
 
   private initializeVrHandRig(): void {
-    this.armIkChains.left = this.avatarRig.createArmIkChain('left');
-    this.armIkChains.right = this.avatarRig.createArmIkChain('right');
-    this.fingerRetargetChains.left = this.avatarRig.createHandFingerRetargetChain('left');
-    this.fingerRetargetChains.right = this.avatarRig.createHandFingerRetargetChain('right');
+    const leftArm = this.avatarRig.createArmIkChain('left');
+    if (leftArm) this.armIkChains.left = leftArm;
+    const rightArm = this.avatarRig.createArmIkChain('right');
+    if (rightArm) this.armIkChains.right = rightArm;
+    const leftFingers = this.avatarRig.createHandFingerRetargetChain('left');
+    if (leftFingers) this.fingerRetargetChains.left = leftFingers;
+    const rightFingers = this.avatarRig.createHandFingerRetargetChain('right');
+    if (rightFingers) this.fingerRetargetChains.right = rightFingers;
     this.fingerRetargeter.setChain('left', this.fingerRetargetChains.left);
     this.fingerRetargeter.setChain('right', this.fingerRetargetChains.right);
     this.fingerRetargeter.resetRuntimeState();

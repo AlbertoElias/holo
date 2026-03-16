@@ -34,7 +34,7 @@ export class GltfExportComposer {
     });
 
     if (!normalizeRootMotion && frames.length > 0) {
-      const first = frames[0];
+      const first = frames[0]!;
       clone.position.set(first.rootPosition.x, first.rootPosition.y, first.rootPosition.z);
       clone.quaternion.set(
         first.rootQuaternion.x,
@@ -131,7 +131,7 @@ export class GltfExportComposer {
 
     const bubbleSphere = bubbleSampler.createBubbleSphere();
     if (frames.length > 0) {
-      const first = frames[0];
+      const first = frames[0]!;
       bubbleSphere.position.set(first.rootPosition.x, first.rootPosition.y, first.rootPosition.z);
     }
     tracks.push(

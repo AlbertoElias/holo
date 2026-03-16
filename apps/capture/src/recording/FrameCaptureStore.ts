@@ -49,7 +49,7 @@ export class FrameCaptureStore {
       const values: number[] = [];
       const influenceCount = Math.min(influences.length, binding.influenceCount);
       for (let i = 0; i < influenceCount; i += 1) {
-        const value = influences[i];
+        const value = influences[i] ?? 0;
         values.push(Number.isFinite(value) ? value : 0);
       }
       morphs.push({ path: binding.path, influences: values });
