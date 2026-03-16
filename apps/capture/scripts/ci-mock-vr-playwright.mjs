@@ -76,6 +76,16 @@ async function waitForHooks() {
   }
 }
 
+async function captureFinalScreenshot() {
+  const screenshotPath = path.join(screenshotDir, 'mock-vr-final.png');
+  try {
+    await page.screenshot({ path: screenshotPath, timeout: 10_000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[mock-vr] final screenshot skipped: ${message}`);
+  }
+}
+
 try {
   const mode = resolveXrTestMode(
     process.env.XR_TEST_MODE
@@ -220,7 +230,7 @@ try {
 
   assert(consoleErrors.length === 0, `Console errors found: ${consoleErrors.join(' | ')}`);
 
-  await page.screenshot({ path: path.join(screenshotDir, 'mock-vr-final.png') });
+  await captureFinalScreenshot();
   console.log('Mock VR CI check passed.');
 } finally {
   await context.close();

@@ -52,7 +52,10 @@ jobs:
         run: |
           curl -fsSL -o /tmp/ktx.tar.bz2 "https://github.com/KhronosGroup/KTX-Software/releases/download/v${KTX_VERSION}/KTX-Software-${KTX_VERSION}-Linux-x86_64.tar.bz2"
           tar -xjf /tmp/ktx.tar.bz2 -C "${RUNNER_TEMP}"
-          echo "${RUNNER_TEMP}/KTX-Software-${KTX_VERSION}-Linux-x86_64/bin" >> "${GITHUB_PATH}"
+          KTX_ROOT="$(find "${RUNNER_TEMP}" -maxdepth 1 -type d -name 'KTX-Software-*' | head -n 1)"
+          test -n "${KTX_ROOT}"
+          export PATH="${KTX_ROOT}/bin:${PATH}"
+          echo "${KTX_ROOT}/bin" >> "${GITHUB_PATH}"
           ktx --version
 
       - name: Verify workspace
@@ -94,7 +97,10 @@ jobs:
         run: |
           curl -fsSL -o /tmp/ktx.tar.bz2 "https://github.com/KhronosGroup/KTX-Software/releases/download/v${KTX_VERSION}/KTX-Software-${KTX_VERSION}-Linux-x86_64.tar.bz2"
           tar -xjf /tmp/ktx.tar.bz2 -C "${RUNNER_TEMP}"
-          echo "${RUNNER_TEMP}/KTX-Software-${KTX_VERSION}-Linux-x86_64/bin" >> "${GITHUB_PATH}"
+          KTX_ROOT="$(find "${RUNNER_TEMP}" -maxdepth 1 -type d -name 'KTX-Software-*' | head -n 1)"
+          test -n "${KTX_ROOT}"
+          export PATH="${KTX_ROOT}/bin:${PATH}"
+          echo "${KTX_ROOT}/bin" >> "${GITHUB_PATH}"
           ktx --version
 
       - name: Verify workspace baseline
