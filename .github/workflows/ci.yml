@@ -61,7 +61,7 @@ jobs:
         run: cp apps/viewer-api/.env.example apps/viewer-api/.env
 
       - name: Install Playwright browsers
-        run: pnpm exec playwright install chromium
+        run: pnpm --filter @holoim/capture exec playwright install chromium
 
       - name: Run tests
         run: pnpm run test:all
@@ -115,7 +115,7 @@ jobs:
         run: cp apps/viewer-api/.env.example apps/viewer-api/.env
 
       - name: Install Playwright browsers
-        run: pnpm exec playwright install chromium
+        run: pnpm --filter @holoim/capture exec playwright install chromium
 
       - name: Run smoke pipeline
         run: pnpm run test:smoke:pipeline
