@@ -37,6 +37,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm --filter @holoim/api prisma:generate
+
+      - name: Copy viewer-api env
+        run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+
       - name: Install Playwright Chromium
         run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
 
@@ -72,6 +78,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @holoim/api prisma:generate
+
+      - name: Copy viewer-api env
+        run: cp apps/viewer-api/.env.example apps/viewer-api/.env
 
       - name: Install Playwright Chromium
         run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
