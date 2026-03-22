@@ -1,6 +1,5 @@
 import type { Browser, BrowserContext, BrowserType, Page } from "@playwright/test";
-
-export type XrTestMode = "iwer" | "off";
+import type { XrTestMode } from "@holoim/xr-runtime";
 
 export type IwerRuntimeState = {
   hasIwerDevice: boolean;

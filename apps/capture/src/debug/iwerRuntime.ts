@@ -1,15 +1,17 @@
+import type { IwerPoseSnapshot } from '@holoim/xr-runtime';
+
 import type { MockVrPoseInput, QuatLike, Vec3Like, VrHandSide } from '../types/contracts';
 
 const IWER_STANDING_HEAD_Y = 1.6;
 
-interface IwerVector3 extends Vec3Like {
+type IwerVector3 = IwerPoseSnapshot['position'] & Vec3Like & {
   set: (x: number, y: number, z: number) => unknown;
-}
+};
 
-interface IwerQuaternion extends QuatLike {
+type IwerQuaternion = IwerPoseSnapshot['quaternion'] & QuatLike & {
   set: (x: number, y: number, z: number, w: number) => unknown;
   normalize?: () => unknown;
-}
+};
 
 interface IwerTrackedHandInput {
   connected: boolean;

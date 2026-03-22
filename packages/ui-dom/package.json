@@ -1,0 +1,29 @@
+{
+  "name": "@holoim/ui-dom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "verify:fast": "pnpm run lint && pnpm run typecheck",
+    "verify:full": "pnpm run verify:fast && pnpm run test"
+  },
+  "dependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@holoim/config-eslint": "workspace:*",
+    "@holoim/config-ts": "workspace:*",
+    "@types/react": "^18.3.18",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

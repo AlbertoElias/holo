@@ -1,19 +1,9 @@
-const PUBLIC_XR_TEST_MODES = new Set(['iwer', 'off']);
-const XR_TEST_MODE_ALIASES = new Map([
-  ['polyfill', 'iwer'],
-  ['shim', 'iwer']
-]);
+import { resolveXrTestMode } from '@holoim/xr-runtime';
+
+export { resolveXrTestMode };
 
 export const XR_CHROMIUM_ARGS = Object.freeze(['--use-gl=angle', '--use-angle=swiftshader']);
 export const XR_CONTEXT_OPTIONS = Object.freeze({ ignoreHTTPSErrors: true });
-
-export function resolveXrTestMode(rawMode = process.env.XR_TEST_MODE) {
-  const normalized = String(rawMode ?? 'iwer').toLowerCase();
-  if (PUBLIC_XR_TEST_MODES.has(normalized)) {
-    return normalized;
-  }
-  return XR_TEST_MODE_ALIASES.get(normalized) ?? 'iwer';
-}
 
 export function createXrLaunchOptions(overrides = {}) {
   const { args = [], ...rest } = overrides;

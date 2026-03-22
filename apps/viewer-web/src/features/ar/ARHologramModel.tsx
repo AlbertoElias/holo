@@ -6,9 +6,12 @@ import { Box3, LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
 import type { AnimationAction, Group, Object3D } from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
+import { readIwerRuntime } from "@holoim/xr-runtime";
+
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipStatus } from "../hologram/useSphereClipping";
+import { ARDepthOcclusion } from "./ARDepthOcclusion";
 import { freezeBubbleWrapperMotion } from "./arAnimation";
 import { ARBubbleAura } from "./ARBubbleAura";
 import {
@@ -59,6 +62,8 @@ export type ArPlacementStatus = {
 };
 
 type ARHologramModelProps = {
+  enableDepthOcclusion: boolean;
+  enableIwerPlacementAssist: boolean;
   url: string;
   placementVersion: number;
   onBubbleStatusChange: (status: SphereClipStatus) => void;
@@ -124,21 +129,9 @@ function normalizeSceneAtOrigin(root: Object3D): void {
   }
 }
 
-function getIwerTrackedPlanes(): Set<PlaneLike> | undefined {
-  const maybeDevice = window as Window & {
-    IWER_DEVICE?: {
-      position?: { x: number; y: number; z: number };
-      quaternion?: { x: number; y: number; z: number; w: number };
-      sem?: {
-        trackedPlanes?: Set<PlaneLike>;
-      };
-    };
-  };
-
-  return maybeDevice.IWER_DEVICE?.sem?.trackedPlanes;
-}
-
 export function ARHologramModel({
+  enableDepthOcclusion,
+  enableIwerPlacementAssist,
   url,
   placementVersion,
   onBubbleStatusChange,
@@ -461,7 +454,7 @@ export function ARHologramModel({
   }, [placementVersion, Boolean(xrSession)]);
 
   useEffect(() => {
-    if (!xrSession) {
+    if (!xrSession || !enableIwerPlacementAssist) {
       return;
     }
 
@@ -471,35 +464,26 @@ export function ARHologramModel({
           return;
         }
 
-        const maybeDevice = window as Window & {
-          IWER_DEVICE?: {
-            position?: { x: number; y: number; z: number };
-            quaternion?: { x: number; y: number; z: number; w: number };
-            sem?: {
-              trackedPlanes?: Set<PlaneLike>;
-            };
-          };
-        };
-        const device = maybeDevice.IWER_DEVICE;
-        if (!device?.sem?.trackedPlanes?.size || !device.position || !device.quaternion) {
+        const iwerRuntime = readIwerRuntime();
+        if (iwerRuntime.trackedPlanesCount === 0 || !iwerRuntime.pose) {
           return;
         }
 
         const devicePosition = cameraPositionRef.current.set(
-          device.position.x,
-          device.position.y,
-          device.position.z
+          iwerRuntime.pose.position.x,
+          iwerRuntime.pose.position.y,
+          iwerRuntime.pose.position.z
         );
         const deviceQuaternion = cameraQuaternionRef.current.set(
-          device.quaternion.x,
-          device.quaternion.y,
-          device.quaternion.z,
-          device.quaternion.w
+          iwerRuntime.pose.quaternion.x,
+          iwerRuntime.pose.quaternion.y,
+          iwerRuntime.pose.quaternion.z,
+          iwerRuntime.pose.quaternion.w
         );
         const planePlacement = computeFloorPlacement(devicePosition, deviceQuaternion, {
           distanceMeters: resolveForwardDistance(),
           minFloorY: 0,
-          eyeToFloorMeters: Math.max(0.1, device.position.y),
+          eyeToFloorMeters: Math.max(0.1, iwerRuntime.pose.position.y),
           verticalOffsetMeters: AR_FLOOR_PLACEMENT_VIEW_LIFT_METERS
         });
 
@@ -536,7 +520,7 @@ export function ARHologramModel({
     // This effect only exists to bridge IWER localhost emulation into a deterministic placement
     // during desktop development and browser automation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placementVersion, Boolean(xrSession)]);
+  }, [enableIwerPlacementAssist, placementVersion, Boolean(xrSession)]);
 
   useFrame(({ camera }, _delta, frame) => {
     if (!groupRef.current) {
@@ -614,30 +598,32 @@ export function ARHologramModel({
       }
 
       let floorY: number | null = null;
-      const iwerTrackedPlanes = getIwerTrackedPlanes();
+      const iwerTrackedPlanes: ReadonlySet<PlaneLike> | undefined = enableIwerPlacementAssist
+        ? readIwerRuntime().trackedPlanes ?? undefined
+        : undefined;
       if (originReferenceSpace) {
-        const detectedPlanes = frame.detectedPlanes && frame.detectedPlanes.size > 0
+        const detectedPlanes: ReadonlySet<PlaneLike> | undefined = frame.detectedPlanes && frame.detectedPlanes.size > 0
           ? frame.detectedPlanes
           : iwerTrackedPlanes;
         if (detectedPlanes && detectedPlanes.size > 0) {
-        for (const plane of detectedPlanes) {
-          if (plane.orientation !== "horizontal") {
-            continue;
-          }
+          for (const plane of detectedPlanes) {
+            if (plane.orientation !== "horizontal") {
+              continue;
+            }
 
-          if (!plane.planeSpace) {
-            continue;
-          }
+            if (!plane.planeSpace) {
+              continue;
+            }
 
-          const planePose = frame.getPose(plane.planeSpace, originReferenceSpace);
-          if (!planePose) {
-            continue;
-          }
+            const planePose = frame.getPose(plane.planeSpace, originReferenceSpace);
+            if (!planePose) {
+              continue;
+            }
 
-          floorY = floorY === null
-            ? planePose.transform.position.y
-            : Math.min(floorY, planePose.transform.position.y);
-        }
+            floorY = floorY === null
+              ? planePose.transform.position.y
+              : Math.min(floorY, planePose.transform.position.y);
+          }
         }
       }
 
@@ -805,9 +791,12 @@ export function ARHologramModel({
   }, [clearActiveAnchor]);
 
   return (
-    <group ref={groupRef} scale={[modelScale, modelScale, modelScale]}>
-      <primitive object={clonedScene} />
-      <ARBubbleAura bubble={sphereClip} />
-    </group>
+    <>
+      <ARDepthOcclusion enabled={enableDepthOcclusion} />
+      <group ref={groupRef} scale={[modelScale, modelScale, modelScale]}>
+        <primitive object={clonedScene} />
+        <ARBubbleAura bubble={sphereClip} />
+      </group>
+    </>
   );
 }

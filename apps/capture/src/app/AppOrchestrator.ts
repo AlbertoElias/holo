@@ -11,11 +11,10 @@ import { InputController } from '../input/InputController';
 import { ArmIkSolver } from '../ik/ArmIkSolver';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import { UIStateStore } from '../ui/UIStateStore';
-import { DesktopHud } from '../ui/DesktopHud';
 import { VrHud } from '../ui/VrHud';
 import { AvatarRecorder } from '../recording/AvatarRecorder';
 import { AudioRecorder } from '../recording/AudioRecorder';
-import type { AppMode, FrameContext, HandPoseSnapshot, MockInputState, MockVrPoseInput, QuatLike, System, TrackedHandJointName, VrHandSide } from '../types/contracts';
+import type { AppMode, FrameContext, HandPoseSnapshot, MockInputState, MockVrPoseInput, QuatLike, System, TrackedHandJointName, UiViewModel, VrHandSide } from '../types/contracts';
 import {
   computeCrouchPoseAmount,
   computeVrCrouchTarget,
@@ -102,11 +101,6 @@ export class AppOrchestrator implements System {
   private readonly ikSolver = new ArmIkSolver();
   private readonly animator = new LocomotionAnimator();
   private readonly uiStore = new UIStateStore();
-  private readonly desktopHud = new DesktopHud(
-    this.bootstrap.statusElement,
-    this.uiStore,
-    () => this.toggleRecording()
-  );
   private readonly vrHud = new VrHud(this.uiStore);
   private readonly recorder = new AvatarRecorder();
   private readonly audioRecorder = new AudioRecorder();
@@ -158,7 +152,6 @@ export class AppOrchestrator implements System {
 
   async init(): Promise<void> {
     this.xrService.mountToScene(this.bootstrap.scene, this.bootstrap.cameraRig);
-    this.desktopHud.init();
     this.vrHud.init();
     this.input.init();
 
@@ -312,7 +305,7 @@ export class AppOrchestrator implements System {
     this.uiStore.publishMode(mode);
 
     if (isVrActive) {
-      this.vrHud.update(this.bootstrap.xrCamera);
+      this.vrHud.update(this.bootstrap.xrCamera, ctx.deltaSec);
     }
 
     const activeCamera = isVrActive ? this.bootstrap.xrCamera : this.bootstrap.desktopCamera;
@@ -326,9 +319,20 @@ export class AppOrchestrator implements System {
     this.unbindXrSelectListeners();
     window.removeEventListener('resize', this.onResize);
     this.input.dispose();
-    this.desktopHud.dispose();
     this.vrHud.dispose();
     this.audioRecorder.dispose();
+  }
+
+  subscribeUi(listener: (state: UiViewModel) => void): () => void {
+    return this.uiStore.subscribe(listener);
+  }
+
+  getUiState(): UiViewModel {
+    return this.uiStore.getState();
+  }
+
+  requestToggleRecording(): void {
+    this.toggleRecording();
   }
 
   private toggleRecording(): void {
@@ -402,7 +406,7 @@ export class AppOrchestrator implements System {
       const panel = this.vrHud.getRecordingPanel();
       if (panel) {
         for (const ctrl of controllers) {
-          if (panel.isPointerOverButton(ctrl)) {
+          if (panel.isPointerOverAction(ctrl)) {
             this.toggleRecording();
             return;
           }

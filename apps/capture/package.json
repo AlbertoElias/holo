@@ -27,6 +27,12 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
+    "@holoim/ui-dom": "workspace:*",
+    "@holoim/xr-runtime": "workspace:*",
+    "@holoim/xr-ui-core": "workspace:*",
+    "@holoim/xr-ui-three": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "three": "catalog:"
   },
   "devDependencies": {
@@ -36,6 +42,8 @@
     "@holoim/tooling-testing": "workspace:*",
     "@iwsdk/vite-plugin-gltf-optimizer": "^0.3.1",
     "@iwsdk/vite-plugin-iwer": "^0.2.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
     "@types/three": "catalog:",
     "@typescript/native-preview": "latest",
     "@vitejs/plugin-basic-ssl": "^2.1.4",

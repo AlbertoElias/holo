@@ -1,11 +1,13 @@
 import { AppOrchestrator } from './AppOrchestrator';
 import { DebugBridge } from '../debug/DebugBridge';
 import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
+import type { CaptureUiBridge } from '../ui/captureUiBridge';
 
 export interface AppRuntime {
   start: () => Promise<void>;
   tick: (deltaSec: number) => void;
   dispose: () => void;
+  uiBridge: CaptureUiBridge;
 }
 
 export function createApp(): AppRuntime {
@@ -21,6 +23,11 @@ export function createApp(): AppRuntime {
     captureHandCalibrationPose: () => orchestrator.captureHandCalibrationPose(),
     resetHandCalibrationPose: () => orchestrator.resetHandCalibrationPose()
   });
+  const uiBridge: CaptureUiBridge = {
+    subscribe: (listener) => orchestrator.subscribeUi(() => listener()),
+    getSnapshot: () => orchestrator.getUiState(),
+    toggleRecording: () => orchestrator.requestToggleRecording()
+  };
 
   return {
     start: async () => {
@@ -36,6 +43,7 @@ export function createApp(): AppRuntime {
     dispose: () => {
       debugBridge.dispose();
       orchestrator.dispose();
-    }
+    },
+    uiBridge
   };
 }

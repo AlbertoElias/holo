@@ -1,0 +1,31 @@
+{
+  "name": "@holoim/xr-ui-three",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "verify:fast": "pnpm run lint && pnpm run typecheck",
+    "verify:full": "pnpm run verify:fast && pnpm run test"
+  },
+  "dependencies": {
+    "@holoim/xr-ui-core": "workspace:*",
+    "@pmndrs/uikit": "^1.0.64",
+    "three": "catalog:"
+  },
+  "devDependencies": {
+    "@holoim/config-eslint": "workspace:*",
+    "@holoim/config-ts": "workspace:*",
+    "@types/three": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

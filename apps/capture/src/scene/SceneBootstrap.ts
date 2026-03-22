@@ -11,7 +11,6 @@ export interface SceneBootstrap {
   xrCamera: THREE.PerspectiveCamera;
   desktopCamera: THREE.PerspectiveCamera;
   cameraRig: THREE.Group;
-  statusElement: HTMLElement;
   loader: GLTFLoader;
   clock: THREE.Clock;
   xrSessionMode: XrSessionMode;
@@ -19,9 +18,8 @@ export interface SceneBootstrap {
 
 export function createSceneBootstrap(): SceneBootstrap {
   const app = document.getElementById('app');
-  const status = document.getElementById('status');
-  if (!app || !status) {
-    throw new Error('Missing required #app or #status element');
+  if (!app) {
+    throw new Error('Missing required #app element');
   }
 
   const scene = new THREE.Scene();
@@ -94,7 +92,6 @@ export function createSceneBootstrap(): SceneBootstrap {
     xrCamera,
     desktopCamera,
     cameraRig,
-    statusElement: status,
     loader: new GLTFLoader(),
     clock: new THREE.Clock(),
     get xrSessionMode() {

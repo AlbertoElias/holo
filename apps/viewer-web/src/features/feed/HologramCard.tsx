@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { HologramDTO } from "@holoim/contracts";
+import { readXrCapabilities } from "@holoim/xr-runtime";
 
 import { isIOSDevice } from "../ar/isIOSDevice";
 import { ARQuickLookLink } from "../ar/ARQuickLookLink";
@@ -134,14 +135,9 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
       return;
     }
 
-    if (!navigator.xr) {
-      setArSupported(false);
-      return;
-    }
-
-    navigator.xr.isSessionSupported("immersive-ar")
-      .then((supported) => {
-        setArSupported(supported);
+    void readXrCapabilities()
+      .then((capabilities) => {
+        setArSupported(capabilities.supportsImmersiveAr);
       })
       .catch(() => {
         setArSupported(false);

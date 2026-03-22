@@ -1,0 +1,26 @@
+{
+  "name": "@holoim/xr-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.mjs"
+    }
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --environment jsdom",
+    "verify:fast": "pnpm run lint && pnpm run typecheck",
+    "verify:full": "pnpm run verify:fast && pnpm run test"
+  },
+  "devDependencies": {
+    "@holoim/config-eslint": "workspace:*",
+    "@holoim/config-ts": "workspace:*",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

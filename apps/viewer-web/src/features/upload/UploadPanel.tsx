@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import type { HologramDTO } from "@holoim/contracts";
+import { UiButton, UiField, UiInput, UiNotice, UiPanel, UiStack } from "@holoim/ui-dom";
 
 import { uploadHologram } from "../feed/api";
 
@@ -89,51 +90,55 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
 
   return (
     <section className={`upload-panel ${isExpanded ? "upload-panel-expanded" : ""}`}>
-      <button
+      <UiButton
         type="button"
         className="upload-toggle"
         onClick={() => setIsExpanded(!isExpanded)}
         aria-label={isExpanded ? "Collapse upload panel" : "Expand upload panel"}
+        tone="ghost"
+        style={{ width: "100%" }}
       >
         {isExpanded ? "✕" : "⬆ Upload"}
-      </button>
+      </UiButton>
       {isExpanded && (
-        <form onSubmit={onSubmit}>
-          <label htmlFor="glb-upload" className="upload-title">
-            Upload Hologram
-          </label>
-          <label className="upload-field">
-            Hologram name
-            <input
-              value={hologramName}
-              onChange={(event) => {
-                setError(null);
-                setHologramName(event.target.value);
-              }}
-              maxLength={120}
-              disabled={isUploading}
-            />
-          </label>
-          <label className="upload-field">
-            Submitted by
-            <input value={submittedBy} onChange={onSubmittedByChange} maxLength={80} disabled={isUploading} />
-          </label>
-          <input
-            ref={fileInputRef}
-            id="glb-upload"
-            type="file"
-            accept=".glb,model/gltf-binary"
-            onChange={onFileChange}
-            disabled={isUploading}
-          />
-          <p className="upload-caption">
-            {selectedFile ? `Selected: ${selectedFile.name}` : "GLB only, up to 25MB"}
-          </p>
-          <button type="submit" disabled={isUploading || !selectedFile}>
-            {isUploading ? "Uploading..." : "Upload"}
-          </button>
-          {error ? <p className="upload-error">{error}</p> : null}
-        </form>
+        <UiPanel style={{ padding: "0.95rem", marginTop: "0.6rem" }}>
+          <form onSubmit={onSubmit}>
+            <UiStack gap="0.65rem">
+              <label htmlFor="glb-upload" className="upload-title">
+                Upload Hologram
+              </label>
+              <UiField label="Hologram name">
+                <UiInput
+                  value={hologramName}
+                  onChange={(event) => {
+                    setError(null);
+                    setHologramName(event.target.value);
+                  }}
+                  maxLength={120}
+                  disabled={isUploading}
+                />
+              </UiField>
+              <UiField label="Submitted by">
+                <UiInput value={submittedBy} onChange={onSubmittedByChange} maxLength={80} disabled={isUploading} />
+              </UiField>
+              <input
+                ref={fileInputRef}
+                id="glb-upload"
+                type="file"
+                accept=".glb,model/gltf-binary"
+                onChange={onFileChange}
+                disabled={isUploading}
+              />
+              <p className="upload-caption">
+                {selectedFile ? `Selected: ${selectedFile.name}` : "GLB only, up to 25MB"}
+              </p>
+              <UiButton type="submit" disabled={isUploading || !selectedFile}>
+                {isUploading ? "Uploading..." : "Upload"}
+              </UiButton>
+              {error ? <UiNotice tone="danger">{error}</UiNotice> : null}
+            </UiStack>
+          </form>
+        </UiPanel>
       )}
     </section>
   );

@@ -297,6 +297,8 @@ test("AR placement uses IWER SEM hit-test placement by default", async ({ page }
   const environmentState = await waitForIwerEnvironment(page, { minTrackedPlanes: 1 });
   expect(environmentState.hasSem).toBeTruthy();
   expect(environmentState.trackedPlanesCount).toBeGreaterThan(0);
+  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion", "disabled");
+  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion-reason", "iwer-runtime");
 
   const placement = await waitForPlacement(
     page,

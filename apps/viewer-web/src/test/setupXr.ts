@@ -1,14 +1,8 @@
-type XrTestMode = "shim" | "off";
+import { resolveXrTestMode } from "@holoim/xr-runtime";
 
-function resolveXrTestMode(): XrTestMode {
-  const raw = String(process.env.XR_TEST_MODE ?? "iwer").toLowerCase();
-  if (raw === "off") {
-    return "off";
-  }
-  return "shim";
-}
+export { resolveXrTestMode } from "@holoim/xr-runtime";
 
-function installShim(): void {
+function installIwerUnitTestStub(): void {
   if ("xr" in navigator) return;
   const xrStub = {
     isSessionSupported: async (mode: string) => mode === "immersive-ar" || mode === "immersive-vr",
@@ -29,7 +23,9 @@ export function installTestXrEnvironment(): void {
   const mode = resolveXrTestMode();
   if (mode === "off") return;
 
+  // In e2e, XR_TEST_MODE=iwer means the localhost page gets a Vite-injected IWER runtime.
+  // In jsdom unit tests, the same public mode installs an internal stub only.
   if (!("xr" in navigator)) {
-    installShim();
+    installIwerUnitTestStub();
   }
 }
