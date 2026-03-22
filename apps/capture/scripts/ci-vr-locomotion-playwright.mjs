@@ -166,12 +166,24 @@ function summarizeState(state) {
   };
 }
 
+async function captureScreenshot(page, filename, label) {
+  const screenshotPath = path.join(screenshotDir, filename);
+  try {
+    await page.screenshot({ path: screenshotPath, timeout: 10_000 });
+    return screenshotPath;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[vr-locomotion] ${label} screenshot skipped: ${message}`);
+    return null;
+  }
+}
+
 async function waitForState(page, label, predicate, options = {}) {
   const stepMs = options.stepMs ?? 80;
   const timeoutMs = options.timeoutMs ?? 1600;
   const timeline = [];
   const timelinePath = path.join(screenshotDir, `${toSlug(label)}-timeline.json`);
-  const screenshotPath = path.join(screenshotDir, `${toSlug(label)}-failure.png`);
+  const screenshotName = `${toSlug(label)}-failure.png`;
 
   for (let elapsedMs = 0; elapsedMs <= timeoutMs; elapsedMs += stepMs) {
     if (elapsedMs > 0) {
@@ -189,8 +201,9 @@ async function waitForState(page, label, predicate, options = {}) {
   }
 
   await writeFile(timelinePath, JSON.stringify(timeline, null, 2));
-  await page.screenshot({ path: screenshotPath });
-  throw new Error(`${label}: condition not met after ${timeoutMs}ms. Timeline: ${timelinePath}. Screenshot: ${screenshotPath}`);
+  const screenshotPath = await captureScreenshot(page, screenshotName, `${label} failure`);
+  const screenshotDetail = screenshotPath ? ` Screenshot: ${screenshotPath}` : ' Screenshot capture skipped.';
+  throw new Error(`${label}: condition not met after ${timeoutMs}ms. Timeline: ${timelinePath}.${screenshotDetail}`);
 }
 
 async function ensureGrounded(page) {
@@ -240,7 +253,7 @@ async function runMoveScenario(label, yawRad, inputPayload, durationMs, screensh
 
     const end = await snapshot(page);
     const delta = horizontalDelta(start.character.position, end.character.position);
-    await page.screenshot({ path: path.join(screenshotDir, screenshotName) });
+    await captureScreenshot(page, screenshotName, label);
 
     return {
       start,
@@ -274,7 +287,7 @@ async function measureForwardDistanceForHeadY(label, headY, screenshotName) {
     await advance(page, 420);
     const end = await snapshot(page);
     await setMockInput(page, { forward: false });
-    await page.screenshot({ path: path.join(screenshotDir, screenshotName) });
+    await captureScreenshot(page, screenshotName, label);
     return {
       distance: horizontalDistance(horizontalDelta(start.character.position, end.character.position)),
       targetSpeed: end.locomotion?.targetHorizontalSpeed ?? 0
@@ -376,7 +389,7 @@ try {
     const landingOffset = Math.abs(postJump.character.position.y - jumpStartY);
     assert(landingOffset < 0.28, `Jump scenario: landing offset too large (${landingOffset.toFixed(3)}).`);
 
-    await page.screenshot({ path: path.join(screenshotDir, '03-jump-landed.png') });
+    await captureScreenshot(page, '03-jump-landed.png', 'jump landed');
   });
 
   await withVrScenarioPage('vr-crouch-state', async (page) => {
@@ -399,7 +412,7 @@ try {
     await advance(page, 680);
     const recovered = await snapshot(page);
     assert((recovered.crouch?.amount ?? 0) < 0.1, `VR crouch: crouch amount did not recover (${recovered.crouch?.amount}).`);
-    await page.screenshot({ path: path.join(screenshotDir, '04-vr-crouch.png') });
+    await captureScreenshot(page, '04-vr-crouch.png', 'vr crouch');
   });
 
   const standingMovement = await measureForwardDistanceForHeadY('vr-crouch-speed-standing', 0, '05-vr-crouch-speed-standing.png');
@@ -443,7 +456,7 @@ try {
 
     await page.keyboard.up('c');
     await waitForState(page, 'desktop-keyboard-crouch-up', (state) => state.input?.crouch === false);
-    await page.screenshot({ path: path.join(screenshotDir, '07-desktop-keyboard-mapping.png') });
+    await captureScreenshot(page, '07-desktop-keyboard-mapping.png', 'desktop keyboard mapping');
   });
 
   await withScenarioPage('desktop-crouch', async (page) => {
@@ -477,7 +490,7 @@ try {
       'desktop-crouch-released',
       (state) => (state.crouch?.amount ?? 0) < 0.1
     );
-    await page.screenshot({ path: path.join(screenshotDir, '08-desktop-crouch.png') });
+    await captureScreenshot(page, '08-desktop-crouch.png', 'desktop crouch');
   });
 
   await withScenarioPage('desktop-crouch-walk', async (page) => {
@@ -505,7 +518,7 @@ try {
 
     await setMockInput(page, { crouch: false, forward: false });
     await advance(page, 240);
-    await page.screenshot({ path: path.join(screenshotDir, '09-desktop-crouch-walk.png') });
+    await captureScreenshot(page, '09-desktop-crouch-walk.png', 'desktop crouch walk');
   });
 
   await withScenarioPage('desktop-crouch-release-walk', async (page) => {
@@ -544,7 +557,7 @@ try {
 
     await setMockInput(page, { forward: false, crouch: false });
     await advance(page, 220);
-    await page.screenshot({ path: path.join(screenshotDir, '10-desktop-crouch-release-walk.png') });
+    await captureScreenshot(page, '10-desktop-crouch-release-walk.png', 'desktop crouch release walk');
   });
 
   assert(consoleErrors.length === 0, `Console errors detected:\n${consoleErrors.join('\n')}`);
