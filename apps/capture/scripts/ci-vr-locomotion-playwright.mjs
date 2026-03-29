@@ -371,10 +371,16 @@ try {
     const jumpStartY = preJump.character.position.y;
 
     await setMockInput(page, { jump: true });
-    await advance(page, 180);
-
-    const midJump = await snapshot(page);
-    assert(!midJump.character.grounded, 'Jump scenario: character should be airborne shortly after jump.');
+    const midJump = await waitForState(
+      page,
+      'jump-airborne',
+      (state) => (
+        state.character.grounded === false
+        && (state.locomotion?.state === 'jump' || state.locomotion?.state === 'fall')
+        && state.character.position.y > jumpStartY + 0.05
+      ),
+      { stepMs: 40, timeoutMs: 700 }
+    );
     assert(
       midJump.locomotion?.state === 'jump' || midJump.locomotion?.state === 'fall',
       `Jump scenario: expected jump/fall locomotion state, got ${midJump.locomotion?.state}`
