@@ -1,44 +1,51 @@
-# TODOS
+# TODOs
 
-## Test Infrastructure
+Use this for planned work that has not yet been started. Record verified defects in
+[`BUGS.md`](BUGS.md), and leave the next-session context in
+[`HANDOFF.md`](HANDOFF.md).
 
-### Expand contract coverage in high-risk runtime packages
+## Now
 
-**What:** Add contract-focused tests for capture orchestration, API upload/routes, and the `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` packages.
+- [ ] Validate capture VR embodiment, hand/finger retargeting, and VR enter/exit
+  behavior on a physical headset. The automated IWER checks cover deterministic
+  browser flows but cannot replace device testing.
+- [ ] Make the XR locomotion command report a reliable final completion status and
+  clean up all child processes locally. It produced expected artifacts during the
+  latest inspection, but the enclosing command did not return a complete transcript.
 
-**Why:** Autonomous refactors can currently remain green despite behavioral regressions in complex runtime paths and shared packages that have little or no direct test coverage.
+## Next
 
-**Context:** Capture has 33 source files but only three unit-test files. The shared `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` packages currently use `--passWithNoTests`, while API CRUD and upload behavior relies primarily on one happy-path smoke flow. Start with public behavior and state-transition contracts rather than implementation details.
+- [ ] Decide the production persistence model for uploads: authentication,
+  authorization, durable object storage, and a production database. The current API
+  intentionally uses local filesystem storage and SQLite.
+- [ ] Move the tracked development SQLite databases out of version control, replace
+  them with a documented seed/fixture workflow, and add an ignore rule.
+- [ ] Add API route tests for upload, pagination, deletion, and USDZ-conversion
+  failure handling. Current API tests cover CORS and file metadata validation only.
+- [ ] Expand contract-focused tests for capture orchestration and the `ui-dom`,
+  `xr-ui-r3f`, and `xr-ui-three` packages, which currently use `--passWithNoTests`.
+  Start with public behavior and state-transition contracts, and run them in the
+  appropriate `verify:agent`, `verify:pr`, or `verify:nightly` tier.
 
-**Effort:** L
-**Priority:** P2
-**Depends on:** Canonical `verify:agent`, `verify:pr`, and `verify:nightly` gates so new tests run in the correct tier.
+## Later
 
-### Profile and restructure the exhaustive XR harness
+- [ ] Split the serial XR locomotion harness into named TypeScript scenario groups,
+  then evaluate safe sharding or browser reuse. Preserve fresh IWER pages and
+  sessions until stage timing and failure artifacts prove reuse does not
+  reintroduce the pose-baseline races fixed in August 2026.
 
-**What:** Split the serial locomotion harness into named TypeScript scenario groups, then evaluate safe sharding or browser reuse.
+- [ ] Migrate the capture TypeScript config to the shared config chain once `tsgo`
+  supports the needed `baseUrl` and non-relative `extends` behavior.
+- [ ] Decide whether the capture app needs a user-visible AR recenter control for
+  device-specific placement recovery.
+- [ ] Select one `IDEA-###` from `docs/product/IDEAS.md` for a bounded PRD and
+  communication experiment; do not begin implementation until the user outcome
+  and success signal are explicit.
 
-**Why:** The exhaustive XR harness remains the dominant nightly cost at roughly one minute locally and has historically taken several minutes in CI; it is difficult to extend or diagnose as one large custom script.
+## Maintenance
 
-**Context:** The harness deliberately creates fresh IWER pages and sessions to isolate pose baselines and runtime state. Preserve that isolation until stage timing and standardized failure artifacts can prove that reuse or parallelism does not reintroduce the races fixed in August 2026.
-
-**Effort:** M
-**Priority:** P3
-**Depends on:** Stage timing, standardized diagnostics, and the canonical nightly gate.
-
-## Workspace Hygiene
-
-### ~~P2: Tighten capture tsconfig strict settings~~ (Done)
-- Enabled `noUncheckedIndexedAccess: true` and `exactOptionalPropertyTypes: true` in `apps/capture/tsconfig.json`.
-- Fixed all resulting type errors across XrSessionService.ts, HandFingerRetargeter.ts, GltfExportComposer.ts, AppOrchestrator.ts, LocomotionAnimator.ts, CameraController.ts, FrameCaptureStore.ts, GLTFAudioPlugin.ts, SceneBubbleSampler.ts, and exportWorker.ts.
-
-### ~~P3: Add .npmrc with workspace hygiene settings~~ (Done)
-- Created `.npmrc` with `strict-peer-dependencies=true`, `auto-install-peers=true`, `shamefully-hoist=false`.
-
-### ~~P3: Add CI/CD pipeline~~ (Done)
-- Consolidated CI into one event-aware workflow with a stable `CI Gate`, parallel PR checks, failure-only diagnostics, timings, and separate fast XR versus nightly exhaustive coverage.
-
-### P4: Migrate capture tsconfig to extend shared chain
-- **What:** When `tsgo` supports `baseUrl` and non-relative `extends` paths, migrate `apps/capture/tsconfig.json` to extend `@holoim/config-ts/web.json` instead of duplicating strict settings.
-- **Why:** Eliminates the need to manually keep capture's tsconfig in sync with `tsconfig.base.json`.
-- **Depends on:** tsgo feature support.
+- Check off finished items in the same change that implements them.
+- Add newly discovered, reproducible defects to `BUGS.md`; do not add speculative
+  risks as bugs.
+- Before pausing work, refresh `HANDOFF.md` with the exact next action and the
+  validation that remains.

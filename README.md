@@ -72,3 +72,6 @@ Use a non-localhost secure origin for native mobile/headset AR so the localhost-
 - Agent quick context: `AGENTS.md`
 - Agent command contract: `AGENT_CONTRACT.md`
 - Cross-project context: `CLAUDE.md`
+- Current handoff: `HANDOFF.md`
+- Verified defects: `BUGS.md`
+- Planned work: `TODOs.md`

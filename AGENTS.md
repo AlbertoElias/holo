@@ -3,6 +3,17 @@
 Fast-path context for coding agents working in this workspace.
 Canonical command entrypoints and validation policy live in `AGENT_CONTRACT.md`.
 
+## Continuity files
+
+- `HANDOFF.md` — current project state, validation snapshot, and exact next action.
+- `BUGS.md` — reproducible open defects only.
+- `TODOs.md` — planned work, separated from defects.
+- `apps/capture/progress.md` — detailed historical capture work log; do not treat it
+  as the current status without checking the files above and Git history.
+
+At the end of a meaningful work session, update `HANDOFF.md` and the relevant
+tracker in the same change.
+
 ## Workspace shape
 
 - This folder is a pnpm monorepo.
