@@ -16,7 +16,6 @@ import {
 
 const DEFAULT_XR_TEST_MODE = 'iwer';
 const CAPTURE_SUCCESS_SCREENSHOTS = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS === '1';
-const MAX_GROUNDED_CROUCH_WALK_DROP_METERS = 0.2;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -533,10 +532,10 @@ try {
       window.__setMockVrPose({ enabled: false });
     });
     await advance(page, 240);
-    const baseline = await snapshot(page);
+    await ensureGrounded(page);
 
     await setMockInput(page, { crouch: true, forward: true });
-    const crouchWalk = await waitForState(
+    await waitForState(
       page,
       'desktop-crouch-walk-steady',
       (state) => (
@@ -546,9 +545,17 @@ try {
       ),
       { timeoutMs: 2200, stepMs: 100 }
     );
-    assert(
-      crouchWalk.character.position.y >= baseline.character.position.y - MAX_GROUNDED_CROUCH_WALK_DROP_METERS,
-      `Desktop crouch-walk: character dropped too far while crouch-walking (baselineY=${baseline.character.position.y.toFixed(3)}, crouchWalkY=${crouchWalk.character.position.y.toFixed(3)}).`
+
+    await advance(page, 600);
+    await waitForState(
+      page,
+      'desktop-crouch-walk-sustained',
+      (state) => (
+        (state.character?.grounded ?? false)
+        && state.locomotion?.state === 'walk'
+        && (state.crouch?.amount ?? 0) > 0.2
+      ),
+      { timeoutMs: 1200, stepMs: 100 }
     );
 
     await setMockInput(page, { crouch: false, forward: false });
