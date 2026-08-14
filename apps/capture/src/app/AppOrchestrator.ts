@@ -574,7 +574,14 @@ export class AppOrchestrator implements System {
   }
 
   setMockVrPose(payload: MockVrPoseInput): void {
+    const wasMockVrEnabled = this.xrService.getMockSnapshot().enabled;
     this.xrService.applyMockVrPoseInput(payload);
+    const isMockVrEnabled = this.xrService.getMockSnapshot().enabled;
+    if (wasMockVrEnabled !== isMockVrEnabled) {
+      // Real XR head height and the debug pose use different coordinate
+      // spaces, so a baseline captured before the source switch is invalid.
+      this.resetVrStandingHeadBaseline();
+    }
   }
 
   setMockInput(payload: MockInputState): void {

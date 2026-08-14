@@ -109,5 +109,14 @@ jobs:
       - name: Capture XR locomotion flows
         run: pnpm --filter @holoim/capture run test:xr:flows
 
+      - name: Upload XR locomotion diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-locomotion-${{ github.run_id }}
+          path: apps/capture/output/ci-vr-locomotion
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Viewer live API integration
         run: RUN_E2E_INTEGRATION=1 pnpm --filter @holoim/web run test:e2e:integration

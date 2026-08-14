@@ -89,12 +89,35 @@ async function withScenarioPage(label, callback) {
 
 async function withVrScenarioPage(label, callback) {
   return withScenarioPage(label, async (page) => {
+    // Prime the deterministic pose before session entry so the first VR frame
+    // cannot capture an IWER-space crouch baseline for mock-relative poses.
+    await setMockPose(page, 0);
+    await setMockInput(page, {
+      forward: false,
+      back: false,
+      left: false,
+      right: false,
+      crouch: false
+    });
+    await advance(page, 120);
+
     if (resolvedMode === 'iwer') {
       await waitForIwerRuntime(page);
       await enterIwerSessionFromButton(page, '#VRButton', {
         readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr'
       });
     }
+
+    await waitForState(
+      page,
+      `${label}-vr-ready`,
+      (state) => (
+        (state.mode === 'vr' || state.mode === 'mock-vr')
+        && state.mockVr?.enabled === true
+        && (state.crouch?.amount ?? 0) < 0.1
+      ),
+      { stepMs: 40, timeoutMs: 1600 }
+    );
     return callback(page);
   });
 }
