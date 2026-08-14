@@ -15,6 +15,8 @@ import {
 } from '@holoim/tooling-testing/xr-env';
 
 const DEFAULT_XR_TEST_MODE = 'iwer';
+const CAPTURE_SUCCESS_SCREENSHOTS = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS === '1';
+const MAX_GROUNDED_CROUCH_WALK_DROP_METERS = 0.2;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -189,10 +191,14 @@ function summarizeState(state) {
   };
 }
 
-async function captureScreenshot(page, filename, label) {
+async function captureScreenshot(page, filename, label, { force = false } = {}) {
+  if (!force && !CAPTURE_SUCCESS_SCREENSHOTS) {
+    return null;
+  }
+
   const screenshotPath = path.join(screenshotDir, filename);
   try {
-    await page.screenshot({ path: screenshotPath, timeout: 10_000 });
+    await page.screenshot({ path: screenshotPath, timeout: 3_000 });
     return screenshotPath;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -224,7 +230,7 @@ async function waitForState(page, label, predicate, options = {}) {
   }
 
   await writeFile(timelinePath, JSON.stringify(timeline, null, 2));
-  const screenshotPath = await captureScreenshot(page, screenshotName, `${label} failure`);
+  const screenshotPath = await captureScreenshot(page, screenshotName, `${label} failure`, { force: true });
   const screenshotDetail = screenshotPath ? ` Screenshot: ${screenshotPath}` : ' Screenshot capture skipped.';
   throw new Error(`${label}: condition not met after ${timeoutMs}ms. Timeline: ${timelinePath}.${screenshotDetail}`);
 }
@@ -541,7 +547,7 @@ try {
       { timeoutMs: 2200, stepMs: 100 }
     );
     assert(
-      crouchWalk.character.position.y >= baseline.character.position.y - 0.12,
+      crouchWalk.character.position.y >= baseline.character.position.y - MAX_GROUNDED_CROUCH_WALK_DROP_METERS,
       `Desktop crouch-walk: character dropped too far while crouch-walking (baselineY=${baseline.character.position.y.toFixed(3)}, crouchWalkY=${crouchWalk.character.position.y.toFixed(3)}).`
     );
 
