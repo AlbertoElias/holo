@@ -23,6 +23,9 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 ### Workspace root
 
 - `pnpm run doctor`
+- `pnpm run verify:agent`
+- `pnpm run verify:pr`
+- `pnpm run verify:nightly`
 - `pnpm run verify:fast`
 - `pnpm run verify:xr`
 - `pnpm run verify:full`
@@ -48,8 +51,14 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 
 ## Pre-Handoff Check Policy
 
-- Minimum for scoped changes: run `verify:fast` in each touched app/package.
-- Required for high-risk or shared-contract changes: run `pnpm run verify:workspace`.
+- Default during implementation: run `pnpm run verify:agent`. It derives affected
+  workspaces and reverse dependents from package manifests, then fails closed to the
+  comprehensive workspace checks if it cannot classify a change safely.
+- Required before opening or updating a pull request: run `pnpm run verify:pr`.
+- `pnpm run verify:nightly` is the exhaustive browser-XR and live-API tier. Run it
+  when those systems change or when diagnosing the scheduled workflow.
+- `pnpm run verify:full` composes the PR and nightly tiers; it is intentionally not
+  the normal edit-loop command.
 - If GLTF export/import contract is touched, run:
   1. `pnpm run verify:repo:capture`
   2. `pnpm run verify:repo:viewer`
@@ -79,6 +88,7 @@ Supported env vars for smoke and XR scripts:
 - `DEV_PORT` (default `5174` for capture checks)
 - `BASE_URL` (default derived from host/port)
 - `E2E_BASE_URL` (default `https://localhost:3174`)
+- `E2E_API_PORT` (default `3001`; use a free port for isolated local integration)
 - `REUSE_DEV_SERVER` (`1` to reuse existing server)
 - `STARTUP_TIMEOUT_MS` (default `30000`)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
@@ -89,11 +99,26 @@ Supported env vars for smoke and XR scripts:
 | Task type | Required commands |
 |---|---|
 | Docs/config only | `pnpm run doctor` |
-| Single-app code change | touched app/package `verify:fast` |
-| Multi-app change | `pnpm run doctor` + `pnpm run verify:workspace` |
-| API upload or GLTF contract change | `pnpm run verify:workspace` + `pnpm run test:smoke:pipeline` |
-| XR regression gate | `pnpm run verify:xr` |
-| Pre-merge confidence sweep | `pnpm run verify:full` |
+| Agent edit loop | `pnpm run verify:agent` |
+| API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` |
+| XR behavior change | `pnpm run verify:agent` + `pnpm run verify:xr` |
+| Pull request / pre-merge | `pnpm run verify:pr` |
+| Scheduled or exhaustive confidence sweep | `pnpm run verify:nightly` |
+
+## CI Contract
+
+- `.github/workflows/ci.yml` is the only GitHub Actions workflow and exposes one
+  stable required check: `CI Gate`.
+- Pull requests and pushes run quality/unit checks first, then build/pipeline smoke
+  and fast IWER XR coverage. Scheduled and explicitly heavy manual runs replace the
+  fast XR job with exhaustive locomotion flows and viewer live-API integration.
+- Test retries are disabled. Flakes must remain visible and be fixed rather than
+  hidden by reruns.
+- Every job has a hard timeout. Timed commands write JSON to
+  `output/test-results/` and append their duration to the GitHub job summary.
+- Browser diagnostics are uploaded only after failures. Timing artifacts are kept
+  for successful and failed runs so regressions can be compared without bloating
+  every artifact set.
 
 ## Git Conventions
 

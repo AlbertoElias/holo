@@ -40,6 +40,9 @@ pnpm run lint:all
 pnpm run typecheck:all
 pnpm run build:all
 pnpm run test:all
+pnpm run verify:agent
+pnpm run verify:pr
+pnpm run verify:nightly
 pnpm run verify:fast
 pnpm run verify:xr
 pnpm run verify:full
@@ -80,7 +83,6 @@ pnpm run test:xr:all
 
 ## Validation checklist before handoff
 
-1. Run lint for touched app/package.
-2. Run typecheck for touched app/package.
-3. Run relevant tests.
-4. For pipeline-affecting changes, run `pnpm run test:smoke:pipeline`.
+1. Run `pnpm run verify:agent` during the edit loop.
+2. Run `pnpm run verify:pr` before a pull request or merge.
+3. For exhaustive XR or live-API changes, also run `pnpm run verify:nightly`.

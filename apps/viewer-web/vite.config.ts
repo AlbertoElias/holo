@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT ?? "3174");
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:3001";
 const semScene = process.env.VITE_IWER_SEM_SCENE;
 const validSemScenes = [
   "living_room",
@@ -75,11 +76,11 @@ export default defineConfig({
     },
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:3001",
+        target: apiProxyTarget,
         changeOrigin: true
       },
       "/uploads": {
-        target: "http://127.0.0.1:3001",
+        target: apiProxyTarget,
         changeOrigin: true
       }
     },

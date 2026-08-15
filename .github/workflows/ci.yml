@@ -5,117 +5,210 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_heavy_xr:
+        description: Run exhaustive XR and viewer integration coverage
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "0 9 * * *"
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+env:
+  PNPM_VERSION: 10.29.3
 
 jobs:
-  verify-fast:
-    name: Lint & Typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm --filter @holoim/api prisma:generate
-
-      - name: Copy viewer-api env
-        run: cp apps/viewer-api/.env.example apps/viewer-api/.env
-
-      - name: Lint
-        run: pnpm run lint:all
-
-      - name: Typecheck
-        run: pnpm run typecheck:all
-
-  test:
-    name: Test
-    needs: verify-fast
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm --filter @holoim/api prisma:generate
-
-      - name: Copy viewer-api env
-        run: cp apps/viewer-api/.env.example apps/viewer-api/.env
-
-      - name: Install Playwright browsers
-        run: pnpm --filter @holoim/capture exec playwright install chromium
-
-      - name: Run tests
-        run: pnpm run test:all
-
-  build:
-    name: Build
-    needs: verify-fast
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm --filter @holoim/api prisma:generate
-
-      - name: Copy viewer-api env
-        run: cp apps/viewer-api/.env.example apps/viewer-api/.env
-
-      - name: Build all
-        run: pnpm run build:all
-
-  smoke:
-    name: Smoke Test
-    needs: [test, build]
+  quality:
+    name: Quality and unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
+        with:
+          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-
       - run: pnpm install --frozen-lockfile
+      - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+      - run: pnpm --filter @holoim/api prisma:generate
+      - name: Lint and typecheck
+        run: pnpm timed quality-checks -- pnpm run check:all
+      - name: Unit tests
+        run: pnpm timed unit-tests -- pnpm run test:unit:all
+      - name: Upload timing summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-timings-${{ github.run_id }}
+          path: output/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Generate Prisma client
-        run: pnpm --filter @holoim/api prisma:generate
+  build-smoke:
+    name: Build and pipeline smoke
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+      - run: pnpm --filter @holoim/api prisma:generate
+      - name: Install KTX-Software
+        env:
+          KTX_VERSION: 4.4.2
+        run: |
+          curl -fsSL -o /tmp/ktx.tar.bz2 "https://github.com/KhronosGroup/KTX-Software/releases/download/v${KTX_VERSION}/KTX-Software-${KTX_VERSION}-Linux-x86_64.tar.bz2"
+          tar -xjf /tmp/ktx.tar.bz2 -C "${RUNNER_TEMP}"
+          KTX_ROOT="$(find "${RUNNER_TEMP}" -maxdepth 1 -type d -name 'KTX-Software-*' | head -n 1)"
+          test -n "${KTX_ROOT}"
+          echo "${KTX_ROOT}/bin" >> "${GITHUB_PATH}"
+          "${KTX_ROOT}/bin/ktx" --version
+      - name: Build
+        run: pnpm timed build -- pnpm run build:all
+      - name: Export, upload, and view smoke test
+        run: pnpm timed smoke-pipeline -- pnpm run test:smoke:pipeline
+      - name: Upload timing summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-smoke-timings-${{ github.run_id }}
+          path: output/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Copy viewer-api env
-        run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+  xr-smoke:
+    name: XR smoke
+    if: ${{ github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.run_heavy_xr) }}
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+      - name: Fast XR smoke suite
+        run: pnpm timed xr-smoke -- pnpm run test:xr:smoke
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-smoke-failure-${{ github.run_id }}
+          path: |
+            apps/capture/output/ci-mock-vr
+            apps/viewer-web/test-results
+            apps/viewer-web/playwright-report
+            output/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload timing summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-smoke-timings-${{ github.run_id }}
+          path: output/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Install Playwright browsers
-        run: pnpm --filter @holoim/capture exec playwright install chromium
+  xr-nightly:
+    name: Exhaustive XR and integration
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_heavy_xr) }}
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+      - run: pnpm --filter @holoim/api prisma:generate
+      - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+      - name: Exhaustive XR flows
+        run: pnpm timed xr-full -- pnpm run test:xr:full
+      - name: Viewer live API integration
+        run: pnpm timed viewer-integration -- pnpm run test:integration:viewer
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-failure-${{ github.run_id }}
+          path: |
+            apps/capture/output/ci-vr-locomotion
+            apps/viewer-web/test-results
+            apps/viewer-web/playwright-report
+            output/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload timing summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-timings-${{ github.run_id }}
+          path: output/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Run smoke pipeline
-        run: pnpm run test:smoke:pipeline
+  gate:
+    name: CI Gate
+    if: always()
+    needs: [quality, build-smoke, xr-smoke, xr-nightly]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      QUALITY_RESULT: ${{ needs.quality.result }}
+      BUILD_SMOKE_RESULT: ${{ needs.build-smoke.result }}
+      XR_SMOKE_RESULT: ${{ needs.xr-smoke.result }}
+      XR_NIGHTLY_RESULT: ${{ needs.xr-nightly.result }}
+      HEAVY_EXPECTED: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_heavy_xr) }}
+    steps:
+      - name: Summarize jobs
+        run: |
+          {
+            echo "## CI gate"
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| Quality | ${QUALITY_RESULT} |"
+            echo "| Build and smoke | ${BUILD_SMOKE_RESULT} |"
+            echo "| XR smoke | ${XR_SMOKE_RESULT} |"
+            echo "| XR nightly | ${XR_NIGHTLY_RESULT} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+      - name: Enforce required jobs
+        run: |
+          test "${QUALITY_RESULT}" = "success"
+          test "${BUILD_SMOKE_RESULT}" = "success"
+          if [ "${HEAVY_EXPECTED}" = "true" ]; then
+            test "${XR_NIGHTLY_RESULT}" = "success"
+          else
+            test "${XR_SMOKE_RESULT}" = "success"
+          fi

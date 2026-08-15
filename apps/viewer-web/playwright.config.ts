@@ -2,10 +2,20 @@ import { defineConfig } from "@playwright/test";
 import { XR_CHROMIUM_ARGS, XR_CONTEXT_OPTIONS } from "@holoim/tooling-testing/xr-env";
 
 const e2eBaseUrl = process.env.E2E_BASE_URL ?? "https://localhost:3174";
+const e2eUrl = new URL(e2eBaseUrl);
+const e2ePort = Number(e2eUrl.port || "443");
+if (e2eUrl.protocol !== "https:" || !Number.isInteger(e2ePort) || e2ePort < 1 || e2ePort > 65535) {
+  throw new Error(`E2E_BASE_URL must be a valid HTTPS URL with a valid port: ${e2eBaseUrl}`);
+}
+const apiPort = Number(process.env.E2E_API_PORT ?? "3001");
+if (!Number.isInteger(apiPort) || apiPort < 1 || apiPort > 65535) {
+  throw new Error(`E2E_API_PORT must be a valid port: ${String(process.env.E2E_API_PORT)}`);
+}
+const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 const reuseExistingServer = process.env.REUSE_DEV_SERVER === "1";
 const webServers = [
   {
-    command: "pnpm exec vite --host 0.0.0.0 --port 3174 --strictPort",
+    command: `VITE_HMR_CLIENT_PORT=${e2ePort} VITE_API_PROXY_TARGET=${apiBaseUrl} pnpm exec vite --host 0.0.0.0 --port ${e2ePort} --strictPort`,
     ignoreHTTPSErrors: true,
     timeout: 120000,
     reuseExistingServer,
@@ -13,10 +23,11 @@ const webServers = [
   },
   ...(process.env.RUN_E2E_INTEGRATION === "1"
     ? [{
-        command: "pnpm --filter @holoim/api exec tsx src/server.ts",
+        command: `TEST_API_PORT=${apiPort} pnpm --filter @holoim/api exec tsx ../../scripts/test-api.ts`,
+        gracefulShutdown: { signal: "SIGTERM" as const, timeout: 5000 },
         timeout: 120000,
         reuseExistingServer,
-        url: "http://127.0.0.1:3001/api/holograms?limit=1"
+        url: `${apiBaseUrl}/api/holograms?limit=1`
       }]
     : [])
 ];
