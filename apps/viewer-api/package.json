@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "prisma generate && tsx watch src/server.ts",
+    "dev": "pnpm run prisma:setup && tsx watch src/server.ts",
     "build": "pnpm run prisma:generate && tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "pnpm run prisma:generate && tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "verify:fast": "pnpm run lint && pnpm run typecheck",
-    "verify:full": "pnpm run verify:fast && pnpm run test && pnpm run build",
+    "verify:fast": "pnpm run lint && pnpm run typecheck && pnpm run test",
+    "verify:full": "pnpm run verify:fast && pnpm run build",
     "prisma:generate": "prisma generate",
+    "prisma:setup": "pnpm run prisma:generate && prisma migrate deploy",
     "prisma:migrate": "prisma migrate dev --name init"
   },
   "dependencies": {

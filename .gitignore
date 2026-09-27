@@ -11,6 +11,7 @@ test-results/
 
 # local runtime artifacts
 apps/viewer-api/uploads/
+apps/viewer-api/prisma/**/*.db*
 apps/viewer-web/.cert/
 
 # env and logs

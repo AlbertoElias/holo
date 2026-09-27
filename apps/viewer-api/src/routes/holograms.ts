@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { deleteHologramResponseSchema, hologramDtoSchema, paginatedHologramsSchema } from "@holoim/contracts";
 
-import { MAX_GLB_BYTES, UPLOADS_DIR } from "../lib/constants.js";
+import { MAX_GLB_BYTES } from "../lib/constants.js";
 import { createHologram, deleteHologramById, getHologramById, listHolograms, updateHologramUsdzPath } from "../services/hologram-repo.js";
 import { saveUploadedGlb, UploadValidationError } from "../services/hologram-storage.js";
 import { convertGlbToUsdz } from "../services/usdz-converter.js";
@@ -42,7 +42,12 @@ function toDto(record: {
   };
 }
 
-export async function registerHologramRoutes(app: FastifyInstance): Promise<void> {
+export async function registerHologramRoutes(
+  app: FastifyInstance,
+  options: { uploadsRoot: string }
+): Promise<void> {
+  const { uploadsRoot } = options;
+
   app.post("/holograms", async (request, reply) => {
     try {
       const parts = request.parts({
@@ -51,7 +56,6 @@ export async function registerHologramRoutes(app: FastifyInstance): Promise<void
         }
       });
 
-      const uploadDir = path.join(process.cwd(), UPLOADS_DIR);
       let uploadedFileMeta: { filename: string; mimetype: string } | undefined;
       let storedUpload:
         | {
@@ -79,7 +83,7 @@ export async function registerHologramRoutes(app: FastifyInstance): Promise<void
             filename: part.filename,
             mimetype: part.mimetype
           };
-          storedUpload = await saveUploadedGlb(part, uploadDir);
+          storedUpload = await saveUploadedGlb(part, uploadsRoot);
           continue;
         }
 
@@ -174,10 +178,9 @@ export async function registerHologramRoutes(app: FastifyInstance): Promise<void
     }
 
     // Trigger on-demand conversion
-    const uploadDir = path.join(process.cwd(), UPLOADS_DIR);
-    const glbPath = path.join(uploadDir, item.filenameStored);
+    const glbPath = path.join(uploadsRoot, item.filenameStored);
     const usdzFilename = item.filenameStored.replace(/\.glb$/i, ".usdz");
-    const usdzAbsPath = path.join(uploadDir, usdzFilename);
+    const usdzAbsPath = path.join(uploadsRoot, usdzFilename);
     const relativeUsdzPath = path.posix.join("uploads", usdzFilename);
 
     try {
@@ -201,9 +204,10 @@ export async function registerHologramRoutes(app: FastifyInstance): Promise<void
       return reply.status(404).send({ error: "Hologram not found." });
     }
 
-    const uploadDir = path.join(process.cwd(), UPLOADS_DIR);
-    const glbAbsolutePath = path.join(uploadDir, item.filenameStored);
-    const usdzAbsolutePath = item.usdzPath ? path.join(process.cwd(), item.usdzPath) : null;
+    const glbAbsolutePath = path.join(uploadsRoot, item.filenameStored);
+    const usdzAbsolutePath = item.usdzPath
+      ? path.join(uploadsRoot, path.basename(item.usdzPath))
+      : null;
 
     let deletedFile = false;
     let deletedUsdz = false;

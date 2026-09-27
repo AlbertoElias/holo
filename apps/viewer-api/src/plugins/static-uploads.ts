@@ -1,12 +1,12 @@
 import fastifyStatic from "@fastify/static";
 import type { FastifyInstance } from "fastify";
 import { mkdir } from "node:fs/promises";
-import path from "node:path";
 
-import { UPLOADS_DIR } from "../lib/constants.js";
-
-export async function registerStaticUploads(app: FastifyInstance): Promise<void> {
-  const uploadsRoot = path.join(process.cwd(), UPLOADS_DIR);
+export async function registerStaticUploads(
+  app: FastifyInstance,
+  options: { uploadsRoot: string }
+): Promise<void> {
+  const { uploadsRoot } = options;
   await mkdir(uploadsRoot, { recursive: true });
 
   await app.register(fastifyStatic, {
