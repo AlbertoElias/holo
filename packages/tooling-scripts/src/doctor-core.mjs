@@ -19,11 +19,17 @@ export function createDoctorReporter() {
   };
 }
 
-export function checkNodeVersion({ fail }, minMajor = 20) {
-  const [majorRaw] = process.versions.node.split(".");
+export function checkNodeVersion({ fail }, minMajor = 20, minMinor = 0) {
+  const [majorRaw, minorRaw] = process.versions.node.split(".");
   const major = Number(majorRaw);
-  if (!Number.isFinite(major) || major < minMajor) {
-    fail(`Node.js ${minMajor}+ is required. Current: ${process.versions.node}`);
+  const minor = Number(minorRaw);
+  if (
+    !Number.isFinite(major) ||
+    !Number.isFinite(minor) ||
+    major < minMajor ||
+    (major === minMajor && minor < minMinor)
+  ) {
+    fail(`Node.js ${minMajor}.${minMinor}+ is required. Current: ${process.versions.node}`);
   }
 }
 

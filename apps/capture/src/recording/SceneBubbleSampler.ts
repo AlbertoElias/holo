@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import { isThreeMesh, isThreeSkinnedMesh } from '../shared/threeTypeGuards';
+
 const RECORDING_SCENE_BUBBLE_RADIUS = 6;
 const MIN_SCENE_SAMPLE_DISTANCE = 0.08;
 const MAX_SCENE_SAMPLES = 480;
@@ -63,9 +65,9 @@ export class SceneBubbleSampler {
     const group = new THREE.Group();
     group.name = 'RecordedSceneBubble';
     sceneRoot.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      if (!isThreeMesh(obj)) return;
       if (!obj.visible) return;
-      if (obj instanceof THREE.SkinnedMesh) return;
+      if (isThreeSkinnedMesh(obj)) return;
       const bubbleMesh = this.createSceneBubbleMesh(sceneRoot, obj);
       if (bubbleMesh) {
         group.add(bubbleMesh);

@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import React from "react";
 
 import { createApp } from './app/createApp';
+import { announceIwsdkMcpRuntimeReady } from './debug/iwsdkMcpRuntime';
 import { CaptureOverlay } from './ui/CaptureOverlay';
 
 const app = createApp();
@@ -13,6 +14,9 @@ if (!uiRootElement) {
 
 createRoot(uiRootElement).render(React.createElement(CaptureOverlay, { bridge: app.uiBridge }));
 
-app.start().catch((error) => {
-  console.error(error);
-});
+app
+  .start()
+  .then(() => announceIwsdkMcpRuntimeReady())
+  .catch((error) => {
+    console.error(error);
+  });

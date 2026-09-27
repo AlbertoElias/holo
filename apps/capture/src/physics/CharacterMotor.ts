@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+import { isThreeMesh } from '../shared/threeTypeGuards';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { clamp } from '../shared/math';
 import type { CharacterSnapshot } from '../types/contracts';
@@ -411,7 +413,7 @@ export class CharacterMotor {
     let vertexOffset = 0;
 
     root.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      if (!isThreeMesh(obj)) return;
 
       const geometry = obj.geometry as THREE.BufferGeometry;
       const position = geometry.getAttribute('position');

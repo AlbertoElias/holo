@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
@@ -28,7 +30,7 @@ export class GltfExportComposer {
     const clone = SkeletonUtils.clone(avatar);
     clone.name = 'RecordedAvatar';
     clone.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
+      if (isThreeMesh(obj)) {
         obj.visible = true;
       }
     });
@@ -51,14 +53,14 @@ export class GltfExportComposer {
     const boneNameToUuid = new Map<string, string>();
     const boneNames: string[] = [];
     clone.traverse((obj) => {
-      if (!(obj instanceof THREE.Bone)) return;
+      if (!isThreeBone(obj)) return;
       boneNameToUuid.set(obj.name, obj.uuid);
       boneNames.push(obj.name);
     });
 
     const morphPathToBinding = new Map<string, MorphExportBinding>();
     clone.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      if (!isThreeMesh(obj)) return;
       const influences = obj.morphTargetInfluences;
       if (!influences || influences.length === 0) return;
       const influenceNamesByIndex = new Array<string>(influences.length);

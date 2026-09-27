@@ -1,5 +1,4 @@
-import { injectIWER } from "@iwsdk/vite-plugin-iwer";
-import basicSsl from "@vitejs/plugin-basic-ssl";
+import { iwsdkDev } from "@iwsdk/vite-plugin-dev";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -27,12 +26,13 @@ const semConfig = semScene && isSemScene(semScene)
 export default defineConfig({
   plugins: [
     react(),
-    basicSsl(),
-    injectIWER({
-      activation: "localhost",
-      device: "metaQuest3",
-      ...(semConfig ? { sem: semConfig } : {})
-      })
+    iwsdkDev({
+      emulator: {
+        activation: "localhost",
+        device: "metaQuest3",
+        ...(semConfig ? { environment: semConfig.defaultScene } : {})
+      }
+    })
   ],
   build: {
     rollupOptions: {
@@ -67,7 +67,6 @@ export default defineConfig({
     port: 3174,
     strictPort: true,
     host: "0.0.0.0",
-    https: {},
     // Allow dynamic ngrok hostnames during local mobile testing.
     allowedHosts: true,
     hmr: {

@@ -131,6 +131,25 @@ This suite runs inside an IWER-backed VR session and validates:
 npm run dev
 ```
 
+- IWSDK collaborative browser and agent session:
+```bash
+pnpm run dev:ai
+```
+
+- IWSDK headless agent session:
+```bash
+pnpm run dev:agent
+```
+
+- Inspect or stop the managed session:
+```bash
+pnpm run dev:status
+pnpm run dev:down
+```
+
+See [`../../docs/IWSDK_AI_WORKFLOW.md`](../../docs/IWSDK_AI_WORKFLOW.md) for the
+agent loop, CLI fallbacks, and the custom-runtime boundary.
+
 - Deterministic local mock VR test loop:
 ```bash
 npm run test:xr:mock

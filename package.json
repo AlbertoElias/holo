@@ -6,6 +6,10 @@
   "scripts": {
     "dev:viewer": "pnpm exec concurrently -n api,web -c blue,green \"pnpm --filter @holoim/api dev\" \"pnpm --filter @holoim/web dev\"",
     "dev:capture": "pnpm --filter @holoim/capture dev",
+    "dev:capture:ai": "pnpm --filter @holoim/capture dev:ai",
+    "dev:capture:agent": "pnpm --filter @holoim/capture dev:agent",
+    "dev:capture:down": "pnpm --filter @holoim/capture dev:down",
+    "dev:capture:status": "pnpm --filter @holoim/capture dev:status",
     "dev": "pnpm exec concurrently -n viewer,capture -c blue,green \"pnpm run dev:viewer\" \"pnpm run dev:capture\"",
     "dev:capture:mock-vr": "pnpm --filter @holoim/capture dev:mock-vr",
     "install:all": "pnpm install",
@@ -30,6 +34,7 @@
     "test:integration:viewer": "pnpm --filter @holoim/web run test:e2e:integration",
     "test:smoke:pipeline": "tsx scripts/test-smoke-pipeline.ts",
     "doctor": "node scripts/doctor.mjs",
+    "verify:repo:tooling": "pnpm --filter @holoim/tooling-testing verify:fast",
     "verify:repo:capture": "pnpm --filter @holoim/capture verify:fast",
     "verify:repo:viewer": "pnpm --filter @holoim/contracts verify:fast && pnpm --filter @holoim/api verify:fast && pnpm --filter @holoim/web verify:fast",
     "verify:workspace": "pnpm run check:all && pnpm run test:unit:all",
@@ -52,7 +57,7 @@
   "author": "",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=20 <21"
+    "node": ">=20.19 <21"
   },
   "packageManager": "pnpm@10.29.3",
   "devDependencies": {
@@ -64,5 +69,11 @@
     "concurrently": "^9.2.1",
     "eslint": "catalog:",
     "tsx": "^4.19.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": "0.35.3",
+      "three": "npm:super-three@0.181.0"
+    }
   }
 }

@@ -20,7 +20,10 @@ import {
 import { isIOSDevice } from "./isIOSDevice";
 
 const AR_SESSION_CONNECTIVITY_RETRY_DELAY_MS = 100;
-const AR_SESSION_CONNECTIVITY_RETRY_MAX_ATTEMPTS = 20;
+// IWSDK's larger development bundle can keep the R3F canvas disconnected while
+// Vite completes a cold dependency optimization. Keep retrying long enough for
+// that one-time startup without changing how non-connectivity errors surface.
+const AR_SESSION_CONNECTIVITY_RETRY_MAX_ATTEMPTS = 100;
 
 type ArStore = ReturnType<typeof createXRStore>;
 

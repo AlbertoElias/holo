@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
 import type { RecordingFrame } from '../types/contracts';
 
 interface MorphCaptureBinding {
@@ -33,7 +35,7 @@ export class FrameCaptureStore {
 
     const bones: RecordingFrame['bones'] = [];
     avatar.traverse((obj) => {
-      if (!(obj instanceof THREE.Bone)) return;
+      if (!isThreeBone(obj)) return;
       bones.push({
         name: obj.name,
         position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
@@ -111,7 +113,7 @@ export class FrameCaptureStore {
     this.morphCaptureBindings.length = 0;
 
     avatar.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      if (!isThreeMesh(obj)) return;
       const influences = obj.morphTargetInfluences;
       if (!influences || influences.length === 0) return;
 

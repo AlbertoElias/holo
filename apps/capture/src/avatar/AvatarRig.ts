@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { TrackedHandJointName, VrHandSide } from '../types/contracts';
 import { clamp } from '../shared/math';
@@ -235,7 +237,7 @@ export class AvatarRig {
   getHandBoneWorldPosition(side: VrHandSide, out: THREE.Vector3): THREE.Vector3 | undefined {
     const handName = side === 'left' ? 'LeftHand' : 'RightHand';
     const hand = this.avatar?.getObjectByName(handName);
-    if (!(hand instanceof THREE.Bone)) return undefined;
+    if (!isThreeBone(hand)) return undefined;
     hand.getWorldPosition(out);
     if (!Number.isFinite(out.x) || !Number.isFinite(out.y) || !Number.isFinite(out.z)) {
       return undefined;
@@ -495,7 +497,7 @@ export class AvatarRig {
     for (const mapping of mappings) {
       const bone = this.findAvatarBone(`${sidePrefix}${mapping.boneSuffix}`);
       if (!bone || !bone.parent) continue;
-      const childBone = bone.children.find((child): child is THREE.Bone => child instanceof THREE.Bone);
+      const childBone = bone.children.find(isThreeBone);
       const bindAimInParent = new THREE.Vector3();
       if (childBone) {
         childBone.getWorldPosition(this.tmpVecA);
@@ -616,7 +618,7 @@ export class AvatarRig {
     const maxHeadRadius = this.avatarHeight * 0.42;
 
     model.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      if (!isThreeMesh(obj)) return;
 
       this.tmpBox.setFromObject(obj);
       this.tmpBox.getCenter(this.tmpCenter);
@@ -654,7 +656,7 @@ export class AvatarRig {
     this.avatarMaterials.length = 0;
     const materialSet = new Set<THREE.Material>();
     model.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      if (!isThreeMesh(obj)) return;
       const meshMaterial = obj.material;
       if (Array.isArray(meshMaterial)) {
         for (const material of meshMaterial) {
@@ -669,7 +671,7 @@ export class AvatarRig {
 
   private disableAvatarFrustumCulling(model: THREE.Object3D): void {
     model.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
+      if (isThreeMesh(obj)) {
         obj.frustumCulled = false;
       }
     });
@@ -824,7 +826,7 @@ export class AvatarRig {
   private findAvatarBone(name: string): THREE.Bone | undefined {
     if (!this.avatar) return undefined;
     const found = this.avatar.getObjectByName(name);
-    return found instanceof THREE.Bone ? found : undefined;
+    return isThreeBone(found) ? found : undefined;
   }
 
   private findAvatarBoneAny(names: readonly string[]): THREE.Bone | undefined {
@@ -853,7 +855,7 @@ export class AvatarRig {
       if (!candidate) continue;
       // Some GLBs expose eyes as skinned meshes whose object transform sits at
       // armature origin. Those are not valid anchors for camera placement.
-      if (candidate instanceof THREE.Mesh) continue;
+      if (isThreeMesh(candidate)) continue;
       return candidate;
     }
     return undefined;

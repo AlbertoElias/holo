@@ -2,9 +2,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
-import basicSsl from '@vitejs/plugin-basic-ssl';
+import { iwsdkDev, type AiMode } from '@iwsdk/vite-plugin-dev';
 import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
-import { injectIWER } from '@iwsdk/vite-plugin-iwer';
+
+function getAiMode(): AiMode | undefined {
+  const mode = process.env.IWSDK_DEV_AI_MODE;
+  return mode === 'agent' || mode === 'collaborate' ? mode : undefined;
+}
 
 function preserveAvatarAssetPlugin(sourcePublicDir: string, tempPublicDir: string): Plugin {
   const avatarSourcePath = path.resolve(sourcePublicDir, 'gltf/models/avatar.glb');
@@ -40,11 +44,21 @@ export default defineConfig(async ({ command }) => {
           return filteredPublicDir;
         })()
       : sourcePublicDir;
+  const aiMode = getAiMode();
   const buildPlugins = [
-    basicSsl(),
-    injectIWER({
-      activation: 'localhost',
-      device: 'metaQuest3'
+    iwsdkDev({
+      emulator: {
+        activation: 'localhost',
+        device: 'metaQuest3'
+      },
+      ...(aiMode
+        ? {
+            ai: {
+              mode: aiMode,
+              screenshotSize: { width: 640, height: 640 }
+            }
+          }
+        : {})
     }),
     preserveAvatarAssetPlugin(sourcePublicDir, tempPublicDir),
     optimizeGLTF({
@@ -56,8 +70,7 @@ export default defineConfig(async ({ command }) => {
     plugins: buildPlugins,
     publicDir: tempPublicDir,
     server: {
-      host: '0.0.0.0',
-      https: true
+      host: '0.0.0.0'
     },
     build: {
       rollupOptions: {
