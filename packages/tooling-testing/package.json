@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test src/dev-server.test.mjs",
+    "verify:fast": "node --check src/dev-server.mjs && node --check src/xr-env.mjs && pnpm run test"
+  },
   "exports": {
     "./dev-server": {
       "types": "./src/dev-server.d.ts",
@@ -15,6 +19,6 @@
   },
   "dependencies": {
     "@holoim/xr-runtime": "workspace:*",
-    "iwer": "^2.1.1"
+    "iwer": "^2.3.0"
   }
 }

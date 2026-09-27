@@ -1,4 +1,4 @@
-import type { ChildProcess } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 
 export type WaitForServerOptions = {
   retries?: number;
@@ -10,7 +10,7 @@ export type WaitForServerOptions = {
 export function runCommand(
   command: string,
   args: string[],
-  options?: Record<string, unknown>
+  options?: SpawnOptions & { timeoutMs?: number }
 ): Promise<void>;
 
 export function canBindPort(host: string, port: number): Promise<boolean>;
