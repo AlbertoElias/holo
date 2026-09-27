@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm run doctor)",
+      "Bash(pnpm run verify:*)",
+      "Bash(pnpm run test:*)",
+      "Bash(pnpm run dev:capture:status)",
+      "Bash(pnpm --filter @holoim/* run doctor)",
+      "Bash(pnpm --filter @holoim/* run verify:*)",
+      "Bash(pnpm --filter @holoim/* run lint)",
+      "Bash(pnpm --filter @holoim/* run typecheck)"
+    ]
+  }
+}

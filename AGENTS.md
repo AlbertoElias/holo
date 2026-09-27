@@ -1,99 +1,58 @@
-# HoloIM Workspace Agent Guide
+# HoloIM agent guide
 
-Fast-path context for coding agents working in this workspace.
-Canonical command entrypoints and validation policy live in `AGENT_CONTRACT.md`.
+## Testing doctrine
 
-## Continuity files
+- Highly prefer end-to-end tests as the sole behavior-verification mechanism for
+  complex features when the real workflow can exercise them. Finish with a
+  repeatable, inspectable artifact such as a transcript, screenshot, or
+  deterministic output file.
+- Never add unit tests after implementation merely to ratify code that already
+  exists. If isolated testing is genuinely necessary, first enumerate all
+  plausible system failure modes and use that list to drive the test design and
+  implementation.
 
-- `HANDOFF.md` — current project state, validation snapshot, and exact next action.
-- `BUGS.md` — reproducible open defects only.
-- `TODOs.md` — planned work, separated from defects.
-- `apps/capture/progress.md` — detailed historical capture work log; do not treat it
-  as the current status without checking the files above and Git history.
+This pnpm monorepo contains `apps/capture` (WebXR recording and GLTF export),
+`apps/viewer-api` (upload and storage), and `apps/viewer-web` (feed and AR viewer).
+Shared contracts, configuration, and tooling live in `packages/`.
 
-At the end of a meaningful work session, update `HANDOFF.md` and the relevant
-tracker in the same change.
+Use TypeScript and existing shared configuration. Keep app-specific logic local;
+share cross-app code through workspace packages. Keep API endpoints backward compatible
+unless versioning is explicit. Preserve GLTF export → upload → render compatibility.
 
-## Workspace shape
+Read `AGENT_CONTRACT.md` when selecting commands, validation scope, or XR environment
+settings. Use `pnpm run verify:agent` in the edit loop, `pnpm run verify:pr` before
+merging, and `pnpm run verify:nightly` for exhaustive XR or live-API changes.
+Documentation-only edits need documentation checks, not every application test.
+Complete relevant checks and fixes before handoff.
 
-- This folder is a pnpm monorepo.
-- Runtime apps:
-  - `apps/capture` - WebXR capture runtime
-  - `apps/viewer-api` - upload/storage API
-  - `apps/viewer-web` - viewer frontend
-- Shared packages:
-  - `packages/contracts`
-  - `packages/config-eslint`
-  - `packages/config-ts`
-  - `packages/tooling-testing`
-  - `packages/tooling-scripts`
+For feature requests or substantial behavior changes, automatically use the
+`feature-delivery` skill in `.agents/skills/feature-delivery/SKILL.md`; do not wait
+for the user to name it. Keep small fixes proportional, as described by the skill.
 
-## Product flow
+For ongoing project work, `HANDOFF.md` has current state, `BUGS.md` tracks reproduced
+defects, and `TODOS.md` tracks planned work. Read the relevant file when resuming or
+changing that work. Update the handoff or tracker when the change alters current
+status or next actions. `apps/capture/progress.md` is historical context.
 
-1. Record and export GLTF from `apps/capture`.
-2. Upload GLTF to `apps/viewer-api`.
-3. Browse and render assets in `apps/viewer-web`.
+For XR automation, use the repository's IWSDK/IWER harness and its HTTPS setup.
+Read `docs/IWSDK_AI_WORKFLOW.md` for the managed capture workflow. Treat emulation
+results separately from physical-headset validation. Shared Three.js values may
+cross module boundaries; use structural flags where constructor identity is unreliable.
 
-## Tech stack
+For other browser QA, use the browser tool suited to the task and available session.
+Project-local gstack skills live in `.agents/skills/gstack`; load the requested workflow
+when using gstack. Its setup command is `cd .agents/skills/gstack && PATH="$HOME/.bun/bin:$PATH" ./setup`.
 
-- Language: TypeScript (strict)
-- 3D: Three.js (all apps), React Three Fiber (`apps/viewer-web`)
-- API: Fastify + Prisma (`apps/viewer-api`)
-- Build/dev: Vite
-- Package manager: pnpm (workspace-wide)
+## Agent configuration (Codex and Claude Code)
 
-## Quick commands (workspace root)
+Keep one source of truth for both agents; `pnpm run doctor` enforces this layout.
 
-```bash
-pnpm install
-pnpm run dev
-pnpm run lint:all
-pnpm run typecheck:all
-pnpm run build:all
-pnpm run test:all
-pnpm run verify:agent
-pnpm run verify:pr
-pnpm run verify:nightly
-pnpm run verify:fast
-pnpm run verify:xr
-pnpm run verify:full
-pnpm run test:xr:all
-```
-
-## Where to implement changes
-
-- Viewer UX / feed / AR rendering: `apps/viewer-web/**`
-- Upload API / storage / DB schema: `apps/viewer-api/**`
-- XR capture / locomotion / export: `apps/capture/src/**`
-- Test runners and shared automation scripts: `scripts/**`, `packages/tooling-*/*`
-- Shared DTO/contracts: `packages/contracts/**`
-
-## Ports
-
-- `apps/viewer-api`: `http://localhost:3001`
-- `apps/viewer-web`: `https://localhost:3174`
-- `apps/capture` dev: `https://localhost:5173`
-- `apps/capture` mock VR: `https://localhost:5174`
-
-## Operating rules
-
-- Prefer app-scoped checks first, then workspace-wide checks.
-- Keep changes localized; cross-app refactors should move shared logic to `packages/*`.
-- Avoid parent-relative imports for shared tooling; use workspace packages.
-- Use `https://localhost:*` for desktop/local XR emulation and a non-localhost secure origin for native mobile/headset WebXR.
-- Browser XR automation is IWER-only at the workspace level; treat jsdom shims as unit-test internals.
-- If GLTF contract changes, validate export -> upload -> view with smoke pipeline.
-
-## gstack
-
-- `gstack` is vendored at `.claude/skills/gstack` for Claude Code and mirrored into the user skill dirs for local Codex/Claude sessions.
-- For browser-driven QA or site exploration, prefer the gstack `browse` skill/binary over generic browser tooling when the task is about interacting with a running app.
-- Available gstack modes: `plan-ceo-review`, `plan-eng-review`, `review`, `ship`, `browse`, `qa`, `setup-browser-cookies`, `retro`.
-- In Codex, if the user names one of those modes or asks for that style of workflow, open the matching `SKILL.md` under `.claude/skills/gstack/<mode>/` and follow it.
-- If project-local gstack skills stop working, run `cd .claude/skills/gstack && PATH="$HOME/.bun/bin:$PATH" ./setup`.
-
-## Validation checklist before handoff
-
-1. Run `pnpm run verify:agent` during the edit loop.
-2. Run `pnpm run verify:pr` before a pull request or merge.
-3. For exhaustive XR or live-API changes, also run `pnpm run verify:nightly`.
+- Instructions: edit `AGENTS.md` files only. Each `CLAUDE.md` is a symlink to the
+  `AGENTS.md` beside it; add the same symlink when creating a new nested guide.
+- Skills: add skill directories under `.agents/skills/`. `.claude/skills` is a
+  symlink to that directory, so never create files inside `.claude/skills` directly.
+- MCP servers: put launch logic in an executable `scripts/mcp/<name>.sh`, then
+  register the same `<name>` in both `.codex/config.toml` and `.mcp.json`. Those
+  config formats differ and cannot be symlinked.
+- Claude Code permission defaults live in `.claude/settings.json`; personal
+  overrides belong in the ignored `.claude/settings.local.json`.

@@ -1,0 +1,7 @@
+# Project MCP servers. Keep this list in sync with .mcp.json (Claude Code);
+# launch logic lives in scripts/mcp/ so both agents share it.
+# Tool calls retain Codex's normal approval policy.
+[mcp_servers.iwsdk-runtime]
+command = "sh"
+args = ["scripts/mcp/iwsdk-runtime.sh"]
+startup_timeout_sec = 20

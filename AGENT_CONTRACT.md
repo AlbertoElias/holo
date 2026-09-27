@@ -30,6 +30,7 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - `pnpm run verify:xr`
 - `pnpm run verify:full`
 - `pnpm run verify:workspace`
+- `pnpm run verify:repo:tooling`
 - `pnpm run verify:repo:capture`
 - `pnpm run verify:repo:viewer`
 - `pnpm run verify:changed`
@@ -37,6 +38,10 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - `pnpm run test:xr:viewer`
 - `pnpm run test:xr:all`
 - `pnpm run test:smoke:pipeline`
+- `pnpm run dev:capture:ai`
+- `pnpm run dev:capture:agent`
+- `pnpm run dev:capture:status`
+- `pnpm run dev:capture:down`
 - `pnpm run dev`
 
 ### App-level (optional when scoping work)
@@ -45,6 +50,7 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - `pnpm --filter @holoim/capture run verify:fast`
 - `pnpm --filter @holoim/capture run verify:full`
 - `pnpm --filter @holoim/capture run verify:changed`
+- `pnpm --filter @holoim/capture run iwsdk:adapter:status`
 - `pnpm --filter @holoim/contracts run verify:fast`
 - `pnpm --filter @holoim/api run verify:fast`
 - `pnpm --filter @holoim/web run verify:fast`
@@ -54,6 +60,8 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - Default during implementation: run `pnpm run verify:agent`. It derives affected
   workspaces and reverse dependents from package manifests, then fails closed to the
   comprehensive workspace checks if it cannot classify a change safely.
+- For documentation-only changes, check the edited content and references; do not
+  run application suites solely because a Markdown file changed.
 - Required before opening or updating a pull request: run `pnpm run verify:pr`.
 - `pnpm run verify:nightly` is the exhaustive browser-XR and live-API tier. Run it
   when those systems change or when diagnosing the scheduled workflow.
@@ -63,6 +71,19 @@ Run automation from these scripts unless a task explicitly requires lower-level 
   1. `pnpm run verify:repo:capture`
   2. `pnpm run verify:repo:viewer`
   3. `pnpm run test:smoke:pipeline`
+
+## Feature Delivery Contract
+
+- Start product behavior changes from `docs/templates/FEATURE_BRIEF.md` and follow
+  `docs/FEATURE_WORKFLOW.md`.
+- The lead owns the user outcome, acceptance criteria, scope, and integration.
+- Consequential changes use a design reviewer before implementation and an
+  independent verifier after implementation. The verifier receives the original
+  criteria and inspects the working result directly.
+- Assign exclusive file or module ownership before parallel edits. Parallelize
+  investigation freely; parallelize implementation only across separate ownership.
+- Report verification results and inspectable artifacts, plus any physical-device
+  checks that remain. Never present IWER evidence as physical-headset validation.
 
 ## Port Policy
 
@@ -79,6 +100,8 @@ Rules:
 - Capture XR checks prefer `https://127.0.0.1:5174`.
 - Use `https://localhost:*` for desktop/local XR emulation and a non-localhost secure origin for native mobile/headset WebXR.
 - When a required port is occupied, scripts should fail fast with a clear message.
+- IWSDK's managed capture runtime owns `5174`; stop it with
+  `pnpm run dev:capture:down` before starting a separate mock-XR server there.
 
 ## Test Environment Contract
 
@@ -91,6 +114,7 @@ Supported env vars for smoke and XR scripts:
 - `E2E_API_PORT` (default `3001`; use a free port for isolated local integration)
 - `REUSE_DEV_SERVER` (`1` to reuse existing server)
 - `STARTUP_TIMEOUT_MS` (default `30000`)
+- `XR_FLOW_TIMEOUT_MS` (default `180000` for capture locomotion flows)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
@@ -98,7 +122,8 @@ Supported env vars for smoke and XR scripts:
 
 | Task type | Required commands |
 |---|---|
-| Docs/config only | `pnpm run doctor` |
+| Documentation only | Check edited content, links, and referenced commands |
+| Tooling/config changes | `pnpm run doctor` plus checks affected by the configuration |
 | Agent edit loop | `pnpm run verify:agent` |
 | API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` |
 | XR behavior change | `pnpm run verify:agent` + `pnpm run verify:xr` |
@@ -123,5 +148,5 @@ Supported env vars for smoke and XR scripts:
 ## Git Conventions
 
 - Treat this workspace as one monorepo for commits and branches.
-- Keep branch names intent-scoped (`codex/*`, `feature/*`, `fix/*`, `chore/*`).
+- Keep branch names intent-scoped (`codex/*`, `claude/*`, `feature/*`, `fix/*`, `chore/*`).
 - Keep changes app-local unless a shared contract/tooling update is required.

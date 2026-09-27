@@ -27,7 +27,9 @@ pnpm-debug.log*
 .tmp_*
 scratch/
 .agent/
+**/.iwsdk/
+
+# agent config: .agents/skills is canonical; .claude/skills links to it
 .claude/*
-!.claude/skills/
-.claude/skills/*
-!.claude/skills/gstack/
+!.claude/settings.json
+!.claude/skills
