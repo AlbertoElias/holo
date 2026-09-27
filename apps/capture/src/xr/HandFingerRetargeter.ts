@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+import { isThreeBone } from '../shared/threeTypeGuards';
 import type { HandFingerName, HandFingerRetargetChain, HandFingerRetargetEntry } from '../avatar/AvatarRig';
 import type { TrackedHandJointName, Vec3Like, VrHandSide } from '../types/contracts';
 import type { XrSessionService } from './XrSessionService';
@@ -6,6 +8,10 @@ import type { XrSessionService } from './XrSessionService';
 const HOLD_TTL_FRAMES_DEFAULT = 12;
 const RECOVERY_BLEND_DEFAULT = 0.35;
 const BIND_BLEND_DEFAULT = 0.2;
+const PINCH_ACTIVATION_RATIO = 0.6;
+const PINCH_REFERENCE_MIN_SOURCE_DISTANCE_METERS = 0.055;
+const PINCH_SOLVER_ITERATIONS = 4;
+const PINCH_MAX_STEP_RADIANS = 0.35;
 
 const FINGER_NAMES: readonly HandFingerName[] = ['thumb', 'index', 'middle', 'ring', 'pinky'];
 
@@ -49,7 +55,10 @@ interface SegmentRuntimeState {
 interface SideRuntimeState {
   chain: HandFingerRetargetChain | undefined;
   segmentsByBoneUuid: Map<string, SegmentRuntimeState>;
+  entriesByFinger: Partial<Record<HandFingerName, HandFingerRetargetEntry[]>>;
   tipEntryByFinger: Partial<Record<HandFingerName, HandFingerRetargetEntry>>;
+  sourceRestPinchDistanceMeters: number | null;
+  avatarRestPinchDistanceMeters: number | null;
   quality: HandRetargetDataQuality;
 }
 
@@ -84,6 +93,18 @@ export class HandFingerRetargeter {
   private readonly tmpUp = new THREE.Vector3();
   private readonly tmpVecA = new THREE.Vector3();
   private readonly tmpVecB = new THREE.Vector3();
+  private readonly tmpPinchThumbPosition = new THREE.Vector3();
+  private readonly tmpPinchIndexPosition = new THREE.Vector3();
+  private readonly tmpPinchMidpoint = new THREE.Vector3();
+  private readonly tmpPinchAxis = new THREE.Vector3();
+  private readonly tmpPinchThumbTarget = new THREE.Vector3();
+  private readonly tmpPinchIndexTarget = new THREE.Vector3();
+  private readonly tmpPinchPivot = new THREE.Vector3();
+  private readonly tmpPinchToEffector = new THREE.Vector3();
+  private readonly tmpPinchToTarget = new THREE.Vector3();
+  private readonly tmpPinchParentWorldQuaternion = new THREE.Quaternion();
+  private readonly tmpPinchWorldDelta = new THREE.Quaternion();
+  private readonly tmpPinchLocalDelta = new THREE.Quaternion();
 
   constructor(
     private readonly xrService: XrSessionService,
@@ -98,7 +119,10 @@ export class HandFingerRetargeter {
   setChain(side: VrHandSide, chain: HandFingerRetargetChain | undefined): void {
     const nextState = this.sideState[side]!;
     nextState.chain = chain;
+    nextState.entriesByFinger = {};
     nextState.tipEntryByFinger = {};
+    nextState.sourceRestPinchDistanceMeters = null;
+    nextState.avatarRestPinchDistanceMeters = null;
     this.resetQuality(nextState.quality);
 
     const nextSegments = new Map<string, SegmentRuntimeState>();
@@ -107,10 +131,17 @@ export class HandFingerRetargeter {
         const previous = nextState.segmentsByBoneUuid.get(entry.bone.uuid);
         nextSegments.set(entry.bone.uuid, previous ?? this.createSegmentRuntimeState());
 
+        const fingerEntries = nextState.entriesByFinger[entry.finger] ?? [];
+        fingerEntries.push(entry);
+        nextState.entriesByFinger[entry.finger] = fingerEntries;
+
         const existingTip = nextState.tipEntryByFinger[entry.finger];
         if (!existingTip || entry.segmentIndex > existingTip.segmentIndex) {
           nextState.tipEntryByFinger[entry.finger] = entry;
         }
+      }
+      for (const fingerEntries of Object.values(nextState.entriesByFinger)) {
+        fingerEntries.sort((a, b) => b.segmentIndex - a.segmentIndex);
       }
     }
     nextState.segmentsByBoneUuid = nextSegments;
@@ -153,6 +184,9 @@ export class HandFingerRetargeter {
       }
       entry.bone.updateMatrixWorld(true);
     }
+
+    this.ensurePinchReference(side, sideState);
+    this.applyPinchContactCorrection(side, sideState);
   }
 
   captureCalibrationPose(side?: VrHandSide): Record<VrHandSide, boolean> {
@@ -174,6 +208,8 @@ export class HandFingerRetargeter {
         runtime.holdFramesRemaining = 0;
         runtime.missingFrames = 0;
       }
+      sideState.sourceRestPinchDistanceMeters = null;
+      sideState.avatarRestPinchDistanceMeters = null;
       this.resetQuality(sideState.quality);
     }
   }
@@ -204,8 +240,7 @@ export class HandFingerRetargeter {
     for (const finger of FINGER_NAMES) {
       const tipEntry = sideState.tipEntryByFinger[finger];
       if (!tipEntry) continue;
-      const tipObject =
-        tipEntry.bone.children.find((child): child is THREE.Bone => child instanceof THREE.Bone) ?? tipEntry.bone;
+      const tipObject = tipEntry.bone.children.find(isThreeBone) ?? tipEntry.bone;
       tipObject.getWorldPosition(this.tmpVecA);
       if (Number.isFinite(this.tmpVecA.x) && Number.isFinite(this.tmpVecA.y) && Number.isFinite(this.tmpVecA.z)) {
         fingerTips[finger] = { x: this.tmpVecA.x, y: this.tmpVecA.y, z: this.tmpVecA.z };
@@ -235,7 +270,10 @@ export class HandFingerRetargeter {
     return {
       chain: undefined,
       segmentsByBoneUuid: new Map(),
+      entriesByFinger: {},
       tipEntryByFinger: {},
+      sourceRestPinchDistanceMeters: null,
+      avatarRestPinchDistanceMeters: null,
       quality: {
         trackedSegments: 0,
         heldSegments: 0,
@@ -324,7 +362,142 @@ export class HandFingerRetargeter {
       runtime.missingFrames = 0;
       sideState.segmentsByBoneUuid.set(boneUuid, runtime);
     }
+    this.capturePinchReference(side, sideState);
     return true;
+  }
+
+  private capturePinchReference(side: VrHandSide, sideState: SideRuntimeState): void {
+    sideState.sourceRestPinchDistanceMeters = this.getSourcePinchDistance(side);
+    sideState.avatarRestPinchDistanceMeters = this.getAvatarPinchDistance(sideState);
+  }
+
+  private ensurePinchReference(side: VrHandSide, sideState: SideRuntimeState): void {
+    if (sideState.sourceRestPinchDistanceMeters !== null && sideState.avatarRestPinchDistanceMeters !== null) return;
+    const sourceDistance = this.getSourcePinchDistance(side);
+    if (sourceDistance === null || sourceDistance < PINCH_REFERENCE_MIN_SOURCE_DISTANCE_METERS) return;
+    const avatarDistance = this.getAvatarPinchDistance(sideState);
+    if (avatarDistance === null || avatarDistance <= 1e-4) return;
+    sideState.sourceRestPinchDistanceMeters = sourceDistance;
+    sideState.avatarRestPinchDistanceMeters = avatarDistance;
+  }
+
+  private applyPinchContactCorrection(side: VrHandSide, sideState: SideRuntimeState): void {
+    const sourceRestDistance = sideState.sourceRestPinchDistanceMeters;
+    const avatarRestDistance = sideState.avatarRestPinchDistanceMeters;
+    const sourceDistance = this.getSourcePinchDistance(side);
+    if (
+      sourceRestDistance === null ||
+      avatarRestDistance === null ||
+      sourceDistance === null ||
+      sourceRestDistance <= 1e-4 ||
+      avatarRestDistance <= 1e-4
+    ) {
+      return;
+    }
+
+    const sourceRatio = sourceDistance / sourceRestDistance;
+    if (!Number.isFinite(sourceRatio) || sourceRatio >= PINCH_ACTIVATION_RATIO) return;
+
+    const thumbTip = this.getTipObject(sideState, 'thumb');
+    const indexTip = this.getTipObject(sideState, 'index');
+    if (!thumbTip || !indexTip) return;
+
+    const desiredDistance = avatarRestDistance * THREE.MathUtils.clamp(sourceRatio, 0.08, 1);
+    const correctionStrength = THREE.MathUtils.smoothstep(
+      PINCH_ACTIVATION_RATIO - sourceRatio,
+      0,
+      PINCH_ACTIVATION_RATIO - 0.08
+    );
+    if (correctionStrength <= 0) return;
+
+    const thumbEntries = sideState.entriesByFinger.thumb ?? [];
+    const indexEntries = sideState.entriesByFinger.index ?? [];
+    for (let iteration = 0; iteration < PINCH_SOLVER_ITERATIONS; iteration += 1) {
+      thumbTip.getWorldPosition(this.tmpPinchThumbPosition);
+      indexTip.getWorldPosition(this.tmpPinchIndexPosition);
+      const currentDistance = this.tmpPinchThumbPosition.distanceTo(this.tmpPinchIndexPosition);
+      if (!Number.isFinite(currentDistance) || currentDistance <= desiredDistance + 5e-4) break;
+
+      this.tmpPinchMidpoint.copy(this.tmpPinchThumbPosition).add(this.tmpPinchIndexPosition).multiplyScalar(0.5);
+      this.tmpPinchAxis.subVectors(this.tmpPinchIndexPosition, this.tmpPinchThumbPosition);
+      if (this.tmpPinchAxis.lengthSq() < 1e-8) break;
+      this.tmpPinchAxis.normalize();
+      this.tmpPinchThumbTarget
+        .copy(this.tmpPinchMidpoint)
+        .addScaledVector(this.tmpPinchAxis, -desiredDistance * 0.5);
+      this.tmpPinchIndexTarget
+        .copy(this.tmpPinchMidpoint)
+        .addScaledVector(this.tmpPinchAxis, desiredDistance * 0.5);
+
+      this.solveFingerTowardTarget(thumbEntries, thumbTip, this.tmpPinchThumbTarget, correctionStrength);
+      this.solveFingerTowardTarget(indexEntries, indexTip, this.tmpPinchIndexTarget, correctionStrength);
+    }
+  }
+
+  private solveFingerTowardTarget(
+    entries: readonly HandFingerRetargetEntry[],
+    tipObject: THREE.Object3D,
+    targetWorld: THREE.Vector3,
+    correctionStrength: number
+  ): void {
+    for (const entry of entries) {
+      const parent = entry.bone.parent;
+      if (!parent) continue;
+
+      entry.bone.getWorldPosition(this.tmpPinchPivot);
+      tipObject.getWorldPosition(this.tmpPinchThumbPosition);
+      this.tmpPinchToEffector.subVectors(this.tmpPinchThumbPosition, this.tmpPinchPivot);
+      this.tmpPinchToTarget.subVectors(targetWorld, this.tmpPinchPivot);
+      if (this.tmpPinchToEffector.lengthSq() < 1e-8 || this.tmpPinchToTarget.lengthSq() < 1e-8) continue;
+
+      this.tmpPinchToEffector.normalize();
+      this.tmpPinchToTarget.normalize();
+      this.tmpPinchWorldDelta.setFromUnitVectors(this.tmpPinchToEffector, this.tmpPinchToTarget).normalize();
+      const stepAngle = Math.min(2 * Math.acos(THREE.MathUtils.clamp(this.tmpPinchWorldDelta.w, -1, 1)), PINCH_MAX_STEP_RADIANS);
+      if (!Number.isFinite(stepAngle) || stepAngle < 1e-5) continue;
+
+      this.tmpAxis.set(this.tmpPinchWorldDelta.x, this.tmpPinchWorldDelta.y, this.tmpPinchWorldDelta.z);
+      if (this.tmpAxis.lengthSq() < 1e-8) continue;
+      this.tmpAxis.normalize();
+      this.tmpPinchWorldDelta.setFromAxisAngle(this.tmpAxis, stepAngle * correctionStrength);
+
+      parent.getWorldQuaternion(this.tmpPinchParentWorldQuaternion);
+      this.tmpPinchLocalDelta
+        .copy(this.tmpPinchParentWorldQuaternion)
+        .invert()
+        .multiply(this.tmpPinchWorldDelta)
+        .multiply(this.tmpPinchParentWorldQuaternion)
+        .normalize();
+      entry.bone.quaternion.premultiply(this.tmpPinchLocalDelta).normalize();
+      entry.bone.updateMatrixWorld(true);
+    }
+  }
+
+  private getSourcePinchDistance(side: VrHandSide): number | null {
+    if (
+      !this.xrService.getTrackedHandJointPosition(side, 'thumb-tip', this.tmpPinchThumbPosition) ||
+      !this.xrService.getTrackedHandJointPosition(side, 'index-finger-tip', this.tmpPinchIndexPosition)
+    ) {
+      return null;
+    }
+    const distance = this.tmpPinchThumbPosition.distanceTo(this.tmpPinchIndexPosition);
+    return Number.isFinite(distance) ? distance : null;
+  }
+
+  private getAvatarPinchDistance(sideState: SideRuntimeState): number | null {
+    const thumbTip = this.getTipObject(sideState, 'thumb');
+    const indexTip = this.getTipObject(sideState, 'index');
+    if (!thumbTip || !indexTip) return null;
+    thumbTip.getWorldPosition(this.tmpPinchThumbPosition);
+    indexTip.getWorldPosition(this.tmpPinchIndexPosition);
+    const distance = this.tmpPinchThumbPosition.distanceTo(this.tmpPinchIndexPosition);
+    return Number.isFinite(distance) ? distance : null;
+  }
+
+  private getTipObject(sideState: SideRuntimeState, finger: HandFingerName): THREE.Object3D | undefined {
+    const tipEntry = sideState.tipEntryByFinger[finger];
+    if (!tipEntry) return undefined;
+    return tipEntry.bone.children.find(isThreeBone) ?? tipEntry.bone;
   }
 
   private computeLiveQuaternion(

@@ -59,8 +59,8 @@ const OPEN_HAND_CURL = {
 };
 
 const PINCH_CURL = {
-  thumb: [0.75, 1.0, 0.9, 0.7],
-  index: [1.1, 1.25, 1.1, 0.85],
+  thumb: [0.2, 0.75, 0.35, 0.1],
+  index: [0.15, 1.7, 0.55, 0.4],
   middle: [0, 0, 0, 0],
   ring: [0, 0, 0, 0],
   pinky: [0, 0, 0, 0]
@@ -147,6 +147,19 @@ function normalizeQuat(quaternion) {
   };
 }
 
+function rotateVecByQuat(vector, quaternion) {
+  const { x, y, z, w } = quaternion;
+  const ix = w * vector.x + y * vector.z - z * vector.y;
+  const iy = w * vector.y + z * vector.x - x * vector.z;
+  const iz = w * vector.z + x * vector.y - y * vector.x;
+  const iw = -x * vector.x - y * vector.y - z * vector.z;
+  return {
+    x: ix * w + iw * -x + iy * -z - iz * -y,
+    y: iy * w + iw * -y + iz * -x - ix * -z,
+    z: iz * w + iw * -z + ix * -y - iy * -x
+  };
+}
+
 export function quatAngleDelta(a, b) {
   if (!a || !b) return Number.NaN;
   const dot = Math.abs(clamp(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w, -1, 1));
@@ -192,7 +205,7 @@ function buildHandJoints(side, wristPosition, curlsByFinger) {
     for (let index = 0; index < chain.length; index += 1) {
       const jointName = chain[index];
       const localCurl = curls[index] ?? 0;
-      if (index > 0 && localCurl !== 0) {
+      if (localCurl !== 0) {
         const localQuat = quatFromAxisAngle(curlAxis, localCurl);
         jointWorldQuat = normalizeQuat(quatMultiply(jointWorldQuat, localQuat));
       }
@@ -205,7 +218,10 @@ function buildHandJoints(side, wristPosition, curlsByFinger) {
 
       const nextLength = lengths[index];
       if (nextLength) {
-        jointPosition = addVec(jointPosition, scaleVec(forward, nextLength));
+        jointPosition = addVec(
+          jointPosition,
+          scaleVec(rotateVecByQuat(forward, jointWorldQuat), nextLength)
+        );
       }
     }
   }

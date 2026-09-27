@@ -86,6 +86,16 @@ async function captureFinalScreenshot() {
   }
 }
 
+async function captureScreenshot(filename) {
+  const screenshotPath = path.join(screenshotDir, filename);
+  try {
+    await page.screenshot({ path: screenshotPath, timeout: 10_000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[mock-vr] ${filename} screenshot skipped: ${message}`);
+  }
+}
+
 try {
   const mode = resolveXrTestMode(
     process.env.XR_TEST_MODE
@@ -104,6 +114,25 @@ try {
     });
   }
 
+  const automaticPinchPhase = await page.evaluate(({ relaxed, pinch }) => {
+    window.__resetHandCalibrationPose();
+    window.__setMockVrPose(relaxed);
+    window.advanceTime(350);
+    const relaxedSnapshot = JSON.parse(window.render_game_to_text());
+    window.__setMockVrPose(pinch);
+    window.advanceTime(450);
+    const pinchSnapshot = JSON.parse(window.render_game_to_text());
+    return { relaxedSnapshot, pinchSnapshot };
+  }, { relaxed: relaxedPose, pinch: pinchPose });
+
+  const automaticRightPinchDistance = automaticPinchPhase.pinchSnapshot.tracking.right.pinchDistanceMeters;
+  const automaticLeftPinchDistance = automaticPinchPhase.pinchSnapshot.tracking.left.pinchDistanceMeters;
+  assert(automaticPinchPhase.relaxedSnapshot.tracking.right.calibrated === false, 'Automatic pinch reference unexpectedly calibrated finger segments.');
+  assert(Number.isFinite(automaticRightPinchDistance), 'Automatic right pinch distance metric is missing.');
+  assert(Number.isFinite(automaticLeftPinchDistance), 'Automatic left pinch distance metric is missing.');
+  assert(automaticRightPinchDistance < 0.018, `Automatic right pinch does not reach fingertip contact (${automaticRightPinchDistance.toFixed(4)}).`);
+  assert(automaticLeftPinchDistance < 0.018, `Automatic left pinch does not reach fingertip contact (${automaticLeftPinchDistance.toFixed(4)}).`);
+
   const relaxedPhase = await page.evaluate((pose) => {
     window.__resetHandCalibrationPose();
     window.__setMockVrPose(pose);
@@ -114,6 +143,7 @@ try {
   }, relaxedPose);
 
   const pinchSnapshot = await applyPoseAndSnapshot(pinchPose, 450);
+  await captureScreenshot('mock-vr-pinch.png');
   const pointingSnapshot = await applyPoseAndSnapshot(pointingPose, 450);
   const dropoutHoldSnapshot = await applyPoseAndSnapshot(dropoutPose, 160);
   const dropoutRecoveredSnapshot = await applyPoseAndSnapshot(relaxedPose, 420);
@@ -163,20 +193,28 @@ try {
 
   const relaxedAvatarPinchDistance = relaxedSnapshot.tracking.right.pinchDistanceMeters;
   const pinchAvatarDistance = pinchSnapshot.tracking.right.pinchDistanceMeters;
+  const pinchLeftAvatarDistance = pinchSnapshot.tracking.left.pinchDistanceMeters;
   assert(Number.isFinite(relaxedAvatarPinchDistance), 'Missing relaxed avatar pinch distance metric.');
   assert(Number.isFinite(pinchAvatarDistance), 'Missing pinch avatar pinch distance metric.');
+  assert(Number.isFinite(pinchLeftAvatarDistance), 'Missing left avatar pinch distance metric.');
 
   const relaxedSourcePinchDistance = sourcePinchDistanceOf(relaxedPose, 'right');
   const pinchSourcePinchDistance = sourcePinchDistanceOf(pinchPose, 'right');
+
+  const sourcePinchDelta = relaxedSourcePinchDistance - pinchSourcePinchDistance;
+  const avatarPinchDelta = relaxedAvatarPinchDistance - pinchAvatarDistance;
+  console.log(
+    `[mock-vr] pinch source=${pinchSourcePinchDistance.toFixed(4)}m avatar-right=${pinchAvatarDistance.toFixed(4)}m avatar-left=${pinchLeftAvatarDistance.toFixed(4)}m`
+  );
 
   assert(
     relaxedAvatarPinchDistance > pinchAvatarDistance + 0.004,
     `Avatar pinch did not close enough (relaxed=${relaxedAvatarPinchDistance.toFixed(4)} pinch=${pinchAvatarDistance.toFixed(4)}).`
   );
-  assert(pinchAvatarDistance < 0.09, `Avatar pinch distance is too large (${pinchAvatarDistance.toFixed(4)}).`);
+  assert(pinchSourcePinchDistance < 0.018, `Source pinch does not reach fingertip contact (${pinchSourcePinchDistance.toFixed(4)}).`);
+  assert(pinchAvatarDistance < 0.018, `Right avatar pinch does not reach fingertip contact (${pinchAvatarDistance.toFixed(4)}).`);
+  assert(pinchLeftAvatarDistance < 0.018, `Left avatar pinch does not reach fingertip contact (${pinchLeftAvatarDistance.toFixed(4)}).`);
 
-  const sourcePinchDelta = relaxedSourcePinchDistance - pinchSourcePinchDistance;
-  const avatarPinchDelta = relaxedAvatarPinchDistance - pinchAvatarDistance;
   assert(sourcePinchDelta > 0, `Source pinch distance did not decrease (${sourcePinchDelta.toFixed(4)}).`);
   assert(avatarPinchDelta > 0, `Avatar pinch distance did not decrease (${avatarPinchDelta.toFixed(4)}).`);
 
