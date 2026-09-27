@@ -55,16 +55,21 @@ scene editing are intentionally not exposed. See `docs/IWSDK_AI_WORKFLOW.md`.
 
 ## Validation snapshot
 
-- `pnpm run verify:fast` — passed: tooling 4 tests, capture 11 tests, viewer API
-  10 tests, and viewer web 38 tests plus lint/type checks
-- `pnpm run test:all` — passed through capture XR flows and subsequent viewer tests;
-  the locomotion runner printed its final PASS and released port 5174
-- `pnpm run verify:xr` — passed on an unrestricted desktop host: capture mock XR
-  and all 5 viewer IWER/SEM AR cases; source
-  pinch 1.30 cm, avatar right 1.19 cm, avatar left 0.90 cm
-- `pnpm run build:all` — passed; capture scene optimization reduced `scene.glb`
-  from 493.4 KB to 206.2 KB
-- `pnpm run test:smoke:pipeline` — passed export, upload, fetch, and cleanup
+This work was rebased onto the tiered CI verification (`verify:agent`, `verify:pr`,
+`verify:nightly`, single `CI Gate` workflow). After the rebase, on 2026-09-27:
+
+- `pnpm run verify:pr` — passed: doctor, lint/typecheck (tooling + all workspaces),
+  unit tests (tooling 6, xr-ui-core 3, xr-runtime 8, viewer API 10, capture 11,
+  viewer web 38), `build:all` (capture `scene.glb` 493.4 KB → 206.2 KB),
+  export/upload/fetch smoke pipeline, and XR smoke: capture mock XR (source pinch
+  1.30 cm, avatar right 1.19 cm, avatar left 0.90 cm) plus all 5 viewer IWER/SEM
+  AR cases
+- `pnpm run verify:nightly` (exhaustive locomotion flows and live-API integration)
+  was not rerun after the rebase. Before it, the locomotion runner printed its final
+  PASS and released port 5174.
+
+Earlier checks from the pre-rebase work:
+
 - `pnpm --filter @holoim/api run prisma:setup` — passed with all three committed
   migrations applied/current
 - Shared process-helper integration tests — passed success, non-zero propagation,
