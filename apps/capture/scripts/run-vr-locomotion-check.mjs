@@ -11,7 +11,7 @@ const host = process.env.DEV_HOST ?? '127.0.0.1';
 const configuredPort = Number(process.env.DEV_PORT ?? '5174');
 const configuredBaseUrl = process.env.BASE_URL;
 const startupTimeoutMs = Number(process.env.STARTUP_TIMEOUT_MS ?? '30000');
-const flowTimeoutMs = Number(process.env.XR_FLOW_TIMEOUT_MS ?? '180000');
+const flowTimeoutMs = Number(process.env.XR_FLOW_TIMEOUT_MS ?? '600000');
 const reuseDevServer = process.env.REUSE_DEV_SERVER === '1';
 
 let devServer = null;

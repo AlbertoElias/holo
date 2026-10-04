@@ -114,7 +114,7 @@ Supported env vars for smoke and XR scripts:
 - `E2E_API_PORT` (default `3001`; use a free port for isolated local integration)
 - `REUSE_DEV_SERVER` (`1` to reuse existing server)
 - `STARTUP_TIMEOUT_MS` (default `30000`)
-- `XR_FLOW_TIMEOUT_MS` (default `180000` for capture locomotion flows)
+- `XR_FLOW_TIMEOUT_MS` (default `600000` for capture locomotion flows; CI runners take 4–7 minutes)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
