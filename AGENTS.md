@@ -46,14 +46,27 @@ when using gstack. Its setup command is `cd .agents/skills/gstack && PATH="$HOME
 ## Sharing work between agents
 
 Multiple agents share this repo, so uncommitted work is invisible to the others.
+Work in your own worktree by default; the main checkout is the integration point.
 
 - Before starting, run `git fetch` and check `git status`; read any in-flight
   brief in `docs/features/README.md` before touching overlapping files.
-- As soon as your change is working and verified, commit and push it. Stage
-  only the files you changed by name — never commit another agent's
+- For implementation work, create a worktree on your own branch and install
+  there (pnpm's shared store makes this cheap):
+  `git worktree add ../holoim-<task> -b <agent>/<task> origin/main`, then
+  `pnpm install` in that directory. One feature or agent per worktree.
+- The exception is a short, sequential fix when the relevant files are clean:
+  it may go directly in a free checkout. Never edit files another agent has
+  modified in a shared tree.
+- Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`),
+  dev servers, and local databases are still shared, so only one agent runs
+  the XR harness or a dev server at a time unless ports are reassigned.
+- As soon as your change is working and verified, commit and push your branch.
+  Stage only the files you changed by name — never commit another agent's
   in-progress work, and never use a broad `git add`.
-- If the push is rejected because another agent landed first, pull with
-  rebase, re-run the affected check, and push again. Do not force-push.
+- The lead merges the verified branch into `main`, pushes, then removes the
+  worktree (`git worktree remove`) and deletes the merged branch. If a push is
+  rejected because another agent landed first, pull with rebase, re-run the
+  affected check, and push again. Do not force-push.
 
 ## Agent configuration (Codex and Claude Code)
 
