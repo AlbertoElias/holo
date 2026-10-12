@@ -74,7 +74,9 @@ Mode behavior:
 - CI installs `ktx` so production builds use the full IWSDK KTX2 compression path. Local `ktx` is optional but recommended if you want build parity with CI.
 - CI / non-headset testing now enters a real IWER-backed XR session and then drives deterministic poses via `window.__setMockVrPose(...)`.
 - Deterministic test hooks available for automation:
-  - `window.advanceTime(ms)`
+  - `window.advanceTime(ms)` (fixed 1/60 s steps; draws the final frame unless the manual clock is on)
+  - `window.__setManualClock(enabled)` (pauses wall-clock simulation so only `advanceTime` moves it; frames keep drawing)
+  - `window.__respawnCharacter()` (returns the character to the scene spawn point)
   - `window.render_game_to_text()`
   - `window.__setMockInput({ forward?, back?, left?, right?, crouch?, jump? })`
   - `window.__setMockVrPose({ head?, hands?: { [side]: { tracked?, position?, quaternion?, joints? } } })`
@@ -118,11 +120,19 @@ npm run test:xr:flows
 npm run ci:vr:flows
 ```
 
+`npm run test:xr` runs both suites against one dev server.
+
 This suite runs inside an IWER-backed VR session and validates:
-- forward locomotion
-- head-yaw-relative locomotion direction
-- strafe flow while yawed
+- forward, back, left, and right travel at four head yaws, each landing nearest
+  its expected world direction (spawn terrain deflects travel by up to ~0.5 rad)
 - jump takeoff + landing recovery
+- VR crouch amount, source, recovery, and crouched speed reduction
+- desktop keyboard mapping, crouch, crouch-jump, and crouch-walk release
+
+Both suites are deterministic: they take the manual clock before XR entry, then
+freeze page timers so IWER stops compositing frames nobody asserts on. Results
+are identical on any host; a failure writes a state timeline JSON next to its
+screenshot.
 
 ## Development Workflows
 
@@ -199,9 +209,12 @@ Optional env vars for mock VR scripts:
 - `BASE_URL` (default: `https://127.0.0.1:5174/`)
 - `SCREENSHOT_DIR` (legacy screenshot dir override)
 - `XR_TEST_ARTIFACT_DIR` (preferred screenshot/timeline dir override)
-- `DEV_HOST` (default for `test:xr:mock`: `127.0.0.1`)
-- `DEV_PORT` (default for `test:xr:mock`: `5174`)
-- `REUSE_DEV_SERVER=1` skips auto start/stop in `test:xr:mock`
+- `DEV_HOST` (default for `test:xr*`: `127.0.0.1`)
+- `DEV_PORT` (default for `test:xr*`: `5174`)
+- `REUSE_DEV_SERVER=1` skips auto start/stop in `test:xr*`
+- `XR_CHECK_TIMEOUT_MS` (default: `120000` per check)
+- `XR_TEST_VIEWPORT` (default: `320x180`; set `1280x720` to watch a run)
+- `XR_CAPTURE_SUCCESS_SCREENSHOTS=1` also saves screenshots for passing steps
 - `STARTUP_TIMEOUT_MS` (default: `30000`)
 - `XR_TEST_MODE` (`iwer` | `off`, default `iwer` for capture scripts; legacy aliases map to `iwer`)
 - `XR_SUPPORT_SHIM=0` (legacy alias that maps to `XR_TEST_MODE=off`)

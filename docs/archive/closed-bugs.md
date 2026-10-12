@@ -37,3 +37,22 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   learning plus calibrated fingertip contact correction. `pnpm run test:xr:capture`
   passes at 1.19 cm right / 0.90 cm left; capture `verify:fast` and `verify:full`
   also pass.
+
+### B-003 — Scheduled XR locomotion flow is slow and flaky on CI
+
+- **Area:** `apps/capture` test clock and XR harness
+- **Severity:** P1 — CI reliability
+- **Observed:** 2026-09-28 to 2026-10-11 (10 of 14 nightly runs failed)
+- **Evidence:** the flow took 268–606 s on GitHub runners against 60 s locally,
+  tripping the 180 s and then 600 s guards; the 2026-10-05 timeline shows a queued
+  jump that never applied. A 2-vCPU Docker reproduction of `main` took 372 s and
+  failed the same `jump-airborne` step.
+- **Cause:** realtime frames ticked and rendered between deterministic steps (and
+  window events cleared edge-triggered input); every simulated step drew a
+  software-GL frame; IWER composited and GPU-synced every device frame.
+- **Fix:** capture's manual clock (`__setManualClock`) stops realtime ticks,
+  stepping no longer draws, tests freeze page timers after XR entry, and inputs
+  apply in the same page turn as their first step. Same reproduction: 31 s for
+  both capture XR suites, with identical results across runs. Details in
+  [`../features/deterministic-lean-ci.md`](../features/deterministic-lean-ci.md).
+

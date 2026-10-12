@@ -15,11 +15,13 @@ export function createApp(): AppRuntime {
   const debugBridge = new DebugBridge({
     renderGameToText: () => orchestrator.renderGameToText(),
     advanceTime: (ms) => orchestrator.advanceTime(ms),
+    setManualClock: (enabled) => orchestrator.setManualClock(enabled),
     setMockVrPose: (payload) => {
       applyIwerMockVrPoseInput(payload);
       orchestrator.setMockVrPose(payload);
     },
     setMockInput: (payload) => orchestrator.setMockInput(payload),
+    respawnCharacter: () => orchestrator.respawnCharacter(),
     captureHandCalibrationPose: () => orchestrator.captureHandCalibrationPose(),
     resetHandCalibrationPose: () => orchestrator.resetHandCalibrationPose()
   });
@@ -34,7 +36,7 @@ export function createApp(): AppRuntime {
       debugBridge.init();
       await orchestrator.init();
       orchestrator.setAnimationLoop(() => {
-        orchestrator.tick(orchestrator.getDeltaFromClock());
+        orchestrator.onRealtimeFrame();
       });
     },
     tick: (deltaSec: number) => {

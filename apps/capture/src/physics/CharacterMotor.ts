@@ -180,6 +180,13 @@ export class CharacterMotor {
     return this.rapierWorld;
   }
 
+  respawn(): boolean {
+    if (!this.avatarRigRef || !this.rapierWorld) return false;
+    const respawned = this.resolveSpawn(this.avatarRigRef);
+    if (respawned) this.rebuildCharacterController();
+    return respawned;
+  }
+
   hasSpawnResolved(): boolean {
     return this.spawnResolved;
   }

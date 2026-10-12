@@ -13,7 +13,7 @@
     "verify:full": "pnpm run verify:fast && pnpm run build",
     "test:e2e": "XR_TEST_MODE=iwer playwright test",
     "test:e2e:mocked": "VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer playwright test e2e/hologram-feed.spec.ts",
-    "test:e2e:integration": "RUN_E2E_INTEGRATION=1 XR_TEST_MODE=iwer playwright test e2e/hologram-feed.integration.spec.ts"
+    "test:e2e:pipeline": "RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer playwright test e2e/capture-to-viewer.pipeline.spec.ts"
   },
   "dependencies": {
     "@holoim/contracts": "workspace:*",

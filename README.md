@@ -45,7 +45,7 @@ pnpm run verify:xr
 pnpm run verify:full
 pnpm run test:xr:all
 pnpm run verify:changed
-pnpm run test:smoke:pipeline
+pnpm run test:smoke:pipeline   # capture export → upload → viewer render
 ```
 
 ## Workflow

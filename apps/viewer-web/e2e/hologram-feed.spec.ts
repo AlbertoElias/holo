@@ -75,7 +75,7 @@ async function mockFeed(page: Page): Promise<void> {
   });
 }
 
-async function setDesktopNavigatorOverrides(page: Page, { forceArSupport }: { forceArSupport?: boolean } = {}): Promise<void> {
+async function setDesktopNavigatorOverrides(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const nav = navigator as Navigator & {
       platform?: string;
@@ -93,12 +93,6 @@ async function setDesktopNavigatorOverrides(page: Page, { forceArSupport }: { fo
       // Best effort override for deterministic non-iOS behavior.
     }
   });
-
-  if (typeof forceArSupport === "boolean") {
-    await page.addInitScript((supported: boolean) => {
-      (window as Window & { __HOLOIM_AR_SUPPORTED_OVERRIDE__?: boolean }).__HOLOIM_AR_SUPPORTED_OVERRIDE__ = supported;
-    }, forceArSupport);
-  }
 }
 
 async function disableHitTestForSession(page: Page): Promise<void> {
@@ -251,93 +245,78 @@ async function enterMockAr(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
 }
 
-test("feed shell renders with mocked data and AR trigger", async ({ page }) => {
+// IWER's overlay intercepts pointer input during a session, so session
+// controls are clicked through the DOM; a missed click then fails the wait
+// that follows instead of passing silently.
+async function clickSessionButton(page: Page, label: string): Promise<void> {
+  await page.evaluate((text) => {
+    const button = Array.from(document.querySelectorAll("button")).find((candidate) => (
+      candidate.textContent?.trim() === text
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error(`${text} button not found.`);
+    }
+    button.click();
+  }, label);
+}
+
+const HIT_TEST_PLACEMENT = {
+  allowedModes: ["hit-test", "floor"],
+  allowedReasons: ["hit-test-stable", "hit-test-anchor", "plane-detected", "plane-detected-anchor"],
+  excludedStages: ["searching"]
+};
+
+test("feed lists holograms, and AR entry and exit round-trip through IWER", async ({ page }) => {
   await mockFeed(page);
-  await setDesktopNavigatorOverrides(page, { forceArSupport: true });
-  await page.goto("/");
-  await assertViewerShell(page);
+  await setDesktopNavigatorOverrides(page);
+
+  await enterMockAr(page);
   const runtimeState = await waitForIwerRuntime(page);
-  expect(runtimeState.hasIwerDevice).toBeTruthy();
   expect(runtimeState.isSecureContext).toBeTruthy();
+  const sessionState = await readIwerSessionState(page);
+  expect(sessionState?.environmentBlendMode).toBe("alpha-blend");
+
+  await clickSessionButton(page, "Exit AR");
+  await waitForNoIwerSession(page);
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.getByLabel("Upload Hologram")).toBeVisible();
   await expect(page.getByText("Mock Runner")).toBeVisible();
   await expect(page.locator(".ar-trigger-button")).toHaveCount(1);
 });
 
-test("entering AR starts an IWER-backed AR session and exit returns to feed", async ({ page }) => {
-  await mockFeed(page);
-  await setDesktopNavigatorOverrides(page);
-
-  await enterMockAr(page);
-
-  const sessionState = await readIwerSessionState(page);
-  expect(sessionState?.environmentBlendMode).toBe("alpha-blend");
-
-  await page.evaluate(() => {
-    const exitButton = Array.from(document.querySelectorAll("button")).find((button) => (
-      button.textContent?.trim() === "Exit AR"
-    ));
-
-    if (!(exitButton instanceof HTMLButtonElement)) {
-      throw new Error("Exit AR button not found.");
-    }
-
-    exitButton.click();
-  });
-  await waitForNoIwerSession(page);
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator(".ar-trigger-button")).toHaveCount(1);
-});
-
-test("AR placement uses IWER SEM hit-test placement by default", async ({ page }) => {
+test("AR placement anchors on IWER SEM hit-tests and recenter places again", async ({ page }) => {
   await mockFeed(page);
   await setDesktopNavigatorOverrides(page);
 
   await enterMockAr(page);
   const environmentState = await waitForIwerEnvironment(page, { minTrackedPlanes: 1 });
   expect(environmentState.hasSem).toBeTruthy();
-  expect(environmentState.trackedPlanesCount).toBeGreaterThan(0);
   await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion", "disabled");
   await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion-reason", "iwer-runtime");
 
-  const placement = await waitForPlacement(
-    page,
-    {
-      minSequence: 1,
-      allowedModes: ["hit-test", "floor"],
-      allowedReasons: ["hit-test-stable", "hit-test-anchor", "plane-detected", "plane-detected-anchor"],
-      excludedStages: ["searching"]
-    }
-  );
-
-  expect(["hit-test", "floor"]).toContain(placement.mode);
+  const placement = await waitForPlacement(page, { minSequence: 1, ...HIT_TEST_PLACEMENT });
   expect(["anchored", "placed", "locked"]).toContain(placement.stage);
-  expect(["hit-test-anchor", "hit-test-stable", "plane-detected", "plane-detected-anchor"]).toContain(placement.reason);
-});
 
-test("recenter reacquires placement from hit-test flow", async ({ page }) => {
-  await mockFeed(page);
-  await setDesktopNavigatorOverrides(page);
-
-  await enterMockAr(page);
-  await waitForIwerEnvironment(page, { minTrackedPlanes: 1 });
-  const initialPlacement = await waitForPlacement(
-    page,
-    {
-      minSequence: 1,
-      allowedModes: ["hit-test", "floor"],
-      allowedReasons: ["hit-test-stable", "hit-test-anchor", "plane-detected", "plane-detected-anchor"],
-      excludedStages: ["searching"]
-    }
-  );
-
-  await page.getByRole("button", { name: "Recenter Model" }).click({ force: true });
-  await page.waitForTimeout(500);
-  const nextPlacement = await readPlacementState(page);
-
-  expect(nextPlacement.sequence).toBeGreaterThanOrEqual(initialPlacement.sequence);
-  expect(["hit-test", "floor"]).toContain(nextPlacement.mode);
-  expect(["anchored", "placed", "locked"]).toContain(nextPlacement.stage);
+  // Recenter must reset placement and then place again. The sequence counter
+  // cannot show this (the controller and model each own one), so record the
+  // stage history and require a reset followed by a resolved placement.
+  await page.evaluate(() => {
+    const root = document.querySelector(".ar-view-container") as HTMLElement;
+    const stages: string[] = [];
+    (window as Window & { __placementStages?: string[] }).__placementStages = stages;
+    new MutationObserver(() => stages.push(root.dataset.placementStage ?? "")).observe(root, {
+      attributes: true,
+      attributeFilter: ["data-placement-stage"]
+    });
+  });
+  await clickSessionButton(page, "Recenter Model");
+  await page.waitForFunction(() => {
+    const stages = (window as Window & { __placementStages?: string[] }).__placementStages ?? [];
+    const resetIndex = stages.findIndex((stage) => stage === "unplaced" || stage === "searching");
+    return resetIndex >= 0 && ["anchored", "placed", "locked"].includes(stages.at(-1) ?? "") && stages.length - 1 > resetIndex;
+  }, null, { timeout: 15000 });
+  const replaced = await waitForPlacement(page, HIT_TEST_PLACEMENT);
+  expect(["anchored", "placed", "locked"]).toContain(replaced.stage);
 });
 
 test("AR placement falls back when hit-test is unavailable", async ({ page }) => {

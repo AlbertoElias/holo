@@ -29,14 +29,14 @@ it from the item below instead of duplicating its status here.
 - [ ] Expand contract-focused tests for capture orchestration and the `ui-dom`,
   `xr-ui-r3f`, and `xr-ui-three` packages, which currently use `--passWithNoTests`.
   Start with public behavior and state-transition contracts, and run them in the
-  appropriate `verify:agent`, `verify:pr`, or `verify:nightly` tier.
+  appropriate `verify:agent` or `verify:pr` tier.
 
 ## Later
 
-- [ ] Split the serial XR locomotion harness into named TypeScript scenario groups,
-  then evaluate safe sharding or browser reuse. Preserve fresh IWER pages and
-  sessions until stage timing and failure artifacts prove reuse does not
-  reintroduce the pose-baseline races fixed in August 2026.
+- [ ] Port the capture XR check scripts to TypeScript scenario groups. Browser
+  reuse and stage timing are done (one VR and one desktop page, respawn between
+  trials) in [`docs/features/deterministic-lean-ci.md`](docs/features/deterministic-lean-ci.md);
+  sharding is unnecessary at current runtimes.
 - [ ] Evaluate IWSDK-native ECS/scene composition only when a concrete authoring
   workflow requires it; the current tooling integration intentionally preserves
   HoloIM's custom Three/Rapier runtime.

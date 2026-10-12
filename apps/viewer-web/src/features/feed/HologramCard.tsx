@@ -11,7 +11,7 @@ import { ARQuickLookLink } from "../ar/ARQuickLookLink";
 import { checkModelAvailability } from "../hologram/modelAvailability";
 import type { ModelAvailability } from "../hologram/modelAvailability";
 import { resolveMediaUrl } from "./api";
-import { HologramCardCanvas } from "./HologramCardCanvas";
+import { HologramCardCanvas, type HologramRenderInfo } from "./HologramCardCanvas";
 
 type HologramCardProps = {
   item: HologramDTO;
@@ -76,6 +76,7 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   }, []);
   const [modelAvailability, setModelAvailability] = useState<CardModelAvailability>("checking");
   const [modelRenderFailed, setModelRenderFailed] = useState(false);
+  const [renderInfo, setRenderInfo] = useState<HologramRenderInfo | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
   const onHasAudio = useCallback((value: boolean) => setHasAudio(value), []);
 
@@ -83,6 +84,7 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
     let cancelled = false;
     setModelAvailability("checking");
     setModelRenderFailed(false);
+    setRenderInfo(null);
 
     checkModelAvailability(modelUrl)
       .then((availability) => {
@@ -155,7 +157,13 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
     : isIOS && canRenderModel;
 
   return (
-    <article className="feed-card" data-card-id={item.id}>
+    <article
+      className="feed-card"
+      data-card-id={item.id}
+      data-model-state={modelRenderFailed ? "failed" : renderInfo ? "rendered" : modelAvailability}
+      data-model-animations={renderInfo ? String(renderInfo.animationCount) : undefined}
+      data-model-bubble={renderInfo ? (renderInfo.bubbleActive ? "active" : "missing") : undefined}
+    >
       <div className="feed-card-bubble-shell">
         <div className="feed-card-bubble-glow" aria-hidden="true" />
         <div className="feed-card-bubble-aura" aria-hidden="true" />
@@ -179,6 +187,7 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
                 active={active}
                 muted={muted}
                 onHasAudio={onHasAudio}
+                onRendered={setRenderInfo}
                 colorAccurateMode={colorAccurateMode}
               />
             </ModelRenderBoundary>

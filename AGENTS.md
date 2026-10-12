@@ -20,8 +20,8 @@ share cross-app code through workspace packages. Keep API endpoints backward com
 unless versioning is explicit. Preserve GLTF export → upload → render compatibility.
 
 Read `AGENT_CONTRACT.md` when selecting commands, validation scope, or XR environment
-settings. Use `pnpm run verify:agent` in the edit loop, `pnpm run verify:pr` before
-merging, and `pnpm run verify:nightly` for exhaustive XR or live-API changes.
+settings. Use `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr` before
+merging; CI runs that same single tier on every push.
 Documentation-only edits need documentation checks, not every application test.
 Complete relevant checks and fixes before handoff.
 

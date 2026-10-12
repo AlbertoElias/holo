@@ -26,6 +26,9 @@ export type IwerEnvironmentState = {
 
 export const XR_CHROMIUM_ARGS: readonly string[];
 export const XR_CONTEXT_OPTIONS: Readonly<{ ignoreHTTPSErrors: true }>;
+export function resolveSimulationViewport(value?: string): { width: number; height: number };
+export function freezePageClock(page: unknown): Promise<void>;
+export function captureXrScreenshot(page: unknown, screenshotPath: string, options?: { timeout?: number }): Promise<void>;
 
 export function resolveXrTestMode(rawMode?: string): XrTestMode;
 export function createXrLaunchOptions<T extends Record<string, unknown>>(overrides?: T): T & {

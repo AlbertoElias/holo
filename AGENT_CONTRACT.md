@@ -25,7 +25,6 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - `pnpm run doctor`
 - `pnpm run verify:agent`
 - `pnpm run verify:pr`
-- `pnpm run verify:nightly`
 - `pnpm run verify:fast`
 - `pnpm run verify:xr`
 - `pnpm run verify:full`
@@ -63,10 +62,9 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - For documentation-only changes, check the edited content and references; do not
   run application suites solely because a Markdown file changed.
 - Required before opening or updating a pull request: run `pnpm run verify:pr`.
-- `pnpm run verify:nightly` is the exhaustive browser-XR and live-API tier. Run it
-  when those systems change or when diagnosing the scheduled workflow.
-- `pnpm run verify:full` composes the PR and nightly tiers; it is intentionally not
-  the normal edit-loop command.
+- `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
+  the viewer AR checks, and the capture → viewer pipeline. `verify:full` is an
+  alias kept for older notes.
 - If GLTF export/import contract is touched, run:
   1. `pnpm run verify:repo:capture`
   2. `pnpm run verify:repo:viewer`
@@ -87,6 +85,7 @@ Primary ports:
 - Viewer web: `3174`
 - Capture dev: `5173`
 - Capture mock VR: `5174`
+- Capture pipeline E2E: `5175`
 
 Rules:
 
@@ -108,7 +107,9 @@ Supported env vars for smoke and XR scripts:
 - `E2E_API_PORT` (default `3001`; use a free port for isolated local integration)
 - `REUSE_DEV_SERVER` (`1` to reuse existing server)
 - `STARTUP_TIMEOUT_MS` (default `30000`)
-- `XR_FLOW_TIMEOUT_MS` (default `600000` for capture locomotion flows; CI runners take 4–7 minutes)
+- `XR_CHECK_TIMEOUT_MS` (default `120000` per capture XR check; checks finish in seconds, so this only stops hangs)
+- `XR_TEST_VIEWPORT` (default `320x180` for capture XR checks; set `1280x720` when inspecting the page live)
+- `E2E_CAPTURE_URL` (default `https://127.0.0.1:5175/` for the pipeline test's capture server)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
@@ -119,18 +120,23 @@ Supported env vars for smoke and XR scripts:
 | Documentation only | Check edited content, links, and referenced commands |
 | Tooling/config changes | `pnpm run doctor` plus checks affected by the configuration |
 | Agent edit loop | `pnpm run verify:agent` |
-| API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` |
+| API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` (real capture export → upload → viewer render) |
 | XR behavior change | `pnpm run verify:agent` + `pnpm run verify:xr` |
 | Pull request / pre-merge | `pnpm run verify:pr` |
-| Scheduled or exhaustive confidence sweep | `pnpm run verify:nightly` |
 
 ## CI Contract
 
 - `.github/workflows/ci.yml` is the only GitHub Actions workflow and exposes one
   stable required check: `CI Gate`.
-- Pull requests and pushes run quality/unit checks first, then build/pipeline smoke
-  and fast IWER XR coverage. Scheduled and explicitly heavy manual runs replace the
-  fast XR job with exhaustive locomotion flows and viewer live-API integration.
+- Every event (push, pull request, manual, and a weekly schedule that only
+  catches runner or dependency drift) runs the same three parallel jobs: quality
+  and unit tests, production build, and browser end-to-end (capture XR checks,
+  viewer AR checks, capture → viewer pipeline). There is no separate heavy tier.
+- Capture XR checks are deterministic: they take capture's manual clock
+  (`__setManualClock`), advance simulation only through `advanceTime`, and freeze
+  the page's timers after XR session entry so IWER's per-frame compositing cannot
+  load the runner. Results must not depend on host speed; a check that passes
+  locally and fails on CI is a defect in the check or the app.
 - Test retries are disabled. Flakes must remain visible and be fixed rather than
   hidden by reruns.
 - Every job has a hard timeout. Timed commands write JSON to

@@ -130,6 +130,10 @@ export class AppOrchestrator implements System {
 
   private elapsedSec = 0;
   private started = false;
+  // Automation can own the clock so wall-clock frames never mutate state
+  // between deterministic steps. Realtime remains the default.
+  private manualClock = false;
+  private drawFrames = true;
   private activeXrSession: XRSession | null = null;
   private readonly defaultSceneBackground = new THREE.Color(0x111318);
   private wasArSession = false;
@@ -243,7 +247,7 @@ export class AppOrchestrator implements System {
         this.placeArWorldInFrontOfViewer();
         this.arWorldRecenterFramesRemaining -= 1;
       }
-      this.bootstrap.renderer.render(this.bootstrap.scene, this.bootstrap.xrCamera);
+      this.present(this.bootstrap.xrCamera);
       return;
     }
 
@@ -310,7 +314,21 @@ export class AppOrchestrator implements System {
 
     const activeCamera = isVrActive ? this.bootstrap.xrCamera : this.bootstrap.desktopCamera;
     this.recorder.capture(ctx.elapsedSec, this.avatarRig.avatar, this.avatarRig.avatarRoot, activeCamera);
-    this.bootstrap.renderer.render(this.bootstrap.scene, activeCamera);
+    this.present(activeCamera);
+  }
+
+  private present(camera: THREE.PerspectiveCamera): void {
+    if (this.drawFrames) {
+      this.bootstrap.renderer.render(this.bootstrap.scene, camera);
+      return;
+    }
+    // Keep the non-drawing side effects of render() so skipped frames leave
+    // world matrices and the XR camera exactly as a drawn frame would.
+    this.bootstrap.scene.updateMatrixWorld();
+    const xr = this.bootstrap.renderer.xr;
+    if (xr.isPresenting && xr.cameraAutoUpdate) {
+      xr.updateCamera(camera);
+    }
   }
 
   dispose(): void {
@@ -447,8 +465,26 @@ export class AppOrchestrator implements System {
     this.update({ deltaSec, elapsedSec: this.elapsedSec, mode: this.resolveAppMode() });
   }
 
-  getDeltaFromClock(): number {
-    return this.bootstrap.clock.getDelta();
+  onRealtimeFrame(): void {
+    const deltaSec = this.bootstrap.clock.getDelta();
+    if (this.manualClock) {
+      // Simulation is paused for automation; keep displaying its state.
+      this.presentFrame();
+      return;
+    }
+    this.tick(deltaSec);
+  }
+
+  private presentFrame(): void {
+    const isArPresenting = this.bootstrap.xrSessionMode === 'ar' && this.xrService.isXrPresenting();
+    const camera = isArPresenting || this.xrService.isVrEmbodimentActive() ? this.bootstrap.xrCamera : this.bootstrap.desktopCamera;
+    this.bootstrap.renderer.render(this.bootstrap.scene, camera);
+  }
+
+  setManualClock(enabled: boolean): void {
+    this.manualClock = enabled;
+    // Discard time that elapsed while manual so realtime resumes without a jump.
+    this.bootstrap.clock.getDelta();
   }
 
   setAnimationLoop(callback: (() => void) | null): void {
@@ -568,8 +604,16 @@ export class AppOrchestrator implements System {
   advanceTime(ms: number): void {
     const steps = Math.max(1, Math.round(ms / (1000 / 60)));
     const stepDelta = 1 / 60;
+    // Intermediate draws are pure cost. Under the manual clock realtime frames
+    // draw instead, because draws outside an XR frame are never composited and
+    // queue up while automation holds frames.
     for (let i = 0; i < steps; i += 1) {
-      this.tick(stepDelta);
+      this.drawFrames = !this.manualClock && i === steps - 1;
+      try {
+        this.tick(stepDelta);
+      } finally {
+        this.drawFrames = true;
+      }
     }
   }
 
@@ -582,6 +626,10 @@ export class AppOrchestrator implements System {
       // spaces, so a baseline captured before the source switch is invalid.
       this.resetVrStandingHeadBaseline();
     }
+  }
+
+  respawnCharacter(): boolean {
+    return this.characterMotor.respawn();
   }
 
   setMockInput(payload: MockInputState): void {

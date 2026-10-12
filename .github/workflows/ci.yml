@@ -1,19 +1,16 @@
 name: CI
 
+# One tier for every event. Browser checks advance simulated time explicitly,
+# so they are deterministic and cheap enough to run on every push; the weekly
+# schedule only catches runner-image and dependency drift on unchanged code.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      run_heavy_xr:
-        description: Run exhaustive XR and viewer integration coverage
-        required: false
-        default: false
-        type: boolean
   schedule:
-    - cron: "0 9 * * *"
+    - cron: "0 9 * * 1"
 
 permissions:
   contents: read
@@ -55,11 +52,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  build-smoke:
-    name: Build and pipeline smoke
-    needs: quality
+  build:
+    name: Production build
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -84,63 +80,19 @@ jobs:
           "${KTX_ROOT}/bin/ktx" --version
       - name: Build
         run: pnpm timed build -- pnpm run build:all
-      - name: Export, upload, and view smoke test
-        run: pnpm timed smoke-pipeline -- pnpm run test:smoke:pipeline
       - name: Upload timing summary
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-smoke-timings-${{ github.run_id }}
+          name: build-timings-${{ github.run_id }}
           path: output/test-results
           if-no-files-found: ignore
           retention-days: 7
 
-  xr-smoke:
-    name: XR smoke
-    if: ${{ github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.run_heavy_xr) }}
-    needs: quality
+  e2e:
+    name: Browser end-to-end
     runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
-      - name: Fast XR smoke suite
-        run: pnpm timed xr-smoke -- pnpm run test:xr:smoke
-      - name: Upload failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xr-smoke-failure-${{ github.run_id }}
-          path: |
-            apps/capture/output/ci-mock-vr
-            apps/viewer-web/test-results
-            apps/viewer-web/playwright-report
-            output/test-results
-          if-no-files-found: ignore
-          retention-days: 14
-      - name: Upload timing summary
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xr-smoke-timings-${{ github.run_id }}
-          path: output/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
-  xr-nightly:
-    name: Exhaustive XR and integration
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_heavy_xr) }}
-    needs: quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -154,16 +106,19 @@ jobs:
       - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
       - run: pnpm --filter @holoim/api prisma:generate
       - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
-      - name: Exhaustive XR flows
-        run: pnpm timed xr-full -- pnpm run test:xr:full
-      - name: Viewer live API integration
-        run: pnpm timed viewer-integration -- pnpm run test:integration:viewer
+      - name: Capture XR checks
+        run: pnpm timed xr-capture -- pnpm run test:xr:capture
+      - name: Viewer AR checks
+        run: pnpm timed xr-viewer -- pnpm run test:xr:viewer
+      - name: Capture to viewer pipeline
+        run: pnpm timed pipeline -- pnpm run test:smoke:pipeline
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-failure-${{ github.run_id }}
+          name: e2e-failure-${{ github.run_id }}
           path: |
+            apps/capture/output/ci-mock-vr
             apps/capture/output/ci-vr-locomotion
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
@@ -174,7 +129,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-timings-${{ github.run_id }}
+          name: e2e-timings-${{ github.run_id }}
           path: output/test-results
           if-no-files-found: ignore
           retention-days: 7
@@ -182,15 +137,13 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, build-smoke, xr-smoke, xr-nightly]
+    needs: [quality, build, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
       QUALITY_RESULT: ${{ needs.quality.result }}
-      BUILD_SMOKE_RESULT: ${{ needs.build-smoke.result }}
-      XR_SMOKE_RESULT: ${{ needs.xr-smoke.result }}
-      XR_NIGHTLY_RESULT: ${{ needs.xr-nightly.result }}
-      HEAVY_EXPECTED: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_heavy_xr) }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      E2E_RESULT: ${{ needs.e2e.result }}
     steps:
       - name: Summarize jobs
         run: |
@@ -199,16 +152,11 @@ jobs:
             echo "| Job | Result |"
             echo "| --- | --- |"
             echo "| Quality | ${QUALITY_RESULT} |"
-            echo "| Build and smoke | ${BUILD_SMOKE_RESULT} |"
-            echo "| XR smoke | ${XR_SMOKE_RESULT} |"
-            echo "| XR nightly | ${XR_NIGHTLY_RESULT} |"
+            echo "| Build | ${BUILD_RESULT} |"
+            echo "| Browser end-to-end | ${E2E_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
       - name: Enforce required jobs
         run: |
           test "${QUALITY_RESULT}" = "success"
-          test "${BUILD_SMOKE_RESULT}" = "success"
-          if [ "${HEAVY_EXPECTED}" = "true" ]; then
-            test "${XR_NIGHTLY_RESULT}" = "success"
-          else
-            test "${XR_SMOKE_RESULT}" = "success"
-          fi
+          test "${BUILD_RESULT}" = "success"
+          test "${E2E_RESULT}" = "success"

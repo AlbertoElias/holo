@@ -8,15 +8,18 @@ const nonViewerBodyPattern = /Loading scene\.\.\./i;
 export const test = base.extend({
   page: async ({ page }, consumePage) => {
     await attachXrEnvironment(page, { mode: process.env.XR_TEST_MODE });
+    const runtimeErrors: string[] = [];
     page.on("pageerror", (error) => {
-      console.error("viewer-pageerror", error);
+      runtimeErrors.push(`pageerror: ${error.message}`);
     });
     page.on("console", (message) => {
       if (message.type() === "error") {
-        console.error("viewer-console-error", message.text());
+        runtimeErrors.push(`console.error: ${message.text()}`);
       }
     });
     await consumePage(page);
+    // Runtime errors fail the test even when the visible flow completed.
+    expect(runtimeErrors, "viewer runtime errors").toEqual([]);
   }
 });
 

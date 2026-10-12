@@ -20,11 +20,17 @@ import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../h
 import { DEFAULT_CAMERA_FRAMING_CONFIG, computeDesiredFraming } from "./cameraFraming";
 import { HologramLighting } from "./HologramLighting";
 
+export type HologramRenderInfo = {
+  animationCount: number;
+  bubbleActive: boolean;
+};
+
 type HologramCardCanvasProps = {
   modelUrl: string;
   active: boolean;
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
+  onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   colorAccurateMode: boolean;
 };
 
@@ -111,7 +117,13 @@ function applyCameraFraming(
   camera.updateProjectionMatrix();
 }
 
-function HologramModel({ url, active, muted, onHasAudio }: { url: string; active: boolean; muted: boolean; onHasAudio: (hasAudio: boolean) => void }) {
+function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
+  url: string;
+  active: boolean;
+  muted: boolean;
+  onHasAudio: (hasAudio: boolean) => void;
+  onRendered?: ((info: HologramRenderInfo) => void) | undefined;
+}) {
   const gltf = useGLTF(url);
   const { scene, animations } = gltf;
   const audioState = useGltfAudio(gltf, active, muted);
@@ -129,6 +141,11 @@ function HologramModel({ url, active, muted, onHasAudio }: { url: string; active
   const avatarRootRef = useRef<Object3D | null>(null);
   const avatarAnchorRef = useRef<{ hips: Object3D; head: Object3D | null } | null>(null);
   const { actions } = useAnimations(animations, clonedScene);
+
+  // Mounting means the GLTF resolved and its scene is in the canvas.
+  useEffect(() => {
+    onRendered?.({ animationCount: animations.length, bubbleActive: sphereClip.active });
+  }, [animations.length, onRendered, sphereClip.active]);
 
   const computePreferredFraming = useCallback((perspectiveCamera: PerspectiveCamera, bubble: SphereClipResult): {
     focus: Vector3;
@@ -364,6 +381,7 @@ export function HologramCardCanvas({
   active,
   muted,
   onHasAudio,
+  onRendered,
   colorAccurateMode
 }: HologramCardCanvasProps) {
   return (
@@ -379,7 +397,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} />
+      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} />
     </Canvas>
   );
 }

@@ -13,6 +13,8 @@ if (!Number.isInteger(apiPort) || apiPort < 1 || apiPort > 65535) {
 }
 const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 const reuseExistingServer = process.env.REUSE_DEV_SERVER === "1";
+const runPipeline = process.env.RUN_E2E_PIPELINE === "1";
+const captureUrl = new URL(process.env.E2E_CAPTURE_URL ?? "https://127.0.0.1:5175/");
 const webServers = [
   {
     command: `VITE_HMR_CLIENT_PORT=${e2ePort} VITE_API_PROXY_TARGET=${apiBaseUrl} pnpm exec vite --host 0.0.0.0 --port ${e2ePort} --strictPort`,
@@ -21,13 +23,19 @@ const webServers = [
     reuseExistingServer,
     url: e2eBaseUrl
   },
-  ...(process.env.RUN_E2E_INTEGRATION === "1"
+  ...(runPipeline
     ? [{
         command: `TEST_API_PORT=${apiPort} pnpm --filter @holoim/api exec tsx ../../scripts/test-api.ts`,
         gracefulShutdown: { signal: "SIGTERM" as const, timeout: 5000 },
         timeout: 120000,
         reuseExistingServer,
         url: `${apiBaseUrl}/api/holograms?limit=1`
+      }, {
+        command: `pnpm --filter @holoim/capture exec vite --host ${captureUrl.hostname} --port ${captureUrl.port} --strictPort`,
+        ignoreHTTPSErrors: true,
+        timeout: 120000,
+        reuseExistingServer,
+        url: captureUrl.href
       }]
     : [])
 ];

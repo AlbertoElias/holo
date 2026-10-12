@@ -5,6 +5,16 @@ export { resolveXrTestMode };
 export const XR_CHROMIUM_ARGS = Object.freeze(['--use-gl=angle', '--use-angle=swiftshader']);
 export const XR_CONTEXT_OPTIONS = Object.freeze({ ignoreHTTPSErrors: true });
 
+// IWER clears and composites the full canvas on every device frame with a
+// synchronous GL readback, so software-GL cost scales with pixel count. Checks
+// that assert simulation state rather than pixels use a small canvas; set
+// XR_TEST_VIEWPORT=1280x720 for readable failure screenshots.
+export function resolveSimulationViewport(value = process.env.XR_TEST_VIEWPORT) {
+  const match = /^(\d+)x(\d+)$/.exec(value ?? '');
+  if (!match) return { width: 320, height: 180 };
+  return { width: Number(match[1]), height: Number(match[2]) };
+}
+
 export function createXrLaunchOptions(overrides = {}) {
   const { args = [], ...rest } = overrides;
   return {
@@ -19,6 +29,33 @@ export function createXrContextOptions(overrides = {}) {
     ...XR_CONTEXT_OPTIONS,
     ...overrides
   };
+}
+
+// Pauses the page's timers and animation frames. Use only after the page and
+// any XR session are ready, in flows that advance simulation time explicitly:
+// IWER otherwise composites and GPU-syncs every frame, which saturates small
+// CI runners without contributing to any assertion.
+const frozenPages = new WeakSet();
+
+export async function freezePageClock(page) {
+  await page.clock.install();
+  frozenPages.add(page);
+  await page.clock.pauseAt(new Date(Date.now() + 100));
+}
+
+// Screenshot for simulation checks. The small simulation canvas is mostly
+// covered by IWER's DevUI, so it is enlarged for the capture, and a few frozen
+// frames run so the page draws and IWER composites the current state. Pages
+// under a manual app clock draw on those frames without advancing.
+export async function captureXrScreenshot(page, screenshotPath, { timeout = 3_000 } = {}) {
+  const simulationViewport = page.viewportSize();
+  try {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    if (frozenPages.has(page)) await page.clock.runFor(100);
+    await page.screenshot({ path: screenshotPath, timeout });
+  } finally {
+    if (simulationViewport) await page.setViewportSize(simulationViewport).catch(() => undefined);
+  }
 }
 
 export async function launchXrBrowser(chromium, launchOptions = {}) {

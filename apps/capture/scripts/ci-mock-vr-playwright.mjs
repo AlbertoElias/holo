@@ -4,9 +4,12 @@ import { chromium } from 'playwright';
 
 import {
   attachXrEnvironment,
+  captureXrScreenshot,
   createXrContext,
   enterIwerSessionFromButton,
+  freezePageClock,
   launchXrBrowser,
+  resolveSimulationViewport,
   resolveXrTestMode,
   waitForIwerRuntime,
   waitForPageFunctions,
@@ -31,6 +34,7 @@ import {
 } from './lib/mock-vr-poses.mjs';
 
 const DEFAULT_XR_TEST_MODE = 'iwer';
+const CAPTURE_SUCCESS_SCREENSHOTS = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS === '1';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -43,7 +47,7 @@ const screenshotDir = process.env.XR_TEST_ARTIFACT_DIR ?? process.env.SCREENSHOT
 await mkdir(screenshotDir, { recursive: true });
 
 const browser = await launchXrBrowser(chromium);
-const context = await createXrContext(browser);
+const context = await createXrContext(browser, { viewport: resolveSimulationViewport() });
 const page = await context.newPage();
 const consoleErrors = [];
 wireXrConsoleErrors(page, consoleErrors);
@@ -65,6 +69,7 @@ async function waitForHooks() {
       page,
       [
         '__setMockVrPose',
+        '__setManualClock',
         'advanceTime',
         'render_game_to_text',
         '__captureHandCalibrationPose',
@@ -76,20 +81,10 @@ async function waitForHooks() {
   }
 }
 
-async function captureFinalScreenshot() {
-  const screenshotPath = path.join(screenshotDir, 'mock-vr-final.png');
+async function captureScreenshot(filename, { force = false } = {}) {
+  if (!force && !CAPTURE_SUCCESS_SCREENSHOTS) return;
   try {
-    await page.screenshot({ path: screenshotPath, timeout: 10_000 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[mock-vr] final screenshot skipped: ${message}`);
-  }
-}
-
-async function captureScreenshot(filename) {
-  const screenshotPath = path.join(screenshotDir, filename);
-  try {
-    await page.screenshot({ path: screenshotPath, timeout: 10_000 });
+    await captureXrScreenshot(page, path.join(screenshotDir, filename));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[mock-vr] ${filename} screenshot skipped: ${message}`);
@@ -106,6 +101,8 @@ try {
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForHooks();
   await waitForTextContentPrefix(page, '#status', 'loaded');
+  // Simulation advances only through advanceTime from here on.
+  await page.evaluate(() => window.__setManualClock(true));
 
   if (mode === 'iwer') {
     await waitForIwerRuntime(page);
@@ -113,6 +110,7 @@ try {
       readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr'
     });
   }
+  await freezePageClock(page);
 
   const automaticPinchPhase = await page.evaluate(({ relaxed, pinch }) => {
     window.__resetHandCalibrationPose();
@@ -268,8 +266,11 @@ try {
 
   assert(consoleErrors.length === 0, `Console errors found: ${consoleErrors.join(' | ')}`);
 
-  await captureFinalScreenshot();
+  await captureScreenshot('mock-vr-final.png');
   console.log('Mock VR CI check passed.');
+} catch (error) {
+  await captureScreenshot('mock-vr-failure.png', { force: true });
+  throw error;
 } finally {
   await context.close();
   await browser.close();

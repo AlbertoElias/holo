@@ -23,8 +23,6 @@ Continue the active brief in [`docs/features/README.md`](docs/features/README.md
   deterministic browser flows only; it does not prove tracking feel, comfort,
   performance, or device session behavior.
 - Perform real-device viewer AR placement validation.
-- `pnpm run verify:nightly` was not rerun after the 2026-09-27 rebase; treat
-  exhaustive locomotion/live-API confidence as stale until rerun.
 
 ## How to resume
 
