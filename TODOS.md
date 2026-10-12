@@ -2,16 +2,19 @@
 
 Use this for planned work that has not yet been started. Record verified defects in
 [`BUGS.md`](BUGS.md), and leave the next-session context in
-[`HANDOFF.md`](HANDOFF.md).
+[`HANDOFF.md`](HANDOFF.md). Once work starts, its feature brief (indexed in
+[`docs/features/README.md`](docs/features/README.md)) is the authority; link to
+it from the item below instead of duplicating its status here.
 
 ## Now
 
 - [ ] Validate capture VR embodiment, hand/finger retargeting, pinch/release
   transitions, and VR enter/exit behavior on a physical headset. The automated
   IWER checks cover deterministic browser flows but cannot replace device testing.
+  (Automated pinch fix: closed B-002 in [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).)
 - [x] Make the XR locomotion command report a reliable final completion status and
-  clean up all child processes locally. The flow now prints its final status, kills
-  its managed process group, and has integration coverage for leaked descendants.
+  clean up all child processes locally. Delivered in
+  [`docs/features/archive/reliability-foundation.md`](docs/features/archive/reliability-foundation.md).
 
 ## Next
 
@@ -43,8 +46,8 @@ Use this for planned work that has not yet been started. Record verified defects
   supports the needed `baseUrl` and non-relative `extends` behavior.
 - [ ] Decide whether the capture app needs a user-visible AR recenter control for
   device-specific placement recovery.
-- [ ] Select one `IDEA-###` from `docs/product/IDEAS.md` for a bounded PRD and
-  communication experiment; do not begin implementation until the user outcome
+- [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
+  do not begin implementation until the user outcome
   and success signal are explicit.
 
 ## Maintenance
@@ -52,5 +55,5 @@ Use this for planned work that has not yet been started. Record verified defects
 - Check off finished items in the same change that implements them.
 - Add newly discovered, reproducible defects to `BUGS.md`; do not add speculative
   risks as bugs.
-- Before pausing work, refresh `HANDOFF.md` with the exact next action and the
-  validation that remains.
+- Before pausing work, refresh `HANDOFF.md` with only the exact next action and
+  the validation that remains; keep feature status in its brief.

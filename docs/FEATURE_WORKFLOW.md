@@ -1,5 +1,21 @@
 # Feature Delivery Workflow
 
+This is the canonical feature-delivery process. `AGENTS.md`, the
+`feature-delivery` skill, and `AGENT_CONTRACT.md` only point here; edit this
+file to change the process. `AGENT_CONTRACT.md` remains canonical for commands
+and validation tiers.
+
+## Where state lives (one authority per phase)
+
+| Phase | Authority | Not duplicated in |
+|---|---|---|
+| Uncommitted product thinking | `docs/product/IDEAS.md` (Idea → PRD → Decision) | `TODOS.md` |
+| Committed queue, not started | `TODOS.md` | Feature briefs |
+| In flight | The feature brief in `docs/features/` (index: `docs/features/README.md`) | `TODOS.md`, `HANDOFF.md` |
+| Verified defects | `BUGS.md` (open only; closed → `docs/archive/closed-bugs.md`) | `TODOS.md` |
+| Session pointer | `HANDOFF.md` (next action + unverified only) | Briefs, trackers |
+| Completed features | `docs/features/archive/` | Live brief index status beyond Complete |
+
 Use this workflow for product behavior changes. Start by copying
 [`templates/FEATURE_BRIEF.md`](templates/FEATURE_BRIEF.md). A small change can keep
 all roles with one agent, but the lead must preserve the review and verification
@@ -34,6 +50,11 @@ consume the agreed contract.
    inspectable artifact such as a transcript, screenshot, or deterministic output.
 5. **Integration.** The lead resolves findings, runs the commands required by
    [`../AGENT_CONTRACT.md`](../AGENT_CONTRACT.md), and records device-only gaps.
+6. **Close.** Mark the brief Complete, move it to `docs/features/archive/`,
+   update the index in `docs/features/README.md`, check off the `TODOS.md`
+   item if one exists, and move any closed bugs to
+   `docs/archive/closed-bugs.md`. Leave `HANDOFF.md` as a pointer to the next
+   action only.
 
 ## Testing rules
 

@@ -25,14 +25,14 @@ merging, and `pnpm run verify:nightly` for exhaustive XR or live-API changes.
 Documentation-only edits need documentation checks, not every application test.
 Complete relevant checks and fixes before handoff.
 
-For feature requests or substantial behavior changes, automatically use the
-`feature-delivery` skill in `.agents/skills/feature-delivery/SKILL.md`; do not wait
-for the user to name it. Keep small fixes proportional, as described by the skill.
+For feature requests or substantial behavior changes, follow the canonical
+process in `docs/FEATURE_WORKFLOW.md` (via the `feature-delivery` skill in
+`.agents/skills/feature-delivery/SKILL.md`); do not wait for the user to name it.
 
-For ongoing project work, `HANDOFF.md` has current state, `BUGS.md` tracks reproduced
-defects, and `TODOS.md` tracks planned work. Read the relevant file when resuming or
-changing that work. Update the handoff or tracker when the change alters current
-status or next actions. `apps/capture/progress.md` is historical context.
+For ongoing work, each phase has one authority — queue in `TODOS.md`, in-flight
+feature in its brief under `docs/features/`, open defects in `BUGS.md`, and
+`HANDOFF.md` as a pointer only — as defined in `docs/FEATURE_WORKFLOW.md`.
+Read and update only the owning file. `apps/capture/progress.md` is historical context.
 
 For XR automation, use the repository's IWSDK/IWER harness and its HTTPS setup.
 Read `docs/IWSDK_AI_WORKFLOW.md` for the managed capture workflow. Treat emulation
@@ -42,6 +42,18 @@ cross module boundaries; use structural flags where constructor identity is unre
 For other browser QA, use the browser tool suited to the task and available session.
 Project-local gstack skills live in `.agents/skills/gstack`; load the requested workflow
 when using gstack. Its setup command is `cd .agents/skills/gstack && PATH="$HOME/.bun/bin:$PATH" ./setup`.
+
+## Sharing work between agents
+
+Multiple agents share this repo, so uncommitted work is invisible to the others.
+
+- Before starting, run `git fetch` and check `git status`; read any in-flight
+  brief in `docs/features/README.md` before touching overlapping files.
+- As soon as your change is working and verified, commit and push it. Stage
+  only the files you changed by name — never commit another agent's
+  in-progress work, and never use a broad `git add`.
+- If the push is rejected because another agent landed first, pull with
+  rebase, re-run the affected check, and push again. Do not force-push.
 
 ## Agent configuration (Codex and Claude Code)
 

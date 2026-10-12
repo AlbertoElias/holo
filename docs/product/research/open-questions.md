@@ -1,7 +1,8 @@
 # Product Research Questions
 
 These questions should be investigated before they become implementation
-requirements. They are intentionally not decisions.
+requirements. They are supporting notes for ideas and PRDs, not a lifecycle
+state, and are intentionally not decisions; see `../README.md`.
 
 1. Which communication tasks show a measurable comprehension or handoff benefit
    from embodied, spatial explanation compared with video and documents?

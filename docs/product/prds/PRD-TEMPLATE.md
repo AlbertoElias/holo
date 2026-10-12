@@ -46,5 +46,5 @@ this outcome.
 
 - Concept:
 - Research:
-- Experiment:
+- Feature brief:
 - Implementation issue:

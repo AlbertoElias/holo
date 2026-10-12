@@ -74,16 +74,10 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 
 ## Feature Delivery Contract
 
-- Start product behavior changes from `docs/templates/FEATURE_BRIEF.md` and follow
-  `docs/FEATURE_WORKFLOW.md`.
-- The lead owns the user outcome, acceptance criteria, scope, and integration.
-- Consequential changes use a design reviewer before implementation and an
-  independent verifier after implementation. The verifier receives the original
-  criteria and inspects the working result directly.
-- Assign exclusive file or module ownership before parallel edits. Parallelize
-  investigation freely; parallelize implementation only across separate ownership.
-- Report verification results and inspectable artifacts, plus any physical-device
-  checks that remain. Never present IWER evidence as physical-headset validation.
+Follow the canonical process in `docs/FEATURE_WORKFLOW.md` (roles, delivery
+sequence, testing rules, and where state lives). This contract remains
+canonical only for commands and validation tiers; never present IWER evidence
+as physical-headset validation.
 
 ## Port Policy
 

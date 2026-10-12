@@ -84,4 +84,4 @@ Additional combined evidence: `pnpm run verify:xr` passed on an unrestricted hos
 ## Physical-device limits
 
 This change does not alter user-facing XR behavior. Existing capture embodiment and
-viewer AR behavior still require the physical-headset checks recorded in `TODOs.md`.
+viewer AR behavior still require the physical-headset checks recorded in `TODOS.md`.

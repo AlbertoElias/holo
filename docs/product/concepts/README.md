@@ -1,8 +1,8 @@
 # Concepts
 
-Concept notes group related seeds without committing to implementation. They are
-the place to develop language, product principles, examples, tensions, and
-research needs before opening a PRD.
+Supporting notes that group related ideas without committing to implementation.
+They develop language, product principles, examples, tensions, and research
+needs before opening a PRD. They are not a lifecycle state; see `../README.md`.
 
 - [Embodied communication](embodied-communication.md)
 - [Spatial language](spatial-language.md)
