@@ -61,8 +61,9 @@ Work in your own worktree by default; the main checkout is the integration point
   dev servers, and local databases are still shared, so only one agent runs
   the XR harness or a dev server at a time unless ports are reassigned.
 - As soon as your change is working and verified, commit and push your branch.
-  Stage only the files you changed by name — never commit another agent's
-  in-progress work, and never use a broad `git add`.
+  You are pre-authorized to commit and push within this workflow; do not stop
+  to ask for approval. Stage only the files you changed by name — never commit
+  another agent's in-progress work, and never use a broad `git add`.
 - The lead merges the verified branch into `main`, pushes, then removes the
   worktree (`git worktree remove`) and deletes the merged branch. If a push is
   rejected because another agent landed first, pull with rebase, re-run the
