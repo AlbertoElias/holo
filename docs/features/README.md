@@ -8,7 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| Deterministic, lean CI | Verifying | [deterministic-lean-ci.md](deterministic-lean-ci.md) |
+| Deterministic, lean CI | Complete | [archive/deterministic-lean-ci.md](archive/deterministic-lean-ci.md) |
 | Development reliability foundation | Complete | [archive/reliability-foundation.md](archive/reliability-foundation.md) |
 
 ## Rules

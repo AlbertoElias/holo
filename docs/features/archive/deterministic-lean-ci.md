@@ -1,7 +1,7 @@
 # Feature brief: Deterministic, lean CI
 
 **Lead:** Claude Code
-**Status:** Verifying
+**Status:** Complete
 
 ## User outcome
 
@@ -20,16 +20,16 @@ container images, and sharding.
 
 ## Acceptance criteria
 
-- [ ] Capture test runs cannot be advanced by wall-clock frames while a test
+- [x] Capture test runs cannot be advanced by wall-clock frames while a test
   drives time; the same inputs produce the same simulation state on any host.
-- [ ] Locomotion assertions check every tested heading moves in the expected
+- [x] Locomotion assertions check every tested heading moves in the expected
   world direction instead of accepting the best of several trials.
-- [ ] One end-to-end test records in capture, exports the real GLB, uploads it
+- [x] One end-to-end test records in capture, exports the real GLB, uploads it
   through the viewer UI to a real API, and renders it in the viewer feed.
-- [ ] Push, pull-request, and scheduled runs execute the same single tier; the
+- [x] Push, pull-request, and scheduled runs execute the same single tier; the
   separate heavy nightly tier is removed.
-- [ ] Browser coverage on CI finishes well inside job limits on 2-vCPU runners.
-- [ ] Removed tests are either testing test scaffolding or fully covered by a
+- [x] Browser coverage on CI finishes well inside job limits on 2-vCPU runners.
+- [x] Removed tests are either testing test scaffolding or fully covered by a
   stronger end-to-end check, and each removal is listed below.
 
 ## Failure cases considered
@@ -83,7 +83,7 @@ matches the CI failures.
 | Real pipeline | `pnpm run test:smoke:pipeline` | Records 1.5 s in capture, exports the GLB, checks skins, `RecordedBubbleSphere`, and animation length, uploads through the viewer UI to the test API, and waits for `data-model-state="rendered"` with an active bubble |
 | Viewer checks can fail | recenter check against a no-op `handleRecenter` | Fails (stage history never resets); passes against the real handler |
 | Diagnostics | forced failure | Timeline JSON plus a 1280×720 screenshot of the head view |
-| Single CI tier | `.github/workflows/ci.yml` | pending: first branch run |
+| Single CI tier | `.github/workflows/ci.yml` on GitHub (run 38314992593, branch `claude/deterministic-lean-ci`) | All jobs green in 3 m 37 s wall; capture XR 33 s, viewer AR 62 s, pipeline 56 s, matching the container to within a few seconds |
 
 ### Tests removed or replaced
 

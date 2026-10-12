@@ -54,5 +54,5 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   stepping no longer draws, tests freeze page timers after XR entry, and inputs
   apply in the same page turn as their first step. Same reproduction: 31 s for
   both capture XR suites, with identical results across runs. Details in
-  [`../features/deterministic-lean-ci.md`](../features/deterministic-lean-ci.md).
+  [`../features/archive/deterministic-lean-ci.md`](../features/archive/deterministic-lean-ci.md).
 

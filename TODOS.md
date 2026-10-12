@@ -35,7 +35,7 @@ it from the item below instead of duplicating its status here.
 
 - [ ] Port the capture XR check scripts to TypeScript scenario groups. Browser
   reuse and stage timing are done (one VR and one desktop page, respawn between
-  trials) in [`docs/features/deterministic-lean-ci.md`](docs/features/deterministic-lean-ci.md);
+  trials) in [`docs/features/archive/deterministic-lean-ci.md`](docs/features/archive/deterministic-lean-ci.md);
   sharding is unnecessary at current runtimes.
 - [ ] Evaluate IWSDK-native ECS/scene composition only when a concrete authoring
   workflow requires it; the current tooling integration intentionally preserves
