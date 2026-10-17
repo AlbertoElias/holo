@@ -127,8 +127,13 @@ export interface System {
 
 // Tracked joints and the avatar bones at the same anatomical joints, in world
 // space, for comparing how closely the avatar follows the user's hands.
+// Input behind a hand pose: real XRHand joints, a controller, the
+// deterministic mock payload, the last valid pose held through a dropout, a
+// neutral pose shown before any tracking, or nothing.
+export type HandPoseSource = 'xr-hand' | 'controller' | 'mock' | 'held' | 'fallback' | 'none';
+
 export type HandSample = {
-  source: 'mock' | 'xr-hand' | 'none';
+  source: HandPoseSource;
   tracked: Partial<Record<TrackedHandJointName, [number, number, number]>>;
   avatar: Partial<Record<TrackedHandJointName, [number, number, number]>>;
 };

@@ -17,8 +17,12 @@ export const TARGETS = Object.freeze({
 });
 
 export const THRESHOLDS = Object.freeze({
-  // Fraction of tracked frames that must arrive through real XRHand input.
+  // Fraction of tracked frames that must arrive through real XRHand input
+  // (not a controller, a held pose, or the neutral fallback).
   minXrHandCoverage: 0.9,
+  // Each finger needs at least this share of XRHand frames to be comparable.
+  minComparableShare: 0.5,
+  minComparableSamples: 10,
   // Per-finger curl (sum of joint flexion angles) mean absolute error, degrees.
   // Ceiling at today's worst finger (66°) so shape cannot regress; target 20°.
   maxCurlErrorDeg: 70,
@@ -148,11 +152,13 @@ function analyzeSide(frames, side) {
   let trackedFrames = 0;
   let xrHandFrames = 0;
   let mockFrames = 0;
+  const sourceCounts = {};
 
   for (const { hands } of frames) {
     const sample = hands?.[side];
     if (!sample || sample.source === 'none') continue;
     trackedFrames += 1;
+    sourceCounts[sample.source] = (sourceCounts[sample.source] ?? 0) + 1;
     if (sample.source === 'mock') mockFrames += 1;
     if (sample.source !== 'xr-hand') continue;
     xrHandFrames += 1;
@@ -205,6 +211,7 @@ function analyzeSide(frames, side) {
     trackedFrames,
     xrHandFrames,
     mockFrames,
+    sourceCounts,
     xrHandCoverage: trackedFrames ? xrHandFrames / trackedFrames : null,
     fingers,
     pinch: { trackedContactFrames: trackedContacts, agreement },
@@ -223,8 +230,9 @@ function checkSide(side, result) {
   if (result.mockFrames > 0) failures.push(`${side}: ${result.mockFrames} frames used mock input instead of XRHand`);
   if (result.xrHandCoverage < t.minXrHandCoverage) failures.push(`${side}: XRHand coverage ${result.xrHandCoverage.toFixed(2)} < ${t.minXrHandCoverage}`);
   for (const [finger, metrics] of Object.entries(result.fingers)) {
-    if (metrics.samples === 0) {
-      failures.push(`${side} ${finger}: no comparable samples`);
+    const neededSamples = Math.max(t.minComparableSamples, Math.ceil(result.xrHandFrames * t.minComparableShare));
+    if (metrics.samples < neededSamples) {
+      failures.push(`${side} ${finger}: ${metrics.samples} comparable samples < ${neededSamples}`);
       continue;
     }
     if (metrics.meanErrorDeg > t.maxCurlErrorDeg) failures.push(`${side} ${finger}: curl error ${metrics.meanErrorDeg.toFixed(1)}° > ${t.maxCurlErrorDeg}°`);
@@ -262,7 +270,8 @@ export function formatHandReport(report) {
     const fingers = Object.entries(result.fingers)
       .map(([finger, m]) => `${finger} ${m.meanErrorDeg?.toFixed(1) ?? '-'}°/r=${m.correlation?.toFixed(2) ?? '-'}/lag ${m.lagFrames ?? '-'}`)
       .join(', ');
-    lines.push(`  ${side}: xr-hand ${(result.xrHandCoverage * 100).toFixed(0)}%; curl ${fingers}`);
+    const sources = Object.entries(result.sourceCounts).map(([source, count]) => `${source} ${count}`).join(', ');
+    lines.push(`  ${side}: xr-hand ${(result.xrHandCoverage * 100).toFixed(0)}% (${sources}); curl ${fingers}`);
     lines.push(`  ${side}: pinch agreement ${result.pinch.agreement?.toFixed(2) ?? '-'} (${result.pinch.trackedContactFrames} contact frames); wrist p95 ${result.wrist.positionErrorP95M !== null ? (result.wrist.positionErrorP95M * 100).toFixed(1) : '-'} cm / ${result.wrist.rotationErrorP95Deg?.toFixed(1) ?? '-'}°; jerk ×${result.jerk.ratio?.toFixed(2) ?? '-'}`);
   }
   return lines.join('\n');

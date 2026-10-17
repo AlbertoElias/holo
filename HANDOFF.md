@@ -12,9 +12,10 @@ plus the in-flight deterministic-CI brief; preserve changes you did not make.
 
 ## Next action
 
-Start a session that loads the project MCP config (`.codex/config.toml` or
-`.mcp.json`), then use `pnpm run dev:capture:ai` for the next capture iteration.
-Continue the active brief in [`docs/features/README.md`](docs/features/README.md).
+Record headset input for `test:xr:hands` (steps in `apps/capture/README.md`,
+"Hand-Tracking Fidelity From Headset Input"), commit it under
+`apps/capture/fixtures/input-recordings/`, and recalibrate the B-005 ceilings
+against it. Active brief: [`docs/features/hand-tracking-fidelity.md`](docs/features/hand-tracking-fidelity.md).
 
 ## Unverified / device-only
 

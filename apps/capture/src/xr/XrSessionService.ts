@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TRACKED_HAND_JOINT_NAMES, type MockVrPoseInput, type TrackedHandJointName, type VrHandSide } from '../types/contracts';
+import { TRACKED_HAND_JOINT_NAMES, type HandPoseSource, type MockVrPoseInput, type TrackedHandJointName, type VrHandSide } from '../types/contracts';
 import { isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 
 interface VrHandTrackingState {
@@ -106,6 +106,8 @@ export class XrSessionService {
   private readonly tmpEyeAnchor = new THREE.Vector3();
   private readonly tmpXrHeadWorld = new THREE.Vector3();
   private readonly tmpHeadLocal = new THREE.Vector3();
+  // Which input produced each hand's pose this frame (see HandPoseSource).
+  private readonly handPoseSource: Record<VrHandSide, HandPoseSource> = { left: 'none', right: 'none' };
   private cameraRig: THREE.Group | null = null;
   private readonly tmpQuat = new THREE.Quaternion();
   private readonly tmpQuatB = new THREE.Quaternion();
@@ -389,6 +391,7 @@ export class XrSessionService {
         const mockHand = this.mockVrState.hands[side]!;
         this.clearTrackedHandJoints(side);
         state.poseValid = false;
+        this.handPoseSource[side] = 'none';
         if (mockHand.tracked) {
           getEyeAnchorWorld(this.tmpEyeAnchor);
           this.tmpVecB.copy(mockHand.position).applyQuaternion(this.mockVrState.headQuaternion);
@@ -400,6 +403,7 @@ export class XrSessionService {
             .normalize();
           this.setTrackedPose(state, this.tmpVecA, this.tmpQuat, this.tmpEyeAnchor);
           this.captureMockTrackedHandJoints(side, mockHand, this.tmpEyeAnchor);
+          this.handPoseSource[side] = 'mock';
           this.updateLowFingerJointWarningState(side, true);
           continue;
         }
@@ -409,6 +413,7 @@ export class XrSessionService {
           state.targetPosition.copy(this.tmpEyeAnchor).add(state.lastValidOffsetFromEye);
           state.targetQuaternion.copy(state.lastValidQuaternion);
           state.poseValid = true;
+          this.handPoseSource[side] = 'held';
         }
       }
       return;
@@ -420,11 +425,13 @@ export class XrSessionService {
         const state = this.xrHandState[side]!;
         this.clearTrackedHandJoints(side);
         state.poseValid = false;
+        this.handPoseSource[side] = 'none';
         this.updateLowFingerJointWarningState(side, false);
         if (!state.hasLastValidPose) continue;
         state.targetPosition.copy(this.tmpEyeAnchor).add(state.lastValidOffsetFromEye);
         state.targetQuaternion.copy(state.lastValidQuaternion);
         state.poseValid = true;
+        this.handPoseSource[side] = 'held';
       }
       return;
     }
@@ -437,6 +444,7 @@ export class XrSessionService {
       const state = this.xrHandState[side]!;
       this.clearTrackedHandJoints(side);
       state.poseValid = false;
+      this.handPoseSource[side] = 'none';
 
       const handSource = this.resolveHandSourceForSide(side);
       const gripState = this.resolveGripForSide(side);
@@ -447,6 +455,7 @@ export class XrSessionService {
           .multiply(this.trackedHandInwardYawOffsets[side]!)
           .normalize();
         this.captureTrackedHandJoints(side, handSource.hand, this.tmpXrHeadWorld, this.tmpEyeAnchor);
+        this.handPoseSource[side] = 'xr-hand';
         this.tmpVecB.copy(this.tmpVecA).sub(this.tmpXrHeadWorld).add(this.tmpEyeAnchor);
         this.setTrackedPose(state, this.tmpVecB, this.tmpQuat, this.tmpEyeAnchor);
         this.updateLowFingerJointWarningState(side, true);
@@ -460,6 +469,7 @@ export class XrSessionService {
 
         if (tracked) {
           this.tmpQuat.multiply(this.trackedControllerRotationOffset).normalize();
+          this.handPoseSource[side] = 'controller';
           this.tmpVecB.copy(this.tmpVecA).sub(this.tmpXrHeadWorld).add(this.tmpEyeAnchor);
           this.setTrackedPose(state, this.tmpVecB, this.tmpQuat, this.tmpEyeAnchor);
           this.updateLowFingerJointWarningState(side, false);
@@ -470,6 +480,7 @@ export class XrSessionService {
       const controllerState = this.resolveControllerForSide(side);
       if (controllerState && this.getTrackedControllerPose(controllerState.controller, this.tmpVecA, this.tmpQuat)) {
         this.tmpQuat.multiply(this.trackedControllerRotationOffset).normalize();
+        this.handPoseSource[side] = 'controller';
         this.tmpVecB.copy(this.tmpVecA).sub(this.tmpXrHeadWorld).add(this.tmpEyeAnchor);
         this.setTrackedPose(state, this.tmpVecB, this.tmpQuat, this.tmpEyeAnchor);
         this.updateLowFingerJointWarningState(side, false);
@@ -480,6 +491,7 @@ export class XrSessionService {
         state.targetPosition.copy(this.tmpEyeAnchor).add(state.lastValidOffsetFromEye);
         state.targetQuaternion.copy(state.lastValidQuaternion);
         state.poseValid = true;
+        this.handPoseSource[side] = 'held';
         this.updateLowFingerJointWarningState(side, false);
         continue;
       }
@@ -489,6 +501,7 @@ export class XrSessionService {
       this.tmpVecA.set(side === 'left' ? -0.24 : 0.24, -0.18, -0.36).applyQuaternion(this.tmpQuatB).add(this.tmpEyeAnchor);
       this.tmpQuat.copy(this.tmpQuatB);
       this.setTrackedPose(state, this.tmpVecA, this.tmpQuat, this.tmpEyeAnchor);
+      this.handPoseSource[side] = 'fallback';
       this.updateLowFingerJointWarningState(side, false);
     }
   }
@@ -511,11 +524,8 @@ export class XrSessionService {
     return true;
   }
 
-  // Which input drove the hand-joint state this frame: the deterministic mock
-  // payload, a real XRHand, or nothing.
-  getHandJointSource(side: VrHandSide): 'mock' | 'xr-hand' | 'none' {
-    if (!this.xrHandState[side]!.poseValid) return 'none';
-    return this.mockVrState.enabled ? 'mock' : 'xr-hand';
+  getHandPoseSource(side: VrHandSide): HandPoseSource {
+    return this.handPoseSource[side];
   }
 
   getTrackedFingerJointCount(side: VrHandSide): number {

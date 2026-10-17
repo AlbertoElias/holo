@@ -164,6 +164,19 @@ function expectPlacedInFrontOnSurface(
   expect(vy - y, "drop below eye level (m)").toBeGreaterThan(0.2);
 }
 
+// Independent oracle: cast a ray straight down through IWER's synthetic room
+// from above the model and return the height of the first surface it meets.
+async function readSurfaceHeightBelow(page: Page, [x, y, z]: [number, number, number]): Promise<number | null> {
+  return page.evaluate(({ px, py, pz }) => {
+    const sem = (window as Window & { IWER_DEVICE?: { sem?: { computeHitTestResults: (matrix: number[]) => number[][] } } }).IWER_DEVICE?.sem;
+    if (!sem) return null;
+    // Column-major pose: rotate -90° about X so the ray's -Z points down.
+    const downRay = [1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, px, py + 0.5, pz, 1];
+    const hit = sem.computeHitTestResults(downRay)[0];
+    return hit ? hit[13]! : null;
+  }, { px: x, py: y, pz: z });
+}
+
 async function readPlacementState(page: Page): Promise<PlacementState> {
   return page.evaluate(() => {
     const root = document.querySelector(".ar-view-container");
@@ -311,6 +324,9 @@ test("AR places the model on a surface in front of the viewer, recenter places a
   const placement = await waitForPlacement(page, { minSequence: 1, ...HIT_TEST_PLACEMENT });
   expect(["anchored", "placed", "locked"]).toContain(placement.stage);
   expectPlacedInFrontOnSurface(placement, await readViewerPose(page));
+  const surfaceY = await readSurfaceHeightBelow(page, placement.position!);
+  expect(surfaceY, "emulated room surface under the model").not.toBeNull();
+  expect(Math.abs(placement.position![1] - surfaceY!), "model base to surface (m)").toBeLessThan(0.1);
   await captureEvidence(page, testInfo, "ar-placed-on-surface");
 
   // Only the model's own placements carry a position and advance its

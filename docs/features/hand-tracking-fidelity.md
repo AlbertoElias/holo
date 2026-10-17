@@ -90,6 +90,15 @@ runs on a Quest, and the player replays into IWER with deterministic
   status, and the hit-test-disabled test never disabled hit-test.
 - B-007 (open): viewer AR logs `GL_INVALID_OPERATION` every frame in IWER.
 
+### Review
+
+Codex (`codex exec`, read-only, 2026-10-17) confirmed the camera-rig fix and
+the surface-normal math and raised three issues, all fixed: hand samples now
+carry the true per-frame source (`xr-hand`, `controller`, `held`, `fallback`,
+`mock`) and each finger needs enough XRHand samples; the reported AR position
+refreshes when an anchor moves the model; and the AR check verifies the base
+against an independent downward raycast through IWER's room model.
+
 ### Open question
 
 Hit-test placement accepts any upward surface, so in IWER's office the

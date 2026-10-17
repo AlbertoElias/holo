@@ -190,6 +190,7 @@ export function ARHologramModel({
   const groupRef = useRef<Group>(null);
   const placementStateRef = useRef<PlacementRuntimeState>(createPlacementRuntimeState());
   const placementStatusRef = useRef<ArPlacementStatus>(createPlacementStatus());
+  const anchorReportedRef = useRef(new Vector3());
   const anchorRef = useRef<XRAnchor | null>(null);
   const anchorRequestPendingRef = useRef(false);
   const hitTestSourceRef = useRef<XRHitTestSource | null>(null);
@@ -563,6 +564,11 @@ export function ARHologramModel({
             anchorPose.transform.position.z
           );
           groupRef.current.quaternion.copy(AR_TARGET_WORLD_QUATERNION);
+          // Keep the reported position current when the anchor relocalizes.
+          const reported = placementStatusRef.current.position;
+          if (!reported || groupRef.current.position.distanceTo(anchorReportedRef.current.set(...reported)) > 0.01) {
+            emitPlacementStatus({});
+          }
         }
       } catch {
         clearActiveAnchor(false);

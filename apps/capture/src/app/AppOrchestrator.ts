@@ -730,7 +730,7 @@ export class AppOrchestrator implements System {
   sampleHands(): Record<VrHandSide, HandSample> {
     const sample = (side: VrHandSide): HandSample => {
       const prefix = side === 'left' ? 'Left' : 'Right';
-      const result: HandSample = { source: this.xrService.getHandJointSource(side), tracked: {}, avatar: {} };
+      const result: HandSample = { source: this.xrService.getHandPoseSource(side), tracked: {}, avatar: {} };
       for (const jointName of TRACKED_HAND_JOINT_NAMES) {
         if (this.xrService.getTrackedHandJointPosition(side, jointName, this.tmpVecA)) {
           result.tracked[jointName] = [this.tmpVecA.x, this.tmpVecA.y, this.tmpVecA.z];
