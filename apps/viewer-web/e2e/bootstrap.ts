@@ -1,4 +1,4 @@
-import { expect, test as base, type Page } from "@playwright/test";
+import { expect, test as base, type Page, type TestInfo } from "@playwright/test";
 
 import { attachXrEnvironment } from "@holoim/tooling-testing/xr-env";
 
@@ -34,6 +34,12 @@ export async function assertViewerShell(page: Page): Promise<void> {
   if (nonViewerBodyPattern.test(bodyText)) {
     throw new Error(`E2E preflight failed: non-viewer app detected (body matched "${nonViewerBodyPattern.source}").`);
   }
+}
+
+// Evidence screenshots for reviewers; off by default to keep CI light.
+export async function captureEvidence(page: Page, testInfo: TestInfo, name: string): Promise<void> {
+  if (process.env.E2E_SCREENSHOTS !== "1") return;
+  await page.screenshot({ path: testInfo.outputPath(`${name}.png`) });
 }
 
 export { expect };

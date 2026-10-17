@@ -14,7 +14,9 @@ import { UIStateStore } from '../ui/UIStateStore';
 import { VrHud } from '../ui/VrHud';
 import { AvatarRecorder } from '../recording/AvatarRecorder';
 import { AudioRecorder } from '../recording/AudioRecorder';
-import type { AppMode, FrameContext, HandPoseSnapshot, MockInputState, MockVrPoseInput, QuatLike, System, TrackedHandJointName, UiViewModel, VrHandSide } from '../types/contracts';
+import type { InputRecordingSession } from '../debug/inputRecording';
+import { TRACKED_HAND_JOINT_NAMES } from '../types/contracts';
+import type { AppMode, FrameContext, HandPoseSnapshot, HandSample, MockInputState, MockVrPoseInput, QuatLike, System, TrackedHandJointName, UiViewModel, VrHandSide } from '../types/contracts';
 import {
   computeCrouchPoseAmount,
   computeVrCrouchTarget,
@@ -41,6 +43,24 @@ const CROUCH_MIN_EFFECT_THRESHOLD = 0.05;
 const FINGER_QUAT_CALIBRATION_STALE_FRAMES = 24;
 const AR_INITIAL_WORLD_DISTANCE_METERS = 2.2;
 const AR_WORLD_RECENTER_FRAMES = 36;
+
+// Avatar bones that sit on the same anatomical joint as each WebXR hand joint.
+const AVATAR_BONE_FOR_HAND_JOINT: ReadonlyArray<readonly [TrackedHandJointName, string]> = [
+  ['wrist', 'Hand'],
+  ['thumb-metacarpal', 'HandThumb1'],
+  ['thumb-phalanx-proximal', 'HandThumb2'],
+  ['thumb-phalanx-distal', 'HandThumb3'],
+  ['thumb-tip', 'HandThumb4'],
+  ...(['index', 'middle', 'ring', 'pinky'] as const).flatMap((finger) => {
+    const bone = `Hand${finger[0]!.toUpperCase()}${finger.slice(1)}`;
+    return [
+      [`${finger}-finger-phalanx-proximal`, `${bone}1`],
+      [`${finger}-finger-phalanx-intermediate`, `${bone}2`],
+      [`${finger}-finger-phalanx-distal`, `${bone}3`],
+      [`${finger}-finger-tip`, `${bone}4`]
+    ] as const;
+  })
+];
 
 const FINGER_DEBUG_BONES: Readonly<Record<VrHandSide, { thumb: string; index: string; middle: string }>> = {
   left: { thumb: 'LeftHandThumb2', index: 'LeftHandIndex3', middle: 'LeftHandMiddle3' },
@@ -133,7 +153,12 @@ export class AppOrchestrator implements System {
   // Automation can own the clock so wall-clock frames never mutate state
   // between deterministic steps. Realtime remains the default.
   private manualClock = false;
+  private manualClockDraws = true;
   private drawFrames = true;
+  private inputRecording: InputRecordingSession | null = null;
+  private handOverlay: THREE.InstancedMesh | null = null;
+  private spectatorCamera: THREE.PerspectiveCamera | null = null;
+  private readonly overlayMatrix = new THREE.Matrix4();
   private activeXrSession: XRSession | null = null;
   private readonly defaultSceneBackground = new THREE.Color(0x111318);
   private wasArSession = false;
@@ -314,12 +339,14 @@ export class AppOrchestrator implements System {
 
     const activeCamera = isVrActive ? this.bootstrap.xrCamera : this.bootstrap.desktopCamera;
     this.recorder.capture(ctx.elapsedSec, this.avatarRig.avatar, this.avatarRig.avatarRoot, activeCamera);
+    this.updateHandOverlay();
     this.present(activeCamera);
   }
 
   private present(camera: THREE.PerspectiveCamera): void {
     if (this.drawFrames) {
       this.bootstrap.renderer.render(this.bootstrap.scene, camera);
+      this.renderSpectatorView();
       return;
     }
     // Keep the non-drawing side effects of render() so skipped frames leave
@@ -367,6 +394,7 @@ export class AppOrchestrator implements System {
   private async startRecording(): Promise<void> {
     this.recorder.clear();
     this.recorder.setEnabled(true);
+    await this.startInputRecording();
     try {
       await this.audioRecorder.start();
     } catch {
@@ -396,11 +424,13 @@ export class AppOrchestrator implements System {
       if (!this.avatarRig.avatar) {
         throw new Error('No avatar to export');
       }
+      const baseName = `avatar-recording-${Date.now()}`;
+      await this.finishInputRecording(baseName);
       const blob = await this.recorder.exportToGlbBlob(this.avatarRig.avatar, this.avatarRig.worldModel, audioData);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `avatar-recording-${Date.now()}.glb`;
+      a.download = `${baseName}.glb`;
       a.click();
       URL.revokeObjectURL(url);
       this.recorder.clear();
@@ -408,6 +438,34 @@ export class AppOrchestrator implements System {
     } catch (err) {
       console.error(err);
       this.uiStore.setRecordingState('idle', (err as Error).message);
+    }
+  }
+
+  // Development builds also keep the raw headset input behind each capture
+  // recording so it can be replayed as a test fixture.
+  private async startInputRecording(): Promise<void> {
+    this.inputRecording = null;
+    const session = this.bootstrap.renderer.xr.getSession();
+    const refSpace = this.bootstrap.renderer.xr.getReferenceSpace();
+    if (!import.meta.env.DEV || !session || !refSpace) return;
+    try {
+      const { InputRecordingSession } = await import('../debug/inputRecording');
+      this.inputRecording = await InputRecordingSession.start(session, refSpace);
+    } catch (error) {
+      console.warn('Input recording unavailable.', error);
+    }
+  }
+
+  private async finishInputRecording(baseName: string): Promise<void> {
+    const inputRecording = this.inputRecording;
+    this.inputRecording = null;
+    if (!inputRecording) return;
+    try {
+      const { saveInputRecording } = await import('../debug/inputRecording');
+      const savedTo = await saveInputRecording(inputRecording.finish(), baseName);
+      this.uiStore.setRecordingState('exporting', `Saved headset input to ${savedTo}`);
+    } catch (error) {
+      console.warn('Saving input recording failed.', error);
     }
   }
 
@@ -465,11 +523,19 @@ export class AppOrchestrator implements System {
     this.update({ deltaSec, elapsedSec: this.elapsedSec, mode: this.resolveAppMode() });
   }
 
-  onRealtimeFrame(): void {
+  onRealtimeFrame(frame?: XRFrame): void {
+    if (frame && this.inputRecording) this.inputRecording.recordFrame(frame);
     const deltaSec = this.bootstrap.clock.getDelta();
     if (this.manualClock) {
-      // Simulation is paused for automation; keep displaying its state.
-      this.presentFrame();
+      // Simulation is paused for automation; keep displaying its state unless
+      // the caller only needs frames to deliver XR input. Either way the frame
+      // applies render()'s camera updates, so results do not depend on drawing.
+      this.drawFrames = this.manualClockDraws;
+      try {
+        this.presentFrame();
+      } finally {
+        this.drawFrames = true;
+      }
       return;
     }
     this.tick(deltaSec);
@@ -478,16 +544,49 @@ export class AppOrchestrator implements System {
   private presentFrame(): void {
     const isArPresenting = this.bootstrap.xrSessionMode === 'ar' && this.xrService.isXrPresenting();
     const camera = isArPresenting || this.xrService.isVrEmbodimentActive() ? this.bootstrap.xrCamera : this.bootstrap.desktopCamera;
-    this.bootstrap.renderer.render(this.bootstrap.scene, camera);
+    this.present(camera);
   }
 
-  setManualClock(enabled: boolean): void {
+  // Debug view for recordings: after the XR frame, redraw the page canvas from
+  // a camera facing the avatar so its whole upper body and hands are visible.
+  setSpectatorView(enabled: boolean): void {
+    this.spectatorCamera = enabled ? (this.spectatorCamera ?? new THREE.PerspectiveCamera(38, 16 / 9, 0.01, 200)) : null;
+  }
+
+  private renderSpectatorView(): void {
+    const spectator = this.spectatorCamera;
+    const renderer = this.bootstrap.renderer;
+    if (!spectator || !renderer.xr.isPresenting) return;
+    // Aim between the hands (or the chest when they are not tracked) from in
+    // front of the avatar, slightly above, so both hands fill the frame.
+    const root = this.avatarRig.avatarRoot.getWorldPosition(this.tmpVecC);
+    const focus = this.tmpVecD.set(root.x, root.y + this.avatarRig.avatarHeight * 0.72, root.z);
+    const left = this.avatarRig.getHandBoneWorldPosition('left', this.tmpVecA);
+    const right = this.avatarRig.getHandBoneWorldPosition('right', this.tmpVecB);
+    if (left && right) focus.copy(left).add(right).multiplyScalar(0.5);
+    const yaw = this.camera.lookYaw;
+    spectator.position.set(focus.x - Math.sin(yaw) * 0.9, focus.y + 0.25, focus.z - Math.cos(yaw) * 0.9);
+    spectator.lookAt(focus);
+    const width = renderer.domElement.width;
+    const height = renderer.domElement.height;
+    spectator.aspect = width / Math.max(1, height);
+    spectator.updateProjectionMatrix();
+    renderer.xr.enabled = false;
+    renderer.setRenderTarget(null);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, width / renderer.getPixelRatio(), height / renderer.getPixelRatio());
+    renderer.render(this.bootstrap.scene, spectator);
+    renderer.xr.enabled = true;
+  }
+
+  setManualClock(enabled: boolean, draw = true): void {
     this.manualClock = enabled;
+    this.manualClockDraws = draw;
     // Discard time that elapsed while manual so realtime resumes without a jump.
     this.bootstrap.clock.getDelta();
   }
 
-  setAnimationLoop(callback: (() => void) | null): void {
+  setAnimationLoop(callback: ((time: number, frame?: XRFrame) => void) | null): void {
     this.bootstrap.renderer.setAnimationLoop(callback);
   }
 
@@ -626,6 +725,61 @@ export class AppOrchestrator implements System {
       // spaces, so a baseline captured before the source switch is invalid.
       this.resetVrStandingHeadBaseline();
     }
+  }
+
+  sampleHands(): Record<VrHandSide, HandSample> {
+    const sample = (side: VrHandSide): HandSample => {
+      const prefix = side === 'left' ? 'Left' : 'Right';
+      const result: HandSample = { source: this.xrService.getHandJointSource(side), tracked: {}, avatar: {} };
+      for (const jointName of TRACKED_HAND_JOINT_NAMES) {
+        if (this.xrService.getTrackedHandJointPosition(side, jointName, this.tmpVecA)) {
+          result.tracked[jointName] = [this.tmpVecA.x, this.tmpVecA.y, this.tmpVecA.z];
+        }
+      }
+      for (const [jointName, boneSuffix] of AVATAR_BONE_FOR_HAND_JOINT) {
+        if (this.avatarRig.getBoneWorldPosition(`${prefix}${boneSuffix}`, this.tmpVecA)) {
+          result.avatar[jointName] = [this.tmpVecA.x, this.tmpVecA.y, this.tmpVecA.z];
+        }
+      }
+      return result;
+    };
+    return { left: sample('left'), right: sample('right') };
+  }
+
+  // Debug overlay of the tracked joints (cyan left, magenta right) drawn over
+  // the scene, so recordings show source and avatar hands together.
+  setHandOverlay(enabled: boolean): void {
+    if (!enabled) {
+      if (this.handOverlay) this.handOverlay.visible = false;
+      return;
+    }
+    if (!this.handOverlay) {
+      const jointCount = TRACKED_HAND_JOINT_NAMES.length;
+      const material = new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.85 });
+      this.handOverlay = new THREE.InstancedMesh(new THREE.SphereGeometry(0.0045, 8, 6), material, jointCount * 2);
+      this.handOverlay.frustumCulled = false;
+      this.handOverlay.renderOrder = 999;
+      const left = new THREE.Color(0x22d3ee);
+      const right = new THREE.Color(0xf472b6);
+      for (let i = 0; i < jointCount * 2; i += 1) this.handOverlay.setColorAt(i, i < jointCount ? left : right);
+      this.bootstrap.scene.add(this.handOverlay);
+    }
+    this.handOverlay.visible = true;
+    this.updateHandOverlay();
+  }
+
+  private updateHandOverlay(): void {
+    const overlay = this.handOverlay;
+    if (!overlay?.visible) return;
+    const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+    (['left', 'right'] as const).forEach((side, sideIndex) => {
+      TRACKED_HAND_JOINT_NAMES.forEach((jointName, jointIndex) => {
+        const index = sideIndex * TRACKED_HAND_JOINT_NAMES.length + jointIndex;
+        const tracked = this.xrService.getTrackedHandJointPosition(side, jointName, this.tmpVecA);
+        overlay.setMatrixAt(index, tracked ? this.overlayMatrix.makeTranslation(this.tmpVecA) : hidden);
+      });
+    });
+    overlay.instanceMatrix.needsUpdate = true;
   }
 
   respawnCharacter(): boolean {

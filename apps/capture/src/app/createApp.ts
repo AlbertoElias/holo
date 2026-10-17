@@ -15,13 +15,16 @@ export function createApp(): AppRuntime {
   const debugBridge = new DebugBridge({
     renderGameToText: () => orchestrator.renderGameToText(),
     advanceTime: (ms) => orchestrator.advanceTime(ms),
-    setManualClock: (enabled) => orchestrator.setManualClock(enabled),
+    setManualClock: (enabled, draw) => orchestrator.setManualClock(enabled, draw),
     setMockVrPose: (payload) => {
       applyIwerMockVrPoseInput(payload);
       orchestrator.setMockVrPose(payload);
     },
     setMockInput: (payload) => orchestrator.setMockInput(payload),
     respawnCharacter: () => orchestrator.respawnCharacter(),
+    sampleHands: () => orchestrator.sampleHands(),
+    setHandOverlay: (enabled) => orchestrator.setHandOverlay(enabled),
+    setSpectatorView: (enabled) => orchestrator.setSpectatorView(enabled),
     captureHandCalibrationPose: () => orchestrator.captureHandCalibrationPose(),
     resetHandCalibrationPose: () => orchestrator.resetHandCalibrationPose()
   });
@@ -35,8 +38,8 @@ export function createApp(): AppRuntime {
     start: async () => {
       debugBridge.init();
       await orchestrator.init();
-      orchestrator.setAnimationLoop(() => {
-        orchestrator.onRealtimeFrame();
+      orchestrator.setAnimationLoop((_time, frame) => {
+        orchestrator.onRealtimeFrame(frame);
       });
     },
     tick: (deltaSec: number) => {

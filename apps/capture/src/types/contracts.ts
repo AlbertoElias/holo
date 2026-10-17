@@ -125,6 +125,14 @@ export interface System {
   dispose(): void;
 }
 
+// Tracked joints and the avatar bones at the same anatomical joints, in world
+// space, for comparing how closely the avatar follows the user's hands.
+export type HandSample = {
+  source: 'mock' | 'xr-hand' | 'none';
+  tracked: Partial<Record<TrackedHandJointName, [number, number, number]>>;
+  avatar: Partial<Record<TrackedHandJointName, [number, number, number]>>;
+};
+
 export type MockVrPoseInput = {
   enabled?: boolean;
   head?: { position?: Vec3Like; quaternion?: QuatLike };

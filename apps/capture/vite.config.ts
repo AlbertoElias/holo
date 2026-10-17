@@ -10,6 +10,55 @@ function getAiMode(): AiMode | undefined {
   return mode === 'agent' || mode === 'collaborate' ? mode : undefined;
 }
 
+// Dev-only sink for raw headset input recorded during a capture session
+// (see src/debug/inputRecording.ts). A headset on the LAN posts here and the
+// file lands in the repo, ready to commit as a replay fixture.
+const INPUT_RECORDING_LIMIT_BYTES = 50 * 1024 * 1024;
+
+function inputRecordingSinkPlugin(outputDir: string): Plugin {
+  return {
+    name: 'holoim-input-recording-sink',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__holoim/input-recordings', (req, res) => {
+        const fail = (status: number, message: string): void => {
+          res.statusCode = status;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ error: message }));
+        };
+        if (req.method !== 'POST') return fail(405, 'POST only');
+        const chunks: Buffer[] = [];
+        let size = 0;
+        req.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > INPUT_RECORDING_LIMIT_BYTES) req.destroy();
+          else chunks.push(chunk);
+        });
+        req.on('end', () => {
+          void (async () => {
+            let recording: { schema?: unknown; frames?: unknown };
+            try {
+              recording = JSON.parse(Buffer.concat(chunks).toString('utf8')) as typeof recording;
+            } catch {
+              return fail(400, 'Body is not JSON');
+            }
+            if (!Array.isArray(recording.schema) || !Array.isArray(recording.frames)) {
+              return fail(400, 'Expected an ActionRecorder recording with schema and frames');
+            }
+            const requested = new URL(req.url ?? '', 'http://localhost').searchParams.get('name') ?? 'recording';
+            const safeName = requested.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'recording';
+            await fs.mkdir(outputDir, { recursive: true });
+            const filePath = path.join(outputDir, `${safeName}.json`);
+            await fs.writeFile(filePath, JSON.stringify(recording));
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ path: path.relative(process.cwd(), filePath) }));
+          })().catch((error: unknown) => fail(500, error instanceof Error ? error.message : String(error)));
+        });
+      });
+    }
+  };
+}
+
 function preserveAvatarAssetPlugin(sourcePublicDir: string, tempPublicDir: string): Plugin {
   const avatarSourcePath = path.resolve(sourcePublicDir, 'gltf/models/avatar.glb');
   const distAvatarPath = path.resolve('dist/gltf/models/avatar.glb');
@@ -61,6 +110,7 @@ export default defineConfig(async ({ command }) => {
         : {})
     }),
     preserveAvatarAssetPlugin(sourcePublicDir, tempPublicDir),
+    inputRecordingSinkPlugin(path.resolve('fixtures/input-recordings')),
     optimizeGLTF({
       level: 'medium'
     })

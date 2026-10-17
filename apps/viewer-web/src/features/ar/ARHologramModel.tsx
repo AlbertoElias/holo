@@ -39,6 +39,14 @@ const AR_FALLBACK_TRIGGER_FAILURE_FRAMES = 12;
 const AR_HIT_TEST_TIMEOUT_MS = 3500;
 const AR_TARGET_WORLD_QUATERNION = new Quaternion();
 const AR_HIT_TEST_RAY_DIRECTION = Object.freeze({ x: 0, y: -0.35, z: -1, w: 0 });
+// A hit pose's Y axis is the surface normal; only near-horizontal, upward
+// surfaces (floors, tables) can hold a standing hologram, never walls.
+const AR_MIN_SURFACE_UP_DOT = 0.8;
+
+function isUpwardSurface({ x, z }: DOMPointReadOnly): boolean {
+  // World Y component of the pose's +Y axis, which is the surface normal.
+  return 1 - 2 * (x * x + z * z) >= AR_MIN_SURFACE_UP_DOT;
+}
 
 type PlacementStage = "unplaced" | "searching" | "placed" | "anchored" | "locked";
 type PlaneLike = {
@@ -59,6 +67,8 @@ export type ArPlacementStatus = {
   reason: string;
   anchored: boolean;
   sequence: number;
+  // Where the model sits in the session's reference space after this update.
+  position?: [number, number, number];
 };
 
 type ARHologramModelProps = {
@@ -250,10 +260,12 @@ export function ARHologramModel({
     { incrementSequence = false }: { incrementSequence?: boolean } = {}
   ): void => {
     const current = placementStatusRef.current;
+    const group = groupRef.current;
     const updated: ArPlacementStatus = {
       ...current,
       ...next,
-      sequence: incrementSequence ? current.sequence + 1 : current.sequence
+      sequence: incrementSequence ? current.sequence + 1 : current.sequence,
+      ...(group ? { position: [group.position.x, group.position.y, group.position.z] as [number, number, number] } : {})
     };
     placementStatusRef.current = updated;
     onPlacementStatusChange?.(updated);
@@ -377,6 +389,10 @@ export function ARHologramModel({
 
     let cancelled = false;
 
+    // The frame loop, the timeout fallback, and the IWER assist all act only
+    // while the runtime state is searching; reporting it is not enough.
+    placementStateRef.current.stage = "searching";
+    placementStateRef.current.stablePoseFrames = 0;
     emitPlacementStatus({
       stage: "searching",
       mode: null,
@@ -558,8 +574,14 @@ export function ARHologramModel({
     if (state.stage === "searching" && frame) {
       if (originReferenceSpace) {
         const hitTestResults = hitTestSourceRef.current ? frame.getHitTestResults(hitTestSourceRef.current) : [];
-        const hitTestResult = hitTestResults[0];
-        const hitTestPose = hitTestResult?.getPose(originReferenceSpace);
+        let hitTestPose: XRPose | undefined;
+        for (const result of hitTestResults) {
+          const pose = result.getPose(originReferenceSpace);
+          if (pose && isUpwardSurface(pose.transform.orientation)) {
+            hitTestPose = pose;
+            break;
+          }
+        }
         if (hitTestPose) {
           const hitTestPosition = hitTestPositionRef.current.set(
             hitTestPose.transform.position.x,

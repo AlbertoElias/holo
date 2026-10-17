@@ -11,7 +11,8 @@ import {
 // Usage: node scripts/run-xr-checks.mjs mock-vr locomotion
 const CHECKS = {
   'mock-vr': 'scripts/ci-mock-vr-playwright.mjs',
-  locomotion: 'scripts/ci-vr-locomotion-playwright.mjs'
+  locomotion: 'scripts/ci-vr-locomotion-playwright.mjs',
+  hands: 'scripts/ci-hand-replay-playwright.mjs'
 };
 
 const requested = process.argv.slice(2);

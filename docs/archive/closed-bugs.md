@@ -56,3 +56,33 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   both capture XR suites, with identical results across runs. Details in
   [`../features/archive/deterministic-lean-ci.md`](../features/archive/deterministic-lean-ci.md).
 
+### B-004 — VR hand targets land near the room origin instead of the avatar
+
+- **Area:** `apps/capture` XR camera rig
+- **Severity:** P1 — VR embodiment broken on device whenever the avatar is away from the origin
+- **Observed:** 2026-10-17 by the new headset-input replay (`test:xr:hands`)
+- **Evidence:** wrist error 2,104 cm; IK targets at y≈1.5 while the avatar stood at y≈22.
+- **Cause:** `SceneBootstrap` parented `renderer.xr.getCamera()` to the camera
+  rig. three.js writes that camera's world pose into its position, so
+  `getWorldPosition()` applied the rig twice and `updateHandTrackingTargets`
+  subtracted a head position one rig-offset too high. VR crouch read the same
+  camera's world height as tracking-space height.
+- **Fix:** stop parenting the XR camera; read tracking-space head height from the
+  rig-local user camera. Wrist error dropped to 8.7 cm; reintroducing the
+  parenting fails `test:xr:hands` at 2,083 cm.
+
+### B-006 — Viewer AR never placed the model; tests passed on a preview status
+
+- **Area:** `apps/viewer-web` AR placement
+- **Severity:** P1 — hit-test placement never ran on any device
+- **Observed:** 2026-10-17 while adding placement geometry checks
+- **Cause:** the hit-test effect reported `searching` but never set the runtime
+  placement stage, so the frame loop, timeout fallback, and IWER assist all
+  waited forever in `unplaced`. The controller's IWER/timeout preview reported
+  `placed` anyway, which satisfied the old checks; the hit-test-disabled check
+  patched an `XRSession` prototype IWER never used.
+- **Fix:** enter `searching` in the runtime state; accept only upward-facing
+  hit-test surfaces; report the placed position. Checks now require a
+  model-reported position in front of the viewer on a surface, and disable
+  hit-test through IWER's supported features.
+

@@ -145,6 +145,9 @@ importers:
       globals:
         specifier: ^16.0.0
         version: 16.5.0
+      iwer:
+        specifier: 2.3.0
+        version: 2.3.0
       playwright:
         specifier: ^1.58.2
         version: 1.58.2

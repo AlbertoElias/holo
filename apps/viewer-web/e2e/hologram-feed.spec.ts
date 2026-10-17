@@ -10,7 +10,7 @@ import {
   waitForNoIwerSession
 } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, expect, test } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const mockGlbPath = path.resolve(testDir, "../../capture/public/gltf/models/avatar.glb");
@@ -31,6 +31,7 @@ type PlacementState = {
   reason: string;
   sequence: number;
   stage: string;
+  position: [number, number, number] | null;
 };
 
 type PlacementExpectation = {
@@ -41,6 +42,9 @@ type PlacementExpectation = {
   minSequence?: number;
   mode?: string;
   notMode?: string;
+  // Only the model's own placement reports a position; controller previews
+  // and recenter resets do not, so this proves the model was really placed.
+  placedByModel?: boolean;
 };
 
 async function mockFeed(page: Page): Promise<void> {
@@ -95,6 +99,9 @@ async function setDesktopNavigatorOverrides(page: Page): Promise<void> {
   });
 }
 
+// Makes the emulated device behave like hardware without hit-test or plane
+// detection: IWER then rejects hit-test sources and reports no planes. The
+// hook runs when IWER publishes its device, before any session is requested.
 async function disableHitTestForSession(page: Page): Promise<void> {
   await page.addInitScript(() => {
     let iwerDeviceValue: unknown;
@@ -103,44 +110,58 @@ async function disableHitTestForSession(page: Page): Promise<void> {
       get: () => iwerDeviceValue,
       set: (value) => {
         iwerDeviceValue = value;
-        const sem = (value as { sem?: { trackedPlanes?: Set<unknown>; trackedMeshes?: Set<unknown> } } | undefined)?.sem;
-        if (sem) {
-          Object.defineProperty(sem, "trackedPlanes", {
-            configurable: true,
-            get: () => new Set()
-          });
-          Object.defineProperty(sem, "trackedMeshes", {
-            configurable: true,
-            get: () => new Set()
-          });
+        const device = value as {
+          supportedFeatures?: string[];
+          sem?: { trackedPlanes?: Set<unknown>; trackedMeshes?: Set<unknown> };
+        } | undefined;
+        const features = device?.supportedFeatures;
+        for (const feature of ["hit-test", "plane-detection", "mesh-detection"]) {
+          const index = features?.indexOf(feature) ?? -1;
+          if (features && index >= 0) features.splice(index, 1);
+        }
+        if (device?.sem) {
+          Object.defineProperty(device.sem, "trackedPlanes", { configurable: true, get: () => new Set() });
+          Object.defineProperty(device.sem, "trackedMeshes", { configurable: true, get: () => new Set() });
         }
       }
     });
-
-    const sessionPrototype = window.XRSession?.prototype;
-    if (sessionPrototype) {
-      const unsupported = async () => {
-        throw new DOMException("Hit-test disabled for fallback coverage.", "NotSupportedError");
-      };
-
-      for (const key of ["requestHitTestSource", "requestHitTestSourceForTransientInput"] as const) {
-        if (typeof sessionPrototype[key] === "function") {
-          Object.defineProperty(sessionPrototype, key, {
-            configurable: true,
-            value: unsupported
-          });
-        }
-      }
-    }
-
-    const framePrototype = window.XRFrame?.prototype;
-    if (framePrototype && "detectedPlanes" in framePrototype) {
-      Object.defineProperty(framePrototype, "detectedPlanes", {
-        configurable: true,
-        get: () => new Set()
-      });
-    }
   });
+}
+
+async function readViewerPose(page: Page): Promise<{ position: [number, number, number]; quaternion: [number, number, number, number] }> {
+  return page.evaluate(() => {
+    const device = (window as Window & { IWER_DEVICE?: { position: { x: number; y: number; z: number }; quaternion: { x: number; y: number; z: number; w: number } } }).IWER_DEVICE;
+    if (!device) throw new Error("IWER device unavailable.");
+    return {
+      position: [device.position.x, device.position.y, device.position.z],
+      quaternion: [device.quaternion.x, device.quaternion.y, device.quaternion.z, device.quaternion.w]
+    };
+  });
+}
+
+// The model must rest on something in front of the viewer: within 45° of the
+// gaze direction, 0.5–5 m away, on or above the floor, and clearly below eye
+// level (not floating in the face or stuck to a wall at eye height).
+function expectPlacedInFrontOnSurface(
+  placement: PlacementState,
+  viewer: { position: [number, number, number]; quaternion: [number, number, number, number] }
+): void {
+  expect(placement.position, "model-reported placement position").not.toBeNull();
+  const [x, y, z] = placement.position!;
+  const [vx, vy, vz] = viewer.position;
+  const [qx, qy, qz, qw] = viewer.quaternion;
+  // Viewer forward (-Z) rotated by the device orientation, flattened to XZ.
+  const forwardX = -(2 * (qx * qz + qw * qy));
+  const forwardZ = -(1 - 2 * (qx * qx + qy * qy));
+  const dx = x - vx;
+  const dz = z - vz;
+  const distance = Math.hypot(dx, dz);
+  const facing = (dx * forwardX + dz * forwardZ) / (distance * Math.hypot(forwardX, forwardZ));
+  expect(distance, "horizontal distance from viewer (m)").toBeGreaterThan(0.5);
+  expect(distance, "horizontal distance from viewer (m)").toBeLessThan(5);
+  expect(facing, "cosine between gaze and model direction").toBeGreaterThan(Math.SQRT1_2);
+  expect(y, "height above floor (m)").toBeGreaterThan(-0.05);
+  expect(vy - y, "drop below eye level (m)").toBeGreaterThan(0.2);
 }
 
 async function readPlacementState(page: Page): Promise<PlacementState> {
@@ -155,7 +176,10 @@ async function readPlacementState(page: Page): Promise<PlacementState> {
       mode: root.dataset.placementMode ?? "",
       reason: root.dataset.placementReason ?? "",
       sequence: Number(root.dataset.placementSequence ?? "0"),
-      stage: root.dataset.placementStage ?? ""
+      stage: root.dataset.placementStage ?? "",
+      position: root.dataset.placementPosition
+        ? root.dataset.placementPosition.split(",").map(Number) as [number, number, number]
+        : null
     };
   });
 }
@@ -200,6 +224,9 @@ async function waitForPlacement(
           return false;
         }
         if (Array.isArray(expected.excludedStages) && expected.excludedStages.includes(state.stage)) {
+          return false;
+        }
+        if (expected.placedByModel && !root.dataset.placementPosition) {
           return false;
         }
 
@@ -263,10 +290,11 @@ async function clickSessionButton(page: Page, label: string): Promise<void> {
 const HIT_TEST_PLACEMENT = {
   allowedModes: ["hit-test", "floor"],
   allowedReasons: ["hit-test-stable", "hit-test-anchor", "plane-detected", "plane-detected-anchor"],
-  excludedStages: ["searching"]
+  excludedStages: ["searching", "unplaced"],
+  placedByModel: true
 };
 
-test("feed lists holograms, and AR entry and exit round-trip through IWER", async ({ page }) => {
+test("AR places the model on a surface in front of the viewer, recenter places again, and exit returns to the feed", async ({ page }, testInfo) => {
   await mockFeed(page);
   await setDesktopNavigatorOverrides(page);
 
@@ -275,6 +303,21 @@ test("feed lists holograms, and AR entry and exit round-trip through IWER", asyn
   expect(runtimeState.isSecureContext).toBeTruthy();
   const sessionState = await readIwerSessionState(page);
   expect(sessionState?.environmentBlendMode).toBe("alpha-blend");
+  const environmentState = await waitForIwerEnvironment(page, { minTrackedPlanes: 1 });
+  expect(environmentState.hasSem).toBeTruthy();
+  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion", "disabled");
+  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion-reason", "iwer-runtime");
+
+  const placement = await waitForPlacement(page, { minSequence: 1, ...HIT_TEST_PLACEMENT });
+  expect(["anchored", "placed", "locked"]).toContain(placement.stage);
+  expectPlacedInFrontOnSurface(placement, await readViewerPose(page));
+  await captureEvidence(page, testInfo, "ar-placed-on-surface");
+
+  // Only the model's own placements carry a position and advance its
+  // sequence, so a higher model-reported sequence proves recenter re-placed.
+  await clickSessionButton(page, "Recenter Model");
+  const replaced = await waitForPlacement(page, { ...HIT_TEST_PLACEMENT, minSequence: placement.sequence + 1 });
+  expect(["anchored", "placed", "locked"]).toContain(replaced.stage);
 
   await clickSessionButton(page, "Exit AR");
   await waitForNoIwerSession(page);
@@ -284,42 +327,7 @@ test("feed lists holograms, and AR entry and exit round-trip through IWER", asyn
   await expect(page.locator(".ar-trigger-button")).toHaveCount(1);
 });
 
-test("AR placement anchors on IWER SEM hit-tests and recenter places again", async ({ page }) => {
-  await mockFeed(page);
-  await setDesktopNavigatorOverrides(page);
-
-  await enterMockAr(page);
-  const environmentState = await waitForIwerEnvironment(page, { minTrackedPlanes: 1 });
-  expect(environmentState.hasSem).toBeTruthy();
-  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion", "disabled");
-  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion-reason", "iwer-runtime");
-
-  const placement = await waitForPlacement(page, { minSequence: 1, ...HIT_TEST_PLACEMENT });
-  expect(["anchored", "placed", "locked"]).toContain(placement.stage);
-
-  // Recenter must reset placement and then place again. The sequence counter
-  // cannot show this (the controller and model each own one), so record the
-  // stage history and require a reset followed by a resolved placement.
-  await page.evaluate(() => {
-    const root = document.querySelector(".ar-view-container") as HTMLElement;
-    const stages: string[] = [];
-    (window as Window & { __placementStages?: string[] }).__placementStages = stages;
-    new MutationObserver(() => stages.push(root.dataset.placementStage ?? "")).observe(root, {
-      attributes: true,
-      attributeFilter: ["data-placement-stage"]
-    });
-  });
-  await clickSessionButton(page, "Recenter Model");
-  await page.waitForFunction(() => {
-    const stages = (window as Window & { __placementStages?: string[] }).__placementStages ?? [];
-    const resetIndex = stages.findIndex((stage) => stage === "unplaced" || stage === "searching");
-    return resetIndex >= 0 && ["anchored", "placed", "locked"].includes(stages.at(-1) ?? "") && stages.length - 1 > resetIndex;
-  }, null, { timeout: 15000 });
-  const replaced = await waitForPlacement(page, HIT_TEST_PLACEMENT);
-  expect(["anchored", "placed", "locked"]).toContain(replaced.stage);
-});
-
-test("AR placement falls back when hit-test is unavailable", async ({ page }) => {
+test("AR placement falls back when hit-test is unavailable", async ({ page }, testInfo) => {
   await mockFeed(page);
   await setDesktopNavigatorOverrides(page);
   await disableHitTestForSession(page);
@@ -331,11 +339,13 @@ test("AR placement falls back when hit-test is unavailable", async ({ page }) =>
     {
       minSequence: 1,
       notMode: "hit-test",
-      excludedStages: ["searching"]
+      excludedStages: ["searching", "unplaced"],
+      placedByModel: true
     }
   );
 
   expect(placement.anchored).toBe(false);
   expect(["floor", "visibility-fallback"]).toContain(placement.mode);
   expect(["hit-test-unavailable", "hit-test-timeout"]).toContain(placement.reason);
+  await captureEvidence(page, testInfo, "ar-fallback-placement");
 });

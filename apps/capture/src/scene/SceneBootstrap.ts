@@ -44,9 +44,10 @@ export function createSceneBootstrap(): SceneBootstrap {
   renderer.xr.enabled = true;
   app.appendChild(renderer.domElement);
 
-  // Parent the real WebXR ArrayCamera to the cameraRig so that
-  // positioning the rig acts as a dolly for VR first-person view.
-  cameraRig.add(renderer.xr.getCamera());
+  // The rig dollies the VR view through xrCamera's parent; three.js applies it
+  // in WebXRManager.updateCamera. Do not also parent renderer.xr.getCamera():
+  // three writes that camera's *world* pose into its position each frame, so a
+  // parent would be applied twice by getWorldPosition().
 
   const vrButton = VRButton.createButton(renderer, {
     optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']

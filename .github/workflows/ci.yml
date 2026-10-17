@@ -120,6 +120,7 @@ jobs:
           path: |
             apps/capture/output/ci-mock-vr
             apps/capture/output/ci-vr-locomotion
+            apps/capture/output/ci-hand-replay
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
             output/test-results

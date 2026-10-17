@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { waitForTextContentPrefix } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, expect, test } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
 
 // Whole-product check: record in capture, export the real GLB, upload it
 // through the viewer UI to a real API, and render it in the feed. Nothing in
@@ -69,6 +69,7 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
     hooks.advanceTime(seconds * 1000 * 0.3);
   }, RECORDED_SECONDS);
 
+  await captureEvidence(capture, testInfo, "capture-recording-in-progress");
   const downloadPromise = capture.waitForEvent("download");
   await capture.getByRole("button", { name: "Stop Recording" }).click();
   const download = await downloadPromise;
@@ -102,5 +103,7 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   await expect(card).toContainText(hologramName);
   await expect(card).toHaveAttribute("data-model-state", "rendered", { timeout: 30_000 });
   await expect(card).toHaveAttribute("data-model-bubble", "active");
+  await card.scrollIntoViewIfNeeded();
+  await captureEvidence(page, testInfo, "uploaded-capture-rendered-in-feed");
   expect(Number(await card.getAttribute("data-model-animations"))).toBeGreaterThan(0);
 });

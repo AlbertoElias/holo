@@ -100,6 +100,7 @@ export function ARView() {
       data-placement-reason={placementStatus?.reason ?? ""}
       data-placement-sequence={String(placementStatus?.sequence ?? 0)}
       data-placement-stage={placementStatus?.stage ?? ""}
+      data-placement-position={placementStatus?.position?.map((value) => value.toFixed(3)).join(",") ?? ""}
       data-depth-occlusion={depthOcclusionStatus.enabled ? "enabled" : "disabled"}
       data-depth-occlusion-reason={depthOcclusionStatus.reason}
     >

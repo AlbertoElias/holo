@@ -245,6 +245,13 @@ export class AvatarRig {
     return out;
   }
 
+  getBoneWorldPosition(name: string, out: THREE.Vector3): THREE.Vector3 | undefined {
+    const bone = this.findAvatarBone(name);
+    if (!bone) return undefined;
+    bone.getWorldPosition(out);
+    return Number.isFinite(out.x) && Number.isFinite(out.y) && Number.isFinite(out.z) ? out : undefined;
+  }
+
   getBoneLocalQuaternion(name: string, out: THREE.Quaternion): THREE.Quaternion | undefined {
     const bone = this.findAvatarBone(name);
     if (!bone) return undefined;

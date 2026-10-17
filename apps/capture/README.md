@@ -134,6 +134,33 @@ freeze page timers so IWER stops compositing frames nobody asserts on. Results
 are identical on any host; a failure writes a state timeline JSON next to its
 screenshot.
 
+## Hand-Tracking Fidelity From Headset Input
+
+`npm run test:xr:hands` replays every recording in `fixtures/input-recordings/`
+through the real WebXR input path (IWER `ActionPlayer` → XRHand joints →
+retargeter → avatar) and compares the avatar's hands with the tracked hands:
+finger curl error, correlation, and lag; pinch contact; wrist position and
+rotation; and added jitter. Each run writes `output/ci-hand-replay/<name>-report.json`
+and per-frame samples. `HAND_REPLAY_VIDEO=1` also renders a spectator video with
+the tracked joints drawn as dots (cyan left, magenta right).
+
+Record new input on a headset:
+
+1. Run `pnpm --filter @holoim/capture dev` on a machine on the same network as the
+   headset, and open the printed network `https://` URL in the headset browser
+   (accept the development certificate). IWER stays off on non-localhost origins,
+   so the session uses the headset's native WebXR.
+2. Enter VR, put the controllers down so hand tracking takes over, and start a
+   recording from the floating panel (pinch while pointing at it).
+3. Perform the motions to cover (open hand, fist, pinch, point, wave, reach),
+   then stop the recording.
+4. The dev server writes the raw input to
+   `fixtures/input-recordings/avatar-recording-<timestamp>.json` (`meta.source`
+   is `headset`). Rename it after the motions it covers and commit it.
+
+`iwer-emulated-pinch.json` comes from IWER's synthetic hands and only guards the
+input path until headset recordings exist.
+
 ## Development Workflows
 
 - Local development:

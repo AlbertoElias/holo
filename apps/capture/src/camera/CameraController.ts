@@ -199,12 +199,14 @@ export class CameraController {
     // VR first-person: keep placement simple and stable.
     // Use root + fixed eye height (avoids animation-driven drift) and a small
     // forward offset so the camera sits naturally in front of the neck.
-    const xrCam = this.deps.renderer.xr.getCamera();
-    if (!this.xrInitialHeadCaptured && xrCam.position.y > 0.1) {
-      this.xrInitialHeadY = xrCam.position.y;
+    // xrCamera is the rig's child, so three keeps its position in tracking
+    // space (renderer.xr.getCamera() holds the world pose instead).
+    const trackedHeadY = this.deps.xrCamera.position.y;
+    if (!this.xrInitialHeadCaptured && trackedHeadY > 0.1) {
+      this.xrInitialHeadY = trackedHeadY;
       this.xrInitialHeadCaptured = true;
     }
-    const headY = this.xrInitialHeadCaptured ? this.xrInitialHeadY : xrCam.position.y;
+    const headY = this.xrInitialHeadCaptured ? this.xrInitialHeadY : trackedHeadY;
     const eyeForwardOffset = this.deps.avatarRig.avatarHeight * 0.08;
     const eyeUpOffset = this.deps.avatarRig.avatarHeight * 0.015;
     this.tmpForward.set(-Math.sin(this.lookYaw), 0, -Math.cos(this.lookYaw)).normalize();

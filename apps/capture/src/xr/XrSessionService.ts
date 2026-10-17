@@ -105,6 +105,8 @@ export class XrSessionService {
   private readonly tmpVecC = new THREE.Vector3();
   private readonly tmpEyeAnchor = new THREE.Vector3();
   private readonly tmpXrHeadWorld = new THREE.Vector3();
+  private readonly tmpHeadLocal = new THREE.Vector3();
+  private cameraRig: THREE.Group | null = null;
   private readonly tmpQuat = new THREE.Quaternion();
   private readonly tmpQuatB = new THREE.Quaternion();
   private readonly trackedHandRotationOffset = new THREE.Quaternion();
@@ -249,6 +251,7 @@ export class XrSessionService {
   }
 
   mountToScene(_scene: THREE.Scene, cameraRig: THREE.Group): void {
+    this.cameraRig = cameraRig;
     // Controllers, grips, and hands MUST be children of the cameraRig (the
     // VR dolly group) so their world positions include the same transform as
     // the XR camera.  Without this, getWorldPosition() returns raw XR
@@ -368,8 +371,11 @@ export class XrSessionService {
     }
 
     if (this.renderer.xr.isPresenting) {
-      const localY = this.renderer.xr.getCamera().position.y;
-      return Number.isFinite(localY) ? localY : undefined;
+      // Tracking-space height: the XR camera's world position relative to the
+      // rig the app dollies to the avatar's eye.
+      this.renderer.xr.getCamera().getWorldPosition(this.tmpHeadLocal);
+      this.cameraRig?.worldToLocal(this.tmpHeadLocal);
+      return Number.isFinite(this.tmpHeadLocal.y) ? this.tmpHeadLocal.y : undefined;
     }
     return undefined;
   }
@@ -503,6 +509,13 @@ export class XrSessionService {
     if (!jointState.positionTracked) return false;
     outPosition.copy(jointState.positionWorld);
     return true;
+  }
+
+  // Which input drove the hand-joint state this frame: the deterministic mock
+  // payload, a real XRHand, or nothing.
+  getHandJointSource(side: VrHandSide): 'mock' | 'xr-hand' | 'none' {
+    if (!this.xrHandState[side]!.poseValid) return 'none';
+    return this.mockVrState.enabled ? 'mock' : 'xr-hand';
   }
 
   getTrackedFingerJointCount(side: VrHandSide): number {

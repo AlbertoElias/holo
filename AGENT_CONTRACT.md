@@ -110,6 +110,8 @@ Supported env vars for smoke and XR scripts:
 - `XR_CHECK_TIMEOUT_MS` (default `120000` per capture XR check; checks finish in seconds, so this only stops hangs)
 - `XR_TEST_VIEWPORT` (default `320x180` for capture XR checks; set `1280x720` when inspecting the page live)
 - `E2E_CAPTURE_URL` (default `https://127.0.0.1:5175/` for the pipeline test's capture server)
+- `HAND_REPLAY_FIXTURES` (default `fixtures/input-recordings` for `test:xr:hands`)
+- `HAND_REPLAY_VIDEO` (`1` renders a spectator video of each hand replay; needs `ffmpeg` to encode)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
