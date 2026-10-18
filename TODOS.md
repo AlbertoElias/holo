@@ -32,7 +32,10 @@ it from the item below instead of duplicating its status here.
   coordinate avatar scale and calibration with the locomotion-animation work.
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
-  intentionally uses local filesystem storage and SQLite.
+  intentionally uses local filesystem storage and SQLite. Host, object storage,
+  and conversion decisions are made and implementing in
+  [`docs/features/live-deployment.md`](docs/features/live-deployment.md)
+  (Fly + R2 + async USDZ; auth and Postgres deliberately deferred there).
 - [x] Move the generated development SQLite databases out of version control. Local
   setup now runs committed Prisma migrations; route tests own temporary database and
   upload fixtures; generated database files are ignored.

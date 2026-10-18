@@ -12,6 +12,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Hand-tracking fidelity from real headset input | Verifying | [hand-tracking-fidelity.md](hand-tracking-fidelity.md) |
 | Capture AR recenter control | Complete | [archive/ar-recenter-control.md](archive/ar-recenter-control.md) |
 | MetaVR setup for physical Quest automation | Complete | [archive/metavr-setup.md](archive/metavr-setup.md) |
+| Live deployment (Fly + R2 + async USDZ) | Implementing | [live-deployment.md](live-deployment.md) |
 | Migrate workspace typechecking to tsgo / TypeScript 7 | Complete | [archive/tsgo-typescript7-migration.md](archive/tsgo-typescript7-migration.md) |
 | Deterministic, lean CI | Complete | [archive/deterministic-lean-ci.md](archive/deterministic-lean-ci.md) |
 | Development reliability foundation | Complete | [archive/reliability-foundation.md](archive/reliability-foundation.md) |
