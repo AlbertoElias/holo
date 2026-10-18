@@ -36,6 +36,15 @@ PRD only after it describes one bounded user outcome and has a reason to exist.
 | IDEA-029 | Conversational memory palace: a navigable graph of claims, artifacts, and decisions | Viewer and collaboration | Idea | How can a graph remain legible at scale? |
 | IDEA-030 | Audience simulation with novice, expert, and skeptical perspectives | Communication protocols | Idea | Is AI simulation accurate enough to be trusted as feedback? |
 | IDEA-031 | Shared design language and interaction model for 2D and 3D, all devices and inputs ([concept](concepts/design-language.md)) | Design system | Idea | Which look, and is the held-mode, two-handed grammar natural on every device? |
+| IDEA-032 | Self-resolving pointing: when the author points or looks at something, the thing the finger or gaze ray hits lights up | Hologram-native annotation | Idea | Which pointing and gaze signals are reliable enough to fire without false highlights? |
+| IDEA-033 | Hand-path ribbons that leave a demonstrated motion in the air at true size and speed | Hologram-native annotation | Idea | When does a trace clarify a motion rather than clutter the scene? |
+| IDEA-034 | True-scale measurements from gestures ("about this big", "at this height") shown as real distances | Hologram-native annotation | Idea | Which gestures signal a measurement rather than ordinary emphasis? |
+| IDEA-035 | "Stand here" viewpoint markers: the author marks where the viewer should stand, replacing the camera shot | Hologram-native annotation | Idea | Do viewers follow suggested viewpoints, and what does the 2D feed do with them? |
+| IDEA-036 | Look-here cues: directional sound, or playback that waits, when a key moment happens outside the viewer's view | Hologram-native annotation | Idea | Which cue redirects attention without feeling like a nag? |
+| IDEA-037 | Proximity notes that play when the viewer walks up to a place, independent of playback time | Hologram-native annotation | Idea | How do proximity notes coexist with the author's timeline? |
+| IDEA-038 | Ghost frames: copies of the avatar at key poses along its path, walkable like stop-motion | Hologram-native annotation | Idea | How are key poses chosen without authoring effort? |
+| IDEA-039 | Author's-eye view: briefly see through the author's eyes, or a cone showing what they looked at | Hologram-native annotation | Idea | Does a borrowed first-person view orient or disorient on each device? |
+| IDEA-040 | Follow-along check: the viewer copies a movement and drift from the author's hands is highlighted | Hologram-native annotation | Idea | Is comparison feedback useful outside training contexts? |
 
 ## Promotion Rule
 
