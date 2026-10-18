@@ -8,10 +8,15 @@ it from the item below instead of duplicating its status here.
 
 ## Now
 
-- [ ] Validate capture VR embodiment, hand/finger retargeting, pinch/release
-  transitions, and VR enter/exit behavior on a physical headset. The automated
-  IWER checks cover deterministic browser flows but cannot replace device testing.
-  (Automated pinch fix: closed B-002 in [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).)
+- [ ] Record real Quest hand input for `test:xr:hands` and recalibrate the
+  fidelity thresholds against it. Current thresholds come from synthetic IWER
+  poses. Owned by [`docs/features/hand-tracking-fidelity.md`](docs/features/hand-tracking-fidelity.md).
+- [ ] On a physical headset, check only what IWER cannot emulate: real-tracking
+  pinch stability (noise, self-occlusion, joint dropouts), Quest browser session
+  events (permission prompt, system menu, headset removal or sleep,
+  controller↔hand switching), and frame rate, latency, and comfort. IWER
+  already covers pinch/release logic, VR enter/exit flows, and retargeting math
+  (B-002, B-005 in [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md)).
 - [x] Make the XR locomotion command report a reliable final completion status and
   clean up all child processes locally. Delivered in
   [`docs/features/archive/reliability-foundation.md`](docs/features/archive/reliability-foundation.md).
