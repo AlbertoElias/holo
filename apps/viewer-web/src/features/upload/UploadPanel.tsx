@@ -17,6 +17,7 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [hologramName, setHologramName] = useState("");
+  const [quickLookEnabled, setQuickLookEnabled] = useState(false);
   const [isExpanded, setIsExpanded] = useState(() => {
     // Start expanded on desktop (where toggle is hidden), collapsed on mobile
     if (typeof window === "undefined") {
@@ -73,11 +74,13 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
       const uploaded = await uploadHologram({
         file: selectedFile,
         hologramName: trimmedName,
-        submittedBy: trimmedSubmittedBy
+        submittedBy: trimmedSubmittedBy,
+        quickLookEnabled
       });
       onUploaded(uploaded);
       setSelectedFile(null);
       setHologramName("");
+      setQuickLookEnabled(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -131,6 +134,23 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
               />
               <p className="upload-caption">
                 {selectedFile ? `Selected: ${selectedFile.name}` : "GLB only, up to 25MB"}
+              </p>
+              <label htmlFor="quicklook-enabled" className="upload-quicklook-toggle">
+                <input
+                  id="quicklook-enabled"
+                  type="checkbox"
+                  checked={quickLookEnabled}
+                  onChange={(event) => {
+                    setError(null);
+                    setQuickLookEnabled(event.target.checked);
+                  }}
+                  disabled={isUploading}
+                />
+                <span>Enable iOS Quick Look (USDZ)</span>
+              </label>
+              <p className="upload-caption">
+                Optional. Converts the GLB to USDZ on upload and stores it so iPhone and iPad can open
+                this hologram in Quick Look. Leave off except for demos.
               </p>
               <UiButton type="submit" disabled={isUploading || !selectedFile}>
                 {isUploading ? "Uploading..." : "Upload"}

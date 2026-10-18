@@ -1,9 +1,11 @@
 # Quick Look previews
 
 The original GLB is canonical. `glb_to_usdz.py` produces a self-contained phone
-preview for the viewer's existing `rel="ar"` link. The API converts on demand,
-serves the versioned `*-ql2.usdz`, and returns a retryable 503 on failure while
-preserving the GLB. Upload, export and browser playback contracts are unchanged.
+preview for the viewer's existing `rel="ar"` link. When an upload opts in to
+Quick Look, the API converts the GLB once at upload time, stores the versioned
+`*-ql2.usdz` next to the GLB, records it as `usdzPath`, and serves that stored
+package on every Quick Look request. A failed conversion fails the upload with
+a retryable 503 and leaves no hologram behind.
 
 ## Install and run
 
@@ -80,10 +82,11 @@ shaders, transmission and per-frame point animation are not reproduced.
 ## Limits and failure handling
 
 The API runs at most two converter processes and queues at most eight additional
-conversions across uploads. One per-upload lifecycle lock covers conversion,
-publication, database update and deletion. This is a **single API process**
-design, matching the current SQLite/local-file deployment; multiple API workers
-would require a shared lifecycle lock before deployment.
+conversions across uploads. Conversion runs during the upload request; Quick
+Look requests never convert. Deletion removes both formats. This is a
+**single API process** design, matching the current SQLite/local-file
+deployment; multiple API workers would require a shared lifecycle lock before
+deployment.
 
 All resources must be embedded. The converter rejects external buffers/images,
 unsupported audio demuxers, excessive object/accessor/pixel/sample counts,
@@ -94,10 +97,11 @@ file/pipe protocols and is killed as a process group on interruption. Conversion
 writes private temporary assets and atomically replaces the destination after a
 complete, uncompressed, aligned USDZ is packaged. The API also uses a private
 output name and atomic publication. Failed jobs remove temporary files and can
-be retried; deletion waits for publication and removes both formats.
+be retried by uploading again; deletion removes both formats.
 
-Bump `USDZ_CONVERTER_VERSION` whenever a released converter changes, so existing
-uploads regenerate. Missing current packages regenerate without a version bump.
+Bump `USDZ_CONVERTER_VERSION` whenever a released converter changes, so new
+uploads store a new versioned package. Stored packages are served as-is and
+are not regenerated when missing.
 
 ## Evidence boundaries
 

@@ -60,6 +60,7 @@ export type UploadHologramInput = {
   file: File;
   hologramName: string;
   submittedBy: string;
+  quickLookEnabled: boolean;
 };
 
 export async function uploadHologram(input: UploadHologramInput): Promise<HologramDTO> {
@@ -68,6 +69,7 @@ export async function uploadHologram(input: UploadHologramInput): Promise<Hologr
   // so it is available throughout streaming upload processing.
   formData.set("hologramName", input.hologramName);
   formData.set("submittedBy", input.submittedBy);
+  formData.set("quickLookEnabled", String(input.quickLookEnabled));
   formData.set("file", input.file);
 
   let response: Response;

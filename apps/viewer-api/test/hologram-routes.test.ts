@@ -4,13 +4,13 @@ import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 type HologramDto = {
   id: string;
   url: string;
   usdzUrl: string | null;
+  quickLookEnabled: boolean;
   filenameOriginal: string;
   hologramName: string;
   submittedBy: string;
@@ -28,6 +28,7 @@ function multipartUpload(input: {
   submittedBy: string;
   file: Buffer;
   fileFirst?: boolean;
+  quickLookEnabled?: boolean;
 }): { boundary: string; payload: Buffer } {
   const boundary = `holoim-route-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const chunks: Buffer[] = [];
@@ -42,6 +43,9 @@ function multipartUpload(input: {
   if (!input.fileFirst) {
     addField("hologramName", input.hologramName);
     addField("submittedBy", input.submittedBy);
+    if (input.quickLookEnabled !== undefined) {
+      addField("quickLookEnabled", String(input.quickLookEnabled));
+    }
   }
   chunks.push(
     Buffer.from(
@@ -55,6 +59,9 @@ function multipartUpload(input: {
   if (input.fileFirst) {
     addField("hologramName", input.hologramName);
     addField("submittedBy", input.submittedBy);
+    if (input.quickLookEnabled !== undefined) {
+      addField("quickLookEnabled", String(input.quickLookEnabled));
+    }
   }
   chunks.push(Buffer.from(`--${boundary}--\r\n`));
 
@@ -63,12 +70,13 @@ function multipartUpload(input: {
 
 async function uploadHologram(
   app: FastifyInstance,
-  input: { hologramName: string; submittedBy?: string; file?: Buffer }
+  input: { hologramName: string; submittedBy?: string; file?: Buffer; quickLookEnabled?: boolean }
 ): Promise<HologramDto> {
   const multipart = multipartUpload({
     hologramName: input.hologramName,
     submittedBy: input.submittedBy ?? "Route Tester",
-    file: input.file ?? Buffer.from("route-test-glb")
+    file: input.file ?? Buffer.from("route-test-glb"),
+    ...(input.quickLookEnabled !== undefined ? { quickLookEnabled: input.quickLookEnabled } : {})
   });
   const response = await app.inject({
     method: "POST",
@@ -137,6 +145,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
         "storagePath" TEXT NOT NULL,
         "durationSec" REAL,
         "usdzPath" TEXT,
+        "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -187,13 +196,72 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       hologramName: "Route upload",
       submittedBy: "API route test",
       sizeBytes: file.length,
-      usdzUrl: null
+      usdzUrl: null,
+      quickLookEnabled: false
     });
     expect(await readFile(path.join(uploadsRoot, path.basename(created.url)))).toEqual(file);
 
     const served = await app.inject({ method: "GET", url: created.url });
     expect(served.statusCode).toBe(200);
     expect(served.rawPayload).toEqual(file);
+  });
+
+  it("does not generate USDZ when Quick Look was not enabled at upload", async () => {
+    const created = await uploadHologram(app, { hologramName: "No Quick Look" });
+    expect(created.quickLookEnabled).toBe(false);
+    expect(created.usdzUrl).toBeNull();
+
+    const response = await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Quick Look is not enabled for this hologram." });
+    // No conversion ran and no USDZ file was published.
+    await expect(access(path.join(converterControl, "calls"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(uploadsRoot)).toEqual([path.basename(created.url)]);
+    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({
+      quickLookEnabled: false,
+      usdzPath: null
+    });
+  });
+
+  it("converts at upload, stores the USDZ, and reuses it without reconverting", async () => {
+    const source = Buffer.from("quicklook-enabled-capture");
+    const created = await uploadHologram(app, {
+      hologramName: "Quick Look demo",
+      file: source,
+      quickLookEnabled: true
+    });
+    const glbFilename = path.basename(created.url);
+    const currentFilename = usdzFilenameFor(glbFilename);
+    const expectedUsdz = Buffer.concat([Buffer.from("fixture-usdz:"), source]);
+
+    // Conversion already happened during the upload request.
+    expect(created.quickLookEnabled).toBe(true);
+    expect(created.usdzUrl).toBe(`/uploads/${currentFilename}`);
+    expect(await readFile(path.join(uploadsRoot, currentFilename))).toEqual(expectedUsdz);
+    expect(await readFile(path.join(converterControl, "calls"), "utf8")).toBe("convert\n");
+    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({
+      quickLookEnabled: true,
+      usdzPath: `uploads/${currentFilename}`
+    });
+
+    const response = await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe(created.usdzUrl);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    const served = await app.inject({ method: "GET", url: response.headers.location! });
+    expect(served.statusCode).toBe(200);
+    expect(served.headers["content-type"]).toContain("model/vnd.usdz+zip");
+    expect(served.rawPayload).toEqual(expectedUsdz);
+
+    // Reuse: a second request serves the same stored bytes, no new conversion.
+    expect((await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` })).statusCode).toBe(302);
+    expect(await readFile(path.join(converterControl, "calls"), "utf8")).toBe("convert\n");
+
+    const fetched = await app.inject({ method: "GET", url: `/api/holograms/${created.id}` });
+    expect(fetched.json<HologramDto>()).toMatchObject({
+      quickLookEnabled: true,
+      usdzUrl: created.usdzUrl
+    });
   });
 
   it("uploads a streamed 2MB file before its trailing form fields", async () => {
@@ -254,15 +322,9 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("deletes the database record and both stored representations", async () => {
-    const created = await uploadHologram(app, { hologramName: "Delete route" });
+    const created = await uploadHologram(app, { hologramName: "Delete route", quickLookEnabled: true });
     const glbPath = path.join(uploadsRoot, path.basename(created.url));
-    const usdzFilename = path.basename(created.url).replace(/\.glb$/i, ".usdz");
-    const usdzPath = path.join(uploadsRoot, usdzFilename);
-    await writeFile(usdzPath, "route-test-usdz");
-    await prisma.hologram.update({
-      where: { id: created.id },
-      data: { usdzPath: `uploads/${usdzFilename}` }
-    });
+    const usdzPath = path.join(uploadsRoot, path.basename(created.usdzUrl!));
 
     const response = await app.inject({
       method: "DELETE",
@@ -283,94 +345,57 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     expect(getResponse.statusCode).toBe(404);
   });
 
-  it("replaces an obsolete preview, reuses the current cache, and repairs a missing cache", async () => {
-    const source = Buffer.from("original-capture-for-cache-repair");
-    const created = await uploadHologram(app, { hologramName: "Cache lifecycle", file: source });
+  it("does not regenerate a missing stored USDZ package", async () => {
+    const source = Buffer.from("original-capture-for-stored-preview");
+    const created = await uploadHologram(app, { hologramName: "Stored preview", file: source, quickLookEnabled: true });
     const glbFilename = path.basename(created.url);
-    const obsoleteFilename = glbFilename.replace(/\.glb$/i, ".usdz");
-    const obsoletePath = path.join(uploadsRoot, obsoleteFilename);
-    const currentFilename = usdzFilenameFor(glbFilename);
-    const currentPath = path.join(uploadsRoot, currentFilename);
-    await writeFile(obsoletePath, "obsolete-preview");
-    await prisma.hologram.update({
-      where: { id: created.id },
-      data: { usdzPath: `uploads/${obsoleteFilename}` }
-    });
-    const requestPreview = () => app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` });
-
-    const converted = await requestPreview();
-    expect(converted.statusCode).toBe(302);
-    expect(converted.headers.location).toBe(`/uploads/${currentFilename}`);
-    expect(converted.headers["cache-control"]).toBe("no-store");
-    const served = await app.inject({ method: "GET", url: converted.headers.location! });
-    expect(served.statusCode).toBe(200);
-    expect(served.headers["content-type"]).toContain("model/vnd.usdz+zip");
-    expect(served.rawPayload).toEqual(Buffer.concat([Buffer.from("fixture-usdz:"), source]));
-    await expect(access(obsoletePath)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({
-      usdzPath: `uploads/${currentFilename}`
-    });
-
-    expect((await requestPreview()).statusCode).toBe(302);
+    const currentPath = path.join(uploadsRoot, usdzFilenameFor(glbFilename));
     expect(await readFile(path.join(converterControl, "calls"), "utf8")).toBe("convert\n");
+
     await rm(currentPath);
-    expect((await requestPreview()).statusCode).toBe(302);
-    expect(await readFile(currentPath)).toEqual(served.rawPayload);
-    expect(await readFile(path.join(converterControl, "calls"), "utf8")).toBe("convert\nconvert\n");
+    const response = await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Quick Look preview is not available for this hologram." });
+    // Still missing and still only the one upload-time conversion.
+    await expect(access(currentPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(path.join(converterControl, "calls"), "utf8")).toBe("convert\n");
     expect(await readFile(path.join(uploadsRoot, glbFilename))).toEqual(source);
   });
 
-  it("discards failed partial output, preserves the GLB, and succeeds on retry", async () => {
+  it("fails the upload when conversion fails, leaves nothing behind, and succeeds on retry", async () => {
     const source = Buffer.from("retryable-original-capture");
-    const created = await uploadHologram(app, { hologramName: "Conversion failure", file: source });
-    const glbFilename = path.basename(created.url);
     await writeFile(path.join(converterControl, "fail"), "fail after writing partial output");
-
+    const failing = multipartUpload({
+      hologramName: "Conversion failure",
+      submittedBy: "Route Tester",
+      file: source,
+      quickLookEnabled: true
+    });
     const response = await app.inject({
-      method: "GET",
-      url: `/api/holograms/${created.id}/usdz`
+      method: "POST",
+      url: "/api/holograms",
+      headers: { "content-type": `multipart/form-data; boundary=${failing.boundary}` },
+      payload: failing.payload
     });
 
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ error: "USDZ conversion temporarily unavailable." });
-    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({
-      id: created.id,
-      usdzPath: null
-    });
-    expect(await readFile(path.join(uploadsRoot, glbFilename))).toEqual(source);
-    expect(await readdir(uploadsRoot)).toEqual([glbFilename]);
+    // No hologram record, no GLB, and no partial USDZ are left behind.
+    await expect(prisma.hologram.findMany()).resolves.toEqual([]);
+    expect(await readdir(uploadsRoot)).toEqual([]);
 
     await rm(path.join(converterControl, "fail"));
-    const retried = await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` });
-    expect(retried.statusCode).toBe(302);
-    const served = await app.inject({ method: "GET", url: retried.headers.location! });
+    const created = await uploadHologram(app, {
+      hologramName: "Conversion failure",
+      file: source,
+      quickLookEnabled: true
+    });
+    expect(created.usdzUrl).toBe(`/uploads/${usdzFilenameFor(path.basename(created.url))}`);
+    const served = await app.inject({ method: "GET", url: created.usdzUrl! });
     expect(served.statusCode).toBe(200);
     expect(served.rawPayload).toEqual(Buffer.concat([Buffer.from("fixture-usdz:"), source]));
-    expect((await readdir(uploadsRoot)).sort()).toEqual([glbFilename, usdzFilenameFor(glbFilename)].sort());
-  });
-
-  it("waits for in-flight conversion before deleting both representations", async () => {
-    const created = await uploadHologram(app, { hologramName: "Delete during conversion" });
-    await writeFile(path.join(converterControl, "hold"), "hold conversion before publication");
-    const conversion = app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` }).then((response) => response);
-    let deletion: ReturnType<typeof app.inject> | undefined;
-    try {
-      await expect.poll(async () => access(path.join(converterControl, "started")).then(() => true, () => false)).toBe(true);
-      deletion = app.inject({ method: "DELETE", url: `/api/holograms/${created.id}` });
-      const first = await Promise.race([
-        deletion.then(() => "deleted"),
-        delay(100).then(() => "conversion still running")
-      ]);
-      expect(first).toBe("conversion still running");
-    } finally {
-      await rm(path.join(converterControl, "hold"), { force: true });
-      await conversion;
-      if (deletion) await deletion;
-    }
-    expect((await conversion).statusCode).toBe(302);
-    expect((await deletion!).statusCode).toBe(200);
-    expect(await readdir(uploadsRoot)).toEqual([]);
-    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toBeNull();
-    expect((await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` })).statusCode).toBe(404);
+    expect((await readdir(uploadsRoot)).sort()).toEqual(
+      [path.basename(created.url), usdzFilenameFor(path.basename(created.url))].sort()
+    );
   });
 });

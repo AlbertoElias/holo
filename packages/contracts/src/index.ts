@@ -4,6 +4,7 @@ export const hologramDtoSchema = z.object({
   id: z.string(),
   url: z.string(),
   usdzUrl: z.string().nullable(),
+  quickLookEnabled: z.boolean(),
   createdAt: z.string().datetime(),
   sizeBytes: z.number().int().nonnegative(),
   filenameOriginal: z.string(),
