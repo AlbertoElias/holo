@@ -27,7 +27,8 @@ import { analyzeBodyReplay, formatBodyReport } from './lib/body-fidelity.mjs';
 //
 // BODY_REPLAY_FAULTS=1 instead breaks each behavior in turn (debug hook
 // __setBodyFaults) and requires the named metric to fail, proving the check
-// can catch it; BODY_REPLAY_FAULT=<name> runs one.
+// can catch it; BODY_REPLAY_FAULT=<name> runs one. BODY_REPLAY_CONCURRENCY sets
+// how many replays run at once (default 2).
 
 const STEP_MS = 1000 / 30;
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -71,7 +72,10 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
   wireXrConsoleErrors(page, consoleErrors, { label });
   await attachXrEnvironment(page, { mode: 'iwer' });
   // Load the environment the input was recorded in.
-  await page.goto(new URL(recording.meta?.query ?? '', baseUrl).href, { waitUntil: 'networkidle' });
+  // ?manualClock=1: the app never ticks on real time before the replay.
+  const pageUrl = new URL(recording.meta?.query ?? '', baseUrl);
+  pageUrl.searchParams.set('manualClock', '1');
+  await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__sampleBody', '__setBodyFaults', 'advanceTime']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   await page.evaluate((list) => {
@@ -171,12 +175,19 @@ try {
     if (videoFrameDir) {
       for (const fileName of fixtures) await mkdir(path.join(videoFrameDir, path.basename(fileName, '.json')), { recursive: true });
     }
-    const reports = [];
-    for (const fileName of fixtures) {
-      const report = await replay(fileName, { video: Boolean(videoFrameDir), screenshot: captureScreenshots });
-      reports.push(report);
-      console.log(formatBodyReport(report));
-    }
+    // Replays run two at a time (each page has its own frozen clock, so
+    // results do not change); videos one at a time.
+    const concurrency = videoFrameDir ? 1 : Math.max(1, Number(process.env.BODY_REPLAY_CONCURRENCY ?? 2));
+    const reports = new Array(fixtures.length);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(concurrency, fixtures.length) }, async () => {
+      while (next < fixtures.length) {
+        const index = next;
+        next += 1;
+        reports[index] = await replay(fixtures[index], { video: Boolean(videoFrameDir), screenshot: captureScreenshots });
+      }
+    }));
+    for (const report of reports) console.log(formatBodyReport(report));
     const failures = reports.flatMap((report) => report.failures.map((failure) => `${report.label}: ${failure}`));
     if (consoleErrors.length > 0) failures.push(`console errors:\n${consoleErrors.join('\n')}`);
     if (failures.length > 0) throw new Error(`Body replay fidelity failed:\n- ${failures.join('\n- ')}`);

@@ -53,7 +53,10 @@ async function replay(fileName) {
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
   await attachXrEnvironment(page, { mode: 'iwer' });
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  // ?manualClock=1: the app never ticks on real time before the replay.
+  const pageUrl = new URL(recording.meta?.query ?? '', baseUrl);
+  pageUrl.searchParams.set('manualClock', '1');
+  await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__sampleHands', '__setHandOverlay']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   // Released frames only deliver XR input unless a video needs them drawn.

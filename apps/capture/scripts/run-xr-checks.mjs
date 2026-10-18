@@ -19,6 +19,11 @@ const CHECKS = {
   'body-fixtures': 'scripts/generate-iwer-body-fixtures.mjs'
 };
 
+// Checks that legitimately run longer than the default hang guard.
+const CHECK_TIMEOUT_MS = {
+  body: 360000
+};
+
 const requested = process.argv.slice(2);
 const unknown = requested.filter((name) => !(name in CHECKS));
 if (requested.length === 0 || unknown.length > 0) {
@@ -77,7 +82,7 @@ try {
     const checkStartedAt = Date.now();
     await runCommand('node', [CHECKS[name]], {
       env: { ...process.env, BASE_URL: baseUrl, NODE_TLS_REJECT_UNAUTHORIZED: '0' },
-      timeoutMs: checkTimeoutMs
+      timeoutMs: process.env.XR_CHECK_TIMEOUT_MS ? checkTimeoutMs : CHECK_TIMEOUT_MS[name] ?? checkTimeoutMs
     });
     console.log(`[xr-checks] ${name} passed in ${((Date.now() - checkStartedAt) / 1000).toFixed(1)}s`);
   }

@@ -40,6 +40,11 @@ export function createApp(): AppRuntime {
   return {
     start: async () => {
       debugBridge.init();
+      // Automation: ?manualClock=1 never ticks on real time, so a replay starts
+      // from the same state on any host (see __setFrameStepping).
+      if (new URLSearchParams(window.location.search).get('manualClock') === '1') {
+        orchestrator.setManualClock(true, false);
+      }
       await orchestrator.init();
       orchestrator.setAnimationLoop((_time, frame) => {
         orchestrator.onRealtimeFrame(frame);

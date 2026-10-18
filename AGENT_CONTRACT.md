@@ -107,7 +107,7 @@ Supported env vars for smoke and XR scripts:
 - `E2E_API_PORT` (default `3001`; use a free port for isolated local integration)
 - `REUSE_DEV_SERVER` (`1` to reuse existing server)
 - `STARTUP_TIMEOUT_MS` (default `30000`)
-- `XR_CHECK_TIMEOUT_MS` (default `120000` per capture XR check; checks finish in seconds, so this only stops hangs)
+- `XR_CHECK_TIMEOUT_MS` (default `120000` per capture XR check, `360000` for `body`; this only stops hangs, and setting it applies to every check)
 - `XR_TEST_VIEWPORT` (default `320x180` for capture XR checks; set `1280x720` when inspecting the page live)
 - `E2E_CAPTURE_URL` (default `https://127.0.0.1:5175/` for the pipeline test's capture server)
 - `HAND_REPLAY_FIXTURES` (default `fixtures/input-recordings` for `test:xr:hands`)
@@ -115,6 +115,7 @@ Supported env vars for smoke and XR scripts:
 - `BODY_REPLAY_FIXTURES` (default `fixtures/body-recordings` for `test:xr:body`)
 - `BODY_REPLAY_VIDEO` (`1` renders a third-person video of each body replay with the tracked head path; needs `ffmpeg`)
 - `BODY_REPLAY_FAULTS` (`1` breaks each body behavior in turn and requires its metric to fail; `BODY_REPLAY_FAULT=<name>` runs one)
+- `BODY_REPLAY_CONCURRENCY` (default `2` body replays at once; results do not depend on it)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
