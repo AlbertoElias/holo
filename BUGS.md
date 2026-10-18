@@ -23,16 +23,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `pnpm --filter @holoim/capture run test:xr:hands`.
 - **Guard:** CI enforces today's values as ceilings until the fix lands.
 
-### B-007 — Viewer AR spams `GL_INVALID_OPERATION` during IWER sessions
-
-- **Area:** `apps/viewer-web` AR rendering
-- **Severity:** P3 — rendering correctness, unconfirmed on device
-- **Observed:** 2026-10-17
-- **Evidence:** every AR session in `test:xr:viewer` logs `glDrawElements: Active
-  draw buffers with missing fragment shader outputs` until Chromium suppresses it.
-- **Expected:** no WebGL errors during AR rendering.
-- **Reproduction:** run `pnpm run test:xr:viewer` and read the page console.
-
 ## Entry template
 
 ```md

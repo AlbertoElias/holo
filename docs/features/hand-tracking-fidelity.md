@@ -88,7 +88,8 @@ runs on a Quest, and the player replays into IWER with deterministic
 - B-005 (open): finger curl offsets of 30–66° and a constant 7.5 cm wrist offset.
 - B-006 (fixed): viewer AR never ran its placement; tests passed on a preview
   status, and the hit-test-disabled test never disabled hit-test.
-- B-007 (open): viewer AR logs `GL_INVALID_OPERATION` every frame in IWER.
+- B-007 (fixed): viewer AR logged `GL_INVALID_OPERATION` every frame in IWER
+  because three's depth-occlusion mesh drew with color writes on.
 
 ### Review
 

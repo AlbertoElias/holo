@@ -1,5 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { Material, Mesh, Object3D, WebXRManager } from "three";
 
 type DepthAwareWebXRManager = WebXRManager & {
@@ -7,6 +7,9 @@ type DepthAwareWebXRManager = WebXRManager & {
   hasDepthSensing?: () => boolean;
 };
 
+// three's occlusion shader writes only gl_FragDepth. Drawing it with color
+// writes on leaves the bound draw buffer without a fragment output, which
+// WebGL rejects with GL_INVALID_OPERATION, so it must stay depth-only.
 function configureOcclusionMaterial(material: Material): void {
   material.colorWrite = false;
   material.depthWrite = true;
@@ -18,6 +21,8 @@ function configureOcclusionObject(object: Object3D): void {
   object.renderOrder = -1000;
   object.traverse((child) => {
     const mesh = child as Mesh;
+    // The plane is a full-screen pass; its vertices ignore the camera.
+    mesh.frustumCulled = false;
     if (!("material" in mesh)) {
       return;
     }
@@ -34,48 +39,30 @@ function configureOcclusionObject(object: Object3D): void {
   });
 }
 
+// WebGLRenderer draws xr.getDepthSensingMesh() itself in every XR render once
+// the session grants GPU depth sensing, so the mesh is never added to the
+// scene; visibility is the only switch for whether occlusion runs.
 export function ARDepthOcclusion({ enabled }: { enabled: boolean }) {
-  const { gl, scene } = useThree();
-  const activeMeshRef = useRef<Object3D | null>(null);
+  const { gl } = useThree();
+  const configuredMeshRef = useRef<Object3D | null>(null);
 
   useFrame(() => {
     const xrManager = gl.xr as DepthAwareWebXRManager;
-    const hasDepthSensing = enabled
-      && xrManager.isPresenting
+    const hasDepthSensing = xrManager.isPresenting
       && typeof xrManager.hasDepthSensing === "function"
       && xrManager.hasDepthSensing();
-    const nextMesh = hasDepthSensing && typeof xrManager.getDepthSensingMesh === "function"
+    const mesh = hasDepthSensing && typeof xrManager.getDepthSensingMesh === "function"
       ? xrManager.getDepthSensingMesh() ?? null
       : null;
 
-    if (activeMeshRef.current === nextMesh) {
-      if (activeMeshRef.current) {
-        activeMeshRef.current.visible = enabled;
+    if (mesh) {
+      if (configuredMeshRef.current !== mesh) {
+        configureOcclusionObject(mesh);
+        configuredMeshRef.current = mesh;
       }
-      return;
-    }
-
-    if (activeMeshRef.current) {
-      scene.remove(activeMeshRef.current);
-      activeMeshRef.current = null;
-    }
-
-    if (nextMesh) {
-      configureOcclusionObject(nextMesh);
-      nextMesh.visible = enabled;
-      scene.add(nextMesh);
-      activeMeshRef.current = nextMesh;
+      mesh.visible = enabled;
     }
   });
-
-  useEffect(() => {
-    return () => {
-      if (activeMeshRef.current) {
-        scene.remove(activeMeshRef.current);
-        activeMeshRef.current = null;
-      }
-    };
-  }, [scene]);
 
   return null;
 }

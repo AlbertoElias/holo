@@ -86,3 +86,26 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   model-reported position in front of the viewer on a surface, and disable
   hit-test through IWER's supported features.
 
+### B-007 — Viewer AR spams `GL_INVALID_OPERATION` during IWER sessions
+
+- **Area:** `apps/viewer-web` AR depth occlusion
+- **Severity:** P3 — rendering correctness; on device the occlusion draw could be rejected
+- **Observed:** 2026-10-17 in `test:xr:viewer`
+- **Evidence:** `glDrawElements: Active draw buffers with missing fragment shader
+  outputs`, 56 times per AR session until Chromium suppressed it. A draw-call
+  trace (`getError()` after each draw) pinned it to three.js's WebXR
+  depth-sensing `ShaderMaterial`, drawn to the XR framebuffer with color writes on.
+- **Cause:** three's `WebGLRenderer` draws `xr.getDepthSensingMesh()` itself in
+  every XR render once the session grants GPU depth sensing. Its shader writes
+  only `gl_FragDepth`. `ARDepthOcclusion` made the mesh depth-only
+  (`colorWrite = false`) only when occlusion was enabled, and occlusion is
+  disabled under IWER, so three drew the unconfigured mesh and WebGL rejected
+  the draw. When enabled, the component also added the mesh to the scene,
+  which drew it a second time.
+- **Fix:** `ARDepthOcclusion` makes three's mesh depth-only whenever it exists,
+  uses `visible` as the on/off switch, and no longer adds it to the scene. The
+  viewer e2e fixture now fails on `GL_INVALID_OPERATION` console warnings; the
+  pre-fix component fails the placement test that way. With occlusion forced on
+  under IWER, the depth pass draws every frame with the color mask off and no
+  GL errors. `test:xr:viewer` (2 passed, 0 GL errors), `test:smoke:pipeline`, and
+  `verify:agent` pass. This is emulation evidence, not a headset run.

@@ -4,6 +4,10 @@ import { attachXrEnvironment } from "@holoim/tooling-testing/xr-env";
 
 const viewerTitlePattern = /HoloIM Viewer/i;
 const nonViewerBodyPattern = /Loading scene\.\.\./i;
+// Chromium reports rejected WebGL calls as console warnings; a rejected draw
+// renders nothing, so it fails tests like an error. Other GPU warnings, such
+// as software-rendering or performance notes, stay non-fatal.
+const webglInvalidOperationPattern = /GL_INVALID_OPERATION/;
 
 export const test = base.extend({
   page: async ({ page }, consumePage) => {
@@ -15,6 +19,8 @@ export const test = base.extend({
     page.on("console", (message) => {
       if (message.type() === "error") {
         runtimeErrors.push(`console.error: ${message.text()}`);
+      } else if (message.type() === "warning" && webglInvalidOperationPattern.test(message.text())) {
+        runtimeErrors.push(`console.warning: ${message.text()}`);
       }
     });
     await consumePage(page);
