@@ -23,6 +23,10 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [x] Adapt the XR avatar to the person's height, keeping its base grounded and
+  neutral head/hands aligned with tracked input. Delivered in
+  [`docs/features/archive/xr-height-adaptation.md`](docs/features/archive/xr-height-adaptation.md).
+
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
   intentionally uses local filesystem storage and SQLite.

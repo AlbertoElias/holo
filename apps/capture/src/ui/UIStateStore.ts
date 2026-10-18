@@ -33,7 +33,7 @@ export class UIStateStore {
     const controls =
       mode === 'desktop-third' || mode === 'desktop-first'
         ? 'Desktop: WASD + Space, hold C to crouch, V toggles 3rd/1st person, R to record. VR: crouch with headset height and use the floating panel to record.'
-        : 'VR: point at the floating panel and press select to record. R also works.';
+        : 'VR: hold a neutral standing or seated posture briefly on entry to fit your height. Re-enter VR to refit. Point at the floating panel and press select to record. R also works.';
     this.value = { ...this.value, mode, controls };
     this.emit();
   }

@@ -6,6 +6,7 @@ import { AvatarRig, type ArmIkChain, type HandFingerRetargetChain } from '../ava
 import { palmFrameQuaternion } from '../xr/palmFrame';
 import { CharacterMotor } from '../physics/CharacterMotor';
 import { CameraController } from '../camera/CameraController';
+import { XrHeightCalibration } from '../xr/XrHeightCalibration';
 import { XrSessionService } from '../xr/XrSessionService';
 import { HandFingerRetargeter } from '../xr/HandFingerRetargeter';
 import { InputController } from '../input/InputController';
@@ -146,6 +147,9 @@ export class AppOrchestrator implements System {
   private crouchPoseAmount = 0;
   private crouchTarget = 0;
   private crouchSource: CrouchSource = 'none';
+  private readonly heightCalibration = new XrHeightCalibration();
+  private heightReferenceRevision = -1;
+  private recordingSizeLocked = false;
   private vrStandingHeadY = 0;
   private vrStandingCaptured = false;
 
@@ -236,6 +240,7 @@ export class AppOrchestrator implements System {
           this.resetFingerQuatFallbackCalibration();
         }
         this.fingerRetargeter.resetRuntimeState();
+        this.heightCalibration.reset();
         this.resetVrStandingHeadBaseline();
         this.input.onXrEntered();
       }
@@ -295,6 +300,7 @@ export class AppOrchestrator implements System {
       this.camera.ensureDesktopRendererState();
     }
 
+    this.updateHeightAdaptation(ctx.deltaSec, isXrPresenting);
     this.updateCrouchState(ctx.deltaSec, isVrActive);
     const jumpQueued = this.input.consumeJumpQueued();
     this.characterMotor.update(ctx.deltaSec, this.camera.lookYaw, this.input.moveState, jumpQueued, {
@@ -327,11 +333,12 @@ export class AppOrchestrator implements System {
     });
     this.avatarRig.applyCrouchPose(this.crouchPoseAmount, characterSnapshot.horizontalSpeed);
 
+    this.camera.update(isVrActive, isXrPresenting, ctx.deltaSec);
+    this.bootstrap.cameraRig.updateMatrixWorld(true);
+
     if (isVrActive && this.characterMotor.hasSpawnResolved()) {
       this.updateVrHandEmbodiment();
     }
-
-    this.camera.update(isVrActive, isXrPresenting, ctx.deltaSec);
 
     const mode = this.resolveAppMode();
     this.uiStore.publishMode(mode);
@@ -385,7 +392,7 @@ export class AppOrchestrator implements System {
 
   private toggleRecording(): void {
     const state = this.uiStore.getState();
-    if (state.recordingState === 'exporting') return;
+    if (state.recordingState === 'exporting' || (this.recordingSizeLocked && state.recordingState === 'idle')) return;
 
     if (state.recordingState === 'recording') {
       this.stopRecordingAndExport();
@@ -395,6 +402,7 @@ export class AppOrchestrator implements System {
   }
 
   private async startRecording(): Promise<void> {
+    this.recordingSizeLocked = true;
     this.recorder.clear();
     this.recorder.setEnabled(true);
     await this.startInputRecording();
@@ -441,6 +449,8 @@ export class AppOrchestrator implements System {
     } catch (err) {
       console.error(err);
       this.uiStore.setRecordingState('idle', (err as Error).message);
+    } finally {
+      this.recordingSizeLocked = false;
     }
   }
 
@@ -527,6 +537,7 @@ export class AppOrchestrator implements System {
   }
 
   onRealtimeFrame(frame?: XRFrame): void {
+    this.xrService.captureFloorHeadPose(frame);
     if (frame && this.inputRecording) this.inputRecording.recordFrame(frame);
     const deltaSec = this.bootstrap.clock.getDelta();
     if (this.manualClock) {
@@ -679,6 +690,17 @@ export class AppOrchestrator implements System {
         left: handSnapshot('left', leftTracking, leftHand, leftSensor),
         right: handSnapshot('right', rightTracking, rightHand, rightSensor)
       },
+      heightAdaptation: {
+        eyeHeight: this.heightCalibration.eyeHeight ?? null,
+        scale: this.avatarRig.xrHeightScale,
+        avatarHeight: this.avatarRig.avatarHeight,
+        minY: this.avatarRig.avatarMinLocalY,
+        baseWorldY: this.avatarRig.avatarRoot.position.y + this.avatarRig.avatarMinLocalY,
+        eyeWorld: this.avatarRig.getEyeAnchorWorldPosition(new THREE.Vector3(), 0),
+        headWorld: this.xrService.getHeadWorldPosition(new THREE.Vector3()),
+        floorHead: this.xrService.getFloorHeadPosition() ?? null,
+        recordingSizeLocked: this.recordingSizeLocked
+      },
       mockVr: this.xrService.getMockSnapshot()
     };
 
@@ -805,6 +827,37 @@ export class AppOrchestrator implements System {
     this.resetFingerQuatFallbackCalibration();
   }
 
+  private updateHeightAdaptation(deltaSec: number, isPresenting: boolean): void {
+    const realVr = isPresenting && !this.xrService.getMockSnapshot().enabled;
+    const pose = realVr ? this.xrService.getFloorHeadPosition() : undefined;
+    const revision = this.xrService.getHeightReferenceRevision();
+    if (revision !== this.heightReferenceRevision) {
+      this.heightReferenceRevision = revision;
+      this.heightCalibration.interrupt();
+      this.camera.reanchorFloorOrigin();
+      this.resetVrStandingHeadBaseline();
+    }
+    if (!realVr) this.heightCalibration.reset();
+    let scaleRatio = 1;
+    if (!this.recordingSizeLocked) {
+      if (!realVr) scaleRatio = this.avatarRig.setXrEyeHeight(undefined);
+      else {
+        const height = this.heightCalibration.update(pose?.y, deltaSec);
+        if (height !== undefined) scaleRatio = this.avatarRig.setXrEyeHeight(height);
+      }
+    }
+    if (scaleRatio !== 1) {
+      for (const side of ['left', 'right'] as const) {
+        const chain = this.armIkChains[side];
+        if (chain) {
+          chain.upperLength *= scaleRatio;
+          chain.lowerLength *= scaleRatio;
+        }
+      }
+    }
+    this.camera.setFloorHeightMapped(realVr && this.heightCalibration.eyeHeight !== undefined, pose);
+  }
+
   private updateCrouchState(deltaSec: number, isVrActive: boolean): void {
     const desktopTarget = this.input.isCrouchHeld() ? 1 : 0;
     const vrCrouch = computeVrCrouchTarget(
@@ -903,7 +956,11 @@ export class AppOrchestrator implements System {
   private updateVrHandEmbodiment(): void {
     if (!this.vrHandRigReady || !this.avatarRig.avatar) return;
 
-    this.xrService.updateHandTrackingTargets((out) => this.avatarRig.getEyeAnchorWorldPosition(out, this.config.embodyOffset));
+    this.xrService.updateHandTrackingTargets((out) => (
+      this.xrService.isXrPresenting() && !this.xrService.getMockSnapshot().enabled && this.heightCalibration.eyeHeight !== undefined
+        ? this.xrService.getHeadWorldPosition(out)
+        : this.avatarRig.getEyeAnchorWorldPosition(out, this.config.embodyOffset)
+    ));
     this.ensureHandSensors();
 
     for (const side of ['left', 'right'] as const) {

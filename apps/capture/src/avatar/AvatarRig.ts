@@ -155,6 +155,32 @@ export class AvatarRig {
   terrainCeilingY = Infinity;
   worldTopRayY = 1000;
 
+  private readonly configuredScale = new THREE.Vector3(1, 1, 1);
+  private configuredHeight = 1.8;
+  private configuredMinY = 0;
+  private configuredEyeY = 1.65;
+  private neutralEyeAboveBase = 1.65;
+  xrHeightScale = 1;
+
+  /** Motor dimensions remain configured; compensate only the visual base. */
+  get heightVisualOffsetY(): number {
+    return this.configuredMinY - this.avatarMinLocalY;
+  }
+
+  setXrEyeHeight(eyeHeight: number | undefined): number {
+    if (!this.avatar) return 1;
+    const previous = this.xrHeightScale;
+    const factor = eyeHeight === undefined ? 1 : eyeHeight / this.neutralEyeAboveBase;
+    if (!Number.isFinite(factor) || factor <= 0 || factor === previous) return 1;
+    this.xrHeightScale = factor;
+    this.avatar.scale.copy(this.configuredScale).multiplyScalar(factor);
+    this.avatarHeight = this.configuredHeight * factor;
+    this.avatarMinLocalY = this.avatar.position.y + (this.configuredMinY - this.avatar.position.y) * factor;
+    this.avatarEyeLocalY = this.avatarMinLocalY + (this.configuredEyeY - this.configuredMinY) * factor;
+    this.avatar.updateWorldMatrix(true, true);
+    return factor / previous;
+  }
+
   private readonly firstPersonHiddenMeshes: THREE.Mesh[] = [];
   private readonly avatarMaterials: THREE.Material[] = [];
   private readonly avatarClipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
@@ -204,6 +230,15 @@ export class AvatarRig {
     this.applySceneScaleAgainstAvatar(config);
     this.refreshWorldBounds();
     this.resolveHeadAndEyes();
+    this.configuredScale.copy(avatar.scale);
+    this.configuredHeight = this.avatarHeight;
+    this.configuredMinY = this.avatarMinLocalY;
+    this.configuredEyeY = this.avatarEyeLocalY;
+    this.getEyeAnchorWorldPosition(this.tmpEyeWorld, 0);
+    this.neutralEyeAboveBase = this.tmpEyeWorld.y - this.avatarRoot.position.y - this.avatarMinLocalY;
+    if (!Number.isFinite(this.neutralEyeAboveBase) || this.neutralEyeAboveBase < this.avatarHeight * 0.3) {
+      this.neutralEyeAboveBase = this.avatarHeight * 0.92;
+    }
     this.disableAvatarFrustumCulling(avatar);
     this.classifyFirstPersonHeadMeshes(avatar);
     this.collectAvatarMaterials(avatar);
@@ -240,7 +275,7 @@ export class AvatarRig {
   }
 
   syncAvatarPoseFromCharacter(position: THREE.Vector3, lookYaw: number, avatarVisualOffsetY: number, avatarForwardOffset: number): void {
-    this.avatarRoot.position.set(position.x, position.y + avatarVisualOffsetY, position.z);
+    this.avatarRoot.position.set(position.x, position.y + avatarVisualOffsetY + this.heightVisualOffsetY, position.z);
     this.avatarRoot.rotation.y = lookYaw + avatarForwardOffset;
   }
 
@@ -274,8 +309,11 @@ export class AvatarRig {
     const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight;
 
     this.crouchHips.bone.position.copy(this.crouchHips.bindPosition);
-    this.crouchHips.bone.position.y -= this.avatarHeight * 0.11 * hipsAmount;
-    this.crouchHips.bone.position.z -= this.avatarHeight * 0.045 * hipsAmount;
+    // Bone translations use parent-local units; avatarHeight is world meters.
+    const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
+    const heightInParent = this.avatarHeight / Math.max(1e-8, Math.abs(parentScale));
+    this.crouchHips.bone.position.y -= heightInParent * 0.11 * hipsAmount;
+    this.crouchHips.bone.position.z -= heightInParent * 0.045 * hipsAmount;
     this.applyCrouchBoneRotation(this.crouchHips, hipsAmount);
     this.crouchHips.bone.updateMatrixWorld(true);
 
@@ -754,7 +792,8 @@ export class AvatarRig {
     }
 
     if (requiredLift <= 1e-5) return;
-    this.crouchHips.bone.position.y += Math.min(requiredLift, maxLift);
+    const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
+    this.crouchHips.bone.position.y += Math.min(requiredLift, maxLift) / Math.max(1e-8, Math.abs(parentScale));
     this.crouchHips.bone.updateMatrixWorld(true);
   }
 
