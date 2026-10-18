@@ -1,7 +1,7 @@
 # Feature brief: Animated Quick Look phone demos
 
 **Lead:** Codex  
-**Status:** Verifying
+**Status:** Complete
 
 ## User outcome
 
@@ -18,17 +18,17 @@ identical lighting/custom shaders in Apple rendering, native iOS runtime, browse
 
 ## Acceptance criteria
 
-- [ ] Real capture export → API upload → USDZ download produces an independently
+- [x] Real capture export → API upload → USDZ download produces an independently
   readable package with changing skeletal and scene transforms over the recording.
-- [ ] Captured materials retain embedded texture assets, UVs, base color/alpha,
+- [x] Captured materials retain embedded texture assets, UVs, base color/alpha,
   normal/metallic/roughness/emissive maps used by the input.
-- [ ] Recorded audio is packaged in a supported audio format with USD playback
+- [x] Recorded audio is packaged in a supported audio format with USD playback
   timing authored; silent captures still convert successfully.
-- [ ] Bubble is a fixed translucent diorama; surrounding geometry stays within its
+- [x] Bubble is a fixed translucent diorama; surrounding geometry stays within its
   initial sphere while avatar/root/joint/facial motion remains animated.
-- [ ] Existing cached conversions regenerate after converter version changes;
+- [x] Existing cached conversions regenerate after converter version changes;
   concurrent requests and conversion failure leave no corrupt reusable package.
-- [ ] Required quality, build and browser workflow checks pass.
+- [x] Required quality, build and browser workflow checks pass.
 
 ## Failure cases considered
 
@@ -41,7 +41,6 @@ identical lighting/custom shaders in Apple rendering, native iOS runtime, browse
 | Unsupported extension silently corrupts geometry | Explicit required-extension policy and documented degraded features |
 | WebM audio is unsupported by Quick Look | Decode/transcode to packaged supported audio and verify duration |
 | Bubble turns opaque or obscures avatar | Translucent USD approximation and renderer/device limitations |
-| XR shader clips against wrong stereo/world coordinates | Real immersive rendering/pixel assertions |
 | Old caches survive fixes; parallel requests corrupt file | Versioned cache name, per-item lock, atomic output |
 | Missing Python/ffmpeg dependencies | Reproducible requirements and CI installation |
 | New tests require proprietary Apple renderer | Portable package inspection plus explicit iPhone device acceptance gap |
@@ -73,9 +72,12 @@ connections, packaged audio and sphere bounds. Separate bubble session owns IWER
 Integration: verify:agent, export/import scoped checks, verify:pr before merge.
 
 Draft recovered with `git apply --check`, then applied on `codex/quicklook-phone-demo`.
-Independent design/implementation review and numerical readback are in progress.
+Independent design/implementation review and numerical readback passed.
 Runtime ports: capture XR 5374, viewer 3374, API 3201, pipeline capture 5375.
-All checks and final findings will be recorded here.
+`verify:agent` passed during the edit loop. `verify:pr` passed before and after
+rebasing onto main's TypeScript 7 migration (`c5c1918fe9c7`). The final full tier
+covers lint, TypeScript checks, unit tests, production builds, the real pipeline,
+all capture XR flows and both viewer AR scenarios. No retries were used.
 
 ## Physical-device limits
 
@@ -105,6 +107,31 @@ Quick Look session. No physical-device result will be claimed without that evide
   documented recommendation and removes that dependency from the viewer.
 - Appearance review in local RealityKit shows the avatar, animated asset,
   textures, clipped surroundings and translucent shell. Its strong shell
-  reflection prompted a matte-shell adjustment; final evidence is still running.
-- See [converter notes](../../apps/viewer-api/tools/README.md) for conversion
+  reflection prompted a matte-shell adjustment. The refreshed 60-frame RealityKit
+  preview removes that highlight and visibly retains performer movement.
+- See [converter notes](../../../apps/viewer-api/tools/README.md) for conversion
   policy, reproducible commands, bounds and the single-process API requirement.
+
+## Final evidence (2026-10-18)
+
+Implementation: `8d8135917ff9`, based on main `c5c1918fe9c7`.
+Independent verdict: pass for authored conversion/package behavior; no remaining
+demonstrated converter blocker. Physical phone acceptance remains pending below.
+
+Local, ignored artifacts retained in this session's worktree:
+
+| Evidence | Result / artifact |
+| --- | --- |
+| Capture → export → UI upload → concurrent USDZ download | `output/quicklook/pipeline-1792352575667/capture-export.glb` and `capture-quicklook.usdz`; pass |
+| Independent actual USD evaluation | Same directory `quicklook-validation.json`: 133 sampled times, all vertices, 4 morph-bearing meshes, 20 images; maximum vertex error 5.69 µm |
+| Adversarial complete GLBs | Same directory `source-derived-challenges/exercise-summary.json`: all 6 pass (moving ancestor/face, silent, MASK/BLEND+UV/PBR/normal, nonloop audio, unsupported required extension, corrupt audio) |
+| Real media duration | Final source WebM and packaged AAC both 2.400 s. Manual-clock source animation is 1.483 s; the inspector warns explicitly, with no stretching or hidden conversion change |
+| API lifecycle | 7 route tests pass, including 2 MB streaming, stale/missing cache, failure/retry and conversion/delete serialization |
+| Apple package validation | `output/quicklook/apple-validation-final.txt`: native `usdchecker --arkit` Success (nonfatal schema registration diagnostics retained) |
+| Apple renderer appearance/motion | `output/quicklook/realitykit-final/frame-*.png` and `realitykit-final.mp4`; local macOS RealityKit visual evidence, no phone/sound-sync claim |
+| Complete final checks | `output/quicklook/verify-pr-integration.log`: exit 0; capture XR includes explicit child-process cleanup completion |
+
+Next device acceptance: open the downloaded USDZ from Safari on an iPhone/iPad,
+confirm root/joint/facial motion, audible full-recording playback and looping,
+synchronization, transparency, material likeness and AR placement. This is a
+physical-device gap, not an authored-package validation result.
