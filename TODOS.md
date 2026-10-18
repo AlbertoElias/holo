@@ -61,12 +61,13 @@ it from the item below instead of duplicating its status here.
 - [ ] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.
 - [x] Migrate the capture TypeScript config to the shared config chain and run
-  every workspace `typecheck` on `tsgo`. The stated blocker was stale: `tsgo`
-  resolves package `extends`; the real fixes were dropping `baseUrl` (removed in
-  TypeScript 7) and declaring `@holoim/config-ts` in capture. Delivered in
-  [`docs/features/tsgo-typescript7-migration.md`](docs/features/tsgo-typescript7-migration.md).
-  Follow-up there: bump the catalog to stable `typescript@^7.0.2` once
-  `typescript-eslint` supports the TypeScript 7 API.
+  the whole workspace on stable TypeScript 7. The stated blocker was stale:
+  `tsgo` resolves package `extends`; the real fixes were dropping `baseUrl`
+  (removed in TypeScript 7) and declaring `@holoim/config-ts` in capture.
+  Delivered in
+  [`docs/features/tsgo-typescript7-migration.md`](docs/features/tsgo-typescript7-migration.md):
+  catalog `typescript@^7.0.2` everywhere, `typescript-eslint` 8.71.2 bridged
+  on the `@typescript/typescript6` sidecar until it supports the TS7 API.
 - [ ] Decide whether the capture app needs a user-visible AR recenter control for
   device-specific placement recovery.
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;

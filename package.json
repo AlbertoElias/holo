@@ -15,7 +15,7 @@
     "install:all": "pnpm install",
     "lint:tooling": "eslint \"scripts/**/*.ts\"",
     "lint:all": "pnpm run lint:tooling && pnpm -r --if-present lint",
-    "typecheck:tooling": "tsgo -p tsconfig.scripts.json --noEmit",
+    "typecheck:tooling": "tsc -p tsconfig.scripts.json --noEmit",
     "typecheck:all": "pnpm run typecheck:tooling && pnpm -r --if-present typecheck",
     "check:all": "pnpm run lint:all && pnpm run typecheck:all",
     "build:all": "pnpm -r --if-present build",
@@ -58,14 +58,14 @@
   },
   "packageManager": "pnpm@10.29.3",
   "devDependencies": {
-    "@types/node": "^22.13.0",
-    "@typescript/native-preview": "latest",
     "@holoim/config-eslint": "workspace:*",
     "@holoim/tooling-scripts": "workspace:*",
     "@holoim/tooling-testing": "workspace:*",
+    "@types/node": "^22.13.0",
     "concurrently": "^9.2.1",
     "eslint": "catalog:",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "typescript": "catalog:"
   },
   "pnpm": {
     "overrides": {

@@ -14,11 +14,13 @@ of the monorepo and typechecking is materially faster.
 
 **Included:** Remove `baseUrl` from `tsconfig.base.json`; point
 `apps/capture` at `@holoim/config-ts/web.json`; migrate every `typecheck`
-script to the native compiler; update `TODOS.md` items for contract tests
-and the XR check-script port per the agreed rescoping.
+script to the native compiler; bump the catalog to `typescript@^7.0.2`
+with `typescript-eslint` updated and bridged on the TS6 sidecar; update
+`TODOS.md` items for contract tests and the XR check-script port per the
+agreed rescoping.
 **Excluded:** The UI/interaction redesign itself (its own brief); porting
-the `.mjs` XR check scripts (folded into the redesign); bumping
-`typescript-eslint` or Vite beyond what the compiler migration requires.
+the `.mjs` XR check scripts (folded into the redesign); bumping Vite or
+ESLint majors beyond what the compiler migration requires.
 
 ## Acceptance criteria
 
@@ -55,26 +57,32 @@ the `.mjs` XR check scripts (folded into the redesign); bumping
 
 ## Design decision
 
-Two-step migration. Step 1 (this brief): remove `baseUrl`, adopt the
-shared chain everywhere, and run all `typecheck` scripts on
-`@typescript/native-preview` (`tsgo`), which is already a workspace
-dependency and reports version `7.0.0-dev.20260707.2`. Step 2 (follow-up,
-only when `typescript-eslint` supports it): bump the catalog `typescript`
-to `^7.0.2` — the stable native release shipped 2026-07-08, whose binary
-is again named `tsc` — and delete the preview package. Keeping step 2
-separate avoids coupling a compiler swap to an ESLint ecosystem upgrade.
-`viewer-api`'s emitting `build` stays on classic `tsc` for the same reason:
-typecheck-first, emit later, each proven by its own run.
+Two-step migration, both steps delivered. Step 1: remove `baseUrl`,
+adopt the shared chain everywhere, and run all `typecheck` scripts on
+`@typescript/native-preview` (`tsgo` `7.0.0-dev.20260707.2`). Step 2:
+bump the catalog `typescript` to `^7.0.2` — the stable native release
+shipped 2026-07-08, whose binary is again named `tsc` — delete the
+preview package, and update `typescript-eslint` to `^8.71.2`.
 
-Findings from the Step 1 implementation pass:
+Findings from the implementation passes:
 
 - Yes, there is a stable native TypeScript: `typescript@7.0.2` (GA
-  2026-07-08) *is* the Go compiler, binary named `tsc`. Step 2 is blocked
-  not on the compiler but on tooling: TypeScript 7 does not yet expose a
-  stable programmatic API, and this repo pins `typescript-eslint` 8.26.1,
-  which embeds the classic compiler. Lint therefore stays on TypeScript
-  5.7 while `typecheck` scripts run `tsgo`; forcing the catalog bump now
-  would break `lint`, not `typecheck`.
+  2026-07-08) *is* the Go compiler, binary named `tsc`. The compiler was
+  never the blocker; the lint toolchain was. Even the latest
+  `typescript-eslint` (8.71.2) declares peer `typescript >=4.8.4 <6.1.0`
+  because TypeScript 7 does not yet expose a stable programmatic API.
+  The supported bridge is Microsoft's sidecar: `packages/config-eslint`
+  now depends on `typescript: npm:@typescript/typescript6@^6.0.2`, so
+  pnpm resolves `typescript-eslint`'s peer to TypeScript 6.0.2 (verified
+  in the lockfile) while every compiler invocation runs 7.0.2. Capture's
+  redundant direct `typescript-eslint` dependency was removed for the
+  same reason — it uses `@holoim/config-eslint`'s instance. When
+  `typescript-eslint` supports TypeScript 7 natively, delete the alias.
+- TS7 requires an explicit `rootDir` when the common source directory
+  escapes it (`TS5011`): `viewer-api`'s emitting config now sets
+  `rootDir: ../..`. Its `dist` output layout is therefore
+  workspace-relative; no script, Dockerfile, or workflow consumes that
+  `dist` (the API runs via `tsx` from source), so nothing else changes.
 - The original `TODOS.md` diagnosis was half-stale: `tsgo` resolves
   package `extends` fine. The real blockers were (a) `baseUrl`, removed in
   TS7 (`TS5102`), fixed by dropping it and making `paths` targets
@@ -93,7 +101,7 @@ Findings from the Step 1 implementation pass:
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Shared chain resolves, no drift | `pnpm run verify:agent` | Exit 0 (unsandboxed, `XDG_CACHE_HOME=/tmp/prisma-cache`); `doctor` + `check:all` also exit 0 |
-| Native typecheck everywhere | `pnpm run check:all` scoped per package | All 9 `typecheck` scripts report `tsgo ... Done` |
+| Native typecheck everywhere | `pnpm run check:all` scoped per package | All 9 `typecheck` scripts report `tsc ... Done` on TypeScript 7.0.2; lint passes on `typescript-eslint` 8.71.2 with the TS6 sidecar |
 | No behavior regression | Existing unit tests via `verify:agent` | `verify:agent` and `test:unit:all` exit 0; `build:all` exit 0 |
 
 ## Physical-device limits

@@ -12,6 +12,7 @@
     "@eslint/js": "catalog:",
     "eslint-plugin-react-hooks": "^5.1.0",
     "globals": "catalog:",
-    "typescript-eslint": "catalog:"
+    "typescript-eslint": "catalog:",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
 }
