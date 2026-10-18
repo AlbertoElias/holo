@@ -23,6 +23,11 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [x] Add realistic walking, crouching, and jumping animations in both XR and
+  desktop 2D, with natural transitions and movement that adapts to walls,
+  inclines, and other environment geometry. Delivered in
+  [avatar-locomotion.md](docs/features/archive/avatar-locomotion.md).
+
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
   intentionally uses local filesystem storage and SQLite.

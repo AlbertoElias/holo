@@ -265,8 +265,19 @@ try {
   const relaxedIndexTip = tipOf(relaxedSnapshot.tracking.right, 'index');
   const recoveredIndexTip = tipOf(dropoutRecoveredSnapshot.tracking.right, 'index');
   assert(relaxedIndexTip && recoveredIndexTip, 'Dropout recovery fingertip metrics missing.');
-  const tipRecoveryError = distance(relaxedIndexTip, recoveredIndexTip);
-  assert(tipRecoveryError < 0.002, `Dropout recovery left the index fingertip ${(tipRecoveryError * 1000).toFixed(1)} mm from the live pose.`);
+  const recoveredWrist = boneOf(dropoutRecoveredSnapshot.tracking.right);
+  assert(relaxedRightBone && recoveredWrist, 'Dropout recovery wrist metrics missing.');
+  // The motor can settle on sloped terrain between samples. Finger recovery is
+  // measured relative to its wrist, preserving the same 2 mm chain tolerance.
+  const relativeTip = (tip, wrist) => ({ x: tip.x - wrist.x, y: tip.y - wrist.y, z: tip.z - wrist.z });
+  const tipRecoveryError = distance(relativeTip(relaxedIndexTip, relaxedRightBone), relativeTip(recoveredIndexTip, recoveredWrist));
+  const wristTargetError = distance(
+    relativeTip(relaxedRightBone, relaxedSnapshot.tracking.right.targetPosition),
+    relativeTip(recoveredWrist, dropoutRecoveredSnapshot.tracking.right.targetPosition)
+  );
+  console.log(`[mock-vr] dropout tip wrist-relative=${(tipRecoveryError * 1000).toFixed(2)}mm world=${(distance(relaxedIndexTip, recoveredIndexTip) * 1000).toFixed(2)}mm wrist-target-residual-change=${(wristTargetError * 1000).toFixed(2)}mm`);
+  assert(wristTargetError < 0.002, `Dropout recovery changed wrist-to-target residual by ${(wristTargetError * 1000).toFixed(1)} mm.`);
+  assert(tipRecoveryError < 0.002, `Dropout recovery left the wrist-relative index fingertip ${(tipRecoveryError * 1000).toFixed(1)} mm from the live pose.`);
 
   const dropoutQuality = retargetQualityOf(dropoutHoldSnapshot.tracking.right);
   assert(dropoutQuality, 'Dropout retarget quality metrics missing.');

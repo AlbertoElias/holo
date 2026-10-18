@@ -277,7 +277,9 @@ async function measureMove(page, yawRad, yawId, inputName) {
   timeline.push(summarizeState(engaged));
   assert(engaged.input?.[inputName] === true, `${label}: mock input did not engage (state ${JSON.stringify(engaged.input)}).`);
 
-  let observedWalk = false;
+  // The first input step is a real sample too: a direction may walk off a
+  // ledge before the later samples, which must then correctly report falling.
+  let observedWalk = engaged.locomotion?.state === 'walk' && (engaged.locomotion?.horizontalSpeed ?? 0) >= 0.05;
   for (let sample = 0; sample < 4; sample += 1) {
     const state = await step(page, { ms: 110 });
     timeline.push(summarizeState(state));

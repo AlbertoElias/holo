@@ -162,6 +162,7 @@ export class AvatarRig {
   private crouchRigReady = false;
   private crouchWarningLogged = false;
   private lastCrouchAmount = -1;
+  private readonly preCrouchPose = new Map<THREE.Bone, { quaternion: THREE.Quaternion; position: THREE.Vector3 }>();
   private crouchHips: CrouchHipsBinding | undefined;
   private readonly crouchSpine: CrouchBoneBinding[] = [];
   private readonly crouchUpperLegs: CrouchBoneBinding[] = [];
@@ -252,6 +253,15 @@ export class AvatarRig {
     this.setDesktopFirstPersonAvatarClip(mode === 'desktop');
   }
 
+  // Unkeyed bones (especially VR idle) must not retain last frame's offsets.
+  restoreCrouchPose(): void {
+    for (const [bone, pose] of this.preCrouchPose) {
+      bone.quaternion.copy(pose.quaternion);
+      bone.position.copy(pose.position);
+    }
+    this.preCrouchPose.clear();
+  }
+
   applyCrouchPose(amount: number, horizontalSpeed = 0): void {
     const clampedAmount = clamp(amount, 0, CROUCH_MAX_POSE_AMOUNT);
     if (!this.crouchRigReady || !this.crouchHips) return;
@@ -273,7 +283,11 @@ export class AvatarRig {
     const spineAmount = Math.pow(clampedAmount, 0.78);
     const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight;
 
-    this.crouchHips.bone.position.copy(this.crouchHips.bindPosition);
+    for (const binding of [this.crouchHips, ...this.crouchSpine, ...this.crouchUpperLegs, ...this.crouchLowerLegs, ...this.crouchFeet]) {
+      this.preCrouchPose.set(binding.bone, {
+        quaternion: binding.bone.quaternion.clone(), position: binding.bone.position.clone()
+      });
+    }
     this.crouchHips.bone.position.y -= this.avatarHeight * 0.11 * hipsAmount;
     this.crouchHips.bone.position.z -= this.avatarHeight * 0.045 * hipsAmount;
     this.applyCrouchBoneRotation(this.crouchHips, hipsAmount);
@@ -720,11 +734,10 @@ export class AvatarRig {
 
   private applyCrouchBoneRotation(binding: CrouchBoneBinding, crouchAmount: number): void {
     if (Math.abs(crouchAmount) <= CROUCH_POSE_EPSILON) {
-      binding.bone.quaternion.copy(binding.bindQuaternion);
       return;
     }
     this.tmpCrouchQuat.setFromAxisAngle(this.localXAxis, binding.fullPitchRad * crouchAmount);
-    binding.bone.quaternion.copy(binding.bindQuaternion).multiply(this.tmpCrouchQuat).normalize();
+    binding.bone.quaternion.multiply(this.tmpCrouchQuat).normalize();
   }
 
   private applyCrouchFootGroundCompensation(crouchAmount: number, walkBlend: number): void {
