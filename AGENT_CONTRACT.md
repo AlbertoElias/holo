@@ -112,6 +112,9 @@ Supported env vars for smoke and XR scripts:
 - `E2E_CAPTURE_URL` (default `https://127.0.0.1:5175/` for the pipeline test's capture server)
 - `HAND_REPLAY_FIXTURES` (default `fixtures/input-recordings` for `test:xr:hands`)
 - `HAND_REPLAY_VIDEO` (`1` renders a spectator video of each hand replay; needs `ffmpeg` to encode)
+- `BODY_REPLAY_FIXTURES` (default `fixtures/body-recordings` for `test:xr:body`)
+- `BODY_REPLAY_VIDEO` (`1` renders a third-person video of each body replay with the tracked head path; needs `ffmpeg`)
+- `BODY_REPLAY_FAULTS` (`1` breaks each body behavior in turn and requires its metric to fail; `BODY_REPLAY_FAULT=<name>` runs one)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
