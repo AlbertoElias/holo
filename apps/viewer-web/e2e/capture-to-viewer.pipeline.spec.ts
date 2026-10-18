@@ -142,9 +142,19 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   await captureEvidence(page, testInfo, "uploaded-capture-rendered-in-feed");
   expect(Number(await card.getAttribute("data-model-animations"))).toBeGreaterThan(0);
 
-  // Both clients race the initial on-demand conversion. They must receive the
-  // same complete package, never a half-written archive or a failed redirect.
+  // Conversion now runs asynchronously in the API's embedded worker. Poll
+  // the preview endpoint until it redirects to the published package; both
+  // clients must then receive the same complete bytes.
   const quickLookUrl = `/api/holograms/${uploaded.id}/usdz`;
+  await expect
+    .poll(
+      async () => {
+        const probe = await page.request.get(quickLookUrl, { timeout: 30_000 });
+        return probe.status();
+      },
+      { timeout: 120_000, intervals: [2_000] }
+    )
+    .toBe(200);
   const responses = await Promise.all([
     page.request.get(quickLookUrl, { timeout: 120_000 }),
     page.request.get(quickLookUrl, { timeout: 120_000 })
