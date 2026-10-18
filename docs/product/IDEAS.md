@@ -45,6 +45,10 @@ PRD only after it describes one bounded user outcome and has a reason to exist.
 | IDEA-038 | Ghost frames: copies of the avatar at key poses along its path, walkable like stop-motion | Hologram-native annotation | Idea | How are key poses chosen without authoring effort? |
 | IDEA-039 | Author's-eye view: briefly see through the author's eyes, or a cone showing what they looked at | Hologram-native annotation | Idea | Does a borrowed first-person view orient or disorient on each device? |
 | IDEA-040 | Follow-along check: the viewer copies a movement and drift from the author's hands is highlighted | Hologram-native annotation | Idea | Is comparison feedback useful outside training contexts? |
+| IDEA-041 | Attention-following camera on flat screens: the view moves to what the author points at, sizes, or walks toward, and re-frames for any aspect ratio | 2D hologram viewing | Idea | How much automatic camera motion feels guided rather than seasick? |
+| IDEA-042 | Tilt to look around: phone orientation adds parallax so the card behaves like a window into the bubble | 2D hologram viewing | Idea | Is the effect worth iOS's motion-permission prompt? |
+| IDEA-043 | Freeze to orbit: pausing stops time and dragging moves around the frozen moment | 2D hologram viewing | Idea | Do viewers discover dragging without a hint? |
+| IDEA-044 | Object-indexed timeline: tap a thing in the scene to jump to every moment the author pointed at it | 2D hologram viewing | Idea | What happens when pointing data is sparse or ambiguous? |
 
 ## Promotion Rule
 
