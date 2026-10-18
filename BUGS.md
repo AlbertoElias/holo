@@ -7,7 +7,16 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-No verified open bugs.
+### B-008 — Mobile Upload button covers the hologram title
+
+- **Area:** `apps/viewer-web` feed layout
+- **Severity:** P2
+- **Observed:** 2026-10-18
+- **Evidence:** At a 390×844 viewport the collapsed Upload button sits on top of
+  the card's title pill; only "By Albe…" and the time stay visible.
+- **Expected:** The hologram name and author are fully readable on phones.
+- **Reproduction:** `pnpm run dev:viewer`, upload any GLB, open
+  `https://localhost:3174/` at 390×844.
 
 ## Entry template
 
