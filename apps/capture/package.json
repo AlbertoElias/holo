@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:unit",
     "test:unit": "vitest run",
-    "test:xr": "node scripts/run-xr-checks.mjs mock-vr locomotion hands",
+    "test:xr": "node scripts/run-xr-checks.mjs mock-vr locomotion terrain hands",
     "test:xr:mock": "node scripts/run-xr-checks.mjs mock-vr",
     "test:xr:flows": "node scripts/run-xr-checks.mjs locomotion",
     "test:xr:hands": "node scripts/run-xr-checks.mjs hands",

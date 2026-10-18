@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| Natural locomotion and terrain response | Complete | [archive/avatar-locomotion.md](archive/avatar-locomotion.md) |
 | Hand-tracking fidelity from real headset input | Verifying | [hand-tracking-fidelity.md](hand-tracking-fidelity.md) |
 | Migrate workspace typechecking to tsgo / TypeScript 7 | Complete | [archive/tsgo-typescript7-migration.md](archive/tsgo-typescript7-migration.md) |
 | Deterministic, lean CI | Complete | [archive/deterministic-lean-ci.md](archive/deterministic-lean-ci.md) |

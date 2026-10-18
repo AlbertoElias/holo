@@ -23,10 +23,10 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
-- [ ] Add realistic walking, crouching, and jumping animations in both XR and
+- [x] Add realistic walking, crouching, and jumping animations in both XR and
   desktop 2D, with natural transitions and movement that adapts to walls,
-  inclines, and other environment geometry. Start in a dedicated session;
-  coordinate avatar transforms with the XR height-adaptation work.
+  inclines, and other environment geometry. Delivered in
+  [avatar-locomotion.md](docs/features/archive/avatar-locomotion.md).
 - [ ] Adapt the XR avatar to the person's height, keeping feet grounded and
   head/hands aligned with tracked input. Start in a dedicated session;
   coordinate avatar scale and calibration with the locomotion-animation work.

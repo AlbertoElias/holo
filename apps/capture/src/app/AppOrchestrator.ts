@@ -10,6 +10,7 @@ import { XrSessionService } from '../xr/XrSessionService';
 import { HandFingerRetargeter } from '../xr/HandFingerRetargeter';
 import { InputController } from '../input/InputController';
 import { ArmIkSolver } from '../ik/ArmIkSolver';
+import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import { UIStateStore } from '../ui/UIStateStore';
 import { VrHud } from '../ui/VrHud';
@@ -73,6 +74,7 @@ export class AppOrchestrator implements System {
   private readonly bootstrap = createSceneBootstrap();
   private readonly avatarRig = new AvatarRig(this.bootstrap.scene, this.bootstrap.worldGroup, this.bootstrap.renderer);
   private readonly characterMotor = new CharacterMotor();
+  private readonly terrainLegs = new TerrainLegSolver();
   private readonly camera = new CameraController({
     renderer: this.bootstrap.renderer,
     xrCamera: this.bootstrap.xrCamera,
@@ -202,6 +204,7 @@ export class AppOrchestrator implements System {
 
       this.avatarRig.applyLoadedModels(sceneGltf.scene, avatarGltf.scene, this.config);
 
+      this.terrainLegs.attach(this.avatarRig);
       this.initializeVrHandRig();
       const spawned = await this.characterMotor.init(this.avatarRig);
       this.ensureHandSensors();
@@ -263,7 +266,7 @@ export class AppOrchestrator implements System {
         this.input.onXrExited();
       }
       this.camera.onXrExited();
-      this.avatarRig.applyCrouchPose(0);
+      // Normal frame restoration removes crouch before the mixer runs.
     }
 
     const isXrPresenting = this.xrService.isXrPresenting();
@@ -295,6 +298,8 @@ export class AppOrchestrator implements System {
       this.camera.ensureDesktopRendererState();
     }
 
+    this.terrainLegs.restore();
+    this.avatarRig.restoreCrouchPose();
     this.updateCrouchState(ctx.deltaSec, isVrActive);
     const jumpQueued = this.input.consumeJumpQueued();
     this.characterMotor.update(ctx.deltaSec, this.camera.lookYaw, this.input.moveState, jumpQueued, {
@@ -323,9 +328,11 @@ export class AppOrchestrator implements System {
       horizontalSpeed: characterSnapshot.horizontalSpeed,
       targetHorizontalSpeed: characterSnapshot.targetHorizontalSpeed,
       moveIntent: this.input.moveState.forward || this.input.moveState.back || this.input.moveState.left || this.input.moveState.right,
-      vrMode: isVrActive
+      vrMode: isVrActive,
+      referenceSpeed: this.avatarRig.avatarHeight * 1.8
     });
     this.avatarRig.applyCrouchPose(this.crouchPoseAmount, characterSnapshot.horizontalSpeed);
+    this.terrainLegs.update(this.avatarRig, characterSnapshot.grounded, ctx.deltaSec);
 
     if (isVrActive && this.characterMotor.hasSpawnResolved()) {
       this.updateVrHandEmbodiment();
@@ -667,7 +674,9 @@ export class AppOrchestrator implements System {
         horizontalSpeed: character.horizontalSpeed,
         targetHorizontalSpeed: character.targetHorizontalSpeed,
         timeScale: this.animator.getCurrentTimeScale(),
-        activeProfile: this.animator.getActiveProfile()
+        activeProfile: this.animator.getActiveProfile(),
+        legs: this.terrainLegs.getSnapshot(),
+        clip: this.animator.getClipSnapshot()
       },
       crouch: {
         amount: this.crouchAmount,

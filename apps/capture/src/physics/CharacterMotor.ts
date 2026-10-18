@@ -127,11 +127,12 @@ export class CharacterMotor {
       this.velocityY = groundedStickVelocity;
     }
 
+    // Tracked hand proximity sensors are observations, not solid obstacles.
     this.characterController.computeColliderMovement(this.characterCollider, {
       x: this.tmpMove.x,
       y: this.velocityY * deltaSec,
       z: this.tmpMove.z
-    });
+    }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
     const corrected = this.characterController.computedMovement();
     if (!Number.isFinite(corrected.x) || !Number.isFinite(corrected.y) || !Number.isFinite(corrected.z)) {
       this.horizontalSpeed = 0;
@@ -374,7 +375,7 @@ export class CharacterMotor {
         x: dx * step,
         y: 0,
         z: dz * step
-      });
+      }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
       const corrected = this.characterController.computedMovement();
       if (!Number.isFinite(corrected.x) || !Number.isFinite(corrected.z)) continue;
       score += Math.hypot(corrected.x, corrected.z);
