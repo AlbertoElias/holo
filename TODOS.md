@@ -58,8 +58,11 @@ it from the item below instead of duplicating its status here.
 - [ ] Evaluate IWSDK-native ECS/scene composition only when a concrete authoring
   workflow requires it; the current tooling integration intentionally preserves
   HoloIM's custom Three/Rapier runtime.
-- [ ] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
+- [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.
+  Set up as the opt-in `metavr` MCP server in
+  [`docs/features/metavr-setup.md`](docs/features/metavr-setup.md); host install
+  and the one-time on-headset USB-debugging accept remain operator steps.
 - [x] Migrate the capture TypeScript config to the shared config chain and run
   the whole workspace on stable TypeScript 7. The stated blocker was stale:
   `tsgo` resolves package `extends`; the real fixes were dropping `baseUrl`
