@@ -261,6 +261,12 @@ try {
   assert(Number.isFinite(recoveryError), 'Dropout recovery quaternion debug output missing.');
   assert(holdDrift < 0.15, `Dropout hold drifted too much (${holdDrift.toFixed(3)} rad).`);
   assert(recoveryError < 0.02, `Dropout recovery did not converge to the live pose (${recoveryError.toFixed(3)} rad off).`);
+  // The whole index chain must recover, not only the sampled bone.
+  const relaxedIndexTip = tipOf(relaxedSnapshot.tracking.right, 'index');
+  const recoveredIndexTip = tipOf(dropoutRecoveredSnapshot.tracking.right, 'index');
+  assert(relaxedIndexTip && recoveredIndexTip, 'Dropout recovery fingertip metrics missing.');
+  const tipRecoveryError = distance(relaxedIndexTip, recoveredIndexTip);
+  assert(tipRecoveryError < 0.002, `Dropout recovery left the index fingertip ${(tipRecoveryError * 1000).toFixed(1)} mm from the live pose.`);
 
   const dropoutQuality = retargetQualityOf(dropoutHoldSnapshot.tracking.right);
   assert(dropoutQuality, 'Dropout retarget quality metrics missing.');

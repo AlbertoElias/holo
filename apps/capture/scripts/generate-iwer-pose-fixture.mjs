@@ -134,7 +134,15 @@ try {
         const a = locals(from);
         const b = locals(to);
         const world = {};
-        const blend = { jointTransforms: {}, gripOffsetMatrix: from.gripOffsetMatrix };
+        const blend = { jointTransforms: {} };
+        if (from.gripOffsetMatrix && to.gripOffsetMatrix) {
+          const gripFrom = rigid(from.gripOffsetMatrix);
+          const gripTo = rigid(to.gripOffsetMatrix);
+          blend.gripOffsetMatrix = new Float32Array(compose(
+            slerp(gripFrom.q, gripTo.q, t),
+            gripFrom.t.map((v, i) => v + (gripTo.t[i] - v) * t)
+          ));
+        }
         for (const joint of order) {
           const q = slerp(a[joint].q, b[joint].q, t);
           const local = a[joint].t.map((v, i) => v + (b[joint].t[i] - v) * t);

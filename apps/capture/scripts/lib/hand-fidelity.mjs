@@ -123,16 +123,34 @@ function localSegmentDirections(joints, frame) {
   });
 }
 
-function rmsJerk(series) {
-  const values = [];
-  for (let i = 3; i < series.length; i += 1) {
-    for (let k = 0; k < series[i].length; k += 1) {
+// RMS jerk per segment (index k of each frame's direction list).
+function rmsJerkPerSegment(series) {
+  if (series.length < 4) return [];
+  return series[0].map((_, k) => {
+    let total = 0;
+    for (let i = 3; i < series.length; i += 1) {
       const jerk = sub(sub(sub(series[i][k], series[i - 1][k]), sub(series[i - 1][k], series[i - 2][k])),
         sub(sub(series[i - 1][k], series[i - 2][k]), sub(series[i - 2][k], series[i - 3][k])));
-      values.push(dot(jerk, jerk));
+      total += dot(jerk, jerk);
     }
-  }
-  return values.length ? Math.sqrt(mean(values)) : null;
+    return Math.sqrt(total / (series.length - 3));
+  });
+}
+
+// Worst per-segment ratio of avatar to tracked jerk, so one jittery segment
+// cannot hide among smooth ones. Segments the user barely moved are measured
+// against a floor (10% of the median tracked jerk) instead of near-zero.
+function worstJerkRatio(tracked, avatar) {
+  const trackedJerk = rmsJerkPerSegment(tracked);
+  const avatarJerk = rmsJerkPerSegment(avatar);
+  if (trackedJerk.length === 0) return null;
+  const floor = 0.1 * percentile(trackedJerk, 0.5);
+  let worst = { ratio: 0, segment: null };
+  trackedJerk.forEach((value, k) => {
+    const ratio = avatarJerk[k] / Math.max(value, floor, 1e-9);
+    if (ratio > worst.ratio) worst = { ratio, segment: SEGMENTS[k].join(' → ') };
+  });
+  return worst;
 }
 
 function analyzeSide(frames, side) {
@@ -196,8 +214,7 @@ function analyzeSide(frames, side) {
   const agreement = pinch.tracked.length
     ? pinch.tracked.filter((ratio, i) => contact(ratio) === contact(pinch.avatar[i])).length / pinch.tracked.length
     : null;
-  const trackedJerk = rmsJerk(directionSeries.tracked);
-  const avatarJerk = rmsJerk(directionSeries.avatar);
+  const worstJerk = worstJerkRatio(directionSeries.tracked, directionSeries.avatar);
 
   return {
     trackedFrames,
@@ -211,7 +228,7 @@ function analyzeSide(frames, side) {
       positionErrorP95M: percentile(wristPositionErrors, 0.95),
       rotationErrorP95Deg: percentile(wristRotationErrors, 0.95)
     },
-    jerk: { tracked: trackedJerk, avatar: avatarJerk, ratio: trackedJerk ? avatarJerk / trackedJerk : null }
+    jerk: { ratio: worstJerk?.ratio ?? null, segment: worstJerk?.segment ?? null }
   };
 }
 
@@ -242,7 +259,7 @@ function checkSide(side, result) {
   }
   if (result.wrist.positionErrorP95M > t.maxWristPositionErrorM) failures.push(`${side}: wrist position p95 ${(result.wrist.positionErrorP95M * 100).toFixed(1)} cm > ${t.maxWristPositionErrorM * 100} cm`);
   if (result.wrist.rotationErrorP95Deg > t.maxWristRotationErrorDeg) failures.push(`${side}: wrist rotation p95 ${result.wrist.rotationErrorP95Deg.toFixed(1)}° > ${t.maxWristRotationErrorDeg}°`);
-  if (result.jerk.ratio !== null && result.jerk.ratio > t.maxJerkRatio) failures.push(`${side}: finger segment jerk ${result.jerk.ratio.toFixed(2)}× tracked > ${t.maxJerkRatio}×`);
+  if (result.jerk.ratio !== null && result.jerk.ratio > t.maxJerkRatio) failures.push(`${side}: ${result.jerk.segment} jerk ${result.jerk.ratio.toFixed(2)}× tracked > ${t.maxJerkRatio}×`);
   return failures;
 }
 
@@ -264,7 +281,7 @@ export function formatHandReport(report) {
       .join(', ');
     const sources = Object.entries(result.sourceCounts).map(([source, count]) => `${source} ${count}`).join(', ');
     lines.push(`  ${side}: xr-hand ${(result.xrHandCoverage * 100).toFixed(0)}% (${sources}); curl ${fingers}`);
-    lines.push(`  ${side}: pinch agreement ${result.pinch.agreement?.toFixed(2) ?? '-'} (${result.pinch.trackedContactFrames} contact frames); wrist p95 ${result.wrist.positionErrorP95M !== null ? (result.wrist.positionErrorP95M * 100).toFixed(1) : '-'} cm / ${result.wrist.rotationErrorP95Deg?.toFixed(1) ?? '-'}°; jerk ×${result.jerk.ratio?.toFixed(2) ?? '-'}`);
+    lines.push(`  ${side}: pinch agreement ${result.pinch.agreement?.toFixed(2) ?? '-'} (${result.pinch.trackedContactFrames} contact frames); wrist p95 ${result.wrist.positionErrorP95M !== null ? (result.wrist.positionErrorP95M * 100).toFixed(1) : '-'} cm / ${result.wrist.rotationErrorP95Deg?.toFixed(1) ?? '-'}°; worst segment jerk ×${result.jerk.ratio?.toFixed(2) ?? '-'}`);
   }
   return lines.join('\n');
 }
