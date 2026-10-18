@@ -18,6 +18,13 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Add VR thumbstick locomotion and snap turn to capture. Today VR moves the
+  avatar only through physical room-scale motion and keyboard/mock input. Move
+  the world-locked camera rig with the stick (smooth move relative to head
+  yaw, optional snap/smooth turn about the user's head), keep the body solver
+  stepping from the resulting root motion, and add a replay check from
+  recorded controller input. Builds on
+  [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
   intentionally uses local filesystem storage and SQLite.
