@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "tsc -p tsconfig.app.json && vite build",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "typecheck": "tsgo -p tsconfig.app.json --noEmit",
     "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck && pnpm run test",
     "verify:full": "pnpm run verify:fast && pnpm run build",

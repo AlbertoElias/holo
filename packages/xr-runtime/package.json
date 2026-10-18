@@ -11,7 +11,7 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
     "test": "vitest run --environment jsdom",
     "verify:fast": "pnpm run lint && pnpm run typecheck",
     "verify:full": "pnpm run verify:fast && pnpm run test"

@@ -48,6 +48,7 @@
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "@holoim/config-eslint": "workspace:*",
+    "@holoim/config-ts": "workspace:*",
     "@holoim/tooling-scripts": "workspace:*",
     "@holoim/tooling-testing": "workspace:*",
     "@iwsdk/cli": "^0.5.3",

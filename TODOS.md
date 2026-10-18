@@ -38,24 +38,35 @@ it from the item below instead of duplicating its status here.
   upload fixtures; generated database files are ignored.
 - [x] Add isolated API route tests for upload/static serving, pagination, deletion,
   and USDZ-conversion failure handling.
-- [ ] Expand contract-focused tests for capture orchestration and the `ui-dom`,
-  `xr-ui-r3f`, and `xr-ui-three` packages, which currently use `--passWithNoTests`.
-  Start with public behavior and state-transition contracts, and run them in the
-  appropriate `verify:agent` or `verify:pr` tier.
+- [ ] Expand contract-focused tests for `xr-ui-core` and capture orchestration
+  only — the durable public behavior and state-transition contracts that survive
+  a UI/interaction redesign. Run them in the appropriate `verify:agent` or
+  `verify:pr` tier. Tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` are
+  deferred to the redesign item below, which owns their new contracts.
+- [ ] Redesign all UI (2D and 3D) and interaction systems (2D and XR) in a
+  dedicated session with its own feature brief. That brief owns: the new
+  contract tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` (currently
+  `--passWithNoTests`), written against the redesigned contracts rather than
+  the current single-file APIs; and the port of the capture XR check scripts
+  (`.mjs`, ~880 lines plus `scripts/lib/`) to TypeScript scenario groups,
+  since the scripts drive the app through the interaction hooks the redesign
+  will change. Preserve the `xr-ui-core` state contracts and the IWER
+  behavior checks (`test:xr:*`) across the redesign.
 
 ## Later
 
-- [ ] Port the capture XR check scripts to TypeScript scenario groups. Browser
-  reuse and stage timing are done (one VR and one desktop page, respawn between
-  trials) in [`docs/features/archive/deterministic-lean-ci.md`](docs/features/archive/deterministic-lean-ci.md);
-  sharding is unnecessary at current runtimes.
 - [ ] Evaluate IWSDK-native ECS/scene composition only when a concrete authoring
   workflow requires it; the current tooling integration intentionally preserves
   HoloIM's custom Three/Rapier runtime.
 - [ ] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.
-- [ ] Migrate the capture TypeScript config to the shared config chain once `tsgo`
-  supports the needed `baseUrl` and non-relative `extends` behavior.
+- [x] Migrate the capture TypeScript config to the shared config chain and run
+  every workspace `typecheck` on `tsgo`. The stated blocker was stale: `tsgo`
+  resolves package `extends`; the real fixes were dropping `baseUrl` (removed in
+  TypeScript 7) and declaring `@holoim/config-ts` in capture. Delivered in
+  [`docs/features/tsgo-typescript7-migration.md`](docs/features/tsgo-typescript7-migration.md).
+  Follow-up there: bump the catalog to stable `typescript@^7.0.2` once
+  `typescript-eslint` supports the TypeScript 7 API.
 - [ ] Decide whether the capture app needs a user-visible AR recenter control for
   device-specific placement recovery.
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;

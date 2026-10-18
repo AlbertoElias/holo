@@ -1,26 +1,11 @@
 {
-  /* Standalone config for tsgo compatibility (tsgo doesn't support baseUrl
-     or non-relative extends paths from the shared @holoim/config-ts chain).
-     Strict settings are kept in sync with tsconfig.base.json manually. */
+  "extends": "@holoim/config-ts/web.json",
   "compilerOptions": {
-    "target": "ES2022",
+    "composite": false,
+    "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "jsx": "react-jsx",
-    "types": ["vite/client"],
-
-    /* Strict settings — match tsconfig.base.json */
-    "strict": true,
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true
+    "types": ["vite/client"]
   },
   "include": ["src"]
 }

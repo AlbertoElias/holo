@@ -103,6 +103,9 @@ importers:
       '@holoim/config-eslint':
         specifier: workspace:*
         version: link:../../packages/config-eslint
+      '@holoim/config-ts':
+        specifier: workspace:*
+        version: link:../../packages/config-ts
       '@holoim/tooling-scripts':
         specifier: workspace:*
         version: link:../../packages/tooling-scripts
