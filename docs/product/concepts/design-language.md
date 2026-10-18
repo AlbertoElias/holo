@@ -5,6 +5,10 @@ listed at the end.
 **Applies to:** `apps/capture`, `apps/viewer-web`, and the shared UI packages,
 in 2D (desktop, phone) and 3D (VR, AR), with mouse, touch, controllers, hands,
 and gaze-pinch.
+**Visual references (private until shared):**
+[Light & Ink screens](https://claude.ai/artifact/C3h8MbK3YCcVKeiJd771S9), 14
+screen mockups of the Light direction over real capture renders, and
+[the interactive grammar demo](https://claude.ai/artifact/DAjXaAk4QGmXxN1riUu5bp).
 
 ## Why the current design fails
 
