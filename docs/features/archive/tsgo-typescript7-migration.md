@@ -1,7 +1,7 @@
 # Feature brief: Migrate workspace typechecking to tsgo / TypeScript 7
 
 **Lead:** Muse (quartz-orbit)
-**Status:** Verifying
+**Status:** Complete
 
 ## User outcome
 

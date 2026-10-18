@@ -65,7 +65,7 @@ it from the item below instead of duplicating its status here.
   `tsgo` resolves package `extends`; the real fixes were dropping `baseUrl`
   (removed in TypeScript 7) and declaring `@holoim/config-ts` in capture.
   Delivered in
-  [`docs/features/tsgo-typescript7-migration.md`](docs/features/tsgo-typescript7-migration.md):
+  [`docs/features/archive/tsgo-typescript7-migration.md`](docs/features/archive/tsgo-typescript7-migration.md):
   catalog `typescript@^7.0.2` everywhere, `typescript-eslint` 8.71.2 bridged
   on the `@typescript/typescript6` sidecar until it supports the TS7 API.
 - [ ] Decide whether the capture app needs a user-visible AR recenter control for
