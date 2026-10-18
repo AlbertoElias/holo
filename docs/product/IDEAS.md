@@ -6,7 +6,7 @@ PRD only after it describes one bounded user outcome and has a reason to exist.
 | ID | Idea | Theme | State | Next question |
 | --- | --- | --- | --- | --- |
 | IDEA-001 | HoloGrammar: structured spatial utterances with intent, referent, action, time, confidence, and expected reply | Communication protocols | Idea | What is the smallest usable grammar? |
-| IDEA-002 | Contextual annotations attached to a 3D anchor, event, and time range | Async holograms | Idea | Which annotation types create the most value first? |
+| IDEA-002 | Contextual annotations attached to a 3D anchor, event, and time range | Async holograms | PRD ([PRD-001](prds/PRD-001-anchored-notes.md)) | Where should authors add notes: at upload, in capture, or in VR? |
 | IDEA-003 | Symbol Forge for team-created, interactive 3D symbols | Spatial language | Idea | What eight symbols are universally useful? |
 | IDEA-004 | Gesture Compiler that turns hand motions into arrows, paths, boundaries, and diagrams | Spatial language | Idea | Which gestures can be recognized reliably enough? |
 | IDEA-005 | Claim Capsules that hold a statement, evidence, confidence, and status | Communication protocols | Idea | Does this help discussions or make them feel bureaucratic? |
