@@ -13,8 +13,8 @@ import { startUsdzWorker } from "./services/usdz-worker.js";
 // without the HTTP API for local/operator use.
 async function main(): Promise<void> {
   if (env.DATABASE_URL.startsWith("file:")) {
-    await prisma.$executeRawUnsafe("PRAGMA journal_mode=WAL;");
-    await prisma.$executeRawUnsafe("PRAGMA busy_timeout=5000;");
+    await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");
+    await prisma.$queryRawUnsafe("PRAGMA busy_timeout=5000;");
   }
 
   const uploadsRoot = env.UPLOADS_ROOT ?? path.join(process.cwd(), UPLOADS_DIR);
