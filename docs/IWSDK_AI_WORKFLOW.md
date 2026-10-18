@@ -96,7 +96,9 @@ a native binary from Meta's CDN.
 Host setup (once, from a normal terminal):
 
 ```bash
-npm install -g @meta-quest/metavr
+# User-writable prefix: the system npm prefix (/usr/local) is root-owned.
+npm install -g --prefix "$HOME/.local" @meta-quest/metavr
+export PATH="$HOME/.local/bin:$PATH" # add to your shell profile
 # Enable Developer Mode for the headset in the Meta Horizon phone app,
 # connect a USB-C data cable, then put the headset on once and accept
 # the "Allow USB debugging" prompt.
