@@ -1,6 +1,6 @@
 # Feature brief: Natural locomotion and terrain response
 
-**Lead:** Codex locomotion chat  
+**Lead:** Codex locomotion chat
 **Status:** Complete
 
 ## User outcome
@@ -9,7 +9,7 @@ Walking, crouching and jumping look continuous in desktop and XR, respond to act
 
 ## Scope
 
-**Included:** lower-body gait/crouch composition, speed-matched clips, airborne transitions, terrain foot placement, existing XR virtual movement input and Rapier wall/slope/step response, excluding proximity sensors from solid obstacles, deterministic browser evidence.  
+**Included:** lower-body gait/crouch composition, speed-matched clips, airborne transitions, terrain foot placement, existing XR virtual movement input and Rapier wall/slope/step response, excluding proximity sensors from solid obstacles, deterministic browser evidence.
 **Excluded:** height calibration/scaling, new tracked-head/hand retargeting, new controller-input or room-scale root translation systems, shared contracts or export format changes; physical headset claims.
 
 ## Acceptance criteria
