@@ -325,8 +325,9 @@ test("AR places the model on a surface in front of the viewer, recenter places a
   expect(["anchored", "placed", "locked"]).toContain(placement.stage);
   expectPlacedInFrontOnSurface(placement, await readViewerPose(page));
   const surfaceY = await readSurfaceHeightBelow(page, placement.position!);
-  expect(surfaceY, "emulated room surface under the model").not.toBeNull();
-  expect(Math.abs(placement.position![1] - surfaceY!), "model base to surface (m)").toBeLessThan(0.1);
+  const surfaceDetail = `placement ${JSON.stringify(placement)}, surface y ${String(surfaceY)}`;
+  expect(surfaceY, `emulated room surface under the model (${surfaceDetail})`).not.toBeNull();
+  expect(Math.abs(placement.position![1] - surfaceY!), `model base to surface in m (${surfaceDetail})`).toBeLessThan(0.1);
   await captureEvidence(page, testInfo, "ar-placed-on-surface");
 
   // Only the model's own placements carry a position and advance its

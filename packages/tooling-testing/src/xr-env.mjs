@@ -40,7 +40,18 @@ const frozenPages = new WeakSet();
 export async function freezePageClock(page) {
   await page.clock.install();
   frozenPages.add(page);
-  await page.clock.pauseAt(new Date(Date.now() + 100));
+  // The fake clock runs until paused, and one long task (shader compile,
+  // XR session start) on a slow runner can carry it past the pause point.
+  // Re-read the page's time and retry only for that specific error.
+  for (let attempt = 0; ; attempt += 1) {
+    const pageNow = await page.evaluate(() => Date.now());
+    try {
+      await page.clock.pauseAt(new Date(pageNow + 1000));
+      return;
+    } catch (error) {
+      if (attempt >= 4 || !String(error).includes('fast-forward to the past')) throw error;
+    }
+  }
 }
 
 // Screenshot for simulation checks. The small simulation canvas is mostly

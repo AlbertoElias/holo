@@ -163,7 +163,6 @@ export function ARView() {
           <ARHologramModel
             url={modelUrl}
             enableDepthOcclusion={depthOcclusionStatus.enabled}
-            enableIwerPlacementAssist={Boolean(xrCapabilities?.hasIwerRuntime)}
             placementVersion={placementVersion}
             onBubbleStatusChange={handleBubbleStatusChange}
             onPlacementStatusChange={handlePlacementStatusChange}

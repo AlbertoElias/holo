@@ -6,7 +6,6 @@ import { Box3, LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
 import type { AnimationAction, Group, Object3D } from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
-import { readIwerRuntime } from "@holoim/xr-runtime";
 
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { useSphereClipping } from "../hologram/useSphereClipping";
@@ -73,7 +72,6 @@ export type ArPlacementStatus = {
 
 type ARHologramModelProps = {
   enableDepthOcclusion: boolean;
-  enableIwerPlacementAssist: boolean;
   url: string;
   placementVersion: number;
   onBubbleStatusChange: (status: SphereClipStatus) => void;
@@ -141,7 +139,6 @@ function normalizeSceneAtOrigin(root: Object3D): void {
 
 export function ARHologramModel({
   enableDepthOcclusion,
-  enableIwerPlacementAssist,
   url,
   placementVersion,
   onBubbleStatusChange,
@@ -470,75 +467,6 @@ export function ARHologramModel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placementVersion, Boolean(xrSession)]);
 
-  useEffect(() => {
-    if (!xrSession || !enableIwerPlacementAssist) {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      try {
-        if (placementStateRef.current.stage !== "searching") {
-          return;
-        }
-
-        const iwerRuntime = readIwerRuntime();
-        if (iwerRuntime.trackedPlanesCount === 0 || !iwerRuntime.pose) {
-          return;
-        }
-
-        const devicePosition = cameraPositionRef.current.set(
-          iwerRuntime.pose.position.x,
-          iwerRuntime.pose.position.y,
-          iwerRuntime.pose.position.z
-        );
-        const deviceQuaternion = cameraQuaternionRef.current.set(
-          iwerRuntime.pose.quaternion.x,
-          iwerRuntime.pose.quaternion.y,
-          iwerRuntime.pose.quaternion.z,
-          iwerRuntime.pose.quaternion.w
-        );
-        const planePlacement = computeFloorPlacement(devicePosition, deviceQuaternion, {
-          distanceMeters: resolveForwardDistance(),
-          minFloorY: 0,
-          eyeToFloorMeters: Math.max(0.1, iwerRuntime.pose.position.y),
-          verticalOffsetMeters: AR_FLOOR_PLACEMENT_VIEW_LIFT_METERS
-        });
-
-        clearActiveAnchor(true);
-        clearActiveHitTestSource();
-        applyPlacementTransform(planePlacement.position);
-
-        placementStateRef.current.stage = "placed";
-        placementStateRef.current.monitorFrames = 0;
-        placementStateRef.current.continuousVisibilityFailures = 0;
-        emitPlacementStatus(
-          {
-            stage: "placed",
-            mode: planePlacement.mode,
-            reason: "plane-detected",
-            anchored: false
-          },
-          { incrementSequence: true }
-        );
-
-        logPlacement("applied IWER plane placement", {
-          cameraPosition: toArray(devicePosition),
-          cameraQuaternion: toQuaternionArray(deviceQuaternion),
-          targetPosition: toArray(planePlacement.position)
-        });
-      } catch (error) {
-        console.error("[AR] IWER plane bridge failed.", error);
-      }
-    }, 250);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-    // This effect only exists to bridge IWER localhost emulation into a deterministic placement
-    // during desktop development and browser automation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enableIwerPlacementAssist, placementVersion, Boolean(xrSession)]);
-
   useFrame(({ camera }, _delta, frame) => {
     if (!groupRef.current) {
       return;
@@ -626,13 +554,10 @@ export function ARHologramModel({
       }
 
       let floorY: number | null = null;
-      const iwerTrackedPlanes: ReadonlySet<PlaneLike> | undefined = enableIwerPlacementAssist
-        ? readIwerRuntime().trackedPlanes ?? undefined
-        : undefined;
       if (originReferenceSpace) {
         const detectedPlanes: ReadonlySet<PlaneLike> | undefined = frame.detectedPlanes && frame.detectedPlanes.size > 0
           ? frame.detectedPlanes
-          : iwerTrackedPlanes;
+          : undefined;
         if (detectedPlanes && detectedPlanes.size > 0) {
           for (const plane of detectedPlanes) {
             if (plane.orientation !== "horizontal") {
@@ -655,9 +580,6 @@ export function ARHologramModel({
         }
       }
 
-      if (floorY === null && iwerTrackedPlanes && iwerTrackedPlanes.size > 0) {
-        floorY = 0;
-      }
 
       if (floorY !== null) {
         const planePlacement = computeFloorPlacement(camPos, camQuat, {

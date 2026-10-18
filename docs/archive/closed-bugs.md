@@ -85,6 +85,9 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   hit-test surfaces; report the placed position. Checks now require a
   model-reported position in front of the viewer on a surface, and disable
   hit-test through IWER's supported features.
+- **Follow-up (2026-10-17):** removed the IWER-only placement assist. It raced the
+  real hit-test on slow runners and could place the model outside the emulated
+  room; IWER implements `frame.detectedPlanes`, so the standard path covers it.
 
 ### B-005 — Avatar finger shape and wrist placement diverge from tracked hands
 
