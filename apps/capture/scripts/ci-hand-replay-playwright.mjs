@@ -45,7 +45,7 @@ const reports = [];
 async function replay(fileName) {
   const label = path.basename(fileName, '.json');
   const recording = JSON.parse(await readFile(path.join(fixtureDir, fileName), 'utf8'));
-  const viewport = videoFrameDir ? { width: 960, height: 540 } : resolveSimulationViewport();
+  const viewport = videoFrameDir ? { width: 1280, height: 720 } : resolveSimulationViewport();
   const context = await createXrContext(browser, { viewport });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });

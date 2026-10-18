@@ -18,7 +18,16 @@ export class ArmIkSolver {
   private readonly tmpQuatB = new THREE.Quaternion();
   private readonly tmpQuatC = new THREE.Quaternion();
 
-  solve(chain: ArmIkChain, targetPositionWorld: THREE.Vector3, targetQuaternionWorld: THREE.Quaternion, avatarRoot: THREE.Group): boolean {
+  // handWorldQuaternion, when given, is the exact world rotation for the hand
+  // bone (palm-aligned from tracked joints); otherwise the target rotation is
+  // mapped through the rig's grip offset, as for controllers.
+  solve(
+    chain: ArmIkChain,
+    targetPositionWorld: THREE.Vector3,
+    targetQuaternionWorld: THREE.Quaternion,
+    avatarRoot: THREE.Group,
+    handWorldQuaternion?: THREE.Quaternion
+  ): boolean {
     chain.upperArm.getWorldPosition(this.tmpUpperWorld);
     this.tmpClampedTarget.copy(targetPositionWorld);
 
@@ -62,7 +71,8 @@ export class ArmIkSolver {
     if (!upperOk || !foreOk) return false;
 
     chain.foreArm.getWorldQuaternion(this.tmpQuatC);
-    this.tmpQuat.copy(targetQuaternionWorld).multiply(chain.handGripRotationOffset);
+    if (handWorldQuaternion) this.tmpQuat.copy(handWorldQuaternion);
+    else this.tmpQuat.copy(targetQuaternionWorld).multiply(chain.handGripRotationOffset);
     chain.hand.quaternion.copy(this.tmpInvQuat.copy(this.tmpQuatC).invert().multiply(this.tmpQuat));
     if (!Number.isFinite(chain.hand.quaternion.x) || !Number.isFinite(chain.hand.quaternion.y) || !Number.isFinite(chain.hand.quaternion.z) || !Number.isFinite(chain.hand.quaternion.w)) {
       return false;

@@ -86,6 +86,23 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   model-reported position in front of the viewer on a surface, and disable
   hit-test through IWER's supported features.
 
+### B-005 — Avatar finger shape and wrist placement diverge from tracked hands
+
+- **Area:** `apps/capture` hand retargeting and arm IK
+- **Severity:** P1 — VR embodiment fidelity
+- **Observed:** 2026-10-17 by `test:xr:hands` (finger curl off by 30–68°, wrist 7.5 cm and 49° off)
+- **Causes:** (1) the index–pinky mapping aimed each phalanx along the segment one
+  joint earlier (the proximal phalanx followed the metacarpal); (2) `toBindAimInParent`
+  reused its caller's scratch vector, so every finger bone aimed with its parent
+  segment's axis; (3) `captureTrackedHandJoints` reused the caller's scratch
+  vector, so the hand target became the pinky tip, ~10 cm past the wrist;
+  (4) hand rotation came from hand-tuned Euler offsets instead of the tracked palm.
+- **Fix:** anatomical mapping generated per finger; dedicated scratch vectors;
+  hand rotation aligns the avatar palm frame (wrist, index/middle/pinky
+  knuckles) to the tracked palm frame. On IWER's relaxed/point/pinch poses: curl
+  error thumb 8.4°, others ≤ 3.9°, correlation ≥ 0.98, wrist 0.0 cm / 0.0°,
+  segment jitter 1.01× tracked. CI now enforces 15°, 0.9, 2 cm, 10°, 1.5×.
+
 ### B-007 — Viewer AR spams `GL_INVALID_OPERATION` during IWER sessions
 
 - **Area:** `apps/viewer-web` AR depth occlusion

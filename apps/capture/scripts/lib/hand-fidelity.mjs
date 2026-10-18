@@ -7,15 +7,6 @@
 // positions. Wrist pose is compared in world space because the avatar arm is
 // expected to put the hand where the user's hand is.
 
-// Where natural-looking hands should land. Finger shape and wrist offset do
-// not meet these yet (BUGS.md B-005); CI enforces THRESHOLDS below meanwhile.
-export const TARGETS = Object.freeze({
-  maxCurlErrorDeg: 20,
-  minCurlCorrelation: 0.8,
-  maxWristPositionErrorM: 0.05,
-  maxWristRotationErrorDeg: 25
-});
-
 export const THRESHOLDS = Object.freeze({
   // Fraction of tracked frames that must arrive through real XRHand input
   // (not a controller, a held pose, or the neutral fallback).
@@ -24,22 +15,23 @@ export const THRESHOLDS = Object.freeze({
   minComparableShare: 0.5,
   minComparableSamples: 10,
   // Per-finger curl (sum of joint flexion angles) mean absolute error, degrees.
-  // Ceiling at today's worst finger (66°) so shape cannot regress; target 20°.
-  maxCurlErrorDeg: 70,
+  // Remaining error is avatar proportion (2026-10-17: thumb 8.4°, others ≤ 4°).
+  maxCurlErrorDeg: 15,
   // Curl must follow the tracked curl over time when the finger actually moves.
-  // Ceiling at today's worst finger (0.63); target 0.8.
-  minCurlCorrelation: 0.6,
+  minCurlCorrelation: 0.9,
   minCurlRangeDegForCorrelation: 25,
   // Retargeting may smooth, but must not delay motion by more than this.
   maxCurlLagFrames: 2,
   // Thumb–index tips within this fraction of hand length count as touching.
   pinchContactRatio: 0.25,
   minPinchAgreement: 0.9,
-  // Wrist placement in world space (p95). Today a constant ~7.5 cm offset;
-  // the 2026-10-17 camera bug put it at 21 m. Target 5 cm and 25°.
-  maxWristPositionErrorM: 0.1,
-  maxWristRotationErrorDeg: 55,
-  // Avatar fingertip jerk relative to the tracked fingertips.
+  // Wrist placement in world space (p95): the avatar hand sits on the tracked
+  // wrist joint with its palm aligned to the tracked palm.
+  maxWristPositionErrorM: 0.02,
+  maxWristRotationErrorDeg: 10,
+  // Jerk of each finger segment's direction (hand frame), avatar relative to
+  // tracked. Directions, not tip positions: avatar finger proportions differ,
+  // and a longer segment legitimately moves its tip further.
   maxJerkRatio: 1.5
 });
 
@@ -51,7 +43,7 @@ const FINGERS = {
   pinky: ['wrist', 'pinky-finger-phalanx-proximal', 'pinky-finger-phalanx-intermediate', 'pinky-finger-phalanx-distal', 'pinky-finger-tip']
 };
 const FRAME_JOINTS = ['wrist', 'index-finger-phalanx-proximal', 'middle-finger-phalanx-proximal', 'pinky-finger-phalanx-proximal'];
-const TIP_JOINTS = ['thumb-tip', 'index-finger-tip', 'middle-finger-tip', 'ring-finger-tip', 'pinky-finger-tip'];
+const SEGMENTS = Object.values(FINGERS).flatMap((chain) => chain.slice(1, -1).map((joint, i) => [joint, chain[i + 2]]));
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -124,10 +116,10 @@ function fingerCurlDeg(joints, chain) {
   return total;
 }
 
-function localTips(joints, frame) {
-  return TIP_JOINTS.map((name) => {
-    const offset = sub(joints[name], frame.wrist);
-    return frame.axes.map((axis) => dot(offset, axis) / frame.handLength);
+function localSegmentDirections(joints, frame) {
+  return SEGMENTS.map(([from, to]) => {
+    const direction = normalize(sub(joints[to], joints[from]));
+    return frame.axes.map((axis) => dot(direction, axis));
   });
 }
 
@@ -148,7 +140,7 @@ function analyzeSide(frames, side) {
   const pinch = { tracked: [], avatar: [] };
   const wristPositionErrors = [];
   const wristRotationErrors = [];
-  const tipSeries = { tracked: [], avatar: [] };
+  const directionSeries = { tracked: [], avatar: [] };
   let trackedFrames = 0;
   let xrHandFrames = 0;
   let mockFrames = 0;
@@ -183,8 +175,8 @@ function analyzeSide(frames, side) {
     // Rotation between the two hand frames: average axis misalignment.
     wristRotationErrors.push(mean(trackedFrame.axes.map((axis, i) => angleDeg(axis, avatarFrame.axes[i]))));
 
-    tipSeries.tracked.push(localTips(sample.tracked, trackedFrame));
-    tipSeries.avatar.push(localTips(sample.avatar, avatarFrame));
+    directionSeries.tracked.push(localSegmentDirections(sample.tracked, trackedFrame));
+    directionSeries.avatar.push(localSegmentDirections(sample.avatar, avatarFrame));
   }
 
   const fingers = Object.fromEntries(Object.entries(curls).map(([finger, { tracked, avatar }]) => {
@@ -204,8 +196,8 @@ function analyzeSide(frames, side) {
   const agreement = pinch.tracked.length
     ? pinch.tracked.filter((ratio, i) => contact(ratio) === contact(pinch.avatar[i])).length / pinch.tracked.length
     : null;
-  const trackedJerk = rmsJerk(tipSeries.tracked);
-  const avatarJerk = rmsJerk(tipSeries.avatar);
+  const trackedJerk = rmsJerk(directionSeries.tracked);
+  const avatarJerk = rmsJerk(directionSeries.avatar);
 
   return {
     trackedFrames,
@@ -250,14 +242,14 @@ function checkSide(side, result) {
   }
   if (result.wrist.positionErrorP95M > t.maxWristPositionErrorM) failures.push(`${side}: wrist position p95 ${(result.wrist.positionErrorP95M * 100).toFixed(1)} cm > ${t.maxWristPositionErrorM * 100} cm`);
   if (result.wrist.rotationErrorP95Deg > t.maxWristRotationErrorDeg) failures.push(`${side}: wrist rotation p95 ${result.wrist.rotationErrorP95Deg.toFixed(1)}° > ${t.maxWristRotationErrorDeg}°`);
-  if (result.jerk.ratio !== null && result.jerk.ratio > t.maxJerkRatio) failures.push(`${side}: fingertip jerk ${result.jerk.ratio.toFixed(2)}× tracked > ${t.maxJerkRatio}×`);
+  if (result.jerk.ratio !== null && result.jerk.ratio > t.maxJerkRatio) failures.push(`${side}: finger segment jerk ${result.jerk.ratio.toFixed(2)}× tracked > ${t.maxJerkRatio}×`);
   return failures;
 }
 
 export function analyzeHandReplay(frames, { stepMs } = {}) {
   const sides = { left: analyzeSide(frames, 'left'), right: analyzeSide(frames, 'right') };
   const failures = Object.entries(sides).flatMap(([side, result]) => checkSide(side, result));
-  return { frames: frames.length, stepMs, thresholds: THRESHOLDS, targets: TARGETS, sides, failures };
+  return { frames: frames.length, stepMs, thresholds: THRESHOLDS, sides, failures };
 }
 
 export function formatHandReport(report) {

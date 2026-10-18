@@ -34,14 +34,17 @@ export class InputRecordingSession {
 
   finish(): InputRecording {
     const { schema, frames } = this.recorder.getRecording();
+    // Keep the first frame at or after each tick of a fixed 30 Hz grid, so
+    // 72/90/120 Hz sessions all yield an even 30 Hz.
+    const period = 1000 / TARGET_FRAME_RATE_HZ;
     const kept: unknown[][] = [];
-    let lastKept = -Infinity;
+    let nextTick = -Infinity;
     for (const frame of frames) {
       const timeStamp = frame[0] as number;
-      if (timeStamp - lastKept >= 1000 / TARGET_FRAME_RATE_HZ - 1) {
-        kept.push(frame);
-        lastKept = timeStamp;
-      }
+      if (timeStamp + 1e-6 < nextTick) continue;
+      kept.push(frame);
+      nextTick = Number.isFinite(nextTick) ? nextTick + period : timeStamp + period;
+      while (nextTick <= timeStamp) nextTick += period;
     }
     const first = (kept[0]?.[0] as number | undefined) ?? 0;
     const last = (kept.at(-1)?.[0] as number | undefined) ?? first;

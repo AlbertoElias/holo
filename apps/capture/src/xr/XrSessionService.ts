@@ -106,6 +106,10 @@ export class XrSessionService {
   private readonly tmpEyeAnchor = new THREE.Vector3();
   private readonly tmpXrHeadWorld = new THREE.Vector3();
   private readonly tmpHeadLocal = new THREE.Vector3();
+  // Own scratch for per-joint capture: callers hold the hand pose in tmpVecA
+  // across captureTrackedHandJoints, which once made the wrist target the
+  // last captured joint (the pinky tip).
+  private readonly tmpJointWorld = new THREE.Vector3();
   // Which input produced each hand's pose this frame (see HandPoseSource).
   private readonly handPoseSource: Record<VrHandSide, HandPoseSource> = { left: 'none', right: 'none' };
   private cameraRig: THREE.Group | null = null;
@@ -754,9 +758,9 @@ export class XrSessionService {
       const joint = jointLookup?.[jointName] ?? hand.getObjectByName(jointName);
       if (!joint || !joint.visible) continue;
 
-      joint.getWorldPosition(this.tmpVecA);
-      if (isFiniteVector3Like(this.tmpVecA)) {
-        sideState[jointName]!.positionWorld.copy(this.tmpVecA).sub(xrHeadWorld).add(eyeAnchorWorld);
+      joint.getWorldPosition(this.tmpJointWorld);
+      if (isFiniteVector3Like(this.tmpJointWorld)) {
+        sideState[jointName]!.positionWorld.copy(this.tmpJointWorld).sub(xrHeadWorld).add(eyeAnchorWorld);
         sideState[jointName]!.positionTracked = isFiniteVector3Like(sideState[jointName]!.positionWorld);
       }
 

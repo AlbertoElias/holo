@@ -12,7 +12,9 @@ import {
 const CHECKS = {
   'mock-vr': 'scripts/ci-mock-vr-playwright.mjs',
   locomotion: 'scripts/ci-vr-locomotion-playwright.mjs',
-  hands: 'scripts/ci-hand-replay-playwright.mjs'
+  hands: 'scripts/ci-hand-replay-playwright.mjs',
+  // Not a check: regenerates the IWER pose fixture the hands check replays.
+  'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs'
 };
 
 const requested = process.argv.slice(2);

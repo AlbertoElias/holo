@@ -75,7 +75,7 @@ runs on a Quest, and the player replays into IWER with deterministic
 |---|---|---|
 | Recorder | emulated session against the dev server (same code path as a headset) | `fixtures/input-recordings/iwer-emulated-pinch.json`: 2 hands × 25 joints, 30 Hz; **headset recording still pending** |
 | Deterministic replay through XRHand | `pnpm --filter @holoim/capture run test:xr:hands` | Identical metrics on macOS and the 2-vCPU container, with and without video; 100% of tracked frames from XRHand, none from mock input |
-| Fidelity thresholds | same | `output/ci-hand-replay/<name>-report.json`; ceilings at today's values (B-005), targets recorded in `TARGETS` |
+| Fidelity thresholds | same, on `iwer-poses-relaxed-point-pinch.json` | curl ≤ 15°, correlation ≥ 0.9, wrist ≤ 2 cm / 10°, segment jitter ≤ 1.5× (B-005 fixed) |
 | Catches real regressions | reintroduce the B-004 camera parenting | Fails at 2,083 cm wrist error |
 | Video and screenshots | `HAND_REPLAY_VIDEO=1 XR_CAPTURE_SUCCESS_SCREENSHOTS=1 pnpm run test:xr:capture`; `E2E_SCREENSHOTS=1` for viewer suites | `output/ci-hand-replay/<name>.mp4`, per-suite PNGs |
 | Viewer AR placement | `pnpm run test:xr:viewer` | Model-reported position checked against the viewer pose; 2 sessions, 41 s on 2 vCPU (was 61 s) |
@@ -85,7 +85,9 @@ runs on a Quest, and the player replays into IWER with deterministic
 
 - B-004 (fixed): VR hand targets landed ~21 m from the avatar because the XR
   camera was parented to the rig.
-- B-005 (open): finger curl offsets of 30–66° and a constant 7.5 cm wrist offset.
+- B-005 (fixed 2026-10-17): finger curl offsets of 30–68° and a 7.5 cm / 49°
+  wrist offset, from a shifted finger mapping, two scratch-vector aliasing bugs,
+  and hand-tuned palm offsets. Now curl ≤ 8.4°, wrist 0 cm / 0°.
 - B-006 (fixed): viewer AR never ran its placement; tests passed on a preview
   status, and the hit-test-disabled test never disabled hit-test.
 - B-007 (fixed): viewer AR logged `GL_INVALID_OPERATION` every frame in IWER

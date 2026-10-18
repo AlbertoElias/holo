@@ -158,8 +158,9 @@ Record new input on a headset:
    `fixtures/input-recordings/avatar-recording-<timestamp>.json` (`meta.source`
    is `headset`). Rename it after the motions it covers and commit it.
 
-`iwer-emulated-pinch.json` comes from IWER's synthetic hands and only guards the
-input path until headset recordings exist.
+`iwer-poses-relaxed-point-pinch.json` moves both hands through IWER's captured
+relaxed, point, and pinch poses; regenerate it with `npm run fixtures:hands`. It
+is emulator data, so add headset recordings alongside it when available.
 
 ## Development Workflows
 

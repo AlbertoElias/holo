@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { TrackedHandJointName, VrHandSide } from '../types/contracts';
+import { palmFrameQuaternion } from '../xr/palmFrame';
 import { clamp } from '../shared/math';
 
 export interface ArmIkChain {
@@ -19,6 +20,9 @@ export interface ArmIkChain {
   upperBindAimInParent: THREE.Vector3;
   foreBindAimInParent: THREE.Vector3;
   handGripRotationOffset: THREE.Quaternion;
+  // Avatar palm frame expressed in the hand bone's space (see palmFrame.ts);
+  // undefined when the rig lacks the index, middle, or pinky knuckle bones.
+  palmInHand: THREE.Quaternion | undefined;
   elbowHintLocal: THREE.Vector3;
 }
 
@@ -34,6 +38,66 @@ export interface HandFingerRetargetEntry {
   xrTargetJointNames: readonly TrackedHandJointName[];
   bindQuaternion: THREE.Quaternion;
   bindAimInParent: THREE.Vector3;
+}
+
+type FingerRetargetMapping = {
+  finger: HandFingerName;
+  segmentIndex: number;
+  boneSuffix: string;
+  xrQuaternionSources: HandFingerRetargetEntry['xrQuaternionSources'];
+  xrSourceJointNames: readonly TrackedHandJointName[];
+  xrTargetJointNames: readonly TrackedHandJointName[];
+};
+
+// Each finger bone starts at a WebXR joint and must aim along the tracked
+// segment that starts at that same joint: Hand<Finger>1 (proximal phalanx,
+// from the knuckle) follows phalanx-proximal → phalanx-intermediate, and so on.
+// The metacarpal segment has no avatar bone; the hand bone covers it.
+function fingerRetargetMappings(finger: 'index' | 'middle' | 'ring' | 'pinky'): FingerRetargetMapping[] {
+  const joint = (name: string) => `${finger}-finger-${name}` as TrackedHandJointName;
+  const metacarpal = joint('metacarpal');
+  const proximal = joint('phalanx-proximal');
+  const intermediate = joint('phalanx-intermediate');
+  const distal = joint('phalanx-distal');
+  const tip = joint('tip');
+  const bone = `Hand${finger[0]!.toUpperCase()}${finger.slice(1)}`;
+  return [
+    {
+      finger,
+      segmentIndex: 0,
+      boneSuffix: `${bone}1`,
+      xrQuaternionSources: [{ jointName: proximal, parentJointNames: [metacarpal, 'wrist'] }],
+      xrSourceJointNames: [proximal],
+      xrTargetJointNames: [intermediate, distal, tip]
+    },
+    {
+      finger,
+      segmentIndex: 1,
+      boneSuffix: `${bone}2`,
+      xrQuaternionSources: [{ jointName: intermediate, parentJointNames: [proximal, metacarpal] }],
+      xrSourceJointNames: [intermediate],
+      xrTargetJointNames: [distal, tip]
+    },
+    {
+      finger,
+      segmentIndex: 2,
+      boneSuffix: `${bone}3`,
+      xrQuaternionSources: [{ jointName: distal, parentJointNames: [intermediate, proximal] }],
+      xrSourceJointNames: [distal],
+      xrTargetJointNames: [tip]
+    },
+    {
+      finger,
+      segmentIndex: 3,
+      boneSuffix: `${bone}4`,
+      xrQuaternionSources: [
+        { jointName: tip, parentJointNames: [distal] },
+        { jointName: distal, parentJointNames: [intermediate] }
+      ],
+      xrSourceJointNames: [distal],
+      xrTargetJointNames: [tip]
+    }
+  ];
 }
 
 export interface HandFingerRetargetChain {
@@ -108,6 +172,7 @@ export class AvatarRig {
   private readonly tmpBox = new THREE.Box3();
   private readonly tmpCenter = new THREE.Vector3();
   private readonly tmpSize = new THREE.Vector3();
+  private readonly tmpBindBoneWorld = new THREE.Vector3();
   private readonly tmpVecA = new THREE.Vector3();
   private readonly tmpVecB = new THREE.Vector3();
   private readonly tmpUpperWorld = new THREE.Vector3();
@@ -262,6 +327,19 @@ export class AvatarRig {
     return out;
   }
 
+  private computePalmInHand(side: VrHandSide, hand: THREE.Bone): THREE.Quaternion | undefined {
+    const prefix = side === 'left' ? 'Left' : 'Right';
+    const knuckle = (finger: string) => this.findAvatarBone(`${prefix}Hand${finger}1`)?.getWorldPosition(new THREE.Vector3());
+    const index = knuckle('Index');
+    const middle = knuckle('Middle');
+    const pinky = knuckle('Pinky');
+    if (!index || !middle || !pinky) return undefined;
+    const palmWorld = palmFrameQuaternion(hand.getWorldPosition(new THREE.Vector3()), index, middle, pinky, new THREE.Quaternion());
+    if (!palmWorld) return undefined;
+    // palmInHand = inverse(handWorld) × palmWorld, captured at bind pose.
+    return hand.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(palmWorld).normalize();
+  }
+
   createArmIkChain(side: VrHandSide): ArmIkChain | undefined {
     const shoulder = this.findAvatarBone(side === 'left' ? 'LeftShoulder' : 'RightShoulder');
     const upperArm = this.findAvatarBone(side === 'left' ? 'LeftArm' : 'RightArm');
@@ -290,6 +368,7 @@ export class AvatarRig {
     if (!this.toBindAimInParent(upperArm, this.tmpForeWorld, upperBindAimInParent)) return undefined;
     if (!this.toBindAimInParent(foreArm, this.tmpHandWorld, foreBindAimInParent)) return undefined;
 
+    const palmInHand = this.computePalmInHand(side, hand);
     const sideTwist = side === 'left' ? -Math.PI * 0.5 : Math.PI * 0.5;
     const handGripRotationOffset = new THREE.Quaternion()
       .setFromEuler(new THREE.Euler(-Math.PI * 0.5, sideTwist, Math.PI, 'XYZ'))
@@ -309,6 +388,7 @@ export class AvatarRig {
       upperBindAimInParent,
       foreBindAimInParent,
       handGripRotationOffset,
+      palmInHand,
       elbowHintLocal: new THREE.Vector3(side === 'left' ? 1 : -1, -0.05, 0.25).normalize()
     };
   }
@@ -358,146 +438,7 @@ export class AvatarRig {
         xrSourceJointNames: ['thumb-phalanx-distal', 'thumb-phalanx-proximal'],
         xrTargetJointNames: ['thumb-tip']
       },
-      {
-        finger: 'index',
-        segmentIndex: 0,
-        boneSuffix: 'HandIndex1',
-        xrQuaternionSources: [{ jointName: 'index-finger-metacarpal', parentJointNames: ['wrist'] }],
-        xrSourceJointNames: ['index-finger-metacarpal', 'wrist'],
-        xrTargetJointNames: ['index-finger-phalanx-proximal', 'index-finger-phalanx-intermediate', 'index-finger-phalanx-distal', 'index-finger-tip']
-      },
-      {
-        finger: 'index',
-        segmentIndex: 1,
-        boneSuffix: 'HandIndex2',
-        xrQuaternionSources: [{ jointName: 'index-finger-phalanx-proximal', parentJointNames: ['index-finger-metacarpal', 'wrist'] }],
-        xrSourceJointNames: ['index-finger-phalanx-proximal', 'index-finger-metacarpal', 'wrist'],
-        xrTargetJointNames: ['index-finger-phalanx-intermediate', 'index-finger-phalanx-distal', 'index-finger-tip']
-      },
-      {
-        finger: 'index',
-        segmentIndex: 2,
-        boneSuffix: 'HandIndex3',
-        xrQuaternionSources: [{ jointName: 'index-finger-phalanx-intermediate', parentJointNames: ['index-finger-phalanx-proximal', 'index-finger-metacarpal'] }],
-        xrSourceJointNames: ['index-finger-phalanx-intermediate', 'index-finger-phalanx-proximal'],
-        xrTargetJointNames: ['index-finger-phalanx-distal', 'index-finger-tip']
-      },
-      {
-        finger: 'index',
-        segmentIndex: 3,
-        boneSuffix: 'HandIndex4',
-        xrQuaternionSources: [
-          { jointName: 'index-finger-phalanx-distal', parentJointNames: ['index-finger-phalanx-intermediate'] },
-          { jointName: 'index-finger-tip', parentJointNames: ['index-finger-phalanx-distal'] }
-        ],
-        xrSourceJointNames: ['index-finger-phalanx-distal', 'index-finger-phalanx-intermediate'],
-        xrTargetJointNames: ['index-finger-tip']
-      },
-      {
-        finger: 'middle',
-        segmentIndex: 0,
-        boneSuffix: 'HandMiddle1',
-        xrQuaternionSources: [{ jointName: 'middle-finger-metacarpal', parentJointNames: ['wrist'] }],
-        xrSourceJointNames: ['middle-finger-metacarpal', 'wrist'],
-        xrTargetJointNames: ['middle-finger-phalanx-proximal', 'middle-finger-phalanx-intermediate', 'middle-finger-phalanx-distal', 'middle-finger-tip']
-      },
-      {
-        finger: 'middle',
-        segmentIndex: 1,
-        boneSuffix: 'HandMiddle2',
-        xrQuaternionSources: [{ jointName: 'middle-finger-phalanx-proximal', parentJointNames: ['middle-finger-metacarpal', 'wrist'] }],
-        xrSourceJointNames: ['middle-finger-phalanx-proximal', 'middle-finger-metacarpal', 'wrist'],
-        xrTargetJointNames: ['middle-finger-phalanx-intermediate', 'middle-finger-phalanx-distal', 'middle-finger-tip']
-      },
-      {
-        finger: 'middle',
-        segmentIndex: 2,
-        boneSuffix: 'HandMiddle3',
-        xrQuaternionSources: [{ jointName: 'middle-finger-phalanx-intermediate', parentJointNames: ['middle-finger-phalanx-proximal', 'middle-finger-metacarpal'] }],
-        xrSourceJointNames: ['middle-finger-phalanx-intermediate', 'middle-finger-phalanx-proximal'],
-        xrTargetJointNames: ['middle-finger-phalanx-distal', 'middle-finger-tip']
-      },
-      {
-        finger: 'middle',
-        segmentIndex: 3,
-        boneSuffix: 'HandMiddle4',
-        xrQuaternionSources: [
-          { jointName: 'middle-finger-phalanx-distal', parentJointNames: ['middle-finger-phalanx-intermediate'] },
-          { jointName: 'middle-finger-tip', parentJointNames: ['middle-finger-phalanx-distal'] }
-        ],
-        xrSourceJointNames: ['middle-finger-phalanx-distal', 'middle-finger-phalanx-intermediate'],
-        xrTargetJointNames: ['middle-finger-tip']
-      },
-      {
-        finger: 'ring',
-        segmentIndex: 0,
-        boneSuffix: 'HandRing1',
-        xrQuaternionSources: [{ jointName: 'ring-finger-metacarpal', parentJointNames: ['wrist'] }],
-        xrSourceJointNames: ['ring-finger-metacarpal', 'wrist'],
-        xrTargetJointNames: ['ring-finger-phalanx-proximal', 'ring-finger-phalanx-intermediate', 'ring-finger-phalanx-distal', 'ring-finger-tip']
-      },
-      {
-        finger: 'ring',
-        segmentIndex: 1,
-        boneSuffix: 'HandRing2',
-        xrQuaternionSources: [{ jointName: 'ring-finger-phalanx-proximal', parentJointNames: ['ring-finger-metacarpal', 'wrist'] }],
-        xrSourceJointNames: ['ring-finger-phalanx-proximal', 'ring-finger-metacarpal', 'wrist'],
-        xrTargetJointNames: ['ring-finger-phalanx-intermediate', 'ring-finger-phalanx-distal', 'ring-finger-tip']
-      },
-      {
-        finger: 'ring',
-        segmentIndex: 2,
-        boneSuffix: 'HandRing3',
-        xrQuaternionSources: [{ jointName: 'ring-finger-phalanx-intermediate', parentJointNames: ['ring-finger-phalanx-proximal', 'ring-finger-metacarpal'] }],
-        xrSourceJointNames: ['ring-finger-phalanx-intermediate', 'ring-finger-phalanx-proximal'],
-        xrTargetJointNames: ['ring-finger-phalanx-distal', 'ring-finger-tip']
-      },
-      {
-        finger: 'ring',
-        segmentIndex: 3,
-        boneSuffix: 'HandRing4',
-        xrQuaternionSources: [
-          { jointName: 'ring-finger-phalanx-distal', parentJointNames: ['ring-finger-phalanx-intermediate'] },
-          { jointName: 'ring-finger-tip', parentJointNames: ['ring-finger-phalanx-distal'] }
-        ],
-        xrSourceJointNames: ['ring-finger-phalanx-distal', 'ring-finger-phalanx-intermediate'],
-        xrTargetJointNames: ['ring-finger-tip']
-      },
-      {
-        finger: 'pinky',
-        segmentIndex: 0,
-        boneSuffix: 'HandPinky1',
-        xrQuaternionSources: [{ jointName: 'pinky-finger-metacarpal', parentJointNames: ['wrist'] }],
-        xrSourceJointNames: ['pinky-finger-metacarpal', 'wrist'],
-        xrTargetJointNames: ['pinky-finger-phalanx-proximal', 'pinky-finger-phalanx-intermediate', 'pinky-finger-phalanx-distal', 'pinky-finger-tip']
-      },
-      {
-        finger: 'pinky',
-        segmentIndex: 1,
-        boneSuffix: 'HandPinky2',
-        xrQuaternionSources: [{ jointName: 'pinky-finger-phalanx-proximal', parentJointNames: ['pinky-finger-metacarpal', 'wrist'] }],
-        xrSourceJointNames: ['pinky-finger-phalanx-proximal', 'pinky-finger-metacarpal', 'wrist'],
-        xrTargetJointNames: ['pinky-finger-phalanx-intermediate', 'pinky-finger-phalanx-distal', 'pinky-finger-tip']
-      },
-      {
-        finger: 'pinky',
-        segmentIndex: 2,
-        boneSuffix: 'HandPinky3',
-        xrQuaternionSources: [{ jointName: 'pinky-finger-phalanx-intermediate', parentJointNames: ['pinky-finger-phalanx-proximal', 'pinky-finger-metacarpal'] }],
-        xrSourceJointNames: ['pinky-finger-phalanx-intermediate', 'pinky-finger-phalanx-proximal'],
-        xrTargetJointNames: ['pinky-finger-phalanx-distal', 'pinky-finger-tip']
-      },
-      {
-        finger: 'pinky',
-        segmentIndex: 3,
-        boneSuffix: 'HandPinky4',
-        xrQuaternionSources: [
-          { jointName: 'pinky-finger-phalanx-distal', parentJointNames: ['pinky-finger-phalanx-intermediate'] },
-          { jointName: 'pinky-finger-tip', parentJointNames: ['pinky-finger-phalanx-distal'] }
-        ],
-        xrSourceJointNames: ['pinky-finger-phalanx-distal', 'pinky-finger-phalanx-intermediate'],
-        xrTargetJointNames: ['pinky-finger-tip']
-      }
+      ...(['index', 'middle', 'ring', 'pinky'] as const).flatMap(fingerRetargetMappings)
     ];
 
     const entries: HandFingerRetargetEntry[] = [];
@@ -870,8 +811,10 @@ export class AvatarRig {
 
   private toBindAimInParent(bone: THREE.Bone, childWorldPosition: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 | undefined {
     if (!bone.parent) return undefined;
-    bone.getWorldPosition(this.tmpVecA);
-    out.subVectors(childWorldPosition, this.tmpVecA);
+    // Own scratch: callers pass tmpVecA as childWorldPosition, which once made
+    // this direction zero and fell back to the parent segment's axis.
+    bone.getWorldPosition(this.tmpBindBoneWorld);
+    out.subVectors(childWorldPosition, this.tmpBindBoneWorld);
     if (out.lengthSq() < 1e-8) return undefined;
     out.normalize();
     bone.parent.getWorldQuaternion(this.tmpParentWorldQuat);

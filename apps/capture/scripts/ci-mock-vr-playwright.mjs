@@ -253,12 +253,14 @@ try {
   const dropoutRightIndexQuat = fingerQuatOf(dropoutHoldSnapshot.tracking.right, 'index');
   const recoveredRightIndexQuat = fingerQuatOf(dropoutRecoveredSnapshot.tracking.right, 'index');
 
+  // Converged means the bone returns to what the same live relaxed pose
+  // produces without a dropout, not merely that it moved.
   const holdDrift = quatAngleDelta(preDropoutRightIndexQuat, dropoutRightIndexQuat);
-  const recoveryDelta = quatAngleDelta(dropoutRightIndexQuat, recoveredRightIndexQuat);
+  const recoveryError = quatAngleDelta(relaxedRightIndexQuat, recoveredRightIndexQuat);
   assert(Number.isFinite(holdDrift), 'Dropout hold quaternion debug output missing.');
-  assert(Number.isFinite(recoveryDelta), 'Dropout recovery quaternion debug output missing.');
+  assert(Number.isFinite(recoveryError), 'Dropout recovery quaternion debug output missing.');
   assert(holdDrift < 0.15, `Dropout hold drifted too much (${holdDrift.toFixed(3)} rad).`);
-  assert(recoveryDelta > 0.04, `Dropout recovery did not converge (${recoveryDelta.toFixed(3)} rad).`);
+  assert(recoveryError < 0.02, `Dropout recovery did not converge to the live pose (${recoveryError.toFixed(3)} rad off).`);
 
   const dropoutQuality = retargetQualityOf(dropoutHoldSnapshot.tracking.right);
   assert(dropoutQuality, 'Dropout retarget quality metrics missing.');

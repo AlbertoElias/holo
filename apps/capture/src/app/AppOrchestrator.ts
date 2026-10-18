@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { createSceneBootstrap } from '../scene/SceneBootstrap';
 import { loadRuntimeConfig } from '../config/runtimeConfig';
 import { AvatarRig, type ArmIkChain, type HandFingerRetargetChain } from '../avatar/AvatarRig';
+import { palmFrameQuaternion } from '../xr/palmFrame';
 import { CharacterMotor } from '../physics/CharacterMotor';
 import { CameraController } from '../camera/CameraController';
 import { XrSessionService } from '../xr/XrSessionService';
@@ -172,6 +173,8 @@ export class AppOrchestrator implements System {
   private readonly tmpVecC = new THREE.Vector3();
   private readonly tmpVecD = new THREE.Vector3();
   private readonly tmpQuatA = new THREE.Quaternion();
+  private readonly handWorldScratch = new THREE.Quaternion();
+  private readonly palmJointScratch = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   private readonly tmpQuatB = new THREE.Quaternion();
   private readonly tmpQuatC = new THREE.Quaternion();
   private readonly tmpQuatD = new THREE.Quaternion();
@@ -553,29 +556,31 @@ export class AppOrchestrator implements System {
     this.spectatorCamera = enabled ? (this.spectatorCamera ?? new THREE.PerspectiveCamera(38, 16 / 9, 0.01, 200)) : null;
   }
 
+  // Two close-ups side by side, one per hand, each from in front of the
+  // avatar looking back at the palm; the avatar's right hand is on the left,
+  // as seen when facing the avatar.
   private renderSpectatorView(): void {
     const spectator = this.spectatorCamera;
     const renderer = this.bootstrap.renderer;
     if (!spectator || !renderer.xr.isPresenting) return;
-    // Aim between the hands (or the chest when they are not tracked) from in
-    // front of the avatar, slightly above, so both hands fill the frame.
-    const root = this.avatarRig.avatarRoot.getWorldPosition(this.tmpVecC);
-    const focus = this.tmpVecD.set(root.x, root.y + this.avatarRig.avatarHeight * 0.72, root.z);
-    const left = this.avatarRig.getHandBoneWorldPosition('left', this.tmpVecA);
-    const right = this.avatarRig.getHandBoneWorldPosition('right', this.tmpVecB);
-    if (left && right) focus.copy(left).add(right).multiplyScalar(0.5);
+    const width = renderer.domElement.width / renderer.getPixelRatio();
+    const height = renderer.domElement.height / renderer.getPixelRatio();
     const yaw = this.camera.lookYaw;
-    spectator.position.set(focus.x - Math.sin(yaw) * 0.9, focus.y + 0.25, focus.z - Math.cos(yaw) * 0.9);
-    spectator.lookAt(focus);
-    const width = renderer.domElement.width;
-    const height = renderer.domElement.height;
-    spectator.aspect = width / Math.max(1, height);
+    spectator.aspect = width / 2 / Math.max(1, height);
     spectator.updateProjectionMatrix();
     renderer.xr.enabled = false;
     renderer.setRenderTarget(null);
+    renderer.setScissorTest(true);
+    (['right', 'left'] as const).forEach((side, slot) => {
+      const hand = this.avatarRig.getHandBoneWorldPosition(side, this.tmpVecD);
+      if (!hand) return;
+      spectator.position.set(hand.x - Math.sin(yaw) * 0.35, hand.y + 0.06, hand.z - Math.cos(yaw) * 0.35);
+      spectator.lookAt(hand.x, hand.y + 0.02, hand.z);
+      renderer.setViewport(slot * (width / 2), 0, width / 2, height);
+      renderer.setScissor(slot * (width / 2), 0, width / 2, height);
+      renderer.render(this.bootstrap.scene, spectator);
+    });
     renderer.setScissorTest(false);
-    renderer.setViewport(0, 0, width / renderer.getPixelRatio(), height / renderer.getPixelRatio());
-    renderer.render(this.bootstrap.scene, spectator);
     renderer.xr.enabled = true;
   }
 
@@ -906,7 +911,8 @@ export class AppOrchestrator implements System {
       const trackingState = this.xrService.getHandTrackingState(side);
       if (!chain || !trackingState.poseValid) continue;
 
-      const solved = this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatarRig.avatarRoot);
+      const handWorld = this.resolveTrackedHandWorldQuaternion(side, chain, this.handWorldScratch);
+      const solved = this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatarRig.avatarRoot, handWorld);
       if (!solved) {
         if (!this.vrIkWarningLogged) {
           console.warn('VR arm IK solve produced invalid output; skipping frame write.');
@@ -925,6 +931,28 @@ export class AppOrchestrator implements System {
         this.setHandSensorTransform(side, this.tmpHandWorld);
       }
     }
+  }
+
+  // Aligns the avatar palm to the tracked palm when hand joints are available,
+  // replacing hand-tuned rotation offsets with a rig-independent mapping.
+  private resolveTrackedHandWorldQuaternion(side: VrHandSide, chain: ArmIkChain, out: THREE.Quaternion): THREE.Quaternion | undefined {
+    if (!chain.palmInHand) return undefined;
+    const source = this.xrService.getHandPoseSource(side);
+    if (source !== 'xr-hand' && source !== 'mock') return undefined;
+    const wrist = this.palmJointScratch[0]!;
+    const index = this.palmJointScratch[1]!;
+    const middle = this.palmJointScratch[2]!;
+    const pinky = this.palmJointScratch[3]!;
+    if (
+      !this.xrService.getTrackedHandJointPosition(side, 'wrist', wrist) ||
+      !this.xrService.getTrackedHandJointPosition(side, 'index-finger-phalanx-proximal', index) ||
+      !this.xrService.getTrackedHandJointPosition(side, 'middle-finger-phalanx-proximal', middle) ||
+      !this.xrService.getTrackedHandJointPosition(side, 'pinky-finger-phalanx-proximal', pinky)
+    ) {
+      return undefined;
+    }
+    const palmWorld = palmFrameQuaternion(wrist, index, middle, pinky, out);
+    return palmWorld?.multiply(this.tmpQuatB.copy(chain.palmInHand).invert()).normalize();
   }
 
   private applyTrackedFingerPoseLegacy(side: VrHandSide): void {

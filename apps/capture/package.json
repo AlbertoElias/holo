@@ -21,6 +21,7 @@
     "test:xr:mock": "node scripts/run-xr-checks.mjs mock-vr",
     "test:xr:flows": "node scripts/run-xr-checks.mjs locomotion",
     "test:xr:hands": "node scripts/run-xr-checks.mjs hands",
+    "fixtures:hands": "node scripts/run-xr-checks.mjs pose-fixture",
     "build": "vite build",
     "preview": "vite preview --host",
     "doctor": "node scripts/doctor.mjs",

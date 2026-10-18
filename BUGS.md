@@ -7,21 +7,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-005 — Avatar finger shape and wrist placement diverge from tracked hands
-
-- **Area:** `apps/capture` hand retargeting (`HandFingerRetargeter`, arm IK)
-- **Severity:** P2 — embodiment fidelity
-- **Observed:** 2026-10-17 by `test:xr:hands` (IWER-emulated input; headset input pending)
-- **Evidence:** `output/ci-hand-replay/iwer-emulated-pinch-report.json`. Finger
-  curl follows the tracked hand over time (correlation 0.63–1.00, no lag) but
-  with a constant offset of 30–66° per finger: an open tracked index measures
-  5°/14°/3° at MCP/PIP/DIP while the avatar shows 29°/25°/14°; in a pinch the
-  avatar bends the PIP 83° where the user bends 33°. The avatar wrist sits a
-  constant ~7.5 cm (4 cm up, 6 cm forward) and ~49° from the tracked wrist.
-- **Expected:** curl error ≤ 20°, correlation ≥ 0.8, wrist ≤ 5 cm and 25°
-  (`TARGETS` in `apps/capture/scripts/lib/hand-fidelity.mjs`).
-- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:hands`.
-- **Guard:** CI enforces today's values as ceilings until the fix lands.
+No verified open bugs.
 
 ## Entry template
 
