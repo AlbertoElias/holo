@@ -14,6 +14,7 @@ import {
   waitForIwerRuntime,
   waitForPageFunctions,
   waitForTextContentPrefix,
+  waitForXrRenderLoop,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
 
@@ -26,7 +27,7 @@ import { analyzeBodyReplay, formatBodyReport } from './lib/body-fidelity.mjs';
 //
 // BODY_REPLAY_FAULTS=1 instead breaks each behavior in turn (debug hook
 // __setBodyFaults) and requires the named metric to fail, proving the check
-// can catch it.
+// can catch it; BODY_REPLAY_FAULT=<name> runs one.
 
 const STEP_MS = 1000 / 30;
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -91,6 +92,7 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
     });
   }
   await freezePageClock(page);
+  await waitForXrRenderLoop(page);
   const durationMs = await page.evaluate(async ({ data, draw }) => {
     const session = window.IWER_DEVICE.activeSession;
     const refSpace = await session.requestReferenceSpace('local-floor');
@@ -103,13 +105,18 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
 
   const frames = [];
   const totalSteps = Math.floor(durationMs / STEP_MS);
+  const timing = { run: 0, sample: 0 };
   for (let index = 0; index < totalSteps; index += 1) {
+    const t0 = performance.now();
     await page.clock.runFor(STEP_MS);
+    const t1 = performance.now();
+    timing.run += t1 - t0;
     const frame = await page.evaluate(() => {
       const hands = window.__sampleHands();
       const wrist = (side) => ({ source: hands[side].source, tracked: { wrist: hands[side].tracked.wrist }, avatar: { wrist: hands[side].avatar.wrist } });
       return { timeMs: window.__replayPlayer.currentTime, body: window.__sampleBody(), hands: { left: wrist('left'), right: wrist('right') } };
     });
+    timing.sample += performance.now() - t1;
     // Once playback ends IWER returns the headset to its default pose.
     if (frame.timeMs >= durationMs - 1) break;
     frames.push(frame);
@@ -132,6 +139,7 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
     ], { stdio: 'inherit' });
     console.log(encoded.status === 0 ? `[body-replay] video: ${videoPath}` : '[body-replay] ffmpeg unavailable; frames kept as PNGs');
   }
+  if (process.env.BODY_REPLAY_PROFILE === '1') console.log(`[body-replay] ${label}: frames ${(timing.run / 1000).toFixed(1)} s, samples ${(timing.sample / 1000).toFixed(1)} s`);
   // Contexts stay open until the browser closes: closing one mid-run makes
   // the next wait on GPU teardown (see ci-vr-locomotion-playwright.mjs).
   await writeFile(path.join(artifactDir, `${label}-samples.json`), JSON.stringify(frames));
@@ -147,7 +155,9 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
 try {
   if (faultMode) {
     const outcomes = [];
+    const only = process.env.BODY_REPLAY_FAULT;
     for (const [fault, { fixture, metrics }] of Object.entries(FAULTS)) {
+      if (only && fault !== only) continue;
       const report = await replay(`${fixture}.json`, { faults: [fault] });
       const caught = report.failures.filter((failure) => metrics.some((metric) => failure.startsWith(`${metric}:`)));
       outcomes.push({ fault, fixture, expected: metrics, caught: caught.length > 0, failures: report.failures });

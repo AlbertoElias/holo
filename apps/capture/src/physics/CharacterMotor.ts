@@ -121,6 +121,7 @@ export class CharacterMotor {
     if (this.tmpMove.lengthSq() > 0) {
       this.tmpMove.normalize().multiplyScalar(this.targetHorizontalSpeed * deltaSec);
     }
+    const wasGrounded = this.grounded;
     if (allowJump && jumpQueued && this.grounded) {
       this.velocityY = this.jumpSpeed;
       this.grounded = false;
@@ -148,18 +149,24 @@ export class CharacterMotor {
       }
       return;
     }
-    // Horizontal correction of a gravity-only move (depenetration, slope
-    // nudges) is not input movement.
+    // A grounded character with no movement stands still: the controller
+    // would otherwise slide the gravity step down a walkable slope a few
+    // millimetres a second (the hand sensors used to hide this by blocking
+    // the capsule).
     const hasInput = this.tmpMove.x !== 0 || this.tmpMove.z !== 0;
-    this.lastInputMovement.set(hasInput ? corrected.x : 0, corrected.y, hasInput ? corrected.z : 0);
+    const external = options?.externalDisplacement;
+    const hasExternal = Boolean(external && (external.x !== 0 || external.z !== 0));
+    const correctedX = hasInput || !wasGrounded ? corrected.x : 0;
+    const correctedZ = hasInput || !wasGrounded ? corrected.z : 0;
+    // Horizontal correction of a gravity-only move is not input movement.
+    this.lastInputMovement.set(hasInput ? correctedX : 0, corrected.y, hasInput ? correctedZ : 0);
     const current = this.characterBody.translation();
-    const total = this.tmpBody.set(corrected.x, corrected.y, corrected.z);
+    const total = this.tmpBody.set(correctedX, corrected.y, correctedZ);
 
     // External displacement moves separately from where input left the
     // capsule, so callers can tell the two apart (the VR rig follows input
     // movement only).
-    const external = options?.externalDisplacement;
-    if (external && Number.isFinite(external.x) && Number.isFinite(external.z) && (external.x !== 0 || external.z !== 0)) {
+    if (external && hasExternal && Number.isFinite(external.x) && Number.isFinite(external.z)) {
       this.characterBody.setTranslation({ x: current.x + total.x, y: current.y + total.y, z: current.z + total.z }, false);
       this.rapierWorld.propagateModifiedBodyPositionsToColliders();
       this.characterController.computeColliderMovement(this.characterCollider, { x: external.x, y: 0, z: external.z }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);

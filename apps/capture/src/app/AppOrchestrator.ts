@@ -746,7 +746,7 @@ export class AppOrchestrator implements System {
     renderer.setScissorTest(false);
   }
 
-  // Third person from front-left of where the avatar first faced, so turns,
+  // Third person, front-left of where the avatar first faced, so turns,
   // crouches, and steps read clearly; the camera only follows position.
   private renderBodySpectator(spectator: THREE.PerspectiveCamera, width: number, height: number): void {
     const renderer = this.bootstrap.renderer;
@@ -806,7 +806,7 @@ export class AppOrchestrator implements System {
     if (this.spectatorMode !== 'body' || !this.headPathLine || !this.headMarker || !this.eyeMarker) return;
     const pose = this.xrService.getHeadPose();
     if (!pose.valid) return;
-    if (this.headPathCount === 0) this.spectatorViewYaw = this.bodySolver.bodyYaw + Math.PI * 0.8;
+    if (this.headPathCount === 0) this.spectatorViewYaw = this.bodySolver.bodyYaw + Math.PI * 0.25;
     const positions = this.headPathLine.geometry.getAttribute('position') as THREE.BufferAttribute;
     if (this.headPathCount === HEAD_PATH_POINTS) {
       positions.array.copyWithin(0, 3);

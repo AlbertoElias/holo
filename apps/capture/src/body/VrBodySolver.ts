@@ -491,7 +491,8 @@ export class VrBodySolver {
 
     this.leanDrop += (drop - this.leanDrop) * (1 - Math.exp(-dt / LEAN_DROP_TIME_SEC));
     const spine = this.hipsToEyes;
-    const leanReach = LEAN_BASE_METERS + Math.sqrt(Math.max(0, spine * spine - Math.max(0, spine - this.leanDrop) ** 2));
+    // Fault: the root chases every head sway (no lean allowance).
+    const leanReach = this.faults.has('fidget-steps') ? 0.005 : LEAN_BASE_METERS + Math.sqrt(Math.max(0, spine * spine - Math.max(0, spine - this.leanDrop) ** 2));
 
     this.root.set(rootPosition.x, rootPosition.y, rootPosition.z);
     const next = this.planA.copy(this.root);

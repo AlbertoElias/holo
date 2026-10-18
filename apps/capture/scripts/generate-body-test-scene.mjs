@@ -9,6 +9,7 @@ import path from 'node:path';
 
 const OUT = path.resolve('fixtures/scenes/body-floor.gltf');
 const FLOOR = 7;
+const SLAB = 0.01;
 const RAMP = { x0: -1.5, x1: 1.5, z0: 1.6, z1: 3.6, z2: 6, h: 0.28 };
 
 const positions = [];
@@ -31,6 +32,9 @@ const quad = (a, b, c, d) => {
 
 const { x0, x1, z0, z1, z2, h } = RAMP;
 quad([-FLOOR, 0, -FLOOR], [-FLOOR, 0, FLOOR], [FLOOR, 0, FLOOR], [FLOOR, 0, -FLOOR]);
+// A 1 cm slab edge: capture grounds the scene by its lowest point, so the
+// floor ends up 1 cm above capture's own ground disc instead of z-fighting it.
+quad([-FLOOR, -SLAB, FLOOR], [FLOOR, -SLAB, FLOOR], [FLOOR, 0, FLOOR], [-FLOOR, 0, FLOOR]);
 quad([x0, 0.001, z0], [x0, h, z1], [x1, h, z1], [x1, 0.001, z0]);
 quad([x0, h, z1], [x0, h, z2], [x1, h, z2], [x1, h, z1]);
 quad([x0, 0, z0], [x0, 0, z2], [x0, h, z2], [x0, h, z1]);

@@ -14,6 +14,7 @@ import {
   waitForIwerRuntime,
   waitForPageFunctions,
   waitForTextContentPrefix,
+  waitForXrRenderLoop,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
 
@@ -80,6 +81,7 @@ async function replay(fileName) {
   // Frozen page time makes IWER's playback advance only when the test
   // releases frames, so input and simulation stay in lockstep on any host.
   await freezePageClock(page);
+  await waitForXrRenderLoop(page);
   const durationMs = await page.evaluate(async ({ data, draw }) => {
     const session = window.IWER_DEVICE.activeSession;
     const refSpace = await session.requestReferenceSpace('local-floor');

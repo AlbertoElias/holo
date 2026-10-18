@@ -338,7 +338,10 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
       const crossing = (series, shift) => series.findIndex((y) => sign * (y - shift - half) >= 0);
       const headHalf = crossing(headTurn, 0);
       const pelvisHalf = crossing(pelvisTurn, offset);
-      if (headHalf >= 0 && pelvisHalf >= 0) turnLags.push((pelvisHalf - headHalf) * dt);
+      // Only turns the pelvis makes too: one already past halfway (a glance
+      // inside the neck's range) has no lag to measure.
+      const pelvisTravel = Math.abs(pelvisTurn.at(-1) - pelvisTurn[0]);
+      if (headHalf >= 0 && pelvisHalf > 0 && pelvisTravel > Math.abs(headTurn.at(-1) - headTurn[0]) / 2) turnLags.push((pelvisHalf - headHalf) * dt);
     }
   }
   metrics.turnLags = turnLags;
@@ -446,6 +449,20 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
   // Stepping.
   const steps = [...liftoffs.left, ...liftoffs.right].sort((a, b) => a - b);
   metrics.steps = steps.length;
+  // Relocations: a foot ending more than 3 cm from where it last stood still,
+  // however low it lifted (shuffles hide below lift-off heights).
+  const relocations = [];
+  for (const side of ['left', 'right']) {
+    const points = footPoints[side];
+    const still = (i) => i > 0 && flatDistance(points[i].ankle, points[i - 1].ankle) / dt < 0.05;
+    const rests = runs(n, still).filter(([a, b]) => b - a >= 2);
+    for (let r = 1; r < rests.length; r += 1) {
+      if (flatDistance(points[rests[r][0]].ankle, points[rests[r - 1][1]].ankle) > 0.03) relocations.push(rests[r - 1][1] + 1);
+    }
+  }
+  relocations.sort((a, b) => a - b);
+  metrics.relocations = relocations.length;
+  const relocationsIn = (a, b) => relocations.filter((i) => i >= a && i <= b).length;
   // Eyes while standing (slow, no foot lifting within 0.5 s) and otherwise.
   const settleFrames = Math.round(0.5 / dt);
   const standingNow = samples.map((_, i) => speed[i] < 0.15 && !steps.some((step) => Math.abs(step - i) <= settleFrames));
@@ -476,7 +493,7 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
   check('stepLengthMinLeg', min(stepLengths), (v) => v >= THRESHOLDS.minStepLengthLeg, (v) => `steps of ${v.toFixed(2)} leg lengths`);
   check('stepLengthMaxLeg', max(stepLengths), (v) => v <= THRESHOLDS.maxStepLengthLeg, (v) => (Number.isFinite(v) ? `steps of ${v.toFixed(2)} leg lengths` : 'walking without stepping'));
   const stillWindows = runs(n, (i) => speed[i] < 0.15 && Math.abs(yawRate[i]) < 20 / DEG && headDrop[i] < 0.05).filter(([a, b]) => (b - a) * dt >= 2);
-  check('stepsWhileStillMax', stillWindows.length ? max(stillWindows.map(([a, b]) => stepsIn(a + Math.round(0.6 / dt), b))) : null, (v) => v <= THRESHOLDS.maxStepsWhileStill, (v) => `${v} steps while standing still`);
+  check('stepsWhileStillMax', stillWindows.length ? max(stillWindows.map(([a, b]) => relocationsIn(a + Math.round(0.6 / dt), b))) : null, (v) => v <= THRESHOLDS.maxStepsWhileStill, (v) => `${v} steps while standing still`);
 
   // Crouch and lean in place.
   const feetMid = samples.map((_, i) => mid(footPoints.left[i].ankle, footPoints.right[i].ankle));
@@ -486,7 +503,7 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
   // A lean lowers the head as the torso pivots; a slow small step does not.
   const leaning = (i) => leanOffset[i] - standingLean > 0.12 && headDrop[i] > 0.02;
   const inPlace = runs(n, (i) => speed[i] < 0.35 && (headDrop[i] > 0.15 || leaning(i))).filter(([a, b]) => b - a > 10);
-  check('stepsInPlaceMax', inPlace.length ? max(inPlace.map(([a, b]) => stepsIn(a, b))) : null, (v) => v <= THRESHOLDS.maxStepsInPlace, (v) => `${v} steps while crouching or leaning in place`);
+  check('stepsInPlaceMax', inPlace.length ? max(inPlace.map(([a, b]) => relocationsIn(a, b))) : null, (v) => v <= THRESHOLDS.maxStepsInPlace, (v) => `${v} steps while crouching or leaning in place`);
   const hips0 = median(bones.slice(0, calibrationFrames).map((b) => b.hips[1]));
   const crouchFrames = samples.map((_, i) => i).filter((i) => headDrop[i] > 0.2);
   check('crouchRatio', crouchFrames.length > 10 ? median(crouchFrames.map((i) => (hips0 - bones[i].hips[1]) / headDrop[i])) : null, (v) => v >= THRESHOLDS.minCrouchRatio && v <= THRESHOLDS.maxCrouchRatio, (v) => `pelvis drops ${v.toFixed(2)}× the head drop`);
