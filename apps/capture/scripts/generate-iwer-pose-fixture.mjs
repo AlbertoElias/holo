@@ -54,6 +54,12 @@ try {
     readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr'
   });
 
+  // IWER's DevUI rewrites device and hand transforms every frame unless
+  // control is programmatic; without this the hands never left its defaults.
+  await page.evaluate(() => {
+    window.IWER_DEVICE.controlMode = 'programmatic';
+  });
+
   // A writable "blend" pose per hand, interpolated between IWER's captured
   // poses (translation lerp, rotation slerp per joint).
   await page.evaluate(() => {

@@ -27,6 +27,10 @@ interface CharacterMotorUpdateOptions {
   moveSpeedMultiplier?: number;
   allowJump?: boolean;
   stickToTerrain?: boolean;
+  // World-space horizontal displacement applied this step on top of input
+  // movement (room-scale VR: the body following the tracked head). It goes
+  // through the character controller, so walls and slopes still apply.
+  externalDisplacement?: { x: number; z: number };
 }
 
 export class CharacterMotor {
@@ -55,6 +59,7 @@ export class CharacterMotor {
   private readonly tmpRight = new THREE.Vector3();
   private readonly tmpMove = new THREE.Vector3();
   private readonly tmpBody = new THREE.Vector3();
+  private readonly lastInputMovement = new THREE.Vector3();
 
   async init(avatarRig: AvatarRig): Promise<boolean> {
     await RAPIER.init();
@@ -116,7 +121,6 @@ export class CharacterMotor {
     if (this.tmpMove.lengthSq() > 0) {
       this.tmpMove.normalize().multiplyScalar(this.targetHorizontalSpeed * deltaSec);
     }
-
     if (allowJump && jumpQueued && this.grounded) {
       this.velocityY = this.jumpSpeed;
       this.grounded = false;
@@ -127,27 +131,53 @@ export class CharacterMotor {
       this.velocityY = groundedStickVelocity;
     }
 
+    // Sensors (the hand spheres) must never block the body: they move with
+    // the avatar's hands and sat in the capsule's path when walking in VR.
     this.characterController.computeColliderMovement(this.characterCollider, {
       x: this.tmpMove.x,
       y: this.velocityY * deltaSec,
       z: this.tmpMove.z
-    });
+    }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
     const corrected = this.characterController.computedMovement();
     if (!Number.isFinite(corrected.x) || !Number.isFinite(corrected.y) || !Number.isFinite(corrected.z)) {
       this.horizontalSpeed = 0;
+      this.lastInputMovement.set(0, 0, 0);
       if (!this.invalidMovementLogged) {
         console.warn('Skipping invalid character movement correction.', corrected);
         this.invalidMovementLogged = true;
       }
       return;
     }
-    this.horizontalSpeed = Math.hypot(corrected.x, corrected.z) / Math.max(deltaSec, 1e-6);
-
+    // Horizontal correction of a gravity-only move (depenetration, slope
+    // nudges) is not input movement.
+    const hasInput = this.tmpMove.x !== 0 || this.tmpMove.z !== 0;
+    this.lastInputMovement.set(hasInput ? corrected.x : 0, corrected.y, hasInput ? corrected.z : 0);
     const current = this.characterBody.translation();
+    const total = this.tmpBody.set(corrected.x, corrected.y, corrected.z);
+
+    // External displacement moves separately from where input left the
+    // capsule, so callers can tell the two apart (the VR rig follows input
+    // movement only).
+    const external = options?.externalDisplacement;
+    if (external && Number.isFinite(external.x) && Number.isFinite(external.z) && (external.x !== 0 || external.z !== 0)) {
+      this.characterBody.setTranslation({ x: current.x + total.x, y: current.y + total.y, z: current.z + total.z }, false);
+      this.rapierWorld.propagateModifiedBodyPositionsToColliders();
+      this.characterController.computeColliderMovement(this.characterCollider, { x: external.x, y: 0, z: external.z }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
+      const externalCorrected = this.characterController.computedMovement();
+      if (Number.isFinite(externalCorrected.x) && Number.isFinite(externalCorrected.y) && Number.isFinite(externalCorrected.z)) {
+        total.x += externalCorrected.x;
+        total.y += externalCorrected.y;
+        total.z += externalCorrected.z;
+      }
+      this.characterBody.setTranslation(current, false);
+      this.rapierWorld.propagateModifiedBodyPositionsToColliders();
+    }
+    this.horizontalSpeed = Math.hypot(total.x, total.z) / Math.max(deltaSec, 1e-6);
+
     this.characterBody.setNextKinematicTranslation({
-      x: current.x + corrected.x,
-      y: current.y + corrected.y,
-      z: current.z + corrected.z
+      x: current.x + total.x,
+      y: current.y + total.y,
+      z: current.z + total.z
     });
 
     this.rapierWorld.timestep = clamp(deltaSec, 1 / 120, 1 / 20);
@@ -170,6 +200,12 @@ export class CharacterMotor {
     const p = this.characterBody.translation();
     out.set(p.x, p.y, p.z);
     return out;
+  }
+
+  // Collision-corrected movement from input and gravity in the last update,
+  // excluding any external displacement.
+  getLastInputMovement(out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.lastInputMovement);
   }
 
   getAvatarVisualOffsetY(): number {

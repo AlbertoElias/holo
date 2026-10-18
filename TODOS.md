@@ -25,6 +25,17 @@ it from the item below instead of duplicating its status here.
   stepping from the resulting root motion, and add a replay check from
   recorded controller input. Builds on
   [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
+- [ ] Replace the procedural walk/jump/fall clips with realistic walking,
+  crouching, and jumping animation that works in both XR and the 2D (desktop)
+  view and adapts to the environment: feet and pelvis follow inclines and
+  steps, the body slows and turns against walls, crouch-walk and landing
+  absorb on uneven ground. Share foot planting with the VR body solver rather
+  than running two systems; prove it with replay metrics like the body check.
+- [ ] In XR, adapt the avatar to the person's height: measure standing eye
+  height (and optionally arm span) at session start or on request, then scale
+  or re-proportion the avatar so its eyes, hands, and floor contact match the
+  user without changing the world scale. Handle recalibration, seated users,
+  and how the scaled avatar is recorded and exported.
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
   intentionally uses local filesystem storage and SQLite.

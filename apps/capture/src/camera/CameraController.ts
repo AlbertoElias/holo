@@ -60,7 +60,9 @@ export class CameraController {
     this.resetCameraForDesktop();
   }
 
-  update(isVrActive: boolean, isXrPresenting: boolean, deltaSec: number, isAr = false): void {
+  // rigWorldLocked: the VR body solver owns the rig (it moves only with
+  // artificial locomotion), so the camera must not dolly it to the avatar.
+  update(isVrActive: boolean, isXrPresenting: boolean, deltaSec: number, isAr = false, rigWorldLocked = false): void {
     // AR spectator: the WebXR device controls the camera directly.
     // Keep cameraRig at origin so the XR pose maps 1:1 to world space.
     if (isAr) {
@@ -89,6 +91,7 @@ export class CameraController {
       return;
     }
 
+    if (rigWorldLocked) return;
     this.updateFirstPersonCamera('vr');
   }
 

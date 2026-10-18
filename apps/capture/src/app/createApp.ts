@@ -24,7 +24,10 @@ export function createApp(): AppRuntime {
     respawnCharacter: () => orchestrator.respawnCharacter(),
     sampleHands: () => orchestrator.sampleHands(),
     setHandOverlay: (enabled) => orchestrator.setHandOverlay(enabled),
-    setSpectatorView: (enabled) => orchestrator.setSpectatorView(enabled),
+    setSpectatorView: (mode) => orchestrator.setSpectatorView(mode),
+    setFrameStepping: (enabled, draw) => orchestrator.setFrameStepping(enabled, draw),
+    sampleBody: () => orchestrator.sampleBody(),
+    setBodyFaults: (faults) => orchestrator.setBodyFaults(faults),
     captureHandCalibrationPose: () => orchestrator.captureHandCalibrationPose(),
     resetHandCalibrationPose: () => orchestrator.resetHandCalibrationPose()
   });

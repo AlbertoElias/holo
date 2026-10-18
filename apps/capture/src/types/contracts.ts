@@ -138,6 +138,29 @@ export type HandSample = {
   avatar: Partial<Record<TrackedHandJointName, [number, number, number]>>;
 };
 
+export type Vec3Tuple = [number, number, number];
+
+// 'hands': close-ups of both hands; 'body': a third-person view that follows
+// the avatar with the tracked head path drawn over it.
+export type SpectatorViewMode = 'off' | 'hands' | 'body';
+
+// One frame of the VR body for fidelity checks, in world space. `trackedHead`
+// is the app's own reading of the XR views (the check's ground truth comes
+// from the recording itself); `rig` maps tracking space to world.
+export type BodySample = {
+  active: boolean;
+  rig: { position: Vec3Tuple; quaternion: [number, number, number, number] };
+  trackedHead: { local: Vec3Tuple; world: Vec3Tuple; worldQuaternion: [number, number, number, number] } | null;
+  root: Vec3Tuple;
+  bones: Partial<Record<string, Vec3Tuple>>;
+  eyes: { left: Vec3Tuple; right: Vec3Tuple } | null;
+  // True ground surface height and normal under each ankle and toe.
+  ground: Partial<Record<'root' | 'leftAnkle' | 'rightAnkle' | 'leftToe' | 'rightToe', { y: number; normal: Vec3Tuple }>>;
+  // Solver state, for diagnosis only; checks measure the bones instead.
+  solver: { aligned: boolean; translating: boolean; turning: boolean; bodyYaw: number; steps: number; swinging: { left: boolean; right: boolean } };
+  dims: { legLength: number; ankleHeight: number; toeHeight: number; toeForward: number; eyeHeight: number; hipHeight: number; stanceWidth: number } | null;
+};
+
 export type MockVrPoseInput = {
   enabled?: boolean;
   head?: { position?: Vec3Like; quaternion?: QuatLike };

@@ -1,0 +1,89 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "holoim generate-body-test-scene.mjs"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "BodyTestFloor",
+      "mesh": 0
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.42,
+          0.45,
+          0.5,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.9
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1008,
+      "uri": "data:application/octet-stream;base64,AADgwAAAAAAAAODAAADgwAAAAAAAAOBAAADgQAAAAAAAAOBAAADgwAAAAAAAAODAAADgQAAAAAAAAOBAAADgQAAAAAAAAODAAADAv28SgzrNzMw/AADAvylcjz5mZmZAAADAPylcjz5mZmZAAADAv28SgzrNzMw/AADAPylcjz5mZmZAAADAP28SgzrNzMw/AADAvylcjz5mZmZAAADAvylcjz4AAMBAAADAPylcjz4AAMBAAADAvylcjz5mZmZAAADAPylcjz4AAMBAAADAPylcjz5mZmZAAADAvwAAAADNzMw/AADAvwAAAAAAAMBAAADAvylcjz4AAMBAAADAvwAAAADNzMw/AADAvylcjz4AAMBAAADAvylcjz5mZmZAAADAPwAAAADNzMw/AADAPylcjz5mZmZAAADAPylcjz4AAMBAAADAPwAAAADNzMw/AADAPylcjz4AAMBAAADAPwAAAAAAAMBAAADAvwAAAAAAAMBAAADAPwAAAAAAAMBAAADAPylcjz4AAMBAAADAvwAAAAAAAMBAAADAPylcjz4AAMBAAADAvylcjz4AAMBAAADgwAAAAAAAAODAAADgQAAAAAAAAODAAADgQAAAIEAAAODAAADgwAAAAAAAAODAAADgQAAAIEAAAODAAADgwAAAIEAAAODAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAHyLfT9geg2+AAAAAHyLfT9geg2+AAAAAHyLfT9geg2+AAAAAHyLfT9geg2+AAAAAHyLfT9geg2+AAAAAHyLfT9geg2+AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 504
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 504,
+      "byteLength": 504
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 42,
+      "type": "VEC3",
+      "min": [
+        -7,
+        0,
+        -7
+      ],
+      "max": [
+        7,
+        2.5,
+        7
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 42,
+      "type": "VEC3"
+    }
+  ]
+}

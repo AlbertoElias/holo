@@ -1,4 +1,4 @@
-import type { HandSample, MockInputState, MockVrPoseInput, VrHandSide } from '../types/contracts';
+import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, VrHandSide } from '../types/contracts';
 
 export interface DebugBridgeAdapters {
   renderGameToText: () => string;
@@ -9,7 +9,10 @@ export interface DebugBridgeAdapters {
   respawnCharacter: () => boolean;
   sampleHands: () => Record<VrHandSide, HandSample>;
   setHandOverlay: (enabled: boolean) => void;
-  setSpectatorView: (enabled: boolean) => void;
+  setSpectatorView: (mode: boolean | SpectatorViewMode) => void;
+  setFrameStepping: (enabled: boolean, draw?: boolean) => void;
+  sampleBody: () => BodySample;
+  setBodyFaults: (faults: readonly string[]) => void;
   captureHandCalibrationPose: () => Record<'left' | 'right', boolean>;
   resetHandCalibrationPose: () => void;
 }
@@ -24,7 +27,10 @@ export class DebugBridge {
     __respawnCharacter?: () => boolean;
     __sampleHands?: () => Record<VrHandSide, HandSample>;
     __setHandOverlay?: (enabled: boolean) => void;
-    __setSpectatorView?: (enabled: boolean) => void;
+    __setSpectatorView?: (mode: boolean | SpectatorViewMode) => void;
+    __setFrameStepping?: (enabled: boolean, draw?: boolean) => void;
+    __sampleBody?: () => BodySample;
+    __setBodyFaults?: (faults: readonly string[]) => void;
     __captureHandCalibrationPose?: () => Record<'left' | 'right', boolean>;
     __resetHandCalibrationPose?: () => void;
   };
@@ -41,6 +47,9 @@ export class DebugBridge {
     this.globalWindow.__sampleHands = this.adapters.sampleHands;
     this.globalWindow.__setHandOverlay = this.adapters.setHandOverlay;
     this.globalWindow.__setSpectatorView = this.adapters.setSpectatorView;
+    this.globalWindow.__setFrameStepping = this.adapters.setFrameStepping;
+    this.globalWindow.__sampleBody = this.adapters.sampleBody;
+    this.globalWindow.__setBodyFaults = this.adapters.setBodyFaults;
     this.globalWindow.__captureHandCalibrationPose = this.adapters.captureHandCalibrationPose;
     this.globalWindow.__resetHandCalibrationPose = this.adapters.resetHandCalibrationPose;
   }
@@ -55,6 +64,9 @@ export class DebugBridge {
     delete this.globalWindow.__sampleHands;
     delete this.globalWindow.__setHandOverlay;
     delete this.globalWindow.__setSpectatorView;
+    delete this.globalWindow.__setFrameStepping;
+    delete this.globalWindow.__sampleBody;
+    delete this.globalWindow.__setBodyFaults;
     delete this.globalWindow.__captureHandCalibrationPose;
     delete this.globalWindow.__resetHandCalibrationPose;
   }

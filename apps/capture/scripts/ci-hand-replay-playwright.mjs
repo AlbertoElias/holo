@@ -21,7 +21,9 @@ import { analyzeHandReplay, formatHandReport } from './lib/hand-fidelity.mjs';
 
 // Replays headset input recorded by capture's dev recorder through the real
 // WebXR path (IWER ActionPlayer → XRHand joints → retargeter → avatar) and
-// measures how closely the avatar's hands follow the tracked hands.
+// measures how closely the avatar's hands follow the tracked hands. The
+// simulation ticks inside each XR frame, in a headset's order (B-008 hid
+// behind a present-then-step order).
 
 const STEP_MS = 1000 / 30;
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -51,7 +53,7 @@ async function replay(fileName) {
   wireXrConsoleErrors(page, consoleErrors, { label });
   await attachXrEnvironment(page, { mode: 'iwer' });
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
-  await waitForPageFunctions(page, ['__setManualClock', '__sampleHands', '__setHandOverlay', 'advanceTime']);
+  await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__sampleHands', '__setHandOverlay']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   // Released frames only deliver XR input unless a video needs them drawn.
   await page.evaluate((draw) => {
@@ -78,27 +80,28 @@ async function replay(fileName) {
   // Frozen page time makes IWER's playback advance only when the test
   // releases frames, so input and simulation stay in lockstep on any host.
   await freezePageClock(page);
-  const durationMs = await page.evaluate(async (data) => {
+  const durationMs = await page.evaluate(async ({ data, draw }) => {
     const session = window.IWER_DEVICE.activeSession;
     const refSpace = await session.requestReferenceSpace('local-floor');
     window.__replayPlayer = window.IWER_DEVICE.createActionPlayer(refSpace, data);
     window.__replayPlayer.play();
+    window.__setFrameStepping(true, draw);
     return window.__replayPlayer.duration;
-  }, recording);
+  }, { data: recording, draw: Boolean(videoFrameDir) });
 
   const frames = [];
   const totalSteps = Math.floor(durationMs / STEP_MS);
   for (let index = 0; index < totalSteps; index += 1) {
     await page.clock.runFor(STEP_MS);
-    const sample = await page.evaluate((ms) => {
-      window.advanceTime(ms);
+    const sample = await page.evaluate(() => {
       const state = JSON.parse(window.render_game_to_text());
       return {
         timeMs: window.__replayPlayer.currentTime,
         hands: window.__sampleHands(),
         state: { mode: state.mode, avatar: state.avatar, character: state.character.position, tracking: { left: { poseValid: state.tracking.left.poseValid, target: state.tracking.left.targetPosition, bone: state.tracking.left.bonePosition, sensor: state.tracking.left.sensorPosition }, right: { poseValid: state.tracking.right.poseValid, target: state.tracking.right.targetPosition, bone: state.tracking.right.bonePosition, sensor: state.tracking.right.sensorPosition } } }
       };
-    }, STEP_MS);
+    });
+    if (sample.timeMs >= durationMs - 1) break;
     frames.push(sample);
     if (videoFrameDir) {
       await page.screenshot({ path: path.join(videoFrameDir, label, `${String(index).padStart(5, '0')}.png`) });
