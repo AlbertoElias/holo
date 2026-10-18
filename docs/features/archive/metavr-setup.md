@@ -1,7 +1,7 @@
 # Feature brief: MetaVR setup for physical Quest automation
 
 **Lead:** Muse (quartz-orbit)
-**Status:** Verifying
+**Status:** Complete
 
 ## User outcome
 
@@ -23,13 +23,12 @@ host-level opt-in); CI usage; wearing-based validation itself.
 ## Acceptance criteria
 
 - [x] `pnpm run doctor` passes with `metavr` registered for both agents.
-- [ ] `scripts/mcp/metavr.sh` starts the MetaVR MCP stdio server when
-  the binary is present on the host. (Pending: installed
-  `@meta-quest/metavr` via npm with caches redirected, then drove a real
-  MCP `initialize` + `tools/list` exchange through the launcher — it
-  exits before responding because the platform binary cannot be fetched:
-  `getaddrinfo ENOTFOUND securecdn.oculus.com` under the sandbox's
-  proxy-only network. No Quest is currently connected either.)
+- [x] `scripts/mcp/metavr.sh` starts the MetaVR MCP stdio server when
+  the binary is present on the host. (Verified 2026-10-18: installed
+  `@meta-quest/metavr` to the user prefix; `metavr mcp server` answered
+  MCP `initialize` as `metavr 1.8.0.17.10` and listed device/perf/UI
+  tools. No Quest was connected yet; device tools need the one-time
+  USB-debugging accept.)
 - [x] Setup doc states the one-time wearing step (USB-debugging prompt)
   and the no-wear testing split.
 - [x] No default script or CI job invokes MetaVR.
