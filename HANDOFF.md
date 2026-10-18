@@ -5,14 +5,20 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-12
-**Baseline:** `cf55d08c4ab0` — check `git log --oneline -10` before trusting it.
-**Working tree when updated:** uncommitted capture pinch-retarget/IWSDK work
-plus the in-flight deterministic-CI brief; preserve changes you did not make.
+**Updated:** 2026-10-18
+**Baseline:** `01c1ca691378` — check `git log --oneline -10` before trusting it.
+**Working tree when updated:** clean; MetaVR setup and capture AR recenter
+landed on `main`.
 
 ## Next action
 
-Record headset input for `test:xr:hands` (steps in `apps/capture/README.md`,
+Physical-device session (Quest 3 connected and USB-authorized;
+`@meta-quest/metavr` 1.8.0.17.10 installed to `~/.local`, `adb` platform-tools
+in `~/.local/bin`, `metavr` MCP registered for both agents — run device work
+from a fresh agent session so the MCP server is host-spawned, or an
+unsandboxed shell; sandboxed bash cannot reach USB). First: desk-bound
+MetaVR checks (device screenshot, capture launch, frame-rate profile).
+Then record headset input for `test:xr:hands` (steps in `apps/capture/README.md`,
 "Hand-Tracking Fidelity From Headset Input"), commit it under
 `apps/capture/fixtures/input-recordings/`, and recalibrate the B-005 ceilings
 against it. Active brief: [`docs/features/hand-tracking-fidelity.md`](docs/features/hand-tracking-fidelity.md).
