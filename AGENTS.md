@@ -66,6 +66,11 @@ Work in your own worktree by default; the main checkout is the integration point
   You are pre-authorized to commit and push within this workflow; do not stop
   to ask for approval. Stage only the files you changed by name — never commit
   another agent's in-progress work, and never use a broad `git add`.
+- Git transport is HTTPS with the `gh` credential helper (repo-local config:
+  `credential.https://github.com.helper` → `gh auth git-credential`). SSH
+  fails inside sandboxed agent sessions (`No user exists for uid 501` — the
+  sandbox blocks the user-database lookup SSH requires); HTTPS through `gh`
+  works with no approval. Do not switch the remote back to SSH.
 - The lead merges the verified branch into `main`, pushes, then removes the
   worktree (`git worktree remove`) and deletes the merged branch. If a push is
   rejected because another agent landed first, pull with rebase, re-run the
