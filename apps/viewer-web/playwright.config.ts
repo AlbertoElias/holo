@@ -25,7 +25,7 @@ const webServers = [
   },
   ...(runPipeline
     ? [{
-        command: `TEST_API_PORT=${apiPort} pnpm --filter @holoim/api exec tsx ../../scripts/test-api.ts`,
+        command: `WEB_ORIGIN=${e2eBaseUrl} TEST_API_PORT=${apiPort} pnpm --filter @holoim/api exec tsx ../../scripts/test-api.ts`,
         gracefulShutdown: { signal: "SIGTERM" as const, timeout: 5000 },
         timeout: 120000,
         reuseExistingServer,
@@ -46,7 +46,7 @@ export default defineConfig({
     baseURL: e2eBaseUrl,
     ...XR_CONTEXT_OPTIONS,
     launchOptions: {
-      args: [...XR_CHROMIUM_ARGS]
+      args: [...XR_CHROMIUM_ARGS, ...(runPipeline ? ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] : [])]
     }
   },
   webServer: webServers

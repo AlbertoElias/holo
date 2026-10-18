@@ -8,7 +8,7 @@ import { deleteHologramResponseSchema, hologramDtoSchema, paginatedHologramsSche
 import { MAX_GLB_BYTES } from "../lib/constants.js";
 import { createHologram, deleteHologramById, getHologramById, listHolograms, updateHologramUsdzPath } from "../services/hologram-repo.js";
 import { saveUploadedGlb, UploadValidationError } from "../services/hologram-storage.js";
-import { convertGlbToUsdz } from "../services/usdz-converter.js";
+import { convertGlbToUsdz, usdzFilenameFor, withHologramLock } from "../services/usdz-converter.js";
 
 const listQuerySchema = z.object({
   cursor: z.string().optional(),
@@ -167,30 +167,34 @@ export async function registerHologramRoutes(
       return reply.status(400).send({ error: "Invalid id param." });
     }
 
-    const item = await getHologramById(params.data.id);
-    if (!item) {
-      return reply.status(404).send({ error: "Hologram not found." });
-    }
+    return withHologramLock(params.data.id, async () => {
+      const item = await getHologramById(params.data.id);
+      if (!item) {
+        return reply.status(404).send({ error: "Hologram not found." });
+      }
 
-    // If USDZ already exists, redirect to it
-    if (item.usdzPath) {
-      return reply.redirect(`/${item.usdzPath}`);
-    }
+      // Resolve the current converter version on every request. The service reuses
+      // an existing package, or regenerates a missing/stale preview under a lock.
+      reply.header("Cache-Control", "no-store");
+      const glbPath = path.join(uploadsRoot, item.filenameStored);
+      const usdzFilename = usdzFilenameFor(item.filenameStored);
+      const usdzAbsPath = path.join(uploadsRoot, usdzFilename);
+      const relativeUsdzPath = path.posix.join("uploads", usdzFilename);
 
-    // Trigger on-demand conversion
-    const glbPath = path.join(uploadsRoot, item.filenameStored);
-    const usdzFilename = item.filenameStored.replace(/\.glb$/i, ".usdz");
-    const usdzAbsPath = path.join(uploadsRoot, usdzFilename);
-    const relativeUsdzPath = path.posix.join("uploads", usdzFilename);
-
-    try {
-      await convertGlbToUsdz(item.id, glbPath, usdzAbsPath);
-      await updateHologramUsdzPath(item.id, relativeUsdzPath);
-      return reply.redirect(`/${relativeUsdzPath}`);
-    } catch (error) {
-      request.log.error({ error }, "USDZ conversion failed");
-      return reply.status(503).send({ error: "USDZ conversion temporarily unavailable." });
-    }
+      try {
+        await convertGlbToUsdz(glbPath, usdzAbsPath);
+        await updateHologramUsdzPath(item.id, relativeUsdzPath);
+        if (item.usdzPath && item.usdzPath !== relativeUsdzPath) {
+          await rm(path.join(uploadsRoot, path.basename(item.usdzPath)), { force: true }).catch((error: unknown) => {
+            request.log.warn({ error }, "Could not remove superseded USDZ preview");
+          });
+        }
+        return reply.redirect(`/${relativeUsdzPath}`);
+      } catch (error) {
+        request.log.error({ error }, "USDZ conversion failed");
+        return reply.status(503).send({ error: "USDZ conversion temporarily unavailable." });
+      }
+    });
   });
 
   app.delete("/holograms/:id", async (request, reply) => {
@@ -199,43 +203,49 @@ export async function registerHologramRoutes(
       return reply.status(400).send({ error: "Invalid id param." });
     }
 
-    const item = await getHologramById(params.data.id);
-    if (!item) {
-      return reply.status(404).send({ error: "Hologram not found." });
-    }
-
-    const glbAbsolutePath = path.join(uploadsRoot, item.filenameStored);
-    const usdzAbsolutePath = item.usdzPath
-      ? path.join(uploadsRoot, path.basename(item.usdzPath))
-      : null;
-
-    let deletedFile = false;
-    let deletedUsdz = false;
-
-    try {
-      await rm(glbAbsolutePath, { force: true });
-      deletedFile = true;
-    } catch {
-      deletedFile = false;
-    }
-
-    if (usdzAbsolutePath) {
-      try {
-        await rm(usdzAbsolutePath, { force: true });
-        deletedUsdz = true;
-      } catch {
-        deletedUsdz = false;
+    return withHologramLock(params.data.id, async () => {
+      const item = await getHologramById(params.data.id);
+      if (!item) {
+        return reply.status(404).send({ error: "Hologram not found." });
       }
-    }
 
-    await deleteHologramById(item.id);
+      const glbAbsolutePath = path.join(uploadsRoot, item.filenameStored);
+      const usdzAbsolutePaths = new Set([
+        path.join(uploadsRoot, usdzFilenameFor(item.filenameStored)),
+        ...(item.usdzPath ? [path.join(uploadsRoot, path.basename(item.usdzPath))] : [])
+      ]);
 
-    return reply.send(
-      deleteHologramResponseSchema.parse({
-        id: item.id,
-        deletedFile,
-        deletedUsdz
-      })
-    );
+      let deletedFile = false;
+      let deletedUsdz = false;
+
+      try {
+        await rm(glbAbsolutePath, { force: true });
+        deletedFile = true;
+      } catch {
+        deletedFile = false;
+      }
+
+      for (const usdzAbsolutePath of usdzAbsolutePaths) {
+        try {
+          // Also remove a published cache whose database update failed.
+          await rm(usdzAbsolutePath);
+          deletedUsdz = true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            request.log.warn({ error }, "Could not remove USDZ preview");
+          }
+        }
+      }
+
+      await deleteHologramById(item.id);
+
+      return reply.send(
+        deleteHologramResponseSchema.parse({
+          id: item.id,
+          deletedFile,
+          deletedUsdz
+        })
+      );
+    });
   });
 }
