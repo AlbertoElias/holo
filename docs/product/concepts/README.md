@@ -10,3 +10,4 @@ needs before opening a PRD. They are not a lifecycle state; see `../README.md`.
 - [Async holograms](async-holograms.md)
 - [Hologram authoring](hologram-authoring.md)
 - [Communication protocols](communication-protocols.md)
+- [Design language and interaction model](design-language.md)

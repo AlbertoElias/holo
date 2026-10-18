@@ -35,6 +35,7 @@ PRD only after it describes one bounded user outcome and has a reason to exist.
 | IDEA-028 | Embodied rhetoric controls for emphasis, urgency, uncertainty, and recap | Expressive presence | Idea | Which expressive signals should be explicit versus inferred? |
 | IDEA-029 | Conversational memory palace: a navigable graph of claims, artifacts, and decisions | Viewer and collaboration | Idea | How can a graph remain legible at scale? |
 | IDEA-030 | Audience simulation with novice, expert, and skeptical perspectives | Communication protocols | Idea | Is AI simulation accurate enough to be trusted as feedback? |
+| IDEA-031 | Shared design language and interaction model for 2D and 3D, all devices and inputs ([concept](concepts/design-language.md)) | Design system | Idea | Which look, and is the held-mode, two-handed grammar natural on every device? |
 
 ## Promotion Rule
 
