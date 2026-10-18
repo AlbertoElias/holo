@@ -1,7 +1,7 @@
 # Feature brief: Live deployment (Fly + R2 + async USDZ)
 
 **Lead:** Muse (lead agent)
-**Status:** Verifying (host decision confirmed by project owner: Fly.io, iteration speed prioritised)
+**Status:** Verifying — code complete and CI green on PR #1; first deploy and physical-device checks remain operator steps (see docs/DEPLOYMENT.md)
 
 ## User outcome
 
