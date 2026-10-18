@@ -24,7 +24,8 @@ export async function createHologram(input: CreateHologramInput) {
       filenameStored: input.filenameStored,
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
-      storagePath: input.storagePath
+      storagePath: input.storagePath,
+      usdzStatus: "pending"
     }
   });
 }
@@ -44,6 +45,48 @@ export async function deleteHologramById(id: string) {
   return prisma.hologram.delete({
     where: { id }
   });
+}
+
+export type CreateUploadIntentInput = {
+  storageKey: string;
+  filenameOriginal: string;
+  hologramName: string;
+  submittedBy: string;
+  mimeType: string;
+  sizeBytes: number;
+  expiresAt: Date;
+};
+
+export async function createUploadIntent(input: CreateUploadIntentInput) {
+  return prisma.uploadIntent.create({ data: input });
+}
+
+export async function getUploadIntentById(id: string) {
+  return prisma.uploadIntent.findUnique({ where: { id } });
+}
+
+export async function getUploadIntentByStorageKey(storageKey: string) {
+  return prisma.uploadIntent.findUnique({ where: { storageKey } });
+}
+
+export async function completeUploadIntent(intentId: string, hologramId: string) {
+  return prisma.uploadIntent.update({
+    where: { id: intentId },
+    data: { completedHologramId: hologramId }
+  });
+}
+
+/** Conditional status transition; returns true when this caller won it. */
+export async function transitionUsdzStatus(
+  id: string,
+  from: string[],
+  data: Prisma.HologramUpdateManyMutationInput
+): Promise<boolean> {
+  const result = await prisma.hologram.updateMany({
+    where: { id, usdzStatus: { in: from } },
+    data
+  });
+  return result.count === 1;
 }
 
 export async function listHolograms(args: { cursor?: string; limit: number }) {
