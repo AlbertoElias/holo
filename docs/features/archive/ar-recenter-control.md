@@ -1,7 +1,7 @@
 # Feature brief: Capture AR recenter control
 
 **Lead:** Muse (quartz-orbit)
-**Status:** Verifying
+**Status:** Complete
 
 ## User outcome
 
@@ -74,3 +74,11 @@ which capture does not request; on a physical Quest the button is a
 spectator/companion-screen control until the redesign adds an in-scene
 AR surface. Real-device AR placement feel remains a physical-headset
 check, separate from IWER evidence.
+
+## Verification evidence (2026-10-18)
+
+- `pnpm --filter @holoim/capture run verify:fast` passes (lint, TypeScript 7
+  typecheck, 13/13 unit tests including the new `UIStateStore` AR-mode tests).
+- Browser XR suites were not run locally: the agent sandbox cannot launch
+  Chromium. CI runs `test:xr:capture` on push; in-headset overlay visibility
+  remains with the UI/interaction redesign as scoped above.
