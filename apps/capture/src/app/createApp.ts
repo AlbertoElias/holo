@@ -31,7 +31,8 @@ export function createApp(): AppRuntime {
   const uiBridge: CaptureUiBridge = {
     subscribe: (listener) => orchestrator.subscribeUi(() => listener()),
     getSnapshot: () => orchestrator.getUiState(),
-    toggleRecording: () => orchestrator.requestToggleRecording()
+    toggleRecording: () => orchestrator.requestToggleRecording(),
+    recenterAr: () => orchestrator.requestRecenterAr()
   };
 
   return {

@@ -4,4 +4,5 @@ export interface CaptureUiBridge {
   subscribe: (listener: () => void) => () => void;
   getSnapshot: () => UiViewModel;
   toggleRecording: () => void;
+  recenterAr: () => void;
 }
