@@ -1,5 +1,5 @@
 import { useAnimations, useGLTF } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useXR } from "@react-three/xr";
 import { Box3, LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
@@ -145,6 +145,8 @@ export function ARHologramModel({
   onPlacementStatusChange
 }: ARHologramModelProps) {
   const { scene, animations } = useGLTF(url);
+  const renderer = useThree((state) => state.gl);
+  const renderScene = useThree((state) => state.scene);
   const clonedScene = useMemo(() => {
     const cloned = cloneSkeleton(scene);
     prepareAnimatedScene(cloned);
@@ -196,6 +198,17 @@ export function ARHologramModel({
   const cameraForwardRef = useRef(new Vector3());
   const visibilityProbePositionRef = useRef(new Vector3());
   const hitTestPositionRef = useRef(new Vector3());
+
+  useEffect(() => {
+    // Opt-in local E2E observer: tests inspect real XR cameras and pixels.
+    // This branch is removed from production builds.
+    if (import.meta.env.DEV) {
+      const observer = (window as Window & {
+        __HOLOIM_AR_TEST_OBSERVER__?: (value: unknown) => void;
+      }).__HOLOIM_AR_TEST_OBSERVER__;
+      observer?.({ renderer, scene: renderScene, model: clonedScene, bubble: sphereClip, actions });
+    }
+  }, [actions, clonedScene, renderScene, renderer, sphereClip]);
 
   useEffect(() => {
     xrSessionRef.current = xrSession ?? null;
