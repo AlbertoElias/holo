@@ -62,6 +62,24 @@ Or connect the GitHub repo in the Pages dashboard with build command
 `https://<branch>.holoim-viewer.pages.dev` URLs, which the API allows via
 the `WEB_ORIGINS` wildcard above.
 
+## 2b. Capture on Cloudflare Pages
+
+The capture app is a static Vite build with no API wiring, so it deploys
+like the viewer. Pages provides the non-localhost HTTPS origin WebXR
+requires on the Quest browser:
+
+```sh
+pnpm --filter @holoim/capture run build
+pnpm --filter @holoim/web exec wrangler pages project create holoim-capture --production-branch main   # once
+pnpm --filter @holoim/web exec wrangler pages deploy "$PWD/apps/capture/dist" --project-name holoim-capture --branch main
+```
+
+Live at https://holoim-capture.pages.dev. Limits of the static deploy: the
+dev-only input-recording sink (`/__holoim/input-recordings`, served by the
+local Vite server) does not exist there, so recording headset input as a
+replay fixture still happens against the local dev server. Capture calls
+no API, so no `WEB_ORIGINS` change is needed unless that changes.
+
 ## 3. Media on R2 (Phase 2)
 
 The code already supports R2; this section is a configuration flip, not

@@ -229,6 +229,9 @@ contracts are preserved, and direct-upload is additive.
   deployed with `VITE_API_ORIGIN=https://holoim-api.fly.dev`;
   https://holoim-viewer.pages.dev returns 200 and the API answers its
   origin with a matching `Access-Control-Allow-Origin`.
+- Capture live on Cloudflare Pages as a static deploy (runbook §2b):
+  https://holoim-capture.pages.dev returns 200. The dev-only
+  input-recording sink is not part of the static deploy.
 - Remaining: the physical-device checks below (Quest feed/WebXR, iPhone
   Quick Look against the live URLs).
 
