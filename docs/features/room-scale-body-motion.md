@@ -230,25 +230,24 @@ spine; feet raised 1 m with ground removed): each now fails.
 | Determinism | Body and hands checks twice, concurrency 2; one replay three times | Byte-identical samples for all six replays |
 | Determinism and speed on 2 vCPU | `docker run --cpus=2 --memory=7g mcr.microsoft.com/playwright:v1.58.2-noble`, CI suites twice | Both runs pass: capture XR 200/196 s (body 140 s, two replays at once), viewer 49/42 s, pipeline 44/39 s; samples byte-identical between runs and with macOS |
 
-Results on macOS (fixtures: walk forward/back/side, turn in place + arc, crouch
+Results on macOS after merging `main` (fixtures: walk forward/back/side, turn in place + arc, crouch
 and lean, small steps + sway, walk up the ramp):
 
 | Metric | Walk | Turn | Crouch/lean | Steps/sway | Ramp |
 |---|---|---|---|---|---|
-| Eyes p95 standing / moving | 0.1 / 2.1 cm | 0.7 / 2.7 cm | 1.5 / 1.4 cm | 1.5 / 3.1 cm | 0.0 / 1.5 cm |
-| Head yaw / pitch p95 | 0.0° / 0.0° | 0.0° / 0.0° | 0.0° / 0.1° | 0.0° / 0.0° | 0.0° / 0.0° |
+| Eyes p95 standing / moving | 0.1 / 2.2 cm | 0.7 / 2.7 cm | 1.5 / 1.4 cm | 1.5 / 3.2 cm | 0.0 / 1.5 cm |
+| Head yaw / pitch p95 | 0.0° / 0.0° | 0.1° / 0.0° | 0.0° / 0.1° | 0.0° / 0.0° | 0.0° / 0.0° |
 | Rig drift | 0.0 cm | 0.0 cm | 0.0 cm | 0.0 cm | 0.0 cm |
-| Root / pelvis overshoot | 1.5 / 1.1 cm | 0.2 / 0.2 cm | – | – | 0.2 / 0.1 cm |
-| Turn lag, neck twist max | – | 0.20 s, 44° | – | – | 0.20 s, 47° |
-| Foot drift, skating | 0.4 cm, 1.0% | 0.3 cm, 0.9% | 0.1 cm, 0.0% | 0.2 cm, 0.8% | 0.4 cm, 1.3% |
-| Planted sole max, min sole | 1.8, 0.0 cm | 1.0, 0.0 cm | 1.4, 0.0 cm | 2.0, 0.0 cm | 1.4, −0.2 cm |
-| Cadence, step length | 2.34/s, 0.57 leg | 2.35/s, 0.48 leg | – | – | 2.18/s, 0.51 leg |
+| Root / pelvis overshoot | 1.6 / 1.3 cm | 0.2 / 0.2 cm | – | – | 0.2 / 0.1 cm |
+| Turn lag, neck twist max | – | 0.20 s, 44° | – | – | 0.20 s, 48° |
+| Foot drift, skating | 0.4 cm, 0.7% | 0.3 cm, 1.3% | 0.1 cm, 0.0% | 0.2 cm, 0.1% | 0.5 cm, 1.4% |
+| Planted sole max, min sole | 2.0, 0.0 cm | 1.0, 0.0 cm | 1.4, 0.0 cm | 1.8, 0.0 cm | 1.3, -0.2 cm |
+| Cadence, step length | 2.21/s, 0.60 leg | 2.26/s, 0.48 leg | – | – | 2.14/s, 0.51 leg |
 | Crouch ratio, lean r | – | – | 0.91, 1.00 | – | – |
-| Pelvis jerk ratio | 1.11 | 1.04 | 0.72 | 0.96 | 1.03 |
+| Pelvis jerk ratio | 0.75 | 1.03 | 0.53 | 0.85 | 1.02 |
 
-The tightest margin is the planted-sole height in the small-steps replay
-(2.0 cm against 2 cm): soft IK and heel roll leave a planted foot up to ~2 cm
-off the floor at the end of a long reach.
+The tightest margin is the planted-sole height (up to 2.0 cm against 2 cm): soft IK and heel roll leave a
+planted foot up to ~2 cm off the floor at the end of a long reach.
 
 ### Defects found and fixed
 
