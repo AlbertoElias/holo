@@ -18,14 +18,14 @@ headset validation. Preserve feed following recorded sphere motion and AR pinnin
 
 ## Acceptance criteria
 
-- [ ] Controlled fixture reproduces the original rendering defects before the fix.
-- [ ] Feed and actual IWER stereo cameras show visible glass, inside geometry and
+- [x] Controlled fixture reproduces the original rendering defects before the fix.
+- [x] Feed and actual IWER stereo cameras show visible glass, inside geometry and
   no outside geometry, including rotated views and non-unit model scales.
-- [ ] Animation continues; feed sphere follows the recording while AR sphere is pinned.
-- [ ] Material arrays retain all entries; setup/cleanup restores source materials and
+- [x] Animation continues; feed sphere follows the recording while AR sphere is pinned.
+- [x] Material arrays retain all entries; setup/cleanup restores source materials and
   disposes owned materials on repeated mount/unmount and configuration changes.
-- [ ] Actual capture-exported GLB loads through upload into feed and immersive AR.
-- [ ] Same deterministic before/after sequence produces a short video, PNGs and JSON.
+- [x] Actual capture-exported GLB loads through upload into feed and immersive AR.
+- [x] Same deterministic before/after sequence produces a short video, PNGs and JSON.
 - [ ] Independent review and required verification pass before integration.
 
 ## Failure cases considered
@@ -86,3 +86,20 @@ headset transparency, tracking, comfort and performance remain untested.
 - Reproduce comparison: capture before/after variants using the same harness,
   then `pnpm exec tsx scripts/render-bubble-comparison.ts`.
 - Semantics and USDZ approximation contract: [../BUBBLE_RENDERING.md](../BUBBLE_RENDERING.md).
+
+### Independent review and comparison evidence
+
+bubble_verify independently reviewed the code and artifacts: PASS, conditional
+only on the full integration gate. The matched comparison source lives under
+`output/bubble-rendering/comparison/{before,after}` so later regression runs cannot
+overwrite it. Both phases have 24 identical requested/observed stereo poses and
+animation times (maximum delta 0); head midpoint error < 6e-8 m. Initial eyes are
+±0.032 m apart. Final baseline rim error 6.18 / 6.09 mean channel levels becomes
+approximately 0; aura radius 0.428 becomes 0.925, matching the clipping radius.
+Material lifecycle: 15 owned materials created, 12 disposed, 3 correctly active.
+Morph vertices outside the sphere disappear; changing the sphere transform
+immediately before drawing updates clipping with no intervening frame.
+
+Video: eight seconds, head movement then common camera/model rotation, left eye
+shown beside its baseline. Readbacks use identical pixel oracles; presentation
+preserves the eye projection aspect. IWER emulation only.

@@ -69,7 +69,7 @@ type ProbeWindow = Window & { __HOLOIM_AR_TEST_OBSERVER__?: (value: Probe) => vo
 
 test("immersive AR renders the animated bubble and clips outside geometry in both eyes", async ({ page }, testInfo) => {
   test.setTimeout(90000);
-  const hologram = { id: "bubble-render", url: "/uploads/bubble-render.glb", usdzUrl: null, createdAt: "2026-10-18T00:00:00Z", sizeBytes: 4096, filenameOriginal: "bubble-render.glb", hologramName: "Bubble rendering diagnostic", submittedBy: "automation" };
+  const hologram = { id: "bubble-render", url: "/uploads/bubble-render.glb", usdzUrl: null, quickLookEnabled: false, createdAt: "2026-10-18T00:00:00Z", sizeBytes: 4096, filenameOriginal: "bubble-render.glb", hologramName: "Bubble rendering diagnostic", submittedBy: "automation" };
   await page.setViewportSize({ width: 640, height: 480 });
   await page.addInitScript(() => {
     (window as ProbeWindow).__HOLOIM_AR_TEST_OBSERVER__ = (value) => { (window as ProbeWindow).__bubbleProbe = value; };
@@ -88,6 +88,19 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   await expect.poll(() => page.locator(".ar-view-container").getAttribute("data-placement-stage")).toMatch(/placed|anchored|locked/);
   await freezePageClock(page);
   await page.clock.runFor(100);
+  // The room chooses placement, but the pixel oracle needs a controlled view
+  // in which its positive outside marker is on screen in every SEM scene.
+  await page.evaluate(async () => {
+    const moduleUrl = "/node_modules/.vite/deps/three.js";
+    const { Vector3 } = await import(moduleUrl) as typeof Three;
+    const probe = (window as ProbeWindow).__bubbleProbe!;
+    const center = probe.model.getObjectByName("RecordedBubbleSphere")!.getWorldPosition(new Vector3());
+    const device = (window as unknown as { IWER_DEVICE: { controlMode: string; position: { set: (...v: number[]) => void }; quaternion: { set: (...v: number[]) => void } } }).IWER_DEVICE;
+    device.controlMode = "programmatic";
+    device.position.set(center.x, center.y, center.z + 3);
+    device.quaternion.set(0, 0, 0, 1);
+  });
+  await page.clock.runFor(50);
 
   await page.evaluate(() => { Object.values((window as ProbeWindow).__bubbleProbe!.actions).forEach((action) => { action.time = 0; }); });
   await page.clock.runFor(50);
