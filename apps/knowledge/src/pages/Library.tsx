@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useReadingState } from "../useReadingState";
 import { concepts, documents, prds, research } from "../knowledge";
 import { DocumentCard, Empty, PageHeading } from "../components";
 export function Library({
@@ -8,7 +8,7 @@ export function Library({
   mode: "wiki" | "prds";
   allDocuments?: boolean;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useReadingState("library-search", "");
   const scope = allDocuments
     ? "All repository documents"
     : "Concepts and research";
@@ -29,13 +29,30 @@ export function Library({
             ? "A SHARED VOCABULARY"
             : "FROM POSSIBILITY TO PROPOSAL"
         }
-        title={mode === "wiki" ? "The concept wiki." : "Product briefs."}
+        title={mode === "wiki" ? "The reference library." : "Product briefs."}
         description={
           mode === "wiki"
-            ? "How we think about presence, spatial language, authoring, and the conversations they could enable."
+            ? "The full thinking, when you want to go deeper."
             : "Bounded user outcomes, proposed interactions, and evidence to seek. Status comes from each source document."
         }
       />
+      <div className="library-tabs">
+        <a
+          href="#/wiki"
+          aria-current={mode === "wiki" && !allDocuments ? "page" : undefined}
+        >
+          Concepts
+        </a>
+        <a href="#/prds" aria-current={mode === "prds" ? "page" : undefined}>
+          Product briefs
+        </a>
+        <a
+          href="#/wiki?collection=all"
+          aria-current={allDocuments ? "page" : undefined}
+        >
+          All documents
+        </a>
+      </div>
       <div className="filter-bar">
         <label className="search-field library-search">
           <span aria-hidden="true">⌕</span>
@@ -66,7 +83,7 @@ export function Library({
         <span>{filtered.length} documents</span>
         <span>Living notes, open questions</span>
       </div>
-      <div className="document-grid">
+      <div className="document-grid library-index">
         {filtered.map((doc) => (
           <DocumentCard key={doc.path} doc={doc} />
         ))}

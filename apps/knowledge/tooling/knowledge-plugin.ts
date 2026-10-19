@@ -1,5 +1,8 @@
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import type { Nodes } from "mdast";
 import type { Plugin } from "vite";
 
 const moduleId = "virtual:holoim-knowledge";
@@ -12,7 +15,7 @@ const rootFiles = [
   "README.md",
 ];
 
-// Only Markdown under docs/ and these named root documents can enter the bundle.
+// Only allowlisted Markdown and referenced, bounded raster images enter the bundle.
 export function knowledgePlugin(repoRoot: string): Plugin {
   function requireRegularPath(filename: string): void {
     // Do not follow a symlink in any component, including docs/ itself.
@@ -51,7 +54,64 @@ export function knowledgePlugin(repoRoot: string): Plugin {
           content: readFileSync(filename, "utf8"),
         };
       });
-      return `export default ${JSON.stringify(documents)};`;
+      const images: Record<string, string> = {};
+      const parser = unified().use(remarkParse);
+      const mime: Record<string, string> = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".avif": "image/avif",
+      };
+      for (const doc of documents) {
+        const tree = parser.parse(doc.content);
+        const definitions = new Map<string, string>();
+        for (const node of tree.children)
+          if (node.type === "definition")
+            definitions.set(node.identifier, node.url);
+        const visit = (node: Nodes): void => {
+          const url =
+            node.type === "image"
+              ? node.url
+              : node.type === "imageReference"
+                ? definitions.get(node.identifier)
+                : undefined;
+          if (
+            url &&
+            !/^[a-z][a-z\d+.-]*:/i.test(url) &&
+            !url.startsWith("/") &&
+            !url.startsWith("#")
+          ) {
+            try {
+              const filename = path.resolve(
+                repoRoot,
+                path.dirname(doc.path),
+                decodeURIComponent(url.split("#")[0]!.split("?")[0]!),
+              );
+              const relative = path
+                .relative(repoRoot, filename)
+                .split(path.sep)
+                .join("/");
+              const type = mime[path.extname(filename).toLowerCase()];
+              if (relative.startsWith("docs/") && type) {
+                requireRegularPath(filename);
+                const stat = lstatSync(filename);
+                if (stat.isFile() && stat.size <= 5 * 1024 * 1024) {
+                  this.addWatchFile(filename);
+                  images[relative] =
+                    `data:${type};base64,${readFileSync(filename).toString("base64")}`;
+                }
+              }
+            } catch {
+              /* Missing, escaped or symlinked assets stay textual references. */
+            }
+          }
+          if ("children" in node) node.children.forEach(visit);
+        };
+        visit(tree);
+      }
+      return `export const images = ${JSON.stringify(images)}; export default ${JSON.stringify(documents)};`;
     },
     configureServer(server) {
       server.watcher.add([
@@ -64,7 +124,10 @@ export function knowledgePlugin(repoRoot: string): Plugin {
           .split(path.sep)
           .join("/");
         if (
-          !(relative.startsWith("docs/") && relative.endsWith(".md")) &&
+          !(
+            relative.startsWith("docs/") &&
+            /\.(md|png|jpe?g|webp|gif|avif)$/i.test(relative)
+          ) &&
           !rootFiles.includes(relative)
         )
           return;

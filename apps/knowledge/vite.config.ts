@@ -7,17 +7,9 @@ import { knowledgePlugin } from "./tooling/knowledge-plugin";
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react(), knowledgePlugin(path.resolve(appRoot, "../.."))],
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: (id) =>
-          id.includes("node_modules") ? "reader" : undefined,
-      },
-    },
-  },
   server: {
     host: "127.0.0.1",
-    port: 4176,
+    port: Number(process.env.KNOWLEDGE_PORT ?? 4176),
     strictPort: true,
     // Poll the small app/docs roots so edits from other agents, atomic renames,
     // and sandboxed macOS sessions do not depend on native filesystem events.

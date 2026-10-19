@@ -46,7 +46,6 @@ export function DocumentCard({ doc }: { doc: KnowledgeDocument }) {
         <span className="arrow">↗</span>
       </div>
       <h3>{doc.title.replace(/^PRD:\s*/, "")}</h3>
-      <p>{doc.description || doc.path}</p>
       <span className="card-path">{doc.path.split("/").at(-1)}</span>
     </a>
   );
@@ -81,5 +80,24 @@ export function NotFound({ path }: { path: string }) {
         Return to the atlas
       </a>
     </div>
+  );
+}
+
+export function GuideUnavailable() {
+  return (
+    <section className="empty-state">
+      <h1>Reading guide unavailable.</h1>
+      <p>
+        The source guide is missing or incomplete. The knowledge is still
+        accessible.
+      </p>
+      <div className="quiet-links">
+        <a href={docUrl("docs/product/concepts/what-a-hologram-is.md")}>
+          Hologram model
+        </a>
+        <a href="#/ideas?layer=all">All ideas</a>
+        <a href={docUrl("docs/product/APPROACH.md")}>Full approach</a>
+      </div>
+    </section>
   );
 }

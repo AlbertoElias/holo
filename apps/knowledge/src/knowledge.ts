@@ -2,7 +2,7 @@ import type { Nodes, Root, RootContent, Table } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import sources from "virtual:holoim-knowledge";
+import sources, { images } from "virtual:holoim-knowledge";
 
 export type DocumentKind = "Concept" | "PRD" | "Research" | "Feature" | "Guide";
 export type KnowledgeDocument = {
@@ -211,4 +211,25 @@ export function headingId(text: string): string {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s_-]/gu, "")
     .replace(/\s/g, "-");
+}
+
+export function localImage(source: string, href: string): string | undefined {
+  if (
+    /^[a-z][a-z\d+.-]*:/i.test(href) ||
+    href.startsWith("/") ||
+    href.startsWith("#")
+  )
+    return undefined;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(href.split("#")[0]!.split("?")[0]!);
+  } catch {
+    return undefined;
+  }
+  const parts = source.split("/").slice(0, -1);
+  for (const segment of decoded.split("/")) {
+    if (segment === "..") parts.pop();
+    else if (segment && segment !== ".") parts.push(segment);
+  }
+  return images[parts.join("/")];
 }

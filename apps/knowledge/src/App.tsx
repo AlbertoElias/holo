@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useReadingState } from "./useReadingState";
 import { byPath, bugs, docUrl, documents } from "./knowledge";
 import { NotFound } from "./components";
 import { Overview } from "./pages/Overview";
@@ -6,25 +7,31 @@ import { IdeaGarden, IdeaDetail } from "./pages/Ideas";
 import { Library } from "./pages/Library";
 import { Bugs } from "./pages/Bugs";
 import { DocumentReader } from "./pages/Documents";
+import { Process } from "./pages/Process";
 const navigation = [
-  { route: "/", title: "Our approach", icon: "◉", detail: "The way forward" },
+  {
+    route: "/",
+    title: "Start here",
+    icon: "◉",
+    detail: "The medium, in one picture",
+  },
   {
     route: "/ideas",
-    title: "Idea garden",
+    title: "Explore ideas",
     icon: "✳",
-    detail: "Possibilities, kept alive",
+    detail: "Find an idea’s place",
   },
   {
     route: "/wiki",
-    title: "Concept wiki",
+    title: "Reference library",
     icon: "◇",
-    detail: "A shared vocabulary",
+    detail: "Concepts, briefs and sources",
   },
   {
-    route: "/prds",
-    title: "Product briefs",
+    route: "/process",
+    title: "How we test",
     icon: "▤",
-    detail: "Ideas in more detail",
+    detail: "From a problem to evidence",
   },
   {
     route: "/bugs",
@@ -47,7 +54,7 @@ function useRoute() {
 }
 export function App() {
   const route = useRoute();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useReadingState("idea-search", "");
   let decoded: string;
   try {
     decoded = decodeURIComponent(route.split("?")[0] ?? "/");
@@ -63,12 +70,14 @@ export function App() {
     : doc?.kind === "Concept" || doc?.kind === "Research"
       ? "/wiki"
       : doc?.kind === "PRD"
-        ? "/prds"
+        ? "/wiki"
         : docPath === "BUGS.md"
           ? "/bugs"
           : docPath
             ? "/"
-            : decoded;
+            : decoded === "/prds"
+              ? "/wiki"
+              : decoded;
   useEffect(() => {
     document.title = `${doc?.title ?? navigation.find((item) => item.route === active)?.title ?? "Knowledge Atlas"} / HoloIM`;
   }, [active, doc]);
@@ -139,9 +148,17 @@ export function App() {
           {decoded === "/" ? (
             <Overview />
           ) : decoded === "/ideas" ? (
-            <IdeaGarden search={search} setSearch={setSearch} />
+            <IdeaGarden
+              search={search}
+              setSearch={setSearch}
+              layer={
+                new URLSearchParams(route.split("?")[1]).get("layer") ?? ""
+              }
+            />
           ) : decoded.startsWith("/idea/") ? (
             <IdeaDetail id={decoded.slice(6)} />
+          ) : decoded === "/process" ? (
+            <Process />
           ) : decoded === "/wiki" || decoded === "/prds" ? (
             <Library
               mode={decoded === "/wiki" ? "wiki" : "prds"}

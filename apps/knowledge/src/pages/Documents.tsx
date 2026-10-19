@@ -1,4 +1,11 @@
-import { byPath, referencedIdeas } from "../knowledge";
+import {
+  byPath,
+  docUrl,
+  nodeText,
+  headingId,
+  referencedIdeas,
+} from "../knowledge";
+import { ideaLabel } from "../guide";
 import { Markdown } from "../Markdown";
 import { Badge, NotFound } from "../components";
 export function DocumentReader({
@@ -46,15 +53,38 @@ export function DocumentReader({
             repo to update it.
           </p>
           <code>{doc.path}</code>
+          <h3>On this page</h3>
+          <nav className="document-outline" aria-label="Document sections">
+            {doc.tree.children
+              .filter((node) => node.type === "heading" && node.depth === 2)
+              .map((node, index) => (
+                <a
+                  key={index}
+                  href={docUrl(doc.path, headingId(nodeText(node)))}
+                >
+                  {nodeText(node)}
+                </a>
+              ))}
+          </nav>
           {references.length > 0 && (
             <>
               <h3>Related ideas</h3>
-              {references.map((idea) => (
+              {references.slice(0, 6).map((idea) => (
                 <a key={idea.id} href={`#/idea/${idea.id}`}>
                   <span>{idea.id}</span>
-                  {idea.title}
+                  {ideaLabel(idea)}
                 </a>
               ))}
+              {references.length > 6 && (
+                <details>
+                  <summary>{references.length - 6} more ideas</summary>
+                  {references.slice(6).map((idea) => (
+                    <a key={idea.id} href={`#/idea/${idea.id}`}>
+                      {idea.id} · {ideaLabel(idea)}
+                    </a>
+                  ))}
+                </details>
+              )}
             </>
           )}
         </aside>

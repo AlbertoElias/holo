@@ -63,3 +63,10 @@ becomes delivery: `TODOS.md` owns the committed queue, an in-flight feature's
 brief owns delivery state, and `HANDOFF.md` is a pointer. The three-state product
 lifecycle above does not add Experiment, Research, or Concept as extra states.
 Those are activities or supporting documents. A draft PRD is not approval to build.
+
+## Visual Reading Guide
+
+Start with the [Atlas reading guide](ATLAS_GUIDE.md) for the Event / Meaning /
+View map, one conceptual wireframe, idea territories and the learning loop.
+Its Mermaid diagrams and concise tables are readable here and rendered by the
+read-only app; the canonical documents linked above still own the decisions.
