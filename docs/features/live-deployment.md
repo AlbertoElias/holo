@@ -1,7 +1,7 @@
 # Feature brief: Live deployment (Fly + R2 + async USDZ)
 
 **Lead:** Muse (lead agent)
-**Status:** Verifying — code complete and CI green on PR #1; first deploy and physical-device checks remain operator steps (see docs/DEPLOYMENT.md)
+**Status:** Verifying — PR #1 merged (529aeb3, CI Gate green); API live on Fly since 2026-10-19; Pages deploy awaits operator `wrangler login`; physical-device checks remain (see docs/DEPLOYMENT.md)
 
 ## User outcome
 
@@ -210,6 +210,30 @@ contracts are preserved, and direct-upload is additive.
 | Direct-to-R2 upload | API route tests with an in-memory fake implementing the storage interface | Pass: fake-S3 route test covers initiate → 409-before-PUT → complete 201 → idempotent replay, non-GLB rejection + object cleanup |
 | Async conversion lifecycle | Route tests with fixture converter + one worker pass per step | Pass: pending → ready → 302 with byte-identical USDZ, failure → `failed` with GLB preserved, missing-object re-enqueue, delete-during-conversion leaves no objects or row |
 | Delete removes objects | Route tests (local driver + delete-during-conversion) | Pass locally; S3 delete shares the same driver call and is covered by the fake in the direct-upload test |
+
+## Deploy evidence (2026-10-19)
+
+- PR #1 merged to `main` as `529aeb3` after CI Gate passed on the merge
+  commit `0ad033c` (Quality, Production build, Browser end-to-end).
+- Fly app `holoim-api` created with a 3 GB `holoim_data` volume in `iad`;
+  `WEB_ORIGIN`/`WEB_ORIGINS` secrets staged for the Pages origin.
+- `fly deploy -c fly.toml` succeeded (image 436 MB, machine
+  `874440da344908`, health check passing). `GET /healthz` returns
+  `{"status":"ok"}` and `GET /api/holograms` returns an empty page from the
+  fresh SQLite volume at https://holoim-api.fly.dev.
+- Live round-trip verified: multipart GLB upload returned a DTO, the file
+  downloaded with HTTP 200, delete removed it, and a follow-up GET returned
+  404. (List stayed empty by design: the `agent-` submitter prefix is
+  excluded as a test artifact.)
+- Viewer live on Cloudflare Pages: project `holoim-viewer` created and
+  deployed with `VITE_API_ORIGIN=https://holoim-api.fly.dev`;
+  https://holoim-viewer.pages.dev returns 200 and the API answers its
+  origin with a matching `Access-Control-Allow-Origin`.
+- Capture live on Cloudflare Pages as a static deploy (runbook §2b):
+  https://holoim-capture.pages.dev returns 200. The dev-only
+  input-recording sink is not part of the static deploy.
+- Remaining: the physical-device checks below (Quest feed/WebXR, iPhone
+  Quick Look against the live URLs).
 
 ## Physical-device limits
 
