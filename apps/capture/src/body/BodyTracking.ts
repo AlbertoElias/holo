@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { AvatarRig } from '../avatar/AvatarRig';
-import { headYawFromQuaternion, type XrHeadPose } from '../xr/XrSessionService';
+import { headYawFromQuaternion, type XrHeadPose } from '../xr/XrTracking';
 import type { BodySample, Vec3Tuple } from '../types/contracts';
 import { type BodyFault, type BodyHeadInput, type GroundSampler, VrBodySolver } from './VrBodySolver';
 

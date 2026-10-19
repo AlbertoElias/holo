@@ -50,7 +50,7 @@ export function renderCaptureTextState(c: CaptureContext): string {
       refitPending: heightFit.calibration.refitting,
       recordingSizeLocked: c.recording.isSizeLocked
     },
-    mockVr: tracking.getMockSnapshot(),
+    mockVr: tracking.mock.snapshot(),
     ar: {
       sessionMode: c.xrEntry.sessionMode,
       worldPosition: { x: stage.worldGroup.position.x, y: stage.worldGroup.position.y, z: stage.worldGroup.position.z }

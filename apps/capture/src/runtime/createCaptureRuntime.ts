@@ -19,7 +19,7 @@ import { VrHud } from '../ui/VrHud';
 import { ArSpectator } from '../xr/ArSpectator';
 import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
-import { XrSessionService } from '../xr/XrSessionService';
+import { XrTracking } from '../xr/XrTracking';
 import { installAutomationHooks } from './automationHooks';
 import { createCaptureStage } from './captureStage';
 import { renderCaptureTextState } from './captureTextState';
@@ -42,7 +42,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   renderer.setAnimationLoop(null);
   const xrEntry = mountXrEntry(world);
 
-  const avatar = new AvatarRig(scene, stage.worldGroup, renderer);
+  const avatar = new AvatarRig(stage.worldGroup, renderer);
   const motor = new CharacterMotor();
   const camera = new CameraController({
     renderer,
@@ -52,7 +52,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     avatarRig: avatar,
     embodyOffset: config.embodyOffset
   });
-  const tracking = new XrSessionService(renderer, config.mockVrEnabledFromQuery, () => avatar.avatarHeight, {
+  const tracking = new XrTracking(renderer, config.mockVrEnabledFromQuery, {
     handPitchDeg: config.handTrackPitchDeg,
     handYawDeg: config.handTrackYawDeg,
     handRollDeg: config.handTrackRollDeg,
@@ -65,28 +65,13 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   const input = new InputController({
     domElement: renderer.domElement,
     isXrPresenting: () => tracking.isXrPresenting(),
-    getDesktopViewMode: () => camera.desktopViewMode,
-    setDesktopViewMode: (mode) => {
-      camera.desktopViewMode = mode;
-    },
-    getLookYaw: () => camera.lookYaw,
-    setLookYaw: (value) => {
-      camera.lookYaw = value;
-    },
-    getThirdPersonPitch: () => camera.thirdPersonPitch,
-    setThirdPersonPitch: (value) => {
-      camera.thirdPersonPitch = camera.clampThirdPersonPitch(value);
-    },
-    getFirstPersonPitch: () => camera.firstPersonPitch,
-    setFirstPersonPitch: (value) => {
-      camera.firstPersonPitch = camera.clampFirstPersonPitch(value);
-    },
+    look: camera,
     onRecordToggle: () => recording.toggle()
   });
   const body = new BodyTracking(avatar, config.avatarForwardOffset);
   const heightFit = new HeightFit({
     ui,
-    isRealVrPresenting: () => tracking.isXrPresenting() && xrEntry.sessionMode === 'vr' && !tracking.getMockSnapshot().enabled,
+    isRealVrPresenting: () => tracking.isXrPresenting() && xrEntry.sessionMode === 'vr' && !tracking.mock.enabled,
     isRecordingSizeLocked: () => recording.isSizeLocked
   });
   const recording = new RecordingSession({
@@ -202,11 +187,11 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __setFrameStepping: (enabled, draw) => loop.setFrameStepping(enabled, draw),
         __setMockVrPose: (payload) => {
           applyIwerMockVrPoseInput(payload);
-          const wasEnabled = tracking.getMockSnapshot().enabled;
-          tracking.applyMockVrPoseInput(payload);
+          const wasEnabled = tracking.mock.enabled;
+          tracking.mock.apply(payload);
           // Real XR head height and the debug pose use different coordinate
           // spaces, so a baseline captured before the source switch is invalid.
-          if (wasEnabled !== tracking.getMockSnapshot().enabled) capture.crouch.resetBaseline();
+          if (wasEnabled !== tracking.mock.enabled) capture.crouch.resetBaseline();
         },
         __setMockInput: (payload) => input.applyMockInput(payload),
         __respawnCharacter: () => motor.respawn(),
@@ -222,7 +207,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       // ?manualClock=1: never tick on real time, so a replay starts from the
       // same state on any host (see __setFrameStepping).
       if (new URLSearchParams(window.location.search).get('manualClock') === '1') loop.setManualClock(true, false);
-      tracking.mountToScene(scene, cameraRig);
+      tracking.mountToRig(cameraRig);
       input.init();
       window.addEventListener('resize', onResize);
       recording.requestMicPermission();

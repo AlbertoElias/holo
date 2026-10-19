@@ -1,7 +1,7 @@
 import { createSystem } from '@iwsdk/core';
 import * as THREE from 'three';
 import { HEAD_TRACKING_JUMP_METERS } from '../body/BodyTracking';
-import { headYawFromQuaternion } from '../xr/XrSessionService';
+import { headYawFromQuaternion } from '../xr/XrTracking';
 import { type CaptureContext, captureContext } from './captureContext';
 
 /**

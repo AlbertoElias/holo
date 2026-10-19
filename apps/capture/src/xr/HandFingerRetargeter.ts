@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { isThreeBone } from '../shared/threeTypeGuards';
 import type { HandFingerName, HandFingerRetargetChain, HandFingerRetargetEntry } from '../avatar/AvatarRig';
 import type { TrackedHandJointName, Vec3Like, VrHandSide } from '../types/contracts';
-import type { XrSessionService } from './XrSessionService';
+import type { XrTracking } from './XrTracking';
 
 const HOLD_TTL_FRAMES_DEFAULT = 12;
 const RECOVERY_BLEND_DEFAULT = 0.35;
@@ -107,7 +107,7 @@ export class HandFingerRetargeter {
   private readonly tmpPinchLocalDelta = new THREE.Quaternion();
 
   constructor(
-    private readonly xrService: XrSessionService,
+    private readonly xrService: XrTracking,
     options: HandRetargeterOptions = {}
   ) {
     this.twistGain = Number.isFinite(options.twistGain) ? Number(options.twistGain) : 1;

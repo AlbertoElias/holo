@@ -8,7 +8,7 @@ import { TRACKED_HAND_JOINT_NAMES, type HandPoseSnapshot, type HandSample, type 
 import { HandFingerRetargeter } from './HandFingerRetargeter';
 import { LegacyFingerRetargeter } from './LegacyFingerRetargeter';
 import { palmFrameQuaternion } from './palmFrame';
-import type { XrSessionService } from './XrSessionService';
+import type { XrTracking } from './XrTracking';
 
 const SIDES = ['left', 'right'] as const;
 
@@ -59,7 +59,7 @@ export class HandEmbodiment {
   private readonly palmJointScratch = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] as const;
 
   constructor(
-    private readonly tracking: XrSessionService,
+    private readonly tracking: XrTracking,
     private readonly avatar: AvatarRig,
     private readonly getPhysicsWorld: () => RAPIER.World | undefined,
     config: RuntimeConfig

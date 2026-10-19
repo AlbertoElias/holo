@@ -18,7 +18,7 @@ export class TrackedHandsSystem extends createSystem() {
     const { tracking, avatar, heightFit, config } = c;
     // Once the height fit maps real meters to the avatar, hand offsets are
     // measured from the tracked head; otherwise from the avatar's eyes.
-    const fromTrackedHead = tracking.isXrPresenting() && !tracking.getMockSnapshot().enabled && heightFit.eyeHeight !== undefined;
+    const fromTrackedHead = tracking.isXrPresenting() && !tracking.mock.enabled && heightFit.eyeHeight !== undefined;
     c.hands.update((out) => (fromTrackedHead ? tracking.getHeadWorldPosition(out) : avatar.getEyeAnchorWorldPosition(out, config.embodyOffset)));
   }
 }

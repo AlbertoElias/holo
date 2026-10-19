@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { AvatarRig } from '../avatar/AvatarRig';
 import { TRACKED_HAND_JOINT_NAMES, type SpectatorViewMode } from '../types/contracts';
-import type { XrSessionService } from '../xr/XrSessionService';
+import type { XrTracking } from '../xr/XrTracking';
 import { HeightEvidenceView } from './HeightEvidenceView';
 
 const HEAD_PATH_POINTS = 150;
@@ -11,7 +11,7 @@ interface DiagnosticViewsDeps {
   renderer: THREE.WebGLRenderer;
   worldGroup: THREE.Group;
   avatar: AvatarRig;
-  tracking: XrSessionService;
+  tracking: XrTracking;
   getLookYaw: () => number;
   getBodyYaw: () => number;
   getHud: () => THREE.Object3D;

@@ -48,7 +48,7 @@ export class XrSessionSystem extends createSystem() {
     c.input.tickDesktopFocusRecovery(frame.xrPresenting);
     // Real XR input drives the full-body solver; the mock pose hook keeps the
     // upper-body embodiment.
-    c.body.active = frame.xrPresenting && !c.tracking.getMockSnapshot().enabled && c.body.ready && c.motor.hasSpawnResolved();
+    c.body.active = frame.xrPresenting && !c.tracking.mock.enabled && c.body.ready && c.motor.hasSpawnResolved();
     frame.bodyTracking = c.body.active && headPose.valid;
 
     // Rig placement outside real XR. Never overlaps the room-scale body,
@@ -56,7 +56,7 @@ export class XrSessionSystem extends createSystem() {
     const rig = c.stage.cameraRig;
     if (c.tracking.isMockVrOnly()) {
       c.camera.applyVrHeadPoseForMock();
-      rig.quaternion.copy(c.tracking.getMockHeadPose().quaternion);
+      rig.quaternion.copy(c.tracking.mock.headQuaternion);
     } else if (!frame.xrPresenting) {
       rig.position.set(0, 0, 0);
       rig.rotation.set(0, 0, 0);

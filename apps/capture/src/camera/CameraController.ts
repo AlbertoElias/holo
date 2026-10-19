@@ -148,12 +148,12 @@ export class CameraController {
     this.ensureDesktopRendererState();
   }
 
+  // World resizes the canvas on the same event.
   onResize(): void {
     this.deps.xrCamera.aspect = window.innerWidth / window.innerHeight;
     this.deps.xrCamera.updateProjectionMatrix();
     this.deps.desktopCamera.aspect = window.innerWidth / window.innerHeight;
     this.deps.desktopCamera.updateProjectionMatrix();
-    this.deps.renderer.setSize(window.innerWidth, window.innerHeight);
     if (!this.deps.renderer.xr.isPresenting) {
       this.ensureDesktopRendererState();
     }

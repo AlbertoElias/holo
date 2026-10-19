@@ -20,7 +20,7 @@ import type { VrHud } from '../ui/VrHud';
 import type { ArSpectator } from '../xr/ArSpectator';
 import type { HandEmbodiment } from '../xr/HandEmbodiment';
 import type { HeightFit } from '../xr/HeightFit';
-import type { XrSessionService } from '../xr/XrSessionService';
+import type { XrTracking } from '../xr/XrTracking';
 
 /** Facts about the current simulation step, written once by their owner. */
 export interface CaptureFrame {
@@ -48,7 +48,7 @@ export interface CaptureContext {
   avatar: AvatarRig;
   motor: CharacterMotor;
   camera: CameraController;
-  tracking: XrSessionService;
+  tracking: XrTracking;
   input: InputController;
   body: BodyTracking;
   heightFit: HeightFit;

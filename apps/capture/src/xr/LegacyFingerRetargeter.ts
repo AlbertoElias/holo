@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { HandFingerRetargetChain } from '../avatar/AvatarRig';
 import { isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 import type { TrackedHandJointName, VrHandSide } from '../types/contracts';
-import type { XrSessionService } from './XrSessionService';
+import type { XrTracking } from './XrTracking';
 
 interface FingerQuatCalibration {
   jointName: TrackedHandJointName;
@@ -31,7 +31,7 @@ export class LegacyFingerRetargeter {
   private readonly tmpQuatC = new THREE.Quaternion();
   private readonly tmpQuatD = new THREE.Quaternion();
 
-  constructor(private readonly tracking: XrSessionService) {}
+  constructor(private readonly tracking: XrTracking) {}
 
   reset(): void {
     this.calibration.left.clear();

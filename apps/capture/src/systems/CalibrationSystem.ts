@@ -31,7 +31,7 @@ export class CalibrationSystem extends createSystem() {
     const c = this.capture;
     const { heightFit, tracking, camera } = c;
     const calibration = heightFit.calibration;
-    const realVr = c.frame.xrPresenting && !tracking.getMockSnapshot().enabled;
+    const realVr = c.frame.xrPresenting && !tracking.mock.enabled;
     const pose = realVr ? tracking.getFloorHeadPosition() : undefined;
     const revision = tracking.getHeightReferenceRevision();
     if (revision !== heightFit.referenceRevision) {

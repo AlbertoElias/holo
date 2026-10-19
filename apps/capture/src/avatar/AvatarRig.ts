@@ -214,7 +214,7 @@ export class AvatarRig {
   private readonly tmpLeftFootWorld = new THREE.Vector3();
   private readonly tmpRightFootWorld = new THREE.Vector3();
 
-  constructor(private readonly scene: THREE.Scene, private readonly worldGroup: THREE.Group, private readonly renderer: THREE.WebGLRenderer) {
+  constructor(private readonly worldGroup: THREE.Group, private readonly renderer: THREE.WebGLRenderer) {
     this.worldGroup.add(this.avatarRoot);
   }
 

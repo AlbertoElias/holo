@@ -1,5 +1,4 @@
 import type { DesktopViewMode, MockInputState } from '../types/contracts';
-import { clamp } from '../shared/math';
 
 export interface MoveState {
   forward: boolean;
@@ -8,18 +7,21 @@ export interface MoveState {
   right: boolean;
 }
 
+/** The desktop view the mouse and V key steer (the camera controller owns it). */
+export interface DesktopLook {
+  desktopViewMode: DesktopViewMode;
+  lookYaw: number;
+  thirdPersonPitch: number;
+  firstPersonPitch: number;
+  clampThirdPersonPitch(value: number): number;
+  clampFirstPersonPitch(value: number): number;
+}
+
 interface InputControllerOptions {
   domElement: HTMLCanvasElement;
   isXrPresenting: () => boolean;
-  getDesktopViewMode: () => DesktopViewMode;
-  setDesktopViewMode: (mode: DesktopViewMode) => void;
-  getLookYaw: () => number;
-  setLookYaw: (value: number) => void;
-  getThirdPersonPitch: () => number;
-  setThirdPersonPitch: (value: number) => void;
-  getFirstPersonPitch: () => number;
-  setFirstPersonPitch: (value: number) => void;
-  onRecordToggle?: () => void;
+  look: DesktopLook;
+  onRecordToggle: () => void;
 }
 
 export class InputController {
@@ -152,16 +154,14 @@ export class InputController {
     const key = event.key.toLowerCase();
 
     if (key === 'v' && !this.options.isXrPresenting() && !event.repeat) {
-      const nextMode = this.options.getDesktopViewMode() === 'third' ? 'first' : 'third';
-      this.options.setDesktopViewMode(nextMode);
-      if (nextMode === 'first') {
-        // Keep default entry close to neutral to avoid immediately looking into torso.
-        this.options.setFirstPersonPitch(-0.04);
-      }
+      const look = this.options.look;
+      look.desktopViewMode = look.desktopViewMode === 'third' ? 'first' : 'third';
+      // Enter first person near neutral to avoid immediately looking into the torso.
+      if (look.desktopViewMode === 'first') look.firstPersonPitch = -0.04;
     }
 
     if (key === 'r' && !event.repeat) {
-      this.options.onRecordToggle?.();
+      this.options.onRecordToggle();
     }
 
     if (event.code === 'Space') {
@@ -209,15 +209,12 @@ export class InputController {
     }
 
     const sensitivity = 0.0025;
-    this.options.setLookYaw(this.options.getLookYaw() - event.movementX * sensitivity);
-
-    if (this.options.getDesktopViewMode() === 'third') {
-      const next = clamp(this.options.getThirdPersonPitch() - event.movementY * sensitivity, 0.18, 0.72);
-      this.options.setThirdPersonPitch(next);
-      return;
+    const look = this.options.look;
+    look.lookYaw -= event.movementX * sensitivity;
+    if (look.desktopViewMode === 'third') {
+      look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - event.movementY * sensitivity);
+    } else {
+      look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - event.movementY * sensitivity);
     }
-
-    const next = clamp(this.options.getFirstPersonPitch() - event.movementY * sensitivity, -1.2, 1.2);
-    this.options.setFirstPersonPitch(next);
   };
 }
