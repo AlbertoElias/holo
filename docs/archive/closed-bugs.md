@@ -218,3 +218,20 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   so those reads do not stall (about 6× faster frames); `waitForXrRenderLoop`
   waits for steady XR frames and aligns the frozen clock to a 48 ms boundary
   before a replay. Three runs of the same replay produce byte-identical samples.
+
+### B-008 — Mobile Upload button covers the hologram title
+
+- **Area:** `apps/viewer-web` feed layout
+- **Severity:** P2
+- **Observed:** 2026-10-18
+- **Evidence:** At a 390×844 viewport the collapsed Upload button sits on top of
+  the card's title pill; only "By Albe…" and the time stay visible.
+- **Expected:** The hologram name and author are fully readable on phones.
+- **Reproduction:** `pnpm run dev:viewer`, upload any GLB, open
+  `https://localhost:3174/` at 390×844.
+- **Fix:** `a664ebe2f9dd` reserves a mobile bottom row for Upload/audio and
+  constrains metadata between side controls. The original 390×844 layout fails
+  the browser overlap assertion; 320×568, 390×844, 667×375, and 768×1024 pass
+  with readable titles/bylines, portal-control clearance, and working Upload
+  expansion/collapse. `verify:agent` and `verify:pr` pass on Node 22 using
+  isolated browser ports (the knowledge port override is local to verification).
