@@ -861,7 +861,7 @@ body {
     width: 2.25rem;
     height: 2.25rem;
     padding: 0.45rem;
-    bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
     right: max(0.75rem, env(safe-area-inset-right, 0px));
   }
 
@@ -869,9 +869,10 @@ body {
     top: calc(0.75rem + env(safe-area-inset-top, 0px));
   }
 
+  /* Keep metadata above Upload/audio and between the side controls. */
   .feed-card-meta {
-    bottom: calc(0.4rem + env(safe-area-inset-bottom, 0px));
-    max-width: min(22rem, calc(100vw - 1.5rem));
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    max-width: min(22rem, calc(100vw - 8rem));
     padding: 0.58rem 0.95rem;
   }
 

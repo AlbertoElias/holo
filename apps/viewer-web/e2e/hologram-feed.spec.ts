@@ -48,13 +48,14 @@ type PlacementExpectation = {
   placedByModel?: boolean;
 };
 
-async function mockFeed(page: Page): Promise<void> {
+async function mockFeed(page: Page, metadata: { hologramName?: string; submittedBy?: string } = {}): Promise<void> {
+  const hologram = { ...mockHologram, ...metadata };
   await page.route("**/api/holograms?*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        items: [mockHologram],
+        items: [hologram],
         nextCursor: null
       })
     });
@@ -64,7 +65,7 @@ async function mockFeed(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(mockHologram)
+      body: JSON.stringify(hologram)
     });
   });
 
@@ -367,3 +368,52 @@ test("AR placement falls back when hit-test is unavailable", async ({ page }, te
   expect(["hit-test-unavailable", "hit-test-timeout"]).toContain(placement.reason);
   await captureEvidence(page, testInfo, "ar-fallback-placement");
 });
+
+// B-008: visibility alone does not detect a fixed control painting over text.
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+  { width: 667, height: 375 },
+  { width: 768, height: 1024 }
+]) {
+  test(`mobile feed metadata clears Upload at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await mockFeed(page, { hologramName: "A recorded hologram", submittedBy: "Alberto Elias" });
+    await page.goto("/");
+    await assertViewerShell(page);
+    const card = page.locator(".feed-card").first();
+    await expect(card).toHaveAttribute("data-model-state", "rendered");
+    const toggle = page.getByRole("button", { name: "Expand upload panel" });
+    await expect(toggle).toBeVisible();
+    await expect(card.getByRole("heading", { name: "A recorded hologram" })).toBeVisible();
+    await expect(card.locator(".feed-card-meta p")).toContainText("By Alberto Elias");
+
+    expect(await card.locator(".feed-card-meta h2").evaluate((heading) => (
+      heading.scrollWidth <= heading.clientWidth
+    )), "the title fits without truncation").toBe(true);
+    const metadata = await card.locator(".feed-card-meta").boundingBox();
+    const upload = await toggle.boundingBox();
+    expect(metadata).not.toBeNull();
+    expect(upload).not.toBeNull();
+    expect(metadata!.y).toBeGreaterThanOrEqual(0);
+    expect(metadata!.x).toBeGreaterThanOrEqual(0);
+    expect(metadata!.x + metadata!.width).toBeLessThanOrEqual(viewport.width);
+    expect(metadata!.y + metadata!.height, "title and author must sit above Upload").toBeLessThan(upload!.y);
+    const portal = await card.locator(".portal-controls").boundingBox();
+    expect(portal).not.toBeNull();
+    expect(metadata!.x, "metadata clears the portal controls on the left").toBeGreaterThan(portal!.x + portal!.width);
+    await testInfo.attach("mobile-layout.json", {
+      body: JSON.stringify({ viewport, metadata, upload, portal }, null, 2),
+      contentType: "application/json"
+    });
+    await captureEvidence(page, testInfo, "mobile-feed-metadata");
+
+    if (viewport.width === 390) {
+      await toggle.click();
+      await expect(page.getByLabel("Upload Hologram")).toBeVisible();
+      await page.getByRole("button", { name: "Collapse upload panel" }).click();
+      await expect(toggle).toBeVisible();
+      await expect(page.getByLabel("Upload Hologram")).toHaveCount(0);
+    }
+  });
+}
