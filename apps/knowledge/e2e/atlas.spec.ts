@@ -128,7 +128,9 @@ test("wiki, internal Markdown links, bug source boundaries, and missing routes",
   await expect(page.locator(".bug-card")).toHaveCount(
     open.match(/^### B-\d+ /gm)?.length ?? 0,
   );
-  await expect(page.locator(".bug-card")).not.toContainText("Short symptom");
+  await expect(
+    page.locator(".bug-card").filter({ hasText: "Short symptom" }),
+  ).toHaveCount(0);
   await page.goto(documentUrl("docs/missing-knowledge-file.md"));
   await expect(
     page.getByRole("heading", { name: "Document not found." }),
@@ -149,7 +151,11 @@ test("phone layout keeps navigation, filters, and source documents usable", asyn
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.locator(".backbone .source-diagram img")).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
   await page.screenshot({
     path: testInfo.outputPath("approach-mobile.png"),
     fullPage: true,
@@ -544,9 +550,16 @@ test("source refresh preserves reading state, and missing guide leaves canonical
       page.getByRole("button", { name: "Free", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
     await page.goto("/#/ideas");
-    await page.locator(".relationship-section").getByRole("button", { name: "Portal view", exact: true }).click();
+    await page
+      .locator(".relationship-section")
+      .getByRole("button", { name: "Portal view", exact: true })
+      .click();
     await writeFile(guideFile, original);
-    await expect(page.locator(".relationship-section").getByRole("button", { name: "Portal view", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page
+        .locator(".relationship-section")
+        .getByRole("button", { name: "Portal view", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("textbox", { name: "Search ideas" }).fill("IDEA-045");
     await writeFile(guideFile, original + "\n");
     await expect(
