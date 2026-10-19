@@ -1,7 +1,7 @@
 # Feature brief: Native IWSDK capture runtime refactor
 
 **Lead:** Claude Code
-**Status:** Implementing on `infra/iwsdk-runtime-refactor` (from `origin/main` `de26df9eb70c`)
+**Status:** Verifying on `infra/iwsdk-runtime-refactor` (from `origin/main` `de26df9eb70c`)
 **Prepared:** 2026-10-19
 
 The user added a requirement when implementation started: treat the migration
@@ -416,6 +416,7 @@ rerun on the refactor and compared.
 | Priority | System | Owns (writes) | Was in `AppOrchestrator.update` |
 | ---: | --- | --- | --- |
 | 0 | `SimulationClockSystem` | simulation step count and time | `tick` accumulators |
+| 5 | `CaptureControlSystem` (dev builds) | applies native control requests (`refitRequested`, `toggleRequested`) through the UI's services | — (new) |
 | 10 | `XrSessionSystem` | XR enter/exit handling, AR spectator placement, head pose, look yaw, desktop/mock rig placement | transition block, AR path, `updateHeadPose`/`syncYaw`, mock/desktop rig |
 | 20 | `RoomScaleSystem` | real-XR rig alignment and planned root displacement | `prepareBodyFrame` |
 | 30 | `CalibrationSystem` | restore of last frame's procedural pose, height fit/refit, asset scale | `restore*`, `updateHeightAdaptation`, `requestHeightRefit` |
@@ -426,6 +427,7 @@ rerun on the refactor and compared.
 | 80 | `CaptureUiSystem` | mode publication, VR recording panel | `publishMode`, `vrHud.update` |
 | 90 | `RecordingSystem` | recorded frame sampling | `recorder.capture` |
 | 100 | `DiagnosticsSystem` | head-path and hand-joint overlays | overlay updates |
+| 110 | `CaptureStateSystem` (dev builds) | publishes domain state to the `capture` entity's components | — (new) |
 
 #### Design review outcome (independent read-only reviewer, 2026-10-19)
 
@@ -470,3 +472,95 @@ Accepted changes to the plan:
 
 The spectator and height-evidence renders stay post-draw passes of the frame
 loop's present step; they draw extra views but never tick or sample.
+
+### Result
+
+Capture's production entry runs on IWSDK World with one frame loop and ordered
+systems; every deterministic replay sample is byte-identical to the
+pre-refactor runtime on the same SDK versions.
+
+**Structure.** `src/main.ts` boots `runtime/createCaptureRuntime.ts`, the
+composition root (218 lines): `captureStage` (World and its SDK boundary,
+scene objects), `xrEntry` (`#VRButton`/`#ARButton` over `world.launchXR`),
+`FrameLoop` (the only animation loop and clock), `automationHooks` and
+`captureTextState`. `src/systems/` holds the eleven ordered systems plus the
+dev-only native state/control pair, reading typed services from
+`captureContext`. New services own state the orchestrator used to hold:
+`BodyTracking`, `CrouchState`, `HeightFit`, `HandEmbodiment`
+(+ `LegacyFingerRetargeter` for `?handRetargetMode=legacy`), `RecordingSession`,
+`ArSpectator`, `DiagnosticViews`, and `XrTracking` + `MockVrPose`.
+
+**Deleted** (old line counts): `app/AppOrchestrator.ts` (1,587),
+`xr/XrSessionService.ts` (1,102, replaced by `XrTracking` 751 + `MockVrPose`
+96: one input-slot table instead of three copies of grip/hand/controller code),
+`scene/SceneBootstrap.ts` (185, incl. the custom AR button and three's VRButton),
+`debug/DebugBridge.ts` (77), `app/createApp.ts` (65), the stub
+`debug/iwsdkMcpRuntime.ts` (28), the unused teardown chain (`dispose` methods,
+`System`/`FrameContext` contracts), dead members (`bodyCapsuleBefore`,
+`isLikelySidePosition`, `AudioRecorder.clear/hasPermission`, unused constructor
+parameters), `InputController`'s eight camera getter/setter callbacks (now a
+typed `DesktopLook`), hand-written finite checks (shared helpers), the duplicate
+resize `setSize` (World sizes the canvas) and the dead `src/scene` chunk rule.
+Total capture source is about the same size (9,692 → 9,878 lines, including
+~370 new lines of native ECS state/controls and XR entry that three's VRButton
+used to provide); no file now owns more than one concern.
+
+**Retained deliberately:** Rapier `CharacterMotor`, `LocomotionAnimator`,
+`TerrainLegSolver`, `VrBodySolver`/`legIk`, height calibration, arm IK and
+finger retargeting algorithms (unchanged apart from finite-check helpers); the
+automation hooks and their names; `?manualClock=1`; the DOM overlay.
+
+**SDK boundaries** (each documented at its call site and in
+`docs/IWSDK_AI_WORKFLOW.md`): capture's frame loop replaces World's loop;
+`InputSystem`, `AudioSystem`, `EnvironmentSystem`, `LightSystem` are
+unregistered; World's locomotion, physics, grabbing and spatial UI are off;
+three's shared audio context is an `OfflineAudioContext` (World.create would
+open a real one for a listener capture removes); capture's rig, cameras, world
+group and avatar are never ECS transform entities (float32); production builds
+give UIKitML empty kits and a two-icon lucide subset; `restoreCameraOnExit` is
+off.
+
+#### Evidence
+
+| What | Result | Where |
+| --- | --- | --- |
+| Deterministic exactness | After every refactor commit, body (5 fixtures), hand replay and locomotion samples were byte-identical to the dependency-step reference (runs r1–r5) | `output/iwsdk-refactor/r*/`, `apps/capture/output/r*-*` (local) |
+| Capture XR suite | mock-vr, locomotion, terrain, hands, height and body pass in one run, including height (flaky on main) | `xr-smoke.log` |
+| Body fault matrix | 12/12 caught; every failure message (with its metric value) identical to main's | `apps/capture/output/r5-body-faults/fault-matrix.json` |
+| Pipeline | capture-to-viewer, bubble-capture and portal pass (3/3, 3.2 min); the portal swipe failure the room-scale brief reported on main did not reproduce | `pipeline.log` |
+| Viewer AR / mocked | 9/9 pass | `xr-smoke.log` |
+| `verify:pr` | doctor, lint, typecheck, all unit tests and every build pass. Knowledge Atlas e2e fails identically on untouched main here: another session's Atlas server holds 127.0.0.1:4176 and the config reuses it, so fixtures written in this worktree are never served (`check:docs` passes) | `verify-pr.log` |
+| Native ECS through the outer CLI | Systems listed in frame order; pause holds state through wall time; `ecs step` advances exactly N steps and N/60 s; native recording samples once per step at simulation time; toggling `RecordingSystem` stops and resumes samples; refit refused on desktop and while recording, accepted after export; VR enter/exit through World's offered session; no browser errors | [CLI transcript](../evidence/iwsdk-runtime-refactor/ecs-cli-transcript.md) |
+| Reload and re-entry | After a source edit the managed page reloads with one canvas and one set of systems; two VR enter/exit cycles re-offer the session, track controllers, no errors; World's unused player meshes stay invisible on desktop and in VR | managed runtime on 5874 |
+
+#### Same-workload comparison (production builds, headless Chromium, SwiftShader, this Mac)
+
+| Measure | main | refactor | Notes |
+| --- | ---: | ---: | --- |
+| Startup JS (index + preloaded chunks) | 3,915 KB / 1,475 KB gz | 4,772 KB / 1,545 KB gz | World runtime: ECS, xr-input, locomotor, scene composition. Before the UIKitML boundary the xr chunk alone was 6.66 MB |
+| Time from navigation to "Loaded" (5 runs) | 247–256 ms | 310–385 ms | Larger parse plus World init; World's audio context removed ~190 ms |
+| Retained JS heap after load + GC | 51 MB | 48 MB | Was 78 MB before the UIKitML boundary (zod schemas) |
+| Steady frame (desktop, drawing) | 50–58 ms | 50–58 ms | Software GL bound |
+| 600 simulation steps, idle / walking | 542–567 / 72–75 ms | 611–629 / 100–105 ms | Same end state; ~+0.05–0.1 ms per step on this host, spread across system dispatch and scene updates; no single hotspot |
+| Deployed assets on disk | 4.4 MB | 14.6 MB | UIKitML's per-font chunks are lazy and never fetched |
+
+These are host-browser diagnostics, not device performance. Quest CPU/GPU
+frame time, latency, memory and thermals on the same workload remain
+unmeasured; the per-step overhead and three's multiview path (enabled by
+World's renderer, active only with WebXR layers on Quest) are the first
+things to profile there.
+
+#### Remaining limits
+
+- Physical-device validation (Quest performance, multiview rendering, AR on a
+  headset or phone, tracking feel) has not been run.
+- AR session request now lists `local-floor` as optional (it stays mandatory at
+  reference-space resolution) and offers `layers`; a device without
+  `local-floor` starts then ends the session instead of rejecting the request.
+- World's offer flow re-offers VR after any session end, where VRButton only
+  re-offered after its own exit click.
+- Native ECS controls apply at the next simulation step; under the manual
+  clock that is the next `advanceTime`. `ecs step` is for the realtime clock.
+- Pre-existing: `test:xr:height` failed once on main when run after the other
+  checks and is not byte-deterministic between runs on main; Knowledge Atlas
+  e2e depends on a free 4176.

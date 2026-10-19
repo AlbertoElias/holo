@@ -98,9 +98,10 @@ it from the item below instead of duplicating its status here.
 
 ## Later
 
-- [ ] Evaluate IWSDK-native ECS/scene composition only when a concrete authoring
-  workflow requires it; the current tooling integration intentionally preserves
-  HoloIM's custom Three/Rapier runtime.
+- [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered
+  ECS systems, keeping Rapier and its algorithms
+  ([brief](docs/features/iwsdk-runtime-refactor.md)). Native scene composition
+  remains unused until a concrete authoring workflow requires it.
 - [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.
   Set up as the opt-in `metavr` MCP server in

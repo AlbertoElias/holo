@@ -1,14 +1,12 @@
 # IWSDK runtime prototype
 
-This is an isolated experiment on `infra/iwsdk-prototype`, not a production
-migration. As of October 19, the locomotion/height/room-scale fixes have landed
-on `origin/main` and the user has requested the real refactor plan. Start with
-[the current feature brief](features/iwsdk-runtime-refactor.md) and
-[the Claude prompt](prompts/claude-iwsdk-runtime-refactor.md).
-
-The runtime and results below remain the older prototype snapshot. Implement on
-fresh main and port its useful pieces selectively; do not merge its old capture
-files or package/Node settings over completed movement work.
+This was an isolated experiment on `infra/iwsdk-prototype`, not a production
+migration. The production refactor is
+[the IWSDK runtime refactor brief](features/iwsdk-runtime-refactor.md); it
+ported the prototype's useful seams onto current main and replaced the
+compatibility wrapper this page describes. The prototype branch and its
+`iwsdk-prototype.html` entry were not merged. The rest of this page is the
+October 18 prototype snapshot.
 
 ## Run
 

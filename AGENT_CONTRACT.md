@@ -99,6 +99,8 @@ Rules:
 - When a required port is occupied, scripts should fail fast with a clear message.
 - IWSDK's managed capture runtime owns `5174`; stop it with
   `pnpm run dev:capture:down` before starting a separate mock-XR server there.
+  Another worktree can run its own managed runtime with
+  `CAPTURE_RUNTIME_PORT=<port>`.
 
 ## Test Environment Contract
 
