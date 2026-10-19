@@ -526,7 +526,7 @@ off.
 | Deterministic exactness | After every refactor commit, body (5 fixtures), hand replay and locomotion samples were byte-identical to the dependency-step reference (runs r1–r5) | `output/iwsdk-refactor/r*/`, `apps/capture/output/r*-*` (local) |
 | Capture XR suite | mock-vr, locomotion, terrain, hands, height and body pass in one run; height alone 6/6 after the D1 fix | `xr-smoke.log` |
 | Body fault matrix | 12/12 caught; every failure message (with its metric value) identical to main's | `apps/capture/output/r5-body-faults/fault-matrix.json` |
-| Pipeline | capture-to-viewer, bubble-capture and portal pass (3/3, 3.2 min); the portal swipe failure the room-scale brief reported on main did not reproduce | `pipeline.log` |
+| Pipeline | capture-to-viewer and bubble-capture passed in all 4 refactor runs. Portal passed 3 of 4: one post-merge run failed the viewer's phone-feed swipe assertion (`swipe scrolls the feed while playing`), the intermittent failure the room-scale brief recorded on main CI; it passed in the 2 immediate re-runs, as did 2 runs on main | `pipeline*.log` |
 | Viewer AR / mocked | 9/9 pass | `xr-smoke.log` |
 | `verify:pr` | doctor, lint, typecheck, all unit tests and every build pass. Knowledge Atlas e2e fails identically on untouched main here: another session's Atlas server holds 127.0.0.1:4176 and the config reuses it, so fixtures written in this worktree are never served (`check:docs` passes) | `verify-pr.log` |
 | Native ECS through the outer CLI | Systems listed in frame order; pause holds state through wall time; `ecs step` advances exactly N steps and N/60 s; native recording samples once per step at simulation time; toggling `RecordingSystem` stops and resumes samples; refit refused on desktop and while recording, accepted after export; VR enter/exit through World's offered session; no browser errors | [CLI transcript](../evidence/iwsdk-runtime-refactor/ecs-cli-transcript.md) |
@@ -582,3 +582,9 @@ on main. The check now calls the harness's `waitForXrRenderLoop` after freezing
 the clock and after re-entry, as the body and hand replays already do (frames
 released under the manual clock change no state); assertions are unchanged.
 Height then passed 6/6 alone.
+
+**After merging `origin/main` `c6bec9bc0492`** (GLB optimizer terrain fix,
+Atlas spec fix, auto-deploy): typecheck, lint and unit tests pass; the full
+capture XR suite and body pass with every sample still byte-identical; the
+production build preserves both GLBs and loads in 286 ms with a 48 MB heap and
+no errors.
