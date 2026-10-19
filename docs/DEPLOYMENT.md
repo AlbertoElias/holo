@@ -27,7 +27,7 @@ From the workspace root (the Docker build context is the monorepo root):
 
 ```sh
 fly apps create holoim-api            # skip if it already exists
-fly volumes create holoim_data --size 10 --region iad -a holoim-api
+fly volumes create holoim_data --size 3 --region iad -a holoim-api
 fly secrets set -a holoim-api \
   WEB_ORIGIN="https://holoim-viewer.pages.dev" \
   WEB_ORIGINS="https://holoim-viewer.pages.dev,https://*.holoim-viewer.pages.dev"
@@ -43,6 +43,11 @@ Rules that keep this topology correct:
   volume and its own SQLite file.
 - The embedded USDZ worker runs in the same process (SQLite phase). The
   machine is sized `shared-cpu-2x` / 2 GB for the Python converter.
+- Volumes are billed at $0.15/GB-month with no free allowance on new
+  Fly organisations, so start small: 3 GB (~$0.45/month) holds roughly
+  800 median GLBs, or ~30 GLB+USDZ demo pairs at ~90 MB per USDZ. Grow
+  it any time with `fly volumes extend`. With Quick Look opt-in and a
+  handful of demo holograms, the volume is not a near-term constraint.
 - Volume snapshots are the backup story for the SQLite index:
   `fly volumes snapshots list <volume-id>`. R2 media without a database
   row is unreachable, so snapshot before risky operations.
@@ -61,6 +66,17 @@ Or connect the GitHub repo in the Pages dashboard with build command
 the `WEB_ORIGINS` wildcard above.
 
 ## 3. Media on R2 (Phase 2)
+
+The code already supports R2; this section is a configuration flip, not
+a project. Stay on the Fly volume while all of these hold: a handful of
+demo holograms, Quick Look opt-in, one machine, low download traffic.
+Move when any trigger hits:
+
+- Volume passes ~70% full, or opted-in USDZ pairs grow past ~50.
+- Download traffic becomes public/shared (Fly egress is $0.02/GB and
+  competes with the API machine; R2 egress is free and CDN-cached).
+- A second machine or region is needed (volumes are per-machine).
+- Media must survive losing the Fly volume/machine.
 
 1. Create the bucket: `wrangler r2 bucket create holoim-media`.
 2. Attach a public custom domain (e.g. `media.<your-domain>`) in the R2
