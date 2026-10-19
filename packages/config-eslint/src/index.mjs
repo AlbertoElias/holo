@@ -19,7 +19,7 @@ const baseConfig = createWorkspaceTsEslintConfig({
 const config = [
   ...baseConfig,
   {
-    files: ['apps/viewer-web/**/*.{ts,tsx}'],
+    files: ['apps/viewer-web/**/*.{ts,tsx}', 'apps/knowledge/**/*.{ts,tsx}', 'src/**/*.{ts,tsx}'],
     plugins: {
       'react-hooks': reactHooks
     },

@@ -11,6 +11,8 @@ export interface LocomotionUpdateInput {
   targetHorizontalSpeed: number;
   moveIntent: boolean;
   vrMode: boolean;
+  /** Uncrouched travel speed: cadence slows with crouch as well as collision. */
+  referenceSpeed?: number;
 }
 
 const LOCOMOTION_STATES: readonly LocomotionState[] = ['idle', 'walk', 'jump', 'fall'];
@@ -28,12 +30,11 @@ const CLIP_FALLBACK_ORDER: Readonly<Record<LocomotionState, readonly LocomotionS
 };
 const ROOT_MOTION_TARGETS = ['hips', 'armature', 'root'];
 const LOWER_BODY_TARGETS = ['hips', 'leftupleg', 'leftleg', 'leftfoot', 'lefttoebase', 'rightupleg', 'rightleg', 'rightfoot', 'righttoebase'];
-const DESKTOP_WALK_TIME_SCALE_BASE = 1.4;
-const DESKTOP_WALK_TIME_SCALE_MIN = 0.8;
-const DESKTOP_WALK_TIME_SCALE_MAX = 2.4;
+const WALK_TIME_SCALE_BASE = 1.4;
+const WALK_TIME_SCALE_MIN = 0.15;
+const WALK_TIME_SCALE_MAX = 2.4;
 const WALK_LOOP_QUAT_MATCH_DOT = 0.99995;
 const WALK_STATE_SPEED_THRESHOLD = 0.12;
-const WALK_STATE_INTENT_SPEED_THRESHOLD = 0.02;
 const WALK_FADE_SEC = 0.08;
 const WALK_ENTRY_TIME_OFFSET_SEC = 0.12;
 
@@ -69,11 +70,9 @@ export class LocomotionAnimator {
 
   update(input: LocomotionUpdateInput): void {
     const nextProfile: LocomotionProfile = input.vrMode ? 'vr-lower-body' : 'desktop-full';
-    const nextState = this.resolveState(input.grounded, input.velocityY, input.horizontalSpeed, input.moveIntent);
+    const nextState = this.resolveState(input.grounded, input.velocityY, input.horizontalSpeed);
     const fadeSec =
-      nextProfile === 'vr-lower-body' && nextState === 'idle'
-        ? 0
-        : nextState === 'jump' || nextState === 'fall'
+      nextState === 'jump' || nextState === 'fall'
           ? 0.1
           : nextState === 'walk'
             ? WALK_FADE_SEC
@@ -94,18 +93,21 @@ export class LocomotionAnimator {
     return this.activeProfile;
   }
 
+  getClipSnapshot(): { name: string; time: number; duration: number } | null {
+    if (!this.activeAction) return null;
+    const clip = this.activeAction.getClip();
+    return { name: clip.name, time: this.activeAction.time, duration: clip.duration };
+  }
+
   getCurrentTimeScale(): number {
     return this.currentTimeScale;
   }
 
-  private resolveState(grounded: boolean, velocityY: number, horizontalSpeed: number, moveIntent: boolean): LocomotionState {
+  private resolveState(grounded: boolean, velocityY: number, horizontalSpeed: number): LocomotionState {
     if (!grounded) {
       return velocityY > 0.25 ? 'jump' : 'fall';
     }
     if (horizontalSpeed >= WALK_STATE_SPEED_THRESHOLD) {
-      return 'walk';
-    }
-    if (moveIntent && horizontalSpeed >= WALK_STATE_INTENT_SPEED_THRESHOLD) {
       return 'walk';
     }
     return 'idle';
@@ -166,8 +168,9 @@ export class LocomotionAnimator {
       if (!clip) continue;
       const action = this.mixer.clipAction(clip);
       action.enabled = true;
-      action.setLoop(THREE.LoopRepeat, Infinity);
-      action.clampWhenFinished = false;
+      const airborne = /jump|takeoff|fall|air/i.test(clip.name);
+      action.setLoop(airborne ? THREE.LoopOnce : THREE.LoopRepeat, airborne ? 1 : Infinity);
+      action.clampWhenFinished = airborne;
       action.setEffectiveTimeScale(1);
       actions[state] = action;
     }
@@ -178,15 +181,17 @@ export class LocomotionAnimator {
     let nextTimeScale = 1;
     const walkAction = this.actionsByProfile[this.activeProfile].walk;
     const usingWalkAction = walkAction !== undefined && this.activeAction === walkAction && this.state === 'walk';
-    if (usingWalkAction && this.activeProfile === 'desktop-full') {
-      const speedRatio = input.horizontalSpeed / Math.max(input.targetHorizontalSpeed, 0.01);
+    if (usingWalkAction) {
+      const speedRatio = input.horizontalSpeed / Math.max(input.referenceSpeed ?? input.targetHorizontalSpeed, 0.01);
       nextTimeScale = THREE.MathUtils.clamp(
-        DESKTOP_WALK_TIME_SCALE_BASE * speedRatio,
-        DESKTOP_WALK_TIME_SCALE_MIN,
-        DESKTOP_WALK_TIME_SCALE_MAX
+        WALK_TIME_SCALE_BASE * speedRatio,
+        WALK_TIME_SCALE_MIN,
+        WALK_TIME_SCALE_MAX
       );
     }
 
+    // Smooth cadence changes without restarting the walking phase.
+    nextTimeScale = THREE.MathUtils.lerp(this.currentTimeScale, nextTimeScale, 1 - Math.exp(-12 * Math.max(0, input.deltaSec)));
     this.currentTimeScale = nextTimeScale;
     this.activeAction?.setEffectiveTimeScale(nextTimeScale);
   }

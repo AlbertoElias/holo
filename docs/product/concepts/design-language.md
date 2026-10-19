@@ -2,13 +2,23 @@
 
 **Status:** Exploration (IDEA-031). Nothing here is decided. Open decisions are
 listed at the end.
+**Lens:** [what a hologram is](what-a-hologram-is.md). The take is the event,
+marks are the meaning layer, and the stage and time cursor are the view.
+**Reading note:** Visual treatments, timings, sizing, font choices, and input bindings
+remain design proposals. The agreed event/meaning/view lens and recorded/inferred/added
+provenance principles remain authoritative. External artifacts are linked rather
+than imported. The earlier [object-explanation recommendation](../APPROACH.md)
+is retained as a candidate, not an override of portal and body-first priorities.
+
 **Applies to:** `apps/capture`, `apps/viewer-web`, and the shared UI packages,
 in 2D (desktop, phone) and 3D (VR, AR), with mouse, touch, controllers, hands,
 and gaze-pinch.
 **Current round:** the [Direction Board](https://claude.ai/artifact/MtoVzHNaaxA3SPd5BuXgdc)
 collects the research, four hologram-first directions (Greenhouse, Prism,
 Companion, Atelier), seven triggers for one action, and brainstorm prompts, with
-reactions saved per card. It supersedes the single-direction proposal below,
+reactions saved per card. References live on the
+[HoloIM Moodboard](https://claude.ai/artifact/6ofHzWfmFmQTiQXBryNfMU), with a plain
+copy in [../research/moodboard.md](../research/moodboard.md). It supersedes the single-direction proposal below,
 which is kept for reference until a direction is chosen.
 **Earlier visual references (private until shared):**
 [Light & Ink screens](https://claude.ai/artifact/C3h8MbK3YCcVKeiJd771S9), 14
@@ -44,6 +54,9 @@ A proposal passes only if it meets all of these.
    thing in view. App chrome recedes.
 5. **Ready for the roadmap.** Notes, symbols, gesture-to-shape, retakes, layers,
    replies, and live multi-person sessions fit the model without new concepts.
+6. **Passes the hologram test.** Each element is anchored to the event, read
+   from the body where possible, expresses intent rather than a view, works on
+   a flat phone, and would lose its meaning as a video.
 
 ## 1. One model for both apps
 
@@ -51,14 +64,15 @@ Four nouns cover capture, editing, and viewing:
 
 | Noun | Meaning |
 | --- | --- |
-| **Stage** | Where a hologram plays: a volume with a floor disc. Full scale in VR or AR, tabletop scale in AR, a card in the feed. |
+| **Stage** | Where a hologram plays: a volume with a floor disc. Full scale in VR or AR, tabletop scale in AR, a portal in the feed. |
 | **Take** | A recorded performance over time: body, hands, face, voice. |
 | **Mark** | Anything authored onto the stage: pin, note, ink stroke, symbol; later replies, decisions, checkpoints. |
 | **Time cursor** | Where you are in time. At "now" while live; at a past moment while editing or watching. |
 
-Every mark has the same shape: `{ author, anchor, span, kind, content, state }`.
-The anchor is a place in the world, a bone on a person (it follows them), or a
-prop. Content is never anchored to the screen. This record is the carrier for
+Every mark has the same shape: `{ author, anchor, span, kind, content, state, provenance }`.
+Provenance is recorded, inferred (read from the body), or added.
+The anchor is a place in the world, a bone on a person (it follows them), a
+prop, or a moment. Content is never anchored to the screen. This record is the carrier for
 HoloGrammar (IDEA-001): intent and confidence become fields of a mark, not a
 new object.
 
@@ -68,6 +82,9 @@ same stage with the cursor in their time, and replying (IDEA-018) is recording
 at a moment of it. There is no separate editor app or mode to learn.
 
 ## 2. Visual language: three materials
+
+The materials map onto the layers: Presence shows the event, Ink shows the
+meaning layer, and Light is the view's chrome.
 
 | Material | What it is | Look |
 | --- | --- | --- |
@@ -215,19 +232,25 @@ drawn" option; doing nothing accepts it. This is the Gesture Compiler
 During a take the system keeps where you point alongside the transcript. Words
 like "this", "here", and "that" are linked to what you pointed at when you said
 them. Nothing appears live. In review those links show as faint suggested pins
-you can accept with one commit, and they drive spatial subtitles (IDEA-014) and
-clarity suggestions (IDEA-023).
+you can accept with one commit, and they drive spatial subtitles (IDEA-014),
+clarity suggestions (IDEA-023), the attention-following camera (IDEA-041),
+and the object-indexed timeline (IDEA-044). This is self-resolving pointing
+(IDEA-032), the first mark kind: meaning read from the body before anything
+is typed.
 
 ## 5. Device idioms
 
 | Device | Role | Arrangement |
 | --- | --- | --- |
-| Desktop | Director's chair: precise timing, typing, arranging | Third-person orbit; ribbon fully expanded with layer lanes; popovers for mark editing |
-| Phone | Watch and reply | Portrait feed; tap to pause; ribbon appears on pause; long-press for the Halo; reply by voice |
+| Desktop | Director's chair: precise timing, typing, arranging | Portal: drag rotates, scroll zooms from inside the world to third person; ribbon fully expanded with layer lanes; popovers for mark editing |
+| Phone | Watch and reply | Portrait feed of portals: moving the phone moves the camera, pinch zooms from inside the world to third person; tap to pause; ribbon appears on pause; long-press for the Halo; reply by voice |
 | VR | Performer's stage | Full scale in the scene bubble; hands first; ribbon around the stage base; step into your ghost to retake |
 | AR | The room is the stage | Hologram on your floor or table at a chosen scale; no environment by default; chips always backed for legibility against bright rooms |
 
 Every device can do everything; each device is the best place for something.
+On every device the viewer chooses Follow (the device carries out the
+author's attention intent) or Free (they move through time and space
+themselves).
 
 ## 6. The core loops
 
@@ -244,8 +267,11 @@ want. To fix a span, select it on the ribbon and choose Retake: you step into
 your own ghost (IDEA-020), perform the span again, and the edges are blended
 (IDEA-021).
 
-**Viewer: watch, inspect, reply.** Pause at a mark tick; the stage holds the
-moment and you look around the pinned point. Replying records at that moment
+**Viewer: watch, inspect, reply.** In Follow, the view goes where the author's
+attention went: the camera eases to what they point at on a phone, a cue
+sounds from that direction in a headset. Pause at a mark tick; the stage holds
+the moment and you move around the pinned point, through the portal or on
+foot. Replying records at that moment
 (IDEA-018, needs accounts).
 
 **Live together (later).** Each person's identity hue marks their avatar,
@@ -256,7 +282,9 @@ referent without taking over their view (IDEA-008, IDEA-013).
 
 | Planned work | Provided by |
 | --- | --- |
-| Anchored notes (PRD-001) | Mark kind `note`, bone or world anchor, span, ribbon ticks, popover editing |
+| Self-resolving pointing (IDEA-032) | "This/here" links, mark kind `link`, provenance `inferred` |
+| Portal view, Follow camera (IDEA-045, IDEA-041) | Stage, time cursor, Follow/Free, attention marks |
+| Authored notes (IDEA-002; PRD-001 parked) | Mark kind `note`, bone or world anchor, span, ribbon ticks, popover editing |
 | Symbol Forge (IDEA-003) | Mark kind `symbol`; the Halo symbols ring; custom symbols added in the world-placed library |
 | Gesture Compiler (IDEA-004) | Ink mode and stroke recognition |
 | Claim capsules, decision stamps (IDEA-005, IDEA-027) | Mark `state` plus the seal and beacon primitives |
@@ -289,8 +317,8 @@ treatment of the materials changes.
 - **An input layer** in `xr-runtime` that turns every device into the seven
   verbs, so components never read controllers, hands, or pointer events
   directly.
-- **A Mark schema** in `@holoim/contracts` with a glTF extension; PRD-001 notes
-  become the first mark kind.
+- **A Mark schema** in `@holoim/contracts` with a glTF extension; "this/here"
+  links read from pointing become the first mark kind, authored notes follow.
 
 ## Open decisions
 
@@ -300,7 +328,8 @@ treatment of the materials changes.
 3. Whether voice commands are in the first version. Web Speech API support in
    Quest Browser is uncertain and needs a device check.
 4. The first slice. Suggested: token source, Chip, Halo, and the verb input
-   layer, shipped together with PRD-001 notes as the first mark kind.
+   layer, shipped with "this/here" links (IDEA-032) as the first mark kind and
+   the portal viewer (IDEA-045). PRD-001 typed notes are parked.
 
 ## How to validate
 

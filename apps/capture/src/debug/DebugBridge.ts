@@ -9,6 +9,7 @@ export interface DebugBridgeAdapters {
   respawnCharacter: () => boolean;
   sampleHands: () => Record<VrHandSide, HandSample>;
   setHandOverlay: (enabled: boolean) => void;
+  setHeightEvidenceView: (enabled: boolean) => void;
   setSpectatorView: (enabled: boolean) => void;
   captureHandCalibrationPose: () => Record<'left' | 'right', boolean>;
   resetHandCalibrationPose: () => void;
@@ -24,6 +25,7 @@ export class DebugBridge {
     __respawnCharacter?: () => boolean;
     __sampleHands?: () => Record<VrHandSide, HandSample>;
     __setHandOverlay?: (enabled: boolean) => void;
+    __setHeightEvidenceView?: (enabled: boolean) => void;
     __setSpectatorView?: (enabled: boolean) => void;
     __captureHandCalibrationPose?: () => Record<'left' | 'right', boolean>;
     __resetHandCalibrationPose?: () => void;
@@ -40,6 +42,7 @@ export class DebugBridge {
     this.globalWindow.__respawnCharacter = this.adapters.respawnCharacter;
     this.globalWindow.__sampleHands = this.adapters.sampleHands;
     this.globalWindow.__setHandOverlay = this.adapters.setHandOverlay;
+    this.globalWindow.__setHeightEvidenceView = this.adapters.setHeightEvidenceView;
     this.globalWindow.__setSpectatorView = this.adapters.setSpectatorView;
     this.globalWindow.__captureHandCalibrationPose = this.adapters.captureHandCalibrationPose;
     this.globalWindow.__resetHandCalibrationPose = this.adapters.resetHandCalibrationPose;
@@ -54,6 +57,7 @@ export class DebugBridge {
     delete this.globalWindow.__respawnCharacter;
     delete this.globalWindow.__sampleHands;
     delete this.globalWindow.__setHandOverlay;
+    delete this.globalWindow.__setHeightEvidenceView;
     delete this.globalWindow.__setSpectatorView;
     delete this.globalWindow.__captureHandCalibrationPose;
     delete this.globalWindow.__resetHandCalibrationPose;

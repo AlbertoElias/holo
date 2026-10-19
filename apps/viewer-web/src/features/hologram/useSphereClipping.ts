@@ -11,7 +11,7 @@
  */
 
 import { useFrame } from "@react-three/fiber";
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { SphereGeometry, Vector3 } from "three";
 import type { Material, Mesh, Object3D, WebGLProgramParametersWithUniforms, WebGLRenderer } from "three";
 
@@ -54,7 +54,7 @@ export type SphereClipResult = {
 
 const BUBBLE_MESH_NAME = "RecordedBubbleSphere";
 const DEFAULT_BUBBLE_RADIUS = 6;
-const CACHE_KEY = "sphere-clip-v1";
+const CACHE_KEY = "sphere-clip-v2";
 
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                   */
@@ -113,21 +113,6 @@ function readSphereRadius(mesh: Mesh): number {
   return geo.boundingSphere?.radius ?? DEFAULT_BUBBLE_RADIUS;
 }
 
-/**
- * Clone a material (or the first element of a material array) so we
- * can patch it without side-effects on other instances.
- */
-function ensureClonedMaterial(mesh: Mesh): Material {
-  const src = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-  if (!src) {
-    throw new Error("Mesh has no material");
-  }
-
-  const cloned = src.clone();
-  mesh.material = cloned;
-  return cloned;
-}
-
 function patchMaterial(material: Material, uniforms: SphereClipUniforms): void {
   material.transparent = true;
 
@@ -184,10 +169,36 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
   const resultRef = useRef<SphereClipResult>({ active: false, radius: 0, center: new Vector3() });
   const falloffWidth = config.falloffWidth;
   const safeMode = config.safeMode ?? true;
-  const onError = config.onError;
-  const onStatus = config.onStatus;
+  const callbacksRef = useRef(config);
+  callbacksRef.current = config;
+
+  const syncSphere = useCallback(() => {
+    const bubble = bubbleRef.current;
+    const uniforms = uniformsRef.current;
+    if (!bubble || !uniforms) {
+      return;
+    }
+
+    bubble.getWorldPosition(uniforms.u_sphereCenter.value);
+    bubble.getWorldScale(worldScaleRef.current);
+    const worldRadius = baseRadiusRef.current * Math.max(
+      Math.abs(worldScaleRef.current.x),
+      Math.abs(worldScaleRef.current.y),
+      Math.abs(worldScaleRef.current.z)
+    );
+    uniforms.u_sphereRadius.value = worldRadius;
+    resultRef.current.radius = worldRadius;
+
+    const material = Array.isArray(bubble.material) ? bubble.material[0] : bubble.material;
+    if (material && isBubbleGlassMaterial(material)) {
+      material.uniforms.u_time.value = 0;
+    }
+  }, []);
+
+  useFrame(syncSphere);
 
   useLayoutEffect(() => {
+    const result = resultRef.current;
     const setInactive = (status: SphereClipStatus) => {
       bubbleRef.current = null;
       baseRadiusRef.current = 0;
@@ -195,7 +206,7 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
       resultRef.current.active = false;
       resultRef.current.radius = 0;
       resultRef.current.center.set(0, 0, 0);
-      onStatus?.(status);
+      callbacksRef.current.onStatus?.(status);
     };
 
     const bubble = findBubbleMesh(scene);
@@ -219,11 +230,25 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
       const previousBubbleMaterial = bubble.material;
       const glassMaterial = createBubbleGlassMaterial();
       bubble.material = glassMaterial;
+      const previousRenderOrder = bubble.renderOrder;
       bubble.renderOrder = 999;
       restoreFns.push(() => {
         glassMaterial.dispose();
         bubble.material = previousBubbleMaterial;
+        bubble.renderOrder = previousRenderOrder;
       });
+
+      // Run immediately before each draw: animation and AR placement can run
+      // after our frame callback, and both eyes must use the current transform.
+      const attachSync = (mesh: Mesh) => {
+        const previousBeforeRender = mesh.onBeforeRender;
+        mesh.onBeforeRender = function (...args) {
+          previousBeforeRender.apply(this, args);
+          syncSphere();
+        };
+        restoreFns.push(() => { mesh.onBeforeRender = previousBeforeRender; });
+      };
+      attachSync(bubble);
 
       // Patch every other mesh in the scene
       scene.traverse((child) => {
@@ -232,19 +257,20 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
           return;
         }
 
+        attachSync(mesh);
         const previousMaterial = mesh.material;
-        const material = ensureClonedMaterial(mesh);
-        patchMaterial(material, uniforms);
+        const originals = Array.isArray(previousMaterial) ? previousMaterial : [previousMaterial];
+        if (originals.length === 0 || originals.some((material) => !material)) {
+          throw new Error("Mesh has no material");
+        }
+        const cloned = originals.map((material) => material.clone());
+        mesh.material = Array.isArray(previousMaterial) ? cloned : cloned[0]!;
 
         restoreFns.push(() => {
-          const current = mesh.material;
-          if (Array.isArray(current)) {
-            current.forEach((entry) => entry.dispose());
-          } else if (current) {
-            current.dispose();
-          }
+          cloned.forEach((material) => material.dispose());
           mesh.material = previousMaterial;
         });
+        cloned.forEach((material) => patchMaterial(material, uniforms));
       });
 
       // Initial sphere centre + world radius
@@ -259,7 +285,7 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
 
       resultRef.current.active = true;
       resultRef.current.radius = worldRadius;
-      onStatus?.("enabled");
+      callbacksRef.current.onStatus?.("enabled");
     } catch (unknownError) {
       while (restoreFns.length > 0) {
         restoreFns.pop()?.();
@@ -267,37 +293,23 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
 
       const error = toError(unknownError);
       setInactive("error");
-      onError?.(error);
+      callbacksRef.current.onError?.(error);
 
       if (!safeMode) {
         throw error;
       }
     }
-  }, [falloffWidth, onError, onStatus, safeMode, scene]);
 
-  // Track the animated sphere centre each frame
-  useFrame(() => {
-    const bubble = bubbleRef.current;
-    const uniforms = uniformsRef.current;
-    if (!bubble || !uniforms) {
-      return;
-    }
-
-    bubble.getWorldPosition(uniforms.u_sphereCenter.value);
-    bubble.getWorldScale(worldScaleRef.current);
-    const worldRadius = baseRadiusRef.current * Math.max(
-      Math.abs(worldScaleRef.current.x),
-      Math.abs(worldScaleRef.current.y),
-      Math.abs(worldScaleRef.current.z)
-    );
-    uniforms.u_sphereRadius.value = worldRadius;
-    resultRef.current.radius = worldRadius;
-
-    const material = Array.isArray(bubble.material) ? bubble.material[0] : bubble.material;
-    if (material && isBubbleGlassMaterial(material)) {
-      material.uniforms.u_time.value = 0;
-    }
-  });
+    return () => {
+      while (restoreFns.length > 0) {
+        restoreFns.pop()?.();
+      }
+      bubbleRef.current = null;
+      uniformsRef.current = null;
+      result.active = false;
+      result.radius = 0;
+    };
+  }, [falloffWidth, safeMode, scene, syncSphere]);
 
   return resultRef.current;
 }

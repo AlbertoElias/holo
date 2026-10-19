@@ -12,7 +12,9 @@ import {
 const CHECKS = {
   'mock-vr': 'scripts/ci-mock-vr-playwright.mjs',
   locomotion: 'scripts/ci-vr-locomotion-playwright.mjs',
+  terrain: 'scripts/ci-terrain-locomotion.ts',
   hands: 'scripts/ci-hand-replay-playwright.mjs',
+  height: 'scripts/ci-xr-height-playwright.ts',
   // Not a check: regenerates the IWER pose fixture the hands check replays.
   'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs'
 };
@@ -73,7 +75,9 @@ try {
 
   for (const name of requested) {
     const checkStartedAt = Date.now();
-    await runCommand('node', [CHECKS[name]], {
+    const script = CHECKS[name];
+    const args = script.endsWith('.ts') ? ['--import', 'tsx', script] : [script];
+    await runCommand('node', args, {
       env: { ...process.env, BASE_URL: baseUrl, NODE_TLS_REJECT_UNAUTHORIZED: '0' },
       timeoutMs: checkTimeoutMs
     });

@@ -42,6 +42,7 @@ export function createSceneBootstrap(): SceneBootstrap {
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local-floor');
   app.appendChild(renderer.domElement);
 
   // The rig dollies the VR view through xrCamera's parent; three.js applies it

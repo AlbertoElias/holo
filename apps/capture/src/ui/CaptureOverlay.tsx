@@ -134,6 +134,17 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
                 Recenter AR
               </UiButton>
             ) : null}
+            {state.mode === "vr" && (
+              <>
+                <UiButton disabled={!state.heightFit.enabled} onClick={() => bridge.refitHeight()} tone="primary">
+                  Refit height
+                </UiButton>
+                <div role="status" style={{ fontSize: "0.78rem", color: uiDomTokens.colorTextMuted }}>
+                  {state.heightFit.pending ? "Hold your new neutral posture briefly…" : state.heightFit.eyeHeight !== null ? `Fitted eye height: ${state.heightFit.eyeHeight.toFixed(2)} m` : "Hold a neutral posture to fit your height."}
+                  {!state.heightFit.enabled && recording.status !== "idle" ? " Refit is available after recording/export." : ""}
+                </div>
+              </>
+            )}
             <div style={{ fontSize: "0.78rem", color: uiDomTokens.colorTextMuted }}>
               Shortcut: <strong>R</strong>
             </div>

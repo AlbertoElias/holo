@@ -24,6 +24,7 @@ export function createApp(): AppRuntime {
     respawnCharacter: () => orchestrator.respawnCharacter(),
     sampleHands: () => orchestrator.sampleHands(),
     setHandOverlay: (enabled) => orchestrator.setHandOverlay(enabled),
+    setHeightEvidenceView: (enabled) => orchestrator.setHeightEvidenceView(enabled),
     setSpectatorView: (enabled) => orchestrator.setSpectatorView(enabled),
     captureHandCalibrationPose: () => orchestrator.captureHandCalibrationPose(),
     resetHandCalibrationPose: () => orchestrator.resetHandCalibrationPose()
@@ -31,6 +32,7 @@ export function createApp(): AppRuntime {
   const uiBridge: CaptureUiBridge = {
     subscribe: (listener) => orchestrator.subscribeUi(() => listener()),
     getSnapshot: () => orchestrator.getUiState(),
+    refitHeight: () => orchestrator.requestHeightRefit(),
     toggleRecording: () => orchestrator.requestToggleRecording(),
     recenterAr: () => orchestrator.requestRecenterAr()
   };

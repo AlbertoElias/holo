@@ -28,6 +28,8 @@ Complete relevant checks and fixes before handoff.
 For feature requests or substantial behavior changes, follow the canonical
 process in `docs/FEATURE_WORKFLOW.md` (via the `feature-delivery` skill in
 `.agents/skills/feature-delivery/SKILL.md`); do not wait for the user to name it.
+Judge product behavior against `docs/product/concepts/what-a-hologram-is.md`:
+a hologram is a recorded event, viewed through a portal on flat screens.
 
 For ongoing work, each phase has one authority — queue in `TODOS.md`, in-flight
 feature in its brief under `docs/features/`, open defects in `BUGS.md`, and
