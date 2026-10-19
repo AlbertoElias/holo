@@ -30,10 +30,10 @@ it from the item below instead of duplicating its status here.
 - [ ] Mark synthesized locomotion as inferred in capture exports, distinct from
   tracked/recorded performance. This is the export-provenance follow-up added
   by the [hologram philosophy](docs/product/concepts/what-a-hologram-is.md).
-- [ ] Adapt the XR avatar to the person's height, keeping feet grounded and
-  head/hands aligned with tracked input. This sets the hologram's true scale,
-  which pointing rays and measurements depend on. Start in a dedicated session;
-  coordinate avatar scale and calibration with the locomotion-animation work.
+- [x] Adapt the XR avatar to the person's height, keeping its base grounded and
+  neutral head/hands aligned with tracked input. Delivered in
+  [`docs/features/archive/xr-height-adaptation.md`](docs/features/archive/xr-height-adaptation.md).
+
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
   intentionally uses local filesystem storage and SQLite.

@@ -21,6 +21,22 @@ export class CameraController {
   private snapDesktopCameraAfterVrExit = false;
   private postVrExitSnapFrames = 0;
   private postVrForceThirdFrames = 0;
+  private floorHeightMapped = false;
+  private floorOriginPending = true;
+  private readonly floorOrigin = new THREE.Vector2();
+
+  reanchorFloorOrigin(): void {
+    this.floorOriginPending = true;
+  }
+
+  setFloorHeightMapped(enabled: boolean, head?: { x: number; z: number }): void {
+    if (enabled && head && (!this.floorHeightMapped || this.floorOriginPending)) {
+      this.floorOrigin.set(head.x, head.z);
+      this.floorOriginPending = false;
+    }
+    this.floorHeightMapped = enabled;
+  }
+
   private xrInitialHeadY = 0;
   private xrInitialHeadCaptured = false;
 
@@ -193,6 +209,17 @@ export class CameraController {
       this.deps.desktopCamera.position.copy(this.tmpEyeAnchor).addScaledVector(this.worldUp, -bodyViewDownOffset).addScaledVector(this.tmpForward, bodyViewForwardOffset);
       this.tmpLookTarget.copy(this.deps.desktopCamera.position).add(this.tmpForward);
       this.deps.desktopCamera.lookAt(this.tmpLookTarget);
+      return;
+    }
+
+    if (this.floorHeightMapped) {
+      // Only translate the floor. Tracking, hands, and camera remain in meters.
+      this.deps.cameraRig.position.set(
+        this.tmpEyeAnchor.x - this.floorOrigin.x,
+        this.deps.avatarRig.avatarRoot.position.y + this.deps.avatarRig.avatarMinLocalY,
+        this.tmpEyeAnchor.z - this.floorOrigin.y
+      );
+      this.deps.cameraRig.quaternion.identity();
       return;
     }
 

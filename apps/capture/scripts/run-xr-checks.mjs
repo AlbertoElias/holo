@@ -14,6 +14,7 @@ const CHECKS = {
   locomotion: 'scripts/ci-vr-locomotion-playwright.mjs',
   terrain: 'scripts/ci-terrain-locomotion.ts',
   hands: 'scripts/ci-hand-replay-playwright.mjs',
+  height: 'scripts/ci-xr-height-playwright.ts',
   // Not a check: regenerates the IWER pose fixture the hands check replays.
   'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs'
 };
