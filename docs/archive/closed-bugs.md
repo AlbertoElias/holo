@@ -219,6 +219,25 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   waits for steady XR frames and aligns the frozen clock to a 48 ms boundary
   before a replay. Three runs of the same replay produce byte-identical samples.
 
+### B-014 — Avatar falls through the scene in the production capture build
+
+- **Area:** `apps/capture` build + physics
+- **Severity:** P1 — capture unusable at the deployed URL
+- **Observed:** 2026-10-19 at https://holoim-capture.pages.dev
+- **Evidence:** A Node simulation running the real `CharacterMotor` against
+  the built `scene.glb` fell from y 22.26 to y 1.91 in 5 s; against the
+  source GLB it stayed grounded at 22.25. The optimizer's output flipped
+  winding on ~850 of 5570 trimesh triangles (up-facing 3702 → 2852) and
+  mirrored some meshes, and its public-dir path ignores `exclude`.
+- **Cause:** `optimizeGLTF` rewrote `scene.glb`; Rapier reads downward
+  triangles as ceilings, so floors stopped colliding. Development never
+  optimized the asset, so local and CI flows stayed grounded.
+- **Fix:** `scene.glb` joins `avatar.glb` in the copy-verbatim preserve
+  mechanism in `vite.config.ts`; `buildWorldTrimeshData` also aligns each
+  triangle's winding with its vertex normals as defense. New
+  `CharacterMotor.test.ts` covers flipped-winding floors; the rebuilt
+  `dist/gltf/models/scene.glb` is byte-identical to source and the
+  simulation stays grounded. Redeployed to Pages and verified live.
 ### B-008 — Mobile Upload button covers the hologram title
 
 - **Area:** `apps/viewer-web` feed layout

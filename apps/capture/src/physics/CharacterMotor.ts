@@ -490,16 +490,54 @@ export class CharacterMotor {
         vertices.push(transformedPos.getX(i), transformedPos.getY(i), transformedPos.getZ(i));
       }
 
+      const meshIndices: number[] = [];
       if (transformed.index) {
         const indexArray = transformed.index.array;
         for (let i = 0; i < indexArray.length; i += 1) {
-          indices.push(Number(indexArray[i]) + vertexOffset);
+          meshIndices.push(Number(indexArray[i]) + vertexOffset);
         }
       } else {
         for (let i = 0; i < transformedPos.count; i += 1) {
-          indices.push(i + vertexOffset);
+          meshIndices.push(i + vertexOffset);
         }
       }
+
+      // Asset optimizers may flip triangle winding (the production GLB
+      // optimizer does). Rapier treats downward-facing triangles as
+      // ceilings, so align each winding with its vertex normals.
+      const normalAttr = transformed.getAttribute('normal');
+      if (normalAttr) {
+        const p0 = new THREE.Vector3();
+        const p1 = new THREE.Vector3();
+        const p2 = new THREE.Vector3();
+        const edgeA = new THREE.Vector3();
+        const edgeB = new THREE.Vector3();
+        const faceNormal = new THREE.Vector3();
+        const vertexNormal = new THREE.Vector3();
+        const vn = new THREE.Vector3();
+        for (let t = 0; t + 2 < meshIndices.length; t += 3) {
+          const m0 = meshIndices[t];
+          const m1 = meshIndices[t + 1];
+          const m2 = meshIndices[t + 2];
+          if (m0 === undefined || m1 === undefined || m2 === undefined) continue;
+          const i0 = m0 - vertexOffset;
+          const i1 = m1 - vertexOffset;
+          const i2 = m2 - vertexOffset;
+          p0.fromBufferAttribute(transformedPos, i0);
+          p1.fromBufferAttribute(transformedPos, i1);
+          p2.fromBufferAttribute(transformedPos, i2);
+          faceNormal.crossVectors(edgeA.subVectors(p1, p0), edgeB.subVectors(p2, p0));
+          vertexNormal.set(0, 0, 0);
+          vertexNormal.add(vn.fromBufferAttribute(normalAttr, i0));
+          vertexNormal.add(vn.fromBufferAttribute(normalAttr, i1));
+          vertexNormal.add(vn.fromBufferAttribute(normalAttr, i2));
+          if (faceNormal.lengthSq() > 0 && vertexNormal.lengthSq() > 0 && faceNormal.dot(vertexNormal) < 0) {
+            meshIndices[t + 1] = m2;
+            meshIndices[t + 2] = m1;
+          }
+        }
+      }
+      indices.push(...meshIndices);
 
       vertexOffset += transformedPos.count;
       transformed.dispose();
