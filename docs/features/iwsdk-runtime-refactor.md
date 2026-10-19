@@ -358,10 +358,8 @@ target for the refactored runtime. The height report is not deterministic even
 between two runs on main (it differs in thousands of lines), so height is
 compared by its assertions, not by hash.
 
-The height failure is pre-existing on unmodified main: it reproduced only when
-height ran after the other checks in one server, and passed alone. It is tracked
-here as a baseline flake, not a migration regression; the same full suite is
-rerun on the refactor and compared.
+The height failure on unmodified main is a test race (see D1 under Independent
+verification): the check froze the page clock before XR frames started.
 
 ### Design decisions
 
@@ -449,13 +447,14 @@ Accepted changes to the plan:
   are explicit service calls from `CalibrationSystem`. All later systems check
   one `arSpectator` flag computed after transitions; `bodyActive` stays stale in
   AR because `__sampleBody` reads it.
-- Native controls are applied by the frame loop before `world.update`, never at
-  a later priority, so a recording start still locks size before calibration
-  runs that frame. UI and VR select keep calling services synchronously, and
+- Native controls are applied before calibration runs (implemented as
+  `CaptureControlSystem` at priority 5, development builds only), so a
+  recording start still locks size before the height fit runs that step. UI and VR select keep calling services synchronously, and
   `requestHeightRefit` still returns its result immediately.
 - Debugger interplay: the frame loop calls `world.update` through the property
   every time (the SDK debugger rewraps it). While the SDK debugger is paused,
-  `advanceTime` and frame stepping throw instead of silently doing nothing;
+  `advanceTime` throws instead of silently doing nothing (frame stepping, like
+  realtime frames, simply does not advance);
   `ecs_step` is supported in the realtime clock mode only. Raw headset input
   recording follows device frames and keeps recording while paused (it is the
   device's record, not simulation output).
@@ -525,7 +524,7 @@ off.
 | What | Result | Where |
 | --- | --- | --- |
 | Deterministic exactness | After every refactor commit, body (5 fixtures), hand replay and locomotion samples were byte-identical to the dependency-step reference (runs r1–r5) | `output/iwsdk-refactor/r*/`, `apps/capture/output/r*-*` (local) |
-| Capture XR suite | mock-vr, locomotion, terrain, hands, height and body pass in one run, including height (flaky on main) | `xr-smoke.log` |
+| Capture XR suite | mock-vr, locomotion, terrain, hands, height and body pass in one run; height alone 6/6 after the D1 fix | `xr-smoke.log` |
 | Body fault matrix | 12/12 caught; every failure message (with its metric value) identical to main's | `apps/capture/output/r5-body-faults/fault-matrix.json` |
 | Pipeline | capture-to-viewer, bubble-capture and portal pass (3/3, 3.2 min); the portal swipe failure the room-scale brief reported on main did not reproduce | `pipeline.log` |
 | Viewer AR / mocked | 9/9 pass | `xr-smoke.log` |
@@ -561,6 +560,25 @@ things to profile there.
   re-offered after its own exit click.
 - Native ECS controls apply at the next simulation step; under the manual
   clock that is the next `advanceTime`. `ecs step` is for the realtime clock.
-- Pre-existing: `test:xr:height` failed once on main when run after the other
-  checks and is not byte-deterministic between runs on main; Knowledge Atlas
-  e2e depends on a free 4176.
+- Pre-existing: the height report is not byte-deterministic between runs on
+  main; Knowledge Atlas e2e depends on a free 4176.
+
+#### Independent verification (separate agent, 2026-10-19)
+
+Exactness re-run independently: every locomotion, hand and body sample and
+report, and all 25 fault-matrix files, byte-identical to the references; 12/12
+faults caught. Every block of the old `update()` was traced to its system with
+order and conditions preserved; the clock and all 15 debug hooks match. One
+canvas (plus IWER's overlay in a session), one loop owner, one main draw per
+frame, listener counts stable across VR/AR re-entry, production preview loads
+without errors.
+
+**D1 (fixed):** `test:xr:height` alone failed 3 of 4 runs on the refactor (6/6
+on main). The check froze the page clock as soon as the app reported VR mode;
+three starts its XR frame loop only after real-time work in session entry, and
+World's entry adds a reference-space probe before `setSession`, so the first
+XR frame could be starved. The same race caused the baseline full-suite failure
+on main. The check now calls the harness's `waitForXrRenderLoop` after freezing
+the clock and after re-entry, as the body and hand replays already do (frames
+released under the manual clock change no state); assertions are unchanged.
+Height then passed 6/6 alone.

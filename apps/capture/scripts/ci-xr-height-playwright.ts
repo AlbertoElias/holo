@@ -6,7 +6,7 @@ import { chromium, type Page } from 'playwright';
 import {
   attachXrEnvironment, createXrContext, enterIwerSessionFromButton,
   freezePageClock, launchXrBrowser, waitForIwerRuntime,
-  waitForPageFunctions, waitForTextContentPrefix, wireXrConsoleErrors
+  waitForPageFunctions, waitForTextContentPrefix, waitForXrRenderLoop, wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
 
 type Vec = { x: number; y: number; z: number };
@@ -180,6 +180,10 @@ try {
       readyCheck: () => JSON.parse((window as unknown as HeightWindow).render_game_to_text()).mode === 'vr'
     });
     await freezePageClock(page);
+    // Session entry finishes on real-time work (makeXRCompatible, reference
+    // space requests); release frames until XR frames arrive steadily. The
+    // manual clock is on, so these frames change no state.
+    await waitForXrRenderLoop(page);
     await pose(page, height);
     await page.evaluate(() => { (window as unknown as HeightWindow).__heightPoseMissing = true; });
     const missing = await frames(page, 40);
@@ -321,6 +325,7 @@ try {
     await page.evaluate((y: number) => (window as unknown as HeightWindow).IWER_DEVICE.position.set(0.35, y, -0.25), height + 0.1);
     // The page clock is frozen; clicking uses Playwright's independent input clock.
     await enterIwerSessionFromButton(page, '#VRButton');
+    await waitForXrRenderLoop(page);
     await pose(page, height + 0.1);
     const reentered = await frames(page, 45);
     near(reentered.heightAdaptation.eyeHeight ?? 0, height + 0.1, 0.01, `${label} fresh entry`);
