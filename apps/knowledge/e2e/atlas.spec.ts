@@ -110,10 +110,11 @@ test("wiki, internal Markdown links, bug source boundaries, and missing routes",
   await page.goto("/#/bugs");
   const bugs = await readFile(path.join(repoRoot, "BUGS.md"), "utf8");
   const open = bugs.split("## Open")[1]?.split("\n## ")[0] ?? "";
-  await expect(page.locator(".bug-card")).toHaveCount(
-    open.match(/^### B-\d+ /gm)?.length ?? 0,
-  );
-  await expect(page.locator(".bug-card")).not.toContainText("Short symptom");
+  const openCount = open.match(/^### B-\d+ /gm)?.length ?? 0;
+  await expect(page.locator(".bug-card")).toHaveCount(openCount);
+  if (openCount > 0) {
+    await expect(page.locator(".bug-card")).not.toContainText("Short symptom");
+  }
   await page.goto(documentUrl("docs/missing-knowledge-file.md"));
   await expect(
     page.getByRole("heading", { name: "Document not found." }),
