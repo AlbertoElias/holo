@@ -24,6 +24,9 @@ Describe the smallest believable interaction from the user's perspective.
 
 ## Why Holograms
 
+State the hypothesized benefit and the fair comparison that could establish it.
+Do not assume other media are insufficient before observing the task.
+
 What would this lose if the hologram were a video? Answer the test in
 [what a hologram is](../concepts/what-a-hologram-is.md):
 
@@ -59,6 +62,23 @@ How it appears and is controlled at each step, in Follow and in Free.
 ## Risks And Open Questions
 
 - [ ]
+
+## Comparison And Learning
+
+Name the actual task, recipients, comparison medium, preparation effort,
+observable measures, and continue/revise/park criteria. Record observations,
+source links, artifacts, and limits here or in linked supporting research.
+Keep technical acceptance separate from communication benefit. Mark blocked
+or inconclusive observations when the workflow fails, recipients are
+unavailable, or the evidence cannot answer the question; do not infer idea
+failure from those conditions. See [Approach](../APPROACH.md).
+
+## Decision
+
+Pending until explicitly decided. Record approval or parking, rationale,
+decision owner/authorization, and evidence; update the PRD status accordingly.
+Drafting this document is not approval to build. On approval, follow the
+[owning-file workflow](../../FEATURE_WORKFLOW.md) for queue and delivery state.
 
 ## Links
 

@@ -32,6 +32,12 @@ go, and each viewer's device decides how to show it.
 There is no camera lane. Pacing, framing, and shots are decided per device at
 playback from the attention lane.
 
+Text, images, video, charts, animation, sound, and simulations can become
+message content rather than app chrome (IDEA-061). Bind a layer to a useful
+place and time, with attribution and a deliberate reveal. The editor model
+(IDEA-022) is about manipulating those layers; mixed-media composition is a
+separate capability that may begin during the take.
+
 ## Product Directions
 
 - Retake only a selected segment and blend it into the surrounding performance.
@@ -43,6 +49,32 @@ playback from the attention lane.
 - Show ghosted prior takes to support repeatable demonstrations and choreography.
 - Every edit is recorded as provenance, so viewers can tell recorded, inferred,
   and added apart.
+
+## Create While Communicating
+
+IDEA-062 preserves the user's emphasis on doing much of the shaping while
+creating: spawn an object, animate or transform it, draw a path, invent a
+symbol, or emphasize a relationship without stopping speech. Voice, gesture,
+controller actions, and presets are candidates. Avoid accidental commands
+being recorded as content or turning natural gestures into unintended marks.
+The [IDEA-031 exploration](design-language.md) suggests held modes and a radial
+menu; these remain alternatives, not requirements for all authoring.
+
+## How Much Editing Is Needed?
+
+Start by observing real takes. Preview and discard/re-record are the proposed
+baseline; trimming is a candidate next step (IDEA-069). If a small mistake
+repeatedly ruins a useful message, investigate segment retakes (IDEA-021).
+If ambiguous references are the main failure, notes or highlights may help
+more than timeline tools. Ghost overlays, overdubs, sequencing/cuts, independent
+layers, and motion continuity are possibilities, not a commitment to a full
+animation suite. Editing should preserve meaning and make material changes
+understandable to recipients.
+
+The recommended [object-explanation experiment](../APPROACH.md) needs prop
+motion to survive recording and playback. Static environment capture and
+recorded object transformations are different capabilities; inspect the
+current exporter before scoping this change.
 
 ## Design Tension
 

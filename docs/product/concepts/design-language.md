@@ -4,6 +4,12 @@
 listed at the end.
 **Lens:** [what a hologram is](what-a-hologram-is.md). The take is the event,
 marks are the meaning layer, and the stage and time cursor are the view.
+**Reading note:** Visual treatments, timings, sizing, font choices, and input bindings
+remain design proposals. The agreed event/meaning/view lens and recorded/inferred/added
+provenance principles remain authoritative. External artifacts are linked rather
+than imported. The earlier [object-explanation recommendation](../APPROACH.md)
+is retained as a candidate, not an override of portal and body-first priorities.
+
 **Applies to:** `apps/capture`, `apps/viewer-web`, and the shared UI packages,
 in 2D (desktop, phone) and 3D (VR, AR), with mouse, touch, controllers, hands,
 and gaze-pinch.

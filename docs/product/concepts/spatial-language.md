@@ -42,6 +42,20 @@ true scale, through a phone portal, on a flat screen, and in a still image.
   a deeper simulation. Content without a place (a chart, a document) joins by
   being attached to a primitive or referent.
 
+## Concrete Objects And Abstract Symbols
+
+A live VR discussion could summon an object, animate it, split it, link it to
+another, and use it as a shared referent. A unique team-created symbol might
+express uncertainty, disagreement, a dependency, or a repeated concept faster
+than reconstructing the explanation each time. In AR those virtual aids can
+sit beside a real person or real equipment; an async hologram could preserve
+the same actions for later inspection.
+
+IDEA-059 narrows this ambition to explaining one actual task with one supplied
+object. It does not require Symbol Forge or a universal vocabulary. The
+[recommended trial](../APPROACH.md) compares recipient task performance with
+a decent video explanation before generalizing the tool.
+
 ## Open Questions
 
 - Which primitives are universal across training, design review, and social use?

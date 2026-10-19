@@ -24,6 +24,26 @@ context. It should never behave like a passive clip, including on a phone.
 - IDEA-044 Object-indexed timeline
 - IDEA-045 Portal view
 
+## What Contextual Annotation Means
+
+A contextual annotation binds a message to what it refers to and, when needed,
+when it matters. "This wrist rotation is risky" might follow the wrist only
+during 00:12-00:15. A note on a machine can stay fixed to a part; a reply can
+refer to an event instead of a permanent location. It is more specific than
+a caption or an unattached comment thread.
+
+Possible context includes an object, bone, surface point, world region,
+recorded event, time span, or physical location. These are alternatives to
+evaluate, not an agreed schema. Notes could contain text, speech, media,
+symbols, questions, or decisions; [parked PRD-001](../prds/PRD-001-anchored-notes.md)
+deliberately proposes only short text notes with space/time anchors.
+
+An annotation can be created while speaking, added in review, or left by a
+recipient. The placement workflow and authorship rules differ; the parked PRD
+chooses upload-time authoring as a proposal and excludes replies. Automatic
+pointing highlights, hand traces, viewpoints, and proximity notes are separate
+[viewer explorations](viewer-experience.md), not implicit PRD scope.
+
 ## Product Directions
 
 - Viewing is two kinds of navigation: through time (play, pause, scrub) and
@@ -39,6 +59,18 @@ context. It should never behave like a passive clip, including on a phone.
 - Represent versions as meaningful changes to speech, motion, marks, and intent.
 - Surface aggregate signals (where viewers stood, looked, and replayed) while
   protecting viewer privacy.
+
+## Continuity With Live Communication
+
+Async is the replayable counterpart of a live spatial discussion: preserve
+people, references, objects, and changes over time, not just a chosen camera
+view. Whether a live session can become an editable, searchable, replyable
+artifact without losing meaning is a hypothesis. A current exported file
+should not be assumed to contain a semantic conversation graph.
+
+Threaded replies could preserve the original moment and let a recipient show
+their own interpretation. Understanding Mirrors and checkpoints could test
+that interpretation; they need evaluation beyond whether playback works.
 
 ## Example
 

@@ -62,7 +62,22 @@ referent in the event, an action in space, a time scope, a confidence level,
 an expected response, and a provenance (recorded, inferred, or added). This
 model, **HoloGrammar** in the idea registry, is the schema of the meaning layer.
 
+## Three Promises To Investigate
+
+| Promise | Example | Evidence to seek |
+| --- | --- | --- |
+| Spatial understanding | Explain assembly, movement, or arrangement | Fewer errors or better transfer to a real task |
+| Human presence | Personal messages, movement demonstrations, storytelling | Felt connection and voluntary repeat use |
+| Shared thinking | Construct diagrams, compare alternatives, respond to an object | Less ambiguity and easier coordination or decisions |
+
+All three belong in the vision. The earlier object-explanation recommendation is retained as a candidate.
+The current agreed lens prioritizes faithful events, portal viewing, and
+meaning read from the body; see the hologram-model page. See [Approach](APPROACH.md) and
+[portfolio directions](concepts/product-directions.md).
+
 ## What Success Looks Like
+
+These are desired outcomes to evaluate, not results already demonstrated.
 
 - A recipient understands a spatial or embodied explanation with fewer
   clarification cycles than from a video and supporting documents.

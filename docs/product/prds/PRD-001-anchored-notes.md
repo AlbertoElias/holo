@@ -13,6 +13,12 @@ authored notes are the fallback for what the body could not say. Start with
 meaning read from the body (IDEA-032 self-resolving pointing) and with viewing
 as a portal (IDEA-045). Revisit notes as one mark kind once those exist.
 
+## Historical Context
+
+Earlier messages discussed this as a draft and suggested an object-explanation
+experiment as another candidate. The current recorded decision above parks
+this PRD; the archive does not reopen it. See [Approach](../APPROACH.md).
+
 ## User Outcome
 
 Before: a viewer watching a hologram has to guess what "this part" or "right

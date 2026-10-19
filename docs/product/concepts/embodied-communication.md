@@ -44,6 +44,20 @@ for communication benefit, not as an end in itself. The same applies to
 inference: every cue the system reads from the body can be wrong, so it must
 be visible as inferred and easy to dismiss.
 
+## Feeling As If Someone Is There
+
+The user emphasized seeing another person in front of you, with expressive
+avatars or capture of real people in AR. Lifelike capture (IDEA-063) is broader
+than the hybrid face/avatar proposal (IDEA-012): it asks which combination of
+face, eye line, hands, posture, timing, voice, scale, and placement conveys the
+person. It does not commit to a volumetric capture technology.
+
+Possible uses include personal messages, storytelling, remote demonstrations,
+and emotionally expressive communication. Measure felt connection and repeat
+choice as well as comprehension. A visually convincing person does not prove
+trustworthiness; edit provenance (IDEA-024), consent, and replay context matter.
+Do not substitute inferred emotion for what the speaker intends to express.
+
 ## Open Questions
 
 - Which cues most improve comprehension for remote instruction?
