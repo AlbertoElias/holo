@@ -15,11 +15,8 @@ repo.
    [Cloudflare](https://dash.cloudflare.com) account.
 2. Install Fly CLI: `brew install flyctl`, then `fly auth login`.
    Wrangler is a project-local devDependency of `apps/viewer-web`
-   (Cloudflare's recommended install); run it through pnpm and log in once:
-   `pnpm --filter @holoim/web exec wrangler login`. It is pinned to the
-   last Node-20-compatible release (4.85.x; current Wrangler requires
-   Node 22 while the workspace pins Node 20) — bump it with the Node
-   upgrade.
+   (Cloudflare's recommended install, kept at `@latest`); run it through
+   pnpm and log in once: `pnpm --filter @holoim/web exec wrangler login`.
 
 ## 1. API on Fly
 

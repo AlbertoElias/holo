@@ -54,7 +54,7 @@
   "author": "",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=20.19 <21"
+    "node": ">=22 <23"
   },
   "packageManager": "pnpm@10.29.3",
   "devDependencies": {

@@ -3,7 +3,7 @@
 # The API depends on workspace packages (@holoim/contracts), so the image
 # builds inside the monorepo layout and runs the compiled output with plain
 # Node — no tsx at runtime.
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \

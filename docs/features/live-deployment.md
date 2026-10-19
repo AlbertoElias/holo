@@ -35,7 +35,7 @@ machine yet, so this pass delivers deploy-ready code and config; the first
 **Included (stepwise, each phase verified before the next):**
 
 1. **Phase 1 — live URL.** Production Dockerfile for `apps/viewer-api`
-   (Node 20, Prisma migrate on boot, `/healthz`), `fly.toml` with a
+   (Node 22, Prisma migrate on boot, `/healthz`), `fly.toml` with a
    persistent volume for SQLite + local uploads, configurable uploads root
    and web origins, Cloudflare Pages config for `apps/viewer-web`
    (`VITE_API_ORIGIN`), and a deployment runbook.

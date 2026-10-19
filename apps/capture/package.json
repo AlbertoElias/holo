@@ -71,6 +71,6 @@
     "webxr-polyfill": "catalog:"
   },
   "engines": {
-    "node": ">=20.19 <21"
+    "node": ">=22 <23"
   }
 }
