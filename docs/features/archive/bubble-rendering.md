@@ -1,7 +1,8 @@
 # Feature brief: Bubble rendering across feed and XR
 
 **Lead:** Codex bubble session
-**Status:** Complete
+**Status:** Complete  
+**Layer:** View
 
 ## User outcome
 
@@ -50,6 +51,11 @@ brief and evidence. Design reviewer and independent verifier: separate read-only
 required by FEATURE_WORKFLOW for export/render compatibility. No converter edits.
 
 ## Design decision
+
+This is a View-layer correction under the current hologram definition: preserve the
+recorded body, scene and timeline while fixing how each device presents the sphere.
+Feed following and AR pinning remain viewing policies; event data stays canonical.
+
 
 Design reviewed by bubble_design agent (2026-10-18): accept recovered fixes and
 add draw-time synchronization, bubble-only AR pinning, positive pixel controls,
