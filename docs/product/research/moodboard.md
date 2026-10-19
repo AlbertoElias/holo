@@ -1,6 +1,6 @@
 # Moodboard references
 
-Supporting research for IDEA-031 ([design language](../concepts/design-language.md)). The live board, with images, reactions and your own additions, is the [HoloIM Moodboard](https://claude.ai/artifact/6ofHzWfmFmQTiQXBryNfMU) (private until shared). This file is the plain list, grouped by the design question each reference helps answer, so it can be re-created elsewhere (for example Are.na, which does not allow automated access). Images on the board come from Wikimedia Commons under the licences noted there; games and films are linked, not copied.
+Saved from the [HoloIM Moodboard](https://claude.ai/artifact/6ofHzWfmFmQTiQXBryNfMU) on 2026-10-19 as its first snapshot. The board is the source of truth: add, keep and drop references there, then press its Save to repo button (Claude desktop app, with the GitHub tools running) rather than editing this file. Supporting research for IDEA-031 ([design language](../concepts/design-language.md)). Images on the board come from Wikimedia Commons under the licences noted here; games and films are linked, not copied.
 
 ## Holograms and light
 
