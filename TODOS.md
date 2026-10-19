@@ -23,6 +23,10 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Portal view on flat screens: freeze, orbit, zoom continuum, Follow/Free,
+  three interaction variants, and a recipient trial. Approved in
+  [PRD-002](docs/product/prds/PRD-002-portal-view.md); in flight in
+  [`docs/features/portal-view.md`](docs/features/portal-view.md).
 - [x] Add realistic walking, crouching, and jumping animations in both XR and
   desktop 2D, with natural transitions and movement that adapts to walls,
   inclines, and other environment geometry. Delivered in
