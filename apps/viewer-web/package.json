@@ -43,14 +43,15 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/three": "catalog:",
-    "@zappar/msdf-generator": "^1.2.4",
     "@vitejs/plugin-react": "^4.7.0",
+    "@zappar/msdf-generator": "^1.2.4",
     "eslint": "catalog:",
     "jsdom": "^26.0.0",
     "three-viewport-gizmo": "^2.2.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "webxr-polyfill": "catalog:"
+    "webxr-polyfill": "catalog:",
+    "wrangler": "^4.85.0"
   }
 }
