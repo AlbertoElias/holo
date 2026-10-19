@@ -12,6 +12,7 @@ import type { InputController } from '../input/InputController';
 import type { CharacterMotor } from '../physics/CharacterMotor';
 import type { RecordingSession } from '../recording/RecordingSession';
 import type { CaptureStage } from '../runtime/captureStage';
+import type { ClockMode } from '../runtime/FrameLoop';
 import type { XrEntry } from '../runtime/xrEntry';
 import type { AppMode, CharacterSnapshot } from '../types/contracts';
 import type { UIStateStore } from '../ui/UIStateStore';
@@ -61,6 +62,7 @@ export interface CaptureContext {
   recording: RecordingSession;
   diagnostics: DiagnosticViews;
   frame: CaptureFrame;
+  clockMode: () => ClockMode;
 }
 
 export function captureContext(world: World): CaptureContext {

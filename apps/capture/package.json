@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:runtime": "vite --host 127.0.0.1 --port 5174 --strictPort",
+    "dev:runtime": "vite --host 127.0.0.1 --port ${CAPTURE_RUNTIME_PORT:-5174} --strictPort",
     "dev:ai": "iwsdk dev up --ai-mode collaborate --foreground",
     "dev:agent": "iwsdk dev up --ai-mode agent --foreground --screenshot-width 640 --screenshot-height 640",
     "dev:down": "iwsdk dev down",

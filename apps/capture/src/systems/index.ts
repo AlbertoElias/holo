@@ -2,7 +2,10 @@ import type { World } from '@iwsdk/core';
 import { BodyPoseSystem } from './BodyPoseSystem';
 import { CalibrationSystem } from './CalibrationSystem';
 import { CameraSystem } from './CameraSystem';
+import { CaptureControlSystem } from './CaptureControlSystem';
+import { CaptureStateSystem } from './CaptureStateSystem';
 import { CaptureUiSystem } from './CaptureUiSystem';
+import { CAPTURE_COMPONENTS } from './components';
 import { DiagnosticsSystem } from './DiagnosticsSystem';
 import { MovementSystem } from './MovementSystem';
 import { RecordingSystem } from './RecordingSystem';
@@ -15,8 +18,14 @@ import { XrSessionSystem } from './XrSessionSystem';
 // owns; the order is the frame contract: input before pose math, the record
 // after the final pose, the draw (FrameLoop) after simulation.
 export function registerCaptureSystems(world: World): void {
+  const capture = world.createEntity();
+  for (const component of CAPTURE_COMPONENTS) {
+    world.registerComponent(component);
+    capture.addComponent(component);
+  }
   world
     .registerSystem(SimulationClockSystem, { priority: 0 })
+    .registerSystem(CaptureControlSystem, { priority: 5 })
     .registerSystem(XrSessionSystem, { priority: 10 })
     .registerSystem(RoomScaleSystem, { priority: 20 })
     .registerSystem(CalibrationSystem, { priority: 30 })
@@ -26,5 +35,6 @@ export function registerCaptureSystems(world: World): void {
     .registerSystem(TrackedHandsSystem, { priority: 70 })
     .registerSystem(CaptureUiSystem, { priority: 80 })
     .registerSystem(RecordingSystem, { priority: 90 })
-    .registerSystem(DiagnosticsSystem, { priority: 100 });
+    .registerSystem(DiagnosticsSystem, { priority: 100 })
+    .registerSystem(CaptureStateSystem, { priority: 110 });
 }
