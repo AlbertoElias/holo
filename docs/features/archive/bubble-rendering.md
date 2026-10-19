@@ -1,7 +1,7 @@
 # Feature brief: Bubble rendering across feed and XR
 
 **Lead:** Codex bubble session
-**Status:** Complete  
+**Status:** Complete
 **Layer:** View
 
 ## User outcome
