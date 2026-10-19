@@ -35,6 +35,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Natural full-body motion from room-scale movement | Verifying | [room-scale-body-motion.md](room-scale-body-motion.md) |
 | Native IWSDK capture runtime refactor | Complete | [archive/iwsdk-runtime-refactor.md](archive/iwsdk-runtime-refactor.md) |
 | IWSDK runtime prototype (evaluation spike) | Complete | [archive/iwsdk-runtime-prototype.md](archive/iwsdk-runtime-prototype.md) |
+| Atlas visual narrative | Verifying | [atlas-narrative.md](atlas-narrative.md) |
 | Knowledge Atlas | Complete | [archive/knowledge-atlas.md](archive/knowledge-atlas.md) |
 | Locomotion clips on every avatar (avatar formats slice 2) | Complete | [archive/locomotion-retarget.md](archive/locomotion-retarget.md) |
 | Natural locomotion and terrain response | Complete | [archive/avatar-locomotion.md](archive/avatar-locomotion.md) |

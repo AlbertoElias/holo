@@ -9,30 +9,38 @@ const repoRoot = path.resolve(
 );
 const documentUrl = (filename: string) => `/#/doc/${filename}`;
 
-test("approach, canonical ideas, filters, PRD relationships, and history", async ({
+test("grouped territories, complete registry, filters, PRD relationships and history", async ({
   page,
 }, testInfo) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Ideas deserve/ }),
+    page.getByRole("heading", { name: "Keep the event. Choose the view." }),
   ).toBeVisible();
-  await page.getByRole("link", { name: /Idea garden/ }).click();
+  await page.getByRole("link", { name: /Explore ideas/ }).click();
+  await expect(page.locator(".territory-card")).toHaveCount(6);
+  await expect(page.locator(".idea-card")).toHaveCount(0);
   const registry = await readFile(
     path.join(repoRoot, "docs/product/IDEAS.md"),
     "utf8",
   );
   const count = registry.match(/^\| IDEA-\d+ \|/gm)?.length ?? 0;
+  await page
+    .getByRole("link", { name: new RegExp("All " + count + " ideas") })
+    .click();
   await expect(page.locator(".idea-card")).toHaveCount(count);
+  await page.getByText("More filters", { exact: true }).click();
   await page
     .getByRole("combobox", { name: "Filter by detail" })
     .selectOption("With PRDs");
-  await expect(
-    page.locator(".idea-card").filter({ hasText: "IDEA-002" }),
-  ).toBeVisible();
   await page.locator(".idea-card").filter({ hasText: "IDEA-002" }).click();
   await expect(
-    page.getByRole("heading", { name: /Notes the author adds/ }),
+    page.getByRole("heading", {
+      name: "Anchored notes",
+      level: 1,
+      exact: true,
+    }),
   ).toBeVisible();
+  await expect(page.locator(".page-heading")).toContainText("Parked");
   await page
     .locator(".document-card")
     .filter({ hasText: "Anchored notes" })
@@ -43,7 +51,11 @@ test("approach, canonical ideas, filters, PRD relationships, and history", async
   await expect(page.locator(".reader-meta")).toContainText("Parked");
   await page.goBack();
   await expect(
-    page.getByRole("heading", { name: /Notes the author adds/ }),
+    page.getByRole("heading", {
+      name: "Anchored notes",
+      level: 1,
+      exact: true,
+    }),
   ).toBeVisible();
   await page.goForward();
   await page.reload();
@@ -58,13 +70,12 @@ test("approach, canonical ideas, filters, PRD relationships, and history", async
     page.getByRole("heading", { name: "Nothing growing here yet." }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(page.locator(".idea-card")).toHaveCount(count);
+  await expect(page.locator(".territory-card")).toHaveCount(6);
+  await page.getByText("More filters", { exact: true }).click();
   await page
     .getByRole("combobox", { name: "Filter by theme" })
     .selectOption("Spatial language");
   await expect(page.locator(".idea-card")).not.toHaveCount(0);
-  for (const card of await page.locator(".idea-card .card-bottom").all())
-    await expect(card).toContainText("Spatial language");
   await page
     .getByRole("combobox", { name: "Filter by theme" })
     .selectOption("All themes");
@@ -77,7 +88,11 @@ test("approach, canonical ideas, filters, PRD relationships, and history", async
   await page.getByRole("textbox", { name: "Search ideas" }).fill("IDEA-045");
   await expect(page.locator(".idea-card")).toHaveCount(1);
   await expect(page.locator(".idea-card")).toContainText("Portal view");
-  await page.getByRole("textbox", { name: "Search ideas" }).fill("");
+  await page.reload();
+  await page.getByText("More filters", { exact: true }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Filter by layer" }),
+  ).toHaveValue("View");
   await page.screenshot({
     path: testInfo.outputPath("ideas-desktop.png"),
     fullPage: true,
@@ -120,7 +135,7 @@ test("wiki, internal Markdown links, bug source boundaries, and missing routes",
   ).toBeVisible();
   await page.getByRole("link", { name: "Return to the atlas" }).click();
   await expect(
-    page.getByRole("heading", { name: /Ideas deserve/ }),
+    page.getByRole("heading", { name: /Keep the event/ }),
   ).toBeVisible();
   await page.goto("/#/%E0%A4%A");
   await expect(
@@ -133,14 +148,16 @@ test("phone layout keeps navigation, filters, and source documents usable", asyn
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await expect(page.locator(".backbone .source-diagram img")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({
     path: testInfo.outputPath("approach-mobile.png"),
     fullPage: true,
     animations: "disabled",
   });
-  await page.getByRole("link", { name: /Idea garden/ }).click();
+  await page.getByRole("link", { name: /Explore ideas/ }).click();
   await page.getByRole("textbox", { name: "Search ideas" }).fill("IDEA-002");
-  // Search also includes note text; filter to its known primary PRD before opening.
+  // Stable-ID search opens the original source idea.
   await page.locator(".idea-card").filter({ hasText: "IDEA-002" }).click();
   await page
     .locator(".document-card")
@@ -250,7 +267,7 @@ test("desktop approach and wiki evidence", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Ideas deserve/ }),
+    page.getByRole("heading", { name: /Keep the event/ }),
   ).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("approach-desktop.png"),
@@ -321,5 +338,238 @@ test("any docs Markdown is discoverable and live updates through atomic replacem
         unlink(filename).catch(() => undefined),
       ),
     );
+  }
+});
+
+test("visual backbone, conceptual wireframe, keyboard controls, learning loop and Markdown diagrams", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("img", { name: "Event, meaning and view remain connected" }),
+  ).toBeVisible();
+  const words = (await page.locator("main").innerText()).split(/\s+/).length;
+  expect(words).toBeLessThan(380);
+  await page.locator("#layer-Meaning").press("Enter");
+  await expect(page.locator("#layer-explanation")).toContainText("body first");
+  await expect(page.locator(".inference-label")).toHaveText(
+    "INFERRED REFERENCE",
+  );
+  await page.locator("#layer-View").press("Enter");
+  await page.getByRole("button", { name: "Free", exact: true }).click();
+  const slider = page.getByRole("slider", {
+    name: "Explore viewpoint in wireframe",
+  });
+  await slider.press("ArrowRight");
+  await expect(slider).toHaveValue("1");
+  await expect(page.locator(".scene-volume")).toHaveAttribute(
+    "style",
+    /rotateY\(1deg\)/,
+  );
+  await expect(page.locator(".wireframe-disclaimer")).toContainText(
+    "not a running product demo",
+  );
+  await page.screenshot({
+    path: testInfo.outputPath("wireframe-free-desktop.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.getByRole("link", { name: /How we test/ }).click();
+  await expect(page.locator(".process-section img")).toBeVisible();
+  await page.locator("#process-3").press("Enter");
+  await expect(page.locator("#process-detail")).toContainText(
+    "Technical success alone is not communication success",
+  );
+  await page.screenshot({
+    path: testInfo.outputPath("process-desktop.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.goto(documentUrl("docs/product/ATLAS_GUIDE.md"));
+  await expect(page.locator(".markdown .source-diagram img")).toHaveCount(5);
+  for (const image of await page
+    .locator(".markdown .source-diagram img")
+    .all()) {
+    await expect(image).toHaveAttribute("src", /^data:image\/svg\+xml/);
+    expect(
+      await image.evaluate(
+        (element: HTMLImageElement) =>
+          element.complete && element.naturalWidth > 0,
+      ),
+    ).toBe(true);
+  }
+});
+
+test("editorial copy and diagrams update from Markdown; new ideas need no app configuration", async ({
+  page,
+}) => {
+  const guideFile = path.join(repoRoot, "docs/product/ATLAS_GUIDE.md");
+  const labelsFile = path.join(
+    repoRoot,
+    "docs/product/research/idea-labels.md",
+  );
+  const registryFile = path.join(repoRoot, "docs/product/IDEAS.md");
+  const [guide = "", labels = "", registry = ""] = await Promise.all(
+    [guideFile, labelsFile, registryFile].map((file) => readFile(file, "utf8")),
+  );
+  try {
+    await page.goto("/");
+    await writeFile(
+      guideFile,
+      guide
+        .replace(
+          "Keep the event. Choose the view.",
+          "A live Markdown headline.",
+        )
+        .replace("EVENT / What happened", "EVENT / Live diagram"),
+    );
+    await expect(
+      page.getByRole("heading", { name: "A live Markdown headline." }),
+    ).toBeVisible();
+    await expect(page.locator(".backbone .source-diagram img")).toHaveAttribute(
+      "src",
+      /Live%20diagram/,
+    );
+    await writeFile(
+      labelsFile,
+      labels.replace("| Portal view |", "| A live portal label |"),
+    );
+    await page.goto("/#/idea/IDEA-045");
+    await expect(
+      page.getByRole("heading", { name: "A live portal label", exact: true }),
+    ).toBeVisible();
+    const row =
+      "| IDEA-999 | Fresh uncurated idea | New territory | Exploration | Idea | Can a future idea be found? | |\n";
+    const lastRow = [...registry.matchAll(/^\| IDEA-\d+ .*$/gm)].at(-1)![0];
+    await writeFile(
+      registryFile,
+      registry.replace(lastRow, lastRow + "\n" + row.trim()),
+    );
+    await page.goto("/#/ideas");
+    await expect(
+      page.locator(".territory-card").filter({ hasText: "New territory" }),
+    ).toBeVisible();
+    await page.getByRole("textbox", { name: "Search ideas" }).fill("IDEA-999");
+    await expect(page.locator(".idea-card")).toContainText(
+      "Fresh uncurated idea",
+    );
+  } finally {
+    await Promise.all(
+      [
+        [guideFile, guide],
+        [labelsFile, labels],
+        [registryFile, registry],
+      ].map(([file, content]) => writeFile(file!, content!)),
+    );
+  }
+});
+
+test("local Markdown images and Mermaid render safely, refresh, and degrade readably", async ({
+  page,
+}) => {
+  const fixture = path.join(repoRoot, "docs/atlas-visual-fixture.md");
+  const asset = path.join(repoRoot, "docs/atlas-visual-fixture.png");
+  const content =
+    '# Visual fixture\n\n![Local diagram](atlas-visual-fixture.png)\n\n![Remote](https://example.com/tracker.png)\n\n```mermaid\nflowchart LR\n  A["Recorded"] --> B["Viewed"]\n```\n';
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aY9sAAAAASUVORK5CYII=",
+    "base64",
+  );
+  let remote = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("example.com")) remote++;
+  });
+  try {
+    await writeFile(asset, png);
+    await writeFile(fixture, content);
+    await page.goto(documentUrl("docs/atlas-visual-fixture.md"));
+    await expect(
+      page.getByRole("img", { name: "Local diagram" }),
+    ).toHaveAttribute("src", /^data:image\/png/);
+    await expect(page.locator(".source-diagram img")).toBeVisible();
+    await expect(page.locator(".image-reference")).toContainText("Remote");
+    expect(remote).toBe(0);
+    await unlink(asset);
+    await expect(page.getByRole("img", { name: "Local diagram" })).toHaveCount(
+      0,
+    );
+    await expect(page.locator(".image-reference")).toContainText([
+      "Local diagram",
+      "Remote",
+    ]);
+    await writeFile(
+      fixture,
+      content.replace(
+        'flowchart LR\n  A["Recorded"] --> B["Viewed"]',
+        "this is not valid mermaid",
+      ),
+    );
+    await expect(page.getByRole("status")).toContainText("Diagram unavailable");
+    await page.getByText("Diagram source", { exact: true }).click();
+    await expect(page.locator(".source-diagram code")).toHaveText(
+      "this is not valid mermaid",
+    );
+  } finally {
+    await Promise.all(
+      [fixture, asset].map((file) => unlink(file).catch(() => undefined)),
+    );
+  }
+});
+
+test("source refresh preserves reading state, and missing guide leaves canonical exits", async ({
+  page,
+}) => {
+  const guideFile = path.join(repoRoot, "docs/product/ATLAS_GUIDE.md");
+  const hidden = path.join(repoRoot, "docs/product/ATLAS_GUIDE.atlas-test");
+  const original = await readFile(guideFile, "utf8");
+  try {
+    await page.goto("/");
+    await page.locator("#layer-View").click();
+    await page.getByRole("button", { name: "Free", exact: true }).click();
+    await writeFile(
+      guideFile,
+      original.replace(
+        "| Speech | “Turn this hinge, like this.” |",
+        "| Speech | A source-backed explanation. |",
+      ),
+    );
+    await expect(page.locator(".speech-chip")).toHaveText(
+      "A source-backed explanation.",
+    );
+    await expect(page.locator("#layer-View")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(
+      page.getByRole("button", { name: "Free", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.goto("/#/ideas");
+    await page.locator(".relationship-section").getByRole("button", { name: "Portal view", exact: true }).click();
+    await writeFile(guideFile, original);
+    await expect(page.locator(".relationship-section").getByRole("button", { name: "Portal view", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("textbox", { name: "Search ideas" }).fill("IDEA-045");
+    await writeFile(guideFile, original + "\n");
+    await expect(
+      page.getByRole("textbox", { name: "Search ideas" }),
+    ).toHaveValue("IDEA-045");
+    await expect(page.locator(".idea-card")).toHaveCount(1);
+    await rename(guideFile, hidden);
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Reading guide unavailable." }),
+    ).toBeVisible();
+    await page
+      .getByRole("link", { name: "Hologram model", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "What a Hologram Is", level: 1 }),
+    ).toBeVisible();
+    await page.goto("/#/process");
+    await expect(
+      page.getByRole("heading", { name: "Reading guide unavailable." }),
+    ).toBeVisible();
+  } finally {
+    await rename(hidden, guideFile).catch(() => undefined);
+    await writeFile(guideFile, original);
   }
 });

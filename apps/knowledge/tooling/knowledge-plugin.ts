@@ -1,7 +1,12 @@
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import type { Nodes } from "mdast";
 import type { Plugin } from "vite";
-import { type DocumentSummary, summarize } from "../src/markdown-tree";
+import {
+  type DocumentSummary,
+  parser,
+  summarize,
+} from "../src/markdown-tree";
 
 const moduleId = "virtual:holoim-knowledge";
 const resolvedId = `\0${moduleId}`;
@@ -13,7 +18,7 @@ const rootFiles = [
   "README.md",
 ];
 
-// Only Markdown under docs/ and these named root documents can enter the bundle.
+// Only allowlisted Markdown and referenced, bounded raster images enter the bundle.
 export function knowledgePlugin(repoRoot: string): Plugin {
   function requireRegularPath(filename: string): void {
     // Do not follow a symlink in any component, including docs/ itself.
@@ -44,6 +49,64 @@ export function knowledgePlugin(repoRoot: string): Plugin {
     return summary;
   }
 
+  // Local raster images a document references, found once per content so a live
+  // update does not reparse every document.
+  const mime: Record<string, string> = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".avif": "image/avif",
+  };
+  const imageRefs = new Map<string, { content: string; refs: string[] }>();
+  function imageRefsFor(docPath: string, content: string): string[] {
+    const cached = imageRefs.get(docPath);
+    if (cached?.content === content) return cached.refs;
+    const refs = new Set<string>();
+    const tree = parser.parse(content);
+    const definitions = new Map<string, string>();
+    for (const node of tree.children)
+      if (node.type === "definition") definitions.set(node.identifier, node.url);
+    const visit = (node: Nodes): void => {
+      const url =
+        node.type === "image"
+          ? node.url
+          : node.type === "imageReference"
+            ? definitions.get(node.identifier)
+            : undefined;
+      if (
+        url &&
+        !/^[a-z][a-z\d+.-]*:/i.test(url) &&
+        !url.startsWith("/") &&
+        !url.startsWith("#")
+      ) {
+        try {
+          const relative = path
+            .relative(
+              repoRoot,
+              path.resolve(
+                repoRoot,
+                path.dirname(docPath),
+                decodeURIComponent(url.split("#")[0]!.split("?")[0]!),
+              ),
+            )
+            .split(path.sep)
+            .join("/");
+          if (relative.startsWith("docs/") && mime[path.extname(relative).toLowerCase()])
+            refs.add(relative);
+        } catch {
+          /* Undecodable references stay textual. */
+        }
+      }
+      if ("children" in node) node.children.forEach(visit);
+    };
+    visit(tree);
+    const list = [...refs];
+    imageRefs.set(docPath, { content, refs: list });
+    return list;
+  }
+
   return {
     name: "holoim-knowledge",
     resolveId(id) {
@@ -65,7 +128,24 @@ export function knowledgePlugin(repoRoot: string): Plugin {
           ...summaryFor(filename, content),
         };
       });
-      return `export default ${JSON.stringify(documents)};`;
+      const images: Record<string, string> = {};
+      for (const doc of documents) {
+        for (const relative of imageRefsFor(doc.path, doc.content)) {
+          const filename = path.resolve(repoRoot, relative);
+          try {
+            requireRegularPath(filename);
+            const stat = lstatSync(filename);
+            if (!stat.isFile() || stat.size > 5 * 1024 * 1024) continue;
+            this.addWatchFile(filename);
+            const type = mime[path.extname(filename).toLowerCase()]!;
+            images[relative] =
+              `data:${type};base64,${readFileSync(filename).toString("base64")}`;
+          } catch {
+            /* Missing, escaped or symlinked assets stay textual references. */
+          }
+        }
+      }
+      return `export const images = ${JSON.stringify(images)}; export default ${JSON.stringify(documents)};`;
     },
     configureServer(server) {
       server.watcher.add([
@@ -78,7 +158,10 @@ export function knowledgePlugin(repoRoot: string): Plugin {
           .split(path.sep)
           .join("/");
         if (
-          !(relative.startsWith("docs/") && relative.endsWith(".md")) &&
+          !(
+            relative.startsWith("docs/") &&
+            /\.(md|png|jpe?g|webp|gif|avif)$/i.test(relative)
+          ) &&
           !rootFiles.includes(relative)
         )
           return;
