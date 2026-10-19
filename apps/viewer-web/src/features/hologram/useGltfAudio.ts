@@ -46,16 +46,23 @@ function extractKhrAudio(gltf: GltfResult): KhrAudioData | null {
   return khrAudio;
 }
 
+/**
+ * `playing` starts and stops the sound. `getPlaybackTime` reports the
+ * animation's current time, so every (re)start lands where the motion is.
+ */
 export function useGltfAudio(
   gltf: GltfResult,
-  active: boolean,
-  muted: boolean
+  playing: boolean,
+  muted: boolean,
+  getPlaybackTime?: () => number
 ): GltfAudioResult {
   const [hasAudio, setHasAudio] = useState(false);
   const audioBufferRef = useRef<AudioBuffer | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
   const loopRef = useRef(true);
+  const getPlaybackTimeRef = useRef(getPlaybackTime);
+  getPlaybackTimeRef.current = getPlaybackTime;
 
   // Decode audio from KHR_audio extension on mount
   useEffect(() => {
@@ -100,11 +107,11 @@ export function useGltfAudio(
     };
   }, [gltf]);
 
-  // Create/destroy audio source based on active + muted state.
+  // Create/destroy audio source based on playing + muted state.
   // muted is included so the gain node always reflects the current value.
   useEffect(() => {
-    if (!active || !audioBufferRef.current) {
-      // Stop playback when inactive
+    if (!playing || !audioBufferRef.current) {
+      // Stop playback when paused or inactive
       if (sourceRef.current) {
         try {
           sourceRef.current.stop();
@@ -132,7 +139,11 @@ export function useGltfAudio(
     source.buffer = buffer;
     source.loop = loopRef.current;
     source.connect(gain);
-    source.start(0);
+    const time = Math.max(getPlaybackTimeRef.current?.() ?? 0, 0);
+    const offset = source.loop ? time % buffer.duration : time;
+    if (offset < buffer.duration) {
+      source.start(0, offset);
+    }
     sourceRef.current = source;
 
     return () => {
@@ -146,7 +157,7 @@ export function useGltfAudio(
       gain.disconnect();
       gainRef.current = null;
     };
-  }, [active, hasAudio, muted]);
+  }, [playing, hasAudio, muted]);
 
   return { hasAudio };
 }

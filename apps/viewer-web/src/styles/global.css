@@ -910,3 +910,83 @@ body {
     padding: 0.65rem 1.3rem;
   }
 }
+
+/* Portal view (PRD-002). Cards pass vertical swipes to the feed; a paused
+   card in the freeze variant keeps every gesture for looking around. */
+.feed-card {
+  touch-action: pan-y;
+  --portal-fill-size: 145vmax;
+}
+
+.feed-card.portal-captured {
+  touch-action: none;
+}
+
+/* Zooming in opens the bubble until it fills the screen: the viewer is
+   inside the scene. --portal-open runs from 0 (object) to 1 (inside). */
+.feed-card .feed-card-bubble-shell {
+  width: calc(var(--bubble-size) + (var(--portal-fill-size) - var(--bubble-size)) * var(--portal-open, 0));
+  height: calc(var(--bubble-size) + (var(--portal-fill-size) - var(--bubble-size)) * var(--portal-open, 0));
+}
+
+.feed-card-bubble-shell:focus-visible {
+  outline: 2px solid rgb(149 214 255 / 80%);
+  outline-offset: 4px;
+}
+
+.portal-controls {
+  position: absolute;
+  bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+  left: max(1rem, env(safe-area-inset-left, 0px));
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.portal-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0.6rem;
+  color: #dbeeff;
+  border-radius: 50%;
+  border: 1px solid rgb(149 214 255 / 35%);
+  background: rgb(8 30 52 / 80%);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.portal-control svg {
+  width: 100%;
+  height: 100%;
+}
+
+.portal-control-primary {
+  background: linear-gradient(180deg, rgb(24 92 142), rgb(10 64 102));
+}
+
+.portal-control[aria-pressed="true"] {
+  border-color: rgb(118 240 195 / 80%);
+  color: #76f0c3;
+}
+
+.portal-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.portal-control:focus-visible {
+  outline: 2px solid rgb(149 214 255 / 80%);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .portal-controls {
+    bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+    left: max(0.75rem, env(safe-area-inset-left, 0px));
+    gap: 0.5rem;
+  }
+}

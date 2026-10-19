@@ -17,6 +17,9 @@ import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
+import { INSIDE_DISTANCE, anglesFromPose, freeCameraPose } from "../portal/portalStore";
+import type { PortalStore } from "../portal/portalStore";
+import { usePortalValue } from "../portal/usePortalValue";
 import { DEFAULT_CAMERA_FRAMING_CONFIG, computeDesiredFraming } from "./cameraFraming";
 import { HologramLighting } from "./HologramLighting";
 
@@ -32,6 +35,7 @@ type HologramCardCanvasProps = {
   onHasAudio: (hasAudio: boolean) => void;
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   colorAccurateMode: boolean;
+  portal: PortalStore;
 };
 
 const HOLOGRAM_ANIMATION_SPEED = 1;
@@ -40,6 +44,10 @@ const CARD_CAMERA_POSITION_OFFSET = new Vector3(0.62, 0.36, 0.18);
 const CARD_CAMERA_LOOK_AT_OFFSET = new Vector3(0, -0.14, 0);
 const BUBBLE_CAMERA_POSITION_OFFSET = new Vector3(0, 0, 0);
 const BUBBLE_CAMERA_LOOK_AT_OFFSET = new Vector3(0, 0, 0);
+/** Seconds Return takes to glide from the Free view back to Follow. */
+const RETURN_SECONDS = 0.45;
+/** Inside end never comes closer than this share of the Follow distance. */
+const MAX_INSIDE_SHARE = 0.6;
 
 function getFramingTargets(root: Object3D): Object3D[] {
   const targets = new Set<Object3D>();
@@ -101,16 +109,50 @@ function applyCameraFraming(
   camera.updateProjectionMatrix();
 }
 
-function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
+function followPose(
+  preferred: { focus: Vector3; distance: number },
+  positionOffset: Vector3,
+  lookAtOffset: Vector3,
+  outPosition: Vector3,
+  outTarget: Vector3
+): void {
+  outPosition.copy(preferred.focus).add(positionOffset);
+  outPosition.z += preferred.distance;
+  outTarget.copy(preferred.focus).add(lookAtOffset);
+}
+
+function easeInOut(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   url: string;
   active: boolean;
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
+  portal: PortalStore;
 }) {
   const gltf = useGLTF(url);
   const { scene, animations } = gltf;
-  const audioState = useGltfAudio(gltf, active, muted);
+  const paused = usePortalValue(portal, (state) => state.paused);
+  const primaryActionRef = useRef<AnimationAction | null>(null);
+  const getPlaybackTime = useCallback(() => primaryActionRef.current?.time ?? 0, []);
+  const audioState = useGltfAudio(gltf, active && !paused, muted, getPlaybackTime);
+  const poseRef = useRef({
+    followPosition: new Vector3(),
+    followTarget: new Vector3(),
+    headTarget: new Vector3(),
+    position: new Vector3(),
+    target: new Vector3(),
+    lastPosition: new Vector3(),
+    lastTarget: new Vector3(),
+    hasLast: false
+  });
+  // Field of view and canvas height while the bubble is closed. Opening the
+  // bubble widens the canvas; the view widens with it instead of magnifying.
+  const baseFovRef = useRef<number | null>(null);
+  const baseHeightRef = useRef(0);
 
   useEffect(() => {
     onHasAudio(audioState.hasAudio);
@@ -129,9 +171,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
   useEffect(() => {
     if (import.meta.env.DEV) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal });
     }
-  }, [actions, camera, clonedScene, mixer, renderScene, renderer, sphereClip]);
+  }, [actions, camera, clonedScene, mixer, portal, renderScene, renderer, sphereClip, url]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {
@@ -291,6 +333,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
     if (!primaryAction) {
       return;
     }
+    primaryActionRef.current = primaryAction;
 
     primaryAction.reset();
     primaryAction.enabled = true;
@@ -331,14 +374,27 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
 
     return () => {
       rankedActions.forEach((action) => action.stop());
+      primaryActionRef.current = null;
     };
   }, [actions, active, audioState.hasAudio, camera, computePreferredFraming, invalidate, sphereClip]);
 
-  useFrame(() => {
+  // Pausing freezes the actions where they are; the setup above resets them
+  // only when the card itself becomes active.
+  useEffect(() => {
+    Object.values(actions).forEach((action) => {
+      if (action) action.paused = !active || paused;
+    });
+  }, [actions, active, paused]);
+
+  useFrame((frameState, delta) => {
     if (!(camera instanceof PerspectiveCamera)) {
       return;
     }
 
+    baseFovRef.current ??= camera.fov;
+    const baseFov = baseFovRef.current;
+    // Framing is computed for the closed bubble's field of view.
+    camera.fov = baseFov;
     const preferred = computePreferredFraming(camera, sphereClip);
     if (!preferred) {
       return;
@@ -347,15 +403,69 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
     if (!isFiniteVector3(preferred.focus) || !isFinitePositive(preferred.distance)) {
       return;
     }
-    camera.near = preferred.near;
-    camera.far = preferred.far;
-    applyCameraFraming(
-      camera,
-      preferred.focus,
-      preferred.distance,
+
+    // Follow is today's automatic framing; Free orbits the same focus.
+    const pose = poseRef.current;
+    followPose(
+      preferred,
       sphereClip.active ? BUBBLE_CAMERA_POSITION_OFFSET : CARD_CAMERA_POSITION_OFFSET,
-      sphereClip.active ? BUBBLE_CAMERA_LOOK_AT_OFFSET : CARD_CAMERA_LOOK_AT_OFFSET
+      sphereClip.active ? BUBBLE_CAMERA_LOOK_AT_OFFSET : CARD_CAMERA_LOOK_AT_OFFSET,
+      pose.followPosition,
+      pose.followTarget
     );
+    const follow = anglesFromPose(pose.followPosition, pose.followTarget);
+    const outsideDistance = follow.distance;
+    const insideDistance = Math.min(INSIDE_DISTANCE, outsideDistance * MAX_INSIDE_SHARE);
+    const runtime = portal.runtime;
+    runtime.followYaw = follow.yaw;
+    runtime.followPitch = follow.pitch;
+    runtime.zoomSpan = Math.log(outsideDistance / insideDistance);
+
+    const state = portal.getState();
+    const canvasHeight = frameState.size.height;
+    if (state.mode === "follow" && runtime.returnBlend === 0) {
+      baseHeightRef.current = canvasHeight;
+    }
+    const openRatio = baseHeightRef.current > 0 ? Math.max(canvasHeight / baseHeightRef.current, 1) : 1;
+    camera.fov = MathUtils.radToDeg(2 * Math.atan(Math.tan(MathUtils.degToRad(baseFov) / 2) * openRatio));
+    if (state.mode === "free") {
+      const head = avatarAnchorRef.current?.head;
+      if (head) {
+        head.getWorldPosition(pose.headTarget);
+      } else {
+        pose.headTarget.copy(pose.followTarget);
+      }
+      freeCameraPose(state, pose.followTarget, pose.headTarget, insideDistance, outsideDistance, pose.position, pose.target);
+    } else if (runtime.returnBlend > 0 && pose.hasLast) {
+      runtime.returnBlend = Math.max(runtime.returnBlend - delta / RETURN_SECONDS, 0);
+      const t = easeInOut(1 - runtime.returnBlend);
+      pose.position.lerpVectors(pose.lastPosition, pose.followPosition, t);
+      pose.target.lerpVectors(pose.lastTarget, pose.followTarget, t);
+    } else {
+      runtime.returnBlend = 0;
+      pose.position.copy(pose.followPosition);
+      pose.target.copy(pose.followTarget);
+    }
+    pose.lastPosition.copy(pose.position);
+    pose.lastTarget.copy(pose.target);
+    pose.hasLast = true;
+
+    camera.position.copy(pose.position);
+    camera.lookAt(pose.target);
+    runtime.measured.cameraDistance = pose.position.distanceTo(pose.target);
+    runtime.measured.insideDistance = insideDistance;
+    runtime.measured.outsideDistance = outsideDistance;
+    runtime.measured.target = [pose.target.x, pose.target.y, pose.target.z];
+    if (state.mode === "free" || runtime.returnBlend > 0) {
+      // Inside the bubble the Follow clip planes would cut the scene away.
+      const distance = pose.position.distanceTo(pose.target);
+      camera.near = Math.max(distance / 200, DEFAULT_CAMERA_FRAMING_CONFIG.minNear);
+      camera.far = Math.max(preferred.far, distance + sphereClip.radius * 2 + 10);
+    } else {
+      camera.near = preferred.near;
+      camera.far = preferred.far;
+    }
+    camera.updateProjectionMatrix();
   });
 
   // SkeletonUtils clones share the loader cache's geometry and source materials.
@@ -370,7 +480,8 @@ export function HologramCardCanvas({
   muted,
   onHasAudio,
   onRendered,
-  colorAccurateMode
+  colorAccurateMode,
+  portal
 }: HologramCardCanvasProps) {
   return (
     <Canvas
@@ -385,7 +496,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} />
+      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} portal={portal} />
     </Canvas>
   );
 }

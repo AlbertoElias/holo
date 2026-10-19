@@ -1,6 +1,6 @@
 import { useGLTF } from "@react-three/drei";
-import { Component, useCallback, useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { HologramDTO } from "@holoim/contracts";
@@ -10,6 +10,11 @@ import { isIOSDevice } from "../ar/isIOSDevice";
 import { ARQuickLookLink } from "../ar/ARQuickLookLink";
 import { checkModelAvailability } from "../hologram/modelAvailability";
 import type { ModelAvailability } from "../hologram/modelAvailability";
+import { PortalControls } from "../portal/PortalControls";
+import { createPortalStore } from "../portal/portalStore";
+import { PORTAL_VARIANTS, readPortalVariant } from "../portal/portalVariant";
+import { usePortalTriggers } from "../portal/usePortalTriggers";
+import { usePortalValue } from "../portal/usePortalValue";
 import { resolveMediaUrl } from "./api";
 import { HologramCardCanvas, type HologramRenderInfo } from "./HologramCardCanvas";
 
@@ -79,6 +84,14 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const [renderInfo, setRenderInfo] = useState<HologramRenderInfo | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
   const onHasAudio = useCallback((value: boolean) => setHasAudio(value), []);
+  const cardRef = useRef<HTMLElement>(null);
+  const portal = useMemo(() => createPortalStore(), []);
+  const portalVariant = useMemo(() => readPortalVariant(), []);
+  const portalTriggers = PORTAL_VARIANTS[portalVariant];
+  const portalMode = usePortalValue(portal, (state) => state.mode);
+  const portalPaused = usePortalValue(portal, (state) => state.paused);
+  // How far the view has gone inside: 0 in Follow or fully zoomed out, 1 at eye level.
+  const portalOpen = usePortalValue(portal, (state) => (state.mode === "free" ? Math.round((1 - state.zoom) * 100) / 100 : 0));
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +117,12 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   }, [modelUrl]);
 
   const canRenderModel = modelAvailability === "ready" && !modelRenderFailed;
+  usePortalTriggers(cardRef, portal, portalTriggers, active && canRenderModel);
+
+  // A card scrolled away starts over in Follow, playing, when it comes back.
+  useEffect(() => {
+    if (!active) portal.reset();
+  }, [active, portal]);
   const unavailableMessage = modelRenderFailed
     ? "Hologram failed to load"
     : modelAvailability === "checking"
@@ -157,13 +176,24 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
 
   return (
     <article
-      className="feed-card"
+      ref={cardRef}
+      className={portalPaused && !portalTriggers.scrollWhilePaused ? "feed-card portal-captured" : "feed-card"}
+      style={{ "--portal-open": portalOpen } as CSSProperties}
       data-card-id={item.id}
+      data-portal-variant={portalVariant}
+      data-portal-mode={portalMode}
+      data-portal-paused={portalPaused ? "true" : "false"}
       data-model-state={modelRenderFailed ? "failed" : renderInfo ? "rendered" : modelAvailability}
       data-model-animations={renderInfo ? String(renderInfo.animationCount) : undefined}
       data-model-bubble={renderInfo ? (renderInfo.bubbleActive ? "active" : "missing") : undefined}
     >
-      <div className="feed-card-bubble-shell">
+      <div
+        className="feed-card-bubble-shell"
+        tabIndex={canRenderModel ? 0 : -1}
+        role="group"
+        aria-roledescription="hologram portal"
+        aria-label={`${item.hologramName}. Space pauses, arrow keys look around, plus and minus zoom, Escape returns.`}
+      >
         <div className="feed-card-bubble-glow" aria-hidden="true" />
         <div className="feed-card-bubble-aura" aria-hidden="true" />
         <div className="feed-card-bubble">
@@ -188,6 +218,7 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
                 onHasAudio={onHasAudio}
                 onRendered={setRenderInfo}
                 colorAccurateMode={colorAccurateMode}
+                portal={portal}
               />
             </ModelRenderBoundary>
           ) : (
@@ -221,6 +252,9 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
         )}
         {shouldShowQuickLook && (
           <ARQuickLookLink item={item} />
+        )}
+        {canRenderModel && (
+          <PortalControls store={portal} tiltAvailable={portalTriggers.tilt} />
         )}
         {hasAudio && (
           <button

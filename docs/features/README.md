@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Natural full-body motion from room-scale movement | Verifying | [room-scale-body-motion.md](room-scale-body-motion.md) |
 | Knowledge Atlas | Complete | [archive/knowledge-atlas.md](archive/knowledge-atlas.md) |
 | Natural locomotion and terrain response | Complete | [archive/avatar-locomotion.md](archive/avatar-locomotion.md) |
