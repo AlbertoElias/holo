@@ -52,10 +52,6 @@ export class FrameLoop {
     this.deps.world.renderer.setAnimationLoop((_time, frame) => this.onFrame(frame));
   }
 
-  stop(): void {
-    this.deps.world.renderer.setAnimationLoop(null);
-  }
-
   // Both switches discard time that passed before them, so stepping or
   // realtime resumes without a jump.
   setManualClock(enabled: boolean, draw = true): void {

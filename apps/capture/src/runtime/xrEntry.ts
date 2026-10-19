@@ -4,7 +4,6 @@ export type XrSessionMode = 'none' | 'vr' | 'ar';
 
 export interface XrEntry {
   readonly sessionMode: XrSessionMode;
-  dispose(): void;
 }
 
 // A session the browser grants on navigation (from another immersive page) is
@@ -75,12 +74,6 @@ export function mountXrEntry(world: World): XrEntry {
   return {
     get sessionMode() {
       return sessionMode;
-    },
-    dispose: () => {
-      xr.removeEventListener('sessionstart', onSessionStart);
-      xr.removeEventListener('sessionend', onSessionEnd);
-      vrButton.element.remove();
-      arButton.element.remove();
     }
   };
 }

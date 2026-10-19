@@ -12,10 +12,6 @@ async function boot(): Promise<void> {
   const runtime = await createCaptureRuntime(container);
   const uiRoot = createRoot(uiRootElement);
   uiRoot.render(React.createElement(CaptureOverlay, { bridge: runtime.uiBridge }));
-  import.meta.hot?.dispose(() => {
-    uiRoot.unmount();
-    runtime.dispose();
-  });
   await runtime.start();
 }
 

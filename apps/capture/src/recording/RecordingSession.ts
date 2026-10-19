@@ -50,10 +50,6 @@ export class RecordingSession {
     this.inputRecording?.recordFrame(frame);
   }
 
-  dispose(): void {
-    this.audio.dispose();
-  }
-
   private async start(): Promise<void> {
     this.sizeLocked = true;
     this.deps.onSizeLocked();

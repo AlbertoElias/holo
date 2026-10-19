@@ -45,15 +45,6 @@ export class InputController {
     this.options.domElement.addEventListener('click', this.onClick);
   }
 
-  dispose(): void {
-    document.removeEventListener('keydown', this.onKeyDown, true);
-    document.removeEventListener('keyup', this.onKeyUp, true);
-    window.removeEventListener('blur', this.onWindowBlur);
-    document.removeEventListener('visibilitychange', this.onVisibilityChange);
-    document.removeEventListener('mousemove', this.onMouseMove);
-    this.options.domElement.removeEventListener('click', this.onClick);
-  }
-
   onXrEntered(): void {
     this.clearMovementState();
   }

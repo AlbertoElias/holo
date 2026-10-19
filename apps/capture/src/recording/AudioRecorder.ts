@@ -86,11 +86,6 @@ export class AudioRecorder {
     this.stream = null;
   }
 
-  dispose(): void {
-    this.clear();
-    this.permissionState = 'pending';
-  }
-
   isRecording(): boolean {
     return this.recording;
   }

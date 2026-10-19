@@ -25,10 +25,6 @@ export class XrSessionSystem extends createSystem() {
     this.capture = captureContext(this.world);
   }
 
-  destroy(): void {
-    this.unbindSession();
-  }
-
   update(deltaSec: number): void {
     const c = this.capture;
     const frame = c.frame;

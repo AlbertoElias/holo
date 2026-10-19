@@ -30,7 +30,6 @@ export interface CaptureRuntime {
   uiBridge: CaptureUiBridge;
   // Loads the scene and avatar, then starts the frame loop.
   start(): Promise<void>;
-  dispose(): void;
 }
 
 /** Composition root: World, capture's services and systems, one frame loop. */
@@ -163,7 +162,6 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   });
 
   const onResize = (): void => camera.onResize();
-  let removeHooks: (() => void) | undefined;
 
   const loadAssets = async (): Promise<void> => {
     const load = (url: string): Promise<GLTF> => new Promise((resolve, reject) => stage.loader.load(url, resolve, undefined, reject));
@@ -197,7 +195,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       }
     },
     start: async () => {
-      removeHooks = installAutomationHooks({
+      installAutomationHooks({
         render_game_to_text: () => renderCaptureTextState(capture),
         advanceTime: (ms) => loop.advanceTime(ms),
         __setManualClock: (enabled, draw) => loop.setManualClock(enabled, draw),
@@ -230,16 +228,6 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       recording.requestMicPermission();
       await loadAssets();
       loop.start();
-    },
-    dispose: () => {
-      loop.stop();
-      removeHooks?.();
-      window.removeEventListener('resize', onResize);
-      input.dispose();
-      vrHud.hide();
-      recording.dispose();
-      xrEntry.dispose();
-      world.destroy();
     }
   };
 }

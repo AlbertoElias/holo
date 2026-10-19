@@ -22,11 +22,6 @@ export interface AutomationHooks {
   __resetHandCalibrationPose: () => void;
 }
 
-/** Installs the hooks on `window`; returns their removal. */
-export function installAutomationHooks(hooks: AutomationHooks): () => void {
-  const target = window as unknown as Record<string, unknown>;
-  for (const [name, hook] of Object.entries(hooks)) target[name] = hook;
-  return () => {
-    for (const name of Object.keys(hooks)) delete target[name];
-  };
+export function installAutomationHooks(hooks: AutomationHooks): void {
+  Object.assign(window, hooks);
 }
