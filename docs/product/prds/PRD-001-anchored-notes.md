@@ -133,5 +133,9 @@ in [`../VISION.md`](../VISION.md).
 
 - Concept: [`../concepts/async-holograms.md`](../concepts/async-holograms.md)
 - Research: [`../research/open-questions.md`](../research/open-questions.md) (question 1)
+- Mockups: [Anchored notes mockups](https://claude.ai/artifact/RWaaSRi9UwVbJ4Jtwu2WKo)
+  (2026-10-18): six screens over real feed captures (the problem today, a
+  note playing, jump-to-note, desktop feed, author at upload, AR sketch).
+  Reviewed before the Parked decision.
 - Feature brief: none yet; created when this PRD is approved and queued
 - Implementation issue: none

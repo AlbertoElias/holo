@@ -27,6 +27,10 @@ artifact needs it.
 - Keep ideas short and noncommittal. Contradictory ideas can coexist.
 - Create a PRD only for one user outcome, not for an entire vision.
 - Link a PRD to its source ideas and open research questions.
+- When mockups or prototypes are made for an idea, link them in the same
+  change: from the PRD's Links section if a PRD exists, otherwise from the
+  idea's Details cell in `IDEAS.md`. Give the date and a one-line summary of
+  what they show.
 - Record a decision by setting the PRD status to Approved or Parked and
   adding the rationale to that PRD; do not create a separate decision log.
 - Move committed engineering work to `TODOS.md`; do not use this directory as a

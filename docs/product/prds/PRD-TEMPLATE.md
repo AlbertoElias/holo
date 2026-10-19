@@ -84,5 +84,6 @@ Drafting this document is not approval to build. On approval, follow the
 
 - Concept:
 - Research:
+- Mockups:
 - Feature brief:
 - Implementation issue:
