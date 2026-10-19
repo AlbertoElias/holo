@@ -1,32 +1,49 @@
-import type { Camera } from 'three';
+import type * as THREE from 'three';
 import { createRecordingUiState } from '@holoim/xr-ui-core';
 import type { UIStateStore } from './UIStateStore';
 import { VrRecordingPanel } from './VrRecordingPanel';
 
+interface VrHudActions {
+  refitHeight: () => void;
+  toggleRecording: () => void;
+}
+
+/**
+ * The floating recording/refit panel in VR, under the camera rig. Controller
+ * select presses act on the surface that controller points at.
+ */
 export class VrHud {
-  private recordingPanel: VrRecordingPanel | null = null;
+  readonly panel = new VrRecordingPanel();
+  private unbindSelect: (() => void) | null = null;
 
-  constructor(private readonly store: UIStateStore) {}
+  constructor(private readonly store: UIStateStore, private readonly renderer: THREE.WebGLRenderer, private readonly actions: VrHudActions) {}
 
-  init(): void {
-    this.recordingPanel = new VrRecordingPanel();
+  show(cameraRig: THREE.Group): void {
+    if (!cameraRig.children.includes(this.panel.group)) cameraRig.add(this.panel.group);
+    if (this.unbindSelect) return;
+    const bindings = [this.renderer.xr.getController(0), this.renderer.xr.getController(1)].map((controller) => {
+      const handler = (): void => {
+        if (!this.renderer.xr.isPresenting) return;
+        if (this.panel.isPointerOverRefit(controller)) this.actions.refitHeight();
+        else if (this.panel.isPointerOverAction(controller)) this.actions.toggleRecording();
+      };
+      controller.addEventListener('select', handler);
+      return { controller, handler };
+    });
+    this.unbindSelect = () => {
+      for (const { controller, handler } of bindings) controller.removeEventListener('select', handler);
+      this.unbindSelect = null;
+    };
   }
 
-  getRecordingPanel(): VrRecordingPanel | null {
-    return this.recordingPanel;
+  hide(): void {
+    this.unbindSelect?.();
+    this.panel.group.parent?.remove(this.panel.group);
   }
 
-  update(camera: Camera, deltaSec: number): void {
-    this.recordingPanel?.updateFromCamera(camera);
-    this.recordingPanel?.updateVisuals(deltaSec, this.getRecordingState(), this.store.getState().heightFit);
-  }
-
-  dispose(): void {
-    this.recordingPanel = null;
-  }
-
-  private getRecordingState() {
+  update(camera: THREE.Camera, deltaSec: number): void {
     const state = this.store.getState();
-    return createRecordingUiState(state.recordingState, state.recordingMessage);
+    this.panel.updateFromCamera(camera);
+    this.panel.updateVisuals(deltaSec, createRecordingUiState(state.recordingState, state.recordingMessage), state.heightFit);
   }
 }

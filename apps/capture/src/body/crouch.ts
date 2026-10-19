@@ -125,3 +125,38 @@ export function computeCrouchPoseAmount(
   const visualBoost = isVrActive ? tuning.vrVisualBoost : 1;
   return clamp(crouchAmount * visualBoost, 0, tuning.maxPoseAmount);
 }
+
+/** Smoothed crouch from the desktop key and the VR head's drop below standing. */
+export class CrouchState {
+  amount = 0;
+  poseAmount = 0;
+  target = 0;
+  source: CrouchSource = "none";
+  private baseline: VrCrouchBaselineState = { standingHeadY: 0, standingCaptured: false };
+
+  update(deltaSec: number, isVrActive: boolean, desktopHeld: boolean, vrHeadY: number | undefined): void {
+    const vrCrouch = computeVrCrouchTarget(deltaSec, isVrActive ? vrHeadY : undefined, this.baseline);
+    this.baseline = vrCrouch.baseline;
+    const resolution = resolveCrouchTargetAndSource(isVrActive, desktopHeld ? 1 : 0, vrCrouch.vrTarget);
+    this.target = resolution.target;
+    this.source = resolution.source;
+    this.amount = stepCrouchAmount(this.amount, this.target, deltaSec);
+    this.poseAmount = computeCrouchPoseAmount(this.amount, isVrActive);
+  }
+
+  /** A fitted height is the standing reference for VR crouch. */
+  setStandingHeadY(headY: number): void {
+    this.baseline = { standingHeadY: headY, standingCaptured: true };
+  }
+
+  resetBaseline(): void {
+    this.baseline = { standingHeadY: 0, standingCaptured: false };
+  }
+
+  release(): void {
+    this.amount = 0;
+    this.poseAmount = 0;
+    this.target = 0;
+    this.source = "none";
+  }
+}
