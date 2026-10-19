@@ -348,6 +348,16 @@ the dev plugin, `super-three` r181, `@pmndrs/uikit` 1.0.75+.
 | `test:xr:body` alone | PASS (45.8 s, five fixtures) | `baseline-body/` |
 | Body fault matrix (`BODY_REPLAY_FAULTS=1`) | PASS: 12/12 faults caught by their metrics (170.9 s) | `baseline-body-faults/fault-matrix.json` |
 
+**Dependency step (old runtime, new SDK).** With `@iwsdk/core|cli|vite-plugin-dev|scene-composition`
+1.0.1, IWER 2.6.0 and capture's UIKit pinned to 1.0.77, the unchanged custom
+runtime passed mock-vr, locomotion, terrain, hands and height (68.1 s) and body
+(45.1 s). Every deterministic sample file (five body replays, hand replay,
+locomotion samples) is **byte-identical** to the main baseline
+(`output/iwsdk-refactor/deps-old-runtime/`). These hashes are the exactness
+target for the refactored runtime. The height report is not deterministic even
+between two runs on main (it differs in thousands of lines), so height is
+compared by its assertions, not by hash.
+
 The height failure is pre-existing on unmodified main: it reproduced only when
 height ran after the other checks in one server, and passed alone. It is tracked
 here as a baseline flake, not a migration regression; the same full suite is
@@ -385,10 +395,14 @@ rerun on the refactor and compared.
    same way, but the request now lists it as optional and also offers `layers`;
    an AR device without `local-floor` now starts then ends the session instead of
    rejecting the request. `#VRButton`/`#ARButton` keep their DOM, text and style.
-5. **Tracking camera identity:** `world.player` (XROrigin) is capture's camera
-   rig and `world.camera` the XR tracking camera; a separate desktop camera is
-   selected only by the frame loop's present step. `world.camera` is never
-   swapped, and `renderer.xr.getCamera()` is never parented.
+5. **Capture's rig, cameras and world group stay plain three objects, not ECS
+   transform entities.** IWSDK's `TransformSystem` replaces an entity's
+   `position`/`quaternion`/`scale` with views over `Transform` storage, which is
+   `Float32Array` (elics `Vec3`/`Vec4`). Using `world.player` as the camera rig
+   would round every rig write to float32 and change replay results. The capture
+   rig parents the XR tracking camera; a separate desktop camera is selected only
+   by the frame loop's present step; `renderer.xr.getCamera()` is never parented.
+   World's own player/camera are left unused (`restoreCameraOnExit: false`).
 6. **Renderer differences accepted from World:** the canvas context is opaque
    (capture's desktop background is always opaque; XR layers carry alpha
    regardless), and three's `multiviewStereo` is enabled, which only takes effect
@@ -412,6 +426,47 @@ rerun on the refactor and compared.
 | 80 | `CaptureUiSystem` | mode publication, VR recording panel | `publishMode`, `vrHud.update` |
 | 90 | `RecordingSystem` | recorded frame sampling | `recorder.capture` |
 | 100 | `DiagnosticsSystem` | head-path and hand-joint overlays | overlay updates |
+
+#### Design review outcome (independent read-only reviewer, 2026-10-19)
+
+Accepted changes to the plan:
+
+- Rig/camera precision (decision 5) was independently confirmed: three's
+  `updateUserCamera` would also round the tracked camera pose if it were an
+  entity. Camera fov 70, near 0.005, far 2000 at (0, 2, 6) stay capture's own.
+- Every simulated step is followed by a present step (draw or matrix-only),
+  including each `advanceTime` step and debugger steps; present is skipped until
+  assets have loaded, as before. The frame loop is installed after `World.create`
+  resolves (the SDK loop must run the initial level load) and `?manualClock=1` is
+  applied before the first capture frame. Simulation time does not accumulate
+  before capture systems start.
+- XR enter/exit handling stays one synchronous block in `XrSessionSystem` that
+  calls camera, motor, crouch, calibration, body, retargeter, HUD and input
+  services in the original order. Cross-owner writes inside height adaptation
+  (crouch reset, arm-chain lengths, body rescale/reset, camera floor origin, UI)
+  are explicit service calls from `CalibrationSystem`. All later systems check
+  one `arSpectator` flag computed after transitions; `bodyActive` stays stale in
+  AR because `__sampleBody` reads it.
+- Native controls are applied by the frame loop before `world.update`, never at
+  a later priority, so a recording start still locks size before calibration
+  runs that frame. UI and VR select keep calling services synchronously, and
+  `requestHeightRefit` still returns its result immediately.
+- Debugger interplay: the frame loop calls `world.update` through the property
+  every time (the SDK debugger rewraps it). While the SDK debugger is paused,
+  `advanceTime` and frame stepping throw instead of silently doing nothing;
+  `ecs_step` is supported in the realtime clock mode only. Raw headset input
+  recording follows device frames and keeps recording while paused (it is the
+  device's record, not simulation output).
+- `EnvironmentSystem` and `LightSystem` are unregistered too: the environment
+  system would clear the AR background and clear alpha, duplicating capture's AR
+  spectator owner. `LevelSystem` stays only for World's initial empty level;
+  capture never loads levels. The frame loop updates `world.visibilityState`
+  each frame as the SDK loop did.
+- XR entry keeps a pending session mode set by the button, settled on
+  `sessionstart`, and cleared when a request ends without a session. Button text
+  follows `sessionstart`/`sessionend`, so offered sessions are reflected.
+- Scene graph and window listener counts are diffed against the old runtime to
+  confirm unregistered SDK input objects add nothing visible or leaking.
 
 The spectator and height-evidence renders stay post-draw passes of the frame
 loop's present step; they draw extra views but never tick or sample.
