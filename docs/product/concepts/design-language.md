@@ -10,7 +10,9 @@ and gaze-pinch.
 **Current round:** the [Direction Board](https://claude.ai/artifact/MtoVzHNaaxA3SPd5BuXgdc)
 collects the research, four hologram-first directions (Greenhouse, Prism,
 Companion, Atelier), seven triggers for one action, and brainstorm prompts, with
-reactions saved per card. It supersedes the single-direction proposal below,
+reactions saved per card. References live on the
+[HoloIM Moodboard](https://claude.ai/artifact/6ofHzWfmFmQTiQXBryNfMU), with a plain
+copy in [../research/moodboard.md](../research/moodboard.md). It supersedes the single-direction proposal below,
 which is kept for reference until a direction is chosen.
 **Earlier visual references (private until shared):**
 [Light & Ink screens](https://claude.ai/artifact/C3h8MbK3YCcVKeiJd771S9), 14
