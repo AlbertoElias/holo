@@ -45,5 +45,5 @@ export function freezeBubbleWrapperMotion(clips: readonly AnimationClip[]): Anim
     return [...clips];
   }
 
-  return filteredClips.length > 0 ? filteredClips : [...clips];
+  return filteredClips;
 }
