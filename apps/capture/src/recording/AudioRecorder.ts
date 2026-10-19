@@ -75,27 +75,12 @@ export class AudioRecorder {
     });
   }
 
-  clear(): void {
-    if (this.recorder && this.recording) {
-      this.recorder.stop();
-    }
-    this.recorder = null;
-    this.chunks = [];
-    this.recording = false;
-    this.releaseStream(this.stream);
-    this.stream = null;
-  }
-
   isRecording(): boolean {
     return this.recording;
   }
 
   getPermissionState(): 'pending' | 'granted' | 'denied' {
     return this.permissionState;
-  }
-
-  hasPermission(): boolean {
-    return this.permissionState === 'granted';
   }
 
   private async getOrCreateStream(): Promise<MediaStream | null> {

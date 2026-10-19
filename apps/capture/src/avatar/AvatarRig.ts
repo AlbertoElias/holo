@@ -4,7 +4,7 @@ import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { TrackedHandJointName, VrHandSide } from '../types/contracts';
 import { palmFrameQuaternion } from '../xr/palmFrame';
-import { clamp } from '../shared/math';
+import { clamp, isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 
 export interface ArmIkChain {
   side: VrHandSide;
@@ -250,14 +250,7 @@ export class AvatarRig {
     if (this.leftEyeAnchor && this.rightEyeAnchor) {
       this.leftEyeAnchor.getWorldPosition(this.tmpVecA);
       this.rightEyeAnchor.getWorldPosition(this.tmpVecB);
-      if (
-        Number.isFinite(this.tmpVecA.x) &&
-        Number.isFinite(this.tmpVecA.y) &&
-        Number.isFinite(this.tmpVecA.z) &&
-        Number.isFinite(this.tmpVecB.x) &&
-        Number.isFinite(this.tmpVecB.y) &&
-        Number.isFinite(this.tmpVecB.z)
-      ) {
+      if (isFiniteVector3Like(this.tmpVecA) && isFiniteVector3Like(this.tmpVecB)) {
         out.copy(this.tmpVecA).add(this.tmpVecB).multiplyScalar(0.5);
         out.y += embodyOffset;
         return out;
@@ -266,7 +259,7 @@ export class AvatarRig {
 
     if (this.headBone) {
       this.headBone.getWorldPosition(out);
-      if (Number.isFinite(out.x) && Number.isFinite(out.y) && Number.isFinite(out.z)) {
+      if (isFiniteVector3Like(out)) {
         out.y += embodyOffset;
         return out;
       }
@@ -356,7 +349,7 @@ export class AvatarRig {
     const hand = this.avatar?.getObjectByName(handName);
     if (!isThreeBone(hand)) return undefined;
     hand.getWorldPosition(out);
-    if (!Number.isFinite(out.x) || !Number.isFinite(out.y) || !Number.isFinite(out.z)) {
+    if (!isFiniteVector3Like(out)) {
       return undefined;
     }
     return out;
@@ -366,14 +359,14 @@ export class AvatarRig {
     const bone = this.findAvatarBone(name);
     if (!bone) return undefined;
     bone.getWorldPosition(out);
-    return Number.isFinite(out.x) && Number.isFinite(out.y) && Number.isFinite(out.z) ? out : undefined;
+    return isFiniteVector3Like(out) ? out : undefined;
   }
 
   getBoneLocalQuaternion(name: string, out: THREE.Quaternion): THREE.Quaternion | undefined {
     const bone = this.findAvatarBone(name);
     if (!bone) return undefined;
     out.copy(bone.quaternion);
-    if (!Number.isFinite(out.x) || !Number.isFinite(out.y) || !Number.isFinite(out.z) || !Number.isFinite(out.w)) {
+    if (!isFiniteQuaternionLike(out)) {
       return undefined;
     }
     return out;

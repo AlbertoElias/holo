@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { isThreeMesh, isThreeSkinnedMesh } from '../shared/threeTypeGuards';
+import { isFiniteVector3Like } from '../shared/math';
 
 const RECORDING_SCENE_BUBBLE_RADIUS = 6;
 const MIN_SCENE_SAMPLE_DISTANCE = 0.08;
@@ -77,7 +78,7 @@ export class SceneBubbleSampler {
   }
 
   private appendSceneBubbleSample(source: THREE.Vector3): void {
-    if (!Number.isFinite(source.x) || !Number.isFinite(source.y) || !Number.isFinite(source.z)) {
+    if (!isFiniteVector3Like(source)) {
       return;
     }
 

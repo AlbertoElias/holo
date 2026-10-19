@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { isThreeMesh } from '../shared/threeTypeGuards';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { clamp } from '../shared/math';
+import { clamp, isFiniteVector3Like } from '../shared/math';
 import type { CharacterSnapshot } from '../types/contracts';
 import type { MoveState } from '../input/InputController';
 import type { AvatarRig } from '../avatar/AvatarRig';
@@ -143,7 +143,7 @@ export class CharacterMotor {
       z: this.tmpMove.z
     }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
     const corrected = this.characterController.computedMovement();
-    if (!Number.isFinite(corrected.x) || !Number.isFinite(corrected.y) || !Number.isFinite(corrected.z)) {
+    if (!isFiniteVector3Like(corrected)) {
       this.horizontalSpeed = 0;
       this.lastInputMovement.set(0, 0, 0);
       if (!this.invalidMovementLogged) {
@@ -174,7 +174,7 @@ export class CharacterMotor {
       this.rapierWorld.propagateModifiedBodyPositionsToColliders();
       this.characterController.computeColliderMovement(this.characterCollider, { x: external.x, y: 0, z: external.z }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
       const externalCorrected = this.characterController.computedMovement();
-      if (Number.isFinite(externalCorrected.x) && Number.isFinite(externalCorrected.y) && Number.isFinite(externalCorrected.z)) {
+      if (isFiniteVector3Like(externalCorrected)) {
         total.x += externalCorrected.x;
         total.y += externalCorrected.y;
         total.z += externalCorrected.z;

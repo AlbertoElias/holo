@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp } from '../shared/math';
+import { clamp, isFiniteQuaternionLike } from '../shared/math';
 import type { ArmIkChain } from '../avatar/AvatarRig';
 
 export class ArmIkSolver {
@@ -74,7 +74,7 @@ export class ArmIkSolver {
     if (handWorldQuaternion) this.tmpQuat.copy(handWorldQuaternion);
     else this.tmpQuat.copy(targetQuaternionWorld).multiply(chain.handGripRotationOffset);
     chain.hand.quaternion.copy(this.tmpInvQuat.copy(this.tmpQuatC).invert().multiply(this.tmpQuat));
-    if (!Number.isFinite(chain.hand.quaternion.x) || !Number.isFinite(chain.hand.quaternion.y) || !Number.isFinite(chain.hand.quaternion.z) || !Number.isFinite(chain.hand.quaternion.w)) {
+    if (!isFiniteQuaternionLike(chain.hand.quaternion)) {
       return false;
     }
 
