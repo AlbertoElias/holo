@@ -14,6 +14,7 @@ CREATE INDEX "Hologram_usdzStatus_idx" ON "Hologram"("usdzStatus");
 CREATE TABLE "UploadIntent" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "storageKey" TEXT NOT NULL,
+    "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
     "filenameOriginal" TEXT NOT NULL,
     "hologramName" TEXT NOT NULL,
     "submittedBy" TEXT NOT NULL,

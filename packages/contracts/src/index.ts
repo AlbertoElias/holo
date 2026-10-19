@@ -9,6 +9,7 @@ export const hologramDtoSchema = z.object({
   usdzUrl: z.string().nullable(),
   // Default keeps older fixtures/mocks parseable; the API always sends it.
   usdzStatus: usdzStatusSchema.default("none"),
+  quickLookEnabled: z.boolean(),
   createdAt: z.string().datetime(),
   sizeBytes: z.number().int().nonnegative(),
   filenameOriginal: z.string(),
@@ -38,7 +39,8 @@ export const initiateUploadRequestSchema = z.object({
   hologramName: z.string().trim().min(1).max(120),
   submittedBy: z.string().trim().min(1).max(80),
   sizeBytes: z.number().int().positive(),
-  mimeType: z.string().trim().min(1).max(120)
+  mimeType: z.string().trim().min(1).max(120),
+  quickLookEnabled: z.boolean().default(false)
 });
 
 export const initiateUploadResponseSchema = z.discriminatedUnion("mode", [

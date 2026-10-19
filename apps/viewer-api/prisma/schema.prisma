@@ -23,6 +23,7 @@ model Hologram {
   usdzClaimToken   String?
   usdzAttempts     Int       @default(0)
   usdzError        String?
+  quickLookEnabled Boolean   @default(false)
   createdAt        DateTime  @default(now())
 
   @@index([createdAt(sort: Desc)])
@@ -32,6 +33,7 @@ model Hologram {
 model UploadIntent {
   id                  String    @id @default(cuid())
   storageKey          String    @unique
+  quickLookEnabled    Boolean   @default(false)
   filenameOriginal    String
   hologramName        String
   submittedBy         String

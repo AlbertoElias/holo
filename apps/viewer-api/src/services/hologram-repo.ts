@@ -13,6 +13,7 @@ export type CreateHologramInput = {
   mimeType: string;
   sizeBytes: number;
   storagePath: string;
+  quickLookEnabled: boolean;
 };
 
 export async function createHologram(input: CreateHologramInput) {
@@ -25,7 +26,8 @@ export async function createHologram(input: CreateHologramInput) {
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
       storagePath: input.storagePath,
-      usdzStatus: "pending"
+      quickLookEnabled: input.quickLookEnabled,
+      usdzStatus: input.quickLookEnabled ? "pending" : "none"
     }
   });
 }
@@ -49,6 +51,7 @@ export async function deleteHologramById(id: string) {
 
 export type CreateUploadIntentInput = {
   storageKey: string;
+  quickLookEnabled: boolean;
   filenameOriginal: string;
   hologramName: string;
   submittedBy: string;

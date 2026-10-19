@@ -64,6 +64,7 @@ export type UploadHologramInput = {
   file: File;
   hologramName: string;
   submittedBy: string;
+  quickLookEnabled: boolean;
 };
 
 async function uploadMultipart(input: UploadHologramInput): Promise<HologramDTO> {
@@ -72,6 +73,7 @@ async function uploadMultipart(input: UploadHologramInput): Promise<HologramDTO>
   // so it is available throughout streaming upload processing.
   formData.set("hologramName", input.hologramName);
   formData.set("submittedBy", input.submittedBy);
+  formData.set("quickLookEnabled", String(input.quickLookEnabled));
   formData.set("file", input.file);
 
   let response: Response;
@@ -102,7 +104,8 @@ async function tryInitiateDirectUpload(input: UploadHologramInput): Promise<Init
         hologramName: input.hologramName,
         submittedBy: input.submittedBy,
         sizeBytes: input.file.size,
-        mimeType: input.file.type || "model/gltf-binary"
+        mimeType: input.file.type || "model/gltf-binary",
+        quickLookEnabled: input.quickLookEnabled
       })
     });
     if (!response.ok) {

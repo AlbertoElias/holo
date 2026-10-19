@@ -39,7 +39,13 @@ const listQuerySchema = z.object({
 
 const uploadFieldsSchema = z.object({
   hologramName: z.string().trim().min(1).max(120),
-  submittedBy: z.string().trim().min(1).max(80)
+  submittedBy: z.string().trim().min(1).max(80),
+  // Multipart fields arrive as strings. Only the exact value "true" opts in;
+  // a missing or malformed value leaves Quick Look disabled.
+  quickLookEnabled: z
+    .string()
+    .optional()
+    .transform((value) => value === "true")
 });
 
 const USDZ_STATUSES: ReadonlySet<string> = new Set(["none", "pending", "processing", "ready", "failed"]);
@@ -53,6 +59,7 @@ type HologramRecord = {
   sizeBytes: number;
   usdzPath: string | null;
   usdzStatus: string;
+  quickLookEnabled: boolean;
   createdAt: Date;
 };
 
@@ -64,8 +71,9 @@ function toDto(record: HologramRecord, storage: MediaStorage) {
   return {
     id: record.id,
     url: storage.publicUrl(record.filenameStored),
-    usdzUrl: status === "ready" && usdzKey ? storage.publicUrl(usdzKey) : null,
+    usdzUrl: record.quickLookEnabled && status === "ready" && usdzKey ? storage.publicUrl(usdzKey) : null,
     usdzStatus: status,
+    quickLookEnabled: record.quickLookEnabled,
     createdAt: record.createdAt.toISOString(),
     sizeBytes: record.sizeBytes,
     filenameOriginal: record.filenameOriginal,
@@ -110,6 +118,7 @@ export async function registerHologramRoutes(
     }
 
     await createUploadIntent({
+      quickLookEnabled: parsed.data.quickLookEnabled ?? false,
       storageKey,
       filenameOriginal: parsed.data.filenameOriginal,
       hologramName: parsed.data.hologramName,
@@ -177,6 +186,7 @@ export async function registerHologramRoutes(
       filenameOriginal: intent.filenameOriginal,
       hologramName: intent.hologramName,
       submittedBy: intent.submittedBy,
+      quickLookEnabled: intent.quickLookEnabled,
       filenameStored,
       mimeType: intent.mimeType,
       sizeBytes: head.sizeBytes,
@@ -256,7 +266,8 @@ export async function registerHologramRoutes(
         filenameStored: storedUpload.storedFilename,
         mimeType: uploadedFileMeta.mimetype,
         sizeBytes: storedUpload.sizeBytes,
-        storagePath: storedUpload.relativeStoragePath
+        storagePath: storedUpload.relativeStoragePath,
+        quickLookEnabled: parsedFields.data.quickLookEnabled
       });
 
       const dto = hologramDtoSchema.parse(toDto(created, storage));
@@ -325,6 +336,10 @@ export async function registerHologramRoutes(
       return reply.status(404).send({ error: "Hologram not found." });
     }
 
+    if (!item.quickLookEnabled) {
+      return reply.status(404).send({ error: "Quick Look is not enabled for this hologram." });
+    }
+
     const usdzKey = usdzFilenameFor(item.filenameStored);
     const expectedUsdzPath = `uploads/${usdzKey}`;
 
@@ -353,6 +368,7 @@ export async function registerHologramRoutes(
         usdzUrl: null
       })
     );
+
   });
 
   app.delete("/holograms/:id", async (request, reply) => {

@@ -152,9 +152,8 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const shouldShowArTrigger = typeof forcedArSupport === "boolean"
     ? forcedArSupport
     : arSupported && !isIOS && canRenderModel;
-  const shouldShowQuickLook = typeof forcedArSupport === "boolean"
-    ? !forcedArSupport
-    : isIOS && canRenderModel;
+  const shouldShowQuickLook = item.quickLookEnabled
+    && (typeof forcedArSupport === "boolean" ? !forcedArSupport : isIOS && canRenderModel);
 
   return (
     <article

@@ -124,15 +124,31 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   if (await expandUpload.isVisible()) await expandUpload.click();
   await page.getByLabel("Hologram name").fill(hologramName);
   await page.getByLabel("Submitted by").fill("pipeline-e2e");
+  // This pipeline is the Quick Look demo path, so it opts in to USDZ generation.
+  await page.locator("#quicklook-enabled").check();
   await page.locator("#glb-upload").setInputFiles(glbPath);
-  const uploadResponse = page.waitForResponse((response) => (
-    response.request().method() === "POST" && new URL(response.url()).pathname === "/api/holograms"
-  ));
+  // The upload now includes the USDZ conversion, so allow converter time.
+  const uploadResponse = page.waitForResponse(
+    (response) => (
+      response.request().method() === "POST" && new URL(response.url()).pathname === "/api/holograms"
+    ),
+    { timeout: 120_000 }
+  );
   await page.getByRole("button", { name: "Upload", exact: true }).click();
   const uploadResult = await uploadResponse;
   expect(uploadResult.status(), await uploadResult.text()).toBe(201);
-  const uploaded = (await uploadResult.json()) as { id: string; sizeBytes: number };
+  const uploaded = (await uploadResult.json()) as {
+    id: string;
+    sizeBytes: number;
+    usdzUrl: string | null;
+    usdzStatus: string;
+    quickLookEnabled: boolean;
+  };
   expect(uploaded.sizeBytes, "stored size matches the export").toBe(glbBytes.length);
+  // Opted in, but conversion is async: no USDZ at upload-response time.
+  expect(uploaded.quickLookEnabled).toBe(true);
+  expect(uploaded.usdzStatus).toBe("pending");
+  expect(uploaded.usdzUrl).toBeNull();
 
   const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
   await expect(card).toContainText(hologramName);
@@ -142,9 +158,9 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   await captureEvidence(page, testInfo, "uploaded-capture-rendered-in-feed");
   expect(Number(await card.getAttribute("data-model-animations"))).toBeGreaterThan(0);
 
-  // Conversion now runs asynchronously in the API's embedded worker. Poll
-  // the preview endpoint until it redirects to the published package; both
-  // clients must then receive the same complete bytes.
+  // Conversion runs asynchronously in the API's embedded worker after the
+  // opt-in upload. Poll the preview endpoint until it redirects to the
+  // published package; both clients must then receive the same bytes.
   const quickLookUrl = `/api/holograms/${uploaded.id}/usdz`;
   await expect
     .poll(
@@ -188,7 +204,7 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   await testInfo.attach("quicklook-demo", { path: usdzPath, contentType: "model/vnd.usdz+zip" });
   const cached = await page.request.get(quickLookUrl);
   expect(cached.ok()).toBe(true);
-  expect(await cached.body(), "cached preview stays byte-identical").toEqual(usdzBytes);
+  expect(await cached.body(), "stored preview stays byte-identical").toEqual(usdzBytes);
 
   // A walking recording has zero facial input. Derived complete GLBs challenge
   // changing facial weights, ancestor/bind transforms, alpha/UV/PBR, silent and

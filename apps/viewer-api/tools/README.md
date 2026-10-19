@@ -1,9 +1,13 @@
 # Quick Look previews
 
 The original GLB is canonical. `glb_to_usdz.py` produces a self-contained phone
-preview for the viewer's existing `rel="ar"` link. The API converts on demand,
-serves the versioned `*-ql2.usdz`, and returns a retryable 503 on failure while
-preserving the GLB. Upload, export and browser playback contracts are unchanged.
+preview for the viewer's existing `rel="ar"` link. Quick Look is opt-in per
+upload (`quickLookEnabled`, default off, set by the upload checkbox): opted-in
+uploads are queued at upload time and converted asynchronously by the API's
+embedded worker, which stores the versioned `*-ql2.usdz`, records it as
+`usdzPath` with `usdzStatus=ready`, and the Quick Look endpoint then redirects
+to that stored package. A failed conversion leaves the GLB untouched, marks
+the record `failed`, and a later Quick Look request re-queues it.
 
 ## Install and run
 
@@ -80,10 +84,11 @@ shaders, transmission and per-frame point animation are not reproduced.
 ## Limits and failure handling
 
 The API runs at most two converter processes and queues at most eight additional
-conversions across uploads. One per-upload lifecycle lock covers conversion,
-publication, database update and deletion. This is a **single API process**
-design, matching the current SQLite/local-file deployment; multiple API workers
-would require a shared lifecycle lock before deployment.
+conversions across uploads. Conversion runs during the upload request; Quick
+Look requests never convert. Deletion removes both formats. This is a
+**single API process** design, matching the current SQLite/local-file
+deployment; multiple API workers would require a shared lifecycle lock before
+deployment.
 
 All resources must be embedded. The converter rejects external buffers/images,
 unsupported audio demuxers, excessive object/accessor/pixel/sample counts,
@@ -94,10 +99,11 @@ file/pipe protocols and is killed as a process group on interruption. Conversion
 writes private temporary assets and atomically replaces the destination after a
 complete, uncompressed, aligned USDZ is packaged. The API also uses a private
 output name and atomic publication. Failed jobs remove temporary files and can
-be retried; deletion waits for publication and removes both formats.
+be retried by uploading again; deletion removes both formats.
 
-Bump `USDZ_CONVERTER_VERSION` whenever a released converter changes, so existing
-uploads regenerate. Missing current packages regenerate without a version bump.
+Bump `USDZ_CONVERTER_VERSION` whenever a released converter changes, so new
+uploads store a new versioned package. Stored packages are served as-is and
+are not regenerated when missing.
 
 ## Evidence boundaries
 
