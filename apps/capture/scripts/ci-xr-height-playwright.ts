@@ -137,7 +137,7 @@ try {
     const context = await createXrContext(browser, { viewport: visualEvidence ? { width: 1000, height: 1056 } : { width: 320, height: 180 } });
     const page: Page = await context.newPage();
     wireXrConsoleErrors(page, errors, { label });
-    await attachXrEnvironment(page, { mode: 'iwer' });
+    await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
     if (label === 'seated') {
       const body = await proportionVariant();
       await page.route('**/gltf/models/avatar.glb', (route) => route.fulfill({ body, contentType: 'model/gltf-binary' }));
@@ -145,6 +145,12 @@ try {
     await page.route('**/__holoim/input-recordings**', (route) => route.fulfill({ json: { path: 'height-test-input.json' } }));
     const url = new URL(process.env.BASE_URL ?? 'https://127.0.0.1:5274/');
     url.searchParams.set('avatarScale', String(assetScale));
+    // Calibration is measured on level ground. The default scene's spawn sits on a
+    // ~60° slope where the room-scale body solver plants both feet and lowers the
+    // pelvis, so the eye-above-base check would measure terrain, not calibration.
+    // Slope response is covered by the terrain and body replay checks.
+    url.searchParams.set('scene', '/fixtures/scenes/body-floor.gltf');
+    url.searchParams.set('sceneScale', '1');
     await page.goto(url.href, { waitUntil: 'networkidle' });
     await waitForPageFunctions(page, ['__setManualClock', 'render_game_to_text', 'advanceTime']);
     await waitForTextContentPrefix(page, '#status', 'loaded');

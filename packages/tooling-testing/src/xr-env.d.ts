@@ -28,6 +28,8 @@ export const XR_CHROMIUM_ARGS: readonly string[];
 export const XR_CONTEXT_OPTIONS: Readonly<{ ignoreHTTPSErrors: true }>;
 export function resolveSimulationViewport(value?: string): { width: number; height: number };
 export function freezePageClock(page: unknown): Promise<void>;
+export function waitForXrRenderLoop(page: unknown, options?: { stepMs?: number; maxSteps?: number; steadySteps?: number }): Promise<void>;
+export function alignFrameClock(page: unknown): Promise<void>;
 export function captureXrScreenshot(page: unknown, screenshotPath: string, options?: { timeout?: number }): Promise<void>;
 
 export function resolveXrTestMode(rawMode?: string): XrTestMode;
@@ -75,4 +77,4 @@ export function enterIwerSessionFromButton(
     readyCheck?: string | ((...args: never[]) => boolean);
   }
 ): Promise<void>;
-export function attachXrEnvironment(page: Page, options?: { mode?: string }): Promise<{ mode: XrTestMode }>;
+export function attachXrEnvironment(page: Page, options?: { mode?: string; cacheClearState?: boolean }): Promise<{ mode: XrTestMode }>;

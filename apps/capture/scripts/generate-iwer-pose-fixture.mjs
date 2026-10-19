@@ -41,7 +41,7 @@ const TIMELINE = [
 const browser = await launchXrBrowser(chromium);
 try {
   const page = await (await createXrContext(browser, { viewport: { width: 320, height: 180 } })).newPage();
-  await attachXrEnvironment(page, { mode: 'iwer' });
+  await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', 'advanceTime']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
@@ -52,6 +52,12 @@ try {
   await waitForIwerRuntime(page);
   await enterIwerSessionFromButton(page, '#VRButton', {
     readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr'
+  });
+
+  // IWER's DevUI rewrites device and hand transforms every frame unless
+  // control is programmatic; without this the hands never left its defaults.
+  await page.evaluate(() => {
+    window.IWER_DEVICE.controlMode = 'programmatic';
   });
 
   // A writable "blend" pose per hand, interpolated between IWER's captured

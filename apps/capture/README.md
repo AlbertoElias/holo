@@ -162,6 +162,48 @@ Record new input on a headset:
 relaxed, point, and pinch poses; regenerate it with `npm run fixtures:hands`. It
 is emulator data, so add headset recordings alongside it when available.
 
+## Room-Scale Body Motion
+
+In VR, `src/body/VrBodySolver.ts` drives the whole avatar from the tracked head
+while the user physically moves: the body follows the head through the physics
+controller, turns after the head with a neck allowance, plants and steps its
+feet, and bends the spine, hips, and knees so the avatar's eyes stay on the
+user's. The camera rig is world-locked: it moves only with keyboard movement and
+ground height, never because the avatar moved.
+
+`npm run test:xr:body` replays every recording in `fixtures/body-recordings/`
+through the real WebXR path, ticking the simulation inside each XR frame as a
+headset does, and measures the body against the recording's own head poses:
+world lock, eye position and lag, head orientation, pelvis lag and overshoot,
+body yaw and turn lag, foot sliding, skating, ground contact, cadence and step
+length, crouch depth, lean, and pops. Reports and samples go to
+`output/ci-body-replay/`. `BODY_REPLAY_VIDEO=1` renders a third-person video with
+the tracked head path in cyan and the avatar's eyes in pink, and
+`BODY_REPLAY_FAULTS=1` breaks each behavior in turn and requires its metric to
+fail.
+
+The IWER fixtures walk the flat-floor-and-ramp test scene
+(`fixtures/scenes/body-floor.gltf`, from `scripts/generate-body-test-scene.mjs`);
+regenerate them with `npm run fixtures:body`. Each recording stores the page's
+query (`meta.query`), so a replay loads the scene it was recorded in.
+
+Record room-scale motion on a headset:
+
+1. Clear a space of at least 3 × 2 m. Run `pnpm --filter @holoim/capture dev`
+   on a machine on the headset's network and open the network `https://` URL in
+   the headset browser. Add `?scene=/fixtures/scenes/body-floor.gltf&sceneScale=1`
+   to record on the test floor, or leave it off for the default scene.
+2. Enter VR standing upright (the first frame sets your standing height), and
+   start a recording from the floating panel.
+3. Cover, with pauses between: walk forward 3 m and back, step sideways both
+   ways, turn 90° and 180° in place, walk a curve, crouch and stand, lean
+   forward and to the side, take single small steps, and stand still looking
+   around. Keep each recording under about 20 s.
+4. Stop the recording. The dev server writes it to
+   `fixtures/input-recordings/avatar-recording-<timestamp>.json` (`meta.source`
+   is `headset`). Move it to `fixtures/body-recordings/`, rename it after what
+   it covers, and commit it.
+
 ## Development Workflows
 
 - Local development:

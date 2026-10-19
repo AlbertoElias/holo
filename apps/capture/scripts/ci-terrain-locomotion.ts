@@ -118,7 +118,7 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
   });
   wireXrConsoleErrors(page, consoleErrors, { label: mode });
   await page.route('**/locomotion-fixture.gltf', route => route.fulfill({ contentType: 'model/gltf+json', body: sceneGltf() }));
-  await attachXrEnvironment(page, { mode: 'iwer' });
+  await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   const url = new URL(process.env.BASE_URL ?? 'https://127.0.0.1:5374/');
   url.searchParams.set('scene', '/locomotion-fixture.gltf');
   url.searchParams.set('sceneScale', '1');

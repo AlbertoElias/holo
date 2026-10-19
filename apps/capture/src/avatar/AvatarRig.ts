@@ -527,7 +527,9 @@ export class AvatarRig {
     return { side, entries };
   }
 
-  sampleTerrainYAt(x: number, z: number, raycaster: THREE.Raycaster): number | undefined {
+  // Ground height at (x, z), ignoring steep faces and the world's ceiling;
+  // outNormal, when given, receives the upward surface normal there.
+  sampleTerrainYAt(x: number, z: number, raycaster: THREE.Raycaster, outNormal?: THREE.Vector3): number | undefined {
     if (!this.worldModel) return undefined;
     this.tmpVecA.set(x, this.worldTopRayY, z);
     raycaster.set(this.tmpVecA, new THREE.Vector3(0, -1, 0));
@@ -536,10 +538,15 @@ export class AvatarRig {
       if (!hit.face) continue;
       const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
       if (normal.y > 0.2 && hit.point.y <= this.terrainCeilingY) {
+        outNormal?.copy(normal);
         return hit.point.y + 0.01;
       }
     }
     return undefined;
+  }
+
+  findBone(names: readonly string[]): THREE.Bone | undefined {
+    return this.findAvatarBoneAny(names);
   }
 
   private centerModelOnGround(model: THREE.Object3D): void {

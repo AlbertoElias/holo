@@ -1,0 +1,306 @@
+# Feature brief: Natural full-body motion from room-scale movement
+
+**Lead:** Claude Code
+**Status:** Verifying
+
+## User outcome
+
+In VR, when the user physically walks, turns, crouches, leans, or steps in
+their room, the capture avatar's whole body moves the way theirs does: the
+avatar's eyes stay at the user's eyes, the pelvis follows without snapping or
+overshooting, the feet plant and step instead of sliding, and the torso and
+head bend and turn with the user. Because capture records the avatar, this is
+also what the exported GLB shows. CI proves it by replaying recorded headset
+input through the real WebXR path and measuring the body against the tracked
+head.
+
+## Findings that motivate the work (investigation, 2026-10-18)
+
+How physical head movement drives the avatar on `main` (`c72c32b`):
+
+- `CharacterMotor` moves only from keyboard/mock input. Physical head
+  translation never moves the character, so walking in the room leaves the
+  avatar behind: the camera is `cameraRig + headLocal`, and the rig is pinned
+  to the avatar's eye anchor every frame (`CameraController.updateFirstPersonCamera`).
+- The rig is placed 0.08 × avatar height (~14 cm) in front of the eye anchor
+  along the look direction, so turning the head in place swings the rig — and
+  the whole world — around a ~14 cm circle.
+- Body yaw is the head yaw every frame (`syncYaw` → `lookYaw` →
+  `avatarRoot.rotation.y`): glancing sideways spins the whole body, with no
+  neck twist or turn lag.
+- VR crouch lowers the avatar's hips with a canned pose driven by head drop,
+  and the rig follows the lowered eye anchor while the tracked head drop is
+  also applied: the view drops by roughly head drop + pose drop.
+- Feet are not planted. The VR "lower-body" profile plays a fixed 1 s walk
+  cycle at a constant rate whenever the motor moves, which slides the feet.
+- The avatar head bone is never rotated to the tracked head; pitch and roll
+  never reach the avatar or the export.
+- Device-only: in a real XR frame three.js leaves `renderer.xr.getCamera()`
+  holding the *tracking-space* left-eye pose until `render()` runs, but
+  `XrSessionService` reads it as world space (hand targets, head height). The
+  replay harness hides this because its manual clock runs `xr.updateCamera`
+  before the simulation step (the B-004 class of bug).
+
+## Scope
+
+**Included:**
+- A VR body solver for real XR input: root and capsule follow the tracked head
+  through the physics controller; body yaw follows head yaw with a neck-twist
+  allowance and turn lag; procedural foot planting and stepping; two-bone leg
+  IK; pelvis height and spine lean solved so the avatar's eyes meet the tracked
+  eyes; neck and head follow the tracked head orientation.
+- A world-locked camera rig: it moves only for artificial locomotion,
+  collision pushback, and terrain height, never because the avatar moved.
+- Head pose read from the XR views' tracking-space transforms, independent of
+  render order; hand targets use the same head pose.
+- Deterministic IWER fixtures for room-scale motion, a replay check through the
+  real WebXR path that steps the simulation inside XR frames (device order),
+  body metrics with thresholds, and a fault-injection mode proving each metric
+  can fail.
+- Evidence: a third-person spectator video with the tracked head path overlaid,
+  and per-check screenshots.
+
+**Excluded:** thumbstick locomotion and snap turn (none exists today; queued
+as its own feature in `TODOS.md`);
+the `__setMockVrPose` debug path (it keeps its legacy behavior and checks);
+desktop locomotion and animation; physical-headset validation of feel and
+comfort; changes to the export format (bones are already recorded per frame).
+
+## Acceptance criteria
+
+Measured on IWER replays of `fixtures/body-recordings/` through the real WebXR
+path, with the simulation ticking inside XR frames as on a headset
+(`test:xr:body`). Distances are metres; "leg" means the avatar's leg length, so
+a different avatar or user height does not change the verdict. Thresholds live
+in `apps/capture/scripts/lib/body-fidelity.mjs`.
+
+- [x] **Input path:** the app's head pose equals the recorded pose (≤ 2 mm).
+- [x] **World lock:** with no artificial input the rig moves ≤ 1 cm and turns
+  ≤ 0.1°, and its height follows the ground under the body (≤ 3 cm p95).
+- [x] **Eyes on eyes:** avatar eye midpoint vs tracked eyes p95 ≤ 2 cm while
+  standing, ≤ 4.5 cm while moving, max ≤ 6 cm, lag 0 frames. *(Changed from a
+  single 3 cm p95: while walking, the pelvis dips so planted feet stay reachable
+  at double support, and the tracked head's bob is not in phase with the
+  avatar's steps.)*
+- [x] **Head orientation:** yaw and pitch from eye and head-top bones within 8°
+  p95 of the tracked head.
+- [x] **Pelvis and root:** pelvis lag ≤ 2 frames while walking; root and pelvis
+  overshoot ≤ 3 cm after a walk stops.
+- [x] **Body yaw:** neck twist ≤ 75°; after a turn the pelvis is within 15° of
+  the head within 1.0 s; in-place turns lag 0.05–0.6 s (half-turn crossing,
+  turns the head holds); while walking straight the pelvis is within 20°.
+- [x] **Feet:** planted heel or ball drift ≤ 2 cm per contact; ≤ 2% skating
+  foot-frames; soles never below −1.5 cm; planted soles ≤ 2 cm above ground;
+  ankles ≥ 8 cm apart; planted jitter ≤ 2 mm RMS.
+- [x] **Stepping:** at 0.8–1.6 m/s, 1.2–2.6 steps/s and 0.4–1.1 leg per step;
+  ≤ 1 foot relocation while standing with head sway, crouching, or leaning.
+- [x] **Crouch:** pelvis drop 0.6–1.2 × head drop.
+- [x] **Lean:** spine pitch correlates ≥ 0.9 with the head's forward offset
+  over each in-place lean.
+- [x] **Smoothness:** pelvis jerk ≤ 2× the tracked head's; no pops (a joint step
+  > 3× its neighbours' and > 4 cm); per-frame caps (pelvis and head 10 cm, legs
+  27 cm ≈ 8 m/s); pelvis yaw ≤ 15° per frame.
+- [x] **Hands still follow:** `test:xr:hands` passes in device frame order;
+  wrists ≤ 2 cm p95 in the crouch-and-lean replay.
+- [x] Every behavior's metric fails when the behavior is broken
+  (`BODY_REPLAY_FAULTS=1`: 12 of 12 caught).
+- [x] Identical results across runs locally and in the 2-vCPU container
+  (byte-identical samples, Linux and macOS alike), and the full CI tier green.
+
+## Failure cases considered
+
+| Failure case | Prevention or evidence |
+|---|---|
+| Test reads app state that the real input path never produces | Replay keeps `mockVr` off; truth comes from the recording, the avatar from bones |
+| Render order differs between test and headset (B-009) | Replays tick inside XR frames; head pose comes from view transforms |
+| Rig follows the avatar, so the world swims (B-012) | World-lock metric; fault `rig-follows-avatar` fails it |
+| Avatar trails or leads the head | Eye error and velocity cross-correlation; fault `root-ignores-head` fails it |
+| Pelvis overshoots on stops | Overshoot metric; fault `root-overshoots` (spring) fails it |
+| Body snaps to every glance, or never turns | Neck twist, settle time, turn lag; fault `body-yaw-snaps` fails it |
+| Feet slide | Drift and skating; fault `feet-glued-to-root` fails them |
+| Feet sink into or float above sloped terrain | Sole heights over raycast ground (ramp fixture); fault `feet-float` fails it |
+| Fidgety stepping while standing or leaning | Foot relocations in still and in-place windows; fault `fidget-steps` fails it |
+| Legs cross on side steps | Foot separation; fault `feet-cross` fails it |
+| Crouch missing | Pelvis/head drop ratio; fault `pelvis-ignores-crouch` fails it |
+| Lean turns into stepping | Lean correlation and in-place relocations; fault `no-spine-lean` fails it |
+| Head bone not driven | Pitch from bones; fault `head-not-rotated` fails it |
+| Jittery pelvis | Jerk ratio; fault `pelvis-jitter` fails it |
+| IK knee snaps near full extension | Pop metric; soft IK in `legIk.ts` |
+| Hand sensors block the body (B-010) | Movement queries exclude sensors |
+| Scratch-vector aliasing between solver stages | One scratch set per stage (plan, step, pose, leg); faults confirm metrics react |
+| Replays depend on host speed (B-013) | Clear-state cache, steady-frame wait, frame-clock alignment; byte-identical samples across runs |
+| Recenter or tracking jump | Rig realigns on reference-space `reset` or a > 0.5 m head jump instead of walking the body |
+| Walking into a virtual wall | The body stops at the wall and the view is not pushed back; not covered by a fixture yet |
+| Fixture bloat | 30 Hz recordings; controllers where hands are not under test (1.6 MB total) |
+
+## Ownership
+
+| Role | Owner | Files or modules |
+|---|---|---|
+| Lead | Claude Code | Brief, integration, handoff |
+| Design reviewer | Codex (`codex exec -s read-only`) | Brief and plan before implementation |
+| Implementer | Claude Code | `apps/capture/src/body/*`, `AppOrchestrator`, `CameraController`, `CharacterMotor`, `XrSessionService`, debug hooks, capture scripts and fixtures, `tooling-testing/xr-env` |
+| Independent verifier | Codex final-diff review plus the fault-injection run | Read-only review; replay artifacts |
+
+## Design decision (as built)
+
+1. **Head pose.** `XrSessionService.updateHeadPose()` reads the eye midpoint and
+   orientation from `getCamera().cameras[i].matrix` (tracking space, set every
+   XR frame before the app runs) and maps them through the rig. Hands, crouch,
+   and body all use it (B-009).
+2. **World-locked rig.** On the first valid head pose, on a reference-space
+   `reset`, or after a > 0.5 m tracking jump, the rig is placed so the tracked
+   eyes sit on the avatar's standing eyes and the body faces the head.
+   Afterwards the rig moves horizontally only with input movement, and its
+   height follows the avatar's visual base every frame (the floor-space
+   contract of XR height adaptation); a wall stops the body, not the view.
+3. **`VrBodySolver`** (`src/body/`), active for real XR input; the mock-VR hook
+   keeps the legacy path. Write order: motor → root → mixer → body solver (owns
+   hips, spine, neck, head, legs, feet, toes) → arm IK → camera → recording.
+   - *Body yaw* follows a head yaw that stays stable looking straight down;
+     ±40° neck deadzone, release at 3°, ±70° hard limit, faster while walking.
+   - *Root*: the head projected to the floor minus the bind eye offset. The
+     body tells a lean from a step by head drop (a lean pivots the head down):
+     the allowed offset grows with the filtered drop. Walking (sustained
+     > 0.55 m/s, upright) moves the root with the head plus a capped catch-up,
+     so it never overshoots. Displacement goes through `CharacterMotor` as a
+     separate, collision-aware move (`externalDisplacement`).
+   - *Feet*: planted until displaced (0.12 leg), turned (25°), strained, or
+     holding the pelvis down; walking alternates feet at a speed-based cadence
+     (~2.2 steps/s at 1.2 m/s) with swings of 80% of a step, landings led by
+     velocity and re-aimed during the swing (rate-limited), quick first steps,
+     a minimum swing time for long strides, no crossing, and a minimum gap.
+     Foot height and pitch come from ground under heel and ball.
+   - *Pelvis and spine*: pelvis placed so the head bone reaches the tracked
+     head (three passes), lean spread over hips and spine with residual
+     passes, twist over spine and neck, neck shares head pitch, head bone takes
+     the tracked orientation. The pelvis dips (≤ 0.05 leg, eased) when planted
+     feet would otherwise be out of reach.
+   - *Legs*: two-bone IK as a frame map from bind (knee toward the foot, a
+     little outward), soft IK over the last 5% of reach, and rate-limited heel
+     or toe roll when the ankle is out of reach.
+4. **Replays.** Checks freeze the page clock, wait for steady XR frames, align
+   the frame clock, and tick inside XR frames (`__setFrameStepping`).
+   `attachXrEnvironment` caches GL clear state so IWER frames do not stall.
+5. **XR height adaptation (merged from `main`).** The solver works at the
+   calibrated avatar scale: a refit calls `rescale(ratio)` and `reset()` so
+   bind dimensions and planted feet follow the new size.
+   - *Reach headroom.* With the body solver, the fit makes the avatar 1.5%
+     taller than the calibrated eye height (`BODY_REACH_HEADROOM`). An avatar
+     whose straight-leg eyes equal the user's cannot follow a head that rises
+     even 1 cm (standing taller, walking bob, feet apart after a stop); the
+     replays missed by up to 4 cm without it.
+   - *Neutral knees from the user.* Standing pelvis height comes from the
+     user's tracked standing eye height (raised only while the head is
+     still), not a fixed soft-knee offset; the knees straighten past it only
+     during a lean (up to 0.015 leg, eased in by the filtered head drop), so
+     a lean does not lift the shoulders off the tracked hands.
+   - *Grounding.* The avatar's visual offset subtracts the character
+     controller's skin offset, so a grounded avatar's soles touch the floor
+     instead of hovering ~2% of its height; the rig's floor is the avatar's
+     visual base every frame.
+   - *Checks.* Body replays hold the first recorded pose until the fit
+     calibrates, as a user stands still on entering VR, then play from the
+     start. The height check (`test:xr:height`) runs on the level
+     `body-floor` fixture: the default scene's spawn is a ~60° slope where
+     planted feet lower the pelvis and the eyes by ~3 cm, which is terrain
+     response, not calibration. It also caches GL clear state like the other
+     capture checks; without it, it hit the 120 s check timeout on 2 vCPU.
+
+### Design review (Codex, read-only, 2026-10-18)
+
+Confirmed the XR camera timing finding and the motivating findings; the crouch
+double-count was plausible but not measured. Adopted: explicit recenter and
+tracking-jump policy; root displacement as a collision-aware motor input; one
+write order; feet aligned to the ground under heel and ball; oracles from the
+recording and bones, not the solver. Not adopted: a dedicated GLB export
+assertion (the recorder already stores every bone's local position and rotation
+per frame, unchanged) and eye-error exclusion for blocked frames (no fixture
+walks into a wall yet).
+
+### Final review (Codex, read-only, 2026-10-18)
+
+Nine findings, all fixed:
+
+- Jumps pinned the pelvis to the floor and could pop: the solver now has an
+  airborne mode (pelvis rides the capsule, feet tuck, re-plant on landing).
+- Solver poses survived XR exit into desktop: body bones return to bind when
+  the solver stops.
+- The landing frame was left out of the rig's height: the rig follows the
+  capsule through landing, so a jump nets zero.
+- Heading mixed roll into yaw: projected forward when well conditioned, the
+  up-vector fallback only near vertical.
+- Lost tracking looked valid: head validity now comes from the frame's
+  viewer pose (`noteXrFrame`).
+- Metrics assumed even sample spacing (samples land on a 16 ms grid, 32/48 ms
+  apart): samples are resampled onto a uniform 30 Hz timeline; the input check
+  uses the raw samples.
+- A spine that never leans passed (null correlation): it now fails.
+- Missing ground samples counted as contact: a ground-coverage check fails
+  them.
+- The GL clear-state cache clamped colors: it now learns the stored value
+  from one real read per distinct input.
+
+Both metric holes were re-tested by tampering with saved samples (upright
+spine; feet raised 1 m with ground removed): each now fails.
+
+## Test plan and evidence
+
+| Acceptance criterion | Workflow or command | Inspectable artifact/result |
+|---|---|---|
+| Body criteria | `pnpm --filter @holoim/capture run test:xr:body` | All five fixtures pass (table below); reports in `output/ci-body-replay/` |
+| Metrics can fail | `BODY_REPLAY_FAULTS=1 node scripts/run-xr-checks.mjs body` | 12/12 faults caught, each by its named metric, again after the height-fit merge; `output/ci-body-replay/fault-matrix.json` |
+| Video and screenshots | `BODY_REPLAY_VIDEO=1 XR_CAPTURE_SUCCESS_SCREENSHOTS=1` | One MP4 and one final PNG per fixture (third person, tracked head path cyan, avatar eyes pink) |
+| Hands in device order | `test:xr:hands` | Passes; the old head read fails it at 2,082 cm (B-009) |
+| Determinism | Body and hands checks twice, concurrency 2; one replay three times; body again after the height-fit merge | Byte-identical samples for all six replays, and for all five body replays after the merge |
+| Determinism and speed on 2 vCPU | `docker run --cpus=2 --memory=7g mcr.microsoft.com/playwright:v1.58.2-noble`, capture and viewer suites twice, after merging `main`, and again after the height-fit merge (Node 22) | Both runs pass each time: capture XR 231/237 s, then 279/287 s with the height check (body ~140 s, two replays at once), viewer 93/88 s then 92/93 s; body samples byte-identical between runs and with macOS. The pipeline suite needs `usd-core`, which has no Linux ARM wheel, so it ran on GitHub's x64 runners instead |
+| Full CI tier on the branch | `gh workflow run ci.yml --ref claude/room-scale-body-motion` (run 39188138321; after merging the height fit and portal view, run 39213476784) | 39188138321 green. 39213476784: quality, unit, build, knowledge 7/7, capture XR 145 s, viewer AR 5/5, capture→viewer and bubble pipelines pass; only `main`'s new `portal.pipeline.spec.ts` fails ("swipe scrolls the feed while playing"), identically on `main` itself (run 39193786345) |
+
+Results on macOS after merging `main`'s XR height fit (each replay calibrates on its held first
+pose; fixtures: walk forward/back/side, turn in place + arc, crouch and lean, small steps + sway,
+walk up the ramp):
+
+| Metric | Walk | Turn | Crouch/lean | Steps/sway | Ramp |
+|---|---|---|---|---|---|
+| Eyes p95 standing / moving | 0.1 / 2.2 cm | 0.8 / 3.2 cm | 1.7 / 1.4 cm | 1.4 / 3.2 cm | 0.0 / 2.3 cm |
+| Head yaw / pitch p95 | 0.0° / 0.0° | 0.1° / 0.0° | 0.0° / 0.1° | 0.0° / 0.0° | 0.0° / 0.0° |
+| Rig drift | 0.0 cm | 0.0 cm | 0.0 cm | 0.0 cm | 0.0 cm |
+| Root / pelvis overshoot | 1.4 / 1.1 cm | 0.3 / 0.3 cm | – | – | 0.2 / 0.1 cm |
+| Turn lag, neck twist max | – | 0.20 s, 45° | – | – | 0.20 s, 47° |
+| Foot drift, skating | 0.4 cm, 1.3% | 0.4 cm, 1.0% | 0.1 cm, 0.0% | 0.3 cm, 0.5% | 0.4 cm, 1.3% |
+| Planted sole max, min sole | 2.0, 0.0 cm | 1.1, 0.0 cm | 1.0, 0.0 cm | 1.4, 0.0 cm | 1.3, -0.1 cm |
+| Cadence, step length | 2.31/s, 0.57 leg | 2.31/s, 0.48 leg | – | – | 2.14/s, 0.51 leg |
+| Crouch ratio, lean r, wrists p95 | – | – | 0.91, 1.00, 1.6 cm | – | – |
+| Pelvis jerk ratio | 1.17 | 0.88 | 0.79 | 0.63 | 0.98 |
+
+The tightest margins are the planted-sole height (2.0 cm against 2 cm: soft IK and heel roll leave a
+planted foot up to ~2 cm off the floor at the end of a long reach) and the crouch/lean wrists
+(1.6 cm against 2 cm: the fixture's hands at the deepest lean sit 6 mm beyond the avatar's
+straight-arm reach). The 1.5% reach headroom and the 0.015-leg lean allowance were set against
+these synthetic fixtures; headset recordings should confirm them.
+
+### Defects found and fixed
+
+B-009 (head pose read in the wrong space on device), B-010 (hand sensors block
+the body), B-011 (standing creep on slopes), B-012 (room-scale motion missing
+from the body), and B-013 (replay tooling) — see
+[`../archive/closed-bugs.md`](../archive/closed-bugs.md).
+
+### Follow-ups
+
+- Phase-lock the avatar's steps to the tracked head's bob (double support at
+  the head's low point), which would cut walking eye error further.
+- A wall fixture: walking into a virtual wall, with eye error reported for
+  blocked frames.
+- Headset recordings for `fixtures/body-recordings/` (steps in
+  `apps/capture/README.md`).
+- Natural, non-robotic motion (full-body IK with joint limits, secondary
+  motion, data-driven priors, naturalness metrics) is queued in `TODOS.md`.
+
+## Physical-device limits
+
+All fixtures are generated in IWER, not recorded on a headset; they prove the
+solver against scripted room-scale paths through the real WebXR input path.
+They do not prove comfort, tracking feel, rendering latency, or real gait
+variety. A headset recording (steps in `apps/capture/README.md`) is the next
+evidence to collect.
