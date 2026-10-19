@@ -61,5 +61,8 @@ uncommitted edits. Do not expose the development server to the internet.
 
 `pnpm --filter @holoim/knowledge test:e2e` runs the real browser workflows, writes
 an HTML report and captures desktop/mobile screenshots under `test-results/`.
+It always starts its own server from the current checkout on `127.0.0.1:4177`,
+so a dev server on 4176 (including a persistent one from another checkout) can
+stay running; the run fails fast if 4177 is already taken.
 The source-freshness scenario creates temporary Markdown fixtures and removes
 them in `finally`; it verifies a newly added PRD appears without app edits.

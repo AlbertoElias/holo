@@ -78,6 +78,7 @@ review, implementation, and independent verification responsibilities.
 | capture dev | 5173 | `https://localhost:5173` |
 | capture mock VR | 5174 | `https://localhost:5174` |
 | knowledge atlas | 4176 | `http://127.0.0.1:4176` |
+| knowledge atlas E2E | 4177 | `http://127.0.0.1:4177` |
 
 Desktop/local XR emulation for `apps/viewer-web` now uses `https://localhost:3174`.
 Use a non-localhost secure origin for native mobile/headset AR so the localhost-only IWER activation does not override real WebXR.

@@ -129,3 +129,24 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   under IWER, the depth pass draws every frame with the color mask off and no
   GL errors. `test:xr:viewer` (2 passed, 0 GL errors), `test:smoke:pipeline`, and
   `verify:agent` pass. This is emulation evidence, not a headset run.
+
+### B-014 — Knowledge Atlas E2E fails when another checkout serves port 4176
+
+- **Area:** `apps/knowledge` test tooling
+- **Severity:** P2 — false failures in `test:knowledge` and `verify:pr`
+- **Observed:** 2026-10-18 on a clean `origin/main` (529aeb3) worktree
+- **Evidence:** three file-writing tests in `apps/knowledge/e2e/atlas.spec.ts`
+  (new Markdown sources, empty canonical bug list, live docs updates) failed with
+  `toBeVisible()` "element(s) not found"; the bugs-page snapshot still showed one
+  open bug after the test had rewritten `BUGS.md` as empty.
+- **Cause:** `playwright.config.ts` set `reuseExistingServer: !process.env.CI`, so a
+  local run attached to the main checkout's dev server on 4176. The specs wrote
+  fixtures into their own worktree, which that server does not watch. B-008 being
+  open was unrelated: the bug-list test replaces `BUGS.md` wholesale.
+- **Expected:** The suite always tests a server rooted in its own checkout.
+- **Reproduction:** Keep `pnpm run dev:knowledge` running in one checkout, then run
+  `pnpm run test:knowledge` from another.
+- **Fix:** the E2E run starts its own server on dedicated port 4177 and never
+  reuses one; an occupied 4177 fails fast with Playwright's "already used" error.
+  With the main checkout's server still on 4176, `pnpm run test:knowledge` passes
+  7/7 from the worktree.

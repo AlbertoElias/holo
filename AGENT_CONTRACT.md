@@ -90,6 +90,7 @@ Primary ports:
 - Capture mock VR: `5174`
 - Capture pipeline E2E: `5175`
 - Knowledge Atlas: `http://127.0.0.1:4176` (loopback-only, no XR runtime)
+- Knowledge Atlas E2E: `http://127.0.0.1:4177` (always started by the test run from its own checkout)
 
 Rules:
 
