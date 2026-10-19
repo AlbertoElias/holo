@@ -1,7 +1,7 @@
 # Feature brief: Portal view
 
 **Lead:** Claude Code  
-**Status:** Implementing
+**Status:** Verifying
 
 Product decision and trial plan: [PRD-002](../product/prds/PRD-002-portal-view.md).
 
@@ -25,18 +25,19 @@ redesign, Quick Look, and the existing AR route.
 ## Acceptance criteria
 
 - [ ] Pausing stops animation time and audio together; resuming continues both
-  from the same moment.
-- [ ] Orbiting in Free keeps the camera's distance to the focus and the focus
+  from the same moment. (Animation verified; audio is wired to restart at the
+  animation time but the test capture has no audio, so it is unverified.)
+- [x] Orbiting in Free keeps the camera's distance to the focus and the focus
   on the author; paused, the focus stays fixed.
-- [ ] Zoom runs from inside the recorded bubble (camera within its radius) to
+- [x] Zoom runs from inside the recorded bubble (camera within its radius) to
   the Follow distance, clamped at both ends, without rescaling the model.
-- [ ] Return restores the Follow framing.
-- [ ] In `freeze`, gestures only explore while paused; in `drag`, sideways
+- [x] Return restores the Follow framing.
+- [x] In `freeze`, gestures only explore while paused; in `drag`, sideways
   drags orbit while vertical swipes still scroll the feed; in `tilt`, device
   orientation turns the camera once enabled.
-- [ ] A card that becomes inactive returns to Follow and playing, and releases
+- [x] A card that becomes inactive returns to Follow and playing, and releases
   its gestures.
-- [ ] All controls work by keyboard and have accessible names.
+- [x] All controls work by keyboard and have accessible names.
 
 ## Failure cases considered
 
@@ -85,13 +86,28 @@ detail page (IDEA-058; defers the question of how viewing works in the feed).
 Review changes: Free starts from the live Follow pose; audio resumes at the
 mixer time instead of restarting.
 
+Implementation change: zooming in grows the bubble to cover the screen, which
+first magnified the view (only the canvas centre was visible). The field of
+view now widens with the canvas, so opening the bubble reveals more of the
+scene at the same scale; the zoom continuum comes from camera distance only.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Pause, orbit, zoom, Return, feed scroll | `pnpm run test:smoke:pipeline` (`portal.pipeline.spec.ts`, real capture export) | pending |
-| Variants on phone and desktop | same spec, phone and desktop viewports, `E2E_SCREENSHOTS=1` | pending |
+| Pause, orbit, zoom, Return, feed scroll | `pnpm run test:smoke:pipeline` (`portal.pipeline.spec.ts`, real capture export) | Passed 2026-10-19 with the other two pipeline specs (3/3, 4.9 min): frozen action times while paused, yaw +0.3 rad from a 240 px drag at constant distance and fixed focus, pitch clamped at −8° and 78°, zoom 0 inside the bubble radius with model scale unchanged, Return at the Follow distance, keyboard Space/arrows/Escape, reset on scroll away |
+| Variants on phone and desktop | same spec at 390×844 touch and 1280×860, `E2E_SCREENSHOTS=1` | freeze: swipe scrolls while playing, not while paused, pinch moves in; drag: sideways swipe orbits while playing and vertical still scrolls; tilt: 6° deadzone, then yaw −1.5× the phone turn. Screenshots: [`evidence/portal-view.jpg`](evidence/portal-view.jpg) |
+| Existing viewer behaviour | `pnpm run test:xr:viewer`, viewer unit tests, lint, typecheck | 5/5 mocked AR and feed specs, 35/35 unit tests |
 | Recipient trial | PRD-002 trial | pending (needs a headset recording) |
+
+## Observations
+
+- Every feed card owns a WebGL context. With several uploads in the feed and a
+  second page open, the browser stopped rendering new cards until the first
+  page closed. Not caused by this feature, but a long feed on a phone may hit
+  the same limit.
+- The Follow camera sits at a fixed world direction, so scene geometry (a
+  rock) can hide the author in Follow; Free lets the viewer move around it.
 
 ## Physical-device limits
 

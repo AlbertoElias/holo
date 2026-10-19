@@ -122,6 +122,9 @@ Written before testing, per the [approach](../APPROACH.md):
 - Concept: [what a hologram is](../concepts/what-a-hologram-is.md),
   [viewer experience](../concepts/viewer-experience.md)
 - Research: [`../research/open-questions.md`](../research/open-questions.md) (question 9)
-- Mockups: none yet; variant screenshots will be linked here
+- Mockups: working prototype screenshots, 2026-10-19:
+  [`portal-view.jpg`](../../features/evidence/portal-view.jpg) (desktop Follow,
+  orbit, and inside; phone Follow, pinched in, drag variant, tilt variant), from
+  a real capture export
 - Feature brief: [`../../features/portal-view.md`](../../features/portal-view.md)
 - Implementation issue: none
