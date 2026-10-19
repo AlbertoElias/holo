@@ -1,0 +1,9 @@
+# Cloudflare Pages for the viewer SPA.
+# Build (from workspace root):  pnpm --filter @holoim/web build
+# Deploy:  pnpm --filter @holoim/web exec wrangler pages deploy dist --project-name holoim-viewer
+# Or connect the repo in the Pages dashboard with the same build command
+# and output directory. Set VITE_API_ORIGIN in the Pages environment
+# (see docs/DEPLOYMENT.md).
+name = "holoim-viewer"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-01-01"

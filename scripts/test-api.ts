@@ -158,6 +158,12 @@ export async function launchTestApi(options: TestApiOptions = {}): Promise<TestA
       recursive: true
     });
 
+    // The API imports @holoim/contracts through its production entry in this
+    // spawned (non-Vite, non-Vitest) process, so build it first.
+    await runCommand("pnpm", ["--filter", "@holoim/contracts", "build"], {
+      cwd: workspaceRoot,
+      env: { ...process.env }
+    });
     await runCommand(
       "pnpm",
       ["--dir", apiRoot, "exec", "prisma", "generate", "--schema", apiSchemaPath],

@@ -8,7 +8,7 @@ datasource db {
 }
 
 model Hologram {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   filenameOriginal String
   hologramName     String
   submittedBy      String
@@ -18,8 +18,28 @@ model Hologram {
   storagePath      String
   durationSec      Float?
   usdzPath         String?
-  quickLookEnabled Boolean  @default(false)
-  createdAt        DateTime @default(now())
+  usdzStatus       String    @default("none")
+  usdzClaimedAt    DateTime?
+  usdzClaimToken   String?
+  usdzAttempts     Int       @default(0)
+  usdzError        String?
+  quickLookEnabled Boolean   @default(false)
+  createdAt        DateTime  @default(now())
 
   @@index([createdAt(sort: Desc)])
+  @@index([usdzStatus])
+}
+
+model UploadIntent {
+  id                  String    @id @default(cuid())
+  storageKey          String    @unique
+  quickLookEnabled    Boolean   @default(false)
+  filenameOriginal    String
+  hologramName        String
+  submittedBy         String
+  mimeType            String
+  sizeBytes           Int
+  expiresAt           DateTime
+  completedHologramId String?   @unique
+  createdAt           DateTime  @default(now())
 }

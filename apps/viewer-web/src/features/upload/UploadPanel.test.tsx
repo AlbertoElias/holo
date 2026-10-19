@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { HologramDTO } from "@holoim/contracts";
+
 import { uploadHologram } from "../feed/api";
 import { UploadPanel } from "./UploadPanel";
 
@@ -10,11 +12,12 @@ vi.mock("../feed/api", () => ({
 
 const mockedUpload = vi.mocked(uploadHologram);
 
-function fakeDto(quickLookEnabled: boolean) {
+function fakeDto(quickLookEnabled: boolean): HologramDTO {
   return {
     id: "holo-1",
     url: "/uploads/avatar.glb",
     usdzUrl: null,
+    usdzStatus: "none",
     quickLookEnabled,
     createdAt: "2026-02-10T00:00:00.000Z",
     sizeBytes: 12,

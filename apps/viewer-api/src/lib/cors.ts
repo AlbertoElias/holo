@@ -1,13 +1,33 @@
 const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
 const localNetworkOriginPattern = /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/i;
 
-export function isAllowedWebOrigin(requestOrigin: string | undefined, configuredOrigin: string): boolean {
+function matchesWildcardOrigin(requestOrigin: string, pattern: string): boolean {
+  if (!pattern.includes("*.")) {
+    return false;
+  }
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace("\\*\\.", "[a-z0-9-]+\\.");
+  return new RegExp(`^${escaped}$`, "i").test(requestOrigin);
+}
+
+export function isAllowedWebOrigin(
+  requestOrigin: string | undefined,
+  configuredOrigin: string,
+  additionalOrigins: string[] = []
+): boolean {
   if (!requestOrigin) {
     return true;
   }
 
   if (requestOrigin === configuredOrigin) {
     return true;
+  }
+
+  for (const allowed of additionalOrigins) {
+    if (requestOrigin === allowed || matchesWildcardOrigin(requestOrigin, allowed)) {
+      return true;
+    }
   }
 
   if (localhostOriginPattern.test(requestOrigin)) {

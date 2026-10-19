@@ -37,3 +37,6 @@ scratch/
 # Python conversion tooling
 __pycache__/
 *.pyc
+
+# agent worktrees
+.worktrees/

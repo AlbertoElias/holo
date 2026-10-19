@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
@@ -42,7 +43,18 @@ async function withConversionSlot(operation: () => Promise<void>): Promise<void>
     else activeConversions -= 1;
   }
 }
-const SCRIPT_PATH = path.join(import.meta.dirname, "..", "..", "tools", "glb_to_usdz.py");
+// Works from src (tsx), from the compiled dist tree, and in the container.
+function resolveScriptPath(): string {
+  const candidates = [
+    path.join(import.meta.dirname, "..", "..", "tools", "glb_to_usdz.py"),
+    path.join(import.meta.dirname, "..", "..", "..", "tools", "glb_to_usdz.py"),
+    path.join(process.cwd(), "apps/viewer-api/tools/glb_to_usdz.py"),
+    path.join(process.cwd(), "tools/glb_to_usdz.py")
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
+}
+
+const SCRIPT_PATH = resolveScriptPath();
 
 export function usdzFilenameFor(glbFilename: string): string {
   return glbFilename.replace(/\.glb$/i, `-${USDZ_CONVERTER_VERSION}.usdz`);

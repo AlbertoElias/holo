@@ -1,5 +1,9 @@
-import type { HologramDTO, PaginatedHolograms } from "@holoim/contracts";
-import { hologramDtoSchema, paginatedHologramsSchema } from "@holoim/contracts";
+import type { HologramDTO, InitiateUploadResponse, PaginatedHolograms } from "@holoim/contracts";
+import {
+  hologramDtoSchema,
+  initiateUploadResponseSchema,
+  paginatedHologramsSchema
+} from "@holoim/contracts";
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "";
 const apiBase = `${apiOrigin}/api`;
@@ -63,7 +67,7 @@ export type UploadHologramInput = {
   quickLookEnabled: boolean;
 };
 
-export async function uploadHologram(input: UploadHologramInput): Promise<HologramDTO> {
+async function uploadMultipart(input: UploadHologramInput): Promise<HologramDTO> {
   const formData = new FormData();
   // Fastify consumes multipart serially. Send metadata before the large file
   // so it is available throughout streaming upload processing.
@@ -90,6 +94,69 @@ export async function uploadHologram(input: UploadHologramInput): Promise<Hologr
   return hologramDtoSchema.parse(await response.json());
 }
 
+async function tryInitiateDirectUpload(input: UploadHologramInput): Promise<InitiateUploadResponse | null> {
+  try {
+    const response = await fetch(`${apiBase}/holograms/uploads/initiate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        filenameOriginal: input.file.name,
+        hologramName: input.hologramName,
+        submittedBy: input.submittedBy,
+        sizeBytes: input.file.size,
+        mimeType: input.file.type || "model/gltf-binary",
+        quickLookEnabled: input.quickLookEnabled
+      })
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return initiateUploadResponseSchema.parse(await response.json());
+  } catch {
+    return null;
+  }
+}
+
+export async function uploadHologram(input: UploadHologramInput): Promise<HologramDTO> {
+  const initiated = await tryInitiateDirectUpload(input);
+  if (!initiated || initiated.mode === "multipart") {
+    return uploadMultipart(input);
+  }
+
+  // Direct path: bytes go straight to object storage; the API only
+  // validates and registers the result on complete.
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(initiated.formFields)) {
+    formData.set(key, value);
+  }
+  formData.set("file", input.file);
+
+  const storageResponse = await fetch(initiated.uploadUrl, { method: "POST", body: formData });
+  if (!storageResponse.ok) {
+    throw new Error(`Direct upload to storage failed (${storageResponse.status}).`);
+  }
+
+  let completeResponse: Response;
+  try {
+    completeResponse = await fetch(`${apiBase}/holograms/uploads/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ intentId: initiated.intentId })
+    });
+  } catch {
+    throw new Error(`Unable to reach API at ${apiBase}. Check that the API is running and CORS is configured.`);
+  }
+
+  if (!completeResponse.ok) {
+    throw new Error(await readErrorMessage(completeResponse, "Upload completion failed."));
+  }
+
+  return hologramDtoSchema.parse(await completeResponse.json());
+}
+
 export function resolveMediaUrl(urlPath: string): string {
+  if (/^(https?:)?\/\//i.test(urlPath) || urlPath.startsWith("data:") || urlPath.startsWith("blob:")) {
+    return urlPath;
+  }
   return `${apiOrigin}${urlPath}`;
 }
