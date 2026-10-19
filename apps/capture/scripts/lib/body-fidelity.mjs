@@ -11,6 +11,8 @@
 
 export const THRESHOLDS = Object.freeze({
   minActiveShare: 0.95,
+  // Share of foot-frames with raycast ground under heel and ball.
+  minGroundCoverage: 0.98,
   // The app's head pose must be the recorded pose (frame order, spaces).
   maxHeadInputErrorM: 0.002,
   // World lock: the rig moves only for terrain height (no input movement in
@@ -220,7 +222,38 @@ export function recordedHeadAt(recording, timeMs) {
   return { position, quaternion };
 }
 
-export function analyzeBodyReplay(frames, { stepMs, recording }) {
+// Samples arrive on XR frames (a 16 ms grid), so their spacing alternates
+// (32 and 48 ms); interpolate every numeric field onto a uniform grid of
+// `stepMs` by playback time so velocities, jerk, and lags are not distorted.
+function resampleUniform(frames, stepMs) {
+  if (frames.length < 2) return frames;
+  const lerp = (a, b, t) => {
+    if (typeof a === 'number' && typeof b === 'number') return a + (b - a) * t;
+    if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) return a.map((v, i) => lerp(v, b[i], t));
+    if (a && b && typeof a === 'object' && typeof b === 'object') {
+      const out = {};
+      for (const key of Object.keys(a)) out[key] = key in b ? lerp(a[key], b[key], t) : a[key];
+      return out;
+    }
+    return t < 0.5 ? a : b;
+  };
+  const out = [];
+  let j = 0;
+  for (let time = frames[0].timeMs; time <= frames.at(-1).timeMs + 1e-6; time += stepMs) {
+    while (j < frames.length - 2 && frames[j + 1].timeMs < time) j += 1;
+    const a = frames[j];
+    const b = frames[j + 1];
+    const span = b.timeMs - a.timeMs;
+    const t = span > 0 ? Math.min(1, Math.max(0, (time - a.timeMs) / span)) : 0;
+    const frame = lerp(a, b, t);
+    frame.timeMs = time;
+    out.push(frame);
+  }
+  return out;
+}
+
+export function analyzeBodyReplay(rawFrames, { stepMs, recording }) {
+  const frames = resampleUniform(rawFrames, stepMs);
   const failures = [];
   const metrics = {};
   const fail = (id, message) => failures.push(`${id}: ${message}`);
@@ -252,7 +285,10 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
   const eyes = samples.map((frame) => mid(frame.body.eyes.left, frame.body.eyes.right));
 
   // Input path.
-  const inputErrors = samples.map((frame, i) => (frame.body.trackedHead ? length(sub(frame.body.trackedHead.local, truthLocal[i].position)) : Infinity));
+  // On the raw samples: exact playback times, no interpolation between them.
+  const inputErrors = rawFrames
+    .filter((frame) => frame.body.active && frame.body.solver.aligned)
+    .map((frame) => (frame.body.trackedHead ? length(sub(frame.body.trackedHead.local, recordedHeadAt(recording, frame.timeMs).position)) : Infinity));
   check('headInputErrorM', max(inputErrors), (v) => v <= THRESHOLDS.maxHeadInputErrorM, (v) => `app head pose is ${(v * 1000).toFixed(1)} mm from the recorded pose`);
 
   // World lock.
@@ -380,6 +416,7 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
   // Feet: heel (sole under the ankle, rolled with the foot) and ball of the
   // foot, against the ground raycast under each.
   const footPoints = { left: [], right: [] };
+  let missingGround = 0;
   for (const frame of samples) {
     for (const side of ['left', 'right']) {
       const ankle = frame.body.bones[`${side}Ankle`];
@@ -390,11 +427,15 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
       const roll = Math.atan2(d[1], horizontal) - Math.atan2(dims.toeHeight - dims.ankleHeight, dims.toeForward);
       const heel = add(add(ankle, scale(u, dims.ankleHeight * Math.sin(roll))), [0, -dims.ankleHeight * Math.cos(roll), 0]);
       const ball = add(add(toe, scale(u, dims.toeHeight * Math.sin(roll))), [0, -dims.toeHeight * Math.cos(roll), 0]);
-      const groundHeel = frame.body.ground[`${side}Ankle`]?.y ?? heel[1];
-      const groundBall = frame.body.ground[`${side}Toe`]?.y ?? ball[1];
-      footPoints[side].push({ heel, ball, heelHeight: heel[1] - groundHeel, ballHeight: ball[1] - groundBall, ankle });
+      // A missing ground sample is not contact: it counts against coverage
+      // and leaves the point out of every contact measure.
+      const groundHeel = frame.body.ground[`${side}Ankle`]?.y;
+      const groundBall = frame.body.ground[`${side}Toe`]?.y;
+      if (groundHeel === undefined || groundBall === undefined) missingGround += 1;
+      footPoints[side].push({ heel, ball, heelHeight: groundHeel === undefined ? Infinity : heel[1] - groundHeel, ballHeight: groundBall === undefined ? Infinity : ball[1] - groundBall, ankle });
     }
   }
+  check('groundCoverage', 1 - missingGround / Math.max(1, 2 * n), (v) => v >= THRESHOLDS.minGroundCoverage, (v) => `ground under the feet sampled on only ${(v * 100).toFixed(0)}% of foot-frames`);
   const drifts = [];
   const jitters = [];
   let skating = 0;
@@ -468,7 +509,6 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
   const standingNow = samples.map((_, i) => speed[i] < 0.15 && !steps.some((step) => Math.abs(step - i) <= settleFrames));
   check('eyeErrorStillP95M', percentile(eyeErrors.filter((_, i) => standingNow[i]), 0.95), (v) => v <= THRESHOLDS.maxEyeErrorStillP95M, (v) => `avatar eyes p95 ${(v * 100).toFixed(1)} cm from the tracked eyes while standing`);
   check('eyeErrorWalkingP95M', standingNow.filter((v) => !v).length > 10 ? percentile(eyeErrors.filter((_, i) => !standingNow[i]), 0.95) : null, (v) => v <= THRESHOLDS.maxEyeErrorWalkingP95M, (v) => `avatar eyes p95 ${(v * 100).toFixed(1)} cm from the tracked eyes while moving`);
-  const stepsIn = (a, b) => steps.filter((i) => i >= a && i <= b).length;
   const walkWindows = runs(n, (i) => speed[i] >= 0.8 && speed[i] <= 1.6).filter(([a, b]) => (b - a) * dt >= 1.2);
   const cadences = [];
   const stepLengths = [];
@@ -519,7 +559,9 @@ export function analyzeBodyReplay(frames, { stepMs, recording }) {
   const leanWindows = runs(n, leaning).filter(([a, b]) => b - a > 10);
   const leanFrames = samples.map((_, i) => i).filter((i) => leanWindows.some(([a, b]) => i >= a - 1 / dt && i <= b + 1 / dt)
     && headDrop[i] < 0.15 && speed[i] < 0.35 && !steps.some((step) => Math.abs(step - i) <= quiet));
-  check('leanCorrelation', leanFrames.length > 15 ? correlation(leanFrames.map((i) => leanOffset[i]), leanFrames.map((i) => spinePitch[i])) : null, (v) => v >= THRESHOLDS.minLeanCorrelation, (v) => `spine pitch follows the head's lean with r = ${v.toFixed(2)}`);
+  // A lean in the input with no spine response at all (constant pitch) is a
+  // failure, not a missing phase.
+  check('leanCorrelation', leanFrames.length > 15 ? correlation(leanFrames.map((i) => leanOffset[i]), leanFrames.map((i) => spinePitch[i])) ?? -1 : null, (v) => v >= THRESHOLDS.minLeanCorrelation, (v) => `spine pitch follows the head's lean with r = ${v.toFixed(2)}`);
 
   // Smoothness.
   const jerkRms = (series) => {

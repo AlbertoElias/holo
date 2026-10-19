@@ -301,41 +301,63 @@ export async function attachXrEnvironment(page, { mode } = {}) {
 // every emulated XR frame with gl.getParameter, and on software GL each of
 // those reads stalls the pipeline (most of a frame's cost in replays). The
 // values are plain context state that only clearColor/clearDepth/clearStencil
-// change, so they are tracked here and answered without the stall.
+// change, so they are tracked here. What the GL stores for a given input
+// (clamped or not, depending on context and extensions) is learned from one
+// real read per distinct input and context, never assumed.
 function cacheWebGlClearState() {
   const COLOR_CLEAR_VALUE = 0x0c22;
   const DEPTH_CLEAR_VALUE = 0x0b73;
   const STENCIL_CLEAR_VALUE = 0x0b91;
-  const state = new WeakMap();
-  const stateOf = (gl) => {
-    let value = state.get(gl);
-    if (!value) {
-      value = { color: [0, 0, 0, 0], depth: 1, stencil: 0 };
-      state.set(gl, value);
+  const contexts = new WeakMap();
+  const stateOf = (gl, getParameter) => {
+    let state = contexts.get(gl);
+    if (!state) {
+      // Initial values, read once.
+      state = {
+        current: {
+          [COLOR_CLEAR_VALUE]: getParameter.call(gl, COLOR_CLEAR_VALUE),
+          [DEPTH_CLEAR_VALUE]: getParameter.call(gl, DEPTH_CLEAR_VALUE),
+          [STENCIL_CLEAR_VALUE]: getParameter.call(gl, STENCIL_CLEAR_VALUE)
+        },
+        learned: new Map()
+      };
+      contexts.set(gl, state);
     }
-    return value;
+    return state;
+  };
+  const remember = (gl, getParameter, pname, key) => {
+    const state = stateOf(gl, getParameter);
+    const learnedKey = `${pname}:${key}`;
+    if (!state.learned.has(learnedKey)) state.learned.set(learnedKey, getParameter.call(gl, pname));
+    state.current[pname] = state.learned.get(learnedKey);
   };
   for (const Context of [globalThis.WebGLRenderingContext, globalThis.WebGL2RenderingContext]) {
     if (!Context) continue;
     const proto = Context.prototype;
     const { clearColor, clearDepth, clearStencil, getParameter } = proto;
     proto.clearColor = function (r, g, b, a) {
-      // Stored as the GL would: clamped to [0, 1] in single precision.
-      stateOf(this).color = [r, g, b, a].map((v) => Math.fround(Math.min(1, Math.max(0, v))));
-      return clearColor.call(this, r, g, b, a);
+      stateOf(this, getParameter);
+      const result = clearColor.call(this, r, g, b, a);
+      remember(this, getParameter, COLOR_CLEAR_VALUE, `${r},${g},${b},${a}`);
+      return result;
     };
     proto.clearDepth = function (depth) {
-      stateOf(this).depth = Math.fround(Math.min(1, Math.max(0, depth)));
-      return clearDepth.call(this, depth);
+      stateOf(this, getParameter);
+      const result = clearDepth.call(this, depth);
+      remember(this, getParameter, DEPTH_CLEAR_VALUE, `${depth}`);
+      return result;
     };
     proto.clearStencil = function (s) {
-      stateOf(this).stencil = s;
-      return clearStencil.call(this, s);
+      stateOf(this, getParameter);
+      const result = clearStencil.call(this, s);
+      remember(this, getParameter, STENCIL_CLEAR_VALUE, `${s}`);
+      return result;
     };
     proto.getParameter = function (pname) {
-      if (pname === COLOR_CLEAR_VALUE) return new Float32Array(stateOf(this).color);
-      if (pname === DEPTH_CLEAR_VALUE) return stateOf(this).depth;
-      if (pname === STENCIL_CLEAR_VALUE) return stateOf(this).stencil;
+      if (pname === COLOR_CLEAR_VALUE || pname === DEPTH_CLEAR_VALUE || pname === STENCIL_CLEAR_VALUE) {
+        const value = stateOf(this, getParameter).current[pname];
+        return value instanceof Float32Array ? new Float32Array(value) : value;
+      }
       return getParameter.call(this, pname);
     };
   }

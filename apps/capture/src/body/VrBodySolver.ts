@@ -162,6 +162,8 @@ const SPINE_LEAN_PASSES = 3;
 const MAX_PELVIS_REACH_DROP = 0.05;
 const PELVIS_REACH_DROP_TIME_SEC = 0.06;
 const PELVIS_HOLD_STEP_METERS = 0.01;
+// Feet tuck this far (leg lengths) above the capsule's floor level in the air.
+const AIRBORNE_FOOT_TUCK = 0.08;
 // Standing knees are soft: the pelvis sits this far (leg lengths) below its
 // bind height, where this rig's legs are locked straight.
 const SOFT_KNEE = 0.03;
@@ -198,6 +200,8 @@ function swingHeight(t: number): number {
 export class VrBodySolver {
   readonly faults = new Set<BodyFault>();
 
+  private readonly hipsBindPosition = new THREE.Vector3();
+  private airborne = false;
   private bind: {
     hips: BindBone;
     spine: BindBone;
@@ -336,6 +340,7 @@ export class VrBodySolver {
     };
     const names = (base: string) => [base, `mixamorig${base}`, base[0]!.toLowerCase() + base.slice(1)];
     const hips = bindBone(names('Hips'));
+    if (hips) this.hipsBindPosition.copy(hips.bone.position);
     const spine = bindBone(names('Spine'));
     const spine1 = bindBone(names('Spine1'));
     const spine2 = bindBone(names('Spine2'));
@@ -438,6 +443,7 @@ export class VrBodySolver {
     this.gaitActive = false;
     this.sinceLastStepStart = 0;
     this.sinceLastLanding = 0;
+    this.airborne = false;
     for (const side of ['left', 'right'] as const) {
       const foot = this.feet[side];
       this.slotWorld(side, rootPosition, this.bodyYawValue, foot.planted);
@@ -454,6 +460,20 @@ export class VrBodySolver {
   reset(): void {
     this.aligned = false;
     this.stepCount = 0;
+  }
+
+  // Hands the skeleton back to the animation path: every bone the solver
+  // writes returns to its bind pose (the hips also to their bind position).
+  restoreBindPose(): void {
+    const bind = this.bind;
+    if (!bind) return;
+    for (const bone of [bind.hips, bind.spine, bind.spine1, bind.spine2, bind.neck, bind.head]) bone.bone.quaternion.copy(bone.local);
+    bind.hips.bone.position.copy(this.hipsBindPosition);
+    for (const side of ['left', 'right'] as const) {
+      const leg = bind.legs[side];
+      for (const bone of [leg.upLeg, leg.leg, leg.foot, leg.toe]) bone?.bone.quaternion.copy(bone.local);
+    }
+    this.avatarRig.avatar?.updateMatrixWorld(true);
   }
 
   // Before physics: turns the body and returns where the root should move
@@ -559,7 +579,9 @@ export class VrBodySolver {
 
   // After physics: plants and steps the feet around the new root and poses the
   // pelvis, spine, neck, head, and legs.
-  solve(head: BodyHeadInput, rootPosition: THREE.Vector3, deltaSec: number, ground: GroundSampler, embodyOffset: number): void {
+  // grounded: whether the physics capsule stands on the ground. In the air
+  // (a jump) the feet leave their plants and the pelvis rides the capsule.
+  solve(head: BodyHeadInput, rootPosition: THREE.Vector3, deltaSec: number, ground: GroundSampler, embodyOffset: number, grounded = true): void {
     const bind = this.bind;
     if (!bind || !this.aligned) return;
     const dt = Math.max(deltaSec, 1e-4);
@@ -567,7 +589,10 @@ export class VrBodySolver {
     const velocityStep = this.planA.subVectors(rootPosition, this.prevRoot).setY(0).multiplyScalar(1 / dt);
     this.prevRoot.copy(rootPosition);
     this.rootVelocity.lerp(velocityStep, 1 - Math.exp(-dt / ROOT_SPEED_TIME_SEC));
-    this.updateFeet(rootPosition, dt, ground);
+    const landed = this.airborne && grounded;
+    this.airborne = !grounded;
+    if (this.airborne || landed) this.placeFeetUnderRoot(rootPosition, ground, this.airborne);
+    else this.updateFeet(rootPosition, dt, ground);
     this.solvePose(head, rootPosition, ground, embodyOffset);
   }
 
@@ -627,6 +652,29 @@ export class VrBodySolver {
       return;
     }
     out.y = y - 0.01;
+  }
+
+  // Airborne: feet hang in their slots a little above the capsule's floor
+  // level; on landing they plant there on the ground.
+  private placeFeetUnderRoot(rootPosition: THREE.Vector3, ground: GroundSampler, inAir: boolean): void {
+    const bind = this.bind!;
+    for (const side of ['left', 'right'] as const) {
+      const foot = this.feet[side];
+      this.slotWorld(side, rootPosition, this.bodyYawValue, foot.planted);
+      if (inAir) {
+        foot.planted.y = rootPosition.y + bind.groundLocalY + AIRBORNE_FOOT_TUCK * bind.dims.legLength;
+        foot.normal.set(0, 1, 0);
+      } else {
+        this.footGroundAt(foot.planted, this.bodyYawValue, foot.normal, ground, rootPosition.y + bind.groundLocalY, bind.legs[side].toeForward);
+        this.sinceLastLanding = 0;
+      }
+      foot.yaw = this.bodyYawValue;
+      foot.swinging = false;
+      foot.roll = 0;
+      foot.current.copy(foot.planted);
+      foot.currentNormal.copy(foot.normal);
+      foot.currentYaw = foot.yaw;
+    }
   }
 
   private updateFeet(rootPosition: THREE.Vector3, dt: number, ground: GroundSampler): void {
@@ -868,7 +916,8 @@ export class VrBodySolver {
     const rootPos = this.poseRootPos.copy(rootPosition);
     const rootQuat = avatarRoot.getWorldQuaternion(this.poseRootQuat);
     const toWorld = (local: THREE.Vector3, out: THREE.Vector3) => out.copy(local).applyQuaternion(rootQuat).add(rootPos);
-    const groundY = this.groundUnder(rootPos, ground);
+    // In the air the floor level moves with the capsule.
+    const groundY = this.airborne ? rootPos.y + bind.groundLocalY : this.groundUnder(rootPos, ground);
 
     // Tracked head mapped onto the avatar head bone: the bind head rotation
     // turned by the tracked head's world rotation.
@@ -909,7 +958,7 @@ export class VrBodySolver {
     // foot is within reach of its hip joint with the foot fully rolled.
     // Only a few centimetres, eased: a foot further out than that has to
     // step instead.
-    const wantedDrop = this.faults.has('feet-float') ? 0 : clamp(this.pelvisExcessOverFeet(), 0, MAX_PELVIS_REACH_DROP * leg);
+    const wantedDrop = this.faults.has('feet-float') || this.airborne ? 0 : clamp(this.pelvisExcessOverFeet(), 0, MAX_PELVIS_REACH_DROP * leg);
     this.pelvisReachDrop += (wantedDrop - this.pelvisReachDrop) * (1 - Math.exp(-this.lastDt / PELVIS_REACH_DROP_TIME_SEC));
     if (this.pelvisReachDrop > 1e-4) {
       hips.y -= this.pelvisReachDrop;

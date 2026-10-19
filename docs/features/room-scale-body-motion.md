@@ -193,6 +193,32 @@ assertion (the recorder already stores every bone's local position and rotation
 per frame, unchanged) and eye-error exclusion for blocked frames (no fixture
 walks into a wall yet).
 
+### Final review (Codex, read-only, 2026-10-18)
+
+Nine findings, all fixed:
+
+- Jumps pinned the pelvis to the floor and could pop: the solver now has an
+  airborne mode (pelvis rides the capsule, feet tuck, re-plant on landing).
+- Solver poses survived XR exit into desktop: body bones return to bind when
+  the solver stops.
+- The landing frame was left out of the rig's height: the rig follows the
+  capsule through landing, so a jump nets zero.
+- Heading mixed roll into yaw: projected forward when well conditioned, the
+  up-vector fallback only near vertical.
+- Lost tracking looked valid: head validity now comes from the frame's
+  viewer pose (`noteXrFrame`).
+- Metrics assumed even sample spacing (samples land on a 16 ms grid, 32/48 ms
+  apart): samples are resampled onto a uniform 30 Hz timeline; the input check
+  uses the raw samples.
+- A spine that never leans passed (null correlation): it now fails.
+- Missing ground samples counted as contact: a ground-coverage check fails
+  them.
+- The GL clear-state cache clamped colors: it now learns the stored value
+  from one real read per distinct input.
+
+Both metric holes were re-tested by tampering with saved samples (upright
+spine; feet raised 1 m with ground removed): each now fails.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |

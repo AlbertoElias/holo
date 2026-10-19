@@ -130,6 +130,9 @@ export class XrSessionService {
     worldQuaternion: new THREE.Quaternion()
   };
   private readonly tmpEyeLocal = new THREE.Vector3();
+  // Whether the latest XR frame had a viewer pose. three keeps its last
+  // camera matrices when tracking is lost, so they alone cannot tell.
+  private viewerTracked = true;
   private readonly tmpRigQuat = new THREE.Quaternion();
   private readonly tmpQuat = new THREE.Quaternion();
   private readonly tmpQuatB = new THREE.Quaternion();
@@ -394,6 +397,17 @@ export class XrSessionService {
     return undefined;
   }
 
+  // Call with each XR frame (inside its callback, where getViewerPose works).
+  noteXrFrame(frame: XRFrame): void {
+    const referenceSpace = this.renderer.xr.getReferenceSpace();
+    if (!referenceSpace) return;
+    try {
+      this.viewerTracked = frame.getViewerPose(referenceSpace) !== null;
+    } catch {
+      // A frame outside its callback; keep the last known state.
+    }
+  }
+
   // Reads the head from the XR views. three copies each view.transform into
   // getCamera().cameras[i].matrix (tracking space) at the start of every XR
   // frame, before the app runs. The ArrayCamera's own position is not usable
@@ -403,7 +417,7 @@ export class XrSessionService {
   updateHeadPose(): XrHeadPose {
     const pose = this.headPose;
     pose.valid = false;
-    if (!this.renderer.xr.isPresenting) return pose;
+    if (!this.renderer.xr.isPresenting || !this.viewerTracked) return pose;
     // AR sessions may expose a single view; the type assumes two.
     const cameras: readonly THREE.Camera[] = this.renderer.xr.getCamera().cameras;
     if (cameras.length === 0) return pose;
@@ -1004,13 +1018,19 @@ const tmpHeadForward = new THREE.Vector3();
 const tmpHeadUp = new THREE.Vector3();
 
 // Heading of a head pose on the floor plane (0 = facing -Z, positive = turned
-// left). Looking straight up or down leaves no horizontal forward, so the
-// head's up vector, which then tilts along the heading, fills in.
+// left): the projected forward, blending near vertical (looking straight up
+// or down) into the projected up vector, which then tilts along the heading.
 export function headYawFromQuaternion(quaternion: THREE.Quaternion, fallbackYaw: number): number {
   tmpHeadForward.set(0, 0, -1).applyQuaternion(quaternion);
   tmpHeadUp.set(0, 1, 0).applyQuaternion(quaternion);
   const tilt = tmpHeadForward.y;
-  tmpHeadForward.addScaledVector(tmpHeadUp, -Math.sign(tilt) * Math.abs(tilt)).projectOnPlane(WORLD_UP);
+  tmpHeadForward.projectOnPlane(WORLD_UP);
+  tmpHeadUp.projectOnPlane(WORLD_UP).multiplyScalar(-Math.sign(tilt));
+  const flat = tmpHeadForward.length();
+  const weight = THREE.MathUtils.smoothstep(flat, 0.15, 0.35);
+  if (flat > 1e-6) tmpHeadForward.multiplyScalar(weight / flat);
+  const upLength = tmpHeadUp.length();
+  if (upLength > 1e-6) tmpHeadForward.addScaledVector(tmpHeadUp, (1 - weight) / upLength);
   if (tmpHeadForward.lengthSq() < 1e-8) return fallbackYaw;
   return Math.atan2(-tmpHeadForward.x, -tmpHeadForward.z);
 }

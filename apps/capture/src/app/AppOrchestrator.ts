@@ -154,6 +154,10 @@ export class AppOrchestrator implements System {
   private readonly prevHeadLocal = new THREE.Vector3();
   private hasPrevHeadLocal = false;
   private bodyGroundY = 0;
+  private bodyWasGrounded = true;
+  // Whether the body solver posed the skeleton last frame; when it stops,
+  // its bones go back to bind for the animation path.
+  private bodyPosed = false;
   private hasBodyGroundY = false;
   private readonly bodyRaycaster = new THREE.Raycaster();
   private readonly groundSampler = (x: number, z: number, outNormal: THREE.Vector3): number | undefined =>
@@ -387,11 +391,14 @@ export class AppOrchestrator implements System {
       // Height follows the ground under the body (the capsule's own height
       // shifts with snapping and crouch clearance), or the capsule in the air.
       const groundY = this.avatarRig.sampleTerrainYAt(this.tmpBodyPosition.x, this.tmpBodyPosition.z, this.bodyRaycaster);
-      if (characterSnapshot.grounded && groundY !== undefined && this.hasBodyGroundY) {
+      // The landing frame still follows the capsule, so a jump nets zero.
+      const onGround = characterSnapshot.grounded && this.bodyWasGrounded;
+      if (onGround && groundY !== undefined && this.hasBodyGroundY) {
         this.bootstrap.cameraRig.position.y += groundY - this.bodyGroundY;
-      } else if (!characterSnapshot.grounded) {
+      } else if (!onGround) {
         this.bootstrap.cameraRig.position.y += this.tmpBodyPosition.y - this.bodyCapsuleBefore.y;
       }
+      this.bodyWasGrounded = characterSnapshot.grounded;
       if (groundY !== undefined) {
         this.bodyGroundY = groundY;
         this.hasBodyGroundY = true;
@@ -419,8 +426,13 @@ export class AppOrchestrator implements System {
       moveIntent: this.input.moveState.forward || this.input.moveState.back || this.input.moveState.left || this.input.moveState.right,
       vrMode: isVrActive
     });
+    if (!this.bodyActive && this.bodyPosed) {
+      this.bodySolver.restoreBindPose();
+      this.bodyPosed = false;
+    }
     if (bodyTracking) {
-      this.bodySolver.solve(this.bodyHead, this.avatarRig.avatarRoot.position, ctx.deltaSec, this.groundSampler, this.config.embodyOffset);
+      this.bodyPosed = true;
+      this.bodySolver.solve(this.bodyHead, this.avatarRig.avatarRoot.position, ctx.deltaSec, this.groundSampler, this.config.embodyOffset, characterSnapshot.grounded);
     } else if (!this.bodyActive) {
       this.avatarRig.applyCrouchPose(this.crouchPoseAmount, characterSnapshot.horizontalSpeed);
     }
@@ -666,6 +678,7 @@ export class AppOrchestrator implements System {
 
   onRealtimeFrame(frame?: XRFrame): void {
     if (frame && this.inputRecording) this.inputRecording.recordFrame(frame);
+    if (frame) this.xrService.noteXrFrame(frame);
     const deltaSec = this.bootstrap.clock.getDelta();
     if (this.frameStepping) {
       this.drawFrames = this.frameSteppingDraws;
