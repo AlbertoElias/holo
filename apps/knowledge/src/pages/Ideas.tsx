@@ -26,7 +26,10 @@ export function IdeaCard({ idea }: { idea: Idea }) {
       <h2>{idea.title}</h2>
       <p className="idea-question">{idea.question}</p>
       <div className="card-bottom">
-        <span>{idea.layer && <small className="idea-layer">{idea.layer}</small>}{idea.theme}</span>
+        <span>
+          {idea.layer && <small className="idea-layer">{idea.layer}</small>}
+          {idea.theme}
+        </span>
         <span>
           {related.length ? `${related.length} linked notes` : "Seed idea"}
         </span>
@@ -42,7 +45,7 @@ export function IdeaGarden({
   setSearch: (value: string) => void;
 }) {
   const [theme, setTheme] = useState("All themes");
-  const [layer, setLayer] = useState("All layers");
+  const [layer, setLayer] = useState("Every layer");
   const [depth, setDepth] = useState("All ideas");
   const themes = [...new Set(ideas.map((idea) => idea.theme))].sort();
   const filtered = ideas.filter((idea) => {
@@ -55,7 +58,7 @@ export function IdeaGarden({
           .includes(query);
     return (
       (theme === "All themes" || idea.theme === theme) &&
-      (layer === 'All layers' || idea.layer === layer) &&
+      (layer === "Every layer" || idea.layer === layer) &&
       (depth === "All ideas" ||
         (depth === "With PRDs"
           ? links.some((doc) => doc.kind === "PRD")
@@ -95,8 +98,13 @@ export function IdeaGarden({
           value={layer}
           onChange={(event) => setLayer(event.target.value)}
         >
-          <option>All layers</option>
-          {[...new Set(ideas.map((idea) => idea.layer))].filter((item) => item && item !== 'All layers').sort().map((item) => <option key={item}>{item}</option>)}
+          <option>Every layer</option>
+          {[...new Set(ideas.map((idea) => idea.layer))]
+            .filter(Boolean)
+            .sort()
+            .map((item) => (
+              <option key={item}>{item}</option>
+            ))}
         </select>
         <select
           aria-label="Filter by detail"
@@ -127,7 +135,7 @@ export function IdeaGarden({
           action={() => {
             setSearch("");
             setTheme("All themes");
-            setLayer('All layers');
+            setLayer("Every layer");
             setDepth("All ideas");
           }}
         />

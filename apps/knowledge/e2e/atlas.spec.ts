@@ -65,6 +65,19 @@ test("approach, canonical ideas, filters, PRD relationships, and history", async
   await expect(page.locator(".idea-card")).not.toHaveCount(0);
   for (const card of await page.locator(".idea-card .card-bottom").all())
     await expect(card).toContainText("Spatial language");
+  await page
+    .getByRole("combobox", { name: "Filter by theme" })
+    .selectOption("All themes");
+  await page
+    .getByRole("combobox", { name: "Filter by layer" })
+    .selectOption("View");
+  await expect(page.locator(".idea-card")).not.toHaveCount(0);
+  for (const layer of await page.locator(".idea-layer").all())
+    await expect(layer).toHaveText("View");
+  await page.getByRole("textbox", { name: "Search ideas" }).fill("IDEA-045");
+  await expect(page.locator(".idea-card")).toHaveCount(1);
+  await expect(page.locator(".idea-card")).toContainText("Portal view");
+  await page.getByRole("textbox", { name: "Search ideas" }).fill("");
   await page.screenshot({
     path: testInfo.outputPath("ideas-desktop.png"),
     fullPage: true,

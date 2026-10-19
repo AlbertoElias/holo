@@ -91,16 +91,19 @@ const table = registry?.tree.children.find(
     node.type === "table" &&
     node.children.some((row) => /^IDEA-\d+/.test(nodeText(row.children[0]!))),
 );
-const columns = table?.children[0]?.children.map((cell) => nodeText(cell).trim().toLowerCase()) ?? [];
+const columns =
+  table?.children[0]?.children.map((cell) =>
+    nodeText(cell).trim().toLowerCase(),
+  ) ?? [];
 export const ideas: Idea[] = (table?.children.slice(1) ?? []).flatMap((row) => {
   const cells = row.children.map(nodeText);
-  const cell = (name: string) => cells[columns.indexOf(name)]?.trim() ?? '';
-  const id = cell('id');
-  const title = cell('idea');
-  const theme = cell('theme');
-  const layer = cell('layer');
-  const state = cell('state');
-  const question = cell('next question');
+  const cell = (name: string) => cells[columns.indexOf(name)]?.trim() ?? "";
+  const id = cell("id");
+  const title = cell("idea");
+  const theme = cell("theme");
+  const layer = cell("layer");
+  const state = cell("state");
+  const question = cell("next question");
   if (!/^IDEA-\d+$/.test(id)) return [];
   return [
     {
