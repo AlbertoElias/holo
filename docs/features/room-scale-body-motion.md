@@ -105,7 +105,7 @@ in `apps/capture/scripts/lib/body-fidelity.mjs`.
 - [x] Every behavior's metric fails when the behavior is broken
   (`BODY_REPLAY_FAULTS=1`: 12 of 12 caught).
 - [x] Identical results across runs locally and in the 2-vCPU container
-  (byte-identical samples, Linux and macOS alike); full CI tier pending below.
+  (byte-identical samples, Linux and macOS alike), and the full CI tier green.
 
 ## Failure cases considered
 
@@ -228,7 +228,8 @@ spine; feet raised 1 m with ground removed): each now fails.
 | Video and screenshots | `BODY_REPLAY_VIDEO=1 XR_CAPTURE_SUCCESS_SCREENSHOTS=1` | One MP4 and one final PNG per fixture (third person, tracked head path cyan, avatar eyes pink) |
 | Hands in device order | `test:xr:hands` | Passes; the old head read fails it at 2,082 cm (B-009) |
 | Determinism | Body and hands checks twice, concurrency 2; one replay three times | Byte-identical samples for all six replays |
-| Determinism and speed on 2 vCPU | `docker run --cpus=2 --memory=7g mcr.microsoft.com/playwright:v1.58.2-noble`, CI suites twice | Both runs pass: capture XR 200/196 s (body 140 s, two replays at once), viewer 49/42 s, pipeline 44/39 s; samples byte-identical between runs and with macOS |
+| Determinism and speed on 2 vCPU | `docker run --cpus=2 --memory=7g mcr.microsoft.com/playwright:v1.58.2-noble`, capture and viewer suites twice, after merging `main` | Both runs pass: capture XR 231/237 s (body ~140 s, two replays at once), viewer 93/88 s; samples byte-identical between runs and with macOS. The pipeline suite needs `usd-core`, which has no Linux ARM wheel, so it ran on GitHub's x64 runners instead |
+| Full CI tier on the branch | `gh workflow run ci.yml --ref claude/room-scale-body-motion` (run 39188138321) | Green: quality, unit, build, capture XR 127 s (body 56 s), viewer AR 5/5, pipeline 2/2 |
 
 Results on macOS after merging `main` (fixtures: walk forward/back/side, turn in place + arc, crouch
 and lean, small steps + sway, walk up the ramp):
