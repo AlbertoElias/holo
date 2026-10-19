@@ -59,20 +59,29 @@ function inputRecordingSinkPlugin(outputDir: string): Plugin {
   };
 }
 
-function preserveAvatarAssetPlugin(sourcePublicDir: string, tempPublicDir: string): Plugin {
-  const avatarSourcePath = path.resolve(sourcePublicDir, 'gltf/models/avatar.glb');
-  const distAvatarPath = path.resolve('dist/gltf/models/avatar.glb');
+// Assets the GLB optimizer must not rewrite. Its public-dir path ignores
+// `exclude`, so these are filtered out of the temp public dir and copied
+// verbatim at closeBundle (the optimizer's output also lands there).
+// - avatar.glb: optimization breaks the skinned avatar.
+// - scene.glb: optimization flips triangle winding (and mirrors some
+//   meshes), corrupting the physics trimesh built from the scene — floors
+//   become ceilings and the avatar falls through.
+const PRESERVED_MODEL_ASSETS = ['gltf/models/avatar.glb', 'gltf/models/scene.glb'] as const;
 
+function preserveModelAssetsPlugin(sourcePublicDir: string, tempPublicDir: string): Plugin {
   return {
-    name: 'capture-preserve-avatar-asset',
+    name: 'capture-preserve-model-assets',
     async buildEnd(error) {
       if (error && tempPublicDir !== sourcePublicDir) {
         await fs.rm(tempPublicDir, { recursive: true, force: true });
       }
     },
     async closeBundle() {
-      await fs.mkdir(path.dirname(distAvatarPath), { recursive: true });
-      await fs.copyFile(avatarSourcePath, distAvatarPath);
+      for (const asset of PRESERVED_MODEL_ASSETS) {
+        const distPath = path.resolve('dist', asset);
+        await fs.mkdir(path.dirname(distPath), { recursive: true });
+        await fs.copyFile(path.resolve(sourcePublicDir, asset), distPath);
+      }
       if (tempPublicDir !== sourcePublicDir) {
         await fs.rm(tempPublicDir, { recursive: true, force: true });
       }
@@ -88,7 +97,7 @@ export default defineConfig(async ({ command }) => {
           const filteredPublicDir = await fs.mkdtemp(path.join(os.tmpdir(), 'holoim-capture-public-'));
           await fs.cp(sourcePublicDir, filteredPublicDir, {
             recursive: true,
-            filter: (src) => src !== path.resolve(sourcePublicDir, 'gltf/models/avatar.glb')
+            filter: (src) => !PRESERVED_MODEL_ASSETS.some((asset) => src === path.resolve(sourcePublicDir, asset))
           });
           return filteredPublicDir;
         })()
@@ -109,7 +118,7 @@ export default defineConfig(async ({ command }) => {
           }
         : {})
     }),
-    preserveAvatarAssetPlugin(sourcePublicDir, tempPublicDir),
+    preserveModelAssetsPlugin(sourcePublicDir, tempPublicDir),
     inputRecordingSinkPlugin(path.resolve('fixtures/input-recordings')),
     optimizeGLTF({
       level: 'medium'
