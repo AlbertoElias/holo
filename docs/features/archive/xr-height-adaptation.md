@@ -3,6 +3,9 @@
 **Lead:** Codex height owner  
 **Status:** Complete
 
+**Follow-up:** [Explicit height refit and actual full-body visual evidence](xr-height-refit.md)
+replaces the original UI-only screenshots and adds same-session posture refitting.
+
 ## User outcome
 
 In immersive VR, the avatar fits the person's initial neutral eye height while

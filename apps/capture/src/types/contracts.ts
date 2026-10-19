@@ -97,6 +97,7 @@ export interface UiViewModel {
   warning: string | null;
   recordingState: 'idle' | 'recording' | 'exporting';
   recordingMessage: string | null;
+  heightFit: { enabled: boolean; pending: boolean; eyeHeight: number | null };
   micPermission: 'pending' | 'granted' | 'denied';
 }
 

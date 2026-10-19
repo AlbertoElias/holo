@@ -18,12 +18,13 @@ interface State {
   heightAdaptation: {
     eyeHeight: number | null; scale: number; avatarHeight: number;
     minY: number; baseWorldY: number; eyeWorld: Vec; headWorld: Vec;
-    floorHead: Vec | null; recordingSizeLocked: boolean;
+    refitPending: boolean; floorHead: Vec | null; recordingSizeLocked: boolean;
   };
   tracking: Record<'left' | 'right', { targetPosition: Vec; bonePosition: Vec; poseValid: boolean }>;
 }
 declare global {
 interface Window {
+  __setHeightEvidenceView(enabled: boolean): void;
   __setManualClock(enabled: boolean, draw?: boolean): void;
   advanceTime(ms: number): void;
   render_game_to_text(): string;
@@ -31,7 +32,7 @@ interface Window {
     controlMode: 'manual' | 'programmatic';
     position: { set(x: number, y: number, z: number): void };
     activeSession: XRSession;
-    controllers: Record<'left' | 'right', { connected: boolean; position: { set(x: number, y: number, z: number): void } }>;
+    controllers: Record<'left' | 'right', { connected: boolean; updateButtonValue(id: string, value: number): void; quaternion: { set(x: number, y: number, z: number, w: number): void }; position: { set(x: number, y: number, z: number): void } }>;
   };
   __heightSpace?: XRReferenceSpace;
   __heightPoseMissing?: boolean;
@@ -40,6 +41,7 @@ interface Window {
 }
 }
 type HeightWindow = Window;
+const visualEvidence = process.env.XR_HEIGHT_VISUALS === '1';
 const artifacts = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-xr-height';
 await mkdir(artifacts, { recursive: true });
 const reports: unknown[] = [];
@@ -86,6 +88,45 @@ async function frames(page: Page, count: number): Promise<State> {
   }
   return sample(page);
 }
+async function captureAvatar(page: Page, name: string): Promise<void> {
+  if (!visualEvidence) return;
+  await page.evaluate(() => {
+    const app = window as HeightWindow;
+    app.__setHeightEvidenceView(true);
+    app.__setManualClock(true, true);
+    // Remove app/emulator HTML chrome only; the live avatar is drawn by Three.
+    for (const element of document.querySelectorAll<HTMLElement>('#ui-root, #VRButton, #ARButton, [data-webxr_runtime] > div')) element.style.visibility = 'hidden';
+  });
+  await page.clock.runFor(34);
+  await page.screenshot({ path: path.join(artifacts, `${name}.png`) });
+  await page.evaluate(() => {
+    const app = window as HeightWindow;
+    app.__setHeightEvidenceView(false);
+    app.__setManualClock(true, false);
+    for (const element of document.querySelectorAll<HTMLElement>('#ui-root, #VRButton, #ARButton, [data-webxr_runtime] > div')) element.style.visibility = '';
+  });
+}
+async function clickRefit(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Refit height', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+}
+async function selectRefitInVr(page: Page, height: number): Promise<void> {
+  await page.evaluate((y) => {
+    const app = window as HeightWindow;
+    // Opposite controller deliberately points at Record: selecting Right must
+    // use only Right's ray, otherwise a refit unexpectedly starts recording.
+    app.IWER_DEVICE.controllers.left.position.set(0.35, y - 0.15, -0.25);
+    app.IWER_DEVICE.controllers.left.quaternion.set(0, 0, 0, 1);
+    const controller = app.IWER_DEVICE.controllers.right;
+    controller.position.set(0.35, y - 0.32, -0.25);
+    controller.quaternion.set(0, 0, 0, 1);
+  }, height);
+  await frames(page, 3);
+  await page.evaluate(() => (window as HeightWindow).IWER_DEVICE.controllers.right.updateButtonValue('trigger', 1));
+  await frames(page, 2);
+  await page.evaluate(() => (window as HeightWindow).IWER_DEVICE.controllers.right.updateButtonValue('trigger', 0));
+  await frames(page, 2);
+}
+
 async function pose(page: Page, y: number): Promise<void> {
   await page.evaluate((height) => (window as HeightWindow).IWER_DEVICE.position.set(0.35, height, -0.25), y);
   await page.clock.runFor(34);
@@ -96,7 +137,7 @@ function near(actual: number, expected: number, tolerance: number, label: string
 
 try {
   for (const [label, height, assetScale] of [['short', 1.25, 1], ['tall', 2.05, 1.3], ['seated', 0.95, 0.7]] as const) {
-    const context = await createXrContext(browser, { viewport: { width: 640, height: 480 } });
+    const context = await createXrContext(browser, { viewport: visualEvidence ? { width: 1000, height: 1056 } : { width: 320, height: 180 } });
     const page: Page = await context.newPage();
     wireXrConsoleErrors(page, errors, { label });
     await attachXrEnvironment(page, { mode: 'iwer' });
@@ -199,7 +240,36 @@ try {
     await pose(page, height);
     await frames(page, 45);
     console.log(`[xr-height] ${label}: scale and tracking checks passed`);
-    await page.screenshot({ path: path.join(artifacts, `${label}.png`) });
+    await clickRefit(page);
+    const awaiting = await frames(page, 15);
+    near(awaiting.heightAdaptation.scale, scale, 1e-8, 'pending refit keeps size');
+    assert(awaiting.heightAdaptation.refitPending, 'pending refit remains explicit');
+    await page.evaluate(() => { (window as HeightWindow).__heightPoseMissing = true; });
+    await frames(page, 40);
+    await page.evaluate(() => { (window as HeightWindow).__heightPoseMissing = false; });
+    const refitted = await frames(page, 40);
+    assert(!refitted.heightAdaptation.refitPending, 'stable refit completed');
+    near(refitted.crouch.amount, 0, 0.01, 'refit sets new neutral baseline');
+    await captureAvatar(page, label);
+    if (label === 'seated') {
+      await pose(page, 1.65);
+      await frames(page, 40);
+      near((await sample(page)).heightAdaptation.scale, scale, 1e-8, 'standing alone keeps size');
+      await selectRefitInVr(page, 1.65);
+      const vrRequested = await sample(page);
+      assert(vrRequested.heightAdaptation.refitPending, 'real VR select activates refit surface');
+      near(vrRequested.heightAdaptation.eyeHeight ?? 0, height, 0.01, 'pending VR refit keeps committed height');
+      const standingFit = await frames(page, 40);
+      near(standingFit.heightAdaptation.eyeHeight ?? 0, 1.65, 0.01, 'same session seated to standing');
+      await captureAvatar(page, 'refit-standing');
+      await pose(page, height);
+      await clickRefit(page);
+      const seatedFit = await frames(page, 40);
+      near(seatedFit.heightAdaptation.eyeHeight ?? 0, height, 0.01, 'same session standing to seated');
+      near(seatedFit.heightAdaptation.baseWorldY - seatedFit.character.position.y, baseToBody, 0.001, 'refit preserves grounding');
+      await captureAvatar(page, 'refit-seated-again');
+      reports.push({ stage: 'explicit-refit', awaiting, refitted, vrRequested, standingFit, seatedFit });
+    }
     if (label === 'tall') {
       // The actual recording/export path must keep its starting scale even
       // when XR ends before the asynchronous export has cloned the asset.
@@ -215,6 +285,9 @@ try {
       await frames(page, 12);
       const recording = await sample(page);
       assert(recording.heightAdaptation.recordingSizeLocked);
+      assert(await page.getByRole('button', { name: 'Refit height', exact: true }).isDisabled(), 'recording startup disables refit');
+      await page.getByRole('button', { name: 'Refit height', exact: true }).dispatchEvent('click');
+      assert(!(await sample(page)).heightAdaptation.refitPending, 'recording handler rejects synthetic refit click');
       await page.evaluate(() => (window as HeightWindow).IWER_DEVICE.activeSession.end());
       const recordedExit = await frames(page, 4);
       near(recordedExit.heightAdaptation.scale, scale, 1e-8, 'recording exit size lock');
@@ -252,6 +325,14 @@ try {
     console.log(`[xr-height] ${label}: calibrated, crouched, reset, exited, reentered`);
   }
   assert.deepEqual(errors, [], 'browser console errors');
+  if (visualEvidence) {
+  const comparison: Page = await browser.newPage({ viewport: { width: 1200, height: 460 } });
+  for (const [name, images] of [['height-comparison', ['short', 'tall', 'seated']], ['refit-sequence', ['seated', 'refit-standing', 'refit-seated-again']]] as const) {
+    const panels = await Promise.all(images.map(async (file) => `<img alt="${file}" src="data:image/png;base64,${(await readFile(path.join(artifacts, `${file}.png`))).toString('base64')}">`));
+    await comparison.setContent(`<html><body style="margin:0;background:#182531;color:white;font:18px sans-serif"><div style="padding:10px;text-align:center">${name === 'refit-sequence' ? 'Same avatar and XR session: seated fit → Refit height standing → Refit height seated' : 'Actual live avatars · identical meter scale and framing'}</div><div style="display:flex">${panels.join('')}</div><style>img{width:400px;height:422px;object-fit:contain}</style></body></html>`, { waitUntil: 'load' });
+    await comparison.screenshot({ path: path.join(artifacts, `${name}.png`) });
+  }
+  }
 } finally {
   await writeFile(path.join(artifacts, 'height-report.json'), JSON.stringify({ reports, errors }, null, 2));
   await browser.close();

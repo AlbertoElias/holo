@@ -6,6 +6,7 @@ import { AvatarRig, type ArmIkChain, type HandFingerRetargetChain } from '../ava
 import { palmFrameQuaternion } from '../xr/palmFrame';
 import { CharacterMotor } from '../physics/CharacterMotor';
 import { CameraController } from '../camera/CameraController';
+import { HeightEvidenceView } from '../debug/HeightEvidenceView';
 import { XrHeightCalibration } from '../xr/XrHeightCalibration';
 import { XrSessionService } from '../xr/XrSessionService';
 import { HandFingerRetargeter } from '../xr/HandFingerRetargeter';
@@ -162,6 +163,7 @@ export class AppOrchestrator implements System {
   private drawFrames = true;
   private inputRecording: InputRecordingSession | null = null;
   private handOverlay: THREE.InstancedMesh | null = null;
+  private heightEvidenceView: HeightEvidenceView | null = null;
   private spectatorCamera: THREE.PerspectiveCamera | null = null;
   private readonly overlayMatrix = new THREE.Matrix4();
   private activeXrSession: XRSession | null = null;
@@ -403,6 +405,7 @@ export class AppOrchestrator implements System {
 
   private async startRecording(): Promise<void> {
     this.recordingSizeLocked = true;
+    this.heightCalibration.interrupt();
     this.recorder.clear();
     this.recorder.setEnabled(true);
     await this.startInputRecording();
@@ -490,25 +493,18 @@ export class AppOrchestrator implements System {
       this.bootstrap.renderer.xr.getController(0),
       this.bootstrap.renderer.xr.getController(1)
     ];
-    const handler = (): void => {
-      if (!this.xrService.isXrPresenting()) return;
-      const panel = this.vrHud.getRecordingPanel();
-      if (panel) {
-        for (const ctrl of controllers) {
-          if (panel.isPointerOverAction(ctrl)) {
-            this.toggleRecording();
-            return;
-          }
-        }
-      }
-    };
-    for (const ctrl of controllers) {
-      ctrl.addEventListener('select', handler);
-    }
+    const bindings = controllers.map((controller) => {
+      const handler = (): void => {
+        if (!this.xrService.isXrPresenting()) return;
+        const panel = this.vrHud.getRecordingPanel();
+        if (panel?.isPointerOverRefit(controller)) this.requestHeightRefit();
+        else if (panel?.isPointerOverAction(controller)) this.toggleRecording();
+      };
+      controller.addEventListener('select', handler);
+      return { controller, handler };
+    });
     this.xrSelectUnsubscribe = () => {
-      for (const ctrl of controllers) {
-        ctrl.removeEventListener('select', handler);
-      }
+      for (const { controller, handler } of bindings) controller.removeEventListener('select', handler);
       this.xrSelectUnsubscribe = null;
     };
   }
@@ -563,6 +559,10 @@ export class AppOrchestrator implements System {
 
   // Debug view for recordings: after the XR frame, redraw the page canvas from
   // a camera facing the avatar so its whole upper body and hands are visible.
+  setHeightEvidenceView(enabled: boolean): void {
+    this.heightEvidenceView = enabled ? new HeightEvidenceView() : null;
+  }
+
   setSpectatorView(enabled: boolean): void {
     this.spectatorCamera = enabled ? (this.spectatorCamera ?? new THREE.PerspectiveCamera(38, 16 / 9, 0.01, 200)) : null;
   }
@@ -573,6 +573,10 @@ export class AppOrchestrator implements System {
   private renderSpectatorView(): void {
     const spectator = this.spectatorCamera;
     const renderer = this.bootstrap.renderer;
+    if (this.heightEvidenceView && renderer.xr.isPresenting) {
+      this.heightEvidenceView.render(renderer, this.bootstrap.scene, this.bootstrap.worldGroup, this.avatarRig, this.xrService.getHeadWorldPosition(new THREE.Vector3()), this.vrHud.getRecordingPanel()?.group);
+      return;
+    }
     if (!spectator || !renderer.xr.isPresenting) return;
     const width = renderer.domElement.width / renderer.getPixelRatio();
     const height = renderer.domElement.height / renderer.getPixelRatio();
@@ -699,6 +703,7 @@ export class AppOrchestrator implements System {
         eyeWorld: this.avatarRig.getEyeAnchorWorldPosition(new THREE.Vector3(), 0),
         headWorld: this.xrService.getHeadWorldPosition(new THREE.Vector3()),
         floorHead: this.xrService.getFloorHeadPosition() ?? null,
+        refitPending: this.heightCalibration.refitting,
         recordingSizeLocked: this.recordingSizeLocked
       },
       mockVr: this.xrService.getMockSnapshot()
@@ -827,6 +832,14 @@ export class AppOrchestrator implements System {
     this.resetFingerQuatFallbackCalibration();
   }
 
+  requestHeightRefit(): boolean {
+    if (!this.xrService.isXrPresenting() || this.bootstrap.xrSessionMode !== 'vr' || this.xrService.getMockSnapshot().enabled || this.recordingSizeLocked) return false;
+    if (this.heightCalibration.refitting || this.heightCalibration.eyeHeight === undefined) return false;
+    this.heightCalibration.requestRefit();
+    this.uiStore.setHeightFit({ enabled: false, pending: true, eyeHeight: this.heightCalibration.eyeHeight ?? null });
+    return true;
+  }
+
   private updateHeightAdaptation(deltaSec: number, isPresenting: boolean): void {
     const realVr = isPresenting && !this.xrService.getMockSnapshot().enabled;
     const pose = realVr ? this.xrService.getFloorHeadPosition() : undefined;
@@ -837,13 +850,25 @@ export class AppOrchestrator implements System {
       this.camera.reanchorFloorOrigin();
       this.resetVrStandingHeadBaseline();
     }
-    if (!realVr) this.heightCalibration.reset();
+    if (!realVr) {
+      this.heightCalibration.reset();
+    }
     let scaleRatio = 1;
     if (!this.recordingSizeLocked) {
       if (!realVr) scaleRatio = this.avatarRig.setXrEyeHeight(undefined);
       else {
+        const wasRefitting = this.heightCalibration.refitting;
         const height = this.heightCalibration.update(pose?.y, deltaSec);
-        if (height !== undefined) scaleRatio = this.avatarRig.setXrEyeHeight(height);
+        if (height !== undefined) {
+          scaleRatio = this.avatarRig.setXrEyeHeight(height);
+          this.camera.reanchorFloorOrigin();
+          this.vrStandingHeadY = height;
+          this.vrStandingCaptured = true;
+          if (wasRefitting) {
+            this.crouchAmount = this.crouchPoseAmount = this.crouchTarget = 0;
+            this.crouchSource = 'none';
+          }
+        }
       }
     }
     if (scaleRatio !== 1) {
@@ -856,6 +881,7 @@ export class AppOrchestrator implements System {
       }
     }
     this.camera.setFloorHeightMapped(realVr && this.heightCalibration.eyeHeight !== undefined, pose);
+    this.uiStore.setHeightFit({ enabled: realVr && !this.recordingSizeLocked && !this.heightCalibration.refitting && this.heightCalibration.eyeHeight !== undefined, pending: realVr && (this.heightCalibration.eyeHeight === undefined || this.heightCalibration.refitting), eyeHeight: this.heightCalibration.eyeHeight ?? null });
   }
 
   private updateCrouchState(deltaSec: number, isVrActive: boolean): void {
