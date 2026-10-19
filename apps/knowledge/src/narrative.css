@@ -173,7 +173,7 @@ summary {
 .scene-volume {
   position: absolute;
   inset: 15px;
-  transform-style: preserve-3d;
+  transform-style: flat;
   transition: transform 0.3s;
 }
 .scene-floor {
