@@ -1,0 +1,302 @@
+{
+  "sdk": "1.0.1",
+  "classification": "IWER compatibility; no headset performance measurement",
+  "systems": {
+    "systems": [
+      {
+        "name": "InputSystem",
+        "index": 0,
+        "priority": -4,
+        "isPaused": false,
+        "configKeys": [
+          "maintainScenePointers"
+        ],
+        "queryNames": [
+          "rayInteractables",
+          "pokeInteractables",
+          "oneHandGrabbables",
+          "twoHandsGrabbables",
+          "distanceGrabbables"
+        ],
+        "entityCounts": {
+          "rayInteractables": 0,
+          "pokeInteractables": 0,
+          "oneHandGrabbables": 0,
+          "twoHandsGrabbables": 0,
+          "distanceGrabbables": 0
+        }
+      },
+      {
+        "name": "TransformSystem",
+        "index": 1,
+        "priority": 0,
+        "isPaused": false,
+        "configKeys": [],
+        "queryNames": [
+          "transform"
+        ],
+        "entityCounts": {
+          "transform": 12
+        }
+      },
+      {
+        "name": "VisibilitySystem",
+        "index": 2,
+        "priority": 0,
+        "isPaused": false,
+        "configKeys": [],
+        "queryNames": [
+          "visibility"
+        ],
+        "entityCounts": {
+          "visibility": 12
+        }
+      },
+      {
+        "name": "EnvironmentSystem",
+        "index": 3,
+        "priority": 0,
+        "isPaused": false,
+        "configKeys": [],
+        "queryNames": [
+          "domeTextures",
+          "domeGradients",
+          "iblTextures",
+          "iblGradients"
+        ],
+        "entityCounts": {
+          "domeTextures": 0,
+          "domeGradients": 0,
+          "iblTextures": 0,
+          "iblGradients": 0
+        }
+      },
+      {
+        "name": "LightSystem",
+        "index": 4,
+        "priority": 0,
+        "isPaused": false,
+        "configKeys": [],
+        "queryNames": [
+          "ambientLights",
+          "directionalLights",
+          "hemisphereLights",
+          "pointLights",
+          "rectAreaLights",
+          "spotLights"
+        ],
+        "entityCounts": {
+          "ambientLights": 0,
+          "directionalLights": 0,
+          "hemisphereLights": 0,
+          "pointLights": 0,
+          "rectAreaLights": 0,
+          "spotLights": 0
+        }
+      },
+      {
+        "name": "LevelSystem",
+        "index": 5,
+        "priority": 0,
+        "isPaused": false,
+        "configKeys": [],
+        "queryNames": [
+          "levelEntities"
+        ],
+        "entityCounts": {
+          "levelEntities": 1
+        }
+      },
+      {
+        "name": "CaptureSystem",
+        "index": 6,
+        "priority": 10,
+        "isPaused": false,
+        "configKeys": [],
+        "queryNames": [
+          "captures"
+        ],
+        "entityCounts": {
+          "captures": 1
+        }
+      }
+    ],
+    "total": 7
+  },
+  "entity": {
+    "entityIndex": 12,
+    "active": true,
+    "components": [
+      {
+        "componentId": "CaptureState",
+        "values": {
+          "steps": 4,
+          "elapsedSec": 1.2927999999523163,
+          "mode": "desktop-third",
+          "x": 0.00005053364293416962,
+          "y": 22.1997013092041,
+          "z": -0.000018106899005942978,
+          "grounded": true,
+          "recording": "idle"
+        }
+      }
+    ]
+  },
+  "diff": {
+    "from": "before-step",
+    "to": "after-step",
+    "frameDelta": 1,
+    "timeDelta": 43.10000002384186,
+    "entities": [
+      {
+        "entityIndex": 12,
+        "status": "changed",
+        "components": [
+          {
+            "componentId": "CaptureState",
+            "status": "changed",
+            "fields": [
+              {
+                "field": "steps",
+                "from": 10,
+                "to": 11
+              },
+              {
+                "field": "elapsedSec",
+                "from": 3.715,
+                "to": 3.7316666666666665
+              },
+              {
+                "field": "x",
+                "from": 0.00015156438166741282,
+                "to": 0.00016833038534969091
+              },
+              {
+                "field": "y",
+                "from": 22.20029640197754,
+                "to": 22.200395584106445
+              },
+              {
+                "field": "z",
+                "from": -0.00005463491106638685,
+                "to": -0.00006087238944019191
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "added": 0,
+      "removed": 0,
+      "changed": 1
+    }
+  },
+  "pause": {
+    "paused": {
+      "steps": 10,
+      "elapsedSec": 3.715,
+      "mode": "desktop-third",
+      "x": 0.00015156438166741282,
+      "y": 22.20029640197754,
+      "z": -0.00005463491106638685,
+      "grounded": true,
+      "recording": "recording",
+      "recordedFrames": 4,
+      "lastRecordedTimeSec": 3.715
+    },
+    "stepped": {
+      "steps": 11,
+      "elapsedSec": 3.7316666666666665,
+      "mode": "desktop-third",
+      "x": 0.00016833038534969091,
+      "y": 22.200395584106445,
+      "z": -0.00006087238944019191,
+      "grounded": true,
+      "recording": "recording",
+      "recordedFrames": 5,
+      "lastRecordedTimeSec": 3.7316666666666665
+    }
+  },
+  "movement": {
+    "before": {
+      "steps": 11,
+      "elapsedSec": 3.7316666666666665,
+      "mode": "desktop-third",
+      "x": 0.00016833038534969091,
+      "y": 22.200395584106445,
+      "z": -0.00006087238944019191,
+      "grounded": true,
+      "recording": "recording",
+      "recordedFrames": 5,
+      "lastRecordedTimeSec": 3.7316666666666665
+    },
+    "after": {
+      "steps": 56,
+      "elapsedSec": 4.481666666666664,
+      "mode": "desktop-third",
+      "x": 0.0013802400790154934,
+      "y": 20.7225341796875,
+      "z": -2.38812518119812,
+      "grounded": false,
+      "recording": "recording",
+      "recordedFrames": 50,
+      "lastRecordedTimeSec": 4.481666666666664
+    }
+  },
+  "resumed": {
+    "steps": 57,
+    "elapsedSec": 4.514999999999997,
+    "mode": "desktop-third",
+    "x": 0.0013802400790154934,
+    "y": 20.558717727661133,
+    "z": -2.38812518119812,
+    "grounded": false,
+    "recording": "recording",
+    "recordedFrames": 51,
+    "lastRecordedTimeSec": 4.514999999999997
+  },
+  "export": {
+    "bytes": 1885236,
+    "animations": 1,
+    "skins": 10
+  },
+  "xrEntered": {
+    "steps": 99,
+    "elapsedSec": 9.438600000023838,
+    "mode": "vr",
+    "x": -0.0007940414361655712,
+    "y": 19.76523780822754,
+    "z": -2.3885350227355957,
+    "grounded": true,
+    "recording": "idle",
+    "recordedFrames": 0,
+    "lastRecordedTimeSec": null
+  },
+  "xrReentered": {
+    "steps": 117,
+    "elapsedSec": 12.408999999999995,
+    "mode": "vr",
+    "x": 0.9535923004150391,
+    "y": 20.144515991210938,
+    "z": -0.7343018054962158,
+    "grounded": true,
+    "recording": "idle",
+    "recordedFrames": 0,
+    "lastRecordedTimeSec": null
+  },
+  "renderer": {
+    "frame": 125,
+    "calls": 33,
+    "triangles": 23074,
+    "points": 0,
+    "lines": 0,
+    "memory": {
+      "geometries": 60,
+      "textures": 31
+    }
+  },
+  "errors": [],
+  "defaultEntry": "custom runtime preserved",
+  "result": "pass"
+}

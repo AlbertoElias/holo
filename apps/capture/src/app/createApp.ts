@@ -10,8 +10,11 @@ export interface AppRuntime {
   uiBridge: CaptureUiBridge;
 }
 
-export function createApp(): AppRuntime {
-  const orchestrator = new AppOrchestrator();
+export function createApp(options: {
+  orchestrator?: AppOrchestrator;
+  externalFrameLoop?: boolean;
+} = {}): AppRuntime {
+  const orchestrator = options.orchestrator ?? new AppOrchestrator();
   const debugBridge = new DebugBridge({
     renderGameToText: () => orchestrator.renderGameToText(),
     advanceTime: (ms) => orchestrator.advanceTime(ms),
@@ -39,9 +42,11 @@ export function createApp(): AppRuntime {
     start: async () => {
       debugBridge.init();
       await orchestrator.init();
-      orchestrator.setAnimationLoop((_time, frame) => {
-        orchestrator.onRealtimeFrame(frame);
-      });
+      if (!options.externalFrameLoop) {
+        orchestrator.setAnimationLoop((_time, frame) => {
+          orchestrator.onRealtimeFrame(frame);
+        });
+      }
     },
     tick: (deltaSec: number) => {
       orchestrator.tick(deltaSec);

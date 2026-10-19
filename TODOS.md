@@ -55,9 +55,10 @@ it from the item below instead of duplicating its status here.
 
 ## Later
 
-- [ ] Evaluate IWSDK-native ECS/scene composition only when a concrete authoring
-  workflow requires it; the current tooling integration intentionally preserves
-  HoloIM's custom Three/Rapier runtime.
+- [ ] After the locomotion and height-adaptation fixes land, evaluate the real
+  IWSDK runtime refactor using [the isolated prototype](docs/IWSDK_RUNTIME_PROTOTYPE.md).
+  Rebase it on the finished movement work, verify height/hand/export compatibility,
+  measure physical Quest performance, and identify custom infrastructure to delete.
 - [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.
   Set up as the opt-in `metavr` MCP server in

@@ -118,6 +118,9 @@ export default defineConfig(async ({ command }) => {
 
   return {
     plugins: buildPlugins,
+    // Capture's UI package and IWSDK must share the schema-capable UIKit build.
+    // Otherwise Vite can prebundle the older transitive package under this name.
+    resolve: { dedupe: ['@pmndrs/uikit'] },
     publicDir: tempPublicDir,
     server: {
       host: '0.0.0.0'

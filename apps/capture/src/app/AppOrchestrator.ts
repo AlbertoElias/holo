@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { createSceneBootstrap } from '../scene/SceneBootstrap';
+import { createSceneBootstrap, type SceneBootstrap } from '../scene/SceneBootstrap';
 import { loadRuntimeConfig } from '../config/runtimeConfig';
 import { AvatarRig, type ArmIkChain, type HandFingerRetargetChain } from '../avatar/AvatarRig';
 import { palmFrameQuaternion } from '../xr/palmFrame';
@@ -69,55 +69,17 @@ const FINGER_DEBUG_BONES: Readonly<Record<VrHandSide, { thumb: string; index: st
 };
 
 export class AppOrchestrator implements System {
+  private readonly bootstrap: SceneBootstrap;
+  private readonly externalPresentation: ((camera: THREE.PerspectiveCamera) => void) | undefined;
   private readonly config = loadRuntimeConfig();
-  private readonly bootstrap = createSceneBootstrap();
-  private readonly avatarRig = new AvatarRig(this.bootstrap.scene, this.bootstrap.worldGroup, this.bootstrap.renderer);
+  private readonly avatarRig: AvatarRig;
+
   private readonly characterMotor = new CharacterMotor();
-  private readonly camera = new CameraController({
-    renderer: this.bootstrap.renderer,
-    xrCamera: this.bootstrap.xrCamera,
-    desktopCamera: this.bootstrap.desktopCamera,
-    cameraRig: this.bootstrap.cameraRig,
-    avatarRig: this.avatarRig,
-    embodyOffset: this.config.embodyOffset
-  });
+  private readonly camera: CameraController;
 
-  private readonly xrService = new XrSessionService(
-    this.bootstrap.renderer,
-    this.config.mockVrEnabledFromQuery,
-    () => this.avatarRig.avatarHeight,
-    {
-      handPitchDeg: this.config.handTrackPitchDeg,
-      handYawDeg: this.config.handTrackYawDeg,
-      handRollDeg: this.config.handTrackRollDeg,
-      handInwardYawDeg: this.config.handTrackInwardYawDeg,
-      controllerPitchDeg: this.config.controllerTrackPitchDeg,
-      controllerYawDeg: this.config.controllerTrackYawDeg,
-      controllerRollDeg: this.config.controllerTrackRollDeg
-    }
-  );
+  private readonly xrService: XrSessionService;
 
-  private readonly input = new InputController({
-    domElement: this.bootstrap.renderer.domElement,
-    isXrPresenting: () => this.xrService.isXrPresenting(),
-    getDesktopViewMode: () => this.camera.desktopViewMode,
-    setDesktopViewMode: (mode) => {
-      this.camera.desktopViewMode = mode;
-    },
-    getLookYaw: () => this.camera.lookYaw,
-    setLookYaw: (value) => {
-      this.camera.lookYaw = value;
-    },
-    getThirdPersonPitch: () => this.camera.thirdPersonPitch,
-    setThirdPersonPitch: (value) => {
-      this.camera.thirdPersonPitch = this.camera.clampThirdPersonPitch(value);
-    },
-    getFirstPersonPitch: () => this.camera.firstPersonPitch,
-    setFirstPersonPitch: (value) => {
-      this.camera.firstPersonPitch = this.camera.clampFirstPersonPitch(value);
-    },
-    onRecordToggle: () => this.toggleRecording()
-  });
+  private readonly input: InputController;
 
   private readonly ikSolver = new ArmIkSolver();
   private readonly animator = new LocomotionAnimator();
@@ -128,9 +90,8 @@ export class AppOrchestrator implements System {
 
   private readonly armIkChains: Partial<Record<VrHandSide, ArmIkChain>> = {};
   private readonly fingerRetargetChains: Partial<Record<VrHandSide, HandFingerRetargetChain>> = {};
-  private readonly fingerRetargeter = new HandFingerRetargeter(this.xrService, {
-    twistGain: this.config.handFingerCurlGain
-  });
+  private readonly fingerRetargeter: HandFingerRetargeter;
+
   private readonly fingerQuatFallbackCalibration: Record<VrHandSide, Map<string, FingerQuatFallbackCalibrationState>> = {
     left: new Map(),
     right: new Map()
@@ -150,6 +111,7 @@ export class AppOrchestrator implements System {
   private vrStandingCaptured = false;
 
   private elapsedSec = 0;
+  private simulationSteps = 0;
   private started = false;
   // Automation can own the clock so wall-clock frames never mutate state
   // between deterministic steps. Realtime remains the default.
@@ -181,6 +143,58 @@ export class AppOrchestrator implements System {
   private readonly onNativeXrSessionEnded = (): void => {
     this.input.onXrSessionEnded();
   };
+
+  constructor(bootstrap: SceneBootstrap = createSceneBootstrap(), externalPresentation?: (camera: THREE.PerspectiveCamera) => void) {
+    this.bootstrap = bootstrap;
+    this.externalPresentation = externalPresentation;
+    this.avatarRig = new AvatarRig(this.bootstrap.scene, this.bootstrap.worldGroup, this.bootstrap.renderer);
+    this.camera = new CameraController({
+      renderer: this.bootstrap.renderer,
+      xrCamera: this.bootstrap.xrCamera,
+      desktopCamera: this.bootstrap.desktopCamera,
+      cameraRig: this.bootstrap.cameraRig,
+      avatarRig: this.avatarRig,
+      embodyOffset: this.config.embodyOffset
+    });
+    this.xrService = new XrSessionService(
+      this.bootstrap.renderer,
+      this.config.mockVrEnabledFromQuery,
+      () => this.avatarRig.avatarHeight,
+      {
+        handPitchDeg: this.config.handTrackPitchDeg,
+        handYawDeg: this.config.handTrackYawDeg,
+        handRollDeg: this.config.handTrackRollDeg,
+        handInwardYawDeg: this.config.handTrackInwardYawDeg,
+        controllerPitchDeg: this.config.controllerTrackPitchDeg,
+        controllerYawDeg: this.config.controllerTrackYawDeg,
+        controllerRollDeg: this.config.controllerTrackRollDeg
+      }
+    );
+    this.input = new InputController({
+      domElement: this.bootstrap.renderer.domElement,
+      isXrPresenting: () => this.xrService.isXrPresenting(),
+      getDesktopViewMode: () => this.camera.desktopViewMode,
+      setDesktopViewMode: (mode) => {
+        this.camera.desktopViewMode = mode;
+      },
+      getLookYaw: () => this.camera.lookYaw,
+      setLookYaw: (value) => {
+        this.camera.lookYaw = value;
+      },
+      getThirdPersonPitch: () => this.camera.thirdPersonPitch,
+      setThirdPersonPitch: (value) => {
+        this.camera.thirdPersonPitch = this.camera.clampThirdPersonPitch(value);
+      },
+      getFirstPersonPitch: () => this.camera.firstPersonPitch,
+      setFirstPersonPitch: (value) => {
+        this.camera.firstPersonPitch = this.camera.clampFirstPersonPitch(value);
+      },
+      onRecordToggle: () => this.toggleRecording()
+    });
+    this.fingerRetargeter = new HandFingerRetargeter(this.xrService, {
+      twistGain: this.config.handFingerCurlGain
+    });
+  }
 
   async init(): Promise<void> {
     this.xrService.mountToScene(this.bootstrap.scene, this.bootstrap.cameraRig);
@@ -348,7 +362,8 @@ export class AppOrchestrator implements System {
   }
 
   private present(camera: THREE.PerspectiveCamera): void {
-    if (this.drawFrames) {
+    this.externalPresentation?.(camera);
+    if (this.drawFrames && !this.externalPresentation) {
       this.bootstrap.renderer.render(this.bootstrap.scene, camera);
       this.renderSpectatorView();
       return;
@@ -530,13 +545,14 @@ export class AppOrchestrator implements System {
   }
 
   tick(deltaSec: number): void {
+    this.simulationSteps += 1;
     this.elapsedSec += deltaSec;
     this.update({ deltaSec, elapsedSec: this.elapsedSec, mode: this.resolveAppMode() });
   }
 
-  onRealtimeFrame(frame?: XRFrame): void {
+  onRealtimeFrame(frame?: XRFrame, suppliedDeltaSec?: number): void {
     if (frame && this.inputRecording) this.inputRecording.recordFrame(frame);
-    const deltaSec = this.bootstrap.clock.getDelta();
+    const deltaSec = suppliedDeltaSec ?? this.bootstrap.clock.getDelta();
     if (this.manualClock) {
       // Simulation is paused for automation; keep displaying its state unless
       // the caller only needs frames to deliver XR input. Either way the frame
@@ -699,6 +715,21 @@ export class AppOrchestrator implements System {
     };
 
     return JSON.stringify(payload);
+  }
+
+  getSimulationSnapshot(): {
+    steps: number; elapsedSec: number; mode: AppMode;
+    x: number; y: number; z: number; grounded: boolean; recording: UiViewModel['recordingState'];
+    recordedFrames: number; lastRecordedTimeSec: number | null;
+  } {
+    const character = this.characterMotor.getSnapshot();
+    const frames = this.recorder.getFrames();
+    return {
+      steps: this.simulationSteps, elapsedSec: this.elapsedSec, mode: this.resolveAppMode(),
+      x: character.position.x, y: character.position.y, z: character.position.z,
+      grounded: character.grounded, recording: this.uiStore.getState().recordingState,
+      recordedFrames: frames.length, lastRecordedTimeSec: frames.at(-1)?.timeSec ?? null
+    };
   }
 
   private getFingerDebugLocalQuaternions(side: VrHandSide): { thumb: QuatLike | null; index: QuatLike | null; middle: QuatLike | null } {
