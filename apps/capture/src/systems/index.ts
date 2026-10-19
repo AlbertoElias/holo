@@ -18,14 +18,8 @@ import { XrSessionSystem } from './XrSessionSystem';
 // owns; the order is the frame contract: input before pose math, the record
 // after the final pose, the draw (FrameLoop) after simulation.
 export function registerCaptureSystems(world: World): void {
-  const capture = world.createEntity();
-  for (const component of CAPTURE_COMPONENTS) {
-    world.registerComponent(component);
-    capture.addComponent(component);
-  }
   world
     .registerSystem(SimulationClockSystem, { priority: 0 })
-    .registerSystem(CaptureControlSystem, { priority: 5 })
     .registerSystem(XrSessionSystem, { priority: 10 })
     .registerSystem(RoomScaleSystem, { priority: 20 })
     .registerSystem(CalibrationSystem, { priority: 30 })
@@ -35,6 +29,19 @@ export function registerCaptureSystems(world: World): void {
     .registerSystem(TrackedHandsSystem, { priority: 70 })
     .registerSystem(CaptureUiSystem, { priority: 80 })
     .registerSystem(RecordingSystem, { priority: 90 })
-    .registerSystem(DiagnosticsSystem, { priority: 100 })
+    .registerSystem(DiagnosticsSystem, { priority: 100 });
+  // Native state and controls serve IWSDK's ECS tools, which (like World's
+  // MCP runtime) exist only in development builds.
+  if (import.meta.env.DEV) registerNativeStateAndControls(world);
+}
+
+function registerNativeStateAndControls(world: World): void {
+  const capture = world.createEntity();
+  for (const component of CAPTURE_COMPONENTS) {
+    world.registerComponent(component);
+    capture.addComponent(component);
+  }
+  world
+    .registerSystem(CaptureControlSystem, { priority: 5 })
     .registerSystem(CaptureStateSystem, { priority: 110 });
 }
