@@ -104,8 +104,8 @@ in `apps/capture/scripts/lib/body-fidelity.mjs`.
   wrists ≤ 2 cm p95 in the crouch-and-lean replay.
 - [x] Every behavior's metric fails when the behavior is broken
   (`BODY_REPLAY_FAULTS=1`: 12 of 12 caught).
-- [ ] Identical results across runs locally and in the 2-vCPU container, and
-  the full CI tier green — see evidence.
+- [x] Identical results across runs locally and in the 2-vCPU container
+  (byte-identical samples, Linux and macOS alike); full CI tier pending below.
 
 ## Failure cases considered
 
@@ -201,24 +201,28 @@ walks into a wall yet).
 | Metrics can fail | `BODY_REPLAY_FAULTS=1 node scripts/run-xr-checks.mjs body` | 12/12 faults caught, each by its named metric; `output/ci-body-replay/fault-matrix.json` |
 | Video and screenshots | `BODY_REPLAY_VIDEO=1 XR_CAPTURE_SUCCESS_SCREENSHOTS=1` | One MP4 and one final PNG per fixture (third person, tracked head path cyan, avatar eyes pink) |
 | Hands in device order | `test:xr:hands` | Passes; the old head read fails it at 2,082 cm (B-008) |
-| Determinism | Same replay three times | Byte-identical samples |
-| Determinism and speed on 2 vCPU | `docker run --cpus=2 --memory=7g mcr.microsoft.com/playwright:v1.58.2-noble`, CI suites twice | DOCKER_RESULTS |
+| Determinism | Body and hands checks twice, concurrency 2; one replay three times | Byte-identical samples for all six replays |
+| Determinism and speed on 2 vCPU | `docker run --cpus=2 --memory=7g mcr.microsoft.com/playwright:v1.58.2-noble`, CI suites twice | Both runs pass: capture XR 200/196 s (body 140 s, two replays at once), viewer 49/42 s, pipeline 44/39 s; samples byte-identical between runs and with macOS |
 
 Results on macOS (fixtures: walk forward/back/side, turn in place + arc, crouch
 and lean, small steps + sway, walk up the ramp):
 
 | Metric | Walk | Turn | Crouch/lean | Steps/sway | Ramp |
 |---|---|---|---|---|---|
-| Eyes p95 standing / moving | 0.1 / 2.0 cm | 0.7 / 2.9 cm | 1.5 / 1.4 cm | 1.3 / 3.0 cm | 0.0 / 2.4 cm |
+| Eyes p95 standing / moving | 0.1 / 2.1 cm | 0.7 / 2.7 cm | 1.5 / 1.4 cm | 1.5 / 3.1 cm | 0.0 / 1.5 cm |
 | Head yaw / pitch p95 | 0.0° / 0.0° | 0.0° / 0.0° | 0.0° / 0.1° | 0.0° / 0.0° | 0.0° / 0.0° |
 | Rig drift | 0.0 cm | 0.0 cm | 0.0 cm | 0.0 cm | 0.0 cm |
-| Root / pelvis overshoot | 1.5 / 1.2 cm | 0.2 / 0.2 cm | – | – | 0.2 / 0.1 cm |
+| Root / pelvis overshoot | 1.5 / 1.1 cm | 0.2 / 0.2 cm | – | – | 0.2 / 0.1 cm |
 | Turn lag, neck twist max | – | 0.20 s, 44° | – | – | 0.20 s, 47° |
-| Foot drift, skating | 0.4 cm, 0.9% | 0.4 cm, 0.7% | 0.1 cm, 0% | 0.1 cm, 0.7% | 0.4 cm, 1.7% |
-| Planted sole max, min sole | 1.8 cm, 0.0 cm | 1.2 cm, 0.0 cm | 1.4 cm, 0.0 cm | 1.4 cm, 0.0 cm | 1.3 cm, −0.2 cm |
-| Cadence, step length | 2.34/s, 0.57 leg | 2.35/s, 0.48 leg | – | – | 2.22/s, 0.50 leg |
+| Foot drift, skating | 0.4 cm, 1.0% | 0.3 cm, 0.9% | 0.1 cm, 0.0% | 0.2 cm, 0.8% | 0.4 cm, 1.3% |
+| Planted sole max, min sole | 1.8, 0.0 cm | 1.0, 0.0 cm | 1.4, 0.0 cm | 2.0, 0.0 cm | 1.4, −0.2 cm |
+| Cadence, step length | 2.34/s, 0.57 leg | 2.35/s, 0.48 leg | – | – | 2.18/s, 0.51 leg |
 | Crouch ratio, lean r | – | – | 0.91, 1.00 | – | – |
-| Pelvis jerk ratio | 1.10 | 1.03 | 0.72 | 0.89 | 1.02 |
+| Pelvis jerk ratio | 1.11 | 1.04 | 0.72 | 0.96 | 1.03 |
+
+The tightest margin is the planted-sole height in the small-steps replay
+(2.0 cm against 2 cm): soft IK and heel roll leave a planted foot up to ~2 cm
+off the floor at the end of a long reach.
 
 ### Defects found and fixed
 
@@ -235,6 +239,8 @@ from the body), and B-012 (replay tooling) — see
   blocked frames.
 - Headset recordings for `fixtures/body-recordings/` (steps in
   `apps/capture/README.md`).
+- Natural, non-robotic motion (full-body IK with joint limits, secondary
+  motion, data-driven priors, naturalness metrics) is queued in `TODOS.md`.
 
 ## Physical-device limits
 

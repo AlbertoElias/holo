@@ -31,6 +31,29 @@ it from the item below instead of duplicating its status here.
   steps, the body slows and turns against walls, crouch-walk and landing
   absorb on uneven ground. Share foot planting with the VR body solver rather
   than running two systems; prove it with replay metrics like the body check.
+- [ ] Make all avatar movement look completely natural, in XR and 2D; the
+  room-scale body solver
+  ([`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md))
+  is correct by its metrics but still reads as robotic. Nail the IK and the
+  motion around it:
+  - Full-body IK with joint limits and comfort costs (spine, shoulders,
+    clavicles, elbows, wrists, knees, ankles) instead of the analytic chains,
+    so poses stay anatomical at reach limits; arm IK that places the elbow
+    and shoulder shrug from body posture, not a fixed hint.
+  - Secondary and overlapping motion: arm swing counter to the legs, hip
+    rotation and lateral sway with each step, weight shift onto the stance
+    leg, heel-strike/toe-off foot roll on every step, head and torso follow-
+    through after turns and stops.
+  - Timing: phase-lock steps to the tracked head's bob, vary step length and
+    cadence naturally, ease velocity changes so starts and stops are not
+    linear ramps.
+  - Consider data-driven priors (motion matching or a learned pose prior on
+    licensed mocap) for the lower body and posture, with the tracked head
+    and hands as hard constraints.
+  - Prove it the same way: add naturalness metrics measured against real
+    human motion (headset recordings plus reference mocap), such as joint
+    angle distributions, arm–leg phase, center-of-mass path, and smoothness,
+    and include side-by-side videos with a reference capture.
 - [ ] In XR, adapt the avatar to the person's height: measure standing eye
   height (and optionally arm span) at session start or on request, then scale
   or re-proportion the avatar so its eyes, hands, and floor contact match the
