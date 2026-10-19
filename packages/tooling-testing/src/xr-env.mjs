@@ -276,7 +276,9 @@ export async function enterIwerSessionFromButton(
   }
 }
 
-export async function attachXrEnvironment(page, { mode } = {}) {
+// cacheClearState: answer IWER's per-frame clear-state reads without a GL
+// stall (see cacheWebGlClearState); opt-in for suites that step many frames.
+export async function attachXrEnvironment(page, { mode, cacheClearState = false } = {}) {
   const resolvedMode = resolveXrTestMode(mode);
   if (resolvedMode === 'off') {
     await page.addInitScript(() => {
@@ -293,7 +295,7 @@ export async function attachXrEnvironment(page, { mode } = {}) {
     return { mode: 'off' };
   }
 
-  await page.addInitScript(cacheWebGlClearState);
+  if (cacheClearState) await page.addInitScript(cacheWebGlClearState);
   return { mode: 'iwer' };
 }
 

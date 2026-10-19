@@ -70,7 +70,7 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
   const context = await createXrContext(browser, { viewport });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
-  await attachXrEnvironment(page, { mode: 'iwer' });
+  await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   // Load the environment the input was recorded in.
   // ?manualClock=1: the app never ticks on real time before the replay.
   const pageUrl = new URL(recording.meta?.query ?? '', baseUrl);

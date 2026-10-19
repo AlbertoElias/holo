@@ -214,7 +214,7 @@ async function openScenarioPage(label, { vr }) {
   const timer = createPhaseTimer(label);
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
-  await attachXrEnvironment(page, { mode: resolvedMode });
+  await attachXrEnvironment(page, { mode: resolvedMode, cacheClearState: true });
   timer.mark('context');
   await waitForReady(page, timer.mark);
   // Take the clock before session entry so the XR transition, standing-head

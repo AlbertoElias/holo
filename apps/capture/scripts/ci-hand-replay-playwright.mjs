@@ -52,7 +52,7 @@ async function replay(fileName) {
   const context = await createXrContext(browser, { viewport });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
-  await attachXrEnvironment(page, { mode: 'iwer' });
+  await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   // ?manualClock=1: the app never ticks on real time before the replay.
   const pageUrl = new URL(recording.meta?.query ?? '', baseUrl);
   pageUrl.searchParams.set('manualClock', '1');

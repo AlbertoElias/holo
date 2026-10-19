@@ -41,7 +41,7 @@ const TIMELINE = [
 const browser = await launchXrBrowser(chromium);
 try {
   const page = await (await createXrContext(browser, { viewport: { width: 320, height: 180 } })).newPage();
-  await attachXrEnvironment(page, { mode: 'iwer' });
+  await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', 'advanceTime']);
   await waitForTextContentPrefix(page, '#status', 'loaded');

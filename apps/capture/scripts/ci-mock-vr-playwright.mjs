@@ -97,7 +97,7 @@ try {
       ?? (process.env.XR_SUPPORT_SHIM === '0' ? 'off' : DEFAULT_XR_TEST_MODE)
   );
 
-  await attachXrEnvironment(page, { mode });
+  await attachXrEnvironment(page, { mode, cacheClearState: true });
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForHooks();
   await waitForTextContentPrefix(page, '#status', 'loaded');
