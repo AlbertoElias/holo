@@ -1,38 +1,51 @@
 # Live VR and AR Dialogue
 
+**Layers:** conversation (several people's events at once), view.
+
 ## Hypothesis
 
-VR provides a fully shared symbolic world; AR combines real people and places
-with virtual communication aids. Both can make attention, reference, and
-collaboration more explicit than video calls.
+A live session is an event being recorded by several people at once. VR
+provides a fully shared world; AR combines real people and places with
+virtual aids; a phone or desktop joins through a portal. All of them can make
+attention, reference, and collaboration more explicit than video calls,
+because attention and reference are data in the event, not guesses from a
+camera feed.
 
 ## Seeds in Scope
 
 - IDEA-007 Grounding signals
-- IDEA-008 Reference Lock
+- IDEA-008 Reference Lock (live twin of IDEA-036 look-here cues)
 - IDEA-010 Role Lenses
 - IDEA-011 Co-presence Portal
-- IDEA-013 Shared Attention Cone
+- IDEA-013 Shared Attention Cone (live twin of IDEA-039 author's-eye view)
 - IDEA-014 Spatial subtitles
 - IDEA-015 Reality-anchored notes
+- IDEA-032 Self-resolving pointing
 
 ## Product Directions
 
-- Let people summon objects, symbols, and simulations into a discussion.
-- Make shared attention visible without forcibly taking control of another
-  participant's view.
+- Let people summon objects, symbols, and simulations into a discussion, each
+  given a place in the shared space.
+- Make shared attention visible from the event itself (where each person points
+  and looks) without taking control of anyone's view. A reference lock is an
+  invitation each participant's device carries out in Follow mode; Free mode
+  can decline it.
 - Use AR to attach explanations to physical place, equipment, or scale.
-- Support role-specific overlays while retaining a shared neutral layer.
-- Capture live sessions as structured holograms that can be replayed and replied to.
+- Support role-specific views over one shared meaning layer.
+- Every live session is already a hologram: afterwards it is replayable,
+  editable, and repliable with its references intact.
 
 ## Design Tension
 
 Live communication needs lightweight, low-friction gestures. Too many controls
 turn conversation into operating a presentation tool; too little structure
-makes the resulting session impossible to navigate later.
+makes the resulting session impossible to navigate later. Reading reference
+and attention from the body, rather than asking for them, is the main way to
+get structure without controls.
 
 ## Open Questions
 
 - Which interactions must be hands-first versus voice-first?
 - How should remote attention be indicated without becoming socially intrusive?
-- What features degrade gracefully for desktop participants?
+- What does a phone or desktop participant need from the portal to keep up
+  with people moving freely in VR?

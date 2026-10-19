@@ -78,3 +78,5 @@ IWER establishes deterministic WebXR behavior and retargeting compatibility, not
 ## Integration validation
 
 Validated against main `70e56826faa9` with the stable TypeScript 7 configuration, AR recentering and the opt-in upload-time Quick Look converter preserved. `verify:agent` and the complete `verify:pr` gate passed. The latest gate exercised real microphone audio, capture export, upload-time USDZ conversion, feed rendering, all capture XR checks and both viewer AR cases (2/2). Height adaptation remains a separate subsequent merge.
+
+The product-documentation update that landed during integration adds an export-provenance requirement: synthesized locomotion must be distinguished from tracked performance. This was not part of the verified animation branch; it is preserved as a separate unchecked `TODOS.md` follow-up rather than marked complete by this merge.
