@@ -55,10 +55,8 @@ it from the item below instead of duplicating its status here.
 
 ## Later
 
-- [ ] After the locomotion and height-adaptation fixes land, evaluate the real
-  IWSDK runtime refactor using [the isolated prototype](docs/IWSDK_RUNTIME_PROTOTYPE.md).
-  Rebase it on the finished movement work, verify height/hand/export compatibility,
-  measure physical Quest performance, and identify custom infrastructure to delete.
+- [ ] Native IWSDK capture runtime refactor: plan and implementation handoff in
+  [the feature brief](docs/features/iwsdk-runtime-refactor.md).
 - [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.
   Set up as the opt-in `metavr` MCP server in

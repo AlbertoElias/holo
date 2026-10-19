@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| Native IWSDK capture runtime refactor | Draft | [iwsdk-runtime-refactor.md](iwsdk-runtime-refactor.md) |
 | IWSDK runtime prototype | Complete | [archive/iwsdk-runtime-prototype.md](archive/iwsdk-runtime-prototype.md) |
 | Animated Quick Look phone demo | Complete | [archive/quicklook-phone-demo.md](archive/quicklook-phone-demo.md) |
 | Hand-tracking fidelity from real headset input | Verifying | [hand-tracking-fidelity.md](hand-tracking-fidelity.md) |

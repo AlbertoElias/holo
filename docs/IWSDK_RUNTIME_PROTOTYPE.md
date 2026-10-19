@@ -1,9 +1,14 @@
 # IWSDK runtime prototype
 
 This is an isolated experiment on `infra/iwsdk-prototype`, not a production
-migration. Finish the locomotion and height-adaptation fixes before evaluating
-and integrating the real refactor. Do not merge this branch merely to enable the
-experimental page.
+migration. As of October 19, the locomotion/height/room-scale fixes have landed
+on `origin/main` and the user has requested the real refactor plan. Start with
+[the current feature brief](features/iwsdk-runtime-refactor.md) and
+[the Claude prompt](prompts/claude-iwsdk-runtime-refactor.md).
+
+The runtime and results below remain the older prototype snapshot. Implement on
+fresh main and port its useful pieces selectively; do not merge its old capture
+files or package/Node settings over completed movement work.
 
 ## Run
 
@@ -42,7 +47,7 @@ production capture's AR spectator/recenter flow is outside this spike.
   being optimized under the newer package's module name.
 
 This adapter is **not evidence of simpler architecture**: `AppOrchestrator` is
-still a compatibility layer. After the locomotion work lands, split product
+still a compatibility layer. For the production refactor, split product
 systems around their transform ownership and remove replaced runtime code.
 
 ## Repeatable checks
@@ -100,7 +105,8 @@ establish reduced maintenance cost or improved target-device performance yet.
 
 ## Decision after the locomotion fixes
 
-Rebase the experiment on the completed movement/height work and compare:
+Use the new main-based implementation worktree described in the feature brief
+and compare:
 
 1. Which input/session/debug/scene infrastructure can actually be deleted?
 2. Can an agent diagnose and change avatar state through standard tools with
