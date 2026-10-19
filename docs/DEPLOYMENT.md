@@ -9,6 +9,17 @@ Nothing here requires a dashboard-only step that an agent cannot reproduce
 from the CLI. Secrets are never committed; only variable names live in the
 repo.
 
+## Automated deploys (CI-gated)
+
+`.github/workflows/deploy.yml` deploys all three surfaces automatically
+whenever the CI workflow completes successfully for a push to `main`:
+Fly API, Pages viewer, Pages capture. Each job health-checks its URL
+afterwards. Required repository secrets: `FLY_API_TOKEN` (a Fly deploy
+token scoped to `holoim-api`), `CLOUDFLARE_API_TOKEN` (scoped token with
+Cloudflare Pages edit permission), and `CLOUDFLARE_ACCOUNT_ID`. Manual
+redeploys: Actions → Deploy → Run workflow. The manual steps below remain
+the fallback and the way the accounts/projects were first created.
+
 ## 0. Accounts and CLIs (one-time, operator)
 
 1. Create a [Fly.io](https://fly.io) account (a card is required) and a

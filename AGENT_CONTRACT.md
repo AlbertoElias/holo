@@ -136,8 +136,9 @@ Supported env vars for smoke and XR scripts:
 
 ## CI Contract
 
-- `.github/workflows/ci.yml` is the only GitHub Actions workflow and exposes one
-  stable required check: `CI Gate`.
+- `.github/workflows/ci.yml` exposes one stable required check: `CI Gate`.
+  `.github/workflows/deploy.yml` deploys production (Fly API, Pages viewer
+  and capture) only after a successful CI run on `main`; it never gates PRs.
 - Every event (push, pull request, manual, and a weekly schedule that only
   catches runner or dependency drift) runs the same three parallel jobs: quality
   and unit tests, production build, and browser end-to-end (capture XR checks,
