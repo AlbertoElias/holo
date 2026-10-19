@@ -17,7 +17,8 @@ varying vec3 vWorldPos;
 void main() {
   vec4 worldPos = modelMatrix * vec4(position, 1.0);
   vNormal = normalize(normalMatrix * normal);
-  vViewDir = normalize(cameraPosition - worldPos.xyz);
+  // Both vectors are in view space, including each XR eye's transform.
+  vViewDir = -(modelViewMatrix * vec4(position, 1.0)).xyz;
   vWorldPos = worldPos.xyz;
   gl_Position = projectionMatrix * viewMatrix * worldPos;
 }
@@ -75,9 +76,10 @@ export function createBubbleGlassMaterial(): BubbleGlassShaderMaterial {
 }
 
 export function isBubbleGlassMaterial(material: Material | undefined): material is BubbleGlassShaderMaterial {
-  if (!(material instanceof ShaderMaterial)) {
+  if (!(material as ShaderMaterial | undefined)?.isShaderMaterial) {
     return false;
   }
 
-  return Boolean(material.uniforms && "u_time" in material.uniforms);
+  const shader = material as ShaderMaterial;
+  return Boolean(shader.uniforms && "u_time" in shader.uniforms);
 }

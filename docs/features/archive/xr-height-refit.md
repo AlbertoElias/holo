@@ -87,3 +87,23 @@ the current neutral eye height; it does not estimate standing stature or add a
 seated animation. In the last sequence image the simulator controllers remain
 high in floor space from the preceding standing selection, so the arms point up;
 that pose is preserved rather than staged for the screenshot.
+
+## Integration with locomotion
+
+Integrated separately after locomotion main `3310ff4d3925`. The resolved frame
+order restores terrain and crouch offsets before calibration, preserves additive
+parent-local crouch translations, then applies terrain before camera and tracked
+hands. Both AR recenter and VR refit controls remain available in their modes.
+The height harness uses a local browser interface, preserving main's unified
+TypeScript 7 source/script check without conflicting global Window declarations.
+Independent resolved-source review and `verify:agent` passed.
+
+The complete `verify:pr` passed on the combined tree: both capture pipelines
+(including real microphone/audio, upload-time USDZ and fidelity challenges), all
+five capture XR suites, and all five viewer tests. Height completed in 41.0s;
+locomotion 14.2s, terrain 11.7s, hands 20.9s, mock VR 9.3s. The measured short,
+tall and seated calibration/refit/lifecycle states are retained in
+[evidence/xr-height-refit/integration-height-report.json](evidence/xr-height-refit/integration-height-report.json).
+The recording case exported a real GLB and checked calibrated asset scale across
+XR exit and export. These results remain emulation evidence; the physical-device
+limits above still apply.

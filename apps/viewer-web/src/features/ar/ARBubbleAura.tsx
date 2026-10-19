@@ -43,7 +43,7 @@ export function ARBubbleAura({ bubble, baseWorldPosition }: ARBubbleAuraProps) {
   const [quality, setQuality] = useState<ArBubbleQuality>("high");
   const segments = useMemo(() => AURA_SEGMENTS_BY_QUALITY[quality], [quality]);
   const localCenterRef = useRef(new Vector3());
-  const baseLocalToParentRef = useRef(new Vector3());
+  const parentScaleRef = useRef(new Vector3());
   const baseNormalizedRef = useRef(new Vector3());
 
   useFrame((state, delta) => {
@@ -73,7 +73,13 @@ export function ARBubbleAura({ bubble, baseWorldPosition }: ARBubbleAuraProps) {
     const localCenter = localCenterRef.current.copy(bubble.center);
     parent.worldToLocal(localCenter);
     root.position.copy(localCenter);
-    root.scale.setScalar(Math.max(0.0001, bubble.radius));
+    // Radius is in world meters; the model parent already applies scale.
+    const parentScale = parent.getWorldScale(parentScaleRef.current);
+    root.scale.set(
+      bubble.radius / Math.max(0.0001, Math.abs(parentScale.x)),
+      bubble.radius / Math.max(0.0001, Math.abs(parentScale.y)),
+      bubble.radius / Math.max(0.0001, Math.abs(parentScale.z))
+    );
 
     const t = state.clock.elapsedTime;
     root.rotation.y = t * 0.14;
@@ -105,12 +111,8 @@ export function ARBubbleAura({ bubble, baseWorldPosition }: ARBubbleAuraProps) {
 
     if (baseRef.current) {
       if (baseWorldPosition && isFiniteVector(baseWorldPosition) && bubble.radius > 1e-6) {
-        const baseLocalToParent = baseLocalToParentRef.current.copy(baseWorldPosition);
-        parent.worldToLocal(baseLocalToParent);
-        const baseNormalized = baseNormalizedRef.current
-          .copy(baseLocalToParent)
-          .sub(root.position)
-          .divideScalar(bubble.radius);
+        const baseNormalized = baseNormalizedRef.current.copy(baseWorldPosition);
+        root.worldToLocal(baseNormalized);
         baseNormalized.y -= 0.24;
         baseRef.current.position.copy(baseNormalized);
       } else {
@@ -127,7 +129,7 @@ export function ARBubbleAura({ bubble, baseWorldPosition }: ARBubbleAuraProps) {
   });
 
   return (
-    <group ref={rootRef} visible={false}>
+    <group ref={rootRef} name="ARBubbleAura" visible={false}>
       <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]} renderOrder={1003}>
         <torusGeometry args={[1.07, 0.018, 18, segments.ring]} />
         <meshBasicMaterial
