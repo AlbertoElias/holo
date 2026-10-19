@@ -60,13 +60,17 @@ export type UploadHologramInput = {
   file: File;
   hologramName: string;
   submittedBy: string;
+  quickLookEnabled: boolean;
 };
 
 export async function uploadHologram(input: UploadHologramInput): Promise<HologramDTO> {
   const formData = new FormData();
-  formData.set("file", input.file);
+  // Fastify consumes multipart serially. Send metadata before the large file
+  // so it is available throughout streaming upload processing.
   formData.set("hologramName", input.hologramName);
   formData.set("submittedBy", input.submittedBy);
+  formData.set("quickLookEnabled", String(input.quickLookEnabled));
+  formData.set("file", input.file);
 
   let response: Response;
   try {

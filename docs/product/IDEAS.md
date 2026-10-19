@@ -6,7 +6,7 @@ PRD only after it describes one bounded user outcome and has a reason to exist.
 | ID | Idea | Theme | State | Next question |
 | --- | --- | --- | --- | --- |
 | IDEA-001 | HoloGrammar: structured spatial utterances with intent, referent, action, time, confidence, and expected reply | Communication protocols | Idea | What is the smallest usable grammar? |
-| IDEA-002 | Contextual annotations attached to a 3D anchor, event, and time range | Async holograms | PRD ([PRD-001](prds/PRD-001-anchored-notes.md)) | Where should authors add notes: at upload, in capture, or in VR? |
+| IDEA-002 | Contextual annotations attached to a 3D anchor, event, and time range | Async holograms | Parked PRD ([PRD-001](prds/PRD-001-anchored-notes.md)) | Which notes can only the author add, after pointing (IDEA-032) is read from the body? |
 | IDEA-003 | Symbol Forge for team-created, interactive 3D symbols | Spatial language | Idea | What eight symbols are universally useful? |
 | IDEA-004 | Gesture Compiler that turns hand motions into arrows, paths, boundaries, and diagrams | Spatial language | Idea | Which gestures can be recognized reliably enough? |
 | IDEA-005 | Claim Capsules that hold a statement, evidence, confidence, and status | Communication protocols | Idea | Does this help discussions or make them feel bureaucratic? |
@@ -35,6 +35,21 @@ PRD only after it describes one bounded user outcome and has a reason to exist.
 | IDEA-028 | Embodied rhetoric controls for emphasis, urgency, uncertainty, and recap | Expressive presence | Idea | Which expressive signals should be explicit versus inferred? |
 | IDEA-029 | Conversational memory palace: a navigable graph of claims, artifacts, and decisions | Viewer and collaboration | Idea | How can a graph remain legible at scale? |
 | IDEA-030 | Audience simulation with novice, expert, and skeptical perspectives | Communication protocols | Idea | Is AI simulation accurate enough to be trusted as feedback? |
+| IDEA-031 | Shared design language and interaction model for 2D and 3D, all devices and inputs ([concept](concepts/design-language.md)) | Design system | Idea | Which look, and is the held-mode, two-handed grammar natural on every device? |
+| IDEA-032 | Self-resolving pointing: when the author points or looks at something, the thing the finger or gaze ray hits lights up | Hologram-native annotation | Idea | Which pointing and gaze signals are reliable enough to fire without false highlights? |
+| IDEA-033 | Hand-path ribbons that leave a demonstrated motion in the air at true size and speed | Hologram-native annotation | Idea | When does a trace clarify a motion rather than clutter the scene? |
+| IDEA-034 | True-scale measurements from gestures ("about this big", "at this height") shown as real distances | Hologram-native annotation | Idea | Which gestures signal a measurement rather than ordinary emphasis? |
+| IDEA-035 | "Stand here" viewpoint markers: the author marks where the viewer should stand, replacing the camera shot | Hologram-native annotation | Idea | Do viewers follow suggested viewpoints, and what does the 2D feed do with them? |
+| IDEA-036 | Look-here cues: directional sound, or playback that waits, when a key moment happens outside the viewer's view | Hologram-native annotation | Idea | Which cue redirects attention without feeling like a nag? |
+| IDEA-037 | Proximity notes that play when the viewer walks up to a place, independent of playback time | Hologram-native annotation | Idea | How do proximity notes coexist with the author's timeline? |
+| IDEA-038 | Ghost frames: copies of the avatar at key poses along its path, walkable like stop-motion | Hologram-native annotation | Idea | How are key poses chosen without authoring effort? |
+| IDEA-039 | Author's-eye view: briefly see through the author's eyes, or a cone showing what they looked at | Hologram-native annotation | Idea | Does a borrowed first-person view orient or disorient on each device? |
+| IDEA-040 | Follow-along check: the viewer copies a movement and drift from the author's hands is highlighted | Hologram-native annotation | Idea | Is comparison feedback useful outside training contexts? |
+| IDEA-041 | Attention-following camera on flat screens: the view moves to what the author points at, sizes, or walks toward, and re-frames for any aspect ratio | 2D hologram viewing | Idea | How much automatic camera motion feels guided rather than seasick? |
+| IDEA-042 | Tilt to look around: phone orientation adds parallax so the card behaves like a window into the bubble | 2D hologram viewing | Idea | Is the effect worth iOS's motion-permission prompt? |
+| IDEA-043 | Freeze to orbit: pausing stops time and dragging moves around the frozen moment | 2D hologram viewing | Idea | Do viewers discover dragging without a hint? |
+| IDEA-044 | Object-indexed timeline: tap a thing in the scene to jump to every moment the author pointed at it | 2D hologram viewing | Idea | What happens when pointing data is sparse or ambiguous? |
+| IDEA-045 | Portal view: on a flat screen the hologram is a window into its 3D world. Moving the phone moves the camera; the mouse rotates; zoom runs from inside the world to third person. Includes IDEA-042 and IDEA-043 ([concept](concepts/what-a-hologram-is.md)) | 2D hologram viewing | Idea | How far can iPhone web go with orientation only, before needing WebXR or ARKit? |
 
 ## Promotion Rule
 

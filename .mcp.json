@@ -3,6 +3,10 @@
     "iwsdk-runtime": {
       "command": "sh",
       "args": ["scripts/mcp/iwsdk-runtime.sh"]
+    },
+    "metavr": {
+      "command": "sh",
+      "args": ["scripts/mcp/metavr.sh"]
     }
   }
 }
