@@ -1,6 +1,6 @@
 # Feature brief: Refit XR height and inspectable visual evidence
 
-**Lead:** Codex height owner  
+**Lead:** Codex height owner
 **Status:** Complete
 
 ## User outcome

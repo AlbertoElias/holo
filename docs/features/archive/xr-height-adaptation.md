@@ -1,6 +1,6 @@
 # Feature brief: XR avatar height adaptation
 
-**Lead:** Codex height owner  
+**Lead:** Codex height owner
 **Status:** Complete
 
 **Follow-up:** [Explicit height refit and actual full-body visual evidence](xr-height-refit.md)
