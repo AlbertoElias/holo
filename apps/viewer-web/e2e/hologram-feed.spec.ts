@@ -18,6 +18,7 @@ const mockHologram = {
   id: "mock-1",
   url: "/uploads/mock-avatar.glb",
   usdzUrl: null,
+  quickLookEnabled: false,
   createdAt: "2026-02-10T00:00:00.000Z",
   sizeBytes: 2048,
   filenameOriginal: "mock-avatar.glb",

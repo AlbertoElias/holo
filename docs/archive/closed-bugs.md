@@ -130,7 +130,7 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   GL errors. `test:xr:viewer` (2 passed, 0 GL errors), `test:smoke:pipeline`, and
   `verify:agent` pass. This is emulation evidence, not a headset run.
 
-### B-008 — On a headset, VR hand targets land ~21 m from the avatar (B-004 in device frame order)
+### B-009 — On a headset, VR hand targets land ~21 m from the avatar (B-004 in device frame order)
 
 - **Area:** `apps/capture` XR head pose (`XrSessionService`)
 - **Severity:** P1 — VR hands broken on device while IWER checks passed
@@ -150,7 +150,7 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   tick inside XR frames (`__setFrameStepping`), and `test:xr:hands` fails at
   2,082 cm with the old read. Emulation evidence, not a headset run.
 
-### B-009 — Hand sensor spheres block the character in VR
+### B-010 — Hand sensor spheres block the character in VR
 
 - **Area:** `apps/capture` physics (`CharacterMotor`)
 - **Severity:** P1 — VR movement stalls or is cut short
@@ -165,10 +165,10 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   locomotion check now runs on the flat test floor, since freed movement on the
   default scene's spawn slope runs off a drop.
 
-### B-010 — A standing character creeps down slopes
+### B-011 — A standing character creeps down slopes
 
 - **Area:** `apps/capture` physics (`CharacterMotor`)
-- **Severity:** P2 — drift while idle; exposed by the B-009 fix
+- **Severity:** P2 — drift while idle; exposed by the B-010 fix
 - **Observed:** 2026-10-18 by `test:xr:mock` (dropout recovery fingertip
   3.8 mm off; limit 2 mm)
 - **Evidence:** on the default scene's spawn slope the avatar slid 2.3 mm/s
@@ -178,7 +178,7 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 - **Fix:** a grounded character with no movement keeps its horizontal
   position. `test:xr:mock` passes; the probe shows no drift over 2.4 s.
 
-### B-011 — Room-scale motion does not reach the avatar's body in VR
+### B-012 — Room-scale motion does not reach the avatar's body in VR
 
 - **Area:** `apps/capture` VR embodiment (`CameraController`, `CharacterMotor`,
   `AppOrchestrator`)
@@ -197,7 +197,7 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   (for example the old rig placement fails world lock). See
   [`../features/room-scale-body-motion.md`](../features/room-scale-body-motion.md).
 
-### B-012 — XR replay tooling: fixtures with unmoved wrists, slow and order-dependent frames
+### B-013 — XR replay tooling: fixtures with unmoved wrists, slow and order-dependent frames
 
 - **Area:** `apps/capture` and `packages/tooling-testing` test tooling
 - **Severity:** P2 — test fidelity and CI time

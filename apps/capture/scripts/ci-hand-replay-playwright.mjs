@@ -23,7 +23,7 @@ import { analyzeHandReplay, formatHandReport } from './lib/hand-fidelity.mjs';
 // Replays headset input recorded by capture's dev recorder through the real
 // WebXR path (IWER ActionPlayer → XRHand joints → retargeter → avatar) and
 // measures how closely the avatar's hands follow the tracked hands. The
-// simulation ticks inside each XR frame, in a headset's order (B-008 hid
+// simulation ticks inside each XR frame, in a headset's order (B-009 hid
 // behind a present-then-step order).
 
 const STEP_MS = 1000 / 30;

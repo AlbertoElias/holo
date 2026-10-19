@@ -1,0 +1,183 @@
+{
+  "feature": "Natural locomotion and terrain response",
+  "environment": "Playwright desktop and IWER mock tracked pose; real GLTF scene loader, avatar, animation and Rapier",
+  "geometry": "Centered 20m floor; ramp y=0.8+0.15x over x=[-3,3],z=[-5,5]; wall z=-4.25",
+  "clock": "Public manual clock claimed before first realtime simulation; all scenario frames stepped explicitly",
+  "checks": {
+    "verifyAgent": "PASS",
+    "captureFast": "PASS",
+    "captureXr": "PASS (56.7s final full gate)",
+    "verifyPr": "PASS (exit 0): all quality/tests/builds, capture-to-viewer pipeline, capture XR, viewer AR",
+    "viewerAr": "PASS (2 tests, 20.4s)",
+    "pipeline": "PASS (real capture export, upload, viewer render)"
+  },
+  "reproduce": "DEV_PORT=5474 pnpm --filter @holoim/capture exec node scripts/run-xr-checks.mjs terrain",
+  "determinism": {
+    "coldRunsEqual": true,
+    "evidenceSha256": "c2e922dfc65b553885d61ec05bdfedc88510b93ef3dcd53c8a55c21c7172adda",
+    "samplesSha256": "dd8b0b5e77dbad8bfe636f7163e0c61e1912e38ff5f6fcb88f42a0c2045fd425"
+  },
+  "modes": {
+    "desktop": {
+      "walkCadence": 1.399050915085508,
+      "crouchCadence": 1.0499271940890818,
+      "walkQuaternionVariation": 0.047519311100343464,
+      "crouchQuaternionVariation": 0.046846015770907634,
+      "meanWalkSpeedMps": 3.240209074152598,
+      "meanCrouchSpeedMps": 2.430020494057538,
+      "standingFeet": [
+        {
+          "side": "left",
+          "foot": {
+            "x": -0.1572352043789799,
+            "y": 0.9672245916814158,
+            "z": 0.07350402498829695
+          },
+          "groundY": 0.7761938831530902,
+          "correction": -0.023621441574124293,
+          "upper": [
+            -0.0013241718903344612,
+            -0.0717348093770365,
+            0.9968960930619588,
+            -0.03241208617549601
+          ],
+          "lower": [
+            -0.004667879002977016,
+            0.00033425537022333744,
+            -0.00034793416175290447,
+            0.9999889889997691
+          ]
+        },
+        {
+          "side": "right",
+          "foot": {
+            "x": 0.15624425975916992,
+            "y": 0.9917665787109531,
+            "z": 0.07551872320743591
+          },
+          "groundY": 0.8234366363677016,
+          "correction": 0.023621311639676464,
+          "upper": [
+            0.005038255260490078,
+            0.03887431379527356,
+            0.9987404206259467,
+            0.03132053509734132
+          ],
+          "lower": [
+            -0.22828931411336692,
+            -0.0007204642285586678,
+            -0.004325121524795311,
+            0.9735834649976035
+          ]
+        }
+      ],
+      "wallEnd": {
+        "state": "idle",
+        "speedMps": 0.0030273028004234323
+      },
+      "jumpPhases": [
+        "jump",
+        "fall",
+        "grounded-idle"
+      ]
+    },
+    "xr": {
+      "walkCadence": 1.398129654970901,
+      "crouchCadence": 1.0499271940890758,
+      "walkQuaternionVariation": 0.04754634699327187,
+      "crouchQuaternionVariation": 0.04720206558203888,
+      "meanWalkSpeedMps": 3.2404332085309293,
+      "meanCrouchSpeedMps": 2.430020494057538,
+      "standingFeet": [
+        {
+          "side": "left",
+          "foot": {
+            "x": -0.15723759450192692,
+            "y": 0.9671229061574249,
+            "z": 0.07350055566939273
+          },
+          "groundY": 0.776193524634642,
+          "correction": -0.02362144157452954,
+          "upper": [
+            -0.0013241718903344245,
+            -0.07173480937701765,
+            0.9968960930619604,
+            -0.03241208617548409
+          ],
+          "lower": [
+            -0.004667879002976588,
+            0.0003342553702231837,
+            -0.0003479341617569984,
+            0.9999889889997691
+          ]
+        },
+        {
+          "side": "right",
+          "foot": {
+            "x": 0.15624186963619757,
+            "y": 0.991664893187371,
+            "z": 0.07551525388856646
+          },
+          "groundY": 0.8234362778492534,
+          "correction": 0.023621311640081886,
+          "upper": [
+            0.005038255260516373,
+            0.03887431379621704,
+            0.998740420625913,
+            0.031320535097246804
+          ],
+          "lower": [
+            -0.22828931411524378,
+            -0.0007204642285680672,
+            -0.004325121524999701,
+            0.9735834649971625
+          ]
+        }
+      ],
+      "wallEnd": {
+        "state": "idle",
+        "speedMps": 0.0030273028004234323
+      },
+      "jumpPhases": [
+        "jump",
+        "fall",
+        "grounded-idle"
+      ]
+    }
+  },
+  "handReplay": {
+    "frames": 244,
+    "xrHandSourceFraction": 1,
+    "wristP95Cm": 0,
+    "wristP95Degrees": 0,
+    "pinchAgreement": 1,
+    "maxCurlDegrees": 8.6,
+    "worstSegmentJerkRatio": 1.18
+  },
+  "dropoutRecovery": {
+    "fingerWristRelativeMm": 0,
+    "wristTargetResidualChangeMm": 0,
+    "thresholdMm": 2,
+    "worldTranslationMm": 3.8
+  },
+  "screenshots": [
+    "avatar-locomotion-desktop.png"
+  ],
+  "limits": [
+    "IWER, not physical-headset comfort/performance evidence",
+    "Existing XR virtual movement input only; no new controller bindings or room-scale root following",
+    "Existing physical-hop/upward crouch-baseline interaction requires physical evaluation"
+  ],
+  "fullGateCommand": "DEV_PORT=5474 E2E_BASE_URL=https://localhost:3474 E2E_API_PORT=3301 E2E_CAPTURE_URL=https://127.0.0.1:5475/ pnpm run verify:pr",
+  "sourceFeatureTip": "136f301773746f8551c048343e6a7641ec8d166b",
+  "integration": {
+    "mainBaseline": "59d4db7bd4ccc5318027c091e9a95b7cb2fe91c9",
+    "verifyAgent": "PASS",
+    "verifyPr": "PASS",
+    "viewerAr": "2/2",
+    "quickLookPipeline": "real audio, capture export, upload-time USDZ, viewer render PASS",
+    "height": "separate subsequent merge",
+    "viewerTests": "5/5 including stereo bubble and AR placement",
+    "pipelines": "2/2 including real bubble export and Quick Look fidelity challenges"
+  }
+}

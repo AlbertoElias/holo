@@ -112,8 +112,8 @@ in `apps/capture/scripts/lib/body-fidelity.mjs`.
 | Failure case | Prevention or evidence |
 |---|---|
 | Test reads app state that the real input path never produces | Replay keeps `mockVr` off; truth comes from the recording, the avatar from bones |
-| Render order differs between test and headset (B-008) | Replays tick inside XR frames; head pose comes from view transforms |
-| Rig follows the avatar, so the world swims (B-011) | World-lock metric; fault `rig-follows-avatar` fails it |
+| Render order differs between test and headset (B-009) | Replays tick inside XR frames; head pose comes from view transforms |
+| Rig follows the avatar, so the world swims (B-012) | World-lock metric; fault `rig-follows-avatar` fails it |
 | Avatar trails or leads the head | Eye error and velocity cross-correlation; fault `root-ignores-head` fails it |
 | Pelvis overshoots on stops | Overshoot metric; fault `root-overshoots` (spring) fails it |
 | Body snaps to every glance, or never turns | Neck twist, settle time, turn lag; fault `body-yaw-snaps` fails it |
@@ -126,9 +126,9 @@ in `apps/capture/scripts/lib/body-fidelity.mjs`.
 | Head bone not driven | Pitch from bones; fault `head-not-rotated` fails it |
 | Jittery pelvis | Jerk ratio; fault `pelvis-jitter` fails it |
 | IK knee snaps near full extension | Pop metric; soft IK in `legIk.ts` |
-| Hand sensors block the body (B-009) | Movement queries exclude sensors |
+| Hand sensors block the body (B-010) | Movement queries exclude sensors |
 | Scratch-vector aliasing between solver stages | One scratch set per stage (plan, step, pose, leg); faults confirm metrics react |
-| Replays depend on host speed (B-012) | Clear-state cache, steady-frame wait, frame-clock alignment; byte-identical samples across runs |
+| Replays depend on host speed (B-013) | Clear-state cache, steady-frame wait, frame-clock alignment; byte-identical samples across runs |
 | Recenter or tracking jump | Rig realigns on reference-space `reset` or a > 0.5 m head jump instead of walking the body |
 | Walking into a virtual wall | The body stops at the wall and the view is not pushed back; not covered by a fixture yet |
 | Fixture bloat | 30 Hz recordings; controllers where hands are not under test (1.6 MB total) |
@@ -147,7 +147,7 @@ in `apps/capture/scripts/lib/body-fidelity.mjs`.
 1. **Head pose.** `XrSessionService.updateHeadPose()` reads the eye midpoint and
    orientation from `getCamera().cameras[i].matrix` (tracking space, set every
    XR frame before the app runs) and maps them through the rig. Hands, crouch,
-   and body all use it (B-008).
+   and body all use it (B-009).
 2. **World-locked rig.** On the first valid head pose, on a reference-space
    `reset`, or after a > 0.5 m tracking jump, the rig is placed so the tracked
    eyes sit on the avatar's standing eyes (soft knees, real ground) and the
@@ -226,7 +226,7 @@ spine; feet raised 1 m with ground removed): each now fails.
 | Body criteria | `pnpm --filter @holoim/capture run test:xr:body` | All five fixtures pass (table below); reports in `output/ci-body-replay/` |
 | Metrics can fail | `BODY_REPLAY_FAULTS=1 node scripts/run-xr-checks.mjs body` | 12/12 faults caught, each by its named metric; `output/ci-body-replay/fault-matrix.json` |
 | Video and screenshots | `BODY_REPLAY_VIDEO=1 XR_CAPTURE_SUCCESS_SCREENSHOTS=1` | One MP4 and one final PNG per fixture (third person, tracked head path cyan, avatar eyes pink) |
-| Hands in device order | `test:xr:hands` | Passes; the old head read fails it at 2,082 cm (B-008) |
+| Hands in device order | `test:xr:hands` | Passes; the old head read fails it at 2,082 cm (B-009) |
 | Determinism | Body and hands checks twice, concurrency 2; one replay three times | Byte-identical samples for all six replays |
 | Determinism and speed on 2 vCPU | `docker run --cpus=2 --memory=7g mcr.microsoft.com/playwright:v1.58.2-noble`, CI suites twice | Both runs pass: capture XR 200/196 s (body 140 s, two replays at once), viewer 49/42 s, pipeline 44/39 s; samples byte-identical between runs and with macOS |
 
@@ -252,9 +252,9 @@ off the floor at the end of a long reach.
 
 ### Defects found and fixed
 
-B-008 (head pose read in the wrong space on device), B-009 (hand sensors block
-the body), B-010 (standing creep on slopes), B-011 (room-scale motion missing
-from the body), and B-012 (replay tooling) — see
+B-009 (head pose read in the wrong space on device), B-010 (hand sensors block
+the body), B-011 (standing creep on slopes), B-012 (room-scale motion missing
+from the body), and B-013 (replay tooling) — see
 [`../archive/closed-bugs.md`](../archive/closed-bugs.md).
 
 ### Follow-ups

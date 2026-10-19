@@ -1,10 +1,14 @@
 # Spatial Language
 
+**Layer:** meaning added by the author, made close to the body.
+
 ## Hypothesis
 
 People can reason together more effectively when abstract relationships become
 objects, paths, volumes, and transformations that can be jointly inspected and
-manipulated.
+manipulated. In a hologram these belong to the meaning layer: each primitive is
+anchored to something in the event (a wrist, a prop, a place, a moment) and
+keeps its meaning from every viewpoint.
 
 ## Seeds in Scope
 
@@ -24,16 +28,23 @@ manipulated.
 - Question beacons identify unresolved points.
 - Decision seals preserve a chosen path and its rationale.
 
+Each primitive also defines how it appears at every step down: in a headset at
+true scale, through a phone portal, on a flat screen, and in a still image.
+
 ## Product Directions
 
 - Start with a small built-in symbol vocabulary before enabling fully custom symbols.
+- Prefer primitives made during the performance: a gesture becomes an editable
+  primitive bound to what it was drawn around, rather than a menu insertion
+  afterwards.
 - Let a creator spawn, bind, transform, and link primitives while speaking.
-- Allow gestures to become editable primitives, not permanent raster traces.
 - Treat symbols as interactive objects that can reveal text, evidence, media, or
-  a deeper simulation.
+  a deeper simulation. Content without a place (a chart, a document) joins by
+  being attached to a primitive or referent.
 
 ## Open Questions
 
 - Which primitives are universal across training, design review, and social use?
 - Does a shared symbol vocabulary emerge naturally or require explicit teaching?
 - How can the scene remain readable when several people create artifacts at once?
+- Which primitives still read on a flat phone without moving the portal?

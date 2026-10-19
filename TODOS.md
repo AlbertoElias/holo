@@ -8,16 +8,25 @@ it from the item below instead of duplicating its status here.
 
 ## Now
 
-- [ ] Validate capture VR embodiment, hand/finger retargeting, pinch/release
-  transitions, and VR enter/exit behavior on a physical headset. The automated
-  IWER checks cover deterministic browser flows but cannot replace device testing.
-  (Automated pinch fix: closed B-002 in [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).)
+- [ ] Record real Quest hand input for `test:xr:hands` and recalibrate the
+  fidelity thresholds against it. Current thresholds come from synthetic IWER
+  poses. Owned by [`docs/features/hand-tracking-fidelity.md`](docs/features/hand-tracking-fidelity.md).
+- [ ] On a physical headset, check only what IWER cannot emulate: real-tracking
+  pinch stability (noise, self-occlusion, joint dropouts), Quest browser session
+  events (permission prompt, system menu, headset removal or sleep,
+  controller↔hand switching), and frame rate, latency, and comfort. IWER
+  already covers pinch/release logic, VR enter/exit flows, and retargeting math
+  (B-002, B-005 in [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md)).
 - [x] Make the XR locomotion command report a reliable final completion status and
   clean up all child processes locally. Delivered in
   [`docs/features/archive/reliability-foundation.md`](docs/features/archive/reliability-foundation.md).
 
 ## Next
 
+- [x] Add realistic walking, crouching, and jumping animations in both XR and
+  desktop 2D, with natural transitions and movement that adapts to walls,
+  inclines, and other environment geometry. Delivered in
+  [avatar-locomotion.md](docs/features/archive/avatar-locomotion.md).
 - [ ] Add VR thumbstick locomotion and snap turn to capture. Today VR moves the
   avatar only through physical room-scale motion and keyboard/mock input. Move
   the world-locked camera rig with the stick (smooth move relative to head
@@ -25,12 +34,6 @@ it from the item below instead of duplicating its status here.
   stepping from the resulting root motion, and add a replay check from
   recorded controller input. Builds on
   [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
-- [ ] Replace the procedural walk/jump/fall clips with realistic walking,
-  crouching, and jumping animation that works in both XR and the 2D (desktop)
-  view and adapts to the environment: feet and pelvis follow inclines and
-  steps, the body slows and turns against walls, crouch-walk and landing
-  absorb on uneven ground. Share foot planting with the VR body solver rather
-  than running two systems; prove it with replay metrics like the body check.
 - [ ] Make all avatar movement look completely natural, in XR and 2D; the
   room-scale body solver
   ([`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md))
@@ -54,11 +57,18 @@ it from the item below instead of duplicating its status here.
     human motion (headset recordings plus reference mocap), such as joint
     angle distributions, arm–leg phase, center-of-mass path, and smoothness,
     and include side-by-side videos with a reference capture.
-- [ ] In XR, adapt the avatar to the person's height: measure standing eye
-  height (and optionally arm span) at session start or on request, then scale
-  or re-proportion the avatar so its eyes, hands, and floor contact match the
-  user without changing the world scale. Handle recalibration, seated users,
-  and how the scaled avatar is recorded and exported.
+- [ ] Mark synthesized locomotion as inferred in capture exports, distinct from
+  tracked/recorded performance. This is the export-provenance follow-up added
+  by the [hologram philosophy](docs/product/concepts/what-a-hologram-is.md).
+- [ ] Adapt the XR avatar to the person's height, keeping feet grounded and
+  head/hands aligned with tracked input. This sets the hologram's true scale,
+  which pointing rays and measurements depend on. Measure standing eye height
+  (and optionally arm span) at session start or on request, and scale or
+  re-proportion the avatar without changing the world scale; handle
+  recalibration, seated users, and how the scaled avatar is recorded and
+  exported. The room-scale body solver currently maps the user's eyes onto the
+  avatar's standing eye height. Start in a dedicated session; coordinate
+  avatar scale and calibration with the locomotion-animation work.
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
   intentionally uses local filesystem storage and SQLite.
@@ -67,29 +77,49 @@ it from the item below instead of duplicating its status here.
   upload fixtures; generated database files are ignored.
 - [x] Add isolated API route tests for upload/static serving, pagination, deletion,
   and USDZ-conversion failure handling.
-- [ ] Expand contract-focused tests for capture orchestration and the `ui-dom`,
-  `xr-ui-r3f`, and `xr-ui-three` packages, which currently use `--passWithNoTests`.
-  Start with public behavior and state-transition contracts, and run them in the
-  appropriate `verify:agent` or `verify:pr` tier.
+- [ ] Expand contract-focused tests for `xr-ui-core` and capture orchestration
+  only — the durable public behavior and state-transition contracts that survive
+  a UI/interaction redesign. Run them in the appropriate `verify:agent` or
+  `verify:pr` tier. Tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` are
+  deferred to the redesign item below, which owns their new contracts.
+- [ ] Redesign all UI (2D and 3D) and interaction systems (2D and XR) in a
+  dedicated session with its own feature brief. That brief owns: the new
+  contract tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` (currently
+  `--passWithNoTests`), written against the redesigned contracts rather than
+  the current single-file APIs; and the port of the capture XR check scripts
+  (`.mjs`, ~880 lines plus `scripts/lib/`) to TypeScript scenario groups,
+  since the scripts drive the app through the interaction hooks the redesign
+  will change. Preserve the `xr-ui-core` state contracts and the IWER
+  behavior checks (`test:xr:*`) across the redesign. Design it through
+  `docs/product/concepts/what-a-hologram-is.md`: include the portal viewer
+  and Follow/Free, and start marks with "this/here" links read from pointing.
 
 ## Later
 
-- [ ] Port the capture XR check scripts to TypeScript scenario groups. Browser
-  reuse and stage timing are done (one VR and one desktop page, respawn between
-  trials) in [`docs/features/archive/deterministic-lean-ci.md`](docs/features/archive/deterministic-lean-ci.md);
-  sharding is unnecessary at current runtimes.
 - [ ] Evaluate IWSDK-native ECS/scene composition only when a concrete authoring
   workflow requires it; the current tooling integration intentionally preserves
   HoloIM's custom Three/Rapier runtime.
-- [ ] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
+- [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.
-- [ ] Migrate the capture TypeScript config to the shared config chain once `tsgo`
-  supports the needed `baseUrl` and non-relative `extends` behavior.
-- [ ] Decide whether the capture app needs a user-visible AR recenter control for
-  device-specific placement recovery.
+  Set up as the opt-in `metavr` MCP server in
+  [`docs/features/archive/metavr-setup.md`](docs/features/archive/metavr-setup.md); host install
+  and the one-time on-headset USB-debugging accept remain operator steps.
+- [x] Migrate the capture TypeScript config to the shared config chain and run
+  the whole workspace on stable TypeScript 7. The stated blocker was stale:
+  `tsgo` resolves package `extends`; the real fixes were dropping `baseUrl`
+  (removed in TypeScript 7) and declaring `@holoim/config-ts` in capture.
+  Delivered in
+  [`docs/features/archive/tsgo-typescript7-migration.md`](docs/features/archive/tsgo-typescript7-migration.md):
+  catalog `typescript@^7.0.2` everywhere, `typescript-eslint` 8.71.2 bridged
+  on the `@typescript/typescript6` sidecar until it supports the TS7 API.
+- [x] Decide whether the capture app needs a user-visible AR recenter control for
+  device-specific placement recovery. Delivered as a "Recenter AR" overlay
+  button shown only in AR mode in
+  [`docs/features/archive/ar-recenter-control.md`](docs/features/archive/ar-recenter-control.md).
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
-  and success signal are explicit.
+  and success signal are explicit. The lens points to IDEA-045 (portal view)
+  or IDEA-032 (self-resolving pointing) first; PRD-001 is parked.
 
 ## Maintenance
 

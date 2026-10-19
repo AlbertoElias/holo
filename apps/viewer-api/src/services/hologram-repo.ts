@@ -13,6 +13,7 @@ export type CreateHologramInput = {
   mimeType: string;
   sizeBytes: number;
   storagePath: string;
+  quickLookEnabled: boolean;
 };
 
 export async function createHologram(input: CreateHologramInput) {
@@ -24,7 +25,8 @@ export async function createHologram(input: CreateHologramInput) {
       filenameStored: input.filenameStored,
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
-      storagePath: input.storagePath
+      storagePath: input.storagePath,
+      quickLookEnabled: input.quickLookEnabled
     }
   });
 }

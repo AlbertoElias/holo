@@ -417,7 +417,7 @@ export class CharacterMotor {
         x: dx * step,
         y: 0,
         z: dz * step
-      });
+      }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
       const corrected = this.characterController.computedMovement();
       if (!Number.isFinite(corrected.x) || !Number.isFinite(corrected.z)) continue;
       score += Math.hypot(corrected.x, corrected.z);

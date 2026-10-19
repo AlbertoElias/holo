@@ -77,8 +77,40 @@ module instance.
   agents need indexed SDK examples.
 - Evaluate MetaVR separately for physical Quest automation. It adds device access
   and native build/install requirements, so it should remain an explicit opt-in.
+  Wiring is in place (see "Physical Quest automation (MetaVR)" below); the
+  evaluation continues against real-device evidence.
 - Do not migrate HoloIM scenes or systems to IWSDK ECS solely to unlock editor
   methods. Treat that as an architecture decision with a concrete product need.
+
+## Physical Quest automation (MetaVR)
+
+MetaVR (`@meta-quest/metavr`) is the explicit opt-in path for real-device
+evidence: Quest device management, launching the app on a USB-connected
+headset, screenshots, frame-rate profiling from the device, and logs.
+It is registered as the `metavr` MCP server for both agents via
+`scripts/mcp/metavr.sh`; start a new agent session after pulling so the
+project MCP configuration reloads. No default script, test, or CI job
+invokes it, and it is not a workspace dependency — its install downloads
+a native binary from Meta's CDN.
+
+Host setup (once, from a normal terminal):
+
+```bash
+# User-writable prefix: the system npm prefix (/usr/local) is root-owned.
+npm install -g --prefix "$HOME/.local" @meta-quest/metavr
+export PATH="$HOME/.local/bin:$PATH" # add to your shell profile
+# Enable Developer Mode for the headset in the Meta Horizon phone app,
+# connect a USB-C data cable, then put the headset on once and accept
+# the "Allow USB debugging" prompt.
+```
+
+After that one-time accept, the headset can sit on a desk: an agent can
+launch capture on the device, capture screenshots and performance
+profiles, and read logs without anyone wearing it. What still needs a
+person is hand tracking with hands moving in front of the cameras,
+controller↔hand switching, and comfort or tracking feel — keep those on
+the physical-headset checklist in `TODOS.md` and report them separately
+from IWER and MetaVR-automated evidence.
 
 ## Sources
 

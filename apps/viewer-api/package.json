@@ -7,7 +7,7 @@
     "dev": "pnpm run prisma:setup && tsx watch src/server.ts",
     "build": "pnpm run prisma:generate && tsc -p tsconfig.json",
     "lint": "eslint .",
-    "typecheck": "pnpm run prisma:generate && tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm run prisma:generate && tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck && pnpm run test",
     "verify:full": "pnpm run verify:fast && pnpm run build",

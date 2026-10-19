@@ -5,3 +5,8 @@
 command = "sh"
 args = ["scripts/mcp/iwsdk-runtime.sh"]
 startup_timeout_sec = 20
+
+[mcp_servers.metavr]
+command = "sh"
+args = ["scripts/mcp/metavr.sh"]
+startup_timeout_sec = 20

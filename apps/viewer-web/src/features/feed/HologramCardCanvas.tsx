@@ -10,7 +10,7 @@ import {
   SRGBColorSpace,
   Vector3
 } from "three";
-import type { AnimationAction, Material, Mesh, Object3D } from "three";
+import type { AnimationAction, Mesh, Object3D } from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { useSphereClipping } from "../hologram/useSphereClipping";
@@ -40,22 +40,6 @@ const CARD_CAMERA_POSITION_OFFSET = new Vector3(0.62, 0.36, 0.18);
 const CARD_CAMERA_LOOK_AT_OFFSET = new Vector3(0, -0.14, 0);
 const BUBBLE_CAMERA_POSITION_OFFSET = new Vector3(0, 0, 0);
 const BUBBLE_CAMERA_LOOK_AT_OFFSET = new Vector3(0, 0, 0);
-
-function disposeScene(root: Object3D): void {
-  root.traverse((child) => {
-    const mesh = child as Mesh;
-    if (mesh.geometry) {
-      mesh.geometry.dispose();
-    }
-
-    const material = mesh.material as Material | Material[] | undefined;
-    if (Array.isArray(material)) {
-      material.forEach((m) => m.dispose());
-    } else if (material) {
-      material.dispose();
-    }
-  });
-}
 
 function getFramingTargets(root: Object3D): Object3D[] {
   const targets = new Set<Object3D>();
@@ -131,7 +115,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
   useEffect(() => {
     onHasAudio(audioState.hasAudio);
   }, [audioState.hasAudio, onHasAudio]);
-  const { camera, invalidate } = useThree();
+  const { camera, invalidate, gl: renderer, scene: renderScene } = useThree();
   const clonedScene = useMemo(() => cloneSkeleton(scene), [scene]);
   const sphereClip = useSphereClipping(clonedScene, { falloffWidth: 1.8 });
   const animatedBoundsRef = useRef(new Box3());
@@ -140,7 +124,14 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
   const framingTargetsRef = useRef<Object3D[]>([]);
   const avatarRootRef = useRef<Object3D | null>(null);
   const avatarAnchorRef = useRef<{ hips: Object3D; head: Object3D | null } | null>(null);
-  const { actions } = useAnimations(animations, clonedScene);
+  const { actions, mixer } = useAnimations(animations, clonedScene);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
+      observer?.({ renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer });
+    }
+  }, [actions, camera, clonedScene, mixer, renderScene, renderer, sphereClip]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {
@@ -367,11 +358,8 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
     );
   });
 
-  useEffect(() => {
-    return () => {
-      disposeScene(clonedScene);
-    };
-  }, [clonedScene]);
+  // SkeletonUtils clones share the loader cache's geometry and source materials.
+  // useSphereClipping owns/disposes its material clones; leave cached assets alive.
 
   return <primitive object={clonedScene} />;
 }

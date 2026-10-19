@@ -412,7 +412,7 @@ export class XrSessionService {
   // getCamera().cameras[i].matrix (tracking space) at the start of every XR
   // frame, before the app runs. The ArrayCamera's own position is not usable
   // here: it is tracking space until render() calls updateCamera and world
-  // space afterwards, so its meaning depends on frame order (B-008). Call once
+  // space afterwards, so its meaning depends on frame order (B-009). Call once
   // per frame, and again via refreshHeadWorldPose() after moving the rig.
   updateHeadPose(): XrHeadPose {
     const pose = this.headPose;

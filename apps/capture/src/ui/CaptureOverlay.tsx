@@ -10,6 +10,9 @@ function resolveOverlayMode(mode: UiViewModel["mode"]): XrMode {
   if (mode === "vr" || mode === "mock-vr") {
     return "vr";
   }
+  if (mode === "ar") {
+    return "ar";
+  }
   return typeof window !== "undefined" && window.innerWidth <= 768 ? "mobile" : "desktop";
 }
 
@@ -126,6 +129,11 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
             >
               {recording.actionLabel}
             </UiButton>
+            {state.mode === "ar" ? (
+              <UiButton onClick={() => bridge.recenterAr()} tone="ghost">
+                Recenter AR
+              </UiButton>
+            ) : null}
             <div style={{ fontSize: "0.78rem", color: uiDomTokens.colorTextMuted }}>
               Shortcut: <strong>R</strong>
             </div>

@@ -28,6 +28,8 @@ Complete relevant checks and fixes before handoff.
 For feature requests or substantial behavior changes, follow the canonical
 process in `docs/FEATURE_WORKFLOW.md` (via the `feature-delivery` skill in
 `.agents/skills/feature-delivery/SKILL.md`); do not wait for the user to name it.
+Judge product behavior against `docs/product/concepts/what-a-hologram-is.md`:
+a hologram is a recorded event, viewed through a portal on flat screens.
 
 For ongoing work, each phase has one authority — queue in `TODOS.md`, in-flight
 feature in its brief under `docs/features/`, open defects in `BUGS.md`, and
@@ -52,8 +54,10 @@ Work in your own worktree by default; the main checkout is the integration point
   brief in `docs/features/README.md` before touching overlapping files.
 - For implementation work, create a worktree on your own branch and install
   there (pnpm's shared store makes this cheap):
-  `git worktree add ../holoim-<task> -b <agent>/<task> origin/main`, then
-  `pnpm install` in that directory. One feature or agent per worktree.
+  `git worktree add ../holoim-<task> -b <type>/<task> origin/main`, then
+  `pnpm install` in that directory. One feature or agent per worktree. Branch
+  by change type, never by agent: `feature/`, `bug/`, `docs/`, `infra/`
+  (e.g. `feature/ar-recenter`, `infra/metavr-setup`).
 - The exception is a short, sequential fix when the relevant files are clean:
   it may go directly in a free checkout. Never edit files another agent has
   modified in a shared tree.
@@ -64,6 +68,11 @@ Work in your own worktree by default; the main checkout is the integration point
   You are pre-authorized to commit and push within this workflow; do not stop
   to ask for approval. Stage only the files you changed by name — never commit
   another agent's in-progress work, and never use a broad `git add`.
+- Git transport is HTTPS with the `gh` credential helper (repo-local config:
+  `credential.https://github.com.helper` → `gh auth git-credential`). SSH
+  fails inside sandboxed agent sessions (`No user exists for uid 501` — the
+  sandbox blocks the user-database lookup SSH requires); HTTPS through `gh`
+  works with no approval. Do not switch the remote back to SSH.
 - The lead merges the verified branch into `main`, pushes, then removes the
   worktree (`git worktree remove`) and deletes the merged branch. If a push is
   rejected because another agent landed first, pull with rebase, re-run the

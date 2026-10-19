@@ -11,6 +11,7 @@ import { type BodyFault, type BodyHeadInput, VrBodySolver } from '../body/VrBody
 import { HandFingerRetargeter } from '../xr/HandFingerRetargeter';
 import { InputController } from '../input/InputController';
 import { ArmIkSolver } from '../ik/ArmIkSolver';
+import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import { UIStateStore } from '../ui/UIStateStore';
 import { VrHud } from '../ui/VrHud';
@@ -97,6 +98,7 @@ export class AppOrchestrator implements System {
   private readonly bootstrap = createSceneBootstrap();
   private readonly avatarRig = new AvatarRig(this.bootstrap.scene, this.bootstrap.worldGroup, this.bootstrap.renderer);
   private readonly characterMotor = new CharacterMotor();
+  private readonly terrainLegs = new TerrainLegSolver();
   private readonly camera = new CameraController({
     renderer: this.bootstrap.renderer,
     xrCamera: this.bootstrap.xrCamera,
@@ -260,6 +262,7 @@ export class AppOrchestrator implements System {
 
       this.avatarRig.applyLoadedModels(sceneGltf.scene, avatarGltf.scene, this.config);
 
+      this.terrainLegs.attach(this.avatarRig);
       this.initializeVrHandRig();
       // Bind pose is measured before any animation writes the skeleton.
       this.bodySolverReady = this.bodySolver.measureBindPose();
@@ -327,13 +330,14 @@ export class AppOrchestrator implements System {
         this.input.onXrExited();
       }
       this.camera.onXrExited();
-      this.avatarRig.applyCrouchPose(0);
+      // Normal frame restoration removes crouch before the mixer runs.
     }
 
     const isXrPresenting = this.xrService.isXrPresenting();
 
     // ── AR spectator path ──────────────────────────────────────────
     if (isAr && isXrPresenting) {
+      this.uiStore.publishMode('ar');
       this.camera.update(false, true, ctx.deltaSec, true);
       if (this.arWorldRecenterFramesRemaining > 0) {
         this.placeArWorldInFrontOfViewer();
@@ -369,6 +373,8 @@ export class AppOrchestrator implements System {
       this.camera.ensureDesktopRendererState();
     }
 
+    this.terrainLegs.restore();
+    this.avatarRig.restoreCrouchPose();
     this.updateCrouchState(ctx.deltaSec, isVrActive);
     const jumpQueued = this.input.consumeJumpQueued();
     this.characterMotor.getCharacterBodyPosition(this.bodyCapsuleBefore);
@@ -424,17 +430,21 @@ export class AppOrchestrator implements System {
       horizontalSpeed: characterSnapshot.horizontalSpeed,
       targetHorizontalSpeed: characterSnapshot.targetHorizontalSpeed,
       moveIntent: this.input.moveState.forward || this.input.moveState.back || this.input.moveState.left || this.input.moveState.right,
-      vrMode: isVrActive
+      vrMode: isVrActive,
+      referenceSpeed: this.avatarRig.avatarHeight * 1.8
     });
     if (!this.bodyActive && this.bodyPosed) {
       this.bodySolver.restoreBindPose();
       this.bodyPosed = false;
     }
+    // The body solver owns hips and legs in room-scale VR; elsewhere the
+    // animation path adds the crouch pose and terrain-adapted legs.
     if (bodyTracking) {
       this.bodyPosed = true;
       this.bodySolver.solve(this.bodyHead, this.avatarRig.avatarRoot.position, ctx.deltaSec, this.groundSampler, this.config.embodyOffset, characterSnapshot.grounded);
     } else if (!this.bodyActive) {
       this.avatarRig.applyCrouchPose(this.crouchPoseAmount, characterSnapshot.horizontalSpeed);
+      this.terrainLegs.update(this.avatarRig, characterSnapshot.grounded, ctx.deltaSec);
     }
 
     if (isVrActive && this.characterMotor.hasSpawnResolved()) {
@@ -531,6 +541,13 @@ export class AppOrchestrator implements System {
 
   requestToggleRecording(): void {
     this.toggleRecording();
+  }
+
+  /** Manual AR placement recovery: re-place the world in front of the viewer. No-op outside a presenting AR session. */
+  requestRecenterAr(): void {
+    if (this.bootstrap.xrSessionMode !== 'ar' || !this.xrService.isXrPresenting()) return;
+    this.arWorldRecenterFramesRemaining = 0;
+    this.placeArWorldInFrontOfViewer();
   }
 
   private toggleRecording(): void {
@@ -963,7 +980,9 @@ export class AppOrchestrator implements System {
         horizontalSpeed: character.horizontalSpeed,
         targetHorizontalSpeed: character.targetHorizontalSpeed,
         timeScale: this.animator.getCurrentTimeScale(),
-        activeProfile: this.animator.getActiveProfile()
+        activeProfile: this.animator.getActiveProfile(),
+        legs: this.terrainLegs.getSnapshot(),
+        clip: this.animator.getClipSnapshot()
       },
       crouch: {
         amount: this.crouchAmount,
@@ -975,7 +994,15 @@ export class AppOrchestrator implements System {
         left: handSnapshot('left', leftTracking, leftHand, leftSensor),
         right: handSnapshot('right', rightTracking, rightHand, rightSensor)
       },
-      mockVr: this.xrService.getMockSnapshot()
+      mockVr: this.xrService.getMockSnapshot(),
+      ar: {
+        sessionMode: this.bootstrap.xrSessionMode,
+        worldPosition: {
+          x: this.bootstrap.worldGroup.position.x,
+          y: this.bootstrap.worldGroup.position.y,
+          z: this.bootstrap.worldGroup.position.z
+        }
+      }
     };
 
     return JSON.stringify(payload);

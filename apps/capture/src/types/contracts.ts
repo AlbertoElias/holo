@@ -1,4 +1,4 @@
-export type AppMode = 'desktop-third' | 'desktop-first' | 'vr' | 'mock-vr';
+export type AppMode = 'desktop-third' | 'desktop-first' | 'vr' | 'mock-vr' | 'ar';
 
 export type DesktopViewMode = 'third' | 'first';
 export type VrHandSide = 'left' | 'right';
