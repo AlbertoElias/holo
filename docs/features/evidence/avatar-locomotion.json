@@ -168,5 +168,14 @@
     "Existing XR virtual movement input only; no new controller bindings or room-scale root following",
     "Existing physical-hop/upward crouch-baseline interaction requires physical evaluation"
   ],
-  "fullGateCommand": "DEV_PORT=5474 E2E_BASE_URL=https://localhost:3474 E2E_API_PORT=3301 E2E_CAPTURE_URL=https://127.0.0.1:5475/ pnpm run verify:pr"
+  "fullGateCommand": "DEV_PORT=5474 E2E_BASE_URL=https://localhost:3474 E2E_API_PORT=3301 E2E_CAPTURE_URL=https://127.0.0.1:5475/ pnpm run verify:pr",
+  "sourceFeatureTip": "136f301773746f8551c048343e6a7641ec8d166b",
+  "integration": {
+    "mainBaseline": "70e56826faa9a2e107a8b0c8b9f59df30d434a67",
+    "verifyAgent": "PASS",
+    "verifyPr": "PASS",
+    "viewerAr": "2/2",
+    "quickLookPipeline": "real audio, capture export, upload-time USDZ, viewer render PASS",
+    "height": "separate subsequent merge"
+  }
 }

@@ -58,8 +58,11 @@ it from the item below instead of duplicating its status here.
 - [ ] Evaluate IWSDK-native ECS/scene composition only when a concrete authoring
   workflow requires it; the current tooling integration intentionally preserves
   HoloIM's custom Three/Rapier runtime.
-- [ ] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
+- [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.
+  Set up as the opt-in `metavr` MCP server in
+  [`docs/features/archive/metavr-setup.md`](docs/features/archive/metavr-setup.md); host install
+  and the one-time on-headset USB-debugging accept remain operator steps.
 - [x] Migrate the capture TypeScript config to the shared config chain and run
   the whole workspace on stable TypeScript 7. The stated blocker was stale:
   `tsgo` resolves package `extends`; the real fixes were dropping `baseUrl`
@@ -68,8 +71,10 @@ it from the item below instead of duplicating its status here.
   [`docs/features/archive/tsgo-typescript7-migration.md`](docs/features/archive/tsgo-typescript7-migration.md):
   catalog `typescript@^7.0.2` everywhere, `typescript-eslint` 8.71.2 bridged
   on the `@typescript/typescript6` sidecar until it supports the TS7 API.
-- [ ] Decide whether the capture app needs a user-visible AR recenter control for
-  device-specific placement recovery.
+- [x] Decide whether the capture app needs a user-visible AR recenter control for
+  device-specific placement recovery. Delivered as a "Recenter AR" overlay
+  button shown only in AR mode in
+  [`docs/features/archive/ar-recenter-control.md`](docs/features/archive/ar-recenter-control.md).
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
   and success signal are explicit.

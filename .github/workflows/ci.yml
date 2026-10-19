@@ -110,8 +110,28 @@ jobs:
         run: pnpm timed xr-capture -- pnpm run test:xr:capture
       - name: Viewer AR checks
         run: pnpm timed xr-viewer -- pnpm run test:xr:viewer
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Quick Look conversion dependencies
+        run: |
+          python3 -m pip install -r apps/viewer-api/tools/requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
       - name: Capture to viewer pipeline
         run: pnpm timed pipeline -- pnpm run test:smoke:pipeline
+      - name: Upload Quick Look fidelity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quicklook-fidelity-${{ github.run_id }}
+          path: |
+            output/quicklook/**/capture-export.glb
+            output/quicklook/**/capture-quicklook.usdz
+            output/quicklook/**/quicklook-validation.json
+            output/quicklook/**/exercise-summary.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

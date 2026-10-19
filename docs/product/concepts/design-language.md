@@ -5,7 +5,12 @@ listed at the end.
 **Applies to:** `apps/capture`, `apps/viewer-web`, and the shared UI packages,
 in 2D (desktop, phone) and 3D (VR, AR), with mouse, touch, controllers, hands,
 and gaze-pinch.
-**Visual references (private until shared):**
+**Current round:** the [Direction Board](https://claude.ai/artifact/MtoVzHNaaxA3SPd5BuXgdc)
+collects the research, four hologram-first directions (Greenhouse, Prism,
+Companion, Atelier), seven triggers for one action, and brainstorm prompts, with
+reactions saved per card. It supersedes the single-direction proposal below,
+which is kept for reference until a direction is chosen.
+**Earlier visual references (private until shared):**
 [Light & Ink screens](https://claude.ai/artifact/C3h8MbK3YCcVKeiJd771S9), 14
 screen mockups of the Light direction over real capture renders, and
 [the interactive grammar demo](https://claude.ai/artifact/DAjXaAk4QGmXxN1riUu5bp).

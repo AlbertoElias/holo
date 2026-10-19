@@ -74,3 +74,7 @@ When merging `codex/xr-height-adaptation`, retain its meter-to-parent-local crou
 ## Physical-device limits
 
 IWER establishes deterministic WebXR behavior and retargeting compatibility, not physical-headset tracking feel, comfort or performance. Physical headset evaluation remains required, including physical-hop interaction with the existing upward head-height crouch baseline. This change animates the existing XR virtual movement inputs; it does not add controller bindings or room-scale root following.
+
+## Integration validation
+
+Validated against main `70e56826faa9` with the stable TypeScript 7 configuration, AR recentering and the opt-in upload-time Quick Look converter preserved. `verify:agent` and the complete `verify:pr` gate passed. The latest gate exercised real microphone audio, capture export, upload-time USDZ conversion, feed rendering, all capture XR checks and both viewer AR cases (2/2). Height adaptation remains a separate subsequent merge.

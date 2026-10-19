@@ -34,6 +34,12 @@ on one or more of these properties:
    if they reduce ambiguity, improve recall, shorten handoffs, or enable better
    decisions.
 
+## What a Hologram Is
+
+A hologram is a recording of an event, not of a view: it can be moved through
+in time and in space. The layers, principles, and test that follow from this
+are in [concepts/what-a-hologram-is.md](concepts/what-a-hologram-is.md).
+
 ## Communication Model
 
 A holographic utterance is more than audio and motion. It has intent, a

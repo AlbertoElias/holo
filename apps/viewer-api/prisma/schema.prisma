@@ -18,6 +18,7 @@ model Hologram {
   storagePath      String
   durationSec      Float?
   usdzPath         String?
+  quickLookEnabled Boolean  @default(false)
   createdAt        DateTime @default(now())
 
   @@index([createdAt(sort: Desc)])

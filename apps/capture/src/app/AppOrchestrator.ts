@@ -273,6 +273,7 @@ export class AppOrchestrator implements System {
 
     // ── AR spectator path ──────────────────────────────────────────
     if (isAr && isXrPresenting) {
+      this.uiStore.publishMode('ar');
       this.camera.update(false, true, ctx.deltaSec, true);
       if (this.arWorldRecenterFramesRemaining > 0) {
         this.placeArWorldInFrontOfViewer();
@@ -388,6 +389,13 @@ export class AppOrchestrator implements System {
 
   requestToggleRecording(): void {
     this.toggleRecording();
+  }
+
+  /** Manual AR placement recovery: re-place the world in front of the viewer. No-op outside a presenting AR session. */
+  requestRecenterAr(): void {
+    if (this.bootstrap.xrSessionMode !== 'ar' || !this.xrService.isXrPresenting()) return;
+    this.arWorldRecenterFramesRemaining = 0;
+    this.placeArWorldInFrontOfViewer();
   }
 
   private toggleRecording(): void {
@@ -688,7 +696,15 @@ export class AppOrchestrator implements System {
         left: handSnapshot('left', leftTracking, leftHand, leftSensor),
         right: handSnapshot('right', rightTracking, rightHand, rightSensor)
       },
-      mockVr: this.xrService.getMockSnapshot()
+      mockVr: this.xrService.getMockSnapshot(),
+      ar: {
+        sessionMode: this.bootstrap.xrSessionMode,
+        worldPosition: {
+          x: this.bootstrap.worldGroup.position.x,
+          y: this.bootstrap.worldGroup.position.y,
+          z: this.bootstrap.worldGroup.position.z
+        }
+      }
     };
 
     return JSON.stringify(payload);
