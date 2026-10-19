@@ -225,9 +225,12 @@ contracts are preserved, and direct-upload is additive.
   downloaded with HTTP 200, delete removed it, and a follow-up GET returned
   404. (List stayed empty by design: the `agent-` submitter prefix is
   excluded as a test artifact.)
-- Remaining: Cloudflare Pages viewer deploy (operator `wrangler login`,
-  then DEPLOYMENT.md §2), an upload round-trip against the live API, and
-  the physical-device checks below.
+- Viewer live on Cloudflare Pages: project `holoim-viewer` created and
+  deployed with `VITE_API_ORIGIN=https://holoim-api.fly.dev`;
+  https://holoim-viewer.pages.dev returns 200 and the API answers its
+  origin with a matching `Access-Control-Allow-Origin`.
+- Remaining: the physical-device checks below (Quest feed/WebXR, iPhone
+  Quick Look against the live URLs).
 
 ## Physical-device limits
 
