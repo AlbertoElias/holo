@@ -150,9 +150,10 @@ in `apps/capture/scripts/lib/body-fidelity.mjs`.
    and body all use it (B-009).
 2. **World-locked rig.** On the first valid head pose, on a reference-space
    `reset`, or after a > 0.5 m tracking jump, the rig is placed so the tracked
-   eyes sit on the avatar's standing eyes (soft knees, real ground) and the
-   body faces the head. Afterwards the rig moves only with input movement and
-   the ground height under the body; a wall stops the body, not the view.
+   eyes sit on the avatar's standing eyes and the body faces the head.
+   Afterwards the rig moves horizontally only with input movement, and its
+   height follows the avatar's visual base every frame (the floor-space
+   contract of XR height adaptation); a wall stops the body, not the view.
 3. **`VrBodySolver`** (`src/body/`), active for real XR input; the mock-VR hook
    keeps the legacy path. Write order: motor → root → mixer → body solver (owns
    hips, spine, neck, head, legs, feet, toes) → arm IK → camera → recording.
@@ -181,6 +182,30 @@ in `apps/capture/scripts/lib/body-fidelity.mjs`.
 4. **Replays.** Checks freeze the page clock, wait for steady XR frames, align
    the frame clock, and tick inside XR frames (`__setFrameStepping`).
    `attachXrEnvironment` caches GL clear state so IWER frames do not stall.
+5. **XR height adaptation (merged from `main`).** The solver works at the
+   calibrated avatar scale: a refit calls `rescale(ratio)` and `reset()` so
+   bind dimensions and planted feet follow the new size.
+   - *Reach headroom.* With the body solver, the fit makes the avatar 1.5%
+     taller than the calibrated eye height (`BODY_REACH_HEADROOM`). An avatar
+     whose straight-leg eyes equal the user's cannot follow a head that rises
+     even 1 cm (standing taller, walking bob, feet apart after a stop); the
+     replays missed by up to 4 cm without it.
+   - *Neutral knees from the user.* Standing pelvis height comes from the
+     user's tracked standing eye height (raised only while the head is
+     still), not a fixed soft-knee offset; the knees straighten past it only
+     during a lean (up to 0.015 leg, eased in by the filtered head drop), so
+     a lean does not lift the shoulders off the tracked hands.
+   - *Grounding.* The avatar's visual offset subtracts the character
+     controller's skin offset, so a grounded avatar's soles touch the floor
+     instead of hovering ~2% of its height; the rig's floor is the avatar's
+     visual base every frame.
+   - *Checks.* Body replays hold the first recorded pose until the fit
+     calibrates, as a user stands still on entering VR, then play from the
+     start. The height check (`test:xr:height`) runs on the level
+     `body-floor` fixture: the default scene's spawn is a ~60° slope where
+     planted feet lower the pelvis and the eyes by ~3 cm, which is terrain
+     response, not calibration. It also caches GL clear state like the other
+     capture checks; without it, it hit the 120 s check timeout on 2 vCPU.
 
 ### Design review (Codex, read-only, 2026-10-18)
 
@@ -224,31 +249,35 @@ spine; feet raised 1 m with ground removed): each now fails.
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Body criteria | `pnpm --filter @holoim/capture run test:xr:body` | All five fixtures pass (table below); reports in `output/ci-body-replay/` |
-| Metrics can fail | `BODY_REPLAY_FAULTS=1 node scripts/run-xr-checks.mjs body` | 12/12 faults caught, each by its named metric; `output/ci-body-replay/fault-matrix.json` |
+| Metrics can fail | `BODY_REPLAY_FAULTS=1 node scripts/run-xr-checks.mjs body` | 12/12 faults caught, each by its named metric, again after the height-fit merge; `output/ci-body-replay/fault-matrix.json` |
 | Video and screenshots | `BODY_REPLAY_VIDEO=1 XR_CAPTURE_SUCCESS_SCREENSHOTS=1` | One MP4 and one final PNG per fixture (third person, tracked head path cyan, avatar eyes pink) |
 | Hands in device order | `test:xr:hands` | Passes; the old head read fails it at 2,082 cm (B-009) |
-| Determinism | Body and hands checks twice, concurrency 2; one replay three times | Byte-identical samples for all six replays |
+| Determinism | Body and hands checks twice, concurrency 2; one replay three times; body again after the height-fit merge | Byte-identical samples for all six replays, and for all five body replays after the merge |
 | Determinism and speed on 2 vCPU | `docker run --cpus=2 --memory=7g mcr.microsoft.com/playwright:v1.58.2-noble`, capture and viewer suites twice, after merging `main` | Both runs pass: capture XR 231/237 s (body ~140 s, two replays at once), viewer 93/88 s; samples byte-identical between runs and with macOS. The pipeline suite needs `usd-core`, which has no Linux ARM wheel, so it ran on GitHub's x64 runners instead |
 | Full CI tier on the branch | `gh workflow run ci.yml --ref claude/room-scale-body-motion` (run 39188138321) | Green: quality, unit, build, capture XR 127 s (body 56 s), viewer AR 5/5, pipeline 2/2 |
 
-Results on macOS after merging `main` (fixtures: walk forward/back/side, turn in place + arc, crouch
-and lean, small steps + sway, walk up the ramp):
+Results on macOS after merging `main`'s XR height fit (each replay calibrates on its held first
+pose; fixtures: walk forward/back/side, turn in place + arc, crouch and lean, small steps + sway,
+walk up the ramp):
 
 | Metric | Walk | Turn | Crouch/lean | Steps/sway | Ramp |
 |---|---|---|---|---|---|
-| Eyes p95 standing / moving | 0.1 / 2.2 cm | 0.7 / 2.7 cm | 1.5 / 1.4 cm | 1.5 / 3.2 cm | 0.0 / 1.5 cm |
+| Eyes p95 standing / moving | 0.1 / 2.2 cm | 0.8 / 3.2 cm | 1.7 / 1.4 cm | 1.4 / 3.2 cm | 0.0 / 2.3 cm |
 | Head yaw / pitch p95 | 0.0° / 0.0° | 0.1° / 0.0° | 0.0° / 0.1° | 0.0° / 0.0° | 0.0° / 0.0° |
 | Rig drift | 0.0 cm | 0.0 cm | 0.0 cm | 0.0 cm | 0.0 cm |
-| Root / pelvis overshoot | 1.6 / 1.3 cm | 0.2 / 0.2 cm | – | – | 0.2 / 0.1 cm |
-| Turn lag, neck twist max | – | 0.20 s, 44° | – | – | 0.20 s, 48° |
-| Foot drift, skating | 0.4 cm, 0.7% | 0.3 cm, 1.3% | 0.1 cm, 0.0% | 0.2 cm, 0.1% | 0.5 cm, 1.4% |
-| Planted sole max, min sole | 2.0, 0.0 cm | 1.0, 0.0 cm | 1.4, 0.0 cm | 1.8, 0.0 cm | 1.3, -0.2 cm |
-| Cadence, step length | 2.21/s, 0.60 leg | 2.26/s, 0.48 leg | – | – | 2.14/s, 0.51 leg |
-| Crouch ratio, lean r | – | – | 0.91, 1.00 | – | – |
-| Pelvis jerk ratio | 0.75 | 1.03 | 0.53 | 0.85 | 1.02 |
+| Root / pelvis overshoot | 1.4 / 1.1 cm | 0.3 / 0.3 cm | – | – | 0.2 / 0.1 cm |
+| Turn lag, neck twist max | – | 0.20 s, 45° | – | – | 0.20 s, 47° |
+| Foot drift, skating | 0.4 cm, 1.3% | 0.4 cm, 1.0% | 0.1 cm, 0.0% | 0.3 cm, 0.5% | 0.4 cm, 1.3% |
+| Planted sole max, min sole | 2.0, 0.0 cm | 1.1, 0.0 cm | 1.0, 0.0 cm | 1.4, 0.0 cm | 1.3, -0.1 cm |
+| Cadence, step length | 2.31/s, 0.57 leg | 2.31/s, 0.48 leg | – | – | 2.14/s, 0.51 leg |
+| Crouch ratio, lean r, wrists p95 | – | – | 0.91, 1.00, 1.6 cm | – | – |
+| Pelvis jerk ratio | 1.17 | 0.88 | 0.79 | 0.63 | 0.98 |
 
-The tightest margin is the planted-sole height (up to 2.0 cm against 2 cm): soft IK and heel roll leave a
-planted foot up to ~2 cm off the floor at the end of a long reach.
+The tightest margins are the planted-sole height (2.0 cm against 2 cm: soft IK and heel roll leave a
+planted foot up to ~2 cm off the floor at the end of a long reach) and the crouch/lean wrists
+(1.6 cm against 2 cm: the fixture's hands at the deepest lean sit 6 mm beyond the avatar's
+straight-arm reach). The 1.5% reach headroom and the 0.015-leg lean allowance were set against
+these synthetic fixtures; headset recordings should confirm them.
 
 ### Defects found and fixed
 

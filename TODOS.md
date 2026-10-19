@@ -60,18 +60,16 @@ it from the item below instead of duplicating its status here.
 - [ ] Mark synthesized locomotion as inferred in capture exports, distinct from
   tracked/recorded performance. This is the export-provenance follow-up added
   by the [hologram philosophy](docs/product/concepts/what-a-hologram-is.md).
-- [ ] Adapt the XR avatar to the person's height, keeping feet grounded and
-  head/hands aligned with tracked input. This sets the hologram's true scale,
-  which pointing rays and measurements depend on. Measure standing eye height
-  (and optionally arm span) at session start or on request, and scale or
-  re-proportion the avatar without changing the world scale; handle
-  recalibration, seated users, and how the scaled avatar is recorded and
-  exported. The room-scale body solver currently maps the user's eyes onto the
-  avatar's standing eye height. Start in a dedicated session; coordinate
-  avatar scale and calibration with the locomotion-animation work.
+- [x] Adapt the XR avatar to the person's height, keeping its base grounded and
+  neutral head/hands aligned with tracked input. Delivered in
+  [`docs/features/archive/xr-height-adaptation.md`](docs/features/archive/xr-height-adaptation.md).
+
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
-  intentionally uses local filesystem storage and SQLite.
+  intentionally uses local filesystem storage and SQLite. Host, object storage,
+  and conversion decisions are made and implementing in
+  [`docs/features/live-deployment.md`](docs/features/live-deployment.md)
+  (Fly + R2 + async USDZ; auth and Postgres deliberately deferred there).
 - [x] Move the generated development SQLite databases out of version control. Local
   setup now runs committed Prisma migrations; route tests own temporary database and
   upload fixtures; generated database files are ignored.

@@ -34,7 +34,7 @@ jobs:
           version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
@@ -63,7 +63,7 @@ jobs:
           version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
@@ -100,12 +100,14 @@ jobs:
           version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
       - run: pnpm --filter @holoim/api prisma:generate
       - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+      - name: Knowledge Atlas browser checks
+        run: pnpm timed knowledge -- pnpm run test:knowledge
       - name: Capture XR checks
         run: pnpm timed xr-capture -- pnpm run test:xr:capture
       - name: Viewer AR checks
@@ -143,6 +145,8 @@ jobs:
             apps/capture/output/ci-hand-replay
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
+            apps/knowledge/test-results
+            apps/knowledge/playwright-report
             output/test-results
           if-no-files-found: ignore
           retention-days: 14

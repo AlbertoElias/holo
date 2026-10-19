@@ -109,6 +109,62 @@ export class XrSessionService {
   private readonly lowFingerJointWarned: Record<VrHandSide, boolean> = { left: false, right: false };
 
   private wasXrPresenting = false;
+  private heightReferenceSpace: XRReferenceSpace | null = null;
+  private heightReferenceRevision = 0;
+  private readonly onHeightReferenceReset = (): void => {
+    this.floorHeadPosition = undefined;
+    this.heightReferenceRevision += 1;
+  };
+
+  getHeightReferenceRevision(): number {
+    return this.heightReferenceRevision;
+  }
+
+  private heightSession: XRSession | null = null;
+  private readonly onHeightVisibilityChange = (): void => {
+    this.floorHeadPosition = undefined;
+    this.heightReferenceRevision += 1;
+  };
+  private floorHeadPosition: DOMPointReadOnly | undefined;
+
+  getFloorHeadPosition(): DOMPointReadOnly | undefined {
+    return this.renderer.xr.getSession()?.visibilityState === 'visible' ? this.floorHeadPosition : undefined;
+  }
+
+  captureFloorHeadPose(frame: XRFrame | undefined): void {
+    // XRFrame poses are only readable inside the animation callback. Keep a
+    // pose value, never a live frame, for deterministic simulation steps.
+    this.floorHeadPosition = frame ? this.readFloorHeadPosition(frame) : undefined;
+  }
+
+  /** Raw floor-space pose, before dolly or avatar transforms. */
+  private readFloorHeadPosition(frame: XRFrame): DOMPointReadOnly | undefined {
+    const reference = this.renderer.xr.getReferenceSpace();
+    if (reference !== this.heightReferenceSpace) {
+      this.heightReferenceSpace?.removeEventListener('reset', this.onHeightReferenceReset);
+      this.heightReferenceSpace = reference;
+      reference?.addEventListener('reset', this.onHeightReferenceReset);
+      this.heightReferenceRevision += 1;
+    }
+    const session = this.renderer.xr.getSession();
+    if (!session || session.visibilityState !== 'visible' || !reference || this.mockVrState.enabled) return undefined;
+    // SceneBootstrap explicitly requests local-floor; unsupported floor spaces
+    // fail session entry rather than interpreting viewer-relative Y as stature.
+    const pose = frame.getViewerPose(reference);
+    const position = pose?.transform.position;
+    if (!pose || pose.emulatedPosition || !position || !isFiniteVector3Like(position)) return undefined;
+    return position;
+  }
+
+  getHeadWorldPosition(out: THREE.Vector3): THREE.Vector3 {
+    if (this.floorHeadPosition) {
+      out.set(this.floorHeadPosition.x, this.floorHeadPosition.y, this.floorHeadPosition.z);
+      return this.cameraRig ? this.cameraRig.localToWorld(out) : out;
+    }
+    // Do not call getWorldPosition on three's internal XR camera: it stores
+    // world coordinates, and updating its matrix can feed that dolly back in.
+    return out.copy(this.tmpXrHeadWorld);
+  }
 
   private readonly tmpVecA = new THREE.Vector3();
   private readonly tmpVecB = new THREE.Vector3();
@@ -297,9 +353,16 @@ export class XrSessionService {
     const exited = this.wasXrPresenting && !isXrPresenting;
     this.wasXrPresenting = isXrPresenting;
     if (entered) {
+      this.heightSession = this.renderer.xr.getSession();
+      this.heightSession?.addEventListener('visibilitychange', this.onHeightVisibilityChange);
       this.resetTrackingState();
     }
     if (exited) {
+      this.heightSession?.removeEventListener('visibilitychange', this.onHeightVisibilityChange);
+      this.heightSession = null;
+      this.heightReferenceSpace?.removeEventListener('reset', this.onHeightReferenceReset);
+      this.heightReferenceSpace = null;
+      this.floorHeadPosition = undefined;
       this.clearRuntimeInputSources();
     }
     return { entered, exited };
@@ -393,6 +456,9 @@ export class XrSessionService {
 
     if (this.renderer.xr.isPresenting && this.headPose.valid) {
       return this.headPose.localPosition.y;
+    }
+    if (this.renderer.xr.isPresenting) {
+      return this.getFloorHeadPosition()?.y;
     }
     return undefined;
   }

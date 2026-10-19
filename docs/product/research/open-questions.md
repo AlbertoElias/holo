@@ -41,3 +41,40 @@ grouped by the layers in [what a hologram is](../concepts/what-a-hologram-is.md)
 
 11. What minimum feature set makes a remote AR participant feel co-present in a
     physical space?
+
+## Additional Conversation Questions
+
+12. Does an explanation with one manipulable object (IDEA-059), synchronized
+   pause/viewpoint inspection (IDEA-060), and a capable flat-screen fallback
+   improve a real follow-up task compared with a decent video explanation?
+13. Which mixed-media layer (IDEA-061) or during-take authoring action (IDEA-062)
+   adds meaning at a tolerable cost in speech interruption and scene clutter?
+14. When are preview, discard/re-record, and trimming (IDEA-069) sufficient,
+    and when do observed mistakes justify segment retakes or a layered editor?
+15. Which creator pipeline failure first prevents repeat use: export/upload,
+    recovery, processing, previews, conversion, identity, or distribution
+    (IDEA-046 through IDEA-057)?
+16. Which audience and repeated job should lead: consumer expression, private
+    team instruction/review, commerce explanation, or third-party integration
+    (IDEA-064 through IDEA-067)?
+17. How do we preserve voluntary shared attention, accurate spatial anchoring,
+    and comfortable viewpoint changes across VR, AR, phone, and desktop?
+18. What evidence distinguishes felt presence from visual realism or novelty,
+    and how does consent or material editing affect that judgment (IDEA-063)?
+19. What would make a result inconclusive rather than negative, and how will
+    recipient availability, technical failure, learning/order effects, and
+    author preparation effort affect the comparison?
+
+
+## Supporting Material
+
+- [Research traditions and leads](research-leads.md): possible foundations to
+  investigate; not verified citations or proven HoloIM benefits.
+- [Approach](../APPROACH.md): practical comparison design and handling of blocked
+  or inconclusive observations.
+- [Conversation coverage](conversation-coverage.md): which proposals and
+  recommendations are preserved, and what source material was unavailable.
+
+Record findings with the originating question and related PRD or concept. Keep
+source links and the limits of any inference; do not promote a lead to evidence
+until its source and relevance have actually been reviewed.

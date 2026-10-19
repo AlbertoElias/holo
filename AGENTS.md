@@ -54,7 +54,7 @@ Work in your own worktree by default; the main checkout is the integration point
   brief in `docs/features/README.md` before touching overlapping files.
 - For implementation work, create a worktree on your own branch and install
   there (pnpm's shared store makes this cheap):
-  `git worktree add ../holoim-<task> -b <type>/<task> origin/main`, then
+  `git worktree add .worktrees/<task> -b <type>/<task> origin/main`, then
   `pnpm install` in that directory. One feature or agent per worktree. Branch
   by change type, never by agent: `feature/`, `bug/`, `docs/`, `infra/`
   (e.g. `feature/ar-recenter`, `infra/metavr-setup`).

@@ -1,0 +1,93 @@
+{
+  "environment": "IWER emulation; no physical-headset evidence",
+  "passed": true,
+  "consoleErrors": [],
+  "scenarios": [
+    {
+      "label": "short",
+      "inputEyeHeightM": 1.25,
+      "configuredAssetMultiplier": 1,
+      "baselineAvatarHeightM": 1.7686172807809353,
+      "baselineMinYM": 0.0007833425392202405,
+      "calibratedScaleFactor": 0.7653558593241105,
+      "calibratedAvatarHeightM": 1.3536215987475644,
+      "eyeAboveBaseM": 1.25,
+      "cameraAboveBaseM": 1.25,
+      "crouchedScaleFactor": 0.7653558593241105,
+      "resetScaleFactor": 0.7653558593241105,
+      "restoredDesktopScale": 1,
+      "reenteredEyeHeightM": 1.350000023841858
+    },
+    {
+      "label": "tall",
+      "inputEyeHeightM": 2.05,
+      "configuredAssetMultiplier": 1.3,
+      "baselineAvatarHeightM": 2.2992024650152163,
+      "baselineMinYM": 0.0010183453009863126,
+      "calibratedScaleFactor": 0.9655258308427169,
+      "calibratedAvatarHeightM": 2.2199393703094397,
+      "eyeAboveBaseM": 2.049999952316284,
+      "cameraAboveBaseM": 2.049999952316284,
+      "crouchedScaleFactor": 0.9655258308427169,
+      "resetScaleFactor": 0.9655258308427169,
+      "restoredDesktopScale": 1,
+      "reenteredEyeHeightM": 2.1500000953674316
+    },
+    {
+      "label": "seated",
+      "inputEyeHeightM": 0.95,
+      "configuredAssetMultiplier": 0.7,
+      "baselineAvatarHeightM": 1.3194783683989448,
+      "baselineMinYM": 0.21054834447131998,
+      "calibratedScaleFactor": 0.7756968014606912,
+      "calibratedAvatarHeightM": 1.023515149963633,
+      "eyeAboveBaseM": 0.949999988079071,
+      "cameraAboveBaseM": 0.949999988079071,
+      "crouchedScaleFactor": 0.7756968014606912,
+      "resetScaleFactor": 0.7756968014606912,
+      "restoredDesktopScale": 1,
+      "reenteredEyeHeightM": 1.0499999523162842
+    }
+  ],
+  "thresholds": {
+    "eyeHeightM": 0.01,
+    "neutralEyeAboveBaseM": 0.025,
+    "cameraAboveBaseM": 0.01,
+    "groundingInvariantM": 0.001,
+    "trackedGripAxesM": 0.002,
+    "wristReach3dM": 0.04
+  },
+  "commands": {
+    "verify:agent": "PASS",
+    "verify:pr": "PASS",
+    "finalHeightSeconds": 42.7,
+    "pipeline": "1 passed (25.6s)",
+    "viewerAR": "2 passed (23.9s)"
+  },
+  "recording": {
+    "startupSizeLocked": true,
+    "xrExitSizeLocked": true,
+    "exportedAvatarNode": {
+      "rotation": [
+        0,
+        1,
+        0,
+        6.123233995736766e-17
+      ],
+      "translation": [
+        0.0005220657330937684,
+        27.776621568228283,
+        -0.001067864359356463
+      ],
+      "scale": [
+        1.255183580095532,
+        1.255183580095532,
+        1.255183580095532
+      ],
+      "name": "RecordedAvatar",
+      "children": [
+        1
+      ]
+    }
+  }
+}

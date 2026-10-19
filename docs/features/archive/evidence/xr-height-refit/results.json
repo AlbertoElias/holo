@@ -1,0 +1,81 @@
+{
+  "environment": "IWER emulation; physical headset unverified",
+  "visualCommand": "DEV_PORT=5274 XR_HEIGHT_VISUALS=1 XR_CHECK_TIMEOUT_MS=180000 pnpm --filter @holoim/capture run test:xr:height",
+  "visualRunSeconds": 108.3,
+  "consoleErrors": [],
+  "refit": {
+    "awaiting": {
+      "committedEyeHeightM": 0.949999988079071,
+      "scale": 0.7756968014606912,
+      "pending": true,
+      "eyeAboveBaseM": 0.949999988079071,
+      "trackedEyeAboveBaseM": 0.949999988079071,
+      "crouchAmount": 0
+    },
+    "refitted": {
+      "committedEyeHeightM": 0.949999988079071,
+      "scale": 0.7756968014606912,
+      "pending": false,
+      "eyeAboveBaseM": 0.949999988079071,
+      "trackedEyeAboveBaseM": 0.949999988079071,
+      "crouchAmount": 0
+    },
+    "vrRequested": {
+      "committedEyeHeightM": 0.949999988079071,
+      "scale": 0.7756968014606912,
+      "pending": true,
+      "eyeAboveBaseM": 0.949999988079071,
+      "trackedEyeAboveBaseM": 1.649999976158142,
+      "crouchAmount": 0
+    },
+    "standingFit": {
+      "committedEyeHeightM": 1.649999976158142,
+      "scale": 1.3472628631333814,
+      "pending": false,
+      "eyeAboveBaseM": 1.6499999761581403,
+      "trackedEyeAboveBaseM": 1.6499999761581403,
+      "crouchAmount": 0
+    },
+    "seatedFit": {
+      "committedEyeHeightM": 0.949999988079071,
+      "scale": 0.7756968014606912,
+      "pending": false,
+      "eyeAboveBaseM": 0.949999988079071,
+      "trackedEyeAboveBaseM": 0.949999988079071,
+      "crouchAmount": 0
+    }
+  },
+  "verified": [
+    "DOM Refit height action",
+    "Real right-trigger selection of VR Refit while left ray points at Record",
+    "Old size/committed eye height retained during sampling",
+    "Tracking loss interrupts pending fit",
+    "New neutral crouch baseline after accepted refit",
+    "Standing alone never resizes",
+    "Recording startup disables/rejects refit",
+    "Static GLB scale preserved through XR exit/export"
+  ],
+  "pngSha256": {
+    "short": "c0c94847766852798f86dc3ee252004b8dc6dbbfea6327a80a55be8e367fa28a",
+    "tall": "154d82dac584fa2f3cdf5e9b1b928bd2bc687b1de58ada8228b06637c2ac5806",
+    "seated": "9ef302657dcbb0c55fdb83d9601a30436fe59a98302c2633b9110b70b0d0f889",
+    "refit-standing": "4362dc40f1c466d5c899cd8dd03c7ddd18cd026656e91d2fe0e9178984cfb2d4",
+    "refit-seated-again": "a62c116018ceb07c5f5c9c38a53698da7bb09c764b00a62175dfc53ec733340f",
+    "height-comparison": "3e46bd8ed91364f5d57e1e909a63fb3dda382613c097d84f92fb78181099e4c2",
+    "refit-sequence": "ea05bb8e08a8a1bf85fe09c99bcd5baaebfd42f4d7b24fbfc2dae61de5456f36"
+  },
+  "regressionGate": {
+    "verify:agent": "PASS",
+    "verify:pr": "PASS",
+    "ports": {
+      "capture": 5474,
+      "viewer": 3474,
+      "api": 3301,
+      "pipeline": 5475
+    },
+    "captureXrSeconds": 75.7,
+    "heightRefitSeconds": 35.3,
+    "pipeline": "1 passed (28.5s)",
+    "viewerAR": "2 passed (21.5s)"
+  }
+}

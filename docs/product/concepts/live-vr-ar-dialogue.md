@@ -35,6 +35,20 @@ camera feed.
 - Every live session is already a hologram: afterwards it is replayable,
   editable, and repliable with its references intact.
 
+## Two Live Situations
+
+In VR, avatars can construct a shared explanation using spawned objects,
+animations, custom 3D symbols, and spatial diagrams. In co-located AR, people
+still see each other and use a virtual world to support the discussion; the
+remote-person portal is an additional case rather than the definition of AR
+communication. Both cases need shared reference, alignment, and understandable
+ownership of changes.
+
+Live-to-async continuity is a vision, not a claim that realtime multiplayer or
+semantic session recording exists. Async is the recommended practical starting
+point in [Approach](../APPROACH.md) because of the established pipeline, pending
+current technical inspection and an actual experiment choice.
+
 ## Design Tension
 
 Live communication needs lightweight, low-friction gestures. Too many controls

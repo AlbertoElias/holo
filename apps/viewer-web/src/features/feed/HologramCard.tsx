@@ -220,7 +220,7 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
           </button>
         )}
         {shouldShowQuickLook && (
-          <ARQuickLookLink hologramId={item.id} />
+          <ARQuickLookLink item={item} />
         )}
         {hasAudio && (
           <button

@@ -13,6 +13,12 @@ authored notes are the fallback for what the body could not say. Start with
 meaning read from the body (IDEA-032 self-resolving pointing) and with viewing
 as a portal (IDEA-045). Revisit notes as one mark kind once those exist.
 
+## Historical Context
+
+Earlier messages discussed this as a draft and suggested an object-explanation
+experiment as another candidate. The current recorded decision above parks
+this PRD; the archive does not reopen it. See [Approach](../APPROACH.md).
+
 ## User Outcome
 
 Before: a viewer watching a hologram has to guess what "this part" or "right
@@ -127,5 +133,9 @@ in [`../VISION.md`](../VISION.md).
 
 - Concept: [`../concepts/async-holograms.md`](../concepts/async-holograms.md)
 - Research: [`../research/open-questions.md`](../research/open-questions.md) (question 1)
+- Mockups: [Anchored notes mockups](https://claude.ai/artifact/RWaaSRi9UwVbJ4Jtwu2WKo)
+  (2026-10-18): six screens over real feed captures (the problem today, a
+  note playing, jump-to-note, desktop feed, author at upload, AR sketch).
+  Reviewed before the Parked decision.
 - Feature brief: none yet; created when this PRD is approved and queued
 - Implementation issue: none

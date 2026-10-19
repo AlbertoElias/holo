@@ -137,10 +137,18 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   await page.getByRole("button", { name: "Upload", exact: true }).click();
   const uploadResult = await uploadResponse;
   expect(uploadResult.status(), await uploadResult.text()).toBe(201);
-  const uploaded = (await uploadResult.json()) as { id: string; sizeBytes: number; usdzUrl: string | null };
+  const uploaded = (await uploadResult.json()) as {
+    id: string;
+    sizeBytes: number;
+    usdzUrl: string | null;
+    usdzStatus: string;
+    quickLookEnabled: boolean;
+  };
   expect(uploaded.sizeBytes, "stored size matches the export").toBe(glbBytes.length);
-  // Conversion ran during this upload, so the stored USDZ is already recorded.
-  expect(uploaded.usdzUrl, "USDZ stored at upload time").toMatch(/-ql2\.usdz$/);
+  // Opted in, but conversion is async: no USDZ at upload-response time.
+  expect(uploaded.quickLookEnabled).toBe(true);
+  expect(uploaded.usdzStatus).toBe("pending");
+  expect(uploaded.usdzUrl).toBeNull();
 
   const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
   await expect(card).toContainText(hologramName);
@@ -150,9 +158,19 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   await captureEvidence(page, testInfo, "uploaded-capture-rendered-in-feed");
   expect(Number(await card.getAttribute("data-model-animations"))).toBeGreaterThan(0);
 
-  // Both clients reuse the package stored at upload time. They must receive
-  // the same complete package, never a half-written archive or a failed redirect.
+  // Conversion runs asynchronously in the API's embedded worker after the
+  // opt-in upload. Poll the preview endpoint until it redirects to the
+  // published package; both clients must then receive the same bytes.
   const quickLookUrl = `/api/holograms/${uploaded.id}/usdz`;
+  await expect
+    .poll(
+      async () => {
+        const probe = await page.request.get(quickLookUrl, { timeout: 30_000 });
+        return probe.status();
+      },
+      { timeout: 120_000, intervals: [2_000] }
+    )
+    .toBe(200);
   const responses = await Promise.all([
     page.request.get(quickLookUrl, { timeout: 120_000 }),
     page.request.get(quickLookUrl, { timeout: 120_000 })

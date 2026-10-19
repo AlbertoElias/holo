@@ -132,6 +132,7 @@ const LEAN_BASE_METERS = 0.04;
 // Head drop below standing that still counts as standing upright.
 const UPRIGHT_DROP_METERS = 0.01;
 const STANDING_RECOVERY_PER_SEC = 0.2;
+const NEUTRAL_HEAD_STILL_SPEED = 0.1;
 const TARGET_SPEED_TIME_SEC = 0.08;
 // Walking bobs the head about 2 Hz; a lean is slower. Filter the drop so a
 // bob does not read as a lean.
@@ -164,9 +165,10 @@ const PELVIS_REACH_DROP_TIME_SEC = 0.06;
 const PELVIS_HOLD_STEP_METERS = 0.01;
 // Feet tuck this far (leg lengths) above the capsule's floor level in the air.
 const AIRBORNE_FOOT_TUCK = 0.08;
-// Standing knees are soft: the pelvis sits this far (leg lengths) below its
-// bind height, where this rig's legs are locked straight.
-const SOFT_KNEE = 0.03;
+// Standing knee flex is capped (leg lengths); a head lower than that is a crouch.
+const MAX_STANDING_KNEE_FLEX = 0.08;
+// To reach a lean the pelvis may rise this far (leg lengths) above standing.
+const LEAN_KNEE_STRAIGHTEN = 0.015;
 // A trailing foot this far (leg lengths) from its slot steps at once, even
 // mid-cadence.
 const URGENT_STEP_DISTANCE = 0.4;
@@ -232,6 +234,9 @@ export class VrBodySolver {
   private leanDrop = 0;
   private lastDt = 1 / 60;
   private standingHeadHeight = 0;
+  // The user's standing eye height above the ground, raised only while the
+  // head is still, so a walking bob does not straighten the avatar's knees.
+  private neutralHeadHeight = 0;
   private hipsToEyes = 0.6;
   private faultTime = 0;
   private readonly rootTarget = new THREE.Vector3();
@@ -405,14 +410,15 @@ export class VrBodySolver {
     return true;
   }
 
-  // Standing eye position (soft knees, on the real ground) for the root at
-  // `rootPosition` facing `yaw`.
+  // Standing eye position (straight legs, on the real ground) for the root at
+  // `rootPosition` facing `yaw`: the rig maps the user's eyes here, so the
+  // camera sits at the user's real eye height above the floor.
   getStandingEyeWorld(rootPosition: THREE.Vector3, yaw: number, ground: GroundSampler, out: THREE.Vector3): THREE.Vector3 {
     const bind = this.bind;
     if (!bind) return out.copy(rootPosition);
     this.planQuat.setFromAxisAngle(UP, yaw + this.forwardOffset);
     out.copy(bind.eyeMid).applyQuaternion(this.planQuat).add(rootPosition);
-    out.y = this.groundUnder(rootPosition, ground) + bind.dims.eyeHeight - SOFT_KNEE * bind.dims.legLength;
+    out.y = this.groundUnder(rootPosition, ground) + bind.dims.eyeHeight;
     return out;
   }
 
@@ -437,6 +443,7 @@ export class VrBodySolver {
     const bindDims = this.bind!.dims;
     this.hipsToEyes = bindDims.eyeHeight - bindDims.hipHeight;
     this.standingHeadHeight = head.worldPosition.y - this.groundUnder(rootPosition, ground);
+    this.neutralHeadHeight = this.standingHeadHeight;
     this.headSpeed = 0;
     this.turning = false;
     this.translating = false;
@@ -460,6 +467,33 @@ export class VrBodySolver {
   reset(): void {
     this.aligned = false;
     this.stepCount = 0;
+  }
+
+  // The avatar was uniformly rescaled by `ratio` about its node's origin (XR
+  // height fit): scale every measurement taken in avatarRoot space to match.
+  // Bone-local positions and all rotations are unchanged by the scale.
+  rescale(ratio: number): void {
+    const bind = this.bind;
+    const origin = this.avatarRig.avatar?.position;
+    if (!bind || !origin || !Number.isFinite(ratio) || ratio <= 0 || ratio === 1) return;
+    const about = (point: THREE.Vector3) => point.sub(origin).multiplyScalar(ratio).add(origin);
+    const bones = [bind.hips, bind.spine, bind.spine1, bind.spine2, bind.neck, bind.head];
+    for (const side of ['left', 'right'] as const) {
+      const leg = bind.legs[side];
+      bones.push(leg.upLeg, leg.leg, leg.foot);
+      if (leg.toe) bones.push(leg.toe);
+      leg.thighLength *= ratio;
+      leg.shinLength *= ratio;
+      leg.toeForward *= ratio;
+      leg.slotLocal.x = origin.x + (leg.slotLocal.x - origin.x) * ratio;
+      leg.slotLocal.z = origin.z + (leg.slotLocal.z - origin.z) * ratio;
+    }
+    for (const bone of bones) about(bone.rootPosition);
+    about(bind.eyeMid);
+    bind.eyeInHead.multiplyScalar(ratio);
+    bind.hipsToHead *= ratio;
+    bind.groundLocalY = this.avatarRig.avatarMinLocalY;
+    for (const key of Object.keys(bind.dims) as (keyof BodyDimensions)[]) bind.dims[key] *= ratio;
   }
 
   // Hands the skeleton back to the animation path: every bone the solver
@@ -494,6 +528,9 @@ export class VrBodySolver {
     const headHeight = head.worldPosition.y - this.groundUnder(rootPosition, ground);
     if (headHeight > this.standingHeadHeight) {
       this.standingHeadHeight = Math.min(headHeight, this.standingHeadHeight + STANDING_RECOVERY_PER_SEC * dt);
+    }
+    if (headHeight > this.neutralHeadHeight && this.headSpeed < NEUTRAL_HEAD_STILL_SPEED) {
+      this.neutralHeadHeight = Math.min(headHeight, this.neutralHeadHeight + STANDING_RECOVERY_PER_SEC * dt);
     }
     const drop = Math.max(0, this.standingHeadHeight - headHeight);
     if (!this.translating && this.headSpeed > TRANSLATE_ON_SPEED && drop < TRANSLATE_MAX_DROP_METERS) this.translating = true;
@@ -930,9 +967,12 @@ export class VrBodySolver {
 
     // First guess for the pelvis: standing over the root, dropped when the
     // head comes closer than the spine is long, and shifted back as the
-    // torso leans forward or the hips sink.
+    // torso leans forward or the hips sink. Standing height is the user's:
+    // knees flex by however much the avatar's straight-leg eyes stand above
+    // the tracked standing eyes; only a lean straightens them, a little.
     const standing = toWorld(bind.hips.rootPosition, this.poseHipsStanding);
-    standing.y = groundY + bind.hips.rootPosition.y - bind.groundLocalY - SOFT_KNEE * leg;
+    const kneeFlex = clamp(bind.dims.eyeHeight - (this.neutralHeadHeight - embodyOffset), 0, MAX_STANDING_KNEE_FLEX * leg);
+    standing.y = groundY + bind.hips.rootPosition.y - bind.groundLocalY - kneeFlex;
     const hips = this.poseHips.copy(standing);
     const forward = this.poseForward.set(-Math.sin(this.bodyYawValue), 0, -Math.cos(this.bodyYawValue));
     const toHead = this.poseVecA.subVectors(headTarget, standing);
@@ -1011,7 +1051,9 @@ export class VrBodySolver {
   }
 
   private clampPelvis(hips: THREE.Vector3, standing: THREE.Vector3, groundY: number, leg: number): void {
-    hips.y = clamp(hips.y, groundY + 0.25 * leg, standing.y + 0.03 * leg);
+    // Only a lean (the head pivoting down and forward) straightens the knees.
+    const straighten = LEAN_KNEE_STRAIGHTEN * leg * THREE.MathUtils.smoothstep(this.leanDrop, 0.01, 0.03);
+    hips.y = clamp(hips.y, groundY + 0.25 * leg, standing.y + straighten);
     const dx = hips.x - standing.x;
     const dz = hips.z - standing.z;
     const horizontal = Math.hypot(dx, dz);

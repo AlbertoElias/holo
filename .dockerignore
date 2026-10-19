@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.git
+.git
+output
+apps/viewer-api/uploads
+apps/viewer-api/prisma/dev.db
+**/test-results
+**/playwright-report
+.claude
+.agents
+**/.env
+**/.env.*
+!**/.env.example

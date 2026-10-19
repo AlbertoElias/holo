@@ -106,6 +106,20 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
     window.__setFrameStepping(true, draw);
     return window.__replayPlayer.duration;
   }, { data: recording, draw: video });
+  // Hold the first recorded pose while the height fit calibrates, as a user
+  // stands still on entering VR; playback restarts once it has settled.
+  const hold = () => page.evaluate(() => {
+    window.__replayPlayer.seek(0);
+    return JSON.parse(window.render_game_to_text()).heightAdaptation?.eyeHeight != null;
+  });
+  for (let held = 0; !(await hold()); held += STEP_MS) {
+    if (held > 3000) throw new Error(`${label}: height fit did not calibrate on the held first pose`);
+    await page.clock.runFor(STEP_MS);
+  }
+  for (let settle = 0; settle < 6; settle += 1) {
+    await page.clock.runFor(STEP_MS);
+    await hold();
+  }
 
   const frames = [];
   const totalSteps = Math.floor(durationMs / STEP_MS);

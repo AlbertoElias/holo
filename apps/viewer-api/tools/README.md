@@ -1,11 +1,13 @@
 # Quick Look previews
 
 The original GLB is canonical. `glb_to_usdz.py` produces a self-contained phone
-preview for the viewer's existing `rel="ar"` link. When an upload opts in to
-Quick Look, the API converts the GLB once at upload time, stores the versioned
-`*-ql2.usdz` next to the GLB, records it as `usdzPath`, and serves that stored
-package on every Quick Look request. A failed conversion fails the upload with
-a retryable 503 and leaves no hologram behind.
+preview for the viewer's existing `rel="ar"` link. Quick Look is opt-in per
+upload (`quickLookEnabled`, default off, set by the upload checkbox): opted-in
+uploads are queued at upload time and converted asynchronously by the API's
+embedded worker, which stores the versioned `*-ql2.usdz`, records it as
+`usdzPath` with `usdzStatus=ready`, and the Quick Look endpoint then redirects
+to that stored package. A failed conversion leaves the GLB untouched, marks
+the record `failed`, and a later Quick Look request re-queues it.
 
 ## Install and run
 

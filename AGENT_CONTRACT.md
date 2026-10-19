@@ -9,6 +9,7 @@ This document is the canonical command and workflow contract for AI agents opera
   - `/Users/albertoelias/code/holoim-workspace/apps/capture`
   - `/Users/albertoelias/code/holoim-workspace/apps/viewer-api`
   - `/Users/albertoelias/code/holoim-workspace/apps/viewer-web`
+  - `/Users/albertoelias/code/holoim-workspace/apps/knowledge` (read-only Markdown atlas)
 - Shared packages:
   - `/Users/albertoelias/code/holoim-workspace/packages/contracts`
   - `/Users/albertoelias/code/holoim-workspace/packages/config-eslint`
@@ -42,6 +43,8 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - `pnpm run dev:capture:status`
 - `pnpm run dev:capture:down`
 - `pnpm run dev`
+- `pnpm run dev:knowledge`
+- `pnpm run test:knowledge`
 
 ### App-level (optional when scoping work)
 
@@ -86,6 +89,7 @@ Primary ports:
 - Capture dev: `5173`
 - Capture mock VR: `5174`
 - Capture pipeline E2E: `5175`
+- Knowledge Atlas: `http://127.0.0.1:4176` (loopback-only, no XR runtime)
 
 Rules:
 

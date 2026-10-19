@@ -74,7 +74,10 @@ export class CharacterMotor {
     this.avatarHeight = avatarRig.avatarHeight;
     this.capsuleRadius = avatarRig.avatarHeight * 0.18;
     this.capsuleHalfHeight = avatarRig.avatarHeight * 0.32;
-    this.avatarVisualOffsetY = -(this.capsuleHalfHeight + this.capsuleRadius) - avatarRig.avatarMinLocalY;
+    // The controller keeps its capsule a small gap (controllerOffset) above
+    // surfaces; the visual base drops by that gap so feet stand on the floor
+    // rather than hovering over it.
+    this.avatarVisualOffsetY = -(this.capsuleHalfHeight + this.capsuleRadius) - avatarRig.avatarMinLocalY - this.controllerOffset();
     this.jumpSpeed = Math.sqrt(2 * Math.abs(gravity) * avatarRig.avatarHeight * 1.2);
     this.moveSpeed = avatarRig.avatarHeight * 1.8;
     this.avatarRigRef = avatarRig;
@@ -287,9 +290,13 @@ export class CharacterMotor {
     this.rapierWorld.propagateModifiedBodyPositionsToColliders();
   }
 
+  private controllerOffset(): number {
+    return Math.max(0.01, this.avatarHeight * 0.02);
+  }
+
   private rebuildCharacterController(): void {
     if (!this.rapierWorld) return;
-    this.characterController = this.rapierWorld.createCharacterController(Math.max(0.01, this.avatarHeight * 0.02));
+    this.characterController = this.rapierWorld.createCharacterController(this.controllerOffset());
     this.characterController.setUp({ x: 0, y: 1, z: 0 });
     this.characterController.setSlideEnabled(true);
     this.characterController.setMaxSlopeClimbAngle(THREE.MathUtils.degToRad(40));

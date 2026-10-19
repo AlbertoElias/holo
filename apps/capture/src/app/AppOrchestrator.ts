@@ -6,6 +6,8 @@ import { AvatarRig, type ArmIkChain, type HandFingerRetargetChain } from '../ava
 import { palmFrameQuaternion } from '../xr/palmFrame';
 import { CharacterMotor } from '../physics/CharacterMotor';
 import { CameraController } from '../camera/CameraController';
+import { HeightEvidenceView } from '../debug/HeightEvidenceView';
+import { XrHeightCalibration } from '../xr/XrHeightCalibration';
 import { headYawFromQuaternion, XrSessionService } from '../xr/XrSessionService';
 import { type BodyFault, type BodyHeadInput, VrBodySolver } from '../body/VrBodySolver';
 import { HandFingerRetargeter } from '../xr/HandFingerRetargeter';
@@ -49,6 +51,11 @@ const AR_WORLD_RECENTER_FRAMES = 36;
 // A tracked head that jumps this far in one frame was re-origined (recenter or
 // tracking recovery); realign the rig instead of walking the body there.
 const HEAD_TRACKING_JUMP_METERS = 0.5;
+// The body solver fits the avatar this much taller than the calibrated eye height
+// so its straight-leg reach has headroom: a user standing taller than at
+// calibration, the head's walking bob, or feet apart after a stop still keep
+// the avatar's eyes on the tracked eyes (knees flex slightly at neutral).
+const BODY_REACH_HEADROOM = 0.015;
 const HEAD_PATH_POINTS = 150;
 
 // Avatar bones reported by sampleBody(), by sample key.
@@ -155,12 +162,9 @@ export class AppOrchestrator implements System {
   private readonly bodyEyeWorld = new THREE.Vector3();
   private readonly prevHeadLocal = new THREE.Vector3();
   private hasPrevHeadLocal = false;
-  private bodyGroundY = 0;
-  private bodyWasGrounded = true;
   // Whether the body solver posed the skeleton last frame; when it stops,
   // its bones go back to bind for the animation path.
   private bodyPosed = false;
-  private hasBodyGroundY = false;
   private readonly bodyRaycaster = new THREE.Raycaster();
   private readonly groundSampler = (x: number, z: number, outNormal: THREE.Vector3): number | undefined =>
     this.avatarRig.sampleTerrainYAt(x, z, this.bodyRaycaster, outNormal);
@@ -195,6 +199,9 @@ export class AppOrchestrator implements System {
   private crouchPoseAmount = 0;
   private crouchTarget = 0;
   private crouchSource: CrouchSource = 'none';
+  private readonly heightCalibration = new XrHeightCalibration();
+  private heightReferenceRevision = -1;
+  private recordingSizeLocked = false;
   private vrStandingHeadY = 0;
   private vrStandingCaptured = false;
 
@@ -207,6 +214,7 @@ export class AppOrchestrator implements System {
   private drawFrames = true;
   private inputRecording: InputRecordingSession | null = null;
   private handOverlay: THREE.InstancedMesh | null = null;
+  private heightEvidenceView: HeightEvidenceView | null = null;
   private spectatorCamera: THREE.PerspectiveCamera | null = null;
   private spectatorMode: SpectatorViewMode = 'off';
   private readonly spectatorFocus = new THREE.Vector3();
@@ -300,10 +308,10 @@ export class AppOrchestrator implements System {
           this.resetFingerQuatFallbackCalibration();
         }
         this.fingerRetargeter.resetRuntimeState();
+        this.heightCalibration.reset();
         this.resetVrStandingHeadBaseline();
         this.bodySolver.reset();
         this.hasPrevHeadLocal = false;
-        this.hasBodyGroundY = false;
         this.input.onXrEntered();
       }
       this.camera.onXrEntered(isAr);
@@ -375,6 +383,7 @@ export class AppOrchestrator implements System {
 
     this.terrainLegs.restore();
     this.avatarRig.restoreCrouchPose();
+    this.updateHeightAdaptation(ctx.deltaSec, isXrPresenting);
     this.updateCrouchState(ctx.deltaSec, isVrActive);
     const jumpQueued = this.input.consumeJumpQueued();
     this.characterMotor.getCharacterBodyPosition(this.bodyCapsuleBefore);
@@ -394,21 +403,9 @@ export class AppOrchestrator implements System {
       const inputMovement = this.characterMotor.getLastInputMovement(this.tmpVecA);
       this.bootstrap.cameraRig.position.x += inputMovement.x;
       this.bootstrap.cameraRig.position.z += inputMovement.z;
-      // Height follows the ground under the body (the capsule's own height
-      // shifts with snapping and crouch clearance), or the capsule in the air.
-      const groundY = this.avatarRig.sampleTerrainYAt(this.tmpBodyPosition.x, this.tmpBodyPosition.z, this.bodyRaycaster);
-      // The landing frame still follows the capsule, so a jump nets zero.
-      const onGround = characterSnapshot.grounded && this.bodyWasGrounded;
-      if (onGround && groundY !== undefined && this.hasBodyGroundY) {
-        this.bootstrap.cameraRig.position.y += groundY - this.bodyGroundY;
-      } else if (!onGround) {
-        this.bootstrap.cameraRig.position.y += this.tmpBodyPosition.y - this.bodyCapsuleBefore.y;
-      }
-      this.bodyWasGrounded = characterSnapshot.grounded;
-      if (groundY !== undefined) {
-        this.bodyGroundY = groundY;
-        this.hasBodyGroundY = true;
-      }
+      // Height: tracking space's floor is the avatar's visual base, as the
+      // height fit maps it, so slopes, steps, and jumps carry the view along.
+      this.bootstrap.cameraRig.position.y = this.tmpBodyPosition.y + this.characterMotor.getAvatarVisualOffsetY() + this.avatarRig.heightVisualOffsetY + this.avatarRig.avatarMinLocalY + this.config.embodyOffset;
       this.xrService.refreshHeadWorldPose();
       this.copyBodyHead();
     }
@@ -447,11 +444,12 @@ export class AppOrchestrator implements System {
       this.terrainLegs.update(this.avatarRig, characterSnapshot.grounded, ctx.deltaSec);
     }
 
+    this.camera.update(isVrActive, isXrPresenting, ctx.deltaSec, false, this.bodyActive && !this.bodySolver.faults.has('rig-follows-avatar'));
+    this.bootstrap.cameraRig.updateMatrixWorld(true);
+
     if (isVrActive && this.characterMotor.hasSpawnResolved()) {
       this.updateVrHandEmbodiment();
     }
-
-    this.camera.update(isVrActive, isXrPresenting, ctx.deltaSec, false, this.bodyActive && !this.bodySolver.faults.has('rig-follows-avatar'));
 
     const mode = this.resolveAppMode();
     this.uiStore.publishMode(mode);
@@ -477,7 +475,7 @@ export class AppOrchestrator implements System {
     this.characterMotor.getCharacterBodyPosition(this.tmpBodyPosition);
     const rootPosition = this.bodyRootPosition.set(
       this.tmpBodyPosition.x,
-      this.tmpBodyPosition.y + this.characterMotor.getAvatarVisualOffsetY(),
+      this.tmpBodyPosition.y + this.characterMotor.getAvatarVisualOffsetY() + this.avatarRig.heightVisualOffsetY,
       this.tmpBodyPosition.z
     );
     if (!this.bodySolver.isAligned || jumped) {
@@ -488,7 +486,9 @@ export class AppOrchestrator implements System {
       this.bodySolver.getStandingEyeWorld(rootPosition, yaw, this.groundSampler, this.bodyEyeWorld);
       this.bodyEyeWorld.y += this.config.embodyOffset;
       rig.position.copy(this.bodyEyeWorld).sub(pose.localPosition);
-      this.hasBodyGroundY = false;
+      // Tracking space's floor is the avatar's visual base (the height fit's
+      // contract): the camera sits at the user's real eye height above it.
+      rig.position.y = rootPosition.y + this.avatarRig.avatarMinLocalY + this.config.embodyOffset;
       rig.updateMatrixWorld(true);
       this.xrService.refreshHeadWorldPose();
       this.copyBodyHead();
@@ -552,7 +552,7 @@ export class AppOrchestrator implements System {
 
   private toggleRecording(): void {
     const state = this.uiStore.getState();
-    if (state.recordingState === 'exporting') return;
+    if (state.recordingState === 'exporting' || (this.recordingSizeLocked && state.recordingState === 'idle')) return;
 
     if (state.recordingState === 'recording') {
       this.stopRecordingAndExport();
@@ -562,6 +562,8 @@ export class AppOrchestrator implements System {
   }
 
   private async startRecording(): Promise<void> {
+    this.recordingSizeLocked = true;
+    this.heightCalibration.interrupt();
     this.recorder.clear();
     this.recorder.setEnabled(true);
     await this.startInputRecording();
@@ -608,6 +610,8 @@ export class AppOrchestrator implements System {
     } catch (err) {
       console.error(err);
       this.uiStore.setRecordingState('idle', (err as Error).message);
+    } finally {
+      this.recordingSizeLocked = false;
     }
   }
 
@@ -647,25 +651,18 @@ export class AppOrchestrator implements System {
       this.bootstrap.renderer.xr.getController(0),
       this.bootstrap.renderer.xr.getController(1)
     ];
-    const handler = (): void => {
-      if (!this.xrService.isXrPresenting()) return;
-      const panel = this.vrHud.getRecordingPanel();
-      if (panel) {
-        for (const ctrl of controllers) {
-          if (panel.isPointerOverAction(ctrl)) {
-            this.toggleRecording();
-            return;
-          }
-        }
-      }
-    };
-    for (const ctrl of controllers) {
-      ctrl.addEventListener('select', handler);
-    }
+    const bindings = controllers.map((controller) => {
+      const handler = (): void => {
+        if (!this.xrService.isXrPresenting()) return;
+        const panel = this.vrHud.getRecordingPanel();
+        if (panel?.isPointerOverRefit(controller)) this.requestHeightRefit();
+        else if (panel?.isPointerOverAction(controller)) this.toggleRecording();
+      };
+      controller.addEventListener('select', handler);
+      return { controller, handler };
+    });
     this.xrSelectUnsubscribe = () => {
-      for (const ctrl of controllers) {
-        ctrl.removeEventListener('select', handler);
-      }
+      for (const { controller, handler } of bindings) controller.removeEventListener('select', handler);
       this.xrSelectUnsubscribe = null;
     };
   }
@@ -694,6 +691,7 @@ export class AppOrchestrator implements System {
   }
 
   onRealtimeFrame(frame?: XRFrame): void {
+    this.xrService.captureFloorHeadPose(frame);
     if (frame && this.inputRecording) this.inputRecording.recordFrame(frame);
     if (frame) this.xrService.noteXrFrame(frame);
     const deltaSec = this.bootstrap.clock.getDelta();
@@ -727,6 +725,10 @@ export class AppOrchestrator implements System {
     this.present(camera);
   }
 
+  setHeightEvidenceView(enabled: boolean): void {
+    this.heightEvidenceView = enabled ? new HeightEvidenceView() : null;
+  }
+
   // Debug views for recordings, drawn to the page canvas after the XR frame:
   // 'hands' shows both hands close up; 'body' follows the avatar from a
   // fixed world direction with the tracked head path overlaid.
@@ -742,6 +744,10 @@ export class AppOrchestrator implements System {
   private renderSpectatorView(): void {
     const spectator = this.spectatorCamera;
     const renderer = this.bootstrap.renderer;
+    if (this.heightEvidenceView && renderer.xr.isPresenting) {
+      this.heightEvidenceView.render(renderer, this.bootstrap.scene, this.bootstrap.worldGroup, this.avatarRig, this.xrService.getHeadWorldPosition(new THREE.Vector3()), this.vrHud.getRecordingPanel()?.group);
+      return;
+    }
     if (!spectator || !renderer.xr.isPresenting) return;
     const width = renderer.domElement.width / renderer.getPixelRatio();
     const height = renderer.domElement.height / renderer.getPixelRatio();
@@ -994,6 +1000,18 @@ export class AppOrchestrator implements System {
         left: handSnapshot('left', leftTracking, leftHand, leftSensor),
         right: handSnapshot('right', rightTracking, rightHand, rightSensor)
       },
+      heightAdaptation: {
+        eyeHeight: this.heightCalibration.eyeHeight ?? null,
+        scale: this.avatarRig.xrHeightScale,
+        avatarHeight: this.avatarRig.avatarHeight,
+        minY: this.avatarRig.avatarMinLocalY,
+        baseWorldY: this.avatarRig.avatarRoot.position.y + this.avatarRig.avatarMinLocalY,
+        eyeWorld: this.avatarRig.getEyeAnchorWorldPosition(new THREE.Vector3(), 0),
+        headWorld: this.xrService.getHeadWorldPosition(new THREE.Vector3()),
+        floorHead: this.xrService.getFloorHeadPosition() ?? null,
+        refitPending: this.heightCalibration.refitting,
+        recordingSizeLocked: this.recordingSizeLocked
+      },
       mockVr: this.xrService.getMockSnapshot(),
       ar: {
         sessionMode: this.bootstrap.xrSessionMode,
@@ -1128,6 +1146,62 @@ export class AppOrchestrator implements System {
     this.resetFingerQuatFallbackCalibration();
   }
 
+  requestHeightRefit(): boolean {
+    if (!this.xrService.isXrPresenting() || this.bootstrap.xrSessionMode !== 'vr' || this.xrService.getMockSnapshot().enabled || this.recordingSizeLocked) return false;
+    if (this.heightCalibration.refitting || this.heightCalibration.eyeHeight === undefined) return false;
+    this.heightCalibration.requestRefit();
+    this.uiStore.setHeightFit({ enabled: false, pending: true, eyeHeight: this.heightCalibration.eyeHeight ?? null });
+    return true;
+  }
+
+  private updateHeightAdaptation(deltaSec: number, isPresenting: boolean): void {
+    const realVr = isPresenting && !this.xrService.getMockSnapshot().enabled;
+    const pose = realVr ? this.xrService.getFloorHeadPosition() : undefined;
+    const revision = this.xrService.getHeightReferenceRevision();
+    if (revision !== this.heightReferenceRevision) {
+      this.heightReferenceRevision = revision;
+      this.heightCalibration.interrupt();
+      this.camera.reanchorFloorOrigin();
+      this.resetVrStandingHeadBaseline();
+    }
+    if (!realVr) {
+      this.heightCalibration.reset();
+    }
+    let scaleRatio = 1;
+    if (!this.recordingSizeLocked) {
+      if (!realVr) scaleRatio = this.avatarRig.setXrEyeHeight(undefined);
+      else {
+        const wasRefitting = this.heightCalibration.refitting;
+        const height = this.heightCalibration.update(pose?.y, deltaSec);
+        if (height !== undefined) {
+          scaleRatio = this.avatarRig.setXrEyeHeight(this.bodySolverReady ? height * (1 + BODY_REACH_HEADROOM) : height);
+          this.camera.reanchorFloorOrigin();
+          this.vrStandingHeadY = height;
+          this.vrStandingCaptured = true;
+          if (wasRefitting) {
+            this.crouchAmount = this.crouchPoseAmount = this.crouchTarget = 0;
+            this.crouchSource = 'none';
+          }
+        }
+      }
+    }
+    if (scaleRatio !== 1) {
+      // The body solver measured the avatar at its old size; rescale and
+      // realign the rig so the tracked eyes sit on the refitted avatar's eyes.
+      this.bodySolver.rescale(scaleRatio);
+      this.bodySolver.reset();
+      for (const side of ['left', 'right'] as const) {
+        const chain = this.armIkChains[side];
+        if (chain) {
+          chain.upperLength *= scaleRatio;
+          chain.lowerLength *= scaleRatio;
+        }
+      }
+    }
+    this.camera.setFloorHeightMapped(realVr && this.heightCalibration.eyeHeight !== undefined, pose);
+    this.uiStore.setHeightFit({ enabled: realVr && !this.recordingSizeLocked && !this.heightCalibration.refitting && this.heightCalibration.eyeHeight !== undefined, pending: realVr && (this.heightCalibration.eyeHeight === undefined || this.heightCalibration.refitting), eyeHeight: this.heightCalibration.eyeHeight ?? null });
+  }
+
   private updateCrouchState(deltaSec: number, isVrActive: boolean): void {
     const desktopTarget = this.input.isCrouchHeld() ? 1 : 0;
     const vrCrouch = computeVrCrouchTarget(
@@ -1226,7 +1300,11 @@ export class AppOrchestrator implements System {
   private updateVrHandEmbodiment(): void {
     if (!this.vrHandRigReady || !this.avatarRig.avatar) return;
 
-    this.xrService.updateHandTrackingTargets((out) => this.avatarRig.getEyeAnchorWorldPosition(out, this.config.embodyOffset));
+    this.xrService.updateHandTrackingTargets((out) => (
+      this.xrService.isXrPresenting() && !this.xrService.getMockSnapshot().enabled && this.heightCalibration.eyeHeight !== undefined
+        ? this.xrService.getHeadWorldPosition(out)
+        : this.avatarRig.getEyeAnchorWorldPosition(out, this.config.embodyOffset)
+    ));
     this.ensureHandSensors();
 
     for (const side of ['left', 'right'] as const) {

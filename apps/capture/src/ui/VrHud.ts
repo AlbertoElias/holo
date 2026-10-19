@@ -18,7 +18,7 @@ export class VrHud {
 
   update(camera: Camera, deltaSec: number): void {
     this.recordingPanel?.updateFromCamera(camera);
-    this.recordingPanel?.updateVisuals(deltaSec, this.getRecordingState());
+    this.recordingPanel?.updateVisuals(deltaSec, this.getRecordingState(), this.store.getState().heightFit);
   }
 
   dispose(): void {

@@ -48,6 +48,18 @@ the author pointed at their wrist while saying "this".
 - Repair: create a question beacon, clarify in context, and resolve the thread.
 - Handoff: convert a decision into task tokens that retain the scene context.
 
+An Understanding Mirror asks the recipient to reconstruct what they understood,
+for example by arranging the parts or repeating a motion. Compare the result
+with the intended task rather than assuming an AI judgment measures meaning.
+Grounding signals and Reference Lock should support voluntary shared attention;
+they should not silently move another person's viewpoint or treat a glance as
+approval. A decision stamp needs explicit human intent before it creates a
+work commitment. Audience simulation can offer novice/expert/skeptical feedback,
+but cannot replace observation of real recipients.
+
+
+Research foundations remain [leads to investigate](../research/research-leads.md), not proof of these product hypotheses.
+
 ## Open Questions
 
 - Which protocol should be explicit to users, and which should be inferred from interaction?
