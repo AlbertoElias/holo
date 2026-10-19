@@ -2,6 +2,7 @@
 
 **Lead:** <name or agent>  
 **Status:** Draft | Reviewed | Implementing | Verifying | Complete
+**Layer:** <event, meaning, view, or conversation; see `docs/product/concepts/what-a-hologram-is.md`>
 
 ## User outcome
 

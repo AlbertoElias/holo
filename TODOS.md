@@ -26,9 +26,11 @@ it from the item below instead of duplicating its status here.
 - [ ] Add realistic walking, crouching, and jumping animations in both XR and
   desktop 2D, with natural transitions and movement that adapts to walls,
   inclines, and other environment geometry. Start in a dedicated session;
-  coordinate avatar transforms with the XR height-adaptation work.
+  coordinate avatar transforms with the XR height-adaptation work. Synthesized
+  motion is inferred, not recorded performance: mark it so in the export.
 - [ ] Adapt the XR avatar to the person's height, keeping feet grounded and
-  head/hands aligned with tracked input. Start in a dedicated session;
+  head/hands aligned with tracked input. This sets the hologram's true scale,
+  which pointing rays and measurements depend on. Start in a dedicated session;
   coordinate avatar scale and calibration with the locomotion-animation work.
 - [ ] Decide the production persistence model for uploads: authentication,
   authorization, durable object storage, and a production database. The current API
@@ -51,7 +53,9 @@ it from the item below instead of duplicating its status here.
   (`.mjs`, ~880 lines plus `scripts/lib/`) to TypeScript scenario groups,
   since the scripts drive the app through the interaction hooks the redesign
   will change. Preserve the `xr-ui-core` state contracts and the IWER
-  behavior checks (`test:xr:*`) across the redesign.
+  behavior checks (`test:xr:*`) across the redesign. Design it through
+  `docs/product/concepts/what-a-hologram-is.md`: include the portal viewer
+  and Follow/Free, and start marks with "this/here" links read from pointing.
 
 ## Later
 
@@ -77,7 +81,8 @@ it from the item below instead of duplicating its status here.
   [`docs/features/archive/ar-recenter-control.md`](docs/features/archive/ar-recenter-control.md).
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
-  and success signal are explicit.
+  and success signal are explicit. The lens points to IDEA-045 (portal view)
+  or IDEA-032 (self-resolving pointing) first; PRD-001 is parked.
 
 ## Maintenance
 

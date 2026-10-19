@@ -90,65 +90,25 @@ pinned to a moment. This also limits clutter.
 5. Would it lose its meaning if the hologram were a video? If not, it is not
    native to holograms.
 
-## Existing work through this lens (2026-10-18)
+## What follows for current work (2026-10-18)
 
-### Event: everything else is derived from it
+Every idea now names its layer in the [idea registry](../IDEAS.md), and each
+concept page opens with the layers it covers. What the lens changes in
+priority:
 
-| Item | Reading |
-| --- | --- |
-| Hand-tracking fidelity, headset input recording (TODOS) | Foundational. Pointing, sizing, and ribbons are only as good as the hands. |
-| Avatar height adaptation (TODOS) | Raised. If the avatar's size is wrong, true scale is wrong, so pointing rays and measurements are wrong. |
-| Locomotion animations (TODOS) | Keep, but synthesized motion is inferred, not recorded: mark it so in the data (principle 7). |
-| IDEA-012 hybrid face | Event fidelity for expression. Later. |
-| Quick Look USDZ (shipped, opt-in) | A flattened copy that cannot hold the meaning layer. A preview, never the hologram. |
+1. **The event comes first.** Hand-tracking fidelity and avatar height
+   adaptation are foundational: pointing rays, measurements, and ribbons are
+   only as good as the body data and its scale. Synthesized locomotion is
+   marked as inferred.
+2. **The portal is how most people will meet holograms** (IDEA-045, with
+   IDEA-042 and IDEA-043). It needs no new data, so it can start now.
+3. **Meaning read from the body comes before meaning typed by the author.**
+   Self-resolving pointing (IDEA-032) unlocks the Follow camera (IDEA-041),
+   spatial subtitles (IDEA-014), the clarity co-director (IDEA-023), and the
+   object-indexed timeline (IDEA-044). PRD-001 typed notes are parked.
+4. **Provenance is a field from the first mark kind**, not a later feature
+   (IDEA-024).
+5. **Quick Look USDZ is a flattened preview.** It cannot carry the meaning
+   layer or the portal, so it stays opt-in and is never the canonical hologram.
 
-### View: how most people will meet holograms
-
-| Item | Reading |
-| --- | --- |
-| **IDEA-045 portal view** | Foundation of viewing on 2D devices. Includes IDEA-042 (tilt) and IDEA-043 (freeze to orbit). |
-| IDEA-041 attention-following camera | The Follow mode of the portal. Needs IDEA-032 data. |
-| IDEA-039 author's-eye view | A viewpoint choice inside the portal. Async twin of IDEA-013. |
-| IDEA-036 look-here cues | View behavior driven by meaning, not something the author writes. Async twin of IDEA-008. |
-| IDEA-010 role lenses | A view filter over the meaning layer. |
-
-### Meaning read from the body (build these before authored marks)
-
-IDEA-032 self-resolving pointing comes first: IDEA-014 spatial subtitles,
-IDEA-023 clarity co-director, IDEA-041, and IDEA-044 object-indexed timeline
-all depend on it. IDEA-033 hand-path ribbons, IDEA-034 gesture measurements,
-and IDEA-038 ghost frames are also derived.
-
-### Meaning added by the author (the fallback)
-
-| Item | Reading |
-| --- | --- |
-| IDEA-002 / PRD-001 anchored notes | Reframed. Typed notes are the fallback for what the body could not say, shown per device, not a timeline caption. PRD-001 is parked. |
-| IDEA-004 gesture compiler, IDEA-003 symbols | Authored during the performance, so they stay close to the body. Keep. |
-| IDEA-035 "stand here" markers | Authored attention intent; Follow mode carries it out. |
-| IDEA-037 proximity notes | Works on phones through the portal, not only in headsets. |
-| IDEA-028 rhetoric controls, IDEA-016 branching, IDEA-017 checkpoints | Meaning-layer marks; each needs a per-device rendering. |
-| IDEA-001 HoloGrammar | The meaning layer's schema: the design-language Mark record. |
-| IDEA-024 provenance | Becomes a required field (recorded, inferred, added) on every mark from the first version, not a later feature. |
-
-### Editing the event
-
-IDEA-020 ghost overlay, IDEA-021 segment retakes, IDEA-022 layered editor, and
-IDEA-019 semantic diff stay as creation tools; IDEA-019 now compares both the
-event and the meaning layers.
-
-### Conversation and later
-
-IDEA-018 Holo Replies becomes natural: a reply is a new event placed at a
-moment and place inside another one. It still needs accounts. IDEA-025 meaning
-heatmap becomes hologram-specific (where viewers stood and looked), with the
-privacy question unchanged. Parked for now: IDEA-005, 006, 007, 009, 011, 013,
-015, 026, 027, 029, 030, 040.
-
-### Open alignment with the design-language concept
-
-That concept is consistent with these principles (marks are never anchored to
-the screen; "this/here" links come from pointing). Two gaps for its owner:
-its viewer loop moves only through time, with no portal and no Follow/Free;
-and its suggested first slice ships PRD-001 typed notes as the first mark
-kind, where this lens would start with derived "this/here" links.
+Parked for now: IDEA-005, 006, 007, 009, 011, 013, 015, 026, 027, 029, 030, 040.
