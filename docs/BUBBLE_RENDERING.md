@@ -37,10 +37,10 @@ and validate animation, materials and actual playback separately.
 Run from the repository root, with the ports free:
 
 ```bash
-E2E_BASE_URL=https://localhost:3274 E2E_API_PORT=3101 \
+E2E_BASE_URL=https://localhost:45740 E2E_API_PORT=45741 \
   pnpm run test:xr:viewer
-E2E_BASE_URL=https://localhost:3274 E2E_API_PORT=3101 \
-  E2E_CAPTURE_URL=https://127.0.0.1:5275/ pnpm run test:smoke:pipeline
+E2E_BASE_URL=https://localhost:45740 E2E_API_PORT=45741 \
+  E2E_CAPTURE_URL=https://127.0.0.1:45742/ pnpm run test:smoke:pipeline
 ```
 
 The first gate includes `ar-bubble.spec.ts`: a controlled valid GLB with moving

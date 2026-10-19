@@ -266,7 +266,11 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
       const device = (window as unknown as { IWER_DEVICE: { controlMode: string; position: { set: (...v: number[]) => void }; quaternion: { set: (...v: number[]) => void } } }).IWER_DEVICE;
       device.controlMode = "programmatic";
       device.position.set(...position.toArray()); device.quaternion.set(...orientation.toArray());
-      Object.values(probe.actions).forEach((action) => { action.time = frame / 24; });
+      // Sample the actual mixer at an exact time; browser RAF phase must not
+      // change the avatar pose between the before and after recordings.
+      Object.values(probe.actions).forEach((action) => { action.paused = false; });
+      probe.mixer.setTime(frame / 24);
+      Object.values(probe.actions).forEach((action) => { action.paused = true; });
       return { position: position.toArray(), quaternion: orientation.toArray(), yaw, pitch };
     }, frame);
     await page.clock.runFor(50);

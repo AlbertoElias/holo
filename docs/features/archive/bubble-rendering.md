@@ -1,7 +1,7 @@
 # Feature brief: Bubble rendering across feed and XR
 
 **Lead:** Codex bubble session
-**Status:** Verifying
+**Status:** Complete
 
 ## User outcome
 
@@ -26,7 +26,7 @@ headset validation. Preserve feed following recorded sphere motion and AR pinnin
   disposes owned materials on repeated mount/unmount and configuration changes.
 - [x] Actual capture-exported GLB loads through upload into feed and immersive AR.
 - [x] Same deterministic before/after sequence produces a short video, PNGs and JSON.
-- [ ] Independent review and required verification pass before integration.
+- [x] Independent review and required verification pass before integration.
 
 ## Failure cases considered
 
@@ -41,7 +41,7 @@ headset validation. Preserve feed following recorded sphere motion and AR pinnin
 | AR pinning accidentally removed or feed freezes | Sample animation and sphere positions in each mode |
 | Test checks status but nothing draws | Pixel counts from real renderer and actual XR eye cameras |
 | Test fixture cannot load | Valid GLB MIME/data, console errors fail check |
-| Test shares another session's runtime | Dedicated 5274/3274/3101/5275 port overrides |
+| Test shares another session's runtime | Dedicated 45743/45740/45741/45742 port overrides |
 
 ## Ownership
 
@@ -61,45 +61,49 @@ translucent glass and clipping of sampled scene/avatar, with limits documented.
 
 ## Test plan and evidence
 
-Controlled unlit glTF fixture provides exact color oracles; actual capture-exported GLB
-provides compatibility evidence. Run through browser feed and IWER immersive AR.
-Store artifacts under output/bubble-rendering; run verify:agent then verify:pr with
-session-specific port overrides. Baseline, after and independent review pending.
+Completed 2026-10-18. Design review: bubble_design. Independent implementation and
+artifact review: bubble_verify, PASS with no unresolved findings. Final full
+`verify:pr` exited 0 after merging current main's TypeScript 7, recenter, and
+Quick Look opt-in upload changes. No converter implementation was edited here.
+
+| Criterion | Reproducible workflow | Result / artifact |
+| --- | --- | --- |
+| Baseline | Original runtime trio from c8c3a4d4abe7 with final harness | Expected failures; rotation error 2.49 / 2.47 versus 0 / 0 corrected |
+| Stereo rendering and head movement | `test:xr:viewer` includes `ar-bubble.spec.ts` | Distinct ±0.032 m eye poses, visible shell/content, positive outside control then zero outside pixels |
+| Matching before/after | Exact mixer sampling plus actual IWER yaw/pitch | 24 identical requested/observed stereo poses and animation times; midpoint error < 1.1e-7 m |
+| Aura scale | Non-unit 0.4625 model scale | World radius 0.428 before, 0.925 after, matching clipping radius |
+| Material lifecycle | Reconfiguration and three browser unmount/remount cycles | Two groups/colors preserved; 15 owned materials created, 12 disposed, 3 correctly active |
+| Deformation and frame order | Browser morph + immediate transform change before draw | Outside deformed vertices disappear; clipping center matches shell without intervening frame |
+| GLB compatibility | `test:smoke:pipeline` includes real bubble capture pipeline | Capture → export → API upload → feed and both immersive eyes render content/glass; feed moves, AR pinned |
+| Integration | `verify:agent`, native TS7 E2E typecheck, final `verify:pr` | Quality, unit tests, production builds, both pipelines, capture mock/locomotion/hands, five viewer checks pass |
+
+Final verification environment:
+
+```bash
+DEV_PORT=45743 E2E_BASE_URL=https://localhost:45740 E2E_API_PORT=45741 \
+  E2E_CAPTURE_URL=https://127.0.0.1:45742/ \
+  USDZ_PYTHON=/private/tmp/holoim-quicklook-python/bin/python pnpm run verify:pr
+```
+
+The original 5274/3274 set and the next 3474 candidate conflicted with concurrent
+sessions. The final high ports were checked free; other sessions' servers were
+left running. The CI office scene also exposed an offscreen positive marker;
+the harness now moves the actual IWER device to a controlled view for that oracle.
+
+Durable evidence directory:
+`/Users/albertoelias/.codex/visualizations/2026/10/18/01a14f6d-77d4-7b32-a871-47e1b6c9ff2d/bubble-rendering/`.
+Start with **BEFORE-AFTER.mp4** (eight seconds). `comparison/{before,after}` holds
+matched PNGs/JSON and expected baseline failures; `capture` holds the real exported
+GLB and feed/stereo rendering evidence. `verify-pr.log` is the full passing transcript.
+The video preserves the eye projection aspect and shows the left eye; assertions
+and JSON cover both. Comparison sources are preserved separately from subsequent
+regression runs. Re-encode with `pnpm exec tsx scripts/render-bubble-comparison.ts`.
+
+Canonical semantics and USDZ approximation requirements:
+[../../BUBBLE_RENDERING.md](../../BUBBLE_RENDERING.md).
 
 ## Physical-device limits
 
 IWER establishes emulated stereo rendering and deterministic behavior only. Physical
-headset transparency, tracking, comfort and performance remain untested.
-
-## Current evidence (2026-10-18)
-
-- Baseline origin/main c8c3a4d4abe7; recovered test fixture repaired to valid GLB.
-- Design reviewer: bubble_design; independent verifier: bubble_verify. Initial
-  review found pipeline gate omission; new pipeline spec is now wired into it.
-- verify:agent passed (sandbox rerun required for Prisma cache access).
-- Controlled stereo, actual head movement, grouped material lifecycle and morph/
-  draw-time transform checks pass. IWER stereo explicitly enabled at 64 mm IPD;
-  default IWER views initially shared a pose and were insufficient stereo evidence.
-- Real capture → upload → feed → AR passes. Final stereo-enabled pipeline rerun
-  and verify:pr remain pending. Quick Look conversion files remain untouched.
-- Video: `output/bubble-rendering/BEFORE-AFTER.mp4` (pending encoding).
-- Reproduce comparison: capture before/after variants using the same harness,
-  then `pnpm exec tsx scripts/render-bubble-comparison.ts`.
-- Semantics and USDZ approximation contract: [../BUBBLE_RENDERING.md](../BUBBLE_RENDERING.md).
-
-### Independent review and comparison evidence
-
-bubble_verify independently reviewed the code and artifacts: PASS, conditional
-only on the full integration gate. The matched comparison source lives under
-`output/bubble-rendering/comparison/{before,after}` so later regression runs cannot
-overwrite it. Both phases have 24 identical requested/observed stereo poses and
-animation times (maximum delta 0); head midpoint error < 6e-8 m. Initial eyes are
-±0.032 m apart. Final baseline rim error 6.18 / 6.09 mean channel levels becomes
-approximately 0; aura radius 0.428 becomes 0.925, matching the clipping radius.
-Material lifecycle: 15 owned materials created, 12 disposed, 3 correctly active.
-Morph vertices outside the sphere disappear; changing the sphere transform
-immediately before drawing updates clipping with no intervening frame.
-
-Video: eight seconds, head movement then common camera/model rotation, left eye
-shown beside its baseline. Readbacks use identical pixel oracles; presentation
-preserves the eye projection aspect. IWER emulation only.
+headset transparency, tracking, comfort and performance remain untested. This session
+does not claim physical Apple Quick Look playback.

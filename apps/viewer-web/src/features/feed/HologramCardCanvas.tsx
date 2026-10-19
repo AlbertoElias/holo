@@ -124,14 +124,14 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered }: {
   const framingTargetsRef = useRef<Object3D[]>([]);
   const avatarRootRef = useRef<Object3D | null>(null);
   const avatarAnchorRef = useRef<{ hips: Object3D; head: Object3D | null } | null>(null);
-  const { actions } = useAnimations(animations, clonedScene);
+  const { actions, mixer } = useAnimations(animations, clonedScene);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions });
+      observer?.({ renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer });
     }
-  }, [actions, camera, clonedScene, renderScene, renderer, sphereClip]);
+  }, [actions, camera, clonedScene, mixer, renderScene, renderer, sphereClip]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {

@@ -8,7 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| Bubble rendering across feed and XR | Verifying | [bubble-rendering.md](bubble-rendering.md) |
+| Bubble rendering across feed and XR | Complete | [archive/bubble-rendering.md](archive/bubble-rendering.md) |
 | Animated Quick Look phone demo | Complete | [archive/quicklook-phone-demo.md](archive/quicklook-phone-demo.md) |
 | Hand-tracking fidelity from real headset input | Verifying | [hand-tracking-fidelity.md](hand-tracking-fidelity.md) |
 | Capture AR recenter control | Complete | [archive/ar-recenter-control.md](archive/ar-recenter-control.md) |

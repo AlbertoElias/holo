@@ -182,7 +182,7 @@ export function ARHologramModel({
     }
   });
   const arAnimations = useMemo(() => freezeBubbleWrapperMotion(animations), [animations]);
-  const { actions } = useAnimations(arAnimations, clonedScene);
+  const { actions, mixer } = useAnimations(arAnimations, clonedScene);
   const xrSession = useXR((state) => state.session);
   const xrSessionRef = useRef<XRSession | null>(null);
   const originReferenceSpace = useXR((state) => state.originReferenceSpace);
@@ -206,9 +206,9 @@ export function ARHologramModel({
       const observer = (window as Window & {
         __HOLOIM_AR_TEST_OBSERVER__?: (value: unknown) => void;
       }).__HOLOIM_AR_TEST_OBSERVER__;
-      observer?.({ renderer, scene: renderScene, model: clonedScene, bubble: sphereClip, actions });
+      observer?.({ renderer, scene: renderScene, model: clonedScene, bubble: sphereClip, actions, mixer });
     }
-  }, [actions, clonedScene, renderScene, renderer, sphereClip]);
+  }, [actions, clonedScene, mixer, renderScene, renderer, sphereClip]);
 
   useEffect(() => {
     xrSessionRef.current = xrSession ?? null;
