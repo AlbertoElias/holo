@@ -22,6 +22,11 @@ export interface CaptureStage {
 }
 
 export async function createCaptureStage(container: HTMLElement): Promise<CaptureStage> {
+  // World.create always builds the SDK's spatial-audio listener, which opens a
+  // Web Audio context (about 190 ms at startup in Chromium). Capture removes
+  // that system below and plays no audio through three (microphone recording
+  // uses MediaRecorder), so three's shared context stays an offline one.
+  THREE.AudioContext.setContext(new OfflineAudioContext(1, 1, 44100) as unknown as AudioContext);
   const world = await World.create(container, {
     xr: {
       sessionMode: SessionMode.ImmersiveVR,
