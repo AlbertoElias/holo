@@ -4,6 +4,7 @@ Supporting notes that group related ideas without committing to implementation.
 They develop language, product principles, examples, tensions, and research
 needs before opening a PRD. They are not a lifecycle state; see `../README.md`.
 
+- [What a hologram is](what-a-hologram-is.md): the lens for everything below
 - [Embodied communication](embodied-communication.md)
 - [Spatial language](spatial-language.md)
 - [Live VR and AR dialogue](live-vr-ar-dialogue.md)

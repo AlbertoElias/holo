@@ -1,9 +1,17 @@
 # PRD: Anchored notes
 
-**Status:** Draft  
+**Status:** Parked  
 **Source ideas:** IDEA-002  
 **Owner:** Alberto Elias  
 **Last updated:** 2026-10-18
+
+## Decision
+
+Parked 2026-10-18. Seen as a video with a feed UI, typed pins on a timeline add
+nothing a captioned video lacks. Under [what a hologram is](../concepts/what-a-hologram-is.md),
+authored notes are the fallback for what the body could not say. Start with
+meaning read from the body (IDEA-032 self-resolving pointing) and with viewing
+as a portal (IDEA-045). Revisit notes as one mark kind once those exist.
 
 ## User Outcome
 
