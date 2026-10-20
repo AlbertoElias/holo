@@ -532,6 +532,19 @@ off.
 | Native ECS through the outer CLI | Systems listed in frame order; pause holds state through wall time; `ecs step` advances exactly N steps and N/60 s; native recording samples once per step at simulation time; toggling `RecordingSystem` stops and resumes samples; refit refused on desktop and while recording, accepted after export; VR enter/exit through World's offered session; no browser errors | [CLI transcript](../evidence/iwsdk-runtime-refactor/ecs-cli-transcript.md) |
 | Reload and re-entry | After a source edit the managed page reloads with one canvas and one set of systems; two VR enter/exit cycles re-offer the session, track controllers, no errors; World's unused player meshes stay invisible on desktop and in VR | managed runtime on 5874 |
 
+#### Ported device-session fixes (2026-10-20)
+
+The Oct 18 Quest session (run in Muse, left uncommitted in the shared checkout)
+fixed bugs that touched the deleted orchestrator. They are ported on this
+branch as separate commits: B-016 (export hang; new `test:xr:recording`, which
+fails without the fix), B-015 (VR pills, aim rays, touch toggle; hit-testing
+now follows the controller's aim line), and shoulder-protraction IK with the
+first real headset hand fixture (wrist ceiling 2 → 4 cm). The IK change is a
+deliberate behavior change, so the exactness reference moves at that commit:
+the synthetic hand replay stays byte-identical, locomotion and body samples
+change, every body metric except crouch-and-lean wrist p95 (1.6 cm → ~0) is
+unchanged, and all 12 body faults are still caught.
+
 #### Same-workload comparison (production builds, headless Chromium, SwiftShader, this Mac)
 
 | Measure | main | refactor | Notes |

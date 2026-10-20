@@ -30,7 +30,7 @@ export const THRESHOLDS = Object.freeze({
   // IK-driven, so moving real hands (39-45 cm travel in the headset fixture)
   // lag the tracked wrist by cm; the synthetic fixture's wrist is static
   // (0 cm). Headset p95 was 5.9/7.9 cm before shoulder-protraction IK;
-  // with it, 1.1/2.6 cm (2026-10-18). Ceiling set to 4 cm.
+  // with it, 2.0/3.0 cm (2026-10-19). Ceiling set to 4 cm.
   maxWristPositionErrorM: 0.04,
   maxWristRotationErrorDeg: 10,
   // Jerk of each finger segment's direction (hand frame), avatar relative to

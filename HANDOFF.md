@@ -5,19 +5,21 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-19
-**Baseline:** `01c1ca691378` — check `git log --oneline -10` before trusting it.
-**Working tree when updated:** clean; MetaVR setup and capture AR recenter
-landed on `main`.
+**Updated:** 2026-10-20
+**Baseline:** branch `infra/iwsdk-runtime-refactor` (merged with `origin/main`
+`c6bec9bc0492`) — check `git log --oneline -10` before trusting it.
+**Working tree when updated:** clean on that branch. The shared main checkout
+still holds the Oct 18 device session's uncommitted edits; they are ported on
+the branch and can be discarded there once it lands.
 
 ## Next action
 
-Record headset input and commit it: hands under
-`apps/capture/fixtures/input-recordings/` (recalibrate the B-005 ceilings
-against it) and room-scale walking, turning, crouching, and leaning under
-`apps/capture/fixtures/body-recordings/` (steps in `apps/capture/README.md`).
-Active briefs: [`docs/features/hand-tracking-fidelity.md`](docs/features/hand-tracking-fidelity.md)
-and [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
+Decide on merging [the IWSDK runtime refactor](docs/features/iwsdk-runtime-refactor.md)
+(main deploys automatically after CI), then validate it on a Quest. The real
+headset hand fixture is committed (B-015/B-016 fixed on the branch). Still to
+record: room-scale walking, turning, crouching and leaning under
+`apps/capture/fixtures/body-recordings/` (steps in `apps/capture/README.md`;
+brief [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md)).
 
 ## Unverified / device-only
 
