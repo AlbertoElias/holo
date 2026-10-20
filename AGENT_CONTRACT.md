@@ -101,14 +101,12 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 - Parallel checks write each check's output to
   `apps/capture/output/xr-checks/<name>.log` and print it when the check ends.
   Set `XR_CHECK_CONCURRENCY=1` for serial, streamed output.
-- CI pins `XR_CHECK_CONCURRENCY=2` on the capture XR step. This private
-  repo's `ubuntu-latest` runner has 2 vCPUs, where the default would run
-  serially (~280–300 s); 2-wide runs each check ~1.5× slower but finishes in
-  ~205–250 s. Concurrent cold page loads can pass the 30 s goto limit, so
-  parallel runs start with the cheapest check alone to warm Vite; 3-wide
-  timed out even so. The
-  pipeline job (~250–390 s, mostly the capture-to-viewer spec and its USDZ
-  Python checks) is then the CI long pole.
+- CI runs capture XR checks serially. This private repo's `ubuntu-latest`
+  runner has 2 vCPUs, so the default is 1. Running 2 at a time passed on the
+  branch but timed out on main: the hand and body checks each open 2 pages at
+  once, and cold page loads then pass the 30 s goto limit. The pipeline job
+  (~250–390 s, mostly the capture-to-viewer spec and its USDZ Python checks)
+  is the CI long pole.
 - Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`) screenshot every frame
   and multiply wall time; combine them with `XR_REPLAY_ONLY`.
 
@@ -163,7 +161,7 @@ Supported env vars for smoke and XR scripts:
 - `BODY_REPLAY_CONCURRENCY` (default `2` body replays at once; results do not depend on it)
 - `HAND_REPLAY_CONCURRENCY` (default `2` hand replays at once; results do not depend on it)
 - `XR_REPLAY_ONLY` (substring, comma-separated for several: replay only matching hand or body fixtures; with `BODY_REPLAY_FAULTS=1`, only faults on those fixtures)
-- `XR_CHECK_CONCURRENCY` (capture XR checks run at once by `test:xr*`; default half the CPUs, from 1 to 3; CI sets 2; results do not depend on it)
+- `XR_CHECK_CONCURRENCY` (capture XR checks run at once by `test:xr*`; default half the CPUs, from 1 to 3, so 1 on CI; results do not depend on it)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
