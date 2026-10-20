@@ -54,6 +54,53 @@ export async function freezePageClock(page) {
   }
 }
 
+// After freezePageClock: releases frames until the app's XR session renders
+// steadily. three.js awaits gl.makeXRCompatible() — a real-time promise, not
+// on the frozen clock — before it sets the session's base layer and starts its
+// frame loop, and the first frames can still wait on real-time work, so this
+// pauses in real time between releases until three consecutive releases each
+// deliver XR frames. Run it while the app does not tick (manual clock), so the
+// frames released here change nothing.
+export async function waitForXrRenderLoop(page, { stepMs = 1000 / 30, maxSteps = 600, steadySteps = 3 } = {}) {
+  await page.evaluate(() => {
+    window.__xrFramesDelivered = 0;
+    const session = window.IWER_DEVICE?.activeSession;
+    const count = () => {
+      window.__xrFramesDelivered += 1;
+      session?.requestAnimationFrame(count);
+    };
+    session?.requestAnimationFrame(count);
+  });
+  let steady = 0;
+  let last = 0;
+  for (let step = 0; step < maxSteps; step += 1) {
+    await page.clock.runFor(stepMs);
+    const { frames, ready } = await page.evaluate(() => ({
+      frames: window.__xrFramesDelivered,
+      ready: Boolean(window.IWER_DEVICE?.activeSession?.renderState?.baseLayer)
+    }));
+    steady = ready && frames > last ? steady + 1 : 0;
+    last = frames;
+    if (steady >= steadySteps) {
+      await alignFrameClock(page);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error('The app never rendered XR frames steadily.');
+}
+
+// The frozen clock fires animation frames every 16 ms counted from when it
+// was installed (in real time), and runFor rounds to whole milliseconds, so
+// the frames that a sequence of 30 Hz steps releases depend on where the
+// clock stands. Moving it to a multiple of 48 ms (three frames) before a
+// replay makes every later step release the same frames on every run.
+export async function alignFrameClock(page) {
+  const ticks = await page.evaluate(() => performance.now());
+  const offset = 48 - (Math.ceil(ticks) % 48);
+  await page.clock.runFor(offset + (Math.ceil(ticks) - ticks));
+}
+
 // Screenshot for simulation checks. The small simulation canvas is mostly
 // covered by IWER's DevUI, so it is enlarged for the capture, and a few frozen
 // frames run so the page draws and IWER composites the current state. Pages
@@ -229,7 +276,9 @@ export async function enterIwerSessionFromButton(
   }
 }
 
-export async function attachXrEnvironment(page, { mode } = {}) {
+// cacheClearState: answer IWER's per-frame clear-state reads without a GL
+// stall (see cacheWebGlClearState); opt-in for suites that step many frames.
+export async function attachXrEnvironment(page, { mode, cacheClearState = false } = {}) {
   const resolvedMode = resolveXrTestMode(mode);
   if (resolvedMode === 'off') {
     await page.addInitScript(() => {
@@ -246,5 +295,72 @@ export async function attachXrEnvironment(page, { mode } = {}) {
     return { mode: 'off' };
   }
 
+  if (cacheClearState) await page.addInitScript(cacheWebGlClearState);
   return { mode: 'iwer' };
+}
+
+// IWER saves and restores the app's clear color, depth, and stencil around
+// every emulated XR frame with gl.getParameter, and on software GL each of
+// those reads stalls the pipeline (most of a frame's cost in replays). The
+// values are plain context state that only clearColor/clearDepth/clearStencil
+// change, so they are tracked here. What the GL stores for a given input
+// (clamped or not, depending on context and extensions) is learned from one
+// real read per distinct input and context, never assumed.
+function cacheWebGlClearState() {
+  const COLOR_CLEAR_VALUE = 0x0c22;
+  const DEPTH_CLEAR_VALUE = 0x0b73;
+  const STENCIL_CLEAR_VALUE = 0x0b91;
+  const contexts = new WeakMap();
+  const stateOf = (gl, getParameter) => {
+    let state = contexts.get(gl);
+    if (!state) {
+      // Initial values, read once.
+      state = {
+        current: {
+          [COLOR_CLEAR_VALUE]: getParameter.call(gl, COLOR_CLEAR_VALUE),
+          [DEPTH_CLEAR_VALUE]: getParameter.call(gl, DEPTH_CLEAR_VALUE),
+          [STENCIL_CLEAR_VALUE]: getParameter.call(gl, STENCIL_CLEAR_VALUE)
+        },
+        learned: new Map()
+      };
+      contexts.set(gl, state);
+    }
+    return state;
+  };
+  const remember = (gl, getParameter, pname, key) => {
+    const state = stateOf(gl, getParameter);
+    const learnedKey = `${pname}:${key}`;
+    if (!state.learned.has(learnedKey)) state.learned.set(learnedKey, getParameter.call(gl, pname));
+    state.current[pname] = state.learned.get(learnedKey);
+  };
+  for (const Context of [globalThis.WebGLRenderingContext, globalThis.WebGL2RenderingContext]) {
+    if (!Context) continue;
+    const proto = Context.prototype;
+    const { clearColor, clearDepth, clearStencil, getParameter } = proto;
+    proto.clearColor = function (r, g, b, a) {
+      stateOf(this, getParameter);
+      const result = clearColor.call(this, r, g, b, a);
+      remember(this, getParameter, COLOR_CLEAR_VALUE, `${r},${g},${b},${a}`);
+      return result;
+    };
+    proto.clearDepth = function (depth) {
+      stateOf(this, getParameter);
+      const result = clearDepth.call(this, depth);
+      remember(this, getParameter, DEPTH_CLEAR_VALUE, `${depth}`);
+      return result;
+    };
+    proto.clearStencil = function (s) {
+      stateOf(this, getParameter);
+      const result = clearStencil.call(this, s);
+      remember(this, getParameter, STENCIL_CLEAR_VALUE, `${s}`);
+      return result;
+    };
+    proto.getParameter = function (pname) {
+      if (pname === COLOR_CLEAR_VALUE || pname === DEPTH_CLEAR_VALUE || pname === STENCIL_CLEAR_VALUE) {
+        const value = stateOf(this, getParameter).current[pname];
+        return value instanceof Float32Array ? new Float32Array(value) : value;
+      }
+      return getParameter.call(this, pname);
+    };
+  }
 }

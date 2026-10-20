@@ -22,9 +22,8 @@ const CAPTURE_SUCCESS_SCREENSHOTS = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS =
 const NO_MOVE = Object.freeze({ forward: false, back: false, left: false, right: false });
 const NO_INPUT = Object.freeze({ ...NO_MOVE, crouch: false });
 const MIN_TRAVEL_METERS = 0.08;
-// Spawn terrain deflects travel by up to ~0.48 rad, so require each input to
-// land nearest its own cardinal direction: swapped axes or a wrong yaw sign
-// produce errors of at least pi/2 and still fail.
+// Require each input to land nearest its own cardinal direction: swapped axes
+// or a wrong yaw sign produce errors of at least pi/2 and still fail.
 const MAX_HEADING_ERROR_RAD = Math.PI / 4;
 
 function assert(condition, message) {
@@ -88,7 +87,10 @@ function mockPose(yawRad, headY = 0) {
 }
 
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
-const url = new URL(baseUrl);
+// The flat test floor: the default scene spawns on a steep slope beside a
+// drop, so a sideways trial could leave the ground and test the terrain, not
+// the input. The default scene stays covered by the mock-VR and pipeline checks.
+const url = new URL('?scene=/fixtures/scenes/body-floor.gltf&sceneScale=1', baseUrl);
 
 const screenshotDir = process.env.XR_TEST_ARTIFACT_DIR ?? process.env.SCREENSHOT_DIR ?? 'output/ci-vr-locomotion';
 await mkdir(screenshotDir, { recursive: true });
@@ -212,7 +214,7 @@ async function openScenarioPage(label, { vr }) {
   const timer = createPhaseTimer(label);
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
-  await attachXrEnvironment(page, { mode: resolvedMode });
+  await attachXrEnvironment(page, { mode: resolvedMode, cacheClearState: true });
   timer.mark('context');
   await waitForReady(page, timer.mark);
   // Take the clock before session entry so the XR transition, standing-head

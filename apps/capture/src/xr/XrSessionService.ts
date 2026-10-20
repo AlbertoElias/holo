@@ -83,6 +83,16 @@ const FINGER_TRACKED_JOINT_NAMES = TRACKED_HAND_JOINT_NAMES.filter((jointName) =
 const LOW_FINGER_JOINT_TRACKED_COUNT = 6;
 const LOW_FINGER_JOINT_WARN_FRAMES = 45;
 
+// Tracked eye midpoint and orientation for the current XR frame. `local` is
+// tracking space (the camera rig's local space); `world` applies the rig.
+export interface XrHeadPose {
+  valid: boolean;
+  localPosition: THREE.Vector3;
+  localQuaternion: THREE.Quaternion;
+  worldPosition: THREE.Vector3;
+  worldQuaternion: THREE.Quaternion;
+}
+
 export interface XrTransition {
   entered: boolean;
   exited: boolean;
@@ -168,6 +178,18 @@ export class XrSessionService {
   // Which input produced each hand's pose this frame (see HandPoseSource).
   private readonly handPoseSource: Record<VrHandSide, HandPoseSource> = { left: 'none', right: 'none' };
   private cameraRig: THREE.Group | null = null;
+  private readonly headPose: XrHeadPose = {
+    valid: false,
+    localPosition: new THREE.Vector3(),
+    localQuaternion: new THREE.Quaternion(),
+    worldPosition: new THREE.Vector3(),
+    worldQuaternion: new THREE.Quaternion()
+  };
+  private readonly tmpEyeLocal = new THREE.Vector3();
+  // Whether the latest XR frame had a viewer pose. three keeps its last
+  // camera matrices when tracking is lost, so they alone cannot tell.
+  private viewerTracked = true;
+  private readonly tmpRigQuat = new THREE.Quaternion();
   private readonly tmpQuat = new THREE.Quaternion();
   private readonly tmpQuatB = new THREE.Quaternion();
   private readonly trackedHandRotationOffset = new THREE.Quaternion();
@@ -416,14 +438,8 @@ export class XrSessionService {
       }
     }
 
-    if (this.renderer.xr.isPresenting) {
-      const xrCamQuat = new THREE.Quaternion();
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(xrCamQuat.copy(this.renderer.xr.getCamera().quaternion)).projectOnPlane(new THREE.Vector3(0, 1, 0));
-      if (forward.lengthSq() > 1e-8) {
-        forward.normalize();
-        return Math.atan2(-forward.x, -forward.z);
-      }
-      return lookYaw;
+    if (this.renderer.xr.isPresenting && this.headPose.valid) {
+      return headYawFromQuaternion(this.headPose.worldQuaternion, lookYaw);
     }
 
     return lookYaw;
@@ -438,10 +454,66 @@ export class XrSessionService {
       return Number.isFinite(this.mockVrState.headPosition.y) ? this.mockVrState.headPosition.y : undefined;
     }
 
+    if (this.renderer.xr.isPresenting && this.headPose.valid) {
+      return this.headPose.localPosition.y;
+    }
     if (this.renderer.xr.isPresenting) {
       return this.getFloorHeadPosition()?.y;
     }
     return undefined;
+  }
+
+  // Call with each XR frame (inside its callback, where getViewerPose works).
+  noteXrFrame(frame: XRFrame): void {
+    const referenceSpace = this.renderer.xr.getReferenceSpace();
+    if (!referenceSpace) return;
+    try {
+      this.viewerTracked = frame.getViewerPose(referenceSpace) !== null;
+    } catch {
+      // A frame outside its callback; keep the last known state.
+    }
+  }
+
+  // Reads the head from the XR views. three copies each view.transform into
+  // getCamera().cameras[i].matrix (tracking space) at the start of every XR
+  // frame, before the app runs. The ArrayCamera's own position is not usable
+  // here: it is tracking space until render() calls updateCamera and world
+  // space afterwards, so its meaning depends on frame order (B-009). Call once
+  // per frame, and again via refreshHeadWorldPose() after moving the rig.
+  updateHeadPose(): XrHeadPose {
+    const pose = this.headPose;
+    pose.valid = false;
+    if (!this.renderer.xr.isPresenting || !this.viewerTracked) return pose;
+    // AR sessions may expose a single view; the type assumes two.
+    const cameras: readonly THREE.Camera[] = this.renderer.xr.getCamera().cameras;
+    if (cameras.length === 0) return pose;
+    pose.localPosition.set(0, 0, 0);
+    for (const eye of cameras) {
+      pose.localPosition.add(this.tmpEyeLocal.setFromMatrixPosition(eye.matrix));
+    }
+    pose.localPosition.multiplyScalar(1 / cameras.length);
+    pose.localQuaternion.setFromRotationMatrix(cameras[0]!.matrix).normalize();
+    if (!isFiniteVector3Like(pose.localPosition) || !isFiniteQuaternionLike(pose.localQuaternion)) return pose;
+    pose.valid = true;
+    this.refreshHeadWorldPose();
+    return pose;
+  }
+
+  refreshHeadWorldPose(): XrHeadPose {
+    const pose = this.headPose;
+    pose.worldPosition.copy(pose.localPosition);
+    pose.worldQuaternion.copy(pose.localQuaternion);
+    const rig = this.cameraRig;
+    if (rig) {
+      rig.updateWorldMatrix(true, false);
+      pose.worldPosition.applyMatrix4(rig.matrixWorld);
+      pose.worldQuaternion.premultiply(rig.getWorldQuaternion(this.tmpRigQuat)).normalize();
+    }
+    return pose;
+  }
+
+  getHeadPose(): XrHeadPose {
+    return this.headPose;
   }
 
   updateHandTrackingTargets(getEyeAnchorWorld: (out: THREE.Vector3) => THREE.Vector3): void {
@@ -500,7 +572,8 @@ export class XrSessionService {
 
     this.refreshInputSourcesFromRuntime();
     getEyeAnchorWorld(this.tmpEyeAnchor);
-    this.getHeadWorldPosition(this.tmpXrHeadWorld);
+    if (!this.headPose.valid) this.updateHeadPose();
+    this.tmpXrHeadWorld.copy(this.refreshHeadWorldPose().worldPosition);
 
     for (const side of ['left', 'right'] as const) {
       const state = this.xrHandState[side]!;
@@ -559,7 +632,7 @@ export class XrSessionService {
       }
 
       // Final fallback: keep a visible neutral hand pose in front of the eyes while waiting for real tracking.
-      this.tmpQuatB.copy(this.renderer.xr.getCamera().getWorldQuaternion(this.tmpQuatB));
+      this.tmpQuatB.copy(this.headPose.worldQuaternion);
       this.tmpVecA.set(side === 'left' ? -0.24 : 0.24, -0.18, -0.36).applyQuaternion(this.tmpQuatB).add(this.tmpEyeAnchor);
       this.tmpQuat.copy(this.tmpQuatB);
       this.setTrackedPose(state, this.tmpVecA, this.tmpQuat, this.tmpEyeAnchor);
@@ -909,9 +982,8 @@ export class XrSessionService {
   }
 
   private scorePoseForSide(worldPosition: THREE.Vector3, side: VrHandSide): number {
-    const xrCamera = this.renderer.xr.getCamera();
-    xrCamera.getWorldPosition(this.tmpVecB);
-    xrCamera.getWorldQuaternion(this.tmpQuat);
+    this.tmpVecB.copy(this.headPose.worldPosition);
+    this.tmpQuat.copy(this.headPose.worldQuaternion);
     this.tmpVecC.set(1, 0, 0).applyQuaternion(this.tmpQuat).setY(0);
     if (this.tmpVecC.lengthSq() < 1e-8) {
       this.tmpVecC.set(1, 0, 0);
@@ -1005,4 +1077,26 @@ export class XrSessionService {
     state.hasLastValidPose = true;
     state.poseValid = true;
   }
+}
+
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const tmpHeadForward = new THREE.Vector3();
+const tmpHeadUp = new THREE.Vector3();
+
+// Heading of a head pose on the floor plane (0 = facing -Z, positive = turned
+// left): the projected forward, blending near vertical (looking straight up
+// or down) into the projected up vector, which then tilts along the heading.
+export function headYawFromQuaternion(quaternion: THREE.Quaternion, fallbackYaw: number): number {
+  tmpHeadForward.set(0, 0, -1).applyQuaternion(quaternion);
+  tmpHeadUp.set(0, 1, 0).applyQuaternion(quaternion);
+  const tilt = tmpHeadForward.y;
+  tmpHeadForward.projectOnPlane(WORLD_UP);
+  tmpHeadUp.projectOnPlane(WORLD_UP).multiplyScalar(-Math.sign(tilt));
+  const flat = tmpHeadForward.length();
+  const weight = THREE.MathUtils.smoothstep(flat, 0.15, 0.35);
+  if (flat > 1e-6) tmpHeadForward.multiplyScalar(weight / flat);
+  const upLength = tmpHeadUp.length();
+  if (upLength > 1e-6) tmpHeadForward.addScaledVector(tmpHeadUp, (1 - weight) / upLength);
+  if (tmpHeadForward.lengthSq() < 1e-8) return fallbackYaw;
+  return Math.atan2(-tmpHeadForward.x, -tmpHeadForward.z);
 }

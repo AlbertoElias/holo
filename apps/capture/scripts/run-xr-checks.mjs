@@ -15,8 +15,15 @@ const CHECKS = {
   terrain: 'scripts/ci-terrain-locomotion.ts',
   hands: 'scripts/ci-hand-replay-playwright.mjs',
   height: 'scripts/ci-xr-height-playwright.ts',
-  // Not a check: regenerates the IWER pose fixture the hands check replays.
-  'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs'
+  body: 'scripts/ci-body-replay-playwright.mjs',
+  // Not checks: regenerate the IWER fixtures the hands and body checks replay.
+  'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs',
+  'body-fixtures': 'scripts/generate-iwer-body-fixtures.mjs'
+};
+
+// Checks that legitimately run longer than the default hang guard.
+const CHECK_TIMEOUT_MS = {
+  body: 360000
 };
 
 const requested = process.argv.slice(2);
@@ -79,7 +86,7 @@ try {
     const args = script.endsWith('.ts') ? ['--import', 'tsx', script] : [script];
     await runCommand('node', args, {
       env: { ...process.env, BASE_URL: baseUrl, NODE_TLS_REJECT_UNAUTHORIZED: '0' },
-      timeoutMs: checkTimeoutMs
+      timeoutMs: process.env.XR_CHECK_TIMEOUT_MS ? checkTimeoutMs : CHECK_TIMEOUT_MS[name] ?? checkTimeoutMs
     });
     console.log(`[xr-checks] ${name} passed in ${((Date.now() - checkStartedAt) / 1000).toFixed(1)}s`);
   }

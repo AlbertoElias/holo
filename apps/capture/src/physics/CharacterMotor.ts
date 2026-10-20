@@ -27,6 +27,10 @@ interface CharacterMotorUpdateOptions {
   moveSpeedMultiplier?: number;
   allowJump?: boolean;
   stickToTerrain?: boolean;
+  // World-space horizontal displacement applied this step on top of input
+  // movement (room-scale VR: the body following the tracked head). It goes
+  // through the character controller, so walls and slopes still apply.
+  externalDisplacement?: { x: number; z: number };
 }
 
 export class CharacterMotor {
@@ -55,6 +59,7 @@ export class CharacterMotor {
   private readonly tmpRight = new THREE.Vector3();
   private readonly tmpMove = new THREE.Vector3();
   private readonly tmpBody = new THREE.Vector3();
+  private readonly lastInputMovement = new THREE.Vector3();
 
   async init(avatarRig: AvatarRig): Promise<boolean> {
     await RAPIER.init();
@@ -69,7 +74,10 @@ export class CharacterMotor {
     this.avatarHeight = avatarRig.avatarHeight;
     this.capsuleRadius = avatarRig.avatarHeight * 0.18;
     this.capsuleHalfHeight = avatarRig.avatarHeight * 0.32;
-    this.avatarVisualOffsetY = -(this.capsuleHalfHeight + this.capsuleRadius) - avatarRig.avatarMinLocalY;
+    // The controller keeps its capsule a small gap (controllerOffset) above
+    // surfaces; the visual base drops by that gap so feet stand on the floor
+    // rather than hovering over it.
+    this.avatarVisualOffsetY = -(this.capsuleHalfHeight + this.capsuleRadius) - avatarRig.avatarMinLocalY - this.controllerOffset();
     this.jumpSpeed = Math.sqrt(2 * Math.abs(gravity) * avatarRig.avatarHeight * 1.2);
     this.moveSpeed = avatarRig.avatarHeight * 1.8;
     this.avatarRigRef = avatarRig;
@@ -116,7 +124,7 @@ export class CharacterMotor {
     if (this.tmpMove.lengthSq() > 0) {
       this.tmpMove.normalize().multiplyScalar(this.targetHorizontalSpeed * deltaSec);
     }
-
+    const wasGrounded = this.grounded;
     if (allowJump && jumpQueued && this.grounded) {
       this.velocityY = this.jumpSpeed;
       this.grounded = false;
@@ -127,7 +135,8 @@ export class CharacterMotor {
       this.velocityY = groundedStickVelocity;
     }
 
-    // Tracked hand proximity sensors are observations, not solid obstacles.
+    // Sensors (the hand spheres) must never block the body: they move with
+    // the avatar's hands and sat in the capsule's path when walking in VR.
     this.characterController.computeColliderMovement(this.characterCollider, {
       x: this.tmpMove.x,
       y: this.velocityY * deltaSec,
@@ -136,19 +145,49 @@ export class CharacterMotor {
     const corrected = this.characterController.computedMovement();
     if (!Number.isFinite(corrected.x) || !Number.isFinite(corrected.y) || !Number.isFinite(corrected.z)) {
       this.horizontalSpeed = 0;
+      this.lastInputMovement.set(0, 0, 0);
       if (!this.invalidMovementLogged) {
         console.warn('Skipping invalid character movement correction.', corrected);
         this.invalidMovementLogged = true;
       }
       return;
     }
-    this.horizontalSpeed = Math.hypot(corrected.x, corrected.z) / Math.max(deltaSec, 1e-6);
-
+    // A grounded character with no movement stands still: the controller
+    // would otherwise slide the gravity step down a walkable slope a few
+    // millimetres a second (the hand sensors used to hide this by blocking
+    // the capsule).
+    const hasInput = this.tmpMove.x !== 0 || this.tmpMove.z !== 0;
+    const external = options?.externalDisplacement;
+    const hasExternal = Boolean(external && (external.x !== 0 || external.z !== 0));
+    const correctedX = hasInput || !wasGrounded ? corrected.x : 0;
+    const correctedZ = hasInput || !wasGrounded ? corrected.z : 0;
+    // Horizontal correction of a gravity-only move is not input movement.
+    this.lastInputMovement.set(hasInput ? correctedX : 0, corrected.y, hasInput ? correctedZ : 0);
     const current = this.characterBody.translation();
+    const total = this.tmpBody.set(correctedX, corrected.y, correctedZ);
+
+    // External displacement moves separately from where input left the
+    // capsule, so callers can tell the two apart (the VR rig follows input
+    // movement only).
+    if (external && hasExternal && Number.isFinite(external.x) && Number.isFinite(external.z)) {
+      this.characterBody.setTranslation({ x: current.x + total.x, y: current.y + total.y, z: current.z + total.z }, false);
+      this.rapierWorld.propagateModifiedBodyPositionsToColliders();
+      this.characterController.computeColliderMovement(this.characterCollider, { x: external.x, y: 0, z: external.z }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
+      const externalCorrected = this.characterController.computedMovement();
+      if (Number.isFinite(externalCorrected.x) && Number.isFinite(externalCorrected.y) && Number.isFinite(externalCorrected.z)) {
+        total.x += externalCorrected.x;
+        total.y += externalCorrected.y;
+        total.z += externalCorrected.z;
+      }
+      this.characterBody.setTranslation(current, false);
+      this.rapierWorld.propagateModifiedBodyPositionsToColliders();
+    }
+    this.horizontalSpeed = Math.hypot(total.x, total.z) / Math.max(deltaSec, 1e-6);
+
     this.characterBody.setNextKinematicTranslation({
-      x: current.x + corrected.x,
-      y: current.y + corrected.y,
-      z: current.z + corrected.z
+      x: current.x + total.x,
+      y: current.y + total.y,
+      z: current.z + total.z
     });
 
     this.rapierWorld.timestep = clamp(deltaSec, 1 / 120, 1 / 20);
@@ -171,6 +210,12 @@ export class CharacterMotor {
     const p = this.characterBody.translation();
     out.set(p.x, p.y, p.z);
     return out;
+  }
+
+  // Collision-corrected movement from input and gravity in the last update,
+  // excluding any external displacement.
+  getLastInputMovement(out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.lastInputMovement);
   }
 
   getAvatarVisualOffsetY(): number {
@@ -245,9 +290,13 @@ export class CharacterMotor {
     this.rapierWorld.propagateModifiedBodyPositionsToColliders();
   }
 
+  private controllerOffset(): number {
+    return Math.max(0.01, this.avatarHeight * 0.02);
+  }
+
   private rebuildCharacterController(): void {
     if (!this.rapierWorld) return;
-    this.characterController = this.rapierWorld.createCharacterController(Math.max(0.01, this.avatarHeight * 0.02));
+    this.characterController = this.rapierWorld.createCharacterController(this.controllerOffset());
     this.characterController.setUp({ x: 0, y: 1, z: 0 });
     this.characterController.setSlideEnabled(true);
     this.characterController.setMaxSlopeClimbAngle(THREE.MathUtils.degToRad(40));
@@ -441,16 +490,54 @@ export class CharacterMotor {
         vertices.push(transformedPos.getX(i), transformedPos.getY(i), transformedPos.getZ(i));
       }
 
+      const meshIndices: number[] = [];
       if (transformed.index) {
         const indexArray = transformed.index.array;
         for (let i = 0; i < indexArray.length; i += 1) {
-          indices.push(Number(indexArray[i]) + vertexOffset);
+          meshIndices.push(Number(indexArray[i]) + vertexOffset);
         }
       } else {
         for (let i = 0; i < transformedPos.count; i += 1) {
-          indices.push(i + vertexOffset);
+          meshIndices.push(i + vertexOffset);
         }
       }
+
+      // Asset optimizers may flip triangle winding (the production GLB
+      // optimizer does). Rapier treats downward-facing triangles as
+      // ceilings, so align each winding with its vertex normals.
+      const normalAttr = transformed.getAttribute('normal');
+      if (normalAttr) {
+        const p0 = new THREE.Vector3();
+        const p1 = new THREE.Vector3();
+        const p2 = new THREE.Vector3();
+        const edgeA = new THREE.Vector3();
+        const edgeB = new THREE.Vector3();
+        const faceNormal = new THREE.Vector3();
+        const vertexNormal = new THREE.Vector3();
+        const vn = new THREE.Vector3();
+        for (let t = 0; t + 2 < meshIndices.length; t += 3) {
+          const m0 = meshIndices[t];
+          const m1 = meshIndices[t + 1];
+          const m2 = meshIndices[t + 2];
+          if (m0 === undefined || m1 === undefined || m2 === undefined) continue;
+          const i0 = m0 - vertexOffset;
+          const i1 = m1 - vertexOffset;
+          const i2 = m2 - vertexOffset;
+          p0.fromBufferAttribute(transformedPos, i0);
+          p1.fromBufferAttribute(transformedPos, i1);
+          p2.fromBufferAttribute(transformedPos, i2);
+          faceNormal.crossVectors(edgeA.subVectors(p1, p0), edgeB.subVectors(p2, p0));
+          vertexNormal.set(0, 0, 0);
+          vertexNormal.add(vn.fromBufferAttribute(normalAttr, i0));
+          vertexNormal.add(vn.fromBufferAttribute(normalAttr, i1));
+          vertexNormal.add(vn.fromBufferAttribute(normalAttr, i2));
+          if (faceNormal.lengthSq() > 0 && vertexNormal.lengthSq() > 0 && faceNormal.dot(vertexNormal) < 0) {
+            meshIndices[t + 1] = m2;
+            meshIndices[t + 2] = m1;
+          }
+        }
+      }
+      indices.push(...meshIndices);
 
       vertexOffset += transformedPos.count;
       transformed.dispose();

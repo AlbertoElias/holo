@@ -31,6 +31,36 @@ it from the item below instead of duplicating its status here.
   desktop 2D, with natural transitions and movement that adapts to walls,
   inclines, and other environment geometry. Delivered in
   [avatar-locomotion.md](docs/features/archive/avatar-locomotion.md).
+- [ ] Add VR thumbstick locomotion and snap turn to capture. Today VR moves the
+  avatar only through physical room-scale motion and keyboard/mock input. Move
+  the world-locked camera rig with the stick (smooth move relative to head
+  yaw, optional snap/smooth turn about the user's head), keep the body solver
+  stepping from the resulting root motion, and add a replay check from
+  recorded controller input. Builds on
+  [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
+- [ ] Make all avatar movement look completely natural, in XR and 2D; the
+  room-scale body solver
+  ([`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md))
+  is correct by its metrics but still reads as robotic. Nail the IK and the
+  motion around it:
+  - Full-body IK with joint limits and comfort costs (spine, shoulders,
+    clavicles, elbows, wrists, knees, ankles) instead of the analytic chains,
+    so poses stay anatomical at reach limits; arm IK that places the elbow
+    and shoulder shrug from body posture, not a fixed hint.
+  - Secondary and overlapping motion: arm swing counter to the legs, hip
+    rotation and lateral sway with each step, weight shift onto the stance
+    leg, heel-strike/toe-off foot roll on every step, head and torso follow-
+    through after turns and stops.
+  - Timing: phase-lock steps to the tracked head's bob, vary step length and
+    cadence naturally, ease velocity changes so starts and stops are not
+    linear ramps.
+  - Consider data-driven priors (motion matching or a learned pose prior on
+    licensed mocap) for the lower body and posture, with the tracked head
+    and hands as hard constraints.
+  - Prove it the same way: add naturalness metrics measured against real
+    human motion (headset recordings plus reference mocap), such as joint
+    angle distributions, arm–leg phase, center-of-mass path, and smoothness,
+    and include side-by-side videos with a reference capture.
 - [ ] Mark synthesized locomotion as inferred in capture exports, distinct from
   tracked/recorded performance. This is the export-provenance follow-up added
   by the [hologram philosophy](docs/product/concepts/what-a-hologram-is.md).

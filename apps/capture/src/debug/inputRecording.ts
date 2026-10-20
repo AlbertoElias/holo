@@ -12,7 +12,9 @@ export type InputRecording = {
   frames: unknown[][];
   // 'iwer-emulated' when IWER produced the input; real headset sessions are
   // the only ones that count as tracked-hand ground truth.
-  meta: { source: 'headset' | 'iwer-emulated'; recordedAt: string; durationMs: number; frameRateHz: number; userAgent: string };
+  // `query` is the page's search string (scene and avatar options), so a
+  // replay loads the same environment the input was recorded in.
+  meta: { source: 'headset' | 'iwer-emulated'; recordedAt: string; durationMs: number; frameRateHz: number; userAgent: string; query: string };
 };
 
 // Quest renders at 72–120 Hz; replay interpolates between frames, so 30 Hz
@@ -56,7 +58,8 @@ export class InputRecordingSession {
         recordedAt: new Date().toISOString(),
         durationMs: last - first,
         frameRateHz: TARGET_FRAME_RATE_HZ,
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        query: window.location.search
       }
     };
   }

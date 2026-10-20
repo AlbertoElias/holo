@@ -129,3 +129,128 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   under IWER, the depth pass draws every frame with the color mask off and no
   GL errors. `test:xr:viewer` (2 passed, 0 GL errors), `test:smoke:pipeline`, and
   `verify:agent` pass. This is emulation evidence, not a headset run.
+
+### B-009 — On a headset, VR hand targets land ~21 m from the avatar (B-004 in device frame order)
+
+- **Area:** `apps/capture` XR head pose (`XrSessionService`)
+- **Severity:** P1 — VR hands broken on device while IWER checks passed
+- **Observed:** 2026-10-18 while investigating room-scale body motion
+- **Evidence:** with the simulation ticked inside the XR frame (a headset's
+  order), wrist error 21.0 m in an IWER probe and 2,082 cm in `test:xr:hands`;
+  in the harness's old manual-clock order, 0.0 cm.
+- **Cause:** during an XR frame three.js leaves `renderer.xr.getCamera()`
+  holding the tracking-space left-eye pose until `render()` calls
+  `updateCamera`; `updateHandTrackingTargets`, `getCurrentHeadLocalY`, and the
+  hand-side scoring read it as world space. The replay harness ran
+  `updateCamera` before each simulation step, which hid it.
+- **Fix:** `XrSessionService.updateHeadPose()` reads the eye midpoint and
+  orientation from the XR views' tracking-space transforms
+  (`getCamera().cameras[i].matrix`) and maps them through the rig, independent
+  of render order; all head consumers use it. The hands and body replays now
+  tick inside XR frames (`__setFrameStepping`), and `test:xr:hands` fails at
+  2,082 cm with the old read. Emulation evidence, not a headset run.
+
+### B-010 — Hand sensor spheres block the character in VR
+
+- **Area:** `apps/capture` physics (`CharacterMotor`)
+- **Severity:** P1 — VR movement stalls or is cut short
+- **Observed:** 2026-10-18 by the room-scale body replay
+- **Evidence:** with 3 cm of movement requested per frame, the capsule moved
+  0 on alternating frames; the controller reported collisions with the hand
+  sensor colliders, which sit inside the capsule's radius in front of the body.
+  The VR locomotion check passed partly because of this: its sideways trial
+  travelled only a short way.
+- **Cause:** `computeColliderMovement` included sensor colliders.
+- **Fix:** movement queries pass `QueryFilterFlags.EXCLUDE_SENSORS`. The VR
+  locomotion check now runs on the flat test floor, since freed movement on the
+  default scene's spawn slope runs off a drop.
+
+### B-011 — A standing character creeps down slopes
+
+- **Area:** `apps/capture` physics (`CharacterMotor`)
+- **Severity:** P2 — drift while idle; exposed by the B-010 fix
+- **Observed:** 2026-10-18 by `test:xr:mock` (dropout recovery fingertip
+  3.8 mm off; limit 2 mm)
+- **Evidence:** on the default scene's spawn slope the avatar slid 2.3 mm/s
+  with no input.
+- **Cause:** the character controller slides the grounded gravity step along a
+  walkable slope; the hand sensors had been holding the capsule in place.
+- **Fix:** a grounded character with no movement keeps its horizontal
+  position. `test:xr:mock` passes; the probe shows no drift over 2.4 s.
+
+### B-012 — Room-scale motion does not reach the avatar's body in VR
+
+- **Area:** `apps/capture` VR embodiment (`CameraController`, `CharacterMotor`,
+  `AppOrchestrator`)
+- **Severity:** P1 — VR embodiment and recordings
+- **Observed:** 2026-10-18 (investigation for the room-scale body brief)
+- **Evidence:** walking the IWER headset 1 m left the avatar where it stood;
+  the camera rig sat 0.08 × avatar height in front of the eye anchor along the
+  look direction, so turning in place swung the world around a ~14 cm circle;
+  body yaw copied head yaw every frame; the avatar head never pitched or
+  rolled; feet slid under a fixed-rate walk clip.
+- **Fix:** `VrBodySolver` (root follows the head through the physics
+  controller, body yaw with a neck allowance and turn lag, planted stepping
+  feet, leg IK, pelvis and spine solved to put the avatar's eyes on the
+  tracked eyes, head orientation) and a world-locked rig. `test:xr:body`
+  measures it; its fault run shows each behavior's metric failing when broken
+  (for example the old rig placement fails world lock). See
+  [`../features/room-scale-body-motion.md`](../features/room-scale-body-motion.md).
+
+### B-013 — XR replay tooling: fixtures with unmoved wrists, slow and order-dependent frames
+
+- **Area:** `apps/capture` and `packages/tooling-testing` test tooling
+- **Severity:** P2 — test fidelity and CI time
+- **Observed:** 2026-10-18
+- **Evidence:** (1) `iwer-poses-relaxed-point-pinch.json` held both wrists at
+  IWER's default (−0.25, 1.5, −0.4) although the generator moved them; (2) a
+  CPU profile of a replay spent 5.3 s of 8.4 s in `getParameter`; (3) once
+  frames were fast, replays started before three's XR loop and the first
+  sample's time varied (19, 32, 34 ms) between runs.
+- **Causes:** (1) IWER's DevUI rewrites device and hand transforms every
+  frame unless `controlMode` is `programmatic`; (2) IWER reads the clear
+  color, depth, and stencil with `gl.getParameter` around every emulated frame,
+  and each read stalls software GL; (3) three awaits a real-time
+  `makeXRCompatible()` before starting its XR loop, and the frozen clock's
+  16 ms frame grid is phased by real time.
+- **Fix:** generators set programmatic control (the hand fixture was
+  regenerated, `test:xr:hands` passes); `attachXrEnvironment` tracks clear state
+  so those reads do not stall (about 6× faster frames); `waitForXrRenderLoop`
+  waits for steady XR frames and aligns the frozen clock to a 48 ms boundary
+  before a replay. Three runs of the same replay produce byte-identical samples.
+
+### B-014 — Avatar falls through the scene in the production capture build
+
+- **Area:** `apps/capture` build + physics
+- **Severity:** P1 — capture unusable at the deployed URL
+- **Observed:** 2026-10-19 at https://holoim-capture.pages.dev
+- **Evidence:** A Node simulation running the real `CharacterMotor` against
+  the built `scene.glb` fell from y 22.26 to y 1.91 in 5 s; against the
+  source GLB it stayed grounded at 22.25. The optimizer's output flipped
+  winding on ~850 of 5570 trimesh triangles (up-facing 3702 → 2852) and
+  mirrored some meshes, and its public-dir path ignores `exclude`.
+- **Cause:** `optimizeGLTF` rewrote `scene.glb`; Rapier reads downward
+  triangles as ceilings, so floors stopped colliding. Development never
+  optimized the asset, so local and CI flows stayed grounded.
+- **Fix:** `scene.glb` joins `avatar.glb` in the copy-verbatim preserve
+  mechanism in `vite.config.ts`; `buildWorldTrimeshData` also aligns each
+  triangle's winding with its vertex normals as defense. New
+  `CharacterMotor.test.ts` covers flipped-winding floors; the rebuilt
+  `dist/gltf/models/scene.glb` is byte-identical to source and the
+  simulation stays grounded. Redeployed to Pages and verified live.
+### B-008 — Mobile Upload button covers the hologram title
+
+- **Area:** `apps/viewer-web` feed layout
+- **Severity:** P2
+- **Observed:** 2026-10-18
+- **Evidence:** At a 390×844 viewport the collapsed Upload button sits on top of
+  the card's title pill; only "By Albe…" and the time stay visible.
+- **Expected:** The hologram name and author are fully readable on phones.
+- **Reproduction:** `pnpm run dev:viewer`, upload any GLB, open
+  `https://localhost:3174/` at 390×844.
+- **Fix:** `a664ebe2f9dd` reserves a mobile bottom row for Upload/audio and
+  constrains metadata between side controls. The original 390×844 layout fails
+  the browser overlap assertion; 320×568, 390×844, 667×375, and 768×1024 pass
+  with readable titles/bylines, portal-control clearance, and working Upload
+  expansion/collapse. `verify:agent` and `verify:pr` pass on Node 22 using
+  isolated browser ports (the knowledge port override is local to verification).

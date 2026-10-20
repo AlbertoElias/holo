@@ -25,7 +25,10 @@ export function createApp(): AppRuntime {
     sampleHands: () => orchestrator.sampleHands(),
     setHandOverlay: (enabled) => orchestrator.setHandOverlay(enabled),
     setHeightEvidenceView: (enabled) => orchestrator.setHeightEvidenceView(enabled),
-    setSpectatorView: (enabled) => orchestrator.setSpectatorView(enabled),
+    setSpectatorView: (mode) => orchestrator.setSpectatorView(mode),
+    setFrameStepping: (enabled, draw) => orchestrator.setFrameStepping(enabled, draw),
+    sampleBody: () => orchestrator.sampleBody(),
+    setBodyFaults: (faults) => orchestrator.setBodyFaults(faults),
     captureHandCalibrationPose: () => orchestrator.captureHandCalibrationPose(),
     resetHandCalibrationPose: () => orchestrator.resetHandCalibrationPose()
   });
@@ -40,6 +43,11 @@ export function createApp(): AppRuntime {
   return {
     start: async () => {
       debugBridge.init();
+      // Automation: ?manualClock=1 never ticks on real time, so a replay starts
+      // from the same state on any host (see __setFrameStepping).
+      if (new URLSearchParams(window.location.search).get('manualClock') === '1') {
+        orchestrator.setManualClock(true, false);
+      }
       await orchestrator.init();
       orchestrator.setAnimationLoop((_time, frame) => {
         orchestrator.onRealtimeFrame(frame);
