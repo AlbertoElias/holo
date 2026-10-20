@@ -32,7 +32,7 @@
   "devDependencies": {
     "@holoim/config-eslint": "workspace:*",
     "@holoim/config-ts": "workspace:*",
-    "@types/node": "^22.13.0",
+    "@types/node": "^24.0.0",
     "eslint": "catalog:",
     "prisma": "^6.3.1",
     "tsx": "^4.19.2",
