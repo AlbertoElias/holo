@@ -159,16 +159,50 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Portal view (PRD-002): its own job so the browser end-to-end job stays
+  # inside its time limit; every touch or mouse event waits for a
+  # software-rendered frame on the runner.
+  portal:
+    name: Portal view end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+      - run: pnpm --filter @holoim/api prisma:generate
+      - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+      - name: Portal gestures and real capture
+        run: pnpm timed portal -- pnpm run test:portal
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portal-failure-${{ github.run_id }}
+          path: |
+            apps/viewer-web/test-results
+            apps/viewer-web/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, build, e2e]
+    needs: [quality, build, e2e, portal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
       QUALITY_RESULT: ${{ needs.quality.result }}
       BUILD_RESULT: ${{ needs.build.result }}
       E2E_RESULT: ${{ needs.e2e.result }}
+      PORTAL_RESULT: ${{ needs.portal.result }}
     steps:
       - name: Summarize jobs
         run: |
@@ -179,9 +213,11 @@ jobs:
             echo "| Quality | ${QUALITY_RESULT} |"
             echo "| Build | ${BUILD_RESULT} |"
             echo "| Browser end-to-end | ${E2E_RESULT} |"
+            echo "| Portal view end-to-end | ${PORTAL_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
       - name: Enforce required jobs
         run: |
           test "${QUALITY_RESULT}" = "success"
           test "${BUILD_RESULT}" = "success"
           test "${E2E_RESULT}" = "success"
+          test "${PORTAL_RESULT}" = "success"

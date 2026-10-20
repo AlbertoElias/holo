@@ -33,6 +33,7 @@
     "test:xr:all": "pnpm run test:xr:capture && pnpm run test:xr:viewer",
     "test:xr:smoke": "pnpm run test:xr:all",
     "test:smoke:pipeline": "pnpm --filter @holoim/web run test:e2e:pipeline",
+    "test:portal": "pnpm --filter @holoim/web run test:e2e:portal",
     "doctor": "node scripts/doctor.mjs",
     "verify:repo:tooling": "pnpm --filter @holoim/tooling-testing verify:fast",
     "verify:repo:capture": "pnpm --filter @holoim/capture verify:fast",
@@ -41,7 +42,7 @@
     "verify:fast": "pnpm run doctor && pnpm run verify:workspace",
     "verify:xr": "pnpm run test:xr:smoke",
     "verify:agent": "tsx scripts/verify-changed.ts",
-    "verify:pr": "pnpm run doctor && pnpm run check:all && pnpm run test:unit:all && pnpm run build:all && pnpm run test:knowledge && pnpm run test:smoke:pipeline && pnpm run test:xr:smoke",
+    "verify:pr": "pnpm run doctor && pnpm run check:all && pnpm run test:unit:all && pnpm run build:all && pnpm run test:knowledge && pnpm run test:smoke:pipeline && pnpm run test:portal && pnpm run test:xr:smoke",
     "verify:full": "pnpm run verify:pr",
     "verify:changed": "pnpm run verify:agent",
     "timed": "tsx scripts/run-timed.ts"

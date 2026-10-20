@@ -55,7 +55,9 @@ export const PORTAL_VARIANTS: Record<PortalVariantName, PortalTriggers> = {
   }
 };
 
-export const DEFAULT_PORTAL_VARIANT: PortalVariantName = "freeze";
+// Looking around while the hologram plays is the default (decided 2026-10-20);
+// `?portal=freeze` keeps exploring to paused moments for comparison.
+export const DEFAULT_PORTAL_VARIANT: PortalVariantName = "drag";
 
 function isVariantName(value: string | null): value is PortalVariantName {
   return value === "freeze" || value === "drag" || value === "tilt";

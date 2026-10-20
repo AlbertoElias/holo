@@ -40,6 +40,10 @@ const items = ["a", "b"].map((key) => ({
 }));
 const [first, second] = items as [typeof items[number], typeof items[number]];
 
+// Each touch event waits for a software-rendered frame; a 2-CPU runner needs
+// about 30 s for the longest of these.
+test.describe.configure({ timeout: 60_000 });
+
 async function openFeed(page: Page, variant: string | null): Promise<void> {
   await installProbe(page);
   await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items, nextCursor: null } }));
@@ -54,7 +58,7 @@ test.describe("phone", () => {
   test.use({ viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
 
   test("freeze: swipes browse while playing; paused, the card keeps swipes and pinches for looking around", async ({ page }, testInfo) => {
-    await openFeed(page, null);
+    await openFeed(page, "freeze");
     const cdp = await page.context().newCDPSession(page);
     const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
     await expect(card).toHaveAttribute("data-portal-variant", "freeze");
@@ -81,9 +85,10 @@ test.describe("phone", () => {
     await captureEvidence(page, testInfo, "phone-freeze-looking-around");
   });
 
-  test("drag: a sideways swipe orbits while playing and does not browse", async ({ page }, testInfo) => {
-    await openFeed(page, "drag");
+  test("drag (default): a sideways swipe orbits and a pinch zooms while playing; vertical swipes still browse", async ({ page }, testInfo) => {
+    await openFeed(page, null);
     const cdp = await page.context().newCDPSession(page);
+    await expect(page.locator(`.feed-card[data-card-id="${first.id}"]`)).toHaveAttribute("data-portal-variant", "drag");
     const start = await readPortal(page, first.url);
     const center = await cardCenter(page, first.id);
     await touchSwipe(page, cdp, { x: center.x + 110, y: center.y }, -220, 0);
@@ -92,7 +97,12 @@ test.describe("phone", () => {
     expect(dragged.paused, "still playing").toBe(false);
     expect(dragged.yaw - start.followYaw, "sideways swipe orbits").toBeGreaterThan(0.3);
     expect(await settleScroll(page), "a sideways swipe does not browse").toBe(0);
+    await touchPinch(page, cdp, center, 60, 260);
+    await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "pinching out moves in while playing" }).toBeLessThan(0.7);
+    expect((await readPortal(page, first.url)).paused).toBe(false);
     await captureEvidence(page, testInfo, "phone-drag-variant");
+    await touchSwipe(page, cdp, { x: center.x, y: center.y + 150 }, 0, -480);
+    expect(await settleScroll(page), "a vertical swipe still browses").toBeGreaterThan(300);
   });
 
   test("tilt: turning the phone turns the camera, past a small deadzone", async ({ page }, testInfo) => {
@@ -116,9 +126,36 @@ test.describe("phone", () => {
   });
 });
 
-test("desktop: drags only explore while paused, pitch is clamped, keyboard works, and scrolling away resets", async ({ page }) => {
+test("desktop (default): drag rotates and trackpad pinch zooms while playing; the mouse wheel still scrolls the feed", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 440 });
   await openFeed(page, null);
+  const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+  const center = await cardCenter(page, first.id);
+  const start = await readPortal(page, first.url);
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x - 150, center.y - 60, { steps: 3 });
+  await page.mouse.up();
+  await expect(card).toHaveAttribute("data-portal-mode", "free");
+  const rotated = await readPortal(page, first.url);
+  expect(rotated.paused, "still playing").toBe(false);
+  expect(rotated.yaw - start.followYaw, "dragging left orbits").toBeGreaterThan(0.3);
+  expect(rotated.pitch, "dragging up lowers the view").toBeLessThan(start.followPitch);
+
+  await page.mouse.move(center.x, center.y);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -60);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "a trackpad pinch zooms while playing" }).toBeLessThan(1);
+  expect(await feedScrollTop(page)).toBe(0);
+
+  await page.mouse.wheel(0, 500);
+  expect(await settleScroll(page), "a plain wheel scrolls the feed while playing").toBeGreaterThan(0);
+});
+
+test("desktop freeze: drags only explore while paused, pitch is clamped, keyboard works, and scrolling away resets", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 440 });
+  await openFeed(page, "freeze");
   const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
   const center = await cardCenter(page, first.id);
   const drag = async (dx: number, dy: number) => {

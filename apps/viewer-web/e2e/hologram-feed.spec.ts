@@ -310,6 +310,8 @@ const HIT_TEST_PLACEMENT = {
 };
 
 test("AR places the model on a surface in front of the viewer, recenter places again, and exit returns to the feed", async ({ page }, testInfo) => {
+  // Takes 25-28 s on a 2-CPU Linux runner, too close to the 30 s default.
+  test.setTimeout(60_000);
   await mockFeed(page);
   await setDesktopNavigatorOverrides(page);
 

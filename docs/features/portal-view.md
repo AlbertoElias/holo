@@ -95,12 +95,28 @@ scene at the same scale; the zoom continuum comes from camera distance only.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Pause, orbit, zoom, Return, feed scroll | `pnpm run test:smoke:pipeline` (`portal.pipeline.spec.ts`, real capture export) | Passed 2026-10-19 with the other two pipeline specs (3/3, 4.9 min): frozen action times while paused, yaw +0.3 rad from a 240 px drag at constant distance and fixed focus, pitch clamped at −8° and 78°, zoom 0 inside the bubble radius with model scale unchanged, Return at the Follow distance, keyboard Space/arrows/Escape, reset on scroll away |
-| Variants on phone and desktop | same spec at 390×844 touch and 1280×860, `E2E_SCREENSHOTS=1` | freeze: swipe scrolls while playing, not while paused, pinch moves in; drag: sideways swipe orbits while playing and vertical still scrolls; tilt: 6° deadzone, then yaw −1.5× the phone turn. Screenshots: [`evidence/portal-view.jpg`](evidence/portal-view.jpg) |
+| Pause, orbit, zoom inside the bubble, Return, Play on a real export | `pnpm run test:smoke:pipeline` (`portal.pipeline.spec.ts`) | 2026-10-20, 2-CPU Linux container: passed in 32 s. Time frozen while paused, yaw +0.3 rad at constant distance and fixed focus, zoom 0 inside the bubble radius with model scale unchanged, Return at the Follow distance, time resumes |
+| Phone touch, variants, keyboard, clamps, reset | `pnpm run test:xr:viewer` (`portal.spec.ts`, mocked two-card feed) | 2026-10-20, Linux container: 4/4. freeze: swipe browses while playing, paused swipe orbits without scrolling, pinch moves in; drag: sideways swipe orbits while playing without browsing; tilt: 6° deadzone, yaw −1.5× the turn, Return re-centres; desktop: pitch clamped at −8°/78°, Space/arrows/+/Escape, reset on scroll away. Screenshots: [`evidence/portal-view.jpg`](evidence/portal-view.jpg) (earlier build) |
 | Existing viewer behaviour | `pnpm run test:xr:viewer`, viewer unit tests, lint, typecheck | 5/5 mocked AR and feed specs, 35/35 unit tests |
 | Recipient trial | PRD-002 trial | pending (needs a headset recording) |
 
 ## Observations
+
+- **Default variant, 2026-10-20:** `drag` (rotate and pinch while playing), by
+  Alberto's decision after using it. Portal checks run in their own CI job
+  (`test:portal`) so the browser end-to-end job stays within its 10-minute
+  limit; the mocked portal tests take about 30 s each on a 2-CPU runner.
+
+- **CI incident, 2026-10-19.** The first version landed on main after macOS-only
+  runs and failed Linux CI: synthesized touch gestures do nothing in headless
+  Linux Chrome, and the spec took over 3 minutes because each input waits for
+  a software-rendered frame (a real capture draws at under 1 fps at 820×600 on
+  2 CPUs). Reproducing in a 2-CPU Linux container found three product bugs,
+  all fixed: a drag released over the upload panel left a stuck gesture that
+  swallowed the next tap; the upload panel covered the portal controls on
+  short windows; the opened bubble drew a 145vmax canvas mostly off-screen.
+  Checks were split: the pipeline spec keeps what needs a real export, and
+  gesture logic runs on the mocked feed with raw touch events.
 
 - Every feed card owns a WebGL context. With several uploads in the feed and a
   second page open, the browser stopped rendering new cards until the first

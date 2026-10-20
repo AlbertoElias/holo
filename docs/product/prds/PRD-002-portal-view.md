@@ -15,6 +15,11 @@ shown through it, and because it is the cheapest direct test of the claim in
 [what a hologram is](../concepts/what-a-hologram-is.md): a hologram can be
 moved through in time *and in space*.
 
+Default variant, 2026-10-20: after trying the portal, Alberto chose looking
+around while the hologram plays (`drag`) as the default. `freeze` and `tilt`
+remain available with `?portal=` for the trial. On desktop the plain mouse
+wheel still scrolls the feed while playing; trackpad pinch and +/- zoom.
+
 ## User Outcome
 
 Before: on a phone or computer, a hologram is a looping clip seen from one
