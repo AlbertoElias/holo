@@ -11,9 +11,10 @@ major="$(tr -dc '0-9' < "$root/.nvmrc")"
 current="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)"
 [ "$current" = "$major" ] && exit 0
 
-# Newest installed patch of that major from n, nvm, or Homebrew.
+# Newest installed patch of that major from fnm, n, nvm, or Homebrew.
 bin="$(
   for candidate in \
+    "${FNM_DIR:-$HOME/.local/share/fnm}"/node-versions/v"$major".*/installation/bin \
     "${N_PREFIX:-$HOME/n}"/n/versions/node/"$major".*/bin \
     "${NVM_DIR:-$HOME/.nvm}"/versions/node/v"$major".*/bin \
     /opt/homebrew/opt/node@"$major"/bin \
@@ -23,7 +24,7 @@ bin="$(
 )"
 
 if [ -z "$bin" ]; then
-  echo "[agent-node-env] No Node $major found (current: ${current:-none}); install one, e.g. 'n install $major'." >&2
+  echo "[agent-node-env] No Node $major found (current: ${current:-none}); install one, e.g. 'fnm install $major'." >&2
   exit 0
 fi
 

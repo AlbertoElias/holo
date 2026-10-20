@@ -88,7 +88,7 @@ mid-session, so a lead delegates lighter work to a pinned subagent instead.
 - A cheaper model does not offset a long session; context size still dominates.
 - Node must be 24 (`.nvmrc`). Claude Code sessions get it from a SessionStart
   hook; in other shells run `eval "$(scripts/agent-node-env.sh)"`. Never switch
-  the machine-wide Node (`n <version>`): other sessions share it.
+  the machine-wide Node (`fnm default <version>`): other sessions share it.
 
 ## Sharing work between agents
 
