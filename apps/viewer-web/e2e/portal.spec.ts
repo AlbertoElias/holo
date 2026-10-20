@@ -126,7 +126,7 @@ test.describe("phone", () => {
   });
 });
 
-test("desktop (default): drag rotates and trackpad pinch zooms while playing; the mouse wheel still scrolls the feed", async ({ page }) => {
+test("desktop (default): drag rotates, and the wheel or trackpad pinch over the bubble zooms, while playing", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 440 });
   await openFeed(page, null);
   const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
@@ -149,8 +149,18 @@ test("desktop (default): drag rotates and trackpad pinch zooms while playing; th
   await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "a trackpad pinch zooms while playing" }).toBeLessThan(1);
   expect(await feedScrollTop(page)).toBe(0);
 
+  await page.mouse.wheel(0, -300);
+  const wheeled = await readPortal(page, first.url);
+  expect(wheeled.zoom, "a plain wheel over the bubble zooms in while playing").toBeLessThan(1);
+  expect(wheeled.paused).toBe(false);
+  expect(await feedScrollTop(page)).toBe(0);
+
+  // Wheeling out zooms back to the outside end, then scrolls the feed.
+  await page.mouse.wheel(0, 3000);
+  expect((await readPortal(page, first.url)).zoom).toBe(1);
+  expect(await settleScroll(page), "zooming out does not scroll the feed").toBe(0);
   await page.mouse.wheel(0, 500);
-  expect(await settleScroll(page), "a plain wheel scrolls the feed while playing").toBeGreaterThan(0);
+  expect(await settleScroll(page), "fully out, the wheel scrolls to the next card").toBeGreaterThan(0);
 });
 
 test("desktop freeze: drags only explore while paused, pitch is clamped, keyboard works, and scrolling away resets", async ({ page }) => {

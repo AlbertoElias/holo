@@ -16,6 +16,11 @@ export type PortalTriggers = {
   pinchWhilePaused: boolean;
   /** A plain mouse wheel zooms while paused; ctrl+wheel (trackpad pinch) follows the pinch switches. */
   wheelZoomWhilePaused: boolean;
+  /**
+   * A plain wheel over the bubble zooms at any time. Fully zoomed out, wheeling
+   * further out passes through, so the feed still scrolls to the next card.
+   */
+  wheelZoomOverBubble: boolean;
   /** Device orientation can turn the camera once the viewer enables it. */
   tilt: boolean;
   /** Touch scrolling of the feed stays available while paused. */
@@ -30,6 +35,7 @@ export const PORTAL_VARIANTS: Record<PortalVariantName, PortalTriggers> = {
     pinchWhilePlaying: false,
     pinchWhilePaused: true,
     wheelZoomWhilePaused: true,
+    wheelZoomOverBubble: false,
     tilt: false,
     scrollWhilePaused: false
   },
@@ -40,6 +46,7 @@ export const PORTAL_VARIANTS: Record<PortalVariantName, PortalTriggers> = {
     pinchWhilePlaying: true,
     pinchWhilePaused: true,
     wheelZoomWhilePaused: true,
+    wheelZoomOverBubble: true,
     tilt: false,
     scrollWhilePaused: true
   },
@@ -50,6 +57,7 @@ export const PORTAL_VARIANTS: Record<PortalVariantName, PortalTriggers> = {
     pinchWhilePlaying: true,
     pinchWhilePaused: true,
     wheelZoomWhilePaused: true,
+    wheelZoomOverBubble: true,
     tilt: true,
     scrollWhilePaused: true
   }

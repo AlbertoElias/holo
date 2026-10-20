@@ -128,10 +128,14 @@ export function usePortalTriggers(
         store.zoomByScale(Math.exp(-event.deltaY * CTRL_WHEEL_ZOOM_PER_PIXEL));
         return;
       }
-      if (paused && triggers.wheelZoomWhilePaused) {
-        event.preventDefault();
-        store.zoomByScale(Math.exp(-event.deltaY * WHEEL_ZOOM_PER_PIXEL));
-      }
+      const overBubble = event.target instanceof Element && event.target.closest(".feed-card-bubble-shell") !== null;
+      if (!(paused && triggers.wheelZoomWhilePaused) && !(overBubble && triggers.wheelZoomOverBubble)) return;
+      // Fully zoomed out, wheeling further out belongs to the feed.
+      const { mode, zoom } = store.getState();
+      const atOutsideEnd = mode === "follow" || zoom >= 1;
+      if (!paused && event.deltaY > 0 && atOutsideEnd) return;
+      event.preventDefault();
+      store.zoomByScale(Math.exp(-event.deltaY * WHEEL_ZOOM_PER_PIXEL));
     };
 
     // Keyboard works in every variant so the portal stays usable without a pointer.

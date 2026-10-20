@@ -17,8 +17,9 @@ moved through in time *and in space*.
 
 Default variant, 2026-10-20: after trying the portal, Alberto chose looking
 around while the hologram plays (`drag`) as the default. `freeze` and `tilt`
-remain available with `?portal=` for the trial. On desktop the plain mouse
-wheel still scrolls the feed while playing; trackpad pinch and +/- zoom.
+remain available with `?portal=` for the trial. On desktop the wheel over the
+bubble zooms while playing; fully zoomed out, wheeling further out scrolls the
+feed to the next card.
 
 ## User Outcome
 
