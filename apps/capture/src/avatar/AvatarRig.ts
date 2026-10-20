@@ -19,6 +19,8 @@ export interface ArmIkChain {
   handBindQuaternion: THREE.Quaternion;
   upperBindAimInParent: THREE.Vector3;
   foreBindAimInParent: THREE.Vector3;
+  shoulderBindQuaternion: THREE.Quaternion;
+  shoulderBindAimInParent: THREE.Vector3 | undefined;
   handGripRotationOffset: THREE.Quaternion;
   // Avatar palm frame expressed in the hand bone's space (see palmFrame.ts);
   // undefined when the rig lacks the index, middle, or pinky knuckle bones.
@@ -404,6 +406,8 @@ export class AvatarRig {
       return undefined;
     }
 
+    const shoulderBindQuaternion = shoulder.quaternion.clone();
+    const shoulderBindAimInParent = this.toBindAimInParent(shoulder, this.tmpUpperWorld, new THREE.Vector3());
     const upperBindQuaternion = upperArm.quaternion.clone();
     const foreBindQuaternion = foreArm.quaternion.clone();
     const handBindQuaternion = hand.quaternion.clone();
@@ -432,6 +436,8 @@ export class AvatarRig {
       handBindQuaternion,
       upperBindAimInParent,
       foreBindAimInParent,
+      shoulderBindQuaternion,
+      shoulderBindAimInParent,
       handGripRotationOffset,
       palmInHand,
       elbowHintLocal: new THREE.Vector3(side === 'left' ? 1 : -1, -0.05, 0.25).normalize()

@@ -28,6 +28,20 @@ export class ArmIkSolver {
     avatarRoot: THREE.Group,
     handWorldQuaternion?: THREE.Quaternion
   ): boolean {
+    // Shoulder protraction: as the target nears full reach, swing the
+    // clavicle toward it (as a real shoulder does). Without this the pinned
+    // shoulder runs out of arm ~10 cm early on a stretch.
+    chain.upperArm.getWorldPosition(this.tmpUpperWorld);
+    if (chain.shoulderBindAimInParent) {
+      const reach = chain.upperLength + chain.lowerLength;
+      const dist = this.tmpUpperWorld.distanceTo(targetPositionWorld);
+      const factor = THREE.MathUtils.smoothstep(dist / Math.max(reach, 1e-5), 0.75, 1.0);
+      this.tmpVecA.subVectors(targetPositionWorld, this.tmpUpperWorld).normalize();
+      if (this.aimBoneAtDirection(chain.shoulder, chain.shoulderBindQuaternion, chain.shoulderBindAimInParent, this.tmpVecA)) {
+        chain.shoulder.quaternion.slerp(chain.shoulderBindQuaternion, 1 - factor * 0.9);
+        chain.shoulder.updateMatrixWorld(true);
+      }
+    }
     chain.upperArm.getWorldPosition(this.tmpUpperWorld);
     this.tmpClampedTarget.copy(targetPositionWorld);
 
