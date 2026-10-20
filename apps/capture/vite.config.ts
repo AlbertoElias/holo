@@ -59,6 +59,40 @@ function inputRecordingSinkPlugin(outputDir: string): Plugin {
   };
 }
 
+// IWSDK's World bootstrap always imports UIKitML. Its component kits build
+// zod schemas for every Horizon component and import every lucide icon at
+// startup: about 1 MB gzipped and 25 MB of retained heap. Capture never
+// renders UIKitML (World's spatial UI is off), so production builds give
+// UIKitML empty kits and resolve lucide to the two icons Horizon imports.
+const UIKITML_EMPTY_KITS = '\0holoim-uikitml-empty-kits';
+const LUCIDE_SUBSET = '\0holoim-lucide-subset:';
+
+function uikitmlBoundaryPlugin(): Plugin {
+  return {
+    name: 'holoim-uikitml-boundary',
+    apply: 'build',
+    enforce: 'pre',
+    async resolveId(source, importer, options) {
+      if (!importer || importer.startsWith(LUCIDE_SUBSET)) return null;
+      if (source === './kits.js' && importer.includes('/@drawcall/uikitml/dist/')) return UIKITML_EMPTY_KITS;
+      if (source !== '@pmndrs/uikit-lucide') return null;
+      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
+      return resolved ? `${LUCIDE_SUBSET}${path.dirname(resolved.id)}` : null;
+    },
+    load(id) {
+      if (id === UIKITML_EMPTY_KITS) {
+        return 'export const lucideComponentSet = {};\nexport const horizonComponentSet = {};\nexport function resolveKitComponentSets() { return []; }';
+      }
+      if (!id.startsWith(LUCIDE_SUBSET)) return null;
+      const dist = id.slice(LUCIDE_SUBSET.length);
+      return [
+        `export { Check, CheckIcon } from ${JSON.stringify(path.join(dist, 'Check.js'))};`,
+        `export { ChevronDown, ChevronDownIcon } from ${JSON.stringify(path.join(dist, 'ChevronDown.js'))};`
+      ].join('\n');
+    }
+  };
+}
+
 // Assets the GLB optimizer must not rewrite. Its public-dir path ignores
 // `exclude`, so these are filtered out of the temp public dir and copied
 // verbatim at closeBundle (the optimizer's output also lands there).
@@ -118,6 +152,7 @@ export default defineConfig(async ({ command }) => {
           }
         : {})
     }),
+    uikitmlBoundaryPlugin(),
     preserveModelAssetsPlugin(sourcePublicDir, tempPublicDir),
     inputRecordingSinkPlugin(path.resolve('fixtures/input-recordings')),
     optimizeGLTF({
@@ -135,7 +170,6 @@ export default defineConfig(async ({ command }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('/src/scene/')) return 'scene';
             if (id.includes('/src/physics/')) return 'physics';
             if (id.includes('/src/xr/')) return 'xr';
             if (id.includes('/src/debug/')) return 'debug';

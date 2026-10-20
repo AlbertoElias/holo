@@ -238,6 +238,22 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   `CharacterMotor.test.ts` covers flipped-winding floors; the rebuilt
   `dist/gltf/models/scene.glb` is byte-identical to source and the
   simulation stays grounded. Redeployed to Pages and verified live.
+### B-015 — VR Start Recording pill invisible / unclickable on headset
+
+- **Area:** `packages/xr-ui-three`, `apps/capture` VR HUD
+- **Severity:** P1 — recording could not be started in VR
+- **Observed:** 2026-10-18 on Quest 3; reproduced in IWER (`test:xr:mock` screenshots showed no pill)
+- **Cause:** three stacked defects: UIKit's px→unit conversion plus the group scale `0.0013` rendered the pill 4.4 mm wide; UIKit's instanced glyphs drew blank text on device; the select ray started at the hand, which can sit past the 0.55 m panel plane; pills were `depthTest: false` (always over the hands).
+- **Fix:** plain Three.js pills with canvas-drawn text (0.44 m), hover and press feedback, a visible aim ray per controller, select along the controller's aim line extended 0.6 m behind the hand, and touch-to-toggle (tracked hand within 14 cm of the record pill, re-armed after 1.2 s); depth-tested. Found and first fixed in the device session (which hit-tested from the head; replaced so the drawn ray and the selectable target agree), ported in `infra/iwsdk-runtime-refactor`. Verified in IWER: select with the hand 0.8 m out, touch toggle, and the height check's real-VR refit select ([screenshot](../evidence/iwsdk-runtime-refactor/b015-vr-pills.png)); recording on device in the original session.
+
+### B-016 — Stop/export hangs forever in "exporting"
+
+- **Area:** `apps/capture` recording stop path
+- **Severity:** P1 — UI locked, avatar size locked, headset input recording lost
+- **Observed:** 2026-10-18 on Quest 3
+- **Cause:** stop awaited `requestAnimationFrame` before saving the headset input; with the headset asleep or the session ended that frame never fires. The same unbounded wait sat in `GltfExportComposer`.
+- **Fix:** the input save runs first on stop; frame waits fall back to 100 ms (`shared/async.ts`); GLB export is capped at 60 s and the input upload at 15 s. Regression check `test:xr:recording` (in `test:xr`) stalls frames during stop and fails without the fix. Verified on device in the original session (fixture saved, `meta.source: headset`).
+
 ### B-008 — Mobile Upload button covers the hologram title
 
 - **Area:** `apps/viewer-web` feed layout

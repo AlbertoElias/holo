@@ -1,22 +1,20 @@
-import { createRoot } from "react-dom/client";
-import React from "react";
+import React from 'react';
+import { createRoot } from 'react-dom/client';
 
-import { createApp } from './app/createApp';
-import { announceIwsdkMcpRuntimeReady } from './debug/iwsdkMcpRuntime';
+import { createCaptureRuntime } from './runtime/createCaptureRuntime';
 import { CaptureOverlay } from './ui/CaptureOverlay';
 
-const app = createApp();
-const uiRootElement = document.getElementById("ui-root");
+async function boot(): Promise<void> {
+  const container = document.getElementById('app');
+  const uiRootElement = document.getElementById('ui-root');
+  if (!container || !uiRootElement) throw new Error('Missing required #app or #ui-root element');
 
-if (!uiRootElement) {
-  throw new Error("Missing required #ui-root element");
+  const runtime = await createCaptureRuntime(container);
+  const uiRoot = createRoot(uiRootElement);
+  uiRoot.render(React.createElement(CaptureOverlay, { bridge: runtime.uiBridge }));
+  await runtime.start();
 }
 
-createRoot(uiRootElement).render(React.createElement(CaptureOverlay, { bridge: app.uiBridge }));
-
-app
-  .start()
-  .then(() => announceIwsdkMcpRuntimeReady())
-  .catch((error) => {
-    console.error(error);
-  });
+boot().catch((error: unknown) => {
+  console.error(error);
+});

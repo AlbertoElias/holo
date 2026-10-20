@@ -7,6 +7,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { GLTFAudioPlugin } from './GLTFAudioPlugin';
 import { FrameCaptureStore } from './FrameCaptureStore';
 import { SceneBubbleSampler } from './SceneBubbleSampler';
+import { nextFrame } from '../shared/async';
 
 interface MorphExportBinding {
   uuid: string;
@@ -22,7 +23,7 @@ export class GltfExportComposer {
     sceneRoot?: THREE.Object3D,
     audioData?: { buffer: ArrayBuffer; mimeType: string }
   ): Promise<Blob> {
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    await nextFrame();
 
     const frames = frameStore.getFrames();
     const normalizeRootMotion = !sceneRoot;

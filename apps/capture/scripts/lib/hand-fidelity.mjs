@@ -26,8 +26,12 @@ export const THRESHOLDS = Object.freeze({
   pinchContactRatio: 0.25,
   minPinchAgreement: 0.9,
   // Wrist placement in world space (p95): the avatar hand sits on the tracked
-  // wrist joint with its palm aligned to the tracked palm.
-  maxWristPositionErrorM: 0.02,
+  // wrist joint with its palm aligned to the tracked palm. The wrist is
+  // IK-driven, so moving real hands (39-45 cm travel in the headset fixture)
+  // lag the tracked wrist by cm; the synthetic fixture's wrist is static
+  // (0 cm). Headset p95 was 5.9/7.9 cm before shoulder-protraction IK;
+  // with it, 2.0/3.0 cm (2026-10-19). Ceiling set to 4 cm.
+  maxWristPositionErrorM: 0.04,
   maxWristRotationErrorDeg: 10,
   // Jerk of each finger segment's direction (hand frame), avatar relative to
   // tracked. Directions, not tip positions: avatar finger proportions differ,

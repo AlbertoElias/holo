@@ -73,7 +73,8 @@ export async function saveInputRecording(recording: InputRecording, baseName: st
     const response = await fetch(`${INPUT_RECORDING_ENDPOINT}?name=${encodeURIComponent(baseName)}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body
+      body,
+      signal: AbortSignal.timeout(15_000)
     });
     if (response.ok) {
       const { path } = (await response.json()) as { path: string };

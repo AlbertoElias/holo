@@ -1,0 +1,139 @@
+{
+  "frames": 244,
+  "stepMs": 33.333333333333336,
+  "thresholds": {
+    "minXrHandCoverage": 0.9,
+    "minComparableShare": 0.5,
+    "minComparableSamples": 10,
+    "maxCurlErrorDeg": 15,
+    "minCurlCorrelation": 0.9,
+    "minCurlRangeDegForCorrelation": 25,
+    "maxCurlLagFrames": 2,
+    "pinchContactRatio": 0.25,
+    "minPinchAgreement": 0.9,
+    "maxWristPositionErrorM": 0.02,
+    "maxWristRotationErrorDeg": 10,
+    "maxJerkRatio": 1.5
+  },
+  "sides": {
+    "left": {
+      "trackedFrames": 244,
+      "xrHandFrames": 244,
+      "mockFrames": 0,
+      "sourceCounts": {
+        "xr-hand": 244
+      },
+      "xrHandCoverage": 1,
+      "fingers": {
+        "thumb": {
+          "samples": 244,
+          "meanErrorDeg": 8.564382692928927,
+          "trackedRangeDeg": 31.894358824687064,
+          "correlation": 0.9757233209684651,
+          "lagFrames": 0
+        },
+        "index": {
+          "samples": 244,
+          "meanErrorDeg": 2.5462959090573802,
+          "trackedRangeDeg": 81.88091590975556,
+          "correlation": 0.9986352801252509,
+          "lagFrames": 0
+        },
+        "middle": {
+          "samples": 244,
+          "meanErrorDeg": 0.000002130522564271459,
+          "trackedRangeDeg": 173.74187089485827,
+          "correlation": 1.0000000000000036,
+          "lagFrames": 0
+        },
+        "ring": {
+          "samples": 244,
+          "meanErrorDeg": 0.44563964516284205,
+          "trackedRangeDeg": 186.76248897206239,
+          "correlation": 0.9999797389966198,
+          "lagFrames": 0
+        },
+        "pinky": {
+          "samples": 244,
+          "meanErrorDeg": 3.8838396891106406,
+          "trackedRangeDeg": 182.50523314816937,
+          "correlation": 0.9997544447876092,
+          "lagFrames": 0
+        }
+      },
+      "pinch": {
+        "trackedContactFrames": 57,
+        "agreement": 0.9959016393442623
+      },
+      "wrist": {
+        "positionErrorP95M": 5.7454536168990814e-8,
+        "rotationErrorP95Deg": 0.000006474294273798437
+      },
+      "jerk": {
+        "ratio": 1.1757994744573754,
+        "segment": "index-finger-phalanx-distal → index-finger-tip"
+      }
+    },
+    "right": {
+      "trackedFrames": 244,
+      "xrHandFrames": 244,
+      "mockFrames": 0,
+      "sourceCounts": {
+        "xr-hand": 244
+      },
+      "xrHandCoverage": 1,
+      "fingers": {
+        "thumb": {
+          "samples": 244,
+          "meanErrorDeg": 8.58438582036486,
+          "trackedRangeDeg": 31.894358824687064,
+          "correlation": 0.97615758584066,
+          "lagFrames": 0
+        },
+        "index": {
+          "samples": 244,
+          "meanErrorDeg": 2.5491017113805112,
+          "trackedRangeDeg": 81.88091590975556,
+          "correlation": 0.9986353345783968,
+          "lagFrames": 0
+        },
+        "middle": {
+          "samples": 244,
+          "meanErrorDeg": 0.000003071547030781538,
+          "trackedRangeDeg": 173.74187089485827,
+          "correlation": 0.9999999999999962,
+          "lagFrames": 0
+        },
+        "ring": {
+          "samples": 244,
+          "meanErrorDeg": 0.38687696887801626,
+          "trackedRangeDeg": 186.76248897206239,
+          "correlation": 0.9999821198070686,
+          "lagFrames": 0
+        },
+        "pinky": {
+          "samples": 244,
+          "meanErrorDeg": 3.8133859297986703,
+          "trackedRangeDeg": 182.50523314816937,
+          "correlation": 0.9997617002963014,
+          "lagFrames": 0
+        }
+      },
+      "pinch": {
+        "trackedContactFrames": 57,
+        "agreement": 0.9959016393442623
+      },
+      "wrist": {
+        "positionErrorP95M": 6.371723524519791e-8,
+        "rotationErrorP95Deg": 0.000009241006547388252
+      },
+      "jerk": {
+        "ratio": 1.1767532185887555,
+        "segment": "index-finger-phalanx-distal → index-finger-tip"
+      }
+    }
+  },
+  "failures": [],
+  "label": "iwer-poses-relaxed-point-pinch",
+  "durationMs": 8137
+}

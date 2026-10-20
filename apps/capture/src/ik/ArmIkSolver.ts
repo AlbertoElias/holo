@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp } from '../shared/math';
+import { clamp, isFiniteQuaternionLike } from '../shared/math';
 import type { ArmIkChain } from '../avatar/AvatarRig';
 
 export class ArmIkSolver {
@@ -28,6 +28,20 @@ export class ArmIkSolver {
     avatarRoot: THREE.Group,
     handWorldQuaternion?: THREE.Quaternion
   ): boolean {
+    // Shoulder protraction: as the target nears full reach, swing the
+    // clavicle toward it (as a real shoulder does). Without this the pinned
+    // shoulder runs out of arm ~10 cm early on a stretch.
+    chain.upperArm.getWorldPosition(this.tmpUpperWorld);
+    if (chain.shoulderBindAimInParent) {
+      const reach = chain.upperLength + chain.lowerLength;
+      const dist = this.tmpUpperWorld.distanceTo(targetPositionWorld);
+      const factor = THREE.MathUtils.smoothstep(dist / Math.max(reach, 1e-5), 0.75, 1.0);
+      this.tmpVecA.subVectors(targetPositionWorld, this.tmpUpperWorld).normalize();
+      if (this.aimBoneAtDirection(chain.shoulder, chain.shoulderBindQuaternion, chain.shoulderBindAimInParent, this.tmpVecA)) {
+        chain.shoulder.quaternion.slerp(chain.shoulderBindQuaternion, 1 - factor * 0.9);
+        chain.shoulder.updateMatrixWorld(true);
+      }
+    }
     chain.upperArm.getWorldPosition(this.tmpUpperWorld);
     this.tmpClampedTarget.copy(targetPositionWorld);
 
@@ -74,7 +88,7 @@ export class ArmIkSolver {
     if (handWorldQuaternion) this.tmpQuat.copy(handWorldQuaternion);
     else this.tmpQuat.copy(targetQuaternionWorld).multiply(chain.handGripRotationOffset);
     chain.hand.quaternion.copy(this.tmpInvQuat.copy(this.tmpQuatC).invert().multiply(this.tmpQuat));
-    if (!Number.isFinite(chain.hand.quaternion.x) || !Number.isFinite(chain.hand.quaternion.y) || !Number.isFinite(chain.hand.quaternion.z) || !Number.isFinite(chain.hand.quaternion.w)) {
+    if (!isFiniteQuaternionLike(chain.hand.quaternion)) {
       return false;
     }
 

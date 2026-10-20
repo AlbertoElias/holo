@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { isThreeBone } from '../shared/threeTypeGuards';
 import type { HandFingerName, HandFingerRetargetChain, HandFingerRetargetEntry } from '../avatar/AvatarRig';
 import type { TrackedHandJointName, Vec3Like, VrHandSide } from '../types/contracts';
-import type { XrSessionService } from './XrSessionService';
+import type { XrTracking } from './XrTracking';
+import { isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 
 const HOLD_TTL_FRAMES_DEFAULT = 12;
 const RECOVERY_BLEND_DEFAULT = 0.35;
@@ -107,7 +108,7 @@ export class HandFingerRetargeter {
   private readonly tmpPinchLocalDelta = new THREE.Quaternion();
 
   constructor(
-    private readonly xrService: XrSessionService,
+    private readonly xrService: XrTracking,
     options: HandRetargeterOptions = {}
   ) {
     this.twistGain = Number.isFinite(options.twistGain) ? Number(options.twistGain) : 1;
@@ -242,7 +243,7 @@ export class HandFingerRetargeter {
       if (!tipEntry) continue;
       const tipObject = tipEntry.bone.children.find(isThreeBone) ?? tipEntry.bone;
       tipObject.getWorldPosition(this.tmpVecA);
-      if (Number.isFinite(this.tmpVecA.x) && Number.isFinite(this.tmpVecA.y) && Number.isFinite(this.tmpVecA.z)) {
+      if (isFiniteVector3Like(this.tmpVecA)) {
         fingerTips[finger] = { x: this.tmpVecA.x, y: this.tmpVecA.y, z: this.tmpVecA.z };
       }
     }
@@ -568,12 +569,7 @@ export class HandFingerRetargeter {
       }
     }
 
-    return (
-      Number.isFinite(outQuaternion.x) &&
-      Number.isFinite(outQuaternion.y) &&
-      Number.isFinite(outQuaternion.z) &&
-      Number.isFinite(outQuaternion.w)
-    );
+    return isFiniteQuaternionLike(outQuaternion);
   }
 
   private resolveTrackedQuaternionPair(
@@ -611,7 +607,7 @@ export class HandFingerRetargeter {
   private getTrackedJointPosition(side: VrHandSide, candidates: readonly TrackedHandJointName[], outPosition: THREE.Vector3): boolean {
     for (const candidate of candidates) {
       if (!this.xrService.getTrackedHandJointPosition(side, candidate, outPosition)) continue;
-      if (Number.isFinite(outPosition.x) && Number.isFinite(outPosition.y) && Number.isFinite(outPosition.z)) {
+      if (isFiniteVector3Like(outPosition)) {
         return true;
       }
     }

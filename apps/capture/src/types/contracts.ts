@@ -46,12 +46,6 @@ export interface QuatLike {
   w: number;
 }
 
-export interface FrameContext {
-  deltaSec: number;
-  elapsedSec: number;
-  mode: AppMode;
-}
-
 export interface CharacterSnapshot {
   position: Vec3Like;
   velocityY: number;
@@ -118,12 +112,6 @@ export interface RecordingFrame {
   rootQuaternion: QuatLike;
   bones: BoneTransform[];
   morphs: MorphTransform[];
-}
-
-export interface System {
-  init(): Promise<void> | void;
-  update(ctx: FrameContext): void;
-  dispose(): void;
 }
 
 // Tracked joints and the avatar bones at the same anatomical joints, in world

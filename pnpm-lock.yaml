@@ -9,9 +9,6 @@ catalogs:
     '@eslint/js':
       specifier: ^9.22.0
       version: 9.39.3
-    '@types/three':
-      specifier: ^0.173.0
-      version: 0.173.0
     eslint:
       specifier: ^9.39.2
       version: 9.39.3
@@ -40,6 +37,9 @@ catalogs:
 overrides:
   sharp: 0.35.3
   three: npm:super-three@0.181.0
+  '@types/three': 0.173.0
+  '@react-three/uikit>@pmndrs/uikit': 1.0.75
+  '@iwsdk/vite-plugin-dev@0.5.3>iwer': 2.3.0
 
 importers:
 
@@ -87,9 +87,12 @@ importers:
       '@holoim/xr-ui-three':
         specifier: workspace:*
         version: link:../../packages/xr-ui-three
+      '@iwsdk/core':
+        specifier: ^1.0.1
+        version: 1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)
       '@pmndrs/uikit':
-        specifier: ^1.0.75
-        version: 1.0.75(super-three@0.181.0)
+        specifier: 1.0.77
+        version: 1.0.77(super-three@0.181.0)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -116,17 +119,14 @@ importers:
         specifier: workspace:*
         version: link:../../packages/tooling-testing
       '@iwsdk/cli':
-        specifier: ^0.5.3
-        version: 0.5.3
-      '@iwsdk/core':
-        specifier: ^0.5.3
-        version: 0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)
+        specifier: ^1.0.1
+        version: 1.0.1
       '@iwsdk/scene-composition':
-        specifier: ^0.5.3
-        version: 0.5.3
+        specifier: ^1.0.1
+        version: 1.0.1
       '@iwsdk/vite-plugin-dev':
-        specifier: ^0.5.3
-        version: 0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.75(super-three@0.181.0))(@types/node@22.19.13)(@types/react@18.3.28)(css-to-react-native@3.2.0)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))
+        specifier: ^1.0.1
+        version: 1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(@types/node@22.19.13)(@types/react@18.3.28)(css-to-react-native@3.2.0)(iwer@2.6.0)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))
       '@iwsdk/vite-plugin-gltf-optimizer':
         specifier: ^0.4.2
         version: 0.4.2(@types/node@22.19.13)(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))
@@ -137,7 +137,7 @@ importers:
         specifier: ^18.3.5
         version: 18.3.7(@types/react@18.3.28)
       '@types/three':
-        specifier: 'catalog:'
+        specifier: 0.173.0
         version: 0.173.0
       '@zappar/msdf-generator':
         specifier: ^1.2.4
@@ -149,8 +149,8 @@ importers:
         specifier: ^16.0.0
         version: 16.5.0
       iwer:
-        specifier: 2.3.0
-        version: 2.3.0
+        specifier: 2.6.0
+        version: 2.6.0
       playwright:
         specifier: ^1.58.2
         version: 1.58.2
@@ -349,6 +349,9 @@ importers:
       '@playwright/test':
         specifier: ^1.50.1
         version: 1.58.2
+      '@pmndrs/uikit':
+        specifier: 1.0.75
+        version: 1.0.75(super-three@0.181.0)
       '@testing-library/jest-dom':
         specifier: ^6.6.3
         version: 6.9.1
@@ -362,7 +365,7 @@ importers:
         specifier: ^18.3.5
         version: 18.3.7(@types/react@18.3.28)
       '@types/three':
-        specifier: 'catalog:'
+        specifier: 0.173.0
         version: 0.173.0
       '@vitejs/plugin-react':
         specifier: ^4.7.0
@@ -537,7 +540,7 @@ importers:
         specifier: ^18.3.18
         version: 18.3.28
       '@types/three':
-        specifier: 'catalog:'
+        specifier: 0.173.0
         version: 0.173.0
       eslint:
         specifier: 'catalog:'
@@ -554,9 +557,6 @@ importers:
       '@holoim/xr-ui-core':
         specifier: workspace:*
         version: link:../xr-ui-core
-      '@pmndrs/uikit':
-        specifier: ^1.0.64
-        version: 1.0.64(super-three@0.181.0)
       three:
         specifier: npm:super-three@0.181.0
         version: super-three@0.181.0
@@ -568,7 +568,7 @@ importers:
         specifier: workspace:*
         version: link:../config-ts
       '@types/three':
-        specifier: 'catalog:'
+        specifier: 0.173.0
         version: 0.173.0
       eslint:
         specifier: 'catalog:'
@@ -856,9 +856,6 @@ packages:
 
   '@dabh/diagnostics@2.0.8':
     resolution: {integrity: sha512-R4MSXTVnuMzGD7bzHdW2ZhhdPC/igELENcq5IjEverBvq5hn1SXCWcsi6eSsdWP0/Ur+SItRRjAktmdoX/8R/Q==}
-
-  '@dimforge/rapier3d-compat@0.12.0':
-    resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
 
   '@dimforge/rapier3d-compat@0.19.3':
     resolution: {integrity: sha512-mMVdSj1PRTT108s9Swbu2GQOmHbn8kbJANRV5xfczL3s0T4vkgZAuoMRgvBzQcHanpKusbC0ZJj6z3mC3aj3vg==}
@@ -1504,6 +1501,11 @@ packages:
     peerDependencies:
       iwer: ^2.3.0
 
+  '@iwer/devui@2.6.0':
+    resolution: {integrity: sha512-0wzwiUAvbGNsQOGcOyW6RR2MeWH900FjBL/mbhzWSickj+wyOR0Pl48CecwPSidDOew+6c4k29r4PJgEl/8l+g==}
+    peerDependencies:
+      iwer: ^2.5.0
+
   '@iwer/sem@0.2.5':
     resolution: {integrity: sha512-vMCfpu/7Qqc+hkBiGD9pxjeObgrhXOrL0KX94CA3yzJaU0dq0y49HXZT6fC+6X/jOmjaM3hjyE1m2h7ZmLzzyA==}
     peerDependencies:
@@ -1514,13 +1516,17 @@ packages:
     peerDependencies:
       iwer: ^2.3.0
 
-  '@iwsdk/cli@0.5.3':
-    resolution: {integrity: sha512-IEKhx0BOhf1dLh7C+gzRa8HX0pUNSuat0pJzhIdiYUuSuGvTyMr/cpJ0wPscnZWs7pLHgsjHuZ3c2yOGZ7ohZQ==}
+  '@iwsdk/cli@1.0.1':
+    resolution: {integrity: sha512-teBkP95f9fWz1aBNn47iL8OLPyHP6IYAiWLSfWxvwtQOo4b8xYfLvrjc22bXVGyRhmt5kKnDmmPT5TmmD/VoTg==}
     engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
     hasBin: true
 
   '@iwsdk/core@0.5.3':
     resolution: {integrity: sha512-BxKTyrs0IEFiZWIbUZ7rsakuDpNZg332TCf3zEeglKU+ojrqFFWzqb6As9mgs7LyAEu9ufOZSXfSV7mQ0O39yA==}
+    engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
+
+  '@iwsdk/core@1.0.1':
+    resolution: {integrity: sha512-SwFPbwn+YcVFTbzwHg1CpEokha4Hem6q5vm5S1LZbqvFMBsdalRYOnpc7zTINmj09jzVF5aeuv/uIduDq59f+A==}
     engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
 
   '@iwsdk/locomotor@0.5.3':
@@ -1530,12 +1536,29 @@ packages:
       three: '>=0.160.0'
       three-mesh-bvh: '>=0.9.1'
 
+  '@iwsdk/locomotor@1.0.1':
+    resolution: {integrity: sha512-mkPRGNpRUtqwHjxiyPCxSPNlMi4+ShVbVVaONTLIa5MhRPajnFXw/PglDt8r8+5DPHYcR0TzkpUHRffM8lJpNg==}
+    engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
+    peerDependencies:
+      three: '>=0.160.0'
+      three-mesh-bvh: '>=0.9.1'
+
   '@iwsdk/scene-composition@0.5.3':
     resolution: {integrity: sha512-Zcydw2asCPxJ2XYizjxLtQ0elMP0ODmd9rJPQ00crT3dsWTMaHBfr0dBBY6gv0C+upOnRnmip/cihP9Ogk1BwA==}
     engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
 
+  '@iwsdk/scene-composition@1.0.1':
+    resolution: {integrity: sha512-T0uOt3/1pA2gtXi0mZU834e/RA9EzmazF8J3RLU+oqvNxpGjfKAhkzeOFay+/iBJ2nIZ/+iPodGnRTTmyo7/Iw==}
+    engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
+
   '@iwsdk/vite-plugin-dev@0.5.3':
     resolution: {integrity: sha512-2jicFml4/rd/Du+UTDjs0G8s6L5+mIuhr4YFzADW85enCfroEiCcSiwo4Bej2CzbgnvSKXsmXRyAUM8pp4yQOQ==}
+    engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
+    peerDependencies:
+      vite: ^7.0.0
+
+  '@iwsdk/vite-plugin-dev@1.0.1':
+    resolution: {integrity: sha512-qCBh/5BAJaNrMZMMF0bIOOkscTIbKgxrQELZL9WzbEM4ga8tKejUYKAYODwYNyAQ+tFyx/kQ4JlTpz+MO89wuw==}
     engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
     peerDependencies:
       vite: ^7.0.0
@@ -1548,6 +1571,12 @@ packages:
 
   '@iwsdk/xr-input@0.5.3':
     resolution: {integrity: sha512-OAaVMGX0Ap3XKY8lZdZ6mokr8YPkHFjx1OqPTvVUpian5SEAa75OgjX+Z92QK1xENmqndlCSexehqKSubGsnyw==}
+    engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
+    peerDependencies:
+      three: '>=0.160.0'
+
+  '@iwsdk/xr-input@1.0.1':
+    resolution: {integrity: sha512-5YdXrpNmQHxjzYAjBQd/gj3wOtwBo2Np2WNWm3+GQCXmIrZ5HnypLSf8BgGLcagJoKkLPE3ByC2Gq6aAAeUkng==}
     engines: {node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0'}
     peerDependencies:
       three: '>=0.160.0'
@@ -1647,11 +1676,11 @@ packages:
   '@pmndrs/handle@6.6.29':
     resolution: {integrity: sha512-zfvakgxva2P5nB6HeOuSMGyFFFP6B5cRO61DeHKSm4z7WRW2FT8baaxW5izsYqymzc4Xutc9fpeIxbFL/GbmAw==}
 
-  '@pmndrs/msdfonts@1.0.64':
-    resolution: {integrity: sha512-fyDNvCIGUTUYxDOzQnLOAGEuDQbyjx1JUlEYrjHB8KLDWzVl0j2SoFiLN4AwahEh4pXiA7XdJBNneQKnfMa/Bw==}
-
   '@pmndrs/msdfonts@1.0.75':
     resolution: {integrity: sha512-sqcAzsSJe6dOwEEf2S4LCC19rA2nXTxrPp3PSSRqcdePqippBIW7Bt0z3BIYH7c4iUMi4dOiKb1+bsAqtrG/qg==}
+
+  '@pmndrs/msdfonts@1.0.77':
+    resolution: {integrity: sha512-Lf7Uq12WMyywNwql7roBRyggxdH3XXAsEgae+zbXv4iVMcJa0cb+iLyqb6zpK+JSPHF0DMghmygJYcgf8/JYbw==}
 
   '@pmndrs/pointer-events@6.6.29':
     resolution: {integrity: sha512-o4YD6VfJgDYjFgde/YyAw2X5KY454tdmOXrHGOvKTWJBHzkL90B5vH4rqmexwRVvaDfT3YLvVh/Dm5cBbgZXMg==}
@@ -1662,19 +1691,16 @@ packages:
   '@pmndrs/uikit-lucide@1.0.75':
     resolution: {integrity: sha512-OdM3+hkZYyMXavSb8UyYsyU4cHV7iXb6ZTJcJhGE4VwCW4x/tFgF6j3FNkatTE0Kh81ODrWrtG6xRrjtftLYkQ==}
 
-  '@pmndrs/uikit-pub-sub@1.0.64':
-    resolution: {integrity: sha512-+hlc5aWC3wQlA/zihwh+OGSm3aY9O+L/TEuNLwXw6R8syHMv7obqeY6s/hcjzD92k6DRQZLhVzVy+yqqVKAbRA==}
-
-  '@pmndrs/uikit-pub-sub@1.0.75':
-    resolution: {integrity: sha512-mDQj95VfYtOcmUVse2C1h3E6KIC4p2t63wXjeNR5OkgTJSElb+Aaq4pEB1IFJUbwrbC4ft54W8LVUzi9PSFlyg==}
-
-  '@pmndrs/uikit@1.0.64':
-    resolution: {integrity: sha512-FQgF8sf46U6fmHnqOn32S04lnWiXVxQO6MatL7FgoLKJ74YIBgEHgwKHRwltgLrN/rcTu7LgJm7LgvXvMccEGA==}
-    peerDependencies:
-      three: '>=0.162'
+  '@pmndrs/uikit-pub-sub@1.0.77':
+    resolution: {integrity: sha512-nfkXQF///Tz6/jIfCtJCxuHMHfLxWj+72fDTIeAlK8MteAelTPtHUH7JKvyoLay4HcGSWuCWJx8Hr5ax6dKX0g==}
 
   '@pmndrs/uikit@1.0.75':
     resolution: {integrity: sha512-5UWP2aqZb6//9DUnGhGlMCN1QPkCMCtzFLqPBujz9i/oF1GHNrY+sHyw9u9pAohMCh2vkdweubSdWSNtfo4olA==}
+    peerDependencies:
+      three: '>=0.162'
+
+  '@pmndrs/uikit@1.0.77':
+    resolution: {integrity: sha512-HSuZbItVhl+xOtBxR5pJ/DqeHzlfVFNbGj/VFeDWU2We6vuYVs3/L6Lcmbxi/+qNXMn6YS5LjXBgtFwvjAXiWg==}
     peerDependencies:
       three: '>=0.162'
 
@@ -2166,9 +2192,6 @@ packages:
 
   '@types/three@0.173.0':
     resolution: {integrity: sha512-KtNjfI/CRB6JVKIVeZM1R3GYDX2wkoV2itNcQu2j4d7qkhjGOuB+s2oF6jl9mztycDLGMtrAnJQYxInC8Bb20A==}
-
-  '@types/three@0.181.0':
-    resolution: {integrity: sha512-MLF1ks8yRM2k71D7RprFpDb9DOX0p22DbdPqT/uAkc6AtQXjxWCVDjCy23G9t1o8HcQPk7woD2NIyiaWcWPYmA==}
 
   '@types/tmp@0.2.6':
     resolution: {integrity: sha512-chhaNf2oKHlRkDGt+tiKE2Z5aJ6qalm7Z9rlLdBwmOiAAf09YQvvoLXjWK4HWPF1xU/fqvMgfNfpVoBscA/tKA==}
@@ -3459,6 +3482,9 @@ packages:
   iwer@2.3.0:
     resolution: {integrity: sha512-+aY/BXVIjztCtS4F1hAO2rQy0P1/0JbJ6Jq5QHVscUBBlv8xJlTkkyeg+uSiD9RQ7i5B6k1Blpcx84FQaI7Myw==}
 
+  iwer@2.6.0:
+    resolution: {integrity: sha512-DNihqCixizrNjPKScTt0aOy9+YP1pn0Jxj1V6tBOV0ceRm6YrEMLo8QhEwYspPYJ9QZjDJShDMdZAaPXDPaSAw==}
+
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
 
@@ -3611,7 +3637,7 @@ packages:
   maath@0.10.8:
     resolution: {integrity: sha512-tRvbDF0Pgqz+9XUa4jjfgAQ8/aPKmQdWXilFu2tMy4GWj4NOsx99HlULO4IeREfbO3a0sA145DZYyvXPkybm0g==}
     peerDependencies:
-      '@types/three': '>=0.134.0'
+      '@types/three': 0.173.0
       three: '>=0.134.0'
 
   magic-string@0.30.21:
@@ -3680,9 +3706,6 @@ packages:
 
   meshoptimizer@0.18.1:
     resolution: {integrity: sha512-ZhoIoL7TNV4s5B6+rx5mC//fw8/POGyNxS/DZyCJeiZ12ScLfVwRE/GfsxwiTkMYYD5DmK2/JXnEVXqL4rF+Sw==}
-
-  meshoptimizer@0.22.0:
-    resolution: {integrity: sha512-IebiK79sqIy+E4EgOr+CAw+Ke8hAspXKzBd0JdgEmPHiAwmvEj2S4h1rfvo+o/BnfEYd/jAOg5IeeIjzlzSnDg==}
 
   meshoptimizer@1.0.1:
     resolution: {integrity: sha512-Vix+QlA1YYT3FwmBBZ+49cE5y/b+pRrcXKqGpS5ouh33d3lSp2PoTpCw19E0cKDFWalembrHnIaZetf27a+W2g==}
@@ -4376,7 +4399,7 @@ packages:
   stats-gl@2.4.2:
     resolution: {integrity: sha512-g5O9B0hm9CvnM36+v7SFl39T7hmAlv541tU81ME8YeSb3i1CIP5/QdDeSB3A0la0bKNHpxpwxOVRo2wFTYEosQ==}
     peerDependencies:
-      '@types/three': '*'
+      '@types/three': 0.173.0
       three: '*'
 
   stats.js@0.17.0:
@@ -5428,8 +5451,6 @@ snapshots:
       enabled: 2.0.0
       kuler: 2.0.0
 
-  '@dimforge/rapier3d-compat@0.12.0': {}
-
   '@dimforge/rapier3d-compat@0.19.3': {}
 
   '@donmccurdy/caporal@0.0.10':
@@ -5450,6 +5471,26 @@ snapshots:
     dependencies:
       '@pmndrs/msdfonts': 1.0.75
       '@pmndrs/uikit': 1.0.75(super-three@0.181.0)
+      '@pmndrs/uikit-horizon': 1.0.75(super-three@0.181.0)
+      '@pmndrs/uikit-lucide': 1.0.75(super-three@0.181.0)
+      '@preact/signals-core': 1.14.0
+      '@sentry/node': 10.71.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))
+      commander: 14.0.3
+      entities: 6.0.1
+      moo: 0.5.3
+      nearley: 2.20.1
+      playwright: 1.62.1
+      three: super-three@0.181.0
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@opentelemetry/core'
+      - '@opentelemetry/exporter-trace-otlp-http'
+      - supports-color
+
+  '@drawcall/uikitml@0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(super-three@0.181.0)':
+    dependencies:
+      '@pmndrs/msdfonts': 1.0.75
+      '@pmndrs/uikit': 1.0.77(super-three@0.181.0)
       '@pmndrs/uikit-horizon': 1.0.75(super-three@0.181.0)
       '@pmndrs/uikit-lucide': 1.0.75(super-three@0.181.0)
       '@preact/signals-core': 1.14.0
@@ -5935,14 +5976,14 @@ snapshots:
 
   '@isaacs/cliui@9.0.0': {}
 
-  '@iwer/devui@1.1.2(@types/react@18.3.28)(iwer@2.3.0)':
+  '@iwer/devui@1.1.2(@types/react@18.3.28)(iwer@2.6.0)':
     dependencies:
       '@fortawesome/fontawesome-svg-core': 6.6.0
       '@fortawesome/free-solid-svg-icons': 6.6.0
       '@fortawesome/react-fontawesome': 0.2.2(@fortawesome/fontawesome-svg-core@6.6.0)(react@18.3.1)
       '@pmndrs/handle': 6.6.29(@types/react@18.3.28)(react@18.3.1)
       '@pmndrs/pointer-events': 6.6.29
-      iwer: 2.3.0
+      iwer: 2.6.0
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       styled-components: 6.3.11(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -5969,9 +6010,27 @@ snapshots:
       - react-native
       - use-sync-external-store
 
-  '@iwer/sem@0.2.5(iwer@2.3.0)':
+  '@iwer/devui@2.6.0(@types/react@18.3.28)(css-to-react-native@3.2.0)(iwer@2.6.0)(use-sync-external-store@1.6.0(react@18.3.1))':
     dependencies:
-      iwer: 2.3.0
+      '@pmndrs/handle': 6.6.29(@types/react@18.3.28)(react@19.2.8)
+      '@pmndrs/pointer-events': 6.6.29
+      iwer: 2.6.0
+      lucide-react: 1.34.0(react@19.2.8)
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+      styled-components: 6.5.3(css-to-react-native@3.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      three: super-three@0.181.0
+      zustand: 5.0.15(@types/react@18.3.28)(react@19.2.8)(use-sync-external-store@1.6.0(react@18.3.1))
+    transitivePeerDependencies:
+      - '@types/react'
+      - css-to-react-native
+      - immer
+      - react-native
+      - use-sync-external-store
+
+  '@iwer/sem@0.2.5(iwer@2.6.0)':
+    dependencies:
+      iwer: 2.6.0
       three: super-three@0.181.0
       ts-proto: 2.11.4
 
@@ -5983,22 +6042,46 @@ snapshots:
       three: super-three@0.181.0
       ts-proto: 2.12.1
 
-  '@iwsdk/cli@0.5.3':
+  '@iwsdk/cli@1.0.1':
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   '@iwsdk/core@0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)':
     dependencies:
       '@babylonjs/havok': 1.3.14
-      '@drawcall/uikitml': 0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.75(super-three@0.181.0))(super-three@0.181.0)
+      '@drawcall/uikitml': 0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(super-three@0.181.0)
       '@iwsdk/locomotor': 0.5.3(super-three@0.181.0)(three-mesh-bvh@0.9.14(super-three@0.181.0))
       '@iwsdk/scene-composition': 0.5.3
       '@iwsdk/xr-input': 0.5.3(super-three@0.181.0)
       '@pmndrs/handle': 6.6.29(@types/react@18.3.28)(react@18.3.1)
       '@pmndrs/pointer-events': 6.6.29
-      '@pmndrs/uikit': 1.0.75(super-three@0.181.0)
+      '@pmndrs/uikit': 1.0.77(super-three@0.181.0)
       '@preact/signals-core': 1.14.0
-      '@types/three': 0.181.0
+      '@types/three': 0.173.0
+      '@types/webxr': 0.5.24
+      elics: 3.4.2
+      three: super-three@0.181.0
+      three-mesh-bvh: 0.9.14(super-three@0.181.0)
+    transitivePeerDependencies:
+      - '@opentelemetry/core'
+      - '@opentelemetry/exporter-trace-otlp-http'
+      - '@types/react'
+      - immer
+      - react
+      - supports-color
+
+  '@iwsdk/core@1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)':
+    dependencies:
+      '@babylonjs/havok': 1.3.14
+      '@drawcall/uikitml': 0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(super-three@0.181.0)
+      '@iwsdk/locomotor': 1.0.1(super-three@0.181.0)(three-mesh-bvh@0.9.14(super-three@0.181.0))
+      '@iwsdk/scene-composition': 1.0.1
+      '@iwsdk/xr-input': 1.0.1(super-three@0.181.0)
+      '@pmndrs/handle': 6.6.29(@types/react@18.3.28)(react@18.3.1)
+      '@pmndrs/pointer-events': 6.6.29
+      '@pmndrs/uikit': 1.0.77(super-three@0.181.0)
+      '@preact/signals-core': 1.14.0
+      '@types/three': 0.173.0
       '@types/webxr': 0.5.24
       elics: 3.4.2
       three: super-three@0.181.0
@@ -6016,7 +6099,14 @@ snapshots:
       three: super-three@0.181.0
       three-mesh-bvh: 0.9.14(super-three@0.181.0)
 
+  '@iwsdk/locomotor@1.0.1(super-three@0.181.0)(three-mesh-bvh@0.9.14(super-three@0.181.0))':
+    dependencies:
+      three: super-three@0.181.0
+      three-mesh-bvh: 0.9.14(super-three@0.181.0)
+
   '@iwsdk/scene-composition@0.5.3': {}
+
+  '@iwsdk/scene-composition@1.0.1': {}
 
   '@iwsdk/vite-plugin-dev@0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.75(super-three@0.181.0))(@types/node@22.19.13)(@types/react@18.3.28)(css-to-react-native@3.2.0)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))':
     dependencies:
@@ -6053,6 +6143,40 @@ snapshots:
       - use-sync-external-store
       - utf-8-validate
 
+  '@iwsdk/vite-plugin-dev@1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(@types/node@22.19.13)(@types/react@18.3.28)(css-to-react-native@3.2.0)(iwer@2.6.0)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))':
+    dependencies:
+      '@drawcall/uikitml': 0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(super-three@0.181.0)
+      '@iwer/devui': 2.6.0(@types/react@18.3.28)(css-to-react-native@3.2.0)(iwer@2.6.0)(use-sync-external-store@1.6.0(react@18.3.1))
+      '@iwsdk/core': 1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)
+      '@iwsdk/scene-composition': 1.0.1
+      '@preact/signals-core': 1.14.0
+      '@vitejs/plugin-basic-ssl': 2.3.0(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))
+      lucide: 0.468.0
+      open: 10.2.0
+      playwright: 1.62.1
+      preact: 10.29.8
+      sharp: 0.35.3(@types/node@22.19.13)
+      three: super-three@0.181.0
+      three-viewport-gizmo: 2.2.0(super-three@0.181.0)
+      vite: 7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - '@opentelemetry/core'
+      - '@opentelemetry/exporter-trace-otlp-http'
+      - '@pmndrs/uikit'
+      - '@types/node'
+      - '@types/react'
+      - bufferutil
+      - css-to-react-native
+      - immer
+      - iwer
+      - preact-render-to-string
+      - react
+      - react-native
+      - supports-color
+      - use-sync-external-store
+      - utf-8-validate
+
   '@iwsdk/vite-plugin-gltf-optimizer@0.4.2(@types/node@22.19.13)(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))':
     dependencies:
       '@gltf-transform/cli': 4.3.0(@types/node@22.19.13)
@@ -6069,6 +6193,12 @@ snapshots:
       - '@types/node'
 
   '@iwsdk/xr-input@0.5.3(super-three@0.181.0)':
+    dependencies:
+      '@pmndrs/pointer-events': 6.6.29
+      '@preact/signals-core': 1.14.0
+      three: super-three@0.181.0
+
+  '@iwsdk/xr-input@1.0.1(super-three@0.181.0)':
     dependencies:
       '@pmndrs/pointer-events': 6.6.29
       '@preact/signals-core': 1.14.0
@@ -6183,15 +6313,15 @@ snapshots:
       - immer
       - react
 
-  '@pmndrs/msdfonts@1.0.64': {}
-
   '@pmndrs/msdfonts@1.0.75': {}
+
+  '@pmndrs/msdfonts@1.0.77': {}
 
   '@pmndrs/pointer-events@6.6.29': {}
 
   '@pmndrs/uikit-horizon@1.0.75(super-three@0.181.0)':
     dependencies:
-      '@pmndrs/uikit': 1.0.75(super-three@0.181.0)
+      '@pmndrs/uikit': 1.0.77(super-three@0.181.0)
       '@pmndrs/uikit-lucide': 1.0.75(super-three@0.181.0)
       zod: 4.4.3
     transitivePeerDependencies:
@@ -6199,31 +6329,28 @@ snapshots:
 
   '@pmndrs/uikit-lucide@1.0.75(super-three@0.181.0)':
     dependencies:
-      '@pmndrs/uikit': 1.0.75(super-three@0.181.0)
+      '@pmndrs/uikit': 1.0.77(super-three@0.181.0)
     transitivePeerDependencies:
       - three
 
-  '@pmndrs/uikit-pub-sub@1.0.64':
+  '@pmndrs/uikit-pub-sub@1.0.77':
     dependencies:
       '@preact/signals-core': 1.14.0
 
-  '@pmndrs/uikit-pub-sub@1.0.75':
+  '@pmndrs/uikit@1.0.75(super-three@0.181.0)':
     dependencies:
-      '@preact/signals-core': 1.14.0
-
-  '@pmndrs/uikit@1.0.64(super-three@0.181.0)':
-    dependencies:
-      '@pmndrs/msdfonts': 1.0.64
-      '@pmndrs/uikit-pub-sub': 1.0.64
+      '@pmndrs/msdfonts': 1.0.77
+      '@pmndrs/uikit-pub-sub': 1.0.77
       '@preact/signals-core': 1.14.0
       '@zappar/msdf-generator': 1.2.4
       three: super-three@0.181.0
       yoga-layout: 3.2.1
+      zod: 4.4.3
 
-  '@pmndrs/uikit@1.0.75(super-three@0.181.0)':
+  '@pmndrs/uikit@1.0.77(super-three@0.181.0)':
     dependencies:
-      '@pmndrs/msdfonts': 1.0.75
-      '@pmndrs/uikit-pub-sub': 1.0.75
+      '@pmndrs/msdfonts': 1.0.77
+      '@pmndrs/uikit-pub-sub': 1.0.77
       '@preact/signals-core': 1.14.0
       '@zappar/msdf-generator': 1.2.4
       three: super-three@0.181.0
@@ -6232,10 +6359,10 @@ snapshots:
 
   '@pmndrs/xr@6.6.29(@types/react@18.3.28)(react@18.3.1)(super-three@0.181.0)':
     dependencies:
-      '@iwer/devui': 1.1.2(@types/react@18.3.28)(iwer@2.3.0)
-      '@iwer/sem': 0.2.5(iwer@2.3.0)
+      '@iwer/devui': 1.1.2(@types/react@18.3.28)(iwer@2.6.0)
+      '@iwer/sem': 0.2.5(iwer@2.6.0)
       '@pmndrs/pointer-events': 6.6.29
-      iwer: 2.3.0
+      iwer: 2.6.0
       meshline: 3.3.1(super-three@0.181.0)
       three: super-three@0.181.0
       zustand: 4.5.7(@types/react@18.3.28)(react@18.3.1)
@@ -6742,16 +6869,6 @@ snapshots:
       '@webgpu/types': 0.1.69
       fflate: 0.8.2
       meshoptimizer: 0.18.1
-
-  '@types/three@0.181.0':
-    dependencies:
-      '@dimforge/rapier3d-compat': 0.12.0
-      '@tweenjs/tween.js': 23.1.3
-      '@types/stats.js': 0.17.4
-      '@types/webxr': 0.5.24
-      '@webgpu/types': 0.1.69
-      fflate: 0.8.2
-      meshoptimizer: 0.22.0
 
   '@types/tmp@0.2.6': {}
 
@@ -8001,6 +8118,11 @@ snapshots:
       gl-matrix: 3.4.4
       webxr-layers-polyfill: 1.1.0
 
+  iwer@2.6.0:
+    dependencies:
+      gl-matrix: 3.4.4
+      webxr-layers-polyfill: 1.1.0
+
   jackspeak@3.4.3:
     dependencies:
       '@isaacs/cliui': 8.0.2
@@ -8338,8 +8460,6 @@ snapshots:
       three: super-three@0.181.0
 
   meshoptimizer@0.18.1: {}
-
-  meshoptimizer@0.22.0: {}
 
   meshoptimizer@1.0.1: {}
 

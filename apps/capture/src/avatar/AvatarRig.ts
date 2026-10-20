@@ -4,7 +4,7 @@ import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { TrackedHandJointName, VrHandSide } from '../types/contracts';
 import { palmFrameQuaternion } from '../xr/palmFrame';
-import { clamp } from '../shared/math';
+import { clamp, isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 
 export interface ArmIkChain {
   side: VrHandSide;
@@ -19,6 +19,8 @@ export interface ArmIkChain {
   handBindQuaternion: THREE.Quaternion;
   upperBindAimInParent: THREE.Vector3;
   foreBindAimInParent: THREE.Vector3;
+  shoulderBindQuaternion: THREE.Quaternion;
+  shoulderBindAimInParent: THREE.Vector3 | undefined;
   handGripRotationOffset: THREE.Quaternion;
   // Avatar palm frame expressed in the hand bone's space (see palmFrame.ts);
   // undefined when the rig lacks the index, middle, or pinky knuckle bones.
@@ -214,7 +216,7 @@ export class AvatarRig {
   private readonly tmpLeftFootWorld = new THREE.Vector3();
   private readonly tmpRightFootWorld = new THREE.Vector3();
 
-  constructor(private readonly scene: THREE.Scene, private readonly worldGroup: THREE.Group, private readonly renderer: THREE.WebGLRenderer) {
+  constructor(private readonly worldGroup: THREE.Group, private readonly renderer: THREE.WebGLRenderer) {
     this.worldGroup.add(this.avatarRoot);
   }
 
@@ -250,14 +252,7 @@ export class AvatarRig {
     if (this.leftEyeAnchor && this.rightEyeAnchor) {
       this.leftEyeAnchor.getWorldPosition(this.tmpVecA);
       this.rightEyeAnchor.getWorldPosition(this.tmpVecB);
-      if (
-        Number.isFinite(this.tmpVecA.x) &&
-        Number.isFinite(this.tmpVecA.y) &&
-        Number.isFinite(this.tmpVecA.z) &&
-        Number.isFinite(this.tmpVecB.x) &&
-        Number.isFinite(this.tmpVecB.y) &&
-        Number.isFinite(this.tmpVecB.z)
-      ) {
+      if (isFiniteVector3Like(this.tmpVecA) && isFiniteVector3Like(this.tmpVecB)) {
         out.copy(this.tmpVecA).add(this.tmpVecB).multiplyScalar(0.5);
         out.y += embodyOffset;
         return out;
@@ -266,7 +261,7 @@ export class AvatarRig {
 
     if (this.headBone) {
       this.headBone.getWorldPosition(out);
-      if (Number.isFinite(out.x) && Number.isFinite(out.y) && Number.isFinite(out.z)) {
+      if (isFiniteVector3Like(out)) {
         out.y += embodyOffset;
         return out;
       }
@@ -356,7 +351,7 @@ export class AvatarRig {
     const hand = this.avatar?.getObjectByName(handName);
     if (!isThreeBone(hand)) return undefined;
     hand.getWorldPosition(out);
-    if (!Number.isFinite(out.x) || !Number.isFinite(out.y) || !Number.isFinite(out.z)) {
+    if (!isFiniteVector3Like(out)) {
       return undefined;
     }
     return out;
@@ -366,14 +361,14 @@ export class AvatarRig {
     const bone = this.findAvatarBone(name);
     if (!bone) return undefined;
     bone.getWorldPosition(out);
-    return Number.isFinite(out.x) && Number.isFinite(out.y) && Number.isFinite(out.z) ? out : undefined;
+    return isFiniteVector3Like(out) ? out : undefined;
   }
 
   getBoneLocalQuaternion(name: string, out: THREE.Quaternion): THREE.Quaternion | undefined {
     const bone = this.findAvatarBone(name);
     if (!bone) return undefined;
     out.copy(bone.quaternion);
-    if (!Number.isFinite(out.x) || !Number.isFinite(out.y) || !Number.isFinite(out.z) || !Number.isFinite(out.w)) {
+    if (!isFiniteQuaternionLike(out)) {
       return undefined;
     }
     return out;
@@ -411,6 +406,8 @@ export class AvatarRig {
       return undefined;
     }
 
+    const shoulderBindQuaternion = shoulder.quaternion.clone();
+    const shoulderBindAimInParent = this.toBindAimInParent(shoulder, this.tmpUpperWorld, new THREE.Vector3());
     const upperBindQuaternion = upperArm.quaternion.clone();
     const foreBindQuaternion = foreArm.quaternion.clone();
     const handBindQuaternion = hand.quaternion.clone();
@@ -439,6 +436,8 @@ export class AvatarRig {
       handBindQuaternion,
       upperBindAimInParent,
       foreBindAimInParent,
+      shoulderBindQuaternion,
+      shoulderBindAimInParent,
       handGripRotationOffset,
       palmInHand,
       elbowHintLocal: new THREE.Vector3(side === 'left' ? 1 : -1, -0.05, 0.25).normalize()
