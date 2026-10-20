@@ -81,7 +81,11 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     onSizeLocked: () => heightFit.calibration.interrupt()
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
-  const vrHud = new VrHud(ui, renderer, {
+  const vrHud = new VrHud({
+    store: ui,
+    renderer,
+    scene,
+    tracking,
     refitHeight: () => heightFit.requestRefit(),
     toggleRecording: () => recording.toggle()
   });

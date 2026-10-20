@@ -552,9 +552,6 @@ importers:
       '@holoim/xr-ui-core':
         specifier: workspace:*
         version: link:../xr-ui-core
-      '@pmndrs/uikit':
-        specifier: 1.0.77
-        version: 1.0.77(super-three@0.181.0)
       three:
         specifier: npm:super-three@0.181.0
         version: super-three@0.181.0

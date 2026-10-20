@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@holoim/xr-ui-core": "workspace:*",
-    "@pmndrs/uikit": "1.0.77",
     "three": "catalog:"
   },
   "devDependencies": {
