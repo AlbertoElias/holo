@@ -22,7 +22,7 @@ export function createDoctorReporter() {
 // The workspace pins one Node major (engines.node, .nvmrc). Another major
 // still runs most scripts, but pnpm then prints "Unsupported engine" on
 // stdout and breaks scripts that parse it, so name the fix.
-export function checkNodeVersion({ fail }, requiredMajor = 22) {
+export function checkNodeVersion({ fail }, requiredMajor = 24) {
   const major = Number(process.versions.node.split(".")[0]);
   if (major !== requiredMajor) {
     fail(

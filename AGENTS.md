@@ -86,7 +86,7 @@ mid-session, so a lead delegates lighter work to a pinned subagent instead.
 - Claude Code subagents live in `.claude/agents/` with pinned models:
   `searcher` (Haiku), `check-runner` (Sonnet), `design-reviewer` (Opus).
 - A cheaper model does not offset a long session; context size still dominates.
-- Node must be 22 (`.nvmrc`). Claude Code sessions get it from a SessionStart
+- Node must be 24 (`.nvmrc`). Claude Code sessions get it from a SessionStart
   hook; in other shells run `eval "$(scripts/agent-node-env.sh)"`. Never switch
   the machine-wide Node (`n <version>`): other sessions share it.
 

@@ -92,7 +92,7 @@ async function checkPorts() {
 }
 
 async function main() {
-  checkNodeVersion(reporter, 22);
+  checkNodeVersion(reporter, 24);
   checkCommand(reporter, "git");
   checkCommand(reporter, "pnpm");
   checkPnpmVersion();
