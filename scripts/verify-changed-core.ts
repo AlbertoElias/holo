@@ -8,6 +8,7 @@ import path from "node:path";
 
 export type SelectionReason =
   | "no-changes"
+  | "docs-only"
   | "package-changes"
   | "all-packages-fallback";
 
@@ -25,6 +26,7 @@ export interface WorkspaceGraph {
 
 export interface PackageSelection {
   changedFiles: readonly string[];
+  docFiles: readonly string[];
   directPackages: readonly string[];
   fallbackFiles: readonly string[];
   reason: SelectionReason;
@@ -40,7 +42,7 @@ export interface CheckPlan {
 }
 
 export interface RootAction {
-  args: readonly ["run", "verify:workspace"];
+  args: readonly string[];
   command: "pnpm";
 }
 
@@ -51,6 +53,7 @@ export interface DryRunReport {
   schemaVersion: 1;
   selection: {
     directPackages: readonly string[];
+    docFiles: readonly string[];
     fallbackFiles: readonly string[];
     reason: SelectionReason;
     selectedPackages: readonly string[];
@@ -61,6 +64,17 @@ export const VERIFY_WORKSPACE_ACTION: RootAction = {
   args: ["run", "verify:workspace"],
   command: "pnpm"
 };
+
+// Documentation needs its own checks, not every package's: Markdown anywhere
+// and everything under docs/. Knowledge's check:docs validates the links.
+export const VERIFY_DOCS_ACTION: RootAction = {
+  args: ["--filter", "@holoim/knowledge", "run", "check:docs"],
+  command: "pnpm"
+};
+
+export function isDocumentationFile(file: string): boolean {
+  return file.endsWith(".md") || file.startsWith("docs/");
+}
 
 const dependencyFields = [
   "dependencies",
@@ -293,15 +307,29 @@ export function selectAffectedPackages(
     return {
       changedFiles: [],
       directPackages: [],
+      docFiles: [],
       fallbackFiles: [],
       reason: "no-changes",
       selectedPackages: []
     };
   }
 
+  const docFiles = normalizedFiles.filter(isDocumentationFile);
+  const codeFiles = normalizedFiles.filter((file) => !isDocumentationFile(file));
+  if (codeFiles.length === 0) {
+    return {
+      changedFiles: normalizedFiles,
+      directPackages: [],
+      docFiles,
+      fallbackFiles: [],
+      reason: "docs-only",
+      selectedPackages: []
+    };
+  }
+
   const directPackages = new Set<string>();
   const fallbackFiles: string[] = [];
-  for (const file of normalizedFiles) {
+  for (const file of codeFiles) {
     const workspacePackage = packageForFile(graph.packages, file);
     if (workspacePackage) {
       directPackages.add(workspacePackage.name);
@@ -315,6 +343,7 @@ export function selectAffectedPackages(
     return {
       changedFiles: normalizedFiles,
       directPackages: [...directPackages].sort(),
+      docFiles,
       fallbackFiles,
       reason: "all-packages-fallback",
       selectedPackages: allPackageNames
@@ -340,6 +369,7 @@ export function selectAffectedPackages(
   return {
     changedFiles: normalizedFiles,
     directPackages: [...directPackages].sort(),
+    docFiles,
     fallbackFiles: [],
     reason: "package-changes",
     selectedPackages: [...selectedPackages].sort()
@@ -375,10 +405,14 @@ export function createDryRunReport(graph: WorkspaceGraph, selection: PackageSele
   return {
     changedFiles: selection.changedFiles,
     checks: usesWorkspaceFallback ? [] : createCheckPlans(graph, selection.selectedPackages),
-    rootActions: usesWorkspaceFallback ? [VERIFY_WORKSPACE_ACTION] : [],
+    rootActions: [
+      ...(selection.docFiles.length > 0 ? [VERIFY_DOCS_ACTION] : []),
+      ...(usesWorkspaceFallback ? [VERIFY_WORKSPACE_ACTION] : [])
+    ],
     schemaVersion: 1,
     selection: {
       directPackages: selection.directPackages,
+      docFiles: selection.docFiles,
       fallbackFiles: selection.fallbackFiles,
       reason: selection.reason,
       selectedPackages: selection.selectedPackages

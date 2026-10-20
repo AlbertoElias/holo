@@ -52,7 +52,7 @@ function checkOptionalKtxCommand() {
 }
 
 async function main() {
-  checkNodeVersion(reporter, 20, 19);
+  checkNodeVersion(reporter, 22);
   checkCommand(reporter, "pnpm");
   checkOptionalKtxCommand();
   checkPathExists(reporter, rootDir, "public/gltf/models/avatar.glb");

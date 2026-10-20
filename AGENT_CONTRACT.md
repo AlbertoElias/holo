@@ -75,6 +75,35 @@ Run automation from these scripts unless a task explicitly requires lower-level 
   2. `pnpm run verify:repo:viewer`
   3. `pnpm run test:smoke:pipeline`
 
+## Fast Agent Loop
+
+Iterate on the narrowest check that exercises the change, then widen once
+before pushing. Measured locally on Node 22 (M-series, shared machine):
+
+| Step | Command | Wall time |
+|---|---|---|
+| Docs-only edit | `pnpm run verify:agent` (runs Knowledge `check:docs` only) | ~2 s |
+| One package edit | `pnpm run verify:agent` | 5–10 s |
+| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|flows\|terrain\|hands\|height\|body>` | 10–45 s |
+| One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
+| All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
+| Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |
+| Branch CI | `gh workflow run CI --ref <branch>` | ~6.5 min |
+
+- Run anything that can pass two minutes (the full XR suite, `verify:pr`,
+  CI) in the background and wait for its completion notice. To wait on CI, run
+  `gh run watch <id> --exit-status` in the background; do not poll with
+  `until grep` or `sleep` loops.
+- `test:xr*` starts its own Vite server on the first free port from `5174`,
+  so a stale server does not block it. Reuse one you started from the same
+  worktree with `REUSE_DEV_SERVER=1 BASE_URL=https://127.0.0.1:<port>/`; never
+  reuse a server from another checkout, which serves other code.
+- Parallel checks write each check's output to
+  `apps/capture/output/xr-checks/<name>.log` and print it when the check ends.
+  Set `XR_CHECK_CONCURRENCY=1` for serial, streamed output.
+- Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`) screenshot every frame
+  and multiply wall time; combine them with `XR_REPLAY_ONLY`.
+
 ## Feature Delivery Contract
 
 Follow the canonical process in `docs/FEATURE_WORKFLOW.md` (roles, delivery
@@ -124,6 +153,9 @@ Supported env vars for smoke and XR scripts:
 - `BODY_REPLAY_VIDEO` (`1` renders a third-person video of each body replay with the tracked head path; needs `ffmpeg`)
 - `BODY_REPLAY_FAULTS` (`1` breaks each body behavior in turn and requires its metric to fail; `BODY_REPLAY_FAULT=<name>` runs one)
 - `BODY_REPLAY_CONCURRENCY` (default `2` body replays at once; results do not depend on it)
+- `HAND_REPLAY_CONCURRENCY` (default `2` hand replays at once; results do not depend on it)
+- `XR_REPLAY_ONLY` (substring, comma-separated for several: replay only matching hand or body fixtures; with `BODY_REPLAY_FAULTS=1`, only faults on those fixtures)
+- `XR_CHECK_CONCURRENCY` (capture XR checks run at once by `test:xr*`; default half the CPUs, from 1 to 3; results do not depend on it)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
@@ -131,7 +163,7 @@ Supported env vars for smoke and XR scripts:
 
 | Task type | Required commands |
 |---|---|
-| Documentation only | Check edited content, links, and referenced commands |
+| Documentation only | `pnpm run verify:agent` (docs link check) plus checking edited content and referenced commands |
 | Tooling/config changes | `pnpm run doctor` plus checks affected by the configuration |
 | Agent edit loop | `pnpm run verify:agent` |
 | API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` (real capture export → upload → viewer render) |
@@ -144,9 +176,10 @@ Supported env vars for smoke and XR scripts:
   `.github/workflows/deploy.yml` deploys production (Fly API, Pages viewer
   and capture) only after a successful CI run on `main`; it never gates PRs.
 - Every event (push, pull request, manual, and a weekly schedule that only
-  catches runner or dependency drift) runs the same three parallel jobs: quality
-  and unit tests, production build, and browser end-to-end (capture XR checks,
-  viewer AR checks, capture → viewer pipeline). There is no separate heavy tier.
+  catches runner or dependency drift) runs the same parallel jobs: quality
+  and unit tests, production build, capture XR checks, viewer AR and Knowledge
+  Atlas checks, capture → viewer pipeline, and portal view checks. Wall time
+  follows the slowest job, not their sum. There is no separate heavy tier.
 - Capture XR checks are deterministic: they take capture's manual clock
   (`__setManualClock`), advance simulation only through `advanceTime`, and freeze
   the page's timers after XR session entry so IWER's per-frame compositing cannot

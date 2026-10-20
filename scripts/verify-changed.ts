@@ -9,6 +9,8 @@ import {
   listChangedFiles,
   selectAffectedPackages,
   type CheckPlan,
+  type RootAction,
+  VERIFY_DOCS_ACTION,
   VERIFY_WORKSPACE_ACTION
 } from "./verify-changed-core.ts";
 
@@ -21,8 +23,8 @@ function runPackageScript(packageName: string, script: string): void {
   }
 }
 
-function runWorkspaceFallback(): void {
-  const result = spawnSync(VERIFY_WORKSPACE_ACTION.command, VERIFY_WORKSPACE_ACTION.args, {
+function runRootAction(action: RootAction): void {
+  const result = spawnSync(action.command, action.args, {
     stdio: "inherit"
   });
   if (result.status !== 0) {
@@ -63,11 +65,20 @@ function main(): void {
     return;
   }
 
+  if (selection.docFiles.length > 0) {
+    console.log(`[verify:changed] ${selection.docFiles.length} documentation file(s) changed; checking docs links.`);
+    runRootAction(VERIFY_DOCS_ACTION);
+  }
+  if (selection.reason === "docs-only") {
+    console.log("[verify:changed] Documentation only; package checks skipped. Check edited commands and references by hand.");
+    return;
+  }
+
   if (selection.reason === "all-packages-fallback") {
     console.log(
       `[verify:changed] Root/shared/unknown changes detected (${selection.fallbackFiles.join(", ")}); running verify:workspace.`
     );
-    runWorkspaceFallback();
+    runRootAction(VERIFY_WORKSPACE_ACTION);
     return;
   }
 

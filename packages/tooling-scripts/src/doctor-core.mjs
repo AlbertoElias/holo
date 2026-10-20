@@ -19,17 +19,17 @@ export function createDoctorReporter() {
   };
 }
 
-export function checkNodeVersion({ fail }, minMajor = 20, minMinor = 0) {
-  const [majorRaw, minorRaw] = process.versions.node.split(".");
-  const major = Number(majorRaw);
-  const minor = Number(minorRaw);
-  if (
-    !Number.isFinite(major) ||
-    !Number.isFinite(minor) ||
-    major < minMajor ||
-    (major === minMajor && minor < minMinor)
-  ) {
-    fail(`Node.js ${minMajor}.${minMinor}+ is required. Current: ${process.versions.node}`);
+// The workspace pins one Node major (engines.node, .nvmrc). Another major
+// still runs most scripts, but pnpm then prints "Unsupported engine" on
+// stdout and breaks scripts that parse it, so name the fix.
+export function checkNodeVersion({ fail }, requiredMajor = 22) {
+  const major = Number(process.versions.node.split(".")[0]);
+  if (major !== requiredMajor) {
+    fail(
+      `Node.js ${requiredMajor}.x is required (engines.node, .nvmrc). Current: ${process.versions.node} at ${process.execPath}. ` +
+        `For this shell: eval "$(scripts/agent-node-env.sh)" (Claude Code sessions run it at start). ` +
+        `Do not switch the machine-wide default Node; other sessions share it.`
+    );
   }
 }
 

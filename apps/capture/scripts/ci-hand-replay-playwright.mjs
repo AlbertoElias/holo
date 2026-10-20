@@ -8,8 +8,10 @@ import {
   captureXrScreenshot,
   createXrContext,
   enterIwerSessionFromButton,
+  filterReplayFixtures,
   freezePageClock,
   launchXrBrowser,
+  mapWithConcurrency,
   resolveSimulationViewport,
   waitForIwerRuntime,
   waitForPageFunctions,
@@ -26,6 +28,9 @@ import { analyzeHandReplay, formatHandReport } from './lib/hand-fidelity.mjs';
 // measures how closely the avatar's hands follow the tracked hands. The
 // simulation ticks inside each XR frame, in a headset's order (B-009 hid
 // behind a present-then-step order).
+//
+// XR_REPLAY_ONLY=<substring> replays only matching recordings;
+// HAND_REPLAY_CONCURRENCY sets how many replay at once (default 2).
 
 const STEP_MS = 1000 / 30;
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -34,9 +39,9 @@ const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-hand-replay';
 const videoFrameDir = process.env.HAND_REPLAY_VIDEO === '1' ? path.join(artifactDir, 'video-frames') : null;
 const captureScreenshots = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS === '1';
 
-const recordings = (await readdir(fixtureDir).catch(() => []))
+const recordings = filterReplayFixtures((await readdir(fixtureDir).catch(() => []))
   .filter((name) => name.endsWith('.json'))
-  .sort();
+  .sort());
 if (recordings.length === 0) {
   throw new Error(`No input recordings in ${fixtureDir}. Record one on a headset (see apps/capture/README.md).`);
 }
@@ -142,11 +147,11 @@ try {
       await mkdir(path.join(videoFrameDir, path.basename(fileName, '.json')), { recursive: true });
     }
   }
-  for (const fileName of recordings) {
-    const report = await replay(fileName);
-    reports.push(report);
-    console.log(formatHandReport(report));
-  }
+  // Each page has its own frozen clock, so replays can share the browser
+  // without changing results; videos render one at a time.
+  const concurrency = videoFrameDir ? 1 : Number(process.env.HAND_REPLAY_CONCURRENCY ?? 2);
+  reports.push(...await mapWithConcurrency(recordings, concurrency, replay));
+  for (const report of reports) console.log(formatHandReport(report));
   const failures = reports.flatMap((report) => report.failures.map((failure) => `${report.label}: ${failure}`));
   if (consoleErrors.length > 0) failures.push(`console errors:\n${consoleErrors.join('\n')}`);
   if (failures.length > 0) {

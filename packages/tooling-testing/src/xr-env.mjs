@@ -364,3 +364,30 @@ function cacheWebGlClearState() {
     };
   }
 }
+
+// Runs worker(item, index) over items with at most `concurrency` in flight and
+// returns the results in input order. Pages in simulation checks each run on
+// their own frozen clock, so concurrency changes wall time, not results.
+export async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  const lanes = Math.max(1, Math.min(Math.floor(concurrency) || 1, items.length));
+  await Promise.all(Array.from({ length: lanes }, async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }));
+  return results;
+}
+
+// Fixture filter shared by the replay checks: XR_REPLAY_ONLY=<substring>
+// (comma-separated for several) keeps only matching fixture names.
+export function filterReplayFixtures(names, filter = process.env.XR_REPLAY_ONLY) {
+  const needles = (filter ?? '').split(',').map((value) => value.trim()).filter(Boolean);
+  if (needles.length === 0) return names;
+  const kept = names.filter((name) => needles.some((needle) => name.includes(needle)));
+  if (kept.length === 0) throw new Error(`XR_REPLAY_ONLY=${filter} matched none of: ${names.join(', ')}`);
+  return kept;
+}

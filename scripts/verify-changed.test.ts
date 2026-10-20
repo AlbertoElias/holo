@@ -79,14 +79,36 @@ test("fails closed to every package for root, shared, or unknown files", (contex
   context.after(() => rmSync(rootDir, { recursive: true, force: true }));
 
   const graph = discoverWorkspaceGraph(rootDir);
-  const selection = selectAffectedPackages(graph, ["README.md", "packages/core/src/index.ts"]);
+  const selection = selectAffectedPackages(graph, ["package.json", "packages/core/src/index.ts"]);
 
   assert.equal(selection.reason, "all-packages-fallback");
-  assert.deepEqual(selection.fallbackFiles, ["README.md"]);
+  assert.deepEqual(selection.fallbackFiles, ["package.json"]);
   assert.deepEqual(selection.selectedPackages, ["@fixture/app", "@fixture/core"]);
   const report = createDryRunReport(graph, selection);
   assert.deepEqual(report.checks, []);
   assert.deepEqual(report.rootActions, [{ command: "pnpm", args: ["run", "verify:workspace"] }]);
+});
+
+test("documentation-only changes run the docs check instead of package checks", (context) => {
+  const rootDir = createWorkspace([
+    { name: "@fixture/app", path: "apps/app", scripts: { test: "unit" } },
+    { name: "@fixture/core", path: "packages/core" }
+  ]);
+  context.after(() => rmSync(rootDir, { recursive: true, force: true }));
+
+  const graph = discoverWorkspaceGraph(rootDir);
+  const docsOnly = selectAffectedPackages(graph, ["TODOS.md", "apps/app/README.md", "docs/features/brief.png"]);
+  assert.equal(docsOnly.reason, "docs-only");
+  assert.deepEqual(docsOnly.selectedPackages, []);
+  const docsReport = createDryRunReport(graph, docsOnly);
+  assert.deepEqual(docsReport.checks, []);
+  assert.deepEqual(docsReport.rootActions, [{ command: "pnpm", args: ["--filter", "@holoim/knowledge", "run", "check:docs"] }]);
+
+  // Docs alongside code: the code selects packages; the docs add only their check.
+  const mixed = selectAffectedPackages(graph, ["docs/guide.md", "apps/app/src/index.ts"]);
+  assert.equal(mixed.reason, "package-changes");
+  assert.deepEqual(mixed.selectedPackages, ["@fixture/app"]);
+  assert.deepEqual(createDryRunReport(graph, mixed).rootActions.map((action) => action.args.at(-1)), ["check:docs"]);
 });
 
 test("keeps no-change behavior as an empty skip", (context) => {
@@ -167,9 +189,11 @@ test("git discovery includes deleted and untracked package files", (context) => 
 test("the CLI dry-run emits deterministic machine-readable data for the real workspace", () => {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const rootDir = path.resolve(scriptDir, "..");
-  const args = ["exec", "tsx", path.join(scriptDir, "verify-changed.ts"), "--", "--dry-run"];
-  const first = spawnSync("pnpm", args, { cwd: rootDir, encoding: "utf8" });
-  const second = spawnSync("pnpm", args, { cwd: rootDir, encoding: "utf8" });
+  // Run the CLI on this Node directly: a pnpm wrapper can print engine
+  // warnings to stdout when the shell's Node differs from engines.node.
+  const args = ["--import", "tsx", path.join(scriptDir, "verify-changed.ts"), "--dry-run"];
+  const first = spawnSync(process.execPath, args, { cwd: rootDir, encoding: "utf8" });
+  const second = spawnSync(process.execPath, args, { cwd: rootDir, encoding: "utf8" });
 
   assert.equal(first.status, 0, first.stderr);
   assert.equal(second.status, 0, second.stderr);
@@ -179,11 +203,12 @@ test("the CLI dry-run emits deterministic machine-readable data for the real wor
   assert.deepEqual(report.changedFiles, [...report.changedFiles].sort());
   assert.deepEqual(report.selection.selectedPackages, [...report.selection.selectedPackages].sort());
 
+  const workspaceActions = report.rootActions.filter((action) => action.args.includes("verify:workspace"));
   if (report.selection.reason === "all-packages-fallback") {
     assert.deepEqual(report.checks, []);
-    assert.deepEqual(report.rootActions, [{ command: "pnpm", args: ["run", "verify:workspace"] }]);
+    assert.deepEqual(workspaceActions, [{ command: "pnpm", args: ["run", "verify:workspace"] }]);
   } else {
-    assert.deepEqual(report.rootActions, []);
+    assert.deepEqual(workspaceActions, []);
     assert.deepEqual(report.checks.map((check) => check.package), report.selection.selectedPackages);
   }
 });

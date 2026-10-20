@@ -94,10 +94,57 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  e2e:
-    name: Browser end-to-end
+  # Browser end-to-end checks run as three parallel jobs (capture XR, viewer
+  # and Knowledge Atlas, capture → viewer pipeline) so CI wall time follows
+  # the slowest suite rather than their sum.
+  capture-xr:
+    name: Capture XR checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+      - run: pnpm --filter @holoim/api prisma:generate
+      - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+      - name: Capture XR checks
+        run: pnpm timed xr-capture -- pnpm run test:xr:capture
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-xr-failure-${{ github.run_id }}
+          path: |
+            apps/capture/output/xr-checks
+            apps/capture/output/ci-mock-vr
+            apps/capture/output/ci-vr-locomotion
+            apps/capture/output/ci-hand-replay
+            apps/capture/output/ci-body-replay/*-report.json
+            apps/capture/output/ci-terrain-locomotion
+            apps/capture/output/ci-xr-height
+            output/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload timing summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-xr-timings-${{ github.run_id }}
+          path: output/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  e2e:
+    name: Viewer and Knowledge browser checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -118,10 +165,47 @@ jobs:
       - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
       - name: Knowledge Atlas browser checks
         run: pnpm timed knowledge -- pnpm run test:knowledge
-      - name: Capture XR checks
-        run: pnpm timed xr-capture -- pnpm run test:xr:capture
       - name: Viewer AR checks
         run: pnpm timed xr-viewer -- pnpm run test:xr:viewer
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-${{ github.run_id }}
+          path: |
+            apps/viewer-web/test-results
+            apps/viewer-web/playwright-report
+            apps/knowledge/test-results
+            apps/knowledge/playwright-report
+            output/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload timing summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-timings-${{ github.run_id }}
+          path: output/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  pipeline:
+    name: Capture to viewer pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+      - run: pnpm --filter @holoim/api prisma:generate
+      - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -148,15 +232,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-failure-${{ github.run_id }}
+          name: pipeline-failure-${{ github.run_id }}
           path: |
-            apps/capture/output/ci-mock-vr
-            apps/capture/output/ci-vr-locomotion
-            apps/capture/output/ci-hand-replay
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
-            apps/knowledge/test-results
-            apps/knowledge/playwright-report
             output/test-results
           if-no-files-found: ignore
           retention-days: 14
@@ -164,14 +243,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-timings-${{ github.run_id }}
+          name: pipeline-timings-${{ github.run_id }}
           path: output/test-results
           if-no-files-found: ignore
           retention-days: 7
 
-  # Portal view (PRD-002): its own job so the browser end-to-end job stays
-  # inside its time limit; every touch or mouse event waits for a
-  # software-rendered frame on the runner.
   portal:
     name: Portal view end-to-end
     runs-on: ubuntu-latest
@@ -210,13 +286,15 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, build, e2e, portal]
+    needs: [quality, build, capture-xr, e2e, pipeline, portal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
       QUALITY_RESULT: ${{ needs.quality.result }}
       BUILD_RESULT: ${{ needs.build.result }}
+      CAPTURE_XR_RESULT: ${{ needs.capture-xr.result }}
       E2E_RESULT: ${{ needs.e2e.result }}
+      PIPELINE_RESULT: ${{ needs.pipeline.result }}
       PORTAL_RESULT: ${{ needs.portal.result }}
     steps:
       - name: Summarize jobs
@@ -227,12 +305,16 @@ jobs:
             echo "| --- | --- |"
             echo "| Quality | ${QUALITY_RESULT} |"
             echo "| Build | ${BUILD_RESULT} |"
-            echo "| Browser end-to-end | ${E2E_RESULT} |"
+            echo "| Capture XR checks | ${CAPTURE_XR_RESULT} |"
+            echo "| Viewer and Knowledge browser checks | ${E2E_RESULT} |"
+            echo "| Capture to viewer pipeline | ${PIPELINE_RESULT} |"
             echo "| Portal view end-to-end | ${PORTAL_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
       - name: Enforce required jobs
         run: |
           test "${QUALITY_RESULT}" = "success"
           test "${BUILD_RESULT}" = "success"
+          test "${CAPTURE_XR_RESULT}" = "success"
           test "${E2E_RESULT}" = "success"
+          test "${PIPELINE_RESULT}" = "success"
           test "${PORTAL_RESULT}" = "success"
