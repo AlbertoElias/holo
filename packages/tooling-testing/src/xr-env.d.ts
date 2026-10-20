@@ -78,3 +78,9 @@ export function enterIwerSessionFromButton(
   }
 ): Promise<void>;
 export function attachXrEnvironment(page: Page, options?: { mode?: string; cacheClearState?: boolean }): Promise<{ mode: XrTestMode }>;
+export function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]>;
+export function filterReplayFixtures(names: readonly string[], filter?: string): string[];

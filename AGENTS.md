@@ -45,29 +45,81 @@ For other browser QA, use the browser tool suited to the task and available sess
 Project-local gstack skills live in `.agents/skills/gstack`; load the requested workflow
 when using gstack. Its setup command is `cd .agents/skills/gstack && PATH="$HOME/.bun/bin:$PATH" ./setup`.
 
+## Working efficiently
+
+Every turn re-reads the whole conversation, so context size is the main cost
+and session length multiplies it.
+
+- One task per session. When a question turns into implementation, or a
+  shipped change into the next feature, record state in the owning file
+  (brief, `TODOS.md`, `BUGS.md`) and tell the user to continue in a fresh session.
+- Never read a full-size image. Preview it first with
+  `node packages/tooling-testing/src/preview.mjs <image-or-frame-dir>` (an
+  800px JPEG, or a 12-frame contact sheet for a frame directory); the hand
+  and body replays already write `<label>-sheet.jpg`. Prefer numeric reports
+  (`*-report.json`) over looking at frames.
+- Run commands that may take over two minutes in the background and wait for
+  the completion notice; do not poll in a loop or let a foreground command
+  reach its timeout.
+- Send broad searches and file sweeps to a subagent so only its conclusion
+  enters the conversation. Print excerpts (`sed -n`, `grep`, `head`) instead
+  of whole large files or logs.
+- Iterate on the narrowest check, then widen once: one capture XR check
+  (`pnpm --filter @holoim/capture run test:xr:body`), one replay fixture
+  (`XR_REPLAY_ONLY=<name>`), and the full tier only before pushing. See
+  "Fast Agent Loop" in `AGENT_CONTRACT.md`.
+
+## Model routing
+
+Pick the tier when starting a session; an agent cannot change its own model
+mid-session, so a lead delegates lighter work to a pinned subagent instead.
+
+| Tier | Work | Claude Code | Codex | Muse |
+|---|---|---|---|---|
+| Deep | Lead on recording, retargeting, contracts or the export → upload → render pipeline; design review; hard debugging | `--model opus` | `-p deep` (gpt-6-astra, xhigh) | `--effort high` |
+| Standard | Implementing a settled brief; routine bugs | default (Sonnet) | `-p standard` (gpt-6.1-sol, medium) | default |
+| Light | Searches, running checks or CI and summarizing, doc and queue bookkeeping | `searcher` / `check-runner` subagents | `-p light` (gpt-6-luna, low) | `--effort low` |
+
+- The independent verifier in `docs/FEATURE_WORKFLOW.md` uses a different
+  vendor from the implementer (for example Codex implements, Claude verifies);
+  same-model review shares the implementer's blind spots.
+- Claude Code subagents live in `.claude/agents/` with pinned models:
+  `searcher` (Haiku), `check-runner` (Sonnet), `design-reviewer` (Opus).
+- A cheaper model does not offset a long session; context size still dominates.
+- Node must be 22 (`.nvmrc`). Claude Code sessions get it from a SessionStart
+  hook; in other shells run `eval "$(scripts/agent-node-env.sh)"`. Never switch
+  the machine-wide Node (`n <version>`): other sessions share it.
+
 ## Sharing work between agents
 
 Multiple agents share this repo, so uncommitted work is invisible to the others.
-Work in your own worktree by default; the main checkout is the integration point.
+Always work in your own worktree under `.worktrees/`; the main checkout is the
+integration point only and never takes edits.
 
 - Before starting, run `git fetch` and check `git status`; read any in-flight
   brief in `docs/features/README.md` before touching overlapping files.
 - For implementation work, create a worktree on your own branch and install
   there (pnpm's shared store makes this cheap):
   `git worktree add .worktrees/<task> -b <type>/<task> origin/main`, then
-  `pnpm install` in that directory. One feature or agent per worktree. Branch
+  `pnpm install` in that directory. If typecheck reports clashing
+  `@types/three` copies in a reused worktree, its `node_modules` is stale:
+  `rm -rf node_modules apps/*/node_modules packages/*/node_modules && pnpm install`
+  (seconds, from the shared store). One feature or agent per worktree. Branch
   by change type, never by agent: `feature/`, `bug/`, `docs/`, `infra/`
-  (e.g. `feature/ar-recenter`, `infra/metavr-setup`).
-- The exception is a short, sequential fix when the relevant files are clean:
-  it may go directly in a free checkout. Never edit files another agent has
-  modified in a shared tree.
+  (e.g. `feature/ar-recenter`, `infra/metavr-setup`). Never edit files another
+  agent has modified in a shared tree.
 - Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`),
   dev servers, and local databases are still shared, so only one agent runs
-  the XR harness or a dev server at a time unless ports are reassigned.
+  the XR harness or a dev server at a time unless ports are reassigned via
+  `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`.
 - As soon as your change is working and verified, commit and push your branch.
-  You are pre-authorized to commit and push within this workflow; do not stop
-  to ask for approval. Stage only the files you changed by name — never commit
-  another agent's in-progress work, and never use a broad `git add`.
+  You are pre-authorized to commit, push, open a pull request, and merge on
+  green CI without asking; do not stop for approval on those steps. After
+  merge, confirm the automated deploy health checks passed and report the
+  live URLs. Still ask before product or scope decisions, secret or billing
+  changes, and destructive operations (force-push, volume or snapshot
+  actions). Stage only the files you changed by name — never commit another
+  agent's in-progress work, and never use a broad `git add`.
 - Git transport is HTTPS with the `gh` credential helper (repo-local config:
   `credential.https://github.com.helper` → `gh auth git-credential`). SSH
   fails inside sandboxed agent sessions (`No user exists for uid 501` — the

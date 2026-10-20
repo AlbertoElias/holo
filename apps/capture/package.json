@@ -23,6 +23,7 @@
     "test:xr:flows": "node scripts/run-xr-checks.mjs locomotion",
     "test:xr:hands": "node scripts/run-xr-checks.mjs hands",
     "test:xr:height": "node scripts/run-xr-checks.mjs height",
+    "test:xr:terrain": "node scripts/run-xr-checks.mjs terrain",
     "test:xr:body": "node scripts/run-xr-checks.mjs body",
     "fixtures:hands": "node scripts/run-xr-checks.mjs pose-fixture",
     "fixtures:body": "node scripts/run-xr-checks.mjs body-fixtures",

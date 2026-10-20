@@ -18,5 +18,22 @@
       "Bash(git worktree:*)",
       "Bash(git merge:*)"
     ]
-  }
+  },
+  "enabledPlugins": {
+    "vercel@claude-plugins-official": false
+  },
+  "autoCompactWindow": 400000,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/agent-node-env.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "model": "sonnet"
 }

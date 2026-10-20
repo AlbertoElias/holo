@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test src/dev-server.test.mjs",
-    "verify:fast": "node --check src/dev-server.mjs && node --check src/xr-env.mjs && pnpm run test"
+    "verify:fast": "node --check src/dev-server.mjs && node --check src/xr-env.mjs && node --check src/preview.mjs && pnpm run test"
   },
   "exports": {
     "./dev-server": {
@@ -15,6 +15,10 @@
     "./xr-env": {
       "types": "./src/xr-env.d.ts",
       "default": "./src/xr-env.mjs"
+    },
+    "./preview": {
+      "types": "./src/preview.d.ts",
+      "default": "./src/preview.mjs"
     }
   },
   "dependencies": {
