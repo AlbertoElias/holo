@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { InputRecordingSession } from '../debug/inputRecording';
+import { nextFrame, withTimeout } from '../shared/async';
 import type { UIStateStore } from '../ui/UIStateStore';
 import { AudioRecorder } from './AudioRecorder';
 import { AvatarRecorder } from './AvatarRecorder';
@@ -17,6 +18,8 @@ interface RecordingSessionDeps {
  * audio, and (in development) the raw headset input behind it. Avatar size
  * stays locked from start until the export finishes.
  */
+const EXPORT_TIMEOUT_MS = 60_000;
+
 export class RecordingSession {
   readonly recorder = new AvatarRecorder();
   private readonly audio = new AudioRecorder();
@@ -71,23 +74,26 @@ export class RecordingSession {
     ui.setRecordingState('exporting', 'Exporting...');
     this.recorder.setEnabled(false);
 
-    let audioData: { buffer: ArrayBuffer; mimeType: string } | undefined;
-    if (this.audio.isRecording()) {
-      try {
-        audioData = await this.audio.stop();
-      } catch {
-        // Audio export is best-effort; continue without it
-      }
-    }
-
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
     try {
       const { avatar, worldModel } = this.deps.getAvatar();
       if (!avatar) throw new Error('No avatar to export');
       const baseName = `avatar-recording-${Date.now()}`;
+      // Save the headset input first: nothing below may stall it.
       await this.finishInputRecording(baseName);
-      const blob = await this.recorder.exportToGlbBlob(avatar, worldModel, audioData);
+
+      let audioData: { buffer: ArrayBuffer; mimeType: string } | undefined;
+      if (this.audio.isRecording()) {
+        try {
+          audioData = await this.audio.stop();
+        } catch {
+          // Audio export is best-effort; continue without it
+        }
+      }
+
+      // Frames stop when the headset sleeps or the session ends; an
+      // unbounded wait here once froze the UI in "exporting" (B-010).
+      await nextFrame();
+      const blob = await withTimeout(this.recorder.exportToGlbBlob(avatar, worldModel, audioData), EXPORT_TIMEOUT_MS, 'GLB export timed out after 60s');
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
