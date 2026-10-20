@@ -120,7 +120,10 @@ npm run test:xr:flows
 npm run ci:vr:flows
 ```
 
-`npm run test:xr` runs both suites against one dev server.
+`npm run test:xr` runs every check against one dev server, several at a time
+(`XR_CHECK_CONCURRENCY`, logs in `output/xr-checks/`). While iterating, run one
+check (`test:xr:body`, `test:xr:hands`, ...) and one fixture
+(`XR_REPLAY_ONLY=walk-forward`); see "Fast Agent Loop" in `AGENT_CONTRACT.md`.
 
 This suite runs inside an IWER-backed VR session and validates:
 - forward, back, left, and right travel at four head yaws, each landing nearest

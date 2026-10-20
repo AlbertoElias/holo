@@ -64,6 +64,13 @@ and session length multiplies it.
 - Send broad searches and file sweeps to a subagent so only its conclusion
   enters the conversation. Print excerpts (`sed -n`, `grep`, `head`) instead
   of whole large files or logs.
+- Iterate on the narrowest check, then widen once: one capture XR check
+  (`pnpm --filter @holoim/capture run test:xr:body`), one replay fixture
+  (`XR_REPLAY_ONLY=<name>`), and the full tier only before pushing. See
+  "Fast Agent Loop" in `AGENT_CONTRACT.md`.
+- Node must be 22 (`.nvmrc`). Claude Code sessions get it from a SessionStart
+  hook; in other shells run `eval "$(scripts/agent-node-env.sh)"`. Never switch
+  the machine-wide Node (`n <version>`): other sessions share it.
 
 ## Sharing work between agents
 
@@ -75,7 +82,10 @@ Work in your own worktree by default; the main checkout is the integration point
 - For implementation work, create a worktree on your own branch and install
   there (pnpm's shared store makes this cheap):
   `git worktree add .worktrees/<task> -b <type>/<task> origin/main`, then
-  `pnpm install` in that directory. One feature or agent per worktree. Branch
+  `pnpm install` in that directory. If typecheck reports clashing
+  `@types/three` copies in a reused worktree, its `node_modules` is stale:
+  `rm -rf node_modules apps/*/node_modules packages/*/node_modules && pnpm install`
+  (seconds, from the shared store). One feature or agent per worktree. Branch
   by change type, never by agent: `feature/`, `bug/`, `docs/`, `infra/`
   (e.g. `feature/ar-recenter`, `infra/metavr-setup`).
 - The exception is a short, sequential fix when the relevant files are clean:

@@ -155,6 +155,14 @@ try {
     await waitForPageFunctions(page, ['__setManualClock', 'render_game_to_text', 'advanceTime']);
     await waitForTextContentPrefix(page, '#status', 'loaded');
     await waitForIwerRuntime(page);
+    // Settle the character on simulated time before the baseline: how far the
+    // real-time clock ran since load depends on host load, and an unsettled
+    // baseline breaks the grounding invariant below.
+    await page.evaluate(() => {
+      const app = window as unknown as HeightWindow;
+      app.__setManualClock(true, false);
+      app.advanceTime(2000);
+    });
     const baseline = await sample(page);
     if (label === 'seated') assert(baseline.heightAdaptation.minY > 0.15, 'fixture has nonzero base origin');
     await page.evaluate((y: number) => {

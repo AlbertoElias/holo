@@ -8,8 +8,10 @@ import {
   captureXrScreenshot,
   createXrContext,
   enterIwerSessionFromButton,
+  filterReplayFixtures,
   freezePageClock,
   launchXrBrowser,
+  mapWithConcurrency,
   resolveSimulationViewport,
   waitForIwerRuntime,
   waitForPageFunctions,
@@ -29,7 +31,8 @@ import { analyzeBodyReplay, formatBodyReport } from './lib/body-fidelity.mjs';
 // BODY_REPLAY_FAULTS=1 instead breaks each behavior in turn (debug hook
 // __setBodyFaults) and requires the named metric to fail, proving the check
 // can catch it; BODY_REPLAY_FAULT=<name> runs one. BODY_REPLAY_CONCURRENCY sets
-// how many replays run at once (default 2).
+// how many replays run at once (default 2). XR_REPLAY_ONLY=<substring> keeps
+// only matching fixtures (and, with faults, the faults that replay them).
 
 const STEP_MS = 1000 / 30;
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -55,14 +58,17 @@ const FAULTS = {
   'fidget-steps': { fixture: 'iwer-small-steps-and-sway', metrics: ['stepsWhileStillMax'] }
 };
 
-const fixtures = (await readdir(fixtureDir).catch(() => []))
+const fixtures = filterReplayFixtures((await readdir(fixtureDir).catch(() => []))
   .filter((name) => name.endsWith('.json'))
-  .sort();
+  .sort());
 if (fixtures.length === 0) throw new Error(`No body recordings in ${fixtureDir}. Run fixtures:body or record one on a headset (apps/capture/README.md).`);
 await mkdir(artifactDir, { recursive: true });
 
 const browser = await launchXrBrowser(chromium);
 const consoleErrors = [];
+// Replays run two at a time by default (each page has its own frozen clock,
+// so results do not change); videos one at a time.
+const concurrency = videoFrameDir ? 1 : Math.max(1, Number(process.env.BODY_REPLAY_CONCURRENCY ?? 2));
 
 async function replay(fileName, { faults = [], video = false, screenshot = false } = {}) {
   const label = `${path.basename(fileName, '.json')}${faults.length ? `--${faults.join('+')}` : ''}`;
@@ -175,15 +181,15 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
 
 try {
   if (faultMode) {
-    const outcomes = [];
     const only = process.env.BODY_REPLAY_FAULT;
-    for (const [fault, { fixture, metrics }] of Object.entries(FAULTS)) {
-      if (only && fault !== only) continue;
+    const selected = Object.entries(FAULTS)
+      .filter(([fault, { fixture }]) => (!only || fault === only) && fixtures.includes(`${fixture}.json`));
+    const outcomes = await mapWithConcurrency(selected, concurrency, async ([fault, { fixture, metrics }]) => {
       const report = await replay(`${fixture}.json`, { faults: [fault] });
       const caught = report.failures.filter((failure) => metrics.some((metric) => failure.startsWith(`${metric}:`)));
-      outcomes.push({ fault, fixture, expected: metrics, caught: caught.length > 0, failures: report.failures });
       console.log(`[body-faults] ${fault} on ${fixture}: ${caught.length ? `caught — ${caught.join('; ')}` : `NOT caught (failures: ${report.failures.join('; ') || 'none'})`}`);
-    }
+      return { fault, fixture, expected: metrics, caught: caught.length > 0, failures: report.failures };
+    });
     await writeFile(path.join(artifactDir, 'fault-matrix.json'), JSON.stringify(outcomes, null, 2));
     const missed = outcomes.filter((outcome) => !outcome.caught);
     if (missed.length > 0) throw new Error(`Body metrics missed faults: ${missed.map((outcome) => outcome.fault).join(', ')}`);
@@ -192,18 +198,9 @@ try {
     if (videoFrameDir) {
       for (const fileName of fixtures) await mkdir(path.join(videoFrameDir, path.basename(fileName, '.json')), { recursive: true });
     }
-    // Replays run two at a time (each page has its own frozen clock, so
-    // results do not change); videos one at a time.
-    const concurrency = videoFrameDir ? 1 : Math.max(1, Number(process.env.BODY_REPLAY_CONCURRENCY ?? 2));
-    const reports = new Array(fixtures.length);
-    let next = 0;
-    await Promise.all(Array.from({ length: Math.min(concurrency, fixtures.length) }, async () => {
-      while (next < fixtures.length) {
-        const index = next;
-        next += 1;
-        reports[index] = await replay(fixtures[index], { video: Boolean(videoFrameDir), screenshot: captureScreenshots });
-      }
-    }));
+    const reports = await mapWithConcurrency(fixtures, concurrency, (fileName) => (
+      replay(fileName, { video: Boolean(videoFrameDir), screenshot: captureScreenshots })
+    ));
     for (const report of reports) console.log(formatBodyReport(report));
     const failures = reports.flatMap((report) => report.failures.map((failure) => `${report.label}: ${failure}`));
     if (consoleErrors.length > 0) failures.push(`console errors:\n${consoleErrors.join('\n')}`);
