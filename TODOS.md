@@ -104,7 +104,7 @@ it from the item below instead of duplicating its status here.
 
 - [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered
   ECS systems, keeping Rapier and its algorithms
-  ([brief](docs/features/iwsdk-runtime-refactor.md)). Native scene composition
+  ([brief](docs/features/archive/iwsdk-runtime-refactor.md)). Native scene composition
   remains unused until a concrete authoring workflow requires it.
 - [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
   reviewing its device access, native dependencies, and install-script requirements.

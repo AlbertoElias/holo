@@ -1,7 +1,7 @@
 # Feature brief: Native IWSDK capture runtime refactor
 
 **Lead:** Claude Code
-**Status:** Verifying on `infra/iwsdk-runtime-refactor` (from `origin/main` `de26df9eb70c`)
+**Status:** Complete — merged to `main` as `971b076065e2` on 2026-10-20 (branch `infra/iwsdk-runtime-refactor`, from `de26df9eb70c`)
 **Prepared:** 2026-10-19
 
 The user added a requirement when implementation started: treat the migration
@@ -70,10 +70,10 @@ when starting):
 
 ## Prototype inventory: reuse and limits
 
-Read [the prototype guide](../IWSDK_RUNTIME_PROTOTYPE.md),
-[verification](../evidence/iwsdk-runtime-prototype/verification.md),
-[native JSON](../evidence/iwsdk-runtime-prototype/native-runtime.json), and
-[hand metrics](../evidence/iwsdk-runtime-prototype/hand-replay.json).
+Read [the prototype guide](../../IWSDK_RUNTIME_PROTOTYPE.md),
+[verification](../../evidence/iwsdk-runtime-prototype/verification.md),
+[native JSON](../../evidence/iwsdk-runtime-prototype/native-runtime.json), and
+[hand metrics](../../evidence/iwsdk-runtime-prototype/hand-replay.json).
 
 - Verified set: IWSDK core/CLI/dev-plugin/scene-composition 1.0.1, IWER 2.6.0,
   shared `super-three` r181, UIKit 1.0.77. Current main still declares IWSDK
@@ -529,7 +529,7 @@ off.
 | Pipeline | capture-to-viewer and bubble-capture passed in all 5 refactor runs (the last after the B-016 export change). Portal passed 3 of 5: both failures were the viewer's phone-feed vertical-swipe assertions (`swipe scrolls the feed while playing`, `vertical swipe still browses`), the intermittent failure main's own CI showed (run 39193786345, room-scale brief); 2 local runs on main passed | `pipeline*.log` |
 | Viewer AR / mocked | 9/9 pass | `xr-smoke.log` |
 | `verify:pr` | doctor, lint, typecheck, all unit tests and every build pass. Knowledge Atlas e2e fails identically on untouched main here: another session's Atlas server holds 127.0.0.1:4176 and the config reuses it, so fixtures written in this worktree are never served (`check:docs` passes) | `verify-pr.log` |
-| Native ECS through the outer CLI | Systems listed in frame order; pause holds state through wall time; `ecs step` advances exactly N steps and N/60 s; native recording samples once per step at simulation time; toggling `RecordingSystem` stops and resumes samples; refit refused on desktop and while recording, accepted after export; VR enter/exit through World's offered session; no browser errors | [CLI transcript](../evidence/iwsdk-runtime-refactor/ecs-cli-transcript.md) |
+| Native ECS through the outer CLI | Systems listed in frame order; pause holds state through wall time; `ecs step` advances exactly N steps and N/60 s; native recording samples once per step at simulation time; toggling `RecordingSystem` stops and resumes samples; refit refused on desktop and while recording, accepted after export; VR enter/exit through World's offered session; no browser errors | [CLI transcript](../../evidence/iwsdk-runtime-refactor/ecs-cli-transcript.md) |
 | Reload and re-entry | After a source edit the managed page reloads with one canvas and one set of systems; two VR enter/exit cycles re-offer the session, track controllers, no errors; World's unused player meshes stay invisible on desktop and in VR | managed runtime on 5874 |
 
 #### Ported device-session fixes (2026-10-20)
@@ -601,3 +601,15 @@ Atlas spec fix, auto-deploy): typecheck, lint and unit tests pass; the full
 capture XR suite and body pass with every sample still byte-identical; the
 production build preserves both GLBs and loads in 286 ms with a 48 MB heap and
 no errors.
+
+#### Landing (2026-10-20)
+
+Before landing, `origin/main` `e6e115ae8f5d` was merged in and branch CI run
+39424935399 found the viewer's AR placement check timing out: the SDK upgrade
+had let pnpm resolve the viewer's IWSDK 0.5.3 emulator (`iwer`, `@iwer/sem`,
+`@iwer/devui`) and `@react-three/uikit` to the newer IWER 2.6 / UIKit 1.0.77
+capture brought in. Scoped overrides restored main's exact viewer resolution;
+branch CI run 39426911430 then passed every job. Merged as `971b076065e2`;
+main CI run 39428222168 and Deploy run 39429563552 (API, capture, viewer)
+succeeded. https://holoim-capture.pages.dev serves the World runtime and loads
+with no console errors (48 MB heap, one canvas).

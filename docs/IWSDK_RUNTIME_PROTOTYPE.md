@@ -2,7 +2,7 @@
 
 This was an isolated experiment on `infra/iwsdk-prototype`, not a production
 migration. The production refactor is
-[the IWSDK runtime refactor brief](features/iwsdk-runtime-refactor.md); it
+[the IWSDK runtime refactor brief](features/archive/iwsdk-runtime-refactor.md); it
 ported the prototype's useful seams onto current main and replaced the
 compatibility wrapper this page describes. The prototype branch and its
 `iwsdk-prototype.html` entry were not merged. The rest of this page is the

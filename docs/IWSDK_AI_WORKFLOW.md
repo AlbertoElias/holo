@@ -89,7 +89,7 @@ exercising controls, or the hand replay check will pick them up.
 
 `apps/capture/src/runtime/` composes World and capture; `src/systems/` holds the
 ordered systems (see the frame contract in
-[the refactor brief](features/iwsdk-runtime-refactor.md)). Deliberate
+[the refactor brief](features/archive/iwsdk-runtime-refactor.md)). Deliberate
 boundaries with the SDK:
 
 - Capture's frame loop replaces World's built-in loop (one `world.update` per

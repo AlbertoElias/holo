@@ -15,7 +15,7 @@ at a proposal or leave the old orchestrator wrapped as the final result.
 
 The handoff is on `origin/infra/iwsdk-prototype`. First read:
 
-- `docs/features/iwsdk-runtime-refactor.md` — the authoritative scope, architecture,
+- `docs/features/archive/iwsdk-runtime-refactor.md` — the authoritative scope, architecture,
   frame/transform contract, failure cases, delivery sequence, acceptance and gates.
 - `docs/IWSDK_RUNTIME_PROTOTYPE.md` and `docs/evidence/iwsdk-runtime-prototype/`
   — successful older prototype and its actual limits.
