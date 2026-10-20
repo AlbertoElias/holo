@@ -88,7 +88,7 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |
-| Branch CI | `gh workflow run CI --ref <branch>` | ~6.5 min |
+| Branch CI | `gh workflow run CI --ref <branch>` | ~4.5–6.5 min |
 
 - Run anything that can pass two minutes (the full XR suite, `verify:pr`,
   CI) in the background and wait for its completion notice. To wait on CI, run
@@ -101,6 +101,14 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 - Parallel checks write each check's output to
   `apps/capture/output/xr-checks/<name>.log` and print it when the check ends.
   Set `XR_CHECK_CONCURRENCY=1` for serial, streamed output.
+- CI pins `XR_CHECK_CONCURRENCY=2` on the capture XR step. This private
+  repo's `ubuntu-latest` runner has 2 vCPUs, where the default would run
+  serially (~280–300 s); 2-wide runs each check ~1.5× slower but finishes in
+  ~205–250 s. Concurrent cold page loads can pass the 30 s goto limit, so
+  parallel runs start with the cheapest check alone to warm Vite; 3-wide
+  timed out even so. The
+  pipeline job (~250–390 s, mostly the capture-to-viewer spec and its USDZ
+  Python checks) is then the CI long pole.
 - Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`) screenshot every frame
   and multiply wall time; combine them with `XR_REPLAY_ONLY`.
 
@@ -155,7 +163,7 @@ Supported env vars for smoke and XR scripts:
 - `BODY_REPLAY_CONCURRENCY` (default `2` body replays at once; results do not depend on it)
 - `HAND_REPLAY_CONCURRENCY` (default `2` hand replays at once; results do not depend on it)
 - `XR_REPLAY_ONLY` (substring, comma-separated for several: replay only matching hand or body fixtures; with `BODY_REPLAY_FAULTS=1`, only faults on those fixtures)
-- `XR_CHECK_CONCURRENCY` (capture XR checks run at once by `test:xr*`; default half the CPUs, from 1 to 3; results do not depend on it)
+- `XR_CHECK_CONCURRENCY` (capture XR checks run at once by `test:xr*`; default half the CPUs, from 1 to 3; CI sets 2; results do not depend on it)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 

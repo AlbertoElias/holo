@@ -127,9 +127,12 @@ try {
   if (parallel) {
     await mkdir(logDir, { recursive: true });
     const ordered = [...requested].sort((left, right) => (CHECK_COST[right] ?? 0) - (CHECK_COST[left] ?? 0));
+    // The cheapest check runs alone first so Vite transforms the app once;
+    // concurrent cold page loads on a 2-vCPU CI runner pass the 30 s goto limit.
+    const warmup = ordered.pop();
+    const settle = (name) => runCheck(name).then(() => null, (caught) => caught);
     // Every check runs to the end so one failure reports all of them.
-    const errors = (await mapWithConcurrency(ordered, concurrency, (name) => runCheck(name).then(() => null, (caught) => caught)))
-      .filter(Boolean);
+    const errors = [await settle(warmup), ...(await mapWithConcurrency(ordered, concurrency, settle))].filter(Boolean);
     if (errors.length > 0) throw new Error(errors.map((caught) => caught.message).join('; '));
   } else {
     for (const name of requested) await runCheck(name);

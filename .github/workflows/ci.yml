@@ -115,6 +115,8 @@ jobs:
       - run: pnpm --filter @holoim/api prisma:generate
       - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
       - name: Capture XR checks
+        env:
+          XR_CHECK_CONCURRENCY: "2"
         run: pnpm timed xr-capture -- pnpm run test:xr:capture
       - name: Upload failure diagnostics
         if: failure()
