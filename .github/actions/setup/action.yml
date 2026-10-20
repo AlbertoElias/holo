@@ -1,0 +1,46 @@
+name: Set up workspace
+description: >-
+  pnpm, Node 24, frozen install, the viewer API .env and Prisma client, and
+  optionally a cached Playwright Chromium. Run after actions/checkout.
+
+inputs:
+  pnpm-version:
+    description: pnpm version to install
+    required: true
+  playwright:
+    description: Install Playwright Chromium ("true" or "false")
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: ${{ inputs.pnpm-version }}
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: pnpm
+    - shell: bash
+      run: pnpm install --frozen-lockfile
+    - shell: bash
+      run: cp apps/viewer-api/.env.example apps/viewer-api/.env
+    - shell: bash
+      run: pnpm --filter @holoim/api prisma:generate
+    - name: Cache Playwright browsers
+      id: playwright-cache
+      if: inputs.playwright == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+    # A cache hit restores the browser binaries; the system libraries they
+    # need still come from apt on every fresh runner.
+    - name: Install Playwright Chromium
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+    - name: Install Playwright system dependencies
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: pnpm --filter @holoim/capture exec playwright install-deps chromium

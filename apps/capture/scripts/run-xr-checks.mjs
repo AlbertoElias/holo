@@ -41,8 +41,9 @@ const CHECK_TIMEOUT_MS = {
   body: 360000
 };
 
-// Local wall time in seconds; parallel runs start the longest first.
-const CHECK_COST = { body: 41, hands: 23, height: 18, terrain: 16, locomotion: 10, 'mock-vr': 8, recording: 5 };
+// Serial wall time in seconds on a 2-vCPU CI runner (CI run 39499697917);
+// parallel runs start the longest first and XR_SHARD balances on it.
+const CHECK_COST = { body: 83, height: 45, terrain: 38, hands: 31, locomotion: 21, 'mock-vr': 18, recording: 11 };
 
 const listed = process.argv.slice(2);
 const unknown = listed.filter((name) => !(name in CHECKS));
