@@ -130,24 +130,33 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: Viewer and Knowledge browser checks
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Independent suites; one runner each keeps them off the critical path.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Knowledge Atlas browser checks
+            label: knowledge
+            script: test:knowledge
+          - name: Viewer AR checks
+            label: xr-viewer
+            script: test:xr:viewer
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
           playwright: "true"
-      - name: Knowledge Atlas browser checks
-        run: pnpm timed knowledge -- pnpm run test:knowledge
-      - name: Viewer AR checks
-        run: pnpm timed xr-viewer -- pnpm run test:xr:viewer
+      - name: ${{ matrix.name }}
+        run: pnpm timed ${{ matrix.label }} -- pnpm run ${{ matrix.script }}
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-failure-${{ github.run_id }}
+          name: e2e-failure-${{ matrix.label }}-${{ github.run_id }}
           path: |
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
@@ -160,7 +169,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-timings-${{ github.run_id }}
+          name: e2e-timings-${{ matrix.label }}-${{ github.run_id }}
           path: output/test-results
           if-no-files-found: ignore
           retention-days: 7
@@ -279,7 +288,7 @@ jobs:
             echo "| Quality | ${QUALITY_RESULT} |"
             echo "| Build | ${BUILD_RESULT} |"
             echo "| Capture XR checks (all shards) | ${CAPTURE_XR_RESULT} |"
-            echo "| Viewer and Knowledge browser checks | ${E2E_RESULT} |"
+            echo "| Viewer and Knowledge browser checks (both jobs) | ${E2E_RESULT} |"
             echo "| Capture to viewer pipeline (all shards) | ${PIPELINE_RESULT} |"
             echo "| Portal view end-to-end | ${PORTAL_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
