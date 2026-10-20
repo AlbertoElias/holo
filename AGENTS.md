@@ -68,7 +68,8 @@ and session length multiplies it.
 ## Sharing work between agents
 
 Multiple agents share this repo, so uncommitted work is invisible to the others.
-Work in your own worktree by default; the main checkout is the integration point.
+Always work in your own worktree under `.worktrees/`; the main checkout is the
+integration point only and never takes edits.
 
 - Before starting, run `git fetch` and check `git status`; read any in-flight
   brief in `docs/features/README.md` before touching overlapping files.
@@ -77,17 +78,20 @@ Work in your own worktree by default; the main checkout is the integration point
   `git worktree add .worktrees/<task> -b <type>/<task> origin/main`, then
   `pnpm install` in that directory. One feature or agent per worktree. Branch
   by change type, never by agent: `feature/`, `bug/`, `docs/`, `infra/`
-  (e.g. `feature/ar-recenter`, `infra/metavr-setup`).
-- The exception is a short, sequential fix when the relevant files are clean:
-  it may go directly in a free checkout. Never edit files another agent has
-  modified in a shared tree.
+  (e.g. `feature/ar-recenter`, `infra/metavr-setup`). Never edit files another
+  agent has modified in a shared tree.
 - Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`),
   dev servers, and local databases are still shared, so only one agent runs
-  the XR harness or a dev server at a time unless ports are reassigned.
+  the XR harness or a dev server at a time unless ports are reassigned via
+  `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`.
 - As soon as your change is working and verified, commit and push your branch.
-  You are pre-authorized to commit and push within this workflow; do not stop
-  to ask for approval. Stage only the files you changed by name — never commit
-  another agent's in-progress work, and never use a broad `git add`.
+  You are pre-authorized to commit, push, open a pull request, and merge on
+  green CI without asking; do not stop for approval on those steps. After
+  merge, confirm the automated deploy health checks passed and report the
+  live URLs. Still ask before product or scope decisions, secret or billing
+  changes, and destructive operations (force-push, volume or snapshot
+  actions). Stage only the files you changed by name — never commit another
+  agent's in-progress work, and never use a broad `git add`.
 - Git transport is HTTPS with the `gh` credential helper (repo-local config:
   `credential.https://github.com.helper` → `gh auth git-credential`). SSH
   fails inside sandboxed agent sessions (`No user exists for uid 501` — the

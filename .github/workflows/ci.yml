@@ -68,11 +68,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
       - run: pnpm --filter @holoim/api prisma:generate
+      - name: Cache KTX-Software
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ktx.tar.bz2
+          key: ktx-4.4.2-linux-x86_64
       - name: Install KTX-Software
         env:
           KTX_VERSION: 4.4.2
         run: |
-          curl -fsSL -o /tmp/ktx.tar.bz2 "https://github.com/KhronosGroup/KTX-Software/releases/download/v${KTX_VERSION}/KTX-Software-${KTX_VERSION}-Linux-x86_64.tar.bz2"
+          if [ ! -f /tmp/ktx.tar.bz2 ]; then curl -fsSL -o /tmp/ktx.tar.bz2 "https://github.com/KhronosGroup/KTX-Software/releases/download/v${KTX_VERSION}/KTX-Software-${KTX_VERSION}-Linux-x86_64.tar.bz2"; fi
           tar -xjf /tmp/ktx.tar.bz2 -C "${RUNNER_TEMP}"
           KTX_ROOT="$(find "${RUNNER_TEMP}" -maxdepth 1 -type d -name 'KTX-Software-*' | head -n 1)"
           test -n "${KTX_ROOT}"
@@ -105,6 +110,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
       - run: pnpm --filter @holoim/api prisma:generate
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
       - name: Knowledge Atlas browser checks
         run: pnpm timed knowledge -- pnpm run test:knowledge
@@ -178,6 +188,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: cp apps/viewer-api/.env.example apps/viewer-api/.env
       - run: pnpm --filter @holoim/api prisma:generate
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
       - name: Portal gestures and real capture
         run: pnpm timed portal -- pnpm run test:portal
