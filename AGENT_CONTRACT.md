@@ -38,6 +38,7 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - `pnpm run test:xr:viewer`
 - `pnpm run test:xr:all`
 - `pnpm run test:smoke:pipeline`
+- `pnpm run test:portal`
 - `pnpm run dev:capture:ai`
 - `pnpm run dev:capture:agent`
 - `pnpm run dev:capture:status`
@@ -66,7 +67,8 @@ Run automation from these scripts unless a task explicitly requires lower-level 
   run application suites solely because a Markdown file changed.
 - Required before opening or updating a pull request: run `pnpm run verify:pr`.
 - `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
-  the viewer AR checks, and the capture → viewer pipeline. `verify:full` is an
+  the viewer AR checks, the capture → viewer pipeline, and the portal view
+  checks (`test:portal`: mocked gestures plus a real capture). `verify:full` is an
   alias kept for older notes.
 - If GLTF export/import contract is touched, run:
   1. `pnpm run verify:repo:capture`

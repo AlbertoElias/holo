@@ -67,7 +67,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build viewer
-        run: pnpm --filter @holoim/web build
+        # The `...` suffix also builds workspace dependencies (contracts)
+        # whose dist entry the viewer bundle resolves.
+        run: pnpm --filter @holoim/web... run build
         env:
           VITE_API_ORIGIN: https://holoim-api.fly.dev
       - name: Deploy to Pages

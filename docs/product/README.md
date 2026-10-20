@@ -44,6 +44,7 @@ artifact needs it.
 - [Vision](VISION.md): the product thesis and communication principles.
 - [Idea registry](IDEAS.md): all currently captured ideas, by layer.
 - [Concepts](concepts/README.md): grouped thinking that remains deliberately fluid.
+- [PRD index](prds/README.md): every PRD, grouped by what it waits on.
 - [PRD template](prds/PRD-TEMPLATE.md): format for ideas that are ready to deepen.
 - [Research questions](research/open-questions.md): evidence needed before choosing a direction.
 

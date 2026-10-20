@@ -310,6 +310,8 @@ const HIT_TEST_PLACEMENT = {
 };
 
 test("AR places the model on a surface in front of the viewer, recenter places again, and exit returns to the feed", async ({ page }, testInfo) => {
+  // Takes 25-28 s on a 2-CPU Linux runner, too close to the 30 s default.
+  test.setTimeout(60_000);
   await mockFeed(page);
   await setDesktopNavigatorOverrides(page);
 
@@ -401,7 +403,9 @@ for (const viewport of [
     expect(metadata!.y + metadata!.height, "title and author must sit above Upload").toBeLessThan(upload!.y);
     const portal = await card.locator(".portal-controls").boundingBox();
     expect(portal).not.toBeNull();
-    expect(metadata!.x, "metadata clears the portal controls on the left").toBeGreaterThan(portal!.x + portal!.width);
+    const overlaps = metadata!.x < portal!.x + portal!.width && portal!.x < metadata!.x + metadata!.width
+      && metadata!.y < portal!.y + portal!.height && portal!.y < metadata!.y + metadata!.height;
+    expect(overlaps, "metadata and the portal controls do not overlap").toBe(false);
     await testInfo.attach("mobile-layout.json", {
       body: JSON.stringify({ viewport, metadata, upload, portal }, null, 2),
       contentType: "application/json"

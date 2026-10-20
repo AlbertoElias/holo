@@ -8,8 +8,9 @@ import type { PortalTriggers } from "./portalVariant";
 // Triggers translate input into portal actions. Each one checks its variant
 // switch at event time, so pausing or changing variant needs no re-binding.
 
+// A tap is a press released without moving; its duration does not matter,
+// so a slow device or a loaded test runner cannot turn a tap into nothing.
 const TAP_MAX_MOVE_PX = 10;
-const TAP_MAX_MS = 400;
 /** A drag across the full card width turns the view half a circle. */
 const ORBIT_RADIANS_PER_CARD_WIDTH = Math.PI;
 const WHEEL_ZOOM_PER_PIXEL = 0.0015;
@@ -22,7 +23,7 @@ const TILT_MAX_RADIANS = MathUtils.degToRad(75);
 const TILT_FOLLOW_DEADZONE_RADIANS = MathUtils.degToRad(6);
 const INTERACTIVE_SELECTOR = "button, a, input, textarea, select, label";
 
-type Pointer = { x: number; y: number; startX: number; startY: number; startTime: number; type: string };
+type Pointer = { x: number; y: number; startX: number; startY: number };
 
 function isInteractive(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
@@ -56,13 +57,15 @@ export function usePortalTriggers(
 
     const onPointerDown = (event: PointerEvent) => {
       if (isInteractive(event.target) || (event.pointerType === "mouse" && event.button !== 0)) return;
+      if (pointers.size === 0) {
+        dragging = false;
+        lastPinch = 0;
+      }
       pointers.set(event.pointerId, {
         x: event.clientX,
         y: event.clientY,
         startX: event.clientX,
-        startY: event.clientY,
-        startTime: event.timeStamp,
-        type: event.pointerType
+        startY: event.clientY
       });
       if (pointers.size === 2) {
         lastPinch = pinchDistance(pointers);
@@ -103,7 +106,6 @@ export function usePortalTriggers(
       if (!pointer) return;
       const wasTap = !dragging
         && pointers.size === 0
-        && event.timeStamp - pointer.startTime <= TAP_MAX_MS
         && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) <= TAP_MAX_MOVE_PX;
       if (pointers.size === 0) dragging = false;
       if (pointers.size < 2) lastPinch = 0;
@@ -126,10 +128,14 @@ export function usePortalTriggers(
         store.zoomByScale(Math.exp(-event.deltaY * CTRL_WHEEL_ZOOM_PER_PIXEL));
         return;
       }
-      if (paused && triggers.wheelZoomWhilePaused) {
-        event.preventDefault();
-        store.zoomByScale(Math.exp(-event.deltaY * WHEEL_ZOOM_PER_PIXEL));
-      }
+      const overBubble = event.target instanceof Element && event.target.closest(".feed-card-bubble-shell") !== null;
+      if (!(paused && triggers.wheelZoomWhilePaused) && !(overBubble && triggers.wheelZoomOverBubble)) return;
+      // Fully zoomed out, wheeling further out belongs to the feed.
+      const { mode, zoom } = store.getState();
+      const atOutsideEnd = mode === "follow" || zoom >= 1;
+      if (!paused && event.deltaY > 0 && atOutsideEnd) return;
+      event.preventDefault();
+      store.zoomByScale(Math.exp(-event.deltaY * WHEEL_ZOOM_PER_PIXEL));
     };
 
     // Keyboard works in every variant so the portal stays usable without a pointer.
@@ -174,17 +180,19 @@ export function usePortalTriggers(
       if (handled) event.preventDefault();
     };
 
+    // Gestures start on the card but may end anywhere, such as over the
+    // upload panel; releases are heard on the window so none is missed.
     card.addEventListener("pointerdown", onPointerDown);
     card.addEventListener("pointermove", onPointerMove);
-    card.addEventListener("pointerup", onPointerUp);
-    card.addEventListener("pointercancel", onPointerCancel);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
     card.addEventListener("wheel", onWheel, { passive: false });
     card.addEventListener("keydown", onKeyDown);
     return () => {
       card.removeEventListener("pointerdown", onPointerDown);
       card.removeEventListener("pointermove", onPointerMove);
-      card.removeEventListener("pointerup", onPointerUp);
-      card.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       card.removeEventListener("wheel", onWheel);
       card.removeEventListener("keydown", onKeyDown);
     };
