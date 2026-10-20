@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig } from "@playwright/test";
 import { XR_CHROMIUM_ARGS, XR_CONTEXT_OPTIONS } from "@holoim/tooling-testing/xr-env";
 
@@ -40,8 +41,15 @@ const webServers = [
     : [])
 ];
 
+// Per-test durations land beside the CI step timings (one file per pnpm script).
+const suiteName = (process.env.npm_lifecycle_event ?? "test-e2e").replace(/[^a-zA-Z0-9_-]+/g, "-");
+
 export default defineConfig({
   testDir: "./e2e",
+  reporter: [
+    [process.env.CI ? "dot" : "list"],
+    ["json", { outputFile: path.resolve(import.meta.dirname, "../../output/test-results", `playwright-web-${suiteName}.json`) }]
+  ],
   use: {
     baseURL: e2eBaseUrl,
     ...XR_CONTEXT_OPTIONS,

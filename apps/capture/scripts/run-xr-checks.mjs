@@ -1,5 +1,5 @@
 import { closeSync, openSync, readFileSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -15,6 +15,10 @@ import {
 
 // Runs capture's browser XR checks against one shared dev server.
 // Usage: node scripts/run-xr-checks.mjs mock-vr locomotion
+// XR_SHARD=<index>/<total> (1-based) runs one deterministic slice of the
+// requested checks, balanced by CHECK_COST, so CI runners split the suite
+// without listing checks twice. Per-check durations are written to
+// output/test-results/xr-checks[-shard-<i>of<n>].json at the repo root.
 // XR_CHECK_CONCURRENCY sets how many checks run at once (default: half the
 // CPUs, from 1 to 3). Each check advances its own frozen page clock, so this
 // changes wall time only. Parallel checks write their output to
@@ -40,12 +44,40 @@ const CHECK_TIMEOUT_MS = {
 // Local wall time in seconds; parallel runs start the longest first.
 const CHECK_COST = { body: 41, hands: 23, height: 18, terrain: 16, locomotion: 10, 'mock-vr': 8, recording: 5 };
 
-const requested = process.argv.slice(2);
-const unknown = requested.filter((name) => !(name in CHECKS));
-if (requested.length === 0 || unknown.length > 0) {
+const listed = process.argv.slice(2);
+const unknown = listed.filter((name) => !(name in CHECKS));
+if (listed.length === 0 || unknown.length > 0) {
   console.error(`[xr-checks] Usage: run-xr-checks.mjs <${Object.keys(CHECKS).join('|')}>...${unknown.length ? ` (unknown: ${unknown.join(', ')})` : ''}`);
   process.exit(2);
 }
+
+// Greedy longest-first packing into the least-loaded shard; ties keep the
+// listed order, so every runner computes the same partition.
+function shardChecks(names, index, total) {
+  const loads = Array.from({ length: total }, () => ({ cost: 0, names: [] }));
+  const byCost = [...names].sort((left, right) => (CHECK_COST[right] ?? 0) - (CHECK_COST[left] ?? 0));
+  for (const name of byCost) {
+    const target = loads.reduce((best, load) => (load.cost < best.cost ? load : best));
+    target.cost += CHECK_COST[name] ?? 0;
+    target.names.push(name);
+  }
+  const selected = new Set(loads[index - 1].names);
+  return names.filter((name) => selected.has(name));
+}
+
+const shardMatch = /^(\d+)\/(\d+)$/.exec(process.env.XR_SHARD ?? '');
+if (process.env.XR_SHARD && (!shardMatch || Number(shardMatch[1]) < 1 || Number(shardMatch[1]) > Number(shardMatch[2]))) {
+  console.error(`[xr-checks] XR_SHARD must be <index>/<total> with 1 <= index <= total, got ${process.env.XR_SHARD}`);
+  process.exit(2);
+}
+const shard = shardMatch ? { index: Number(shardMatch[1]), total: Number(shardMatch[2]) } : null;
+const requested = shard ? shardChecks(listed, shard.index, shard.total) : listed;
+const timingsPath = path.resolve(
+  import.meta.dirname,
+  '../../../output/test-results',
+  `xr-checks${shard ? `-shard-${shard.index}of${shard.total}` : ''}.json`
+);
+const timings = [];
 
 const host = process.env.DEV_HOST ?? '127.0.0.1';
 const configuredPort = Number(process.env.DEV_PORT ?? '5174');
@@ -85,7 +117,8 @@ try {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
   const parallel = concurrency > 1 && requested.length > 1;
-  console.log(`[xr-checks] Running ${requested.join(', ')} against ${baseUrl}${parallel ? `, ${concurrency} at a time` : ''}`);
+  if (requested.length === 0) throw new Error(`shard ${process.env.XR_SHARD} selected no checks`);
+  console.log(`[xr-checks] Running ${requested.join(', ')}${shard ? ` (shard ${shard.index}/${shard.total})` : ''} against ${baseUrl}${parallel ? `, ${concurrency} at a time` : ''}`);
 
   if (!reuseDevServer) {
     devServer = startViteDevServer({
@@ -119,7 +152,9 @@ try {
         if (output) console.log(output.split('\n').map((line) => `[${name}] ${line}`).join('\n'));
       }
     }
-    const seconds = ((Date.now() - checkStartedAt) / 1000).toFixed(1);
+    const durationMs = Date.now() - checkStartedAt;
+    timings.push({ name, status: error ? 'failed' : 'passed', durationMs });
+    const seconds = (durationMs / 1000).toFixed(1);
     if (error) throw new Error(`${name} failed after ${seconds}s: ${error.message}`);
     console.log(`[xr-checks] ${name} passed in ${seconds}s`);
   };
@@ -153,6 +188,13 @@ try {
 }
 
 const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+try {
+  await mkdir(path.dirname(timingsPath), { recursive: true });
+  const summary = { shard: process.env.XR_SHARD ?? null, requested, totalMs: Date.now() - startedAt, checks: timings };
+  await writeFile(timingsPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
+} catch (error) {
+  console.warn(`[xr-checks] Could not write ${timingsPath}: ${error instanceof Error ? error.message : String(error)}`);
+}
 if (failure) {
   console.error(`[xr-checks] FAIL after ${elapsedSeconds}s: ${failure.message}`);
   process.exitCode = interruptedSignal === 'SIGINT' ? 130 : interruptedSignal === 'SIGTERM' ? 143 : 1;
