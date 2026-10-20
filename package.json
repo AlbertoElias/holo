@@ -74,7 +74,9 @@
     "overrides": {
       "sharp": "0.35.3",
       "three": "npm:super-three@0.181.0",
-      "@types/three": "0.173.0"
+      "@types/three": "0.173.0",
+      "@react-three/uikit>@pmndrs/uikit": "1.0.75",
+      "@iwsdk/vite-plugin-dev@0.5.3>iwer": "2.3.0"
     }
   }
 }

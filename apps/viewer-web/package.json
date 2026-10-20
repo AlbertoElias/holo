@@ -39,6 +39,7 @@
     "@iwsdk/scene-composition": "^0.5.3",
     "@iwsdk/vite-plugin-dev": "^0.5.3",
     "@playwright/test": "^1.50.1",
+    "@pmndrs/uikit": "1.0.75",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/react": "^18.3.18",

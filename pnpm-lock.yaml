@@ -38,6 +38,8 @@ overrides:
   sharp: 0.35.3
   three: npm:super-three@0.181.0
   '@types/three': 0.173.0
+  '@react-three/uikit>@pmndrs/uikit': 1.0.75
+  '@iwsdk/vite-plugin-dev@0.5.3>iwer': 2.3.0
 
 importers:
 
@@ -343,10 +345,13 @@ importers:
         version: 0.5.3
       '@iwsdk/vite-plugin-dev':
         specifier: ^0.5.3
-        version: 0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(@types/node@22.19.13)(@types/react@18.3.28)(css-to-react-native@3.2.0)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))
+        version: 0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.75(super-three@0.181.0))(@types/node@22.19.13)(@types/react@18.3.28)(css-to-react-native@3.2.0)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))
       '@playwright/test':
         specifier: ^1.50.1
         version: 1.58.2
+      '@pmndrs/uikit':
+        specifier: 1.0.75
+        version: 1.0.75(super-three@0.181.0)
       '@testing-library/jest-dom':
         specifier: ^6.6.3
         version: 6.9.1
@@ -1688,6 +1693,11 @@ packages:
 
   '@pmndrs/uikit-pub-sub@1.0.77':
     resolution: {integrity: sha512-nfkXQF///Tz6/jIfCtJCxuHMHfLxWj+72fDTIeAlK8MteAelTPtHUH7JKvyoLay4HcGSWuCWJx8Hr5ax6dKX0g==}
+
+  '@pmndrs/uikit@1.0.75':
+    resolution: {integrity: sha512-5UWP2aqZb6//9DUnGhGlMCN1QPkCMCtzFLqPBujz9i/oF1GHNrY+sHyw9u9pAohMCh2vkdweubSdWSNtfo4olA==}
+    peerDependencies:
+      three: '>=0.162'
 
   '@pmndrs/uikit@1.0.77':
     resolution: {integrity: sha512-HSuZbItVhl+xOtBxR5pJ/DqeHzlfVFNbGj/VFeDWU2We6vuYVs3/L6Lcmbxi/+qNXMn6YS5LjXBgtFwvjAXiWg==}
@@ -5457,6 +5467,26 @@ snapshots:
       winston: 3.10.0
       wrap-ansi: 8.1.0
 
+  '@drawcall/uikitml@0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.75(super-three@0.181.0))(super-three@0.181.0)':
+    dependencies:
+      '@pmndrs/msdfonts': 1.0.75
+      '@pmndrs/uikit': 1.0.75(super-three@0.181.0)
+      '@pmndrs/uikit-horizon': 1.0.75(super-three@0.181.0)
+      '@pmndrs/uikit-lucide': 1.0.75(super-three@0.181.0)
+      '@preact/signals-core': 1.14.0
+      '@sentry/node': 10.71.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))
+      commander: 14.0.3
+      entities: 6.0.1
+      moo: 0.5.3
+      nearley: 2.20.1
+      playwright: 1.62.1
+      three: super-three@0.181.0
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@opentelemetry/core'
+      - '@opentelemetry/exporter-trace-otlp-http'
+      - supports-color
+
   '@drawcall/uikitml@0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(super-three@0.181.0)':
     dependencies:
       '@pmndrs/msdfonts': 1.0.75
@@ -5962,11 +5992,11 @@ snapshots:
       - '@types/react'
       - immer
 
-  '@iwer/devui@2.3.0(@types/react@18.3.28)(css-to-react-native@3.2.0)(iwer@2.6.0)(use-sync-external-store@1.6.0(react@18.3.1))':
+  '@iwer/devui@2.3.0(@types/react@18.3.28)(css-to-react-native@3.2.0)(iwer@2.3.0)(use-sync-external-store@1.6.0(react@18.3.1))':
     dependencies:
       '@pmndrs/handle': 6.6.29(@types/react@18.3.28)(react@19.2.8)
       '@pmndrs/pointer-events': 6.6.29
-      iwer: 2.6.0
+      iwer: 2.3.0
       lucide-react: 1.34.0(react@19.2.8)
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -6004,11 +6034,11 @@ snapshots:
       three: super-three@0.181.0
       ts-proto: 2.11.4
 
-  '@iwer/sem@2.3.0(iwer@2.6.0)':
+  '@iwer/sem@2.3.0(iwer@2.3.0)':
     dependencies:
       '@bufbuild/protobuf': 2.14.0
       gl-matrix: 3.4.4
-      iwer: 2.6.0
+      iwer: 2.3.0
       three: super-three@0.181.0
       ts-proto: 2.12.1
 
@@ -6078,16 +6108,16 @@ snapshots:
 
   '@iwsdk/scene-composition@1.0.1': {}
 
-  '@iwsdk/vite-plugin-dev@0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(@types/node@22.19.13)(@types/react@18.3.28)(css-to-react-native@3.2.0)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))':
+  '@iwsdk/vite-plugin-dev@0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.75(super-three@0.181.0))(@types/node@22.19.13)(@types/react@18.3.28)(css-to-react-native@3.2.0)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))':
     dependencies:
-      '@drawcall/uikitml': 0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(super-three@0.181.0)
-      '@iwer/devui': 2.3.0(@types/react@18.3.28)(css-to-react-native@3.2.0)(iwer@2.6.0)(use-sync-external-store@1.6.0(react@18.3.1))
-      '@iwer/sem': 2.3.0(iwer@2.6.0)
+      '@drawcall/uikitml': 0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.75(super-three@0.181.0))(super-three@0.181.0)
+      '@iwer/devui': 2.3.0(@types/react@18.3.28)(css-to-react-native@3.2.0)(iwer@2.3.0)(use-sync-external-store@1.6.0(react@18.3.1))
+      '@iwer/sem': 2.3.0(iwer@2.3.0)
       '@iwsdk/core': 0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)
       '@iwsdk/scene-composition': 0.5.3
       '@preact/signals-core': 1.14.0
       '@vitejs/plugin-basic-ssl': 2.3.0(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(tsx@4.21.0))
-      iwer: 2.6.0
+      iwer: 2.3.0
       lucide: 0.468.0
       open: 10.2.0
       playwright: 1.58.2
@@ -6307,6 +6337,16 @@ snapshots:
     dependencies:
       '@preact/signals-core': 1.14.0
 
+  '@pmndrs/uikit@1.0.75(super-three@0.181.0)':
+    dependencies:
+      '@pmndrs/msdfonts': 1.0.77
+      '@pmndrs/uikit-pub-sub': 1.0.77
+      '@preact/signals-core': 1.14.0
+      '@zappar/msdf-generator': 1.2.4
+      three: super-three@0.181.0
+      yoga-layout: 3.2.1
+      zod: 4.4.3
+
   '@pmndrs/uikit@1.0.77(super-three@0.181.0)':
     dependencies:
       '@pmndrs/msdfonts': 1.0.77
@@ -6471,7 +6511,7 @@ snapshots:
   '@react-three/uikit@1.0.64(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0))(@types/react@18.3.28)(react@18.3.1)(super-three@0.181.0)(use-sync-external-store@1.6.0(react@18.3.1))':
     dependencies:
       '@pmndrs/pointer-events': 6.6.29
-      '@pmndrs/uikit': 1.0.77(super-three@0.181.0)
+      '@pmndrs/uikit': 1.0.75(super-three@0.181.0)
       '@preact/signals-core': 1.14.0
       '@react-three/fiber': 8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0)
       react: 18.3.1
