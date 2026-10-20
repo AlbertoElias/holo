@@ -915,18 +915,30 @@ body {
    card in the freeze variant keeps every gesture for looking around. */
 .feed-card {
   touch-action: pan-y;
-  --portal-fill-size: 145vmax;
 }
 
 .feed-card.portal-captured {
   touch-action: none;
 }
 
-/* Zooming in opens the bubble until it fills the screen: the viewer is
-   inside the scene. --portal-open runs from 0 (object) to 1 (inside). */
+/* Zooming in opens the bubble into the whole screen: the viewer is inside
+   the scene. --portal-open runs from 0 (object) to 1 (inside). The canvas
+   never grows past the screen, so no pixels are drawn off-screen. */
+.feed-card .feed-card-bubble-shell,
+.feed-card .feed-card-bubble {
+  --portal-radius: calc(var(--bubble-size) / 2 * (1 - var(--portal-open, 0)));
+}
+
 .feed-card .feed-card-bubble-shell {
-  width: calc(var(--bubble-size) + (var(--portal-fill-size) - var(--bubble-size)) * var(--portal-open, 0));
-  height: calc(var(--bubble-size) + (var(--portal-fill-size) - var(--bubble-size)) * var(--portal-open, 0));
+  width: calc(var(--bubble-size) + (100vw - var(--bubble-size)) * var(--portal-open, 0));
+  height: calc(var(--bubble-size) + (100svh - var(--bubble-size)) * var(--portal-open, 0));
+  border-radius: var(--portal-radius);
+  clip-path: inset(0 round var(--portal-radius));
+}
+
+.feed-card .feed-card-bubble {
+  border-radius: var(--portal-radius);
+  clip-path: inset(0 round var(--portal-radius));
 }
 
 .feed-card-bubble-shell:focus-visible {
@@ -934,10 +946,12 @@ body {
   outline-offset: 4px;
 }
 
+/* Stacked above the mute button on the right; the left side belongs to the
+   upload panel, which covers the bottom-left corner on short windows. */
 .portal-controls {
   position: absolute;
-  bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
-  left: max(1rem, env(safe-area-inset-left, 0px));
+  bottom: calc(8.6rem + env(safe-area-inset-bottom, 0px));
+  right: max(1rem, env(safe-area-inset-right, 0px));
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -985,8 +999,8 @@ body {
 
 @media (max-width: 768px) {
   .portal-controls {
-    bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
-    left: max(0.75rem, env(safe-area-inset-left, 0px));
+    bottom: calc(8rem + env(safe-area-inset-bottom, 0px));
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
     gap: 0.5rem;
   }
 }
