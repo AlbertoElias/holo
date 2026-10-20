@@ -33,6 +33,7 @@ scratch/
 .claude/*
 !.claude/settings.json
 !.claude/skills
+!.claude/agents
 
 # Python conversion tooling
 __pycache__/

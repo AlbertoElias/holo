@@ -68,6 +68,24 @@ and session length multiplies it.
   (`pnpm --filter @holoim/capture run test:xr:body`), one replay fixture
   (`XR_REPLAY_ONLY=<name>`), and the full tier only before pushing. See
   "Fast Agent Loop" in `AGENT_CONTRACT.md`.
+
+## Model routing
+
+Pick the tier when starting a session; an agent cannot change its own model
+mid-session, so a lead delegates lighter work to a pinned subagent instead.
+
+| Tier | Work | Claude Code | Codex | Muse |
+|---|---|---|---|---|
+| Deep | Lead on recording, retargeting, contracts or the export → upload → render pipeline; design review; hard debugging | `--model opus` | `-p deep` (gpt-6-astra, xhigh) | `--effort high` |
+| Standard | Implementing a settled brief; routine bugs | default (Sonnet) | `-p standard` (gpt-6.1-sol, medium) | default |
+| Light | Searches, running checks or CI and summarizing, doc and queue bookkeeping | `searcher` / `check-runner` subagents | `-p light` (gpt-6-luna, low) | `--effort low` |
+
+- The independent verifier in `docs/FEATURE_WORKFLOW.md` uses a different
+  vendor from the implementer (for example Codex implements, Claude verifies);
+  same-model review shares the implementer's blind spots.
+- Claude Code subagents live in `.claude/agents/` with pinned models:
+  `searcher` (Haiku), `check-runner` (Sonnet), `design-reviewer` (Opus).
+- A cheaper model does not offset a long session; context size still dominates.
 - Node must be 22 (`.nvmrc`). Claude Code sessions get it from a SessionStart
   hook; in other shells run `eval "$(scripts/agent-node-env.sh)"`. Never switch
   the machine-wide Node (`n <version>`): other sessions share it.
