@@ -17,6 +17,7 @@ import {
   waitForXrRenderLoop,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
+import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import { analyzeBodyReplay, formatBodyReport } from './lib/body-fidelity.mjs';
 
@@ -156,6 +157,8 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', videoPath
     ], { stdio: 'inherit' });
     console.log(encoded.status === 0 ? `[body-replay] video: ${videoPath}` : '[body-replay] ffmpeg unavailable; frames kept as PNGs');
+    const sheet = writeContactSheet(path.join(videoFrameDir, label), path.join(artifactDir, `${label}-sheet.jpg`));
+    if (sheet) console.log(`[body-replay] contact sheet: ${sheet}`);
   }
   if (process.env.BODY_REPLAY_PROFILE === '1') console.log(`[body-replay] ${label}: frames ${(timing.run / 1000).toFixed(1)} s, samples ${(timing.sample / 1000).toFixed(1)} s`);
   // Contexts stay open until the browser closes: closing one mid-run makes

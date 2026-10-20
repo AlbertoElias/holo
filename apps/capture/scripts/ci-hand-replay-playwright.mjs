@@ -17,6 +17,7 @@ import {
   waitForXrRenderLoop,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
+import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import { analyzeHandReplay, formatHandReport } from './lib/hand-fidelity.mjs';
 
@@ -124,6 +125,8 @@ async function replay(fileName) {
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', videoPath
     ], { stdio: 'inherit' });
     console.log(encoded.status === 0 ? `[hand-replay] video: ${videoPath}` : '[hand-replay] ffmpeg unavailable; frames kept as PNGs');
+    const sheet = writeContactSheet(path.join(videoFrameDir, label), path.join(artifactDir, `${label}-sheet.jpg`));
+    if (sheet) console.log(`[hand-replay] contact sheet: ${sheet}`);
   }
   await writeFile(path.join(artifactDir, `${label}-samples.json`), JSON.stringify(frames));
   const report = analyzeHandReplay(frames, { stepMs: STEP_MS });

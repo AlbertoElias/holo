@@ -18,5 +18,9 @@
       "Bash(git worktree:*)",
       "Bash(git merge:*)"
     ]
-  }
+  },
+  "enabledPlugins": {
+    "vercel@claude-plugins-official": false
+  },
+  "autoCompactWindow": 400000
 }

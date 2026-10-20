@@ -45,6 +45,26 @@ For other browser QA, use the browser tool suited to the task and available sess
 Project-local gstack skills live in `.agents/skills/gstack`; load the requested workflow
 when using gstack. Its setup command is `cd .agents/skills/gstack && PATH="$HOME/.bun/bin:$PATH" ./setup`.
 
+## Working efficiently
+
+Every turn re-reads the whole conversation, so context size is the main cost
+and session length multiplies it.
+
+- One task per session. When a question turns into implementation, or a
+  shipped change into the next feature, record state in the owning file
+  (brief, `TODOS.md`, `BUGS.md`) and tell the user to continue in a fresh session.
+- Never read a full-size image. Preview it first with
+  `node packages/tooling-testing/src/preview.mjs <image-or-frame-dir>` (an
+  800px JPEG, or a 12-frame contact sheet for a frame directory); the hand
+  and body replays already write `<label>-sheet.jpg`. Prefer numeric reports
+  (`*-report.json`) over looking at frames.
+- Run commands that may take over two minutes in the background and wait for
+  the completion notice; do not poll in a loop or let a foreground command
+  reach its timeout.
+- Send broad searches and file sweeps to a subagent so only its conclusion
+  enters the conversation. Print excerpts (`sed -n`, `grep`, `head`) instead
+  of whole large files or logs.
+
 ## Sharing work between agents
 
 Multiple agents share this repo, so uncommitted work is invisible to the others.
