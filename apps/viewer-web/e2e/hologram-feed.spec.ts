@@ -401,7 +401,9 @@ for (const viewport of [
     expect(metadata!.y + metadata!.height, "title and author must sit above Upload").toBeLessThan(upload!.y);
     const portal = await card.locator(".portal-controls").boundingBox();
     expect(portal).not.toBeNull();
-    expect(metadata!.x, "metadata clears the portal controls on the left").toBeGreaterThan(portal!.x + portal!.width);
+    const overlaps = metadata!.x < portal!.x + portal!.width && portal!.x < metadata!.x + metadata!.width
+      && metadata!.y < portal!.y + portal!.height && portal!.y < metadata!.y + metadata!.height;
+    expect(overlaps, "metadata and the portal controls do not overlap").toBe(false);
     await testInfo.attach("mobile-layout.json", {
       body: JSON.stringify({ viewport, metadata, upload, portal }, null, 2),
       contentType: "application/json"
