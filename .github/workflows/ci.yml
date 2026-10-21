@@ -1,32 +1,64 @@
 name: CI
 
-# One tier for every event. Browser checks advance simulated time explicitly,
-# so they are deterministic and cheap enough to run on every push; the weekly
-# schedule only catches runner-image and dependency drift on unchanged code.
+# Local-first verification: agents run `pnpm run verify:agent` in the loop
+# and `pnpm run verify:pr` before merging (see AGENT_CONTRACT.md). Hosted CI
+# therefore runs only on pushes to main and on manual dispatch — never on
+# branches or pull requests. On main, a changes job selects only the suites
+# relevant to the files the push touched (docs-only pushes run no suites);
+# manual dispatch always runs the full suite.
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
-  schedule:
-    - cron: "0 9 * * 1"
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+  cancel-in-progress: true
 
 env:
   PNPM_VERSION: 10.29.3
 
 jobs:
+  changes:
+    name: Select jobs for changed areas
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      quality: ${{ steps.areas.outputs.quality }}
+      capture_xr: ${{ steps.areas.outputs.capture_xr }}
+      e2e: ${{ steps.areas.outputs.e2e }}
+      pipeline: ${{ steps.areas.outputs.pipeline }}
+      portal: ${{ steps.areas.outputs.portal }}
+      docs_only: ${{ steps.areas.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select areas
+        id: areas
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            scripts/ci-changed-areas.sh >> "${GITHUB_OUTPUT}"
+          else
+            scripts/ci-changed-areas.sh "${BEFORE}" "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          fi
+          {
+            echo "## Changed areas"
+            cat "${GITHUB_OUTPUT}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+
   # Lint, unit tests and the production build share one runner: each is
   # under a minute, and Actions bills every job rounded up to the minute.
   quality:
     name: Quality, unit tests and build
+    needs: [changes]
+    if: needs.changes.outputs.quality == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -74,6 +106,8 @@ jobs:
   # counts balance wall time against billed minutes (per job, rounded up).
   capture-xr:
     name: Capture XR checks (shard ${{ matrix.shard }}/2)
+    needs: [changes]
+    if: needs.changes.outputs.capture_xr == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Each 2-vCPU runner runs its slice serially: two checks at once on one
@@ -120,6 +154,8 @@ jobs:
 
   e2e:
     name: Viewer and Knowledge browser checks
+    needs: [changes]
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -157,6 +193,8 @@ jobs:
 
   pipeline:
     name: Capture to viewer pipeline (shard ${{ matrix.shard }}/2)
+    needs: [changes]
+    if: needs.changes.outputs.pipeline == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # The two pipeline specs (~100 s and ~80 s on CI) dominate this job;
@@ -217,6 +255,8 @@ jobs:
 
   portal:
     name: Portal view end-to-end
+    needs: [changes]
+    if: needs.changes.outputs.portal == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -249,10 +289,11 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, capture-xr, e2e, pipeline, portal]
+    needs: [changes, quality, capture-xr, e2e, pipeline, portal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
       QUALITY_RESULT: ${{ needs.quality.result }}
       CAPTURE_XR_RESULT: ${{ needs.capture-xr.result }}
       E2E_RESULT: ${{ needs.e2e.result }}
@@ -273,8 +314,12 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
       - name: Enforce required jobs
         run: |
-          test "${QUALITY_RESULT}" = "success"
-          test "${CAPTURE_XR_RESULT}" = "success"
-          test "${E2E_RESULT}" = "success"
-          test "${PIPELINE_RESULT}" = "success"
-          test "${PORTAL_RESULT}" = "success"
+          # A job is either green or skipped because its area was not
+          # touched by this push; anything else fails the gate.
+          test "${CHANGES_RESULT}" = "success"
+          ok() { test "$1" = "success" || test "$1" = "skipped"; }
+          ok "${QUALITY_RESULT}"
+          ok "${CAPTURE_XR_RESULT}"
+          ok "${E2E_RESULT}"
+          ok "${PIPELINE_RESULT}"
+          ok "${PORTAL_RESULT}"
