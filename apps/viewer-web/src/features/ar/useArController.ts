@@ -307,12 +307,15 @@ export function useArController(): UseArControllerResult {
     }
 
     const intervalId = window.setInterval(() => {
-      const nextStatus = resolvePlacementPreviewStatus(placementStatus, readIwerRuntime(), false);
-      if (!nextStatus) {
+      const runtime = readIwerRuntime();
+      if (!resolvePlacementPreviewStatus(placementStatus, runtime, false)) {
         return;
       }
 
-      setPlacementStatus(nextStatus);
+      // Re-resolve against the latest status: the model's own placement may be
+      // queued but not yet committed (slow software-GL frames), and this
+      // closure's status would overwrite it with a position-less preview.
+      setPlacementStatus((current) => resolvePlacementPreviewStatus(current, runtime, false) ?? current);
       window.clearInterval(intervalId);
       window.clearTimeout(timeoutId);
     }, 250);
