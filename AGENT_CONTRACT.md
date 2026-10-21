@@ -65,7 +65,32 @@ Run automation from these scripts unless a task explicitly requires lower-level 
   comprehensive workspace checks if it cannot classify a change safely.
 - For documentation-only changes, check the edited content and references; do not
   run application suites solely because a Markdown file changed.
-- Required before opening or updating a pull request: run `pnpm run verify:pr`.
+- Required before opening or updating a pull request: run `pnpm run verify:pr`
+  locally. Hosted CI does not run on branches or pull requests, so this local
+  run is the pre-merge gate; do not dispatch hosted CI to substitute for it.
+  Hosted CI is only the final check on `main` before deployment: never use it
+  to reproduce, debug or verify a change.
+
+### Emulating CI
+
+When running a check directly does not reproduce a problem, and especially a
+failure seen only on CI, run it with `scripts/ci-emulate.sh <command>` (Docker
+must be running). It copies the working tree, including uncommitted edits,
+into a `node:24-bookworm` container pinned to 2 CPUs (`--cpuset-cpus`, so
+`availableParallelism()` is 2 and the harness chooses CI's concurrency) and
+7 GB, sets `CI=true`, and repeats the CI setup (frozen install, `.env`, Prisma,
+Chromium with `--with-deps`) before running the command. The pnpm store and
+browsers persist in Docker volumes, so only the first run downloads them.
+Outputs and Playwright reports are copied to `output/ci-emulate/`.
+
+```bash
+scripts/ci-emulate.sh pnpm run test:xr:viewer
+scripts/ci-emulate.sh pnpm --filter @holoim/viewer-web exec playwright test e2e/ar.spec.ts --repeat-each=20 --workers=1
+```
+
+`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0,1`). The container is a
+close emulation, not the runner image: a failure that reproduces only on
+hosted CI is still a defect to explain, not something to rerun.
 - `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
   the viewer AR checks, the capture → viewer pipeline, and the portal view
   checks (`test:portal`: mocked gestures plus a real capture). `verify:full` is an
@@ -88,7 +113,8 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |
-| Branch CI | `gh workflow run CI --ref <branch>` | ~3.5–4.5 min |
+| Hosted CI (manual, full) | `gh workflow run CI --ref main` | ~3.5–4.5 min |
+| Hosted CI (push to main) | automatic on merge/push | only suites for the changed areas; docs-only runs no suites |
 
 - Run anything that can pass two minutes (the full XR suite, `verify:pr`,
   CI) in the background and wait for its completion notice. To wait on CI, run
@@ -182,20 +208,33 @@ Supported env vars for smoke and XR scripts:
 | Agent edit loop | `pnpm run verify:agent` |
 | API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` (real capture export → upload → viewer render) |
 | XR behavior change | `pnpm run verify:agent` + `pnpm run verify:xr` |
-| Pull request / pre-merge | `pnpm run verify:pr` |
+| Pull request / pre-merge | `pnpm run verify:pr` locally (hosted CI does not run on PRs) |
 
 ## CI Contract
 
-- `.github/workflows/ci.yml` exposes one stable required check: `CI Gate`.
-  `.github/workflows/deploy.yml` deploys production (Fly API, Pages viewer
-  and capture) only after a successful CI run on `main`; it never gates PRs.
-- Every event (push, pull request, manual, and a weekly schedule that only
-  catches runner or dependency drift) runs the same parallel jobs: quality,
-  unit tests and production build (one runner), capture XR checks (2 shards),
-  viewer AR and Knowledge Atlas checks, capture → viewer pipeline (2 shards),
-  and portal view checks. Jobs share `.github/actions/setup` (pnpm, Node, install,
-  Prisma, cached Playwright Chromium). Wall time
-  follows the slowest job, not their sum. There is no separate heavy tier.
+- `.github/workflows/ci.yml` exposes one stable check on main: `CI Gate`.
+  It triggers only on pushes to `main` and on manual dispatch — never on
+  branches or pull requests. Agents verify locally instead:
+  `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr` before
+  merging (see Pre-Handoff Check Policy).
+- On a push to `main`, a `changes` job (`scripts/ci-changed-areas.sh`,
+  diffing the push's `before..sha`) selects only the suites relevant to the
+  merged files: quality, unit tests and production build (one runner),
+  capture XR checks (2 shards), viewer AR and Knowledge Atlas checks,
+  capture → viewer pipeline (2 shards), and portal view checks. A docs-only
+  push selects no suite and the gate passes on skips; root, shared-package,
+  or unclassified files select every suite (fail closed, mirroring
+  `verify:agent`). Manual dispatch always runs every suite. Jobs share
+  `.github/actions/setup` (pnpm, Node, install, Prisma, cached Playwright
+  Chromium). Wall time follows the slowest selected job, not their sum.
+  There is no separate heavy tier and no weekly schedule; dispatch CI
+  manually to check runner-image or dependency drift on unchanged code.
+- `.github/workflows/deploy.yml` deploys production only after a successful
+  CI run from a `main` push, and only the apps that push touched (the same
+  script, diffing the head commit against its first parent — exact for the
+  squash and merge commits used on `main`): API (Fly), viewer (Pages), and
+  capture (Pages) deploy independently, and a docs-only merge deploys
+  nothing. Manual dispatch deploys all three. It never gates PRs.
 - Capture XR checks are deterministic: they take capture's manual clock
   (`__setManualClock`), advance simulation only through `advanceTime`, and freeze
   the page's timers after XR session entry so IWER's per-frame compositing cannot
