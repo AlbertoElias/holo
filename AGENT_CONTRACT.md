@@ -68,6 +68,29 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - Required before opening or updating a pull request: run `pnpm run verify:pr`
   locally. Hosted CI does not run on branches or pull requests, so this local
   run is the pre-merge gate; do not dispatch hosted CI to substitute for it.
+  Hosted CI is only the final check on `main` before deployment: never use it
+  to reproduce, debug or verify a change.
+
+### Emulating CI
+
+When running a check directly does not reproduce a problem, and especially a
+failure seen only on CI, run it with `scripts/ci-emulate.sh <command>` (Docker
+must be running). It copies the working tree, including uncommitted edits,
+into a `node:24-bookworm` container pinned to 2 CPUs (`--cpuset-cpus`, so
+`availableParallelism()` is 2 and the harness chooses CI's concurrency) and
+7 GB, sets `CI=true`, and repeats the CI setup (frozen install, `.env`, Prisma,
+Chromium with `--with-deps`) before running the command. The pnpm store and
+browsers persist in Docker volumes, so only the first run downloads them.
+Outputs and Playwright reports are copied to `output/ci-emulate/`.
+
+```bash
+scripts/ci-emulate.sh pnpm run test:xr:viewer
+scripts/ci-emulate.sh pnpm --filter @holoim/viewer-web exec playwright test e2e/ar.spec.ts --repeat-each=20 --workers=1
+```
+
+`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0,1`). The container is a
+close emulation, not the runner image: a failure that reproduces only on
+hosted CI is still a defect to explain, not something to rerun.
 - `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
   the viewer AR checks, the capture → viewer pipeline, and the portal view
   checks (`test:portal`: mocked gestures plus a real capture). `verify:full` is an

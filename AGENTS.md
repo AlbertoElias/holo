@@ -10,6 +10,13 @@
   exists. If isolated testing is genuinely necessary, first enumerate all
   plausible system failure modes and use that list to drive the test design and
   implementation.
+- Do not count on hosted CI. It is only the final check for changes that land
+  on `main`, before deployment. Reproduce, fix and verify everything locally;
+  never push or dispatch CI to find out whether something works.
+- When running a test directly does not reproduce a problem (for example a
+  failure seen only on CI), emulate CI in Docker with `scripts/ci-emulate.sh
+  <command>`: a 2-CPU, 7 GB Linux container with Node 24 and Chromium, like a
+  hosted runner. See "Emulating CI" in `AGENT_CONTRACT.md`.
 
 This pnpm monorepo contains `apps/capture` (WebXR recording and GLTF export),
 `apps/viewer-api` (upload and storage), and `apps/viewer-web` (feed and AR viewer).
