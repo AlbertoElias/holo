@@ -23,10 +23,12 @@ env:
   PNPM_VERSION: 10.29.3
 
 jobs:
+  # Lint, unit tests and the production build share one runner: each is
+  # under a minute, and Actions bills every job rounded up to the minute.
   quality:
-    name: Quality and unit tests
+    name: Quality, unit tests and build
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -35,31 +37,16 @@ jobs:
       - name: Lint and typecheck
         run: pnpm timed quality-checks -- pnpm run check:all
       - name: Unit tests
+        if: ${{ !cancelled() }}
         run: pnpm timed unit-tests -- pnpm run test:unit:all
-      - name: Upload timing summary
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-timings-${{ github.run_id }}
-          path: output/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
-  build:
-    name: Production build
-    runs-on: ubuntu-latest
-    timeout-minutes: 6
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-        with:
-          pnpm-version: ${{ env.PNPM_VERSION }}
       - name: Cache KTX-Software
+        if: ${{ !cancelled() }}
         uses: actions/cache@v4
         with:
           path: /tmp/ktx.tar.bz2
           key: ktx-4.4.2-linux-x86_64
       - name: Install KTX-Software
+        if: ${{ !cancelled() }}
         env:
           KTX_VERSION: 4.4.2
         run: |
@@ -70,21 +57,23 @@ jobs:
           echo "${KTX_ROOT}/bin" >> "${GITHUB_PATH}"
           "${KTX_ROOT}/bin/ktx" --version
       - name: Build
+        if: ${{ !cancelled() }}
         run: pnpm timed build -- pnpm run build:all
       - name: Upload timing summary
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-timings-${{ github.run_id }}
+          name: quality-timings-${{ github.run_id }}
           path: output/test-results
           if-no-files-found: ignore
           retention-days: 7
 
-  # Browser end-to-end checks run as parallel jobs (capture XR shards,
-  # viewer and Knowledge Atlas, capture → viewer pipeline, portal) so CI wall
-  # time follows the slowest suite rather than their sum.
+  # Browser end-to-end checks run as parallel jobs (2 capture XR shards,
+  # viewer and Knowledge Atlas, 2 capture → viewer pipeline shards, portal)
+  # so CI wall time follows the slowest suite rather than their sum. Shard
+  # counts balance wall time against billed minutes (per job, rounded up).
   capture-xr:
-    name: Capture XR checks (shard ${{ matrix.shard }}/3)
+    name: Capture XR checks (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Each 2-vCPU runner runs its slice serially: two checks at once on one
@@ -93,9 +82,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     env:
-      XR_SHARD: ${{ matrix.shard }}/3
+      XR_SHARD: ${{ matrix.shard }}/2
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -130,33 +119,25 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: ${{ matrix.name }}
+    name: Viewer and Knowledge browser checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Independent suites; one runner each keeps them off the critical path.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Knowledge Atlas browser checks
-            label: knowledge
-            script: test:knowledge
-          - name: Viewer AR checks
-            label: xr-viewer
-            script: test:xr:viewer
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
           playwright: "true"
-      - name: ${{ matrix.name }}
-        run: pnpm timed ${{ matrix.label }} -- pnpm run ${{ matrix.script }}
+      - name: Knowledge Atlas browser checks
+        run: pnpm timed knowledge -- pnpm run test:knowledge
+      - name: Viewer AR checks
+        if: ${{ !cancelled() }}
+        run: pnpm timed xr-viewer -- pnpm run test:xr:viewer
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-failure-${{ matrix.label }}-${{ github.run_id }}
+          name: e2e-failure-${{ github.run_id }}
           path: |
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
@@ -169,7 +150,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-timings-${{ matrix.label }}-${{ github.run_id }}
+          name: e2e-timings-${{ github.run_id }}
           path: output/test-results
           if-no-files-found: ignore
           retention-days: 7
@@ -268,12 +249,11 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [quality, build, capture-xr, e2e, pipeline, portal]
+    needs: [quality, capture-xr, e2e, pipeline, portal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
       QUALITY_RESULT: ${{ needs.quality.result }}
-      BUILD_RESULT: ${{ needs.build.result }}
       CAPTURE_XR_RESULT: ${{ needs.capture-xr.result }}
       E2E_RESULT: ${{ needs.e2e.result }}
       PIPELINE_RESULT: ${{ needs.pipeline.result }}
@@ -285,17 +265,15 @@ jobs:
             echo "## CI gate"
             echo "| Job | Result |"
             echo "| --- | --- |"
-            echo "| Quality | ${QUALITY_RESULT} |"
-            echo "| Build | ${BUILD_RESULT} |"
+            echo "| Quality, unit tests and build | ${QUALITY_RESULT} |"
             echo "| Capture XR checks (all shards) | ${CAPTURE_XR_RESULT} |"
-            echo "| Viewer and Knowledge browser checks (both jobs) | ${E2E_RESULT} |"
+            echo "| Viewer and Knowledge browser checks | ${E2E_RESULT} |"
             echo "| Capture to viewer pipeline (all shards) | ${PIPELINE_RESULT} |"
             echo "| Portal view end-to-end | ${PORTAL_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
       - name: Enforce required jobs
         run: |
           test "${QUALITY_RESULT}" = "success"
-          test "${BUILD_RESULT}" = "success"
           test "${CAPTURE_XR_RESULT}" = "success"
           test "${E2E_RESULT}" = "success"
           test "${PIPELINE_RESULT}" = "success"

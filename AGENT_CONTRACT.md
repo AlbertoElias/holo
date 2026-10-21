@@ -101,9 +101,11 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 - Parallel checks write each check's output to
   `apps/capture/output/xr-checks/<name>.log` and print it when the check ends.
   Set `XR_CHECK_CONCURRENCY=1` for serial, streamed output.
-- CI splits capture XR checks across 3 runners with `XR_SHARD=<i>/3`, which
+- CI splits capture XR checks across 2 runners with `XR_SHARD=<i>/2`, which
   packs the listed checks by their CI cost (`CHECK_COST` in
-  `run-xr-checks.mjs`) so every check runs exactly once; `body` runs alone.
+  `run-xr-checks.mjs`) so every check runs exactly once. Actions bills each
+  job rounded up to the minute against a monthly cap, so add shards or jobs
+  only when the wall-time win outweighs the extra billed minutes.
   Each runner still runs its slice serially: this private repo's
   `ubuntu-latest` runner has 2 vCPUs, so the default is 1. Running 2 at a time
   passed on the branch but timed out on main: the hand and body checks each
@@ -166,7 +168,7 @@ Supported env vars for smoke and XR scripts:
 - `BODY_REPLAY_CONCURRENCY` (default `2` body replays at once; results do not depend on it)
 - `HAND_REPLAY_CONCURRENCY` (default `2` hand replays at once; results do not depend on it)
 - `XR_REPLAY_ONLY` (substring, comma-separated for several: replay only matching hand or body fixtures; with `BODY_REPLAY_FAULTS=1`, only faults on those fixtures)
-- `XR_SHARD` (`<index>/<total>`, 1-based: `test:xr*` runs one cost-balanced slice of the listed checks; CI uses 3 slices)
+- `XR_SHARD` (`<index>/<total>`, 1-based: `test:xr*` runs one cost-balanced slice of the listed checks; CI uses 2 slices)
 - `XR_CHECK_CONCURRENCY` (capture XR checks run at once by `test:xr*`; default half the CPUs, from 1 to 3, so 1 on CI; results do not depend on it)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
@@ -188,10 +190,10 @@ Supported env vars for smoke and XR scripts:
   `.github/workflows/deploy.yml` deploys production (Fly API, Pages viewer
   and capture) only after a successful CI run on `main`; it never gates PRs.
 - Every event (push, pull request, manual, and a weekly schedule that only
-  catches runner or dependency drift) runs the same parallel jobs: quality
-  and unit tests, production build, capture XR checks (3 shards), viewer AR
-  checks, Knowledge Atlas checks, capture → viewer pipeline (2 shards), and
-  portal view checks. Jobs share `.github/actions/setup` (pnpm, Node, install,
+  catches runner or dependency drift) runs the same parallel jobs: quality,
+  unit tests and production build (one runner), capture XR checks (2 shards),
+  viewer AR and Knowledge Atlas checks, capture → viewer pipeline (2 shards),
+  and portal view checks. Jobs share `.github/actions/setup` (pnpm, Node, install,
   Prisma, cached Playwright Chromium). Wall time
   follows the slowest job, not their sum. There is no separate heavy tier.
 - Capture XR checks are deterministic: they take capture's manual clock
