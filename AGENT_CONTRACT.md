@@ -88,7 +88,7 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |
-| Branch CI | `gh workflow run CI --ref <branch>` | ~3.5–4 min |
+| Branch CI | `gh workflow run CI --ref <branch>` | ~3.5–4.5 min |
 
 - Run anything that can pass two minutes (the full XR suite, `verify:pr`,
   CI) in the background and wait for its completion notice. To wait on CI, run
