@@ -88,7 +88,7 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |
-| Branch CI | `gh workflow run CI --ref <branch>` | ~4.5–6.5 min |
+| Branch CI | `gh workflow run CI --ref <branch>` | ~3.5–4 min |
 
 - Run anything that can pass two minutes (the full XR suite, `verify:pr`,
   CI) in the background and wait for its completion notice. To wait on CI, run
@@ -101,12 +101,17 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 - Parallel checks write each check's output to
   `apps/capture/output/xr-checks/<name>.log` and print it when the check ends.
   Set `XR_CHECK_CONCURRENCY=1` for serial, streamed output.
-- CI runs capture XR checks serially. This private repo's `ubuntu-latest`
-  runner has 2 vCPUs, so the default is 1. Running 2 at a time passed on the
-  branch but timed out on main: the hand and body checks each open 2 pages at
-  once, and cold page loads then pass the 30 s goto limit. The pipeline job
-  (~250–390 s, mostly the capture-to-viewer spec and its USDZ Python checks)
-  is the CI long pole.
+- CI splits capture XR checks across 3 runners with `XR_SHARD=<i>/3`, which
+  packs the listed checks by their CI cost (`CHECK_COST` in
+  `run-xr-checks.mjs`) so every check runs exactly once; `body` runs alone.
+  Each runner still runs its slice serially: this private repo's
+  `ubuntu-latest` runner has 2 vCPUs, so the default is 1. Running 2 at a time
+  passed on the branch but timed out on main: the hand and body checks each
+  open 2 pages at once, and cold page loads then pass the 30 s goto limit.
+  The pipeline job runs its two specs as Playwright shards
+  (`pnpm run test:smoke:pipeline --shard=<i>/2`); the capture-to-viewer spec
+  (~100 s on CI) is the long pole. Update `CHECK_COST` from the CI
+  `xr-checks-shard-*.json` timings when a check's cost changes a lot.
 - Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`) screenshot every frame
   and multiply wall time; combine them with `XR_REPLAY_ONLY`.
 
@@ -161,6 +166,7 @@ Supported env vars for smoke and XR scripts:
 - `BODY_REPLAY_CONCURRENCY` (default `2` body replays at once; results do not depend on it)
 - `HAND_REPLAY_CONCURRENCY` (default `2` hand replays at once; results do not depend on it)
 - `XR_REPLAY_ONLY` (substring, comma-separated for several: replay only matching hand or body fixtures; with `BODY_REPLAY_FAULTS=1`, only faults on those fixtures)
+- `XR_SHARD` (`<index>/<total>`, 1-based: `test:xr*` runs one cost-balanced slice of the listed checks; CI uses 3 slices)
 - `XR_CHECK_CONCURRENCY` (capture XR checks run at once by `test:xr*`; default half the CPUs, from 1 to 3, so 1 on CI; results do not depend on it)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
@@ -183,8 +189,10 @@ Supported env vars for smoke and XR scripts:
   and capture) only after a successful CI run on `main`; it never gates PRs.
 - Every event (push, pull request, manual, and a weekly schedule that only
   catches runner or dependency drift) runs the same parallel jobs: quality
-  and unit tests, production build, capture XR checks, viewer AR and Knowledge
-  Atlas checks, capture → viewer pipeline, and portal view checks. Wall time
+  and unit tests, production build, capture XR checks (3 shards), viewer AR
+  checks, Knowledge Atlas checks, capture → viewer pipeline (2 shards), and
+  portal view checks. Jobs share `.github/actions/setup` (pnpm, Node, install,
+  Prisma, cached Playwright Chromium). Wall time
   follows the slowest job, not their sum. There is no separate heavy tier.
 - Capture XR checks are deterministic: they take capture's manual clock
   (`__setManualClock`), advance simulation only through `advanceTime`, and freeze
@@ -195,6 +203,10 @@ Supported env vars for smoke and XR scripts:
   hidden by reruns.
 - Every job has a hard timeout. Timed commands write JSON to
   `output/test-results/` and append their duration to the GitHub job summary.
+  The same folder gets per-check durations from `run-xr-checks.mjs`
+  (`xr-checks[-shard-<i>of<n>].json`) and Playwright JSON reports
+  (`playwright-web-<script>.json`, `playwright-knowledge.json`) with per-test
+  durations.
 - Browser diagnostics are uploaded only after failures. Timing artifacts are kept
   for successful and failed runs so regressions can be compared without bloating
   every artifact set.
