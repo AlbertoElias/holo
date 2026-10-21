@@ -17,9 +17,13 @@ primary_region = "iad"
 [http_service]
   internal_port = 3001
   force_https = true
-  auto_stop_machines = "off"
+  # Sandbox/demo app: stop when idle, start on the next request (a few
+  # seconds cold start). Still one machine; this only scales it to zero.
+  # USDZ conversions interrupted by a stop are reclaimed after
+  # USDZ_STALE_CLAIM_MS once the machine is running again.
+  auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
   [[http_service.checks]]
     type = "http"
