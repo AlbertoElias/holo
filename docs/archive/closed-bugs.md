@@ -270,3 +270,25 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   with readable titles/bylines, portal-control clearance, and working Upload
   expansion/collapse. `verify:agent` and `verify:pr` pass on Node 22 using
   isolated browser ports (the knowledge port override is local to verification).
+
+### B-017 — Viewer AR placement wait intermittently times out with no model position
+
+- **Area:** apps/viewer-web (AR placement preview, `useArController`)
+- **Severity:** P2 (CI flake in the only intermittent viewer check)
+- **Observed:** 2026-10-19 (CI runs 39186342259, 39368121357, 39424935399, 39484635802 on four branches)
+- **Evidence:** `e2e/hologram-feed.spec.ts` "AR places the model…" fails in `waitForPlacement`
+  with `placement-wait-timeout`; the stuck state is always `placed`/`floor`/`plane-detected`,
+  sequence 1, `position: null`, with 10 tracked planes.
+- **Expected:** the model's own placement (with position) stays the reported status.
+- **Cause (confirmed):** the controller's plane-detected preview interval in
+  `useArController` read `placementStatus` from its effect closure and wrote with a
+  plain `setPlacementStatus`. On the 2-CPU software-GL runner the model's placement
+  commit took >200 ms, so a tick with the stale `searching` closure overwrote it.
+  Timeline from `scripts/ci-emulate`-style Docker repro (2 CPUs):
+  `17624ms placed|hit-test|hit-test-stable|1|-0.000,1.299,-0.860` then
+  `17834ms placed|floor|plane-detected|1|` (no position); the anchored model never
+  re-emits, so the position stays lost.
+- **Reproduction:** `CI_EMULATE_CPUS=0 scripts/ci-emulate.sh` loop of the spec: 6/30 runs
+  time out this way (≈1/80 at 2 CPUs); never on macOS hosts.
+- **Fix (cd54bc23):** the preview tick re-resolves inside a functional update, so it never replaces a
+  status the model already reported. Same 1-CPU loop: 0/30; 2 CPUs: 0/150.

@@ -92,7 +92,10 @@ export function useArController(): UseArControllerResult {
       meshDetection: false,
       planeDetection: true,
       hitTest: true,
-      depthSensing: true
+      // Depth occlusion is disabled under the IWER emulator (see
+      // resolveDepthOcclusionStatus), and IWER computes emulated depth with a
+      // synchronous GPU readback every frame that stalls software-GL runners.
+      depthSensing: !readIwerRuntime().available
     });
 
     const originalOnBeforeFrame = xrStore.onBeforeFrame;
