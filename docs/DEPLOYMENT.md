@@ -46,9 +46,15 @@ curl https://holoim-api.fly.dev/healthz   # {"status":"ok"}
 
 Rules that keep this topology correct:
 
-- **One machine.** `fly.toml` pins `min_machines_running = 1` with
-  auto-stop off. Do not `fly scale count 2`: each machine gets its own
-  volume and its own SQLite file.
+- **One machine, scaled to zero.** HoloIM is a sandbox/demo app, so
+  `fly.toml` sets `auto_stop_machines = "stop"` and
+  `min_machines_running = 0`: Fly stops the machine when idle and starts it
+  on the next request (a few seconds cold start). You pay for running
+  seconds plus the volume, roughly $1–3/month at demo usage versus ~$12
+  always-on. Do not `fly scale count 2`: each machine gets its own volume
+  and its own SQLite file.
+- A stop can interrupt a USDZ conversion; the worker reclaims it after
+  `USDZ_STALE_CLAIM_MS` once the machine runs again.
 - The embedded USDZ worker runs in the same process (SQLite phase). The
   machine is sized `shared-cpu-2x` / 2 GB for the Python converter.
 - Volumes are billed at $0.15/GB-month with no free allowance on new
