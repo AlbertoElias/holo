@@ -1,7 +1,9 @@
 name: Deploy
 
-# Deploys production whenever CI passes on main. Manual runs are allowed
-# from the Actions tab (workflow_dispatch) for redeploys and rollbacks.
+# Deploys production whenever CI passes on main, but only the apps the
+# merged push touched (docs-only merges deploy nothing; see
+# scripts/ci-changed-areas.sh). Manual runs are allowed from the Actions
+# tab (workflow_dispatch) for redeploys and rollbacks, and deploy all apps.
 on:
   workflow_run:
     workflows: [CI]
@@ -20,12 +22,41 @@ env:
   PNPM_VERSION: 10.29.3
 
 jobs:
-  deploy-api:
-    name: Deploy API (Fly)
+  changes:
+    name: Select deploy targets
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      api: ${{ steps.areas.outputs.api }}
+      web: ${{ steps.areas.outputs.web }}
+      capture_app: ${{ steps.areas.outputs.capture_app }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      - name: Select areas
+        id: areas
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            scripts/ci-changed-areas.sh >> "${GITHUB_OUTPUT}"
+          else
+            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+            scripts/ci-changed-areas.sh "${base}" HEAD >> "${GITHUB_OUTPUT}"
+          fi
+
+  deploy-api:
+    name: Deploy API (Fly)
+    needs: [changes]
+    if: >-
+      needs.changes.outputs.api == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -48,10 +79,12 @@ jobs:
 
   deploy-web:
     name: Deploy viewer (Pages)
+    needs: [changes]
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.web == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+       github.event.workflow_run.event == 'push'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -82,10 +115,12 @@ jobs:
 
   deploy-capture:
     name: Deploy capture (Pages)
+    needs: [changes]
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.capture_app == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+       github.event.workflow_run.event == 'push'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
