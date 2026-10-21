@@ -267,7 +267,9 @@ async function waitForPlacement(
           : null,
         trackedPlanesCount: window.IWER_DEVICE?.sem?.trackedPlanes?.size ?? 0,
         trackedMeshesCount: window.IWER_DEVICE?.sem?.trackedMeshes?.size ?? 0
-      }))
+      })),
+      timeline: await page.evaluate(() => (window as Window & { __placementTimeline?: string[] }).__placementTimeline ?? []),
+      arConsole: arConsoleLines.get(page) ?? []
     });
     throw error;
   }
@@ -275,7 +277,35 @@ async function waitForPlacement(
   return readPlacementState(page);
 }
 
+// A placement timeout only shows the final state; record every placement
+// attribute change and AR log line so the dump says which side stalled.
+const arConsoleLines = new WeakMap<Page, string[]>();
+
+async function recordPlacementTimeline(page: Page): Promise<void> {
+  const lines: string[] = [];
+  arConsoleLines.set(page, lines);
+  page.on("console", (message) => {
+    const text = message.text();
+    if (text.startsWith("[AR")) {
+      lines.push(text);
+    }
+  });
+  await page.addInitScript(() => {
+    const timeline: string[] = [];
+    (window as Window & { __placementTimeline?: string[] }).__placementTimeline = timeline;
+    new MutationObserver(() => {
+      const root = document.querySelector(".ar-view-container");
+      if (!(root instanceof HTMLElement)) return;
+      const { placementStage, placementMode, placementReason, placementSequence, placementPosition } = root.dataset;
+      const entry = [placementStage, placementMode, placementReason, placementSequence, placementPosition].join("|");
+      if (timeline.at(-1)?.endsWith(entry)) return;
+      timeline.push(`${Math.round(performance.now())}ms ${entry}`);
+    }).observe(document, { attributes: true, subtree: true, childList: true, attributeFilter: ["data-placement-stage", "data-placement-sequence", "data-placement-position"] });
+  });
+}
+
 async function enterMockAr(page: Page): Promise<void> {
+  await recordPlacementTimeline(page);
   await page.goto("/");
   await assertViewerShell(page);
   await waitForIwerRuntime(page);
