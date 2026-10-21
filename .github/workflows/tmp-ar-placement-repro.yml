@@ -1,0 +1,31 @@
+# TEMPORARY (B-017): loops the Viewer AR checks on the 2-vCPU runner to catch the
+# placement-wait-timeout flake with its timeline. Delete before merging.
+name: tmp AR placement repro
+
+on:
+  push:
+    branches: [bug/ar-placement-preview-race]
+
+env:
+  PNPM_VERSION: 10.29.3
+
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          playwright: "true"
+      - name: Loop Viewer AR checks
+        working-directory: apps/viewer-web
+        env:
+          VITE_IWER_SEM_SCENE: office_small
+          XR_TEST_MODE: iwer
+        run: pnpm exec playwright test e2e/hologram-feed.spec.ts e2e/ar-bubble.spec.ts --workers=1 --repeat-each=8 --reporter=line
