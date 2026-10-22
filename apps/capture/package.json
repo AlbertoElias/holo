@@ -41,7 +41,7 @@
     "check": "pnpm run verify:fast && pnpm run build"
   },
   "dependencies": {
-    "@dimforge/rapier3d-compat": "^0.19.3",
+    "@dimforge/rapier3d-compat": "^0.20.0",
     "@holoim/ui-dom": "workspace:*",
     "@holoim/xr-runtime": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",
