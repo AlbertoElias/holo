@@ -9,6 +9,8 @@ export function PortalControls({ store, tiltAvailable }: { store: PortalStore; t
   const paused = usePortalValue(store, (state) => state.paused);
   const mode = usePortalValue(store, (state) => state.mode);
   const tiltStatus = usePortalValue(store, (state) => state.tiltStatus);
+  const highlights = usePortalValue(store, (state) => state.highlights);
+  const hasHighlights = usePortalValue(store, (state) => state.hasHighlights);
 
   return (
     <div className="portal-controls">
@@ -32,6 +34,22 @@ export function PortalControls({ store, tiltAvailable }: { store: PortalStore; t
             <rect x="7" y="2.5" width="10" height="19" rx="2" />
             <path d="M3 9c-1.2 1.8-1.2 4.2 0 6" />
             <path d="M21 9c1.2 1.8 1.2 4.2 0 6" />
+          </svg>
+        </button>
+      )}
+      {hasHighlights && (
+        <button
+          type="button"
+          className="portal-control"
+          aria-pressed={highlights}
+          aria-label="Highlight what the author points at"
+          title={highlights ? "Hide what the author points at" : "Show what the author points at"}
+          onClick={() => store.toggleHighlights()}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 21l7-7" />
+            <path d="M9 9l6 1-3 3z" />
+            <circle cx="16" cy="8" r="5" strokeDasharray={highlights ? undefined : "2 3"} />
           </svg>
         </button>
       )}

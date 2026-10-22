@@ -16,6 +16,10 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
+import { PointingHighlights } from "../meaning/PointingHighlights";
+import type { PointingProbe } from "../meaning/PointingHighlights";
+import { readMeaningLinks } from "../meaning/meaningLinks";
+import type { MeaningGltf } from "../meaning/meaningLinks";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
 import { INSIDE_DISTANCE, anglesFromPose, freeCameraPose } from "../portal/portalStore";
 import type { PortalStore } from "../portal/portalStore";
@@ -39,6 +43,7 @@ type HologramCardCanvasProps = {
 };
 
 const HOLOGRAM_ANIMATION_SPEED = 1;
+const SPHERE_CLIP_FALLOFF = 1.8;
 const CARD_CAMERA_DISTANCE_SCALE = 1.36;
 const CARD_CAMERA_POSITION_OFFSET = new Vector3(0.62, 0.36, 0.18);
 const CARD_CAMERA_LOOK_AT_OFFSET = new Vector3(0, -0.14, 0);
@@ -159,7 +164,13 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   }, [audioState.hasAudio, onHasAudio]);
   const { camera, invalidate, gl: renderer, scene: renderScene } = useThree();
   const clonedScene = useMemo(() => cloneSkeleton(scene), [scene]);
-  const sphereClip = useSphereClipping(clonedScene, { falloffWidth: 1.8 });
+  const sphereClip = useSphereClipping(clonedScene, { falloffWidth: SPHERE_CLIP_FALLOFF });
+  const meaningLinks = useMemo(() => readMeaningLinks(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
+  const pointingProbe = useRef<PointingProbe>({ links: [] }).current;
+  useEffect(() => {
+    portal.setHasHighlights(meaningLinks.length > 0);
+    return () => portal.setHasHighlights(false);
+  }, [meaningLinks, portal]);
   const animatedBoundsRef = useRef(new Box3());
   const fullSceneBoundsRef = useRef(new Box3());
   const scratchBoundsRef = useRef(new Box3());
@@ -171,9 +182,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   useEffect(() => {
     if (import.meta.env.DEV) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe });
     }
-  }, [actions, camera, clonedScene, mixer, portal, renderScene, renderer, sphereClip, url]);
+  }, [actions, camera, clonedScene, mixer, pointingProbe, portal, renderScene, renderer, sphereClip, url]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {
@@ -471,7 +482,21 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   // SkeletonUtils clones share the loader cache's geometry and source materials.
   // useSphereClipping owns/disposes its material clones; leave cached assets alive.
 
-  return <primitive object={clonedScene} />;
+  return (
+    <>
+      <primitive object={clonedScene} />
+      {meaningLinks.length > 0 && (
+        <PointingHighlights
+          links={meaningLinks}
+          portal={portal}
+          bubble={sphereClip}
+          falloffWidth={SPHERE_CLIP_FALLOFF}
+          getPlaybackTime={getPlaybackTime}
+          probe={pointingProbe}
+        />
+      )}
+    </>
+  );
 }
 
 export function HologramCardCanvas({
