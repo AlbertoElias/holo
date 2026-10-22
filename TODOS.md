@@ -100,6 +100,36 @@ it from the item below instead of duplicating its status here.
   `docs/product/concepts/what-a-hologram-is.md`: include the portal viewer
   and Follow/Free, and start marks with "this/here" links read from pointing.
 
+- [ ] Support the standard avatar formats, not one hardcoded skeleton. Today the
+  rig finds bones by exact names in about five places
+  (`AvatarRig.ts`, `VrBodySolver.ts`, `BodyTracking.ts`), matching the shipped
+  Ready Player Me export (`LeftArm`, `LeftHandIndex1`); a raw Mixamo download
+  (`mixamorigLeftArm`) loses arms, hands, and fingers silently. Ready Player Me
+  has shut down, so treat its export as a legacy asset, not a target.
+  - One canonical humanoid bone resolver that maps any skeleton to a single
+    internal bone set; replace every hardcoded lookup with it.
+  - Per-standard maps: Mixamo, VRM 0.x and 1.0 (read the `VRM`/`VRMC_vrm`
+    humanoid extension; handle 0.x axis flip), Unity Humanoid, Unreal
+    (UE4/UE5 mannequin), Meta Oculus/Movement SDK, Apple (ARKit body skeleton
+    and RealityKit/USDZ), and OpenXR `XR_FB_body_tracking`. Track any
+    ratified Khronos, OMI, or Metaverse Standards Forum avatar work.
+  - Bind-pose normalization (T-pose vs A-pose, bone axes) so retargeting does
+    not assume the shipped rig's rest pose.
+  - Prove it end to end: one fixture avatar per standard through the replay
+    harness, checking hand fidelity and export → upload → render.
+- [ ] Face and expressions on avatars, as the foundation for phone-driven
+  avatars. Nothing exists today. Define one canonical expression set and map
+  it to VRM expressions, Apple ARKit's 52 blendshapes, Meta's face blendshapes
+  and visemes, and Unity/Unreal facial rigs; include gaze and eyelids. Shares
+  its avatar format work with the item above, and its product question with
+  [PRD-008](docs/product/prds/PRD-008-hybrid-embodiment.md) and
+  [PRD-046](docs/product/prds/PRD-046-lifelike-presence.md).
+- [ ] Capture yourself with a phone while your body controls an avatar: the phone
+  camera tracks the face and expression (ARKit blendshapes on iPhone, an
+  equivalent on Android) and drives the avatar's face, while headset or body
+  tracking drives the rest. Needs a PRD first
+  ([IDEA-078](docs/product/IDEAS.md)); depends on the two items above.
+
 ## Later
 
 - [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered
