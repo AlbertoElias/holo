@@ -26,6 +26,9 @@ jobs:
     name: Select jobs for changed areas
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: read
     outputs:
       quality: ${{ steps.areas.outputs.quality }}
       capture_xr: ${{ steps.areas.outputs.capture_xr }}
@@ -41,11 +44,16 @@ jobs:
         id: areas
         env:
           BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
+        # Diff from the last successful CI run on main, so pushes whose run
+        # was cancelled by this one or failed are re-checked; the push's
+        # `before` is the fallback.
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             scripts/ci-changed-areas.sh >> "${GITHUB_OUTPUT}"
           else
-            scripts/ci-changed-areas.sh "${BEFORE}" "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+            base="$(scripts/ci-push-base.sh ci.yml "${GITHUB_SHA}" "${BEFORE}")"
+            scripts/ci-changed-areas.sh "${base}" "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
           fi
           {
             echo "## Changed areas"

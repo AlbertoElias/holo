@@ -218,7 +218,8 @@ Supported env vars for smoke and XR scripts:
   `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr` before
   merging (see Pre-Handoff Check Policy).
 - On a push to `main`, a `changes` job (`scripts/ci-changed-areas.sh`,
-  diffing the push's `before..sha`) selects only the suites relevant to the
+  diffing from the last successful CI run on `main` found by
+  `scripts/ci-push-base.sh`, falling back to the push's `before`) selects only the suites relevant to the
   merged files: quality, unit tests and production build (one runner),
   capture XR checks (2 shards), viewer AR and Knowledge Atlas checks,
   capture → viewer pipeline (2 shards), and portal view checks. A docs-only
@@ -230,9 +231,10 @@ Supported env vars for smoke and XR scripts:
   There is no separate heavy tier and no weekly schedule; dispatch CI
   manually to check runner-image or dependency drift on unchanged code.
 - `.github/workflows/deploy.yml` deploys production only after a successful
-  CI run from a `main` push, and only the apps that push touched (the same
-  script, diffing the head commit against its first parent — exact for the
-  squash and merge commits used on `main`): API (Fly), viewer (Pages), and
+  CI run from a `main` push, and only the apps changed since the last
+  successful deploy (the same scripts; with no usable previous deploy it
+  deploys everything). Diffing a merge commit against its first parent would
+  miss the merged branch, so never use `HEAD^` as the base: API (Fly), viewer (Pages), and
   capture (Pages) deploy independently, and a docs-only merge deploys
   nothing. Manual dispatch deploys all three. It never gates PRs.
 - Capture XR checks are deterministic: they take capture's manual clock
