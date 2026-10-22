@@ -9,6 +9,12 @@ const MAX_SCENE_SAMPLES = 480;
 const OCCLUSION_TEST_MIN_NORMAL_Y_ABS = 0.6;
 const OCCLUSION_HIT_MIN_DISTANCE = 0.03;
 
+export interface SceneBubble {
+  group: THREE.Group;
+  /** Source scene mesh → its clipped copy in `group`. */
+  clippedBySource: Map<THREE.Mesh, THREE.Mesh>;
+}
+
 export class SceneBubbleSampler {
   private static readonly UP = new THREE.Vector3(0, 1, 0);
 
@@ -60,11 +66,17 @@ export class SceneBubbleSampler {
     return sphere;
   }
 
-  collectSceneBubbleGroup(sceneRoot: THREE.Object3D): THREE.Group | undefined {
+  /**
+   * The world model clipped to the recorded bubble, as exported, with each
+   * source mesh's clipped copy. Point resolution casts only against these
+   * clipped meshes, never the source scene, the bubble sphere or lights.
+   */
+  collectSceneBubbleGroup(sceneRoot: THREE.Object3D): SceneBubble | undefined {
     if (this.sceneBubbleSamples.length === 0) return undefined;
     sceneRoot.updateMatrixWorld(true);
     const group = new THREE.Group();
     group.name = 'RecordedSceneBubble';
+    const clippedBySource = new Map<THREE.Mesh, THREE.Mesh>();
     sceneRoot.traverse((obj) => {
       if (!isThreeMesh(obj)) return;
       if (!obj.visible) return;
@@ -72,9 +84,10 @@ export class SceneBubbleSampler {
       const bubbleMesh = this.createSceneBubbleMesh(sceneRoot, obj);
       if (bubbleMesh) {
         group.add(bubbleMesh);
+        clippedBySource.set(obj, bubbleMesh);
       }
     });
-    return group.children.length > 0 ? group : undefined;
+    return group.children.length > 0 ? { group, clippedBySource } : undefined;
   }
 
   private appendSceneBubbleSample(source: THREE.Vector3): void {

@@ -5,7 +5,10 @@ import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 import { GLTFAudioPlugin } from './GLTFAudioPlugin';
+import { GLTFMeaningPlugin } from './GLTFMeaningPlugin';
 import { FrameCaptureStore } from './FrameCaptureStore';
+import type { PointSampleStore } from './PointSampleStore';
+import { type MeaningDraft, PointResolver, type PointResolutionReport } from './PointResolver';
 import { SceneBubbleSampler } from './SceneBubbleSampler';
 import { nextFrame } from '../shared/async';
 
@@ -16,13 +19,19 @@ interface MorphExportBinding {
 }
 
 export class GltfExportComposer {
+  private readonly pointResolver = new PointResolver();
+  /** What point resolution decided for the latest export; undefined before one or for a take without point samples. */
+  lastPointReport: PointResolutionReport | undefined;
+
   async exportToGlbBlob(
     avatar: THREE.Object3D,
     frameStore: FrameCaptureStore,
     bubbleSampler: SceneBubbleSampler,
     sceneRoot?: THREE.Object3D,
-    audioData?: { buffer: ArrayBuffer; mimeType: string }
+    audioData?: { buffer: ArrayBuffer; mimeType: string },
+    pointStore?: PointSampleStore
   ): Promise<Blob> {
+    this.lastPointReport = undefined;
     await nextFrame();
 
     const frames = frameStore.getFrames();
@@ -145,18 +154,38 @@ export class GltfExportComposer {
     const scene = new THREE.Scene();
     scene.add(clone);
     scene.add(bubbleSphere);
-    if (sceneRoot) {
-      const sceneBubble = bubbleSampler.collectSceneBubbleGroup(sceneRoot);
-      if (sceneBubble) {
-        scene.add(sceneBubble);
-      }
+    const sceneBubble = sceneRoot ? bubbleSampler.collectSceneBubbleGroup(sceneRoot) : undefined;
+    if (sceneBubble) {
+      scene.add(sceneBubble.group);
     }
     this.addRecordedSceneLights(scene);
+
+    // Resolution runs here, on the main thread, before parse: it needs the
+    // clipped meshes and the avatar, and the plugin maps its objects to the
+    // writer's node indices. Root motion is normalized without a world
+    // model, so scene anchors are skipped and only body anchors remain.
+    let meaning: MeaningDraft | undefined;
+    if (pointStore?.hasSamples()) {
+      scene.updateMatrixWorld(true);
+      const { draft, report } = this.pointResolver.resolve({
+        frames,
+        store: pointStore,
+        avatar,
+        exportAvatar: clone,
+        sceneMeshes: normalizeRootMotion || !sceneBubble ? [] : [...sceneBubble.clippedBySource.values()]
+      });
+      this.lastPointReport = report;
+      if (draft.marks.length > 0 || draft.spans.length > 0) meaning = draft;
+    }
 
     return new Promise<Blob>((resolve, reject) => {
       const exporter = new GLTFExporter();
       if (audioData && audioData.buffer.byteLength > 0) {
         exporter.register((writer) => new GLTFAudioPlugin(writer, audioData.buffer, audioData.mimeType));
+      }
+      if (meaning) {
+        const draft = meaning;
+        exporter.register((writer) => new GLTFMeaningPlugin(writer, draft));
       }
       exporter.parse(
         scene,

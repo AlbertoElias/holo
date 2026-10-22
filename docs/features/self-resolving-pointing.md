@@ -204,6 +204,41 @@ without recomputing.
   slot (after the camera, before recording) only outside VR.
 - **Record.** As above, written by an `afterParse` exporter plugin that uses
   `nodeMap`, like `GLTFAudioPlugin.ts`.
+- **Point-sample store (capture API).** `AvatarRecorder.pointSamples`
+  (`apps/capture/src/recording/PointSampleStore.ts`) holds one take's point
+  evidence; it is cleared with the recorder, ignores writes while not
+  recording, and is read once by `PointResolver` at export. Every `timeSec`
+  is the simulation time of the step (`CaptureFrame.elapsedSec`, the value
+  `RecordingSystem` passes to `AvatarRecorder.capture`), so samples line up
+  with frames; systems before `RecordingSystem` write in the same step.
+  - Headset (written by capture itself): `RecordingSystem` passes
+    `c.tracking` to `capture`, and `PointDetector` (`src/xr/`) writes
+    `recordHandSample({ timeSec, side, score, origin, direction })` for each
+    `xr-hand` frame with a filtered index-fingertip ray (world space) and a
+    pose score in [0, 1] (`src/xr/pointPose.ts`).
+  - Desktop point action, on each step while held:
+    `recordAim({ timeSec, side, origin, direction })` with the eye-origin aim
+    ray (world space, unit direction; `side` is the hand that shows it and
+    becomes `from`); `endAim(timeSec)` on the step the hold ends (release,
+    blur, page hidden, pointer lock lost; harmless when no hold is open);
+    and, while synthesized arm motion is visible including any blend back,
+    `recordInferredMotion(timeSec, bones)` with the VRM bones it drives
+    (for example `rightShoulder`, `rightUpperArm`, `rightLowerArm`,
+    `rightHand`). Aim writes more than 0.25 s apart, or on another side,
+    start a new hold; stopping the recording closes an open hold at its last
+    sample. Each hold of at least 0.2 s becomes `recorded` links (cast
+    against the clipped scene only, split on referent change like headset
+    points, none for the sky); each contiguous motion run becomes one
+    `inferred` motion span.
+  - Resolution thresholds (`src/recording/pointSegments.ts`,
+    `PointResolver.ts`): enter at score 0.6, hold above 0.35, bridge gaps
+    under 0.3 s, dwell 0.4 s, spans backdated to score 0.1; a referent
+    change must hold 0.4 s to split; cone of rays to 3.5° (a thin object in
+    front of a floor or wall wins over it); confidence = agreement × mean
+    pose score × ray quality, links kept at 0.5 or more; `radius` 0.15 m on
+    meshes whose bounds exceed 1.5 m. `AvatarRecorder.getLastPointReport()`
+    returns what the latest export decided (pose segments, holds, runs with
+    referent, agreement, confidence, and why a run was dropped) for checks.
 - **Viewer.** A per-card hook reads `gltf.userData.gltfExtensions` as
   `useGltfAudio.ts` reads `KHR_audio`, maps node indices through a parallel
   walk of original and clone, and a highlight component raises emissive on the
