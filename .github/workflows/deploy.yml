@@ -97,7 +97,7 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       - name: Health check
         run: |
-          for attempt in 1 2 3 4 5 6; do
+          for _ in 1 2 3 4 5 6; do
             if curl -fsS https://holoim-api.fly.dev/healthz; then exit 0; fi
             sleep 10
           done

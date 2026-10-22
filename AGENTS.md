@@ -138,6 +138,9 @@ integration point only and never takes edits.
   worktree (`git worktree remove`) and deletes the merged branch. If a push is
   rejected because another agent landed first, pull with rebase, re-run the
   affected check, and push again. Do not force-push.
+- Push to `main` once per finished change, not once per commit. CI cancels a
+  run when a newer push lands, and the cancelled run's minutes are lost, so
+  batch follow-up fixes locally and push them together.
 
 ## Agent configuration (Codex and Claude Code)
 
