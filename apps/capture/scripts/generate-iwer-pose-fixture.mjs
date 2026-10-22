@@ -109,7 +109,10 @@ try {
     pointingLabels = await runPointingTake({
       page,
       stepMs: STEP_MS,
-      readLeftWrist: () => page.evaluate(() => window.__sampleHands().left.tracked.wrist),
+      readLeftPalm: () => page.evaluate(() => {
+        const { wrist, 'middle-finger-phalanx-proximal': knuckle } = window.__sampleHands().left.tracked;
+        return wrist.map((v, i) => (v + knuckle[i]) / 2);
+      }),
       tipShift
     });
   } else {

@@ -1,6 +1,7 @@
 {
   "fixture": "input-recordings/headset-open-fist-pinch-point-wave-reach.json",
-  "scene": null,
+  "scene": "/fixtures/scenes/pointing-room.gltf",
+  "sceneNote": "The take was recorded without a scene and its points aim about 20° up, into sky in an open scene; the room scene puts a wall in their path so each point yields a link. What they hit is not scored.",
   "source": "Written 2026-10-22 from the replay's 0.2 s contact sheets (spectator view, tracked-joint dots) before any detector existed, cross-read against per-finger extension and thumb-index distance computed from the recorded tracked joints at 0.2 s steps. Boundaries are good to about 0.2 s; wave/reach boundary about 0.4 s.",
   "useFor": "timing and silence only; this was recorded in a real room, so what a point's ray hits in the replay scene says nothing about the referent",
   "timeBase": "seconds from the first input frame; the capture recording starts within two 30 Hz steps of it",

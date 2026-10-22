@@ -126,7 +126,7 @@ const lerp3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
  * returns labels for the check: every point's intended referent and the times
  * it was held, in seconds from the first stepped frame.
  */
-export async function runPointingTake({ page, stepMs, readLeftWrist, tipShift = [0, 0, 0] }) {
+export async function runPointingTake({ page, stepMs, readLeftPalm, tipShift = [0, 0, 0] }) {
   const stepSec = stepMs / 1000;
   let elapsed = 0;
   const labels = [];
@@ -191,10 +191,12 @@ export async function runPointingTake({ page, stepMs, readLeftWrist, tipShift = 
 
   // 2. The avatar's own left hand.
   await moveLeft(LEFT_OFFERED, 0.5);
-  // Let the tracked hand settle before reading where its wrist is.
+  // Let the tracked hand settle before reading where its palm is. Aim at the
+  // palm centre, not the wrist: the wrist is the forearm/hand boundary, so a
+  // ray at it is as much a point at the forearm as at the hand.
   await hold(0.4);
-  const wrist = await readLeftWrist();
-  await raise(wrist, BLEND_SEC);
+  const palm = await readLeftPalm();
+  await raise(palm, BLEND_SEC);
   start = elapsed;
   await hold(HOLD_SEC);
   point('leftHand', start);

@@ -10,14 +10,23 @@ import { TARGETS } from './lib/pointing-scene.mjs';
 // horizon, so a point into the sky hits no geometry. Load it with
 // ?scene=/fixtures/scenes/pointing-targets.gltf&sceneScale=1.
 // Targets are exported as `<name>_RecordedBubble`, which the check matches.
+//
+// Also writes fixtures/scenes/pointing-room.gltf for the real headset take,
+// whose points (recorded in a real room) aim about 20° above the horizon: the
+// same floor and a wall ahead of the spawn, so those points hit something.
+// What they hit is not a referent; that take proves timing and silence.
 
 const OUT = path.resolve('fixtures/scenes/pointing-targets.gltf');
+const ROOM_OUT = path.resolve('fixtures/scenes/pointing-room.gltf');
+// Bubble clipping keeps triangles with two vertices within 6 m of the
+// recording, so the wall is split into 0.5 m quads.
+const ROOM_WALL = { x0: -2.5, x1: 2.5, height: 3.2, z: -3, cell: 0.5 };
 const FLOOR = 7;
 const SLAB = 0.01;
 
-const positions = [];
-const normals = [];
-const meshRanges = [];
+let positions = [];
+let normals = [];
+let meshRanges = [];
 function triangle(a, b, c) {
   const u = b.map((v, i) => v - a[i]);
   const w = c.map((v, i) => v - a[i]);
@@ -49,15 +58,13 @@ function addMesh(name, build, material) {
   meshRanges.push({ name, start, count: positions.length / 3 - start, material });
 }
 
-addMesh('PointingFloor', () => {
+const addFloor = () => addMesh('PointingFloor', () => {
   quad([-FLOOR, 0, -FLOOR], [-FLOOR, 0, FLOOR], [FLOOR, 0, FLOOR], [FLOOR, 0, -FLOOR]);
   // A 1 cm slab edge keeps the floor clear of capture's own ground disc.
   quad([-FLOOR, -SLAB, FLOOR], [FLOOR, -SLAB, FLOOR], [FLOOR, 0, FLOOR], [-FLOOR, 0, FLOOR]);
 }, 0);
-Object.entries(TARGETS).forEach(([name, { center, size }], index) => {
-  addMesh(name, () => box(center, size), index + 1);
-});
 
+async function writeScene(out, materials) {
 const bytes = Buffer.alloc((positions.length + normals.length) * 4);
 positions.forEach((v, i) => bytes.writeFloatLE(v, i * 4));
 normals.forEach((v, i) => bytes.writeFloatLE(v, (positions.length + i) * 4));
@@ -86,14 +93,40 @@ const gltf = {
   scenes: [{ nodes: meshRanges.map((_, i) => i) }],
   nodes: meshRanges.map((range, i) => ({ name: range.name, mesh: i })),
   meshes: meshRanges.map((_, i) => ({ primitives: [{ attributes: { POSITION: i * 2, NORMAL: i * 2 + 1 }, material: i }] })),
-  materials: [
-    { pbrMetallicRoughness: { baseColorFactor: [0.42, 0.45, 0.5, 1], metallicFactor: 0, roughnessFactor: 0.9 } },
-    ...Object.values(TARGETS).map(({ color }) => ({ pbrMetallicRoughness: { baseColorFactor: color, metallicFactor: 0, roughnessFactor: 0.6 } }))
-  ],
+  materials,
   buffers: [{ byteLength: bytes.length, uri: `data:application/octet-stream;base64,${bytes.toString('base64')}` }],
   bufferViews,
   accessors
 };
-await mkdir(path.dirname(OUT), { recursive: true });
-await writeFile(OUT, `${JSON.stringify(gltf, null, 2)}\n`);
-console.log(`[pointing-scene] ${OUT}: ${positions.length / 9} triangles, targets ${Object.keys(TARGETS).join(', ')}`);
+await mkdir(path.dirname(out), { recursive: true });
+await writeFile(out, `${JSON.stringify(gltf, null, 2)}\n`);
+console.log(`[pointing-scene] ${out}: ${positions.length / 9} triangles, meshes ${meshRanges.map((range) => range.name).join(', ')}`);
+}
+
+const FLOOR_MATERIAL = { pbrMetallicRoughness: { baseColorFactor: [0.42, 0.45, 0.5, 1], metallicFactor: 0, roughnessFactor: 0.9 } };
+
+addFloor();
+Object.entries(TARGETS).forEach(([name, { center, size }], index) => {
+  addMesh(name, () => box(center, size), index + 1);
+});
+await writeScene(OUT, [
+  FLOOR_MATERIAL,
+  ...Object.values(TARGETS).map(({ color }) => ({ pbrMetallicRoughness: { baseColorFactor: color, metallicFactor: 0, roughnessFactor: 0.6 } }))
+]);
+
+positions = [];
+normals = [];
+meshRanges = [];
+addFloor();
+addMesh('RoomWall', () => {
+  const { x0, x1, height, z, cell } = ROOM_WALL;
+  for (let x = x0; x < x1 - 1e-6; x += cell) {
+    for (let y = 0; y < height - 1e-6; y += cell) {
+      const xe = Math.min(x + cell, x1);
+      const ye = Math.min(y + cell, height);
+      // Faces +Z, toward the spawn.
+      quad([x, y, z], [xe, y, z], [xe, ye, z], [x, ye, z]);
+    }
+  }
+}, 1);
+await writeScene(ROOM_OUT, [FLOOR_MATERIAL, { pbrMetallicRoughness: { baseColorFactor: [0.75, 0.72, 0.66, 1], metallicFactor: 0, roughnessFactor: 0.9 } }]);

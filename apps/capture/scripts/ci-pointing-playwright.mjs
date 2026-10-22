@@ -85,6 +85,12 @@ async function replay(labelFile) {
   await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"(discarded by the pointing check)"}' }));
   await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   const pageUrl = new URL(recording.meta?.query ?? '', baseUrl);
+  // A take recorded without a scene (the real headset take) replays in the
+  // scene its labels name, so its points hit geometry rather than sky.
+  if (labels.scene && !pageUrl.searchParams.has('scene')) {
+    pageUrl.searchParams.set('scene', labels.scene);
+    pageUrl.searchParams.set('sceneScale', '1');
+  }
   pageUrl.searchParams.set('manualClock', '1');
   await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__setSpectatorView', '__setHandOverlay']);
@@ -126,7 +132,7 @@ async function replay(labelFile) {
   await mkdir(frameDir, { recursive: true });
   const shots = sheetShots(labels);
   // Hand close-ups show finger shape in the real take; the body view shows the arm aiming in the synthetic scene.
-  const spectatorMode = labels.scene ? 'body' : 'hands';
+  const spectatorMode = labels.useFor === 'timing and referents' ? 'body' : 'hands';
   const aim = [];
   let nextShot = 0;
   const totalSteps = Math.floor(durationMs / STEP_MS);
@@ -147,11 +153,12 @@ async function replay(labelFile) {
       if (target || shot.referent === 'leftHand') {
         const hands = await page.evaluate(() => {
           const sample = window.__sampleHands();
-          return { tip: sample.right.tracked['index-finger-tip'], proximal: sample.right.tracked['index-finger-phalanx-proximal'], leftWrist: sample.left.tracked.wrist };
+          const { wrist, 'middle-finger-phalanx-proximal': knuckle } = sample.left.tracked;
+          return { tip: sample.right.tracked['index-finger-tip'], proximal: sample.right.tracked['index-finger-phalanx-proximal'], leftPalm: wrist.map((v, i) => (v + knuckle[i]) / 2) };
         });
         aim.push({
           point: shot.name,
-          errorDeg: Number(angleDeg(sub(hands.tip, hands.proximal), sub(target ?? hands.leftWrist, hands.tip)).toFixed(2))
+          errorDeg: Number(angleDeg(sub(hands.tip, hands.proximal), sub(target ?? hands.leftPalm, hands.tip)).toFixed(2))
         });
       }
       await captureXrScreenshot(page, path.join(frameDir, `${String(nextShot).padStart(2, '0')}.png`));
