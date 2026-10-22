@@ -49,7 +49,7 @@ export const initiateUploadResponseSchema = z.discriminatedUnion("mode", [
     mode: z.literal("direct"),
     intentId: z.string().min(1),
     uploadUrl: z.string().url(),
-    formFields: z.record(z.string()),
+    formFields: z.record(z.string(), z.string()),
     storageKey: z.string().min(1),
     expiresAt: z.string().datetime()
   })

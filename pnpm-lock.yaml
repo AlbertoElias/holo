@@ -31,8 +31,8 @@ catalogs:
       specifier: ^2.0.3
       version: 2.0.3
     zod:
-      specifier: ^3.24.2
-      version: 3.25.76
+      specifier: ^4.4.3
+      version: 4.4.3
 
 overrides:
   sharp: 0.35.3
@@ -75,6 +75,9 @@ importers:
       '@dimforge/rapier3d-compat':
         specifier: ^0.20.0
         version: 0.20.0
+      '@holoim/meaning':
+        specifier: workspace:*
+        version: link:../../packages/meaning
       '@holoim/ui-dom':
         specifier: workspace:*
         version: link:../../packages/ui-dom
@@ -259,7 +262,7 @@ importers:
         version: 5.7.4
       zod:
         specifier: 'catalog:'
-        version: 3.25.76
+        version: 4.4.3
     devDependencies:
       '@holoim/config-eslint':
         specifier: workspace:*
@@ -326,7 +329,7 @@ importers:
         version: super-three@0.181.0
       zod:
         specifier: 'catalog:'
-        version: 3.25.76
+        version: 4.4.3
     devDependencies:
       '@holoim/config-eslint':
         specifier: workspace:*
@@ -422,7 +425,7 @@ importers:
     dependencies:
       zod:
         specifier: 'catalog:'
-        version: 3.25.76
+        version: 4.4.3
     devDependencies:
       '@holoim/config-eslint':
         specifier: workspace:*
@@ -444,7 +447,7 @@ importers:
     dependencies:
       zod:
         specifier: 'catalog:'
-        version: 3.25.76
+        version: 4.4.3
     devDependencies:
       '@holoim/config-eslint':
         specifier: workspace:*
@@ -5013,9 +5016,6 @@ packages:
 
   youch@4.1.0-beta.10:
     resolution: {integrity: sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ==}
-
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
@@ -9936,8 +9936,6 @@ snapshots:
       '@speed-highlight/core': 1.2.24
       cookie: 1.1.1
       youch-core: 0.3.3
-
-  zod@3.25.76: {}
 
   zod@4.4.3: {}
 

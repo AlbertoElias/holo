@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
+    "@holoim/meaning": "workspace:*",
     "@holoim/ui-dom": "workspace:*",
     "@holoim/xr-runtime": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",

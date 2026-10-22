@@ -11,7 +11,7 @@ catalog:
 
   # Shared runtime deps
   three: npm:super-three@0.181.0
-  zod: ^3.24.2
+  zod: ^4.4.3
 
   # Shared type packages
   "@types/three": ^0.173.0
