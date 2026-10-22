@@ -72,19 +72,73 @@ Return.
 while the glow flickers gently; in 3D the warm light on the table flickers
 with it. With reduced motion, the edge holds still.
 
-## Open for round 2
+## Design review of round 1
 
-- **Contrast and caption chips.** The caption chip is still a blue-tinted
-  dark glass from the earlier blue; retune it for blue-green, and check text
-  contrast against the bottom of the gradient, where it turns amber.
-- **How loud the edge is.** Burnt is the loudest edge. Tune spark density and
-  flicker so the hologram stays calm when many are on screen, such as in a
-  feed.
-- **Gold versus the amber horizon.** Both are warm; the edge must still read
-  where a hologram sits low on the screen, over the amber.
-- **Type scale and sizes** across phone, desktop and headset, using the
-  angular sizing in the [design-language concept](../concepts/design-language.md).
-- **Glyph legibility.** Thin gold glyphs need checking for size, contrast and
-  hit targets on touch, controller and hands.
-- **Colours not chosen yet:** record red, the unresolved state, errors, and
-  each person's identity hue, which must stay clear of the gold.
+An independent design review (2026-10-22) checked the direction against the
+principles, the [inventory](inventory/README.md) and the design-language
+concept. Its main findings:
+
+- **The amber horizon fails contrast where the controls sit.** Muted text
+  drops below 4.5:1 from about 78% down the gradient, body text from about
+  88%, and the gold edge and glyphs below the 3:1 non-text minimum from about
+  90%. At the horizon, gold is 2.1:1. Phone controls, captions and recording
+  states all sit in that band.
+- **Gold and amber are 12° apart in hue,** so a hologram low on the screen
+  loses its edge. A dark char band just outside the gold core (as real burnt
+  paper has) restores it: gold on char is 11.3:1 and char on amber 5.3:1.
+- **AR has no ground colour.** Over a white wall gold is 1.5:1, and glow
+  disappears in bright rooms. Text needs a chip of at least 82% opacity. The
+  inventory's AR captures use a synthetic room, so round 3 needs real-camera
+  captures.
+- **"No buttons or pills" must not drop the chip.** Text never floats bare in
+  3D; the chip stays as the text container, retuned for blue-green.
+- **Burnt is loud in a feed.** Sparks only on the focused hologram, a small
+  global particle budget, flicker at or below 10% luminance and 1 Hz, none in
+  VR peripheral vision, and never on real-surface lighting in AR.
+- **Edge sizes need angular clamps.** As percentages, the tears vanish on
+  small cards and the halo covers the glyphs on large ones.
+- **Thin glyphs shimmer in a headset** and edge-hugging targets collide with
+  phone gestures. Try a 2 px stroke and 20 to 24 px icons, with hit areas of
+  24, 44, 56 or 72 angular px by input.
+- **Warm hues are used up.** Gold, glow and horizon take every warm hue, so
+  "open amber" can no longer mean unresolved, record red needs to lean to
+  crimson on a chip, and identity hues must avoid both gold and blue-green.
+- **Some principles are weakened:** a glowing halo is the outline principle 6
+  warns against (light spilling onto the table may replace it); gold on
+  everything stops meaning "hologram"; a constantly animated edge never hides;
+  and the ground is defined as a CSS gradient before it is defined in 3D.
+- **Timecode is defined twice** above (Figtree tabular, and the title face's
+  italic); round 2 settles it.
+- **The edge, sparks and ground belong to the view layer** and must never be
+  baked into exported GLB. AR Quick Look can carry only a static edge.
+
+## Round 2 agenda
+
+In order, each compared in the studio:
+
+1. **Ground in 3D first:** a sky dome with the horizon below eye level; the
+   gradient with a darker horizon (`#7a5940` or `#6e5039`); the gradient
+   pinned to the stage rather than the screen.
+2. **Edge legibility:** a char band, a darker horizon, or both, judged on the
+   amber, a white wall and a beige wall.
+3. **Chip:** `#081a1e` at 85%, `#0c2228` at 82%, or walnut-tinted glass, with
+   at least 4.5:1 over white.
+4. **Angular clamps for the edge:** three clamp sets, at an 80 px thumbnail,
+   a phone card, a tabletop slab and a doorway.
+5. **Edge loudness:** sparks on focus only, a global particle budget, or a
+   breathing glow with no particles; measure frame time on a mid-range phone
+   and on Quest.
+6. **Glyphs:** 1.5 or 2 px stroke, with or without glow, with or without a
+   chip; hit-target overlays per input on the capture VR panel and phone
+   portal.
+7. **Semantic colours:** record red `#ff3b5c` or `#e5484d` on a chip;
+   unresolved as a hollow shape, an unlit gap in the edge, or a cool signal
+   hue; an identity set of 5 to 6 hues or 8.
+8. **Type scale:** Figtree or Fraunces italic for timecode; tracked uppercase
+   or sentence-case labels; headset legibility scale 2× or 2.5×.
+9. **Motion:** flicker amplitude and rate, the reduced-motion version, and
+   whether the edge dims while recording.
+
+Sections 2 and 3 of the [design-language concept](../concepts/design-language.md)
+still describe neutral chrome and open amber; the styleguide (round 4)
+replaces them.
