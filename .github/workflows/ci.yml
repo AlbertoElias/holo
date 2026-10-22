@@ -296,7 +296,10 @@ jobs:
 
   gate:
     name: CI Gate
-    if: always()
+    # Not always(): a cancelled run (superseded by a newer push, or GitHub
+    # occasionally creating two runs for one push) would still start a runner
+    # here only to report failure. Failed or skipped jobs still reach the gate.
+    if: ${{ !cancelled() }}
     needs: [changes, quality, capture-xr, e2e, pipeline, portal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
