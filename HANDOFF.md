@@ -21,6 +21,16 @@ record room-scale walking, turning, crouching and leaning under
 `apps/capture/fixtures/body-recordings/` (brief
 [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md)).
 
+## Ready to merge (grouped)
+
+Verified branches waiting to go to `main` together with the next finished
+change (see "Sharing work between agents" in `AGENTS.md`):
+
+- `docs/self-resolving-pointing-brief`: PRD-022 approved, reviewed brief
+  [`docs/features/self-resolving-pointing.md`](docs/features/self-resolving-pointing.md),
+  merge-grouping and subagent rules in `AGENTS.md`. Docs only;
+  `verify:agent` passed 2026-10-22.
+
 ## Unverified / device-only
 
 - Validate the room-scale body solver on a headset (walking, turning,

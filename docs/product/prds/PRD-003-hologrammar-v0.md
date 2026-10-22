@@ -5,7 +5,7 @@
 **Layer:** Meaning (added)  
 **Depends on:** IDEA-032 (first producer of marks), IDEA-024 (provenance field)  
 **Owner:** Unassigned  
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-22
 
 ## User Outcome
 
@@ -103,6 +103,10 @@ and render identically across devices. Revisit if every mark kind still needs
 its own special-case fields; park if IDEA-032 is parked.
 
 ## Decision
+
+v0 subset, 2026-10-22: [PRD-022](PRD-022-self-resolving-pointing.md) (approved)
+delivers the first slice of this PRD with pointing links; see its "First mark"
+section for exactly which fields and styles. The rest of this PRD stays Draft.
 
 Pending until explicitly decided. Drafting this document is not approval to
 build. Recommended sequencing: approve together with IDEA-032, not before it.
