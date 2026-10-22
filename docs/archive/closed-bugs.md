@@ -292,3 +292,33 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   time out this way (≈1/80 at 2 CPUs); never on macOS hosts.
 - **Fix (cd54bc23):** the preview tick re-resolves inside a functional update, so it never replaces a
   status the model already reported. Same 1-CPU loop: 0/30; 2 CPUs: 0/150.
+
+### B-018 — Entering AR stalls the main thread 10–16 s on software GL
+
+- **Area:** apps/viewer-web (AR entry under the IWER emulator)
+- **Severity:** P2 (residual Viewer AR flake: `enterMockAr`'s 10 s `waitForIwerSession`
+  times out when the stall overlaps it)
+- **Observed:** 2026-10-21 (`scripts/ci-emulate.sh` loops; likely CI run 39368121357)
+- **Evidence:** a long-task observer shows one 10–16 s task in every 1-CPU run (≈1/120
+  failures at 2 CPUs). CPU profiles: it was IWER `computeDepthSensing` → synchronous
+  `readRenderTargetPixels` (17 s of 21 s); with depth sensing no longer requested under
+  IWER the stall moves to `WebGLRenderer.forceContextLoss` when the feed card canvas is
+  disposed on navigation to `/ar` (13.6 s), so it is a software-GL backlog flushed at
+  the first synchronous GL call.
+- **Partial fix:** request `depthSensing` only outside IWER (occlusion is already off
+  there): 1-CPU session-start failures 5/90 → 0/60. Smaller viewports do not help
+  (390×844 still 11–12 s; the feed's AR trigger is unclickable at 320×180).
+- **Cause (confirmed):** a Chrome trace (categories `gpu`, `gpu.angle`) shows the feed
+  card's first frames cost 12–16 s of SwiftShader GPU time at 1 CPU
+  (`vkQueueSubmit` chunks of ~2 s each). The tests clicked AR as soon as the trigger
+  appeared, before those frames finished, so the AR page's synchronous GL calls (the
+  card's `forceContextLoss` on unmount, the AR canvas's context creation) waited behind
+  them on the shared GPU thread. Disabling the context loss only moved the wait into
+  the session (up to 8 s tasks). Once the card has finished drawing, entry is fast.
+- **Reproduction:** `CI_EMULATE_CPUS=0 scripts/ci-emulate.sh` loop of "AR places the model"
+  with a `longtask` PerformanceObserver (a 13–18 s task in every run before the fix).
+- **Fix:** the e2e helpers `observeFeedCardRenderer` / `waitForFeedCardPresented`
+  (`apps/viewer-web/e2e/bootstrap.ts`) wait, before the AR tap, until the card is
+  rendered and a WebGL fence on its context has signalled (polled, never blocking).
+  Used by `enterMockAr` and the ar-bubble feed → AR test. 1-CPU Docker loop: longest
+  task 2.8 s (was 13–18 s), 0 failures; `test:e2e:mocked` green at 2 CPUs.

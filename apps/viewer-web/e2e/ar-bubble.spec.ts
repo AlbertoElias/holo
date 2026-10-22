@@ -7,7 +7,7 @@ import { freezePageClock, waitForIwerSession } from "@holoim/tooling-testing/xr-
 
 import { captureBubblePixels } from "./bubble-pixel-proof";
 
-import { expect, test } from "./bootstrap";
+import { expect, observeFeedCardRenderer, test, waitForFeedCardPresented } from "./bootstrap";
 
 // A deliberately oversized red object sits outside the recorded sphere. The
 // animated green object is inside it. Unlit colors make the pixel oracle
@@ -77,7 +77,9 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: [hologram], nextCursor: null } }));
   await page.route("**/api/holograms/bubble-render", (route) => route.fulfill({ json: hologram }));
   await page.route("**/uploads/bubble-render.glb", (route) => route.fulfill({ body: diagnosticGltf(), contentType: "model/gltf-binary" }));
+  await observeFeedCardRenderer(page);
   await page.goto("/");
+  await waitForFeedCardPresented(page);
   await page.locator(".ar-trigger-button").first().click();
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await page.waitForFunction(() => Boolean((window as ProbeWindow).__bubbleProbe?.bubble.active));
