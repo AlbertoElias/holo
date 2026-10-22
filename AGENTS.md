@@ -82,6 +82,9 @@ and session length multiplies it.
 
 Pick the tier when starting a session; an agent cannot change its own model
 mid-session, so a lead delegates lighter work to a pinned subagent instead.
+Split work into small tasks and give each one to a subagent on the matching
+tier (one module, one check run, one search); the lead keeps only design,
+integration, and decisions. Smaller tasks keep each context short.
 
 | Tier | Work | Claude Code | Codex | Muse |
 |---|---|---|---|---|
@@ -138,9 +141,13 @@ integration point only and never takes edits.
   worktree (`git worktree remove`) and deletes the merged branch. If a push is
   rejected because another agent landed first, pull with rebase, re-run the
   affected check, and push again. Do not force-push.
-- Push to `main` once per finished change, not once per commit. CI cancels a
-  run when a newer push lands, and the cancelled run's minutes are lost, so
-  batch follow-up fixes locally and push them together.
+- Every push to `main` runs CI and a deploy, so merge to `main` as rarely as
+  possible. Batch follow-up fixes locally, and group finished, verified
+  changes into one merge: push the verified branch, record it as ready in
+  `HANDOFF.md`, and merge it together with the next finished change rather
+  than on its own. Documentation-only changes ride along with the next merge
+  unless the user asks for them on `main` sooner. CI also cancels a run when
+  a newer push lands, and the cancelled run's minutes are lost.
 
 ## Agent configuration (Codex and Claude Code)
 

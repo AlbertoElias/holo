@@ -27,6 +27,10 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Self-resolving pointing (PRD-022, approved 2026-10-22): highlight what
+  the author points at in the feed portal, from headset hands and a desktop
+  point action. Owned by
+  [`docs/features/self-resolving-pointing.md`](docs/features/self-resolving-pointing.md).
 - [ ] Portal view on flat screens: freeze, orbit, zoom continuum, Follow/Free,
   three interaction variants, and a recipient trial. Approved in
   [PRD-002](docs/product/prds/PRD-002-portal-view.md); in flight in

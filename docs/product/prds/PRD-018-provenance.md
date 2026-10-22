@@ -5,7 +5,7 @@
 **Layer:** All layers  
 **Depends on:** the first mark kind (IDEA-032); applies to synthesized locomotion now  
 **Owner:** Unassigned  
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-22
 
 ## User Outcome
 
@@ -86,6 +86,10 @@ Measures: correct attribution and stated trust. Continue if attribution
 improves; revise styles if they distract.
 
 ## Decision
+
+v0 subset, 2026-10-22: [PRD-022](PRD-022-self-resolving-pointing.md) (approved)
+delivers the first slice of this PRD with pointing links; see its "First mark"
+section for exactly which fields and styles. The rest of this PRD stays Draft.
 
 Pending until explicitly decided. Drafting this document is not approval to
 build. The lens already requires the field; this PRD scopes how it is shown.
