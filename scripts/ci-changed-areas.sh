@@ -6,9 +6,13 @@
 #   base omitted, all-zero, or unreachable -> every area (fail closed).
 #   head defaults to HEAD.
 #
-# Docs-only changes select no area. Root/shared/unknown files select every
-# area, mirroring verify:agent's all-packages fallback. Keep this mapping in
-# sync with the jobs in .github/workflows/ci.yml and deploy.yml.
+# Each file selects only the suites that actually exercise it, and the apps
+# whose build it changes. Docs, CI/deploy workflows, shell scripts and tool
+# configuration have no suite, so they select nothing (the changes job itself
+# runs the selection scripts on every push; dispatch CI to exercise an edited
+# job). Lockfile changes alter every app's dependencies and select every
+# area; unclassified files fail closed the same way. Keep this mapping in sync
+# with the jobs in .github/workflows/ci.yml and deploy.yml.
 set -euo pipefail
 
 base="${1:-}"
@@ -40,6 +44,7 @@ else
   fi
   saw_code=false
   saw_docs=false
+  saw_plumbing=false
   while IFS= read -r file; do
     [ -z "${file}" ] && continue
     case "${file}" in
@@ -61,10 +66,21 @@ else
         api=true; web=true; capture_app=true ;;
       packages/*)
         saw_code=true; quality=true ;;
-      fly.toml)
-        saw_code=true; quality=true; api=true ;;
-      .github/*|scripts/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig*.json|eslint.config.*|.nvmrc)
+      # The API image: nothing tests it before the deploy health check.
+      fly.toml|.dockerignore)
+        saw_code=true; api=true ;;
+      # Lint, typecheck and tooling unit tests cover these.
+      scripts/*.ts|tsconfig*.json|eslint.config.*)
+        saw_code=true; quality=true ;;
+      pnpm-lock.yaml)
         saw_code=true; all ;;
+      # No suite exercises these: CI/deploy workflows and actions, shell and
+      # Node scripts, agent tooling, editor and package-manager settings.
+      # (Dependency edits in package.json or pnpm-workspace.yaml also change
+      # pnpm-lock.yaml, which selects everything.)
+      .github/*|scripts/*|.agents/*|.claude/*|.codex/*|.vscode/*|.mcp.json \
+        |.gitignore|.npmrc|.nvmrc|package.json|pnpm-workspace.yaml)
+        saw_plumbing=true ;;
       *)
         echo "ci-changed-areas: unclassified file '${file}'; selecting all areas" >&2
         saw_code=true; all ;;
@@ -72,7 +88,8 @@ else
   done <<EOF
 ${files}
 EOF
-  if [ "${saw_code}" = "false" ] && [ "${saw_docs}" = "true" ]; then
+  if [ "${saw_code}" = "false" ] && [ "${saw_docs}" = "true" ] \
+    && [ "${saw_plumbing}" = "false" ]; then
     docs_only=true
   fi
 fi

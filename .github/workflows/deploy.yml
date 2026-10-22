@@ -1,15 +1,21 @@
 name: Deploy
 
-# Deploys production whenever CI passes on main, but only the apps the
-# merged push touched (docs-only merges deploy nothing; see
-# scripts/ci-changed-areas.sh). Manual runs are allowed from the Actions
-# tab (workflow_dispatch) for redeploys and rollbacks, and deploy all apps.
+# Deploys production whenever CI passes on main, but only the apps changed
+# since the last successful deploy (docs- or tooling-only merges deploy
+# nothing; see scripts/ci-changed-areas.sh). Manual runs from the Actions tab
+# (workflow_dispatch) redeploy or roll back the chosen targets (default all).
 on:
   workflow_run:
     workflows: [CI]
     branches: [main]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      targets:
+        description: Apps to deploy
+        type: choice
+        default: all
+        options: [all, api, web, capture]
 
 permissions:
   contents: read
@@ -46,14 +52,23 @@ jobs:
         id: areas
         env:
           GH_TOKEN: ${{ github.token }}
-        # Diff from the last successful deploy so merge commits, multi-commit
-        # pushes and pushes whose CI was cancelled or failed are all covered.
-        # With no usable previous deploy, the empty base deploys everything.
+          TARGETS: ${{ inputs.targets }}
+        # Diff from the last successful CI-triggered deploy so merge commits,
+        # multi-commit pushes and pushes whose CI was cancelled or failed are
+        # all covered; manual (possibly partial) redeploys never count. With
+        # no usable previous deploy, the empty base deploys everything.
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            scripts/ci-changed-areas.sh >> "${GITHUB_OUTPUT}"
+            base="dispatch: ${TARGETS:-all}"
+            case "${TARGETS:-all}" in
+              all) echo "api=true"; echo "web=true"; echo "capture_app=true" ;;
+              api) echo "api=true"; echo "web=false"; echo "capture_app=false" ;;
+              web) echo "api=false"; echo "web=true"; echo "capture_app=false" ;;
+              capture) echo "api=false"; echo "web=false"; echo "capture_app=true" ;;
+              *) echo "Unknown targets '${TARGETS}'" >&2; exit 1 ;;
+            esac >> "${GITHUB_OUTPUT}"
           else
-            base="$(scripts/ci-push-base.sh deploy.yml HEAD)"
+            base="$(scripts/ci-push-base.sh deploy.yml HEAD "" workflow_run)"
             scripts/ci-changed-areas.sh "${base}" HEAD >> "${GITHUB_OUTPUT}"
           fi
           {

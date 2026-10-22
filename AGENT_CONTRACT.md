@@ -219,24 +219,34 @@ Supported env vars for smoke and XR scripts:
   merging (see Pre-Handoff Check Policy).
 - On a push to `main`, a `changes` job (`scripts/ci-changed-areas.sh`,
   diffing from the last successful CI run on `main` found by
-  `scripts/ci-push-base.sh`, falling back to the push's `before`) selects only the suites relevant to the
-  merged files: quality, unit tests and production build (one runner),
-  capture XR checks (2 shards), viewer AR and Knowledge Atlas checks,
-  capture → viewer pipeline (2 shards), and portal view checks. A docs-only
-  push selects no suite and the gate passes on skips; root, shared-package,
-  or unclassified files select every suite (fail closed, mirroring
-  `verify:agent`). Manual dispatch always runs every suite. Jobs share
+  `scripts/ci-push-base.sh`, falling back to the push's `before`) selects
+  only the suites that exercise exactly the changed files: quality, unit
+  tests and production build (one runner), capture XR checks (2 shards),
+  viewer AR and Knowledge Atlas checks, capture → viewer pipeline (2 shards),
+  and portal view checks. Files no suite tests select nothing and the gate
+  passes on skips: docs and `.md`, workflows and `.github/actions`, shell
+  and Node scripts, agent tooling, editor and package-manager config, and
+  `package.json` / `pnpm-workspace.yaml` (dependency edits also change
+  `pnpm-lock.yaml`). `scripts/*.ts`, `tsconfig*.json` and `eslint.config.*`
+  select quality only; `fly.toml` and `.dockerignore` select only the API
+  deploy. `pnpm-lock.yaml`, shared packages (`contracts`, `tooling-testing`,
+  `ui-dom`, `xr-*`) and unclassified
+  files select every suite (fail closed). The `changes` job runs the
+  selection scripts on every push; to exercise an edited CI job, dispatch
+  CI manually, which always runs every suite. Jobs share
   `.github/actions/setup` (pnpm, Node, install, Prisma, cached Playwright
   Chromium). Wall time follows the slowest selected job, not their sum.
   There is no separate heavy tier and no weekly schedule; dispatch CI
   manually to check runner-image or dependency drift on unchanged code.
 - `.github/workflows/deploy.yml` deploys production only after a successful
   CI run from a `main` push, and only the apps changed since the last
-  successful deploy (the same scripts; with no usable previous deploy it
-  deploys everything). Diffing a merge commit against its first parent would
-  miss the merged branch, so never use `HEAD^` as the base: API (Fly), viewer (Pages), and
-  capture (Pages) deploy independently, and a docs-only merge deploys
-  nothing. Manual dispatch deploys all three. It never gates PRs.
+  successful CI-triggered deploy (the same scripts; with no usable previous
+  deploy it deploys everything). Never diff a merge commit against `HEAD^`:
+  that misses the merged branch. API (Fly), viewer (Pages), and capture
+  (Pages) deploy independently, and a docs- or tooling-only merge deploys
+  nothing. Manual dispatch deploys the chosen `targets` (`all`, `api`,
+  `web`, `capture`; default `all`) and never counts as a later deploy's
+  base. It never gates PRs.
 - Capture XR checks are deterministic: they take capture's manual clock
   (`__setManualClock`), advance simulation only through `advanceTime`, and freeze
   the page's timers after XR session entry so IWER's per-frame compositing cannot
