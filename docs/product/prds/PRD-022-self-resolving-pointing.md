@@ -5,7 +5,7 @@
 **Layer:** Meaning (read)  
 **Depends on:** hand-tracking fidelity (in verification), avatar height adaptation (complete), IDEA-045 portal (approved)  
 **Owner:** Unassigned  
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-21
 
 ## User Outcome
 
@@ -31,6 +31,9 @@ and the object-indexed timeline (IDEA-044).
 
 - **Author:** someone recording an explanation in VR who points at parts of
   the scene or their own body while talking. They do nothing extra.
+- **Desktop author:** someone recording on a computer, steering the avatar
+  with keyboard and mouse. Their hands are not tracked, so they hold a point
+  action to aim (see Capturing on desktop).
 - **Recipient:** someone watching later through the phone portal, at the
   moment the author says "this".
 
@@ -44,6 +47,24 @@ and the object-indexed timeline (IDEA-044).
   (outline or glow) and a faint ray from the fingertip.
 - Low-confidence hits show nothing rather than a wrong highlight.
 - Author review (optional in the first version) can dismiss a wrong link.
+
+### Capturing on desktop
+
+Desktop capture (keyboard movement, pointer-lock mouse look) has no hand
+control, so a 2D take never holds a pointing hand pose. Decided 2026-10-21:
+add an explicit point action rather than leave 2D takes without highlights,
+or read mouse-look as gaze (mouse-look mostly navigates, so it would flood
+false highlights).
+
+- While the author holds the point action (a mouse button or key), the
+  avatar's arm points along the crosshair ray through the existing arm IK.
+- The take records that target ray directly, so the referent is the
+  author's deliberate choice and needs no confidence guess.
+- The synthesized arm pose is marked inferred (PRD-018); the target ray is
+  recorded intent.
+- Resolution works on the recorded event, a hand pose plus an optional
+  explicit target ray, not on the capture device, so playback and
+  highlighting are the same for headset and desktop takes.
 
 ## Why Holograms
 
@@ -72,11 +93,14 @@ without highlights.
 ## In Scope
 
 - [ ] Pointing detection from recorded hand poses; gaze as a second source if reliable.
+- [ ] A desktop point action that drives the avatar's arm along the crosshair
+  and records an explicit target ray, with the arm pose marked inferred.
 - [ ] Ray casting into the recorded scene bubble and the avatar.
 - [ ] A confidence threshold that prefers no highlight over a wrong one.
 - [ ] Storage of links in the meaning-layer record (PRD-003) with provenance "inferred".
 - [ ] Rendering in the feed portal on phone and desktop.
 - [ ] An end-to-end run on a real headset recording, with screenshots of each highlighted moment.
+- [ ] A replay check of a desktop take using the point action, with the same evidence.
 
 ## Out Of Scope
 
@@ -96,6 +120,9 @@ without highlights.
 - [ ] Which pointing and gaze signals are reliable enough to fire without false highlights?
 - [ ] The scene bubble is sampled geometry; "the thing" may not exist as a separate object.
 - [ ] Hand-tracking quality on the physical headset sets the ceiling; emulation cannot answer it.
+- [ ] Does a button-driven point still pass the recorded-event test? Working
+  answer: yes, because the target is the author's choice and the synthesized
+  arm is labelled inferred; confirm in review.
 
 ## Comparison And Learning
 
