@@ -31,10 +31,19 @@ const CHECKS = {
   hands: 'scripts/ci-hand-replay-playwright.mjs',
   height: 'scripts/ci-xr-height-playwright.ts',
   body: 'scripts/ci-body-replay-playwright.mjs',
-  // Not checks: regenerate the IWER fixtures the hands and body checks replay.
+  pointing: 'scripts/ci-pointing-playwright.mjs',
+  // Not checks: regenerate the IWER fixtures the hands, body and pointing checks replay.
   'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs',
-  'body-fixtures': 'scripts/generate-iwer-body-fixtures.mjs'
+  'body-fixtures': 'scripts/generate-iwer-body-fixtures.mjs',
+  // Not a check: regenerates the synthetic pointing take and its labels.
+  'pointing-fixture': 'scripts/generate-iwer-pose-fixture.mjs'
 };
+
+// Checks that import TypeScript workspace sources (the meaning package) run under tsx.
+const USES_TSX = new Set(['pointing']);
+
+// Extra environment for entries that share a script.
+const CHECK_ENV = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };
 
 // Checks that legitimately run longer than the default hang guard.
 const CHECK_TIMEOUT_MS = {
@@ -134,13 +143,13 @@ try {
   const runCheck = async (name) => {
     const checkStartedAt = Date.now();
     const script = CHECKS[name];
-    const args = script.endsWith('.ts') ? ['--import', 'tsx', script] : [script];
+    const args = script.endsWith('.ts') || USES_TSX.has(name) ? ['--import', 'tsx', script] : [script];
     const logPath = path.join(logDir, `${name}.log`);
     const logFd = parallel ? openSync(logPath, 'w') : null;
     let error = null;
     try {
       await runCommand('node', args, {
-        env: { ...process.env, BASE_URL: baseUrl, NODE_TLS_REJECT_UNAUTHORIZED: '0' },
+        env: { ...process.env, ...CHECK_ENV[name], BASE_URL: baseUrl, NODE_TLS_REJECT_UNAUTHORIZED: '0' },
         timeoutMs: process.env.XR_CHECK_TIMEOUT_MS ? checkTimeoutMs : CHECK_TIMEOUT_MS[name] ?? checkTimeoutMs,
         ...(logFd === null ? {} : { stdio: ['ignore', logFd, logFd] })
       });

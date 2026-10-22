@@ -1,0 +1,42 @@
+{
+  "fixture": "pointing-recordings/iwer-pointing-targets.json",
+  "scene": "/fixtures/scenes/pointing-targets.gltf",
+  "source": "IWER-synthetic take from scripts/lib/pointing-take.mjs; times are seconds from the first recorded frame, referents are what the pointing finger was aimed at",
+  "useFor": "timing and referents",
+  "referentNote": "TargetA and TargetB are node names (exported as <name>_RecordedBubble); leftHand is the humanoid bone of the avatar hand that was pointed at; null is empty sky",
+  "hand": "right",
+  "durationSec": 18.2,
+  "points": [
+    {
+      "referent": "TargetA",
+      "start": 1.5,
+      "end": 2.9
+    },
+    {
+      "referent": "leftHand",
+      "start": 5.6,
+      "end": 7
+    },
+    {
+      "referent": "TargetB",
+      "start": 9.3,
+      "end": 10.7
+    },
+    {
+      "referent": "TargetA",
+      "start": 11.1,
+      "end": 12.5
+    },
+    {
+      "referent": null,
+      "start": 14.3,
+      "end": 15.7
+    },
+    {
+      "referent": "TargetB",
+      "brief": true,
+      "start": 17,
+      "end": 17.2
+    }
+  ]
+}

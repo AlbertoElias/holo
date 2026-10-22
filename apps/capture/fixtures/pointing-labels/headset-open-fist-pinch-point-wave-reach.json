@@ -1,0 +1,18 @@
+{
+  "fixture": "input-recordings/headset-open-fist-pinch-point-wave-reach.json",
+  "scene": null,
+  "source": "Written 2026-10-22 from the replay's 0.2 s contact sheets (spectator view, tracked-joint dots) before any detector existed, cross-read against per-finger extension and thumb-index distance computed from the recorded tracked joints at 0.2 s steps. Boundaries are good to about 0.2 s; wave/reach boundary about 0.4 s.",
+  "useFor": "timing and silence only; this was recorded in a real room, so what a point's ray hits in the replay scene says nothing about the referent",
+  "timeBase": "seconds from the first input frame; the capture recording starts within two 30 Hz steps of it",
+  "durationSec": 9.27,
+  "segments": [
+    { "name": "open", "kind": "silent", "start": 0.2, "end": 2.4, "note": "both hands open, fingers extended" },
+    { "name": "fist", "kind": "silent", "start": 2.6, "end": 3.7, "note": "both hands closed, all fingers curled" },
+    { "name": "point-left", "kind": "point", "hand": "left", "start": 3.8, "end": 4.95, "note": "index extended, middle/ring/pinky curled" },
+    { "name": "point-right", "kind": "point", "hand": "right", "start": 3.85, "end": 4.9, "note": "index extended, middle/ring/pinky curled; both hands point together" },
+    { "name": "open-between", "kind": "silent", "start": 5.2, "end": 5.7, "note": "hands open again between point and pinch" },
+    { "name": "pinch", "kind": "silent", "start": 5.9, "end": 6.7, "note": "thumb and index touching (about 1 cm), other fingers extended" },
+    { "name": "wave", "kind": "silent", "start": 6.9, "end": 8.4, "note": "open hands rocking side to side" },
+    { "name": "reach", "kind": "silent", "start": 8.4, "end": 9.27, "note": "open hands moving toward the viewer" }
+  ]
+}
