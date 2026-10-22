@@ -1,0 +1,209 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "holoim generate-pointing-test-scene.mjs"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0,
+        1,
+        2
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "PointingFloor",
+      "mesh": 0
+    },
+    {
+      "name": "TargetA",
+      "mesh": 1
+    },
+    {
+      "name": "TargetB",
+      "mesh": 2
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "material": 0
+        }
+      ]
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 2,
+            "NORMAL": 3
+          },
+          "material": 1
+        }
+      ]
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 4,
+            "NORMAL": 5
+          },
+          "material": 2
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.42,
+          0.45,
+          0.5,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.9
+      }
+    },
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.9,
+          0.2,
+          0.15,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.6
+      }
+    },
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15,
+          0.35,
+          0.9,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.6
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 2016,
+      "uri": "data:application/octet-stream;base64,AADgwAAAAAAAAODAAADgwAAAAAAAAOBAAADgQAAAAAAAAOBAAADgwAAAAAAAAODAAADgQAAAAAAAAOBAAADgQAAAAAAAAODAAADgwArXI7wAAOBAAADgQArXI7wAAOBAAADgQAAAAAAAAOBAAADgwArXI7wAAOBAAADgQAAAAAAAAOBAAADgwAAAAAAAAOBAzcysvwAAgD9mZhbAmplZvwAAgD9mZhbAmplZvwAAwD9mZhbAzcysvwAAgD9mZhbAmplZvwAAwD9mZhbAzcysvwAAwD9mZhbAmplZvwAAgD9mZjbAzcysvwAAgD9mZjbAzcysvwAAwD9mZjbAmplZvwAAgD9mZjbAzcysvwAAwD9mZjbAmplZvwAAwD9mZjbAzcysvwAAgD9mZjbAzcysvwAAgD9mZhbAzcysvwAAwD9mZhbAzcysvwAAgD9mZjbAzcysvwAAwD9mZhbAzcysvwAAwD9mZjbAmplZvwAAgD9mZhbAmplZvwAAgD9mZjbAmplZvwAAwD9mZjbAmplZvwAAgD9mZhbAmplZvwAAwD9mZjbAmplZvwAAwD9mZhbAzcysvwAAwD9mZhbAmplZvwAAwD9mZhbAmplZvwAAwD9mZjbAzcysvwAAwD9mZhbAmplZvwAAwD9mZjbAzcysvwAAwD9mZjbAzcysvwAAgD9mZjbAmplZvwAAgD9mZjbAmplZvwAAgD9mZhbAzcysvwAAgD9mZjbAmplZvwAAgD9mZhbAzcysvwAAgD9mZhbAmplZPwAAgD9mZhbAzcysPwAAgD9mZhbAzcysPwAAwD9mZhbAmplZPwAAgD9mZhbAzcysPwAAwD9mZhbAmplZPwAAwD9mZhbAzcysPwAAgD9mZjbAmplZPwAAgD9mZjbAmplZPwAAwD9mZjbAzcysPwAAgD9mZjbAmplZPwAAwD9mZjbAzcysPwAAwD9mZjbAmplZPwAAgD9mZjbAmplZPwAAgD9mZhbAmplZPwAAwD9mZhbAmplZPwAAgD9mZjbAmplZPwAAwD9mZhbAmplZPwAAwD9mZjbAzcysPwAAgD9mZhbAzcysPwAAgD9mZjbAzcysPwAAwD9mZjbAzcysPwAAgD9mZhbAzcysPwAAwD9mZjbAzcysPwAAwD9mZhbAmplZPwAAwD9mZhbAzcysPwAAwD9mZhbAzcysPwAAwD9mZjbAmplZPwAAwD9mZhbAzcysPwAAwD9mZjbAmplZPwAAwD9mZjbAmplZPwAAgD9mZjbAzcysPwAAgD9mZjbAzcysPwAAgD9mZhbAmplZPwAAgD9mZjbAzcysPwAAgD9mZhbAmplZPwAAgD9mZhbAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAIAAAAAAAACAPwAAAIAAAAAAAACAPwAAAIAAAAAAAAAAgAAAgD8AAAAAAAAAgAAAgD8AAAAAAAAAgAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAIAAAAAAAACAPwAAAIAAAAAAAACAPwAAAIAAAAAAAAAAgAAAgD8AAAAAAAAAgAAAgD8AAAAAAAAAgAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAA"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 144
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1008,
+      "byteLength": 144
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 144,
+      "byteLength": 432
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1152,
+      "byteLength": 432
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 576,
+      "byteLength": 432
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1584,
+      "byteLength": 432
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 12,
+      "type": "VEC3",
+      "min": [
+        -7,
+        -0.01,
+        -7
+      ],
+      "max": [
+        7,
+        0,
+        7
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 12,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3",
+      "min": [
+        -1.35,
+        1,
+        -2.85
+      ],
+      "max": [
+        -0.8500000000000001,
+        1.5,
+        -2.35
+      ]
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3",
+      "min": [
+        0.8500000000000001,
+        1,
+        -2.85
+      ],
+      "max": [
+        1.35,
+        1.5,
+        -2.35
+      ]
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3"
+    }
+  ]
+}
