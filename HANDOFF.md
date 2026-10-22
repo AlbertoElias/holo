@@ -21,6 +21,15 @@ record room-scale walking, turning, crouching and leaning under
 `apps/capture/fixtures/body-recordings/` (brief
 [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md)).
 
+## Ready to merge (grouped)
+
+Verified branches awaiting a grouped merge to `main` (do not merge singly).
+
+- `infra/meaning-contract` — new `@holoim/meaning` package: `HOLOIM_meaning` v0
+  types and validator, VRM humanoid bone table with Mixamo aliases (brief:
+  [`docs/features/self-resolving-pointing.md`](docs/features/self-resolving-pointing.md),
+  on `docs/self-resolving-pointing-brief`). Consumers: capture and viewer.
+
 ## Unverified / device-only
 
 - Validate the room-scale body solver on a headset (walking, turning,
