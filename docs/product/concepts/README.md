@@ -16,6 +16,8 @@ needs before opening a PRD. They are not a lifecycle state; see `../README.md`.
 
 - [Viewer experience](viewer-experience.md)
 - [Creator pipeline](creator-pipeline.md)
+- [Agent-authored holograms](agent-authored-holograms.md)
+- [Phone reality capture](phone-reality-capture.md)
 - [Product directions](product-directions.md)
 - [Knowledge Atlas](knowledge-atlas.md)
 - [Conversation coverage](../research/conversation-coverage.md)
