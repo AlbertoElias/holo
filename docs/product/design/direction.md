@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Round 1 decided, 2026-10-22. Step 3 of the design-language work:
+**Status:** Round 1 decided; round 2 in progress (items 1 to 3 decided), 2026-10-22. Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
@@ -9,7 +9,7 @@ where each choice below can be seen in a 3D room, on a desktop and on a phone.
 Step 3 runs in rounds:
 
 1. **Character** (decided): the mood and the edge's personality.
-2. **Foundations**: exact colours and contrast, type scale, sizes across
+2. **Foundations** (in progress): exact colours and contrast, type scale, sizes across
    devices, edge parameters, motion timing.
 3. **Stress test**: the hardest screens from the inventory, such as errors,
    AR in a bright room, recording, and legibility in a headset.
@@ -142,3 +142,57 @@ In order, each compared in the studio:
 Sections 2 and 3 of the [design-language concept](../concepts/design-language.md)
 still describe neutral chrome and open amber; the styleguide (round 4)
 replaces them.
+
+## Round 2 decisions
+
+Each item was compared in the studio's Round 2 tab. A design review
+checked each batch before the user decided. Decisions are also stored in the
+studio's `decisions` collection (`r2-1` to `r2-9`). Contrast is WCAG 2.x,
+recomputed by the studio. The studio's char `#1f140c` gives 11.8:1 gold on char
+and 5.5:1 char on amber, slightly above the review's 11.3 and 5.3.
+
+### Batch 1 (2026-10-22): ground, edge, chip
+
+| # | Item | Decision | Also compared |
+| --- | --- | --- | --- |
+| 1 | Ground | **Screen gradient, amber horizon** on flat screens, as in round 1. **In VR and AR the ground is not painted:** the hologram is pinned to its stage and lit by its own gold light on the surface. | A sky dome with the horizon 6° below eye level; a horizon pinned to each card's stage; umber `#7a5940` and deep umber `#6e5039` horizons |
+| 2 | Edge legibility | **Gold only.** No char band: "a char looks horrible". Other ways to keep the edge visible low on the screen are still open. | Thin char (0.6% of the short side) and wide char (1.2%), `#1f140c` |
+| 3 | Chip | **Deep sea by room, flat:** `#081a1e` at 72% in VR and 88% in AR, with no blur or rim | Round 1 chip; deep sea 85%; ground `#0c2228` 82%; walnut `#2b1d14` 84%; a glass material (blur and warm rim) |
+
+**Exact values**
+
+| Token | Value |
+| --- | --- |
+| Flat ground (phone and desktop) | `linear-gradient(180deg, #0c2228 0%, #17424a 48%, #575f5a 80%, #b8835e 100%)`, pinned to the screen |
+| XR ground | None painted. VR keeps the blue-hour room; AR is the camera image. Warmth comes from the hologram's gold light falling on its stage. |
+| Edge | Round 1 burnt edge unchanged: halo 6% of the short side in `#ffb066` at 50%, blurred; gold core `#ffc872` 1.4%, softly blurred; highlight `#fff3cf` 0.4% |
+| Chip, VR | `rgba(8, 26, 30, 0.72)` |
+| Chip, AR | `rgba(8, 26, 30, 0.88)` |
+| Chip material | Flat: no backdrop blur, no rim |
+
+**What these decisions leave open.** Keeping the round 1 ground and edge
+keeps the problems the review found. Later items and round 3 have to solve
+them without a darker horizon or a char band.
+
+- **The bottom of a flat screen is not safe for chrome.** On the gradient,
+  muted text drops below 4.5:1 from 75% down the screen, gold labels from
+  77%, body text from 89%, and gold shapes below 3:1 from 90%. At the bottom
+  edge, text is 3.0:1, muted 2.0:1 and gold 2.1:1. Fixed chrome in the
+  bottom quarter needs the chip, which is item 6's question (glyphs with or
+  without a chip). Scrolling text crosses that band too, so feed captions and
+  timecode need the chip or must stay out of it.
+- **The edge fades into the horizon.** Gold on amber is 2.1:1, and 1.8:1
+  next to the edge where the glow halo lightens the amber. A hologram low on
+  the screen loses its edge. Alternatives to char are still to be found:
+  for example, a darker halo instead of a warm one at the horizon, keeping
+  holograms out of the bottom band, or a horizon that recedes when a
+  hologram nears it. Round 3 tests this on the hardest screens.
+- **The chip holds in sRGB but not fully in linear light.** Over white, as a
+  browser blends, the AR chip gives text 11.9:1, muted 7.9:1, gold labels
+  8.3:1 and record red `#ff3b5c` 3.7:1. If a target blends in linear light
+  (some XR compositors, possibly AR Quick Look), the same chip gives text
+  5.5:1, muted 3.7:1, gold labels 3.9:1 and red 1.7:1. Round 3 has to check
+  which way each target blends; item 7 picks the red with this in mind.
+- **Pinned to the stage in XR** turns item 1's 2D question into a 3D one:
+  the warm light a hologram casts on its surface must stay within item 5's
+  limits (never flicker on real surfaces in AR).
