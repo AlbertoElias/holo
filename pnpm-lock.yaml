@@ -291,6 +291,9 @@ importers:
       '@holoim/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@holoim/meaning':
+        specifier: workspace:*
+        version: link:../../packages/meaning
       '@holoim/ui-dom':
         specifier: workspace:*
         version: link:../../packages/ui-dom
