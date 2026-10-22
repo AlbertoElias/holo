@@ -26,10 +26,13 @@ record room-scale walking, turning, crouching and leaning under
 Verified branches waiting to go to `main` together with the next finished
 change (see "Sharing work between agents" in `AGENTS.md`):
 
-- `docs/self-resolving-pointing-brief`: PRD-022 approved, reviewed brief
-  [`docs/features/self-resolving-pointing.md`](docs/features/self-resolving-pointing.md),
-  merge-grouping and subagent rules in `AGENTS.md`. Docs only;
-  `verify:agent` passed 2026-10-22.
+- `feature/self-resolving-pointing`: integration branch for
+  [`docs/features/self-resolving-pointing.md`](docs/features/self-resolving-pointing.md).
+  Holds the approved PRD-022 and reviewed brief, the merge-grouping and
+  subagent rules in `AGENTS.md`, and the `@holoim/meaning` package
+  (`HOLOIM_meaning` v0 types and validator, VRM humanoid bone table).
+  Implementation branches are cut from it and merge back into it; it goes to
+  `main` once as one change when the feature is verified.
 
 ## Unverified / device-only
 
