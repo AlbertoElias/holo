@@ -58,6 +58,18 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
     await page.evaluate((ms) => window.advanceTime(ms), steps * STEP_MS);
     if (recording) elapsed += steps * STEP_MS / 1000;
   };
+  // The wrist in the avatar's own frame. Real CDP mouse moves carry platform-
+  // dependent movementX (Linux derives it from position, macOS reports none),
+  // which turns the body, so poses compare independent of facing.
+  const wristLocal = async () => {
+    const [{ avatar }, hands] = await Promise.all([state(), page.evaluate(() => window.__sampleHands())]);
+    const [x, y, z] = hands.right.avatar.wrist;
+    const dx = x - avatar.x;
+    const dz = z - avatar.z;
+    const cos = Math.cos(avatar.yaw);
+    const sin = Math.sin(avatar.yaw);
+    return [dx * cos - dz * sin, y - avatar.y, dx * sin + dz * cos];
+  };
   const mock = (payload) => page.evaluate((arg) => window.__setMockInput(arg), payload);
   const held = async () => (await state()).point.held;
   const canvasCenter = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 };
@@ -105,7 +117,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
 
   // --- Phase 0: release paths (not recording, so nothing is exported). ---
   await advance(1.0);
-  const baseline = (await page.evaluate(() => window.__sampleHands())).right.avatar.wrist;
+  const baseline = await wristLocal();
   const releasePaths = [];
   const expectHeld = async (name, expected) => {
     await advance(0.1);
@@ -153,7 +165,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   if (!menuPrevented) fail('the context menu opened on the canvas');
   // Mouse-up with the cursor off the canvas still ends it (document listener).
   await advance(0.6);
-  const settled = (await page.evaluate(() => window.__sampleHands())).right.avatar.wrist;
+  const settled = await wristLocal();
   const restDrift = Math.hypot(...sub(settled, baseline));
   if (restDrift > REST_TOLERANCE_M) fail(`arm did not return to its locomotion pose after release: wrist is ${round(restDrift, 3)} m from baseline (limit ${REST_TOLERANCE_M})`);
 
@@ -209,11 +221,11 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
     // Pressing starts the aim level (third person); steer it onto the target.
     await mock(await aimFor());
     await advance(0.3);
-    // Real vertical mouse movement under pointer lock steers the aim pitch.
+    // Vertical mouse movement under pointer lock steers the aim pitch (a synthetic move: CDP cannot report movementY for a simulated lock).
     let pitchSteer;
     if (name === 'B') {
       const before = (await state()).point.aimPitch;
-      await page.mouse.move(canvasCenter.x, canvasCenter.y + 12);
+      await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 0, movementY: 12, bubbles: true })));
       await advance(0.1);
       const after = (await state()).point.aimPitch;
       pitchSteer = { before: round(before, 3), after: round(after, 3) };
@@ -283,7 +295,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   await mock({ lookYaw: 0 });
   await advance(0.8);
   await shoot('after');
-  const after = (await page.evaluate(() => window.__sampleHands())).right.avatar.wrist;
+  const after = await wristLocal();
   const afterDrift = Math.hypot(...sub(after, baseline));
   if (afterDrift > REST_TOLERANCE_M) fail(`arm did not return to its locomotion pose after the take: wrist is ${round(afterDrift, 3)} m from baseline (limit ${REST_TOLERANCE_M})`);
 
