@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Round 1 decided; round 2 in progress (items 1 to 6 decided), 2026-10-23. Step 3 of the design-language work:
+**Status:** Rounds 1 and 2 decided, 2026-10-23; round 3 (stress test) is next. Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
@@ -9,7 +9,7 @@ where each choice below can be seen in a 3D room, on a desktop and on a phone.
 Step 3 runs in rounds:
 
 1. **Character** (decided): the mood and the edge's personality.
-2. **Foundations** (in progress): exact colours and contrast, type scale, sizes across
+2. **Foundations** (decided): exact colours and contrast, type scale, sizes across
    devices, edge parameters, motion timing.
 3. **Stress test**: the hardest screens from the inventory, such as errors,
    AR in a bright room, recording, and legibility in a headset.
@@ -277,3 +277,90 @@ are still open. Round 3 must test them on the hardest screens.
   about 0.45 m, makes a 72 px target about 12 mm, which round 3 should check
   against hand-tracking accuracy. One phone control row reaches into the
   back-swipe edge or the home bar.
+
+### Batch 3 (2026-10-23): semantic colours, type, motion
+
+| # | Item | Decision | Also compared |
+| --- | --- | --- | --- |
+| 7 | Semantic colours | **Rose `#ff3b5c`, no keyline, hollow mark for unresolved, 8 identity hues** | Crimson `#e5484d`; a 1.5 px `#081a1e` keyline ring around red; unresolved as an unlit gap in the edge or a cool hue `oklch(0.84 0.11 275)`; a set of 5 to 6 identity hues |
+| 8 | Type scale | **Figtree tabular timecode, sentence-case labels, 2.5× in a headset** | Fraunces italic timecode (16 px, not tabular); tracked uppercase labels (12.5 px, 0.1 em); 2× headset scale |
+| 9 | Motion | **Round 1 flicker; a slow fade for reduced motion; the edge dims while recording; in AR the table light follows the flicker** | A 10% swing at 0.8 Hz (the review's limit); a 5% swing at 0.5 Hz; reduced motion as fully still or as still embers; the edge unchanged or quiet while recording; a steady AR table light |
+
+Round 1 flicker replaces batch 2's provisional glow flicker.
+
+**Exact values**
+
+| Token | Value |
+| --- | --- |
+| Record red | `#ff3b5c`, with no keyline |
+| Unresolved | Hollow: the mark is an outline in the author's identity hue and fills in once resolved |
+| Identity hues | 8, chroma 0.12, spaced to stay clear of record red, the golds, the horizon and the ground hue. Each keeps at least 3:1 on `#17424a`. |
+| Identity 1 | deep lime `#a9b355`, `oklch(0.74 0.12 114.5)` |
+| Identity 2 | deep lime 2 `#8c8b26`, `oklch(0.62 0.12 109.0)` |
+| Identity 3 | deep mint `#58c295`, `oklch(0.74 0.12 163.0)` |
+| Identity 4 | pale sky `#96d3ff`, `oklch(0.84 0.12 240.5)` |
+| Identity 5 | deep blue `#7496e3`, `oklch(0.68 0.12 265.0)` |
+| Identity 6 | pale sky 2 `#7fbcfd`, `oklch(0.78 0.12 250.5)` |
+| Identity 7 | deep pink `#b670ad`, `oklch(0.64 0.12 331.5)` |
+| Identity 8 | deep pink 2 `#cc81bc`, `oklch(0.70 0.12 335.0)` |
+| Identity separation | Closest pair ΔE (OKLab × 100): 6.0 normal vision, 5.7 red-blind, 6.0 green-blind, 4.6 blue-blind |
+| Timecode | Figtree 400, 0.9rem (14.4 px), tabular figures |
+| Labels | Figtree 500, 14 px, sentence case, no tracking |
+| Headset scale | 2.5× every flat size, for type and icons |
+| Flicker, flat screens | Halo opacity 0.50, 0.32, 0.58, 0.40 over 2.6 s in uneven steps. The brightness swing is 59% on the darkest ground, 48% on the mid ground and 16% at the horizon. |
+| Flicker, room and AR | The halo follows the same pattern. The table light swings ±12% around 90%, mixing about 0.8 Hz and 2 Hz (0.9 + 0.12 · sin 9t · sin 3.7t, t in seconds), on real surfaces in AR too. |
+| Reduced motion | No sparks. Halo opacity 0.50 to 0.489 and back over 8 s (0.125 Hz), ease-in-out: a 4.7% brightness swing on the darkest ground, 4.1% mid, 1.6% at the horizon. |
+| While recording | Sparks stop. On flat screens the halo holds at 0.08 opacity, and the gold core and highlight drop to 0.55. In the room the halo holds at 0.15 opacity (0.9 normally) and the table light holds steady at 90%. |
+
+Type at the decided sizes. The flat sizes were read from the user's
+studio view; the desktop title and captions scale with the window. The
+headset column is angular px at 2.5×. The smallest letter is the x-height,
+because every role is mixed case. It was measured at the studio's reference
+window and is given in Quest 3 pixels.
+
+| Role | Flat | Headset | Smallest letter, Quest px |
+| --- | --- | --- | --- |
+| Title, desktop | 41.6 px | 104.0 px | 20.5 at 32.8 px flat |
+| Title, phone card | 21.6 px | 54.0 px | 13.6 |
+| Caption on a hologram | 16.0 px | 40.0 px | 8.9 at 13.3 px flat |
+| Caption under a card | 14.1 px | 35.2 px | 9.4 |
+| Byline | 12.5 px | 31.2 px | 8.3 |
+| Control label | 14.0 px | 35.0 px | 9.3 |
+| Timecode | 14.4 px | 36.0 px | 9.6 |
+| Note | 14.4 px | 36.0 px | 9.6 |
+
+**What these decisions leave open.**
+
+- **The flicker is far louder than the review allowed.** The review capped
+  flicker at a ±10% swing under 1 Hz and asked that real surfaces never
+  flicker in AR. Round 1 flicker swings the halo's brightness by 59% on the
+  dark ground. Its uneven steps and the table light reach about 2 Hz. In AR
+  the table light flickers on the real table.
+  - What it passes: it stays under the three-flashes-a-second limit
+    (WCAG 2.3.1).
+  - What it costs: it is the loudest option compared. With sparks
+    everywhere (item 5), every hologram in view flickers at once.
+  - What to check: round 3 should watch it on a Quest and in AR on a real
+    table, for comfort and for motion sickness.
+  - What already helps: viewers who ask for reduced motion get the 4.7%
+    slow fade instead.
+- **Record red is weak where the controls sit.** Bare rose on the flat
+  ground is 1.2:1 at the desktop control row and 1.1:1 at the lowest phone
+  controls, against the 3:1 a graphic needs. Without a keyline, red gets no
+  help on the AR chip either: 3.7:1 over white in sRGB, but under 2:1 (1.7 to 1.8:1) if the
+  target blends in linear light. A red mark in the bottom quarter, or in AR,
+  needs the chip and a check of how each target blends (round 3). Text or a
+  second cue beside it, such as "Recording" or the timecode, should carry
+  the state, not colour alone.
+- **One identity hue sits close to the horizon for green-blind viewers.**
+  It is about ΔE 2 from the horizon, so an author mark low on a flat screen
+  can disappear for them. The hollow and filled shapes still carry the
+  state, but the author's colour does not.
+- **Fraunces italic stays a display face.** Its figures are not tabular
+  (0:08 is 34.0 px wide, 1:11 is 25.1 px), so timecode uses Figtree.
+  Fraunces keeps titles.
+- **Headset legibility at 2.5×.** Every role's smallest letter is at least
+  8.3 Quest pixels, above the studio's rule of thumb of 8; at 2× the byline
+  would be 6.6. The 1.5 px glyph stroke (item 6) becomes 3.75 angular px,
+  about 2.0 Quest pixels, which should no longer shimmer. Round 3 checks
+  both on a Quest; the rule of thumb is not a standard.
