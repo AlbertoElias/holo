@@ -1,15 +1,21 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { Page } from "@playwright/test";
+import { chromium, type Page } from "@playwright/test";
+
+import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, expect, test } from "./bootstrap";
 import { cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
 import { MARKS, MIDPOINTS, OUTSIDE_TIMES, buildPointingGlb } from "./pointing-fixture";
 
 // Self-resolving pointing in the viewer (PRD-022): the referent lights up while
-// the author points. Capture does not write HOLOIM_meaning yet, so a hand-built
-// GLB carries the record; the upload → feed → render path is the real one.
+// the author points. Two kinds of take go through the real upload → feed → render
+// path: capture's own exports, recorded in the spec's beforeAll (the desktop
+// take is recorded-style, the IWER replay is inferred-style), and a
+// hand-built GLB, kept only for what the exports cannot cover: a large-surface
+// ring, an inferred link on a scene object next to a recorded one, and an old
+// recording without the extension.
 // Time is driven by the primary action, so every state is checked by seeking
 // the paused animation instead of waiting on a software-rendered clock.
 
@@ -80,7 +86,130 @@ async function shot(page: Page, id: string, name: string): Promise<void> {
   await page.locator(`.feed-card[data-card-id="${id}"]`).screenshot({ path: path.join(evidenceDir, `${name}.png`) });
 }
 
-test("pointing highlights follow the recorded links, styles, orbit and toggle", async ({ page }) => {
+type Expected = { referent: string; style: "recorded" | "inferred"; start: number; end: number };
+
+const captureUrl = process.env.E2E_CAPTURE_URL ?? "https://127.0.0.1:5175/";
+const captureRoot = path.resolve(import.meta.dirname, "../../capture");
+const takeDir = path.resolve(import.meta.dirname, "../../../output/pointing-viewer/takes");
+
+// The real exports are recorded here, in the running capture app, by the same
+// takes capture's own pointing check scores: a scripted desktop point action
+// (recorded style) and the IWER headset replay (inferred style). Nothing is
+// committed, so a break in capture's export shows up as a failure in this spec.
+const exportsByLabel = new Map<string, { file: string; expected: Expected[] }>();
+
+function expectedFrom(glb: Buffer): Expected[] {
+  const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString("utf8")) as {
+    nodes: Array<{ name?: string }>;
+    extensions: { HOLOIM_meaning: { marks: Array<{ anchor: { to: { node: number } }; span: { start: number; end: number }; provenance: { value: "recorded" | "inferred" } }> } };
+  };
+  return gltf.extensions.HOLOIM_meaning.marks.map((mark) => ({
+    referent: gltf.nodes[mark.anchor.to.node]!.name!,
+    style: mark.provenance.value,
+    start: mark.span.start,
+    end: mark.span.end
+  }));
+}
+
+test.beforeAll(async () => {
+  if (process.env.RUN_E2E_PIPELINE !== "1") return;
+  test.setTimeout(300_000);
+  // @ts-expect-error capture's .mjs scripts are untyped
+  const { runDesktopPointingCheck } = await import("../../capture/scripts/lib/pointing-desktop-take.mjs");
+  // @ts-expect-error capture's .mjs scripts are untyped
+  const { replayPointingTake } = await import("../../capture/scripts/lib/pointing-iwer-replay.mjs");
+  const browser = await launchXrBrowser(chromium);
+  const consoleErrors: string[] = [];
+  try {
+    const desktop = await runDesktopPointingCheck({ browser, baseUrl: captureUrl, artifactDir: takeDir, consoleErrors });
+    const iwer = await replayPointingTake({
+      browser, baseUrl: captureUrl, captureRoot, labelsDir: "fixtures/pointing-labels", artifactDir: takeDir, consoleErrors,
+      labelFile: "iwer-pointing-targets.json"
+    });
+    for (const [label, report] of [["desktop-recorded", desktop], ["iwer-inferred", iwer]] as const) {
+      expect(report.failures, `${label} take`).toEqual([]);
+      exportsByLabel.set(label, { file: report.glb, expected: expectedFrom(await readFile(report.glb)) });
+    }
+    expect(consoleErrors, "capture runtime errors").toEqual([]);
+  } finally {
+    await browser.close();
+  }
+});
+
+const REAL_EXPORTS = [
+  { label: "desktop-recorded", styles: ["recorded"] },
+  { label: "iwer-inferred", styles: ["inferred"] }
+] as const;
+
+for (const { label, styles } of REAL_EXPORTS) {
+  test(`real capture export ${label}: highlights follow the links, orbit and toggle`, async ({ page }) => {
+    test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
+    test.setTimeout(180_000);
+
+    const { file, expected } = exportsByLabel.get(label)!;
+    expect(expected.length, "links in the export").toBeGreaterThan(0);
+    for (const mark of expected) expect(styles).toContain(mark.style);
+    const uploaded = await upload(page, label, await readFile(file));
+    await page.setViewportSize(DESKTOP);
+    await installProbe(page);
+    await showOnly(page, uploaded.id);
+    await page.goto("/");
+    await assertViewerShell(page);
+    const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
+    await waitForPortalReady(page, uploaded.id, uploaded.url);
+    await expect(card).toHaveAttribute("data-model-bubble", "active");
+    await card.getByRole("button", { name: "Pause" }).click();
+    await expect(card).toHaveAttribute("data-portal-paused", "true");
+    const toggle = card.getByRole("button", { name: "Highlight what the author points at" });
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+    // Before the first span and in every gap: nothing shows.
+    const gaps = [expected[0]!.start - 0.4, ...expected.slice(1).map((m, i) => (expected[i]!.end + m.start) / 2).filter((t, i) => expected[i + 1]!.start - expected[i]!.end > 0.2)];
+    for (const time of gaps) expect(await settle(page, uploaded.url, time, 0), `nothing at ${time}s`).toEqual([]);
+    await shot(page, uploaded.id, `${label}-0-outside-span`);
+
+    // Each span's midpoint: exactly one link, in the export's provenance style, on its referent.
+    for (const [i, mark] of expected.entries()) {
+      const [reading, ...rest] = await settle(page, uploaded.url, (mark.start + mark.end) / 2, 1);
+      expect(rest).toEqual([]);
+      expect(reading, `span ${i}`).toMatchObject({ style: mark.style, referent: mark.referent, line: true });
+      if (mark.referent === "LeftHand") {
+        expect(reading!.glow, "body parts get the bone glow").toBe(true);
+        expect(reading!.emissive, "body parts leave the avatar's materials alone").toBeNull();
+      } else {
+        expect(reading!.emissive, "scene referent glows by emissive").toBeGreaterThan(0);
+      }
+      await shot(page, uploaded.id, `${label}-${i + 1}-${mark.style}-${mark.referent}`);
+    }
+    await settle(page, uploaded.url, expected.at(-1)!.end + 0.4, 0);
+
+    // Orbit: the highlight stays on the referent from another angle.
+    const first = expected[0]!;
+    const center = await cardCenter(page, uploaded.id);
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.move(center.x - 20, center.y - 5, { steps: 2 });
+    await page.mouse.move(center.x - 220, center.y - 30, { steps: 6 });
+    await page.mouse.up();
+    await expect(card).toHaveAttribute("data-portal-mode", "free");
+    expect((await readPortal(page, uploaded.url)).yaw).not.toBe(0);
+    const [orbited] = await settle(page, uploaded.url, (first.start + first.end) / 2, 1);
+    expect(orbited).toMatchObject({ referent: first.referent, style: first.style, line: true });
+    await shot(page, uploaded.id, `${label}-5-orbited`);
+
+    // The toggle hides and shows them, by keyboard too.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await settle(page, uploaded.url, (first.start + first.end) / 2, 0);
+    await shot(page, uploaded.id, `${label}-6-toggled-off`);
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect((await settle(page, uploaded.url, (first.start + first.end) / 2, 1))[0]).toMatchObject({ referent: first.referent });
+  });
+}
+
+test("hand-built take: surface ring, inferred scene link, body part, orbit and toggle", async ({ page }) => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
   test.setTimeout(180_000);
 
