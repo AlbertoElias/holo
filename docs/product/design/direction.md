@@ -224,7 +224,7 @@ per angular px.
 | Edge inset | the larger of 6% of the short side and the halo width, so the glow is never clipped square |
 | Sparks, flat screens | 26 per hologram, every hologram in view; 0.4% to 0.8% of the short side, rising and fading over 2 to 4 s |
 | Sparks, room | up to 70 per hologram |
-| Glow flicker | ±10% at under 1 Hz, as compared in the studio; item 9 sets the final amplitude and rate |
+| Glow flicker | As compared in the studio: on flat screens the halo's opacity swings from 0.50 to 0.45 at 0.8 Hz, which is a 15% brightness swing on the darkest ground, 11% on the mid ground and 4% at the horizon; in the room the halo and the table light swing ±10% at 0.8 Hz. Item 9 sets the final amplitude and rate. |
 | VR peripheral vision | no sparks (a rule for the build; the studio did not simulate gaze) |
 | Glyph stroke | 1.5 px |
 | Glyph icon | 16 px; Play ring 36 px |
