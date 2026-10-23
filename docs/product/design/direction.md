@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Round 1 decided; round 2 in progress (items 1 to 3 decided), 2026-10-22. Step 3 of the design-language work:
+**Status:** Round 1 decided; round 2 in progress (items 1 to 6 decided), 2026-10-23. Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
@@ -196,3 +196,84 @@ them without a darker horizon or a char band.
 - **Pinned to the stage in XR** turns item 1's 2D question into a 3D one:
   the warm light a hologram casts on its surface must stay within item 5's
   limits (never flicker on real surfaces in AR).
+
+### Batch 2 (2026-10-23): edge sizes, loudness, glyphs
+
+The studio measured sizes in angular px. One angular px is one CSS reference
+pixel, about 0.0213° of view, so a number means the same apparent size on a
+phone, a desktop and in a headset. A Quest 3 shows about 0.53 headset pixels
+per angular px.
+
+| # | Item | Decision | Also compared |
+| --- | --- | --- | --- |
+| 4 | Edge sizes | **Percent only**, as in round 1: every part of the edge is a share of the hologram's short side, with no angular limits | Fine (core 1.5–6 px, halo 6–28, tears 1–6 about every 40 px); Sturdy (core 2.5–9, halo 10–40, tears 2–9 about every 60 px); Constant (core 3, halo 18, tears 3 every 50 px at every size) |
+| 5 | Edge loudness | **Sparks everywhere**, as in round 1: every hologram in view sheds sparks and its glow flickers. Provisional until frame time is measured on a mid-range phone and a Quest. | Sparks only on the focused hologram; a shared budget of 24 sparks per screen and per room; a breathing glow with no particles |
+| 6 | Glyphs | **1.5 px stroke, 16 px icons, no glow, bare** (no chip) | 2 px stroke; 20 and 24 px icons; a soft glow; the item 3 chip behind the control row |
+
+**Exact values**
+
+| Token | Value |
+| --- | --- |
+| Edge radius | 7% of the short side |
+| Edge halo | 6% of the short side, `#ffb066` at 50%, blurred (standard deviation half the halo width) |
+| Edge core | 1.4% of the short side, `#ffc872` |
+| Edge highlight | 0.4% of the short side, `#fff3cf` |
+| Edge waves | 2% of the short side, 3 to 9 per loop |
+| Edge tears | 0.9% of the short side, 16 to 38 per loop |
+| Edge jitter | 0.7% of the short side |
+| Edge inset | the larger of 6% of the short side and the halo width, so the glow is never clipped square |
+| Sparks, flat screens | 26 per hologram, every hologram in view; 0.4% to 0.8% of the short side, rising and fading over 2 to 4 s |
+| Sparks, room | up to 70 per hologram |
+| Glow flicker | ±10% at under 1 Hz, as compared in the studio; item 9 sets the final amplitude and rate |
+| VR peripheral vision | no sparks (a rule for the build; the studio did not simulate gaze) |
+| Glyph stroke | 1.5 px |
+| Glyph icon | 16 px; Play ring 36 px |
+| Glyph glow | none |
+| Glyph backing | bare |
+| Hit targets | mouse 24 px, touch 44, ray or controller 56, hand poke 72 (angular px) |
+
+The edge at the four studio sizes, with no limits (angular px):
+
+| Size | Gold core | Halo | Highlight | Tear depth (deepest) |
+| --- | --- | --- | --- | --- |
+| 80 px thumbnail (80 × 64) | 0.9 | 3.8 | 0.3 | 0.6 (0.8) |
+| Phone card (300 × 240) | 3.4 | 14.4 | 1.0 | 2.2 (3.1) |
+| Tabletop slab, 0.62 × 0.74 m at 1.5 m | 15.4 (8.2 Quest px) | 65.8 | 4.4 | 9.9 (14.2) |
+| Doorway, 0.9 × 2 m at 1.5 m | 22.0 (11.7 Quest px) | 94.1 | 6.3 | 14.1 (20.3) |
+
+**What these decisions leave open.** All three choices keep round 1 or go
+lighter, so the review's concerns about size, loudness and headset legibility
+are still open. Round 3 must test them on the hardest screens.
+
+- **Small and large holograms.** On an 80 px thumbnail the gold core is
+  0.9 px and the tears 0.8 px deep, below one device pixel, so the edge
+  drawn there is a smooth gold line. On a doorway the halo is 94 px wide,
+  wider than a 24 px icon several times over, so glyphs beside the edge sit
+  inside the glow. A thumbnail treatment, or a cap on the halo for large
+  holograms in XR, may still be needed.
+- **Sparks everywhere breaks two of the review's rules.** The review asked
+  for sparks only on the focused hologram, a small global particle budget,
+  and never flicker on real surfaces in AR. With every hologram sparking,
+  the table light in AR flickers with the glow. Frame time was measured only
+  on a desktop browser (8.3 ms average at 120 fps, 0.19 ms of CPU per 3D
+  frame, with no frames running long); a mid-range phone and a Quest decide
+  whether this holds. Item 9 can still cut the flicker amplitude and keep
+  real-surface light steady.
+- **Bare glyphs fail contrast where the controls sit.** On the decided
+  ground, bare gold glyphs are 3.0:1 at the desktop's control row (labels
+  need 4.5:1) and 2.1:1 where phone controls scroll lowest; timecode in
+  muted text is 2.9:1 and 2.0:1. In AR they are 1.3:1 over a white wall and
+  1.1:1 over beige. The item 3 chip would lift these to 7.4–9.1:1 in sRGB,
+  or 4.0–6.5:1 in linear light. So bare glyphs can live only where the
+  ground behind them is dark; anything in the bottom quarter of a flat
+  screen, and everything in AR, still needs the chip or another fix.
+  Round 3 decides where that line falls.
+- **1.5 px is thin in a headset.** At 1× a 1.5 px stroke is 0.80 headset
+  pixels and shimmers as the head moves. At the 2× or 2.5× headset scale
+  that item 8 chooses, it becomes 1.6 or 2.0 headset pixels. Item 8's choice
+  settles whether 1.5 px holds.
+- **Hit targets** are the proposed sizes, not one of the options compared.
+  At 1.75 m a 56 px ray target is about 37 mm. A poke panel within reach,
+  about 0.45 m, makes a 72 px target about 12 mm, which round 3 should check
+  against hand-tracking accuracy. One phone control row reaches into the
+  back-swipe edge or the home bar.
