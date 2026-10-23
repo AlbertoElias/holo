@@ -10,6 +10,7 @@ import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { DiagnosticViews } from '../debug/DiagnosticViews';
 import type { DesktopPointAction } from '../input/DesktopPointAction';
 import type { InputController } from '../input/InputController';
+import type { VrLocomotion } from '../input/VrLocomotion';
 import type { CharacterMotor } from '../physics/CharacterMotor';
 import type { RecordingSession } from '../recording/RecordingSession';
 import type { CaptureStage } from '../runtime/captureStage';
@@ -52,6 +53,7 @@ export interface CaptureContext {
   tracking: XrTracking;
   input: InputController;
   point: DesktopPointAction;
+  locomotion: VrLocomotion;
   body: BodyTracking;
   heightFit: HeightFit;
   crouch: CrouchState;

@@ -21,6 +21,19 @@ export function renderCaptureTextState(c: CaptureContext): string {
       right: input.moveState.right,
       crouch: input.isCrouchHeld()
     },
+    thumbstick: {
+      moveX: c.locomotion.thumbstick.moveX,
+      moveY: c.locomotion.thumbstick.moveY,
+      turnX: c.locomotion.thumbstick.turnX,
+      turnMode: c.locomotion.turnMode,
+      turnYaw: c.locomotion.turnYaw,
+      snapCount: c.locomotion.snapCount,
+      rigYaw: Math.atan2(
+        2 * (stage.cameraRig.quaternion.w * stage.cameraRig.quaternion.y + stage.cameraRig.quaternion.x * stage.cameraRig.quaternion.z),
+        1 - 2 * (stage.cameraRig.quaternion.y * stage.cameraRig.quaternion.y + stage.cameraRig.quaternion.x * stage.cameraRig.quaternion.x)
+      ),
+      headWorld: tracking.getHeadWorldPosition(new THREE.Vector3())
+    },
     avatar: {
       x: avatar.avatarRoot.position.x,
       y: avatar.avatarRoot.position.y,

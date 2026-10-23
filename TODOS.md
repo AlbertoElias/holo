@@ -39,7 +39,7 @@ it from the item below instead of duplicating its status here.
   desktop 2D, with natural transitions and movement that adapts to walls,
   inclines, and other environment geometry. Delivered in
   [avatar-locomotion.md](docs/features/archive/avatar-locomotion.md).
-- [ ] Add VR thumbstick locomotion and snap turn to capture. Today VR moves the
+- [x] Add VR thumbstick locomotion and snap turn to capture. Today VR moves the
   avatar only through physical room-scale motion and keyboard/mock input. Move
   the world-locked camera rig with the stick (smooth move relative to head
   yaw, optional snap/smooth turn about the user's head), keep the body solver

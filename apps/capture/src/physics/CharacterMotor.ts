@@ -31,6 +31,10 @@ interface CharacterMotorUpdateOptions {
   // movement (room-scale VR: the body following the tracked head). It goes
   // through the character controller, so walls and slopes still apply.
   externalDisplacement?: { x: number; z: number };
+  // Analog move in look space (VR thumbstick): x = strafe right, z =
+  // forward, magnitude ≤ 1 scales speed. Replaces the boolean move state
+  // when its magnitude is non-zero.
+  analogMove?: { x: number; z: number };
 }
 
 export class CharacterMotor {
@@ -116,13 +120,19 @@ export class CharacterMotor {
     this.tmpRight.crossVectors(new THREE.Vector3(0, -1, 0), this.tmpForward).normalize();
 
     this.tmpMove.set(0, 0, 0);
-    if (moveState.forward) this.tmpMove.add(this.tmpForward);
-    if (moveState.back) this.tmpMove.sub(this.tmpForward);
-    if (moveState.right) this.tmpMove.add(this.tmpRight);
-    if (moveState.left) this.tmpMove.sub(this.tmpRight);
-
-    if (this.tmpMove.lengthSq() > 0) {
-      this.tmpMove.normalize().multiplyScalar(this.targetHorizontalSpeed * deltaSec);
+    const analog = options?.analogMove;
+    if (analog && (analog.x !== 0 || analog.z !== 0)) {
+      this.tmpMove.addScaledVector(this.tmpForward, analog.z).addScaledVector(this.tmpRight, analog.x);
+      const mag = Math.min(1, this.tmpMove.length());
+      if (mag > 0) this.tmpMove.multiplyScalar((this.targetHorizontalSpeed * deltaSec * mag) / this.tmpMove.length());
+    } else {
+      if (moveState.forward) this.tmpMove.add(this.tmpForward);
+      if (moveState.back) this.tmpMove.sub(this.tmpForward);
+      if (moveState.right) this.tmpMove.add(this.tmpRight);
+      if (moveState.left) this.tmpMove.sub(this.tmpRight);
+      if (this.tmpMove.lengthSq() > 0) {
+        this.tmpMove.normalize().multiplyScalar(this.targetHorizontalSpeed * deltaSec);
+      }
     }
     const wasGrounded = this.grounded;
     if (allowJump && jumpQueued && this.grounded) {

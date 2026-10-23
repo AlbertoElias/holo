@@ -131,7 +131,7 @@ export type Vec3Tuple = [number, number, number];
 
 // 'hands': close-ups of both hands; 'body': a third-person view that follows
 // the avatar with the tracked head path drawn over it.
-export type SpectatorViewMode = 'off' | 'hands' | 'body';
+export type SpectatorViewMode = 'off' | 'hands' | 'body' | 'body-fixed';
 
 // One frame of the VR body for fidelity checks, in world space. `trackedHead`
 // is the app's own reading of the XR views (the check's ground truth comes
@@ -177,4 +177,7 @@ export type MockInputState = {
   point?: boolean;
   lookYaw?: number;
   aimPitch?: number;
+  /** VR thumbstick axes, −1..1 (`moveY` forward-positive). */
+  thumbstick?: { moveX?: number; moveY?: number; turnX?: number };
+  turnMode?: 'snap' | 'smooth';
 };

@@ -10,6 +10,8 @@ interface CameraControllerDeps {
   cameraRig: THREE.Group;
   avatarRig: AvatarRig;
   embodyOffset: number;
+  /** Thumbstick turn accumulated on the rig (VrLocomotion owns it). */
+  rigYaw: () => number;
 }
 
 export class CameraController {
@@ -222,7 +224,7 @@ export class CameraController {
         this.deps.avatarRig.avatarRoot.position.y + this.deps.avatarRig.avatarMinLocalY,
         this.tmpEyeAnchor.z - this.floorOrigin.y
       );
-      this.deps.cameraRig.quaternion.identity();
+      this.deps.cameraRig.quaternion.setFromAxisAngle(this.worldUp, this.deps.rigYaw());
       return;
     }
 
@@ -245,7 +247,7 @@ export class CameraController {
       this.tmpEyeAnchor.y + eyeUpOffset - headY,
       this.tmpEyeAnchor.z + this.tmpForward.z * eyeForwardOffset
     );
-    this.deps.cameraRig.quaternion.identity();
+    this.deps.cameraRig.quaternion.setFromAxisAngle(this.worldUp, this.deps.rigYaw());
   }
 
   clampThirdPersonPitch(value: number): number {

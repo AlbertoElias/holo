@@ -13,13 +13,14 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-Validate capture's IWSDK runtime on a Quest (performance against the
-pre-refactor runtime, multiview rendering, AR, aim rays and hand touch on the
-record pill); the gaps are listed in
-[the archived brief](docs/features/archive/iwsdk-runtime-refactor.md). Then
-record room-scale walking, turning, crouching and leaning under
-`apps/capture/fixtures/body-recordings/` (brief
-[`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md)).
+VR thumbstick locomotion is complete (brief
+[`docs/features/archive/vr-thumbstick-locomotion.md`](docs/features/archive/vr-thumbstick-locomotion.md),
+branch `feature/vr-locomotion`): the `VR_LOCO_VIDEO=1` locomotion check
+passed and produced
+`apps/capture/output/ci-vr-locomotion/vr-thumbstick-locomotion.mp4`, and
+`pnpm run verify:pr` passed. Next: validate the room-scale body solver and
+stick feel/comfort on a physical headset (see Unverified below), or pick
+the next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 

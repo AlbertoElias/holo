@@ -62,15 +62,17 @@ function inputRecordingSinkPlugin(outputDir: string): Plugin {
 // IWSDK's World bootstrap always imports UIKitML. Its component kits build
 // zod schemas for every Horizon component and import every lucide icon at
 // startup: about 1 MB gzipped and 25 MB of retained heap. Capture never
-// renders UIKitML (World's spatial UI is off), so production builds give
+// renders UIKitML (World's spatial UI is off), so builds and dev give
 // UIKitML empty kits and resolve lucide to the two icons Horizon imports.
+// Dev needs the same boundary: unbundled, the kits issue ~1600 icon module
+// requests, and one (Fingerprint.js) matches content-blocker rules, which
+// fails the whole module graph and leaves a blank page.
 const UIKITML_EMPTY_KITS = '\0holoim-uikitml-empty-kits';
 const LUCIDE_SUBSET = '\0holoim-lucide-subset:';
 
 function uikitmlBoundaryPlugin(): Plugin {
   return {
     name: 'holoim-uikitml-boundary',
-    apply: 'build',
     enforce: 'pre',
     async resolveId(source, importer, options) {
       if (!importer || importer.startsWith(LUCIDE_SUBSET)) return null;
@@ -89,6 +91,28 @@ function uikitmlBoundaryPlugin(): Plugin {
         `export { Check, CheckIcon } from ${JSON.stringify(path.join(dist, 'Check.js'))};`,
         `export { ChevronDown, ChevronDownIcon } from ${JSON.stringify(path.join(dist, 'ChevronDown.js'))};`
       ].join('\n');
+    }
+  };
+}
+
+// @drawcall/uikitml ships .js.map files that reference ../src/*.ts sources
+// it does not publish and carries no sourcesContent. Vite extracts those
+// maps while loading each dist file, tries to read the missing sources,
+// and warns once per file. The maps are unusable, so serve the files
+// without their sourceMappingURL comments and let them map to themselves.
+// This must hook load: Vite extracts the map before transforms run.
+const UIKITML_DIST_RE = /\/@drawcall\/uikitml\/dist\/[^?]*\.js$/;
+
+function stripUikitmlSourcemapsPlugin(): Plugin {
+  return {
+    name: 'holoim-strip-uikitml-sourcemaps',
+    enforce: 'pre',
+    async load(id) {
+      const file = id.split('?')[0] ?? '';
+      if (!UIKITML_DIST_RE.test(file.replaceAll('\\', '/'))) return null;
+      const code = await fs.readFile(file, 'utf-8');
+      const stripped = code.replace(/^[ \t]*\/\/[#@]\s*sourceMappingURL=.*\r?$/gm, '');
+      return { code: stripped, map: null };
     }
   };
 }
@@ -153,6 +177,7 @@ export default defineConfig(async ({ command }) => {
         : {})
     }),
     uikitmlBoundaryPlugin(),
+    stripUikitmlSourcemapsPlugin(),
     preserveModelAssetsPlugin(sourcePublicDir, tempPublicDir),
     inputRecordingSinkPlugin(path.resolve('fixtures/input-recordings')),
     optimizeGLTF({
@@ -169,7 +194,7 @@ export default defineConfig(async ({ command }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks(id) {
+          manualChunks(id: string) {
             if (id.includes('/src/physics/')) return 'physics';
             if (id.includes('/src/xr/')) return 'xr';
             if (id.includes('/src/debug/')) return 'debug';

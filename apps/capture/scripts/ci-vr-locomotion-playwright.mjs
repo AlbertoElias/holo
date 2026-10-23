@@ -20,7 +20,9 @@ import {
 const DEFAULT_XR_TEST_MODE = 'iwer';
 const CAPTURE_SUCCESS_SCREENSHOTS = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS === '1';
 const NO_MOVE = Object.freeze({ forward: false, back: false, left: false, right: false });
-const NO_INPUT = Object.freeze({ ...NO_MOVE, crouch: false });
+const STICK_ZERO = Object.freeze({ moveX: 0, moveY: 0, turnX: 0 });
+const NO_INPUT = Object.freeze({ ...NO_MOVE, crouch: false, thumbstick: STICK_ZERO });
+const VIDEO_MODE = process.env.VR_LOCO_VIDEO === '1';
 const MIN_TRAVEL_METERS = 0.08;
 // Require each input to land nearest its own cardinal direction: swapped axes
 // or a wrong yaw sign produce errors of at least pi/2 and still fail.
@@ -129,7 +131,8 @@ function summarizeState(state) {
     targetHorizontalSpeed: state.locomotion?.targetHorizontalSpeed,
     crouchAmount: state.crouch?.amount,
     crouchSource: state.crouch?.source,
-    input: state.input
+    input: state.input,
+    thumbstick: state.thumbstick
   };
 }
 
@@ -371,7 +374,140 @@ async function runVrScenarios() {
     `VR crouch: target speed not reduced enough (standing ${standingSpeed.toFixed(3)}, crouched ${crouchedSpeed.toFixed(3)}).`
   );
   timer.mark('crouch-speed');
+
+  // ── Thumbstick locomotion ──────────────────────────────────────────
+  // Heading the avatar faces, from the same look yaw the motor steers by.
+  const headingOf = (state) => state.avatar?.yaw ?? 0;
+  const stickMove = async (label, stick, ms) => {
+    const start = await settle(page, label, { pose: mockPose(0) });
+    const yaw = headingOf(start);
+    for (let elapsed = 0; elapsed < ms; elapsed += 110) {
+      await step(page, { input: { thumbstick: stick }, ms: 110 });
+    }
+    const end = await step(page, { input: NO_INPUT, ms: 60 });
+    const delta = horizontalDelta(start.character.position, end.character.position);
+    return { yaw, delta, distance: horizontalDistance(delta), end };
+  };
+
+  for (const [name, stick, inputName] of [
+    ['stick-forward', { moveX: 0, moveY: 1, turnX: 0 }, 'forward'],
+    ['stick-back', { moveX: 0, moveY: -1, turnX: 0 }, 'back'],
+    ['stick-right', { moveX: 1, moveY: 0, turnX: 0 }, 'right'],
+    ['stick-left', { moveX: -1, moveY: 0, turnX: 0 }, 'left']
+  ]) {
+    const { yaw, delta, distance } = await stickMove(name, stick, 440);
+    const err = angleBetweenDeltas(delta, expectedDirection(inputName, yaw));
+    assert(distance > MIN_TRAVEL_METERS, `${name}: travel too short (${distance.toFixed(3)} m).`);
+    assert(err < MAX_HEADING_ERROR_RAD, `${name}: heading error ${err.toFixed(3)} rad at yaw ${yaw.toFixed(3)}.`);
+    console.info(`[vr-locomotion] ${name}: ${distance.toFixed(3)}m heading-err ${err.toFixed(3)}rad`);
+  }
+
+  // Deadzone: sub-threshold deflection must not creep.
+  const dz = await stickMove('stick-deadzone', { moveX: 0.08, moveY: 0.08, turnX: 0 }, 550);
+  assert(dz.distance < 0.02, `stick-deadzone: avatar crept ${dz.distance.toFixed(3)} m.`);
+
+  // Analog scaling: half stick travels materially less than full stick.
+  const half = await stickMove('stick-half', { moveX: 0, moveY: 0.5, turnX: 0 }, 550);
+  const full = await stickMove('stick-full', { moveX: 0, moveY: 1, turnX: 0 }, 550);
+  assert(half.distance > 0.03 && half.distance < full.distance * 0.8,
+    `stick analog scaling: half ${half.distance.toFixed(3)} m vs full ${full.distance.toFixed(3)} m.`);
+
+  // Snap turn: one flick = one 30° snap, no re-trigger while held, and the
+  // avatar root does not translate while turning in place.
+  const turnStart = await settle(page, 'snap-turn', { pose: mockPose(0) });
+  const preTurnPos = turnStart.character.position;
+  const preTurnYaw = turnStart.thumbstick?.turnYaw ?? 0;
+  const preSnaps = turnStart.thumbstick?.snapCount ?? 0;
+  let held = await step(page, { input: { thumbstick: { moveX: 0, moveY: 0, turnX: 1 } }, ms: 110 });
+  for (let i = 0; i < 3; i += 1) held = await step(page, { ms: 110 });
+  assert((held.thumbstick?.snapCount ?? 0) === preSnaps + 1,
+    `snap-turn: held stick snapped ${held.thumbstick?.snapCount - preSnaps} times, expected 1.`);
+  const snapDelta = (held.thumbstick?.turnYaw ?? 0) - preTurnYaw;
+  assert(Math.abs(snapDelta + Math.PI / 6) < 0.06, `snap-turn: turn delta ${snapDelta.toFixed(3)} rad, expected ≈ -0.524.`);
+  const turnTravel = horizontalDistance(horizontalDelta(preTurnPos, held.character.position));
+  assert(turnTravel < 0.02, `snap-turn: avatar translated ${turnTravel.toFixed(3)} m while turning.`);
+  assert(Math.abs((held.thumbstick?.rigYaw ?? 0) - (held.thumbstick?.turnYaw ?? 0)) < 0.06,
+    `snap-turn: rig yaw ${held.thumbstick?.rigYaw} does not match turn yaw ${held.thumbstick?.turnYaw}.`);
+  await step(page, { input: NO_INPUT, ms: 80 });
+  const second = await step(page, { input: { thumbstick: { moveX: 0, moveY: 0, turnX: 1 } }, ms: 110 });
+  assert((second.thumbstick?.snapCount ?? 0) === preSnaps + 2, 'snap-turn: second flick after release did not snap.');
+  await step(page, { input: NO_INPUT, ms: 80 });
+
+  // Forward stick after turning follows the new heading.
+  const postTurn = await stickMove('stick-after-turn', { moveX: 0, moveY: 1, turnX: 0 }, 440);
+  const postErr = angleBetweenDeltas(postTurn.delta, expectedDirection('forward', postTurn.yaw));
+  assert(postTurn.distance > MIN_TRAVEL_METERS && postErr < MAX_HEADING_ERROR_RAD,
+    `stick-after-turn: distance ${postTurn.distance.toFixed(3)} m, heading error ${postErr.toFixed(3)} rad at yaw ${postTurn.yaw.toFixed(3)}.`);
+
+  // Smooth turn: heading rotates continuously while the stick is held.
+  const smoothStart = await settle(page, 'smooth-turn', { pose: mockPose(0) });
+  await step(page, { input: { turnMode: 'smooth', thumbstick: { moveX: 0, moveY: 0, turnX: 1 } }, ms: 0 });
+  let smooth = smoothStart;
+  for (let i = 0; i < 5; i += 1) smooth = await step(page, { ms: 100 });
+  const smoothDelta = (smooth.thumbstick?.turnYaw ?? 0) - (smoothStart.thumbstick?.turnYaw ?? 0);
+  assert(smoothDelta < -0.5 && smoothDelta > -1.4, `smooth-turn: turned ${smoothDelta.toFixed(3)} rad in 0.5 s.`);
+  assert((smooth.thumbstick?.snapCount ?? 0) === (smoothStart.thumbstick?.snapCount ?? 0), 'smooth-turn: snap fired in smooth mode.');
+  await step(page, { input: { turnMode: 'snap', thumbstick: STICK_ZERO }, ms: 80 });
+  await captureScreenshot(page, '06-thumbstick.png', 'thumbstick');
+  timer.mark('thumbstick');
   timer.report('scenarios');
+}
+
+// Choreographed third-person video of thumbstick locomotion: forward,
+// snap-turn right, forward, strafe, snap-turn, forward. Frames use the
+// fixed-tripod spectator view with the page UI hidden, so the avatar's
+// travel across the room (not a follow camera) is what the viewer sees.
+async function runThumbstickVideo() {
+  const page = await openScenarioPage('video', { vr: true });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => {
+    window.__setSpectatorView('body-fixed');
+    const devui = window.IWER_DEVICE.devui;
+    for (const element of [devui?.devUIContainer, devui?.devUICanvas, document.getElementById('ui-root'), document.getElementById('VRButton'), document.getElementById('ARButton')]) {
+      if (element instanceof HTMLElement) element.style.display = 'none';
+    }
+  });
+  await settle(page, 'video', { pose: mockPose(0) });
+  const framesDir = path.join(screenshotDir, 'frames');
+  await mkdir(framesDir, { recursive: true });
+  let frame = 0;
+  const shot = async () => {
+    const name = `frame-${String(frame).padStart(4, '0')}.png`;
+    frame += 1;
+    // captureXrScreenshot, not page.screenshot: it runs a few frozen frames
+    // first so IWER composites the current state. A raw screenshot captures
+    // the stale XR composite and every frame looks identical.
+    await captureXrScreenshot(page, path.join(framesDir, name), { timeout: 10_000 }).catch(() => undefined);
+  };
+  const drive = async (input, ms) => {
+    const start = await step(page, { input, ms: 0 });
+    let end = start;
+    for (let elapsed = 0; elapsed < ms; elapsed += 100) {
+      end = await step(page, { ms: 100 });
+      await shot();
+    }
+    const travelled = horizontalDistance(horizontalDelta(start.character.position, end.character.position));
+    console.info(`[vr-locomotion] video drive ${JSON.stringify(input.thumbstick)}: ${travelled.toFixed(2)} m, turnYaw ${(end.thumbstick?.turnYaw ?? 0).toFixed(2)} rad`);
+    return end;
+  };
+  await shot();
+  await drive({ thumbstick: { moveX: 0, moveY: 1, turnX: 0 } }, 1600);
+  await drive({ thumbstick: { moveX: 0, moveY: 0, turnX: 1 } }, 300);
+  await drive({ thumbstick: { moveX: 0, moveY: 1, turnX: 0 } }, 1600);
+  await drive({ thumbstick: { moveX: 1, moveY: 0, turnX: 0 } }, 900);
+  await drive({ thumbstick: { moveX: 0, moveY: 0, turnX: -1 } }, 300);
+  await drive({ thumbstick: { moveX: 0, moveY: 1, turnX: 0 } }, 1400);
+  await drive({ thumbstick: STICK_ZERO }, 400);
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const videoPath = path.join(screenshotDir, 'vr-thumbstick-locomotion.mp4');
+  // The XR composite is a 320x180 canvas centered in the 1280x720 page;
+  // crop to it and upscale so the avatar fills the video frame.
+  await promisify(execFile)('ffmpeg', ['-y', '-framerate', '10', '-i', path.join(framesDir, 'frame-%04d.png'),
+    '-vf', 'crop=320:180:480:270,scale=1280:720:flags=lanczos',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', videoPath], { timeout: 120_000 });
+  console.info(`[vr-locomotion] video: ${videoPath} (${frame} frames)`);
+  return videoPath;
 }
 
 async function runDesktopScenarios() {
@@ -444,6 +580,7 @@ async function timedStage(name, run) {
 try {
   await timedStage('vr scenarios', runVrScenarios);
   await timedStage('desktop scenarios', runDesktopScenarios);
+  if (VIDEO_MODE) await timedStage('thumbstick video', runThumbstickVideo);
   assert(consoleErrors.length === 0, `Console errors detected:\n${consoleErrors.join('\n')}`);
   console.log('Mock VR locomotion flow check passed.');
 } finally {

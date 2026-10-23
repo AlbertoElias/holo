@@ -27,6 +27,7 @@ interface XrInputSourceLike {
   gripSpace?: unknown;
   hand?: unknown;
   targetRaySpace?: unknown;
+  gamepad?: { axes?: readonly number[]; buttons?: readonly unknown[] };
 }
 
 // One of three's per-index XR input objects (grip, hand or target ray) and
@@ -431,6 +432,29 @@ export class XrTracking {
       this.handPoseSource[side] = 'fallback';
       this.updateLowFingerJointWarning(side, false);
     }
+  }
+
+  /**
+   * Thumbstick axes for a controller side, y forward-positive. Standard
+   * mapping puts the stick at axes[2,3]; two-axis (touchpad) devices fall
+   * back to axes[0,1]. Undefined when no gamepad reports for the side.
+   */
+  getThumbstickAxes(side: VrHandSide): { x: number; y: number } | undefined {
+    if (!this.renderer.xr.isPresenting) return undefined;
+    this.refreshInputSourcesFromSession();
+    const session = this.renderer.xr.getSession();
+    if (!session) return undefined;
+    for (const source of session.inputSources) {
+      if (source.handedness !== side) continue;
+      const axes = (source as XrInputSourceLike).gamepad?.axes;
+      if (!axes || axes.length < 2) continue;
+      const base = axes.length >= 4 ? 2 : 0;
+      const x = axes[base] ?? 0;
+      const y = axes[base + 1] ?? 0;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      return { x, y: -y };
+    }
+    return undefined;
   }
 
   getHandTrackingState(side: VrHandSide): Readonly<HandTarget> {
