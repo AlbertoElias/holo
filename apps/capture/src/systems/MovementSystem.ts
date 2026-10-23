@@ -14,6 +14,7 @@ export class MovementSystem extends createSystem() {
   private capture!: CaptureContext;
   private readonly bodyPosition = new THREE.Vector3();
   private readonly inputMovement = new THREE.Vector3();
+  private readonly stickMove = { x: 0, z: 0 };
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -27,11 +28,13 @@ export class MovementSystem extends createSystem() {
 
     c.crouch.update(deltaSec, frame.vrActive, input.isCrouchHeld(), c.tracking.getCurrentHeadLocalY());
     const crouchAmount = c.crouch.amount;
+    const stick = frame.vrActive ? c.locomotion.moveVector(this.stickMove) : { x: 0, z: 0 };
     motor.update(deltaSec, c.camera.lookYaw, input.moveState, input.consumeJumpQueued(), {
       moveSpeedMultiplier: 1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount,
       allowJump: true,
       stickToTerrain: crouchAmount >= CROUCH_MIN_EFFECT_THRESHOLD,
-      ...(frame.bodyTracking ? { externalDisplacement: body.displacement } : {})
+      ...(frame.bodyTracking ? { externalDisplacement: body.displacement } : {}),
+      ...(stick.x !== 0 || stick.z !== 0 ? { analogMove: stick } : {})
     });
     frame.character = motor.getSnapshot();
 

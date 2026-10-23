@@ -9,11 +9,14 @@ import { type CaptureContext, captureContext } from './captureContext';
  * the first tracked frame or after a tracking jump, then plan the root's move
  * toward the head for the character motor to carry out.
  */
+const UP = new THREE.Vector3(0, 1, 0);
+
 export class RoomScaleSystem extends createSystem() {
   private capture!: CaptureContext;
   private readonly bodyPosition = new THREE.Vector3();
   private readonly rootPosition = new THREE.Vector3();
   private readonly eyeWorld = new THREE.Vector3();
+  private readonly localHead = new THREE.Vector3();
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -39,12 +42,16 @@ export class RoomScaleSystem extends createSystem() {
     );
     if (!body.solver.isAligned || jumped) {
       // Put the tracked eyes on the avatar's standing eyes, body facing the head.
-      const yaw = headYawFromQuaternion(pose.localQuaternion, c.camera.lookYaw);
+      // World facing is the local head yaw plus any thumbstick rig turn.
+      const yaw = headYawFromQuaternion(pose.localQuaternion, c.camera.lookYaw) + c.locomotion.turnYaw;
       const rig = c.stage.cameraRig;
-      rig.quaternion.identity();
+      // Preserve any thumbstick turn: the rig's yaw is the locomotion
+      // state's, and the local head offset must be rotated by it.
+      rig.quaternion.setFromAxisAngle(UP, c.locomotion.turnYaw);
       body.solver.getStandingEyeWorld(rootPosition, yaw, body.groundSampler, this.eyeWorld);
       this.eyeWorld.y += config.embodyOffset;
-      rig.position.copy(this.eyeWorld).sub(pose.localPosition);
+      this.localHead.copy(pose.localPosition).applyQuaternion(rig.quaternion);
+      rig.position.copy(this.eyeWorld).sub(this.localHead);
       // Tracking space's floor is the avatar's visual base (the height fit's
       // contract): the camera sits at the user's real eye height above it.
       rig.position.y = rootPosition.y + avatar.avatarMinLocalY + config.embodyOffset;
