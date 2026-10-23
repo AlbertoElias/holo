@@ -149,6 +149,7 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
     const time = getPlaybackTime();
     const saved = savedRef.current;
     const wanted = new Map<EmissiveMaterial, number>();
+    const sampled: { record: { emissive: number | null }; material: EmissiveMaterial | null }[] = [];
     probe.links = [];
 
     const edgeFade = (position: Vector3): number => {
@@ -164,7 +165,7 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
       const style = STYLES[link.style];
       let lit = false;
       let usesEmissive = false;
-      let emissiveSample: number | null = null;
+      let sampledMaterial: EmissiveMaterial | null = null;
 
       if (active) {
         link.from.updateWorldMatrix(true, false);
@@ -192,7 +193,7 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
           }
         }
         const firstMaterial = meshes[0] && (Array.isArray(meshes[0].material) ? meshes[0].material[0] : meshes[0].material);
-        emissiveSample = firstMaterial && isEmissive(firstMaterial) ? firstMaterial.emissiveIntensity : null;
+        sampledMaterial = firstMaterial && isEmissive(firstMaterial) ? firstMaterial : null;
 
         // Bone glow for body parts, and for surfaces that cannot glow themselves.
         const showGlow = body || !usesEmissive;
@@ -240,16 +241,18 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
       entry.wasActive = active;
 
       if (lit || active) {
-        probe.links.push({
+        const record = {
           index,
           style: link.style,
           strength,
           referent: link.to.name,
-          emissive: emissiveSample,
+          emissive: null as number | null,
           line: entry.line.visible,
           glow: entry.glow.visible,
           ring: entry.ring.visible
-        });
+        };
+        probe.links.push(record);
+        sampled.push({ record, material: sampledMaterial });
       }
     });
 
@@ -269,6 +272,8 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
       material.emissiveIntensity = original.intensity;
       saved.delete(material);
     });
+    // The probe reports what the viewer sees, so sample once the pass has written it.
+    for (const { record, material } of sampled) record.emissive = material ? material.emissiveIntensity : null;
   });
 
   return <group ref={groupRef} />;

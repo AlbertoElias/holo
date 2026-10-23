@@ -21,15 +21,21 @@ export const meaningSpanSchema = z
   .strict()
   .refine((span) => span.end >= span.start, { message: "span.end must not precede span.start" });
 
+const recordedProvenance = z.object({ value: z.literal("recorded") }).strict();
+
+/** In (0, 1]. */
+const confidence = finite.positive().max(1);
+
+/** A link that was inferred must say how sure the inference was. */
+export const meaningLinkProvenanceSchema = z.discriminatedUnion("value", [
+  recordedProvenance,
+  z.object({ value: z.literal("inferred"), confidence }).strict()
+]);
+
+/** Motion spans may be inferred without a confidence. */
 export const meaningProvenanceSchema = z.discriminatedUnion("value", [
-  z.object({ value: z.literal("recorded") }).strict(),
-  z
-    .object({
-      value: z.literal("inferred"),
-      /** In (0, 1]. */
-      confidence: finite.positive().max(1).optional()
-    })
-    .strict()
+  recordedProvenance,
+  z.object({ value: z.literal("inferred"), confidence: confidence.optional() }).strict()
 ]);
 
 export const meaningLinkFromSchema = z
@@ -51,7 +57,7 @@ export const meaningLinkMarkSchema = z
     kind: z.literal("link"),
     anchor: z.object({ from: meaningLinkFromSchema, to: meaningLinkToSchema }).strict(),
     span: meaningSpanSchema,
-    provenance: meaningProvenanceSchema
+    provenance: meaningLinkProvenanceSchema
   })
   .strict();
 
@@ -75,6 +81,7 @@ export const holoimMeaningSchema = z
 
 export type MeaningSpan = z.infer<typeof meaningSpanSchema>;
 export type MeaningProvenance = z.infer<typeof meaningProvenanceSchema>;
+export type MeaningLinkProvenance = z.infer<typeof meaningLinkProvenanceSchema>;
 export type MeaningLinkFrom = z.infer<typeof meaningLinkFromSchema>;
 export type MeaningLinkTo = z.infer<typeof meaningLinkToSchema>;
 export type MeaningLinkMark = z.infer<typeof meaningLinkMarkSchema>;

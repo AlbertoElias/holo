@@ -1,7 +1,8 @@
-// A hand-written GLB carrying a valid HOLOIM_meaning record, until capture
-// exports one for real: a recorded and an inferred link to scene objects, an
-// inferred link to the author's own hand (body part), and a recorded link to
-// the floor (large surface). Node indices below are the glTF node order.
+// A hand-written GLB carrying a valid HOLOIM_meaning record. It is deliberately
+// hand-built, not a capture export, so it covers cases real takes do not: a
+// large-surface (floor) ring, a mixed recorded/inferred pair of links to scene
+// objects, an inferred link to the author's own hand (body part), and the
+// no-extension case. Node indices below are the glTF node order.
 
 export const NODE = {
   avatar: 0, hips: 1, head: 2, rightHand: 3, rightIndexDistal: 4, leftHand: 5,

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { type MeaningMotionSpan, type MeaningProvenance, type MeaningSpan, resolveHumanoidBone, type VrmHumanoidBone } from '@holoim/meaning';
+import { type MeaningMotionSpan, type MeaningLinkProvenance, type MeaningSpan, resolveHumanoidBone, type VrmHumanoidBone } from '@holoim/meaning';
 
 import { isThreeBone } from '../shared/threeTypeGuards';
 import type { RecordingFrame, VrHandSide } from '../types/contracts';
@@ -12,7 +12,7 @@ export interface MeaningLinkDraft {
   from: { bone: VrmHumanoidBone; object: THREE.Object3D };
   to: { object: THREE.Object3D; bone?: VrmHumanoidBone; point: [number, number, number]; radius?: number };
   span: MeaningSpan;
-  provenance: MeaningProvenance;
+  provenance: MeaningLinkProvenance;
 }
 
 export interface MeaningDraft {
@@ -258,7 +258,7 @@ export class PointResolver {
     });
   }
 
-  private link(from: MeaningLinkDraft['from'], majority: Resolved[], span: MeaningSpan, provenance: MeaningProvenance): MeaningLinkDraft {
+  private link(from: MeaningLinkDraft['from'], majority: Resolved[], span: MeaningSpan, provenance: MeaningLinkProvenance): MeaningLinkDraft {
     const target = majority[0]!.target!;
     const point = new THREE.Vector3();
     for (const r of majority) point.add(r.localPoint!);
@@ -385,7 +385,7 @@ export class PointResolver {
 function rejectReason(run: ReferentRun, durationSec: number, from: unknown, confidence: number | undefined): string | undefined {
   if (!from) return 'avatar has no hand bone for from';
   if (run.key === null) return 'no referent';
-  if (durationSec < POINT_DWELL_SEC * 0.5) return 'too brief';
+  if (durationSec < POINT_DWELL_SEC) return 'too brief';
   if (confidence !== undefined && confidence < POINT_MIN_CONFIDENCE) return 'low confidence';
   return undefined;
 }

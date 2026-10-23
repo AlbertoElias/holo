@@ -51,6 +51,11 @@ const clone = <T>(v: T): T => structuredClone(v);
 const mark = (m: typeof example): Loose => m.marks[0] as Loose;
 
 describe("validateHoloimMeaning", () => {
+  it("keeps confidence optional for inferred motion spans", () => {
+    expect(example.spans[0]!.provenance).toEqual({ value: "inferred" });
+    expect(validateHoloimMeaning(example).ok).toBe(true);
+  });
+
   it("accepts the brief's example and an empty record", () => {
     expect(validateHoloimMeaning(example).ok).toBe(true);
     expect(validateHoloimMeaning({ version: 0, marks: [], spans: [] }).ok).toBe(true);
@@ -70,6 +75,8 @@ describe("validateHoloimMeaning", () => {
   const mutations: Array<[string, (m: typeof example) => void]> = [
     ["unknown mark kind", (m) => { mark(m).kind = "arrow"; }],
     ["unknown span kind", (m) => { (m.spans[0] as Loose).kind = "gaze"; }],
+    ["inferred link without confidence", (m) => { mark(m).provenance = { value: "inferred" }; }],
+    ["inferred link with zero confidence", (m) => { mark(m).provenance = { value: "inferred", confidence: 0 }; }],
     ["NaN start", (m) => { mark(m).span.start = NaN; }],
     ["Infinity end", (m) => { mark(m).span.end = Infinity; }],
     ["negative start", (m) => { mark(m).span.start = -1; }],
