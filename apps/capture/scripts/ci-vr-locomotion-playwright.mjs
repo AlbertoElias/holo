@@ -454,12 +454,19 @@ async function runVrScenarios() {
 }
 
 // Choreographed third-person video of thumbstick locomotion: forward,
-// snap-turn right, forward, strafe, snap-turn, forward. Frames are the
-// spectator body view the body replay harness already produces.
+// snap-turn right, forward, strafe, snap-turn, forward. Frames use the
+// fixed-tripod spectator view with the page UI hidden, so the avatar's
+// travel across the room (not a follow camera) is what the viewer sees.
 async function runThumbstickVideo() {
   const page = await openScenarioPage('video', { vr: true });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.evaluate(() => window.__setSpectatorView('body'));
+  await page.evaluate(() => {
+    window.__setSpectatorView('body-fixed');
+    const devui = window.IWER_DEVICE.devui;
+    for (const element of [devui?.devUIContainer, devui?.devUICanvas, document.getElementById('ui-root'), document.getElementById('VRButton'), document.getElementById('ARButton')]) {
+      if (element instanceof HTMLElement) element.style.display = 'none';
+    }
+  });
   await settle(page, 'video', { pose: mockPose(0) });
   const framesDir = path.join(screenshotDir, 'frames');
   await mkdir(framesDir, { recursive: true });
@@ -467,14 +474,21 @@ async function runThumbstickVideo() {
   const shot = async () => {
     const name = `frame-${String(frame).padStart(4, '0')}.png`;
     frame += 1;
-    await page.screenshot({ path: path.join(framesDir, name), timeout: 10_000 }).catch(() => undefined);
+    // captureXrScreenshot, not page.screenshot: it runs a few frozen frames
+    // first so IWER composites the current state. A raw screenshot captures
+    // the stale XR composite and every frame looks identical.
+    await captureXrScreenshot(page, path.join(framesDir, name), { timeout: 10_000 }).catch(() => undefined);
   };
   const drive = async (input, ms) => {
-    await step(page, { input, ms: 0 });
+    const start = await step(page, { input, ms: 0 });
+    let end = start;
     for (let elapsed = 0; elapsed < ms; elapsed += 100) {
-      await step(page, { ms: 100 });
+      end = await step(page, { ms: 100 });
       await shot();
     }
+    const travelled = horizontalDistance(horizontalDelta(start.character.position, end.character.position));
+    console.info(`[vr-locomotion] video drive ${JSON.stringify(input.thumbstick)}: ${travelled.toFixed(2)} m, turnYaw ${(end.thumbstick?.turnYaw ?? 0).toFixed(2)} rad`);
+    return end;
   };
   await shot();
   await drive({ thumbstick: { moveX: 0, moveY: 1, turnX: 0 } }, 1600);
@@ -487,7 +501,10 @@ async function runThumbstickVideo() {
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
   const videoPath = path.join(screenshotDir, 'vr-thumbstick-locomotion.mp4');
+  // The XR composite is a 320x180 canvas centered in the 1280x720 page;
+  // crop to it and upscale so the avatar fills the video frame.
   await promisify(execFile)('ffmpeg', ['-y', '-framerate', '10', '-i', path.join(framesDir, 'frame-%04d.png'),
+    '-vf', 'crop=320:180:480:270,scale=1280:720:flags=lanczos',
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', videoPath], { timeout: 120_000 });
   console.info(`[vr-locomotion] video: ${videoPath} (${frame} frames)`);
   return videoPath;

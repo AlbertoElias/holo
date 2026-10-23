@@ -50,7 +50,7 @@ export class DiagnosticViews {
     this.spectatorCamera = this.spectatorMode === 'off' ? null : (this.spectatorCamera ?? new THREE.PerspectiveCamera(38, 16 / 9, 0.01, 200));
     this.spectatorFocusReady = false;
     this.headPathCount = 0;
-    if (this.spectatorMode === 'body') this.ensureHeadPathOverlay();
+    if (this.spectatorMode === 'body' || this.spectatorMode === 'body-fixed') this.ensureHeadPathOverlay();
     this.setHeadPathOverlayVisible(false);
   }
 
@@ -95,7 +95,7 @@ export class DiagnosticViews {
     const height = renderer.domElement.height / renderer.getPixelRatio();
     renderer.xr.enabled = false;
     renderer.setRenderTarget(null);
-    if (this.spectatorMode === 'body') this.renderBodySpectator(spectator, width, height);
+    if (this.spectatorMode === 'body' || this.spectatorMode === 'body-fixed') this.renderBodySpectator(spectator, width, height);
     else this.renderHandsSpectator(spectator, width, height);
     renderer.xr.enabled = true;
   }
@@ -123,23 +123,37 @@ export class DiagnosticViews {
 
   // Third person, front-left of where the avatar first faced, so turns,
   // crouches, and steps read clearly; the camera only follows position.
+  // 'body-fixed' is a tripod instead: the camera is planted once and only
+  // pans to track the avatar, so travel across the room reads directly.
   private renderBodySpectator(spectator: THREE.PerspectiveCamera, width: number, height: number): void {
     const { renderer, scene, avatar } = this.deps;
     const root = avatar.avatarRoot.position;
+    const fixed = this.spectatorMode === 'body-fixed';
     if (!this.spectatorFocusReady) {
       this.spectatorFocus.copy(root);
       this.spectatorFocusReady = true;
+      if (fixed) {
+        const distance = avatar.avatarHeight * 3.4;
+        spectator.position.set(
+          root.x - Math.sin(this.spectatorViewYaw) * distance,
+          root.y + avatar.avatarHeight * 0.9,
+          root.z - Math.cos(this.spectatorViewYaw) * distance
+        );
+      }
     }
-    this.spectatorFocus.lerp(root, 0.08);
+    if (!fixed) this.spectatorFocus.lerp(root, 0.08);
     const distance = avatar.avatarHeight * 2.1;
     spectator.aspect = width / Math.max(1, height);
     spectator.updateProjectionMatrix();
-    spectator.position.set(
-      this.spectatorFocus.x - Math.sin(this.spectatorViewYaw) * distance,
-      this.spectatorFocus.y + avatar.avatarHeight * 0.75,
-      this.spectatorFocus.z - Math.cos(this.spectatorViewYaw) * distance
-    );
-    spectator.lookAt(this.spectatorFocus.x, this.spectatorFocus.y + avatar.avatarHeight * 0.45, this.spectatorFocus.z);
+    if (!fixed) {
+      spectator.position.set(
+        this.spectatorFocus.x - Math.sin(this.spectatorViewYaw) * distance,
+        this.spectatorFocus.y + avatar.avatarHeight * 0.75,
+        this.spectatorFocus.z - Math.cos(this.spectatorViewYaw) * distance
+      );
+    }
+    const lookTarget = fixed ? root : this.spectatorFocus;
+    spectator.lookAt(lookTarget.x, lookTarget.y + avatar.avatarHeight * 0.45, lookTarget.z);
     renderer.setViewport(0, 0, width, height);
     avatar.setFirstPersonVisualState('off');
     this.setHeadPathOverlayVisible(true);
@@ -174,7 +188,7 @@ export class DiagnosticViews {
   // Cyan: the tracked eyes' recent path and current position; pink: the
   // avatar's eye midpoint.
   private updateHeadPathOverlay(): void {
-    if (this.spectatorMode !== 'body' || !this.headPathLine || !this.headMarker || !this.eyeMarker) return;
+    if ((this.spectatorMode !== 'body' && this.spectatorMode !== 'body-fixed') || !this.headPathLine || !this.headMarker || !this.eyeMarker) return;
     const pose = this.deps.tracking.getHeadPose();
     if (!pose.valid) return;
     if (this.headPathCount === 0) this.spectatorViewYaw = this.deps.getBodyYaw() + Math.PI * 0.25;
