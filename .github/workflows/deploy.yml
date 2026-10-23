@@ -163,7 +163,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build capture
-        run: pnpm --filter @holoim/capture run build
+        # Like the viewer: `...` builds the workspace packages (meaning) whose
+        # dist entry the production bundle resolves.
+        run: pnpm --filter @holoim/capture... run build
       - name: Deploy to Pages
         run: pnpm --filter @holoim/web exec wrangler pages deploy "$GITHUB_WORKSPACE/apps/capture/dist" --project-name holoim-capture --branch main
         env:
