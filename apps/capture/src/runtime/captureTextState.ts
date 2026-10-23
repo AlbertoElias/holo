@@ -27,6 +27,7 @@ export function renderCaptureTextState(c: CaptureContext): string {
       z: avatar.avatarRoot.position.z,
       yaw: c.camera.lookYaw
     },
+    point: { held: input.isPointHeld(), aimPitch: input.getPointAimPitch(), ...c.point.snapshot() },
     locomotion: {
       state: animator.getState(),
       horizontalSpeed: character.horizontalSpeed,

@@ -27,6 +27,10 @@ interface InputControllerOptions {
 export class InputController {
   readonly moveState: MoveState = { forward: false, back: false, left: false, right: false };
 
+  // Point action sources held now: 'mouse' (right button under pointer lock),
+  // 'key' (F), 'mock' (automation). Any one holds the action.
+  private readonly pointSources = new Set<'mouse' | 'key' | 'mock'>();
+  private pointAimPitch = 0;
   private jumpQueued = false;
   private crouchHeld = false;
   private focusRecoveryUntilMs = 0;
@@ -44,7 +48,21 @@ export class InputController {
     window.addEventListener('blur', this.onWindowBlur);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     document.addEventListener('mousemove', this.onMouseMove);
+    document.addEventListener('mousedown', this.onMouseDown, true);
+    document.addEventListener('mouseup', this.onMouseUp, true);
+    document.addEventListener('contextmenu', this.onContextMenu, true);
+    document.addEventListener('pointerlockchange', this.onPointerLockChange);
     this.options.domElement.addEventListener('click', this.onClick);
+  }
+
+  /** Whether the desktop point action is held (right button, F, or the mock hook). */
+  isPointHeld(): boolean {
+    return this.pointSources.size > 0;
+  }
+
+  /** Aim pitch (radians above the horizon) while held; the mouse's vertical axis drives it. */
+  getPointAimPitch(): number {
+    return this.pointAimPitch;
   }
 
   onXrEntered(): void {
@@ -97,6 +115,30 @@ export class InputController {
     if (typeof payload.right === 'boolean') this.moveState.right = payload.right;
     if (typeof payload.crouch === 'boolean') this.crouchHeld = payload.crouch;
     if (payload.jump) this.jumpQueued = true;
+    if (typeof payload.lookYaw === 'number') this.options.look.lookYaw = payload.lookYaw;
+    if (typeof payload.point === 'boolean') {
+      if (payload.point) this.startPoint('mock');
+      else this.endPoint('mock');
+    }
+    if (typeof payload.aimPitch === 'number') {
+      const look = this.options.look;
+      this.pointAimPitch = look.clampFirstPersonPitch(payload.aimPitch);
+      if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
+    }
+  }
+
+  private startPoint(source: 'mouse' | 'key' | 'mock'): void {
+    if (this.options.isXrPresenting()) return;
+    if (this.pointSources.size === 0) {
+      const look = this.options.look;
+      // First person aims where the view looks; third person starts level.
+      this.pointAimPitch = look.desktopViewMode === 'first' ? look.firstPersonPitch : 0;
+    }
+    this.pointSources.add(source);
+  }
+
+  private endPoint(source: 'mouse' | 'key' | 'mock'): void {
+    this.pointSources.delete(source);
   }
 
   private clearMovementState(): void {
@@ -106,6 +148,7 @@ export class InputController {
     this.moveState.right = false;
     this.crouchHeld = false;
     this.jumpQueued = false;
+    this.pointSources.clear();
   }
 
   private restoreDesktopFocus(): void {
@@ -173,6 +216,11 @@ export class InputController {
       this.crouchHeld = true;
       event.preventDefault();
     }
+
+    if (event.code === 'KeyF' && !event.repeat) {
+      this.startPoint('key');
+      event.preventDefault();
+    }
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
@@ -182,6 +230,11 @@ export class InputController {
 
     if (event.code === 'KeyC') {
       this.crouchHeld = false;
+      event.preventDefault();
+    }
+
+    if (event.code === 'KeyF') {
+      this.endPoint('key');
       event.preventDefault();
     }
   };
@@ -196,10 +249,31 @@ export class InputController {
     }
   };
 
+  private readonly onMouseDown = (event: MouseEvent): void => {
+    if (event.button !== 2 || this.options.isXrPresenting() || document.pointerLockElement !== this.options.domElement) return;
+    this.startPoint('mouse');
+    event.preventDefault();
+  };
+
+  private readonly onMouseUp = (event: MouseEvent): void => {
+    if (event.button !== 2) return;
+    this.endPoint('mouse');
+  };
+
+  // The point action owns the right button on the canvas; no browser menu.
+  private readonly onContextMenu = (event: Event): void => {
+    if (event.target === this.options.domElement || document.pointerLockElement === this.options.domElement) event.preventDefault();
+  };
+
+  private readonly onPointerLockChange = (): void => {
+    if (document.pointerLockElement !== this.options.domElement) this.endPoint('mouse');
+  };
+
   private readonly onClick = (): void => {
     this.options.domElement.focus({ preventScroll: true });
     if (!this.options.isXrPresenting() && document.pointerLockElement !== this.options.domElement) {
-      this.options.domElement.requestPointerLock();
+      // Browsers that refuse the lock reject the request; clicking again retries.
+      void Promise.resolve(this.options.domElement.requestPointerLock()).catch(() => undefined);
     }
   };
 
@@ -211,7 +285,11 @@ export class InputController {
     const sensitivity = 0.0025;
     const look = this.options.look;
     look.lookYaw -= event.movementX * sensitivity;
-    if (look.desktopViewMode === 'third') {
+    if (this.pointSources.size > 0) {
+      // Held: vertical mouse aims the point (first person's view follows it).
+      this.pointAimPitch = look.clampFirstPersonPitch(this.pointAimPitch - event.movementY * sensitivity);
+      if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
+    } else if (look.desktopViewMode === 'third') {
       look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - event.movementY * sensitivity);
     } else {
       look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - event.movementY * sensitivity);

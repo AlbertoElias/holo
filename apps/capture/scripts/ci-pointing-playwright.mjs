@@ -19,6 +19,7 @@ import {
 } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
+import { runDesktopPointingCheck } from './lib/pointing-desktop-take.mjs';
 import { TARGETS } from './lib/pointing-scene.mjs';
 import { expectations, readGlbJson, scorePointing, TOLERANCE_SEC } from './lib/pointing-score.mjs';
 
@@ -46,10 +47,12 @@ const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-pointing';
 const concurrency = Math.max(1, Number(process.env.POINTING_CONCURRENCY ?? 2));
 const SHEET_VIEWPORT = { width: 960, height: 540 };
 
-const labelFiles = filterReplayFixtures((await readdir(labelsDir).catch(() => []))
-  .filter((name) => name.endsWith('.json'))
-  .sort());
-if (labelFiles.length === 0) throw new Error(`No pointing labels in ${labelsDir}.`);
+// The scripted desktop take (lib/pointing-desktop-take.mjs) has no labels file.
+const replayFilter = process.env.XR_REPLAY_ONLY;
+const runDesktop = !replayFilter || 'desktop-pointing-targets'.includes(replayFilter);
+const allLabelFiles = (await readdir(labelsDir).catch(() => [])).filter((name) => name.endsWith('.json')).sort();
+const labelFiles = runDesktop && replayFilter && !allLabelFiles.some((name) => name.includes(replayFilter)) ? [] : filterReplayFixtures(allLabelFiles);
+if (labelFiles.length === 0 && !runDesktop) throw new Error(`No pointing labels in ${labelsDir}.`);
 await mkdir(artifactDir, { recursive: true });
 
 const browser = await launchXrBrowser(chromium);
@@ -232,6 +235,11 @@ function format(report) {
 try {
   const reports = await mapWithConcurrency(labelFiles, concurrency, replay);
   for (const report of reports) console.log(format(report));
+  if (runDesktop) {
+    const desktop = await runDesktopPointingCheck({ browser, baseUrl, artifactDir, consoleErrors });
+    console.log(`[pointing] ${desktop.label}: ${desktop.status}, ${desktop.links.length} link(s), ${desktop.spans.length} span(s)\n  sheet: ${desktop.sheet}`);
+    reports.push({ ...desktop, matches: [], silence: [] });
+  }
   const failures = reports.flatMap((report) => report.failures.map((failure) => `${report.label}: ${failure}`));
   if (consoleErrors.length > 0) failures.push(`console errors:\n${consoleErrors.join('\n')}`);
   if (failures.length > 0) throw new Error(`Pointing check failed:\n- ${failures.join('\n- ')}`);

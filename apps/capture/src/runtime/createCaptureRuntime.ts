@@ -8,12 +8,14 @@ import { CameraController } from '../camera/CameraController';
 import { loadRuntimeConfig } from '../config/runtimeConfig';
 import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
 import { DiagnosticViews } from '../debug/DiagnosticViews';
+import { DesktopPointAction } from '../input/DesktopPointAction';
 import { InputController } from '../input/InputController';
 import { CharacterMotor } from '../physics/CharacterMotor';
 import { RecordingSession } from '../recording/RecordingSession';
 import { activeCamera, type CaptureContext } from '../systems/captureContext';
 import { registerCaptureSystems } from '../systems';
 import type { CaptureUiBridge } from '../ui/captureUiBridge';
+import { PointCrosshair } from '../ui/PointCrosshair';
 import { UIStateStore } from '../ui/UIStateStore';
 import { VrHud } from '../ui/VrHud';
 import { ArSpectator } from '../xr/ArSpectator';
@@ -99,6 +101,13 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     camera,
     tracking,
     input,
+    point: new DesktopPointAction({
+      avatar,
+      desktopCamera: stage.desktopCamera,
+      crosshair: new PointCrosshair(container),
+      embodyOffset: config.embodyOffset,
+      getPointSamples: () => recording.recorder.pointSamples
+    }),
     body,
     heightFit,
     crouch: new CrouchState(),
@@ -159,6 +168,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       avatar.applyLoadedModels(sceneGltf.scene, avatarGltf.scene, config);
       capture.terrainLegs.attach(avatar);
       hands.attach();
+      capture.point.attach();
       // Bind pose is measured before any animation writes the skeleton.
       body.measureBindPose();
       const spawned = await motor.init(avatar);

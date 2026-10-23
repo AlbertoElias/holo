@@ -173,4 +173,8 @@ export type MockInputState = {
   right?: boolean;
   crouch?: boolean;
   jump?: boolean;
+  // Desktop point action: hold it, steer the body yaw, and set the aim pitch.
+  point?: boolean;
+  lookYaw?: number;
+  aimPitch?: number;
 };

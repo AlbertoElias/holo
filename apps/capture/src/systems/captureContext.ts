@@ -8,6 +8,7 @@ import type { CrouchState } from '../body/crouch';
 import type { CameraController } from '../camera/CameraController';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { DiagnosticViews } from '../debug/DiagnosticViews';
+import type { DesktopPointAction } from '../input/DesktopPointAction';
 import type { InputController } from '../input/InputController';
 import type { CharacterMotor } from '../physics/CharacterMotor';
 import type { RecordingSession } from '../recording/RecordingSession';
@@ -50,6 +51,7 @@ export interface CaptureContext {
   camera: CameraController;
   tracking: XrTracking;
   input: InputController;
+  point: DesktopPointAction;
   body: BodyTracking;
   heightFit: HeightFit;
   crouch: CrouchState;
