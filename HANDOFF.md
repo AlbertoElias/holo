@@ -23,19 +23,15 @@ record room-scale walking, turning, crouching and leaning under
 
 ## Ready to merge (grouped)
 
-Verified branches waiting to go to `main` together with the next finished
-change (see "Sharing work between agents" in `AGENTS.md`):
-
-- `feature/self-resolving-pointing`: integration branch for
-  [`docs/features/self-resolving-pointing.md`](docs/features/self-resolving-pointing.md).
-  Holds the approved PRD-022 and reviewed brief, the merge-grouping and
-  subagent rules in `AGENTS.md`, and the `@holoim/meaning` package
-  (`HOLOIM_meaning` v0 types and validator, VRM humanoid bone table).
-  Implementation branches are cut from it and merge back into it; it goes to
-  `main` once as one change when the feature is verified.
+None.
 
 ## Unverified / device-only
 
+- Self-resolving pointing on a Quest and a phone: score at least three new
+  headset takes with 20 or more author-labelled points against PRD-022's
+  precision and recall targets, view the feed highlight on a real phone, and
+  run the recipient trial (brief
+  [`docs/features/self-resolving-pointing.md`](docs/features/self-resolving-pointing.md)).
 - Validate the room-scale body solver on a headset (walking, turning,
   crouching, leaning feel; world lock; comfort). The body check is IWER only.
 - Validate capture VR embodiment, hand/finger retargeting, pinch/release

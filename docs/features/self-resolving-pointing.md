@@ -1,7 +1,7 @@
 # Feature brief: Self-resolving pointing
 
 **Lead:** Claude Code (Opus)  
-**Status:** Reviewed
+**Status:** Verifying (emulation complete 2026-10-23; physical-device evidence pending)
 **Layer:** Meaning (read); see `docs/product/concepts/what-a-hologram-is.md`
 
 Product decision, targets, and trial: [PRD-022](../product/prds/PRD-022-self-resolving-pointing.md)
@@ -265,13 +265,26 @@ list) recorded above.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Headset timing and silence | New `pointing` check in `run-xr-checks.mjs`: replay `headset-open-fist-pinch-point-wave-reach.json` through the real input path, record, export; labels written from the contact sheet before tuning, kept in `fixtures/pointing-labels/` | pending: `output/ci-pointing/<label>-report.json` (links vs labels), `<label>-sheet.jpg` |
-| Referents: targets, own body, change mid-point, sky, too brief | Same check, synthetic IWER take from `generate-iwer-pose-fixture.mjs` in a generated test scene | pending: report JSON, contact sheet |
-| Desktop action, both views, release paths, two recorded links, spans, sky | Same check, scripted desktop take via new mock hooks (`point`, aim) plus one real right-button hold under pointer lock (confirm early that headless Chromium grants it) | pending: report JSON, contact sheet of the arm aiming at A and B |
+| Headset timing and silence | New `pointing` check in `run-xr-checks.mjs`: replay `headset-open-fist-pinch-point-wave-reach.json` through the real input path, record, export; labels written from the contact sheet before tuning, kept in `fixtures/pointing-labels/` | passed 2026-10-23: 2 links (both hands, at the labelled times) against a generated room scene; open, fist, pinch, wave, reach silent. `output/ci-pointing/headset-open-fist-pinch-point-wave-reach-report.json`, `-sheet.jpg`. Referents are not scored on this take (it has no intended referent) |
+| Referents: targets, own body, change mid-point, sky, too brief | Same check, synthetic IWER take from `generate-iwer-pose-fixture.mjs` in a generated test scene | passed 2026-10-23: TargetA, leftHand, TargetB, TargetA resolved; sky and too-brief silent. `output/ci-pointing/iwer-pointing-targets-report.json`, `-sheet.jpg` |
+| Desktop action, both views, release paths, two recorded links, spans, sky | Same check, scripted desktop take via new mock hooks (`point`, aim) plus one real right-button hold under pointer lock (confirm early that headless Chromium grants it) | passed 2026-10-23: 2 `recorded` links (A, B), 3 `inferred` arm spans, no link for the sky hold. Headless Chromium rejects pointer lock, so the check uses a real CDP right-button hold with a simulated `pointerLockElement`. `output/ci-pointing/desktop-pointing-targets-report.json`, `-sheet.jpg` |
 | Upload, render, styles, orbit, loop, toggle | `e2e/pointing.pipeline.spec.ts` records the real exports itself in `beforeAll`, against the running capture app (`E2E_CAPTURE_URL`), with no committed GLBs: the scripted desktop take (recorded style) and the IWER replay take (inferred style; scene objects and the author's hand), through the same shared helpers as the capture check (`lib/pointing-desktop-take.mjs`, `lib/pointing-iwer-replay.mjs`), which also score them. Each is uploaded → feed, with a dev-only highlight probe; expected links are read from the export's own `HOLOIM_meaning`. A hand-built GLB stays only for what the exports lack: a large-surface ring, a mixed recorded/inferred scene pair, and the no-extension old recording | passed 2026-10-23, 4 tests in 1.4 min: screenshots in `output/pointing-viewer/` (`desktop-recorded-*`, `iwer-inferred-*`: outside span, each span midpoint, orbited, toggled off; hand-built `0-`…`7-`), takes in `output/pointing-viewer/takes/` |
-| Old GLBs unchanged; USDZ conversion | `pnpm run test:smoke:pipeline`; conversion of a GLB with the extension | pending |
-| Repo checks | `pnpm run verify:agent` in the loop, `pnpm run verify:pr` before merge | pending |
+| Old GLBs unchanged; USDZ conversion | `pnpm run test:smoke:pipeline`; conversion of a GLB with the extension | passed 2026-10-23: pipeline suite (6 tests) including the no-extension recording; USDZ conversion of a GLB carrying `HOLOIM_meaning` succeeds, Quick Look treating it as an optional extension |
+| Repo checks | `pnpm run verify:agent` in the loop, `pnpm run verify:pr` before merge | passed 2026-10-23 on the integration branch, and again after merging `main` |
 | Precision and recall targets; recipient trial | Physical headset takes with author-labelled points; PRD-022 trial | pending (device) |
+
+## Independent verification
+
+2026-10-23, Muse (Meta), a different vendor from the Claude implementers; Codex
+ran out of quota part-way after confirming the schema and USDZ conversion and
+flagging that the viewer e2e then used a hand-built GLB (since replaced by live
+capture exports). Muse found no defect above Low, no threshold or label
+weakened, and correct provenance in every producer. Its four Low findings
+were fixed in `6f13a25d1e8d`: confidence is now required on inferred links, the
+resolver applies the full 0.4 s dwell to sub-runs, the viewer probe samples
+after applying, and the hand-built fixture's purpose is documented. Its
+sandbox could not launch Chromium, so the browser runs above were made by the
+lead on the same tree.
 
 ## Physical-device limits
 
