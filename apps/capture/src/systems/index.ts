@@ -12,6 +12,7 @@ import { RecordingSystem } from './RecordingSystem';
 import { RoomScaleSystem } from './RoomScaleSystem';
 import { SimulationClockSystem } from './SimulationClockSystem';
 import { TrackedHandsSystem } from './TrackedHandsSystem';
+import { VrLocomotionSystem } from './VrLocomotionSystem';
 import { XrSessionSystem } from './XrSessionSystem';
 
 // One simulation step, in priority order. Each system writes only what it
@@ -21,6 +22,7 @@ export function registerCaptureSystems(world: World): void {
   world
     .registerSystem(SimulationClockSystem, { priority: 0 })
     .registerSystem(XrSessionSystem, { priority: 10 })
+    .registerSystem(VrLocomotionSystem, { priority: 15 })
     .registerSystem(RoomScaleSystem, { priority: 20 })
     .registerSystem(CalibrationSystem, { priority: 30 })
     .registerSystem(MovementSystem, { priority: 40 })

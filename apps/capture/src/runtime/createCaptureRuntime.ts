@@ -9,6 +9,7 @@ import { loadRuntimeConfig } from '../config/runtimeConfig';
 import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
 import { DiagnosticViews } from '../debug/DiagnosticViews';
 import { InputController } from '../input/InputController';
+import { VrLocomotion } from '../input/VrLocomotion';
 import { CharacterMotor } from '../physics/CharacterMotor';
 import { RecordingSession } from '../recording/RecordingSession';
 import { activeCamera, type CaptureContext } from '../systems/captureContext';
@@ -44,13 +45,15 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
 
   const avatar = new AvatarRig(stage.worldGroup, renderer);
   const motor = new CharacterMotor();
+  const locomotion = new VrLocomotion();
   const camera = new CameraController({
     renderer,
     xrCamera: stage.xrCamera,
     desktopCamera: stage.desktopCamera,
     cameraRig,
     avatarRig: avatar,
-    embodyOffset: config.embodyOffset
+    embodyOffset: config.embodyOffset,
+    rigYaw: () => locomotion.turnYaw
   });
   const tracking = new XrTracking(renderer, config.mockVrEnabledFromQuery, {
     handPitchDeg: config.handTrackPitchDeg,
@@ -99,6 +102,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     camera,
     tracking,
     input,
+    locomotion,
     body,
     heightFit,
     crouch: new CrouchState(),
@@ -197,7 +201,11 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           // spaces, so a baseline captured before the source switch is invalid.
           if (wasEnabled !== tracking.mock.enabled) capture.crouch.resetBaseline();
         },
-        __setMockInput: (payload) => input.applyMockInput(payload),
+        __setMockInput: (payload) => {
+          input.applyMockInput(payload);
+          if (payload.thumbstick) locomotion.setThumbstick(payload.thumbstick);
+          if (payload.turnMode) locomotion.setTurnMode(payload.turnMode);
+        },
         __respawnCharacter: () => motor.respawn(),
         __sampleHands: () => hands.sample(),
         __sampleBody: () => body.sample(cameraRig, tracking.getHeadPose()),

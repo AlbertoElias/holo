@@ -9,6 +9,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Feature | Status | Brief |
 | --- | --- | --- |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
+| VR thumbstick locomotion and snap turn | Complete | [vr-thumbstick-locomotion.md](archive/vr-thumbstick-locomotion.md) |
 | Natural full-body motion from room-scale movement | Verifying | [room-scale-body-motion.md](room-scale-body-motion.md) |
 | Native IWSDK capture runtime refactor | Complete | [archive/iwsdk-runtime-refactor.md](archive/iwsdk-runtime-refactor.md) |
 | IWSDK runtime prototype (evaluation spike) | Complete | [archive/iwsdk-runtime-prototype.md](archive/iwsdk-runtime-prototype.md) |
