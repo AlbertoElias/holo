@@ -1,7 +1,7 @@
 # Feature brief: Shared XR interface and viewer VR/AR
 
 **Lead:** Claude (Opus)  
-**Status:** Implementing (approved 2026-10-24; step 1 spikes)
+**Status:** Implementing (approved 2026-10-24; step 1 spikes done, both GO)
 **Layer:** view (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -181,7 +181,7 @@ Implementation order (each step lands green before the next):
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Spikes | Throwaway IWER runs (phone AR profile; capture with input + UI on) and a production build | Notes and screenshots in this brief; pending |
+| Spikes | Throwaway IWER runs (phone AR tap; capture with input + UI on) and a production build, 2026-10-24 | **Both GO**; results in "Step 1 spike results" below |
 | VR entry, recorded scale, teardown | New IWER spec `xr-viewer.spec.ts` (Quest 3 profile) in `test:xr:viewer` | Screenshot + `xr-viewer-report.json`; pending |
 | Gallery, multiple placed, focus, audio focus | Same spec on a seeded 12-item feed | Report with entity states + screenshot; pending |
 | Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | Drift numbers in report; pending |
@@ -191,6 +191,78 @@ Implementation order (each step lands green before the next):
 | Capture on shared panels | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + capture panel screenshot; pending |
 | Same look in both apps | IWER screenshots of both panels via `preview.mjs` | Side-by-side sheet; pending |
 | Pipeline compatibility | `pnpm run test:smoke:pipeline` | Pass output; pending |
+
+### Step 1 spike results (2026-10-24)
+
+Throwaway code, reverted after the runs; nothing from it is merged. Both runs
+used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
+
+**Spike 1: phone AR tap on an IWSDK panel: GO, with an app-side bridge.**
+
+- Setup: a minimal IWSDK `World` in `immersive-ar` (spatial UI on) with one
+  `PanelUI` button 0.85 m ahead, in a 390×844 page. IWER has no phone
+  profile, so the page emulated one: mono view, controllers and hands
+  disconnected, and each tap delivered the way Chrome Android does without
+  `dom-overlay`: a transient input source (`handedness: 'none'`,
+  `targetRayMode: 'screen'`, ray from the viewer through the tap point) that
+  fires `selectstart`, then `select` and `selectend` inside an XR frame, then
+  is removed.
+- IWSDK alone: **no.** `XRInputManager.assignInputSource` keeps only `left`
+  and `right` sources, so a screen source never drives an IWSDK pointer.
+  Result: 4 taps, 4 XR `selectstart` events, 0 panel `pointerdown`, 0 `click`.
+- With a ~30-line bridge: **yes.** On `selectstart`/`selectend` from a
+  `screen` or `transient-pointer` source, read the target-ray pose from the
+  event's frame, place an object under `world.player` there, and drive a
+  `@pmndrs/pointer-events` ray pointer (`move` then `down`/`up` then `exit`)
+  into the scene, the event system `PanelUI` already uses. Result: 3 of 3
+  taps on the button gave `pointerdown` + `click` and showed the pressed
+  state; a tap on empty space gave nothing.
+- Notes for step 2: pointer-events treats a press longer than 300 ms as no
+  click (`clickThresholdMs`), so the bridge sets the threshold it wants for
+  phones; scrubbing the timeline by dragging needs the bridge to also
+  `move` the pointer every frame while the source exists (not exercised);
+  IWSDK does not request `dom-overlay`, so no DOM UI is available in phone
+  AR. Real Android Chrome tap delivery is unverified (Physical-device limits).
+
+**Spike 2: IWSDK input and spatial UI inside capture: GO.**
+
+- Change tried in `captureStage.ts`: `spatialUI: true` and `InputSystem` kept
+  registered (`AudioSystem`, `EnvironmentSystem`, `LightSystem`,
+  `GazeSystem` still removed; locomotion, physics, grabbing still off). A
+  `PanelUI` panel with `Follower` (target `world.player.head`, `PivotY`) and
+  `RayInteractable` + `PokeInteractable` had a Record/Stop button calling
+  `recording.toggle()`.
+- No CDN models: IWSDK's visual adapters load controller and hand GLBs from
+  `cdn.jsdelivr.net/npm/@webxr-input-profiles` even with visuals toggled off.
+  Replacing each adapter's `assetLoader` with one that returns an empty
+  scene leaves input tracked with no visual and no request: 0 requests to
+  the CDN in the run (two `[xr-input]` console warnings name the URL that
+  was declined). Capture keeps its own avatar hands.
+- Recording input stays capture's: IWSDK only dispatches pointer events;
+  capture still reads three's controllers and hands. In IWER (Quest 3) the
+  right controller ray clicked Record, recording ran through a head turn
+  (the panel lazy-followed), and a second click stopped and exported a
+  2.5 MB GLB (`RecordedMotion`, 141 channels, 10 skins). No console errors.
+- Determinism: with the change, `run-xr-checks.mjs recording mock-vr hands
+  body` passed, and all 14 hand and body replay outputs (`*-samples.json`,
+  `*-report.json`) were byte-identical to a clean checkout of this branch.
+- Production build: `vite build` with capture's empty UIKitML kits and
+  lucide subset still parses and instantiates a panel of plain
+  `div`/`span` (all three element ids found, 10 meshes). Horizon kit
+  components and lucide icons beyond the subset stay unavailable, so the
+  shared package builds from UIKit primitives or widens the boundary in
+  `vite.config.ts`. The one console error in the served build (a JSON
+  request answered with HTML) also occurs on the clean build.
+- Notes for steps 3 and 5: IWSDK pointers live under `world.player`, but
+  capture moves its own `cameraRig`, so the spike copied the rig's world
+  pose to `world.player` before each `world.update` (a float32 entity
+  transform; only pointers and `Follower` read it, recording does not). The
+  old `VrHud` conflicts with IWSDK input: its proximity touch and its own
+  controller `select` both toggled recording when its head-locked pill
+  crossed the controller or the ray, so the spike disabled it; step 5 must
+  remove it in the same change that adds the shared panel. The default
+  UIKit font lacks `·` and `×`; panel copy avoids them or the shared
+  package ships a font that has them.
 
 ### Video verification loop
 
