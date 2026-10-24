@@ -22,11 +22,10 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- UI redesign slices 0 and 1 (brief
-  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)): branch
-  `claude/redesign-slices-0-1-8d2c58`, verified locally with `verify:pr`
-  on 2026-10-24 (evidence in the brief). Hold it and merge it together with
-  slice 2, at the user's request; slice 2 builds on it.
+- Nothing held. UI redesign slices 0, 1 and 2 (brief
+  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) were
+  merged to `main` together on 2026-10-24, verified locally with `verify:pr`
+  (evidence in the brief); slices 3 and 4 are next there.
 
 ## Unverified / device-only
 
