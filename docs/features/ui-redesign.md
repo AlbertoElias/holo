@@ -1,8 +1,8 @@
 # Feature brief: Redesign UI and interaction across capture and viewer
 
 **Lead:** Claude Code (Opus)  
-**Status:** Reviewed (design review 2026-10-24; the user's answers recorded
-2026-10-24); awaiting the remaining questions and approval to build
+**Status:** Reviewed (design review 2026-10-24; every question answered by
+the user 2026-10-24); awaiting approval to build
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -77,7 +77,10 @@ what they marked in the portal.
 - "Here" (marking a place). Only "this" is in this brief.
 - Ink drawing, speech commands and the verbs of the concept's verb table that
   no action here needs.
-- Viewpoint portals (Q12), until a feature suggests viewpoints.
+- Viewpoint portals (Q12). Their look is tracked with suggested viewpoints
+  in [PRD-025](../product/prds/PRD-025-stand-here-markers.md) (IDEA-035).
+- A VR viewing mode in `viewer-web` (Q19): a separate feature, queued in
+  `TODOS.md`.
 - The Follow camera driven by pointing (PRD-030), the time ribbon, layers and
   scrubbing.
 - Any chrome in the exported GLB. The edge, sparks, shade, light, ground,
@@ -118,8 +121,9 @@ What follows from those answers:
   readers must keep loading v0 files.
 - **Handedness defaults to right-handed**, stored per device, and changed in
   each app's settings (Q8).
-- **The Quick Look halo applies to new USDZ files.** Re-converting the files
-  already stored is a separate one-off run, done only on the user's go-ahead.
+- **The Quick Look halo reaches existing files too** (answered 2026-10-24):
+  in production every stored hologram's USDZ is rebuilt with the halo; in a
+  local database only the three most recent are.
   Styleguide 9.5 names the wrong files: the USDZ is built by
   `apps/viewer-api/tools/glb_to_usdz.py`, run by
   `src/services/usdz-worker.ts` (`tools/preview_usdz.swift` is only a macOS
@@ -155,51 +159,52 @@ that changes one updates the styleguide and `tokens.json`.
   resolver maps that input to 72 apx. There is no Vision Pro to check it on
   (device check 10).
 
-### Still open
+### Answered by the user on a second pass, 2026-10-24
 
-The user asked what Q10, Q12 and Q13 mean, and for a suggestion on Q11.
-Each has a proposal waiting for an OK.
+The user asked what Q10, Q12 and Q13 meant and for a suggestion on Q11;
+the lead's proposals below were accepted as written, except where noted.
+Nothing in this brief is still open.
 
 - **Q10. What makes a hologram's edge the same everywhere?** The tears
   along the edge are random, drawn from a seed. To look the same in the
-  feed, in AR and in Quick Look, a hologram needs one fixed seed. *Proposal:*
+  feed, in AR and in Quick Look, a hologram needs one fixed seed. *Decided:*
   the seed is the hologram's id, which the viewer and the USDZ builder both
   know. Capture's own preview, before upload, uses a seed picked per take:
   until it is uploaded it is not yet a hologram anyone else sees. Nothing is
-  written into the GLB. Blocks the edge in slices 3, 4 and 6.
+  written into the GLB.
 - **Q11. Where do general controls go?** Hologram controls go at its foot;
   general ones (Exit AR, upload, settings, sign-in later, the Halo, Record
-  before a take) need a home. *Proposal,* from the styleguide's placement
+  before a take) need a home. *Decided,* from the styleguide's placement
   table: on phone and desktop, actions go in the **bottom dock** (on its
   shade, thumb zone on a phone) and lists and settings in a **side sheet**;
   in a headset, actions go on the **non-dominant wrist** and lists and
   settings on a **world panel 1 m or more away**. In AR before placement, or
   with the hologram out of view, Exit and the placing hint are on the wrist
   (Quest) or in the dock (Android). The top status line shows state only.
-  Blocks the AR route in slice 3 and the shell in slices 3 and 4.
 - **Q12. Viewpoint portals.** An author could suggest other angles to watch
   from ("see it from behind"). The styleguide says each would be a small
   golden portal floating in the scene that you step or click into; the open
   part is its look, because at that size the burnt edge becomes a plain
-  line. No feature suggests viewpoints yet. *Proposal:* out of this brief
-  until one does.
+  line. No feature suggests viewpoints yet. *Decided:* out of this brief.
+  The open look is recorded with suggested viewpoints in
+  [PRD-025](../product/prds/PRD-025-stand-here-markers.md) (IDEA-035).
 - **Q13. The rescale indicator.** Rescaling means showing a hologram bigger
   or smaller than it was recorded, such as a person shrunk onto a table.
   True scale is a fact (principle 6), so any rescale must be visible,
   labelled and reversible. Today the AR route silently resizes every
   hologram so the recording is 1.85 m tall (`AR_MODEL_TARGET_HEIGHT_METERS`,
   clamped between 0.12× and 2.5×), so a 1.6 m person shows taller than they
-  are, with no label. *Proposal:* AR opens at true scale; if the viewer
+  are, with no label. *Decided:* AR opens at true scale; if the viewer
   pinches to resize, a label on the chip shows the scale (for example
   "1:4" or "½ size") with a glyph that returns to true size. The label's look
-  is new and goes to the user with slice 3's screenshots.
-- **Q19. Viewing in VR.** You said viewing happens in VR too, but
-  `viewer-web` has no VR mode today. Does this brief add one (holograms on
-  stages in the blue-hour room, styleguide 9.1), or is it its own feature?
+  is new and goes to the user with slice 3's screenshots for a check.
+- **Q19. Viewing in VR.** Viewing happens in VR too, but `viewer-web` has
+  no VR mode today. *Decided:* a separate feature (holograms on stages in
+  the blue-hour room, styleguide 9.1), queued in `TODOS.md`.
 - **Q20. What does the first Halo hold?** The concept's directions are
   fixed (N note, NE symbols, E redo, SE mark moment, S record/stop, SW
   retake, W undo, NW ink), but most of those actions do not exist yet.
-  *Proposal:* capture's Halo carries S record/stop, W undo the last held
+  *Decided:* capture's Halo carries S record/stop, W undo the last held
   mark and E redo it; empty directions draw nothing, and their places stay
   reserved. The viewer's Halo waits for viewing actions beyond Play, Free and
   Return.
@@ -207,7 +212,7 @@ Each has a proposal waiting for an OK.
   right-button hold on desktop and a long-press on a phone, but the held
   mark already uses the right button on desktop, and the natural phone mark
   is touch-and-hold on the thing itself. The rule that all chrome but stop
-  hides while recording also leaves no mark button on a phone. *Proposal:*
+  hides while recording also leaves no mark button on a phone. *Decided:*
   the mark keeps the right button (desktop) and becomes touch-and-hold on the
   referent (phone and phone AR, no button needed); the Halo moves to a held
   key on desktop, chosen against capture's key map (Space is taken), and to
@@ -239,10 +244,10 @@ Slices 0 to 2 change nothing a person can see.
 | 0 | Port the capture XR checks to TypeScript | Nothing |
 | 1 | `@holoim/design-tokens` | Nothing |
 | 2 | Component contracts and their tests | Slice 1 |
-| 3 | Every viewer page | Slices 0 and 2; Q10, Q11, Q13 (Q19 if VR viewing is added) |
-| 4 | Every capture page, touch input, handedness | Slices 0 and 2; Q10, Q11 |
-| 5 | Hold to mark "this" and the Halo | Slice 4; Q20, Q21; the meaning v1 change for phone AR |
-| 6 | Quick Look baked halo | Q10 |
+| 3 | Every viewer page | Slices 0 and 2 |
+| 4 | Every capture page, touch input, handedness | Slices 0 and 2 |
+| 5 | Hold to mark "this" and the Halo | Slice 4; the meaning v1 change for phone AR |
+| 6 | Quick Look baked halo | Slice 2 (the seeded outline) |
 | 7 | Cross-device task test and device checks | Slices 3 to 6 |
 
 ### Slice 0: port the capture XR checks
@@ -401,8 +406,6 @@ written to ratify code. Their `--passWithNoTests` flags are removed.
   bar, steady stage light, soot per Q15 and Q16, Exit per Q11, true scale
   per Q13. Quest AR uses headset sizes (2.5×, rays 56, poke 72, labels fade
   within 1 m); Android uses flat sizes and touch 44.
-- If Q19 adds VR viewing: holograms on stages in the blue-hour room, per
-  styleguide 9.1.
 
 ### Slice 4: every capture page, touch input, handedness
 
@@ -451,9 +454,15 @@ written to ratify code. Their `--passWithNoTests` flags are removed.
 `tools/glb_to_usdz.py` adds the gold core, the cream highlight and a static
 soft halo when it builds a USDZ. The outline matches the TypeScript edge for
 the same seed (Q10): the worker passes the computed points to the Python
-tool, or a golden-vector test holds the two together. New USDZ files only;
-re-converting stored files is a separate run on the user's go-ahead. The
-exported GLB is unchanged.
+tool, or a golden-vector test holds the two together. The exported GLB is
+unchanged.
+
+Existing files are rebuilt by a one-off script: in production, every stored
+hologram's USDZ; locally, only the three most recent. The script writes each
+new USDZ beside the old one and switches the hologram to it only after the
+new file validates, so a failed rebuild leaves the old preview in place, and
+it can resume after an interruption. It runs on production once the slice is
+verified locally against the three local files.
 
 ### Slice 7: cross-device task test and device checks
 
@@ -506,7 +515,8 @@ See "Test plan and evidence" and "Physical-device limits".
   exports byte-identical to before, with all chrome visible during the
   take; v0 files still load after the meaning change.
 - [ ] New USDZ files carry the baked edge, matching the viewer's outline for
-  the same hologram.
+  the same hologram; the rebuild script has updated the three most recent
+  local holograms and then every production hologram, with no preview lost.
 - [ ] The cross-device task test has run and its results are recorded here.
 - [ ] Every device check below has a recorded physical result, or is listed
   under remaining limits with the reason.
@@ -558,6 +568,7 @@ Listed before choosing isolated tests; contract tests come from this list.
 | Marks change the GLB for takes without marks | Extension written only when there are marks; byte-identical export check |
 | The viewer hides an old GLB without the meaning extension | Extension is optional; feed e2e includes an older export |
 | Fonts fail to load and text falls back to a different face | Self-hosted WOFF2; e2e checks the computed font family |
+| The USDZ rebuild fails partway, or replaces a working preview with a broken one | New file written beside the old; switched only after it validates; resumable; run locally on three files first |
 | Old and new UI coexist on one page mid-redesign | Each slice converts whole pages; merged only when its pages are complete |
 
 ## Ownership
@@ -571,7 +582,7 @@ Listed before choosing isolated tests; contract tests come from this list.
 | Implementer, slice 3 | Assigned at start | `apps/viewer-web/src/**`, `apps/viewer-web/e2e/**` |
 | Implementer, slices 4 and 5 | Assigned at start | `apps/capture/src/**`, capture checks for touch, handedness, the held mark and the Halo |
 | Meaning owner | Assigned for the v1 change | `packages/meaning/**`, as its own reviewed change |
-| Implementer, slice 6 | Assigned at start | `apps/viewer-api/tools/glb_to_usdz.py`, `apps/viewer-api/src/services/usdz-worker.ts` |
+| Implementer, slice 6 | Assigned at start | `apps/viewer-api/tools/glb_to_usdz.py`, `apps/viewer-api/src/services/usdz-worker.ts`, the one-off rebuild script |
 | Independent verifier | A different vendor from the implementer (for example Codex) | Read-only; test artifacts only |
 
 Slices 3 and 4 may run in parallel once slices 0 and 2 are merged; they
@@ -598,8 +609,9 @@ share no files.
   the USDZ path corrected; held-mode input collisions added.
 - **User's answers, 2026-10-24:** recorded in "Decisions and questions",
   which widen the scope to every page, the Halo, touch capture on phones,
-  controllers, handedness and the Quick Look halo, and move identity hues to
-  the identity project.
+  controllers, handedness and the Quick Look halo (with a rebuild of existing
+  files), and move identity hues to the identity project, viewpoint portals
+  to PRD-025 and VR viewing to its own feature.
 
 ## Test plan and evidence
 

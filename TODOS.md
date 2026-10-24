@@ -107,6 +107,10 @@ it from the item below instead of duplicating its status here.
   `docs/product/concepts/what-a-hologram-is.md`: include the portal viewer
   and Follow/Free, and start marks with "this/here" links read from pointing.
   Brief: [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md).
+- [ ] Add a VR viewing mode to `apps/viewer-web`: holograms on their stages
+  in the blue-hour room, lit by their own gold light (styleguide 9.1), using
+  the redesign's components. Split out of the UI redesign brief on
+  2026-10-24 as a separate feature; it needs its own brief.
 
 - [ ] Support the standard avatar formats, not one hardcoded skeleton. Today the
   rig finds bones by exact names in about five places

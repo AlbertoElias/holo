@@ -69,6 +69,10 @@ saying "look from the left side" with no marker.
 ## Risks And Open Questions
 
 - [ ] Do viewers follow suggested viewpoints in a headset, and is the 2D camera move welcome?
+- [ ] How a suggested viewpoint looks: the [styleguide](../design/styleguide.md)
+  draws another angle as a small golden portal in the scene, but at that size
+  the burnt edge reads as a smooth line. Moved here from the UI redesign
+  ([brief](../../features/ui-redesign.md), Q12) on 2026-10-24.
 
 ## Comparison And Learning
 
