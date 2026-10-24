@@ -26,6 +26,12 @@ next queue item in [`TODOS.md`](TODOS.md).
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) were
   merged to `main` together on 2026-10-24, verified locally with `verify:pr`
   (evidence in the brief); slices 3 and 4 are next there.
+- UI redesign slice 3, every viewer page: branch
+  `feature/ui-redesign-slice-3`, pushed and verified locally (evidence in
+  the brief's slice 3 rows). Held to merge with slice 4. Open before it
+  counts as done: the user's look at the placeholders and the side sheet,
+  the AR edge decision, real wrist drawings for Exit, and Codex's
+  independent pass (usage limit on 2026-10-24).
 
 ## Unverified / device-only
 

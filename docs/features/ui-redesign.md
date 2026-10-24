@@ -524,6 +524,43 @@ written to ratify code. Their `--passWithNoTests` flags are removed.
   bar, steady stage light, soot per Q15 and Q16, Exit per Q11, true scale
   per Q13. Quest AR uses headset sizes (2.5×, rays 56, poke 72, labels fade
   within 1 m); Android uses flat sizes and touch 44.
+- **As built (2026-10-24), branch `feature/ui-redesign-slice-3`.**
+  - Feed: the ground gradient on `body::before`, fixed to the screen; each
+    card has its title and byline, the portal cut to `edgeOutline` seeded by
+    the hologram id (`EdgeSvg`), and the `Shade` with Play, the timecode
+    ("Paused · 0:08"), Free and Return (`GlyphControl`; Return shows "Return"
+    and keeps the core's full name). The reach row (highlights, tilt, View
+    in AR, sound) unfolds on pointer or focus and leaves after the idle
+    time. On touch, the first tap only reveals it. The card nearest the
+    middle (`nearestToMiddle`) runs `edgeFrame` and draws its sparks on a
+    canvas from core's `createSpark`, `sparkCount` and the token colours. The
+    other cards hold the resting frame. The feed's stage light comes from
+    core's `stageLight`.
+  - The dock holds Upload, and the `SideSheet` holds the form. Notices for
+    the empty feed, offline, a server error with "Try again", and the upload
+    status are on the `Chip` at the top, never under the form.
+  - AR: `HologramFootControls` at the hologram's foot (Play or Pause, and the
+    timecode). When the viewer pinches, a second row shows the scale label
+    and a true-size control. On a headset, `WristControls` puts Exit on the
+    non-dominant wrist, read from the frame's grip or wrist pose. A phone's
+    dock holds Recenter and Exit, with notices on the chip. Glyphs are
+    selected by an XR `select` ray against their hit meshes. The silent
+    1.85 m resize is gone: the hologram opens at true scale. The three bright
+    point lights became one steady stage light. `HeadLockedActionBar` and
+    the old `Ui*` components are no longer used by the viewer.
+  - Package change, approved by the lead (commit `7b9f666be095`):
+    `GlyphControl` takes `glyph: null` (the word stands in its place) and a
+    `word` prop. `GlyphSpec.id`, and the wrist row's glyph list in
+    `xr-ui-three`, admit null (an empty ring). Contract tests cover both.
+  - **Placeholders, not a settled look:** Pause, Exit AR, Recenter, Upload,
+    true size and "Try again" are words on flat screens and empty rings in
+    the room. An empty ring on the wrist cannot be told apart, and no text
+    may sit within arm's reach. So Exit on the wrist needs a real drawing
+    before slice 3 counts as done in a headset (Recenter is not on the wrist
+    yet for the same reason).
+  - **AR edge pending the user's decision.** AR keeps the bubble and its
+    aura, draws no slab edge, and does not wire soot or the Q16 threshold.
+    The criterion's soot part is not met.
 
 ### Slice 4: every capture page, touch input, handedness
 
@@ -742,8 +779,10 @@ share no files.
 | Independent verification, slice 2 | Codex (a different vendor) given the brief and tree | Neither (review and probes) | 2026-10-24: Codex's probes found two defects, both fixed with tests: the timecode's figures were proportional (0:11 and 0:12 differed by 2.9 mm at 1 m), and labels took the font's 1.2 line height, not the role's 1.35. They confirmed text hides within 1 m, the soft edge reaches 0 at the rim, and the thumbnail halo stays inside its bounds. Codex hit its usage limit before writing a verdict, so slice 2 has no complete independent pass |
 | `verify:pr`, slices 0 and 1 | `pnpm run verify:pr` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 6/6 (the viewer pointing pipeline imports the ported `pointing-desktop-take.ts` and `pointing-iwer-replay.ts`), `test:portal` 6/6, `test:xr:capture` passes. `test:knowledge` 7/7 once run against its own server: Playwright reuses whatever answers on port 4176, and a knowledge dev server from the main checkout was running there, so its first run failed 3 tests (2 also fail that way on `main`). `test:xr:viewer` 9/9 on rerun; its first run hit B-021, a flake that also fails on `main` |
 | `verify:pr`, slice 2 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling), builds, `test:smoke:pipeline` 6/6, `test:portal` 6/6 and `test:xr:smoke` 9/9 pass; no app changed. `test:knowledge` 7/7 in Docker (port 4176 was held by the main checkout's server) once its bug-list check counted template cards instead of asserting on one: with B-020 and B-021 open there are two cards, and the old assertion failed Playwright's strict mode |
-| Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | Screenshots at desktop and 390 × 844, previewed with `packages/tooling-testing/src/preview.mjs`; pending |
-| AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | Screenshots and placement report; pending |
+| Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | 2026-10-24, slice 3: `test:portal` 6/6. `test:xr:viewer` 14/14, which now includes `e2e/redesign.spec.ts`. At 1280 × 800 and 390 × 844 that spec checks the fixed ground gradient; Play, Free and Return in the shade (Return's word "Return", its name the core's); every glyph hit area at the input minimum; the timecode in its token font; the reach row hidden until the shade is reached; exactly one card sparking, at `sparkCount`; the side sheet at most 24rem wide, closing on "Close"; no sparks under reduced motion; and the empty, server-error ("Try again", `role=alert`) and offline notices on the phone chip. Screenshots in the ignored `output/redesign-slice-3/`, previewed with `preview.mjs` and shown to the user. Physical phones not checked |
+| AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | 2026-10-24, slice 3, IWER's Quest 3 (OculusBrowser UA, so the 97% passthrough chip): Exit is in the page before placement and on the left wrist; the model's scale is 1 at open; no chrome object has the camera as an ancestor; every chip mesh is at the target's opacity; the stage light holds 0.9 over 0.7 s; a controller ray selects Pause and Play; a two-finger pinch sets "1:…" and a ray at true size restores 1; Exit still works after a 180° turn. `ar-bubble.spec.ts` now gets its non-unit transform from the viewer's pinch. Not checked on a Quest or an Android phone, nor the Android dock over dom-overlay. The AR edge and soot wait on the user's decision |
+| `verify:pr`, slice 3 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 8/8, `test:portal` 6/6, `test:xr:smoke` 14/14 and `test:xr:viewer` 14/14. `test:knowledge` in Docker: 6/7, then its live-update test (atomic replacement and rename) passed 3 of 3 alone, so a timing flake under amd64 emulation; slice 3 changes no knowledge code. Docker needed `PLAYWRIGHT_BROWSERS_PATH` set to a fresh folder: the shared `holoim-ci-playwright` volume holds an arm64 Chromium 1208 marked complete, which the now amd64 image cannot run |
+| Independent verification, slice 3 | Codex (a different vendor) given the brief, the tree and the slice 2 contracts | Neither (review and probes) | 2026-10-24: not run. Codex returned "You've hit your usage limit … try again at 9:20 PM" before reading anything, so slice 3 has no independent pass yet |
 | Capture pages and headset rules | `pnpm --filter @holoim/capture run test:xr:mock`, a new placement scenario, and a touch scenario on the phone viewport | Emulation (IWER, Playwright) | Placement, label-distance and handedness report; pending |
 | Hold to mark on every input | IWER scenarios (hands, controllers), the desktop pointing take, touch scenarios for phone and phone AR | Emulation | Exported GLBs with the expected `recorded` links and no overlapping inferred link; pending |
 | The Halo on every input | Flick and hold scenarios with mouse, touch and IWER (hands, controllers, `transient-pointer` if IWER emulates it) | Emulation | Report of directions committed; pending |
