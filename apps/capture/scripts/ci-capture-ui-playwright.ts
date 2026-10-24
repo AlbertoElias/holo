@@ -388,6 +388,8 @@ async function headsetPhase(): Promise<void> {
   await aim(page, 'right', [0.15, 1.35, -0.15], record);
   await frames(page, 3);
   const hovering = await chrome(page);
+  // Held on a controller the glyph sits inside the avatar's sleeve: it must still be seen.
+  assert(hovering.wrist && (hovering.wrist.occludedBy === null || hovering.wrist.drawnOverBody), `headset: Record is in view on a controller (behind ${hovering.wrist?.occludedBy})`);
   assert.equal(hovering.rays.find((ray) => ray.side === 'right')?.hit, 'record', 'headset: the right ray rests on the record glyph');
   await select(page, 'right');
   await until(page, () => window.__sampleChrome().ui.recordingState === 'recording', 'the take to start');
@@ -434,6 +436,7 @@ async function headsetPhase(): Promise<void> {
   });
   await frames(page, 20);
   const hands = await chrome(page);
+  assert(hands.wrist && (hands.wrist.occludedBy === null || hands.wrist.drawnOverBody), `headset: Record is in view on a tracked hand (behind ${hands.wrist?.occludedBy})`);
   assert(hands.wrist?.input === 'poke', `headset: a tracked dominant hand pokes (${hands.wrist?.input})`);
   assert(hands.wrist.hitSizeM >= Math.max(tokens.hit.pokeFloorMm / 1000, hitAreaMeters('poke', 0, tokens.placement.armReachM, { headset: false })) - 1e-6, 'headset: a poke hit area of 72 apx and at least 20 mm');
   const approach = await pokeTo(page, 'right', 0.06);
@@ -598,6 +601,7 @@ async function headsetPhase(): Promise<void> {
     walkedHead: { panelMovedM: panelMoved, wristMovedM: wristMoved },
     recording: placement(recording),
     statusLineFollow: { after10DegM: round(distance(small.statusLine!.position, statusBefore)), after40DegM: round(distance(large.statusLine!.position, statusBefore)) },
+    wristInView: { controller: { occludedBy: hovering.wrist.occludedBy, drawnOverBody: hovering.wrist.drawnOverBody }, hand: { occludedBy: hands.wrist.occludedBy, drawnOverBody: hands.wrist.drawnOverBody } },
     poke: { hitSizeM: round(hands.wrist.hitSizeM), shadeRadiusAt6cmM: round(approach.fingertipShade.radiusM), shadeRadiusAt2cmM: round(nearer.fingertipShade.radiusM), ticks: poked.feedback.ticks },
     feedback: poked.feedback,
     handedness: { right: placement(right), left: placement(left), trayLeftHanded: tray, trayRightHanded: trayRight }

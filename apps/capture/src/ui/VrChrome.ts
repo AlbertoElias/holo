@@ -6,6 +6,7 @@ import {
   createRecordingUiState,
   dominantHand,
   glyphAppearance,
+  isInChrome,
   markChromeTree,
   nonDominantHand,
   recordingText,
@@ -77,7 +78,8 @@ interface RayState {
 export interface VrChromeSnapshot {
   shown: boolean;
   handedness: Handedness;
-  wrist: { hand: Hand; input: 'poke' | 'ray'; visible: boolean; position: number[]; anchor: number[] | null; hitSizeM: number; drawnSizeM: number; recording: boolean } | null;
+  /** `occludedBy`: the first scene mesh, not chrome, between the head and the record glyph, or null when the glyph is in view. */
+  wrist: { hand: Hand; input: 'poke' | 'ray'; visible: boolean; position: number[]; anchor: number[] | null; hitSizeM: number; drawnSizeM: number; recording: boolean; occludedBy: string | null; drawnOverBody: boolean } | null;
   statusLine: { visible: boolean; text: string; position: number[]; distanceFromHeadM: number } | null;
   panel: { visible: boolean; position: number[]; distanceFromHeadM: number; rows: Array<{ id: RowId; text: string; visible: boolean; enabled: boolean; distanceFromHeadM: number; hitHeightM: number }> } | null;
   rays: Array<{ side: Hand; visible: boolean; hit: string | null; origin: number[] }>;
@@ -96,6 +98,8 @@ const tmpQuat = new THREE.Quaternion();
 const tmpScale = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
 const levelHead = new THREE.Object3D();
+/** Above the scene and the avatar, below the aim rays (998). */
+const WRIST_OVER_BODY_ORDER = 990;
 
 /**
  * Capture's chrome in a headset (styleguide 1.2, 6.1, 8.5, 9.1; brief
@@ -111,6 +115,8 @@ export class VrChrome {
   private wrist: ThreeWristGlyphs | null = null;
   private wristKey = '';
   private wristTracked = false;
+  /** The record state the wrist row was last drawn for; null after a rebuild. */
+  private wristDrawnRecording: boolean | null = null;
   private readonly wristAnchor = new THREE.Object3D();
   private status: ThreeStatusLine | null = null;
   private panel: ThreeWorldPanel | null = null;
@@ -202,6 +208,8 @@ export class VrChrome {
             anchor: this.wristTracked ? world(this.wristAnchor).toArray() : null,
             hitSizeM: this.wrist.glyphs[0]!.hitSizeM,
             drawnSizeM: this.wrist.glyphs[0]!.drawnSizeM,
+            occludedBy: this.occluder(camera, world(this.wrist.glyphs[0]!.group)),
+            drawnOverBody: everyMesh(this.wrist.group, (mesh) => !(Array.isArray(mesh.material) ? mesh.material : [mesh.material]).some((material) => material.depthTest)),
             recording: state.recordingState === 'recording'
           }
         : null,
@@ -240,6 +248,20 @@ export class VrChrome {
     if (!this.shown || !this.wrist || this.wrist.input !== 'poke') return null;
     const presser = dominantHand(this.deps.store.getState().handedness);
     return this.pokeNear || elapsedSec - this.lastPokeSec < POKE_RELEASE_SEC ? presser : null;
+  }
+
+  /** The first visible scene mesh, not chrome, on the line from the head to `point`. */
+  private occluder(camera: THREE.Camera, point: THREE.Vector3): string | null {
+    const head = camera.getWorldPosition(new THREE.Vector3());
+    const toPoint = point.clone().sub(head);
+    const length = toPoint.length();
+    raycaster.set(head, toPoint.normalize());
+    raycaster.near = 0.01;
+    raycaster.far = length - 0.002;
+    const hit = raycaster.intersectObject(this.deps.scene, true).find((candidate) => !isInChrome(candidate.object) && isShown(candidate.object));
+    raycaster.near = 0;
+    raycaster.far = Infinity;
+    return hit ? hit.object.name || hit.object.type : null;
   }
 
   /** The world-space point at the centre of a panel row or the wrist glyph, for checks that aim at it. */
@@ -298,6 +320,7 @@ export class VrChrome {
       }
       this.wrist = new ThreeWristGlyphs({ handedness, glyphs: ['record'], input });
       this.wristKey = key;
+      this.wristDrawnRecording = null;
       this.pokeArmed = false;
       this.root.add(this.wrist.group);
     }
@@ -305,7 +328,11 @@ export class VrChrome {
     const wrist = this.wrist!;
     wrist.group.visible = this.wristTracked && chromeVisible('record', recording);
     if (this.wristTracked) wrist.update(this.wristAnchor);
-    wrist.setRecording(recording);
+    if (this.wristDrawnRecording !== recording) {
+      wrist.setRecording(recording);
+      drawOverBody(wrist.group);
+      this.wristDrawnRecording = recording;
+    }
   }
 
   /** The carrying hand's wrist joint, or its controller's grip; false when neither is tracked. */
@@ -551,4 +578,29 @@ function isShown(object: THREE.Object3D): boolean {
     if (node.type === 'Scene') return true;
   }
   return false;
+}
+
+/**
+ * The wrist row draws over the wearer's own avatar: held on a controller,
+ * the record glyph sits inside the avatar's sleeve and cuff, and depth
+ * testing hid it there (measured in IWER: occluded by the outfit). Nothing
+ * else comes between the eye and a wrist at arm's reach. Record rebuilds its
+ * shape and materials when it turns into Stop, so this runs after each
+ * change. Set here, open to revisit; proposed as a ThreeWristGlyphs option.
+ */
+function drawOverBody(group: THREE.Object3D): void {
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.renderOrder = WRIST_OVER_BODY_ORDER;
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) material.depthTest = false;
+  });
+}
+
+function everyMesh(root: THREE.Object3D, test: (mesh: THREE.Mesh) => boolean): boolean {
+  let all = true;
+  root.traverse((object) => {
+    if ((object as THREE.Mesh).isMesh && !test(object as THREE.Mesh)) all = false;
+  });
+  return all;
 }
