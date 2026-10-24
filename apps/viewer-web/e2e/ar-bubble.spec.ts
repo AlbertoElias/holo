@@ -373,7 +373,12 @@ test("the golden edge is a burnt ring round the bubble, facing the viewer from e
         scale: edge.getWorldScale(new Vector3()).x,
         soot: opacity("edge-soot"), halo: opacity("edge-halo"), core: opacity("edge-core"),
         unflagged, headLocked,
-        aura: scene.getObjectByName("ARBubbleAura")?.visible ?? false
+        aura: scene.getObjectByName("ARBubbleAura")?.visible ?? false,
+        auraTori: (() => {
+          let tori = 0;
+          scene.getObjectByName("ARBubbleAura")?.traverse((object) => { if ((object as Mesh).geometry?.type === "TorusGeometry") tori += 1; });
+          return tori;
+        })()
       };
     });
     expect(ring, "the AR route draws an edge round the bubble").not.toBeNull();
@@ -394,6 +399,7 @@ test("the golden edge is a burnt ring round the bubble, facing the viewer from e
     expect(ring!.halo).toBe(0);
     expect(ring!.core).toBe(1);
     expect(ring!.aura, "the bubble's aura stays").toBe(true);
+    expect(ring!.auraTori, "the aura's cyan equator ring is gone: the gold ring alone outlines the bubble").toBe(0);
     await page.screenshot({ path: resolve(shots, `ar-ring-${side.name}.png`) });
   }
 });

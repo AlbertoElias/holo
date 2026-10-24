@@ -30,8 +30,8 @@ next queue item in [`TODOS.md`](TODOS.md).
   `feature/ui-redesign-slice-3`, pushed and verified locally (evidence in
   the brief's slice 3 rows). The AR edge is built as the user decided (a
   burnt ring round the bubble). Held to merge with slice 4. Open before it
-  counts as done: the user's look at the placeholders, the side sheet and
-  the aura's cyan ring crossing the gold one, real wrist drawings for Exit,
+  counts as done: the user's look at the placeholders and the side sheet,
+  real wrist drawings for Exit,
   and Codex's independent pass (usage limit on 2026-10-24).
 
 ## Unverified / device-only
