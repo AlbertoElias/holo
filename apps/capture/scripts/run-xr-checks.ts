@@ -35,6 +35,7 @@ const CHECKS = {
   pointing: 'scripts/ci-pointing-playwright.ts',
   object: 'scripts/ci-object-playwright.mjs',
   summon: 'scripts/ci-summon-playwright.mjs',
+  ui: 'scripts/ci-capture-ui-playwright.ts',
   // Needs the Quest Pro emulator for eye gaze; see CHECK_SERVER_ENV.
   face: 'scripts/ci-face-playwright.ts',
   // Not checks: regenerate the IWER fixtures the hands, body and pointing checks replay.

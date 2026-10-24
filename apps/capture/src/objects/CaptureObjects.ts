@@ -1,3 +1,4 @@
+import { dominantHand, nonDominantHand, type Handedness } from '@holoim/xr-ui-core';
 import * as THREE from 'three';
 
 import type { AuthoringFrame } from '../recording/authoringSpans';
@@ -26,6 +27,8 @@ export interface CaptureObjectsDeps {
   embodyOffset: number;
   /** A take is recording or exporting: the supplied object is chosen before it. */
   isTakeActive: () => boolean;
+  /** The dominant hand: in a headset the other hand holds the tray up and this one summons. */
+  getHandedness: () => Handedness;
 }
 
 const TRACKED_SOURCES: ReadonlySet<HandPoseSource> = new Set(['xr-hand', 'controller', 'mock']);
@@ -72,18 +75,23 @@ export class CaptureObjects {
    */
   update(step: ObjectStep & { trayHeld: boolean }): void {
     const vrActive = step.vrActive;
-    const held = this.trayGesture.update({ vrActive, deltaSec: step.deltaSec, desktopHeld: step.trayHeld });
-    this.tray.update(held && !this.interaction.isHolding('left'), { vrActive, bodyYaw: step.bodyYaw });
+    // Desktop has one carrying arm (the right); in a headset handedness picks the hands.
+    const handedness = this.deps.getHandedness();
+    const holder = vrActive ? nonDominantHand(handedness) : 'left';
+    const summoner = vrActive ? dominantHand(handedness) : 'right';
+    const held = this.trayGesture.update({ vrActive, deltaSec: step.deltaSec, desktopHeld: step.trayHeld, hand: holder });
+    this.tray.update(held && !this.interaction.isHolding(holder), { vrActive, bodyYaw: step.bodyYaw, hand: holder });
     const summonsBefore = this.tray.snapshot().summons.length;
-    this.interaction.update(step);
-    // A left grab closes the tray at once.
-    if (this.interaction.isHolding('left') && this.tray.isOpen()) this.tray.update(false, { vrActive, bodyYaw: step.bodyYaw });
-    const palm = vrActive ? this.interaction.palmPosition('right', this.palm) : undefined;
+    this.interaction.update({ ...step, summoner });
+    // A grab by the holding hand closes the tray at once.
+    if (this.interaction.isHolding(holder) && this.tray.isOpen()) this.tray.update(false, { vrActive, bodyYaw: step.bodyYaw, hand: holder });
+    const palm = vrActive ? this.interaction.palmPosition(summoner, this.palm) : undefined;
     this.lastAuthoring = {
       // Desktop tray motion moves no arm, so it has no hands-in-menu spans.
       trayOpen: vrActive && this.tray.isOpen(),
       empty: { left: !this.interaction.isHolding('left'), right: !this.interaction.isHolding('right') },
-      rightNearTray: Boolean(palm && this.tray.inZone(palm)),
+      holder,
+      summonerNearTray: Boolean(palm && this.tray.inZone(palm)),
       summoned: this.tray.snapshot().summons.length > summonsBefore,
       tracked: {
         left: !vrActive || TRACKED_SOURCES.has(this.deps.tracking.getHandPoseSource('left')),

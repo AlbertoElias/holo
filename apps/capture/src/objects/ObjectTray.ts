@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
+import type { VrHandSide } from '../types/contracts';
 import type { SceneObject, SceneObjectRegistry } from './SceneObjectRegistry';
 import type { TrayItemKind } from './trayItem';
 
@@ -39,7 +40,7 @@ export interface TraySnapshot {
  * The prepared tray (PRD-045): up to five items, seen only by the author.
  * Items are `authoring` objects in the registry, so the recorder and the
  * exporter never see them; while the tray is open they show as miniatures in
- * an arc above the avatar's left palm (desktop: in front of the chest),
+ * an arc above the avatar's holding palm (desktop: in front of the chest),
  * facing the author. `ObjectSystem` lays them out each step after the arms
  * have their final pose. A summon adds a new full-size `event` object.
  */
@@ -94,12 +95,12 @@ export class ObjectTray {
   }
 
   /** Opens or closes the tray and lays out the miniatures for this step. */
-  update(open: boolean, step: { vrActive: boolean; bodyYaw: number }): void {
+  update(open: boolean, step: { vrActive: boolean; bodyYaw: number; hand: VrHandSide }): void {
     this.open = open && this.items.length > 0;
     for (const item of this.items) item.object.wrapper.visible = this.open;
     if (!this.open) return;
 
-    const anchor = step.vrActive ? this.palmAnchor() : null;
+    const anchor = step.vrActive ? this.palmAnchor(step.hand) : null;
     const yaw = this.facingYaw(anchor, step.bodyYaw);
     if (anchor) {
       this.center.copy(anchor).addScaledVector(this.up, ABOVE_PALM_M);
@@ -180,11 +181,12 @@ export class ObjectTray {
     };
   }
 
-  /** Between the left wrist and middle knuckle, on the avatar. */
-  private palmAnchor(): THREE.Vector3 | null {
-    const wrist = this.avatar.getBoneWorldPosition('LeftHand', this.palm);
+  /** Between the holding hand's wrist and middle knuckle, on the avatar. */
+  private palmAnchor(side: VrHandSide): THREE.Vector3 | null {
+    const prefix = side === 'left' ? 'Left' : 'Right';
+    const wrist = this.avatar.getBoneWorldPosition(`${prefix}Hand`, this.palm);
     if (!wrist) return null;
-    const knuckle = this.avatar.getBoneWorldPosition('LeftHandMiddle1', this.knuckle);
+    const knuckle = this.avatar.getBoneWorldPosition(`${prefix}HandMiddle1`, this.knuckle);
     return knuckle ? this.palm.lerp(knuckle, 0.5) : this.palm;
   }
 

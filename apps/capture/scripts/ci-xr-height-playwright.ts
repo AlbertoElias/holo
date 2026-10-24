@@ -99,20 +99,32 @@ async function clickRefit(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Refit height', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
 }
 async function selectRefitInVr(page: Page, height: number): Promise<void> {
+  for (let i = 0; i < 60 && !(await page.evaluate(() => window.__chromeTarget('refit'))); i += 1) await frames(page, 5);
+  const before = await page.evaluate(() => window.__sampleChrome().ui.handedness);
   await page.evaluate((y) => {
-    // Opposite controller deliberately points at Record: selecting Right must
-    // use only Right's ray, otherwise a refit unexpectedly starts recording.
-    window.IWER_DEVICE!.controllers.left!.position.set(0.35, y - 0.15, -0.25);
-    window.IWER_DEVICE!.controllers.left!.quaternion.set(0, 0, 0, 1);
-    const controller = window.IWER_DEVICE!.controllers.right!;
-    controller.position.set(0.35, y - 0.32, -0.25);
-    controller.quaternion.set(0, 0, 0, 1);
+    // Refit lives on the settings world panel. The opposite controller
+    // deliberately rests on the hand row: selecting Right must use only
+    // Right's ray, otherwise a refit unexpectedly swaps handedness.
+    const device = window.IWER_DEVICE!;
+    const head = window.__sampleChrome().vr.head;
+    const offset = [head[0]! - device.position.x, head[1]! - device.position.y, head[2]! - device.position.z];
+    // No named helpers in here: tsx would wrap them in a __name the page lacks.
+    const aims = [['left', [head[0]! - 0.2, y - 0.3, head[2]! - 0.2], window.__chromeTarget('hand')!], ['right', [head[0]! + 0.2, y - 0.3, head[2]! - 0.2], window.__chromeTarget('refit')!]] as const;
+    for (const [side, from, target] of aims) {
+      const controller = device.controllers[side]!;
+      controller.position.set(from[0]! - offset[0]!, from[1]! - offset[1]!, from[2]! - offset[2]!);
+      const length = Math.hypot(target[0]! - from[0]!, target[1]! - from[1]!, target[2]! - from[2]!);
+      const [x, y, z] = [0, 1, 2].map((i) => (target[i]! - from[i]!) / length) as [number, number, number];
+      const half = Math.hypot(y, x, 1 - z);
+      controller.quaternion.set(y / half, -x / half, 0, (1 - z) / half);
+    }
   }, height);
   await frames(page, 3);
   await page.evaluate(() => window.IWER_DEVICE!.controllers.right!.updateButtonValue('trigger', 1));
   await frames(page, 2);
   await page.evaluate(() => window.IWER_DEVICE!.controllers.right!.updateButtonValue('trigger', 0));
   await frames(page, 2);
+  assert.equal(await page.evaluate(() => window.__sampleChrome().ui.handedness), before, 'selecting Refit leaves handedness alone');
 }
 
 async function pose(page: Page, y: number): Promise<void> {

@@ -1,3 +1,4 @@
+import type { Handedness } from '@holoim/xr-ui-core';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
@@ -7,6 +8,7 @@ import { CrouchState } from '../body/crouch';
 import { CameraController } from '../camera/CameraController';
 import { loadRuntimeConfig } from '../config/runtimeConfig';
 import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
+import { ChromeProbe } from '../debug/chromeProbe';
 import { DiagnosticViews } from '../debug/DiagnosticViews';
 import { FaceDriver } from '../face/FaceDriver';
 import { DesktopPointAction } from '../input/DesktopPointAction';
@@ -20,7 +22,9 @@ import { registerCaptureSystems } from '../systems';
 import type { CaptureUiBridge } from '../ui/captureUiBridge';
 import { PointCrosshair } from '../ui/PointCrosshair';
 import { UIStateStore } from '../ui/UIStateStore';
-import { VrHud } from '../ui/VrHud';
+import { saveHandedness } from '../ui/handedness';
+import { TouchStickView } from '../ui/TouchStickView';
+import { VrChrome } from '../ui/VrChrome';
 import { ArSpectator } from '../xr/ArSpectator';
 import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
@@ -69,12 +73,20 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     controllerRollDeg: config.controllerTrackRollDeg
   });
   const ui = new UIStateStore();
+  ui.setXrEntry(xrEntry.offers);
+  xrEntry.onChange(() => ui.setXrEntry(xrEntry.offers));
+  const touchStick = new TouchStickView(container);
   const input = new InputController({
     domElement: renderer.domElement,
     isXrPresenting: () => tracking.isXrPresenting(),
     look: camera,
-    onRecordToggle: () => recording.toggle()
+    onRecordToggle: () => recording.toggle(),
+    onTouchStick: (stick) => touchStick.update(stick)
   });
+  const setHandedness = (handedness: Handedness): void => {
+    saveHandedness(handedness);
+    ui.setHandedness(handedness);
+  };
   const body = new BodyTracking(avatar, config.avatarForwardOffset);
   const heightFit = new HeightFit({
     ui,
@@ -97,15 +109,17 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     tracking,
     ui,
     embodyOffset: config.embodyOffset,
-    isTakeActive: () => ui.getState().recordingState !== 'idle'
+    isTakeActive: () => ui.getState().recordingState !== 'idle',
+    getHandedness: () => ui.getState().handedness
   });
-  const vrHud = new VrHud({
+  const vrChrome = new VrChrome({
     store: ui,
     renderer,
     scene,
     tracking,
     refitHeight: () => heightFit.requestRefit(),
-    toggleRecording: () => recording.toggle()
+    toggleRecording: () => recording.toggle(),
+    setHandedness
   });
 
   const capture: CaptureContext = {
@@ -122,7 +136,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       desktopCamera: stage.desktopCamera,
       crosshair: new PointCrosshair(container),
       embodyOffset: config.embodyOffset,
-      getPointSamples: () => recording.recorder.pointSamples
+      getPointSamples: () => recording.recorder.pointSamples,
+      getHandedness: () => ui.getState().handedness
     }),
     locomotion,
     body,
@@ -135,7 +150,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     terrainLegs: new TerrainLegSolver(),
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
     ui,
-    vrHud,
+    vrChrome,
     recording,
     diagnostics: new DiagnosticViews({
       scene,
@@ -145,7 +160,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       tracking,
       getLookYaw: () => camera.lookYaw,
       getBodyYaw: () => body.solver.bodyYaw,
-      getHud: () => vrHud.panel.group
+      getHud: () => vrChrome.root
     }),
     frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arSpectator: false, vrActive: false, bodyTracking: false, character: null },
     clockMode: () => loop.clockMode
@@ -179,6 +194,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     simulationSteps: () => capture.frame.steps
   });
 
+  const chromeProbe = new ChromeProbe();
   const onResize = (): void => camera.onResize();
 
   const loadAssets = async (): Promise<void> => {
@@ -218,6 +234,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       loadObjectFile: (file) => void objects.loadFile(file),
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       toggleFaceCamera: () => capture.face.toggleCamera(),
+      setHandedness,
+      toggleXr: (mode) => xrEntry.toggle(mode),
       recenterAr: () => {
         if (xrEntry.sessionMode === 'ar' && tracking.isXrPresenting()) capture.ar.recenter();
       }
@@ -254,7 +272,22 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __loadTrayUrls: (urls) => objects.loadTrayUrls(urls),
         __setFaceInput: (sample) => capture.face.setAutomationInput(sample),
         __sampleFace: () => capture.face.snapshot(),
-        __toggleFaceCamera: () => capture.face.toggleCamera()
+        __toggleFaceCamera: () => capture.face.toggleCamera(),
+        __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),
+        __chromeTarget: (target) => vrChrome.targetPosition(target),
+        __setRetainLastTake: (retain) => recording.setRetainLastTake(retain),
+        __reexportLastTake: async () => {
+          const bytes = await recording.reexportLastTake();
+          if (!bytes) return null;
+          let binary = '';
+          const view = new Uint8Array(bytes);
+          for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+          return { base64: btoa(binary), byteLength: bytes.byteLength };
+        },
+        __setChromeProbe: (mode) => chromeProbe.set(mode, avatar.worldModel, avatar.avatarRoot, vrChrome.root),
+        __setChromeVisible: (visible) => {
+          vrChrome.root.visible = visible;
+        }
       });
       // ?manualClock=1: never tick on real time, so a replay starts from the
       // same state on any host (see __setFrameStepping).

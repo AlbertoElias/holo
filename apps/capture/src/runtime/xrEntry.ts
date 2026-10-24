@@ -1,9 +1,15 @@
 import { ReferenceSpaceType, SessionMode, type World } from '@iwsdk/core';
+import type { XrEntryOffer } from '../types/contracts';
 
 export type XrSessionMode = 'none' | 'vr' | 'ar';
 
 export interface XrEntry {
   readonly sessionMode: XrSessionMode;
+  /** What the dock's VR and AR entries offer; `onChange` fires when either changes. */
+  readonly offers: { vr: XrEntryOffer; ar: XrEntryOffer };
+  onChange(listener: () => void): () => void;
+  /** Enters that mode, or leaves the session if one is running. */
+  toggle(mode: Exclude<XrSessionMode, 'none'>): void;
 }
 
 // A session the browser grants on navigation (from another immersive page) is
@@ -17,17 +23,33 @@ if (typeof navigator !== 'undefined' && navigator.xr && !/WebXRViewer\//i.test(n
 }
 
 /**
- * ENTER VR / ENTER AR buttons (`#VRButton`, `#ARButton`) over World's XR
- * lifecycle. Both keep `local-floor` mandatory: AR is spectated at true scale
- * on the real floor, and VR height fitting reads floor-relative head height.
+ * The VR and AR entries over World's XR lifecycle. The dock draws them
+ * (`#VRButton`, `#ARButton`, docs/features/ui-redesign.md slice 4); this
+ * module only knows what each offers. Both keep `local-floor` mandatory: AR
+ * is spectated at true scale on the real floor, and VR height fitting reads
+ * floor-relative head height.
  */
 export function mountXrEntry(world: World): XrEntry {
   let sessionMode: XrSessionMode = 'none';
   // The mode a button asked for. World's own offer flow also starts sessions
   // (always VR), so a request only counts while World reports it pending.
   let requestedMode: Exclude<XrSessionMode, 'none'> | null = null;
+  const supported = { vr: 'unknown' as XrEntryOffer, ar: 'unknown' as XrEntryOffer };
+  const listeners = new Set<() => void>();
+  let offers = { vr: supported.vr, ar: supported.ar };
+  const publish = (): void => {
+    const next = {
+      vr: sessionMode === 'vr' ? 'active' : supported.vr,
+      ar: sessionMode === 'ar' ? 'active' : supported.ar
+    } satisfies XrEntry['offers'];
+    if (next.vr === offers.vr && next.ar === offers.ar) return;
+    offers = next;
+    for (const listener of listeners) listener();
+  };
 
   const launch = (mode: Exclude<XrSessionMode, 'none'>): void => {
+    // A second press while a request is pending would relabel that request.
+    if (world.sessionRequestPending) return;
     requestedMode = mode;
     world.launchXR({
       sessionMode: mode === 'ar' ? SessionMode.ImmersiveAR : SessionMode.ImmersiveVR,
@@ -35,130 +57,59 @@ export function mountXrEntry(world: World): XrEntry {
       features: { handTracking: true, gazeTracking: true }
     });
   };
-  const toggle = (mode: Exclude<XrSessionMode, 'none'>): void => {
-    if (world.session) world.exitXR();
-    else launch(mode);
-  };
-
-  const vrButton = createEntryButton('VRButton', 'VR', 'calc(50% - 50px)', 'calc(50% - 75px)', () => toggle('vr'));
-  const arButton = createEntryButton('ARButton', 'AR', 'calc(50% + 60px)', 'calc(50% + 60px)', () => toggle('ar'));
 
   const xr = world.renderer.xr;
-  const onSessionStart = (): void => {
-    sessionMode = world.sessionRequestPending && requestedMode ? requestedMode : 'vr';
+  xr.addEventListener('sessionstart', () => {
+    // The session says what it is: opaque is VR, a passthrough blend is AR. A
+    // remembered request can be stale (it was refused, or World started this
+    // session itself), so it only decides when the blend mode is missing.
+    const blend = xr.getSession()?.environmentBlendMode;
+    sessionMode = blend ? (blend === 'opaque' ? 'vr' : 'ar') : requestedMode ?? 'vr';
     requestedMode = null;
-    (sessionMode === 'ar' ? arButton : vrButton).setActive(true);
-  };
-  const onSessionEnd = (): void => {
+    publish();
+  });
+  xr.addEventListener('sessionend', () => {
     sessionMode = 'none';
-    vrButton.setActive(false);
-    arButton.setActive(false);
-  };
-  xr.addEventListener('sessionstart', onSessionStart);
-  xr.addEventListener('sessionend', onSessionEnd);
+    publish();
+  });
 
   if (navigator.xr) {
-    void navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-      vrButton.showSupported(supported);
-      if (supported && vrSessionGranted) launch('vr');
+    void navigator.xr.isSessionSupported('immersive-vr').then((ok) => {
+      supported.vr = ok ? 'available' : 'unsupported';
+      publish();
+      if (ok && vrSessionGranted) launch('vr');
     }).catch((error: unknown) => {
       console.warn('Exception when trying to call xr.isSessionSupported', error);
-      vrButton.showNotAllowed();
+      supported.vr = 'unsupported';
+      publish();
     });
-    void navigator.xr.isSessionSupported('immersive-ar').then((supported) => arButton.showSupported(supported));
-    document.body.append(vrButton.element, arButton.element);
+    void navigator.xr.isSessionSupported('immersive-ar').then((ok) => {
+      supported.ar = ok ? 'available' : 'unsupported';
+      publish();
+    }).catch(() => {
+      supported.ar = 'unsupported';
+      publish();
+    });
   } else {
-    document.body.append(createWebXrUnavailableNotice());
+    supported.vr = 'unsupported';
+    supported.ar = 'unsupported';
+    publish();
   }
 
   return {
     get sessionMode() {
       return sessionMode;
-    }
-  };
-}
-
-interface EntryButton {
-  element: HTMLButtonElement;
-  showSupported(supported: boolean): void;
-  showNotAllowed(): void;
-  setActive(active: boolean): void;
-}
-
-// Matches three's VRButton look and states, which capture used before.
-function createEntryButton(id: string, label: 'VR' | 'AR', enabledLeft: string, disabledLeft: string, onClick: () => void): EntryButton {
-  const button = document.createElement('button');
-  button.id = id;
-  stylize(button);
-  button.style.display = 'none';
-  // Keep desktop keyboard control on the game surface after XR transitions.
-  button.setAttribute('tabindex', '-1');
-
-  const disable = (text: string): void => {
-    button.style.display = '';
-    button.style.cursor = 'auto';
-    button.style.left = disabledLeft;
-    button.style.width = '150px';
-    button.onmouseenter = null;
-    button.onmouseleave = null;
-    button.onclick = null;
-    button.textContent = text;
-  };
-
-  return {
-    element: button,
-    showSupported: (supported) => {
-      if (!supported) {
-        disable(`${label} NOT SUPPORTED`);
-        return;
-      }
-      button.style.display = '';
-      button.style.cursor = 'pointer';
-      button.style.left = enabledLeft;
-      button.style.width = '100px';
-      button.textContent = `ENTER ${label}`;
-      button.onmouseenter = () => {
-        button.style.opacity = '1.0';
-      };
-      button.onmouseleave = () => {
-        button.style.opacity = '0.5';
-      };
-      button.onclick = onClick;
     },
-    showNotAllowed: () => disable(`${label} NOT ALLOWED`),
-    setActive: (active) => {
-      if (button.onclick) button.textContent = `${active ? 'EXIT' : 'ENTER'} ${label}`;
+    get offers() {
+      return offers;
+    },
+    onChange: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    toggle: (mode) => {
+      if (world.session) world.exitXR();
+      else launch(mode);
     }
   };
-}
-
-function createWebXrUnavailableNotice(): HTMLAnchorElement {
-  const message = document.createElement('a');
-  if (window.isSecureContext === false) {
-    message.href = document.location.href.replace(/^http:/, 'https:');
-    message.textContent = 'WEBXR NEEDS HTTPS';
-  } else {
-    message.href = 'https://immersiveweb.dev/';
-    message.textContent = 'WEBXR NOT AVAILABLE';
-  }
-  message.style.left = 'calc(50% - 90px)';
-  message.style.width = '180px';
-  message.style.textDecoration = 'none';
-  stylize(message);
-  return message;
-}
-
-function stylize(element: HTMLElement): void {
-  element.style.position = 'absolute';
-  element.style.bottom = '20px';
-  element.style.padding = '12px 6px';
-  element.style.border = '1px solid #fff';
-  element.style.borderRadius = '4px';
-  element.style.background = 'rgba(0,0,0,0.1)';
-  element.style.color = '#fff';
-  element.style.font = 'normal 13px sans-serif';
-  element.style.textAlign = 'center';
-  element.style.opacity = '0.5';
-  element.style.outline = 'none';
-  element.style.zIndex = '999';
 }

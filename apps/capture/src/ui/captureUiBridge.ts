@@ -1,3 +1,5 @@
+import type { Handedness } from "@holoim/xr-ui-core";
+
 import type { UiViewModel } from "../types/contracts";
 
 export interface CaptureUiBridge {
@@ -9,4 +11,6 @@ export interface CaptureUiBridge {
   loadObjectFile: (file: File) => void;
   loadTrayFiles: (files: File[]) => void;
   toggleFaceCamera: () => void;
+  setHandedness: (handedness: Handedness) => void;
+  toggleXr: (mode: "vr" | "ar") => void;
 }

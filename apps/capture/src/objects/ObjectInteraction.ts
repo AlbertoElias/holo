@@ -30,6 +30,8 @@ export interface ObjectStep {
   timeSec: number;
   /** The body's facing (the camera's look yaw). */
   bodyYaw: number;
+  /** The hand that summons from an open tray in a headset (the dominant one). */
+  summoner?: VrHandSide;
   desktop: {
     /** `G` was pressed this step. */
     toggle: boolean;
@@ -181,7 +183,7 @@ export class ObjectInteraction {
       const palm = this.palmWorld(side, this.pos2);
       if (!palm) continue;
       // An open tray's miniature wins over an object in reach (PRD-045).
-      const item = side === 'right' && step.recording ? this.deps.tray.nearestItem(palm, VR_REACH_M) : null;
+      const item = side === (step.summoner ?? 'right') && step.recording ? this.deps.tray.nearestItem(palm, VR_REACH_M) : null;
       if (item) {
         const summoned = this.deps.tray.summon(item, step.timeSec);
         this.writeWorld(summoned, this.deps.tray.miniaturePose(item, this.world));

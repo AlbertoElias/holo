@@ -164,7 +164,7 @@ try {
 
   // Recording starts with the performance and stops after liveness.
   const clickButton = (name: string) => page.evaluate((label: string) => {
-    const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+    const button = [...document.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') ?? b.textContent?.trim()) === label);
     if (!button) throw new Error(`no button "${label}"`);
     button.click();
   }, name);
@@ -367,6 +367,8 @@ async function webcamFallbacks() {
       const face = window.__sampleFace();
       return { expressionSource: face.expressionSource, gazeSource: face.gazeSource };
     });
+    // The face camera control lives in the settings side sheet.
+    if (!(await page.getByRole('dialog', { name: 'Settings' }).isVisible())) await page.getByRole('button', { name: 'Settings' }).click();
     const label = await page.getByRole('button', { name: /^Face camera/ }).textContent().catch(() => null);
     check(settled.camera === mode, `webcam ${mode}: camera state ${settled.camera}`);
     check(after.expressionSource === 'liveness' && after.gazeSource === 'liveness', `webcam ${mode}: face driven by ${after.expressionSource}/${after.gazeSource}, want liveness`);
