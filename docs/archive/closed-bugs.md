@@ -322,3 +322,28 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   rendered and a WebGL fence on its context has signalled (polled, never blocking).
   Used by `enterMockAr` and the ar-bubble feed → AR test. 1-CPU Docker loop: longest
   task 2.8 s (was 13–18 s), 0 failures; `test:e2e:mocked` green at 2 CPUs.
+
+### B-019 — Desktop pointing take ends its link early on hosted CI, blocking deploys
+
+- **Area:** apps/capture (pointing desktop take), apps/viewer-web pointing pipeline e2e
+- **Severity:** P1 (the CI gate skips every deploy while it fails)
+- **Observed:** 2026-10-24, main CI on `cbf22beb`, `935f02e1` and `3538a339`
+- **Evidence:** `e2e/pointing.pipeline.spec.ts:145` › desktop-recorded take:
+  `B: link 4.8–5.75 s is not within 0.35 s of the hold 4.8–6.2 s`, the same
+  numbers on every run. Passes locally on macOS and under `scripts/ci-emulate.sh`
+  (pipeline shard 1, 6/6).
+- **Expected:** the recorded link ends within 0.35 s of the scripted hold.
+- **Reproduction:** push to `main` with a pipeline-area change; pipeline shard 1
+  fails. Not reproduced off the hosted runner; the cause was found by logging
+  the take's DOM events under an x86_64 `ci-emulate.sh` container.
+- **Fix:** Linux headless Chromium grants the real pointer lock (the take
+  assumed it never did) and then reports the cursor warping between the
+  viewport origin and centre as trusted mousemoves of ±(480, 270) px at
+  wall-clock moments; each turns capture's look by over a radian. The take
+  re-aims only at fixed steps, so a warp landing after hold B's last re-aim
+  (on the fast runner, during its screenshot) moved the aim off B and the link
+  ended at the last on-target sample. The desktop take now releases a granted
+  lock and always uses its DOM-level stand-in, so input is identical on every
+  host, and fails if any trusted mouse movement reaches capture under the lock.
+  CI's pipeline failure artifact now includes the take reports. Verified with
+  `test:xr:pointing` on macOS and pipeline shard 1 (6/6) under x86_64 emulation.

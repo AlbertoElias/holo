@@ -251,6 +251,7 @@ jobs:
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
             output/test-results
+            output/pointing-viewer/takes/*-report.json
           if-no-files-found: ignore
           retention-days: 14
       - name: Upload timing summary

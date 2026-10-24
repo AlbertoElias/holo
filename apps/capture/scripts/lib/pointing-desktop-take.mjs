@@ -74,7 +74,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   const held = async () => (await state()).point.held;
   const canvasCenter = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 };
 
-  // --- Pointer lock: confirm early whether headless Chromium grants it. ---
+  // --- Pointer lock: record whether headless Chromium grants it, then always simulate it. ---
   await page.evaluate(() => {
     window.__lockEvents = [];
     document.addEventListener('pointerlockchange', () => window.__lockEvents.push('change'));
@@ -83,29 +83,44 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   await page.mouse.click(canvasCenter.x, canvasCenter.y);
   await page.waitForTimeout(400);
   const realLock = await page.evaluate(() => ({ granted: document.pointerLockElement === document.querySelector('canvas'), events: window.__lockEvents }));
-  // Chromium (headless shell, --headless=new, even a headed Chrome driven over
-  // CDP) rejects the request with "WrongDocumentError: The root document of
-  // this element is not valid for pointer lock". The lock is then simulated at
-  // the DOM API boundary: capture's own click handler still calls
-  // requestPointerLock and its handlers still read document.pointerLockElement,
-  // while the right button, F key and mouse movement are real CDP input.
-  if (!realLock.granted) {
-    await page.evaluate(() => {
-      const canvas = document.querySelector('canvas');
-      let locked = false;
-      Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (locked ? canvas : null) });
-      canvas.requestPointerLock = () => {
-        locked = true;
-        document.dispatchEvent(new Event('pointerlockchange'));
-        return Promise.resolve();
-      };
-      document.exitPointerLock = () => {
-        locked = false;
-        document.dispatchEvent(new Event('pointerlockchange'));
-      };
-    });
+  // macOS Chromium rejects the request ("WrongDocumentError: The root document
+  // of this element is not valid for pointer lock"); Linux headless Chromium
+  // grants it, and then reports the cursor warping between the viewport origin
+  // and its centre as trusted mousemoves of ±(480, 270) px at wall-clock
+  // moments, each turning the view by over a radian (B-019: on a fast runner
+  // one landed mid-hold and moved the aim off B). So the real lock is released
+  // and the lock is always simulated at the DOM API boundary: capture's own
+  // click handler still calls requestPointerLock and its handlers still read
+  // document.pointerLockElement, while the right button, F key and mouse
+  // movement are real CDP input, identical on every host.
+  if (realLock.granted) {
+    await page.evaluate(() => new Promise((resolve) => {
+      document.addEventListener('pointerlockchange', resolve, { once: true });
+      document.exitPointerLock();
+    }));
+    await page.waitForTimeout(100);
   }
-  const pointerLock = { headlessGrants: realLock.granted, realEvents: realLock.events, simulated: !realLock.granted };
+  await page.evaluate(() => {
+    const canvas = document.querySelector('canvas');
+    let locked = false;
+    Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (locked ? canvas : null) });
+    canvas.requestPointerLock = () => {
+      locked = true;
+      document.dispatchEvent(new Event('pointerlockchange'));
+      return Promise.resolve();
+    };
+    document.exitPointerLock = () => {
+      locked = false;
+      document.dispatchEvent(new Event('pointerlockchange'));
+    };
+    // CDP clicks stay at the canvas centre, so real input under the lock never
+    // moves the view; only the take's own synthetic pitch steer does.
+    window.__strayMoves = [];
+    document.addEventListener('mousemove', (event) => {
+      if (locked && event.isTrusted && (event.movementX || event.movementY)) window.__strayMoves.push([event.movementX, event.movementY]);
+    }, true);
+  });
+  const pointerLock = { headlessGrants: realLock.granted, realEvents: realLock.events, simulated: true };
   await page.mouse.click(canvasCenter.x, canvasCenter.y);
   await page.waitForTimeout(100);
   if (!(await page.evaluate(() => document.pointerLockElement === document.querySelector('canvas')))) throw new Error('the pointer lock stand-in did not engage');
@@ -308,6 +323,8 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
 
   const score = scoreDesktop({ gltf, holds });
   failures.push(...score.failures);
+  pointerLock.strayMoves = await page.evaluate(() => window.__strayMoves);
+  if (pointerLock.strayMoves.length > 0) fail(`${pointerLock.strayMoves.length} trusted mouse movement(s) reached capture under the lock, first ${pointerLock.strayMoves[0]}: the take's aim depends on host timing`);
   const sheet = writeContactSheet(frameDir, path.join(artifactDir, `${label}-sheet.jpg`));
   const report = {
     label,
