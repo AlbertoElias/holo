@@ -332,7 +332,7 @@ pills. Three are always there: **Play**, **Free** and **Return**.
 | Return | Back to the author's view (Follow) | "Return" | Open arc with an arrowhead `M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.5h2.5` |
 | Record | Start or stop a take (capture) | "Recording 0:12" while recording | Inside the 36 apx gold ring: a 14 apx filled rose circle when idle; a 13 apx rose rounded square (radius 3 apx) while recording |
 | View in your room | Open the hologram in AR Quick Look or WebXR AR | "View in your room" | A cube in viewfinder brackets `M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3`, round joins and caps; on the card, in its shade |
-| Step inside | Enter the hologram's event in WebXR VR, at recorded scale | "Step inside" | TBD: options are with the user; until one is chosen the card shows the label alone, in its shade |
+| Step inside | Enter the hologram's event in WebXR VR, at recorded scale | "Step inside" | A door frame on a threshold line with a figure standing in it `M3.5 14.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 12.5 3v11.5M1.5 14.5h13M7.1 5.2a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M8 7v3.5M8 10.5l-1.3 3M8 10.5l1.3 3M6.5 8.5h3`, round joins and caps; on the card, in its shade, beside View in your room |
 
 The rose record dot has no keyline of its own; the gold ring around it is
 the same as Play's. The Play triangle and the record shapes are filled;

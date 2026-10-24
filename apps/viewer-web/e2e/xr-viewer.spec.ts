@@ -348,7 +348,7 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
   await waitForIwerRuntime(page);
   const vrTrigger = page.locator(".vr-trigger-button");
   await expect(vrTrigger).toHaveCount(1, { timeout: 15_000 });
-  await expect(vrTrigger).toHaveText("Step inside");
+  await expect(vrTrigger).toHaveAttribute("aria-label", "Step inside");
   await expect(page.locator(".ar-trigger-button")).toHaveAttribute("aria-label", "View in your room");
 
   const visits: unknown[] = [];

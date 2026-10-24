@@ -354,11 +354,10 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   at `/ar/:id?shell=iwsdk`. Porting bubble clipping, aura and depth
   occlusion, then making the IWSDK shell the `/ar/:id` default, is a later
   step; the existing AR specs assert those effects.
-- **Feed triggers.** The AR trigger reads "View in your room" with the
-  styleguide's viewfinder-cube glyph (section 6). The VR trigger is a label-only
-  placeholder, "Step inside" (`VR_TRIGGER_PLACEHOLDER_LABEL` in
-  `xrSupport.ts`), shown when `immersive-vr` is supported, until the
-  styleguide gives it a glyph. Exiting returns to `/` and scrolls to the
+- **Feed triggers.** Both use styleguide §6 glyphs: "View in your room" is
+  the viewfinder cube, and "Step inside" is the doorway (a door frame on a
+  threshold with a figure in it, chosen by the user 2026-10-24). "Step
+  inside" shows only when `immersive-vr` is supported. Exiting returns to `/` and scrolls to the
   hologram that was opened. Step 2 has no head-following controls.
 - **Placement.** VR places the hologram 1.5 m ahead on the floor, facing the
   viewer. AR ports the R3F hit test (a downward-tilted viewer ray, plane and
@@ -393,10 +392,10 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
 - **Decided by the user (2026-10-24):** controls follow the styleguide
   (foot controls, status line, hand dock; scope and design decision
   rewritten); the copy stays "View in your room" / "Step inside", and the
-  styleguide's §6 glyph table now says so, with the "Step inside" drawing
-  TBD (the lead is putting options to the user). The feed and the Quick
+  styleguide's §6 glyph table now says so, including the user's doorway
+  drawing for "Step inside". The feed and the Quick
   Look link use `XR_ENTRY_LABEL`.
-- **Still open:** the "Step inside" glyph; the IWSDK shell's skip of
+- **Still open:** the IWSDK shell's skip of
   surfaces over 0.5 m (the R3F view still uses the first upward hit); the
   feed's trigger chrome predates the styleguide.
 - **Limits:** the viewer's `@iwsdk/vite-plugin-dev` 0.5.3 still bundles

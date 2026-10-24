@@ -617,16 +617,6 @@ body {
   transform: translateY(0);
 }
 
-/* Placeholder until the styleguide has a VR glyph: the label alone. */
-.vr-trigger-button {
-  width: auto;
-  padding: 0 1rem;
-  border-radius: 1.5rem;
-  font: inherit;
-  font-size: 0.9rem;
-  white-space: nowrap;
-}
-
 /* The VR trigger sits left of the AR one when both show. */
 .vr-trigger-button.vr-trigger-beside {
   right: calc(max(1rem, env(safe-area-inset-right, 0px)) + 3.6rem);
@@ -893,16 +883,16 @@ body {
     right: max(0.75rem, env(safe-area-inset-right, 0px));
   }
 
-  /* On a phone the VR label stacks under the AR glyph, clear of the badge. */
   .vr-trigger-button {
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0.55rem;
     top: calc(0.75rem + env(safe-area-inset-top, 0px));
     right: max(0.75rem, env(safe-area-inset-right, 0px));
-    height: 2.75rem;
   }
 
   .vr-trigger-button.vr-trigger-beside {
-    top: calc(4rem + env(safe-area-inset-top, 0px));
-    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    right: calc(max(0.75rem, env(safe-area-inset-right, 0px)) + 3.25rem);
   }
 
   .ar-quicklook-link {

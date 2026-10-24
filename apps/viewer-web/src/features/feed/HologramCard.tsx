@@ -250,8 +250,13 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
             className={shouldShowArTrigger ? "vr-trigger-button vr-trigger-beside" : "vr-trigger-button"}
             onClick={handleEnterVR}
             type="button"
+            title={XR_ENTRY_LABEL.vr}
+            aria-label={XR_ENTRY_LABEL.vr}
           >
-            {XR_ENTRY_LABEL.vr}
+            {/* Styleguide section 6: a door frame on a threshold, a figure standing in it. */}
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3.5 14.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 12.5 3v11.5M1.5 14.5h13M7.1 5.2a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M8 7v3.5M8 10.5l-1.3 3M8 10.5l1.3 3M6.5 8.5h3" />
+            </svg>
           </button>
         )}
         {shouldShowArTrigger && (
