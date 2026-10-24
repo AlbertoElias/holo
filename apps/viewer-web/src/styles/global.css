@@ -577,7 +577,8 @@ body {
   margin: 0;
 }
 
-.ar-trigger-button {
+.ar-trigger-button,
+.vr-trigger-button {
   position: absolute;
   top: calc(1.25rem + env(safe-area-inset-top, 0px));
   right: max(1rem, env(safe-area-inset-right, 0px));
@@ -597,20 +598,38 @@ body {
   transition: all 0.2s ease;
 }
 
-.ar-trigger-button svg {
+.ar-trigger-button svg,
+.vr-trigger-button svg {
   width: 100%;
   height: 100%;
 }
 
-.ar-trigger-button:hover {
+.ar-trigger-button:hover,
+.vr-trigger-button:hover {
   background: linear-gradient(135deg, rgb(24 92 142), rgb(10 64 102));
   border-color: rgb(169 224 255 / 55%);
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgb(24 92 142 / 50%);
 }
 
-.ar-trigger-button:active {
+.ar-trigger-button:active,
+.vr-trigger-button:active {
   transform: translateY(0);
+}
+
+/* Placeholder until the styleguide has a VR glyph: the label alone. */
+.vr-trigger-button {
+  width: auto;
+  padding: 0 1rem;
+  border-radius: 1.5rem;
+  font: inherit;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+/* The VR trigger sits left of the AR one when both show. */
+.vr-trigger-button.vr-trigger-beside {
+  right: calc(max(1rem, env(safe-area-inset-right, 0px)) + 3.6rem);
 }
 
 .ar-quicklook-link {
@@ -664,6 +683,32 @@ body {
 
 .audio-mute-button:active {
   transform: translateY(0);
+}
+
+/* IWSDK immersive routes: the flat ground from tokens.json until the session starts. */
+.xr-view-container {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, #0c2228 0%, #17424a 48%, #575f5a 80%, #b8835e 100%);
+  color: #fff6ea;
+}
+
+.xr-view-scene {
+  position: absolute;
+  inset: 0;
+}
+
+/* The World's canvas only matters in the session; until then the ground shows. */
+.xr-view-container:not([data-xr-state="immersive"]) .xr-view-scene {
+  visibility: hidden;
+}
+
+.xr-view-entry {
+  position: absolute;
+  inset: 0 0 25%;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
 }
 
 .ar-view-container {

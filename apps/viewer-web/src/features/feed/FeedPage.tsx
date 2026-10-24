@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import { HologramCard } from "./HologramCard";
 import { pickActiveCard } from "./visibility";
@@ -12,6 +13,9 @@ export function FeedPage() {
   const [audioMuted, setAudioMuted] = useState(true);
   const feedRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  // Leaving an immersive view returns to the hologram that was opened.
+  const focusHologramId = (useLocation().state as { focusHologramId?: string } | null)?.focusHologramId ?? null;
+  const focusedOnReturn = useRef(false);
 
   const toggleAudioMute = useCallback(() => {
     setAudioMuted((prev) => {
@@ -61,6 +65,15 @@ export function FeedPage() {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [canLoadMore, loadMore, nextCursor]);
+
+  useEffect(() => {
+    if (!focusHologramId || focusedOnReturn.current) return;
+    const card = feedRef.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(focusHologramId)}"]`);
+    if (!card) return;
+    focusedOnReturn.current = true;
+    card.scrollIntoView({ block: "center" });
+    setActiveId(focusHologramId);
+  }, [focusHologramId, items]);
 
   useEffect(() => {
     if (!activeId && items[0]) {

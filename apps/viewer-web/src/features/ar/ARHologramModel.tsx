@@ -3,10 +3,11 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useXR } from "@react-three/xr";
 import { Box3, LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
-import type { AnimationAction, Group, Object3D } from "three";
+import type { AnimationAction, Group } from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 
+import { normalizeSceneAtOrigin, rankClipsForPlayback } from "../hologram/hologramScene";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipStatus } from "../hologram/useSphereClipping";
@@ -118,23 +119,6 @@ function toArray(vector: Vector3): [number, number, number] {
 
 function toQuaternionArray(quaternion: Quaternion): [number, number, number, number] {
   return [quaternion.x, quaternion.y, quaternion.z, quaternion.w];
-}
-
-function normalizeSceneAtOrigin(root: Object3D): void {
-  const anchor = root.getObjectByName("RecordedAvatar")
-    ?? root.getObjectByName("Hips")
-    ?? root.getObjectByName("mixamorigHips")
-    ?? root;
-
-  const anchorPos = anchor.getWorldPosition(new Vector3());
-  if (!Number.isFinite(anchorPos.x) || !Number.isFinite(anchorPos.y) || !Number.isFinite(anchorPos.z)) return;
-
-  root.position.sub(anchorPos);
-
-  const bounds = new Box3().setFromObject(root);
-  if (!bounds.isEmpty() && Number.isFinite(bounds.min.y)) {
-    root.position.y -= bounds.min.y;
-  }
 }
 
 export function ARHologramModel({
@@ -698,26 +682,9 @@ export function ARHologramModel({
       return;
     }
 
-    const rankedActions = allActions
-      .slice()
-      .sort((a, b) => {
-        const aName = a.getClip().name.toLowerCase();
-        const bName = b.getClip().name.toLowerCase();
-        const motionTerms = ["body", "move", "walk", "run", "idle", "anim", "record"];
-        const aHasMotionName = motionTerms.some((term) => aName.includes(term)) ? 1 : 0;
-        const bHasMotionName = motionTerms.some((term) => bName.includes(term)) ? 1 : 0;
-        if (bHasMotionName !== aHasMotionName) {
-          return bHasMotionName - aHasMotionName;
-        }
-
-        const aTracks = a.getClip().tracks.length;
-        const bTracks = b.getClip().tracks.length;
-        if (bTracks !== aTracks) {
-          return bTracks - aTracks;
-        }
-
-        return b.getClip().duration - a.getClip().duration;
-      });
+    const rankedActions = rankClipsForPlayback(allActions.map((action) => action.getClip()))
+      .map((clip) => allActions.find((action) => action.getClip() === clip))
+      .filter((action): action is AnimationAction => Boolean(action));
 
     const primaryAction = rankedActions[0];
     if (!primaryAction) {

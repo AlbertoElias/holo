@@ -1,7 +1,7 @@
 # Feature brief: Shared XR interface and viewer VR/AR
 
 **Lead:** Claude (Opus)  
-**Status:** Implementing (approved 2026-10-24; step 1 spikes done, both GO)
+**Status:** Implementing (approved 2026-10-24; step 1 spikes GO; step 2 viewer shell done)
 **Layer:** view (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -139,6 +139,10 @@ Implementation order (each step lands green before the next):
 4. **Gallery and multiple placed holograms**, focus, feed paging, disposal.
 5. **Capture migration** onto the shared package; retire `xr-ui-three` and
    `xr-ui-r3f`.
+6. **IWSDK AR by default** (added 2026-10-24, decision A): port bubble
+   clipping, aura and depth occlusion to the IWSDK AR shell, port the AR
+   specs (with `hand-tracking-fidelity.md`), then make it the `/ar/:id`
+   default and retire the R3F immersive view.
 
 | Role | Owner | Files or modules |
 |---|---|---|
@@ -182,12 +186,12 @@ Implementation order (each step lands green before the next):
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Spikes | Throwaway IWER runs (phone AR tap; capture with input + UI on) and a production build, 2026-10-24 | **Both GO**; results in "Step 1 spike results" below |
-| VR entry, recorded scale, teardown | New IWER spec `xr-viewer.spec.ts` (Quest 3 profile) in `test:xr:viewer` | Screenshot + `xr-viewer-report.json`; pending |
+| VR entry, recorded scale, teardown | IWER spec `xr-viewer.spec.ts` (Quest 3 profile) in `test:xr:viewer` | **Pass** 2026-10-24: scale 1, on the floor 1.50 m ahead, two enter/exit visits with equal renderer counts; screenshot + `output/test-results/xr-viewer-report.json` |
 | Gallery, multiple placed, focus, audio focus | Same spec on a seeded 12-item feed | Report with entity states + screenshot; pending |
-| Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | Drift numbers in report; pending |
+| Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | Playback and audio **pass** (step 2): clip clock 1.00× wall clock, audio offset within 0.2 ms of clip time; scrub and loop UI wait for step 3 |
 | Grab/scale/rotate | Same spec, scripted controller grips | Transforms in report; pending |
 | Memory after remove/page | Same spec | Geometry/texture counts in report; pending |
-| AR placement + phone tap | Ported AR specs with IWER phone profile | Pass output; pending |
+| AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | IWSDK shell **pass** (step 2): stands on the floor 1.8 m ahead and anchors, tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
 | Capture on shared panels | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + capture panel screenshot; pending |
 | Same look in both apps | IWER screenshots of both panels via `preview.mjs` | Side-by-side sheet; pending |
 | Pipeline compatibility | `pnpm run test:smoke:pipeline` | Pass output; pending |
@@ -263,6 +267,52 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   remove it in the same change that adds the shared panel. The default
   UIKit font lacks `·` and `×`; panel copy avoids them or the shared
   package ships a font that has them.
+
+### Step 2 results (2026-10-24)
+
+- **Routes (decision A, accepted by the lead 2026-10-24).** `/vr/:id` is
+  IWSDK only: a `World` (`features/xr/`) with the hologram at recorded scale
+  (no 1.85 m normalisation; the R3F AR view keeps it until it is retired).
+  `/ar/:id` stays on the R3F view by default; the IWSDK AR shell is opt-in
+  at `/ar/:id?shell=iwsdk`. Porting bubble clipping, aura and depth
+  occlusion, then making the IWSDK shell the `/ar/:id` default, is a later
+  step; the existing AR specs assert those effects.
+- **Feed triggers.** The AR trigger uses the styleguide's "View in AR" label
+  and viewfinder-cube glyph (section 6). The VR trigger is a label-only
+  placeholder, "Step inside" (`VR_TRIGGER_PLACEHOLDER_LABEL` in
+  `xrSupport.ts`), shown when `immersive-vr` is supported, until the
+  styleguide gives it a glyph. Exiting returns to `/` and scrolls to the
+  hologram that was opened. Step 2 has no head-following controls.
+- **Placement.** VR places the hologram 1.5 m ahead on the floor, facing the
+  viewer. AR ports the R3F hit test (a downward-tilted viewer ray, plane and
+  mesh entities, upward surfaces only, then an anchor) with one change: hits
+  more than 0.5 m above the local floor are skipped, because a recorded
+  person at true scale stands on the floor. Without a usable hit after
+  3.5 s, it stands on the local floor (y = 0) 1.8 m ahead (the R3F view's
+  minimum forward distance) and is anchored there. In IWER's `office_small`
+  the first upward hit is a 1.3 m desk 0.86 m ahead. The R3F rule puts the
+  hologram on it, with everything above its feet out of a phone's view; the
+  IWSDK shell falls back to the floor 1.8 m ahead.
+- **Playback.** `HologramPlaybackSystem` drives the mixer from one clip clock
+  and starts KHR_audio at that clock (IWSDK `AudioSystem` unregistered).
+  The spec builds an audio fixture by appending a tone to `avatar.glb`.
+- **Input.** The screen-input bridge (`screenInputBridge.ts`) drives a
+  pointer-events ray pointer from phone taps. IWSDK pointers only intersect
+  entities in `scene.interactableDescendants`, so the hologram carries
+  `RayInteractable`. Its pointer target is an invisible body-sized box: a
+  three.js skinned-mesh raycast missed the avatar entirely, and per-frame
+  ray tests on skinned triangles are costly.
+- **Probe.** Development builds expose `window.__HOLOIM_XR_VIEWER__.snapshot()`
+  (placement, scale, clip time, audio offset, renderer counts), which the
+  spec reads.
+- **Open decisions (with the user via the lead):** the VR trigger's glyph
+  and label; "View in your room" (scope above) vs the styleguide's "View in
+  AR"; styleguide section 1.2 forbids head-locked interactive UI, but step
+  3's lazy-follow panel follows the head; the IWSDK shell's skip of
+  surfaces over 0.5 m (the R3F view still uses the first upward hit); the
+  feed's trigger chrome predates the styleguide.
+- **Limits:** the viewer's `@iwsdk/vite-plugin-dev` 0.5.3 still bundles
+  IWER 2.3; IWSDK locomotion is off. Emulation evidence only.
 
 ### Video verification loop
 

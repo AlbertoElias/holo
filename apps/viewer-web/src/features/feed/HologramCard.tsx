@@ -15,6 +15,7 @@ import { createPortalStore } from "../portal/portalStore";
 import { PORTAL_VARIANTS, readPortalVariant } from "../portal/portalVariant";
 import { usePortalTriggers } from "../portal/usePortalTriggers";
 import { usePortalValue } from "../portal/usePortalValue";
+import { supportsImmersiveVr, XR_ENTRY_LABEL } from "../xr/xrSupport";
 import { resolveMediaUrl } from "./api";
 import { HologramCardCanvas, type HologramRenderInfo } from "./HologramCardCanvas";
 
@@ -72,6 +73,7 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
   const [arSupported, setArSupported] = useState<boolean>(false);
+  const [vrSupported, setVrSupported] = useState<boolean>(false);
   const isIOS = useMemo(() => isIOSDevice(), []);
   const forcedArSupport = useMemo(() => {
     if (typeof window === "undefined") {
@@ -165,9 +167,17 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
       });
   }, [forcedArSupport]);
 
+  useEffect(() => {
+    void supportsImmersiveVr().then(setVrSupported);
+  }, []);
+
   const handleEnterAR = () => {
     navigate(`/ar/${item.id}`);
   };
+  const handleEnterVR = () => {
+    navigate(`/vr/${item.id}`);
+  };
+  const shouldShowVrTrigger = vrSupported && canRenderModel;
   const shouldShowArTrigger = typeof forcedArSupport === "boolean"
     ? forcedArSupport
     : arSupported && !isIOS && canRenderModel;
@@ -233,20 +243,26 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
 
       <div className="feed-card-overlay">
         <span className="feed-card-badge">Hologram</span>
+        {shouldShowVrTrigger && (
+          <button
+            className={shouldShowArTrigger ? "vr-trigger-button vr-trigger-beside" : "vr-trigger-button"}
+            onClick={handleEnterVR}
+            type="button"
+          >
+            {XR_ENTRY_LABEL.vr}
+          </button>
+        )}
         {shouldShowArTrigger && (
           <button
             className="ar-trigger-button"
             onClick={handleEnterAR}
             type="button"
-            title="View in Augmented Reality"
-            aria-label="View in AR"
+            title={XR_ENTRY_LABEL.ar}
+            aria-label={XR_ENTRY_LABEL.ar}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 7V4a2 2 0 0 1 2-2h3" />
-              <path d="M22 7V4a2 2 0 0 0-2-2h-3" />
-              <path d="M2 17v3a2 2 0 0 0 2 2h3" />
-              <path d="M22 17v3a2 2 0 0 1-2 2h-3" />
-              <text x="12" y="15" fontSize="9" fontWeight="bold" textAnchor="middle" fill="currentColor" stroke="none">AR</text>
+            {/* Styleguide section 6: a cube in viewfinder brackets. */}
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3" />
             </svg>
           </button>
         )}

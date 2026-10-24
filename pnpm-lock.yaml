@@ -318,6 +318,12 @@ importers:
       '@holoim/xr-ui-r3f':
         specifier: workspace:*
         version: link:../../packages/xr-ui-r3f
+      '@iwsdk/core':
+        specifier: ^1.0.1
+        version: 1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)
+      '@pmndrs/pointer-events':
+        specifier: 6.6.29
+        version: 6.6.29
       '@react-three/drei':
         specifier: ^9.120.4
         version: 9.122.0(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0))(@types/react@18.3.28)(@types/three@0.173.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0)(use-sync-external-store@1.6.0(react@18.3.1))
@@ -352,9 +358,6 @@ importers:
       '@holoim/tooling-testing':
         specifier: workspace:*
         version: link:../../packages/tooling-testing
-      '@iwsdk/core':
-        specifier: ^0.5.3
-        version: 0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)
       '@iwsdk/scene-composition':
         specifier: ^0.5.3
         version: 0.5.3
