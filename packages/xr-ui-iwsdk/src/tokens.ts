@@ -29,6 +29,13 @@ export const CHIP_OPACITY = {
   arAndroidChrome: 0.88 // chip.opacity.arAndroidChrome
 } as const;
 
+export const SHADE = {
+  inner: 0.7, // shade.inner alpha (deepSea)
+  mid: 0.5, // shade.mid alpha
+  midStop: 0.6, // shade.midStop
+  phoneHeight: 0.24 // shade $extensions placement.heightPhone: 24% of screen height
+} as const;
+
 export const CHIP = {
   radius: 18, // chip.radius
   paddingBlock: 5, // chip.paddingBlock

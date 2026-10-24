@@ -46,6 +46,8 @@ type ViewerSnapshot = {
     worldScale: Vec3;
     yaw: number;
     tiltRad: number;
+    /** World height of the lowest bone: the recorded person's feet. */
+    lowestBoneY: number | null;
     grabbed: boolean;
     recordedSize: Vec3;
     playing: boolean;
@@ -73,7 +75,8 @@ type FootProbe = {
   sizes: { glyphIconApx: number; ringApx: number; strokeApx: number; hitApx: number };
   text: { playback: string; elapsedTotal: string; scale: string };
   buttons: Record<"play" | "restart" | "recenter" | "scale", { worldPosition: Vec3; visible: boolean }>;
-  timeline: { worldStart: Vec3; worldEnd: Vec3; fraction: number };
+  timeline: { worldStart: Vec3; worldEnd: Vec3; fraction: number; lengthApx: number };
+  reachRow: { worldLeft: Vec3; worldRight: Vec3; widthApx: number };
 };
 type Controls = {
   target: "vr" | "ar-quest" | "ar-phone";
@@ -473,6 +476,18 @@ async function rayClick(page: Page, target: Vec3, from: Vec3 = [0.25, 1.25, -0.2
   await setButton(page, "right", "trigger", 0);
 }
 
+/** World points projected to the page's screen, in CSS px from its top left. */
+const toScreen = (page: Page, points: Vec3[]) =>
+  page.evaluate((points) => {
+    type V = { x: number; y: number; project(c: unknown): V };
+    const camera = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { camera: { position: { constructor: new (x: number, y: number, z: number) => V } } } } }).__HOLOIM_XR_VIEWER__.world.camera;
+    const Vector = camera.position.constructor;
+    return points.map((point) => {
+      const p = new Vector(...point).project(camera);
+      return { x: (p.x + 1) / 2 * innerWidth, y: (1 - p.y) / 2 * innerHeight };
+    });
+  }, points);
+
 const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const horizontal = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 const controls = async (page: Page) => (await snapshot(page)).controls!;
@@ -583,6 +598,9 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   const eye: Vec3 = (await readHeadPose(page)).position;
   const anchor = placed.hologram.worldPosition;
   const height = placed.hologram.recordedSize[1];
+  // The recorded person's feet, not only the entity's origin, stand on the floor.
+  const feetOnFloor = (s: ViewerSnapshot, scale = 1) => s.hologram.lowestBoneY! - anchor[1] > -0.01 && s.hologram.lowestBoneY! - anchor[1] < 0.15 * scale;
+  expect(feetOnFloor(placed), `feet ${placed.hologram.lowestBoneY?.toFixed(3)} m above the floor`).toBe(true);
 
   // One control set, sized and placed as the brief and styleguide say.
   const first = placed.controls!;
@@ -706,7 +724,7 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   const grabSteps = 15;
   // The hologram stays standing on the floor whatever the hands do: base at the
   // ground (±5 mm) and upright through the whole grab.
-  const grounded: Array<{ baseY: number; tiltRad: number }> = [];
+  const grounded: Array<{ baseY: number; tiltRad: number; feetOnFloor: boolean }> = [];
   for (let i = 1; i <= grabSteps; i++) {
     const t = i / grabSteps;
     const spread = 0.12 + 0.06 * t;
@@ -714,12 +732,13 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
     await setPose(page, "left", [anchor[0] - spread + 0.3 * t, chest + 0.15 * t, front], null);
     await setPose(page, "right", [anchor[0] + spread + 0.3 * t, chest + 0.25 * t, front + 0.12 * t], null);
     const step = await snapshot(page);
-    grounded.push({ baseY: step.hologram.worldPosition[1], tiltRad: step.hologram.tiltRad });
+    grounded.push({ baseY: step.hologram.worldPosition[1], tiltRad: step.hologram.tiltRad, feetOnFloor: feetOnFloor(step, step.hologram.worldScale[0]) });
     await dwell(page, 0.05);
   }
   for (const [i, sample] of grounded.entries()) {
     expect(Math.abs(sample.baseY - anchor[1]), `grab step ${i + 1}: base on the floor`).toBeLessThan(0.005);
     expect(sample.tiltRad, `grab step ${i + 1}: upright`).toBeLessThan(1e-4);
+    expect(sample.feetOnFloor, `grab step ${i + 1}: feet on the floor`).toBe(true);
   }
   const grown = await snapshot(page);
   await setButton(page, "left", "squeeze", 0);
@@ -881,6 +900,8 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
 
   const placed = await waitForSnapshot(page, (s) => s.placement.stage !== "searching" && s.hologram.visible);
   mark("ar-placed");
+  expect(placed.hologram.lowestBoneY! - placed.hologram.worldPosition[1], "feet on the surface").toBeGreaterThan(-0.01);
+  expect(placed.hologram.lowestBoneY! - placed.hologram.worldPosition[1], "feet on the surface").toBeLessThan(0.15);
   await dwell(page);
   expect(["hit-test", "floor"]).toContain(placed.placement.mode);
   const anchored = await waitForSnapshot(page, (s) => s.placement.stage === "anchored", 5_000).catch(() => null);
@@ -946,18 +967,27 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   expect(dockOnScreen.widthPx, "Exit glyph in CSS px").toBeCloseTo(phone.dock.glyphApx, 0);
   expect(dockOnScreen.x, "dock centred").toBeCloseTo(dockOnScreen.innerWidth / 2, 0);
   expect(dockOnScreen.y, "dock in the thumb zone").toBeGreaterThan(dockOnScreen.innerHeight * 0.85);
-  // Tilt the phone toward the hologram's feet: the controls come near.
-  await setPose(page, "head", null, phone.foot.worldPosition);
-  const near = await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1, 3_000);
+  // Frame the whole hologram, its foot in the lower half of the screen: the controls come
+  // (on a phone the screen is the hand), and the reach row fits the screen's 16 px gutters.
+  const standing = moved.hologram.worldPosition;
+  const tall = moved.hologram.recordedSize[1];
+  await setPose(page, "head", null, [standing[0], standing[1] + tall * 0.45, standing[2]]);
+  const rowBudget = page.viewportSize()!.width - 32;
+  const near = await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.foot.reachRow.widthApx > 0 && s.controls!.foot.reachRow.widthApx <= rowBudget + 0.5, 3_000);
   const foot = near.controls!.foot;
-  // Where the reach row's ends land on the phone screen (CSS px), for the report: at flat sizes
-  // the row is close to a phone's width (design question in the brief's step 3 results).
-  const rowOnScreen = await page.evaluate((points) => {
-    type V = { x: number; y: number; project(c: unknown): V };
-    const camera = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { camera: { position: { constructor: new (x: number, y: number, z: number) => V } } } } }).__HOLOIM_XR_VIEWER__.world.camera;
-    const Vector = camera.position.constructor;
-    return points.map((point) => (new Vector(...point).project(camera).x + 1) / 2 * innerWidth);
-  }, [foot.buttons.restart.worldPosition, foot.buttons.scale.worldPosition]);
+  const [crown, feet, rowLeft, rowRight] = await toScreen(page, [
+    [standing[0], standing[1] + tall, standing[2]],
+    standing,
+    foot.reachRow.worldLeft,
+    foot.reachRow.worldRight
+  ]);
+  const phoneSize = page.viewportSize()!;
+  await captureEvidence(page, testInfo, "ar-phone-framed");
+  expect(crown!.y, "the hologram's head is in view").toBeGreaterThan(0);
+  expect(feet!.y, "its feet are in view").toBeLessThan(phoneSize.height);
+  // The row is fitted to the gutters exactly; allow float error.
+  expect(rowLeft!.x, "reach row left edge inside the 16 px gutter").toBeGreaterThanOrEqual(16 - 0.01);
+  expect(rowRight!.x, "reach row right edge inside the 16 px gutter").toBeLessThanOrEqual(phoneSize.width - 16 + 0.01);
   await dwell(page);
   mark("tap-play-glyph");
   await phoneTap(page, foot.buttons.play.worldPosition);
@@ -1009,7 +1039,8 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
     tapMove: { target: floorTarget, position: moved.hologram.worldPosition, missM: miss, reanchored: Boolean(reanchored) },
     phoneControls: {
       sizes: phone.foot.sizes,
-      reachRowEndsPx: { restart: rowOnScreen[0], scale: rowOnScreen[1], screenWidth: page.viewportSize()!.width },
+      reachRowPx: { left: rowLeft!.x, right: rowRight!.x, screenWidth: phoneSize.width, timelineApx: foot.timeline.lengthApx },
+      bodyInViewPx: { crown: crown!.y, feet: feet!.y, screenHeight: phoneSize.height },
       dockOnScreen,
       chipOpacity: phone.foot.chipOpacity,
       metresPerApx: phone.foot.metresPerApx,

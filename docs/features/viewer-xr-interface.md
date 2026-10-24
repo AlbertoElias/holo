@@ -445,24 +445,41 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   stretched to 8 s so restart and loop checks do not alias with polling.
   Emulated phone taps release on the next frame: emulated frames take
   about 150 ms, and pointer-events treats a press over 300 ms as no click.
-- **Design questions for the user.**
-  - Provisional glyphs: pause, restart, recenter and exit are not in §6.
-  - The scale chip reads "62%", because the font has no "×".
-  - Inter stands in for Figtree (no MSDF Figtree font yet).
+- **Phone placement.** On a phone the on-reach row shows while the chip
+  sits in the lower half of the screen. The spec frames the whole body: the
+  phone looks at 45% of the hologram's height, so crown and feet stay on
+  screen with the controls showing. The timeline shrinks (down to 48 apx) until
+  the reach row fits 16 px gutters. At 390 px the spec asserts left ≥ 16 and
+  right ≤ 374.
+- **Phone dock shade.** The bottom dock sits on the §5.2 shade: deep sea 70%
+  to 50% at 60% to clear, across the screen width and 24% of its height. It
+  takes no pointer.
+- **Standing on the ground.** A skinned person's bounds follow bone
+  matrices a fresh clone has not computed, so `normalizeSceneAtOrigin` left
+  the fixture 1.04 m above the floor. The viewer re-stands it on its posed
+  vertices (`standOnFeet`), and the spec asserts the lowest bone sits on the
+  ground after placement and through the grab. The R3F
+  `ARHologramModel` uses the same normalisation and likely floats too
+  (follow-up).
+- **Design decisions (lead, 2026-10-24).**
+  - The scale chip reads "62%".
+  - Figtree replaces Inter. The OFL TTFs (Regular 400, Medium 500, from
+    erikdkennedy/figtree) are generated into MSDF atlases with
+    `@zappar/msdf-generator` (printable ASCII plus "·×–—…") in
+    `packages/xr-ui-iwsdk/src/fonts/` with `OFL.txt`. Each weight loads as
+    its own asset on first use. Figtree set the elapsed/total label wider
+    than Inter, so labels never wrap (`wordBreak: "keep-all"`).
   - The "·" is drawn as a dot.
   - The chip tilts half-way toward the eyes.
-  - The timeline's track colour and length have no token.
-  - Exit sits in the hand dock and the phone bottom dock, still pending
-    confirmation.
-  - The phone dock has no §5.2 shade.
-  - At flat sizes the phone's reach row (restart, 160 apx timeline,
-    elapsed/total, recenter, scale chip) is wider than a 390 px screen. In
-    the spec its ends land at −33 px and 398 px. Shorten the timeline on
-    phones, wrap the row, or drop a control there?
-  - At token sizes the chip is small from about 2 m.
-  - A ray click on the hologram no longer pauses it in a headset (grab owns
-    the ray there); the play glyph does.
+  - The timeline track is gold at 40% under a gold fill (closest tokens).
+  - Exit sits in the hand dock and the phone bottom dock.
+  - The phone dock uses the §5.2 shade.
+  - A small chip at about 2 m is fine.
+  - A ray click on the hologram no longer pauses it in a headset; the play
+    glyph does.
   - Restart returns to 0 and keeps the play state.
+- **Glyphs.** The user approved the pause, restart, recenter and exit
+  drawings (2026-10-24). They are in styleguide §6 path for path.
 - **Limits.** The grounded grab and the uniform-scale patch rely on IWSDK's
   internal `Handle` component. Emulation evidence only.
 

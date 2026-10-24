@@ -111,6 +111,7 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
   const root = cloneSkeleton(loaded.gltf.scene);
   prepareAnimatedScene(root);
   normalizeSceneAtOrigin(root);
+  standOnFeet(root);
   root.name = "HologramModel";
   const hologram = world.createTransformEntity(undefined, { parent: world.activeLevel.value });
   hologram.object3D!.name = "Hologram";
@@ -184,6 +185,33 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
 }
 
 /** Development-only window probe the e2e spec reads (`xr-viewer-report.json`). */
+/**
+ * normalizeSceneAtOrigin stands the model on its bounds, but a skinned mesh's
+ * bounds follow bone matrices a fresh clone has not computed, so a recorded
+ * person can float about a hip height off the floor. Re-stand it on its
+ * posed vertices.
+ */
+function standOnFeet(root: Object3D): void {
+  root.updateMatrixWorld(true);
+  root.traverse((object) => {
+    const mesh = object as Object3D & { isSkinnedMesh?: boolean; skeleton?: { update(): void } };
+    if (mesh.isSkinnedMesh) mesh.skeleton?.update();
+  });
+  const bounds = new Box3().setFromObject(root, true);
+  if (!bounds.isEmpty() && Number.isFinite(bounds.min.y)) root.position.y -= bounds.min.y;
+}
+
+function lowestBoneY(model: Object3D): number | null {
+  let lowest: number | null = null;
+  const at = new Vector3();
+  model.traverse((object) => {
+    if (!(object as Object3D & { isBone?: boolean }).isBone) return;
+    const y = object.getWorldPosition(at).y;
+    lowest = lowest === null ? y : Math.min(lowest, y);
+  });
+  return lowest;
+}
+
 function installXrViewerProbe(world: World, hologram: Entity, model: Object3D): void {
   const size = new Box3().setFromObject(model).getSize(new Vector3());
   (window as { __HOLOIM_XR_VIEWER__?: unknown }).__HOLOIM_XR_VIEWER__ = {
@@ -205,6 +233,7 @@ function installXrViewerProbe(world: World, hologram: Entity, model: Object3D): 
           worldScale: object.getWorldScale(new Vector3()).toArray(),
           yaw: object.rotation.y,
           // A recorded person stays upright: the angle between its up and the world's.
+          lowestBoneY: lowestBoneY(model),
           tiltRad: new Vector3(0, 1, 0).applyQuaternion(object.getWorldQuaternion(new Quaternion())).angleTo(new Vector3(0, 1, 0)),
           grabbed: hologram.hasComponent(Grabbed),
           recordedSize: size.toArray(),

@@ -118,12 +118,12 @@ export class HologramControlsSystem extends createSystem() {
     const foot = new FootControls(this.world, {
       target,
       actions,
-      ...(target === "ar-phone" ? { metresPerApx: phoneMetresPerApx(fovy, window.innerHeight) } : {})
+      ...(target === "ar-phone" ? { metresPerApx: phoneMetresPerApx(fovy, window.innerHeight), viewportWidthCss: window.innerWidth } : {})
     });
     const status = new StatusLine(this.world, this.player.head, targetMetrics(target).chipOpacity);
     const exit = { id: "exit", glyph: "exit" as const, label: "Exit", onSelect: () => this.options.exit() };
     const dock = target === "ar-phone"
-      ? new HandDock(this.world, { kind: "phone", camera, verticalFovRad: fovy, viewportHeightCss: window.innerHeight }, [exit])
+      ? new HandDock(this.world, { kind: "phone", camera, verticalFovRad: fovy, viewportHeightCss: window.innerHeight, viewportWidthCss: window.innerWidth }, [exit])
       // Handedness defaults to right, so the dock sits on the left hand or controller.
       : new HandDock(this.world, { kind: "hand", space: this.player.gripSpaces.left, ownPointerIds: this.handPointerIds("left") }, [exit]);
     this.placedSequence = -1;

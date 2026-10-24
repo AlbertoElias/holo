@@ -17,19 +17,17 @@ export interface GlyphDrawing {
 }
 
 /**
- * Styleguide §6 glyphs, plus provisional drawings for controls §6 does not
- * define yet (pause, restart, recenter, exit), drawn in the same line style
- * and marked for design review.
+ * Styleguide §6 glyphs, path for path; the two must change together.
  */
 export const GLYPHS = {
   play: { d: "M4 2.5v11l9-5.5z", fill: true },
-  // Provisional: two filled bars, the Play triangle's weight.
+  // Two filled bars, the Play triangle's weight.
   pause: { d: "M4.5 3h2.4v10H4.5zM9.1 3h2.4v10H9.1z", fill: true },
-  // Provisional: back-to-start bar and an open triangle.
+  // A back-to-start bar and an open triangle.
   restart: { d: "M3.5 3v10M12.5 3.2 6 8l6.5 4.8z" },
-  // Provisional: a ring with four ticks, "put it back in front of me".
+  // A ring with four ticks, "put it back in front of me".
   recenter: { d: "M8 1.5v2.5M8 12v2.5M1.5 8H4M12 8h2.5M8 5a3 3 0 1 0 0 6a3 3 0 1 0 0-6" },
-  // Provisional: an open door frame with an arrow leaving it.
+  // An open door frame with an arrow leaving it.
   exit: { d: "M9 2.5H4.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H9M7 8h7.5M12 5.5 14.5 8 12 10.5" },
   // Record (§6): filled rose circle idle, rose rounded square while recording.
   recordIdle: { d: "M8 1a7 7 0 1 0 0 14a7 7 0 1 0 0-14z", fill: true },
@@ -105,7 +103,10 @@ export function createGlyph(name: GlyphName, options: { size: number; color: str
   };
 
   let drawingMeshes: Mesh[] = [];
+  let drawing: GlyphName | null = null;
   const draw = (glyph: GlyphName): void => {
+    if (glyph === drawing) return;
+    drawing = glyph;
     for (const mesh of drawingMeshes) {
       element.remove(mesh);
       mesh.geometry.dispose();

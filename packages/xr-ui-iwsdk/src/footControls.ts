@@ -10,8 +10,9 @@ import {
   type HologramControlActions,
   type HologramControlState
 } from "@holoim/xr-ui-core";
-import { Vector3, type Object3D } from "three";
+import { Vector3, type Camera, type Object3D } from "three";
 
+import { FONT_FAMILIES, FONT_FAMILY } from "./fonts.js";
 import { createGlyph, type GlyphElement, type GlyphName } from "./glyphs.js";
 import {
   CHIP,
@@ -42,6 +43,10 @@ export const NEAR_HEAD_RAY_DEG = 15;
 const CHIP_LIFT_M = 0.02;
 /** Timeline length in apx before the target scale; no token yet. */
 const TIMELINE_LENGTH = 160;
+/** On a phone the timeline gives way so the reach row fits the screen; it stays at least this long to scrub. */
+const PHONE_TIMELINE_MIN = 48;
+/** Phone screen gutter each side of the reach row (CSS px; the lead's decision, 2026-10-24). */
+const PHONE_GUTTER = 16;
 
 const tmp = new Vector3();
 const tmp2 = new Vector3();
@@ -62,6 +67,8 @@ export interface FootControlsOptions {
   actions: HologramControlActions;
   /** Only the phone needs it: world metres per CSS pixel at the reference distance (see `phoneMetresPerApx`). */
   metresPerApx?: number;
+  /** Only the phone needs it: the screen width the reach row must fit (CSS px). */
+  viewportWidthCss?: number;
 }
 
 export interface FootControlsInput {
@@ -92,7 +99,9 @@ export interface FootControlsProbe {
   sizes: { glyphIconApx: number; ringApx: number; strokeApx: number; hitApx: number };
   text: { playback: string; elapsedTotal: string; scale: string };
   buttons: Record<string, { worldPosition: [number, number, number]; visible: boolean }>;
-  timeline: { worldStart: [number, number, number]; worldEnd: [number, number, number]; fraction: number };
+  timeline: { worldStart: [number, number, number]; worldEnd: [number, number, number]; fraction: number; lengthApx: number };
+  /** The on-reach chip's left and right edges (world), and its laid-out width. */
+  reachRow: { worldLeft: [number, number, number]; worldRight: [number, number, number]; widthApx: number };
 }
 
 export function phoneMetresPerApx(verticalFovRad: number, viewportHeightCss: number): number {
@@ -134,6 +143,8 @@ export class FootControls {
   private state: HologramControlState = { playing: false, clipTime: 0, duration: 0, scale: 1 };
   private readonly strings = { playback: "", elapsedTotal: "", scale: "" };
   private readonly actions: HologramControlActions;
+  private timelineApx: number;
+  private readonly rowBudgetApx: number | null;
 
   constructor(world: World, options: FootControlsOptions) {
     this.actions = options.actions;
@@ -142,11 +153,15 @@ export class FootControls {
     this.metresPerApx = options.metresPerApx ?? metresPerApx(FOOT_REFERENCE_DISTANCE_M);
     this.attention = createAttentionState(performance.now());
     const s = this.metrics.scale;
+    this.timelineApx = TIMELINE_LENGTH * s;
+    this.rowBudgetApx = options.target === "ar-phone" && options.viewportWidthCss ? options.viewportWidthCss - 2 * PHONE_GUTTER : null;
 
     // Each row sits on its own chip; the on-reach row unfolds above, so the
     // always-there row never moves under a reaching hand.
     this.root = new UIKit.Container({
       pixelSize: this.metresPerApx,
+      fontFamilies: FONT_FAMILIES,
+      fontFamily: FONT_FAMILY,
       anchorX: "center",
       anchorY: "bottom",
       flexDirection: "column",
@@ -172,16 +187,17 @@ export class FootControls {
     this.addButton(this.reachRow, "restart", "restart", () => this.actions.restart());
 
     this.timelineHit = new UIKit.Container({
-      width: TIMELINE_LENGTH * s,
+      width: this.timelineApx,
       height: this.metrics.hitMin,
       justifyContent: "center",
       flexDirection: "column"
     });
+    // The styleguide has no track token; the closest is gold at 40% under a gold fill (brief).
     const track = new UIKit.Container({
       width: "100%",
       height: GLYPH.stroke * s,
       borderRadius: GLYPH.stroke * s,
-      backgroundColor: withAlpha(COLOR.textMuted, 0.45),
+      backgroundColor: withAlpha(COLOR.gold, 0.4),
       pointerEvents: "none"
     });
     this.timelineFill = new UIKit.Container({ width: "0%", height: "100%", borderRadius: GLYPH.stroke * s, backgroundColor: COLOR.gold, pointerEvents: "none" });
@@ -262,10 +278,12 @@ export class FootControls {
     });
     this.used = false;
     if (this.target === "ar-phone") {
-      // Flat sizes are CSS pixels on screen (§9.2) at any distance, not only at the reference one.
+      // Flat sizes are CSS pixels on screen (§9.2) at any distance: scale by the
+      // controls' depth in view (the reach row's, where the widest row sits).
       const object = this.entity.object3D!;
-      const distance = input.head.getWorldPosition(new Vector3()).distanceTo(object.getWorldPosition(new Vector3()));
-      object.scale.setScalar(distance / FOOT_REFERENCE_DISTANCE_M);
+      const at = (this.reachOpacity > 0 ? this.reachRow : this.alwaysRow).getWorldPosition(new Vector3());
+      const depth = -at.applyMatrix4(input.head.matrixWorld.clone().invert()).z;
+      if (depth > 0.05) object.scale.setScalar(depth / FOOT_REFERENCE_DISTANCE_M);
     }
 
     // Chrome unfolds 240 ms in and 400 ms out (§8.4).
@@ -276,7 +294,18 @@ export class FootControls {
     this.labelOpacity = input.hologramDistanceM >= LABEL_MIN_DISTANCE_M ? 1 : 0;
 
     this.render();
+    this.fitPhoneRow();
     return this.reading;
+  }
+
+  /** Shortens (or restores) the phone's timeline until the laid-out reach row fits the screen's gutters. */
+  private fitPhoneRow(): void {
+    const width = this.rowBudgetApx !== null ? this.reachRow.size.value?.[0] : undefined;
+    if (width === undefined || this.reachOpacity === 0) return;
+    const next = Math.min(TIMELINE_LENGTH, Math.max(PHONE_TIMELINE_MIN, this.timelineApx - (width - this.rowBudgetApx!)));
+    if (Math.abs(next - this.timelineApx) < 0.5) return;
+    this.timelineApx = next;
+    this.timelineHit.setProperties({ width: next });
   }
 
   probe(): FootControlsProbe {
@@ -305,7 +334,8 @@ export class FootControls {
       sizes: { glyphIconApx: GLYPH.icon * s, ringApx: GLYPH.ring * s, strokeApx: GLYPH.stroke * s, hitApx: this.metrics.hitMin },
       text: { ...this.strings },
       buttons,
-      timeline: { worldStart: start.toArray() as [number, number, number], worldEnd: end.toArray() as [number, number, number], fraction: this.fraction() }
+      timeline: { worldStart: start.toArray() as [number, number, number], worldEnd: end.toArray() as [number, number, number], fraction: this.fraction(), lengthApx: this.timelineApx },
+      reachRow: this.reachRowEdges()
     };
   }
 
@@ -333,10 +363,20 @@ export class FootControls {
     return true;
   }
 
+  private reachRowEdges(): FootControlsProbe["reachRow"] {
+    const widthApx = this.reachRow.size.value?.[0] ?? 0;
+    const object = this.entity.object3D!;
+    const half = (widthApx * this.metresPerApx * object.getWorldScale(new Vector3()).x) / 2;
+    const centre = this.reachRow.getWorldPosition(new Vector3());
+    const right = new Vector3(1, 0, 0).transformDirection(object.matrixWorld);
+    const edge = (sign: number) => centre.clone().addScaledVector(right, sign * half).toArray() as [number, number, number];
+    return { worldLeft: edge(-1), worldRight: edge(1), widthApx };
+  }
+
   /** World positions of the timeline's two ends (centre line). */
   private timelineEnds(): [Vector3, Vector3] {
     this.timelineHit.updateWorldMatrix(true, false);
-    const half = (TIMELINE_LENGTH * this.metrics.scale * this.metresPerApx * this.entity.object3D!.getWorldScale(new Vector3()).x) / 2;
+    const half = (this.timelineApx * this.metresPerApx * this.entity.object3D!.getWorldScale(new Vector3()).x) / 2;
     const centre = this.timelineHit.getWorldPosition(new Vector3());
     const right = new Vector3(1, 0, 0).transformDirection(this.entity.object3D!.matrixWorld);
     return [centre.clone().addScaledVector(right, -half), centre.clone().addScaledVector(right, half)];
@@ -354,10 +394,18 @@ export class FootControls {
     }
     const centre = object.getWorldPosition(tmp);
     const hand = input.hands.some((h) => h.getWorldPosition(tmp2).distanceTo(centre) <= NEAR_HAND_DISTANCE_M);
-    const head = input.head.getWorldPosition(tmp2);
-    const toChip = centre.clone().sub(head).normalize();
-    const forward = new Vector3(0, 0, -1).transformDirection(input.head.matrixWorld);
-    const headRay = forward.angleTo(toChip) <= (NEAR_HEAD_RAY_DEG * Math.PI) / 180;
+    let headRay: boolean;
+    if (this.target === "ar-phone" && (input.head as Camera).isCamera) {
+      // A phone is held to frame the hologram: the controls come while its foot is
+      // in the lower half of the screen, so the whole body can stay in view.
+      const screen = centre.clone().project(input.head as Camera);
+      headRay = screen.z < 1 && Math.abs(screen.x) <= 1 && screen.y >= -1 && screen.y <= 0;
+    } else {
+      const head = input.head.getWorldPosition(tmp2);
+      const toChip = centre.clone().sub(head).normalize();
+      const forward = new Vector3(0, 0, -1).transformDirection(input.head.matrixWorld);
+      headRay = forward.angleTo(toChip) <= (NEAR_HEAD_RAY_DEG * Math.PI) / 180;
+    }
     this.nearFlags = { hover: this.hovering.size > 0, hand, headRay };
     return this.nearFlags.hover || hand || headRay;
   }
@@ -407,8 +455,8 @@ export class FootControls {
   }
 
   private text(type: { size: number; weight: number }, color: string): UIKitText {
-    // Figtree is not baked to MSDF yet; UIKit's default face stands in (§7.3).
-    return new UIKit.Text({ text: "", fontSize: type.size * this.metrics.scale, fontWeight: type.weight, color, pointerEvents: "none" });
+    // One line, never squeezed: a row short of width shrinks the timeline instead.
+    return new UIKit.Text({ text: "", fontSize: type.size * this.metrics.scale, fontWeight: type.weight, color, wordBreak: "keep-all", flexShrink: 0, pointerEvents: "none" });
   }
 
   private addButton(row: UIKitComponent, id: string, glyphName: GlyphName, onSelect: () => void, ring = false): Button {

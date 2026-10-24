@@ -1,9 +1,9 @@
 import { PokeInteractable, RayInteractable, UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
 import type { DockAction } from "@holoim/xr-ui-core";
-import { Vector3, type Object3D } from "three";
+import { CanvasTexture, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, Vector3, type Object3D } from "three";
 
 import { createGlyph, type GlyphElement, type GlyphName } from "./glyphs.js";
-import { COLOR, DOCK_REFERENCE_DISTANCE_M, GLYPH, HEADSET_SCALE, HIT, metresPerApx } from "./tokens.js";
+import { COLOR, DOCK_REFERENCE_DISTANCE_M, GLYPH, HEADSET_SCALE, HIT, SHADE, metresPerApx } from "./tokens.js";
 
 // The hand dock (styleguide §1.2, §9.1): glyphs on the non-dominant hand or
 // controller in a headset, within reach and so without text; on a phone, the
@@ -19,7 +19,7 @@ const DOCK_GLYPHS: Record<DockAction["glyph"], GlyphName> = { exit: "exit", reco
 export type HandDockMount =
   /** `ownPointerIds`: the pointers of the hand the dock rides on, which must reach past it. */
   | { kind: "hand"; space: Object3D; ownPointerIds: readonly number[] }
-  | { kind: "phone"; camera: Object3D; verticalFovRad: number; viewportHeightCss: number };
+  | { kind: "phone"; camera: Object3D; verticalFovRad: number; viewportHeightCss: number; viewportWidthCss: number };
 
 export interface HandDockProbe {
   mount: HandDockMount["kind"];
@@ -46,6 +46,7 @@ export class HandDock {
   private readonly metresPerApx: number;
   private readonly hitApx: number;
   private readonly glyphApx: number;
+  private shade: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null;
 
   constructor(world: World, mount: HandDockMount, actions: readonly DockAction[]) {
     this.mount = mount;
@@ -105,6 +106,10 @@ export class HandDock {
       // Bottom centre, above the home bar and safe area (§6.1, §9.3).
       const halfHeight = PHONE_DOCK_DEPTH_M * Math.tan(mount.verticalFovRad / 2);
       object.position.set(0, -halfHeight + (HIT.phoneHomeBar + GLYPH.gap) * this.metresPerApx, -PHONE_DOCK_DEPTH_M);
+      // The dock sits on the soft shade a hologram casts, spread along the bottom of the screen (§5.2).
+      this.shade = phoneShade(mount.viewportWidthCss * this.metresPerApx, SHADE.phoneHeight * mount.viewportHeightCss * this.metresPerApx);
+      this.shade.position.set(0, (this.hitApx / 2) * this.metresPerApx, -0.001);
+      object.add(this.shade);
     }
   }
 
@@ -139,8 +144,40 @@ export class HandDock {
 
   dispose(): void {
     for (const button of this.buttons) button.glyph.dispose();
+    this.shade?.geometry.dispose();
+    this.shade?.material.map?.dispose();
+    this.shade?.material.dispose();
     this.entity.object3D!.removeFromParent();
     this.document.dispose();
     this.entity.destroy();
   }
+}
+
+/**
+ * The shade (§5.1) as a `width` × `height` m plane: radial-gradient(closest-side,
+ * deepSea .7, deepSea .5 at 60%, transparent). It takes no pointer, so taps
+ * through it still reach the scene.
+ */
+function phoneShade(width: number, height: number): Mesh<PlaneGeometry, MeshBasicMaterial> {
+  // A square gradient; the plane stretches it into the closest-side ellipse.
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  const context = canvas.getContext("2d")!;
+  const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
+  const rgb = [1, 3, 5].map((i) => parseInt(COLOR.deepSea.slice(i, i + 2), 16)).join(",");
+  gradient.addColorStop(0, `rgba(${rgb},${SHADE.inner})`);
+  gradient.addColorStop(SHADE.midStop, `rgba(${rgb},${SHADE.mid})`);
+  gradient.addColorStop(1, `rgba(${rgb},0)`);
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 256, 256);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  const mesh = new Mesh(
+    new PlaneGeometry(width, height),
+    new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false })
+  );
+  mesh.name = "PhoneDockShade";
+  mesh.renderOrder = -1;
+  mesh.raycast = () => undefined;
+  return mesh;
 }

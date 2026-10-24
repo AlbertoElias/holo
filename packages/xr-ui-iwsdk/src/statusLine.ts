@@ -1,6 +1,7 @@
 import { Follower, FollowBehavior, UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
 import { Vector3, type Object3D } from "three";
 
+import { FONT_FAMILIES, FONT_FAMILY } from "./fonts.js";
 import { CHIP, COLOR, HEADSET_SCALE, TYPE, metresPerApx, withAlpha } from "./tokens.js";
 
 // The periphery status line (styleguide §1.2): the one thing that follows the
@@ -31,9 +32,11 @@ export class StatusLine {
   constructor(world: World, head: Object3D, chipOpacity: number) {
     const s = HEADSET_SCALE;
     const text = (): InstanceType<typeof UIKit.Text> =>
-      new UIKit.Text({ text: "", fontSize: TYPE.timecode.size * s, fontWeight: TYPE.timecode.weight, color: COLOR.textMuted, pointerEvents: "none" });
+      new UIKit.Text({ text: "", fontSize: TYPE.timecode.size * s, fontWeight: TYPE.timecode.weight, color: COLOR.textMuted, wordBreak: "keep-all", flexShrink: 0, pointerEvents: "none" });
     this.root = new UIKit.Container({
       pixelSize: metresPerApx(DISTANCE_M),
+      fontFamilies: FONT_FAMILIES,
+      fontFamily: FONT_FAMILY,
       flexDirection: "row",
       alignItems: "center",
       gap: 4 * s,
