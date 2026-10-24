@@ -1,8 +1,9 @@
 # Feature brief: Redesign UI and interaction across capture and viewer
 
 **Lead:** Claude Code (Opus)  
-**Status:** Implementing (approved by the user 2026-10-24; slices 0 and 1
-first)
+**Status:** Implementing (approved by the user 2026-10-24). Slices 0 and 1
+built and verified locally on `claude/redesign-slices-0-1-8d2c58`, not yet on
+`main`; slice 2 is next
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -287,6 +288,27 @@ silently broken selector into a type error.
   compare each `*-report.json` with a comparator that drops timings and
   paths and compares numeric fields within tolerances declared in the
   comparator. A difference is a port defect unless explained in this brief.
+- **As built (2026-10-24).** Every `ci-*` check, the runner
+  (`run-xr-checks.ts`), `scripts/lib/*` and the two fixture generators that
+  import from it (`generate-pointing-test-scene.ts`,
+  `generate-iwer-pose-fixture.ts`) are TypeScript run by `tsx`, under the
+  same `test:xr:*` names. `generate-iwer-body-fixtures.mjs` imports nothing
+  from `scripts/lib/`, so it stays `.mjs` and keeps its literal button text.
+  The hooks are declared once in `src/runtime/automationHooks.ts` as the
+  global `Window` (the app's `AutomationHooks` plus `IWER_DEVICE`, now typed
+  as IWER's own `XRDevice`); hooks a check installs itself are declared next
+  to the code that installs them. `CONTROL_NAMES` in `xr-ui-core` labels
+  capture's record button and the viewer's Play, Pause and Return, and the
+  capture checks and viewer e2e specs find them by it.
+  `@holoim/tooling-testing` now has `@playwright/test` for its declarations,
+  so `page` is a real Playwright `Page` in the checks rather than `any`.
+  Explained differences: tsx compiles with esbuild's `keepNames`, which
+  wraps named inner functions of `page.evaluate` callbacks in an `__name`
+  helper the page lacks, so three scripts add a one-line identity `__name`
+  init script (the callbacks themselves are unchanged); and two reports are
+  assembled by spreading rather than mutating, with the same key order.
+  The comparator is `apps/capture/scripts/compare-xr-reports.ts` (see
+  `AGENT_CONTRACT.md`).
 
 ### Slice 1: `@holoim/design-tokens`
 
@@ -334,6 +356,40 @@ it, so design rounds edit one place.
 - Fraunces and Figtree are self-hosted as WOFF2 for the DOM, and baked to
   MSDF at the styleguide's weights for 3D. Today `global.css` names Space
   Grotesk and never loads it.
+- **As built (2026-10-24).**
+  - `scripts/generate.ts` writes three committed files: `tokens.ts`,
+    `tokens.css` (each colour also as an `-rgb` triplet for
+    `rgb(var(…) / a)`; the gradient as its stop list) and a flat
+    `tokens.json` that the lint rule, and later the Python USDZ tool, read
+    without TypeScript. It fails on an unresolved or circular alias, a hex
+    that disagrees with its components, and any `$type` it does not know.
+  - `$extensions` are never exported, so the size rule moved into plain
+    tokens: `size.radiansPerApx` (0.000372) and `size.headsetScale` (2.5).
+    The fluid CSS sizes (`clamp(…)`) are still `$extensions` and so not
+    generated; slice 3 adds them as tokens if its pages need them.
+  - `apxToMeters(apx, distanceM, { headset })` scales every drawn size;
+    `hitAreaMeters(input, drawnApx, distanceM, { headset })` takes the
+    larger of the drawn size and the input's unscaled minimum (and 20 mm for
+    a poke). `@holoim/design-tokens/three` exports `tokenColor(hex)`
+    (`setStyle(hex, SRGBColorSpace)`) and `chromeMaterial`
+    (`toneMapped: false`).
+  - **Literal check: at error level from the start, with nothing to
+    migrate.** None of today's literals equals a token colour: `uiDomTokens`
+    and the viewer's and capture's hex values are the old palette. So the
+    rule (`holoim/no-token-colour-literal`, in every package's lint through
+    `createWorkspaceTsEslintConfig`) and the CSS check
+    (`check-css-literals.mjs`, in the `lint` of `viewer-web` and
+    `knowledge`, the apps with CSS files) pass today and fail as soon as a
+    token colour is copied. Replacing the old-palette literals with tokens
+    is the restyle itself, so slices 2 to 4 do it page by page; the rule
+    cannot see them because they are not token values.
+  - Fraunces (opsz and wght axes, for optical sizing) and Figtree (wght)
+    are self-hosted as variable WOFF2, latin and latin-ext, from Fontsource
+    5.3.0 under the OFL, in `@holoim/design-tokens/fonts.css`. No app
+    imports it yet: the pages that switch to the new faces do (slices 3 and
+    4), with the computed-font e2e check. The MSDF bake for 3D is left to
+    the slice that first draws 3D text in the new faces (slice 2's
+    `xr-ui-three` and `xr-ui-r3f` renderers), since nothing reads it before.
 
 ### Slice 2: component contracts
 
@@ -470,7 +526,7 @@ See "Test plan and evidence" and "Physical-device limits".
 
 ## Acceptance criteria
 
-- [ ] Slice 0: every capture XR check runs from TypeScript under its old
+- [x] Slice 0: every capture XR check runs from TypeScript under its old
   script name and environment, the viewer pointing pipeline and `doctor`
   still pass, and the report comparator finds no unexplained difference.
 - [ ] No design value is hand-copied: the lint rule and the CSS check pass,
@@ -617,9 +673,10 @@ share no files.
 
 | Acceptance criterion | Workflow or command | Emulation or physical | Inspectable artifact/result |
 | --- | --- | --- | --- |
-| Port equivalence | `pnpm run test:xr:capture`, `test:xr:pointing`, `pnpm run doctor`, `pnpm run test:smoke:pipeline` on `main` and on the branch | Emulation (IWER) | Comparator output over `*-report.json`; pending |
-| Tokens and literals | `pnpm run verify:agent` after a token edit | Neither (tooling) | Check output; pending |
-| Contracts | `pnpm --filter @holoim/xr-ui-core test`, and the same for `ui-dom`, `xr-ui-r3f`, `xr-ui-three`, `design-tokens` | Neither (unit) | Test report; pending |
+| Port equivalence | `pnpm run test:xr:capture`, `test:xr:pointing`, `pnpm run doctor`, `pnpm run test:smoke:pipeline` on `main` and on the branch | Emulation (IWER) | 2026-10-24: all nine checks (`mock-vr recording locomotion terrain hands height body face pointing`, `XR_CHECK_CONCURRENCY=2`) pass on `main` (`eebf013`, twice) and on the branch. `compare-xr-reports.ts` over the 31 report, sample and log files: 31/31 agree main↔main, main↔branch and main²↔branch. Declared in the comparator, from main↔main: the face check's voice jaw (Chromium's fake microphone runs in real time) and the height report's positions (up to 0.45 mm apart on `main`; B-020). Doctor, the viewer pointing pipeline and the rest: `verify:pr` row below |
+| Tokens and literals | `pnpm run verify:agent` after a token edit | Neither (tooling) | 2026-10-24: with only `tokens.json` changed the selector picks `@holoim/design-tokens` and `@holoim/config-eslint` and their 13 dependents (15 packages, reason `package-changes`); an edit without regenerating fails `pnpm --filter @holoim/design-tokens test` (drift). Tooling tests for both classifiers pass, as do the literal rule's tests (`@holoim/config-eslint` `test`). The DOM and 3D read-back waits for the slices that consume the tokens |
+| Contracts | `pnpm --filter @holoim/xr-ui-core test`, and the same for `ui-dom`, `xr-ui-r3f`, `xr-ui-three`, `design-tokens` | Neither (unit) | `design-tokens`, 2026-10-24: 17 tests pass (drift, bad and circular alias, `$extensions` not exported, colour read-back, sizes, fonts). The rest pending (slice 2) |
+| `verify:pr`, slices 0 and 1 | `pnpm run verify:pr` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 6/6 (the viewer pointing pipeline imports the ported `pointing-desktop-take.ts` and `pointing-iwer-replay.ts`), `test:portal` 6/6, `test:xr:capture` passes. `test:knowledge` 7/7 once run against its own server: Playwright reuses whatever answers on port 4176, and a knowledge dev server from the main checkout was running there, so its first run failed 3 tests (2 also fail that way on `main`). `test:xr:viewer` 9/9 on rerun; its first run hit B-021, a flake that also fails on `main` |
 | Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | Screenshots at desktop and 390 × 844, previewed with `packages/tooling-testing/src/preview.mjs`; pending |
 | AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | Screenshots and placement report; pending |
 | Capture pages and headset rules | `pnpm --filter @holoim/capture run test:xr:mock`, a new placement scenario, and a touch scenario on the phone viewport | Emulation (IWER, Playwright) | Placement, label-distance and handedness report; pending |
