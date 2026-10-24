@@ -331,7 +331,7 @@ Only where the ground fails:
 | VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s, holds at least 2 s after the background last asks for it, and leaves over 0.4 s, as chrome does |
 | AR (WebXR) | Every row and every label sits on the chip |
 | AR Quick Look | No chip is possible, so no text or controls inside Quick Look |
-| Phone and desktop | Controls and captions sit in their hologram's shade. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The bottom dock sits on a shade along the bottom of the screen, the same soft shade a hologram casts |
+| Phone and desktop | Controls and captions sit in their hologram's shade. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The bottom dock sits on a shade along the bottom of the screen: the hologram shade's colours and stops as a band rising from the bottom edge, never an oval, so only a hologram casts an oval shade |
 | Everywhere | Text over a hologram's own picture always sits on the chip |
 
 ## 6. Glyph controls
