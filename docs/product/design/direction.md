@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Rounds 1 and 2 decided, 2026-10-23; round 3 (stress test) is next. Step 3 of the design-language work:
+**Status:** Rounds 1 to 3 decided, 2026-10-23. Quest checks confirm items 9 and 10's poke floor. Type at 2.5× and how each AR target blends are still to check on devices, and Quest's AR chip opacity needs a new decision (see Round 3's device results). Round 4 (styleguide) is next. Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
@@ -11,7 +11,7 @@ Step 3 runs in rounds:
 1. **Character** (decided): the mood and the edge's personality.
 2. **Foundations** (decided): exact colours and contrast, type scale, sizes across
    devices, edge parameters, motion timing.
-3. **Stress test**: the hardest screens from the inventory, such as errors,
+3. **Stress test** (decided; device checks partly run): the hardest screens from the inventory, such as errors,
    AR in a bright room, recording, and legibility in a headset.
 4. **Styleguide**: write it down, then redesign every inventoried screen.
 
@@ -364,3 +364,150 @@ window and is given in Quest 3 pixels.
   would be 6.6. The 1.5 px glyph stroke (item 6) becomes 3.75 angular px,
   about 2.0 Quest pixels, which should no longer shimmer. Round 3 checks
   both on a Quest; the rule of thumb is not a standard.
+
+## Round 3 decisions
+
+Round 3 put the round 1 and 2 values on the hardest screens: errors, AR in a
+bright room, recording, headset type at 2.5×, a feed with many holograms, and
+the portal viewer. Each item was compared in the studio's Round 3 tab. Each
+batch was reviewed by the design reviewer before the user saw it, and the
+review's fixes were applied first. Decisions are stored in the studio's
+`decisions` collection (`r3-1` to `r3-10`). Contrast is WCAG 2.x over the
+studio's grounds; "over white" means pure `#ffffff`.
+
+Device results are listed separately below, as measured. Emulation (IWER) only
+smoke-tested the probe and never counts as a result.
+
+### Decisions
+
+| # | Item | Decision | Also compared |
+| --- | --- | --- | --- |
+| 1 | The bottom quarter | **Controls in the hologram's shade.** The hologram casts a soft shade at its foot, and its controls and caption sit in it. Feed-wide notices, which have no hologram, use the chip. | A chip below the line; a shadow under bare controls; a pool of shade; moving chrome out of the band |
+| 2 | Edge at the horizon and on pale walls | **Soot halo where the ground is light; in AR, soot only in bright rooms.** | Gold only, as decided; keeping holograms above the band; a receding horizon. In AR: gold only; soot always |
+| 3 | Author marks at the horizon | **Bare, with the author's initial in every mark** | A dark ring, with initials |
+| 4 | The edge at extreme sizes | **As decided in round 2** (width as a percentage of the short side, at both ends) | A 1.5 px core floor at small sizes; a 2.2 cm halo cap, or moving the glyphs out, at large sizes |
+| 5 | Where the chip is mandatory | **Only where the ground fails** | Darkening the VR sky instead (reopens round 2's room); always in XR; everywhere |
+| 6 | Recording without colour alone | **Stop square with the word; a plain rose dot** | The word and running time alone; a slow pulse, a tally line, or a sound and the wrist, each with the word; a rose dot with a cream ring (reopens round 2's no keyline) |
+| 7 | How each target blends | **AR chip 92% where the target blends in linear light, 88% where it blends in sRGB** | 88% everywhere; 97% where linear; opaque in AR |
+| 8 | Flicker in a headset and in AR | **Round 1 rhythm at a gentle swing in headsets** (probe variant E); flat screens keep round 1 | Round 1 everywhere (round 2); round 1 with real surfaces steady; gentle in headsets; gentle everywhere |
+| 9 | Sparks and frame time | **Sparks on the focused hologram only** | Sparks everywhere (round 2); everywhere on capable devices; a shared budget of 24 sparks |
+| 10 | Hands and headset type | **Poke targets 72 angular px, never under 20 mm; headset type 2.5× (round 2)** | 72, 96 and 120 apx pokes with no floor; 2× and 3× type |
+
+Item 8 reverses round 2 item 9 in headsets. Item 9 replaces round 2's sparks
+everywhere.
+
+### Exact values
+
+| Token | Value |
+| --- | --- |
+| Shade (item 1) | `radial-gradient(closest-side, rgba(8,26,30,.7), rgba(8,26,30,.5) 60%, rgba(8,26,30,0))` at the hologram's foot, 120% of its width; it moves with its card |
+| Bottom band | From 75% down a flat screen, where muted text falls below 4.5:1 on the bare ground |
+| Ratios in the shade | Phone labels and glyphs 6.17 to 8.63:1; phone timecode (muted) 5.88 to 8.23:1; desktop labels 5.43 to 8.03:1; feed timecode crossing the band 4.75 to 7.37:1; caption 10.08 to 12.99:1; error text 12.75:1; error action ("Try again") 8.62:1. Measured at the shade's rim behind the outermost label, about 45% |
+| Soot halo (item 2) | `#081a1e`, same width and blur as the glow halo; opacity 0.6 on flat screens, 1 in AR; no flicker (only the warm part flickers) |
+| Soot blend | From ground luminance 0.095 (all glow, about 75% down) to 0.16 (all soot, about 88% down) |
+| Soot in AR | Only when the WebXR lighting estimate (Android Chrome) says the room is bright. Quest's browser gives no estimate, so on Quest the edge stays gold only |
+| Author initial (item 3) | Figtree 600, 10 px; `#081a1e` on a filled mark, the author's hue on a hollow one |
+| Chip rule (item 5) | Flat screens follow item 1. In VR, rows stay bare against the room's walls and take the chip in front of the sky, a hologram or a lit surface, with hysteresis: fade in over 0.3 s, hold at least 2 s. In AR, every row and label sits on the chip. Text over a hologram's own picture always sits on the chip |
+| Recording cue (item 6) | The record control is a filled circle when idle and a rounded square (stop) while recording, beside "Recording 0:12" counting up in place of the timecode. Rose `#ff3b5c` dot, no ring |
+| AR chip (item 7) | `#081a1e` at 92% where the target blends in linear light, 88% where it blends in sRGB; never opaque |
+| Flicker, flat screens (item 8) | Round 1: halo 0.50, 0.32, 0.58, 0.40 over 2.6 s; light 0.9 + 0.12 · sin 9t · sin 3.7t |
+| Flicker, VR and AR | Halo 0.45 + (round 1 − 0.32) × 0.05 / 0.26, so it swings 0.45 to 0.50 in round 1's rhythm; light on real or room surfaces steady at 0.9 |
+| Sparks (item 9) | Only the hologram you are looking at, or the card nearest the middle of a phone screen, sheds sparks. The others hold a steady glow and, on a phone, do not redraw |
+| Hand poke (item 10) | 72 apx, never under 20 mm (20 mm at 45 cm); gap 30 apx (5.0 mm at 45 cm) |
+| Headset scale | 2.5× |
+
+Bare gold in front of the VR sky is 4.1:1 and muted 3.9:1, which is why item 5
+puts the chip there. The scene light behind a VR panel is `#e7e6e2` at the 99th
+percentile and `#fdf3ed` at its brightest.
+
+The edge's gold against the ground, before and after soot (item 2):
+
+| Where | Gold only | With soot | With soot, linear blending |
+| --- | --- | --- | --- |
+| Phone feed, a hologram ending at the bottom | 1.9:1 | 4.2:1 | same (browser) |
+| Desktop, a hologram ending at 90% | 2.2:1 | 5.0:1 | same (browser) |
+| Phone, a hologram ending at 80% | 2.8:1 | 3.4:1 | same (browser) |
+| AR, white wall `#f2f0eb` | 1.2:1 | 3.3:1 | 1.7:1 |
+| AR, beige wall `#d8c6a8` | 1.1:1 | 4.3:1 | 2.4:1 |
+
+How each target blends (item 7), before device checks:
+
+| Target | Blending |
+| --- | --- |
+| Browser page (DOM, CSS) | sRGB: documented, and measured below |
+| WebGL canvas in a browser (three.js) | sRGB: documented |
+| Quest browser, VR (WebXR) | sRGB: documented, needs a device check |
+| Quest browser, AR passthrough | Unknown, probably linear: needs a device check |
+| Android Chrome, AR (ARCore) | Unknown, probably sRGB: needs a device check |
+| AR Quick Look (iOS) | Linear, documented in part; no chip is possible there |
+
+Headset type at 2.5× (item 10), x-height in Quest pixels: title on a phone
+card 13.6, caption on a hologram 8.9, caption under a card 9.4, byline 8.3,
+control label 9.3, timecode 9.6.
+
+### Corrections to round 2
+
+- **The colour near the horizon was record red, not an identity hue.** Rose
+  `#ff3b5c` is ΔE 2.2 from the bottom edge for green-blind viewers and ΔE 0.3
+  at 89% down for red-blind viewers. Deep lime 2, the identity hue suspected
+  before, is ΔE 4.7 (1.0:1). Item 6's stop shape and word carry the
+  recording state without colour; item 3's initials name the author.
+- **The headset rule of thumb is an x-height of 8 Quest pixels.** Round 2's
+  "smallest letter" means the x-height.
+
+### Device results (measured)
+
+Run with `node scripts/design-probe/server.mjs` on a Mac on the same Wi-Fi.
+It serves the probe at `https://<the Mac's LAN IP>:8443/` (self-signed: accept
+the warning once) and the iPhone's Quick Look file over HTTP on port 8480. The
+probe renders a real exported take through a portal. Each device's results are
+appended to `output/design-probe/device-results.jsonl`. Results that cannot
+reach the Mac stay on the device and are resent when the page next loads.
+
+| Device | Check | Result |
+| --- | --- | --- |
+| Mac, Chromium (the Claude app's browser pane) | Blending, screenshot | **sRGB.** Black at 25/50/75% over white read 191/127/64 (sRGB predicts 191/128/64, linear 225/188/137) |
+| Mac, M1 Max, Chrome | Frame time, 9-card feed | 120 Hz (8.3 ms). Focus only 0% long frames; sparks everywhere 0.03%; headroom ×8 sparks |
+| iPhone, iOS 26.6.2, Safari | Frame time, 9-card feed | 60 Hz (17 ms). Focus only 0.39% long; sparks everywhere 0.17%; headroom ×8. A second run was invalid (the page was hidden) |
+| Quest 3, Quest Browser 33 (Chrome 126), 2D page | Frame time, 9-card feed | 72 Hz (13.9 ms). Focus only 0.04% long; **sparks everywhere 4.44% long** (p99 22.3 ms, worst 88.8 ms); supports item 9 |
+| Quest 3, VR room, six holograms | Flicker, blind | Round 1 (A) distracting; round 1 halo with steady light (B) distracting; gentle 0.8 Hz (C) noticeable; **variant E (item 8) noticeable**; still (D) fine. Each was watched 4 to 8 s, not the minute asked for, so treat this as a first look |
+| Quest 3, VR room, six holograms | Frame time (step 4) | 90 Hz (11.2 ms). Focus only: median 12.9 ms, 2.44% long; **sparks everywhere: median 13.4 ms, 3.75% long**; ×2 to ×8 sparks 2.3 to 3.7% long. The room already misses 90 Hz with sparks on one hologram, and more sparks barely add to it, so the six recorded takes, not the sparks, use up the budget. Supports item 9 |
+| Quest 3, hand tracking, 45 cm | Poke, 40 mixed trials per size (step 5) | 72 apx (12.0 mm): 32/40 hits, 80% (95% lower bound 65%). 96 apx (16.1 mm): 36/40, 90% (lower bound 77%). **120 apx (20.1 mm): 36/40, 90%** (lower bound 77%). No poke hit the wrong square; every miss landed in a gap or off the grid. Mean distance from the target's centre 4.8, 5.6 and 6.6 mm. Supports item 10's 20 mm floor, which is 120 apx at 45 cm |
+| Quest 3 | Type at 2×, 2.5× and 3× (step 5) | **Not valid.** A probe bug let the buttons of a sample already rated catch the next pinch. So 3× was rated twice at each distance and 2.5× never. Only the first rating at each distance is sound: 3× was easy at 45 cm and at 1.75 m |
+| Quest 3, AR passthrough | Lowest AR chip that reads cleanly | **97%**, in two separate sessions, above item 7's 88% and 92% |
+| Quest 3, AR passthrough | Blending, matched by eye | **Inconclusive.** In the first session a probe bug counted one trigger press as two picks. The rerun gave one pair, wall 150 and 50% patch 150, which no visible patch can give. The one clean early pair (wall 225, patch 135, ratio 0.60) leans sRGB (0.50) over linear (0.73) |
+
+The Quest records arrived two or three times each, from the same probe bug: it
+added another set of controller listeners every time a session started. The
+probe now registers them once, and the table counts each rating once.
+
+**Steps 4 and 5 first did not load on the Quest 3 (VR frame time, and poke and
+type).** The 2D frame-time check makes nine WebGL canvases. Android-based
+browsers such as Quest Browser cap the WebGL contexts a page may hold and drop
+the oldest, which was the probe's XR renderer, so every VR check after it drew
+nothing. The probe also parsed the take again for every session and never freed
+GPU memory. It now releases the nine canvases before any XR check, rebuilds a
+lost renderer, parses the take once, and frees each session's geometry,
+materials and bone textures when it ends. An emulated run of all six checks in
+a row stays flat at 27 textures and 17 geometries. A failed load now shows in
+the headset and is reported to the Mac. On the rerun both steps loaded on the
+Quest 3, in 362 ms and 33 ms.
+
+The probe now counts a button only while it is still in the scene. It also
+records the time between the two blending picks, so a double tap shows, and
+step 5 has a "Type check only" button that skips the pokes.
+
+**Still to run, so these decisions are not yet confirmed on devices:**
+
+- **Item 10, type at 2.5×:** "Type check only" in step 5 on a Quest 3.
+- **Item 7, how each target blends:**
+  - Quest AR by eye: step 2.
+  - Android AR: step 2.
+  - A screenshot of the blend patches from each target.
+  - AR Quick Look on an iPhone.
+- **Item 8:** the AR table check (step 3) and a full minute per variant.
+- **Item 9 on a mid-range Android phone:** step 4 "Run on this screen".
+
+**Open from the device results:** the Quest's lowest clean AR chip was 97%
+twice, above item 7's 88% and 92%. Item 7 needs a new decision for Quest AR
+passthrough once its blending is known.

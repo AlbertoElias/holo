@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloIM Device Probe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root { --bg: #081a1e; --panel: #0f2a2f; --text: #fff6ea; --muted: #bfd0cc; --gold: #ffc872; --line: #24464c; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 Figtree, system-ui, sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font: 600 2rem Fraunces, Georgia, serif; margin: 0 0 4px; }
+h2 { font-size: 1.05rem; margin: 26px 0 6px; color: var(--gold); font-weight: 500; }
+p, li { color: var(--muted); margin: 6px 0; }
+ol { padding-left: 20px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 10px 0; }
+button { font: 500 1rem Figtree, sans-serif; color: var(--bg); background: var(--gold); border: 0; border-radius: 10px; padding: 12px 16px; margin: 4px 6px 4px 0; min-height: 48px; cursor: pointer; }
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+button[aria-pressed="true"] { outline: 3px solid var(--text); }
+#status { position: sticky; top: 0; background: var(--bg); padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .9rem; color: var(--muted); z-index: 2; }
+#flat { position: fixed; inset: 0; display: none; background: #0c2228; z-index: 5; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 6px; padding: 6px; }
+#flat canvas { width: 100%; height: 100%; display: block; border-radius: 8px; min-width: 0; min-height: 0; }
+#flathud { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 6; display: none; background: rgba(8,26,30,.92); border-radius: 10px; padding: 10px 12px; font: 400 14px Figtree, sans-serif; }
+pre { white-space: pre-wrap; font-size: .8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div id="status">Device: <b id="devname">not set</b> · <span id="xrsupport">checking WebXR…</span> · take: <span id="takestate">loading…</span></div>
+  <h1>HoloIM device probe</h1>
+  <p>Round 3, batch 3. Each check sends its result to the Mac serving this page, labelled with the device you pick. These are device measurements and stay separate from the studio’s emulation. The holograms are a real exported take (a recorded event), not pictures.</p>
+
+  <h2>1 · Which device is this?</h2>
+  <div id="devices"></div>
+
+  <h2>2 · Blending (item 7)</h2>
+  <div class="card">
+    <ol>
+      <li>Stand about a metre from a plain pale wall, in even light. Start AR: black patches at 25%, 50% and 75% appear 60 cm ahead, with wall showing between them.</li>
+      <li>Take a screenshot and check the wall shows beside each patch in it (Quest: hold the Meta button and press the trigger; Android: power and volume down). Send it to the Mac.</li>
+      <li>In the headset, match by eye too: tap the grey swatch that matches the bare wall, then the one that matches the 50% patch.</li>
+      <li>Last, tap the lowest AR chip whose text reads cleanly.</li>
+    </ol>
+    <button data-run="blend">Start AR blend probe</button>
+    <p>iPhone (AR Quick Look): open <a id="usdz" rel="ar" href="blend.usdz"><img alt="Open the blend probe in AR Quick Look" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Crect width='120' height='40' rx='8' fill='%23ffc872'/%3E%3Ctext x='60' y='26' font-family='sans-serif' font-size='15' text-anchor='middle' fill='%23081a1e'%3EOpen in AR%3C/text%3E%3C/svg%3E" width="120" height="40"></a>, point it at a pale wall so the patches stick to it, and take a screenshot with wall beside each patch.</p>
+  </div>
+
+  <h2>3 · Flicker (item 8)</h2>
+  <div class="card">
+    <p>Five flicker variants, labelled 1 to 5 in a random order that changes every time. Watch each for <b>a full minute</b>, then rate it.</p>
+    <p><b>On a real table (AR):</b> on Quest this needs Space Setup with the table marked. Pick the table’s colour on the panel, aim at the tabletop until the ring sits on it, then pinch or pull the trigger to place the hologram.</p>
+    <button data-run="flicker">Start AR table check</button>
+    <p><b>In the room (VR):</b> six holograms around you, all flickering at once.</p>
+    <button data-run="flickroom">Start VR room check</button>
+  </div>
+
+  <h2>4 · Sparks frame time (item 9)</h2>
+  <div class="card">
+    <p>About 90 seconds. First the page measures the display’s own refresh rate, then it alternates “sparks on the focused hologram only” with “sparks on every hologram” (15 s each, twice), then doubles the sparks until frames start running long. Keep still and do not touch the screen until the result appears.</p>
+    <p><b>Phone:</b> nine cards, each its own canvas at up to 1.5× pixel density, like the feed. With focus only, eight cards hold still, as the feed does; with sparks everywhere, all nine draw every frame.</p>
+    <button data-run="flatfps">Run on this screen</button>
+    <p><b>Quest:</b> six holograms around you with a table light each. If you have Meta’s OVR Metrics Tool, turn on its overlay first and screenshot the GPU figures during each phase: the page can only see dropped frames, not how close the GPU is to its limit.</p>
+    <button data-run="vrfps">Run in VR</button>
+  </div>
+
+  <h2>5 · Poke targets and type size (item 10)</h2>
+  <div class="card">
+    <p>Quest with <b>hand tracking on</b> (put the controllers down). A grid 45 cm away lights one square at a time; poke it with your index finger. 120 pokes, with three square sizes mixed at random. Then type samples appear one scale at a time, at 45 cm and at 1.75 m; rate each.</p>
+    <button data-run="hands">Start VR hands and type check</button>
+    <button class="ghost" data-run="typeonly">Type check only</button>
+  </div>
+
+  <h2>Results sent from this device</h2>
+  <pre id="log">none yet</pre>
+</main>
+<div id="flat"></div>
+<div id="flathud"></div>
+
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+/* ?emulate swaps in Meta's IWER headset emulator, for smoke tests on a desktop; its results are labelled and never count */
+const EMULATED = new URLSearchParams(location.search).has('emulate');
+if (EMULATED) { const { XRDevice, metaQuest3 } = await import('https://cdn.jsdelivr.net/npm/iwer@2.6.0/+esm'); const dev = new XRDevice(metaQuest3); dev.installRuntime({ forceInstall: true }); window.__xrdev = dev; }
+
+/* ---------- shared ---------- */
+const GOLD = '#ffc872', GLOW = '#ffb066', DS = '#081a1e', TEXT = '#fff6ea', MUTED = '#bfd0cc', RED = '#ff3b5c', SKY = '#2c6870', WALL = '#15302f';
+const APX = Math.tan(0.0213 * Math.PI / 180);           /* metres per angular px per metre of distance */
+const m = (apx, dist) => apx * dist * APX;
+const shuffle = a => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+const DEVICES = ['Quest 3', 'Quest 3S', 'Quest 2', 'Quest Pro', 'Android phone', 'iPhone', 'Desktop', 'Other'];
+let device = ''; try { device = localStorage.getItem('probeDevice') || ''; } catch (_) {}
+const devEl = document.getElementById('devices');
+function drawDevices() { devEl.innerHTML = DEVICES.map(d => `<button class="ghost" aria-pressed="${d === device}" data-dev="${d}">${d}</button>`).join(''); document.getElementById('devname').textContent = device || 'not set'; }
+devEl.addEventListener('click', e => { const d = e.target.dataset.dev; if (!d) return; device = d; try { localStorage.setItem('probeDevice', d); } catch (_) {} drawDevices(); });
+drawDevices();
+/* results that cannot reach the Mac stay on this device and are resent when the page next loads */
+const sent = [];
+let unsent = []; try { unsent = JSON.parse(localStorage.getItem('probeUnsent') || '[]'); } catch (_) {}
+const keepUnsent = () => { try { localStorage.setItem('probeUnsent', JSON.stringify(unsent)); } catch (_) {} };
+function drawLog() {
+  const head = unsent.length ? `${unsent.length} result(s) kept on this device, not yet on the Mac. They are resent when this page reloads.\n` : '';
+  document.getElementById('log').textContent = head + (sent.length ? sent.map(s => `${s.saved ? 'saved' : 'NOT SAVED'} · ${JSON.stringify(s.rec)}`).join('\n') : 'none yet');
+}
+async function post(rec) { try { return (await fetch('/result', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(rec) })).ok; } catch (e) { console.warn(e); return false; } }
+async function send(test, result) {
+  const rec = { test, device: EMULATED ? 'EMULATED (IWER)' : device || 'unset', dpr: devicePixelRatio, screen: `${screen.width}x${screen.height}`, ...result };
+  const s = { rec, saved: false }; sent.push(s); drawLog();
+  s.saved = await post(rec); if (!s.saved) { unsent.push(rec); keepUnsent(); } drawLog();
+}
+(async () => { const left = []; for (const rec of unsent) if (!(await post({ ...rec, resent: true }))) left.push(rec); unsent = left; keepUnsent(); drawLog(); })();
+/* failures reach the Mac too, so a check that does not load on a headset can be diagnosed without its console */
+let xrNotice = null;
+function fail(where, e) {
+  const message = String(e?.message || e);
+  console.error(where, e);
+  document.getElementById('xrsupport').textContent = `Error in ${where}: ${message}`;
+  if (xrNotice) setLabel(xrNotice, ['Something failed; it was sent to the Mac.', message.slice(0, 60)], { bg: 'rgba(80,10,20,.92)' });
+  send('error', { where, message, stack: String(e?.stack || '').slice(0, 1500), ua: navigator.userAgent });
+}
+window.addEventListener('error', e => fail('page', e.error || e.message));
+window.addEventListener('unhandledrejection', e => fail('promise', e.reason));
+const xr = navigator.xr;
+Promise.all(['immersive-vr', 'immersive-ar'].map(mo => xr ? xr.isSessionSupported(mo).catch(() => false) : false)).then(([vr, ar]) => {
+  document.getElementById('xrsupport').textContent = `VR ${vr ? 'yes' : 'no'} · AR ${ar ? 'yes' : 'no'} · DPR ${devicePixelRatio}${EMULATED ? ' · EMULATED' : ''}`;
+});
+document.getElementById('usdz').href = `http://${location.hostname}:8480/blend.usdz`;
+
+/* the real exported take, parsed once per WebGL context (the feed gives every card its own) */
+const loader = new GLTFLoader();
+const takeBytes = fetch('take.glb').then(r => r.arrayBuffer()).then(b => { document.getElementById('takestate').textContent = `${(b.byteLength / 1e6).toFixed(1)} MB loaded`; return b; });
+const parseTake = () => takeBytes.then(b => new Promise((res, rej) => loader.parse(b.slice(0), '', res, rej)));
+/* XR sessions share one renderer, so they share one parse; each session's clones are freed when it ends */
+let xrGltf = null, xrGltfValue = null;
+const xrTake = () => (xrGltf ||= parseTake().then(g => (xrGltfValue = g)));
+
+function canvasTex(w, h, draw, mip = true) { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); draw(x, w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; if (!mip) { t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; } else t.anisotropy = 4; return t; }
+const haloTex = canvasTex(512, 512, (x, w, h) => { x.filter = 'blur(26px)'; x.strokeStyle = GLOW; x.lineWidth = 46; x.strokeRect(80, 80, w - 160, h - 160); });
+const poolTex = canvasTex(256, 256, (x, w) => { const g = x.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2); g.addColorStop(0, 'rgba(255,176,102,1)'); g.addColorStop(1, 'rgba(255,176,102,0)'); x.fillStyle = g; x.fillRect(0, 0, w, w); });
+const dotTex = canvasTex(64, 64, (x) => { const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,220,150,1)'); g.addColorStop(.4, 'rgba(255,200,114,.8)'); g.addColorStop(1, 'rgba(255,176,102,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); });
+/* sparks are light, so they add; they keep the layer's alpha so they add to passthrough rather than cover it */
+const addBlend = { blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, transparent: true, depthWrite: false };
+
+/* flicker: round 1 keyframes 0%/100% .5, 40% .32, 55% .58, 70% .40 over 2.6 s, ease-in-out between keys */
+const KEYS = [[0, .5], [.4, .32], [.55, .58], [.7, .4], [1, .5]];
+function r1Halo(t) { const p = (t % 2.6) / 2.6; for (let i = 0; i < KEYS.length - 1; i++) { const [a, va] = KEYS[i], [b, vb] = KEYS[i + 1]; if (p <= b) { const u = (p - a) / (b - a), e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; return va + (vb - va) * e; } } return .5; }
+const r1Lamp = t => .9 + .12 * Math.sin(9 * t) * Math.sin(3.7 * t);
+const VARIANTS = {
+  A: { name: 'round 1', halo: r1Halo, lamp: r1Lamp },
+  B: { name: 'round 1 halo, real light steady', halo: r1Halo, lamp: () => .9 },
+  C: { name: 'gentle (0.50 to 0.45 at 0.8 Hz), light steady', halo: t => .475 + .025 * Math.cos(2 * Math.PI * .8 * t), lamp: () => .9 },
+  E: { name: 'round 1 rhythm at the gentle swing, light steady', halo: t => .45 + (r1Halo(t) - .32) * (.05 / .26), lamp: () => .9 },
+  D: { name: 'still', halo: () => .5, lamp: () => .9 }
+};
+
+/* the take as exported: an avatar inside its scene bubble; `fit` frames the avatar */
+function cloneTake(gltf) {
+  const take = SkeletonUtils.clone(gltf.scene), av = take.getObjectByName('RecordedAvatar') || take;
+  take.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(av);
+  const mixer = new THREE.AnimationMixer(take); if (gltf.animations[0]) mixer.clipAction(gltf.animations[0]).play();
+  return { take, mixer, size: box.getSize(new THREE.Vector3()), centre: box.getCenter(new THREE.Vector3()), feet: box.min.y };
+}
+/* a hologram in a room: a window (stencil) onto the take, a gold edge, a halo, and sparks rising off the edge */
+let stencilRef = 0;
+function hologram(gltf, width, nSparks, opts = {}) {
+  const g = new THREE.Group(), h = width * 1.18, ref = (stencilRef = stencilRef % 254 + 1);
+  const mask = new THREE.Mesh(new THREE.PlaneGeometry(width, h), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, stencilWrite: true, stencilRef: ref, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp }));
+  mask.renderOrder = -1; g.add(mask);
+  const T = cloneTake(gltf), take = T.take, mixer = T.mixer, k = (h * .8) / T.size.y;
+  take.scale.setScalar(k); take.position.set(-T.centre.x * k, -h * .42 - T.feet * k, -T.centre.z * k - width * .7);
+  take.traverse(o => { if (!o.material) return; o.material = Array.isArray(o.material) ? o.material.map(mm => mm.clone()) : o.material.clone();
+    for (const mm of [].concat(o.material)) Object.assign(mm, { stencilWrite: true, stencilRef: ref, stencilFunc: THREE.EqualStencilFunc, stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.KeepStencilOp }); o.frustumCulled = false; });
+  g.add(take);
+  const edgeW = width * .012, edge = new THREE.Group();
+  [[0, h / 2, width + edgeW, edgeW], [0, -h / 2, width + edgeW, edgeW], [width / 2, 0, edgeW, h], [-width / 2, 0, edgeW, h]].forEach(([x, y, w, hh]) => { const e = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), new THREE.MeshBasicMaterial({ color: GOLD })); e.position.set(x, y, .001); edge.add(e); });
+  g.add(edge);
+  /* the halo as designed: #ffb066 at the flicker's opacity, blended normally (additive glow clips to white on pale surfaces) */
+  const halo = new THREE.Mesh(new THREE.PlaneGeometry(width * 1.6, h * 1.6), new THREE.MeshBasicMaterial({ map: haloTex, opacity: .5, transparent: true, depthWrite: false })); halo.position.z = -.002; g.add(halo);
+  const N = nSparks, pos = new Float32Array(N * 3), col = new Float32Array(N * 4), seed = [];
+  for (let i = 0; i < N; i++) { const s = Math.random() * 2 * (width + h); let x, y; if (s < width) { x = -width / 2 + s; y = h / 2; } else if (s < width + h) { x = width / 2; y = h / 2 - (s - width); } else if (s < 2 * width + h) { x = width / 2 - (s - width - h); y = -h / 2; } else { x = -width / 2; y = -h / 2 + (s - 2 * width - h); }
+    seed.push({ x, y, life: 2 + Math.random() * 2, t0: Math.random() * 4, dx: (Math.random() - .5) * width * .06 }); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 4)); geo.setDrawRange(0, N);
+  const sparks = new THREE.Points(geo, new THREE.PointsMaterial({ size: opts.pointPx || Math.max(.004, width * .02), map: dotTex, vertexColors: true, sizeAttenuation: !opts.pointPx, ...addBlend }));
+  sparks.frustumCulled = false; g.add(sparks);
+  let lastT = null;
+  g.userData = { halo, sparks, mixer, N,
+    /* n: how many sparks to draw this frame (0 hides them) */
+    update(t, haloOp, n) {
+      if (lastT !== null) mixer.update(Math.max(0, t - lastT)); lastT = t;
+      halo.material.opacity = haloOp; sparks.visible = n > 0; if (!n) return;
+      const rise = h * .2, cnt = Math.min(n, N); geo.setDrawRange(0, cnt);
+      for (let i = 0; i < cnt; i++) { const s = seed[i], p = ((t + s.t0) % s.life) / s.life, a = p < .15 ? p / .15 : 1 - (p - .15) / .85;
+        pos[i * 3] = s.x + s.dx * p; pos[i * 3 + 1] = s.y + rise * p; pos[i * 3 + 2] = .003; col[i * 4] = 1; col[i * 4 + 1] = .85; col[i * 4 + 2] = .55; col[i * 4 + 3] = a; }
+      geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
+    } };
+  return g;
+}
+/* a flat card's edge, inner glow and sparks, drawn in its own canvas over the take */
+function cardFx(w, h, nSparks, pointPx) {
+  const g = new THREE.Group(), edgeW = Math.min(w, h) * .015;
+  [[0, h / 2 - edgeW / 2, w, edgeW], [0, -h / 2 + edgeW / 2, w, edgeW], [w / 2 - edgeW / 2, 0, edgeW, h], [-w / 2 + edgeW / 2, 0, edgeW, h]].forEach(([x, y, ww, hh]) => { const e = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), new THREE.MeshBasicMaterial({ color: GOLD, depthTest: false })); e.position.set(x, y, 0); e.renderOrder = 3; g.add(e); });
+  const halo = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.25, h * 1.25), new THREE.MeshBasicMaterial({ map: haloTex, opacity: .5, transparent: true, depthTest: false, depthWrite: false })); halo.renderOrder = 2; g.add(halo);
+  const N = nSparks, pos = new Float32Array(N * 3), col = new Float32Array(N * 4), seed = [];
+  for (let i = 0; i < N; i++) { const s = Math.random() * 2 * (w + h); let x, y; if (s < w) { x = -w / 2 + s; y = h / 2; } else if (s < w + h) { x = w / 2; y = h / 2 - (s - w); } else if (s < 2 * w + h) { x = w / 2 - (s - w - h); y = -h / 2; } else { x = -w / 2; y = -h / 2 + (s - 2 * w - h); }
+    seed.push({ x: x * .96, y: y * .96, life: 2 + Math.random() * 2, t0: Math.random() * 4, dx: (Math.random() - .5) * w * .06 }); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
+  const sparks = new THREE.Points(geo, new THREE.PointsMaterial({ size: pointPx, map: dotTex, vertexColors: true, sizeAttenuation: false, ...addBlend, depthTest: false })); sparks.frustumCulled = false; sparks.renderOrder = 4; g.add(sparks);
+  g.userData.update = (t, haloOp, n) => { halo.material.opacity = haloOp; sparks.visible = n > 0; if (!n) return; const cnt = Math.min(n, N); geo.setDrawRange(0, cnt);
+    for (let i = 0; i < cnt; i++) { const s = seed[i], p = ((t + s.t0) % s.life) / s.life, a = p < .15 ? p / .15 : 1 - (p - .15) / .85; pos[i * 3] = s.x + s.dx * p; pos[i * 3 + 1] = s.y + h * .12 * p; pos[i * 3 + 2] = 0; col[i * 4] = 1; col[i * 4 + 1] = .85; col[i * 4 + 2] = .55; col[i * 4 + 3] = a; }
+    geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true; };
+  return g;
+}
+/* the spark ramp needs room for up to 8× the base count */
+const RAMP = [2, 4, 8];
+
+/* text and buttons for XR panels */
+function textTex(lines, wpx, hpx, bg, mip = true) {
+  return canvasTex(wpx, hpx, (x, w, h) => { if (bg) { x.fillStyle = bg; x.beginPath(); x.roundRect(0, 0, w, h, Math.min(w, h) * .18); x.fill(); } for (const l of lines) { x.font = l.font; x.fillStyle = l.color || TEXT; x.textAlign = l.align || 'left'; x.textBaseline = 'middle'; x.fillText(l.text, l.x, l.y); } }, mip);
+}
+const buttons = [];
+function button(label, w, h, onClick, opts = {}) {
+  const mat = new THREE.MeshBasicMaterial({ map: textTex([{ text: label, font: '500 40px Figtree', x: (w / h) * 64, y: 64, align: 'center', color: opts.fg || DS }], Math.round((w / h) * 128), 128, opts.bg || GOLD), transparent: true });
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); b.userData.onClick = onClick; b.userData.label = label; buttons.push(b); return b;
+}
+const lineTex = (lines, n, opts) => { const px = 64; return textTex(lines.map((t, i) => ({ text: t, font: `400 ${px * .55}px Figtree`, x: 16, y: px * (i + .5), color: opts.color || TEXT })), Math.round(n.width / n.height * px * lines.length), px * lines.length, opts.bg === undefined ? 'rgba(8,26,30,.88)' : opts.bg); };
+function label(text, w, h, opts = {}) { const lines = Array.isArray(text) ? text : [text]; return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ transparent: true, map: lineTex(lines, { width: w, height: h }, opts) })); }
+function setLabel(mesh, text, opts = {}) { const lines = Array.isArray(text) ? text : [text]; mesh.material.map.dispose(); mesh.material.map = lineTex(lines, mesh.geometry.parameters, opts); mesh.material.needsUpdate = true; }
+
+/* ---------- XR session runner ---------- */
+let renderer, scene, camera, session, active;
+function ensureRenderer() {
+  /* a browser drops its oldest WebGL context when a page holds too many (the flat test makes nine), so a lost renderer is rebuilt */
+  if (renderer && !renderer.getContext().isContextLost()) return;
+  if (renderer) { renderer.dispose(); renderer.domElement.remove(); inputReady = false; }
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
+  renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth, innerHeight);
+  renderer.xr.enabled = true; renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.domElement.addEventListener('webglcontextlost', () => fail('WebGL', 'the XR renderer lost its WebGL context (too many canvases, or GPU memory); the next check starts a fresh one'));
+  camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .01, 50);
+}
+const ray = new THREE.Raycaster(), tmpM = new THREE.Matrix4();
+/* a button counts only while it is visible and still in the scene: a detached panel keeps its old world position and would still catch rays */
+const isShown = o => { let p = o; for (; p.parent; p = p.parent) if (!p.visible) return false; return p === scene && p.visible; };
+let inputReady = false;
+function setupInput() {
+  for (let i = 0; i < 2; i++) { scene.add(renderer.xr.getController(i)); scene.add(renderer.xr.getHand(i)); }
+  if (inputReady) return; inputReady = true;
+  for (let i = 0; i < 2; i++) {
+    const c = renderer.xr.getController(i);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), new THREE.LineBasicMaterial({ color: GOLD })); line.scale.z = .6; c.add(line);
+    c.addEventListener('select', () => {
+      tmpM.identity().extractRotation(c.matrixWorld); ray.ray.origin.setFromMatrixPosition(c.matrixWorld); ray.ray.direction.set(0, 0, -1).applyMatrix4(tmpM);
+      const hit = ray.intersectObjects(buttons.filter(b => b.parent && isShown(b)), false)[0];
+      if (hit) hit.object.userData.onClick(); else active?.onSelect?.(c);
+    });
+  }
+}
+/* free what a session made, keeping the shared parse and the module's textures */
+function disposeScene(root) {
+  const keep = new Set([haloTex, poolTex, dotTex]);
+  xrGltfValue?.scene.traverse(o => { if (o.geometry) keep.add(o.geometry); for (const mm of [].concat(o.material || [])) for (const v of Object.values(mm)) if (v?.isTexture) keep.add(v); });
+  for (let i = 0; i < 2; i++) { root.remove(renderer.xr.getController(i)); root.remove(renderer.xr.getHand(i)); }
+  root.traverse(o => { if (o.isSkinnedMesh) o.skeleton.dispose(); if (o.geometry && !keep.has(o.geometry)) o.geometry.dispose(); for (const mm of [].concat(o.material || [])) { for (const v of Object.values(mm)) if (v?.isTexture && !keep.has(v)) v.dispose(); mm.dispose(); } });
+  renderer.renderLists.dispose();
+}
+function xrInfo() { const s = renderer.xr.getSession(), bl = s?.renderState?.baseLayer; return { frameRate: s?.frameRate ?? null, supportedFrameRates: s?.supportedFrameRates ? [...s.supportedFrameRates] : null, fixedFoveation: bl?.fixedFoveation ?? null, framebuffer: bl ? `${bl.framebufferWidth}x${bl.framebufferHeight}` : null }; }
+async function start(mode, test, features, opts = {}) {
+  if (!xr) { alert('WebXR is not available in this browser.'); return; }
+  flatCleanup?.(); ensureRenderer(); scene = new THREE.Scene(); buttons.length = 0; setupInput();
+  renderer.xr.setFoveation(opts.foveation ?? 1);
+  try { session = await xr.requestSession(mode, features); } catch (e) { alert('Could not start ' + mode + ': ' + e.message); fail('start ' + mode, e); return; }
+  renderer.xr.setReferenceSpaceType('local-floor');
+  try { await renderer.xr.setSession(session); } catch (e) { fail('setSession', e); session.end(); return; }
+  active = test; test.ready = false; test.broken = false; let placed = false, t0 = null;
+  const s = session, sc = scene;
+  s.addEventListener('end', () => { renderer.setAnimationLoop(null); test.end?.(); active = null; xrNotice = null; try { disposeScene(sc); } catch (e) { console.warn(e); } });
+  renderer.setAnimationLoop((t, frame) => {
+    if (t0 === null) t0 = t;
+    if (!placed && frame) { const pose = frame.getViewerPose(renderer.xr.getReferenceSpace()); if (pose) { placed = true;
+      /* say "loading" in the headset, so a slow or failed load is visible rather than an empty room */
+      const nf = headFrame(renderer.xr.getCamera()); xrNotice = label(['Loading the check…', ''], .4, .07); xrNotice.position.set(0, 0, -1); nf.add(xrNotice); scene.add(nf);
+      const tl = performance.now();
+      Promise.resolve().then(() => test.init(scene, renderer.xr.getCamera(), frame)).then(() => { test.ready = true; nf.visible = false; xrNotice = null; send('xr-loaded', { mode, check: opts.name, loadMs: Math.round(performance.now() - tl), ...xrInfo() }); }, e => fail('loading the check', e)); } }
+    if (test.ready && !test.broken) { try { test.frame?.((t - t0) / 1000, frame, t); } catch (e) { test.broken = true; fail('running the check', e); } }
+    renderer.render(scene, camera);
+  });
+}
+/* a frame at the head with yaw only: -z is straight ahead */
+function headFrame(cam, floor = false) {
+  const p = new THREE.Vector3(), q = new THREE.Quaternion(); cam.getWorldPosition(p); cam.getWorldQuaternion(q);
+  const e = new THREE.Euler().setFromQuaternion(q, 'YXZ'); const g = new THREE.Group(); g.position.copy(p); if (floor) g.position.y = 0; g.rotation.y = e.y; return g;
+}
+/* blind labels: the variants in a random order, numbered 1–5; the mapping is logged with every rating */
+function blindVariants() { return shuffle(Object.keys(VARIANTS)).map((k, i) => ({ label: String(i + 1), key: k })); }
+
+/* ---------- 2 · blend probe ---------- */
+const SWATCHES = Array.from({ length: 13 }, (_, i) => 45 + i * 15);
+const blendTest = {
+  init(scene, cam) {
+    const f = headFrame(cam); scene.add(f); this.wallMatch = null;
+    [.25, .5, .75].forEach((a, i) => { const q = new THREE.Mesh(new THREE.PlaneGeometry(.1, .1), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: a, depthWrite: false })); q.position.set((i - 1) * .15, .06, -.6); f.add(q);
+      const l = label(`${a * 100}%`, .04, .016, { bg: 'rgba(0,0,0,1)' }); l.position.set((i - 1) * .15, 0, -.6); f.add(l); });
+    const info = label(['Screenshot now, with wall beside every patch.', 'Then tap the swatch that matches the bare wall.'], .34, .04); info.position.set(0, .16, -.6); f.add(info); this.info = info;
+    const sw = new THREE.Group(); sw.position.set(0, -.045, -.6); f.add(sw);
+    SWATCHES.forEach((v, i) => { const hex = '#' + v.toString(16).padStart(2, '0').repeat(3); const b = new THREE.Mesh(new THREE.PlaneGeometry(.024, .03), new THREE.MeshBasicMaterial({ color: new THREE.Color(hex) }));
+      b.position.set((i - 6) * .027, 0, 0); b.userData.onClick = () => this.pick(v); b.userData.label = 'swatch ' + v; buttons.push(b); sw.add(b); });
+    const chips = new THREE.Group(); chips.position.set(0, -.12, -.6); chips.visible = false; f.add(chips); this.chips = chips;
+    [['88%', .88], ['92%', .92], ['97%', .97], ['Opaque', 1]].forEach(([n, a], i) => {
+      const c = new THREE.Group(); c.position.set((i - 1.5) * .105, 0, 0);
+      c.add(new THREE.Mesh(new THREE.PlaneGeometry(.095, .034), new THREE.MeshBasicMaterial({ color: DS, transparent: true, opacity: a, depthWrite: false })));
+      const txt = new THREE.Mesh(new THREE.PlaneGeometry(.095, .034), new THREE.MeshBasicMaterial({ transparent: true, map: textTex([{ text: '●', font: '400 40px Figtree', x: 22, y: 64, color: RED }, { text: 'Recording 0:12', font: '400 30px Figtree', x: 50, y: 50, color: MUTED }, { text: 'Refit', font: '500 30px Figtree', x: 50, y: 88, color: GOLD }], 360, 128) })); txt.position.z = .001; c.add(txt);
+      const b = button(n, .06, .022, () => { send('blend-chip', { lowestCleanChip: n }); setLabel(info, ['Sent. Thank you.', 'Press Exit, then send the screenshot to the Mac.']); }); b.position.set(0, -.032, .001); c.add(b); chips.add(c);
+    });
+    const ex = button('Exit', .06, .022, () => session.end()); ex.position.set(.22, .16, -.6); f.add(ex);
+  },
+  pick(v) {
+    if (this.wallMatch === null) { this.wallMatch = v; this.wallAt = performance.now(); setLabel(this.info, [`Wall matched ${v}.`, 'Now tap the swatch that matches the 50% patch.']); return; }
+    const lin = x => { x /= 255; return x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }, enc = l => 255 * (l <= .0031308 ? 12.92 * l : 1.055 * l ** (1 / 2.4) - .055);
+    const ratio = v / this.wallMatch, linPred = enc(.5 * lin(this.wallMatch)) / this.wallMatch;
+    send('blend-match', { wallMatch: this.wallMatch, patch50Match: v, pickGapMs: Math.round(performance.now() - this.wallAt), ratio: +ratio.toFixed(3), sRGBPredicts: .5, linearPredicts: +linPred.toFixed(3), byEye: Math.abs(ratio - .5) < Math.abs(ratio - linPred) ? 'sRGB' : 'linear' });
+    this.wallMatch = null; this.chips.visible = true; setLabel(this.info, ['Matched and sent.', 'Last: tap the lowest chip that reads cleanly.']);
+  }
+};
+
+/* ---------- 3 · flicker on a real table (AR) ---------- */
+const TABLES = ['Pale table', 'Mid-tone table', 'Dark table'];
+const flickerTest = {
+  async init(scene, cam) {
+    const s = renderer.xr.getSession(); this.f = headFrame(cam); scene.add(this.f); this.holo = null; this.root = null; this.hitSource = null; this.onTable = false; this.table = null;
+    this.blind = blindVariants(); this.cur = this.blind[0]; this.t0 = null;
+    this.reticle = new THREE.Mesh(new THREE.RingGeometry(.04, .05, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: GOLD })); this.reticle.matrixAutoUpdate = false; this.reticle.visible = false; scene.add(this.reticle);
+    s.requestReferenceSpace('viewer').then(vs => s.requestHitTestSource({ space: vs })).then(h => { this.hitSource = h; }).catch(() => {});
+    this.gltf = await xrTake();
+    this.panel = new THREE.Group(); this.panel.position.set(-.35, -.15, -.7); this.panel.rotation.y = .4; this.f.add(this.panel);
+    this.info = label(['Pick the table colour, then aim at the', 'tabletop and pinch to place.'], .3, .05); this.info.position.y = .16; this.panel.add(this.info);
+    TABLES.forEach((n, i) => { const b = button(n.split(' ')[0], .09, .028, () => { this.table = n; this.say(); }); b.position.set((i - 1) * .1, .11, 0); this.panel.add(b); });
+    const ahead = button('No table: place ahead', .2, .028, () => this.place(null)); ahead.position.set(0, .07, 0); this.panel.add(ahead);
+    this.blind.forEach((v, i) => { const b = button(v.label, .05, .03, () => { this.cur = v; this.t0 = performance.now(); this.say(); }); b.position.set((i - 2) * .06, .02, 0); this.panel.add(b); });
+    ['Fine', 'Noticeable', 'Distracting'].forEach((r, i) => { const b = button(r, .095, .03, () => this.rate(r)); b.position.set((i - 1) * .1, -.03, 0); this.panel.add(b); });
+    const ex = button('Exit', .07, .03, () => s.end()); ex.position.set(0, -.08, 0); this.panel.add(ex);
+  },
+  rate(r) {
+    if (!this.holo) { this.say('Place the hologram first.'); return; }
+    const watched = this.t0 ? (performance.now() - this.t0) / 1000 : 0;
+    send('flicker', { surface: 'ar-table', label: this.cur.label, variant: this.cur.key, rating: r, placedOnTable: this.onTable, table: this.table, watchedS: Math.round(watched), order: this.blind.map(v => v.label + '=' + v.key).join(' ') });
+    this.say(`Sent ${this.cur.label}: ${r}${watched < 55 ? ' (watched under a minute)' : ''}`);
+  },
+  say(extra) { setLabel(this.info, [extra || (this.holo ? 'Watch a full minute, then rate.' : this.table ? 'Aim at the tabletop and pinch to place.' : 'Pick the table colour first.'), `Variant ${this.cur.label}${this.table ? ' · ' + this.table : ''}`]); },
+  onSelect() { if (this.reticle.visible) this.place(this.reticle.matrix); },
+  place(mat) {
+    if (this.root) scene.remove(this.root);
+    const root = new THREE.Group();
+    if (mat) { root.applyMatrix4(mat); this.onTable = true; } else { root.position.set(0, -.45, -.8); this.f.updateMatrixWorld(); root.applyMatrix4(this.f.matrixWorld); this.onTable = false; }
+    const cp = new THREE.Vector3(); renderer.xr.getCamera().getWorldPosition(cp); root.lookAt(cp.x, root.position.y, cp.z);
+    const h = hologram(this.gltf, .3, 70); h.position.y = .3 * 1.18 / 2 + .01; root.add(h);
+    /* light cast on the real table: warm, blended normally so it shows on pale surfaces too */
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(.7, .45).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: poolTex, opacity: .3, transparent: true, depthWrite: false })); pool.position.set(0, .002, .1); root.add(pool);
+    scene.add(root); this.root = root; this.holo = h; this.pool = pool; this.t0 = performance.now(); this.say();
+  },
+  frame(t, frame) {
+    if (this.hitSource && frame) { const r = frame.getHitTestResults(this.hitSource)[0]; if (r) { this.reticle.visible = true; this.reticle.matrix.fromArray(r.getPose(renderer.xr.getReferenceSpace()).transform.matrix); } else this.reticle.visible = false; }
+    if (!this.holo) return; const v = VARIANTS[this.cur.key];
+    this.holo.userData.update(t, v.halo(t), 70); this.pool.material.opacity = .3 * v.lamp(t) / .9;
+  }
+};
+
+/* ---------- a VR room of six holograms, for the room flicker check and the VR frame time ---------- */
+async function buildRoom(scene, cam, sparksEach) {
+  scene.background = new THREE.Color(SKY);
+  scene.add(new THREE.Mesh(new THREE.CircleGeometry(8, 48).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#2a221e', roughness: .9 })));
+  scene.add(new THREE.HemisphereLight('#6fa0a6', '#1a1512', .9));
+  const gltf = await xrTake(), f = headFrame(cam, true); scene.add(f);
+  const holos = [], lamps = [];
+  for (let i = 0; i < 6; i++) { const a = (i - 2.5) * .42, R = 2 + (i % 2) * .6; const g = new THREE.Group(); g.position.set(Math.sin(a) * R, 0, -Math.cos(a) * R); g.lookAt(0, 0, 0); f.add(g);
+    const table = new THREE.Mesh(new THREE.BoxGeometry(.8, .75, .5), new THREE.MeshStandardMaterial({ color: '#4a3a2c', roughness: .8 })); table.position.y = .375; g.add(table);
+    const h = hologram(gltf, .4, sparksEach); h.position.set(0, .75 + .4 * 1.18 / 2 + .01, 0); g.add(h); holos.push(h);
+    const lamp = new THREE.PointLight(GLOW, 1.2, 2.5, 2); lamp.position.set(0, 1.0, .15); g.add(lamp); lamps.push(lamp); }
+  return { f, holos, lamps };
+}
+const roomFlickerTest = {
+  async init(scene, cam) {
+    this.blind = blindVariants(); this.cur = this.blind[0]; this.t0 = performance.now();
+    Object.assign(this, await buildRoom(scene, cam, 70));
+    const p = new THREE.Group(); p.position.set(0, 1.25, -1.1); this.f.add(p);
+    this.info = label(['Watch the room a full minute, then rate.', `Variant ${this.cur.label}`], .4, .06); this.info.position.y = .12; p.add(this.info);
+    this.blind.forEach((v, i) => { const b = button(v.label, .06, .04, () => { this.cur = v; this.t0 = performance.now(); setLabel(this.info, ['Watch the room a full minute, then rate.', `Variant ${v.label}`]); }); b.position.set((i - 2) * .075, .05, 0); p.add(b); });
+    ['Fine', 'Noticeable', 'Distracting'].forEach((r, i) => { const b = button(r, .13, .04, () => { const w = (performance.now() - this.t0) / 1000; send('flicker', { surface: 'vr-room', label: this.cur.label, variant: this.cur.key, rating: r, holograms: 6, watchedS: Math.round(w), order: this.blind.map(v => v.label + '=' + v.key).join(' ') }); setLabel(this.info, [`Sent ${this.cur.label}: ${r}${w < 55 ? ' (watched under a minute)' : ''}`, 'Pick the next variant.']); }); b.position.set((i - 1) * .145, -.01, 0); p.add(b); });
+    const ex = button('Exit', .09, .04, () => session.end()); ex.position.set(0, -.065, 0); p.add(ex);
+  },
+  frame(t) { const v = VARIANTS[this.cur.key]; this.holos.forEach((h, i) => { const ti = t + i * .7; h.userData.update(ti, v.halo(ti), 70); this.lamps[i].intensity = 1.2 * v.lamp(ti); }); }
+};
+
+/* ---------- 4 · frame time ---------- */
+/* the display's own refresh with nothing drawn, a warm-up, focus/everywhere/focus/everywhere, then the spark ramp */
+const PHASES = [['refresh', 3], ['warm', 3], ['focus', 15], ['every', 15], ['focus', 15], ['every', 15], ['x2', 8], ['x4', 8], ['x8', 8]];
+function stats(ds) { if (!ds || !ds.length) return null; const s = [...ds].sort((a, b) => a - b), q = p => s[Math.min(s.length - 1, Math.floor(s.length * p))]; return { frames: s.length, median: +q(.5).toFixed(2), p95: +q(.95).toFixed(2), p99: +q(.99).toFixed(2), max: +s[s.length - 1].toFixed(2) }; }
+function phaser(onDone, say) {
+  let i = 0, start = null, last = null, hidden = document.hidden; const d = {};
+  document.addEventListener('visibilitychange', () => { if (document.hidden) hidden = true; });
+  say(PHASES[0][0]);
+  return (now) => {
+    if (start === null) start = now; const el = (now - start) / 1000, ph = PHASES[i][0];
+    if (last !== null && ph !== 'warm') (d[ph] = d[ph] || []).push(now - last);
+    last = now;
+    if (el > PHASES[i][1]) { i++; start = now;
+      if (i >= PHASES.length) {
+        const refresh = stats(d.refresh).median, long = k => +(100 * (d[k] || []).filter(x => x > 1.5 * refresh).length / Math.max(1, (d[k] || []).length)).toFixed(2);
+        const ramp = Object.fromEntries(RAMP.map(r => [`x${r}`, { ...stats(d['x' + r]), longPct: long('x' + r) }]));
+        const ok = RAMP.filter(r => ramp['x' + r].longPct <= 1);
+        onDone({ refreshMs: refresh, focus: { ...stats(d.focus), longPct: long('focus') }, everywhere: { ...stats(d.every), longPct: long('every') }, ramp, headroom: long('every') > 1 ? 'none: sparks everywhere already runs long' : ok.length ? `×${Math.max(...ok)} sparks with ≤1% long frames` : 'under ×2', pageWasHidden: hidden, valid: !hidden && refresh < 100 });
+        return { done: true, mode: 'none', mult: 1 }; }
+      say(PHASES[i][0]); }
+    const p = PHASES[i][0];
+    return { done: false, mode: p === 'refresh' ? 'none' : p === 'focus' || p === 'warm' ? 'focus' : 'every', mult: p.startsWith('x') ? +p.slice(1) : 1 };
+  };
+}
+const phaseText = p => p === 'refresh' ? 'Measuring the display’s own refresh…' : p === 'warm' ? 'Warming up…' : p === 'focus' ? 'Measuring: sparks on the focused hologram only…' : p === 'every' ? 'Measuring: sparks on every hologram…' : `Measuring: ${p.slice(1)}× the sparks on every hologram…`;
+/* the flat test holds nine WebGL contexts; they are released before anything else runs */
+let flatCleanup = null;
+async function runFlat() {
+  flatCleanup?.();
+  const host = document.getElementById('flat'), hud = document.getElementById('flathud');
+  host.style.display = 'grid'; hud.style.display = 'block'; hud.textContent = 'Loading the take into nine canvases…'; host.innerHTML = '';
+  const dpr = Math.min(devicePixelRatio, 1.5), cards = [];
+  for (let i = 0; i < 9; i++) { const cv = document.createElement('canvas'); host.appendChild(cv); }
+  for (const cv of host.querySelectorAll('canvas')) {
+    const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true }); r.setPixelRatio(dpr); r.outputColorSpace = THREE.SRGBColorSpace;
+    const { width, height } = cv.getBoundingClientRect(); r.setSize(width, height, false);
+    const sc = new THREE.Scene(); sc.background = new THREE.Color('#0c2228');
+    const T = cloneTake(await parseTake()); sc.add(T.take);
+    /* the canvas is the portal: frame the avatar at 80% of the card's height */
+    const cam = new THREE.PerspectiveCamera(35, width / height, .05, 200), dist = (T.size.y / .8 / 2) / Math.tan(35 / 2 * Math.PI / 180);
+    cam.position.set(T.centre.x, T.centre.y, T.centre.z + dist); cam.lookAt(T.centre);
+    /* sparks and the halo ride on a plane just in front of the camera, sized to the card */
+    const hh = 2 * .2 * Math.tan(35 / 2 * Math.PI / 180), ww = hh * width / height, h = cardFx(ww, hh, 26 * 8, Math.max(3, .016 * Math.min(width, height)) * dpr); h.position.set(0, 0, -.2); cam.add(h); sc.add(cam);
+    cards.push({ r, sc, cam, h, T, drawn: false });
+  }
+  let finished = false, t0 = null;
+  flatCleanup = () => { finished = true; cards.forEach(c => { c.r.dispose(); c.r.forceContextLoss(); }); host.style.display = 'none'; hud.style.display = 'none'; host.innerHTML = ''; flatCleanup = null; };
+  const tick = phaser(res => {
+    const gl = cards[0].r.getContext(), dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const lost = cards.filter(c => c.r.getContext().isContextLost()).length; res.lostContexts = lost; if (lost) res.valid = false;
+    send('frametime-flat', { holograms: 9, canvases: 9, canvasDpr: dpr, sparksEach: 26, gpu: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : null, ...res });
+    hud.innerHTML = `${res.valid ? '' : '<b>Not valid: the page was hidden or throttled, or a canvas lost its WebGL context. Run it again with the screen on. </b>'}Refresh ${res.refreshMs} ms. Focus only: median ${res.focus.median} ms, ${res.focus.longPct}% long. Everywhere: median ${res.everywhere.median} ms, p95 ${res.everywhere.p95} ms, ${res.everywhere.longPct}% long. Headroom: ${res.headroom}. Sent. <button id="flatclose">Close</button>`;
+    document.getElementById('flatclose').onclick = () => flatCleanup?.();
+  }, p => { hud.textContent = phaseText(p) + ' Keep still.'; });
+  const loop = now => {
+    if (finished) return; requestAnimationFrame(loop);
+    if (t0 === null) t0 = now; const st = tick(now), t = (now - t0) / 1000;
+    if (st.done) { finished = true; return; }
+    if (st.mode === 'none') return;
+    cards.forEach((c, i) => {
+      /* focus: only the focused card draws every frame; the feed's frameloop="demand" leaves the rest still */
+      const live = st.mode === 'every' || i === 4;
+      if (!live && c.drawn) return;
+      if (live || !c.drawn) c.T.mixer.update(c.lastT === undefined ? 0 : t - c.lastT); c.lastT = t;
+      c.h.userData.update(t, live ? r1Halo(t) : .5, live ? 26 * st.mult : 0); c.r.render(c.sc, c.cam); c.drawn = true;
+    });
+  };
+  requestAnimationFrame(loop);
+}
+const vrFpsTest = {
+  async init(scene, cam) {
+    this.done = false; Object.assign(this, await buildRoom(scene, cam, 70 * 8));
+    this.info = label(['Stand still and look ahead.', 'Warming up…'], .5, .08); this.info.position.set(0, 1.5, -1.2); this.f.add(this.info);
+    this.ex = button('Exit', .12, .05, () => session.end()); this.ex.position.set(0, 1.38, -1.2); this.f.add(this.ex);
+    this.tick = phaser(res => { send('frametime-vr', { holograms: 6, sparksEach: 70, pointLights: 6, ...xrInfo(), ...res }); setLabel(this.info, [`Refresh ${res.refreshMs} ms · everywhere ${res.everywhere.longPct}% long`, `Headroom: ${res.headroom}. Sent. Press Exit.`]); this.done = true; }, p => setLabel(this.info, ['Stand still and look ahead.', phaseText(p)]));
+  },
+  frame(t, frame, now) {
+    if (this.done) return; const st = this.tick(now);
+    if (st.done) { this.done = true; return; }
+    const focusIdx = 2; /* the hologram straight ahead */
+    this.holos.forEach((h, i) => { const live = st.mode === 'every' || (st.mode === 'focus' && i === focusIdx); h.visible = st.mode !== 'none'; h.userData.update(t + i, live ? r1Halo(t + i) : .5, live ? 70 * st.mult : 0); this.lamps[i].intensity = 1.2 * (live ? r1Lamp(t + i) : .9); });
+  }
+};
+
+/* ---------- 5 · hands and type ---------- */
+/* the gap is the studio's control-row gap (12 px) at the 2.5× headset scale */
+const SIZES = [72, 96, 120], GAP = 30, TRIALS = 40, POKE_D = .45;
+/* rounds 1 and 2: Fraunces 600 titles, Figtree for everything else */
+const ROLES = [
+  ['Title, phone card', '600 {s}px Fraunces', 21.6, 'Rooftop’s ready', TEXT],
+  ['Caption on a hologram', '400 {s}px Figtree', 16, 'We have to take turns.', TEXT],
+  ['Caption under a card', '400 {s}px Figtree', 14.1, 'The roof’s finally done.', TEXT],
+  ['Byline', '400 {s}px Figtree', 12.5, 'Mika · 2 h ago', MUTED],
+  ['Control label', '500 {s}px Figtree', 14, 'Refit   Return   Free', GOLD],
+  ['Timecode', '400 {s}px Figtree', 14.4, '0:12 / 1:04', MUTED]
+];
+function typePanel(dist, scale) {
+  /* every role at this scale, in angular px for this distance; 1 texel per angular px (about 1.9 per Quest px), no mipmaps */
+  const lineH = r => r[2] * scale * 1.6, H = ROLES.reduce((a, r) => a + lineH(r), 0) + 30 * scale, W = 210 * scale;
+  const tex = canvasTex(Math.round(W), Math.round(H), (x) => { x.fillStyle = 'rgba(8,26,30,.92)'; x.beginPath(); x.roundRect(0, 0, W, H, 16 * scale); x.fill(); let y = 15 * scale; x.textBaseline = 'middle';
+    for (const r of ROLES) { x.font = r[1].replace('{s}', (r[2] * scale).toFixed(1)); x.fillStyle = r[4]; x.fontVariantNumeric = r[0] === 'Timecode' ? 'tabular-nums' : 'normal'; x.fillText(r[3], 12 * scale, y + lineH(r) / 2); y += lineH(r); } }, false);
+  return new THREE.Mesh(new THREE.PlaneGeometry(m(W, dist), m(H, dist)), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+}
+const handsTest = {
+  async init(scene, cam) {
+    scene.background = new THREE.Color(SKY); scene.add(new THREE.HemisphereLight('#ffffff', '#333333', 1));
+    scene.add(new THREE.Mesh(new THREE.CircleGeometry(6, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: WALL })));
+    this.f = headFrame(cam); scene.add(this.f); this.tp = null;
+    await Promise.all(['600 20px Fraunces', '400 20px Figtree', '500 20px Figtree'].map(f => document.fonts.load(f)));
+    this.tips = [0, 1].map(() => { const s = new THREE.Mesh(new THREE.SphereGeometry(.004), new THREE.MeshBasicMaterial({ color: TEXT })); scene.add(s); return s; });
+    /* poke panel: 45 cm from the eyes, 25 cm below them, facing them */
+    this.panel = new THREE.Group(); this.panel.position.set(0, -.25, -Math.sqrt(POKE_D * POKE_D - .25 * .25)); this.f.add(this.panel);
+    this.f.updateMatrixWorld(true); this.panel.lookAt(this.f.localToWorld(new THREE.Vector3(0, 0, 0)));
+    this.info = label(['Hand tracking: put the controllers down.', 'Poke the lit square with your index finger.'], .26, .04); this.info.position.set(0, .1, 0); this.panel.add(this.info);
+    this.grids = SIZES.map(apx => { const s = m(apx, POKE_D), g = m(GAP, POKE_D), grid = new THREE.Group(), cells = [];
+      for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.PlaneGeometry(s, s), new THREE.MeshBasicMaterial({ color: '#24464c' })); c.position.set((i - 1) * (s + g), (1 - j) * (s + g) - .015, 0); grid.add(c); cells.push(c); }
+      grid.visible = false; this.panel.add(grid); return { apx, size: s, grid, cells }; });
+    this.queue = shuffle(SIZES.flatMap((_, k) => Array(TRIALS).fill(k))); this.done = 0; this.res = SIZES.map(() => []); this.phase = 'poke'; this.armed = true; if (this.typeOnly) this.queue = []; this.next();
+  },
+  next() {
+    if (!this.queue.length) return this.typeCheck();
+    this.k = this.queue.pop(); this.grids.forEach((g, i) => { g.grid.visible = i === this.k; });
+    const G = this.grids[this.k]; this.target = Math.floor(Math.random() * 9); G.cells.forEach((c, i) => c.material.color.set(i === this.target ? GOLD : '#24464c'));
+    setLabel(this.info, [`Poke ${this.done + 1} of ${SIZES.length * TRIALS}`, 'Poke the lit square with your index finger.']);
+  },
+  frame() {
+    if (this.phase !== 'poke') return;
+    const v = new THREE.Vector3();
+    for (let h = 0; h < 2; h++) { const hand = renderer.xr.getHand(h), tip = hand.joints?.['index-finger-tip']; if (!tip || !hand.visible || !tip.visible) { this.tips[h].visible = false; continue; }
+      tip.getWorldPosition(v); this.tips[h].visible = true; this.tips[h].position.copy(v);
+      const local = this.panel.worldToLocal(v.clone()), z = local.z - (tip.jointRadius || .008);   /* the fingertip's surface, not the joint's centre */
+      if (z > .015) { this.armed = true; continue; }
+      if (this.armed && z <= 0 && z > -.05 && Math.abs(local.x) < .12 && Math.abs(local.y) < .12) { this.armed = false; this.poke(local); } }
+  },
+  poke(p) {
+    const G = this.grids[this.k], half = G.size / 2, inCell = G.cells.findIndex(c => Math.abs(p.x - c.position.x) <= half && Math.abs(p.y - c.position.y) <= half);
+    const t = G.cells[this.target].position;
+    this.res[this.k].push({ hit: inCell === this.target, wrong: inCell >= 0 && inCell !== this.target, off: Math.hypot(p.x - t.x, p.y - t.y) * 1000 });
+    this.done++;
+    if (!this.queue.length) SIZES.forEach((apx, k) => { const r = this.res[k], n = r.length; send('poke', { apx, mm: +(m(apx, POKE_D) * 1000).toFixed(1), gapApx: GAP, gapMm: +(m(GAP, POKE_D) * 1000).toFixed(1), distanceM: POKE_D, trials: n, hits: r.filter(x => x.hit).length, wrongTarget: r.filter(x => x.wrong).length, missedAll: r.filter(x => !x.hit && !x.wrong).length, meanOffsetMm: +(r.reduce((a, x) => a + x.off, 0) / n).toFixed(1), maxOffsetMm: +Math.max(...r.map(x => x.off)).toFixed(1), mixedOrder: true }); });
+    this.next();
+  },
+  typeCheck() {
+    this.phase = 'type'; this.grids.forEach(g => { g.grid.visible = false; });
+    this.screens = [...shuffle([2, 2.5, 3]).map(s => [POKE_D, s]), ...shuffle([2, 2.5, 3]).map(s => [1.75, s])];
+    setLabel(this.info, ['Pokes done. Now type, one size at a time.', 'Rate how each one reads.']);
+    this.showType();
+  },
+  showType() {
+    if (this.tp) this.f.remove(this.tp);
+    if (!this.screens.length) { this.panel.visible = true; setLabel(this.info, ['All sent. Thank you.', 'Press Exit.']); const ex = button('Exit', .07, .03, () => session.end()); ex.position.set(0, .03, 0); this.panel.add(ex); return; }
+    const [dist, sc] = this.screens.shift(), g = new THREE.Group(); g.position.set(0, 0, -dist); this.f.add(g); this.tp = g; this.panel.visible = false;
+    const p = typePanel(dist, sc); g.add(p); const H = p.geometry.parameters.height, bw = m(190, dist), bh = m(60, dist);
+    ['Easy', 'Takes effort', 'Can’t read'].forEach((n, i) => { const b = button(n, bw, bh, () => { send('type', { distanceM: dist, scale: sc, rating: n, foveation: renderer.xr.getFoveation?.() ?? null }); this.showType(); }); b.position.set((i - 1) * bw * 1.12, -H / 2 - bh * 1.1, 0); g.add(b); });
+  }
+};
+
+if (EMULATED) window.__probe = { blendTest, flickerTest, roomFlickerTest, vrFpsTest, handsTest, runFlat, get session() { return session; }, get renderer() { return renderer; }, buttons, isShown };
+document.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', () => {
+  if (!device && !EMULATED) { alert('Pick the device first (step 1).'); return; }
+  const k = b.dataset.run;
+  if (k === 'blend') start('immersive-ar', blendTest, { requiredFeatures: ['local-floor'] }, { name: k });
+  if (k === 'flicker') start('immersive-ar', flickerTest, { requiredFeatures: ['local-floor'], optionalFeatures: ['hit-test'] }, { name: k });
+  if (k === 'flickroom') start('immersive-vr', roomFlickerTest, { requiredFeatures: ['local-floor'] }, { name: k });
+  if (k === 'flatfps') runFlat();
+  if (k === 'vrfps') start('immersive-vr', vrFpsTest, { requiredFeatures: ['local-floor'] }, { name: k });
+  handsTest.typeOnly = k === 'typeonly';
+  if (k === 'typeonly') start('immersive-vr', handsTest, { requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'] }, { name: k, foveation: 0 });
+  if (k === 'hands') start('immersive-vr', handsTest, { requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'] }, { name: k, foveation: 0 });
+}));
+</script>
+</body>
+</html>
