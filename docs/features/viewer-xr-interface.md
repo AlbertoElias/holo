@@ -1,7 +1,7 @@
 # Feature brief: Shared XR interface and viewer VR/AR
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed (revised for IWSDK and multiple holograms; awaiting user approval)
+**Status:** Implementing (approved 2026-10-24; step 1 spikes)
 **Layer:** view (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -191,6 +191,19 @@ Implementation order (each step lands green before the next):
 | Capture on shared panels | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + capture panel screenshot; pending |
 | Same look in both apps | IWER screenshots of both panels via `preview.mjs` | Side-by-side sheet; pending |
 | Pipeline compatibility | `pnpm run test:smoke:pipeline` | Pass output; pending |
+
+### Video verification loop
+
+Every step, including each spike, ends with a real-time proof video of the
+real workflow in IWER (headset view plus a spectator view where it helps:
+entering, gallery, placing, grabbing, scrubbing, focus and audio switching,
+exit; for capture, record → stop → export on the shared panels). The
+implementer previews it as a contact sheet
+(`node packages/tooling-testing/src/preview.mjs`), fixes what it shows, and
+re-records until it is clean; the lead sends the final video to the user as
+proof. Videos and their recording scripts stay in the ignored `output/`
+directory or the scratchpad: never committed or linked from docs. Durable
+evidence is the e2e specs and their `*-report.json`.
 
 ## Physical-device limits
 
