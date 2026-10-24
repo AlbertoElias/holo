@@ -22,10 +22,12 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Nothing held. UI redesign slices 0, 1 and 2 (brief
-  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) were
-  merged to `main` together on 2026-10-24, verified locally with `verify:pr`
-  (evidence in the brief); slices 3 and 4 are next there.
+- UI redesign slice 4 (every capture page, touch, handedness; brief
+  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) is pushed on
+  `claude/sharp-snyder-e9566f` and verified locally with `verify:pr`
+  (evidence in the brief). It carries slice 3's `7b9f666` (`GlyphControl
+  glyph: null`) and the `ui-dom` passthrough `2be153f`. Merge it together
+  with slice 3. Slices 0, 1 and 2 were merged on 2026-10-24.
 
 ## Unverified / device-only
 

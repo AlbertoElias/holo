@@ -546,6 +546,48 @@ written to ratify code. Their `--passWithNoTests` flags are removed.
   (`collectSceneBubbleGroup`, which exports every visible non-skinned mesh)
   and the point resolver skip it.
 
+Built (2026-10-24, branch `claude/sharp-snyder-e9566f`):
+
+- Q15 for capture: capture shows no hologram and no edge in VR (it never
+  drew the edge), so VR soot does not apply to it.
+- Controls whose glyph is not drawn yet (Settings, Enter or Exit VR and AR,
+  Refit height, Recenter AR, Face camera, the handedness options) are
+  `GlyphControl` with `glyph: null`, which draws the word (slice 3's
+  `7b9f666`). With the lead's approval, `GlyphControl` now passes
+  `disabled`, `id`, `role`, `aria-*` and `data-*` to its button
+  (`7e5cfd2`), so capture keeps no control of its own. The file pickers'
+  words are plain gold `controlLabel` type over the native file input,
+  which is the control. No wrist control is undrawn: the wrist row holds
+  only Record.
+- Placeholder looks for the user's screenshot check, since the styleguide
+  has none: a disabled control draws at the 40% idle dim with no cream lift
+  and no pressed state (Refit while the height fit runs, the pickers while
+  recording). A chosen option has no selected look either, so the choice is
+  said in words under the handedness pair.
+- In a headset the wrist row takes `poke` hit sizes when the dominant hand
+  is tracked and `ray` sizes with a controller. The world panel opens 1.5 m
+  ahead when the session starts and stays there; it hides while recording.
+  A ray commits only for the controller that fired, and chrome takes only
+  each side's own input, so one controller never commits twice. A poke
+  arms only when the fingertip is seen above the glyph's face, and a row
+  whose label hides within 1 m takes no hits. With focus on a DOM control,
+  Space and Enter press it; the scene does not jump.
+- Handedness swaps the wrist row, the tray's holding and summoning hands in
+  VR, and the desktop pointing arm (switched only at rest). Desktop carry and
+  summon stay right-handed: one IK chain drives them.
+- The tick plays on its own audio context, so it never enters the take's
+  sound. The poking hand reads as untracked to the recorder while it pokes,
+  so a poke never records as a gesture.
+- Values set to the rule here, open to revisit (local constants, proposed
+  for the styleguide and `tokens.json`): the fingertip shade appears within
+  10 cm and grows to 3× the drawn radius; contact at 8 mm, a push 4 cm
+  through still commits, rearm after 3 cm back; tick 2200 Hz, 18 ms, gain
+  0.12, panned at the glyph; pulses 0.15 for 12 ms on hover and 0.5 for
+  30 ms on commit; the walk stick takes touches starting in the left 40% of
+  the scene, travels 44 apx, and touch look turns 0.006 rad per px.
+- Limits kept: phone AR capture has no DOM overlay, so Recenter AR stays
+  unreachable there, as before.
+
 ### Slice 5: hold to mark "this", and the Halo
 
 | Input | Hold | Point | Today |
@@ -744,7 +786,11 @@ share no files.
 | `verify:pr`, slice 2 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling), builds, `test:smoke:pipeline` 6/6, `test:portal` 6/6 and `test:xr:smoke` 9/9 pass; no app changed. `test:knowledge` 7/7 in Docker (port 4176 was held by the main checkout's server) once its bug-list check counted template cards instead of asserting on one: with B-020 and B-021 open there are two cards, and the old assertion failed Playwright's strict mode |
 | Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | Screenshots at desktop and 390 × 844, previewed with `packages/tooling-testing/src/preview.mjs`; pending |
 | AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | Screenshots and placement report; pending |
-| Capture pages and headset rules | `pnpm --filter @holoim/capture run test:xr:mock`, a new placement scenario, and a touch scenario on the phone viewport | Emulation (IWER, Playwright) | Placement, label-distance and handedness report; pending |
+| Capture pages, desktop and phone | `pnpm --filter @holoim/capture run test:xr:ui` (desktop 1280 × 800 and phone 390 × 844 with touch, Playwright) | Emulation (Playwright viewports) | 2026-10-24: desktop dock targets at least 24 apx (Record 36), Figtree loaded, the side sheet carries key words; handedness set by keyboard (Space on a radio), stored in `holoim.handedness`, kept across a reload, right by default; while recording the dock holds only Stop (a rose square) and "Recording 0:02". Phone: every dock target 44 × 44 apx, clear of the 20 apx side edges and the 34 apx home bar; touch words with no key help; the scene has `touch-action: none`; a drag on the right turns the view 0.54 rad, the walk stick shows under the finger and walks 3.2 m in 1 s, nothing starts in the edge or home-bar zone, and tap records. Report `output/ci-capture-ui/ui-report.json` (ignored) |
+| Capture headset rules | `test:xr:ui` headset phase | Emulation (IWER, controllers and hands) | 2026-10-24: Record on the left wrist for the right-handed, 4 cm off the wrist, drawn at 2.5× (15.1 mm), ray hit 15.1 mm, poke hit 20 mm (the floor); in view on a controller and on a tracked hand (on a controller it was hidden inside the avatar's sleeve until the wrist row drew over the body). Settings panel 1.5 m away, rows with ray-sized hits; every label at least 1 m away, and none shows, nor takes a hit, with the head 0.8 m from the panel. The panel and wrist stay put as the head walks 36 cm and turns 30°. A ray select on Record starts a take: the panel hides, "Recording 0:01" shows on the status line, which stays through a 10° turn (0.1 mm) and follows a 40° one (0.92 m). A poke stops it: the fingertip shade shows wide at 6 cm (16.6 mm) and sharpens at 2 cm (10.5 mm); one poke, one commit, one tick, even with the finger held; a tip arriving from behind commits nothing. Handedness from the panel row moves Record to the right wrist and the left ray presses it, while the right ray rests on Refit and refits nothing; the tray takes the non-dominant palm under both settings; with one controller, one select commits once |
+| Chrome stays out of the take | `test:xr:ui` export phase | Emulation (IWER) | 2026-10-24: a take without marks re-exported with every headset chrome object shown, hidden, moved visible into the scene model, or with a chrome-flagged box beside the avatar: the same canonical digest each time, and a repeat matches. A plain box in the same place changes it (the control). The canonical digest names each bufferView by its bytes' hash, because three's GLTFExporter orders texture bufferViews by when each async encode resolves, so two exports of one take can differ in raw bytes with the same content. The downloaded file differs from the re-exports because the exporter clones the live avatar's pose |
+| Independent verification, slice 4 | Codex (a different vendor), then a same-vendor stand-in | Neither (review) | 2026-10-24: Codex was at its usage limit and could not run. A Claude code-reviewer stood in; it is not independent by vendor. It found one bug: one controller made a select commit twice, because both sides fell back to the same input. It found weak spots: chrome shown vs hidden could not differ, since chrome sits outside the exported model; the occlusion raycast did not skip chrome; a poke armed with no approach; the XR entry mode could go stale; the home bar was not excluded from touch; and several assertions were weak. All are fixed and covered by the check above. Slice 2's `xr-ui-three` and `ui-dom` contracts still have no cross-vendor pass |
+| `verify:pr`, slice 4 | `pnpm run verify:pr`; `test:knowledge` and `test:xr:viewer` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling; `@holoim/ui-dom` 86/86) and builds pass. `test:smoke:pipeline` 6/6 and `test:portal` 6/6 pass. In `test:xr:smoke` every capture check passes (the full `test:xr` tier, now 12 checks with `ui`, passes too). The viewer's `ar-bubble.spec.ts:70` failed twice with B-021 while the machine was loaded (load average about 20) and passed 6/6 alone with B-021's command. In Docker, `test:knowledge` 7/7 and `test:xr:viewer` 9/9. The shared `holoim-ci-playwright` volume holds an arm64 Chromium 1208 marked complete, which an amd64 container cannot launch, so the runs set `PLAYWRIGHT_BROWSERS_PATH=/root/pw-fresh` |
 | Hold to mark on every input | IWER scenarios (hands, controllers), the desktop pointing take, touch scenarios for phone and phone AR | Emulation | Exported GLBs with the expected `recorded` links and no overlapping inferred link; pending |
 | The Halo on every input | Flick and hold scenarios with mouse, touch and IWER (hands, controllers, `transient-pointer` if IWER emulates it) | Emulation | Report of directions committed; pending |
 | Pipeline and USDZ | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result; byte-identical export with chrome visible; v0 and v1 files load; USDZ outline matches; pending |
@@ -789,3 +835,12 @@ and controllers (feel, false starts, stuck modes), the Halo flick on each
 headset input, touch capture and the held mark on a real phone, the
 fingertip shade and tick on a real poke (and whether the microphone hears
 the tick), and the record glyph on a real wrist.
+
+Slice 4 still needs, on devices: on a real phone, look, walk and record by
+touch, with no clash with the back swipe or the home bar and the stick's
+40% share and 0.006 rad per px look judged; on Quest 3 with hands, the poke
+distances (10 cm, 8 mm, 4 cm, 3 cm) for false starts and misses, the
+fingertip shade's look, and whether the take's microphone hears the tick;
+with Quest controllers, the pulse strengths and the ray landing on the wrist
+glyph; the world panel's 1.5 m legibility (check 7); and a left-handed
+participant through the whole capture flow.
