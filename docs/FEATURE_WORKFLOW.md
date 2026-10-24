@@ -48,6 +48,9 @@ consume the agreed contract.
 4. **Independent verification.** Give the verifier the original brief and working
    tree. The verifier exercises the real workflow where practical and records an
    inspectable artifact such as a transcript, screenshot, or deterministic output.
+   The verifier also records a proof video of the real workflow, per
+   "Testing doctrine" in [`../AGENTS.md`](../AGENTS.md): kept under ignored
+   `output/`, never committed, and sent to the user before handoff.
 5. **Integration.** The lead resolves findings, runs the commands required by
    [`../AGENT_CONTRACT.md`](../AGENT_CONTRACT.md), and records device-only gaps.
 6. **Close.** Mark the brief Complete, move it to `docs/features/archive/`,
