@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-20
+**Updated:** 2026-10-23
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -13,18 +13,7 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-VR thumbstick locomotion is complete (brief
-[`docs/features/archive/vr-thumbstick-locomotion.md`](docs/features/archive/vr-thumbstick-locomotion.md),
-branch `feature/vr-locomotion`): the `VR_LOCO_VIDEO=1` locomotion check
-passed and produced
-`apps/capture/output/ci-vr-locomotion/vr-thumbstick-locomotion.mp4`, and
-`pnpm run verify:pr` passed. Next: validate the room-scale body solver and
-stick feel/comfort on a physical headset (see Unverified below), or pick
-the next queue item in [`TODOS.md`](TODOS.md).
-
-## Ready to merge (grouped)
-
-None.
+Expired upload-intent cleanup is complete (brief [`docs/features/archive/upload-intent-cleanup.md`](docs/features/archive/upload-intent-cleanup.md)): the API now sweeps expired direct-upload intents and their `incoming/*.glb` objects hourly. Next: pick the next queue item in [`TODOS.md`](TODOS.md), or validate capture on a physical headset (see Unverified below).
 
 ## Unverified / device-only
 
