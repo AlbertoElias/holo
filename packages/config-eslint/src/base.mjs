@@ -1,8 +1,17 @@
+import noTokenColourLiteral from './rules/no-token-colour-literal.mjs';
+
 // Re-export ESLint ecosystem deps so consumers don't need direct dependencies.
 // Usage: import { tseslint, jsConfig, globals } from '@holoim/config-eslint/base';
 export { default as tseslint } from 'typescript-eslint';
 export { default as jsConfig } from '@eslint/js';
 export { default as globals } from 'globals';
+
+// Workspace rules: a design-token colour copied by hand drifts from
+// docs/product/design/tokens.json, so code reads it from @holoim/design-tokens.
+export const holoimPlugin = {
+  meta: { name: '@holoim/eslint-plugin' },
+  rules: { 'no-token-colour-literal': noTokenColourLiteral }
+};
 
 export const workspaceDefaultIgnores = [
   "**/dist/**",
@@ -46,8 +55,12 @@ export function createWorkspaceTsEslintConfig({
       languageOptions: {
         globals
       },
+      plugins: {
+        holoim: holoimPlugin
+      },
       rules: {
         ...workspaceDefaultRules,
+        "holoim/no-token-colour-literal": "error",
         ...rules
       }
     }

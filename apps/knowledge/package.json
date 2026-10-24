@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "pnpm run check:docs && tsgo --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4176 --strictPort",
-    "lint": "eslint .",
+    "lint": "eslint . && node ../../packages/config-eslint/src/check-css-literals.mjs src",
     "typecheck": "tsgo --noEmit",
     "check:docs": "tsx tooling/check-docs.ts",
     "test:e2e": "pnpm run check:docs && playwright test",

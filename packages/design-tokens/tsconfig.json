@@ -1,0 +1,9 @@
+{
+  "extends": "@holoim/config-ts/web.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src", "scripts"]
+}

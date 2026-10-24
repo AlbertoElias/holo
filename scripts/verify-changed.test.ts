@@ -111,6 +111,70 @@ test("documentation-only changes run the docs check instead of package checks", 
   assert.deepEqual(createDryRunReport(graph, mixed).rootActions.map((action) => action.args.at(-1)), ["check:docs"]);
 });
 
+// A token edit lives under docs/ but generates @holoim/design-tokens, and the
+// shared lint rule reads its colours: classing it as docs-only would skip the
+// drift check and every lint (failure case in docs/features/ui-redesign.md).
+test("a design token edit runs the token package, its dependents and every linted package", (context) => {
+  const rootDir = createWorkspace([
+    { name: "@holoim/web", path: "apps/viewer-web", dependencies: { "@holoim/design-tokens": "workspace:*" }, devDependencies: { "@holoim/config-eslint": "workspace:*" } },
+    { name: "@holoim/design-tokens", path: "packages/design-tokens", devDependencies: { "@holoim/config-eslint": "workspace:*" } },
+    { name: "@holoim/config-eslint", path: "packages/config-eslint" },
+    { name: "@holoim/meaning", path: "packages/meaning", devDependencies: { "@holoim/config-eslint": "workspace:*" } },
+    { name: "@holoim/unlinted", path: "packages/unlinted" }
+  ]);
+  context.after(() => rmSync(rootDir, { recursive: true, force: true }));
+  const graph = discoverWorkspaceGraph(rootDir);
+
+  for (const file of ["docs/product/design/tokens.json", "./docs/product/design/tokens.json"]) {
+    const selection = selectAffectedPackages(graph, [file]);
+    assert.equal(selection.reason, "package-changes", file);
+    assert.deepEqual(selection.docFiles, []);
+    assert.deepEqual(selection.directPackages, ["@holoim/config-eslint", "@holoim/design-tokens"]);
+    assert.deepEqual(selection.selectedPackages, ["@holoim/config-eslint", "@holoim/design-tokens", "@holoim/meaning", "@holoim/web"]);
+  }
+
+  const generated = selectAffectedPackages(graph, ["packages/design-tokens/src/generated/tokens.json"]);
+  assert.deepEqual(generated.directPackages, ["@holoim/config-eslint", "@holoim/design-tokens"]);
+
+  // The styleguide beside it is still documentation.
+  assert.equal(selectAffectedPackages(graph, ["docs/product/design/styleguide.md"]).reason, "docs-only");
+});
+
+test("a design token edit selects every CI area", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "holoim-ci-areas-"));
+  try {
+    mkdirSync(path.join(rootDir, "docs/product/design"), { recursive: true });
+    writeFileSync(path.join(rootDir, "docs/product/design/styleguide.md"), "a\n");
+    writeFileSync(path.join(rootDir, "docs/product/design/tokens.json"), "{}\n");
+    runGit(rootDir, ["init"]);
+    runGit(rootDir, ["add", "."]);
+    runGit(rootDir, ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "-m", "base"]);
+    const areas = (): Record<string, string> => {
+      const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "ci-changed-areas.sh");
+      const result = spawnSync("bash", [script, "HEAD~1", "HEAD"], { cwd: rootDir, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      return Object.fromEntries(result.stdout.trim().split("\n").map((line) => line.split("=") as [string, string]));
+    };
+    const commit = (file: string, text: string) => {
+      writeFileSync(path.join(rootDir, file), text);
+      runGit(rootDir, ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "-am", file]);
+    };
+
+    commit("docs/product/design/styleguide.md", "b\n");
+    assert.equal(areas().docs_only, "true");
+    assert.equal(areas().quality, "false");
+
+    commit("docs/product/design/tokens.json", "{ }\n");
+    const tokenAreas = areas();
+    assert.equal(tokenAreas.docs_only, "false");
+    for (const area of ["quality", "capture_xr", "e2e", "pipeline", "portal", "web", "capture_app"]) {
+      assert.equal(tokenAreas[area], "true", area);
+    }
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("keeps no-change behavior as an empty skip", (context) => {
   const rootDir = createWorkspace([{ name: "@fixture/app", path: "apps/app" }]);
   context.after(() => rmSync(rootDir, { recursive: true, force: true }));
