@@ -5,7 +5,13 @@
 **Layer:** All layers  
 **Depends on:** a chosen visual direction from the Direction Board; portal view evidence (PRD-002)  
 **Owner:** Unassigned  
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-24
+
+> **Visual direction replaced (2026-10-24).** The direction this PRD waited on
+> is chosen and written down in the [styleguide](../design/styleguide.md). Its
+> visual parts, marked below (the Direction Board choice, "Light chrome" and
+> thin Light chrome in AR), are replaced by it and kept for history. The
+> interaction grammar (held modes, the Halo, "this" and "here") still stands.
 
 ## User Outcome
 
@@ -37,6 +43,7 @@ Validate one slice of the grammar, not the whole system:
 - One action (mark "this") done through each device idiom.
 
 Pick the visual direction first; then apply it to the record -> view loop only.
+*(Replaced: the direction is the [styleguide](../design/styleguide.md).)*
 
 ## Why Holograms
 
@@ -51,6 +58,9 @@ video app's design language has no meaning layer. Fair comparison: today's UI.
 
 ## Across Devices
 
+*"Light chrome" below is replaced by the gold glyphs of the
+[styleguide](../design/styleguide.md); the placement still holds.*
+
 | Device | Appearance | Control |
 | --- | --- | --- |
 | Headset (VR or AR) | Light chrome from the hand; Ink on referents | Held pinch or trigger; Halo menu |
@@ -60,7 +70,9 @@ video app's design language has no meaning layer. Fair comparison: today's UI.
 
 ## In Scope
 
-- [ ] Choose a direction from the Direction Board with reactions recorded.
+- [x] Choose a direction from the Direction Board with reactions recorded.
+  *(Replaced: chosen in the Direction Studio, rounds 1 to 3, and written down
+  in the [styleguide](../design/styleguide.md).)*
 - [ ] Apply materials and one held-mode action across capture and viewer.
 - [ ] A cross-device task test.
 
@@ -77,6 +89,8 @@ video app's design language has no meaning layer. Fair comparison: today's UI.
 
 - [ ] Which look, and is the held-mode, two-handed grammar natural on every device?
 - [ ] Legibility of thin Light chrome on bright AR backgrounds.
+  *(Replaced: AR text sits on the chip, and the edge takes soot in bright
+  rooms; see the [styleguide](../design/styleguide.md).)*
 
 ## Comparison And Learning
 

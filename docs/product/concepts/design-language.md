@@ -87,6 +87,18 @@ at a moment of it. There is no separate editor app or mode to learn.
 
 ## 2. Visual language: three materials
 
+> **Replaced (2026-10-24)** by the [styleguide](../design/styleguide.md).
+> Kept for history. The styleguide carries over, marked "carried": the three
+> materials and their prominence order, chrome never in an identity hue,
+> marks replaying with their timing, chrome dimming while recording, the
+> angular units, the per-input targets (as round 2 revised them), the hand
+> feedback channels and reduced-motion crossfades. It replaces the neutral
+> Light chrome, open amber and Atkinson, and in VR it lets rows stay bare
+> against a dark wall (round 3), so text no longer always floats on a chip.
+> The separate ink and light chips
+> became one chip (a container for marks is open there), and the 120–180 ms
+> timing is open there.
+
 The materials map onto the layers: Presence shows the event, Ink shows the
 meaning layer, and Light is the view's chrome.
 
@@ -151,6 +163,10 @@ numbers. Both are available as web fonts and can be baked to MSDF for
 - Reduced motion replaces movement with crossfades.
 
 ## 3. Where UI lives
+
+> **Replaced (2026-10-24)** by the [styleguide](../design/styleguide.md),
+> "Where things live", which keeps this placement with the round 3 rules
+> applied (no text within arm's reach in a headset). Kept for history.
 
 No interactive UI is locked to the head. Each 3D location has a 2D
 counterpart, which is how every 2D surface also exists in 3D.
@@ -300,6 +316,10 @@ referent without taking over their view (IDEA-008, IDEA-013).
 | Multi-person (IDEA-011, IDEA-013) | Presence material and identity hues |
 
 ## 8. Three looks for the same model
+
+> **Replaced (2026-10-24):** none of these looks was chosen. The
+> [styleguide](../design/styleguide.md) sets the look: a burnt gold edge on a
+> blue-hour ground. Kept for history.
 
 The model, grammar, and placement above are the same in all three. Only the
 treatment of the materials changes.

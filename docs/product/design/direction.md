@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Rounds 1 to 3 decided; round 3 closed 2026-10-24 with the device results it has, and its unverified gaps are listed under Round 3. Round 4 (styleguide) is next. Step 3 of the design-language work:
+**Status:** Rounds 1 to 3 decided; round 3 closed 2026-10-24 with the device results it has, and its unverified gaps are listed under Round 3. Round 4 is written down in the [styleguide](styleguide.md). Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
