@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Rounds 1 to 3 decided, 2026-10-23. Quest checks confirm item 9, item 10's poke floor and 2.5× type at 1.75 m. Text at arm's reach fails at 2.5× and needs a decision; how each AR target blends is still to check on devices, and Quest's AR chip opacity needs a new decision (see Round 3's device results). Round 4 (styleguide) is next. Step 3 of the design-language work:
+**Status:** Rounds 1 to 3 decided, 2026-10-23. Quest checks confirm item 9, item 10's poke floor and 2.5× type at 1.75 m. Text never sits within arm's reach in a headset; how each AR target blends is still to check on devices, and Quest's AR chip opacity needs a new decision (see Round 3's device results). Round 4 (styleguide) is next. Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
@@ -415,6 +415,7 @@ everywhere.
 | Sparks (item 9) | Only the hologram you are looking at, or the card nearest the middle of a phone screen, sheds sparks. The others hold a steady glow and, on a phone, do not redraw |
 | Hand poke (item 10) | 72 apx, never under 20 mm (20 mm at 45 cm); gap 30 apx (5.0 mm at 45 cm) |
 | Headset scale | 2.5× |
+| Text near the hand (added after the device checks) | No text within arm's reach in a headset. Panels you touch carry glyphs only, and their labels sit 1 m away or more. Decided because 2.5× could not be read at 45 cm on a Quest 3 (see the device results) |
 
 Bare gold in front of the VR sky is 4.1:1 and muted 3.9:1, which is why item 5
 puts the chip there. The scene light behind a VR panel is `#e7e6e2` at the 99th
@@ -474,6 +475,7 @@ reach the Mac stay on the device and are resent when the page next loads.
 | Quest 3, VR room, six holograms | Frame time (step 4) | 90 Hz (11.2 ms). Focus only: median 12.9 ms, 2.44% long; **sparks everywhere: median 13.4 ms, 3.75% long**; ×2 to ×8 sparks 2.3 to 3.7% long. The room already misses 90 Hz with sparks on one hologram, and more sparks barely add to it, so the six recorded takes, not the sparks, use up the budget. Supports item 9 |
 | Quest 3, hand tracking, 45 cm | Poke, 40 mixed trials per size (step 5) | 72 apx (12.0 mm): 32/40 hits, 80% (95% lower bound 65%). 96 apx (16.1 mm): 36/40, 90% (lower bound 77%). **120 apx (20.1 mm): 36/40, 90%** (lower bound 77%). No poke hit the wrong square; every miss landed in a gap or off the grid. Mean distance from the target's centre 4.8, 5.6 and 6.6 mm. Supports item 10's 20 mm floor, which is 120 apx at 45 cm |
 | Quest 3 | Type at 2×, 2.5× and 3× ("Type size only", one rating per sample) | **At 1.75 m:** 2× takes effort; **2.5× easy**; 3× easy. **At 45 cm:** 2× can't read; **2.5× can't read**; 3× takes effort. The samples are the same angular size at both distances, so the difference is distance itself. The Quest 3 focuses at about 1.3 m, which suggests that text near the hand blurs. A first run, in which a probe bug misattributed ratings, is discarded |
+| iPhone, AR Quick Look | Blending, screenshot | **Not readable.** The screenshot shows a table with two soft dark blobs and no patches on a wall, so there is nothing to measure. Needs a retry against a plain pale wall |
 | Quest 3, AR passthrough | Lowest AR chip that reads cleanly | **97%**, in two separate sessions, above item 7's 88% and 92% |
 | Quest 3, AR passthrough | Blending, matched by eye | **Inconclusive.** In the first session a probe bug counted one trigger press as two picks. The rerun gave one pair, wall 150 and 50% patch 150, which no visible patch can give. The one clean early pair (wall 225, patch 135, ratio 0.60) leans sRGB (0.50) over linear (0.73) |
 
@@ -523,7 +525,7 @@ Any borrowed Android phone can run steps 2 to 4 with the probe as it is.
 - **Quest AR chip:** the Quest's lowest clean AR chip was 97% twice, above
   item 7's 88% and 92%. Item 7 needs a new decision for Quest AR passthrough
   once its blending is known.
-- **Text within arm's reach:** 2.5× holds at 1.75 m but cannot be read at
-  45 cm, and even 3× takes effort there. Item 10's scale stands for panels at
-  a distance. Text near the hand, such as labels on a panel you poke, needs
-  its own decision.
+- **Text within arm's reach (decided):** 2.5× holds at 1.75 m but cannot be
+  read at 45 cm, and even 3× takes effort there. Decision: no text within
+  arm's reach in a headset; near panels carry glyphs only, with their labels
+  at 1 m or more.
