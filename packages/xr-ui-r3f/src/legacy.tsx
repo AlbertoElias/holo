@@ -60,6 +60,7 @@ function resolvePlacementSummary(placement: PlacementUiState | null | undefined)
   return null;
 }
 
+/** @deprecated Head-locked; replaced by HologramFootControls and WristControls when slice 3 moves the AR route over. */
 export function HeadLockedActionBar({
   actions,
   offset = [0, -0.18, -0.85],

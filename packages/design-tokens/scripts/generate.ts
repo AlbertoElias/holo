@@ -87,6 +87,31 @@ function hexOf(token: Token, value: Json): string {
   return computed;
 }
 
+/** A colour's alpha, 1 when the token gives none. */
+function alphaOf(token: Token, value: Json): number {
+  const alpha = isObject(value) ? value.alpha : undefined;
+  if (alpha === undefined) return 1;
+  if (typeof alpha !== 'number' || alpha < 0 || alpha > 1) fail(token, 'alpha must be a number from 0 to 1');
+  return alpha;
+}
+
+/** A colour as code reads it: sRGB hex, or hex and alpha when the token is translucent. */
+function colourValue(token: Token, value: Json): Json {
+  const hex = hexOf(token, value);
+  const alpha = alphaOf(token, value);
+  return alpha === 1 ? hex : { hex, alpha };
+}
+
+function svgPath(token: Token, value: Json): Json {
+  const d = field(token, value, 'd');
+  if (typeof d !== 'string' || !/^[Mm]/.test(d.trim())) fail(token, 'expected a path starting with a moveto');
+  const fill = isObject(value) ? value.fill ?? false : false;
+  const linejoin = isObject(value) ? value.linejoin ?? 'miter' : 'miter';
+  if (typeof fill !== 'boolean') fail(token, 'fill must be true or false');
+  if (linejoin !== 'round' && linejoin !== 'miter') fail(token, 'linejoin must be round or miter');
+  return { d, fill, linejoin };
+}
+
 function dimensionApx(token: Token, value: Json): number {
   if (!isObject(value) || typeof value.value !== 'number') fail(token, 'expected a dimension');
   if (value.unit === 'px') return value.value;
@@ -126,11 +151,12 @@ function num(token: Token, value: Json): number {
   return typeof value === 'number' ? value : fail(token, 'expected a number');
 }
 
-/** The value code reads: sRGB hex colours, apx sizes, ms durations, plain numbers. */
+/** The value code reads: sRGB hex colours (with alpha when translucent), apx sizes, ms durations, plain numbers, SVG paths. */
 export function toCodeValue(token: Token): Json {
   const { type, value } = token;
   switch (type) {
-    case 'color': return hexOf(token, value);
+    case 'color': return colourValue(token, value);
+    case 'svgPath': return svgPath(token, value);
     case 'dimension': return dimensionApx(token, value);
     case 'duration': return durationMs(token, value);
     case 'number': return num(token, value);
@@ -168,8 +194,10 @@ function toCssDeclarations(token: Token): Array<[string, string]> {
     case 'color': {
       const hex = hexOf(token, value);
       const rgb = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16)).join(' ');
-      return [[name, hex], [`${name}-rgb`, rgb]];
+      const alpha = alphaOf(token, value);
+      return [[name, alpha === 1 ? hex : `rgb(${rgb} / ${alpha})`], [`${name}-rgb`, rgb]];
     }
+    case 'svgPath': return [];
     case 'dimension': return [[name, dimensionCss(token, value)]];
     case 'duration': return [[name, `${durationMs(token, value)}ms`]];
     case 'number': return [[name, String(num(token, value))]];

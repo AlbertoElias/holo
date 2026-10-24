@@ -100,7 +100,13 @@ source and goes back there.
 | World (placed by the user, 1 m away or more) | Side sheet | Labels for near panels, long text, library, inbox, settings |
 
 The periphery status line is the one thing that follows the head, lazily,
-and it never holds a control.
+and it never holds a control. It sits 1.5 m away, 20° above the line of
+sight, and stays put until the head turns more than 20° from it; then it
+eases back (time constant 240 ms) until it is within 1°.
+
+In a headset a world panel opens 1.5 m straight ahead and is never nearer
+than 1 m; after that it stays where it is. Wrist glyphs sit 4 cm above the
+back of the non-dominant wrist and are sized for 45 cm, arm's reach.
 
 **Always there, and hidden until reached for.** Play, Free and Return stay
 visible, small and close to the edge. Every other control appears from the
@@ -322,7 +328,7 @@ Only where the ground fails:
 
 | Target | Rule |
 | --- | --- |
-| VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s and holds at least 2 s |
+| VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s, holds at least 2 s after the background last asks for it, and leaves over 0.4 s, as chrome does |
 | AR (WebXR) | Every row and every label sits on the chip |
 | AR Quick Look | No chip is possible, so no text or controls inside Quick Look |
 | Phone and desktop | Controls and captions sit in their hologram's shade. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The bottom dock sits on a shade along the bottom of the screen, the same soft shade a hologram casts |
@@ -383,6 +389,30 @@ contact. No glow.
 **Phone edges.** Keep every target out of the system's gesture zones and
 the safe-area insets: the back-swipe edges (about 20 apx each side) and the
 home bar (about 34 apx at the bottom).
+
+**Holds.** A button, key, trigger or pinch holds a mode the moment it is
+pressed. A touch on a surface becomes a hold after 300 ms, if it has moved
+less than half a touch target (22 apx); otherwise it is a scroll or a drag.
+A held mode ends on release, on tracking loss and on blur, and its release
+never also selects what is under it.
+
+### 6.2 The Halo
+
+One radial menu with eight directions that never change, on every device:
+
+| N | NE | E | SE | S | SW | W | NW |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Note | Symbols | Redo | Mark moment | Record / stop | Retake | Undo | Ink |
+
+- A press held 300 ms draws the ring. Moving out of the centre (half a glyph
+  ring, 18 apx) points at the nearest direction; releasing there commits it.
+  Released before the ring draws, it is a flick: it commits and nothing is
+  drawn. Released in the centre, or cancelled, it commits nothing.
+- Each direction is a glyph ring (36 apx). Neighbours sit one glyph gap
+  (12 apx) apart, so the ring's radius is about 63 apx. Headset values are
+  2.5× these.
+- A direction with no action draws nothing, and its place stays reserved.
+  Capture's Halo carries S, W (undo the last held mark) and E (redo it).
 
 ## 7. Type
 
@@ -461,7 +491,7 @@ level 0.50 and, on a phone, do not redraw.
 
 | Target | In focus | Sparks |
 | --- | --- | --- |
-| VR and AR | The hologram nearest the head's forward ray | Up to 70; none in peripheral vision |
+| VR and AR | The hologram nearest the head's forward ray | Up to 70; none in peripheral vision, further than 30° from that ray |
 | Phone | The card nearest the middle of the screen | 26 |
 | Desktop | The card nearest the middle of the window | 26 |
 
@@ -479,7 +509,7 @@ ease-in-out. The stage light holds steady at 0.9.
 - Controls appear from where the hand or cursor is and leave afterwards;
   everything returns to its source.
 - Chrome **unfolds**: 240 ms in, 400 ms out, ease-out.
-- The VR chip fades in over 0.3 s and holds at least 2 s.
+- The VR chip fades in over 0.3 s, holds at least 2 s and leaves over 0.4 s.
 - The world never moves relative to the head without the user's action.
 - Under reduced motion, chrome crossfades in place instead of moving.
 

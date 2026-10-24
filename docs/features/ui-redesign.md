@@ -1,9 +1,9 @@
 # Feature brief: Redesign UI and interaction across capture and viewer
 
 **Lead:** Claude Code (Opus)  
-**Status:** Implementing (approved by the user 2026-10-24). Slices 0 and 1
-built and verified locally on `claude/redesign-slices-0-1-8d2c58`, not yet on
-`main`; slice 2 is next
+**Status:** Implementing (approved by the user 2026-10-24). Slices 0, 1 and
+2 built and verified locally (slice 2 on `claude/redesign-slice-2-0eb742`);
+slices 3 and 4 are next
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -431,6 +431,68 @@ The renderers then implement the contracts:
   with the wrist glyphs, the periphery status line, the chip with
   hysteresis, the world panel, the Halo and MSDF labels.
 
+- **As built (2026-10-24).**
+  - `xr-ui-core` gained one module per contract (`edge`, `chip`, `shade`,
+    `glyph`, `hitArea`, `placement` with handedness and the status line's
+    lazy follow, `headsetText`, `motion`, `recordingChrome`, `halo`,
+    `heldMode`, `scale`, `chromeFlag`, `typeRoles`, `targets`, `random`),
+    pure functions over `@holoim/design-tokens`; the old exports and their
+    tests are unchanged. A target is `{kind: "flat" | "vr" | "ar" |
+    "quickLook"}`, AR naming its compositor (`unlisted` takes 92%).
+  - Tokens: the generator dropped a colour's alpha (the shade's 0.7 and 0.5
+    stops); it now keeps it, and has a deliberate `svgPath` type for the
+    glyph drawings. The flicker keyframes and constants, the glyph
+    drawings, the shade's placement and the 3D halo's 0.9 moved from
+    `$extensions` into plain tokens, so no formula constant is typed in code.
+  - MSDF: Fraunces 600 and Figtree 400, 500 and 600 baked by
+    `packages/design-tokens/scripts/bake-msdf.ts` (fontTools instancing,
+    `@zappar/msdf-generator` in a Node worker; deterministic), loaded through
+    `@holoim/design-tokens/msdf`. Latin and Latin-1 only: a caption in
+    another script loses its glyphs (`missingGlyphs`) until more are baked.
+  - `ui-dom`: `GlyphControl`, `Chip`, `Shade`, `Dock`, `SideSheet`, `Halo`,
+    `EdgeSvg` and the type roles. `xr-ui-three`: `ThreeEdge`, `ThreeGlyph`,
+    `ThreeMsdfLabel`, `ThreeChip`, `ThreeWristGlyphs`, `ThreeStatusLine`,
+    `ThreeWorldPanel`, `ThreeHalo`, all materials through one chrome helper
+    and every object chrome-flagged; an MSDF label takes its role's line
+    height, and the timecode's figures share the widest digit's advance, so
+    the running time never shifts. `xr-ui-r3f` mounts those objects:
+    `HologramFootControls`, `WristControls`, `Edge`, `HaloMenu`. The old
+    components stay exported, marked deprecated, until slices 3 and 4 move
+    the apps over; no app changed.
+- **Set by the lead in slice 2 (2026-10-24).** The contracts needed values
+  the styleguide did not give. Each is now a plain rule in the styleguide and
+  `tokens.json`, built to and open to revisit like those above:
+  - The periphery status line sits 1.5 m away, 20° above the line of sight,
+    and follows lazily: still until the head turns 20° from it, then eased
+    back (240 ms time constant) to within 1°. A world panel opens 1.5 m
+    ahead (never nearer than 1 m) and stays. Wrist glyphs sit 4 cm above the
+    back of the non-dominant wrist, sized at 45 cm.
+  - The VR chip leaves over 0.4 s, as chrome does; its 2 s hold counts from
+    the last frame the background asked for it, so a wavering background
+    never makes it flicker.
+  - No sparks further than 30° from the head's forward ray (peripheral
+    vision).
+  - One hold duration, 300 ms, for the Halo ring and for touch-and-hold, with
+    a touch slop of half a touch target (22 apx).
+  - The Halo's layout comes from the glyph tokens: each direction is a 36 apx
+    glyph ring, neighbours one 12 apx gap apart (radius about 63 apx), and
+    leaving the centre's own ring (18 apx) picks a direction.
+  - The edge outline's recipe: one sine of 3 to 9 waves; tears spread one per
+    share of the loop, each a triangular notch inward, 0.6× to 1.4× the tear
+    amplitude deep (so the phone card's tears average 2.2 apx and never pass
+    3.1, as section 3.3 gives); seeded by FNV-1a and mulberry32, golden-tested
+    in `packages/xr-ui-core/src/fixtures/edge-golden.json` for the Python port
+    (slice 6).
+  - A scale label is a ratio, "1:4" or "2.5:1", with enough digits never to
+    read "1:1" off true scale.
+- **Still to draw, for the user with slice 3's screenshots.** The styleguide
+  has no drawing for Pause, true size (Q13), Exit, Undo, Redo, Settings,
+  Upload or Close, no blur value for the gold core ("softly blurred"), and
+  no width for the side sheet. Until those are decided the contracts draw
+  the core sharp, a Halo direction whose action has no drawing as an empty
+  glyph ring, the side sheet's close control as the word "Close", and the
+  side sheet at `min(100%, 24rem)`.
+
 Contract tests for `ui-dom`, `xr-ui-r3f` and `xr-ui-three` check that each
 renderer carries out the core contract: the same edge points from the same
 seed; hit areas at the input minimum; the chip opacity for the target;
@@ -535,9 +597,9 @@ See "Test plan and evidence" and "Physical-device limits".
 - [ ] Editing `tokens.json` makes `verify:agent` run the token package and
   its dependents; regenerating changes the value in the DOM and the 3D
   scene; not regenerating fails the drift check.
-- [ ] Every formula (soot, halo opacity, flicker, stage light, sizes) is
+- [x] Every formula (soot, halo opacity, flicker, stage light, sizes) is
   written once in `xr-ui-core`, with tests that cite the styleguide.
-- [ ] The `xr-ui-core` state contracts are unchanged and their tests pass;
+- [x] The `xr-ui-core` state contracts are unchanged and their tests pass;
   the new contracts have tests; `ui-dom`, `xr-ui-r3f` and `xr-ui-three` have
   contract tests and no `--passWithNoTests`.
 - [ ] Every page of both apps is in the new look on each device it runs on;
@@ -675,8 +737,11 @@ share no files.
 | --- | --- | --- | --- |
 | Port equivalence | `pnpm run test:xr:capture`, `test:xr:pointing`, `pnpm run doctor`, `pnpm run test:smoke:pipeline` on `main` and on the branch | Emulation (IWER) | 2026-10-24: all nine checks (`mock-vr recording locomotion terrain hands height body face pointing`, `XR_CHECK_CONCURRENCY=2`) pass on `main` (`eebf013`, twice) and on the branch. `compare-xr-reports.ts` over the 31 report, sample and log files: 31/31 agree main↔main, main↔branch and main²↔branch. Declared in the comparator, from main↔main: the face check's voice jaw (Chromium's fake microphone runs in real time) and the height report's positions (up to 0.45 mm apart on `main`; B-020). Doctor, the viewer pointing pipeline and the rest: `verify:pr` row below |
 | Tokens and literals | `pnpm run verify:agent` after a token edit | Neither (tooling) | 2026-10-24: with only `tokens.json` changed the selector picks `@holoim/design-tokens` and `@holoim/config-eslint` and their 13 dependents (15 packages, reason `package-changes`); an edit without regenerating fails `pnpm --filter @holoim/design-tokens test` (drift). Tooling tests for both classifiers pass, as do the literal rule's tests (`@holoim/config-eslint` `test`). The DOM and 3D read-back waits for the slices that consume the tokens |
-| Contracts | `pnpm --filter @holoim/xr-ui-core test`, and the same for `ui-dom`, `xr-ui-r3f`, `xr-ui-three`, `design-tokens` | Neither (unit) | `design-tokens`, 2026-10-24: 17 tests pass (drift, bad and circular alias, `$extensions` not exported, colour read-back, sizes, fonts). The rest pending (slice 2) |
+| Contracts | `pnpm --filter @holoim/xr-ui-core test`, and the same for `ui-dom`, `xr-ui-r3f`, `xr-ui-three`, `design-tokens` | Neither (unit) | 2026-10-24: `design-tokens` 33 (drift, bad and circular alias, `$extensions` not exported, colour and alpha read-back, svg paths, sizes, fonts, MSDF atlases), `xr-ui-core` 78 (the old state tests unchanged; each new test cites its styleguide section; the edge golden file), `ui-dom` 70 (jsdom), `xr-ui-three` 77 (jsdom; colours read back with `getHexString(SRGBColorSpace)`, `toneMapped` off, chrome flag on every descendant, tabular timecode), `xr-ui-r3f` 66 (`@react-three/test-renderer`). None of the five keeps `--passWithNoTests` |
+| 3D render, slice 2 | The `xr-ui-three` objects drawn in Chromium with WebGL2 and ACES tone mapping, then read back | Emulation (browser) | 2026-10-24: 7 shader programs compile with no GL error; 1264 pixels read back exactly gold (`#d3a12c`) under tone mapping, so chrome is neither tone-mapped nor converted twice. Screenshot and JSON kept outside the repo |
+| Independent verification, slice 2 | Codex (a different vendor) given the brief and tree | Neither (review and probes) | 2026-10-24: Codex's probes found two defects, both fixed with tests: the timecode's figures were proportional (0:11 and 0:12 differed by 2.9 mm at 1 m), and labels took the font's 1.2 line height, not the role's 1.35. They confirmed text hides within 1 m, the soft edge reaches 0 at the rim, and the thumbnail halo stays inside its bounds. Codex hit its usage limit before writing a verdict, so slice 2 has no complete independent pass |
 | `verify:pr`, slices 0 and 1 | `pnpm run verify:pr` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 6/6 (the viewer pointing pipeline imports the ported `pointing-desktop-take.ts` and `pointing-iwer-replay.ts`), `test:portal` 6/6, `test:xr:capture` passes. `test:knowledge` 7/7 once run against its own server: Playwright reuses whatever answers on port 4176, and a knowledge dev server from the main checkout was running there, so its first run failed 3 tests (2 also fail that way on `main`). `test:xr:viewer` 9/9 on rerun; its first run hit B-021, a flake that also fails on `main` |
+| `verify:pr`, slice 2 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling), builds, `test:smoke:pipeline` 6/6, `test:portal` 6/6 and `test:xr:smoke` 9/9 pass; no app changed. `test:knowledge` 7/7 in Docker (port 4176 was held by the main checkout's server) once its bug-list check counted template cards instead of asserting on one: with B-020 and B-021 open there are two cards, and the old assertion failed Playwright's strict mode |
 | Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | Screenshots at desktop and 390 × 844, previewed with `packages/tooling-testing/src/preview.mjs`; pending |
 | AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | Screenshots and placement report; pending |
 | Capture pages and headset rules | `pnpm --filter @holoim/capture run test:xr:mock`, a new placement scenario, and a touch scenario on the phone viewport | Emulation (IWER, Playwright) | Placement, label-distance and handedness report; pending |

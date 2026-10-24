@@ -48,6 +48,20 @@ describe("generate", () => {
     expect(() => generate({ color: { gold: colour("#ffc800", [1, 0.7843, 0.4471]) } })).toThrow(/disagrees/);
   });
 
+  // A translucent colour (the shade's stops) must not lose its alpha.
+  it("keeps a colour's alpha in code and CSS", () => {
+    const files = generate({ shade: { inner: { $type: "color", $value: { colorSpace: "srgb", components: [0.0314, 0.102, 0.1176], hex: "#081a1e", alpha: 0.7 } } } });
+    expect(JSON.parse(files["tokens.json"])).toEqual({ "shade.inner": { hex: "#081a1e", alpha: 0.7 } });
+    expect(files["tokens.css"]).toContain("--holoim-shade-inner: rgb(8 26 30 / 0.7);");
+    expect(() => generate({ c: { $type: "color", $value: { colorSpace: "srgb", components: [0, 0, 0], alpha: 2 } } })).toThrow(/alpha/);
+  });
+
+  it("exports a glyph drawing as an SVG path and refuses one without a moveto", () => {
+    const files = generate({ glyph: { play: { $type: "svgPath", $value: { d: "M4 2.5v11l9-5.5z", fill: true } } } });
+    expect(JSON.parse(files["tokens.json"])).toEqual({ "glyph.play": { d: "M4 2.5v11l9-5.5z", fill: true, linejoin: "miter" } });
+    expect(() => generate({ glyph: { bad: { $type: "svgPath", $value: { d: "v11" } } } })).toThrow(/moveto/);
+  });
+
   it("fails on a $type it does not know, rather than guessing", () => {
     expect(() => generate({ shadow: { $type: "shadow", $value: {} } })).toThrow(/unsupported \$type/);
   });

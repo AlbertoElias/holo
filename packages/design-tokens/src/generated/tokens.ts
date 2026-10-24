@@ -69,14 +69,25 @@ export const tokens = {
     paddingInline: 14,
     controlRowPaddingStart: 3,
     vrFadeIn: 300,
-    vrMinHold: 2000
+    vrMinHold: 2000,
+    vrFadeOut: 400
   },
   shade: {
-    inner: '#081a1e',
-    mid: '#081a1e',
+    inner: {
+      hex: '#081a1e',
+      alpha: 0.7
+    },
+    mid: {
+      hex: '#081a1e',
+      alpha: 0.5
+    },
     midStop: 0.6,
     widthOfHologram: 1.2,
-    labelRim: 0.45
+    labelRim: 0.45,
+    startMin: 0.9,
+    startMax: 0.95,
+    heightDesktop: 120,
+    heightPhoneOfScreen: 0.24
   },
   edge: {
     radius: 0.07,
@@ -93,7 +104,8 @@ export const tokens = {
       width: 0.06,
       color: '#ffb066',
       level: 0.5,
-      blurStdDevOfWidth: 0.5
+      blurStdDevOfWidth: 0.5,
+      material3DRest: 0.9
     },
     core: {
       width: 0.014,
@@ -133,6 +145,28 @@ export const tokens = {
       focusRingOffset: 3,
       focusRingColor: '#ffc872',
       pressedOpacity: 0.55
+    },
+    path: {
+      play: {
+        d: 'M4 2.5v11l9-5.5z',
+        fill: true,
+        linejoin: 'miter'
+      },
+      free: {
+        d: 'M8 1.5v13M1.5 8h13M8 1.5 6 3.5M8 1.5l2 2M8 14.5l-2-2M8 14.5l2-2M1.5 8l2-2M1.5 8l2 2M14.5 8l-2-2M14.5 8l-2 2',
+        fill: false,
+        linejoin: 'miter'
+      },
+      return: {
+        d: 'M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.5h2.5',
+        fill: false,
+        linejoin: 'miter'
+      },
+      viewInAr: {
+        d: 'M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3',
+        fill: false,
+        linejoin: 'round'
+      }
     }
   },
   mark: {
@@ -239,7 +273,35 @@ export const tokens = {
     },
     flicker: {
       period: 2600,
-      stageLightRest: 0.9
+      stageLightRest: 0.9,
+      flatHalo: {
+        k0: {
+          at: 0,
+          level: 0.5
+        },
+        k1: {
+          at: 0.4,
+          level: 0.32
+        },
+        k2: {
+          at: 0.55,
+          level: 0.58
+        },
+        k3: {
+          at: 0.7,
+          level: 0.4
+        },
+        k4: {
+          at: 1,
+          level: 0.5
+        }
+      },
+      easing: [0.42, 0, 0.58, 1],
+      stageLightSwing: 0.12,
+      stageLightRateA: 9,
+      stageLightRateB: 3.7,
+      xrHaloRest: 0.45,
+      xrHaloSwing: 0.05
     },
     sparks: {
       countFlat: 26,
@@ -247,7 +309,8 @@ export const tokens = {
       sizeMin: 0.004,
       sizeMax: 0.008,
       lifeMin: 2000,
-      lifeMax: 4000
+      lifeMax: 4000,
+      peripheralDegrees: 30
     },
     reducedMotion: {
       haloFrom: 0.5,
@@ -258,6 +321,22 @@ export const tokens = {
     recording: {
       flatHaloLevel: 0.08,
       flatCoreAndHighlightOpacity: 0.55
+    },
+    hold: {
+      delay: 300
+    }
+  },
+  placement: {
+    armReachM: 0.45,
+    wristOffsetM: 0.04,
+    worldPanelMinM: 1,
+    worldPanelDefaultM: 1.5,
+    statusLine: {
+      distanceM: 1.5,
+      elevationDegrees: 20,
+      followBeyondDegrees: 20,
+      settleDegrees: 1,
+      follow: 240
     }
   }
 } as const;

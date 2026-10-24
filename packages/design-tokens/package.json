@@ -10,7 +10,9 @@
     "./three": "./src/three.ts",
     "./tokens.css": "./src/generated/tokens.css",
     "./tokens.json": "./src/generated/tokens.json",
-    "./fonts.css": "./src/fonts/fonts.css"
+    "./fonts.css": "./src/fonts/fonts.css",
+    "./msdf/*": "./src/fonts/msdf/*",
+    "./msdf": "./src/msdf.ts"
   },
   "scripts": {
     "generate": "tsx scripts/generate.ts",
@@ -18,7 +20,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx scripts/generate.ts --check && vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck",
-    "verify:full": "pnpm run verify:fast && pnpm run test"
+    "verify:full": "pnpm run verify:fast && pnpm run test",
+    "bake:msdf": "tsx scripts/bake-msdf.ts"
   },
   "peerDependencies": {
     "three": "*"
@@ -33,6 +36,7 @@
     "@holoim/config-ts": "workspace:*",
     "@types/node": "^24.0.0",
     "@types/three": "catalog:",
+    "@zappar/msdf-generator": "^1.2.4",
     "eslint": "catalog:",
     "three": "catalog:",
     "tsx": "^4.19.2",

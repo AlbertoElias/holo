@@ -491,6 +491,9 @@ importers:
       '@types/three':
         specifier: 0.173.0
         version: 0.173.0
+      '@zappar/msdf-generator':
+        specifier: ^1.2.4
+        version: 1.2.4
       eslint:
         specifier: 'catalog:'
         version: 9.39.3(jiti@2.6.1)
@@ -543,9 +546,18 @@ importers:
 
   packages/ui-dom:
     dependencies:
+      '@holoim/design-tokens':
+        specifier: workspace:*
+        version: link:../design-tokens
+      '@holoim/xr-ui-core':
+        specifier: workspace:*
+        version: link:../xr-ui-core
       react:
         specifier: ^18.3.1
         version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
     devDependencies:
       '@holoim/config-eslint':
         specifier: workspace:*
@@ -553,12 +565,21 @@ importers:
       '@holoim/config-ts':
         specifier: workspace:*
         version: link:../config-ts
+      '@testing-library/react':
+        specifier: ^16.2.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.5
+        version: 18.3.7(@types/react@18.3.28)
       eslint:
         specifier: 'catalog:'
         version: 9.39.3(jiti@2.6.1)
+      jsdom:
+        specifier: ^26.0.0
+        version: 26.1.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -585,6 +606,10 @@ importers:
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(jiti@2.6.1)(jsdom@26.1.0)(tsx@4.21.0)
 
   packages/xr-ui-core:
+    dependencies:
+      '@holoim/design-tokens':
+        specifier: workspace:*
+        version: link:../design-tokens
     devDependencies:
       '@holoim/config-eslint':
         specifier: workspace:*
@@ -604,9 +629,15 @@ importers:
 
   packages/xr-ui-r3f:
     dependencies:
+      '@holoim/design-tokens':
+        specifier: workspace:*
+        version: link:../design-tokens
       '@holoim/xr-ui-core':
         specifier: workspace:*
         version: link:../xr-ui-core
+      '@holoim/xr-ui-three':
+        specifier: workspace:*
+        version: link:../xr-ui-three
       '@react-three/fiber':
         specifier: ^8.17.14
         version: 8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0)
@@ -626,6 +657,9 @@ importers:
       '@holoim/config-ts':
         specifier: workspace:*
         version: link:../config-ts
+      '@react-three/test-renderer':
+        specifier: ^8.2.1
+        version: 8.2.4(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0))(react@18.3.1)(super-three@0.181.0)
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.28
@@ -635,6 +669,9 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 9.39.3(jiti@2.6.1)
+      jsdom:
+        specifier: ^26.0.0
+        version: 26.1.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -644,6 +681,9 @@ importers:
 
   packages/xr-ui-three:
     dependencies:
+      '@holoim/design-tokens':
+        specifier: workspace:*
+        version: link:../design-tokens
       '@holoim/xr-ui-core':
         specifier: workspace:*
         version: link:../xr-ui-core
@@ -663,6 +703,9 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 9.39.3(jiti@2.6.1)
+      jsdom:
+        specifier: ^26.0.0
+        version: 26.1.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -1904,6 +1947,13 @@ packages:
         optional: true
       react-native:
         optional: true
+
+  '@react-three/test-renderer@8.2.4':
+    resolution: {integrity: sha512-igZWeGSkrz4HWxx5Dk3jSeCHRVUzvRn/fENlnDDpQGtJyEQyeGPGv8oRK8YdtMzc1VxAmlV5I5vVOKpixghObg==}
+    peerDependencies:
+      '@react-three/fiber': '>=8 < 9'
+      react: '>=18 <19'
+      three: '>=0.133'
 
   '@react-three/uikit@1.0.64':
     resolution: {integrity: sha512-//wUWePJHHHWgDokWs2WUs8yUqOJ1Dy/g1OufGHw/BeTujtoNG0hmuISjdeDXZOQPfNjpMgrbemfmvryTeCfLg==}
@@ -6594,6 +6644,12 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
     transitivePeerDependencies:
       - '@types/react'
+
+  '@react-three/test-renderer@8.2.4(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0))(react@18.3.1)(super-three@0.181.0)':
+    dependencies:
+      '@react-three/fiber': 8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0)
+      react: 18.3.1
+      three: super-three@0.181.0
 
   '@react-three/uikit@1.0.64(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0))(@types/react@18.3.28)(react@18.3.1)(super-three@0.181.0)(use-sync-external-store@1.6.0(react@18.3.1))':
     dependencies:
