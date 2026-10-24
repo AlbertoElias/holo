@@ -276,8 +276,6 @@ test("real capture export: the object plays in the hand, matches the track, orbi
   await expect(card).toHaveAttribute("data-model-bubble", "active");
   await card.getByRole("button", { name: "Pause" }).click();
   await expect(card).toHaveAttribute("data-portal-paused", "true");
-  const collapse = page.getByRole("button", { name: "Collapse upload panel" });
-  if (await collapse.isVisible()) await collapse.click();
 
   // Screenshots look from the author's front-right and closer in: Follow
   // looks over their shoulder, where the body hides a held object. Readings

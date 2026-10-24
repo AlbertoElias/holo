@@ -4,10 +4,16 @@ import type { CSSProperties, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { HologramDTO } from "@holoim/contracts";
+import { tokens } from "@holoim/design-tokens";
+import { Chip, GlyphControl, Shade, Type, useReducedMotion } from "@holoim/ui-dom";
+import { edgeOutline, edgePathData, type ViewTarget } from "@holoim/xr-ui-core";
 import { readXrCapabilities } from "@holoim/xr-runtime";
 
 import { isIOSDevice } from "../ar/isIOSDevice";
 import { ARQuickLookLink } from "../ar/ARQuickLookLink";
+import { ChromeButton } from "../chrome/ChromeButton";
+import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
+import { useElementBox } from "../chrome/useFlatScreen";
 import { checkModelAvailability } from "../hologram/modelAvailability";
 import type { ModelAvailability } from "../hologram/modelAvailability";
 import { PortalControls } from "../portal/PortalControls";
@@ -17,13 +23,16 @@ import { usePortalTriggers } from "../portal/usePortalTriggers";
 import { usePortalValue } from "../portal/usePortalValue";
 import { resolveMediaUrl } from "./api";
 import { HologramCardCanvas, type HologramRenderInfo } from "./HologramCardCanvas";
+import { PortalEdge } from "./PortalEdge";
 
 type HologramCardProps = {
   item: HologramDTO;
+  /** The card nearest the middle of the screen: it plays, sparks and redraws (8.2). */
   active: boolean;
   muted: boolean;
   onToggleMute: () => void;
   preloadNextUrl?: string | undefined;
+  target: ViewTarget & { kind: "flat" };
 };
 
 type CardModelAvailability = ModelAvailability | "checking";
@@ -67,10 +76,50 @@ class ModelRenderBoundary extends Component<ModelRenderBoundaryProps, ModelRende
   }
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl }: HologramCardProps) {
+/**
+ * A cursor or touch on the card (1.2): the reach controls show while it
+ * moves there and for the idle time after, and leave with the mouse.
+ */
+function useReach(cardRef: React.RefObject<HTMLElement | null>): boolean {
+  const [reached, setReached] = useState(false);
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return undefined;
+    let timer = 0;
+    const reach = () => {
+      setReached(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setReached(false), tokens.glyph.idleAfter);
+    };
+    const leave = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
+      window.clearTimeout(timer);
+      setReached(false);
+    };
+    card.addEventListener("pointermove", reach);
+    card.addEventListener("pointerdown", reach);
+    card.addEventListener("focusin", reach);
+    card.addEventListener("pointerleave", leave);
+    return () => {
+      window.clearTimeout(timer);
+      card.removeEventListener("pointermove", reach);
+      card.removeEventListener("pointerdown", reach);
+      card.removeEventListener("focusin", reach);
+      card.removeEventListener("pointerleave", leave);
+    };
+  }, [cardRef]);
+  return reached;
+}
+
+function formatByline(item: HologramDTO): string {
+  return `By ${item.submittedBy} · ${new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
+}
+
+export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl, target }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
+  const reducedMotion = useReducedMotion();
   const [arSupported, setArSupported] = useState<boolean>(false);
   const isIOS = useMemo(() => isIOSDevice(), []);
   const forcedArSupport = useMemo(() => {
@@ -85,6 +134,9 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const [hasAudio, setHasAudio] = useState(false);
   const onHasAudio = useCallback((value: boolean) => setHasAudio(value), []);
   const cardRef = useRef<HTMLElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
+  const portalBox = useElementBox(portalRef);
+  const reached = useReach(cardRef);
   const portal = useMemo(() => createPortalStore(), []);
   const portalVariant = useMemo(() => readPortalVariant(), []);
   const portalTriggers = PORTAL_VARIANTS[portalVariant];
@@ -126,7 +178,7 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const unavailableMessage = modelRenderFailed
     ? "Hologram failed to load"
     : modelAvailability === "checking"
-      ? "Loading hologram..."
+      ? "Loading hologram…"
       : modelAvailability === "missing"
         ? "Hologram file missing"
         : modelAvailability === "invalid"
@@ -174,12 +226,50 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const shouldShowQuickLook = item.quickLookEnabled
     && (typeof forcedArSupport === "boolean" ? !forcedArSupport : isIOS && canRenderModel);
 
+  // The portal's burnt outline (3.1), seeded by the hologram's id (Q10): the
+  // picture is cut to it while the portal is closed, and the edge is drawn on it.
+  const outline = useMemo(
+    () => (portalBox ? edgeOutline({ seed: item.id, width: portalBox.width, height: portalBox.height }) : null),
+    [item.id, portalBox]
+  );
+  const clipPath = outline && portalOpen === 0 ? `path("${edgePathData(outline.points)}")` : undefined;
+  const cardHeight = cardRef.current?.offsetHeight ?? 0;
+  // Each card fills the screen when it is in view, so its foot's share of the card is its share of the screen.
+  const groundFraction = portalBox && cardHeight > 0 ? (portalBox.top + portalBox.height) / cardHeight : 1;
+  const portalStyle = {
+    "--portal-open": portalOpen,
+    "--portal-x": `${portalBox?.left ?? 0}px`,
+    "--portal-y": `${portalBox?.top ?? 0}px`,
+    "--portal-inset": `${outline?.inset ?? 0}px`,
+    "--portal-radius": `${(outline?.shortSide ?? 0) * tokens.edge.radius}px`
+  } as CSSProperties;
+
+  const controls = canRenderModel ? (
+    <PortalControls store={portal} tiltAvailable={portalTriggers.tilt} active={active} reached={reached}>
+      {shouldShowArTrigger && (
+        <span className="ar-trigger-button">
+          <GlyphControl glyph="viewInAr" label={VIEWER_CONTROL_NAMES.viewInAr} onPress={handleEnterAR} showLabel />
+        </span>
+      )}
+      {shouldShowQuickLook && <ARQuickLookLink item={item} />}
+      {hasAudio && (
+        <ChromeButton
+          className="audio-mute-button"
+          label={muted ? VIEWER_CONTROL_NAMES.soundOn : VIEWER_CONTROL_NAMES.soundOff}
+          word={muted ? "Unmute" : "Mute"}
+          onPress={onToggleMute}
+        />
+      )}
+    </PortalControls>
+  ) : null;
+
   return (
     <article
       ref={cardRef}
       className={portalPaused && !portalTriggers.scrollWhilePaused ? "feed-card portal-captured" : "feed-card"}
-      style={{ "--portal-open": portalOpen } as CSSProperties}
+      style={portalStyle}
       data-card-id={item.id}
+      data-card-focus={active ? "true" : "false"}
       data-portal-variant={portalVariant}
       data-portal-mode={portalMode}
       data-portal-paused={portalPaused ? "true" : "false"}
@@ -187,103 +277,77 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
       data-model-animations={renderInfo ? String(renderInfo.animationCount) : undefined}
       data-model-bubble={renderInfo ? (renderInfo.bubbleActive ? "active" : "missing") : undefined}
     >
-      <div
-        className="feed-card-bubble-shell"
-        tabIndex={canRenderModel ? 0 : -1}
-        role="group"
-        aria-roledescription="hologram portal"
-        aria-label={`${item.hologramName}. Space pauses, arrow keys look around, plus and minus zoom, Escape returns.`}
-      >
-        <div className="feed-card-bubble-glow" aria-hidden="true" />
-        <div className="feed-card-bubble-aura" aria-hidden="true" />
-        <div className="feed-card-bubble">
-          {canRenderModel ? (
-            <ModelRenderBoundary
-              resetKey={modelUrl}
-              onError={(error) => {
-                console.error("Failed to render hologram card model.", error);
-                setModelRenderFailed(true);
-                setHasAudio(false);
-              }}
-              fallback={(
-                <div className="feed-card-model-unavailable">
-                  <p>Hologram failed to load</p>
-                </div>
-              )}
-            >
-              <HologramCardCanvas
-                modelUrl={modelUrl}
-                active={active}
-                muted={muted}
-                onHasAudio={onHasAudio}
-                onRendered={setRenderInfo}
-                colorAccurateMode={colorAccurateMode}
-                portal={portal}
-              />
-            </ModelRenderBoundary>
-          ) : (
-            <div className="feed-card-model-unavailable">
-              <p>{unavailableMessage}</p>
-            </div>
-          )}
-        </div>
-        <div className="feed-card-bubble-rim" aria-hidden="true" />
-      </div>
-      <div className="feed-card-bubble-base" aria-hidden="true" />
+      <header className="feed-card-meta">
+        <Type variant={target.device === "phone" ? "titlePhoneCard" : "titleDesktop"} as="h2" className="feed-card-title">
+          {item.hologramName}
+        </Type>
+        <Type variant="byline" as="p">
+          {formatByline(item)}
+        </Type>
+      </header>
 
-      <div className="feed-card-overlay">
-        <span className="feed-card-badge">Hologram</span>
-        {shouldShowArTrigger && (
-          <button
-            className="ar-trigger-button"
-            onClick={handleEnterAR}
-            type="button"
-            title="View in Augmented Reality"
-            aria-label="View in AR"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 7V4a2 2 0 0 1 2-2h3" />
-              <path d="M22 7V4a2 2 0 0 0-2-2h-3" />
-              <path d="M2 17v3a2 2 0 0 0 2 2h3" />
-              <path d="M22 17v3a2 2 0 0 1-2 2h-3" />
-              <text x="12" y="15" fontSize="9" fontWeight="bold" textAnchor="middle" fill="currentColor" stroke="none">AR</text>
-            </svg>
-          </button>
-        )}
-        {shouldShowQuickLook && (
-          <ARQuickLookLink item={item} />
-        )}
-        {canRenderModel && (
-          <PortalControls store={portal} tiltAvailable={portalTriggers.tilt} />
-        )}
-        {hasAudio && (
-          <button
-            className="audio-mute-button"
-            onClick={onToggleMute}
-            type="button"
-            title={muted ? "Unmute" : "Mute"}
-            aria-label={muted ? "Unmute audio" : "Mute audio"}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              {muted ? (
-                <>
-                  <line x1="23" y1="9" x2="17" y2="15" />
-                  <line x1="17" y1="9" x2="23" y2="15" />
-                </>
-              ) : (
-                <>
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                </>
-              )}
-            </svg>
-          </button>
-        )}
-        <div className="feed-card-meta">
-          <h2>{item.hologramName}</h2>
-          <p>{`By ${item.submittedBy} - ${new Date(item.createdAt).toLocaleString()}`}</p>
+      <div ref={portalRef} className="feed-card-portal">
+        <div
+          className="feed-card-bubble-shell"
+          tabIndex={canRenderModel ? 0 : -1}
+          role="group"
+          aria-roledescription="hologram portal"
+          aria-label={`${item.hologramName}. Space pauses, arrow keys look around, plus and minus zoom, Escape returns.`}
+          style={clipPath ? { clipPath } : undefined}
+        >
+          <div className="feed-card-bubble">
+            {canRenderModel ? (
+              <ModelRenderBoundary
+                resetKey={modelUrl}
+                onError={(error) => {
+                  console.error("Failed to render hologram card model.", error);
+                  setModelRenderFailed(true);
+                  setHasAudio(false);
+                }}
+                fallback={(
+                  <div className="feed-card-model-unavailable">
+                    <Type variant="captionUnderCard" as="p">Hologram failed to load</Type>
+                  </div>
+                )}
+              >
+                <HologramCardCanvas
+                  modelUrl={modelUrl}
+                  active={active}
+                  muted={muted}
+                  onHasAudio={onHasAudio}
+                  onRendered={setRenderInfo}
+                  colorAccurateMode={colorAccurateMode}
+                  portal={portal}
+                  target={target}
+                  reducedMotion={reducedMotion}
+                />
+              </ModelRenderBoundary>
+            ) : (
+              <div className="feed-card-model-unavailable">
+                <Type variant="captionUnderCard" as="p">{unavailableMessage}</Type>
+              </div>
+            )}
+          </div>
         </div>
+        {portalBox && portalBox.width > 0 && portalBox.height > 0 && (
+          <div className="feed-card-edge-layer">
+            <PortalEdge
+              seed={item.id}
+              width={portalBox.width}
+              height={portalBox.height}
+              target={target}
+              inFocus={active && portalOpen === 0}
+              reducedMotion={reducedMotion}
+              groundFraction={groundFraction}
+            />
+          </div>
+        )}
+        <Shade device={target.device} className="feed-card-shade">
+          {portalOpen > 0 ? (
+            // Over the hologram's own picture, text always takes the chip (5.2).
+            <Chip target={target} overPicture controlRow>{controls}</Chip>
+          ) : controls}
+        </Shade>
       </div>
     </article>
   );

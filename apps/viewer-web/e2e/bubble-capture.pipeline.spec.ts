@@ -97,8 +97,8 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const hologramName = `Pipeline ${testInfo.testId.slice(0, 8)}-${Date.now()}`;
   await page.goto("/");
   await assertViewerShell(page);
-  const expandUpload = page.getByRole("button", { name: "Expand upload panel" });
-  if (await expandUpload.isVisible()) await expandUpload.click();
+  // Upload lives in the dock and opens the side sheet (Q11).
+  await page.getByRole("button", { name: "Upload a hologram" }).click();
   await page.getByLabel("Hologram name").fill(hologramName);
   await page.getByLabel("Submitted by").fill("pipeline-e2e");
   await page.locator("#glb-upload").setInputFiles(glbPath);

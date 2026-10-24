@@ -5,6 +5,7 @@ import type * as Three from "three";
 import type { Mesh, Object3D } from "three";
 import { freezePageClock, waitForIwerSession } from "@holoim/tooling-testing/xr-env";
 
+import { pinch } from "./ar-gestures";
 import { captureBubblePixels } from "./bubble-pixel-proof";
 
 import { expect, observeFeedCardRenderer, test, waitForFeedCardPresented } from "./bootstrap";
@@ -88,6 +89,11 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
     device.stereoEnabled = true; device.ipd = 0.064;
   });
   await expect.poll(() => page.locator(".ar-view-container").getAttribute("data-placement-stage")).toMatch(/placed|anchored|locked/);
+  // AR opens at true scale (Q13); the viewer's own pinch gives the non-unit
+  // transform the clipping must survive, and brings the 4 m diagnostic bubble
+  // into the controlled view below.
+  await pinch(page, 250, 100);
+  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-ar-scale-label", /^1:/);
   await freezePageClock(page);
   await page.clock.runFor(100);
   // The room chooses placement, but the pixel oracle needs a controlled view
@@ -245,7 +251,7 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   for (let index = 0; index < frames.length; index++) await writeFile(resolve(artifactDir, `frame-${String(index).padStart(3, "0")}.png`), Buffer.from(frames[index]!, "base64"));
   await writeFile(resolve(artifactDir, "metrics.json"), JSON.stringify({ ...metrics, animationPositions: [before, after] }, null, 2));
   expect.soft(evidence.eyeCount, "active immersive AR has two independently rendered eyes").toBe(2);
-  expect.soft(evidence.modelScale, "exercise a non-unit model transform").not.toBeCloseTo(1);
+  expect.soft(evidence.modelScale, "exercise a non-unit model transform (the viewer's rescale)").not.toBeCloseTo(1);
   for (let eye = 0; eye < evidence.eyeCount; eye++) {
     expect.soft(evidence.outsidePositiveControl[eye], `outside marker is on screen before clipping in eye ${eye}`).toBeGreaterThan(20);
     expect.soft(evidence.clipped[eye], `outside geometry is absent in eye ${eye}`).toBe(0);
