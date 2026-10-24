@@ -52,8 +52,8 @@ grouped by the layers in [what a hologram is](../concepts/what-a-hologram-is.md)
 14. When are preview, discard/re-record, and trimming (IDEA-069) sufficient,
     and when do observed mistakes justify segment retakes or a layered editor?
 15. Which creator pipeline failure first prevents repeat use: export/upload,
-    recovery, processing, previews, conversion, identity, or distribution
-    (IDEA-046 through IDEA-057)?
+    previews, conversion, identity, or distribution
+    (IDEA-046, IDEA-048 through IDEA-056, IDEA-058)?
 16. Which audience and repeated job should lead: consumer expression, private
     team instruction/review, commerce explanation, or third-party integration
     (IDEA-064 through IDEA-067)?
