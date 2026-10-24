@@ -783,7 +783,7 @@ class Converter:
                 if "bufferView" not in audio:
                     raise ValueError("Audio must be embedded in GLB")
                 data = _buffer_view(self.gltf, audio["bufferView"])
-                formats = {"audio/webm": "matroska", "audio/ogg": "ogg", "audio/mp4": "mov", "audio/wav": "wav"}
+                formats = {"audio/webm": "matroska", "audio/ogg": "ogg", "audio/mp4": "mov", "audio/wav": "wav", "audio/mpeg": "mp3"}
                 mime = audio.get("mimeType", "").split(";", 1)[0].lower()
                 if mime not in formats:
                     raise ValueError("Unsupported recorded audio MIME type")
@@ -836,13 +836,21 @@ class Converter:
             names = list(binding.GetBlendShapesAttr().Get() or [])
             blend = UsdSkel.BlendShapeQuery(binding) if names else None
             animation = query.GetAnimQuery() if query else cache.GetAnimQuery(binding.GetInheritedAnimationSource())
-            meshes.append((prim, points, skeleton, query, skinning, names, blend, animation))
-        if len(frames) * sum(len(entry[1]) for entry in meshes) > 100_000_000:
+            # Rigid meshes under a constant transform chain (scene props) have
+            # one pose; evaluate them once instead of at every frame.
+            ancestor, moving = prim, bool(skinning or blend)
+            while not moving and ancestor:
+                moving = ancestor.IsA(UsdGeom.Xformable) and UsdGeom.Xformable(ancestor).TransformMightBeTimeVarying()
+                ancestor = ancestor.GetParent()
+            meshes.append((prim, points, skeleton, query, skinning, names, blend, animation, moving))
+        if sum(len(entry[1]) * (len(frames) if entry[8] else 1) for entry in meshes) > 100_000_000:
             raise ValueError("Animation extent evaluation exceeds conversion budget")
         lower, upper = np.full(3, np.inf), np.full(3, -np.inf)
-        for frame in sorted(frames):
+        for index, frame in enumerate(sorted(frames)):
             xforms = UsdGeom.XformCache(frame)
-            for prim, original, skeleton, query, skinning, names, blend, animation in meshes:
+            for prim, original, skeleton, query, skinning, names, blend, animation, moving in meshes:
+                if index and not moving:
+                    continue
                 points = Vt.Vec3fArray(original)
                 if blend:
                     order = list(animation.GetBlendShapeOrder())
