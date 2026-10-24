@@ -66,10 +66,15 @@ async function loadHologram(modelUrl: string) {
   return { gltf, audio };
 }
 
+/** Image-based light from the blue-hour gradient: lights the hologram in VR and AR alike. */
+function addRoomLight(world: World): void {
+  world.activeLevel.value.addComponent(IBLGradient, { sky: BLUE_HOUR_SKY, equator: BLUE_HOUR_EQUATOR, ground: BLUE_HOUR_GROUND, intensity: 1 });
+}
+
+/** VR only: the blue-hour dome and floor. AR keeps the camera image as its ground. */
 function addVrRoom(world: World): void {
   const level = world.activeLevel.value;
   level.addComponent(DomeGradient, { sky: BLUE_HOUR_SKY, equator: BLUE_HOUR_EQUATOR, ground: BLUE_HOUR_GROUND, intensity: 1 });
-  level.addComponent(IBLGradient, { sky: BLUE_HOUR_SKY, equator: BLUE_HOUR_EQUATOR, ground: BLUE_HOUR_GROUND, intensity: 1 });
   const floor = new Mesh(
     new CircleGeometry(VR_FLOOR_RADIUS_M, 64),
     new MeshStandardMaterial({ color: new Color(DEEP_SEA), roughness: 0.95, metalness: 0 })
@@ -97,6 +102,7 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
   // cannot seek and ramps on wall-clock time.
   world.unregisterSystem(AudioSystem);
   world.globals.viewer = createViewerContext(options.mode);
+  addRoomLight(world);
   if (!isAr) addVrRoom(world);
 
   // Recorded scale, never normalised: true scale is fact.

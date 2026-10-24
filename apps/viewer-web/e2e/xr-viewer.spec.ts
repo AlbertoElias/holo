@@ -18,6 +18,9 @@ const avatarGlbPath = path.resolve(testDir, "../../capture/public/gltf/models/av
 const reportPath = path.resolve(testDir, "../../../output/test-results/xr-viewer-report.json");
 const AUDIO_SECONDS = 30;
 const AUDIO_SYNC_TOLERANCE_S = 0.05;
+// Mean Rec. 709 luminance (0-255) of the hologram's pixels; a black
+// silhouette reads near 0.
+const HOLOGRAM_MIN_MEAN_LUMINANCE = 30;
 
 const mockHologram = {
   id: "mock-1",
@@ -51,6 +54,19 @@ type ViewerSnapshot = {
 };
 
 const report: Record<string, unknown> = {};
+// XR_PROOF_VIDEO=1 holds key moments a little longer for the proof recording.
+const PROOF_DWELL_MS = process.env.XR_PROOF_VIDEO === "1" ? 1200 : 0;
+
+/** Milestones in ms since the test started, for the report and for cutting recordings. */
+function createTimeline() {
+  const startedAt = Date.now();
+  const marks: Array<{ label: string; ms: number }> = [];
+  const mark = (label: string) => void marks.push({ label, ms: Date.now() - startedAt });
+  // The first navigation commit is when a recording stops being blank: it anchors cuts.
+  const markFirstCommit = (page: Page) => page.once("framenavigated", () => mark("first-commit"));
+  return { marks, mark, markFirstCommit };
+}
+const dwell = (page: Page, factor = 1) => (PROOF_DWELL_MS ? page.waitForTimeout(PROOF_DWELL_MS * factor) : Promise.resolve());
 
 test.afterAll(async () => {
   await mkdir(path.dirname(reportPath), { recursive: true });
@@ -247,6 +263,47 @@ async function readHeadPose(page: Page): Promise<{ position: Vec3; forward: Vec3
   });
 }
 
+type HologramLuminance = { pixels: number; mean: number; coverage: number };
+
+/**
+ * Mean luminance (0-255, Rec. 709) of the hologram's own pixels: those that
+ * change when it is hidden for a frame. An unlit hologram renders as a black
+ * silhouette and fails this; a hologram out of view has no pixels.
+ */
+async function measureHologramLuminance(page: Page): Promise<HologramLuminance> {
+  const setVisible = (visible: boolean) => page.evaluate((v) => {
+    (window as unknown as { __HOLOIM_XR_VIEWER__: { hologram: { object3D: { visible: boolean } } } }).__HOLOIM_XR_VIEWER__.hologram.object3D.visible = v;
+  }, visible);
+  const lit = (await page.screenshot()).toString("base64");
+  await setVisible(false);
+  await page.waitForTimeout(150);
+  const hidden = (await page.screenshot()).toString("base64");
+  await setVisible(true);
+  return page.evaluate(async ({ lit, hidden }) => {
+    const pixelsOf = async (png: string) => {
+      const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${png}`)).blob());
+      const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d")!;
+      context.drawImage(bitmap, 0, 0);
+      return context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+    };
+    const [a, b] = [await pixelsOf(lit), await pixelsOf(hidden)];
+    let pixels = 0;
+    let sum = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      const changed = Math.abs(a[i]! - b[i]!) + Math.abs(a[i + 1]! - b[i + 1]!) + Math.abs(a[i + 2]! - b[i + 2]!) > 24;
+      if (!changed) continue;
+      pixels++;
+      sum += 0.2126 * a[i]! + 0.7152 * a[i + 1]! + 0.0722 * a[i + 2]!;
+    }
+    return { pixels, mean: pixels ? sum / pixels : 0, coverage: pixels / (a.length / 4) };
+  }, { lit, hidden });
+}
+
+function expectHologramLit(luminance: HologramLuminance): void {
+  expect(luminance.coverage, `hologram covers ${(luminance.coverage * 100).toFixed(1)}% of the view`).toBeGreaterThan(0.01);
+  expect(luminance.mean, `hologram mean luminance ${luminance.mean.toFixed(1)}`).toBeGreaterThan(HOLOGRAM_MIN_MEAN_LUMINANCE);
+}
+
 /** Clip time and audio offset sampled in one evaluate, so their gap is drift. */
 async function readAudioSync(page: Page): Promise<{ clipTime: number; scheduledOffset: number } | null> {
   const s = await snapshot(page);
@@ -274,7 +331,7 @@ async function endSession(page: Page): Promise<void> {
 }
 
 async function expectTornDown(page: Page): Promise<void> {
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/(\?shell=iwsdk)?$/);
   await expect(page.locator(".xr-view-container")).toHaveCount(0);
   expect(await page.evaluate(() => "__HOLOIM_XR_VIEWER__" in window), "probe removed with the World").toBe(false);
   await expect(page.locator('[data-card-id="mock-1"]'), "back on the opened hologram's card").toBeInViewport({ timeout: 10_000 });
@@ -282,8 +339,11 @@ async function expectTornDown(page: Page): Promise<void> {
 
 test("VR: Step inside shows the hologram at recorded scale on the floor ahead, plays it with its audio, and exit returns to its card", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
+  const { marks, mark, markFirstCommit } = createTimeline();
+  markFirstCommit(page);
   await mockFeed(page);
   await page.goto("/");
+  mark("feed-loaded");
   await assertViewerShell(page);
   await waitForIwerRuntime(page);
   const vrTrigger = page.locator(".vr-trigger-button");
@@ -293,11 +353,18 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
 
   const visits: unknown[] = [];
   for (let visit = 1; visit <= 2; visit++) {
+    await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 15_000 });
+    mark(`feed-ready-${visit}`);
+    // The portal takes a few seconds to show the figure.
+    if (visit === 1) await dwell(page, 3);
+    mark(`step-inside-${visit}`);
     await page.locator(".vr-trigger-button").click();
     await expect(page).toHaveURL(/\/vr\/mock-1$/);
     await enterSession(page, "Step inside", "opaque");
 
     const placed = await waitForSnapshot(page, (s) => s.placement.stage === "placed" && s.hologram.visible);
+    mark(`vr-placed-${visit}`);
+    if (visit === 1) await dwell(page);
     const head = await readHeadPose(page);
     const [px, py, pz] = placed.hologram.worldPosition;
     const ahead = Math.hypot(px - head.position[0], pz - head.position[2]);
@@ -327,10 +394,16 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
     expect(audio, "embedded audio plays").not.toBeNull();
     const drift = Math.abs(audio!.scheduledOffset - audio!.clipTime);
     expect(drift, `audio offset ${audio!.scheduledOffset.toFixed(3)} vs clip ${audio!.clipTime.toFixed(3)}`).toBeLessThan(AUDIO_SYNC_TOLERANCE_S);
+    // Measured on the second visit: hiding the hologram for a frame would blink in the first.
+    const luminance = visit === 2 ? await measureHologramLuminance(page) : null;
+    if (luminance) expectHologramLit(luminance);
     if (visit === 1) await captureEvidence(page, testInfo, "vr-life-size");
 
+    mark(`vr-exit-${visit}`);
     await endSession(page);
     await expectTornDown(page);
+    mark(`card-back-${visit}`);
+    if (visit === 1) await dwell(page, 4);
     visits.push({
       visit,
       placement: placed.placement,
@@ -341,22 +414,39 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
       duration: second.hologram.duration,
       clipAdvance: { clipS: advanced, wallS },
       audio: { ...audio, driftS: drift },
-      renderer: second.renderer
+      renderer: second.renderer,
+      ...(luminance ? { luminance } : {})
     });
   }
-  report.vr = { visits };
+  report.vr = { visits, timeline: marks };
 });
 
 test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram pauses and resumes it, a tap on the floor moves it, and exit returns to the feed", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
+  const { marks, mark, markFirstCommit } = createTimeline();
+  markFirstCommit(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await mockFeed(page);
   await emulatePhone(page);
-  await page.goto("/ar/mock-1?shell=iwsdk");
+  // The feed opted into the IWSDK AR shell; its "View in your room" trigger opens it.
+  await page.goto("/?shell=iwsdk");
+  mark("feed-loaded");
+  await assertViewerShell(page);
   await waitForIwerRuntime(page);
+  const arTrigger = page.locator(".ar-trigger-button");
+  await expect(arTrigger).toHaveAttribute("aria-label", "View in your room", { timeout: 15_000 });
+  await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 15_000 });
+  mark("feed-ready");
+  await dwell(page, 3);
+  mark("view-in-room");
+  await arTrigger.click();
+  await expect(page).toHaveURL(/\/ar\/mock-1\?shell=iwsdk$/);
   await enterSession(page, "View in your room", "alpha-blend");
+  mark("ar-immersive");
 
   const placed = await waitForSnapshot(page, (s) => s.placement.stage !== "searching" && s.hologram.visible);
+  mark("ar-placed");
+  await dwell(page);
   expect(["hit-test", "floor"]).toContain(placed.placement.mode);
   const anchored = await waitForSnapshot(page, (s) => s.placement.stage === "anchored", 5_000).catch(() => null);
   const head = await readHeadPose(page);
@@ -371,10 +461,15 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   expect(position[1], "height above floor (m)").toBeGreaterThan(-0.05);
   expect(head.position[1] - position[1], "drop below eye level (m)").toBeGreaterThan(0.2);
   expect(placed.hologram.worldScale.every((v) => Math.abs(v - 1) < 1e-6)).toBe(true);
+  mark("luminance-start");
+  const luminance = await measureHologramLuminance(page);
+  mark("luminance-end");
+  expectHologramLit(luminance);
   await captureEvidence(page, testInfo, "ar-placed");
 
   // Tap the hologram's chest: pause, then resume.
   const chest: Vec3 = [position[0], position[1] + placed.hologram.recordedSize[1] * 0.6, position[2]];
+  mark("tap-pause");
   await page.evaluate((target) => (window as unknown as { __phoneTap(t: Vec3): Promise<void> }).__phoneTap(target), chest);
   const paused = await waitForSnapshot(page, (s) => !s.hologram.playing, 3_000);
   const pausedAt = paused.hologram.clipTime;
@@ -385,7 +480,9 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   await waitForSnapshot(page, (s) => s.hologram.playing, 3_000);
 
   // Tap the floor beside it: the hologram moves there.
-  const floorTarget: Vec3 = [position[0] + 0.8, position[1], position[2] + 0.4];
+  const floorTarget: Vec3 = [position[0] + 0.3, position[1], position[2] + 0.3];
+  await dwell(page);
+  mark("tap-move");
   await page.evaluate((target) => (window as unknown as { __phoneTap(t: Vec3): Promise<void> }).__phoneTap(target), floorTarget);
   const moved = await waitForSnapshot(page, (s) => s.placement.mode === "tap" && s.placement.sequence > placed.placement.sequence, 3_000);
   const miss = Math.hypot(moved.hologram.worldPosition[0] - floorTarget[0], moved.hologram.worldPosition[2] - floorTarget[2]);
@@ -393,13 +490,19 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const reanchored = await waitForSnapshot(page, (s) => s.placement.stage === "anchored", 3_000).catch(() => null);
   await captureEvidence(page, testInfo, "ar-tap-moved");
 
+  await dwell(page);
+  mark("ar-exit");
   await endSession(page);
   await expectTornDown(page);
+  mark("card-back");
+  await dwell(page, 3);
   report.ar = {
+    timeline: marks,
     placement: placed.placement,
     anchoredAfterPlacement: Boolean(anchored),
     head,
     forwardDot,
+    luminance,
     horizontalDistance,
     surfaceHeightM: position[1],
     pausedAtClipTime: pausedAt,

@@ -172,7 +172,9 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   }, []);
 
   const handleEnterAR = () => {
-    navigate(`/ar/${item.id}`);
+    // Opting the feed into the IWSDK AR shell carries over to its AR route.
+    const shell = new URLSearchParams(window.location.search).get("shell");
+    navigate(shell === "iwsdk" ? `/ar/${item.id}?shell=iwsdk` : `/ar/${item.id}`);
   };
   const handleEnterVR = () => {
     navigate(`/vr/${item.id}`);

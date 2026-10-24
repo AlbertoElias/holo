@@ -893,6 +893,18 @@ body {
     right: max(0.75rem, env(safe-area-inset-right, 0px));
   }
 
+  /* On a phone the VR label stacks under the AR glyph, clear of the badge. */
+  .vr-trigger-button {
+    top: calc(0.75rem + env(safe-area-inset-top, 0px));
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    height: 2.75rem;
+  }
+
+  .vr-trigger-button.vr-trigger-beside {
+    top: calc(4rem + env(safe-area-inset-top, 0px));
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+  }
+
   .ar-quicklook-link {
     width: auto;
     height: auto;

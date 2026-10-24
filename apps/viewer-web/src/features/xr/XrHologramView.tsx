@@ -9,6 +9,9 @@ import { XR_ENTRY_LABEL } from "./xrSupport";
 
 type ViewState = "loading" | "ready" | "immersive" | "error";
 
+/** The IWSDK AR shell is opt-in (`?shell=iwsdk`); leaving it keeps the feed opted in. */
+const feedPath = (mode: XrViewMode): string => (mode === "ar" ? "/?shell=iwsdk" : "/");
+
 /** `/vr/:id` and `/ar/:id`: one IWSDK World per visit, destroyed on leave. */
 export function XrHologramView({ mode }: { mode: XrViewMode }) {
   const { id } = useParams<{ id: string }>();
@@ -28,7 +31,7 @@ export function XrHologramView({ mode }: { mode: XrViewMode }) {
     }
     let cancelled = false;
     let viewer: ViewerWorld | null = null;
-    const backToFeed = (): void => void navigate("/", { replace: true, state: { focusHologramId: id } });
+    const backToFeed = (): void => void navigate(feedPath(mode), { replace: true, state: { focusHologramId: id } });
 
     void (async () => {
       try {
@@ -82,7 +85,7 @@ export function XrHologramView({ mode }: { mode: XrViewMode }) {
                 {XR_ENTRY_LABEL[mode]}
               </UiButton>
             ) : null}
-            <UiButton type="button" tone="ghost" onClick={() => void navigate("/", { state: { focusHologramId: id } })}>
+            <UiButton type="button" tone="ghost" onClick={() => void navigate(feedPath(mode), { state: { focusHologramId: id } })}>
               Back to feed
             </UiButton>
           </UiStack>

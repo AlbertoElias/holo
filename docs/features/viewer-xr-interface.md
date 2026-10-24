@@ -46,24 +46,58 @@ neutral space. True scale is fact: life size means the recorded scale.
   head-locked or head-following control panel in either app.
 - **Entry.** Feed card shows "Step inside" (VR, when `immersive-vr` is
   supported) and "View in your room" (AR, unchanged rules). A Quest shows both.
-- **VR space.** IWSDK environment with a neutral gradient dome and a soft floor;
-  IWSDK locomotion (slide, snap turn, teleport).
+- **VR space.** The blue-hour room (styleguide §9.1): IWSDK gradient dome and
+  image-based light from `tokens.json` ground colours, and a soft floor; each
+  hologram lights its own stage. IWSDK locomotion (slide, snap turn,
+  teleport). AR uses the same image-based light over the camera image.
 - **Gallery.** Feed holograms appear as small live previews on a curved shelf
-  around the viewer, paged through the feed cursor. Selecting one places it at
+  around the viewer, paged through the feed cursor with the existing
+  `fetchHolograms(cursor)` (no API change). Selecting one places it at
   recorded scale in front of the viewer and focuses it.
 - **Several placed holograms.** Placed holograms stay where they are. Each has
-  its own playback state and its own grab/scale/rotate. Selecting a placed
-  hologram focuses it. Each placed hologram has its own foot controls, so
-  controls act on the hologram they stand under; focus decides only which
-  one is audible (and where sparks show, §8.2). "Back to gallery" removes one
-  from the space.
-- **Controls at each hologram's foot** (styleguide §1.2, §6): Play/Pause
-  with its timecode always there, small and close to the edge, dimming to
-  40% after 4 s unused; restart, scrubbable timeline with elapsed/total,
-  recenter, scale chip ("life size" reset) and back to gallery appear when a
-  hand, ray or tap reaches for them and leave afterwards. Exit is in the hand
-  dock (bottom dock on a phone). Glyphs only within arm's reach; their
-  labels sit 1 m away or more (§9.1).
+  its own playback state, grab/scale/rotate and foot controls; every foot
+  control acts on its own hologram. Two kinds of focus, kept apart:
+  - **Audio focus**: the hologram whose body or foot control was last
+    selected. Only it is heard. A head turn never changes it.
+  - **Spark focus**: the hologram nearest the head's forward ray (§8.2). It
+    carries the sparks and nothing else.
+
+  "Back to gallery" removes one from the space.
+- **Controls at each hologram's foot** (styleguide §1.2, §6):
+  - **Always there:** Play/Pause with its timecode, small and close to the
+    edge; the only always-there glyph (Free and Return are excluded below).
+    It dims to 40% after 4 s unused and returns to full when something comes
+    near: a ray hovering the chip, a hand within 0.3 m of it, or the head's
+    forward ray within 15° of it. Quest Browser exposes no gaze, so the head
+    ray stands in for it.
+  - **On reach:** restart, scrubbable timeline with elapsed/total, recenter,
+    scale chip ("life size" reset) and back to gallery appear on the same
+    triggers and leave afterwards.
+  - **Size and pose:** sized for a 1.75 m reference distance (`tokens.json`
+    apx are angular). Hit areas follow §6.1 per input and are never under
+    56 apx for a ray or 44 apx for touch at that distance. The chip's world
+    size ignores the hologram's grab scale, so a 0.1× hologram keeps
+    full-size controls. Its position is fixed to the hologram, 2 cm above
+    the anchor and in front of the feet, outside the hologram's pointer box.
+    Its yaw faces the viewer only when the hologram is placed or recentered,
+    never per frame.
+  - **Chip per target (§5.2, §9):** VR rows are bare against walls and take
+    the chip at 72% (0.3 s fade in, 2 s hold) in front of a lit floor. AR
+    always shows the chip, 97% on Quest passthrough and 88% on Android
+    Chrome, never opaque. On an Android phone, flat sizes and 44 apx touch
+    targets, not 2.5×.
+  - **Labels:** glyphs only within arm's reach. The timecode and labels
+    follow §7.3: readable 1 m away or more, faded within 1 m of the
+    hologram.
+- **Exit and the dock.** Exit sits in the hand dock in a headset (pending
+  user decision: §1.2 lists Record, ink and undo there, not Exit). On a
+  phone, IWSDK has no `dom-overlay`, so the bottom dock is a screen-space
+  strip attached to the camera in the §9.3 thumb zone, inside the safe-area
+  insets of §6.1; it is the one exemption from the no-head-follow criterion
+  (on a phone the screen is the hand), and it is pending user confirmation
+  with Exit. Android back and the system exit take the same exit path. With
+  controllers only, the dock sits on the non-dominant controller; handedness
+  defaults to right and gets a setting.
 - **Move / scale / rotate.** IWSDK `TwoHandsGrabbable` (move, rotate, scale)
   with scale clamped to 0.1×–2× recorded scale; any non-1.0 scale is shown on
   the chip and reversible.
@@ -83,33 +117,41 @@ neutral space. True scale is fact: life size means the recorded scale.
   sessions; phone `immersive-vr`.
 - Switching between AR and VR mid-session.
 - Synchronized playback across holograms.
+- The Free and Return glyphs: Follow mode is not built in XR, so Play/Pause
+  is the only always-there glyph.
 
 ## Acceptance criteria
 
 - [ ] "Step inside" appears only where `immersive-vr` is supported and enters
       an IWSDK VR world with the chosen hologram placed at recorded scale
       ~1.5 m ahead on a neutral floor; "View in your room" keeps today's rules.
-- [ ] Holograms are placed at recorded scale (1.0) by default — the 1.85 m
-      normalisation is removed — and the scale chip reads "life size".
+- [ ] In the IWSDK shells, holograms are placed at recorded scale (1.0) by
+      default, with no 1.85 m normalisation, and the scale chip reads "life
+      size". The R3F AR view keeps its normalisation until step 6 retires it.
 - [ ] The gallery shows feed holograms around the viewer, pages past the
       loaded feed via the cursor, and selecting one places and focuses it
       without ending the session.
 - [ ] At least four holograms can be placed at once; each keeps its own play
-      state, transform and foot controls; selecting one focuses it; only the
-      focused one is audible.
-- [ ] Every foot and hand-dock control works by controller ray, hand
-      ray/pinch and hand poke in headset VR and AR, and by screen tap in
-      phone AR (foot controls and the bottom dock).
-- [ ] Nothing interactive follows or locks to the head: the periphery status
-      line is the only head-following element and holds state only.
-- [ ] Pause freezes the focused hologram's animation and audio at the same
+      state, transform and foot controls, and the foot chips never overlap.
+      Selecting one gives it audio focus, and only it is heard. A head turn
+      moves the sparks but never the audio.
+- [ ] Foot controls work by controller ray, hand ray/pinch and screen tap
+      (phone AR), and by poke where they are within reach. The hand dock
+      works by poke and ray; the phone bottom dock by screen tap.
+- [ ] Nothing interactive follows or locks to the head in a headset: the
+      periphery status line is the only head-following element and holds
+      state only (the phone bottom dock is the stated exemption).
+- [ ] The always-there glyph dims to 40% after 4 s unused and returns on
+      ray hover, a hand within 0.3 m or the head ray within 15°; the probe
+      reports control opacity and the dim timer.
+- [ ] Pause freezes that hologram's animation and audio at the same
       clip time; play resumes there; restart returns both to 0; loops wrap
       both together.
 - [ ] Scrubbing shows the pose at the chosen time, and the scheduled audio
       offset matches clip time within 50 ms (measured as
       `ctx.currentTime − startedAt + offset`; proves scheduling, not ear sync).
 - [ ] Two-hand grab moves, rotates and scales (clamped); recenter restores
-      default placement and recorded scale for the focused hologram.
+      default placement and recorded scale for that hologram.
 - [ ] Removing holograms and paging the gallery returns renderer geometry and
       texture counts to the baseline for what remains in the space.
 - [ ] Exit destroys the World and returns to the feed at the last focused
@@ -117,8 +159,9 @@ neutral space. True scale is fact: life size means the recorded scale.
 - [ ] Capture's XR UI is built only from the shared package (Record in the
       hand dock, "Recording 0:12" on the status line, no head-locked panel),
       and capture recording, refit and recenter pass the capture XR suite.
-- [ ] Side-by-side IWER screenshots of capture and viewer show the same
-      foot-control, status-line and hand-dock components and styling.
+- [ ] Capture and viewer use the same foot-control, status-line and
+      hand-dock components: the probes report equal glyph size (apx), stroke
+      width and chip opacity per target, and an IWER contact sheet shows both.
 - [ ] `/ar/:id` deep links work; AR placement, recenter and bubble specs pass
       (ported as needed); export → upload → render pipeline smoke passes.
 
@@ -133,9 +176,14 @@ neutral space. True scale is fact: life size means the recorded scale.
 | Gallery and placed entities share one cached GLTF (AssetManager clone) and disposal corrupts the source | Dispose only per-clone materials and mixers; evict cache keys only when no entity uses them |
 | Double select on a gallery item while it loads | Load keyed by id; duplicate placement ignored |
 | Hologram fails to load or 404s | Gallery tile shows an error state; nothing else changes |
-| Focus ambiguity when holograms overlap | Last selected wins; the focused one carries the sparks (§8.2); each set of foot controls acts only on the hologram above it, so focus never decides what a control does |
+| Focus ambiguity when holograms overlap | Audio focus is the last selected; spark focus is the head ray (§8.2); each foot control acts only on its own hologram, so neither focus decides what a control does |
+| Neighbouring holograms' foot chips overlap | Each new placement is offset by at least the chip width plus a 30 apx gap; tested with four placed |
+| Foot chip under the real floor or hidden by it (AR floor error, fallback at y = 0, depth occlusion) | Chip 2 cm above the anchor; chrome is exempt from depth occlusion when step 6 ports it |
+| Poking the palm dock collides with a two-hand grab by the same hand | The dock hides while the non-dominant hand grabs |
+| Scrubbing on a phone needs the pointer to move every frame (spike 1, not exercised) | Step 3 checks a held-tap scrub through the screen-input bridge |
+| The same upload renders at different sizes in `/vr` (recorded scale) and the R3F `/ar` (1.85 m normalisation) | Accepted until step 6 retires the R3F view; the IWSDK AR shell is already at recorded scale |
 | Audio of an unfocused hologram keeps playing | Focus change stops audio on the old one and starts the new one from its clock |
-| Grab and foot-control pointer target the same input | IWSDK pointer priority (touch > grab > ray); the foot chip sits outside the hologram's grab volume |
+| Grab and foot-control pointer target the same input | IWSDK pointer priority (touch > grab > ray); the foot chip sits in front of the feet, outside the hologram's grab volume and pointer box |
 | GLB with a wrong root scale looks absurd at 1.0 | Scale chip makes it visible and reversible; log recorded-scale anomalies; no silent normalisation |
 | Static hologram (no clip) | Timeline/play disabled, "still" state; static GLB fixture |
 | Autoplay blocked | `AudioContext.resume()` inside the first XR select (feed resume does not carry over) |
@@ -158,7 +206,9 @@ Implementation order (each step lands green before the next):
    status line, hand dock) and the viewer's foot controls; grab/scale.
 4. **Gallery and multiple placed holograms**, focus, feed paging, disposal.
 5. **Capture migration** onto the shared package (Record to the hand dock,
-   status on the status line); retire `xr-ui-three` and `xr-ui-r3f`.
+   status on the status line); retire `xr-ui-three` and `xr-ui-r3f`. The
+   exported GLB has no UIKit or font nodes, and its node and channel counts
+   match before and after the migration.
 6. **IWSDK AR by default** (added 2026-10-24, decision A): port bubble
    clipping, aura and depth occlusion to the IWSDK AR shell, port the AR
    specs (with `hand-tracking-fidelity.md`), then make it the `/ar/:id`
@@ -167,7 +217,7 @@ Implementation order (each step lands green before the next):
 | Role | Owner | Files or modules |
 |---|---|---|
 | Lead | Claude (Opus) | Brief, integration, shared UI API, final handoff |
-| Design reviewer | `design-reviewer` subagent (Opus) | Re-review of this revision before step 2 |
+| Design reviewer | `design-reviewer` subagent (Opus) | Re-review done 2026-10-24 before step 3 (foot controls, hand dock, decision A); findings applied |
 | Implementer | Claude (Sonnet) subagents, one step at a time | `apps/viewer-web/src/features/xr/` (new), `features/ar/`, `app/router.tsx`, `feed/HologramCard*.tsx` (triggers), `hologram/useGltfAudio.ts` (shared audio clock); `packages/xr-ui-iwsdk/` (new), `packages/xr-ui-core/`; step 5: `apps/capture/src/ui/`, `apps/capture/src/runtime/captureStage.ts`; new spec `apps/viewer-web/e2e/xr-viewer.spec.ts` |
 | Independent verifier | Codex (different vendor) | Read-only verification; test artifacts only |
 
@@ -216,7 +266,7 @@ Implementation order (each step lands green before the next):
 | Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | Playback and audio **pass** (step 2): clip clock 1.00× wall clock, audio offset within 0.2 ms of clip time; scrub and loop UI wait for step 3 |
 | Grab/scale/rotate | Same spec, scripted controller grips | Transforms in report; pending |
 | Memory after remove/page | Same spec | Geometry/texture counts in report; pending |
-| AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | IWSDK shell **pass** (step 2): stands on the floor 1.8 m ahead and anchors, tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
+| AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | IWSDK shell **pass** (step 2), opened from the feed card at `/?shell=iwsdk`: stands on the floor 1.8 m ahead and anchors, lit like VR (mean luminance of the hologram's pixels 67 in AR vs 71 in VR; the unlit build read 19 and fails the 30 threshold), tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
 | Capture on the shared UI | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + hand-dock and status-line screenshot; pending |
 | Same look in both apps | IWER screenshots of both apps' foot controls, status line and hand dock via `preview.mjs` | Side-by-side sheet; pending |
 | Nothing interactive follows the head | Same spec: turn the head and read control world positions | Report shows foot controls fixed to their hologram; pending |
@@ -292,7 +342,8 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   crossed the controller or the ray, so the spike disabled it; step 5 must
   remove it in the same change that adds the hand-dock Record. The default
   UIKit font lacks `·` and `×`, and the styleguide's "Paused · 0:08" needs
-  `·`, so the shared package ships a font that has them.
+  `·`, so the shared package (not either app) ships an MSDF font that has
+  them.
 
 ### Step 2 results (2026-10-24)
 
@@ -328,6 +379,14 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   `RayInteractable`. Its pointer target is an invisible body-sized box: a
   three.js skinned-mesh raycast missed the avatar entirely, and per-frame
   ray tests on skinned triangles are costly.
+- **Lighting.** The blue-hour image-based light (`IBLGradient`) lights the
+  hologram in both modes; only VR adds the dome and floor. AR first shipped
+  without it and the hologram rendered as a black silhouette. The spec now
+  measures the hologram's own pixels (those that change when it is hidden
+  for a frame) and requires a mean luminance above 30.
+- **Opt-in carries over.** With `/?shell=iwsdk`, the feed's AR trigger opens
+  `/ar/:id?shell=iwsdk`, and exit returns to `/?shell=iwsdk`. On phones the
+  "Step inside" label stacks under the AR glyph, clear of the card badge.
 - **Probe.** Development builds expose `window.__HOLOIM_XR_VIEWER__.snapshot()`
   (placement, scale, clip time, audio offset, renderer counts), which the
   spec reads.
