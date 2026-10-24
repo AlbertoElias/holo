@@ -23,6 +23,8 @@ preserve any in-progress work in the shared tree.
    `docs/features/`, add it to the index in `docs/features/README.md`, and
    follow the delivery sequence in `docs/FEATURE_WORKFLOW.md`. For a narrowly
    scoped bug fix, a concise checklist may replace a persisted brief.
-3. For capture XR changes, also read `docs/IWSDK_AI_WORKFLOW.md`.
+3. For capture XR changes, also read `docs/IWSDK_AI_WORKFLOW.md`. For any UI
+   or visual change, follow `docs/product/design/styleguide.md` and its
+   `tokens.json`.
 4. On close, follow the Close step in `docs/FEATURE_WORKFLOW.md`: archive the
    completed brief and any closed bugs, and update only the owning tracker.
