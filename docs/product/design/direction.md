@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Rounds 1 to 3 decided, 2026-10-23. Quest checks confirm items 9 and 10's poke floor. Type at 2.5× and how each AR target blends are still to check on devices, and Quest's AR chip opacity needs a new decision (see Round 3's device results). Round 4 (styleguide) is next. Step 3 of the design-language work:
+**Status:** Rounds 1 to 3 decided, 2026-10-23. Quest checks confirm item 9, item 10's poke floor and 2.5× type at 1.75 m. Text at arm's reach fails at 2.5× and needs a decision; how each AR target blends is still to check on devices, and Quest's AR chip opacity needs a new decision (see Round 3's device results). Round 4 (styleguide) is next. Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
@@ -473,7 +473,7 @@ reach the Mac stay on the device and are resent when the page next loads.
 | Quest 3, VR room, six holograms | Flicker, blind | Round 1 (A) distracting; round 1 halo with steady light (B) distracting; gentle 0.8 Hz (C) noticeable; **variant E (item 8) noticeable**; still (D) fine. Each was watched 4 to 8 s, not the minute asked for, so treat this as a first look |
 | Quest 3, VR room, six holograms | Frame time (step 4) | 90 Hz (11.2 ms). Focus only: median 12.9 ms, 2.44% long; **sparks everywhere: median 13.4 ms, 3.75% long**; ×2 to ×8 sparks 2.3 to 3.7% long. The room already misses 90 Hz with sparks on one hologram, and more sparks barely add to it, so the six recorded takes, not the sparks, use up the budget. Supports item 9 |
 | Quest 3, hand tracking, 45 cm | Poke, 40 mixed trials per size (step 5) | 72 apx (12.0 mm): 32/40 hits, 80% (95% lower bound 65%). 96 apx (16.1 mm): 36/40, 90% (lower bound 77%). **120 apx (20.1 mm): 36/40, 90%** (lower bound 77%). No poke hit the wrong square; every miss landed in a gap or off the grid. Mean distance from the target's centre 4.8, 5.6 and 6.6 mm. Supports item 10's 20 mm floor, which is 120 apx at 45 cm |
-| Quest 3 | Type at 2×, 2.5× and 3× (step 5) | **Not valid.** A probe bug let the buttons of a sample already rated catch the next pinch. So 3× was rated twice at each distance and 2.5× never. Only the first rating at each distance is sound: 3× was easy at 45 cm and at 1.75 m |
+| Quest 3 | Type at 2×, 2.5× and 3× ("Type size only", one rating per sample) | **At 1.75 m:** 2× takes effort; **2.5× easy**; 3× easy. **At 45 cm:** 2× can't read; **2.5× can't read**; 3× takes effort. The samples are the same angular size at both distances, so the difference is distance itself. The Quest 3 focuses at about 1.3 m, which suggests that text near the hand blurs. A first run, in which a probe bug misattributed ratings, is discarded |
 | Quest 3, AR passthrough | Lowest AR chip that reads cleanly | **97%**, in two separate sessions, above item 7's 88% and 92% |
 | Quest 3, AR passthrough | Blending, matched by eye | **Inconclusive.** In the first session a probe bug counted one trigger press as two picks. The rerun gave one pair, wall 150 and 50% patch 150, which no visible patch can give. The one clean early pair (wall 225, patch 135, ratio 0.60) leans sRGB (0.50) over linear (0.73) |
 
@@ -499,7 +499,6 @@ step 5 has a "Type check only" button that skips the pokes.
 
 **Still to run, so these decisions are not yet confirmed on devices:**
 
-- **Item 10, type at 2.5×:** "Type check only" in step 5 on a Quest 3.
 - **Item 7, how each target blends:**
   - Quest AR by eye: step 2.
   - A screenshot of the blend patches from each target.
@@ -519,6 +518,12 @@ for now:
 
 Any borrowed Android phone can run steps 2 to 4 with the probe as it is.
 
-**Open from the device results:** the Quest's lowest clean AR chip was 97%
-twice, above item 7's 88% and 92%. Item 7 needs a new decision for Quest AR
-passthrough once its blending is known.
+**Open from the device results:**
+
+- **Quest AR chip:** the Quest's lowest clean AR chip was 97% twice, above
+  item 7's 88% and 92%. Item 7 needs a new decision for Quest AR passthrough
+  once its blending is known.
+- **Text within arm's reach:** 2.5× holds at 1.75 m but cannot be read at
+  45 cm, and even 3× takes effort there. Item 10's scale stands for panels at
+  a distance. Text near the hand, such as labels on a panel you poke, needs
+  its own decision.
