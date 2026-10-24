@@ -9,7 +9,8 @@ export class UIStateStore {
     recordingState: 'idle',
     recordingMessage: null,
     heightFit: { enabled: false, pending: false, eyeHeight: null },
-    micPermission: 'pending'
+    micPermission: 'pending',
+    faceCamera: 'off'
   };
 
   private listeners = new Set<(state: UiViewModel) => void>();
@@ -50,6 +51,12 @@ export class UIStateStore {
 
   setMicPermission(micPermission: UiViewModel['micPermission']): void {
     this.value = { ...this.value, micPermission };
+    this.emit();
+  }
+
+  setFaceCamera(faceCamera: UiViewModel['faceCamera']): void {
+    if (this.value.faceCamera === faceCamera) return;
+    this.value = { ...this.value, faceCamera };
     this.emit();
   }
 

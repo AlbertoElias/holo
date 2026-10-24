@@ -1,4 +1,4 @@
-import { byPath, referencedIdeas } from "../knowledge";
+import { byPath, isWikiKind, referencedIdeas } from "../knowledge";
 import { Markdown } from "../Markdown";
 import { Badge, NotFound } from "../components";
 export function DocumentReader({
@@ -16,7 +16,7 @@ export function DocumentReader({
       <a
         className="back-link"
         href={
-          doc.kind === "Concept" || doc.kind === "Research"
+          isWikiKind(doc.kind)
             ? "#/wiki"
             : doc.kind === "PRD"
               ? "#/prds"
@@ -26,7 +26,7 @@ export function DocumentReader({
         ← Back to{" "}
         {doc.kind === "PRD"
           ? "product briefs"
-          : doc.kind === "Concept" || doc.kind === "Research"
+          : isWikiKind(doc.kind)
             ? "the wiki"
             : "our approach"}
       </a>

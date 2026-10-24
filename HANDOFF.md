@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-20
+**Updated:** 2026-10-24
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -13,14 +13,12 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-VR thumbstick locomotion is complete (brief
-[`docs/features/archive/vr-thumbstick-locomotion.md`](docs/features/archive/vr-thumbstick-locomotion.md),
-branch `feature/vr-locomotion`): the `VR_LOCO_VIDEO=1` locomotion check
-passed and produced
-`apps/capture/output/ci-vr-locomotion/vr-thumbstick-locomotion.mp4`, and
-`pnpm run verify:pr` passed. Next: validate the room-scale body solver and
-stick feel/comfort on a physical headset (see Unverified below), or pick
-the next queue item in [`TODOS.md`](TODOS.md).
+Face and expressions on avatars is complete (brief
+[`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md)):
+webcam, WebXR eye gaze and liveness drive synthesized ARKit shapes, and
+`test:xr:face` (`FACE_VIDEO=1` for the proof video) runs in the capture XR
+suite. Next: validate the face on devices (see Unverified below), or pick the
+next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
@@ -40,6 +38,11 @@ None.
   deterministic browser flows only; it does not prove tracking feel, comfort,
   performance, or device session behavior.
 - Perform real-device viewer AR placement validation.
+- Face on devices: WebXR eye gaze and its permission prompt on a Quest Pro,
+  and webcam tracking in a phone browser. The desktop webcam (including
+  left/right on a real wink) and the voice-driven jaw passed on a laptop on
+  2026-10-24 (brief
+  [`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md)).
 
 ## How to resume
 

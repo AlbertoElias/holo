@@ -14,13 +14,6 @@ investment should follow an actual workflow and evidence of friction.
 - **IDEA-046 Direct publishing:** offer "Publish to HoloIM" after export with
   title, creator, and optional tags. Keep a local export path and make recording
   loss on failure avoidable. Publishing is distinct from recording or editing.
-- **IDEA-057 Upload recovery:** show progress and a failed attempt that can be
-  retried or resumed without losing asset or metadata. Decide what resumable
-  means before promising recovery across reloads or devices.
-- **IDEA-047 Processing lifecycle:** distinguish accepted uploads from usable
-  messages. The proposed states are uploaded, processing, ready, and failed;
-  store actionable failure reasons. These asset states are unrelated to the
-  product knowledge lifecycle (Idea -> PRD -> Decision).
 - **IDEA-048 Metadata:** extract duration, audio presence, and rough polygon
   count. Define accuracy and units rather than displaying guesses as facts.
 - **IDEA-049 Preview images:** generate recognizable thumbnails. A representative
@@ -55,7 +48,6 @@ export -> upload -> render flow; review compatibility before changing responses.
 ## Open Questions
 
 - Which pipeline step currently stops people making a second message?
-- Does ready mean playable in-browser, or complete on every supported AR path?
 - How do authors discover and recover from a failed derived artifact?
 - Which identity, safety, storage, and service needs follow from the first
   chosen use case, rather than an assumed public social network?

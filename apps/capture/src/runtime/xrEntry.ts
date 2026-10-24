@@ -32,7 +32,7 @@ export function mountXrEntry(world: World): XrEntry {
     world.launchXR({
       sessionMode: mode === 'ar' ? SessionMode.ImmersiveAR : SessionMode.ImmersiveVR,
       referenceSpace: { type: ReferenceSpaceType.LocalFloor, required: true },
-      features: { handTracking: true }
+      features: { handTracking: true, gazeTracking: true }
     });
   };
   const toggle = (mode: Exclude<XrSessionMode, 'none'>): void => {

@@ -129,6 +129,11 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
             >
               {recording.actionLabel}
             </UiButton>
+            {state.mode === "desktop-third" || state.mode === "desktop-first" ? (
+              <UiButton onClick={() => bridge.toggleFaceCamera()} tone="ghost">
+                {faceCameraLabel(state.faceCamera)}
+              </UiButton>
+            ) : null}
             {state.mode === "ar" ? (
               <UiButton onClick={() => bridge.recenterAr()} tone="ghost">
                 Recenter AR
@@ -153,4 +158,21 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
       </div>
     </div>
   );
+}
+
+function faceCameraLabel(state: UiViewModel["faceCamera"]): string {
+  switch (state) {
+    case "off":
+      return "Face camera: off";
+    case "starting":
+      return "Face camera: starting…";
+    case "tracking":
+      return "Face camera: tracking";
+    case "no-face":
+      return "Face camera: no face in view";
+    case "denied":
+      return "Face camera: permission denied";
+    case "unavailable":
+      return "Face camera: unavailable";
+  }
 }

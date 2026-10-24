@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Rounds 1 to 3 decided; round 3 closed 2026-10-24 with the device results it has, and its unverified gaps are listed under Round 3. Round 4 is written down in the [styleguide](styleguide.md). Step 3 of the design-language work:
+**Status:** Rounds 1 to 3 decided; round 3 closed 2026-10-24 with the device results it has, and its unverified gaps are listed under Round 3. Round 4 (below) settled the open taste calls, and the result is the [styleguide](styleguide.md), rules only. Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
@@ -528,3 +528,37 @@ Known gaps, carried into round 4 as unverified rather than blocking:
   everywhere.
 
 The probe can still run any of these: `node scripts/design-probe/server.mjs`.
+
+## Round 4 decisions
+
+The [styleguide](styleguide.md) wrote rounds 1 to 3 down. The user then
+settled its open taste calls on the
+[visual styleguide page](https://claude.ai/artifact/HKRiYc7vVwX1C1QWXf1hhC),
+choosing between previewed options (2026-10-24):
+
+1. **Glyph states: cream lift.** Hover brightens to `#fff3cf`, focus adds a
+   1.5 apx gold ring 3 apx out, pressing dims to 55%.
+2. **Idle dimming.** Play, Free and Return dim to 40% after 4 s unused.
+3. **The chip over a hologram's picture stays 72%**, accepting muted text
+   at 4.46:1 over white.
+4. **Quick Look:** the USDZ carries the edge with a baked halo, added by the
+   server.
+5. **Chrome unfolds,** 240 ms in and 400 ms out, ease-out.
+6. **While recording,** all chrome but stop and the running time hides.
+7. **No edge in a headset while recording:** "you're just in the world
+   recording, doing your own thing". This replaces round 2 item 9's room
+   values (halo 0.15, steady light).
+8. **Within 1 m,** labels, timecode and caption fade, glyphs stay, notes
+   fold to their mark.
+9. **Notes sit on a tinted slip**; the phone dock sits on a bottom shade.
+10. **The poke proximity cue is a fingertip shade**, and **View in AR** is a
+    cube in viewfinder brackets.
+
+With these, the styleguide holds rules only. Values the studio drew but
+never compared were adopted as drawn. The questions still open (viewpoint
+portals, the rescale indicator, provenance looks, soot in VR, the AR
+brightness threshold, the gaze-and-pinch hit size, the chip on an unlisted
+target) and round 3's device gaps above, plus four the styleguide added
+(sRGB blending in Quest VR, the headset glyph stroke, legibility from 1 m to
+1.75 m with the 25 apx initial, and the baked Quick Look halo), moved to the
+UI redesign feature brief.

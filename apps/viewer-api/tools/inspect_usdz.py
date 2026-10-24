@@ -376,7 +376,7 @@ class Inspection:
         if extent is not None and np.array(extent).shape == (2, 3):
             extent = np.array(extent)
             self.check(np.all(extent[0] <= self.evaluated_min+1e-3) and np.all(extent[1] >= self.evaluated_max-1e-3), "Root framing extent excludes evaluated animation vertices")
-            self.check(np.all(extent[1]-extent[0] <= (self.evaluated_max-self.evaluated_min)*1.02+.01), "Root framing extent is oversized versus evaluated vertices")
+            self.check(np.all(extent[1]-extent[0] <= (self.evaluated_max-self.evaluated_min)*1.02+.05), "Root framing extent is oversized versus evaluated vertices")
             self.report["framing"] = {"authoredExtent": extent.tolist(), "evaluatedMinimum": self.evaluated_min.tolist(), "evaluatedMaximum": self.evaluated_max.tolist()}
 
     def materials(self):

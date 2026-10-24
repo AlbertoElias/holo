@@ -88,7 +88,7 @@ at a moment of it. There is no separate editor app or mode to learn.
 ## 2. Visual language: three materials
 
 > **Replaced (2026-10-24)** by the [styleguide](../design/styleguide.md).
-> Kept for history. The styleguide carries over, marked "carried": the three
+> Kept for history. The styleguide carries over the three
 > materials and their prominence order, chrome never in an identity hue,
 > marks replaying with their timing, the angular units, the per-input
 > targets (as round 2 revised them), the hand feedback channels and

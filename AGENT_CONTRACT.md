@@ -109,7 +109,7 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 |---|---|---|
 | Docs-only edit | `pnpm run verify:agent` (runs Knowledge `check:docs` only) | ~2 s |
 | One package edit | `pnpm run verify:agent` | 5–10 s |
-| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|flows\|terrain\|hands\|height\|body>` | 10–45 s |
+| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|flows\|terrain\|hands\|height\|body\|face>` | 10–45 s |
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |
@@ -140,7 +140,7 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
   (`pnpm run test:smoke:pipeline --shard=<i>/2`); the capture-to-viewer spec
   (~100 s on CI) is the long pole. Update `CHECK_COST` from the CI
   `xr-checks-shard-*.json` timings when a check's cost changes a lot.
-- Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`) screenshot every frame
+- Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`, `FACE_VIDEO=1`) screenshot every frame
   and multiply wall time; combine them with `XR_REPLAY_ONLY`.
 
 ## Feature Delivery Contract
@@ -183,7 +183,7 @@ Supported env vars for smoke and XR scripts:
 - `E2E_API_PORT` (default `3001`; use a free port for isolated local integration)
 - `REUSE_DEV_SERVER` (`1` to reuse existing server)
 - `STARTUP_TIMEOUT_MS` (default `30000`)
-- `XR_CHECK_TIMEOUT_MS` (default `120000` per capture XR check, `360000` for `body`; this only stops hangs, and setting it applies to every check)
+- `XR_CHECK_TIMEOUT_MS` (default `120000` per capture XR check, `360000` for `body` and `face`; this only stops hangs, and setting it applies to every check)
 - `XR_TEST_VIEWPORT` (default `320x180` for capture XR checks; set `1280x720` when inspecting the page live)
 - `E2E_CAPTURE_URL` (default `https://127.0.0.1:5175/` for the pipeline test's capture server)
 - `HAND_REPLAY_FIXTURES` (default `fixtures/input-recordings` for `test:xr:hands`)
@@ -192,6 +192,8 @@ Supported env vars for smoke and XR scripts:
 - `BODY_REPLAY_VIDEO` (`1` renders a third-person video of each body replay with the tracked head path; needs `ffmpeg`)
 - `BODY_REPLAY_FAULTS` (`1` breaks each body behavior in turn and requires its metric to fail; `BODY_REPLAY_FAULT=<name>` runs one)
 - `BODY_REPLAY_CONCURRENCY` (default `2` body replays at once; results do not depend on it)
+- `FACE_VIDEO` (`1` renders the face check's close-up video and contact sheet to `output/ci-face/`; needs `ffmpeg`)
+- `CAPTURE_IWER_DEVICE` (`metaQuestPro` emulates the Quest Pro, the one IWER device with eye gaze; the runner starts a second dev server with it for the `face` check)
 - `HAND_REPLAY_CONCURRENCY` (default `2` hand replays at once; results do not depend on it)
 - `XR_REPLAY_ONLY` (substring, comma-separated for several: replay only matching hand or body fixtures; with `BODY_REPLAY_FAULTS=1`, only faults on those fixtures)
 - `XR_SHARD` (`<index>/<total>`, 1-based: `test:xr*` runs one cost-balanced slice of the listed checks; CI uses 2 slices)

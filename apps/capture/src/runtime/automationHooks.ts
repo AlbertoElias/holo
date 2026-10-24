@@ -1,3 +1,5 @@
+import type { FaceSample } from '../face/faceTypes';
+import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, VrHandSide } from '../types/contracts';
 
 /**
@@ -20,6 +22,11 @@ export interface AutomationHooks {
   __setSpectatorView: (mode: boolean | SpectatorViewMode) => void;
   __captureHandCalibrationPose: () => Record<VrHandSide, boolean>;
   __resetHandCalibrationPose: () => void;
+  // A full face (weights and optional gaze) that overrides the camera and
+  // liveness until released with null.
+  __setFaceInput: (sample: FaceSample | null) => void;
+  __sampleFace: () => FaceSnapshot;
+  __toggleFaceCamera: () => void;
 }
 
 export function installAutomationHooks(hooks: AutomationHooks): void {

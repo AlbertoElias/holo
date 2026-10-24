@@ -4,7 +4,13 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import sources from "virtual:holoim-knowledge";
 
-export type DocumentKind = "Concept" | "PRD" | "Research" | "Feature" | "Guide";
+export type DocumentKind =
+  | "Concept"
+  | "Design"
+  | "PRD"
+  | "Research"
+  | "Feature"
+  | "Guide";
 export type KnowledgeDocument = {
   path: string;
   title: string;
@@ -42,6 +48,7 @@ export function nodeText(node: Nodes): string {
 
 function kindFor(path: string): DocumentKind {
   if (path.startsWith("docs/product/concepts/")) return "Concept";
+  if (path.startsWith("docs/product/design/")) return "Design";
   if (path.startsWith("docs/product/prds/")) return "PRD";
   if (path.startsWith("docs/product/research/")) return "Research";
   if (path.startsWith("docs/features/")) return "Feature";
@@ -74,7 +81,12 @@ export const prds = documents.filter(
   (doc) =>
     doc.kind === "PRD" && !/\/(?:PRD-TEMPLATE|README)\.md$/.test(doc.path),
 );
+export const design = documents.filter(
+  (doc) => doc.kind === "Design" && !doc.path.endsWith("/README.md"),
+);
 export const research = documents.filter((doc) => doc.kind === "Research");
+export const isWikiKind = (kind: DocumentKind | undefined) =>
+  kind === "Concept" || kind === "Design" || kind === "Research";
 
 function linkedPaths(node: Nodes): string[] {
   if (node.type === "link") {

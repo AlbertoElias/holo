@@ -185,6 +185,23 @@ the tracked head path in cyan and the avatar's eyes in pink, and
 `BODY_REPLAY_FAULTS=1` breaks each behavior in turn and requires its metric to
 fail.
 
+`npm run test:xr:face` drives the avatar's face through the real VR path on an
+emulated Quest Pro (the runner starts a second dev server with
+`CAPTURE_IWER_DEVICE=metaQuestPro`, the one IWER device with eye gaze). It plays
+a scripted ARKit performance (winks, smile, jaw, brows, frown, pucker, visemes,
+looks), releases the eyes to WebXR eye gaze swept through IWER, then to liveness
+(blinks and saccades), records and exports the GLB, and requires the exported
+morph animation to match what the avatar showed. It also checks that a camera
+with no face in view, or a denied camera, leaves liveness in charge. The report
+goes to `output/ci-face/face-report.json`; `FACE_VIDEO=1` adds a captioned
+close-up video and contact sheet.
+
+The face comes from, in priority order: the webcam (MediaPipe Face Landmarker,
+desktop only, toggled with the "Face camera" button), WebXR eye gaze for the
+eyes (Quest Pro), and liveness (voice-driven jaw from the microphone, blinks,
+saccades). The avatar's ARKit shapes are synthesized from its own geometry by
+`npm run build:avatar-face` (idempotent; see `scripts/build-avatar-face.mjs`).
+
 The IWER fixtures walk the flat-floor-and-ramp test scene
 (`fixtures/scenes/body-floor.gltf`, from `scripts/generate-body-test-scene.mjs`);
 regenerate them with `npm run fixtures:body`. Each recording stores the page's

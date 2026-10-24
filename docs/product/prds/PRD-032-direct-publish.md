@@ -32,7 +32,7 @@ An author in a Quest who just finished a take and wants to send it to one person
 - Publish asks for a title (voice or keyboard) and uploads via the existing
   initiate -> PUT -> complete flow, showing progress.
 - On success: a short link and a QR code to open it on a phone. On failure: the
-  recording stays local and Publish can be retried (IDEA-057).
+  recording stays local and Publish can be retried.
 
 ## Why Holograms
 
