@@ -29,10 +29,10 @@ next queue item in [`TODOS.md`](TODOS.md).
 - UI redesign slice 3, every viewer page: branch
   `feature/ui-redesign-slice-3`, pushed and verified locally (evidence in
   the brief's slice 3 rows). The AR edge is built as the user decided (a
-  burnt ring round the bubble). Held to merge with slice 4. Open before it
-  counts as done: the user's look at the placeholders and the side sheet,
-  real wrist drawings for Exit,
-  and Codex's independent pass (usage limit on 2026-10-24).
+  burnt ring round the bubble), and the user passed its looks. Held to
+  merge with slice 4. Open: Codex's independent pass (usage limit on
+  2026-10-24); real wrist drawings for Exit and Recenter are a known gap
+  for a design pass.
 
 ## Unverified / device-only
 
