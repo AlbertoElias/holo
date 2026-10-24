@@ -90,14 +90,15 @@ at a moment of it. There is no separate editor app or mode to learn.
 > **Replaced (2026-10-24)** by the [styleguide](../design/styleguide.md).
 > Kept for history. The styleguide carries over, marked "carried": the three
 > materials and their prominence order, chrome never in an identity hue,
-> marks replaying with their timing, chrome dimming while recording, the
-> angular units, the per-input targets (as round 2 revised them), the hand
-> feedback channels and reduced-motion crossfades. It replaces the neutral
-> Light chrome, open amber and Atkinson, and in VR it lets rows stay bare
-> against a dark wall (round 3), so text no longer always floats on a chip.
-> The separate ink and light chips
-> became one chip (a container for marks is open there), and the 120–180 ms
-> timing is open there.
+> marks replaying with their timing, the angular units, the per-input
+> targets (as round 2 revised them), the hand feedback channels and
+> reduced-motion crossfades. It replaces the neutral Light chrome, open
+> amber and Atkinson, and in VR it lets rows stay bare against a dark wall
+> (round 3), so text no longer always floats on a chip. Round 4 also
+> replaced: the separate ink and light chips (notes now sit on a tinted
+> slip, chrome on one chip), the 120–180 ms timing (now 240 ms in, 400 ms
+> out), and chrome dimming while recording (now everything but stop and the
+> running time hides).
 
 The materials map onto the layers: Presence shows the event, Ink shows the
 meaning layer, and Light is the view's chrome.

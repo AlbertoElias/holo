@@ -1,6 +1,6 @@
 # HoloIM Styleguide
 
-**Status:** Draft, 2026-10-24. Round 4 of the design-language work:
+**Status:** Decided, 2026-10-24. Round 4 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md),
 [direction](direction.md) (rounds 1 to 3), this styleguide, then the
 redesigned screens.
@@ -9,6 +9,8 @@ hands and controllers) and on flat screens (phone and desktop, with touch and
 mouse).
 **Tokens:** [tokens.json](tokens.json) holds the values below in W3C Design
 Tokens format for later builds. This page wins where the two differ.
+**Visual page:** [HoloIM Styleguide](https://claude.ai/artifact/HKRiYc7vVwX1C1QWXf1hhC)
+draws these values live, and holds the round 4 answers.
 **Replaces:** sections 2, 3 and 8 of the
 [design-language concept](../concepts/design-language.md) (the neutral Light
 look, Atkinson, open amber, the three looks) and the visual-direction parts
@@ -30,7 +32,8 @@ edge, on a blue-hour ground, with a few gold glyphs at its foot.
   later round overrides an earlier one. For example, round 3 item 8 reverses
   round 2 item 9 in headsets, and round 3 item 9 replaces round 2's sparks
   everywhere. Sources are cited as `r<round>-<item>`; "r3 close" is the
-  decisions taken from round 3's device results.
+  decisions taken from round 3's device results. "r4" marks a choice the
+  user made on the visual page on 2026-10-24, from options it previewed.
 - **Markers.** Every value without a marker was decided in rounds 1 to 3.
   - **Unverified:** decided, but a device check is missing. Build to the
     value and keep the check open. Most come from round 3's known gaps; those
@@ -95,9 +98,10 @@ each layer of a hologram has its own material.
   (principle 7).
 - A mark's reveal is part of the message: it replays with its original
   timing (principle 7).
-- **Open:** marks that hold text (notes) have no container yet. The concept's
-  separate "ink chip" for content was not carried into the rounds, which
-  defined one chip, for chrome.
+- A mark that holds text (a note) sits on a **tinted slip** (r4): a dark
+  slip tinted toward the author's hue, with the author's mark and name in
+  their hue. As drawn, the tint is `color-mix(in srgb, <hue> 22%, #081a1e)`
+  with cream text. It never looks like the chrome's chip.
 
 ### 1.2 Where things live
 
@@ -119,8 +123,9 @@ and it never holds a control.
 
 **Always there, and hidden until reached for.** Play, Free and Return stay
 visible, small and close to the edge (principle 5). Every other control
-appears from the hand or cursor and leaves afterwards. **Open:** whether the
-always-there set dims when it has not been used for a while.
+appears from the hand or cursor and leaves afterwards. When nobody has used
+the always-there set for 4 s, it dims to 40%; it comes back to full strength
+when a hand, cursor or gaze comes near (r4).
 
 ## 2. Tokens
 
@@ -183,10 +188,11 @@ The chip is never opaque in AR (r3-7). **Open:** a target not listed here.
 r3-7 has a value only for known blending; until one is measured, 92% (the
 linear value) is the cautious reading.
 
-**Open: the chip over a hologram's own picture on a flat screen.** Text
-there always takes the chip (r3-5), but 72% over a white picture gives muted
-text 4.46:1 (below 4.5:1), gold 4.68:1 and record red 2.05:1. At 88% the AR
-chip gives 7.9:1, 8.3:1 and 3.7:1 over white in sRGB.
+**Over a hologram's own picture** on a flat screen, the chip stays 72% (r4).
+Text there always takes the chip (r3-5). Over a pure white picture this gives
+muted text 4.46:1, just under 4.5:1, gold 4.68:1 and record red 2.05:1; the
+user accepted that. Red over a picture therefore never goes without its
+shape and word.
 
 **Shape (as drawn):** corner radius 18 apx, padding 5 × 14 apx. A chip that
 holds a control row is padded 3 apx at the top, bottom and start and 14 apx
@@ -369,7 +375,7 @@ Only where the ground fails (r3-5):
 | VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface (bare gold in front of the VR sky is 4.1:1, muted 3.9:1). Hysteresis: the chip fades in over 0.3 s and holds at least 2 s |
 | AR (WebXR) | Every row and every label sits on the chip |
 | AR Quick Look | No chip is possible, so no text or controls inside Quick Look |
-| Phone and desktop | Controls and captions sit in their hologram's shade. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. **Open:** the bottom dock's backing; it sits in the bottom band, outside any shade |
+| Phone and desktop | Controls and captions sit in their hologram's shade. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The bottom dock sits on a shade along the bottom of the screen, the same soft shade a hologram casts (r4) |
 | Everywhere | Text over a hologram's own picture always sits on the chip |
 
 The round 1 review asked that text never float bare in 3D. r3-5 overrides
@@ -407,12 +413,16 @@ triangle and the record shapes are filled; every other glyph is a line.
 **Unverified**, added by this styleguide: that a 3.75 apx stroke no longer
 shimmers. Round 3's Quest check rated type size only, not glyph strokes.
 
-**Open:** the hover, keyboard-focus and pressed looks of a glyph. Glyphs have
-no glow, so a hover glow would reopen r2-6. A build must still show a
-visible keyboard focus (WCAG 2.4.7).
+**States: cream lift** (r4). On hover the glyph, ring included, brightens
+from gold to the edge's cream highlight `#fff3cf`. Keyboard focus adds a
+1.5 apx gold ring 3 apx outside the glyph. Pressing dims it to 55%. There is
+still no glow (r2-6).
 
-**Open:** the glyph for the feed's "View in AR" entry (AR Quick Look and
-WebXR AR); it is a control on the card, in its shade.
+**View in AR** (r4): the feed's entry for AR Quick Look and WebXR AR is a
+cube in viewfinder brackets with the label "View in AR", on the card, in its
+shade. Drawing (16 × 16):
+`M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3`
+(round joins and caps).
 
 ### 6.1 Hit sizes per input
 
@@ -434,9 +444,10 @@ every miss landed in a gap or off the grid. The 20 mm floor rests on it.
 
 **Hand feedback (carried):** hands have no haptics, so a poke shows a
 proximity cue before contact and a soft spatial tick on commit; controllers
-pulse; system sounds stay out of the capture mix. **Open:** the look of the
-proximity cue. The concept proposed a glow, which r2-6's "no glow" rules
-out for glyphs.
+pulse; system sounds stay out of the capture mix. The proximity cue is a
+**fingertip shade** (r4): the fingertip casts a soft deep-sea shade on the
+panel, blurred while it is far and sharpening as it nears, until it meets
+the glyph at contact. No glow.
 
 **Phone edges.** Keep every target out of the system's gesture zones and
 the safe-area insets. As drawn, the zones are the back-swipe edges (about
@@ -492,10 +503,9 @@ never shift as time runs (r2-8). It reads "Paused · 0:08" beside Play, and
 - **No text within arm's reach** (r3 close). At 45 cm, 2.5× could not be
   read on a Quest 3 and 3× took effort; the Quest 3 focuses at about 1.3 m.
   Panels you touch carry glyphs only, and their labels sit 1 m away or more.
-- **Open:** what a tabletop hologram's foot labels ("Paused · 0:08", the
-  timecode, the caption) do when the viewer stands within 1 m of it, and how
-  marks with text or initials read within reach. The r3 rule was decided for
-  panels you touch.
+- **Within 1 m of a hologram** (r4), its labels, timecode and caption fade
+  out and its glyphs stay; people's notes fold to their mark. The text comes
+  back as you step back past 1 m.
 - **Unverified**, added by this styleguide: legibility between 1 m and
   1.75 m (the check ran at 45 cm and 1.75 m only), and the author initial at
   25 apx (not in the check).
@@ -564,23 +574,25 @@ the same 8 s fade; round 3 did not compare reduced motion in a headset.
 - The VR chip fades in over 0.3 s and holds at least 2 s (r3-5).
 - Under reduced motion, chrome crossfades in place instead of moving
   (carried).
-- **Open:** chrome timing. The concept proposed 120 to 180 ms, ease-out; it
-  was never compared.
+- Chrome **unfolds** (r4): 240 ms in, 400 ms out, ease-out. This replaces
+  the concept's 120 to 180 ms.
 
 ### 8.5 Recording
 
-Recording quiets the edge, so the person being recorded is what you watch
-(r2-9, r3-6).
+On a flat screen, recording quiets the edge, so the person being recorded
+is what you watch (r2-9, r3-6). In a headset there is no edge at all while
+recording: you are in the world, recording, doing your own thing, not
+looking into a hologram (r4). This replaces round 2's room values (halo at
+0.15, steady stage light).
 
-| | Flat screens | Room (VR, AR) |
+| | Flat screens | Headset (VR, AR) |
 | --- | --- | --- |
-| Sparks | Stop | Stop |
-| Halo | Holds at level 0.08 | Holds at material opacity 0.15 (level about 0.08) |
-| Gold core and highlight | Drop to 0.55 opacity | **Open:** set only for flat screens |
-| Stage light | Not set | Holds steady at 0.9 |
+| Sparks | Stop | No edge |
+| Halo | Holds at level 0.08 | No edge |
+| Gold core and highlight | Drop to 0.55 opacity | No edge |
 
-**Carried:** the rest of the chrome dims while a take is recording. **Open:**
-by how much.
+**Chrome while recording** (r4): everything but the stop control and
+"Recording 0:12" hides until the take ends.
 
 The state is carried by shape and word, not colour: the record control turns
 from a filled rose circle into a rose rounded square (stop), and
@@ -594,7 +606,8 @@ the stop shape alone, since no text sits within arm's reach.
 ### 9.1 VR (Quest Browser, WebXR)
 
 - **Ground:** the blue-hour room, not painted. Each hologram lights its stage.
-- **Edge:** three strokes at the slab's size. Soot in VR is **open**.
+- **Edge:** three strokes at the slab's size; none while you record. Soot in
+  VR is **open**.
 - **Chip:** 72%, only in front of the sky, a hologram or a lit surface, with
   a 0.3 s fade in and a 2 s hold. **Unverified:** sRGB blending on Quest VR.
 - **Motion:** gentle flicker and steady stage light; sparks on the hologram
@@ -662,15 +675,17 @@ nothing to measure). No chip, controls, sparks, flicker or meaning layer can
 be added. It is a flattened, opt-in preview, never the canonical hologram
 ([what a hologram is](../concepts/what-a-hologram-is.md)).
 
-- The feed's "View in AR" entry is a control on the card, in its shade, and
-  follows the flat rules (its glyph is open).
-- **Open:** whether the USDZ preview carries a static golden edge. A static
-  edge is all Quick Look could carry (round 1 review), and nothing
-  translucent is baked into the USDZ today. If chosen, the edge is added
-  when the server builds the USDZ (`apps/viewer-api/src/worker.ts`,
+- The feed's "View in AR" entry is the cube glyph on the card, in its shade,
+  and follows the flat rules.
+- **The USDZ carries the edge with a baked halo** (r4): the gold core, the
+  cream highlight and a soft halo, static. It is added when the server
+  builds the USDZ (`apps/viewer-api/src/worker.ts`,
   `apps/viewer-api/tools/preview_usdz.swift`), never in the exported GLB, so
   the edge stays in the view layer and the export → upload → render pipeline
   is unchanged.
+- **Unverified:** how the baked halo looks. Quick Look blends translucency
+  in linear light (documented in part), so the halo may look washed out;
+  check it on an iPhone.
 
 ## 10. Do and don't
 
@@ -706,30 +721,35 @@ Added by this styleguide:
 6. The 3.75 apx glyph stroke in a headset: type was rated, strokes were not.
 7. Headset legibility between 1 m and 1.75 m, and the author initial at
    25 apx.
+8. The baked halo in the Quick Look USDZ (r4), which blends in linear light.
 
-**Open: taste decisions for the user.**
+**Decided in round 4** (the user, on the visual page, 2026-10-24):
 
-1. Glyph hover, keyboard-focus and pressed looks (section 6).
-2. Whether the always-there set dims when idle (section 1.2).
-3. The flat chip over a hologram's own picture (section 2.3).
-4. Whether the Quick Look USDZ carries a static golden edge (section 9.5).
-5. Chrome timing (section 8.4), and how much chrome dims while recording
-   (section 8.5).
-6. The gold core and highlight in the room while recording (section 8.5).
-7. Foot labels and mark text within 1 m of a headset viewer (section 7.3).
-8. A container for marks that hold text (section 1.1), and the backing of
-   the phone's bottom dock (section 5.2).
-9. The proximity cue for hand pokes (section 6.1).
-10. Viewpoint portals, the rescale indicator and provenance looks
-    (section 4).
-11. The "View in AR" glyph (section 6).
+1. Glyph states: cream lift (section 6).
+2. The always-there set dims to 40% after 4 s idle (section 1.2).
+3. The chip over a hologram's picture stays 72% (section 2.3).
+4. The Quick Look USDZ carries the edge with a baked halo (section 9.5).
+5. Chrome unfolds, 240 ms in and 400 ms out; while recording, all chrome
+   but stop and the running time hides (sections 8.4, 8.5).
+6. No edge in a headset while recording (section 8.5).
+7. Within 1 m, labels fade and glyphs stay; notes fold to their mark
+   (section 7.3).
+8. Notes sit on a tinted slip; the phone dock sits on a bottom shade
+   (sections 1.1, 5.2).
+9. The poke proximity cue is a fingertip shade (section 6.1).
+10. "View in AR" is a cube in brackets (section 6).
+
+**Open: for the screen redesign.**
+
+- Viewpoint portals, the rescale indicator and provenance looks
+  (section 4).
 
 **Open: to set or measure.**
 
-12. Soot in VR (section 3.2).
-13. The AR brightness threshold for soot, on an Android device (section 3.2).
-14. Gaze-and-pinch hit size (section 6.1).
-15. The chip on a target not listed (section 2.3).
+- Soot in VR (section 3.2).
+- The AR brightness threshold for soot, on an Android device (section 3.2).
+- Gaze-and-pinch hit size (section 6.1).
+- The chip on a target not listed (section 2.3).
 
 **As drawn** values are marked inline. Most are small (radii, gaps, line
 heights, the glyph drawings); the largest are the flat chip at 72%, the
