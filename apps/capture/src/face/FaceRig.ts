@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import {
+  FACE_CHANNELS,
   MAX_PITCH,
   MAX_YAW,
   type EyeGaze,
   type FaceChannel,
   type FaceStandard,
   type TargetFormula,
+  arkitFromGaze,
   evaluateTarget,
   resolveMorphTarget,
   routeToBound
@@ -37,7 +39,14 @@ interface EyeBinding {
 export interface FaceBindingReport {
   morphTargets: Array<{ mesh: string; name: string; standard: FaceStandard | null }>;
   boundChannels: FaceChannel[];
+  // Channels the avatar can neither show nor route to a nearby one.
+  unroutableChannels: FaceChannel[];
   unresolvedTargets: string[];
+  // Combined targets left at 0 because the same mesh has a target per channel
+  // (a VRM "blink" beside "blinkLeft" and "blinkRight").
+  suppressedTargets: string[];
+  // What turns the eyes: bones, eyeLook morphs, or nothing.
+  gazeBy: 'bones' | 'morphs' | 'none';
   eyes: { left: boolean; right: boolean; pivotOffsetMm: { left: number | null; right: number | null } };
 }
 
@@ -46,6 +55,8 @@ const EYE_BONE_NAMES = {
   right: ['RightEye', 'rightEye', 'Eye_R', 'eye_R', 'J_Adj_R_FaceEye', 'EyeRight']
 } as const;
 const EYE_MESH_NAMES = { left: ['EyeLeft', 'Eye_L'], right: ['EyeRight', 'Eye_R'] } as const;
+const HEAD_BONE_NAMES = ['Head', 'head', 'J_Bip_C_Head', 'CC_Base_Head'] as const;
+const GAZE_CHANNELS = new Set<FaceChannel>(FACE_CHANNELS.filter((channel) => channel.startsWith('eyeLook')));
 
 /**
  * Drives an avatar's face from canonical weights: every morph target whose
@@ -55,8 +66,13 @@ const EYE_MESH_NAMES = { left: ['EyeLeft', 'Eye_L'], right: ['EyeRight', 'Eye_R'
 export class FaceRig {
   private readonly morphs: MorphBinding[] = [];
   private readonly unresolved: string[] = [];
+  private readonly suppressed: string[] = [];
+  private readonly suppressedBindings: MorphBinding[] = [];
   private readonly bound = new Set<FaceChannel>();
   private readonly eyes: { left: EyeBinding | null; right: EyeBinding | null } = { left: null, right: null };
+  // Morph-only rigs aim their gaze from the head: its bind orientation
+  // relative to the avatar root, as for the eyes' parents.
+  private head: { bone: THREE.Object3D; bindInverse: THREE.Quaternion } | null = null;
   private readonly gazeQuat = new THREE.Quaternion();
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
   private readonly tmpPosition = new THREE.Vector3();
@@ -69,16 +85,29 @@ export class FaceRig {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return;
       const meshBound = new Set<FaceChannel>();
+      const meshMorphs: MorphBinding[] = [];
       for (const [name, index] of Object.entries(mesh.morphTargetDictionary)) {
         const resolved = resolveMorphTarget(name);
         if (!resolved) {
           this.unresolved.push(`${mesh.name}:${name}`);
           continue;
         }
-        this.morphs.push({ mesh, index, name, standard: resolved.standard, formula: resolved.formula, meshBound });
-        for (const term of resolved.formula.terms) {
-          this.bound.add(term.channel);
-          meshBound.add(term.channel);
+        meshMorphs.push({ mesh, index, name, standard: resolved.standard, formula: resolved.formula, meshBound });
+      }
+      // A target that only combines channels the mesh already shows one by
+      // one would add its displacement on top of theirs.
+      const single = new Set(meshMorphs.filter((m) => channelsOf(m.formula).size === 1).flatMap((m) => [...channelsOf(m.formula)]));
+      for (const binding of meshMorphs) {
+        const channels = channelsOf(binding.formula);
+        if (channels.size > 1 && [...channels].every((channel) => single.has(channel))) {
+          this.suppressed.push(`${mesh.name}:${binding.name}`);
+          this.suppressedBindings.push(binding);
+          continue;
+        }
+        this.morphs.push(binding);
+        for (const channel of channels) {
+          this.bound.add(channel);
+          meshBound.add(channel);
         }
       }
     });
@@ -97,14 +126,38 @@ export class FaceRig {
         pivotOffsetMm: eyeMesh ? pivotOffset(bone, eyeMesh) : null
       };
     }
+    const head = findFirst(avatar, HEAD_BONE_NAMES, (o) => (o as THREE.Bone).isBone === true);
+    if (head) this.head = { bone: head, bindInverse: rootInverse.clone().multiply(head.getWorldQuaternion(new THREE.Quaternion())).invert() };
+    for (const binding of this.suppressedBindings) binding.mesh.morphTargetInfluences![binding.index] = 0;
+  }
+
+  /** Eye bones turn the eyes when both exist; otherwise eyeLook morphs, if any. */
+  get gazeBy(): 'bones' | 'morphs' | 'none' {
+    if (this.eyes.left && this.eyes.right) return 'bones';
+    return [...GAZE_CHANNELS].some((channel) => this.bound.has(channel)) ? 'morphs' : 'none';
   }
 
   get hasFace(): boolean {
     return this.morphs.length > 0 || this.eyes.left !== null || this.eyes.right !== null;
   }
 
-  /** Sets every bound morph target from canonical weights (absolute, not additive). */
-  setWeights(weights: FaceWeights): void {
+  /**
+   * Sets the face absolutely (not additively): every bound morph target, and
+   * the gaze on whichever one thing turns the eyes, so eye bones and eyeLook
+   * morphs never both carry it.
+   */
+  apply(weights: FaceWeights, gaze: FaceGaze): void {
+    const by = this.gazeBy;
+    const face: FaceWeights = {};
+    for (const [channel, value] of Object.entries(weights) as [FaceChannel, number][]) {
+      if (!GAZE_CHANNELS.has(channel)) face[channel] = value;
+    }
+    if (by === 'morphs') Object.assign(face, arkitFromGaze(gaze));
+    this.setWeights(face);
+    if (by === 'bones') this.setGaze(gaze);
+  }
+
+  private setWeights(weights: FaceWeights): void {
     const routed = new Map<Set<FaceChannel>, FaceWeights>();
     for (const binding of this.morphs) {
       let meshWeights = routed.get(binding.meshBound);
@@ -119,7 +172,7 @@ export class FaceRig {
    * gaze * eyeBind, which leaves the eye position unchanged because the bone
    * rotates about its own origin.
    */
-  setGaze(gaze: { left: EyeGaze; right: EyeGaze }): void {
+  private setGaze(gaze: { left: EyeGaze; right: EyeGaze }): void {
     for (const side of ['left', 'right'] as const) {
       const eye = this.eyes[side];
       if (!eye) continue;
@@ -136,7 +189,17 @@ export class FaceRig {
   gazeTowardPoint(point: THREE.Vector3): FaceGaze | null {
     const left = this.eyes.left;
     const right = this.eyes.right;
-    if (!left || !right) return null;
+    if (!left || !right) {
+      if (this.gazeBy !== 'morphs' || !this.head) return null;
+      // No eyes to converge: aim both from the head, in its bind frame.
+      const direction = this.tmpDirection.copy(point).sub(this.head.bone.getWorldPosition(this.tmpPosition));
+      direction.applyQuaternion(this.head.bone.getWorldQuaternion(this.tmpQuat).multiply(this.head.bindInverse).invert());
+      const eye = {
+        yaw: THREE.MathUtils.clamp(Math.atan2(direction.x, direction.z), -MAX_YAW, MAX_YAW),
+        pitch: THREE.MathUtils.clamp(Math.atan2(direction.y, Math.hypot(direction.x, direction.z)), -MAX_PITCH, MAX_PITCH)
+      };
+      return { left: eye, right: { ...eye } };
+    }
     const toward = (eye: EyeBinding): { yaw: number; pitch: number } => {
       const eyePosition = eye.bone.getWorldPosition(this.tmpPosition);
       const direction = this.tmpDirection.copy(point).sub(eyePosition);
@@ -174,7 +237,10 @@ export class FaceRig {
     return {
       morphTargets: this.morphs.map((m) => ({ mesh: m.mesh.name, name: m.name, standard: m.standard })),
       boundChannels: [...this.bound].sort(),
+      unroutableChannels: FACE_CHANNELS.filter((channel) => !this.bound.has(channel) && Object.keys(routeToBound({ [channel]: 1 }, this.bound)).length === 0),
       unresolvedTargets: [...this.unresolved],
+      suppressedTargets: [...this.suppressed],
+      gazeBy: this.gazeBy,
       eyes: {
         left: this.eyes.left !== null,
         right: this.eyes.right !== null,
@@ -227,4 +293,8 @@ function pivotOffset(bone: THREE.Object3D, mesh: THREE.Mesh): number | null {
   if (Math.abs(a.determinant()) < 1e-18) return null;
   const centre = rhs.applyMatrix4(a.invert());
   return Math.round(Math.hypot(centre.x, centre.y, centre.z) * 1e4) / 10;
+}
+
+function channelsOf(formula: TargetFormula): Set<FaceChannel> {
+  return new Set(formula.terms.map((term) => term.channel));
 }

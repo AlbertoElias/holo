@@ -1,7 +1,7 @@
 # Feature brief: Face and expressions on avatars
 
 **Lead:** Claude Code (Opus 5.5)  
-**Status:** Implementing
+**Status:** Verified — ready to merge (branch `feature/avatar-face`)
 **Layer:** event (the face is part of the recorded body; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -171,6 +171,31 @@ Reviewed by the `design-reviewer` subagent; its changes are folded in.
 | Liveness | 7 s after gaze drops, in the same check | 2 blinks, saccade range 6.1° |
 | Webcam fallback | same check, Chromium fake camera (no face in view) and a denied camera | `no-face` (GPU delegate) and `denied` both leave liveness driving the face; button labels "no face in view" / "permission denied" |
 | Regressions | `pnpm run verify:pr` (with `test:xr:capture`, which now includes `face`) | doctor, lint, typecheck, unit tests and builds pass; pipeline 6/6 (capture-to-viewer upload and render with the new head targets); portal; viewer XR 9/9; all 8 capture XR checks pass in 62 s in parallel. Knowledge atlas flaked once (0 cards rendered) and passed 7/7 on rerun |
+
+### Independent verification
+
+Codex (`-p deep`) verified commit `d7b9758` against this brief. Its sandbox
+blocked Chromium, so it probed the source with synthetic rigs and mocked
+browser APIs, and reported seven defects, all fixed:
+
+1. Eye bones and eyeLook morphs both carried the gaze. `FaceRig.apply` now
+   gives the gaze to one carrier: bones when both eyes have them, otherwise
+   eyeLook morphs.
+2. A combined blink beside per-eye blinks double-closed the lids. A target
+   that only combines channels the same mesh shows one by one stays at 0
+   (`suppressedTargets` in the report).
+3. Morph-only rigs never moved their eyes and could not take WebXR gaze.
+   They now get eyeLook weights from the gaze, aimed from the head bone.
+4. Turning the camera off during startup re-enabled it and leaked the
+   stream. Each start is invalidated by `stop()` and releases late arrivals.
+5. Entering VR left the camera running. The driver now stops it.
+6. A lost face took 0.57 s to reach liveness. The hold is now 0.2 s, plus
+   the 0.25 s crossfade: 0.45 s.
+7. The report omitted channels the avatar cannot show. It now lists
+   `unroutableChannels` and `gazeBy`.
+
+`apps/capture/src/face/face.test.ts` covers 1–5 and 7 with synthetic rigs;
+the shipped avatar cannot reach them through the XR face check.
 
 ## Physical-device limits
 

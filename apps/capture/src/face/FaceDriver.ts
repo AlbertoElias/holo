@@ -67,16 +67,17 @@ export class FaceDriver {
   }
 
   toggleCamera(): void {
-    if (this.webcam.state === 'off' || this.webcam.state === 'denied' || this.webcam.state === 'unavailable') void this.webcam.start();
-    else this.webcam.stop();
+    if (this.webcam.active) this.webcam.stop();
+    else void this.webcam.start();
   }
 
   update(input: FaceStepInput): void {
+    // The camera cannot see a face under a headset: release it on entering VR.
+    if (input.vrActive && this.webcam.active) this.webcam.stop();
     const rig = this.rig;
     if (!rig?.hasFace) return;
     if (input.micGranted) void this.voice.start();
 
-    // The camera cannot see a face under a headset.
     const camera = input.vrActive ? null : this.webcam.sample(performance.now());
     const live = this.liveness.sample(input.timeSec, input.deltaSec, this.automation || camera ? 0 : this.voice.read());
 
@@ -117,8 +118,7 @@ export class FaceDriver {
     this.output = weights;
     this.outputGaze = nextGaze;
 
-    rig.setWeights(withLidFollow(weights, nextGaze));
-    rig.setGaze(nextGaze);
+    rig.apply(withLidFollow(weights, nextGaze), nextGaze);
   }
 
   snapshot(): FaceSnapshot {

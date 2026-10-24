@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-20
+**Updated:** 2026-10-24
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -24,7 +24,12 @@ the next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-None.
+- `feature/avatar-face`: face and expressions on avatars (brief
+  [`docs/features/avatar-face.md`](docs/features/avatar-face.md)). Verified
+  locally (`verify:pr`, all capture XR checks including the new `face`) and
+  by an independent Codex review whose defects are fixed. Merge with the
+  next finished change, then close the brief.
+
 
 ## Unverified / device-only
 
@@ -40,6 +45,10 @@ None.
   deterministic browser flows only; it does not prove tracking feel, comfort,
   performance, or device session behavior.
 - Perform real-device viewer AR placement validation.
+- Face on devices: WebXR eye gaze and its permission prompt on a Quest Pro,
+  a real wink through the webcam (left/right mirroring), webcam tracking
+  quality on a laptop and a phone, and the microphone-driven jaw with real
+  speech (brief [`docs/features/avatar-face.md`](docs/features/avatar-face.md)).
 
 ## How to resume
 
