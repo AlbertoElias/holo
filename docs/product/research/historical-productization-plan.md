@@ -29,8 +29,8 @@ and port authority is [AGENT_CONTRACT.md](../../../AGENT_CONTRACT.md).
 | Historical phase | Proposed scope | Related ideas |
 | --- | --- | --- |
 | Weeks 1-2: foundation | Align ports, env names, docs, E2E server config; workspace doctor; shared ESLint source; decide tsgo rollout | Supporting engineering proposals, not product ideas; current policies live outside this directory |
-| Weeks 3-5: processing | Uploaded -> processing -> ready/failed; duration/audio/poly-count metadata; thumbnails; durable USDZ jobs; persisted retry/error and stale-lock handling | IDEA-047, IDEA-048, IDEA-049, IDEA-050 |
-| Weeks 6-8: creator workflow | Direct capture publishing; title/creator/tags; progress and recoverable uploads; detail/share URL | IDEA-046, IDEA-057, IDEA-058 |
+| Weeks 3-5: processing | Uploaded -> processing -> ready/failed; duration/audio/poly-count metadata; thumbnails; durable USDZ jobs; persisted retry/error and stale-lock handling | IDEA-048, IDEA-049, IDEA-050 |
+| Weeks 6-8: creator workflow | Direct capture publishing; title/creator/tags; progress and recoverable uploads; detail/share URL | IDEA-046, IDEA-058 |
 | Weeks 9-10: discovery/trust | Latest/creator/tag filters, text search, stable pagination; session/token identity; hide/report/admin review | IDEA-051, IDEA-052, IDEA-053 |
 | Weeks 11-12: hardening | Object storage/CDN/signed URLs; request limits, quotas, rate limits; structured logs, metrics, dashboards; upload and processing SLOs | IDEA-054, IDEA-055, IDEA-056 |
 

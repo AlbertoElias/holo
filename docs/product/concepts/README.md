@@ -13,6 +13,9 @@ needs before opening a PRD. They are not a lifecycle state; see `../README.md`.
 - [Hologram authoring](hologram-authoring.md)
 - [Communication protocols](communication-protocols.md)
 - [Design language and interaction model](design-language.md)
+  - [Styleguide](../design/styleguide.md): the current look, as rules, with
+    [tokens](../design/tokens.json); its rounds are in
+    [direction](../design/direction.md)
 
 - [Viewer experience](viewer-experience.md)
 - [Creator pipeline](creator-pipeline.md)

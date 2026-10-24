@@ -81,8 +81,6 @@ Supporting work. Approve each with the workflow it unblocks; PRD-038 and PRD-039
 | PRD | Source | Status |
 | --- | --- | --- |
 | [PRD-032: Publish from capture](PRD-032-direct-publish.md) | IDEA-046 | Draft |
-| [PRD-041: Upload progress and recovery](PRD-041-upload-recovery.md) | IDEA-057 | Draft |
-| [PRD-033: Visible processing lifecycle](PRD-033-processing-lifecycle.md) | IDEA-047 | Draft |
 | [PRD-034: Useful processing metadata](PRD-034-asset-metadata.md) | IDEA-048 | Draft |
 | [PRD-035: Preview images that represent the event fairly](PRD-035-preview-images.md) | IDEA-049 | Draft |
 | [PRD-036: Find a known explanation](PRD-036-discovery.md) | IDEA-051 | Draft |

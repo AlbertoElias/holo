@@ -5,6 +5,7 @@ import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
 import { createMediaStorage } from "./services/media-storage.js";
 import { startUsdzWorker } from "./services/usdz-worker.js";
+import { startUploadIntentCleanup } from "./services/upload-intent-cleanup.js";
 import path from "node:path";
 import { UPLOADS_DIR } from "./lib/constants.js";
 
@@ -26,6 +27,18 @@ async function main(): Promise<void> {
       }
     });
     app.addHook("onClose", async () => worker.stop());
+  }
+
+  if (env.UPLOAD_INTENT_CLEANUP_ENABLED) {
+    const uploadsRoot = env.UPLOADS_ROOT ?? path.join(process.cwd(), UPLOADS_DIR);
+    const cleanup = startUploadIntentCleanup({
+      storage: createMediaStorage(uploadsRoot),
+      logger: {
+        info: (obj, msg) => app.log.info(obj as object, msg),
+        error: (obj, msg) => app.log.error(obj as object, msg)
+      }
+    });
+    app.addHook("onClose", async () => cleanup.stop());
   }
 
   await app.listen({ port: env.PORT, host: "0.0.0.0" });

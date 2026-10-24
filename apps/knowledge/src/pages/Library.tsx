@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { concepts, documents, prds, research } from "../knowledge";
+import { concepts, design, documents, prds, research } from "../knowledge";
 import { DocumentCard, Empty, PageHeading } from "../components";
 export function Library({
   mode,
@@ -11,12 +11,12 @@ export function Library({
   const [query, setQuery] = useState("");
   const scope = allDocuments
     ? "All repository documents"
-    : "Concepts and research";
+    : "Concepts, design and research";
   const list =
     mode === "wiki"
       ? scope === "All repository documents"
         ? documents
-        : [...concepts, ...research]
+        : [...concepts, ...design, ...research]
       : prds;
   const filtered = list.filter((doc) =>
     `${doc.title} ${doc.content}`.toLowerCase().includes(query.toLowerCase()),
@@ -57,7 +57,7 @@ export function Library({
                   : "/wiki";
             }}
           >
-            <option>Concepts and research</option>
+            <option>Concepts, design and research</option>
             <option>All repository documents</option>
           </select>
         )}

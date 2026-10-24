@@ -9,7 +9,8 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Feature | Status | Brief |
 | --- | --- | --- |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
-| Face and expressions on avatars | Ready to merge | [avatar-face.md](avatar-face.md) |
+| Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
+| Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |
 | Self-resolving pointing | Verifying | [self-resolving-pointing.md](self-resolving-pointing.md) |
 | VR thumbstick locomotion and snap turn | Complete | [vr-thumbstick-locomotion.md](archive/vr-thumbstick-locomotion.md) |
 | Natural full-body motion from room-scale movement | Verifying | [room-scale-body-motion.md](room-scale-body-motion.md) |

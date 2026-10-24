@@ -13,23 +13,16 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-VR thumbstick locomotion is complete (brief
-[`docs/features/archive/vr-thumbstick-locomotion.md`](docs/features/archive/vr-thumbstick-locomotion.md),
-branch `feature/vr-locomotion`): the `VR_LOCO_VIDEO=1` locomotion check
-passed and produced
-`apps/capture/output/ci-vr-locomotion/vr-thumbstick-locomotion.mp4`, and
-`pnpm run verify:pr` passed. Next: validate the room-scale body solver and
-stick feel/comfort on a physical headset (see Unverified below), or pick
-the next queue item in [`TODOS.md`](TODOS.md).
+Face and expressions on avatars is complete (brief
+[`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md)):
+webcam, WebXR eye gaze and liveness drive synthesized ARKit shapes, and
+`test:xr:face` (`FACE_VIDEO=1` for the proof video) runs in the capture XR
+suite. Next: validate the face on devices (see Unverified below), or pick the
+next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- `feature/avatar-face`: face and expressions on avatars (brief
-  [`docs/features/avatar-face.md`](docs/features/avatar-face.md)). Verified
-  locally (`verify:pr`, all capture XR checks including the new `face`) and
-  by an independent Codex review whose defects are fixed. Merge with the
-  next finished change, then close the brief.
-
+None.
 
 ## Unverified / device-only
 

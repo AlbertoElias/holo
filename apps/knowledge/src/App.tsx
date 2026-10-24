@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { byPath, bugs, docUrl, documents } from "./knowledge";
+import { byPath, bugs, docUrl, documents, isWikiKind } from "./knowledge";
 import { NotFound } from "./components";
 import { Overview } from "./pages/Overview";
 import { IdeaGarden, IdeaDetail } from "./pages/Ideas";
@@ -60,7 +60,7 @@ export function App() {
   const doc = docPath ? byPath.get(docPath) : null;
   const active = decoded.startsWith("/idea")
     ? "/ideas"
-    : doc?.kind === "Concept" || doc?.kind === "Research"
+    : isWikiKind(doc?.kind)
       ? "/wiki"
       : doc?.kind === "PRD"
         ? "/prds"

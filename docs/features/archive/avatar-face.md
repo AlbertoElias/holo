@@ -1,7 +1,7 @@
 # Feature brief: Face and expressions on avatars
 
 **Lead:** Claude Code (Opus 5.5)  
-**Status:** Verified — ready to merge (branch `feature/avatar-face`)
+**Status:** Complete (merged 2026-10-24)
 **Layer:** event (the face is part of the recorded body; see
 `docs/product/concepts/what-a-hologram-is.md`)
 

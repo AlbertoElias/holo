@@ -46,6 +46,7 @@ it from the item below instead of duplicating its status here.
   stepping from the resulting root motion, and add a replay check from
   recorded controller input. Builds on
   [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
+- [x] Clean up expired direct-upload intents and their `incoming/*.glb` objects so abandoned uploads do not leak storage. In flight in [`docs/features/archive/upload-intent-cleanup.md`](docs/features/archive/upload-intent-cleanup.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D; the
   room-scale body solver
   ([`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md))
@@ -118,9 +119,9 @@ it from the item below instead of duplicating its status here.
     not assume the shipped rig's rest pose.
   - Prove it end to end: one fixture avatar per standard through the replay
     harness, checking hand fidelity and export → upload → render.
-- [ ] Face and expressions on avatars, as the foundation for phone-driven
-  avatars. In flight in
-  [`docs/features/avatar-face.md`](docs/features/avatar-face.md). Define one canonical expression set and map
+- [x] Face and expressions on avatars, as the foundation for phone-driven
+  avatars. Delivered 2026-10-24 in
+  [`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md); device validation is listed in `HANDOFF.md`. Define one canonical expression set and map
   it to VRM expressions, Apple ARKit's 52 blendshapes, Meta's face blendshapes
   and visemes, and Unity/Unreal facial rigs; include gaze and eyelids. Shares
   its avatar format work with the item above, and its product question with

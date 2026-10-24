@@ -21,6 +21,10 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   PUBLIC_MEDIA_BASE_URL: z.string().url().optional(),
   USDZ_WORKER_ENABLED: boolFromEnv,
+  UPLOAD_INTENT_CLEANUP_ENABLED: boolFromEnv,
+  UPLOAD_INTENT_CLEANUP_INTERVAL_MS: z.coerce.number().int().positive().default(3_600_000),
+  UPLOAD_INTENT_GRACE_MS: z.coerce.number().int().nonnegative().default(900_000),
+  UPLOAD_INTENT_COMPLETED_RETENTION_MS: z.coerce.number().int().positive().default(86_400_000),
   USDZ_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
   USDZ_STALE_CLAIM_MS: z.coerce.number().int().positive().default(600_000)
 });
@@ -39,6 +43,10 @@ const parsed = envSchema.parse({
   S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY,
   PUBLIC_MEDIA_BASE_URL: process.env.PUBLIC_MEDIA_BASE_URL,
   USDZ_WORKER_ENABLED: process.env.USDZ_WORKER_ENABLED,
+  UPLOAD_INTENT_CLEANUP_ENABLED: process.env.UPLOAD_INTENT_CLEANUP_ENABLED,
+  UPLOAD_INTENT_CLEANUP_INTERVAL_MS: process.env.UPLOAD_INTENT_CLEANUP_INTERVAL_MS,
+  UPLOAD_INTENT_GRACE_MS: process.env.UPLOAD_INTENT_GRACE_MS,
+  UPLOAD_INTENT_COMPLETED_RETENTION_MS: process.env.UPLOAD_INTENT_COMPLETED_RETENTION_MS,
   USDZ_POLL_INTERVAL_MS: process.env.USDZ_POLL_INTERVAL_MS,
   USDZ_STALE_CLAIM_MS: process.env.USDZ_STALE_CLAIM_MS
 });
