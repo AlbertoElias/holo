@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| Redesign UI and interaction across capture and viewer | Reviewed | [ui-redesign.md](ui-redesign.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Self-resolving pointing | Verifying | [self-resolving-pointing.md](self-resolving-pointing.md) |
 | VR thumbstick locomotion and snap turn | Complete | [vr-thumbstick-locomotion.md](archive/vr-thumbstick-locomotion.md) |

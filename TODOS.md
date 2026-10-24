@@ -103,6 +103,7 @@ it from the item below instead of duplicating its status here.
   behavior checks (`test:xr:*`) across the redesign. Design it through
   `docs/product/concepts/what-a-hologram-is.md`: include the portal viewer
   and Follow/Free, and start marks with "this/here" links read from pointing.
+  Brief: [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md).
 
 - [ ] Support the standard avatar formats, not one hardcoded skeleton. Today the
   rig finds bones by exact names in about five places
