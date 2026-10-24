@@ -1,55 +1,63 @@
 # Feature brief: Shared XR interface and viewer VR/AR
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed (awaiting user approval)
+**Status:** Reviewed (revised for IWSDK and multiple holograms; awaiting user approval)
 **Layer:** view (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
 
-A recipient on a headset can step into a hologram in VR, and a recipient on a
-phone or headset can place it in their room in AR. In both, they control the
-recorded event the way they would a video — play, pause, restart, scrub — move,
-scale and rotate it, and go to the next or previous hologram in their feed
-without leaving the immersive session.
+A recipient on a headset can step into holograms in VR, and a recipient on a
+phone or headset can place them in their room in AR. They pick holograms from
+a gallery of their feed, place several side by side, and control each like a
+video — play, pause, restart, scrub — while moving, scaling and rotating it,
+all without leaving the immersive session.
 
-Capture and viewer present **one XR interface**: the same panel, components,
-placement and interaction, differing only in the actions each app supplies.
+Capture and viewer present **one XR interface**, built the IWSDK way: the same
+panels, components, follow behavior and interaction, differing only in the
+actions each app supplies.
 
 Product framing: on flat screens the screen is a portal; in a headset the
-portal disappears and the recipient stands in the event. VR therefore uses a
-minimal neutral space. True scale is fact: life size means the recorded scale.
+portal disappears and the recipient stands in the event. VR uses a minimal
+neutral space. True scale is fact: life size means the recorded scale.
 
 ## Scope
 
 **Included:**
 
-- **One XR interface for capture and viewer.** Shared packages own the panel,
-  its components (button, toggle, timeline slider, label pill, status line),
-  placement (lazy-follow anchor), hover/press feedback, the input router
-  (controller ray + trigger, hand pinch, hand poke) and the grab/two-hand
-  manipulator. Both apps get identical look and behavior; capture supplies
-  record/stop, refit and recenter, the viewer supplies the actions below.
-  Capture's `VrRecordingPanel` and `VrHud` migrate onto the shared panel.
-- **VR entry.** New `/vr/:id` route starting an `immersive-vr` session. The
-  feed card shows a VR trigger when `immersive-vr` is supported, alongside the
-  existing AR trigger (a Quest shows both: AR is passthrough, VR is the neutral
-  space).
-- **VR space.** Soft neutral floor and horizon; hologram at recorded scale on
-  the floor about 1.5 m in front of the viewer.
-- **Viewer actions** in both `/vr/:id` and `/ar/:id`: play/pause, restart,
-  scrubbable timeline with elapsed/total, previous/next hologram, recenter,
-  exit, and a scale chip showing the current scale with "life size" reset.
-- **Phone AR** keeps the DOM overlay for the panel (tap). It uses the same
-  action model and state from `xr-ui-core`, not the Three rendering.
-- **Playback.** One clock drives the animation mixer and audio together. AR
-  gains audio (it has none today).
-- **Move / scale / rotate.** Grab to move, two-hand grab to scale and rotate
-  about the vertical axis; one-finger drag / two-finger pinch on phone AR.
-  Default is recorded scale (1.0); any other scale is a labelled, reversible
-  choice clamped to 0.1×–2× recorded scale.
-- **Feed browsing in XR.** Previous/next swaps the hologram inside the same
-  session in feed order, preloading neighbours and fetching the next cursor
-  page when needed; the URL is replaced so exit returns to the right card.
+- **IWSDK viewer scene.** `/vr/:id` and `/ar/:id` each mount an IWSDK `World`
+  (`World.create(container)`, destroyed on exit), as capture does. The flat
+  feed and portal stay React Three Fiber.
+- **One XR interface for capture and viewer.** A shared workspace package
+  (`@holoim/xr-ui-iwsdk`, replacing `xr-ui-three`/`xr-ui-r3f`) provides IWSDK
+  `PanelUI` panels (UIKit) with shared components (button, toggle, timeline
+  slider, label pill, status line, scale chip), `Follower` lazy-follow, and
+  IWSDK's ray/touch/grab pointers. `xr-ui-core` keeps the app-agnostic action
+  model. Capture's `VrRecordingPanel` and `VrHud` move onto it.
+- **Entry.** Feed card shows "Step inside" (VR, when `immersive-vr` is
+  supported) and "View in your room" (AR, unchanged rules). A Quest shows both.
+- **VR space.** IWSDK environment with a neutral gradient dome and a soft floor;
+  IWSDK locomotion (slide, snap turn, teleport).
+- **Gallery.** Feed holograms appear as small live previews on a curved shelf
+  around the viewer, paged through the feed cursor. Selecting one places it at
+  recorded scale in front of the viewer and focuses it.
+- **Several placed holograms.** Placed holograms stay where they are. Each has
+  its own playback state and its own grab/scale/rotate. Selecting a placed
+  hologram focuses it; the control panel binds to the focused one. Only the
+  focused hologram's audio is heard. "Back to gallery" removes one from the
+  space.
+- **Controls for the focused hologram:** play/pause, restart, scrubbable
+  timeline with elapsed/total, recenter, scale chip ("life size" reset), back
+  to gallery, exit.
+- **Move / scale / rotate.** IWSDK `TwoHandsGrabbable` (move, rotate, scale)
+  with scale clamped to 0.1×–2× recorded scale; any non-1.0 scale is shown on
+  the chip and reversible.
+- **AR.** IWSDK `immersive-ar` with hit-test and anchors; placing from the
+  gallery uses the hit-test floor point. The pure placement logic in
+  `arPlacement.ts` is reused; the R3F `ARHologramModel` state machine becomes
+  an IWSDK system.
+- **Playback.** An app-side `HologramPlaybackSystem` owns each hologram's clip
+  clock and `AnimationMixer` (IWSDK has no animation system) and drives that
+  hologram's audio, so pause, seek, restart and loop keep them in sync.
 
 **Excluded:**
 
@@ -58,139 +66,136 @@ minimal neutral space. True scale is fact: life size means the recorded scale.
 - Capture-time environment in VR; meaning-layer UI in XR; multi-viewer
   sessions; phone `immersive-vr`.
 - Switching between AR and VR mid-session.
+- Synchronized playback across holograms.
 
 ## Acceptance criteria
 
-- [ ] On a device reporting `immersive-vr`, the feed card shows the VR trigger;
-      activating it enters VR with the hologram at recorded scale on a neutral
-      floor ~1.5 m ahead. Devices without it show no VR trigger; AR trigger and
-      Quick Look rules are unchanged.
-- [ ] AR and VR place the hologram at recorded scale (1.0) by default — the
-      current 1.85 m normalisation is removed — and the scale chip reads
-      "life size".
-- [ ] In headset VR and AR the panel appears within reach, lazily follows the
-      viewer, and every control works by controller ray + trigger, hand pinch
-      at a distance and hand poke up close. In phone AR every control works by
-      tap on the DOM overlay.
-- [ ] Pause freezes animation and audio at the same clip time; play resumes
-      there; restart returns both to 0; looping wraps both together.
+- [ ] "Step inside" appears only where `immersive-vr` is supported and enters
+      an IWSDK VR world with the chosen hologram placed at recorded scale
+      ~1.5 m ahead on a neutral floor; "View in your room" keeps today's rules.
+- [ ] Holograms are placed at recorded scale (1.0) by default — the 1.85 m
+      normalisation is removed — and the scale chip reads "life size".
+- [ ] The gallery shows feed holograms around the viewer, pages past the
+      loaded feed via the cursor, and selecting one places and focuses it
+      without ending the session.
+- [ ] At least four holograms can be placed at once; each keeps its own play
+      state and transform; selecting one moves panel focus to it; only the
+      focused one is audible.
+- [ ] Every panel control works by controller ray, hand ray/pinch and hand
+      poke in headset VR and AR, and by screen tap in phone AR.
+- [ ] Pause freezes the focused hologram's animation and audio at the same
+      clip time; play resumes there; restart returns both to 0; loops wrap
+      both together.
 - [ ] Scrubbing shows the pose at the chosen time, and the scheduled audio
       offset matches clip time within 50 ms (measured as
-      `ctx.currentTime − startedAt + offset` — proves scheduling, not ear sync).
-- [ ] Grab moves the hologram; two-hand grab scales (clamped) and rotates about
-      the vertical axis; recenter restores default placement and recorded scale.
-- [ ] Next/previous swaps to the neighbouring hologram without ending the XR
-      session, shows loading inside the panel, crosses page boundaries via the
-      feed cursor, and is disabled at either end of the feed.
-- [ ] After browsing 10 holograms and returning, renderer geometry and texture
-      counts return to within the current+neighbours baseline.
-- [ ] Exit returns to the feed scrolled to the hologram last shown.
-- [ ] Capture's VR/AR panel is drawn and hit-tested only by the shared
-      packages; capture recording, refit and recenter pass the capture XR suite.
-- [ ] Side-by-side IWER screenshots of the capture and viewer panels show the
-      same components, styling and placement behavior.
-- [ ] `/ar/:id` deep links work; existing AR placement, recenter and bubble
-      specs pass; export → upload → render pipeline smoke passes.
+      `ctx.currentTime − startedAt + offset`; proves scheduling, not ear sync).
+- [ ] Two-hand grab moves, rotates and scales (clamped); recenter restores
+      default placement and recorded scale for the focused hologram.
+- [ ] Removing holograms and paging the gallery returns renderer geometry and
+      texture counts to the baseline for what remains in the space.
+- [ ] Exit destroys the World and returns to the feed at the last focused
+      hologram.
+- [ ] Capture's panels are built only from the shared package and capture
+      recording, refit and recenter pass the capture XR suite.
+- [ ] Side-by-side IWER screenshots of capture and viewer panels show the same
+      components, styling and follow behavior.
+- [ ] `/ar/:id` deep links work; AR placement, recenter and bubble specs pass
+      (ported as needed); export → upload → render pipeline smoke passes.
 
 ## Failure cases considered
 
 | Failure case | Prevention or evidence |
 |---|---|
-| Viewer AR has controllers, hands and screen input disabled (`useArController.ts`) because IWER threw on input frames | Step 1 re-enables input under IWER and fixes the throw; e2e enters AR and VR with controllers and hands |
-| Next/prev unmounts the canvas (ARView swaps to a DOM notice on `isLoading`), ending the session | Shell stays mounted for the session; hologram id is shell state; URL changes via `navigate(..., {replace:true})`; loading drawn in the panel |
-| Disposing a model breaks drei's `useGLTF` cache (clones share geometry/textures) | Dispose only the clone's own materials, stop the mixer (`uncacheRoot`), `useGLTF.clear(url)` only for evicted ids; keep current + neighbours |
-| Double press on next/prev during a load | Load keyed by id; stale results discarded; e2e double-press case |
-| Neighbour fails to load or 404s | Error in panel, current hologram stays, controls usable |
-| Neighbour lies past the loaded feed page | Feed list and cursor passed in router state; fetch next page; deep link fetches its own neighbours |
-| GLB with wrong root scale looks absurd at 1.0 | Scale chip makes it visible and reversible; flag recorded-scale anomalies in console diagnostics, no silent normalisation |
-| Static hologram (no animation clip) | Timeline/play disabled, "still" state; static GLB fixture |
-| No audio or autoplay blocked | Clock runs alone; `AudioContext.resume()` inside the first XR select handler (feed resume does not carry over) |
-| Audio and animation drift over many seeks or loop wraps | Clock owns `mixer.setTime` (clip time × timeScale, incl. secondary actions); audio restarts from clock on play/seek via a `seekVersion`; check after 20 seeks |
-| Old audio buffer survives a model swap | Audio hook drops and stops the old buffer when the hologram changes |
-| One select fires twice in the viewer (router + @react-three/xr pointer events on `<primitive>`) | Panel `raycast` is a no-op; only the shared router hits the panel |
-| Grab and panel ray target the same input | Panel hits win; grab only starts on a miss |
-| Capture input differs (direct `renderer.xr.getController` listeners, poke with 1.2 s rearm) | Router takes a per-host adapter (ray origin/dir, select edge, pinch edge, fingertip); poke and ray/pinch both enabled in both apps |
-| Capture recording regresses while its panel migrates | Capture XR suite before and after; migration is its own commit, last |
+| Phone AR needs tap input but IWSDK has no DOM overlay | Spike (step 1): screen/transient-pointer input reaching IWSDK pointers on the in-world panel. If it fails, decision returns to the user before going further |
+| Enabling IWSDK InputSystem and spatial UI in capture breaks recording (it was removed for CDN controller models and double ray ownership; UIKitML is stripped in production builds) | Spike (step 1) in capture: local controller/hand models, input visuals off, pointers only; record/replay determinism re-checked; production build check that panels survive |
+| IWSDK `AudioSystem` has no seek and uses wall-clock ramps that broke capture replay | Viewer audio stays app-side, driven by `HologramPlaybackSystem`; IWSDK audio stays off in both apps |
+| Many placed holograms exceed Quest frame or memory budget | Cap placed count (start at 4, tune on device); gallery previews are paused low-LOD clones; IWER reports draw calls and geometry counts |
+| Gallery and placed entities share one cached GLTF (AssetManager clone) and disposal corrupts the source | Dispose only per-clone materials and mixers; evict cache keys only when no entity uses them |
+| Double select on a gallery item while it loads | Load keyed by id; duplicate placement ignored |
+| Hologram fails to load or 404s | Gallery tile shows an error state; nothing else changes |
+| Focus ambiguity when holograms overlap | Last selected wins; focused one shows a ring; panel shows its title |
+| Audio of an unfocused hologram keeps playing | Focus change stops audio on the old one and starts the new one from its clock |
+| Grab and panel pointer target the same input | IWSDK pointer priority (touch > grab > ray); panels sit above grab targets |
+| GLB with a wrong root scale looks absurd at 1.0 | Scale chip makes it visible and reversible; log recorded-scale anomalies; no silent normalisation |
+| Static hologram (no clip) | Timeline/play disabled, "still" state; static GLB fixture |
+| Autoplay blocked | `AudioContext.resume()` inside the first XR select (feed resume does not carry over) |
+| World not torn down on exit or route change (leaked render loop, XR session) | `world.destroy()` on unmount; e2e enters and exits twice and checks one canvas, no session |
 | Duplicate `three` copies across packages | Structural flags, not `instanceof`; typecheck catches clashing `@types/three` |
-| Panel out of reach for tall, short or seated users | Placed from head height at session start and on recenter |
-| Session ends unexpectedly (headset off, system menu) | Existing session-end path returns to the feed |
-| Phone AR tap on panel also triggers placement | DOM overlay consumes the event |
+| Panel out of reach (tall, short, seated) | `Follower` offset from head height; recenter re-seats it |
+| Session ends unexpectedly | Same exit path as the Exit control |
+| Capture recording regresses while its panels migrate | Capture XR suite before and after; migration is its own commit, last |
 
 ## Ownership
 
 Implementation order (each step lands green before the next):
 
-1. Viewer input under IWER — `apps/viewer-web/src/features/ar/useArController.ts`.
-2. Persistent immersive shell, in-session swap with disposal, `/vr/:id`,
-   recorded scale — `apps/viewer-web/src/features/xr/` (new),
-   `features/ar/` (adopt shell), `app/router.tsx`, feed navigation state.
-3. Playback clock and seekable audio — `features/xr/`, `hologram/useGltfAudio.ts`
-   (after portal-view merges).
-4. Shared panel and interaction packages, used by the viewer —
-   `packages/xr-ui-core/`, `packages/xr-ui-three/`, `packages/xr-ui-r3f/`.
-5. Capture migration — `apps/capture/src/ui/VrRecordingPanel.ts`,
-   `apps/capture/src/ui/VrHud.ts`, `createCaptureRuntime.ts` wiring.
+1. **Spikes** (decide go/no-go): phone AR tap on an IWSDK panel; IWSDK input and
+   spatial UI inside capture without breaking recording or production builds.
+2. **IWSDK viewer shell**: `/vr/:id` and `/ar/:id` mount a World with one
+   hologram at recorded scale, AR hit-test/anchor placement ported,
+   `HologramPlaybackSystem` with audio, exit/teardown.
+3. **Shared UI package** `@holoim/xr-ui-iwsdk` and the focused-hologram panel
+   in the viewer; grab/scale.
+4. **Gallery and multiple placed holograms**, focus, feed paging, disposal.
+5. **Capture migration** onto the shared package; retire `xr-ui-three` and
+   `xr-ui-r3f`.
 
 | Role | Owner | Files or modules |
 |---|---|---|
-| Lead | Claude (Opus) | Brief, integration, final handoff, steps 4 API design |
-| Design reviewer | `design-reviewer` subagent (Opus) | Done; findings applied below |
-| Implementer | Claude (Sonnet) subagents, one step at a time | Paths per step above; new spec `apps/viewer-web/e2e/xr-viewer.spec.ts` |
+| Lead | Claude (Opus) | Brief, integration, shared UI API, final handoff |
+| Design reviewer | `design-reviewer` subagent (Opus) | Re-review of this revision before step 2 |
+| Implementer | Claude (Sonnet) subagents, one step at a time | `apps/viewer-web/src/features/xr/` (new), `features/ar/`, `app/router.tsx`, `feed/HologramCard*.tsx` (triggers), `hologram/useGltfAudio.ts` (shared audio clock); `packages/xr-ui-iwsdk/` (new), `packages/xr-ui-core/`; step 5: `apps/capture/src/ui/`, `apps/capture/src/runtime/captureStage.ts`; new spec `apps/viewer-web/e2e/xr-viewer.spec.ts` |
 | Independent verifier | Codex (different vendor) | Read-only verification; test artifacts only |
 
 **Overlaps:**
 
-- `portal-view.md` owns `feed/HologramCard*.tsx` and `hologram/useGltfAudio.ts`
-  (its brief says Verifying; the index said Implementing). The VR trigger and
-  audio seek wait for its merge.
-- `hand-tracking-fidelity.md` owns viewer AR checks: coordinate before editing
+- `portal-view.md` is merged and live; its brief stays Verifying only for
+  device checks, so its files are free to edit on top of `main`.
+- `hand-tracking-fidelity.md` owns viewer AR checks: coordinate before porting
   `hologram-feed.spec.ts` or `ar-bubble.spec.ts`.
 - `room-scale-body-motion.md` owns `tooling-testing/xr-env` and touches capture
-  runtime wiring (`AppOrchestrator`, `XrSessionService`): check before steps
-  1 and 5.
+  runtime wiring: check before steps 2 and 5.
 
 ## Design decision
 
-- **Persistent shell.** One mounted immersive shell per session
-  (`mode: "ar" | "vr"`); AR keeps its placement state machine, VR uses fixed
-  floor placement. `/ar/:id` stays and `/vr/:id` is added.
-- **Shared UI is plain Three.js.** Capture runs IWSDK (ECS over plain Three),
-  the viewer runs R3F; a `THREE.Object3D` is the layer both host natively.
-  `xr-ui-core` defines the panel spec (`{ id, kind: button|toggle|slider|label|chip,
-  label, state, onSelect/onChange }`) and interaction state; `xr-ui-three`
-  renders it, owns hit-testing, hover/press, lazy-follow and the manipulator;
-  each app feeds an input adapter. Capture adds the group to its scene; the
-  viewer mounts it with `<primitive>`. Rendering builds on `@pmndrs/uikit`'s
-  vanilla Three API if a spike in step 4 shows it runs in both hosts (it is
-  the library under today's `HeadLockedActionBar`); otherwise extend today's
-  `ThreeRecordingActionPanel` canvas approach. `HeadLockedActionBar` and the
-  R3F-only uikit usage are retired.
+- **IWSDK for both immersive scenes.** Capture already runs on an IWSDK World;
+  the viewer's immersive routes become IWSDK Worlds too, so the shared
+  interface is IWSDK-native: `PanelUI`/UIKit panels, `Follower`, IWSDK
+  pointers and grab components. The capture-specific reasons IWSDK input, UI
+  and audio were switched off (`docs/IWSDK_AI_WORKFLOW.md`,
+  `archive/iwsdk-runtime-refactor.md`) are re-tested in the step 1 spike;
+  audio stays app-side in both apps.
+- **What stays app-side:** animation playback (IWSDK has none) and audio seek
+  live in a viewer `HologramPlaybackSystem`; AR placement rules from
+  `arPlacement.ts`.
+- **Feed stays R3F.** The flat feed and portal are not XR; rewriting them buys
+  nothing. Entering XR navigates to the IWSDK route.
 - **Same behavior everywhere.** Capture's panel changes from head-locked to
-  lazy-follow and gains ray/pinch alongside its existing poke — intended
-  changes that make the two apps identical.
-- **Playback clock** lives in the viewer and owns mixer time; `useGltfAudio`
-  takes a clip-time + `seekVersion` input instead of owning time.
-- Alternatives rejected: moving the viewer onto IWSDK (rewrites render path
-  and AR placement); two renderers behind one spec (they drift); wrist menu
-  (unusable on phones and controllers; possible later addition).
+  lazy-follow and gains ray/pinch alongside poke — intended changes that make
+  the two apps identical.
+- Alternatives rejected: plain-Three shared panel hosted in both IWSDK and R3F
+  (hand-rolls what IWSDK provides); keeping the viewer on R3F with
+  `@react-three/xr` (two stacks for one interface).
 
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Input enabled, VR entry, recorded scale | New IWER spec `xr-viewer.spec.ts` (Quest 3 profile) in `test:xr:viewer` | Screenshot + `xr-viewer-report.json`; pending |
+| Spikes | Throwaway IWER runs (phone AR profile; capture with input + UI on) and a production build | Notes and screenshots in this brief; pending |
+| VR entry, recorded scale, teardown | New IWER spec `xr-viewer.spec.ts` (Quest 3 profile) in `test:xr:viewer` | Screenshot + `xr-viewer-report.json`; pending |
+| Gallery, multiple placed, focus, audio focus | Same spec on a seeded 12-item feed | Report with entity states + screenshot; pending |
 | Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | Drift numbers in report; pending |
-| Move/scale/rotate | Same spec, scripted controller grips (not IWER hands) | Transforms in report; pending |
-| Next/prev, paging, double press, 404, memory | Same spec on a seeded 12-item feed | Report incl. geometry/texture counts; pending |
-| AR unchanged + phone overlay | `hologram-feed.spec.ts` AR cases, `ar-bubble.spec.ts`, overlay actions | Pass output; pending |
-| Capture on shared panel | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + capture panel screenshot; pending |
+| Grab/scale/rotate | Same spec, scripted controller grips | Transforms in report; pending |
+| Memory after remove/page | Same spec | Geometry/texture counts in report; pending |
+| AR placement + phone tap | Ported AR specs with IWER phone profile | Pass output; pending |
+| Capture on shared panels | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + capture panel screenshot; pending |
 | Same look in both apps | IWER screenshots of both panels via `preview.mjs` | Side-by-side sheet; pending |
 | Pipeline compatibility | `pnpm run test:smoke:pipeline` | Pass output; pending |
 
 ## Physical-device limits
 
 IWER proves session, input, scheduling and memory behavior only. On devices:
-Quest 3 VR comfort, panel reach and readability, grab/pinch/poke feel, audio
-sync by ear, recorded-scale realism; Quest passthrough AR; Android phone AR
-tap controls; capture panel feel after migration. Record results here; until
-then they stay under Unverified in `HANDOFF.md`.
+Quest 3 VR comfort, frame rate with four placed holograms, panel reach and
+readability, grab/pinch/poke feel, audio by ear, recorded-scale realism; Quest
+passthrough AR; Android phone AR tap; capture panel feel after migration.
+Record results here; until then they stay under Unverified in `HANDOFF.md`.

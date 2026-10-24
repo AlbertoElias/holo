@@ -9,7 +9,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Feature | Status | Brief |
 | --- | --- | --- |
 | Shared XR interface and viewer VR/AR | Draft | [viewer-xr-interface.md](viewer-xr-interface.md) |
-| Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
+| Portal view on flat screens | Verifying | [portal-view.md](portal-view.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |
 | Self-resolving pointing | Verifying | [self-resolving-pointing.md](self-resolving-pointing.md) |
