@@ -248,7 +248,7 @@ the warm halo crossfades into a dark soot halo of the same shape:
 ```txt
 t = clamp((L − 0.095) / (0.16 − 0.095), 0, 1)   L: relative luminance of the ground behind the edge
 glow halo opacity = level × (1 − t)              only this part flickers
-soot halo opacity = soot × t                     soot: 0.6 on flat screens, 1 in AR
+soot halo opacity = soot × t                     soot: 0.6 on flat screens and in VR, 1 in AR
 ```
 
 `t` is 0 (all glow) at about 75% down the gradient and 1 (all soot) at about
@@ -257,10 +257,18 @@ soot halo opacity = soot × t                     soot: 0.6 on flat screens, 1 i
 Per target:
 
 - **Flat screens:** soot 0.6, by the luminance rule above.
-- **AR:** AR has no ground luminance behind the edge, so `t` is 1 when the
-  WebXR lighting estimate says the room is bright, and 0 otherwise: soot at
-  full opacity replaces the glow outright. Where there is no lighting
-  estimate (Quest), the edge is gold only.
+- **VR:** the flat-screen rule. `L` is the luminance of the VR room behind
+  the edge, and soot is 0.6.
+- **AR with a lighting estimate (Android Chrome):** AR has no ground
+  luminance behind the edge, so `t` is 1 while the room is bright and 0
+  otherwise: soot at full opacity replaces the glow outright. Bright is read
+  from the estimate's ambient (first) spherical-harmonic coefficient, in
+  linear light: `Y = 0.2126 R + 0.7152 G + 0.0722 B`. Soot switches on at
+  `Y ≥ 0.16` and off when `Y < 0.095`; between the two it keeps its state, so
+  it does not flicker at the boundary.
+- **AR with no lighting estimate (Quest passthrough):** soot at full opacity,
+  always (`t` = 1). Legibility against a bright wall comes before warmth in a
+  dim room.
 - **AR Quick Look:** none ([section 9.5](#95-ar-quick-look-ios)).
 
 ### 3.3 Sizes
@@ -362,6 +370,7 @@ input's minimum, centred on the glyph.
 | Mouse | 24 apx | |
 | Touch | 44 apx | |
 | Controller ray or hand ray | 56 apx | About 37 mm at 1.75 m |
+| Gaze and pinch | 72 apx | About 1.5° of view, above eye-tracking accuracy; visionOS sends it as `transient-pointer` input |
 | Hand poke | 72 apx, never under 20 mm; 30 apx gap (5.0 mm at 45 cm) | At 45 cm the 20 mm floor rules: 120 apx |
 
 **Hand feedback.** Hands have no haptics, so a poke shows a proximity cue
@@ -417,7 +426,9 @@ never shift as time runs. It reads "Paused · 0:08" beside Play, and
 
 ### 7.3 Headsets
 
-- **2.5× every flat size**, for type and icons.
+- **2.5× every flat size** of type, icons, glyph strokes, rings, glyph gaps
+  and the chip's shape, as the tables above give. Never hit areas
+  ([section 6.1](#61-hit-sizes-per-input)).
 - **No text within arm's reach.** The Quest 3 focuses at about 1.3 m, and
   at 45 cm 2.5× text cannot be read and 3× takes effort. Panels you touch carry glyphs
   only, and their labels sit 1 m away or more.
@@ -500,7 +511,8 @@ the stop shape alone, since no text sits within arm's reach.
 ### 9.1 VR (Quest Browser, WebXR)
 
 - **Ground:** the blue-hour room, not painted. Each hologram lights its stage.
-- **Edge:** three strokes at the slab's size; none while you record.
+- **Edge:** three strokes at the slab's size; none while you record. Soot
+  by the flat-screen rule, from the luminance of the room behind the edge.
 - **Chip:** 72%, only in front of the sky, a hologram or a lit surface, with
   a 0.3 s fade in and a 2 s hold.
 - **Motion:** gentle flicker and steady stage light; sparks on the hologram
@@ -518,8 +530,10 @@ the stop shape alone, since no text sits within arm's reach.
   on the real surface, which never flickers.
 - **Chip:** every row and label. 97% on Quest passthrough, 88% on Android
   Chrome, 92% on a target that blends in linear light; never opaque.
-- **Edge:** gold only on Quest. On Android, soot at full opacity when the
-  lighting estimate says the room is bright.
+- **Edge:** soot at full opacity always on Quest passthrough, which has no
+  lighting estimate. On Android, soot at full opacity while the lighting
+  estimate says the room is bright (on at 0.16, off below 0.095; section
+  3.2).
 - **Motion:** as VR.
 - **Type, glyphs and input:** as VR on a Quest. On an Android phone, flat
   sizes and 44 apx touch targets.
