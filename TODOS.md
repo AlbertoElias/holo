@@ -69,9 +69,6 @@ it from the item below instead of duplicating its status here.
     human motion (headset recordings plus reference mocap), such as joint
     angle distributions, arm–leg phase, center-of-mass path, and smoothness,
     and include side-by-side videos with a reference capture.
-- [ ] Mark synthesized locomotion as inferred in capture exports, distinct from
-  tracked/recorded performance. This is the export-provenance follow-up added
-  by the [hologram philosophy](docs/product/concepts/what-a-hologram-is.md).
 - [x] Adapt the XR avatar to the person's height, keeping its base grounded and
   neutral head/hands aligned with tracked input. Delivered in
   [`docs/features/archive/xr-height-adaptation.md`](docs/features/archive/xr-height-adaptation.md).
@@ -122,7 +119,8 @@ it from the item below instead of duplicating its status here.
   - Prove it end to end: one fixture avatar per standard through the replay
     harness, checking hand fidelity and export → upload → render.
 - [ ] Face and expressions on avatars, as the foundation for phone-driven
-  avatars. Nothing exists today. Define one canonical expression set and map
+  avatars. In flight in
+  [`docs/features/avatar-face.md`](docs/features/avatar-face.md). Define one canonical expression set and map
   it to VRM expressions, Apple ARKit's 52 blendshapes, Meta's face blendshapes
   and visemes, and Unity/Unreal facial rigs; include gaze and eyelids. Shares
   its avatar format work with the item above, and its product question with

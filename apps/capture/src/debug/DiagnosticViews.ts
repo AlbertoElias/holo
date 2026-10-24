@@ -96,6 +96,7 @@ export class DiagnosticViews {
     renderer.xr.enabled = false;
     renderer.setRenderTarget(null);
     if (this.spectatorMode === 'body' || this.spectatorMode === 'body-fixed') this.renderBodySpectator(spectator, width, height);
+    else if (this.spectatorMode === 'face') this.renderFaceSpectator(spectator, width, height);
     else this.renderHandsSpectator(spectator, width, height);
     renderer.xr.enabled = true;
   }
@@ -159,6 +160,26 @@ export class DiagnosticViews {
     this.setHeadPathOverlayVisible(true);
     renderer.render(scene, spectator);
     this.setHeadPathOverlayVisible(false);
+    avatar.setFirstPersonVisualState('vr');
+  }
+
+  // A portrait of the face from in front of the eyes, following the head:
+  // forward is up × (right eye − left eye), so it needs no rig axis convention.
+  private renderFaceSpectator(spectator: THREE.PerspectiveCamera, width: number, height: number): void {
+    const { renderer, scene, avatar } = this.deps;
+    const left = avatar.leftEyeAnchor?.getWorldPosition(new THREE.Vector3());
+    const right = avatar.rightEyeAnchor?.getWorldPosition(new THREE.Vector3());
+    if (!left || !right) return;
+    const centre = left.clone().add(right).multiplyScalar(0.5);
+    const forward = new THREE.Vector3(0, 1, 0).cross(right.clone().sub(left)).setY(0).normalize();
+    spectator.fov = 20;
+    spectator.aspect = width / Math.max(1, height);
+    spectator.updateProjectionMatrix();
+    spectator.position.copy(centre).addScaledVector(forward, 0.55).add(new THREE.Vector3(0, 0.01, 0));
+    spectator.lookAt(centre.x, centre.y - 0.025, centre.z);
+    renderer.setViewport(0, 0, width, height);
+    avatar.setFirstPersonVisualState('off');
+    renderer.render(scene, spectator);
     avatar.setFirstPersonVisualState('vr');
   }
 

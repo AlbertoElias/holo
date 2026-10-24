@@ -8,6 +8,7 @@ import type { CrouchState } from '../body/crouch';
 import type { CameraController } from '../camera/CameraController';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { DiagnosticViews } from '../debug/DiagnosticViews';
+import type { FaceDriver } from '../face/FaceDriver';
 import type { DesktopPointAction } from '../input/DesktopPointAction';
 import type { InputController } from '../input/InputController';
 import type { VrLocomotion } from '../input/VrLocomotion';
@@ -58,6 +59,7 @@ export interface CaptureContext {
   heightFit: HeightFit;
   crouch: CrouchState;
   hands: HandEmbodiment;
+  face: FaceDriver;
   animator: LocomotionAnimator;
   terrainLegs: TerrainLegSolver;
   ar: ArSpectator;

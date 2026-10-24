@@ -1,0 +1,30 @@
+{
+  "name": "@holoim/avatar-face",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "verify:fast": "pnpm run lint && pnpm run typecheck",
+    "verify:full": "pnpm run verify:fast && pnpm run test && pnpm run build"
+  },
+  "devDependencies": {
+    "@holoim/config-eslint": "workspace:*",
+    "@holoim/config-ts": "workspace:*",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

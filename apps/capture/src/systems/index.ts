@@ -7,6 +7,7 @@ import { CaptureStateSystem } from './CaptureStateSystem';
 import { CaptureUiSystem } from './CaptureUiSystem';
 import { CAPTURE_COMPONENTS } from './components';
 import { DiagnosticsSystem } from './DiagnosticsSystem';
+import { FaceSystem } from './FaceSystem';
 import { MovementSystem } from './MovementSystem';
 import { RecordingSystem } from './RecordingSystem';
 import { RoomScaleSystem } from './RoomScaleSystem';
@@ -29,6 +30,7 @@ export function registerCaptureSystems(world: World): void {
     .registerSystem(BodyPoseSystem, { priority: 50 })
     .registerSystem(CameraSystem, { priority: 60 })
     .registerSystem(TrackedHandsSystem, { priority: 70 })
+    .registerSystem(FaceSystem, { priority: 75 })
     .registerSystem(CaptureUiSystem, { priority: 80 })
     .registerSystem(RecordingSystem, { priority: 90 })
     .registerSystem(DiagnosticsSystem, { priority: 100 });

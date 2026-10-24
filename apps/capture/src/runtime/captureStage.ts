@@ -1,4 +1,4 @@
-import { AudioSystem, EnvironmentSystem, InputSystem, LightSystem, ReferenceSpaceType, SessionMode, World } from '@iwsdk/core';
+import { AudioSystem, EnvironmentSystem, GazeSystem, InputSystem, LightSystem, ReferenceSpaceType, SessionMode, World } from '@iwsdk/core';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -33,7 +33,8 @@ export async function createCaptureStage(container: HTMLElement): Promise<Captur
       // Same session request and browser offer as three's VRButton.
       offer: 'always',
       referenceSpace: { type: ReferenceSpaceType.LocalFloor, required: true },
-      features: { handTracking: true },
+      // Optional eye gaze (Quest Browser 'gaze-tracking') drives the avatar's eyes.
+      features: { handTracking: true, gazeTracking: true },
       // Capture resets its own cameras on exit; a deferred SDK restore would race the frame loop.
       restoreCameraOnExit: false
     },
@@ -90,6 +91,9 @@ function removeCompetingSdkSystems(world: World): void {
   // Spatial playback with wall-clock AudioParam ramps, which throw under
   // replay's rebased clock. Capture records the microphone with MediaRecorder.
   world.unregisterSystem(AudioSystem);
+  // Gaze-and-pinch targeting; capture reads the gaze ray only to aim the
+  // avatar's eyes (face/XrGaze).
+  world.unregisterSystem(GazeSystem);
   for (const child of [...world.player.head.children]) {
     if (child.type === 'AudioListener') child.removeFromParent();
   }

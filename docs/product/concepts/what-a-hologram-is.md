@@ -98,8 +98,8 @@ priority:
 
 1. **The event comes first.** Hand-tracking fidelity and avatar height
    adaptation are foundational: pointing rays, measurements, and ribbons are
-   only as good as the body data and its scale. Synthesized locomotion is
-   marked as inferred.
+   only as good as the body data and its scale. IK-solved locomotion is part
+   of the recorded performance, not an inferred mark.
 2. **The portal is how most people will meet holograms** (IDEA-045, with
    IDEA-042 and IDEA-043). It needs no new data, so it can start now.
 3. **Meaning read from the body comes before meaning typed by the author.**

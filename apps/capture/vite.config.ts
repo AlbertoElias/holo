@@ -165,7 +165,8 @@ export default defineConfig(async ({ command }) => {
     iwsdkDev({
       emulator: {
         activation: 'localhost',
-        device: 'metaQuest3'
+        // The face check emulates a Quest Pro, the profile with eye gaze.
+        device: process.env.CAPTURE_IWER_DEVICE === 'metaQuestPro' ? 'metaQuestPro' : 'metaQuest3'
       },
       ...(aiMode
         ? {
