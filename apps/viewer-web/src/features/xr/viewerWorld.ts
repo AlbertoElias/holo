@@ -1,6 +1,7 @@
 import {
   AudioSystem,
   DomeGradient,
+  Grabbed,
   IBLGradient,
   RayInteractable,
   ReferenceSpaceType,
@@ -8,7 +9,7 @@ import {
   World,
   type Entity
 } from "@iwsdk/core";
-import { Box3, BoxGeometry, CircleGeometry, Color, Mesh, MeshBasicMaterial, MeshStandardMaterial, PointLight, Vector3 } from "three";
+import { Box3, BoxGeometry, Quaternion, CircleGeometry, Color, Mesh, MeshBasicMaterial, MeshStandardMaterial, PointLight, Vector3 } from "three";
 import type { Object3D } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -26,6 +27,7 @@ import {
   setHologramPlaying,
   type HologramRuntime
 } from "./hologramPlayback";
+import { HologramControlsSystem } from "./hologramControls";
 import { ArPlacementSystem, VrPlacementSystem } from "./placementSystems";
 import { ScreenInputSystem } from "./screenInputBridge";
 import { createViewerContext, viewerContext, type XrViewMode } from "./viewerContext";
@@ -94,7 +96,7 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
         features: isAr ? { hitTest: true, anchors: true } : { handTracking: true },
         offer: "none"
       },
-      features: { locomotion: false, physics: false, grabbing: false, spatialUI: false }
+      features: { locomotion: false, physics: false, grabbing: true, spatialUI: true }
     }),
     loadHologram(options.modelUrl)
   ]);
@@ -135,7 +137,7 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
   });
   viewerContext(world).focused = hologram;
 
-  world.registerSystem(HologramPlaybackSystem);
+  world.registerSystem(HologramPlaybackSystem).registerSystem(HologramControlsSystem);
   if (isAr) {
     world.registerSystem(ArPlacementSystem).registerSystem(ScreenInputSystem);
     const placement = world.getSystem(ArPlacementSystem)!;
@@ -201,6 +203,10 @@ function installXrViewerProbe(world: World, hologram: Entity, model: Object3D): 
           visible: object.visible,
           worldPosition: worldPosition.toArray(),
           worldScale: object.getWorldScale(new Vector3()).toArray(),
+          yaw: object.rotation.y,
+          // A recorded person stays upright: the angle between its up and the world's.
+          tiltRad: new Vector3(0, 1, 0).applyQuaternion(object.getWorldQuaternion(new Quaternion())).angleTo(new Vector3(0, 1, 0)),
+          grabbed: hologram.hasComponent(Grabbed),
           recordedSize: size.toArray(),
           playing: Boolean(hologram.getValue(HologramPlayback, "playing")),
           clipTime: hologram.getValue(HologramPlayback, "clipTime"),
@@ -210,6 +216,7 @@ function installXrViewerProbe(world: World, hologram: Entity, model: Object3D): 
             ? { playing: runtime.audio.playing, scheduledOffset: runtime.audio.scheduledOffset(), duration: runtime.audio.duration }
             : null
         },
+        controls: world.getSystem(HologramControlsSystem)?.probe() ?? null,
         renderer: {
           geometries: world.renderer.info.memory.geometries,
           textures: world.renderer.info.memory.textures,

@@ -101,3 +101,108 @@ export interface XrUiActions {
   retryPermission?: () => void;
   exportRecording?: () => void;
 }
+
+// Hologram controls (docs/features/viewer-xr-interface.md): the app-agnostic
+// action model behind the foot controls, status line and hand dock. Each app
+// supplies the actions; @holoim/xr-ui-iwsdk draws them.
+
+/** Playback and pose state of one placed hologram, as its foot controls show it. */
+export interface HologramControlState {
+  playing: boolean;
+  clipTime: number;
+  /** Clip length in seconds; 0 is a still hologram (no timeline). */
+  duration: number;
+  /** Uniform scale relative to the recorded scale (1 = life size). */
+  scale: number;
+}
+
+/** What a hologram's foot controls do; each acts only on its own hologram. */
+export interface HologramControlActions {
+  togglePlay(): void;
+  restart(): void;
+  seek(clipTime: number): void;
+  recenter(): void;
+  resetScale(): void;
+}
+
+export type DockGlyph = "exit" | "record";
+
+/** A glyph in the hand dock (headset) or bottom dock (phone). Glyphs only within reach. */
+export interface DockAction {
+  id: string;
+  glyph: DockGlyph;
+  /** Accessible name; never drawn within arm's reach. */
+  label: string;
+  onSelect(): void;
+}
+
+/** Figtree tabular timecode, "0:08" (styleguide §7.2). */
+export function formatTimecode(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/** The label beside Play: "0:08", or "Paused · 0:08" (styleguide §6, §7.2); "Still" without a clip. */
+export function playbackLabel(state: Pick<HologramControlState, "playing" | "clipTime" | "duration">): { prefix: string | null; time: string } {
+  if (state.duration <= 0) return { prefix: null, time: "Still" };
+  return { prefix: state.playing ? null : "Paused", time: formatTimecode(state.clipTime) };
+}
+
+/** Elapsed and total beside the timeline: "0:08 / 0:30". */
+export function elapsedTotalLabel(state: Pick<HologramControlState, "clipTime" | "duration">): string {
+  return `${formatTimecode(state.clipTime)} / ${formatTimecode(state.duration)}`;
+}
+
+export const LIFE_SIZE_LABEL = "life size";
+const LIFE_SIZE_TOLERANCE = 0.005;
+
+export function isLifeSize(scale: number): boolean {
+  return Math.abs(scale - 1) < LIFE_SIZE_TOLERANCE;
+}
+
+/** The scale chip: "life size" at recorded scale, otherwise the share of it ("62%"). Rescaling is always labelled. */
+export function scaleLabel(scale: number): string {
+  return isLifeSize(scale) ? LIFE_SIZE_LABEL : `${Math.round(scale * 100)}%`;
+}
+
+/**
+ * Attention on the always-there set (styleguide §1.2): it dims after `idleAfterMs` unused and
+ * returns when something comes near. The on-reach set shows only while something is near, and
+ * holds `holdMs` after it leaves so it does not flicker at the edge of a trigger.
+ */
+export interface AttentionState {
+  /** Last time (ms) anything came near or a control was used. */
+  lastActiveAt: number;
+  /** Last time (ms) a near trigger was true. */
+  lastNearAt: number;
+}
+
+export interface AttentionTiming {
+  idleAfterMs: number;
+  idleOpacity: number;
+  holdMs: number;
+}
+
+export interface AttentionReading {
+  /** Opacity of the always-there set: 1, or idleOpacity once idle. */
+  opacity: number;
+  /** Whether the on-reach set is shown. */
+  revealed: boolean;
+  /** Time left before the always-there set dims, in ms (0 once dimmed). */
+  dimInMs: number;
+}
+
+export function createAttentionState(now: number): AttentionState {
+  return { lastActiveAt: now, lastNearAt: Number.NEGATIVE_INFINITY };
+}
+
+export function updateAttention(state: AttentionState, now: number, near: boolean, used: boolean, timing: AttentionTiming): AttentionReading {
+  if (near) state.lastNearAt = now;
+  if (near || used) state.lastActiveAt = now;
+  const idleFor = now - state.lastActiveAt;
+  return {
+    opacity: idleFor >= timing.idleAfterMs ? timing.idleOpacity : 1,
+    revealed: now - state.lastNearAt <= timing.holdMs,
+    dimInMs: Math.max(0, timing.idleAfterMs - idleFor)
+  };
+}

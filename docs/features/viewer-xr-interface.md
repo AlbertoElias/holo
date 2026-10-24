@@ -150,8 +150,11 @@ neutral space. True scale is fact: life size means the recorded scale.
 - [ ] Scrubbing shows the pose at the chosen time, and the scheduled audio
       offset matches clip time within 50 ms (measured as
       `ctx.currentTime − startedAt + offset`; proves scheduling, not ear sync).
-- [ ] Two-hand grab moves, rotates and scales (clamped); recenter restores
-      default placement and recorded scale for that hologram.
+- [ ] Two-hand grab moves, rotates and scales (clamped) while the hologram
+      stays standing on its ground: horizontal moves, yaw-only turns, scale
+      about its base, base height within 5 mm of the ground throughout (the
+      user, 2026-10-24); recenter restores default placement and recorded
+      scale for that hologram.
 - [ ] Removing holograms and paging the gallery returns renderer geometry and
       texture counts to the baseline for what remains in the space.
 - [ ] Exit destroys the World and returns to the feed at the last focused
@@ -263,13 +266,13 @@ Implementation order (each step lands green before the next):
 | Spikes | Throwaway IWER runs (phone AR tap; capture with input + UI on) and a production build, 2026-10-24 | **Both GO**; results in "Step 1 spike results" below |
 | VR entry, recorded scale, teardown | IWER spec `xr-viewer.spec.ts` (Quest 3 profile) in `test:xr:viewer` | **Pass** 2026-10-24: scale 1, on the floor 1.50 m ahead, two enter/exit visits with equal renderer counts; screenshot + `output/test-results/xr-viewer-report.json` |
 | Gallery, multiple placed, focus, audio focus | Same spec on a seeded 12-item feed | Report with entity states + screenshot; pending |
-| Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | Playback and audio **pass** (step 2): clip clock 1.00× wall clock, audio offset within 0.2 ms of clip time; scrub and loop UI wait for step 3 |
-| Grab/scale/rotate | Same spec, scripted controller grips | Transforms in report; pending |
+| Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | **Pass** (steps 2–3): clip clock 1.00× wall clock; ray pause holds clock and audio; a held-trigger scrub lands within 5% of the aimed time with the pose at that time; resume, restart and a phone timeline drag reschedule audio within 50 ms; `vrControls` and `ar.phoneControls` in the report |
+| Grab/scale/rotate | Same spec, scripted controller grips | **Pass** (step 3): two-hand grip grab spreads, carries, lifts and turns it; uniform scale, clamped at 2× ("200%"), base on the floor (0 mm) and upright at every step; scale chip "life size" resets scale in place; recenter 1.50 m ahead at recorded scale; `vrControls.grab` in the report |
 | Memory after remove/page | Same spec | Geometry/texture counts in report; pending |
-| AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | IWSDK shell **pass** (step 2), opened from the feed card at `/?shell=iwsdk`: stands on the floor 1.8 m ahead and anchors, lit like VR (mean luminance of the hologram's pixels 67 in AR vs 71 in VR; the unlit build read 19 and fails the 30 threshold), tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
+| AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | Step 3 **pass**: phone foot controls at flat sizes (16/36 apx, 44 apx touch, chip 0.88), a tap on the play glyph pauses without moving the hologram, a 30-frame finger drag on the timeline scrubs within 5%, and Exit in the bottom dock (16 CSS px, bottom centre) leaves; IWSDK shell **pass** (step 2), opened from the feed card at `/?shell=iwsdk`: stands on the floor 1.8 m ahead and anchors, lit like VR (mean luminance of the hologram's pixels 67 in AR vs 71 in VR; the unlit build read 19 and fails the 30 threshold), tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
 | Capture on the shared UI | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + hand-dock and status-line screenshot; pending |
 | Same look in both apps | IWER screenshots of both apps' foot controls, status line and hand dock via `preview.mjs` | Side-by-side sheet; pending |
-| Nothing interactive follows the head | Same spec: turn the head and read control world positions | Report shows foot controls fixed to their hologram; pending |
+| Nothing interactive follows the head | Same spec: turn the head and read control world positions | **Pass** (step 3): foot controls moved 0 m on a head turn while the status line (no interactive parts) followed; `vrControls.headTurn` |
 | Pipeline compatibility | `pnpm run test:smoke:pipeline` | Pass output; pending |
 
 ### Step 1 spike results (2026-10-24)
@@ -400,6 +403,68 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   feed's trigger chrome predates the styleguide.
 - **Limits:** the viewer's `@iwsdk/vite-plugin-dev` 0.5.3 still bundles
   IWER 2.3; IWSDK locomotion is off. Emulation evidence only.
+
+### Step 3 results (2026-10-24)
+
+- **Package.** `@holoim/xr-ui-iwsdk` builds the foot controls, the periphery
+  status line and the hand dock from IWSDK's UIKit (`UIKit.Container`,
+  `Text`, `Content`) and pointer events, driven by the action model and
+  labels in `@holoim/xr-ui-core`. Sizes come from `tokens.json` per target
+  (`vr`, `ar-quest`, `ar-phone`); glyphs are stroked meshes, because UIKit's
+  `Svg` fills paths and ignores strokes.
+- **Foot controls.** A chip at the hologram's front edge, turned to the
+  viewer only when it is placed or recentered. The always-there row is Play
+  (in its ring) with "Paused · 0:06" when paused. The on-reach row is
+  restart, the timeline with elapsed/total, recenter and the scale chip.
+  The on-reach row shows on ray hover, a hand within 0.3 m or the head ray
+  within 15°, holds 2 s, and the chip dims to 40% after 4 s unused.
+- **Phone sizes.** Flat sizes are CSS pixels of the phone's image (§9.2),
+  computed from the XR view's projection (the page camera's read 7.5 px for
+  a 16 px glyph). The foot chip scales with its distance from the phone, so
+  it keeps that size wherever the viewer stands.
+- **Status line.** Follows the head lazily, holds no pointer target, and
+  shows only "Paused · t" in step 3.
+- **Hand dock.** Exit on the left grip, its poke target at least 20 mm, and
+  hidden while that hand grabs. On a phone, a bottom-centre strip fixed to
+  the camera.
+- **Grab.** `TwoHandsGrabbable` on headsets only. IWSDK's handle denies ray
+  pointers on the hologram and stays bound once added, so a phone never gets
+  one. Its transform is replaced (`twoHandGrab.ts`) so the hologram stays
+  standing on its ground (the user, 2026-10-24): the base moves with the
+  hands' midpoint horizontally, turns by their yaw, scales uniformly about
+  itself (0.1×–2×), and keeps its height. In AR, release hit-tests straight
+  down under the new spot and re-anchors there; without a hit within 1 s it
+  anchors where it was let go. The AR path has no emulated check yet
+  (the phone has no grab; the spec has no AR headset run).
+- **Input.** Phones are detected by `session.interactionMode ===
+  "screen-space"` (Chrome Android) or a single view. IWER always reports
+  two views, so the spec sets the mode. The screen-input bridge already
+  moved the pointer every frame, so a held finger drags the timeline with
+  no change.
+- **Spec changes.** Grips, not IWER hands, drive the grab. Clips are
+  stretched to 8 s so restart and loop checks do not alias with polling.
+  Emulated phone taps release on the next frame: emulated frames take
+  about 150 ms, and pointer-events treats a press over 300 ms as no click.
+- **Design questions for the user.**
+  - Provisional glyphs: pause, restart, recenter and exit are not in §6.
+  - The scale chip reads "62%", because the font has no "×".
+  - Inter stands in for Figtree (no MSDF Figtree font yet).
+  - The "·" is drawn as a dot.
+  - The chip tilts half-way toward the eyes.
+  - The timeline's track colour and length have no token.
+  - Exit sits in the hand dock and the phone bottom dock, still pending
+    confirmation.
+  - The phone dock has no §5.2 shade.
+  - At flat sizes the phone's reach row (restart, 160 apx timeline,
+    elapsed/total, recenter, scale chip) is wider than a 390 px screen. In
+    the spec its ends land at −33 px and 398 px. Shorten the timeline on
+    phones, wrap the row, or drop a control there?
+  - At token sizes the chip is small from about 2 m.
+  - A ray click on the hologram no longer pauses it in a headset (grab owns
+    the ray there); the play glyph does.
+  - Restart returns to 0 and keeps the play state.
+- **Limits.** The grounded grab and the uniform-scale patch rely on IWSDK's
+  internal `Handle` component. Emulation evidence only.
 
 ### Video verification loop
 

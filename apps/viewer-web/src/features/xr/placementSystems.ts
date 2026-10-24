@@ -1,4 +1,4 @@
-import { createSystem } from "@iwsdk/core";
+import { createSystem, Grabbed } from "@iwsdk/core";
 import { Plane, Quaternion, Vector3 } from "three";
 import type { Matrix4, Object3D, Ray } from "three";
 
@@ -20,6 +20,10 @@ const AR_MIN_SURFACE_UP_DOT = 0.8;
 // A recorded person at true scale stands on the floor, not on furniture:
 // surfaces higher than this above the local floor are skipped.
 const AR_MAX_STANDING_SURFACE_M = 0.5;
+// After a two-hand move, the surface under the hologram is found by a ray
+// straight down from this far above its base, within this long.
+const AR_REGROUND_RAY_HEIGHT_M = 1;
+const AR_REGROUND_TIMEOUT_MS = 1000;
 // Without a usable hit, stand it on the local floor (y = 0) this far ahead,
 // the R3F view's minimum, so the whole figure fits in view.
 const AR_FLOOR_FALLBACK_DISTANCE_M = 1.8;
@@ -78,6 +82,10 @@ export class ArPlacementSystem extends createSystem() {
   private searchStartedAt = 0;
   private pendingAnchorPose: Matrix4 | null = null;
   private session: XRSession | null = null;
+  /** A two-hand grab moved the hologram off its anchor; re-anchor where it is let go. */
+  private grabbed = false;
+  /** Hit test straight down under a released hologram, and when it gives up. */
+  private reground: { source: XRHitTestSource | null; until: number } | null = null;
 
   init(): void {
     const onSessionStart = (): void => void this.startSession(this.xrManager.getSession());
@@ -116,8 +124,27 @@ export class ArPlacementSystem extends createSystem() {
     if (c.recenterRequested) {
       c.recenterRequested = false;
       this.dropAnchor();
+      this.cancelReground();
       c.placement = { ...c.placement, stage: "searching" };
       this.searchStartedAt = performance.now();
+    }
+
+    if (c.focused.hasComponent(Grabbed)) {
+      // The hands hold it: the anchor lets go until it is released.
+      if (!this.grabbed) {
+        this.dropAnchor();
+        this.cancelReground();
+      }
+      this.grabbed = true;
+      return;
+    }
+    if (this.grabbed && c.focused.object3D) {
+      this.grabbed = false;
+      c.placement = { ...c.placement, stage: "placed" };
+      this.startReground(c.focused.object3D, refSpace);
+    }
+    if (this.reground && c.focused.object3D) {
+      if (!this.regroundStep(frame, refSpace, c.focused.object3D)) return;
     }
 
     if (c.placement.stage === "searching") {
@@ -133,6 +160,46 @@ export class ArPlacementSystem extends createSystem() {
         c.focused.object3D.position.set(p.x, p.y, p.z).applyMatrix4(this.player.matrixWorld);
       }
     }
+  }
+
+  /** The grab kept the base at its old height; find the surface under where it was let go. */
+  private startReground(object: Object3D, refSpace: XRReferenceSpace): void {
+    const reground: { source: XRHitTestSource | null; until: number } = { source: null, until: performance.now() + AR_REGROUND_TIMEOUT_MS };
+    this.reground = reground;
+    const base = object.getWorldPosition(new Vector3()).applyMatrix4(this.player.matrixWorld.clone().invert());
+    if (typeof XRRay !== "function" || !this.session?.requestHitTestSource) return;
+    const ray = new XRRay({ x: base.x, y: base.y + AR_REGROUND_RAY_HEIGHT_M, z: base.z, w: 1 }, { x: 0, y: -1, z: 0, w: 0 });
+    void this.session.requestHitTestSource({ space: refSpace, offsetRay: ray, entityTypes: ["plane", "mesh"] })?.then(
+      (source) => {
+        if (this.reground === reground) reground.source = source;
+        else source.cancel();
+      },
+      () => undefined
+    );
+  }
+
+  /** True once regrounding is done: the hologram stands on the surface found, or where it was let go. */
+  private regroundStep(frame: XRFrame, refSpace: XRReferenceSpace, object: Object3D): boolean {
+    const reground = this.reground!;
+    let found = false;
+    for (const result of reground.source ? frame.getHitTestResults(reground.source) : []) {
+      const pose = result.getPose(refSpace);
+      if (!pose || (pose.transform.matrix[5] ?? 0) < AR_MIN_SURFACE_UP_DOT) continue;
+      const p = pose.transform.position;
+      object.position.copy(new Vector3(p.x, p.y, p.z).applyMatrix4(this.player.matrixWorld));
+      object.updateMatrixWorld();
+      found = true;
+      break;
+    }
+    if (!found && performance.now() < reground.until) return false;
+    this.cancelReground();
+    this.pendingAnchorPose = object.matrixWorld.clone();
+    return true;
+  }
+
+  private cancelReground(): void {
+    this.reground?.source?.cancel();
+    this.reground = null;
   }
 
   private async startSession(session: XRSession | null): Promise<void> {
@@ -154,6 +221,7 @@ export class ArPlacementSystem extends createSystem() {
   }
 
   private stopSession(): void {
+    this.cancelReground();
     this.hitTestSource?.cancel();
     this.hitTestSource = null;
     this.dropAnchor();

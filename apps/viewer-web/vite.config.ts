@@ -24,6 +24,11 @@ const semConfig = semScene && isSemScene(semScene)
   : undefined;
 
 export default defineConfig({
+  resolve: {
+    // @holoim/xr-ui-iwsdk resolves its own pnpm copy of @iwsdk/core (no React
+    // peer); one World needs one copy of IWSDK, UIKit and three.
+    dedupe: ["@iwsdk/core", "@pmndrs/uikit", "@pmndrs/pointer-events", "three"]
+  },
   plugins: [
     react(),
     iwsdkDev({

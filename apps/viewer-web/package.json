@@ -22,6 +22,7 @@
     "@holoim/ui-dom": "workspace:*",
     "@holoim/xr-runtime": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",
+    "@holoim/xr-ui-iwsdk": "workspace:*",
     "@holoim/xr-ui-r3f": "workspace:*",
     "@iwsdk/core": "^1.0.1",
     "@pmndrs/pointer-events": "6.6.29",
