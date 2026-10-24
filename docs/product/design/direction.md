@@ -438,7 +438,7 @@ How each target blends (item 7), before device checks:
 | WebGL canvas in a browser (three.js) | sRGB: documented |
 | Quest browser, VR (WebXR) | sRGB: documented, needs a device check |
 | Quest browser, AR passthrough | Unknown, probably linear: needs a device check |
-| Android Chrome, AR (ARCore) | Unknown, probably sRGB: needs a device check |
+| Android Chrome, AR (ARCore) | Unknown, probably sRGB: no Android device to check on |
 | AR Quick Look (iOS) | Linear, documented in part; no chip is possible there |
 
 Headset type at 2.5× (item 10), x-height in Quest pixels: title on a phone
@@ -502,11 +502,22 @@ step 5 has a "Type check only" button that skips the pokes.
 - **Item 10, type at 2.5×:** "Type check only" in step 5 on a Quest 3.
 - **Item 7, how each target blends:**
   - Quest AR by eye: step 2.
-  - Android AR: step 2.
   - A screenshot of the blend patches from each target.
   - AR Quick Look on an iPhone.
 - **Item 8:** the AR table check (step 3) and a full minute per variant.
-- **Item 9 on a mid-range Android phone:** step 4 "Run on this screen".
+
+**No Android device is available**, so the Android checks are out of reach
+for now:
+
+- **Item 7:** Android AR blending stays unmeasured.
+- **Item 2:** soot in bright rooms is unverified everywhere. It depends on the
+  WebXR lighting estimate, which only Android Chrome gives, so in practice
+  soot in AR only ever shows on Android.
+- **Item 9:** the closest stand-in for a mid-range Android phone is the Quest
+  3's 2D page. Quest Browser is Chromium on Android, on a Snapdragon XR2 Gen 2,
+  and it measured 4.44% long frames with sparks everywhere.
+
+Any borrowed Android phone can run steps 2 to 4 with the probe as it is.
 
 **Open from the device results:** the Quest's lowest clean AR chip was 97%
 twice, above item 7's 88% and 92%. Item 7 needs a new decision for Quest AR
