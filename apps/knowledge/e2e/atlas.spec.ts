@@ -112,9 +112,8 @@ test("wiki, internal Markdown links, bug source boundaries, and missing routes",
   const open = bugs.split("## Open")[1]?.split("\n## ")[0] ?? "";
   const openCount = open.match(/^### B-\d+ /gm)?.length ?? 0;
   await expect(page.locator(".bug-card")).toHaveCount(openCount);
-  if (openCount > 0) {
-    await expect(page.locator(".bug-card")).not.toContainText("Short symptom");
-  }
+  // No open card may be the template's placeholder, however many are open.
+  await expect(page.locator(".bug-card", { hasText: "Short symptom" })).toHaveCount(0);
   await page.goto(documentUrl("docs/missing-knowledge-file.md"));
   await expect(
     page.getByRole("heading", { name: "Document not found." }),
