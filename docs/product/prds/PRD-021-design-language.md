@@ -1,6 +1,6 @@
 # PRD: One interaction grammar across devices
 
-**Status:** Draft  
+**Status:** Approved  
 **Source ideas:** IDEA-031  
 **Layer:** All layers  
 **Depends on:** a chosen visual direction from the Direction Board; portal view evidence (PRD-002)  
@@ -102,9 +102,10 @@ success and time. Continue if transfer works; revise idioms that fail on one dev
 
 ## Decision
 
-Pending until explicitly decided. Drafting this document is not approval to
-build. The portal view (PRD-002) was approved ahead of this redesign; its
-evidence feeds the choice.
+Approved to build on 2026-10-24, through the
+[feature brief](../../features/ui-redesign.md), which widens it to every page
+and the Halo and records every scope answer. The portal view (PRD-002) was
+approved ahead of this redesign; its evidence feeds the choice.
 
 ## Links
 

@@ -1,8 +1,8 @@
 # Feature brief: Redesign UI and interaction across capture and viewer
 
 **Lead:** Claude Code (Opus)  
-**Status:** Reviewed (design review 2026-10-24; every question answered by
-the user 2026-10-24); awaiting approval to build
+**Status:** Implementing (approved by the user 2026-10-24; slices 0 and 1
+first)
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
