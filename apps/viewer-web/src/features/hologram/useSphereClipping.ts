@@ -15,6 +15,7 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 import { SphereGeometry, Vector3 } from "three";
 import type { Material, Mesh, Object3D, WebGLProgramParametersWithUniforms, WebGLRenderer } from "three";
 
+import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { createBubbleGlassMaterial, isBubbleGlassMaterial } from "./BubbleGlassMaterial";
 import {
   SPHERE_CLIP_FRAGMENT_MAIN,
@@ -253,7 +254,9 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
       // Patch every other mesh in the scene
       scene.traverse((child) => {
         const mesh = child as Mesh;
-        if (!mesh.isMesh || mesh === bubble) {
+        // Objects the author handled stay whole: one held at arm's length
+        // must not be cut by the bubble around the avatar.
+        if (!mesh.isMesh || mesh === bubble || isInsideRecordedObject(mesh)) {
           return;
         }
 

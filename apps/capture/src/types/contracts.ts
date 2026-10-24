@@ -93,6 +93,10 @@ export interface UiViewModel {
   recordingMessage: string | null;
   heightFit: { enabled: boolean; pending: boolean; eyeHeight: number | null };
   micPermission: 'pending' | 'granted' | 'denied';
+  /** The supplied object, chosen before recording. */
+  object: { status: 'none' | 'loading' | 'ready' | 'error'; name: string | null; message: string | null };
+  /** The prepared tray (PRD-045): item names in slot order. */
+  tray: { names: string[]; loading: boolean; message: string | null };
   faceCamera: 'off' | 'starting' | 'tracking' | 'no-face' | 'denied' | 'unavailable';
 }
 

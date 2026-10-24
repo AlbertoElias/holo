@@ -33,6 +33,8 @@ const CHECKS = {
   height: 'scripts/ci-xr-height-playwright.ts',
   body: 'scripts/ci-body-replay-playwright.ts',
   pointing: 'scripts/ci-pointing-playwright.ts',
+  object: 'scripts/ci-object-playwright.mjs',
+  summon: 'scripts/ci-summon-playwright.mjs',
   // Needs the Quest Pro emulator for eye gaze; see CHECK_SERVER_ENV.
   face: 'scripts/ci-face-playwright.ts',
   // Not checks: regenerate the IWER fixtures the hands, body and pointing checks replay.
@@ -42,6 +44,9 @@ const CHECKS = {
   'pointing-fixture': 'scripts/generate-iwer-pose-fixture.ts'
 } as const;
 type CheckName = keyof typeof CHECKS;
+
+// .mjs checks that import TypeScript workspace sources (the meaning and objects packages) run under tsx too.
+const USES_TSX: ReadonlySet<CheckName> = new Set(['object', 'summon']);
 
 // Extra environment for entries that share a script.
 const CHECK_ENV: Partial<Record<CheckName, Record<string, string>>> = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };
@@ -172,7 +177,7 @@ try {
   const runCheck = async (name: CheckName) => {
     const checkStartedAt = Date.now();
     const script: string = CHECKS[name];
-    const args = script.endsWith('.ts') ? ['--import', 'tsx', script] : [script];
+    const args = script.endsWith('.ts') || USES_TSX.has(name) ? ['--import', 'tsx', script] : [script];
     const logPath = path.join(logDir, `${name}.log`);
     const logFd = parallel ? openSync(logPath, 'w') : null;
     let error: Error | null = null;

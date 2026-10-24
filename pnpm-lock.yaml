@@ -81,6 +81,9 @@ importers:
       '@holoim/meaning':
         specifier: workspace:*
         version: link:../../packages/meaning
+      '@holoim/objects':
+        specifier: workspace:*
+        version: link:../../packages/objects
       '@holoim/ui-dom':
         specifier: workspace:*
         version: link:../../packages/ui-dom
@@ -306,6 +309,9 @@ importers:
       '@holoim/meaning':
         specifier: workspace:*
         version: link:../../packages/meaning
+      '@holoim/objects':
+        specifier: workspace:*
+        version: link:../../packages/objects
       '@holoim/ui-dom':
         specifier: workspace:*
         version: link:../../packages/ui-dom
@@ -508,6 +514,28 @@ importers:
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(jiti@2.6.1)(jsdom@26.1.0)(tsx@4.21.0)
 
   packages/meaning:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@holoim/config-eslint':
+        specifier: workspace:*
+        version: link:../config-eslint
+      '@holoim/config-ts':
+        specifier: workspace:*
+        version: link:../config-ts
+      eslint:
+        specifier: 'catalog:'
+        version: 9.39.3(jiti@2.6.1)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(jiti@2.6.1)(jsdom@26.1.0)(tsx@4.21.0)
+
+  packages/objects:
     dependencies:
       zod:
         specifier: 'catalog:'
@@ -3217,6 +3245,7 @@ packages:
   eslint@9.39.3:
     resolution: {integrity: sha512-VmQ+sifHUbI/IcSopBCF/HO3YiHQx/AVd3UVyYL6weuwW+HvON9VYn5l6Zl1WZzPWXPNZrSQpxwkkZ/VuvJZzg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

@@ -31,6 +31,8 @@ FPS = 30.0
 MAX_INPUT_BYTES = 100 * 1024 * 1024
 MAX_VERTICES = 2_000_000
 MAX_SAMPLES = 20_000
+# Scale written for a hidden (zero-scale) node; see `animate`.
+HIDDEN_SCALE = 1e-4
 MAX_DURATION = 600
 MAX_TEXTURE_PIXELS = 4096 * 4096
 MAX_TOTAL_TEXTURE_PIXELS = 64 * 1024 * 1024
@@ -721,6 +723,15 @@ class Converter:
             work = 3 * len(self.animated) + 4 * sum(len(ordered) for _, ordered in animations) + len(morph_names)
             if len(times) > MAX_SAMPLES or len(times) * work > 8_000_000:
                 raise ValueError("Baked animation exceeds conversion budget")
+            # A node whose scale track reaches 0 (a summoned object before it
+            # appears) is hidden by time-sampled visibility, and its scale is
+            # clamped to HIDDEN_SCALE: a zero scale is a singular transform,
+            # and the tiny scale still hides it in players that ignore
+            # animated visibility.
+            hideable = {
+                index for (index, path), (_, source_values, _) in channels.items()
+                if path == "scale" and index in self.ops and np.abs(np.asarray(source_values, dtype=float)).reshape(-1, 3).max(axis=1).min() < 1e-9
+            }
             for time in sorted(times):
                 frame = (offset + time)*FPS
                 values = {key: _sample(*channel, time, rotation=key[1] == "rotation") for key, channel in channels.items()}
@@ -744,7 +755,13 @@ class Converter:
                     t, r, s = _node_trs(self.gltf.nodes[index])
                     ops[0].Set(Gf.Vec3d(*map(float, values.get((index, "translation"), t))), frame)
                     ops[1].Set(_quat(values.get((index, "rotation"), r)), frame)
-                    ops[2].Set(Gf.Vec3d(*map(float, values.get((index, "scale"), s))), frame)
+                    scale = list(map(float, values.get((index, "scale"), s)))
+                    if index in hideable:
+                        hidden = max(abs(v) for v in scale) < 1e-9
+                        UsdGeom.Imageable(ops[0].GetAttr().GetPrim()).CreateVisibilityAttr().Set("invisible" if hidden else "inherited", frame)
+                        if hidden:
+                            scale = [HIDDEN_SCALE] * 3
+                    ops[2].Set(Gf.Vec3d(*scale), frame)
                 weights = []
                 for index, (names, default) in self.morphs.items():
                     value = values.get((index, "weights"), default)

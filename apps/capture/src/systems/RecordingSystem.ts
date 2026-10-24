@@ -15,6 +15,6 @@ export class RecordingSystem extends createSystem() {
   update(): void {
     const c = this.capture;
     if (c.frame.arSpectator) return;
-    c.recording.recorder.capture(c.frame.elapsedSec, c.avatar.avatar, c.avatar.avatarRoot, activeCamera(c), c.tracking);
+    c.recording.recorder.capture(c.frame.elapsedSec, c.avatar.avatar, c.avatar.avatarRoot, activeCamera(c), c.tracking, c.objects.registry.eventObjects(), c.objects.authoringFrame());
   }
 }

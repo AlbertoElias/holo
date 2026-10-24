@@ -1,11 +1,11 @@
 # PRD: Explain with an object
 
-**Status:** Draft  
+**Status:** Approved  
 **Source ideas:** IDEA-059  
 **Layer:** Event  
 **Depends on:** IDEA-045 portal (approved); hand-tracking fidelity (in verification)  
-**Owner:** Unassigned  
-**Last updated:** 2026-10-20
+**Owner:** Claude Code  
+**Last updated:** 2026-10-24
 
 ## User Outcome
 
@@ -97,9 +97,9 @@ is a blocked result, not a negative one.
 
 ## Decision
 
-Pending until explicitly decided. Drafting this document is not approval to
-build. This is the Approach's leading candidate experiment alongside portal
-and body-first work.
+Approved 2026-10-24: the user asked for this feature directly, to be built
+before PRD-045, whose tray of prepared objects builds on the same object API.
+The recipient trial remains a research step after the pipeline ships.
 
 ## Links
 
@@ -108,5 +108,5 @@ and body-first work.
 - Research: [open questions](../research/open-questions.md) (questions 1, 12)
 - Related PRDs: [PRD-002 portal view](PRD-002-portal-view.md)
 - Mockups: none
-- Feature brief: none
+- Feature brief: [explain-with-an-object](../../features/explain-with-an-object.md)
 - Implementation issue: none

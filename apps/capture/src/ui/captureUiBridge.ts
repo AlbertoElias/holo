@@ -6,5 +6,7 @@ export interface CaptureUiBridge {
   refitHeight: () => boolean;
   toggleRecording: () => void;
   recenterAr: () => void;
+  loadObjectFile: (file: File) => void;
+  loadTrayFiles: (files: File[]) => void;
   toggleFaceCamera: () => void;
 }

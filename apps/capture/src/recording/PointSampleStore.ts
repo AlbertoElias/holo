@@ -121,6 +121,14 @@ export class PointSampleStore {
     this.motionRuns.push({ bones: [...bones], startSec: timeSec, endSec: timeSec });
   }
 
+  /** Drops a hand's samples inside its authoring spans (PRD-045): a reach into the tray is not a point. */
+  dropHandSamplesWithin(spans: ReadonlyArray<{ hand: VrHandSide; start: number; end: number }>): void {
+    if (spans.length === 0) return;
+    const kept = this.handSamples.filter((sample) => !spans.some((span) => span.hand === sample.side && sample.timeSec >= span.start && sample.timeSec <= span.end));
+    this.handSamples.length = 0;
+    this.handSamples.push(...kept);
+  }
+
   getHandSamples(): readonly HandPointSample[] {
     return this.handSamples;
   }

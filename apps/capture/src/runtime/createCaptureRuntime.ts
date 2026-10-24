@@ -12,6 +12,7 @@ import { FaceDriver } from '../face/FaceDriver';
 import { DesktopPointAction } from '../input/DesktopPointAction';
 import { InputController } from '../input/InputController';
 import { VrLocomotion } from '../input/VrLocomotion';
+import { CaptureObjects } from '../objects/CaptureObjects';
 import { CharacterMotor } from '../physics/CharacterMotor';
 import { RecordingSession } from '../recording/RecordingSession';
 import { activeCamera, type CaptureContext } from '../systems/captureContext';
@@ -84,9 +85,20 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ui,
     renderer,
     getAvatar: () => ({ avatar: avatar.avatar, worldModel: avatar.worldModel }),
-    onSizeLocked: () => heightFit.calibration.interrupt()
+    onSizeLocked: () => heightFit.calibration.interrupt(),
+    onTakeStart: () => objects.startTake()
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
+  const objects = new CaptureObjects({
+    worldGroup: stage.worldGroup,
+    renderer,
+    loader: stage.loader,
+    avatar,
+    tracking,
+    ui,
+    embodyOffset: config.embodyOffset,
+    isTakeActive: () => ui.getState().recordingState !== 'idle'
+  });
   const vrHud = new VrHud({
     store: ui,
     renderer,
@@ -117,6 +129,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     heightFit,
     crouch: new CrouchState(),
     hands,
+    objects,
     face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state)),
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
@@ -176,6 +189,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       capture.terrainLegs.attach(avatar);
       hands.attach();
       capture.point.attach();
+      objects.attach();
       // Bind pose is measured before any animation writes the skeleton.
       body.measureBindPose();
       const spawned = await motor.init(avatar);
@@ -183,6 +197,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       if (avatar.avatar) capture.animator.attachClips(avatar.avatar, avatarGltf.animations);
       // Bound at bind pose, like the body, before any system writes the eyes.
       if (avatar.avatar) capture.face.attach(avatar.avatar);
+      // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
+      if (config.objectUrl) await objects.loadUrl(config.objectUrl);
+      if (config.trayUrls.length > 0) await objects.loadTrayUrls(config.trayUrls);
       ui.setLoadState(spawned ? 'ready' : 'warning', spawned ? null : 'Loaded with warnings: spawn/physics setup incomplete.');
       registerCaptureSystems(world);
       started = true;
@@ -198,6 +215,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       getSnapshot: () => ui.getState(),
       refitHeight: () => heightFit.requestRefit(),
       toggleRecording: () => recording.toggle(),
+      loadObjectFile: (file) => void objects.loadFile(file),
+      loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       toggleFaceCamera: () => capture.face.toggleCamera(),
       recenterAr: () => {
         if (xrEntry.sessionMode === 'ar' && tracking.isXrPresenting()) capture.ar.recenter();
@@ -231,6 +250,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __setSpectatorView: (mode) => capture.diagnostics.setSpectatorView(mode),
         __captureHandCalibrationPose: () => hands.captureCalibrationPose(),
         __resetHandCalibrationPose: () => hands.resetCalibrationPose(),
+        __loadObjectUrl: (url) => objects.loadUrl(url),
+        __loadTrayUrls: (urls) => objects.loadTrayUrls(urls),
         __setFaceInput: (sample) => capture.face.setAutomationInput(sample),
         __sampleFace: () => capture.face.snapshot(),
         __toggleFaceCamera: () => capture.face.toggleCamera()

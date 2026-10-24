@@ -20,6 +20,7 @@ import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
 import { readMeaningLinks } from "../meaning/meaningLinks";
 import type { MeaningGltf } from "../meaning/meaningLinks";
+import { readRecordedObjects } from "../objects/recordedObjects";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
 import { INSIDE_DISTANCE, anglesFromPose, freeCameraPose } from "../portal/portalStore";
 import type { PortalStore } from "../portal/portalStore";
@@ -166,6 +167,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   const clonedScene = useMemo(() => cloneSkeleton(scene), [scene]);
   const sphereClip = useSphereClipping(clonedScene, { falloffWidth: SPHERE_CLIP_FALLOFF });
   const meaningLinks = useMemo(() => readMeaningLinks(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
+  const recordedObjects = useMemo(() => readRecordedObjects(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
   const pointingProbe = useRef<PointingProbe>({ links: [] }).current;
   useEffect(() => {
     portal.setHasHighlights(meaningLinks.length > 0);
@@ -182,9 +184,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   useEffect(() => {
     if (import.meta.env.DEV) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, objects: recordedObjects });
     }
-  }, [actions, camera, clonedScene, mixer, pointingProbe, portal, renderScene, renderer, sphereClip, url]);
+  }, [actions, camera, clonedScene, mixer, pointingProbe, portal, recordedObjects, renderScene, renderer, sphereClip, url]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {
@@ -281,9 +283,12 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   useLayoutEffect(() => {
     prepareAnimatedScene(clonedScene);
     framingTargetsRef.current = getFramingTargets(clonedScene);
-    const hips = findObjectByName(clonedScene, ["Hips", "mixamorigHips"]);
-    const head = findObjectByName(clonedScene, ["Head", "mixamorigHead"]);
     const avatarRootByName = findObjectByName(clonedScene, ["RecordedAvatar"]);
+    // Within the avatar when the export names it, so a recorded object's own
+    // bone names (a prop with a "Head") never take over the framing.
+    const avatarScope = avatarRootByName ?? clonedScene;
+    const hips = findObjectByName(avatarScope, ["Hips", "mixamorigHips"]);
+    const head = findObjectByName(avatarScope, ["Head", "mixamorigHead"]);
 
     avatarRootRef.current = avatarRootByName ?? (hips ? getTopLevelAncestor(hips, clonedScene) : null);
     if (!avatarRootRef.current && framingTargetsRef.current.length > 0) {

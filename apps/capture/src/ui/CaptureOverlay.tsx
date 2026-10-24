@@ -51,6 +51,55 @@ function resolveStatusText(state: UiViewModel): string {
   return state.warning ?? `Loaded. ${state.controls}`;
 }
 
+// The supplied object (PRD-043): one GLB, chosen before recording. It shares
+// the shortcut row so the panel keeps its height on small viewports.
+function ObjectPicker({ bridge, object, disabled }: { bridge: CaptureUiBridge; object: UiViewModel["object"]; disabled: boolean }) {
+  const label = object.status === "ready" ? `Object: ${object.name}` : object.status === "loading" ? "Loading object…" : "Choose object…";
+  const inactive = disabled || object.status === "loading";
+  return (
+    <label style={{ cursor: inactive ? "default" : "pointer", textDecoration: inactive ? "none" : "underline", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {label}
+      <input
+        aria-label="Choose an object (.glb)"
+        type="file"
+        accept=".glb,model/gltf-binary"
+        disabled={inactive}
+        style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden" }}
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) bridge.loadObjectFile(file);
+          event.currentTarget.value = "";
+        }}
+      />
+    </label>
+  );
+}
+
+// The prepared tray (PRD-045): up to five GLBs or images, before recording.
+// Also on the shortcut row; a pick adds to the tray.
+function TrayPicker({ bridge, tray, disabled }: { bridge: CaptureUiBridge; tray: UiViewModel["tray"]; disabled: boolean }) {
+  const label = tray.loading ? "Loading tray…" : tray.names.length > 0 ? `Tray: ${tray.names.length}` : "Tray…";
+  const inactive = disabled || tray.loading;
+  return (
+    <label title={tray.names.join(", ")} style={{ cursor: inactive ? "default" : "pointer", textDecoration: inactive ? "none" : "underline", whiteSpace: "nowrap" }}>
+      {label}
+      <input
+        aria-label="Add tray items (.glb, .png, .jpg)"
+        type="file"
+        multiple
+        accept=".glb,model/gltf-binary,.png,image/png,.jpg,.jpeg,image/jpeg"
+        disabled={inactive}
+        style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden" }}
+        onChange={(event) => {
+          const files = [...(event.currentTarget.files ?? [])];
+          if (files.length > 0) bridge.loadTrayFiles(files);
+          event.currentTarget.value = "";
+        }}
+      />
+    </label>
+  );
+}
+
 export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   const state = useSyncExternalStore(bridge.subscribe, bridge.getSnapshot, bridge.getSnapshot);
   const recording = createRecordingUiState(state.recordingState, state.recordingMessage);
@@ -150,8 +199,24 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
                 </div>
               </>
             )}
-            <div style={{ fontSize: "0.78rem", color: uiDomTokens.colorTextMuted }}>
-              Shortcut: <strong>R</strong>
+            {state.object.status === "error" && state.object.message ? (
+              <UiNotice tone="warning" title="Object">
+                {state.object.message}
+              </UiNotice>
+            ) : null}
+            {state.tray.message ? (
+              <UiNotice tone="warning" title="Tray">
+                {state.tray.message}
+              </UiNotice>
+            ) : null}
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", fontSize: "0.78rem", color: uiDomTokens.colorTextMuted }}>
+              <span>
+                Shortcut: <strong>R</strong>
+              </span>
+              <span style={{ display: "flex", gap: "0.75rem", minWidth: 0 }}>
+                <ObjectPicker bridge={bridge} object={state.object} disabled={recording.status !== "idle"} />
+                <TrayPicker bridge={bridge} tray={state.tray} disabled={recording.status !== "idle"} />
+              </span>
             </div>
           </UiStack>
         </UiPanel>
