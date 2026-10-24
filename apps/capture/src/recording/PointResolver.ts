@@ -158,6 +158,8 @@ export class PointResolver {
     };
 
     collectHumanoidBones(input.exportAvatar, this.exportBones);
+    // Chrome is never a referent: the scene sampler leaves it out, and these
+    // meshes are its clipped copies (GltfExportComposer), so none is chrome.
     this.sceneTargets = new Map(input.sceneMeshes.map((mesh) => [mesh, sceneTarget(mesh)]));
     this.raycaster.near = RAY_NEAR;
     this.raycaster.far = MAX_RAY_DISTANCE;

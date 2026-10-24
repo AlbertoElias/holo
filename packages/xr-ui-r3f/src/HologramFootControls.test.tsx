@@ -335,3 +335,20 @@ describe("HologramFootControls: lifecycle", () => {
     await renderer.unmount();
   });
 });
+
+describe("HologramFootControls: a control with no drawing yet (brief, slice 3: Pause, true size)", () => {
+  it("draws an empty ring on the chip, keeps the input's hit area, and is named and selected by its label", async () => {
+    const select = vi.fn();
+    const renderer = await mount(hologram({ target: VIEW_TARGETS.androidChrome, input: "touch", glyphs: [{ id: null, label: "Pause", onSelect: select }] }));
+    const empty = root(renderer).getObjectByName("glyph-empty");
+    expect(empty, "the slot is an empty glyph").toBeDefined();
+    expect(empty!.getObjectByName("glyph-ring")).toBeDefined();
+    expect(meshesOf(empty!).some((mesh) => mesh.name.startsWith("glyph-path") || mesh.name.startsWith("glyph-record")), "no drawing inside the ring").toBe(false);
+    const hit = hitByLabel(root(renderer), "Pause");
+    expect((hit.geometry as PlaneGeometry).parameters.width).toBeGreaterThanOrEqual(apxToMeters(tokens.hit.touch, DISTANCE, { headset: false }) - 1e-9);
+    await renderer.fireEvent(instanceOf(hit), "click");
+    expect(select).toHaveBeenCalledTimes(1);
+    chipMesh(renderer);
+    await renderer.unmount();
+  });
+});

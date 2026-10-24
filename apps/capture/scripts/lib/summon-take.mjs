@@ -594,6 +594,8 @@ export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, arti
     const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
     await advance(1);
     const fixtures = ['bracket.glb', 'diagram.png'].map((name) => path.join(captureRoot, 'fixtures/objects', name));
+    // The pickers live in the settings side sheet.
+    await page.getByRole('button', { name: 'Settings' }).click();
     const picker = page.getByLabel('Add tray items (.glb, .png, .jpg)');
     await picker.setInputFiles(fixtures);
     await page.getByText('Tray: 2').waitFor({ timeout: 10_000 });
@@ -603,6 +605,8 @@ export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, arti
     let state = await readState(page);
     const refusal = { items: state.objects.tray.items.length, message: 'The tray holds at most 5 items.' };
     if (refusal.items !== 2) fail(`a refused pick changed the tray (${refusal.items} items)`);
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
 
     await page.locator('canvas').first().focus();
     let withoutT;

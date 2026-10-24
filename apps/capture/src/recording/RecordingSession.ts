@@ -27,6 +27,10 @@ export class RecordingSession {
   private readonly audio = new AudioRecorder();
   private inputRecording: InputRecordingSession | null = null;
   private sizeLocked = false;
+  // Checks re-export the last take to compare bytes (chrome visible or not);
+  // off in production, where a take's samples are freed once it downloads.
+  private retainLastTake = false;
+  private lastTake: { avatar: THREE.Object3D; worldModel: THREE.Object3D | undefined; audioData: { buffer: ArrayBuffer; mimeType: string } | undefined } | null = null;
 
   constructor(private readonly deps: RecordingSessionDeps) {}
 
@@ -50,6 +54,20 @@ export class RecordingSession {
     else void this.start();
   }
 
+  /** Keep the last take's samples after it downloads, for `reexportLastTake`. */
+  setRetainLastTake(retain: boolean): void {
+    this.retainLastTake = retain;
+    if (!retain) this.lastTake = null;
+  }
+
+  /** The last take exported again from the same samples, against the scene as it is now. */
+  async reexportLastTake(): Promise<ArrayBuffer | null> {
+    const take = this.lastTake;
+    if (!take) return null;
+    const blob = await this.recorder.exportToGlbBlob(take.avatar, take.worldModel, take.audioData);
+    return blob.arrayBuffer();
+  }
+
   /** Raw device input for this XR frame; called inside the frame's callback. */
   recordInputFrame(frame: XRFrame): void {
     this.inputRecording?.recordFrame(frame);
@@ -58,6 +76,7 @@ export class RecordingSession {
   private async start(): Promise<void> {
     this.sizeLocked = true;
     this.deps.onSizeLocked();
+    this.lastTake = null;
     this.recorder.clear();
     this.deps.onTakeStart();
     this.recorder.setEnabled(true);
@@ -103,7 +122,8 @@ export class RecordingSession {
       anchor.download = `${baseName}.glb`;
       anchor.click();
       URL.revokeObjectURL(url);
-      this.recorder.clear();
+      if (this.retainLastTake) this.lastTake = { avatar, worldModel, audioData };
+      else this.recorder.clear();
       ui.setRecordingState('idle');
     } catch (err) {
       console.error(err);

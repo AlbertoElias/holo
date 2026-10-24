@@ -1,6 +1,10 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 
+import '@holoim/design-tokens/fonts.css';
+import '@holoim/design-tokens/tokens.css';
+import './ui/capture.css';
+
 import { createCaptureRuntime } from './runtime/createCaptureRuntime';
 import { CaptureOverlay } from './ui/CaptureOverlay';
 

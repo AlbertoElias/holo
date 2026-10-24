@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 
+import type { VrHandSide } from '../types/contracts';
 import type { XrTracking } from '../xr/XrTracking';
 
 // xr-standard mapping on Touch controllers: buttons[4] is X/A, buttons[5] Y/B.
@@ -11,7 +12,7 @@ const BUTTON_ON = 0.5;
 const PALM_UP_ON = 0.7;
 const PALM_UP_OFF = 0.4;
 const PALM_DWELL_SEC = 0.25;
-// The left hand lost (the right reaching over it, say): keep the tray open this long.
+// The holding hand lost (the other reaching over it, say): keep the tray open this long.
 const LOST_HOLD_SEC = 0.5;
 
 export type TrayGestureSource = 'button' | 'palm' | 'key' | 'none';
@@ -23,8 +24,10 @@ interface InputSourceLike {
 }
 
 /**
- * The held tray gesture (PRD-045): the left controller's Y button, the left
- * palm turned up, or T on desktop. The tray is open only while it is held.
+ * The held tray gesture (PRD-045): the holding controller's upper face button
+ * (Y on the left, B on the right), that palm turned up, or T on desktop. The
+ * holding hand is the non-dominant one (handedness). The tray is open only
+ * while it is held.
  */
 export class TrayGestureInput {
   private held = false;
@@ -43,7 +46,7 @@ export class TrayGestureInput {
     private readonly tracking: XrTracking
   ) {}
 
-  update(step: { vrActive: boolean; deltaSec: number; desktopHeld: boolean }): boolean {
+  update(step: { vrActive: boolean; deltaSec: number; desktopHeld: boolean; hand: VrHandSide }): boolean {
     if (!step.vrActive) {
       this.palmUpSec = this.lostSec = 0;
       this.palmDot = null;
@@ -52,9 +55,9 @@ export class TrayGestureInput {
       return this.held;
     }
     const session = this.renderer.xr.isPresenting ? this.renderer.xr.getSession() : null;
-    const left = session ? ([...session.inputSources].find((s) => s.handedness === 'left') as InputSourceLike | undefined) : undefined;
-    if (left?.hand) {
-      const dot = this.readPalmUp();
+    const holder = session ? ([...session.inputSources].find((s) => s.handedness === step.hand) as InputSourceLike | undefined) : undefined;
+    if (holder?.hand) {
+      const dot = this.readPalmUp(step.hand);
       this.palmDot = dot;
       if (dot === null) {
         this.lostSec += step.deltaSec;
@@ -74,14 +77,14 @@ export class TrayGestureInput {
     }
     this.palmUpSec = 0;
     this.palmDot = null;
-    const button = left?.gamepad?.buttons?.[TRAY_BUTTON];
+    const button = holder?.gamepad?.buttons?.[TRAY_BUTTON];
     if (button) {
       this.lostSec = 0;
       this.held = (button.value ?? (button.pressed ? 1 : 0)) >= BUTTON_ON;
       this.source = 'button';
       return this.held;
     }
-    // No left input this frame: hold briefly, then close.
+    // No holding input this frame: hold briefly, then close.
     this.lostSec += step.deltaSec;
     if (this.lostSec >= LOST_HOLD_SEC || !session) this.held = false;
     this.source = 'none';
@@ -103,16 +106,17 @@ export class TrayGestureInput {
     this.palmDot = null;
   }
 
-  /** The left palm normal's dot with world up, or null without the joints. */
-  private readPalmUp(): number | null {
+  /** The palm normal's dot with world up, or null without the joints. */
+  private readPalmUp(side: VrHandSide): number | null {
     const t = this.tracking;
-    if (!t.getTrackedHandJointPosition('left', 'wrist', this.wrist)
-      || !t.getTrackedHandJointPosition('left', 'index-finger-metacarpal', this.indexBase)
-      || !t.getTrackedHandJointPosition('left', 'pinky-finger-metacarpal', this.pinkyBase)) return null;
-    // Left hand: (pinky − wrist) × (index − wrist) points out of the palm.
+    if (!t.getTrackedHandJointPosition(side, 'wrist', this.wrist)
+      || !t.getTrackedHandJointPosition(side, 'index-finger-metacarpal', this.indexBase)
+      || !t.getTrackedHandJointPosition(side, 'pinky-finger-metacarpal', this.pinkyBase)) return null;
+    // Left hand: (pinky − wrist) × (index − wrist) points out of the palm; the right hand mirrors it.
     this.toPinky.subVectors(this.pinkyBase, this.wrist);
     this.normal.subVectors(this.indexBase, this.wrist);
-    this.normal.crossVectors(this.toPinky, this.normal);
+    if (side === 'left') this.normal.crossVectors(this.toPinky, this.normal);
+    else this.normal.crossVectors(this.normal, this.toPinky);
     if (this.normal.lengthSq() < 1e-10) return null;
     return this.normal.normalize().y;
   }

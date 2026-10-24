@@ -71,7 +71,7 @@ export class XrSessionSystem extends createSystem() {
     if (isAr) {
       c.ar.onEntered();
     } else {
-      c.vrHud.show(c.stage.cameraRig);
+      c.vrChrome.show();
       c.hands.resetRuntimeState();
       c.heightFit.calibration.reset();
       c.crouch.resetBaseline();
@@ -89,7 +89,7 @@ export class XrSessionSystem extends createSystem() {
     if (exitingAr) {
       c.ar.onExited();
     } else {
-      c.vrHud.hide();
+      c.vrChrome.hide();
       c.hands.resetRuntimeState();
       c.motor.onXrExited(c.avatar);
       c.crouch.resetBaseline();

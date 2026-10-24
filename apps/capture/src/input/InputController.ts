@@ -1,4 +1,5 @@
 import type { DesktopViewMode, MockInputState } from '../types/contracts';
+import { TouchInput, type TouchStick } from './TouchInput';
 
 export interface MoveState {
   forward: boolean;
@@ -22,7 +23,15 @@ interface InputControllerOptions {
   isXrPresenting: () => boolean;
   look: DesktopLook;
   onRecordToggle: () => void;
+  /** The walk stick appeared, moved or left. */
+  onTouchStick?: (stick: TouchStick | null) => void;
 }
+
+const MOUSE_LOOK_RAD_PER_PX = 0.0025;
+// A finger drags a shorter way than a locked mouse for the same turn.
+const TOUCH_LOOK_RAD_PER_PX = 0.006;
+// Stick share past which a direction is held (the motor walks in eight directions).
+const STICK_DIRECTION_THRESHOLD = 0.38;
 
 export class InputController {
   readonly moveState: MoveState = { forward: false, back: false, left: false, right: false };
@@ -41,10 +50,19 @@ export class InputController {
   private summonSlotQueued: number | null = null;
   private focusRecoveryUntilMs = 0;
   private lastFocusAttemptMs = 0;
+  private lastPointerType = 'mouse';
   private readonly options: InputControllerOptions;
+  readonly touch: TouchInput;
 
   constructor(options: InputControllerOptions) {
     this.options = options;
+    this.touch = new TouchInput({
+      domElement: options.domElement,
+      isXrPresenting: options.isXrPresenting,
+      onMove: (x, y) => this.applyStick(x, y),
+      onLook: (dx, dy) => this.applyLook(dx, dy, TOUCH_LOOK_RAD_PER_PX),
+      onStick: (stick) => options.onTouchStick?.(stick)
+    });
   }
 
   init(): void {
@@ -59,6 +77,8 @@ export class InputController {
     document.addEventListener('contextmenu', this.onContextMenu, true);
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
     this.options.domElement.addEventListener('click', this.onClick);
+    this.options.domElement.addEventListener('pointerdown', this.onPointerDown, true);
+    this.touch.init();
   }
 
   /** Whether the desktop point action is held (right button, F, or the mock hook). */
@@ -169,7 +189,17 @@ export class InputController {
     this.pointSources.delete(source);
   }
 
+  /** The touch stick as the four walk keys. */
+  private applyStick(x: number, y: number): void {
+    this.moveState.forward = y > STICK_DIRECTION_THRESHOLD;
+    this.moveState.back = y < -STICK_DIRECTION_THRESHOLD;
+    this.moveState.right = x > STICK_DIRECTION_THRESHOLD;
+    this.moveState.left = x < -STICK_DIRECTION_THRESHOLD;
+    if (x !== 0 || y !== 0) this.focusRecoveryUntilMs = 0;
+  }
+
   private clearMovementState(): void {
+    this.touch.reset();
     this.moveState.forward = false;
     this.moveState.back = false;
     this.moveState.left = false;
@@ -221,6 +251,9 @@ export class InputController {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    // A focused control (a button in the dock or the side sheet, a file
+    // picker) takes Space and Enter as its press; the scene never jumps on them.
+    if ((event.code === 'Space' || event.key === 'Enter') && isControl(event.target)) return;
     if (this.setMoveStateFromKeyboardEvent(event, true)) {
       this.focusRecoveryUntilMs = 0;
       event.preventDefault();
@@ -331,31 +364,41 @@ export class InputController {
     if (document.pointerLockElement !== this.options.domElement) this.endPoint('mouse');
   };
 
+  private readonly onPointerDown = (event: PointerEvent): void => {
+    this.lastPointerType = event.pointerType;
+  };
+
   private readonly onClick = (): void => {
     this.options.domElement.focus({ preventScroll: true });
+    // Touch looks by dragging; there is no pointer to lock.
+    if (this.lastPointerType === 'touch') return;
     if (!this.options.isXrPresenting() && document.pointerLockElement !== this.options.domElement) {
       // Browsers that refuse the lock reject the request; clicking again retries.
       void Promise.resolve(this.options.domElement.requestPointerLock()).catch(() => undefined);
     }
   };
 
+  private applyLook(dx: number, dy: number, sensitivity: number): void {
+    if (this.options.isXrPresenting()) return;
+    const look = this.options.look;
+    look.lookYaw -= dx * sensitivity;
+    if (this.pointSources.size > 0) {
+      // Held: vertical motion aims the point (first person's view follows it).
+      this.pointAimPitch = look.clampFirstPersonPitch(this.pointAimPitch - dy * sensitivity);
+      if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
+    } else if (look.desktopViewMode === 'third') {
+      look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - dy * sensitivity);
+    } else {
+      look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - dy * sensitivity);
+    }
+  }
+
   private readonly onMouseMove = (event: MouseEvent): void => {
     if (this.options.isXrPresenting() || document.pointerLockElement !== this.options.domElement) {
       return;
     }
 
-    const sensitivity = 0.0025;
-    const look = this.options.look;
-    look.lookYaw -= event.movementX * sensitivity;
-    if (this.pointSources.size > 0) {
-      // Held: vertical mouse aims the point (first person's view follows it).
-      this.pointAimPitch = look.clampFirstPersonPitch(this.pointAimPitch - event.movementY * sensitivity);
-      if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
-    } else if (look.desktopViewMode === 'third') {
-      look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - event.movementY * sensitivity);
-    } else {
-      look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - event.movementY * sensitivity);
-    }
+    this.applyLook(event.movementX, event.movementY, MOUSE_LOOK_RAD_PER_PX);
   };
 }
 
@@ -367,4 +410,8 @@ function summonSlot(code: string): number | null {
 
 function isObjectTurnKey(code: string): code is 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX' {
   return code === 'KeyQ' || code === 'KeyE' || code === 'KeyZ' || code === 'KeyX';
+}
+
+function isControl(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('button, input, select, textarea, [contenteditable="true"], [role="radio"], [role="button"]') !== null;
 }

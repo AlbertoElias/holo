@@ -222,3 +222,20 @@ describe("WristControls: colour and controls", () => {
     expect(watches.every((watch) => watch.disposed)).toBe(true);
   });
 });
+
+describe("WristControls: a control with no drawing yet (brief, slice 3: Exit, Recenter)", () => {
+  it("draws an empty ring, keeps the input's hit area, and is named and selected by its label", async () => {
+    const select = vi.fn();
+    const renderer = await mount(row({ input: "ray", glyphs: [{ id: null, label: "Exit AR", onSelect: select }] }));
+    const empty = renderer.scene.instance.getObjectByName("glyph-empty");
+    expect(empty, "the slot is an empty glyph").toBeDefined();
+    expect(empty!.getObjectByName("glyph-ring")).toBeDefined();
+    expect(meshesOf(empty!).some((mesh) => mesh.name.startsWith("glyph-path") || mesh.name.startsWith("glyph-record")), "no drawing inside the ring").toBe(false);
+    const hit = hitByLabel(renderer.scene.instance, "Exit AR");
+    expect(hit.name).toBe("Exit AR");
+    expect((hit.geometry as PlaneGeometry).parameters.width).toBeGreaterThanOrEqual(apxToMeters(tokens.hit.ray, ARM, { headset: false }) - 1e-9);
+    await renderer.fireEvent(instanceOf(hit), "click");
+    expect(select).toHaveBeenCalledTimes(1);
+    await renderer.unmount();
+  });
+});

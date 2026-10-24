@@ -11,7 +11,8 @@ import type { Mesh, Object3D, Texture } from "three";
 
 /** A glyph in a row of controls. Its `label` is its accessible name. */
 export interface GlyphSpec {
-  id: GlyphId;
+  /** null for an action with no drawing yet (brief, "still to draw"): an empty glyph ring, named by `label`. */
+  id: GlyphId | null;
   /** The accessible name: kept on the hit mesh's `name` and `userData.label`. */
   label: string;
   onSelect: () => void;
