@@ -34,6 +34,8 @@ const CHECKS = {
   pointing: 'scripts/ci-pointing-playwright.mjs',
   object: 'scripts/ci-object-playwright.mjs',
   summon: 'scripts/ci-summon-playwright.mjs',
+  // Needs the Quest Pro emulator for eye gaze; see CHECK_SERVER_ENV.
+  face: 'scripts/ci-face-playwright.mjs',
   // Not checks: regenerate the IWER fixtures the hands, body and pointing checks replay.
   'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs',
   'body-fixtures': 'scripts/generate-iwer-body-fixtures.mjs',
@@ -47,14 +49,19 @@ const USES_TSX = new Set(['pointing', 'object', 'summon']);
 // Extra environment for entries that share a script.
 const CHECK_ENV = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };
 
+// Checks that need their own dev server: the face check emulates a Quest
+// Pro (eye gaze) while the others keep the Quest 3 their fixtures came from.
+const CHECK_SERVER_ENV = { face: { CAPTURE_IWER_DEVICE: 'metaQuestPro' } };
+
 // Checks that legitimately run longer than the default hang guard.
 const CHECK_TIMEOUT_MS = {
-  body: 360000
+  body: 360000,
+  face: 360000
 };
 
 // Serial wall time in seconds on a 2-vCPU CI runner (CI run 39499697917);
 // parallel runs start the longest first and XR_SHARD balances on it.
-const CHECK_COST = { body: 83, height: 45, terrain: 38, hands: 31, locomotion: 21, 'mock-vr': 18, recording: 11 };
+const CHECK_COST = { face: 40, body: 83, height: 45, terrain: 38, hands: 31, locomotion: 21, 'mock-vr': 18, recording: 11 };
 
 const listed = process.argv.slice(2);
 const unknown = listed.filter((name) => !(name in CHECKS));
@@ -103,6 +110,7 @@ const concurrency = Math.max(1, Number(process.env.XR_CHECK_CONCURRENCY ?? Math.
 const logDir = path.resolve('output/xr-checks');
 
 let devServer = null;
+const extraServers = [];
 let interruptedSignal = null;
 let failure = null;
 const startedAt = Date.now();
@@ -110,6 +118,7 @@ const startedAt = Date.now();
 const handleSignal = (signal) => {
   interruptedSignal = signal;
   void stopProcess(devServer);
+  for (const server of extraServers) void stopProcess(server);
 };
 const onSigint = () => handleSignal('SIGINT');
 const onSigterm = () => handleSignal('SIGTERM');
@@ -142,6 +151,25 @@ try {
     await waitForServer(baseUrl, startupTimeoutMs, devServer);
   }
 
+  const extraBaseUrls = new Map();
+  const baseUrlFor = (name) => {
+    const extraEnv = CHECK_SERVER_ENV[name];
+    if (!extraEnv || configuredBaseUrl || reuseDevServer) return baseUrl;
+    if (Object.entries(extraEnv).every(([key, value]) => process.env[key] === value)) return baseUrl;
+    const key = JSON.stringify(extraEnv);
+    if (!extraBaseUrls.has(key)) {
+      extraBaseUrls.set(key, (async () => {
+        const extraPort = await findAvailablePort(host, port + 1 + extraBaseUrls.size, 20);
+        const server = startViteDevServer({ host, port: extraPort, cwd: process.cwd(), env: { ...process.env, ...extraEnv, NODE_TLS_REJECT_UNAUTHORIZED: '0' } });
+        extraServers.push(server);
+        const url = createHttpsBaseUrl(host, extraPort);
+        await waitForServer(url, startupTimeoutMs, server);
+        return url;
+      })());
+    }
+    return extraBaseUrls.get(key);
+  };
+
   const runCheck = async (name) => {
     const checkStartedAt = Date.now();
     const script = CHECKS[name];
@@ -151,7 +179,7 @@ try {
     let error = null;
     try {
       await runCommand('node', args, {
-        env: { ...process.env, ...CHECK_ENV[name], BASE_URL: baseUrl, NODE_TLS_REJECT_UNAUTHORIZED: '0' },
+        env: { ...process.env, ...CHECK_ENV[name], BASE_URL: await baseUrlFor(name), NODE_TLS_REJECT_UNAUTHORIZED: '0' },
         timeoutMs: process.env.XR_CHECK_TIMEOUT_MS ? checkTimeoutMs : CHECK_TIMEOUT_MS[name] ?? checkTimeoutMs,
         ...(logFd === null ? {} : { stdio: ['ignore', logFd, logFd] })
       });
@@ -189,6 +217,7 @@ try {
 } finally {
   try {
     await stopProcess(devServer);
+    for (const server of extraServers) await stopProcess(server);
   } catch (error) {
     const cleanupError = error instanceof Error ? error : new Error(String(error));
     failure = failure

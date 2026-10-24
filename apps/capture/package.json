@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:unit",
     "test:unit": "vitest run",
-    "test:xr": "node scripts/run-xr-checks.mjs mock-vr recording locomotion terrain hands height body",
+    "test:xr": "node scripts/run-xr-checks.mjs mock-vr recording locomotion terrain hands height body face",
     "test:xr:recording": "node scripts/run-xr-checks.mjs recording",
     "test:xr:mock": "node scripts/run-xr-checks.mjs mock-vr",
     "test:xr:flows": "node scripts/run-xr-checks.mjs locomotion",
@@ -28,6 +28,7 @@
     "test:xr:pointing": "node scripts/run-xr-checks.mjs pointing",
     "test:xr:object": "node scripts/run-xr-checks.mjs object",
     "test:xr:summon": "node scripts/run-xr-checks.mjs summon",
+    "test:xr:face": "node scripts/run-xr-checks.mjs face",
     "fixtures:hands": "node scripts/run-xr-checks.mjs pose-fixture",
     "fixtures:body": "node scripts/run-xr-checks.mjs body-fixtures",
     "fixtures:pointing": "node scripts/generate-pointing-test-scene.mjs && node scripts/run-xr-checks.mjs pointing-fixture",
@@ -42,10 +43,12 @@
     "ci:vr:flows": "node scripts/ci-vr-locomotion-playwright.mjs",
     "test:vr:mock": "pnpm run test:xr:mock",
     "test:vr:flows": "pnpm run test:xr:flows",
-    "check": "pnpm run verify:fast && pnpm run build"
+    "check": "pnpm run verify:fast && pnpm run build",
+    "build:avatar-face": "node scripts/build-avatar-face.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
+    "@holoim/avatar-face": "workspace:*",
     "@holoim/meaning": "workspace:*",
     "@holoim/objects": "workspace:*",
     "@holoim/ui-dom": "workspace:*",
@@ -53,6 +56,7 @@
     "@holoim/xr-ui-core": "workspace:*",
     "@holoim/xr-ui-three": "workspace:*",
     "@iwsdk/core": "^1.0.1",
+    "@mediapipe/tasks-vision": "0.10.17",
     "@pmndrs/uikit": "1.0.77",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -60,6 +64,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
+    "@gltf-transform/core": "4.3.0",
     "@holoim/config-eslint": "workspace:*",
     "@holoim/config-ts": "workspace:*",
     "@holoim/tooling-scripts": "workspace:*",

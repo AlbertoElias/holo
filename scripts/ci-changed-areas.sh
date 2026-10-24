@@ -61,7 +61,7 @@ else
         saw_code=true; quality=true; pipeline=true; api=true ;;
       apps/*)
         saw_code=true; all ;;
-      packages/contracts/*|packages/tooling-testing/*|packages/ui-dom/*|packages/xr-*)
+      packages/avatar-face/*|packages/contracts/*|packages/tooling-testing/*|packages/ui-dom/*|packages/xr-*)
         saw_code=true; quality=true; capture_xr=true; e2e=true; pipeline=true; portal=true
         api=true; web=true; capture_app=true ;;
       packages/*)

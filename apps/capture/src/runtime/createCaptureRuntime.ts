@@ -8,6 +8,7 @@ import { CameraController } from '../camera/CameraController';
 import { loadRuntimeConfig } from '../config/runtimeConfig';
 import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
 import { DiagnosticViews } from '../debug/DiagnosticViews';
+import { FaceDriver } from '../face/FaceDriver';
 import { DesktopPointAction } from '../input/DesktopPointAction';
 import { InputController } from '../input/InputController';
 import { VrLocomotion } from '../input/VrLocomotion';
@@ -129,6 +130,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     crouch: new CrouchState(),
     hands,
     objects,
+    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state)),
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
@@ -158,6 +160,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       if (frame) {
         recording.recordInputFrame(frame);
         tracking.noteXrFrame(frame);
+        capture.face.xrGaze.noteXrFrame(frame, renderer.xr.getReferenceSpace());
       }
     },
     present: (draw) => {
@@ -192,6 +195,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       const spawned = await motor.init(avatar);
       hands.ensureSensors();
       if (avatar.avatar) capture.animator.attachClips(avatar.avatar, avatarGltf.animations);
+      // Bound at bind pose, like the body, before any system writes the eyes.
+      if (avatar.avatar) capture.face.attach(avatar.avatar);
       // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
       if (config.objectUrl) await objects.loadUrl(config.objectUrl);
       if (config.trayUrls.length > 0) await objects.loadTrayUrls(config.trayUrls);
@@ -212,6 +217,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       toggleRecording: () => recording.toggle(),
       loadObjectFile: (file) => void objects.loadFile(file),
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
+      toggleFaceCamera: () => capture.face.toggleCamera(),
       recenterAr: () => {
         if (xrEntry.sessionMode === 'ar' && tracking.isXrPresenting()) capture.ar.recenter();
       }
@@ -245,7 +251,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __captureHandCalibrationPose: () => hands.captureCalibrationPose(),
         __resetHandCalibrationPose: () => hands.resetCalibrationPose(),
         __loadObjectUrl: (url) => objects.loadUrl(url),
-        __loadTrayUrls: (urls) => objects.loadTrayUrls(urls)
+        __loadTrayUrls: (urls) => objects.loadTrayUrls(urls),
+        __setFaceInput: (sample) => capture.face.setAutomationInput(sample),
+        __sampleFace: () => capture.face.snapshot(),
+        __toggleFaceCamera: () => capture.face.toggleCamera()
       });
       // ?manualClock=1: never tick on real time, so a replay starts from the
       // same state on any host (see __setFrameStepping).

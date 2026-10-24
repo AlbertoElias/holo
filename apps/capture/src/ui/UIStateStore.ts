@@ -11,7 +11,8 @@ export class UIStateStore {
     heightFit: { enabled: false, pending: false, eyeHeight: null },
     micPermission: 'pending',
     object: { status: 'none', name: null, message: null },
-    tray: { names: [], loading: false, message: null }
+    tray: { names: [], loading: false, message: null },
+    faceCamera: 'off'
   };
 
   private listeners = new Set<(state: UiViewModel) => void>();
@@ -62,6 +63,12 @@ export class UIStateStore {
 
   setTrayState(tray: UiViewModel['tray']): void {
     this.value = { ...this.value, tray };
+    this.emit();
+  }
+
+  setFaceCamera(faceCamera: UiViewModel['faceCamera']): void {
+    if (this.value.faceCamera === faceCamera) return;
+    this.value = { ...this.value, faceCamera };
     this.emit();
   }
 

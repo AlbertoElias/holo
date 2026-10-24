@@ -97,6 +97,7 @@ export interface UiViewModel {
   object: { status: 'none' | 'loading' | 'ready' | 'error'; name: string | null; message: string | null };
   /** The prepared tray (PRD-045): item names in slot order. */
   tray: { names: string[]; loading: boolean; message: string | null };
+  faceCamera: 'off' | 'starting' | 'tracking' | 'no-face' | 'denied' | 'unavailable';
 }
 
 export interface BoneTransform {
@@ -135,7 +136,7 @@ export type Vec3Tuple = [number, number, number];
 
 // 'hands': close-ups of both hands; 'body': a third-person view that follows
 // the avatar with the tracked head path drawn over it.
-export type SpectatorViewMode = 'off' | 'hands' | 'body' | 'body-fixed';
+export type SpectatorViewMode = 'off' | 'hands' | 'body' | 'body-fixed' | 'face';
 
 // One frame of the VR body for fidelity checks, in world space. `trackedHead`
 // is the app's own reading of the XR views (the check's ground truth comes

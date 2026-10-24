@@ -8,4 +8,5 @@ export interface CaptureUiBridge {
   recenterAr: () => void;
   loadObjectFile: (file: File) => void;
   loadTrayFiles: (files: File[]) => void;
+  toggleFaceCamera: () => void;
 }
