@@ -10,7 +10,9 @@ import {
   SRGBColorSpace,
   Vector3
 } from "three";
-import type { AnimationAction, Mesh, Object3D } from "three";
+import type { AnimationAction, Mesh, Object3D, PointLight } from "three";
+import { tokens } from "@holoim/design-tokens";
+import { stageLight, type ViewTarget } from "@holoim/xr-ui-core";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { useSphereClipping } from "../hologram/useSphereClipping";
@@ -41,6 +43,9 @@ type HologramCardCanvasProps = {
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   colorAccurateMode: boolean;
   portal: PortalStore;
+  /** The screen the card is on: sets the stage light's flicker (8.1). */
+  target: ViewTarget;
+  reducedMotion: boolean;
 };
 
 const HOLOGRAM_ANIMATION_SPEED = 1;
@@ -52,6 +57,10 @@ const BUBBLE_CAMERA_POSITION_OFFSET = new Vector3(0, 0, 0);
 const BUBBLE_CAMERA_LOOK_AT_OFFSET = new Vector3(0, 0, 0);
 /** Seconds Return takes to glide from the Free view back to Follow. */
 const RETURN_SECONDS = 0.45;
+/** The stage light sits this share of the way from the author toward the Follow camera, */
+const STAGE_LIGHT_TOWARD_VIEWER = 0.35;
+/** and this far below the Follow target, near the floor at the author's feet. */
+const STAGE_LIGHT_DROP_METERS = 0.7;
 /** Inside end never comes closer than this share of the Follow distance. */
 const MAX_INSIDE_SHARE = 0.6;
 
@@ -131,8 +140,10 @@ function easeInOut(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
+function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, target, reducedMotion }: {
   url: string;
+  target: ViewTarget;
+  reducedMotion: boolean;
   active: boolean;
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
@@ -159,6 +170,8 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   // bubble widens the canvas; the view widens with it instead of magnifying.
   const baseFovRef = useRef<number | null>(null);
   const baseHeightRef = useRef(0);
+  // The portal's own stage light (8.1): warm light from the hologram's foot.
+  const stageLightRef = useRef<PointLight>(null);
 
   useEffect(() => {
     onHasAudio(audioState.hasAudio);
@@ -403,6 +416,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   }, [actions, active, paused]);
 
   useFrame((frameState, delta) => {
+    portal.runtime.playbackSeconds = primaryActionRef.current?.time ?? 0;
     if (!(camera instanceof PerspectiveCamera)) {
       return;
     }
@@ -429,6 +443,12 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
       pose.followPosition,
       pose.followTarget
     );
+    const light = stageLightRef.current;
+    if (light) {
+      light.position.lerpVectors(pose.followTarget, pose.followPosition, STAGE_LIGHT_TOWARD_VIEWER);
+      light.position.y = pose.followTarget.y - STAGE_LIGHT_DROP_METERS;
+      light.intensity = stageLight(target, frameState.clock.elapsedTime * 1000, { reducedMotion }) ?? 0;
+    }
     const follow = anglesFromPose(pose.followPosition, pose.followTarget);
     const outsideDistance = follow.distance;
     const insideDistance = Math.min(INSIDE_DISTANCE, outsideDistance * MAX_INSIDE_SHARE);
@@ -490,6 +510,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal }: {
   return (
     <>
       <primitive object={clonedScene} />
+      <pointLight ref={stageLightRef} color={tokens.color.glow} decay={2} />
       {meaningLinks.length > 0 && (
         <PointingHighlights
           links={meaningLinks}
@@ -511,7 +532,9 @@ export function HologramCardCanvas({
   onHasAudio,
   onRendered,
   colorAccurateMode,
-  portal
+  portal,
+  target,
+  reducedMotion
 }: HologramCardCanvasProps) {
   return (
     <Canvas
@@ -526,7 +549,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} portal={portal} />
+      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} />
     </Canvas>
   );
 }

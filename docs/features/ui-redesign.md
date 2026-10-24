@@ -1,9 +1,9 @@
 # Feature brief: Redesign UI and interaction across capture and viewer
 
 **Lead:** Claude Code (Opus)  
-**Status:** Implementing (approved by the user 2026-10-24). Slices 0, 1 and
-2 built and verified locally (slice 2 on `claude/redesign-slice-2-0eb742`);
-slices 3 and 4 are next
+**Status:** Implementing (approved by the user 2026-10-24). Slices 0 to 4
+are on `main` (3 and 4 merged together after `verify:pr` on the combined
+tree); slice 5 is next
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -108,6 +108,7 @@ what they marked in the portal.
 | Q16 | AR brightness threshold | Set by the lead from known data (below) |
 | Q17 | Gaze-and-pinch | In scope; size set by the lead (below) |
 | Q18 | Chip on an unlisted AR target | 92% |
+| AR edge (slice 3) | How does the golden edge show in WebXR AR? | "Draw the burnt golden edge as an outline around the bubble, following its shape, and keep the bubble rendering." Built as a ring on the bubble's silhouette, facing the viewer (styleguide 9.2). Then: "Remove the aura's cyan equator ring; keep the rest of the bubble rendering." |
 
 What follows from those answers:
 
@@ -522,8 +523,59 @@ written to ratify code. Their `--passWithNoTests` flags are removed.
 - The WebXR AR route: controls at the hologram's foot, every row on the chip
   (97% Quest passthrough, 88% Android Chrome, 92% elsewhere), no head-locked
   bar, steady stage light, soot per Q15 and Q16, Exit per Q11, true scale
-  per Q13. Quest AR uses headset sizes (2.5×, rays 56, poke 72, labels fade
+  per Q13. The edge is a burnt ring round the bubble's silhouette, facing
+  the viewer, with the bubble's own rendering kept (the user's AR-edge
+  answer); checked by an IWER screenshot of the ring from two sides. Quest AR uses headset sizes (2.5×, rays 56, poke 72, labels fade
   within 1 m); Android uses flat sizes and touch 44.
+- **As built (2026-10-24), branch `feature/ui-redesign-slice-3`.**
+  - Feed: the ground gradient on `body::before`, fixed to the screen; each
+    card has its title and byline, the portal cut to `edgeOutline` seeded by
+    the hologram id (`EdgeSvg`), and the `Shade` with Play, the timecode
+    ("Paused · 0:08"), Free and Return (`GlyphControl`; Return shows "Return"
+    and keeps the core's full name). The reach row (highlights, tilt, View
+    in AR, sound) unfolds on pointer or focus and leaves after the idle
+    time. On touch, the first tap only reveals it. The card nearest the
+    middle (`nearestToMiddle`) runs `edgeFrame` and draws its sparks on a
+    canvas from core's `createSpark`, `sparkCount` and the token colours. The
+    other cards hold the resting frame. The feed's stage light comes from
+    core's `stageLight`.
+  - The dock holds Upload, and the `SideSheet` holds the form. Notices for
+    the empty feed, offline, a server error with "Try again", and the upload
+    status are on the `Chip` at the top, never under the form.
+  - AR: `HologramFootControls` at the hologram's foot (Play or Pause, and the
+    timecode). When the viewer pinches, a second row shows the scale label
+    and a true-size control. On a headset, `WristControls` puts Exit on the
+    non-dominant wrist, read from the frame's grip or wrist pose. A phone's
+    dock holds Recenter and Exit, with notices on the chip. Glyphs are
+    selected by an XR `select` ray against their hit meshes. The silent
+    1.85 m resize is gone: the hologram opens at true scale. The three bright
+    point lights became one steady stage light. `HeadLockedActionBar` and
+    the old `Ui*` components are no longer used by the viewer.
+  - Package change, approved by the lead (commit `7b9f666be095`):
+    `GlyphControl` takes `glyph: null` (the word stands in its place) and a
+    `word` prop. `GlyphSpec.id`, and the wrist row's glyph list in
+    `xr-ui-three`, admit null (an empty ring). Contract tests cover both.
+  - **Placeholders, accepted by the user on flat screens (2026-10-24):**
+    Pause, Exit AR, Recenter, Upload, true size and "Try again" are words on
+    flat screens and empty rings in the room. An empty ring on the wrist cannot be told apart, and no text
+    may sit within arm's reach. So Exit on the wrist needs a real drawing
+    before slice 3 counts as done in a headset (Recenter is not on the wrist
+    yet for the same reason).
+  - **AR edge, as the user decided.** `edgeOutline` takes a `shape`; the
+    rounded rectangle stays the default and a `circle` is drawn with no
+    inset, waves, tears and jitter as shares of the diameter, from the same
+    seed and draw order as the card. `bubbleSilhouette` gives the circle
+    where the eye's lines touch the sphere; the `BubbleEdge` in `xr-ui-r3f`
+    lays a unit circle `ThreeEdge` there every frame, facing the eye, scaled
+    to the silhouette's diameter, and hides it from inside the bubble. The
+    viewer mounts it in world space from `ARHologramModel`'s bubble, beside
+    the kept aura. Soot: the AR session now asks for `light-estimation`
+    (optional, through `arSessionInit`, since the XR store has no option for
+    it); `useArSoot` reads the probe's ambient luminance into
+    `nextArSootOn`, so Android switches at 0.16 and 0.095 and a Quest, with
+    no estimate, keeps the soot on. The aura's cyan equator ring crossed the
+    gold ring on both sides; the user had it removed (2026-10-24), so the
+    gold ring alone outlines the bubble and the rest of the aura stays.
 
 ### Slice 4: every capture page, touch input, handedness
 
@@ -784,8 +836,13 @@ share no files.
 | Independent verification, slice 2 | Codex (a different vendor) given the brief and tree | Neither (review and probes) | 2026-10-24: Codex's probes found two defects, both fixed with tests: the timecode's figures were proportional (0:11 and 0:12 differed by 2.9 mm at 1 m), and labels took the font's 1.2 line height, not the role's 1.35. They confirmed text hides within 1 m, the soft edge reaches 0 at the rim, and the thumbnail halo stays inside its bounds. Codex hit its usage limit before writing a verdict, so slice 2 has no complete independent pass |
 | `verify:pr`, slices 0 and 1 | `pnpm run verify:pr` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 6/6 (the viewer pointing pipeline imports the ported `pointing-desktop-take.ts` and `pointing-iwer-replay.ts`), `test:portal` 6/6, `test:xr:capture` passes. `test:knowledge` 7/7 once run against its own server: Playwright reuses whatever answers on port 4176, and a knowledge dev server from the main checkout was running there, so its first run failed 3 tests (2 also fail that way on `main`). `test:xr:viewer` 9/9 on rerun; its first run hit B-021, a flake that also fails on `main` |
 | `verify:pr`, slice 2 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling), builds, `test:smoke:pipeline` 6/6, `test:portal` 6/6 and `test:xr:smoke` 9/9 pass; no app changed. `test:knowledge` 7/7 in Docker (port 4176 was held by the main checkout's server) once its bug-list check counted template cards instead of asserting on one: with B-020 and B-021 open there are two cards, and the old assertion failed Playwright's strict mode |
-| Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | Screenshots at desktop and 390 × 844, previewed with `packages/tooling-testing/src/preview.mjs`; pending |
-| AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | Screenshots and placement report; pending |
+| Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | 2026-10-24, slice 3: `test:portal` 6/6. `test:xr:viewer` 14/14, which now includes `e2e/redesign.spec.ts`. At 1280 × 800 and 390 × 844 that spec checks the fixed ground gradient; Play, Free and Return in the shade (Return's word "Return", its name the core's); every glyph hit area at the input minimum; the timecode in its token font; the reach row hidden until the shade is reached; exactly one card sparking, at `sparkCount`; the side sheet at most 24rem wide, closing on "Close"; no sparks under reduced motion; and the empty, server-error ("Try again", `role=alert`) and offline notices on the phone chip. Screenshots in the ignored `output/redesign-slice-3/`, previewed with `preview.mjs` and shown to the user. Physical phones not checked |
+| AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | 2026-10-24, slice 3, IWER's Quest 3 (OculusBrowser UA, so the 97% passthrough chip): Exit is in the page before placement and on the left wrist; the model's scale is 1 at open; no chrome object has the camera as an ancestor; every chip mesh is at the target's opacity; the stage light holds 0.9 over 0.7 s; a controller ray selects Pause and Play; a two-finger pinch sets "1:…" and a ray at true size restores 1; Exit still works after a 180° turn. `ar-bubble.spec.ts` now gets its non-unit transform from the viewer's pinch. Not checked on a Quest or an Android phone, nor the Android dock over dom-overlay. The ring round the bubble: see the next row |
+| AR edge, the ring round the bubble | `xr-ui-core` `edge.test.ts`, `xr-ui-r3f` `BubbleEdge.test.tsx`; `ar-bubble.spec.ts` in `pnpm run test:xr:viewer` | Contract tests and emulation (IWER) | 2026-10-24, slice 3: one seed gives the same circle points, with the card's waves and tears; the card's outline is unchanged (golden fixture); points and strokes scale with the diameter; `bubbleSilhouette` keeps every ring point on the sphere and tangent to the eye's line while walking round it from 1.7R to 9R, and is null from inside; the r3f ring stays on the silhouette, facing the viewer, all chrome, hidden from inside or with no bubble; soot on with no estimate, off with a dark one. Under IWER, from in front and from behind the diagnostic bubble: the ring is at the silhouette's centre (2 dp), faces the eye (dot > 0.999), its scale is the silhouette's diameter, soot at the no-estimate opacity with the glow at 0, the aura still drawn with no cyan torus; screenshots `ar-ring-front.png` and `ar-ring-back.png`. The bubble's pixel oracle still passes with the ring drawn. `test:xr:viewer` 15/15, again after the torus was removed. Not checked on a Quest or an Android phone, so the lighting-estimate path (Android) has no run |
+| `verify:pr`, slice 3 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 8/8, `test:portal` 6/6, `test:xr:smoke` 14/14 and `test:xr:viewer` 14/14. `test:knowledge` in Docker: 6/7, then its live-update test (atomic replacement and rename) passed 3 of 3 alone, so a timing flake under amd64 emulation; slice 3 changes no knowledge code. Docker needed `PLAYWRIGHT_BROWSERS_PATH` set to a fresh folder: the shared `holoim-ci-playwright` volume holds an arm64 Chromium 1208 marked complete, which the now amd64 image cannot run |
+| User's look, slice 3 | Screenshots in `output/redesign-slice-3/` shown to the user | Neither (the user's eye) | 2026-10-24: the user answered "All the slice 3 looks are OK as they are." That covers the word placeholders (Pause, Upload, true size, Exit AR and Recenter in the Android dock); the side sheet's 24rem width and its stacking at the chip's opacity over the card; the dock padding; the "Close" word; the rescale label ("1:1.2" on the foot's second row, small and dim at Android's flat sizes); and the AR ring from two sides without the cyan ring. The disabled look (40%) is only on tilt where motion is unsupported, which no screenshot shows, so it was not judged. Android shots are IWER with an Android user agent and the dock lifted over IWER's view for the screenshot. Real wrist drawings for Exit and Recenter stay a known gap for a design pass, not a flat-screen blocker |
+| Dock shade, slice 3 | `ui-dom` `Surfaces.test.tsx`; screenshots in `output/redesign-slice-3/` | Contract test and the user's eye | 2026-10-24: the user saw two shadows: the dock painted the hologram's oval shade across the screen, so it read as a second object on the floor. On a before-and-after mock they chose "make the dock's shade a band along the bottom edge, so only holograms cast an oval shadow." `Dock` now uses `dockShadeGradient()`, the shade's stops as `linear-gradient(to top, …)`; the test checks the band, its stops and colour, and that it is not radial. Styleguide 5.2 says so. Capture's dock (slice 4) gets the same band |
+| Independent verification, slice 3 | Codex (a different vendor) given the brief, the tree and the slice 2 contracts | Neither (review and probes) | 2026-10-24: not run. Codex returned "You've hit your usage limit … try again at 9:20 PM" before reading anything, so slice 3 has no independent pass yet |
 | Capture pages, desktop and phone | `pnpm --filter @holoim/capture run test:xr:ui` (desktop 1280 × 800 and phone 390 × 844 with touch, Playwright) | Emulation (Playwright viewports) | 2026-10-24: desktop dock targets at least 24 apx (Record 36), Figtree loaded, the side sheet carries key words; handedness set by keyboard (Space on a radio), stored in `holoim.handedness`, kept across a reload, right by default; while recording the dock holds only Stop (a rose square) and "Recording 0:02". Phone: every dock target 44 × 44 apx, clear of the 20 apx side edges and the 34 apx home bar; touch words with no key help; the scene has `touch-action: none`; a drag on the right turns the view 0.54 rad, the walk stick shows under the finger and walks 3.2 m in 1 s, nothing starts in the edge or home-bar zone, and tap records. Report `output/ci-capture-ui/ui-report.json` (ignored) |
 | Capture headset rules | `test:xr:ui` headset phase | Emulation (IWER, controllers and hands) | 2026-10-24: Record on the left wrist for the right-handed, 4 cm off the wrist, drawn at 2.5× (15.1 mm), ray hit 15.1 mm, poke hit 20 mm (the floor); in view on a controller and on a tracked hand (on a controller it was hidden inside the avatar's sleeve until the wrist row drew over the body). Settings panel 1.5 m away, rows with ray-sized hits; every label at least 1 m away, and none shows, nor takes a hit, with the head 0.8 m from the panel. The panel and wrist stay put as the head walks 36 cm and turns 30°. A ray select on Record starts a take: the panel hides, "Recording 0:01" shows on the status line, which stays through a 10° turn (0.1 mm) and follows a 40° one (0.92 m). A poke stops it: the fingertip shade shows wide at 6 cm (16.6 mm) and sharpens at 2 cm (10.5 mm); one poke, one commit, one tick, even with the finger held; a tip arriving from behind commits nothing. Handedness from the panel row moves Record to the right wrist and the left ray presses it, while the right ray rests on Refit and refits nothing; the tray takes the non-dominant palm under both settings; with one controller, one select commits once |
 | Chrome stays out of the take | `test:xr:ui` export phase | Emulation (IWER) | 2026-10-24: a take without marks re-exported with every headset chrome object shown, hidden, moved visible into the scene model, or with a chrome-flagged box beside the avatar: the same canonical digest each time, and a repeat matches. A plain box in the same place changes it (the control). The canonical digest names each bufferView by its bytes' hash, because three's GLTFExporter orders texture bufferViews by when each async encode resolves, so two exports of one take can differ in raw bytes with the same content. The downloaded file differs from the re-exports because the exporter clones the live avatar's pose |

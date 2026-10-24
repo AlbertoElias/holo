@@ -1,0 +1,290 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { test as plainTest, type Page } from "@playwright/test";
+import type * as Three from "three";
+import { waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
+import { tokens } from "@holoim/design-tokens";
+import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, sparkCount, VIEW_TARGETS } from "@holoim/xr-ui-core";
+
+import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented } from "./bootstrap";
+import { pinch } from "./ar-gestures";
+import { installProbe, scrollFeedToTop, waitForPortalReady } from "./portal-helpers";
+
+// The viewer's pages in the redesigned look (docs/features/ui-redesign.md,
+// slice 3), on a mocked feed at desktop size and at 390 × 844, and the WebXR
+// AR route under IWER. Screenshots go to output/redesign-slice-3/ for the
+// user's look; the assertions are the slice's acceptance criteria.
+
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const avatarGlb = path.resolve(testDir, "../../capture/public/gltf/models/avatar.glb");
+const shotsDir = path.resolve(testDir, "../../../output/redesign-slice-3");
+const PHONE = { width: 390, height: 844 };
+const DESKTOP = { width: 1280, height: 800 };
+const items = ["a", "b", "c"].map((key, index) => ({
+  id: `redesign-${key}`,
+  url: `/uploads/redesign-${key}.glb`,
+  usdzUrl: null,
+  quickLookEnabled: false,
+  createdAt: "2026-10-24T09:30:00.000Z",
+  sizeBytes: 2048,
+  filenameOriginal: `redesign-${key}.glb`,
+  hologramName: ["This is the entire kitchen", "Sunday, before the guests came", "The long way round"][index]!,
+  submittedBy: "Mara"
+}));
+const [first] = items as [typeof items[number]];
+
+test.describe.configure({ timeout: 90_000 });
+
+async function shot(page: Page, name: string): Promise<void> {
+  await mkdir(shotsDir, { recursive: true });
+  await page.screenshot({ path: path.join(shotsDir, `${name}.png`) });
+}
+
+async function mockFeed(page: Page, feed: typeof items = items): Promise<void> {
+  await page.addInitScript(() => {
+    (window as Window & { __HOLOIM_AR_SUPPORTED_OVERRIDE__?: boolean }).__HOLOIM_AR_SUPPORTED_OVERRIDE__ = true;
+  });
+  await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: feed, nextCursor: null } }));
+  for (const item of feed) await page.route(`**/api/holograms/${item.id}`, (route) => route.fulfill({ json: item }));
+  await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
+}
+
+async function openFeed(page: Page): Promise<void> {
+  await installProbe(page);
+  await mockFeed(page);
+  await page.goto("/");
+  await assertViewerShell(page);
+  await waitForPortalReady(page, first.id, first.url);
+  await scrollFeedToTop(page);
+}
+
+for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+  test(`${label}: the feed card in the new look`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await openFeed(page);
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(600);
+    await shot(page, `${label}-feed`);
+    const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+
+    // The ground is pinned to the screen and painted from the token stops.
+    const ground = await page.evaluate(() => {
+      const style = getComputedStyle(document.body, "::before");
+      return { position: style.position, image: style.backgroundImage };
+    });
+    expect(ground.position, "the ground does not scroll with the feed").toBe("fixed");
+    expect(ground.image).toContain("linear-gradient");
+
+    // Play, Free and Return are always there, as glyphs in the shade; Return's word is short, its name full.
+    const shade = card.locator(".feed-card-shade");
+    await expect(shade.getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();
+    await expect(shade.getByRole("button", { name: "Free" })).toBeVisible();
+    const returnControl = shade.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView });
+    await expect(returnControl).toHaveText("Return");
+    for (const control of await shade.locator(".portal-controls-row button").all()) {
+      const box = await control.boundingBox();
+      expect(box!.width, "every glyph's hit area is at least the mouse minimum").toBeGreaterThanOrEqual(hitAreaApx("mouse", 0) - 0.5);
+      expect(box!.height).toBeGreaterThanOrEqual(hitAreaApx("mouse", 0) - 0.5);
+    }
+    await expect(shade.locator(".portal-timecode")).toHaveCSS("font-family", new RegExp([tokens.type.timecode.fontFamily].flat()[0]!.split(",")[0]!.replace(/"/g, "")));
+
+    // The highlight and tilt toggles come only when reached for.
+    const controls = card.locator(".portal-controls");
+    await expect(controls).toHaveAttribute("data-reach", "hidden");
+    await card.locator(".feed-card-shade").hover();
+    await expect(controls).toHaveAttribute("data-reach", "shown");
+    await page.waitForTimeout(400);
+    await shot(page, `${label}-feed-reached`);
+
+    // Sparks on the card nearest the middle only; the others hold.
+    const sparking = await page.locator(".feed-card-edge").evaluateAll((edges) => edges.map((edge) => Number(edge.getAttribute("data-edge-sparks") ?? 0)));
+    expect(sparking.filter((count) => count > 0), "exactly one card sparks").toHaveLength(1);
+    expect(Math.max(...sparking)).toBe(sparkCount(label === "phone" ? VIEW_TARGETS.phone : VIEW_TARGETS.desktop, { inFocus: true, reducedMotion: false, recording: false }));
+    await expect(card).toHaveAttribute("data-card-focus", "true");
+
+    await page.getByRole("button", { name: "Upload a hologram" }).click();
+    await page.waitForTimeout(500);
+    await shot(page, `${label}-upload-sheet`);
+    const sheet = page.getByRole("dialog", { name: "Upload a hologram" });
+    await expect(sheet).toBeVisible();
+    const sheetBox = await sheet.boundingBox();
+    expect(sheetBox!.width, "the sheet is at most 24rem wide and never wider than the screen").toBeLessThanOrEqual(Math.min(viewport.width, 24 * 16) + 0.5);
+    await sheet.getByRole("button", { name: "Close" }).click();
+    await expect(sheet).toHaveCount(0);
+  });
+}
+
+test("phone: reduced motion stops the sparks and keeps the controls", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize(PHONE);
+  await openFeed(page);
+  const sparking = await page.locator(".feed-card-edge").evaluateAll((edges) => edges.map((edge) => Number(edge.getAttribute("data-edge-sparks") ?? 0)));
+  expect(sparking.every((count) => count === 0), "no sparks under reduced motion").toBe(true);
+  await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .feed-card-shade`).getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();
+});
+
+// The server error is the case under test, so the browser's own line for the
+// 500 is expected; any other runtime error still fails, as in ./bootstrap.
+plainTest("phone: feed-wide notices sit on the chip", async ({ page }) => {
+  const runtimeErrors: string[] = [];
+  page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() !== "error" || /status of 500/.test(message.text())) return;
+    runtimeErrors.push(`console.error: ${message.text()}`);
+  });
+  await page.setViewportSize(PHONE);
+  const chipBackground = (selector: string) => page.locator(`${selector} .feed-notice-chip`).evaluate((chip) => getComputedStyle(chip).backgroundColor);
+  const expected = `${Math.round(chipOpacity(VIEW_TARGETS.phone)! * 100) / 100}`;
+
+  await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: [], nextCursor: null } }));
+  await page.goto("/");
+  await expect(page.locator('[data-notice="empty"]')).toBeVisible();
+  expect(await chipBackground('[data-notice="empty"]'), "the empty feed's notice is on the phone chip").toContain(expected);
+  await shot(page, "phone-notice-empty");
+
+  await page.unroute("**/api/holograms?*");
+  await page.route("**/api/holograms?*", (route) => route.fulfill({ status: 500, json: { error: "The server is having a moment." } }));
+  await page.reload();
+  const error = page.locator('[data-notice="error"]');
+  await expect(error).toBeVisible();
+  await expect(error).toHaveAttribute("role", "alert");
+  await expect(error.getByRole("button", { name: "Try again" })).toBeVisible();
+  await shot(page, "phone-notice-error");
+
+  await page.context().setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+  await expect(page.locator('[data-notice="offline"]')).toBeVisible();
+  await shot(page, "phone-notice-offline");
+  await page.context().setOffline(false);
+  expect(runtimeErrors, "viewer runtime errors").toEqual([]);
+});
+
+// ── The WebXR AR route under IWER (a Quest 3 in emulation) ──
+
+type ArProbe = { renderer: Three.WebGLRenderer; scene: Three.Scene; model: Three.Object3D };
+type ArWindow = Window & { __HOLOIM_AR_TEST_OBSERVER__?: (value: ArProbe) => void; __arProbe?: ArProbe };
+type IwerVector = { set: (...values: number[]) => void; x: number; y: number; z: number };
+type IwerPosed = { position: IwerVector; quaternion: IwerVector & { w: number } };
+type IwerController = IwerPosed & { updateButtonValue: (id: string, value: number) => void };
+type IwerDevice = IwerPosed & { controlMode: string; controllers: Record<"left" | "right", IwerController> };
+
+/** Aims the right controller from the head at a chrome glyph (by its accessible name) and pulls the trigger. */
+async function selectInRoom(page: Page, label: string): Promise<void> {
+  await page.evaluate(async (name) => {
+    const { Vector3, Quaternion, Matrix4 } = await import("/node_modules/.vite/deps/three.js") as typeof Three;
+    const probe = (window as ArWindow).__arProbe!;
+    let hit: Three.Object3D | undefined;
+    probe.scene.traverse((object) => {
+      if (object.userData.label === name && object.layers.mask !== 0) hit = object;
+    });
+    if (!hit) throw new Error(`${name} is not in the room.`);
+    const at = hit.getWorldPosition(new Vector3());
+    const device = (window as unknown as { IWER_DEVICE: IwerDevice }).IWER_DEVICE;
+    // The ray starts at the head: aimed in the scene's space, placed in IWER's.
+    const from = probe.renderer.xr.getCamera().getWorldPosition(new Vector3());
+    const look = new Matrix4().lookAt(from, at, new Vector3(0, 1, 0));
+    const turn = new Quaternion().setFromRotationMatrix(look);
+    device.controlMode = "programmatic";
+    const controller = device.controllers.right;
+    controller.position.set(device.position.x, device.position.y, device.position.z);
+    controller.quaternion.set(turn.x, turn.y, turn.z, turn.w);
+  }, label);
+  await page.waitForTimeout(150);
+  await page.evaluate(() => (window as unknown as { IWER_DEVICE: IwerDevice }).IWER_DEVICE.controllers.right.updateButtonValue("trigger", 1));
+  await page.waitForTimeout(150);
+  await page.evaluate(() => (window as unknown as { IWER_DEVICE: IwerDevice }).IWER_DEVICE.controllers.right.updateButtonValue("trigger", 0));
+  await page.waitForTimeout(150);
+}
+
+test("AR: controls at the hologram's foot on the chip, Exit always reachable, true scale and a labelled rescale", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 640, height: 480 });
+  await page.addInitScript(() => {
+    (window as ArWindow).__HOLOIM_AR_TEST_OBSERVER__ = (value) => { (window as ArWindow).__arProbe = value; };
+  });
+  await mockFeed(page, [first]);
+  await observeFeedCardRenderer(page);
+  await page.goto("/");
+  await waitForFeedCardPresented(page);
+  await page.locator(".ar-trigger-button").first().click();
+  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
+  const view = page.locator(".ar-view-container");
+
+  // Exit is there from the first frame, before anything is placed.
+  await expect(page.getByRole("button", { name: "Exit AR" })).toBeAttached();
+  await page.waitForFunction(() => Boolean((window as ArWindow).__arProbe));
+  await expect.poll(() => view.getAttribute("data-placement-stage")).toMatch(/placed|anchored|locked/);
+  await page.waitForTimeout(500);
+
+  const room = await page.evaluate(() => {
+    const probe = (window as ArWindow).__arProbe!;
+    const xrCamera = probe.renderer.xr.getCamera();
+    const chrome: Array<{ name: string; headLocked: boolean }> = [];
+    const chips: number[] = [];
+    probe.scene.traverse((object) => {
+      if (object.userData.holoimChrome !== true) return;
+      let ancestor: Three.Object3D | null = object;
+      let headLocked = false;
+      while (ancestor) {
+        if ((ancestor as Three.Camera).isCamera || ancestor === xrCamera) headLocked = true;
+        ancestor = ancestor.parent;
+      }
+      if (typeof object.userData.label === "string") chrome.push({ name: object.userData.label, headLocked });
+      if (object.name === "chip" && (object as Three.Mesh).isMesh) chips.push(((object as Three.Mesh).material as Three.Material).opacity);
+    });
+    const light = probe.scene.getObjectByName("ar-stage-light") as Three.PointLight | undefined;
+    return {
+      modelScale: probe.model.parent!.scale.x,
+      chrome,
+      chips,
+      wristVisible: probe.scene.getObjectByName("wrist-glyphs-left")?.visible ?? false,
+      stageLight: light?.intensity ?? null,
+      cameraChildren: xrCamera.children.length
+    };
+  });
+  expect(room.modelScale, "the hologram opens at true scale").toBe(1);
+  expect(room.chrome.map((entry) => entry.name)).toEqual(expect.arrayContaining([CONTROL_NAMES.pause, "Exit AR"]));
+  expect(room.chrome.filter((entry) => entry.headLocked), "no control follows the head").toEqual([]);
+  const target = await view.getAttribute("data-ar-target");
+  expect(target, "IWER's Quest 3 is a headset").toBe("headset");
+  const compositor = arCompositorFromUserAgent(await page.evaluate(() => navigator.userAgent));
+  const expectedChip = chipOpacity({ kind: "ar", compositor, headset: true })!;
+  expect(room.chips.length, "the foot row sits on the chip").toBeGreaterThan(0);
+  for (const opacity of room.chips) expect(opacity, "every row is on the chip at the target's opacity").toBeCloseTo(expectedChip, 2);
+  expect(room.wristVisible, "Exit is on the non-dominant wrist").toBe(true);
+  expect(room.stageLight, "the stage light rests steady in a room").toBeCloseTo(tokens.motion.flicker.stageLightRest, 5);
+  await page.waitForTimeout(700);
+  expect(await page.evaluate(() => ((window as ArWindow).__arProbe!.scene.getObjectByName("ar-stage-light") as Three.PointLight).intensity)).toBe(room.stageLight);
+  await shot(page, "ar-headset-foot");
+
+  // Play and Pause work from the room: a controller ray at the foot row.
+  await selectInRoom(page, CONTROL_NAMES.pause);
+  await expect(view).toHaveAttribute("data-ar-paused", "true");
+  await selectInRoom(page, CONTROL_NAMES.play);
+  await expect(view).toHaveAttribute("data-ar-paused", "false");
+
+  // A pinch rescales, the label says by how much, and the glyph beside it goes back.
+  await pinch(page, 200, 100);
+  await expect(view).not.toHaveAttribute("data-ar-scale", "1");
+  await expect(view).toHaveAttribute("data-ar-scale-label", /^1:/);
+  expect(await page.evaluate(() => (window as ArWindow).__arProbe!.model.parent!.scale.x)).toBeLessThan(1);
+  await page.waitForTimeout(300);
+  await shot(page, "ar-headset-rescaled");
+  await selectInRoom(page, "Return to true size");
+  await expect(view).toHaveAttribute("data-ar-scale", "1");
+  await expect(view).toHaveAttribute("data-ar-scale-label", "");
+
+  // Looking away: the wrist and the dock still hold Exit.
+  await page.evaluate(() => {
+    const device = (window as unknown as { IWER_DEVICE: IwerDevice }).IWER_DEVICE;
+    device.controlMode = "programmatic";
+    device.quaternion.set(0, 1, 0, 0);
+  });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => (window as ArWindow).__arProbe!.scene.getObjectByName("wrist-glyphs-left")?.visible)).toBe(true);
+  await page.evaluate(() => (document.querySelector('button[aria-label="Exit AR"]') as HTMLButtonElement).click());
+  await waitForNoIwerSession(page);
+  await expect(page).toHaveURL(/\/$/);
+});

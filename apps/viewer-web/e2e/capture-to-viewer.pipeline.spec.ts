@@ -121,8 +121,8 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   const hologramName = `Pipeline ${testInfo.testId.slice(0, 8)}-${Date.now()}`;
   await page.goto("/");
   await assertViewerShell(page);
-  const expandUpload = page.getByRole("button", { name: "Expand upload panel" });
-  if (await expandUpload.isVisible()) await expandUpload.click();
+  // Upload lives in the dock and opens the side sheet (Q11).
+  await page.getByRole("button", { name: "Upload a hologram" }).click();
   await page.getByLabel("Hologram name").fill(hologramName);
   await page.getByLabel("Submitted by").fill("pipeline-e2e");
   // This pipeline is the Quick Look demo path, so it opts in to USDZ generation.

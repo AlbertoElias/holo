@@ -232,6 +232,6 @@ export { EdgeSvg, RESTING_EDGE_FRAME, type EdgeSvgProps } from "./EdgeSvg.js";
 export { GlyphControl, type GlyphControlProps } from "./GlyphControl.js";
 export { Halo, type HaloProps, type HaloViewState } from "./Halo.js";
 export { defaultHitInput, useReducedMotion } from "./internal.js";
-export { Shade, shadeGradient, type ShadeProps } from "./Shade.js";
+export { Shade, dockShadeGradient, shadeGradient, type ShadeProps } from "./Shade.js";
 export { SideSheet, type SideSheetProps } from "./SideSheet.js";
 export { Type, fontStack, typeRoleStyle, type TypeElement, type TypeProps, type TypeRole } from "./typeRoles.js";

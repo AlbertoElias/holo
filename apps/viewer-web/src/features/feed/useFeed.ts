@@ -51,6 +51,10 @@ export function useFeed() {
     canLoadMore,
     nextCursor,
     addToTop,
+    /** Loads the first page again, after an error. */
+    retry: async () => {
+      await load();
+    },
     loadMore: async () => {
       if (nextCursor) {
         await load(nextCursor);

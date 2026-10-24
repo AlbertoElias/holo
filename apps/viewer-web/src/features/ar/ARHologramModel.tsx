@@ -1,16 +1,17 @@
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
 import { useXR } from "@react-three/xr";
 import { Box3, LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
 import type { AnimationAction, Group, Object3D } from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { TRUE_SCALE } from "@holoim/xr-ui-core";
 
 
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { useSphereClipping } from "../hologram/useSphereClipping";
-import type { SphereClipStatus } from "../hologram/useSphereClipping";
+import type { SphereClipResult, SphereClipStatus } from "../hologram/useSphereClipping";
 import { ARDepthOcclusion } from "./ARDepthOcclusion";
 import { freezeBubbleWrapperMotion } from "./arAnimation";
 import { ARBubbleAura } from "./ARBubbleAura";
@@ -22,9 +23,10 @@ import {
 } from "./arPlacement";
 
 const HOLOGRAM_ANIMATION_SPEED = 1;
-const AR_MODEL_TARGET_HEIGHT_METERS = 1.85;
-const AR_MODEL_MIN_SCALE = 0.12;
-const AR_MODEL_MAX_SCALE = 2.5;
+// Only for the first viewing distance when a recording has no measurable height.
+const AR_UNKNOWN_HEIGHT_METERS = 1.7;
+const AR_FOOT_MIN_FRONT_METERS = 0.3;
+const AR_FOOT_FRONT_HEIGHT_RATIO = 0.2;
 const AR_INITIAL_POSITION = new Vector3(0, 0.05, -2);
 const AR_LOCAL_REFERENCE_SPACE_MAX_Y_METERS = 0.45;
 const AR_INITIAL_FORWARD_DISTANCE_MIN_METERS = 1.8;
@@ -77,6 +79,15 @@ type ARHologramModelProps = {
   placementVersion: number;
   onBubbleStatusChange: (status: SphereClipStatus) => void;
   onPlacementStatusChange?: (status: ArPlacementStatus) => void;
+  /** The viewer's rescale; true scale (Q13) unless they pinch, and then labelled at the foot. */
+  scaleFactor?: number;
+  paused?: boolean;
+  /** Written every frame with the playing take's time, in seconds, for the timecode. */
+  playbackSecondsRef?: MutableRefObject<number>;
+  /** The controls at the hologram's foot: in its placement, never in its scale. */
+  children?: (foot: { frontMeters: number }) => ReactNode;
+  /** World-space chrome that follows the bubble, read every frame (the edge's ring). */
+  bubbleChrome?: (bubble: SphereClipResult) => ReactNode;
 };
 
 function createPlacementRuntimeState(): PlacementRuntimeState {
@@ -160,7 +171,12 @@ export function ARHologramModel({
   url,
   placementVersion,
   onBubbleStatusChange,
-  onPlacementStatusChange
+  onPlacementStatusChange,
+  scaleFactor = TRUE_SCALE,
+  paused = false,
+  playbackSecondsRef,
+  children,
+  bubbleChrome
 }: ARHologramModelProps) {
   const { scene, animations } = useGLTF(url);
   const renderer = useThree((state) => state.gl);
@@ -171,17 +187,14 @@ export function ARHologramModel({
     normalizeSceneAtOrigin(cloned);
     return cloned;
   }, [scene]);
-  const modelScale = useMemo(() => {
-    const bounds = boundsWithoutObjects(clonedScene);
-    const size = bounds.getSize(new Vector3());
-    if (!Number.isFinite(size.y) || size.y <= 1e-4) return 0.4;
-    return Math.min(AR_MODEL_MAX_SCALE, Math.max(AR_MODEL_MIN_SCALE, AR_MODEL_TARGET_HEIGHT_METERS / size.y));
-  }, [clonedScene]);
+  // True scale is a fact (principle 6): the recording opens at its own size,
+  // and only the viewer's own, labelled rescale changes it.
+  const modelScale = scaleFactor;
   const modelHeightMeters = useMemo(() => {
     const bounds = boundsWithoutObjects(clonedScene);
     const size = bounds.getSize(new Vector3());
     if (!Number.isFinite(size.y) || size.y <= 1e-4) {
-      return AR_MODEL_TARGET_HEIGHT_METERS;
+      return AR_UNKNOWN_HEIGHT_METERS;
     }
     return size.y * modelScale;
   }, [clonedScene, modelScale]);
@@ -199,12 +212,18 @@ export function ARHologramModel({
       }
     }
   });
+  // The foot row stands at the front of the bubble, or a short step ahead of a recording without one.
+  const footFrontMeters = sphereClip.active && Number.isFinite(sphereClip.radius) && sphereClip.radius > 0
+    ? sphereClip.radius
+    : Math.max(AR_FOOT_MIN_FRONT_METERS, modelHeightMeters * AR_FOOT_FRONT_HEIGHT_RATIO);
   const arAnimations = useMemo(() => freezeBubbleWrapperMotion(animations), [animations]);
   const { actions, mixer } = useAnimations(arAnimations, clonedScene);
   const xrSession = useXR((state) => state.session);
   const xrSessionRef = useRef<XRSession | null>(null);
   const originReferenceSpace = useXR((state) => state.originReferenceSpace);
   const groupRef = useRef<Group>(null);
+  const footRef = useRef<Group>(null);
+  const primaryActionRef = useRef<AnimationAction | null>(null);
   const placementStateRef = useRef<PlacementRuntimeState>(createPlacementRuntimeState());
   const placementStatusRef = useRef<ArPlacementStatus>(createPlacementStatus());
   const anchorReportedRef = useRef(new Vector3());
@@ -498,6 +517,20 @@ export function ARHologramModel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placementVersion, Boolean(xrSession)]);
 
+  useEffect(() => {
+    mixer.timeScale = paused ? 0 : 1;
+  }, [mixer, paused]);
+
+  // The foot row follows the hologram's placement, not its scale.
+  useFrame(() => {
+    const group = groupRef.current;
+    const foot = footRef.current;
+    if (playbackSecondsRef) playbackSecondsRef.current = primaryActionRef.current?.time ?? 0;
+    if (!group || !foot) return;
+    foot.position.copy(group.position);
+    foot.quaternion.copy(group.quaternion);
+  });
+
   useFrame(({ camera }, _delta, frame) => {
     if (!groupRef.current) {
       return;
@@ -742,6 +775,7 @@ export function ARHologramModel({
       return;
     }
 
+    primaryActionRef.current = primaryAction;
     primaryAction.reset();
     primaryAction.enabled = true;
     primaryAction.setLoop(LoopRepeat, Infinity);
@@ -761,6 +795,7 @@ export function ARHologramModel({
     });
 
     return () => {
+      primaryActionRef.current = null;
       rankedActions.forEach((action) => action.stop());
     };
   }, [actions]);
@@ -778,6 +813,10 @@ export function ARHologramModel({
         <primitive object={clonedScene} />
         <ARBubbleAura bubble={sphereClip} />
       </group>
+      <group ref={footRef} name="ar-hologram-foot">
+        {children?.({ frontMeters: footFrontMeters })}
+      </group>
+      {bubbleChrome?.(sphereClip)}
     </>
   );
 }

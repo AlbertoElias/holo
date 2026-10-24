@@ -53,13 +53,26 @@ describe("dock (5.2, 6.1 phone edges)", () => {
     expect(dock.style.paddingRight).toBe("max(env(safe-area-inset-right), 20px)");
   });
 
-  it("sits on the shade's gradient and spaces its glyphs one glyph gap apart (30 apx for a poke)", () => {
+  it("spaces its glyphs one glyph gap apart (30 apx for a poke)", () => {
     const { container } = render(<Dock input="mouse">x</Dock>);
     const dock = container.firstElementChild as HTMLElement;
     expect(dock.style.gap).toBe("12px");
-    expect(dock.style.background).toMatch(/^radial-gradient\(closest-side,/);
     const poke = render(<Dock input="poke">x</Dock>).container.lastElementChild as HTMLElement;
     expect(poke.style.gap).toBe("30px");
+  });
+});
+
+// The user saw two shadows: the dock painted the hologram's oval shade across
+// the screen, so it read as a second object on the floor (2026-10-24).
+describe("dock shade (5.2)", () => {
+  it("is a band up from the bottom edge in the shade's stops, not a second oval", () => {
+    const dock = render(<Dock>x</Dock>).container.firstElementChild as HTMLElement;
+    const gradient = dock.style.background;
+    expect(gradient).toMatch(/^linear-gradient\(to top,/);
+    expect(gradient).not.toMatch(/radial/);
+    const stops = Array.from(gradient.matchAll(/rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\) ([\d.]+)%/g));
+    expect(stops.map((stop) => [Number(stop[4]), Number(stop[5])])).toEqual([[0.7, 0], [0.5, 60], [0, 100]]);
+    for (const stop of stops) expect(stop.slice(1, 4).map(Number)).toEqual([8, 26, 30]);
   });
 });
 

@@ -22,12 +22,15 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- UI redesign slice 4 (every capture page, touch, handedness; brief
-  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) is pushed on
-  `claude/sharp-snyder-e9566f` and verified locally with `verify:pr`
-  (evidence in the brief). It carries slice 3's `7b9f666` (`GlyphControl
-  glyph: null`) and the `ui-dom` passthrough `2be153f`. Merge it together
-  with slice 3. Slices 0, 1 and 2 were merged on 2026-10-24.
+- Nothing held. UI redesign slices 0 to 4 (brief
+  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are merged
+  to `main`: slices 0 to 2 on 2026-10-24, and slices 3 (every viewer page)
+  and 4 (every capture page, touch, handedness) together after `verify:pr`
+  passed on the combined tree (evidence in the brief). Next there: slice 5
+  (hold to mark "this" and the Halo). Open: Codex's independent pass over
+  slices 2 to 4 (it was at its usage limit on 2026-10-24); real wrist
+  drawings for Exit and Recenter, a known gap for a design pass; the
+  physical device checks in the brief.
 
 ## Unverified / device-only
 
