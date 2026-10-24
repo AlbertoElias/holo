@@ -44,7 +44,7 @@ pre { white-space: pre-wrap; font-size: .8rem; color: var(--muted); }
       <li>Last, tap the lowest AR chip whose text reads cleanly.</li>
     </ol>
     <button data-run="blend">Start AR blend probe</button>
-    <p>iPhone (AR Quick Look): open <a id="usdz" rel="ar" href="blend.usdz"><img alt="Open the blend probe in AR Quick Look" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Crect width='120' height='40' rx='8' fill='%23ffc872'/%3E%3Ctext x='60' y='26' font-family='sans-serif' font-size='15' text-anchor='middle' fill='%23081a1e'%3EOpen in AR%3C/text%3E%3C/svg%3E" width="120" height="40"></a>, point it at a pale wall so the patches stick to it, and take a screenshot with wall beside each patch.</p>
+    <p id="qlrow"><b>iPhone only</b> (AR Quick Look is Apple’s; on a Quest or a computer this link does nothing): open <a id="usdz" rel="ar" href="blend.usdz"><img alt="Open the blend probe in AR Quick Look" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Crect width='120' height='40' rx='8' fill='%23ffc872'/%3E%3Ctext x='60' y='26' font-family='sans-serif' font-size='15' text-anchor='middle' fill='%23081a1e'%3EOpen in AR%3C/text%3E%3C/svg%3E" width="120" height="40"></a>, point it at a pale wall so the patches stick to it, and take a screenshot with wall beside each patch.</p>
   </div>
 
   <h2>3 · Flicker (item 8)</h2>
@@ -69,7 +69,8 @@ pre { white-space: pre-wrap; font-size: .8rem; color: var(--muted); }
   <div class="card">
     <p>Quest with <b>hand tracking on</b> (put the controllers down). A grid 45 cm away lights one square at a time; poke it with your index finger. 120 pokes, with three square sizes mixed at random. Then type samples appear one scale at a time, at 45 cm and at 1.75 m; rate each.</p>
     <button data-run="hands">Start VR hands and type check</button>
-    <button class="ghost" data-run="typeonly">Type check only</button>
+    <p><b>Already did the pokes?</b> This skips them and goes straight to the type samples: six panels (2×, 2.5× and 3×, at 45 cm and then 1.75 m), one at a time. Rate each one Easy, Takes effort or Can’t read; it takes about a minute.</p>
+    <button data-run="typeonly">Type size only (skip the pokes)</button>
   </div>
 
   <h2>Results sent from this device</h2>
@@ -129,6 +130,8 @@ Promise.all(['immersive-vr', 'immersive-ar'].map(mo => xr ? xr.isSessionSupporte
   document.getElementById('xrsupport').textContent = `VR ${vr ? 'yes' : 'no'} · AR ${ar ? 'yes' : 'no'} · DPR ${devicePixelRatio}${EMULATED ? ' · EMULATED' : ''}`;
 });
 document.getElementById('usdz').href = `http://${location.hostname}:8480/blend.usdz`;
+/* Quick Look exists only on iPhone and iPad; elsewhere the row is dimmed so nobody waits on it */
+if (!/iPad|iPhone|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) document.getElementById('qlrow').style.opacity = '.5';
 
 /* the real exported take, parsed once per WebGL context (the feed gives every card its own) */
 const loader = new GLTFLoader();
