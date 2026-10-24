@@ -39,9 +39,10 @@ None.
   performance, or device session behavior.
 - Perform real-device viewer AR placement validation.
 - Face on devices: WebXR eye gaze and its permission prompt on a Quest Pro,
-  a real wink through the webcam (left/right mirroring), webcam tracking
-  quality on a laptop and a phone, and the microphone-driven jaw with real
-  speech (brief [`docs/features/avatar-face.md`](docs/features/avatar-face.md)).
+  and webcam tracking in a phone browser. The desktop webcam (including
+  left/right on a real wink) and the voice-driven jaw passed on a laptop on
+  2026-10-24 (brief
+  [`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md)).
 
 ## How to resume
 

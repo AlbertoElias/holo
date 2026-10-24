@@ -202,6 +202,9 @@ the shipped avatar cannot reach them through the XR face check.
 - WebXR eye gaze on a physical eye-tracking headset (Quest Pro), including
   the eye-tracking permission prompt at session start: IWER emulates the gaze
   input only.
-- Webcam left/right mirroring with a real wink.
-- Real webcam tracking quality and latency on a laptop and a phone browser.
-- Microphone-driven jaw feel with real speech.
+- Real webcam tracking in a phone browser.
+
+Validated by the user on a laptop on 2026-10-24, through the live capture
+site and a recording played in the live viewer: webcam tracking, left/right
+on a real wink (`SWAP_SIDES` stays `false`), and the microphone-driven jaw
+with real speech.
