@@ -72,6 +72,36 @@ export async function getUploadIntentByStorageKey(storageKey: string) {
   return prisma.uploadIntent.findUnique({ where: { storageKey } });
 }
 
+export async function listExpiredUploadIntents(expiredBefore: Date, limit: number) {
+  return prisma.uploadIntent.findMany({
+    where: { completedHologramId: null, expiresAt: { lt: expiredBefore } },
+    orderBy: [{ expiresAt: "asc" }],
+    take: limit
+  });
+}
+
+export async function listOldCompletedUploadIntents(createdBefore: Date, limit: number) {
+  return prisma.uploadIntent.findMany({
+    where: { completedHologramId: { not: null }, createdAt: { lt: createdBefore } },
+    orderBy: [{ createdAt: "asc" }],
+    take: limit
+  });
+}
+
+/** Conditional delete; returns true when this caller removed the row. */
+export async function deleteUncompletedUploadIntent(id: string): Promise<boolean> {
+  const result = await prisma.uploadIntent.deleteMany({ where: { id, completedHologramId: null } });
+  return result.count === 1;
+}
+
+/** Conditional delete; returns true when this caller removed the row. */
+export async function deleteCompletedUploadIntent(id: string, createdBefore: Date): Promise<boolean> {
+  const result = await prisma.uploadIntent.deleteMany({
+    where: { id, completedHologramId: { not: null }, createdAt: { lt: createdBefore } }
+  });
+  return result.count === 1;
+}
+
 export async function completeUploadIntent(intentId: string, hologramId: string) {
   return prisma.uploadIntent.update({
     where: { id: intentId },
