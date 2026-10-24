@@ -11,7 +11,8 @@ import { ThreeGlyph } from "./ThreeGlyph.js";
 
 export interface ThreeWristGlyphsOptions {
   handedness: Handedness;
-  glyphs: readonly GlyphId[];
+  /** null draws an empty ring, for an action with no drawing yet. */
+  glyphs: readonly (GlyphId | null)[];
   /** "poke" for tracked hands, "ray" for controllers: sets every hit area. */
   input: Extract<HitInput, "poke" | "ray">;
 }

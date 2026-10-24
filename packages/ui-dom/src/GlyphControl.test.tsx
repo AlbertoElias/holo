@@ -9,7 +9,7 @@ import type { GlyphId, HitInput } from "@holoim/xr-ui-core";
 import { GlyphControl } from "./GlyphControl.js";
 import { cssRgb } from "./testHelpers.js";
 
-function press(glyph: GlyphId, props: Partial<Parameters<typeof GlyphControl>[0]> = {}) {
+function press(glyph: GlyphId | null, props: Partial<Parameters<typeof GlyphControl>[0]> = {}) {
   const onPress = vi.fn();
   render(<GlyphControl glyph={glyph} label="A glyph" onPress={onPress} {...props} />);
   const button = screen.getByRole("button", { name: "A glyph" });
@@ -166,5 +166,40 @@ describe("drawings (6)", () => {
     expect(label.style.fontWeight).toBe("500");
     expect(label.style.color).toBe(cssRgb(tokens.glyph.color));
     expect(label.style.fontFamily).toContain("Figtree");
+  });
+});
+
+describe("a control with no drawing yet (brief, slice 3: Pause, Exit, Recenter, Upload, true size)", () => {
+  it("draws its word in the control-label role, with no drawing, and keeps its accessible name", () => {
+    const { button, visual, onPress } = press(null);
+    expect(button.querySelector("svg")).toBeNull();
+    expect(visual.textContent).toBe("A glyph");
+    expect(visual.style.fontWeight).toBe("500");
+    expect(visual.style.fontFamily).toContain("Figtree");
+    expect(visual.style.color).toBe(cssRgb(tokens.glyph.color));
+    fireEvent.click(button);
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  const cases: Array<[HitInput, number]> = [["mouse", 24], ["touch", 44], ["ray", 56], ["gazePinch", 72]];
+  it.each(cases)("keeps the hit area at the %s minimum, %i apx", (input, expected) => {
+    const { button } = press(null, { input });
+    expect(button.style.minWidth).toBe(`${expected}px`);
+    expect(button.style.minHeight).toBe(`${expected}px`);
+  });
+
+  it("shows a word that differs from its accessible name", () => {
+    render(<GlyphControl glyph={null} label="Exit AR" word="Exit" onPress={() => undefined} />);
+    const button = screen.getByRole("button", { name: "Exit AR" });
+    expect(button.querySelector("[data-glyph-visual]")!.textContent).toBe("Exit");
+  });
+});
+
+describe("word (6): the visible word can differ from the accessible name", () => {
+  it("names Return in full and shows only its short word beside the arc", () => {
+    render(<GlyphControl glyph="return" label="Return to the author's view" word="Return" showLabel onPress={() => undefined} />);
+    const button = screen.getByRole("button", { name: "Return to the author's view" });
+    expect(button.textContent).toBe("Return");
+    expect(button.querySelector("svg")).not.toBeNull();
   });
 });

@@ -36,11 +36,13 @@ export interface GlyphButtonProps {
   /** The drawing's box in apx: the ring or the icon. */
   drawnApx: number;
   showLabel?: boolean;
-  /** The drawing, given the state's appearance. */
-  children: (appearance: GlyphAppearance) => ReactNode;
+  /** The visible word, when it differs from the accessible name (`label`). */
+  word?: string;
+  /** The drawing, given the state's appearance; without one the control is its word. */
+  children?: (appearance: GlyphAppearance) => ReactNode;
 }
 
-export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, showLabel = false, children }: GlyphButtonProps) {
+export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, showLabel = false, word = label, children }: GlyphButtonProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [focusVisible, setFocusVisible] = useState(false);
@@ -52,6 +54,8 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
   const appearance = glyphAppearance({ hovered, focusVisible, pressed, dimmed }, { headset: false });
   const metrics = glyphMetrics({ headset: false });
   const hit = hitAreaApx(hitInput, drawnApx);
+  const focusOutline = appearance.focusRing ? `${appearance.focusRing.width}px solid ${appearance.focusRing.color}` : "none";
+  const outlineOffset = appearance.focusRing ? `${appearance.focusRing.offset}px` : undefined;
 
   return (
     <button
@@ -88,20 +92,42 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
         touchAction: "manipulation"
       }}
     >
-      <span
-        data-glyph-visual=""
-        style={{
-          display: "inline-flex",
-          width: drawnApx,
-          height: drawnApx,
-          borderRadius: "50%",
-          outline: appearance.focusRing ? `${appearance.focusRing.width}px solid ${appearance.focusRing.color}` : "none",
-          outlineOffset: appearance.focusRing ? `${appearance.focusRing.offset}px` : undefined
-        }}
-      >
-        {children(appearance)}
-      </span>
-      {showLabel ? <span style={{ ...typeRoleStyle("controlLabel"), color: appearance.color }}>{label}</span> : null}
+      {children ? (
+        <span
+          data-glyph-visual=""
+          style={{
+            display: "inline-flex",
+            width: drawnApx,
+            height: drawnApx,
+            borderRadius: "50%",
+            outline: focusOutline,
+            outlineOffset
+          }}
+        >
+          {children(appearance)}
+        </span>
+      ) : (
+        // No drawing yet: the word stands in its place, at the drawing's height.
+        <span
+          data-glyph-visual=""
+          data-glyph-word=""
+          style={{
+            ...typeRoleStyle("controlLabel"),
+            display: "inline-flex",
+            alignItems: "center",
+            minHeight: drawnApx,
+            paddingInline: metrics.gapApx / 2,
+            borderRadius: drawnApx / 2,
+            color: appearance.color,
+            whiteSpace: "nowrap",
+            outline: focusOutline,
+            outlineOffset
+          }}
+        >
+          {word}
+        </span>
+      )}
+      {showLabel && children ? <span style={{ ...typeRoleStyle("controlLabel"), color: appearance.color }}>{word}</span> : null}
     </button>
   );
 }
