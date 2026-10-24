@@ -11,7 +11,7 @@ import { TRUE_SCALE } from "@holoim/xr-ui-core";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { useSphereClipping } from "../hologram/useSphereClipping";
-import type { SphereClipStatus } from "../hologram/useSphereClipping";
+import type { SphereClipResult, SphereClipStatus } from "../hologram/useSphereClipping";
 import { ARDepthOcclusion } from "./ARDepthOcclusion";
 import { freezeBubbleWrapperMotion } from "./arAnimation";
 import { ARBubbleAura } from "./ARBubbleAura";
@@ -86,6 +86,8 @@ type ARHologramModelProps = {
   playbackSecondsRef?: MutableRefObject<number>;
   /** The controls at the hologram's foot: in its placement, never in its scale. */
   children?: (foot: { frontMeters: number }) => ReactNode;
+  /** World-space chrome that follows the bubble, read every frame (the edge's ring). */
+  bubbleChrome?: (bubble: SphereClipResult) => ReactNode;
 };
 
 function createPlacementRuntimeState(): PlacementRuntimeState {
@@ -173,7 +175,8 @@ export function ARHologramModel({
   scaleFactor = TRUE_SCALE,
   paused = false,
   playbackSecondsRef,
-  children
+  children,
+  bubbleChrome
 }: ARHologramModelProps) {
   const { scene, animations } = useGLTF(url);
   const renderer = useThree((state) => state.gl);
@@ -813,6 +816,7 @@ export function ARHologramModel({
       <group ref={footRef} name="ar-hologram-foot">
         {children?.({ frontMeters: footFrontMeters })}
       </group>
+      {bubbleChrome?.(sphereClip)}
     </>
   );
 }

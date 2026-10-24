@@ -560,7 +560,9 @@ the stop shape alone, since no text sits within arm's reach.
   on the real surface, which never flickers.
 - **Chip:** every row and label. 97% on Quest passthrough, 88% on Android
   Chrome, 92% on a target that blends in linear light; never opaque.
-- **Edge:** soot at full opacity always on Quest passthrough, which has no
+- **Edge:** in WebXR AR the edge outlines the bubble: a burnt ring around its
+  silhouette, facing the viewer. The bubble keeps its own rendering. Soot at
+  full opacity always on Quest passthrough, which has no
   lighting estimate. On Android, soot at full opacity while the lighting
   estimate says the room is bright (on at 0.16, off below 0.095; section
   3.2).

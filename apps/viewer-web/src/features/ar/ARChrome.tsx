@@ -2,14 +2,15 @@
 // Play and the timecode at the hologram's foot on the chip, the scale label
 // and its way back to true size beside them once the viewer rescales, and on
 // a headset Exit on the non-dominant wrist, so it is there before placement
-// and with the hologram out of view. Nothing follows the head.
+// and with the hologram out of view. The golden edge is a burnt ring round the
+// bubble's silhouette, facing the viewer. Nothing follows the head.
 import { useFrame, useThree } from "@react-three/fiber";
 import { useXR } from "@react-three/xr";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Matrix4, Object3D, Raycaster } from "three";
 
 import { tokens } from "@holoim/design-tokens";
-import { HologramFootControls, WristControls, type GlyphSpec } from "@holoim/xr-ui-r3f";
+import { BubbleEdge, HologramFootControls, WristControls, type BubbleShape, type GlyphSpec } from "@holoim/xr-ui-r3f";
 import {
   DEFAULT_HANDEDNESS,
   formatRunningTime,
@@ -22,6 +23,7 @@ import {
 } from "@holoim/xr-ui-core";
 
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
+import { useArSoot } from "./useArSoot";
 
 /** The scale label sits this far below the Play row, in metres before the headset factor. */
 const SCALE_ROW_DROP_METERS = 0.07;
@@ -184,4 +186,11 @@ export function ArWristExit({ target, onExit }: { target: ViewTarget; onExit: ()
   useXrSelect(useMemo(() => new Map([[VIEWER_CONTROL_NAMES.exitAr, onExit]]), [onExit]));
   if (!headset) return null;
   return <WristControls handedness={DEFAULT_HANDEDNESS} glyphs={[{ id: null, label: VIEWER_CONTROL_NAMES.exitAr, onSelect: onExit }]} input="ray" wrist={wrist} />;
+}
+
+/** The edge round the bubble (styleguide 9.2), its soot from the lighting estimate (3.2). */
+export function ArBubbleEdge({ seed, bubble, target, reducedMotion }: { seed: string; bubble: BubbleShape; target: ViewTarget; reducedMotion: boolean }) {
+  const session = useXR((state) => state.session) ?? null;
+  const soot = useArSoot(session);
+  return <BubbleEdge seed={seed} bubble={bubble} target={target} recording={false} inFocus={true} reducedMotion={reducedMotion} soot={soot} />;
 }

@@ -16,7 +16,7 @@ import {
 } from "@holoim/xr-ui-core";
 
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
-import { ArFootRows, ArWristExit } from "./ARChrome";
+import { ArBubbleEdge, ArFootRows, ArWristExit } from "./ARChrome";
 import { ARHologramModel } from "./ARHologramModel";
 import { isPlacementResolved } from "./arController";
 import { useArController } from "./useArController";
@@ -249,6 +249,9 @@ export function ARView() {
             scaleFactor={scaleFactor}
             paused={paused}
             playbackSecondsRef={playbackSecondsRef}
+            bubbleChrome={(bubble) =>
+              immersive ? <ArBubbleEdge seed={hologram.id} bubble={bubble} target={target} reducedMotion={reducedMotion} /> : null
+            }
           >
             {({ frontMeters }) => (
               <>

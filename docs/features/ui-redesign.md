@@ -108,6 +108,7 @@ what they marked in the portal.
 | Q16 | AR brightness threshold | Set by the lead from known data (below) |
 | Q17 | Gaze-and-pinch | In scope; size set by the lead (below) |
 | Q18 | Chip on an unlisted AR target | 92% |
+| AR edge (slice 3) | How does the golden edge show in WebXR AR? | "Draw the burnt golden edge as an outline around the bubble, following its shape, and keep the bubble rendering." Built as a ring on the bubble's silhouette, facing the viewer (styleguide 9.2) |
 
 What follows from those answers:
 
@@ -522,7 +523,9 @@ written to ratify code. Their `--passWithNoTests` flags are removed.
 - The WebXR AR route: controls at the hologram's foot, every row on the chip
   (97% Quest passthrough, 88% Android Chrome, 92% elsewhere), no head-locked
   bar, steady stage light, soot per Q15 and Q16, Exit per Q11, true scale
-  per Q13. Quest AR uses headset sizes (2.5×, rays 56, poke 72, labels fade
+  per Q13. The edge is a burnt ring round the bubble's silhouette, facing
+  the viewer, with the bubble's own rendering kept (the user's AR-edge
+  answer); checked by an IWER screenshot of the ring from two sides. Quest AR uses headset sizes (2.5×, rays 56, poke 72, labels fade
   within 1 m); Android uses flat sizes and touch 44.
 - **As built (2026-10-24), branch `feature/ui-redesign-slice-3`.**
   - Feed: the ground gradient on `body::before`, fixed to the screen; each
@@ -558,9 +561,20 @@ written to ratify code. Their `--passWithNoTests` flags are removed.
     may sit within arm's reach. So Exit on the wrist needs a real drawing
     before slice 3 counts as done in a headset (Recenter is not on the wrist
     yet for the same reason).
-  - **AR edge pending the user's decision.** AR keeps the bubble and its
-    aura, draws no slab edge, and does not wire soot or the Q16 threshold.
-    The criterion's soot part is not met.
+  - **AR edge, as the user decided.** `edgeOutline` takes a `shape`; the
+    rounded rectangle stays the default and a `circle` is drawn with no
+    inset, waves, tears and jitter as shares of the diameter, from the same
+    seed and draw order as the card. `bubbleSilhouette` gives the circle
+    where the eye's lines touch the sphere; the `BubbleEdge` in `xr-ui-r3f`
+    lays a unit circle `ThreeEdge` there every frame, facing the eye, scaled
+    to the silhouette's diameter, and hides it from inside the bubble. The
+    viewer mounts it in world space from `ARHologramModel`'s bubble, beside
+    the kept aura. Soot: the AR session now asks for `light-estimation`
+    (optional, through `arSessionInit`, since the XR store has no option for
+    it); `useArSoot` reads the probe's ambient luminance into
+    `nextArSootOn`, so Android switches at 0.16 and 0.095 and a Quest, with
+    no estimate, keeps the soot on. The aura's cyan equator ring crosses the
+    gold ring on both sides: shown to the user, not decided here.
 
 ### Slice 4: every capture page, touch input, handedness
 
@@ -780,7 +794,8 @@ share no files.
 | `verify:pr`, slices 0 and 1 | `pnpm run verify:pr` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 6/6 (the viewer pointing pipeline imports the ported `pointing-desktop-take.ts` and `pointing-iwer-replay.ts`), `test:portal` 6/6, `test:xr:capture` passes. `test:knowledge` 7/7 once run against its own server: Playwright reuses whatever answers on port 4176, and a knowledge dev server from the main checkout was running there, so its first run failed 3 tests (2 also fail that way on `main`). `test:xr:viewer` 9/9 on rerun; its first run hit B-021, a flake that also fails on `main` |
 | `verify:pr`, slice 2 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling), builds, `test:smoke:pipeline` 6/6, `test:portal` 6/6 and `test:xr:smoke` 9/9 pass; no app changed. `test:knowledge` 7/7 in Docker (port 4176 was held by the main checkout's server) once its bug-list check counted template cards instead of asserting on one: with B-020 and B-021 open there are two cards, and the old assertion failed Playwright's strict mode |
 | Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | 2026-10-24, slice 3: `test:portal` 6/6. `test:xr:viewer` 14/14, which now includes `e2e/redesign.spec.ts`. At 1280 × 800 and 390 × 844 that spec checks the fixed ground gradient; Play, Free and Return in the shade (Return's word "Return", its name the core's); every glyph hit area at the input minimum; the timecode in its token font; the reach row hidden until the shade is reached; exactly one card sparking, at `sparkCount`; the side sheet at most 24rem wide, closing on "Close"; no sparks under reduced motion; and the empty, server-error ("Try again", `role=alert`) and offline notices on the phone chip. Screenshots in the ignored `output/redesign-slice-3/`, previewed with `preview.mjs` and shown to the user. Physical phones not checked |
-| AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | 2026-10-24, slice 3, IWER's Quest 3 (OculusBrowser UA, so the 97% passthrough chip): Exit is in the page before placement and on the left wrist; the model's scale is 1 at open; no chrome object has the camera as an ancestor; every chip mesh is at the target's opacity; the stage light holds 0.9 over 0.7 s; a controller ray selects Pause and Play; a two-finger pinch sets "1:…" and a ray at true size restores 1; Exit still works after a 180° turn. `ar-bubble.spec.ts` now gets its non-unit transform from the viewer's pinch. Not checked on a Quest or an Android phone, nor the Android dock over dom-overlay. The AR edge and soot wait on the user's decision |
+| AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | 2026-10-24, slice 3, IWER's Quest 3 (OculusBrowser UA, so the 97% passthrough chip): Exit is in the page before placement and on the left wrist; the model's scale is 1 at open; no chrome object has the camera as an ancestor; every chip mesh is at the target's opacity; the stage light holds 0.9 over 0.7 s; a controller ray selects Pause and Play; a two-finger pinch sets "1:…" and a ray at true size restores 1; Exit still works after a 180° turn. `ar-bubble.spec.ts` now gets its non-unit transform from the viewer's pinch. Not checked on a Quest or an Android phone, nor the Android dock over dom-overlay. The ring round the bubble: see the next row |
+| AR edge, the ring round the bubble | `xr-ui-core` `edge.test.ts`, `xr-ui-r3f` `BubbleEdge.test.tsx`; `ar-bubble.spec.ts` in `pnpm run test:xr:viewer` | Contract tests and emulation (IWER) | 2026-10-24, slice 3: one seed gives the same circle points, with the card's waves and tears; the card's outline is unchanged (golden fixture); points and strokes scale with the diameter; `bubbleSilhouette` keeps every ring point on the sphere and tangent to the eye's line while walking round it from 1.7R to 9R, and is null from inside; the r3f ring stays on the silhouette, facing the viewer, all chrome, hidden from inside or with no bubble; soot on with no estimate, off with a dark one. Under IWER, from in front and from behind the diagnostic bubble: the ring is at the silhouette's centre (2 dp), faces the eye (dot > 0.999), its scale is the silhouette's diameter, soot at the no-estimate opacity with the glow at 0, the aura still drawn; screenshots `ar-ring-front.png` and `ar-ring-back.png`. The bubble's pixel oracle still passes with the ring drawn. `test:xr:viewer` 15/15. Not checked on a Quest or an Android phone, so the lighting-estimate path (Android) has no run |
 | `verify:pr`, slice 3 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 8/8, `test:portal` 6/6, `test:xr:smoke` 14/14 and `test:xr:viewer` 14/14. `test:knowledge` in Docker: 6/7, then its live-update test (atomic replacement and rename) passed 3 of 3 alone, so a timing flake under amd64 emulation; slice 3 changes no knowledge code. Docker needed `PLAYWRIGHT_BROWSERS_PATH` set to a fresh folder: the shared `holoim-ci-playwright` volume holds an arm64 Chromium 1208 marked complete, which the now amd64 image cannot run |
 | Independent verification, slice 3 | Codex (a different vendor) given the brief, the tree and the slice 2 contracts | Neither (review and probes) | 2026-10-24: not run. Codex returned "You've hit your usage limit … try again at 9:20 PM" before reading anything, so slice 3 has no independent pass yet |
 | Capture pages and headset rules | `pnpm --filter @holoim/capture run test:xr:mock`, a new placement scenario, and a touch scenario on the phone viewport | Emulation (IWER, Playwright) | Placement, label-distance and handedness report; pending |
