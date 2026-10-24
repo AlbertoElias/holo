@@ -1,5 +1,6 @@
 // Contract tests for the glyph control, from the failure cases of
 // docs/features/ui-redesign.md slice 2: styleguide 6 (states), 6.1 (hit areas), 1.2 (idle dim).
+import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -201,5 +202,107 @@ describe("word (6): the visible word can differ from the accessible name", () =>
     const button = screen.getByRole("button", { name: "Return to the author's view" });
     expect(button.textContent).toBe("Return");
     expect(button.querySelector("svg")).not.toBeNull();
+  });
+});
+
+// Brief, slice 4: capture's controls need native state and semantics on the
+// button (Refit disabled while fitting, handedness as a radio pair, Settings
+// expanded, an id the XR helpers click). Failure modes: an attribute never
+// reaches the button; a caller's aria-label replaces the accessible name; a
+// cast slips a class, a style or a handler past the tokens; disabled still
+// presses, lifts to cream on hover or shows pressed; the disabled look is not
+// the 40% idle dim; a radio is not focusable or does not show its state; the
+// hit area shrinks below the input's minimum.
+describe("native attributes (brief, slice 4)", () => {
+  // By label, not role: some of these buttons are radios.
+  function control(props: Partial<Parameters<typeof GlyphControl>[0]> = {}) {
+    const onPress = vi.fn();
+    render(<GlyphControl glyph={null} label="A glyph" onPress={onPress} {...props} />);
+    return { button: screen.getByLabelText("A glyph") as HTMLButtonElement, onPress };
+  }
+
+  it("passes disabled, id, role, every aria-* and every data-* to the button", () => {
+    const { button } = control({ id: "VRButton", role: "radio", "aria-checked": true, "aria-expanded": false, "aria-haspopup": "dialog", "data-capture-dock-item": "vr", disabled: false });
+    expect(button.id).toBe("VRButton");
+    expect(button.getAttribute("role")).toBe("radio");
+    expect(button.getAttribute("aria-checked")).toBe("true");
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(button.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(button.getAttribute("data-capture-dock-item")).toBe("vr");
+  });
+
+  it("keeps its label as the accessible name over a passed aria-label", () => {
+    render(<GlyphControl glyph="free" label="Free view" aria-label="Something else" onPress={() => undefined} />);
+    expect(screen.getByRole("button", { name: "Free view" })).toBeTruthy();
+  });
+
+  it("drops a class, a style or a handler slipped in by a cast: tokens own the look", () => {
+    const onClick = vi.fn();
+    const sneaky = { className: "custom", style: { color: "red" }, onClick } as unknown as Record<string, never>;
+    const { button, onPress } = press("free", sneaky);
+    expect(button.className).toBe("");
+    expect(button.style.color).toBe(cssRgb(tokens.glyph.color));
+    fireEvent.click(button);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("disabled: blocks the press, draws the 40% idle dim, and never lifts to cream or shows pressed", () => {
+    const { button, onPress } = control({ glyph: "free", disabled: true });
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(onPress).not.toHaveBeenCalled();
+    expect(button.style.opacity).toBe(String(tokens.glyph.idleOpacity));
+    fireEvent.pointerEnter(button, { pointerType: "mouse" });
+    expect(button.style.color).toBe(cssRgb(tokens.glyph.color));
+    fireEvent.pointerDown(button);
+    expect(button.style.opacity).toBe(String(tokens.glyph.idleOpacity));
+    expect(button.style.cursor).toBe("default");
+  });
+
+  it("disabled while hovered drops the hover state at once", () => {
+    const onPress = vi.fn();
+    const { rerender } = render(<GlyphControl glyph={null} label="Refit height" onPress={onPress} input="mouse" />);
+    const button = screen.getByRole("button", { name: "Refit height" });
+    fireEvent.pointerEnter(button, { pointerType: "mouse" });
+    expect(button.style.color).toBe(cssRgb(tokens.glyph.states.hoverColor));
+    rerender(<GlyphControl glyph={null} label="Refit height" onPress={onPress} input="mouse" disabled />);
+    expect(button.style.color).toBe(cssRgb(tokens.glyph.color));
+    expect(button.style.opacity).toBe(String(tokens.glyph.idleOpacity));
+  });
+
+  it("works as a radio pair: focusable native buttons whose press moves aria-checked", () => {
+    function Pair() {
+      const [hand, setHand] = useState<"right" | "left">("right");
+      return (
+        <div role="radiogroup" aria-label="Hand">
+          <GlyphControl glyph={null} label="Right-handed" role="radio" aria-checked={hand === "right"} onPress={() => setHand("right")} />
+          <GlyphControl glyph={null} label="Left-handed" role="radio" aria-checked={hand === "left"} onPress={() => setHand("left")} />
+        </div>
+      );
+    }
+    render(<Pair />);
+    const right = screen.getByRole("radio", { name: "Right-handed" });
+    const left = screen.getByRole("radio", { name: "Left-handed" });
+    expect(right.getAttribute("aria-checked")).toBe("true");
+    // jsdom does not turn Enter or Space into the click a browser fires on a
+    // button; capture's UI check presses Space in Chromium. Here: the radio is
+    // a native button in the tab order, its key shows pressed, its click commits.
+    expect(left.tagName).toBe("BUTTON");
+    expect(left.tabIndex).toBe(0);
+    left.focus();
+    expect(document.activeElement).toBe(left);
+    fireEvent.keyDown(left, { key: " " });
+    expect(left.style.opacity).toBe(String(tokens.glyph.states.pressedOpacity));
+    fireEvent.keyUp(left, { key: " " });
+    fireEvent.click(left);
+    expect(left.getAttribute("aria-checked")).toBe("true");
+    expect(right.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it.each<[HitInput, number]>([["mouse", 24], ["touch", 44], ["ray", 56]])("keeps the %s minimum (%i apx) with attributes, disabled included", (input, expected) => {
+    const { button } = control({ input, disabled: true, role: "radio", "aria-checked": false });
+    expect(button.style.minWidth).toBe(`${expected}px`);
+    expect(button.style.minHeight).toBe(`${expected}px`);
   });
 });

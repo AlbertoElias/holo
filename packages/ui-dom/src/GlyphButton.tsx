@@ -1,6 +1,6 @@
 // The button around a glyph drawing: hit area (6.1), states (6) and label.
 // GlyphControl and the side sheet's close mark share it.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type AriaAttributes, type ReactNode } from "react";
 
 import { glyphAppearance, glyphMetrics, hitAreaApx, type GlyphAppearance, type HitInput } from "@holoim/xr-ui-core";
 
@@ -28,6 +28,26 @@ function isFocusVisible(element: Element): boolean {
   return keyboardModality;
 }
 
+/**
+ * Native button attributes a caller may set: state and semantics only. No
+ * `className` or `style`: tokens own the look, and those would bypass them.
+ */
+export type GlyphButtonAttributes = AriaAttributes & {
+  disabled?: boolean;
+  id?: string;
+  role?: string;
+  [data: `data-${string}`]: string | undefined;
+};
+
+/** Keeps only the attributes above, so a cast cannot slip a class, a style or a handler through. */
+export function passThroughAttributes(props: object): GlyphButtonAttributes {
+  const kept: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (key === "disabled" || key === "id" || key === "role" || key.startsWith("aria-") || key.startsWith("data-")) kept[key] = value;
+  }
+  return kept as GlyphButtonAttributes;
+}
+
 export interface GlyphButtonProps {
   label: string;
   onPress: () => void;
@@ -40,9 +60,11 @@ export interface GlyphButtonProps {
   word?: string;
   /** The drawing, given the state's appearance; without one the control is its word. */
   children?: (appearance: GlyphAppearance) => ReactNode;
+  attributes?: GlyphButtonAttributes;
 }
 
-export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, showLabel = false, word = label, children }: GlyphButtonProps) {
+export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, showLabel = false, word = label, children, attributes = {} }: GlyphButtonProps) {
+  const disabled = attributes.disabled === true;
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [focusVisible, setFocusVisible] = useState(false);
@@ -51,7 +73,9 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
 
   useEffect(listenForModality, []);
 
-  const appearance = glyphAppearance({ hovered, focusVisible, pressed, dimmed }, { headset: false });
+  // A disabled control has no look in the styleguide yet (brief, slice 4,
+  // placeholder): the idle dim, with no cream lift and no pressed state.
+  const appearance = glyphAppearance(disabled ? { dimmed: true } : { hovered, focusVisible, pressed, dimmed }, { headset: false });
   const metrics = glyphMetrics({ headset: false });
   const hit = hitAreaApx(hitInput, drawnApx);
   const focusOutline = appearance.focusRing ? `${appearance.focusRing.width}px solid ${appearance.focusRing.color}` : "none";
@@ -59,6 +83,7 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
 
   return (
     <button
+      {...passThroughAttributes(attributes)}
       type="button"
       aria-label={label}
       onClick={onPress}
@@ -85,7 +110,7 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
         background: "transparent",
         // The ring is drawn on the glyph, not on the (larger) hit area.
         outline: "none",
-        cursor: "pointer",
+        cursor: disabled ? "default" : "pointer",
         color: appearance.color,
         opacity: appearance.opacity,
         WebkitTapHighlightColor: "transparent",

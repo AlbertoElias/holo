@@ -2,10 +2,11 @@
 // chrome, at least the input's hit area, never a glow.
 import { drawnSizeApx, glyphDrawing, glyphMetrics, isIdleDimmed, type GlyphId, type HitInput } from "@holoim/xr-ui-core";
 
-import { GlyphButton } from "./GlyphButton.js";
+import { GlyphButton, passThroughAttributes, type GlyphButtonAttributes } from "./GlyphButton.js";
 import { GlyphSvg } from "./glyphSvg.js";
 
-export interface GlyphControlProps {
+/** Also takes `disabled`, `id`, `role`, and any `aria-*` or `data-*` attribute, set on the button. */
+export interface GlyphControlProps extends GlyphButtonAttributes {
   /** null for an action with no drawing yet (brief, "still to draw"): the control is its word. */
   glyph: GlyphId | null;
   /** The accessible name. */
@@ -24,8 +25,8 @@ export interface GlyphControlProps {
   showLabel?: boolean;
 }
 
-export function GlyphControl({ glyph, label, word, onPress, recording = false, input, msSinceUse = 0, approached = false, showLabel = false }: GlyphControlProps) {
-  const shared = { label, onPress, ...(word !== undefined ? { word } : {}), ...(input ? { input } : {}) };
+export function GlyphControl({ glyph, label, word, onPress, recording = false, input, msSinceUse = 0, approached = false, showLabel = false, ...rest }: GlyphControlProps) {
+  const shared = { label, onPress, attributes: passThroughAttributes(rest), ...(word !== undefined ? { word } : {}), ...(input ? { input } : {}) };
   if (glyph === null) {
     return <GlyphButton {...shared} drawnApx={glyphMetrics({ headset: false }).iconApx} />;
   }
