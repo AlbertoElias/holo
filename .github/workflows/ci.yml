@@ -205,9 +205,12 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.pipeline == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # The two pipeline specs (~100 s and ~80 s on CI) dominate this job;
-    # Playwright's file sharding gives each runner one.
+    # Shard 1 takes about 9 minutes on a good runner (setup, the app builds and
+    # ~7.5 minutes of tests, since PRD-043 added the object take), so 10 left
+    # no margin for a slow runner. The ceiling costs nothing when tests pass.
+    timeout-minutes: 15
+    # The pipeline specs dominate this job; Playwright's file sharding splits
+    # them between two runners.
     strategy:
       fail-fast: false
       matrix:
