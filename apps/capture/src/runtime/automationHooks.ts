@@ -1,3 +1,5 @@
+import type { XRDevice } from 'iwer';
+
 import type { FaceSample } from '../face/faceTypes';
 import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, VrHandSide } from '../types/contracts';
@@ -27,6 +29,18 @@ export interface AutomationHooks {
   __setFaceInput: (sample: FaceSample | null) => void;
   __sampleFace: () => FaceSnapshot;
   __toggleFaceCamera: () => void;
+}
+
+/**
+ * Hooks on `window`, typed once for the app and for the XR checks in
+ * `scripts/`, whose `page.evaluate` callbacks call them. The automation hooks
+ * exist once `installAutomationHooks` has run (checks wait for them with
+ * `waitForPageFunctions`); `IWER_DEVICE` exists only under the IWER emulator.
+ */
+declare global {
+  interface Window extends AutomationHooks {
+    IWER_DEVICE?: XRDevice;
+  }
 }
 
 export function installAutomationHooks(hooks: AutomationHooks): void {

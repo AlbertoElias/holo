@@ -1,3 +1,7 @@
+import { CONTROL_NAMES } from "./controlNames.js";
+
+export { CONTROL_NAMES, type ControlName } from "./controlNames.js";
+
 export type XrMode = "desktop" | "mobile" | "vr" | "ar";
 
 export type UiRecordingStatus = "idle" | "recording" | "exporting";
@@ -25,10 +29,10 @@ export function createRecordingUiState(status: UiRecordingStatus, message: strin
     message,
     canToggle: status !== "exporting",
     actionLabel: status === "recording"
-      ? "Stop Recording"
+      ? CONTROL_NAMES.stopRecording
       : status === "exporting"
         ? (message ?? "Exporting...")
-        : "Start Recording"
+        : CONTROL_NAMES.startRecording
   };
 }
 

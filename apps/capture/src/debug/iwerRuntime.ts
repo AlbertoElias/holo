@@ -1,37 +1,11 @@
-import type { IwerPoseSnapshot } from '@holoim/xr-runtime';
-
-import type { MockVrPoseInput, QuatLike, Vec3Like, VrHandSide } from '../types/contracts';
+import type { MockVrPoseInput, QuatLike, Vec3Like } from '../types/contracts';
+import type {} from '../runtime/automationHooks';
 
 const IWER_STANDING_HEAD_Y = 1.6;
 
-type IwerVector3 = IwerPoseSnapshot['position'] & Vec3Like & {
-  set: (x: number, y: number, z: number) => unknown;
-};
-
-type IwerQuaternion = IwerPoseSnapshot['quaternion'] & QuatLike & {
-  set: (x: number, y: number, z: number, w: number) => unknown;
-  normalize?: () => unknown;
-};
-
-interface IwerTrackedHandInput {
-  connected: boolean;
-  position: IwerVector3;
-  quaternion: IwerQuaternion;
-}
-
-interface IwerDevice {
-  position: IwerVector3;
-  quaternion: IwerQuaternion;
-  hands: Partial<Record<VrHandSide, IwerTrackedHandInput>>;
-  primaryInputMode: 'controller' | 'hand';
-  activeSession?: XRSession;
-}
-
-declare global {
-  interface Window {
-    IWER_DEVICE?: IwerDevice;
-  }
-}
+// The emulated device the checks drive; declared with the other automation
+// hooks in runtime/automationHooks.ts.
+type IwerDevice = NonNullable<Window['IWER_DEVICE']>;
 
 function normalizeQuaternion(quaternion: QuatLike): QuatLike {
   const length = Math.hypot(quaternion.x, quaternion.y, quaternion.z, quaternion.w);

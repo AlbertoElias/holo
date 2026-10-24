@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import type { ActionPlayer, XRReferenceSpaceType } from 'iwer';
 
 import {
   attachXrEnvironment,
@@ -21,7 +22,14 @@ import {
 } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
-import { analyzeBodyReplay, formatBodyReport } from './lib/body-fidelity.mjs';
+import type {} from '../src/runtime/automationHooks';
+import { analyzeBodyReplay, formatBodyReport, type BodyFrame, type BodyRecording, type BodyReport } from './lib/body-fidelity.ts';
+
+declare global {
+  interface Window {
+    __replayPlayer?: ActionPlayer;
+  }
+}
 
 // Replays room-scale headset input (walking, turning, crouching, leaning,
 // stepping) through the real WebXR path and measures the avatar's whole body
@@ -65,19 +73,22 @@ if (fixtures.length === 0) throw new Error(`No body recordings in ${fixtureDir}.
 await mkdir(artifactDir, { recursive: true });
 
 const browser = await launchXrBrowser(chromium);
-const consoleErrors = [];
+const consoleErrors: string[] = [];
 // Replays run two at a time by default (each page has its own frozen clock,
 // so results do not change); videos one at a time.
 const concurrency = videoFrameDir ? 1 : Math.max(1, Number(process.env.BODY_REPLAY_CONCURRENCY ?? 2));
 
-async function replay(fileName, { faults = [], video = false, screenshot = false } = {}) {
+async function replay(fileName: string, { faults = [], video = false, screenshot = false }: { faults?: string[]; video?: boolean; screenshot?: boolean } = {}): Promise<BodyReport> {
   const label = `${path.basename(fileName, '.json')}${faults.length ? `--${faults.join('+')}` : ''}`;
-  const recording = JSON.parse(await readFile(path.join(fixtureDir, fileName), 'utf8'));
+  const recording = JSON.parse(await readFile(path.join(fixtureDir, fileName), 'utf8')) as BodyRecording;
   const viewport = video ? { width: 1280, height: 720 } : resolveSimulationViewport();
   const context = await createXrContext(browser, { viewport });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
   await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
+  // tsx compiles with keepNames, which wraps named inner functions of the
+  // page.evaluate callbacks in an __name helper the page lacks.
+  await page.addInitScript('globalThis.__name = (target) => target;');
   // Load the environment the input was recorded in.
   // ?manualClock=1: the app never ticks on real time before the replay.
   const pageUrl = new URL(recording.meta?.query ?? '', baseUrl);
@@ -85,7 +96,7 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
   await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__sampleBody', '__setBodyFaults', 'advanceTime']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
-  await page.evaluate((list) => {
+  await page.evaluate((list: string[]) => {
     window.__setManualClock(true, false);
     window.__setBodyFaults(list);
   }, faults);
@@ -96,7 +107,7 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
   if (video) {
     await page.evaluate(() => {
       window.__setSpectatorView('body');
-      const devui = window.IWER_DEVICE.devui;
+      const devui = window.IWER_DEVICE!.devui;
       for (const element of [devui?.devUIContainer, devui?.devUICanvas, document.getElementById('ui-root'), document.getElementById('VRButton'), document.getElementById('ARButton')]) {
         if (element instanceof HTMLElement) element.style.display = 'none';
       }
@@ -104,10 +115,11 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
   }
   await freezePageClock(page);
   await waitForXrRenderLoop(page);
-  const durationMs = await page.evaluate(async ({ data, draw }) => {
-    const session = window.IWER_DEVICE.activeSession;
-    const refSpace = await session.requestReferenceSpace('local-floor');
-    window.__replayPlayer = window.IWER_DEVICE.createActionPlayer(refSpace, data);
+  const durationMs = await page.evaluate(async ({ data, draw }: { data: unknown; draw: boolean }) => {
+    const session = window.IWER_DEVICE!.activeSession!;
+    const refSpace = await session.requestReferenceSpace('local-floor' as XRReferenceSpaceType); // IWER types the name as an enum; the runtime value is the string
+    // The recording is the parsed fixture JSON, already in IWER's format.
+    window.__replayPlayer = window.IWER_DEVICE!.createActionPlayer(refSpace, data as Parameters<NonNullable<Window['IWER_DEVICE']>['createActionPlayer']>[1]);
     window.__replayPlayer.play();
     // From here every XR frame ticks the simulation, as on a headset.
     window.__setFrameStepping(true, draw);
@@ -116,7 +128,7 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
   // Hold the first recorded pose while the height fit calibrates, as a user
   // stands still on entering VR; playback restarts once it has settled.
   const hold = () => page.evaluate(() => {
-    window.__replayPlayer.seek(0);
+    window.__replayPlayer!.seek(0);
     return JSON.parse(window.render_game_to_text()).heightAdaptation?.eyeHeight != null;
   });
   for (let held = 0; !(await hold()); held += STEP_MS) {
@@ -128,7 +140,7 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
     await hold();
   }
 
-  const frames = [];
+  const frames: BodyFrame[] = [];
   const totalSteps = Math.floor(durationMs / STEP_MS);
   const timing = { run: 0, sample: 0 };
   for (let index = 0; index < totalSteps; index += 1) {
@@ -138,14 +150,14 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
     timing.run += t1 - t0;
     const frame = await page.evaluate(() => {
       const hands = window.__sampleHands();
-      const wrist = (side) => ({ source: hands[side].source, tracked: { wrist: hands[side].tracked.wrist }, avatar: { wrist: hands[side].avatar.wrist } });
-      return { timeMs: window.__replayPlayer.currentTime, body: window.__sampleBody(), hands: { left: wrist('left'), right: wrist('right') } };
+      const wrist = (side: 'left' | 'right') => ({ source: hands[side].source, tracked: { wrist: hands[side].tracked.wrist }, avatar: { wrist: hands[side].avatar.wrist } });
+      return { timeMs: window.__replayPlayer!.currentTime, body: window.__sampleBody(), hands: { left: wrist('left'), right: wrist('right') } };
     });
     timing.sample += performance.now() - t1;
     // Once playback ends IWER returns the headset to its default pose.
     if (frame.timeMs >= durationMs - 1) break;
     frames.push(frame);
-    if (video) await page.screenshot({ path: path.join(videoFrameDir, label, `${String(index).padStart(5, '0')}.png`) });
+    if (video) await page.screenshot({ path: path.join(videoFrameDir!, label, `${String(index).padStart(5, '0')}.png`) });
   }
 
   if (screenshot) {
@@ -159,22 +171,24 @@ async function replay(fileName, { faults = [], video = false, screenshot = false
     const videoPath = path.join(artifactDir, `${label}.mp4`);
     const encoded = spawnSync('ffmpeg', [
       '-loglevel', 'error', '-y', '-framerate', String(Math.round(1000 / STEP_MS)),
-      '-i', path.join(videoFrameDir, label, '%05d.png'),
+      '-i', path.join(videoFrameDir!, label, '%05d.png'),
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', videoPath
     ], { stdio: 'inherit' });
     console.log(encoded.status === 0 ? `[body-replay] video: ${videoPath}` : '[body-replay] ffmpeg unavailable; frames kept as PNGs');
-    const sheet = writeContactSheet(path.join(videoFrameDir, label), path.join(artifactDir, `${label}-sheet.jpg`));
+    const sheet = writeContactSheet(path.join(videoFrameDir!, label), path.join(artifactDir, `${label}-sheet.jpg`));
     if (sheet) console.log(`[body-replay] contact sheet: ${sheet}`);
   }
   if (process.env.BODY_REPLAY_PROFILE === '1') console.log(`[body-replay] ${label}: frames ${(timing.run / 1000).toFixed(1)} s, samples ${(timing.sample / 1000).toFixed(1)} s`);
   // Contexts stay open until the browser closes: closing one mid-run makes
   // the next wait on GPU teardown (see ci-vr-locomotion-playwright.mjs).
   await writeFile(path.join(artifactDir, `${label}-samples.json`), JSON.stringify(frames));
-  const report = analyzeBodyReplay(frames, { stepMs: STEP_MS, recording });
-  report.label = label;
-  report.frames = frames.length;
-  report.durationMs = durationMs;
-  report.source = recording.meta?.source ?? 'unknown';
+  const report: BodyReport = {
+    ...analyzeBodyReplay(frames, { stepMs: STEP_MS, recording }),
+    label,
+    frames: frames.length,
+    durationMs,
+    source: recording.meta?.source ?? 'unknown'
+  };
   await writeFile(path.join(artifactDir, `${label}-report.json`), JSON.stringify(report, null, 2));
   return report;
 }

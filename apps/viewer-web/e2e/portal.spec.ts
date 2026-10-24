@@ -19,6 +19,7 @@ import {
   waitForFrozenTimes,
   waitForPortalReady
 } from "./portal-helpers";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Portal view (PRD-002) trigger logic on a mocked two-card feed: phone touch,
 // the three variants, keyboard, clamps, and reset on scroll. The real capture
@@ -118,7 +119,7 @@ test.describe("phone", () => {
     expect((await readPortal(page, first.url)).tiltYaw, "yaw follows the turn, amplified").toBeCloseTo((-30 * Math.PI / 180) * 1.5, 3);
 
     // Return re-centres tilt on how the phone is held now.
-    await card.getByRole("button", { name: "Return to the author's view" }).click();
+    await card.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }).click();
     await expect(card).toHaveAttribute("data-portal-mode", "follow");
     await dispatchOrientation(page, 41, 60);
     expect((await readPortal(page, first.url)).mode, "holding still after Return stays in Follow").toBe("follow");

@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process';
 import { closeSync, openSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -14,7 +15,7 @@ import {
 } from '@holoim/tooling-testing/dev-server';
 
 // Runs capture's browser XR checks against one shared dev server.
-// Usage: node scripts/run-xr-checks.mjs mock-vr locomotion
+// Usage: node --import tsx scripts/run-xr-checks.ts mock-vr locomotion
 // XR_SHARD=<index>/<total> (1-based) runs one deterministic slice of the
 // requested checks, balanced by CHECK_COST, so CI runners split the suite
 // without listing checks twice. Per-check durations are written to
@@ -24,61 +25,61 @@ import {
 // changes wall time only. Parallel checks write their output to
 // output/xr-checks/<name>.log, printed when the check ends.
 const CHECKS = {
-  'mock-vr': 'scripts/ci-mock-vr-playwright.mjs',
-  recording: 'scripts/ci-recording-export-playwright.mjs',
-  locomotion: 'scripts/ci-vr-locomotion-playwright.mjs',
+  'mock-vr': 'scripts/ci-mock-vr-playwright.ts',
+  recording: 'scripts/ci-recording-export-playwright.ts',
+  locomotion: 'scripts/ci-vr-locomotion-playwright.ts',
   terrain: 'scripts/ci-terrain-locomotion.ts',
-  hands: 'scripts/ci-hand-replay-playwright.mjs',
+  hands: 'scripts/ci-hand-replay-playwright.ts',
   height: 'scripts/ci-xr-height-playwright.ts',
-  body: 'scripts/ci-body-replay-playwright.mjs',
-  pointing: 'scripts/ci-pointing-playwright.mjs',
+  body: 'scripts/ci-body-replay-playwright.ts',
+  pointing: 'scripts/ci-pointing-playwright.ts',
   // Needs the Quest Pro emulator for eye gaze; see CHECK_SERVER_ENV.
-  face: 'scripts/ci-face-playwright.mjs',
+  face: 'scripts/ci-face-playwright.ts',
   // Not checks: regenerate the IWER fixtures the hands, body and pointing checks replay.
-  'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs',
+  'pose-fixture': 'scripts/generate-iwer-pose-fixture.ts',
   'body-fixtures': 'scripts/generate-iwer-body-fixtures.mjs',
   // Not a check: regenerates the synthetic pointing take and its labels.
-  'pointing-fixture': 'scripts/generate-iwer-pose-fixture.mjs'
-};
-
-// Checks that import TypeScript workspace sources (the meaning package) run under tsx.
-const USES_TSX = new Set(['pointing']);
+  'pointing-fixture': 'scripts/generate-iwer-pose-fixture.ts'
+} as const;
+type CheckName = keyof typeof CHECKS;
 
 // Extra environment for entries that share a script.
-const CHECK_ENV = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };
+const CHECK_ENV: Partial<Record<CheckName, Record<string, string>>> = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };
 
 // Checks that need their own dev server: the face check emulates a Quest
 // Pro (eye gaze) while the others keep the Quest 3 their fixtures came from.
-const CHECK_SERVER_ENV = { face: { CAPTURE_IWER_DEVICE: 'metaQuestPro' } };
+const CHECK_SERVER_ENV: Partial<Record<CheckName, Record<string, string>>> = { face: { CAPTURE_IWER_DEVICE: 'metaQuestPro' } };
 
 // Checks that legitimately run longer than the default hang guard.
-const CHECK_TIMEOUT_MS = {
+const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
   body: 360000,
   face: 360000
 };
 
 // Serial wall time in seconds on a 2-vCPU CI runner (CI run 39499697917);
 // parallel runs start the longest first and XR_SHARD balances on it.
-const CHECK_COST = { face: 40, body: 83, height: 45, terrain: 38, hands: 31, locomotion: 21, 'mock-vr': 18, recording: 11 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { face: 40, body: 83, height: 45, terrain: 38, hands: 31, locomotion: 21, 'mock-vr': 18, recording: 11 };
 
-const listed = process.argv.slice(2);
-const unknown = listed.filter((name) => !(name in CHECKS));
+const isCheckName = (name: string): name is CheckName => name in CHECKS;
+const args = process.argv.slice(2);
+const unknown = args.filter((name) => !isCheckName(name));
+const listed = args.filter(isCheckName);
 if (listed.length === 0 || unknown.length > 0) {
-  console.error(`[xr-checks] Usage: run-xr-checks.mjs <${Object.keys(CHECKS).join('|')}>...${unknown.length ? ` (unknown: ${unknown.join(', ')})` : ''}`);
+  console.error(`[xr-checks] Usage: run-xr-checks.ts <${Object.keys(CHECKS).join('|')}>...${unknown.length ? ` (unknown: ${unknown.join(', ')})` : ''}`);
   process.exit(2);
 }
 
 // Greedy longest-first packing into the least-loaded shard; ties keep the
 // listed order, so every runner computes the same partition.
-function shardChecks(names, index, total) {
-  const loads = Array.from({ length: total }, () => ({ cost: 0, names: [] }));
+function shardChecks(names: CheckName[], index: number, total: number): CheckName[] {
+  const loads = Array.from({ length: total }, () => ({ cost: 0, names: [] as CheckName[] }));
   const byCost = [...names].sort((left, right) => (CHECK_COST[right] ?? 0) - (CHECK_COST[left] ?? 0));
   for (const name of byCost) {
     const target = loads.reduce((best, load) => (load.cost < best.cost ? load : best));
     target.cost += CHECK_COST[name] ?? 0;
     target.names.push(name);
   }
-  const selected = new Set(loads[index - 1].names);
+  const selected = new Set(loads[index - 1]!.names);
   return names.filter((name) => selected.has(name));
 }
 
@@ -94,7 +95,7 @@ const timingsPath = path.resolve(
   '../../../output/test-results',
   `xr-checks${shard ? `-shard-${shard.index}of${shard.total}` : ''}.json`
 );
-const timings = [];
+const timings: Array<{ name: CheckName; status: 'passed' | 'failed'; durationMs: number }> = [];
 
 const host = process.env.DEV_HOST ?? '127.0.0.1';
 const configuredPort = Number(process.env.DEV_PORT ?? '5174');
@@ -107,13 +108,13 @@ const reuseDevServer = process.env.REUSE_DEV_SERVER === '1';
 const concurrency = Math.max(1, Number(process.env.XR_CHECK_CONCURRENCY ?? Math.min(3, Math.floor(os.availableParallelism() / 2))) || 1);
 const logDir = path.resolve('output/xr-checks');
 
-let devServer = null;
-const extraServers = [];
-let interruptedSignal = null;
-let failure = null;
+let devServer: ChildProcess | null = null;
+const extraServers: ChildProcess[] = [];
+let interruptedSignal: NodeJS.Signals | null = null;
+let failure: Error | null = null;
 const startedAt = Date.now();
 
-const handleSignal = (signal) => {
+const handleSignal = (signal: NodeJS.Signals) => {
   interruptedSignal = signal;
   void stopProcess(devServer);
   for (const server of extraServers) void stopProcess(server);
@@ -149,8 +150,8 @@ try {
     await waitForServer(baseUrl, startupTimeoutMs, devServer);
   }
 
-  const extraBaseUrls = new Map();
-  const baseUrlFor = (name) => {
+  const extraBaseUrls = new Map<string, Promise<string>>();
+  const baseUrlFor = (name: CheckName): string | Promise<string> => {
     const extraEnv = CHECK_SERVER_ENV[name];
     if (!extraEnv || configuredBaseUrl || reuseDevServer) return baseUrl;
     if (Object.entries(extraEnv).every(([key, value]) => process.env[key] === value)) return baseUrl;
@@ -165,16 +166,16 @@ try {
         return url;
       })());
     }
-    return extraBaseUrls.get(key);
+    return extraBaseUrls.get(key)!;
   };
 
-  const runCheck = async (name) => {
+  const runCheck = async (name: CheckName) => {
     const checkStartedAt = Date.now();
-    const script = CHECKS[name];
-    const args = script.endsWith('.ts') || USES_TSX.has(name) ? ['--import', 'tsx', script] : [script];
+    const script: string = CHECKS[name];
+    const args = script.endsWith('.ts') ? ['--import', 'tsx', script] : [script];
     const logPath = path.join(logDir, `${name}.log`);
     const logFd = parallel ? openSync(logPath, 'w') : null;
-    let error = null;
+    let error: Error | null = null;
     try {
       await runCommand('node', args, {
         env: { ...process.env, ...CHECK_ENV[name], BASE_URL: await baseUrlFor(name), NODE_TLS_REJECT_UNAUTHORIZED: '0' },
@@ -182,7 +183,7 @@ try {
         ...(logFd === null ? {} : { stdio: ['ignore', logFd, logFd] })
       });
     } catch (caught) {
-      error = caught;
+      error = caught instanceof Error ? caught : new Error(String(caught));
     } finally {
       if (logFd !== null) {
         closeSync(logFd);
@@ -203,9 +204,10 @@ try {
     // The cheapest check runs alone first so Vite transforms the app once;
     // concurrent cold page loads on a 2-vCPU CI runner pass the 30 s goto limit.
     const warmup = ordered.pop();
-    const settle = (name) => runCheck(name).then(() => null, (caught) => caught);
+    const warmupName = warmup!;
+    const settle = (name: CheckName) => runCheck(name).then((): Error | null => null, (caught: unknown) => (caught instanceof Error ? caught : new Error(String(caught))));
     // Every check runs to the end so one failure reports all of them.
-    const errors = [await settle(warmup), ...(await mapWithConcurrency(ordered, concurrency, settle))].filter(Boolean);
+    const errors = [await settle(warmupName), ...(await mapWithConcurrency(ordered, concurrency, settle))].filter((caught): caught is Error => caught !== null);
     if (errors.length > 0) throw new Error(errors.map((caught) => caught.message).join('; '));
   } else {
     for (const name of requested) await runCheck(name);

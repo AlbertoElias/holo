@@ -8,6 +8,7 @@ import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 import { assertViewerShell, expect, test } from "./bootstrap";
 import { cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
 import { MARKS, MIDPOINTS, OUTSIDE_TIMES, buildPointingGlb } from "./pointing-fixture";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Self-resolving pointing in the viewer (PRD-022): the referent lights up while
 // the author points. Two kinds of take go through the real upload → feed → render
@@ -114,10 +115,8 @@ function expectedFrom(glb: Buffer): Expected[] {
 test.beforeAll(async () => {
   if (process.env.RUN_E2E_PIPELINE !== "1") return;
   test.setTimeout(300_000);
-  // @ts-expect-error capture's .mjs scripts are untyped
-  const { runDesktopPointingCheck } = await import("../../capture/scripts/lib/pointing-desktop-take.mjs");
-  // @ts-expect-error capture's .mjs scripts are untyped
-  const { replayPointingTake } = await import("../../capture/scripts/lib/pointing-iwer-replay.mjs");
+  const { runDesktopPointingCheck } = await import("../../capture/scripts/lib/pointing-desktop-take.ts");
+  const { replayPointingTake } = await import("../../capture/scripts/lib/pointing-iwer-replay.ts");
   const browser = await launchXrBrowser(chromium);
   const consoleErrors: string[] = [];
   try {
@@ -158,7 +157,7 @@ for (const { label, styles } of REAL_EXPORTS) {
     const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
     await waitForPortalReady(page, uploaded.id, uploaded.url);
     await expect(card).toHaveAttribute("data-model-bubble", "active");
-    await card.getByRole("button", { name: "Pause" }).click();
+    await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
     await expect(card).toHaveAttribute("data-portal-paused", "true");
     const toggle = card.getByRole("button", { name: "Highlight what the author points at" });
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
@@ -224,7 +223,7 @@ test("hand-built take: surface ring, inferred scene link, body part, orbit and t
   await expect(card).toHaveAttribute("data-model-bubble", "active");
 
   // Freeze playback; time is set by seeking from here on.
-  await card.getByRole("button", { name: "Pause" }).click();
+  await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
   await expect(card).toHaveAttribute("data-portal-paused", "true");
 
   const toggle = card.getByRole("button", { name: "Highlight what the author points at" });
@@ -295,7 +294,7 @@ test("a recording without the extension renders unchanged, with no pointing cont
   const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
   await waitForPortalReady(page, uploaded.id, uploaded.url);
 
-  await expect(card.getByRole("button", { name: "Pause" })).toBeVisible();
+  await expect(card.getByRole("button", { name: CONTROL_NAMES.pause })).toBeVisible();
   await expect(card.getByRole("button", { name: "Highlight what the author points at" })).toHaveCount(0);
   await seek(page, uploaded.url, MIDPOINTS[0]!);
   await page.waitForTimeout(400);

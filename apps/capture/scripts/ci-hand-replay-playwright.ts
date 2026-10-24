@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import type { ActionPlayer, XRReferenceSpaceType } from 'iwer';
 
 import {
   attachXrEnvironment,
@@ -21,7 +22,14 @@ import {
 } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
-import { analyzeHandReplay, formatHandReport } from './lib/hand-fidelity.mjs';
+import type {} from '../src/runtime/automationHooks';
+import { analyzeHandReplay, formatHandReport, type HandReplayFrame, type HandReplayReport } from './lib/hand-fidelity.ts';
+
+declare global {
+  interface Window {
+    __replayPlayer?: ActionPlayer;
+  }
+}
 
 // Replays headset input recorded by capture's dev recorder through the real
 // WebXR path (IWER ActionPlayer → XRHand joints → retargeter → avatar) and
@@ -48,12 +56,12 @@ if (recordings.length === 0) {
 await mkdir(artifactDir, { recursive: true });
 
 const browser = await launchXrBrowser(chromium);
-const consoleErrors = [];
-const reports = [];
+const consoleErrors: string[] = [];
+const reports: HandReplayReport[] = [];
 
-async function replay(fileName) {
+async function replay(fileName: string): Promise<HandReplayReport> {
   const label = path.basename(fileName, '.json');
-  const recording = JSON.parse(await readFile(path.join(fixtureDir, fileName), 'utf8'));
+  const recording = JSON.parse(await readFile(path.join(fixtureDir, fileName), 'utf8')) as { meta?: { query?: string } };
   const viewport = videoFrameDir ? { width: 1280, height: 720 } : resolveSimulationViewport();
   const context = await createXrContext(browser, { viewport });
   const page = await context.newPage();
@@ -66,9 +74,9 @@ async function replay(fileName) {
   await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__sampleHands', '__setHandOverlay']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   // Released frames only deliver XR input unless a video needs them drawn.
-  await page.evaluate((draw) => {
+  await page.evaluate((draw: boolean) => {
     window.__setManualClock(true, draw);
-    window.IWER_DEVICE.primaryInputMode = 'hand';
+    window.IWER_DEVICE!.primaryInputMode = 'hand';
   }, Boolean(videoFrameDir));
   await waitForIwerRuntime(page);
   await enterIwerSessionFromButton(page, '#VRButton', {
@@ -80,7 +88,7 @@ async function replay(fileName) {
     await page.evaluate(() => {
       window.__setHandOverlay(true);
       window.__setSpectatorView(true);
-      const devui = window.IWER_DEVICE.devui;
+      const devui = window.IWER_DEVICE!.devui;
       for (const element of [devui?.devUIContainer, devui?.devUICanvas, document.getElementById('ui-root'), document.getElementById('VRButton'), document.getElementById('ARButton')]) {
         if (element instanceof HTMLElement) element.style.display = 'none';
       }
@@ -91,23 +99,24 @@ async function replay(fileName) {
   // releases frames, so input and simulation stay in lockstep on any host.
   await freezePageClock(page);
   await waitForXrRenderLoop(page);
-  const durationMs = await page.evaluate(async ({ data, draw }) => {
-    const session = window.IWER_DEVICE.activeSession;
-    const refSpace = await session.requestReferenceSpace('local-floor');
-    window.__replayPlayer = window.IWER_DEVICE.createActionPlayer(refSpace, data);
+  const durationMs = await page.evaluate(async ({ data, draw }: { data: unknown; draw: boolean }) => {
+    const session = window.IWER_DEVICE!.activeSession!;
+    const refSpace = await session.requestReferenceSpace('local-floor' as XRReferenceSpaceType); // IWER types the name as an enum; the runtime value is the string
+    // The recording is the parsed fixture JSON, already in IWER's format.
+    window.__replayPlayer = window.IWER_DEVICE!.createActionPlayer(refSpace, data as Parameters<NonNullable<Window['IWER_DEVICE']>['createActionPlayer']>[1]);
     window.__replayPlayer.play();
     window.__setFrameStepping(true, draw);
     return window.__replayPlayer.duration;
   }, { data: recording, draw: Boolean(videoFrameDir) });
 
-  const frames = [];
+  const frames: HandReplayFrame[] = [];
   const totalSteps = Math.floor(durationMs / STEP_MS);
   for (let index = 0; index < totalSteps; index += 1) {
     await page.clock.runFor(STEP_MS);
     const sample = await page.evaluate(() => {
       const state = JSON.parse(window.render_game_to_text());
       return {
-        timeMs: window.__replayPlayer.currentTime,
+        timeMs: window.__replayPlayer!.currentTime,
         hands: window.__sampleHands(),
         state: { mode: state.mode, avatar: state.avatar, character: state.character.position, tracking: { left: { poseValid: state.tracking.left.poseValid, target: state.tracking.left.targetPosition, bone: state.tracking.left.bonePosition, sensor: state.tracking.left.sensorPosition }, right: { poseValid: state.tracking.right.poseValid, target: state.tracking.right.targetPosition, bone: state.tracking.right.bonePosition, sensor: state.tracking.right.sensorPosition } } }
       };
@@ -134,9 +143,7 @@ async function replay(fileName) {
     if (sheet) console.log(`[hand-replay] contact sheet: ${sheet}`);
   }
   await writeFile(path.join(artifactDir, `${label}-samples.json`), JSON.stringify(frames));
-  const report = analyzeHandReplay(frames, { stepMs: STEP_MS });
-  report.label = label;
-  report.durationMs = durationMs;
+  const report = Object.assign(analyzeHandReplay(frames, { stepMs: STEP_MS }), { label, durationMs });
   await writeFile(path.join(artifactDir, `${label}-report.json`), JSON.stringify(report, null, 2));
   return report;
 }

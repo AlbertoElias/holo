@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { chromium } from 'playwright';
+import { chromium, type Page } from 'playwright';
 
 import {
   attachXrEnvironment,
@@ -14,8 +14,12 @@ import {
   waitForXrRenderLoop
 } from '@holoim/tooling-testing/xr-env';
 
-import { installHandBlend } from './lib/iwer-hand-blend.mjs';
-import { calibrateTipShift, installPointingRig, REST, runPointingTake } from './lib/pointing-take.mjs';
+import { CONTROL_NAMES } from '@holoim/xr-ui-core';
+
+import type {} from '../src/runtime/automationHooks';
+import { installHandBlend } from './lib/iwer-hand-blend.ts';
+import type { Vec3 } from './lib/pointing-scene.ts';
+import { calibrateTipShift, installPointingRig, REST, runPointingTake } from './lib/pointing-take.ts';
 
 // Regenerates fixtures/input-recordings/iwer-poses-relaxed-point-pinch.json:
 // both hands move through IWER's captured relaxed, point, and pinch poses with
@@ -47,7 +51,7 @@ const baseUrl = new URL(
 ).href;
 
 // [pose to reach, seconds to blend into it, seconds to hold it]
-const TIMELINE = [
+const TIMELINE: Array<[string, number, number]> = [
   ['default', 0, 0.6],
   ['point', 0.5, 0.8],
   ['default', 0.5, 0.4],
@@ -60,14 +64,18 @@ const TIMELINE = [
 
 const browser = await launchXrBrowser(chromium);
 try {
-  const page = await (await createXrContext(browser, { viewport: { width: 320, height: 180 } })).newPage();
+  const page: Page = await (await createXrContext(browser, { viewport: { width: 320, height: 180 } })).newPage();
+  // tsx compiles with keepNames, which wraps named inner functions of the
+  // page.evaluate callbacks (installHandBlend, installPointingRig) in an __name
+  // helper the page lacks.
+  await page.addInitScript('globalThis.__name = (target) => target;');
   await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', 'advanceTime']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   await page.evaluate(() => {
     window.__setManualClock(true, false);
-    window.IWER_DEVICE.primaryInputMode = 'hand';
+    window.IWER_DEVICE!.primaryInputMode = 'hand';
   });
   await waitForIwerRuntime(page);
   await enterIwerSessionFromButton(page, '#VRButton', {
@@ -77,51 +85,51 @@ try {
   // IWER's DevUI rewrites device and hand transforms every frame unless
   // control is programmatic; without this the hands never left its defaults.
   await page.evaluate(() => {
-    window.IWER_DEVICE.controlMode = 'programmatic';
+    window.IWER_DEVICE!.controlMode = 'programmatic';
   });
 
   await page.evaluate(installHandBlend);
 
   await freezePageClock(page);
   const before = new Set(await readdir(FIXTURE_DIR).catch(() => []));
-  const clickByText = (text) => page.evaluate((label) => {
+  const clickByText = (text: string) => page.evaluate((label) => {
     [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)?.click();
   }, text);
 
-  const placeHands = (seconds) => page.evaluate((s) => {
+  const placeHands = (seconds: number) => page.evaluate((s) => {
     // Hands held in front of the face, drifting slightly so wrists move too.
     const sway = Math.sin(s * 1.3) * 0.03;
-    window.IWER_DEVICE.hands.left.position.set(-0.17, 1.38 + sway, -0.32);
-    window.IWER_DEVICE.hands.right.position.set(0.17, 1.38 - sway, -0.32);
+    window.IWER_DEVICE!.hands.left!.position.set(-0.17, 1.38 + sway, -0.32);
+    window.IWER_DEVICE!.hands.right!.position.set(0.17, 1.38 - sway, -0.32);
   }, seconds);
 
-  let pointingLabels = null;
+  let pointingLabels: Awaited<ReturnType<typeof runPointingTake>> | null = null;
   if (POINTING) {
     await waitForXrRenderLoop(page);
     // Frames tick the simulation, so tracked hands exist to aim at.
     await page.evaluate(() => window.__setFrameStepping(true, false));
     await page.evaluate(installPointingRig);
-    await page.evaluate((rest) => window.__applyPointState({ right: { s: 0, rest: rest.right }, left: { pos: rest.left } }), REST);
-    const tipShift = await calibrateTipShift({ page, stepMs: STEP_MS, readRightTip: () => page.evaluate(() => window.__sampleHands().right.tracked['index-finger-tip']) });
+    await page.evaluate((rest) => window.__applyPointState!({ right: { s: 0, rest: rest.right }, left: { pos: rest.left } }), REST);
+    const tipShift = await calibrateTipShift({ page, stepMs: STEP_MS, readRightTip: () => page.evaluate(() => window.__sampleHands().right.tracked['index-finger-tip']!) });
     console.log(`[pose-fixture] tracked fingertip offset ${tipShift.map((v) => v.toFixed(3)).join(', ')}`);
-    await clickByText('Start Recording');
+    await clickByText(CONTROL_NAMES.startRecording);
     await page.clock.runFor(STEP_MS);
     pointingLabels = await runPointingTake({
       page,
       stepMs: STEP_MS,
       readLeftPalm: () => page.evaluate(() => {
         const { wrist, 'middle-finger-phalanx-proximal': knuckle } = window.__sampleHands().left.tracked;
-        return wrist.map((v, i) => (v + knuckle[i]) / 2);
+        return wrist!.map((v, i) => (v + knuckle![i]!) / 2) as Vec3;
       }),
       tipShift
     });
   } else {
     let elapsed = 0;
-    let current = TIMELINE[0][0];
-    await page.evaluate((pose) => window.__blendHands(pose, pose, 1), current);
+    let current = TIMELINE[0]![0];
+    await page.evaluate((pose) => window.__blendHands!(pose, pose, 1), current);
     await placeHands(0);
     await page.clock.runFor(STEP_MS);
-    await clickByText('Start Recording');
+    await clickByText(CONTROL_NAMES.startRecording);
     await page.clock.runFor(STEP_MS);
 
     for (const [target, blendSeconds, holdSeconds] of TIMELINE) {
@@ -130,7 +138,7 @@ try {
       for (let step = 1; step <= blendSteps + holdSteps; step += 1) {
         const raw = Math.min(1, step / Math.max(1, blendSteps));
         const eased = raw * raw * (3 - 2 * raw);
-        await page.evaluate(({ from, to, t }) => window.__blendHands(from, to, t), { from: current, to: target, t: eased });
+        await page.evaluate(({ from, to, t }) => window.__blendHands!(from, to, t), { from: current, to: target, t: eased });
         elapsed += STEP_MS / 1000;
         await placeHands(elapsed);
         await page.clock.runFor(STEP_MS);
@@ -141,9 +149,9 @@ try {
 
   }
 
-  await clickByText('Stop Recording');
+  await clickByText(CONTROL_NAMES.stopRecording);
   // Export runs on animation frames; release them until the file lands.
-  let created = null;
+  let created: string | null = null;
   for (let attempt = 0; attempt < 300 && !created; attempt += 1) {
     await page.clock.runFor(100);
     const after = await readdir(FIXTURE_DIR).catch(() => []);
@@ -162,7 +170,7 @@ try {
     await writeFile(POINTING_LABELS, `${JSON.stringify({
       fixture: `pointing-recordings/${POINTING_FIXTURE_NAME}`,
       scene: '/fixtures/scenes/pointing-targets.gltf',
-      source: 'IWER-synthetic take from scripts/lib/pointing-take.mjs; times are seconds from the first recorded frame, referents are what the pointing finger was aimed at',
+      source: 'IWER-synthetic take from scripts/lib/pointing-take.ts; times are seconds from the first recorded frame, referents are what the pointing finger was aimed at',
       useFor: 'timing and referents',
       referentNote: 'TargetA and TargetB are node names (exported as <name>_RecordedBubble); leftHand is the humanoid bone of the avatar hand that was pointed at; null is empty sky',
       hand: 'right',

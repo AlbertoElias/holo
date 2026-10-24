@@ -1,4 +1,5 @@
 import { HOLOIM_MEANING_EXTENSION, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
+import type { MeaningLinkFrom, MeaningLinkProvenance, MeaningLinkTo } from '../../../../packages/meaning/src/index.ts';
 
 // Scores the HOLOIM_meaning record of an exported GLB against a labels file
 // (fixtures/pointing-labels/). Two label shapes:
@@ -13,29 +14,81 @@ import { HOLOIM_MEANING_EXTENSION, validateHoloimMeaning } from '../../../../pac
 export const TOLERANCE_SEC = 0.5;
 const SILENT_OVERLAP_SEC = 0.05;
 
+/** The parts of a glTF JSON document the scorer reads. */
+export type GltfJson = {
+  extensions?: Record<string, unknown>;
+  extensionsUsed?: string[];
+  extensionsRequired?: string[];
+  nodes?: Array<{ name?: string }>;
+};
+
+export type LabelSegment = { kind: string; name: string; hand?: string; start: number; end: number };
+export type LabelPoint = { referent?: string | null; brief?: boolean; start: number; end: number };
+/** A labels file (fixtures/pointing-labels/): either `segments` or `points`. */
+export type PointingLabels = {
+  fixture: string;
+  scene?: string;
+  source?: string;
+  useFor?: string;
+  hand?: string;
+  segments?: LabelSegment[];
+  points?: LabelPoint[];
+};
+
+export type ExpectedPoint = { name: string; hand: string | undefined; start: number; end: number; referent: string | undefined };
+export type SilentWindow = { name: string; start: number; end: number; allowedOverlapSec: number; referent?: undefined };
+
+export type PointingLink = {
+  from: MeaningLinkFrom;
+  to: MeaningLinkTo;
+  start: number;
+  end: number;
+  provenance: MeaningLinkProvenance;
+  hand: 'left' | 'right' | null;
+  fromNodeName: string | null;
+  toNodeName: string | null;
+};
+export type PointingMatch =
+  | { point: string; link: null }
+  | {
+    point: string;
+    referent: string | null;
+    label: { start: number; end: number };
+    link: { start: number; end: number; startError: number; endError: number; from: string; to: string; provenance: MeaningLinkProvenance };
+    ok: boolean;
+  };
+export type SilenceResult = { window: string; start: number; end: number; allowedOverlapSec: number; links: number };
+export type PointingScore = {
+  status: 'no-meaning' | 'invalid' | 'passed' | 'failed';
+  failures: string[];
+  links: PointingLink[];
+  matches: PointingMatch[];
+  silence: SilenceResult[];
+};
+
 /** Reads the JSON chunk of a binary glTF. */
-export function readGlbJson(buffer) {
+export function readGlbJson(buffer: Buffer): GltfJson {
   if (buffer.readUInt32LE(0) !== 0x46546c67) throw new Error('not a GLB (bad magic)');
   const jsonLength = buffer.readUInt32LE(12);
   if (buffer.readUInt32LE(16) !== 0x4e4f534a) throw new Error('GLB has no leading JSON chunk');
   return JSON.parse(buffer.subarray(20, 20 + jsonLength).toString('utf8'));
 }
 
-const overlap = (aStart, aEnd, bStart, bEnd) => Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
-const handOf = (bone) => (bone.startsWith('left') ? 'left' : bone.startsWith('right') ? 'right' : null);
-const round = (value) => Math.round(value * 100) / 100;
+const overlap = (aStart: number, aEnd: number, bStart: number, bEnd: number) => Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
+const handOf = (bone: string): 'left' | 'right' | null => (bone.startsWith('left') ? 'left' : bone.startsWith('right') ? 'right' : null);
+const round = (value: number) => Math.round(value * 100) / 100;
 
 /** Normalises either label shape into expected link points and silent windows. */
-function expectations(labels) {
-  const points = [];
-  const silent = [];
+function expectations(labels: PointingLabels): { points: ExpectedPoint[]; silent: SilentWindow[] } {
+  const points: ExpectedPoint[] = [];
+  const silent: SilentWindow[] = [];
   if (labels.segments) {
     for (const segment of labels.segments) {
       if (segment.kind === 'point') points.push({ name: segment.name, hand: segment.hand, start: segment.start, end: segment.end, referent: undefined });
       else silent.push({ name: segment.name, start: segment.start, end: segment.end, allowedOverlapSec: TOLERANCE_SEC });
     }
   } else {
-    labels.points.forEach((point, index) => {
+    labels.points!.forEach((point, index) => {
       const name = `${point.brief ? 'brief' : point.referent === null ? 'sky' : 'point'}-${index + 1}${point.referent ? `-${point.referent}` : ''}`;
       if (point.brief || point.referent === null) silent.push({ name, start: point.start, end: point.end, allowedOverlapSec: SILENT_OVERLAP_SEC });
       else points.push({ name, hand: labels.hand, start: point.start, end: point.end, referent: point.referent });
@@ -44,7 +97,7 @@ function expectations(labels) {
   return { points, silent };
 }
 
-function describeTo(gltf, to) {
+function describeTo(gltf: GltfJson, to: MeaningLinkTo): string {
   return to.bone ? `bone ${to.bone}` : `node ${to.node} (${gltf.nodes?.[to.node]?.name ?? 'unnamed'})`;
 }
 
@@ -53,8 +106,8 @@ function describeTo(gltf, to) {
  * 'no-meaning' when the GLB has no extension at all, so the check can say so
  * plainly instead of reporting every label as missed.
  */
-export function scorePointing({ labels, gltf }) {
-  const failures = [];
+export function scorePointing({ labels, gltf }: { labels: PointingLabels; gltf: GltfJson }): PointingScore {
+  const failures: string[] = [];
   const raw = gltf.extensions?.[HOLOIM_MEANING_EXTENSION];
   if (raw === undefined) {
     return {
@@ -72,7 +125,7 @@ export function scorePointing({ labels, gltf }) {
   if (!(gltf.extensionsUsed ?? []).includes(HOLOIM_MEANING_EXTENSION)) failures.push(`${HOLOIM_MEANING_EXTENSION} is not listed in extensionsUsed`);
   if ((gltf.extensionsRequired ?? []).includes(HOLOIM_MEANING_EXTENSION)) failures.push(`${HOLOIM_MEANING_EXTENSION} must never be in extensionsRequired`);
 
-  const links = validation.value.marks.map((mark) => ({
+  const links: PointingLink[] = validation.value.marks.map((mark) => ({
     from: mark.anchor.from,
     to: mark.anchor.to,
     start: mark.span.start,
@@ -84,9 +137,9 @@ export function scorePointing({ labels, gltf }) {
   }));
   const { points, silent } = expectations(labels);
 
-  const matches = [];
-  const matched = new Set();
-  for (const hand of ['left', 'right']) {
+  const matches: PointingMatch[] = [];
+  const matched = new Set<PointingLink>();
+  for (const hand of ['left', 'right'] as const) {
     const expected = points.filter((point) => point.hand === hand).sort((a, b) => a.start - b.start);
     const found = links.filter((link) => link.hand === hand).sort((a, b) => a.start - b.start);
     if (expected.length !== found.length) {

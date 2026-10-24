@@ -120,7 +120,7 @@ jobs:
     timeout-minutes: 10
     # Each 2-vCPU runner runs its slice serially: two checks at once on one
     # runner pushed cold page loads past the 30 s goto limit (20b1986e40ae).
-    # run-xr-checks.mjs balances the slices by cost and covers every check.
+    # run-xr-checks.ts balances the slices by cost and covers every check.
     strategy:
       fail-fast: false
       matrix:

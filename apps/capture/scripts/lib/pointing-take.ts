@@ -1,22 +1,40 @@
-import { TARGETS } from './pointing-scene.mjs';
+import type { Page } from 'playwright';
+
+import type {} from '../../src/runtime/automationHooks';
+import { TARGETS, type Vec3 } from './pointing-scene.ts';
+
+type Quat = [number, number, number, number];
+/** What window.__applyPointState takes: the right hand's pose parameters and the left hand's position. */
+export type PointState = {
+  right: { s: number; rest: Vec3; tip?: Vec3; aim?: Vec3 };
+  left: { pos: Vec3 };
+};
+/** One labelled point of the scripted take. */
+export type PointingTakeLabel = { referent: string | null; brief?: true; start: number; end: number };
+
+declare global {
+  interface Window {
+    __applyPointState?: (state: PointState) => void;
+  }
+}
 
 // The scripted pointing take: the right index finger points at things in the
 // generated pointing-targets scene while the left hand rests, except where the
 // left hand is itself the thing pointed at. Aiming is solved from IWER's
 // captured 'point' pose, so the fingertip sits at TIP and the index finger
-// lies along the line to the aim point. Used by generate-iwer-pose-fixture.mjs.
+// lies along the line to the aim point. Used by generate-iwer-pose-fixture.ts.
 
-export const REST = { right: [0.22, 1.05, -0.25], left: [-0.22, 1.05, -0.25] };
+export const REST: { right: Vec3; left: Vec3 } = { right: [0.22, 1.05, -0.25], left: [-0.22, 1.05, -0.25] };
 // Where the pointing fingertip is while pointing: in front of the right shoulder.
-const TIP = [0.26, 1.3, -0.5];
+const TIP: Vec3 = [0.26, 1.3, -0.5];
 // Where the left hand is held when it is the referent: across the chest.
-const LEFT_OFFERED = [-0.12, 1.25, -0.45];
+const LEFT_OFFERED: Vec3 = [-0.12, 1.25, -0.45];
 
-const center = (name) => TARGETS[name].center;
+const center = (name: string) => TARGETS[name]!.center;
 const SKY = (() => {
-  const d = [0.15, 0.9, -0.4];
+  const d: Vec3 = [0.15, 0.9, -0.4];
   const n = Math.hypot(...d);
-  return TIP.map((v, i) => v + (d[i] / n) * 5);
+  return TIP.map((v, i) => v + (d[i]! / n) * 5) as Vec3;
 })();
 
 const BLEND_SEC = 0.5;
@@ -28,77 +46,79 @@ const BRIEF_HOLD_SEC = 0.0;
 
 /** Adds window.__applyPointState({ right: { s, tip, aim }, left: { pos } }) to an IWER page. */
 export function installPointingRig() {
-  const conj = ([x, y, z, w]) => [-x, -y, -z, w];
-  const qmul = ([ax, ay, az, aw], [bx, by, bz, bw]) => [
+  const conj = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w];
+  const qmul = ([ax, ay, az, aw]: Quat, [bx, by, bz, bw]: Quat): Quat => [
     aw * bx + ax * bw + ay * bz - az * by,
     aw * by - ax * bz + ay * bw + az * bx,
     aw * bz + ax * by - ay * bx + az * bw,
     aw * bw - ax * bx - ay * by - az * bz
   ];
-  const rotate = (q, v) => qmul(qmul(q, [v[0], v[1], v[2], 0]), conj(q)).slice(0, 3);
-  const norm = (v) => {
+  const rotate = (q: Quat, v: Vec3): Vec3 => qmul(qmul(q, [v[0], v[1], v[2], 0]), conj(q)).slice(0, 3) as Vec3;
+  const norm = (v: Vec3): Vec3 => {
     const n = Math.hypot(...v);
-    return v.map((x) => x / n);
+    return v.map((x) => x / n) as Vec3;
   };
-  const fromTo = (a, b) => {
+  const fromTo = (a: Vec3, b: Vec3): Quat => {
     const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
     if (dot < -0.9999) return [0, 1, 0, 0];
-    const axis = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-    const q = [axis[0], axis[1], axis[2], 1 + dot];
+    const axis: Vec3 = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const q: Quat = [axis[0], axis[1], axis[2], 1 + dot];
     const n = Math.hypot(...q);
-    return q.map((x) => x / n);
+    return q.map((x) => x / n) as Quat;
   };
-  const slerp = (a, b, t) => {
+  const slerp = (a: Quat, b: Quat, t: number): Quat => {
     let cos = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
     const sign = cos < 0 ? -1 : 1;
     cos *= sign;
     if (cos > 0.9995) {
-      const out = a.map((v, i) => v + (sign * b[i] - v) * t);
+      const out = a.map((v, i) => v + (sign * b[i]! - v) * t);
       const n = Math.hypot(...out);
-      return out.map((v) => v / n);
+      return out.map((v) => v / n) as Quat;
     }
     const theta = Math.acos(cos);
     const wa = Math.sin((1 - t) * theta) / Math.sin(theta);
     const wb = (sign * Math.sin(t * theta)) / Math.sin(theta);
-    return a.map((v, i) => wa * v + wb * b[i]);
+    return a.map((v, i) => wa * v + wb * b[i]!) as Quat;
   };
-  const IDENTITY = [0, 0, 0, 1];
+  const IDENTITY: Quat = [0, 0, 0, 1];
   // The point pose's fingertip and index direction, in the hand's own frame.
-  const pointGeometry = (hand) => {
-    const key = Object.getOwnPropertySymbols(hand).find((symbol) => hand[symbol]?.poses);
-    const { jointTransforms } = hand[key].poses.point;
+  const pointGeometry = (hand: object) => {
+    // IWER keeps the poses under a private symbol key; XRHandInput's types hide it.
+    const internals = hand as Record<symbol, { poses: Record<string, { jointTransforms: Record<string, { offsetMatrix: Float32Array }> }> } | undefined>;
+    const key = Object.getOwnPropertySymbols(hand).find((symbol) => internals[symbol]?.poses)!;
+    const { jointTransforms } = internals[key]!.poses.point!;
     // The right hand's tracked joints are the stored pose mirrored in x (measured: tracked tip - wrist is (-0.089, 0.046, -0.153) where the stored offset is (0.089, 0.046, -0.153)).
-    const translation = (joint) => [-jointTransforms[joint].offsetMatrix[12], jointTransforms[joint].offsetMatrix[13], jointTransforms[joint].offsetMatrix[14]];
+    const translation = (joint: string): Vec3 => [-jointTransforms[joint]!.offsetMatrix[12]!, jointTransforms[joint]!.offsetMatrix[13]!, jointTransforms[joint]!.offsetMatrix[14]!];
     const tip = translation('index-finger-tip');
     const proximal = translation('index-finger-phalanx-proximal');
-    return { tip, direction: norm(tip.map((v, i) => v - proximal[i])) };
+    return { tip, direction: norm(tip.map((v, i) => v - proximal[i]!) as Vec3) };
   };
   window.__applyPointState = ({ right, left }) => {
-    const devices = window.IWER_DEVICE.hands;
-    devices.left.position.set(...left.pos);
-    devices.left.quaternion.set(...IDENTITY);
-    window.__blendHands('default', 'default', 1, ['left']);
-    const hand = devices.right;
+    const devices = window.IWER_DEVICE!.hands;
+    devices.left!.position.set(...left.pos);
+    devices.left!.quaternion.set(...IDENTITY);
+    window.__blendHands!('default', 'default', 1, ['left']);
+    const hand = devices.right!;
     const s = right.s;
-    window.__blendHands('default', 'point', s, ['right']);
+    window.__blendHands!('default', 'point', s, ['right']);
     if (s <= 0) {
       hand.position.set(...right.rest);
       hand.quaternion.set(...IDENTITY);
       return;
     }
     const { tip, direction } = pointGeometry(hand);
-    const wanted = norm(right.aim.map((v, i) => v - right.tip[i]));
+    const wanted = norm(right.aim!.map((v, i) => v - right.tip![i]!) as Vec3);
     const aimed = qmul(fromTo(direction, wanted), IDENTITY);
     const rotatedTip = rotate(aimed, tip);
-    const aimedPosition = right.tip.map((v, i) => v - rotatedTip[i]);
+    const aimedPosition = right.tip!.map((v, i) => v - rotatedTip[i]!);
     const q = slerp(IDENTITY, aimed, s);
-    const position = right.rest.map((v, i) => v + (aimedPosition[i] - v) * s);
+    const position = right.rest.map((v, i) => v + (aimedPosition[i]! - v) * s) as Vec3;
     hand.position.set(...position);
     hand.quaternion.set(...q);
   };
 }
 
-const ease = (u) => u * u * (3 - 2 * u);
+const ease = (u: number) => u * u * (3 - 2 * u);
 
 /**
  * The page's tracked fingertip sits a fixed offset from where the IWER hand
@@ -107,8 +127,12 @@ const ease = (u) => u * u * (3 - 2 * u);
  * subtracts so the tracked fingertip, not IWER's, lands on TIP. Call before
  * recording starts.
  */
-export async function calibrateTipShift({ page, stepMs, readRightTip }) {
-  const apply = (s) => page.evaluate((arg) => window.__applyPointState(arg), {
+export async function calibrateTipShift({ page, stepMs, readRightTip }: {
+  page: Page;
+  stepMs: number;
+  readRightTip: () => Promise<number[]>;
+}): Promise<Vec3> {
+  const apply = (s: number) => page.evaluate((arg) => window.__applyPointState!(arg), {
     right: { s, tip: TIP, aim: center('TargetA'), rest: REST.right },
     left: { pos: REST.left }
   });
@@ -117,31 +141,36 @@ export async function calibrateTipShift({ page, stepMs, readRightTip }) {
   const tracked = await readRightTip();
   await apply(0);
   await page.clock.runFor(stepMs * 8);
-  return tracked.map((v, i) => v - TIP[i]);
+  return tracked.map((v, i) => v - TIP[i]!) as Vec3;
 }
-const lerp3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const lerp3 = (a: Vec3, b: Vec3, t: number) => a.map((v, i) => v + (b[i]! - v) * t) as Vec3;
 
 /**
  * Plays the take after recording has started, one `stepMs` step at a time, and
  * returns labels for the check: every point's intended referent and the times
  * it was held, in seconds from the first stepped frame.
  */
-export async function runPointingTake({ page, stepMs, readLeftPalm, tipShift = [0, 0, 0] }) {
+export async function runPointingTake({ page, stepMs, readLeftPalm, tipShift = [0, 0, 0] }: {
+  page: Page;
+  stepMs: number;
+  readLeftPalm: () => Promise<Vec3>;
+  tipShift?: Vec3;
+}): Promise<{ labels: PointingTakeLabel[]; durationSec: number }> {
   const stepSec = stepMs / 1000;
   let elapsed = 0;
-  const labels = [];
+  const labels: PointingTakeLabel[] = [];
   const state = { s: 0, aim: center('TargetA'), left: REST.left };
   const apply = async () => {
-    await page.evaluate((arg) => window.__applyPointState(arg), {
-      right: { s: ease(state.s), tip: TIP.map((v, i) => v - tipShift[i]), aim: state.aim.map((v, i) => v - tipShift[i]), rest: REST.right },
+    await page.evaluate((arg) => window.__applyPointState!(arg), {
+      right: { s: ease(state.s), tip: TIP.map((v, i) => v - tipShift[i]!) as Vec3, aim: state.aim.map((v, i) => v - tipShift[i]!) as Vec3, rest: REST.right },
       left: { pos: state.left }
     });
     await page.clock.runFor(stepMs);
     elapsed += stepSec;
   };
-  const steps = (seconds) => Math.max(0, Math.round(seconds / stepSec));
+  const steps = (seconds: number) => Math.max(0, Math.round(seconds / stepSec));
   // Raises the hand (s 0 → 1), holds, lowers it; each phase moves the aim.
-  const raise = async (aim, seconds) => {
+  const raise = async (aim: Vec3, seconds: number) => {
     state.aim = aim;
     const n = steps(seconds);
     for (let i = 1; i <= n; i += 1) {
@@ -149,10 +178,10 @@ export async function runPointingTake({ page, stepMs, readLeftPalm, tipShift = [
       await apply();
     }
   };
-  const hold = async (seconds) => {
+  const hold = async (seconds: number) => {
     for (let i = 0; i < steps(seconds); i += 1) await apply();
   };
-  const sweep = async (to, seconds) => {
+  const sweep = async (to: Vec3, seconds: number) => {
     const from = state.aim;
     const n = steps(seconds);
     for (let i = 1; i <= n; i += 1) {
@@ -160,14 +189,14 @@ export async function runPointingTake({ page, stepMs, readLeftPalm, tipShift = [
       await apply();
     }
   };
-  const lower = async (seconds) => {
+  const lower = async (seconds: number) => {
     const n = steps(seconds);
     for (let i = 1; i <= n; i += 1) {
       state.s = 1 - i / n;
       await apply();
     }
   };
-  const moveLeft = async (to, seconds) => {
+  const moveLeft = async (to: Vec3, seconds: number) => {
     const from = state.left;
     const n = steps(seconds);
     for (let i = 1; i <= n; i += 1) {
@@ -177,7 +206,7 @@ export async function runPointingTake({ page, stepMs, readLeftPalm, tipShift = [
   };
   // One labelled point: `referent` is the intended target, held from the
   // moment the pose completes to the moment it starts to release.
-  const point = (referent, start) => labels.push({ referent, start: Number(start.toFixed(2)), end: Number(elapsed.toFixed(2)) });
+  const point = (referent: string | null, start: number) => labels.push({ referent, start: Number(start.toFixed(2)), end: Number(elapsed.toFixed(2)) });
 
   await hold(1.0);
 

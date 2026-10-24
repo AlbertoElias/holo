@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { NodeIO } from '@gltf-transform/core';
-import { chromium } from 'playwright';
+import { NodeIO, type AnimationSampler } from '@gltf-transform/core';
+import { chromium, type Download, type Route } from 'playwright';
+import { CONTROL_NAMES } from '@holoim/xr-ui-core';
 
 import {
   attachXrEnvironment,
@@ -17,6 +18,11 @@ import {
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
+
+import type {} from '../src/runtime/automationHooks';
+import type { FaceSnapshot } from '../src/face/FaceDriver';
+import type { FaceBindingReport } from '../src/face/FaceRig';
+import type { FaceCameraState, FaceExpressionSource, FaceGaze, FaceGazeSource, FaceSample, FaceWeights } from '../src/face/faceTypes';
 
 // Drives the avatar's face through the real VR path on an emulated Quest Pro
 // (the one IWER device with eye gaze): a scripted ARKit performance through
@@ -34,10 +40,43 @@ const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-face';
 const video = process.env.FACE_VIDEO === '1';
 const frameDir = path.join(artifactDir, 'video-frames');
 
+type Eye = { yaw: number; pitch: number };
+type EyeDeg = { yaw: number; pitch: number };
+type Segment = { name: string; sec: number; face: FaceSample; high?: string[]; low?: string[]; routed?: string[]; gaze?: Eye; lidFollow?: boolean };
+// One step of the performance: the head mesh's influences by target name,
+// and what the face reported.
+type Sample = {
+  label: string;
+  frame: number;
+  expressionSource: FaceExpressionSource;
+  gazeSource: FaceGazeSource;
+  head: Record<string, number>;
+  gaze: FaceSnapshot['gaze'];
+  weights: FaceWeights;
+};
+type FaceReading = { camera: FaceCameraState; delegate: 'GPU' | 'CPU' | null; expressionSource: FaceExpressionSource; gazeSource: FaceGazeSource };
+type WebcamOutcomes = Record<string, FaceReading & { after: { expressionSource: FaceExpressionSource; gazeSource: FaceGazeSource }; buttonLabel: string | null }>;
+type ExportResult = {
+  failures: string[];
+  summary: { bytes: number; durationSec?: number; headTargets?: number; maxWeightError?: number; faceBytesPerMinute?: number | null };
+};
+type FaceReport = {
+  device: string;
+  frames: number;
+  binding: { headMesh: string | undefined; boundChannels: number; eyes: FaceBindingReport['eyes']; unresolvedTargets: string[] };
+  segments: Array<{ name: string; expressionSource: FaceExpressionSource; gazeDeg: { left: EyeDeg | null; right: EyeDeg | null } }>;
+  xrGaze: Array<{ name: string; gazeSource: FaceGazeSource; gazeDeg: { left: EyeDeg | null; right: EyeDeg | null } }>;
+  release: { maxStepJump: number; target: string | null; maxGazeStepDeg: number };
+  liveness: { blinks: number; saccadeRangeDeg: number; voiceJawMax: number };
+  export: ExportResult['summary'] & { exportMs: number };
+  failures: string[];
+  webcam?: WebcamOutcomes;
+};
+
 const smile = { mouthSmileLeft: 1, mouthSmileRight: 1, cheekSquintLeft: 0.4, cheekSquintRight: 0.4, eyeSquintLeft: 0.3, eyeSquintRight: 0.3 };
 // Each segment holds its face; `expect` names the head targets that must
 // read high (1 − tolerance) and low (≤ tolerance) at its end.
-const SEGMENTS = [
+const SEGMENTS: Segment[] = [
   { name: 'neutral', sec: 0.8, face: { weights: {} }, low: ['eyeBlinkLeft', 'eyeBlinkRight', 'jawOpen', 'mouthSmileLeft'] },
   { name: 'wink-left', sec: 0.8, face: { weights: { eyeBlinkLeft: 1 } }, high: ['eyeBlinkLeft'], low: ['eyeBlinkRight'] },
   { name: 'wink-right', sec: 0.8, face: { weights: { eyeBlinkRight: 1 } }, high: ['eyeBlinkRight'], low: ['eyeBlinkLeft'] },
@@ -66,7 +105,7 @@ const XR_GAZE = [
 const LIVENESS_SEC = 7;
 const TOLERANCE = 0.05;
 
-function gazeBoth(yaw, pitch) {
+function gazeBoth(yaw: number, pitch: number): FaceGaze {
   return { left: { yaw, pitch }, right: { yaw, pitch } };
 }
 
@@ -75,9 +114,9 @@ await mkdir(video ? frameDir : artifactDir, { recursive: true });
 
 // Chromium's fake camera (a test pattern, never a face) for the webcam phase.
 const browser = await launchXrBrowser(chromium, { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
-const consoleErrors = [];
-const failures = [];
-const check = (ok, message) => {
+const consoleErrors: string[] = [];
+const failures: string[] = [];
+const check = (ok: boolean, message: string) => {
   if (!ok) failures.push(message);
 };
 
@@ -88,7 +127,7 @@ try {
   await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   // Stopping an IWER recording uploads its input to the dev server's fixture
   // sink; this check's take is not a fixture.
-  await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"(discarded by the face check)"}' }));
+  await page.route('**/__holoim/input-recordings*', (route: Route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"(discarded by the face check)"}' }));
   const pageUrl = new URL(baseUrl);
   pageUrl.searchParams.set('manualClock', '1');
   await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
@@ -96,59 +135,59 @@ try {
   await waitForTextContentPrefix(page, '#status', 'loaded');
   await page.evaluate(() => window.__setManualClock(true, false));
   await waitForIwerRuntime(page);
-  const device = await page.evaluate(() => ({ name: window.IWER_DEVICE.name, gaze: Boolean(window.IWER_DEVICE.gaze) }));
+  const device: { name: string; gaze: boolean } = await page.evaluate(() => ({ name: window.IWER_DEVICE!.name, gaze: Boolean(window.IWER_DEVICE!.gaze) }));
   check(device.gaze, `IWER device ${device.name} has no eye gaze; the face check needs CAPTURE_IWER_DEVICE=metaQuestPro`);
   await enterIwerSessionFromButton(page, '#VRButton', {
     readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr'
   });
-  await page.evaluate((hide) => {
+  await page.evaluate((hide: boolean) => {
     window.__setSpectatorView('face');
     if (!hide) return;
-    const devui = window.IWER_DEVICE.devui;
+    const devui = window.IWER_DEVICE!.devui;
     for (const element of [devui?.devUIContainer, devui?.devUICanvas, document.getElementById('ui-root'), document.getElementById('VRButton'), document.getElementById('ARButton')]) {
       if (element instanceof HTMLElement) element.style.display = 'none';
     }
   }, video);
   await freezePageClock(page);
   await waitForXrRenderLoop(page);
-  await page.evaluate((draw) => window.__setFrameStepping(true, draw), video);
+  await page.evaluate((draw: boolean) => window.__setFrameStepping(true, draw), video);
 
-  const binding = (await page.evaluate(() => window.__sampleFace())).binding;
+  const binding: FaceBindingReport = (await page.evaluate(() => window.__sampleFace())).binding!;
   const headMesh = binding.morphTargets.find((target) => target.name === 'eyeBlinkLeft')?.mesh;
   check(Boolean(headMesh), 'no head mesh binds eyeBlinkLeft');
   check(binding.eyes.left && binding.eyes.right, 'eye bones not bound');
-  for (const side of ['left', 'right']) {
+  for (const side of ['left', 'right'] as const) {
     // The fit leans back a few millimetres on the cornea bulge.
     const offset = binding.eyes.pivotOffsetMm[side];
     check(offset !== null && offset < 5, `${side} eye bone is ${offset} mm off the eyeball centre`);
   }
 
   // Recording starts with the performance and stops after liveness.
-  const clickButton = (name) => page.evaluate((label) => {
+  const clickButton = (name: string) => page.evaluate((label: string) => {
     const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
     if (!button) throw new Error(`no button "${label}"`);
     button.click();
   }, name);
-  await clickButton('Start Recording');
+  await clickButton(CONTROL_NAMES.startRecording);
 
-  const samples = [];
+  const samples: Sample[] = [];
   let frameIndex = 0;
-  const step = async (label) => {
+  const step = async (label: string) => {
     await page.clock.runFor(STEP_MS);
-    const snapshot = await page.evaluate(() => window.__sampleFace());
-    const head = {};
+    const snapshot: FaceSnapshot = await page.evaluate(() => window.__sampleFace());
+    const head: Record<string, number> = {};
     for (const [key, value] of Object.entries(snapshot.influences)) {
       const [mesh, name] = key.split(':');
-      if (mesh === headMesh) head[name] = value;
+      if (mesh === headMesh) head[name!] = value;
     }
-    const sample = { label, frame: frameIndex, expressionSource: snapshot.expressionSource, gazeSource: snapshot.gazeSource, head, gaze: snapshot.gaze, weights: snapshot.weights };
+    const sample: Sample = { label, frame: frameIndex, expressionSource: snapshot.expressionSource, gazeSource: snapshot.gazeSource, head, gaze: snapshot.gaze, weights: snapshot.weights };
     samples.push(sample);
     if (video) await page.screenshot({ path: path.join(frameDir, `${String(frameIndex).padStart(5, '0')}.png`) });
     frameIndex += 1;
     return sample;
   };
   // The video carries each segment's name and the face's sources.
-  const caption = (label) => video && page.evaluate((text) => {
+  const caption = (label: string) => video && page.evaluate((text: string) => {
     let element = document.getElementById('face-caption');
     if (!element) {
       element = document.createElement('div');
@@ -158,16 +197,16 @@ try {
     }
     element.textContent = text;
   }, label);
-  const hold = async (label, sec) => {
+  const hold = async (label: string, sec: number) => {
     await caption(`${label} · expression: ${label === 'liveness' || label.startsWith('xr-') ? 'liveness' : 'scripted'} · gaze: ${label.startsWith('xr-') ? 'WebXR eye gaze' : label === 'liveness' ? 'liveness' : 'scripted'}`);
-    let last = null;
+    let last: Sample | null = null;
     for (let i = 0; i < Math.round(sec * 1000 / STEP_MS); i += 1) last = await step(label);
-    return last;
+    return last!;
   };
 
   const segmentResults = [];
   for (const segment of SEGMENTS) {
-    await page.evaluate((face) => window.__setFaceInput(face), segment.face);
+    await page.evaluate((face: FaceSample) => window.__setFaceInput(face), segment.face);
     const end = await hold(segment.name, segment.sec);
     const result = { name: segment.name, expressionSource: end.expressionSource, head: end.head, gaze: end.gaze };
     segmentResults.push(result);
@@ -176,8 +215,8 @@ try {
     for (const name of segment.low ?? []) check((end.head[name] ?? 0) <= TOLERANCE, `${segment.name}: ${name} ${(end.head[name] ?? 0).toFixed(3)} > ${TOLERANCE}`);
     for (const name of segment.routed ?? []) check((end.head[name] ?? 0) >= 0.3, `${segment.name}: routed ${name} ${(end.head[name] ?? 0).toFixed(3)} < 0.3`);
     if (segment.gaze) {
-      for (const side of ['left', 'right']) {
-        const eye = end.gaze[side];
+      for (const side of ['left', 'right'] as const) {
+        const eye = end.gaze[side]!;
         check(Math.abs(eye.yaw - segment.gaze.yaw) < 1 * DEG && Math.abs(eye.pitch - segment.gaze.pitch) < 1 * DEG,
           `${segment.name}: ${side} eye yaw ${(eye.yaw / DEG).toFixed(1)}° pitch ${(eye.pitch / DEG).toFixed(1)}°, wanted ${(segment.gaze.yaw / DEG).toFixed(1)}° / ${(segment.gaze.pitch / DEG).toFixed(1)}°`);
       }
@@ -188,39 +227,39 @@ try {
   // Release: WebXR eye gaze takes the eyes, liveness the expression.
   await page.evaluate(() => {
     window.__setFaceInput(null);
-    window.IWER_DEVICE.gaze.connected = true;
+    window.IWER_DEVICE!.gaze!.connected = true;
   });
   const releaseStart = samples.length;
   const xrResults = [];
   for (const target of XR_GAZE) {
-    await page.evaluate(({ yaw, pitch }) => {
+    await page.evaluate(({ yaw, pitch }: { yaw: number; pitch: number }) => {
       // Viewer-local ray: rotate -Z by yaw about +Y, then pitch about +X.
       const cy = Math.cos(yaw / 2), sy = Math.sin(yaw / 2), cx = Math.cos(pitch / 2), sx = Math.sin(pitch / 2);
-      window.IWER_DEVICE.gaze.quaternion.set(sx * cy, sy * cx, -sx * sy, cx * cy);
+      window.IWER_DEVICE!.gaze!.quaternion.set(sx * cy, sy * cx, -sx * sy, cx * cy);
     }, target);
     const end = await hold(target.name, target.sec);
     xrResults.push({ name: target.name, gazeSource: end.gazeSource, gaze: end.gaze });
     check(end.gazeSource === 'xr-gaze', `${target.name}: gaze source ${end.gazeSource}`);
-    const mean = (end.gaze.left.yaw + end.gaze.right.yaw) / 2;
+    const mean = (end.gaze.left!.yaw + end.gaze.right!.yaw) / 2;
     if (target.clamped) check(Math.abs(mean - MAX_YAW) < 0.5 * DEG, `${target.name}: yaw ${(mean / DEG).toFixed(1)}° not clamped at 30°`);
     else check(Math.sign(mean) === Math.sign(target.yaw) || target.yaw === 0, `${target.name}: eyes turned the wrong way (yaw ${(mean / DEG).toFixed(1)}°)`);
-    if (target.yaw === 0) check(end.gaze.left.pitch > 5 * DEG, `${target.name}: eyes did not look up (pitch ${(end.gaze.left.pitch / DEG).toFixed(1)}°)`);
+    if (target.yaw === 0) check(end.gaze.left!.pitch > 5 * DEG, `${target.name}: eyes did not look up (pitch ${(end.gaze.left!.pitch / DEG).toFixed(1)}°)`);
   }
   // A source change crossfades instead of popping: the expression and the
   // eyes move at most the crossfade's steepest step. Blinks and the voice jaw
   // are excluded; liveness drives them fast by design (the fake microphone's
   // beeps open the jaw within a step).
   let maxJump = 0;
-  let jumpTarget = null;
+  let jumpTarget: string | null = null;
   let maxGazeJump = 0;
   for (let i = releaseStart; i < releaseStart + 12 && i < samples.length; i += 1) {
-    for (const name of Object.keys({ ...samples[i].head, ...samples[i - 1].head })) {
+    for (const name of Object.keys({ ...samples[i]!.head, ...samples[i - 1]!.head })) {
       if (name.startsWith('eyeBlink') || name === 'jawOpen') continue;
-      const jump = Math.abs((samples[i].head[name] ?? 0) - (samples[i - 1].head[name] ?? 0));
+      const jump = Math.abs((samples[i]!.head[name] ?? 0) - (samples[i - 1]!.head[name] ?? 0));
       if (jump > maxJump) [maxJump, jumpTarget] = [jump, name];
     }
-    for (const side of ['left', 'right']) {
-      const [a, b] = [samples[i - 1].gaze[side], samples[i].gaze[side]];
+    for (const side of ['left', 'right'] as const) {
+      const [a, b] = [samples[i - 1]!.gaze[side]!, samples[i]!.gaze[side]!];
       maxGazeJump = Math.max(maxGazeJump, Math.hypot(b.yaw - a.yaw, b.pitch - a.pitch));
     }
   }
@@ -228,14 +267,14 @@ try {
   check(maxGazeJump <= 8 * DEG, `release popped the eyes ${(maxGazeJump / DEG).toFixed(1)}° in one step`);
 
   await page.evaluate(() => {
-    window.IWER_DEVICE.gaze.connected = false;
+    window.IWER_DEVICE!.gaze!.connected = false;
   });
   const livenessStart = samples.length;
   await hold('liveness', LIVENESS_SEC);
   const live = samples.slice(livenessStart + 10);
   let blinks = 0;
-  for (let i = 1; i < live.length; i += 1) if ((live[i].head.eyeBlinkLeft ?? 0) > 0.8 && (live[i - 1].head.eyeBlinkLeft ?? 0) <= 0.8) blinks += 1;
-  const yaws = live.map((s) => s.gaze.left.yaw);
+  for (let i = 1; i < live.length; i += 1) if ((live[i]!.head.eyeBlinkLeft ?? 0) > 0.8 && (live[i - 1]!.head.eyeBlinkLeft ?? 0) <= 0.8) blinks += 1;
+  const yaws = live.map((s) => s.gaze.left!.yaw);
   const saccadeRangeDeg = (Math.max(...yaws) - Math.min(...yaws)) / DEG;
   check(live.every((s) => s.expressionSource === 'liveness' && s.gazeSource === 'liveness'), 'liveness did not take the face after gaze dropped');
   check(blinks >= 1 && blinks <= 4, `liveness blinked ${blinks} times in ${LIVENESS_SEC} s`);
@@ -247,9 +286,9 @@ try {
   // Stop and export; the clock has to run for the export to finish.
   const download = page.waitForEvent('download', { timeout: 60_000 });
   const exportStarted = performance.now();
-  await clickButton('Stop Recording');
-  let file = null;
-  void download.then((d) => { file = d; });
+  await clickButton(CONTROL_NAMES.stopRecording);
+  let file: Download | null = null;
+  void download.then((d: Download) => { file = d; });
   for (let waited = 0; !file && waited < 60_000; waited += STEP_MS) await page.clock.runFor(STEP_MS);
   const glbPath = path.join(artifactDir, 'face-recording.glb');
   await (await download).saveAs(glbPath);
@@ -257,7 +296,7 @@ try {
   const exportResult = await verifyExport(glbPath, headMesh, samples);
   for (const message of exportResult.failures) failures.push(`export: ${message}`);
 
-  const report = {
+  const report: FaceReport = {
     device: device.name,
     frames: samples.length,
     binding: { headMesh, boundChannels: binding.boundChannels.length, eyes: binding.eyes, unresolvedTargets: binding.unresolvedTargets },
@@ -300,7 +339,7 @@ try {
  * with no face in view, or a denied one, leaves liveness in charge.
  */
 async function webcamFallbacks() {
-  const outcomes = {};
+  const outcomes: WebcamOutcomes = {};
   for (const mode of ['no-face', 'denied']) {
     const context = await createXrContext(browser, { viewport: { width: 960, height: 540 }, permissions: ['camera'] });
     const page = await context.newPage();
@@ -314,13 +353,14 @@ async function webcamFallbacks() {
     await waitForPageFunctions(page, ['__toggleFaceCamera', '__sampleFace']);
     await waitForTextContentPrefix(page, '#status', 'loaded');
     await page.evaluate(() => window.__toggleFaceCamera());
-    const settled = await page.waitForFunction((want) => {
+    // Never null: waitForFunction resolves only on a truthy value.
+    const settled = (await page.waitForFunction((want: string) => {
       const face = window.__sampleFace();
       return face.camera === want ? { camera: face.camera, delegate: face.cameraDelegate, expressionSource: face.expressionSource, gazeSource: face.gazeSource } : null;
     }, mode, { timeout: 45_000, polling: 250 }).then((handle) => handle.jsonValue()).catch(async () => page.evaluate(() => {
       const face = window.__sampleFace();
       return { camera: face.camera, delegate: face.cameraDelegate, expressionSource: face.expressionSource, gazeSource: face.gazeSource };
-    }));
+    }))) as FaceReading;
     // A second after settling, liveness still drives the face.
     await page.waitForTimeout(1000);
     const after = await page.evaluate(() => {
@@ -340,31 +380,31 @@ async function webcamFallbacks() {
  * The GLB's head morph animation must reproduce the weights the avatar showed
  * at each segment's end, and its eye bones must carry the gaze.
  */
-async function verifyExport(glbPath, headMesh, recorded) {
-  const out = [];
+async function verifyExport(glbPath: string, headMesh: string | undefined, recorded: Sample[]): Promise<ExportResult> {
+  const out: string[] = [];
   const document = await new NodeIO().read(glbPath);
   const root = document.getRoot();
-  const mesh = root.listMeshes().find((m) => m.getName() === headMesh) ?? root.listMeshes().find((m) => (m.getExtras().targetNames ?? []).includes('eyeBlinkLeft'));
+  const mesh = root.listMeshes().find((m) => m.getName() === headMesh) ?? root.listMeshes().find((m) => ((m.getExtras().targetNames ?? []) as string[]).includes('eyeBlinkLeft'));
   if (!mesh) return { failures: ['no head mesh with ARKit targets in the GLB'], summary: { bytes: (await readFile(glbPath)).length } };
-  const names = mesh.getExtras().targetNames ?? [];
+  const names = (mesh.getExtras().targetNames ?? []) as string[];
   const nodes = root.listNodes().filter((n) => n.getMesh() === mesh);
-  let weightsChannel = null;
+  let weightsChannel: AnimationSampler | null = null;
   let faceBytes = 0;
   let duration = 0;
   const eyeNames = new Set(['LeftEye', 'RightEye']);
   let eyeChannels = 0;
   for (const animation of root.listAnimations()) {
     for (const channel of animation.listChannels()) {
-      const sampler = channel.getSampler();
-      const input = sampler.getInput();
-      duration = Math.max(duration, input.getMax([0])[0]);
+      const sampler = channel.getSampler()!;
+      const input = sampler.getInput()!;
+      duration = Math.max(duration, input.getMax([0])[0]!);
       if (channel.getTargetPath() === 'weights') {
-        faceBytes += sampler.getOutput().getByteLength();
-        if (nodes.includes(channel.getTargetNode())) weightsChannel = sampler;
+        faceBytes += sampler.getOutput()!.getByteLength();
+        if (nodes.includes(channel.getTargetNode()!)) weightsChannel = sampler;
       }
-      if (channel.getTargetPath() === 'rotation' && eyeNames.has(channel.getTargetNode()?.getName())) {
+      if (channel.getTargetPath() === 'rotation' && eyeNames.has(channel.getTargetNode()?.getName() as string)) {
         eyeChannels += 1;
-        faceBytes += sampler.getOutput().getByteLength();
+        faceBytes += sampler.getOutput()!.getByteLength();
       }
     }
   }
@@ -372,24 +412,24 @@ async function verifyExport(glbPath, headMesh, recorded) {
   if (eyeChannels < 2) out.push(`eye bones carry ${eyeChannels} rotation channels, want 2`);
   let maxError = 0;
   if (weightsChannel) {
-    const times = weightsChannel.getInput().getArray();
-    const values = weightsChannel.getOutput().getArray();
+    const times = weightsChannel.getInput()!.getArray()!;
+    const values = weightsChannel.getOutput()!.getArray()!;
     const count = names.length;
     // Compare at each segment's last frame, by time: recording starts with
     // the first step and keys every XR frame, which can outpace the steps.
-    const ends = new Map();
+    const ends = new Map<string, Sample>();
     // Scripted segments only: a liveness blink can fall between keys.
     for (const sample of recorded) if (sample.expressionSource === 'automation') ends.set(sample.label, sample);
     for (const sample of ends.values()) {
       const time = (sample.frame + 1) * STEP_MS / 1000;
       let key = 0;
-      while (key + 1 < times.length && times[key + 1] <= time) key += 1;
+      while (key + 1 < times.length && times[key + 1]! <= time) key += 1;
       const next = Math.min(key + 1, times.length - 1);
-      const t = next === key ? 0 : Math.min(1, Math.max(0, (time - times[key]) / (times[next] - times[key])));
+      const t = next === key ? 0 : Math.min(1, Math.max(0, (time - times[key]!) / (times[next]! - times[key]!)));
       for (const [index, name] of names.entries()) {
         if (!(name in sample.head)) continue;
-        const value = values[key * count + index] * (1 - t) + values[next * count + index] * t;
-        maxError = Math.max(maxError, Math.abs(value - sample.head[name]));
+        const value = values[key * count + index]! * (1 - t) + values[next * count + index]! * t;
+        maxError = Math.max(maxError, Math.abs(value - sample.head[name]!));
       }
     }
     if (maxError > TOLERANCE) out.push(`exported weights differ from the avatar by ${maxError.toFixed(3)} (> ${TOLERANCE})`);
@@ -401,10 +441,10 @@ async function verifyExport(glbPath, headMesh, recorded) {
   };
 }
 
-function toDeg(eye) {
+function toDeg(eye: Eye | null): EyeDeg | null {
   return eye ? { yaw: round(eye.yaw / DEG), pitch: round(eye.pitch / DEG) } : null;
 }
 
-function round(value) {
+function round(value: number) {
   return Math.round(value * 1000) / 1000;
 }

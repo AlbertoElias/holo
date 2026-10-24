@@ -1,3 +1,5 @@
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
+
 import type { PortalStore } from "./portalStore";
 import { enableTilt } from "./usePortalTriggers";
 import { usePortalValue } from "./usePortalValue";
@@ -57,8 +59,8 @@ export function PortalControls({ store, tiltAvailable }: { store: PortalStore; t
         <button
           type="button"
           className="portal-control"
-          aria-label="Return to the author's view"
-          title="Return to the author's view"
+          aria-label={CONTROL_NAMES.returnToAuthorView}
+          title={CONTROL_NAMES.returnToAuthorView}
           onClick={() => store.returnToFollow()}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -71,8 +73,8 @@ export function PortalControls({ store, tiltAvailable }: { store: PortalStore; t
       <button
         type="button"
         className="portal-control portal-control-primary"
-        aria-label={paused ? "Play" : "Pause"}
-        title={paused ? "Play" : "Pause"}
+        aria-label={paused ? CONTROL_NAMES.play : CONTROL_NAMES.pause}
+        title={paused ? CONTROL_NAMES.play : CONTROL_NAMES.pause}
         onClick={() => store.togglePause()}
       >
         {paused ? (

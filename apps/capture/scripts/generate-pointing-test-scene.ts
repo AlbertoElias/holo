@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { TARGETS } from './lib/pointing-scene.mjs';
+import { TARGETS, type Vec3 } from './lib/pointing-scene.ts';
 
 // Writes fixtures/scenes/pointing-targets.gltf: the scene the pointing check's
 // synthetic take points in. A 14 m floor at y = 0 and two named, separated
@@ -24,12 +24,14 @@ const ROOM_WALL = { x0: -2.5, x1: 2.5, height: 3.2, z: -3, cell: 0.5 };
 const FLOOR = 7;
 const SLAB = 0.01;
 
-let positions = [];
-let normals = [];
-let meshRanges = [];
-function triangle(a, b, c) {
-  const u = b.map((v, i) => v - a[i]);
-  const w = c.map((v, i) => v - a[i]);
+type Material = { pbrMetallicRoughness: { baseColorFactor: number[]; metallicFactor: number; roughnessFactor: number } };
+
+let positions: number[] = [];
+let normals: number[] = [];
+let meshRanges: Array<{ name: string; start: number; count: number; material: number }> = [];
+function triangle(a: Vec3, b: Vec3, c: Vec3) {
+  const u = b.map((v, i) => v - a[i]!) as Vec3;
+  const w = c.map((v, i) => v - a[i]!) as Vec3;
   const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
   const length = Math.hypot(...n);
   for (const p of [a, b, c]) {
@@ -38,13 +40,13 @@ function triangle(a, b, c) {
   }
 }
 // Counter-clockwise quad seen from the side its normal faces.
-const quad = (a, b, c, d) => {
+const quad = (a: Vec3, b: Vec3, c: Vec3, d: Vec3) => {
   triangle(a, b, c);
   triangle(a, c, d);
 };
-function box([cx, cy, cz], size) {
+function box([cx, cy, cz]: Vec3, size: number) {
   const h = size / 2;
-  const p = (x, y, z) => [cx + x * h, cy + y * h, cz + z * h];
+  const p = (x: number, y: number, z: number): Vec3 => [cx + x * h, cy + y * h, cz + z * h];
   quad(p(-1, -1, 1), p(1, -1, 1), p(1, 1, 1), p(-1, 1, 1));
   quad(p(1, -1, -1), p(-1, -1, -1), p(-1, 1, -1), p(1, 1, -1));
   quad(p(-1, -1, -1), p(-1, -1, 1), p(-1, 1, 1), p(-1, 1, -1));
@@ -52,7 +54,7 @@ function box([cx, cy, cz], size) {
   quad(p(-1, 1, 1), p(1, 1, 1), p(1, 1, -1), p(-1, 1, -1));
   quad(p(-1, -1, -1), p(1, -1, -1), p(1, -1, 1), p(-1, -1, 1));
 }
-function addMesh(name, build, material) {
+function addMesh(name: string, build: () => void, material: number) {
   const start = positions.length / 3;
   build();
   meshRanges.push({ name, start, count: positions.length / 3 - start, material });
@@ -64,7 +66,7 @@ const addFloor = () => addMesh('PointingFloor', () => {
   quad([-FLOOR, -SLAB, FLOOR], [FLOOR, -SLAB, FLOOR], [FLOOR, 0, FLOOR], [-FLOOR, 0, FLOOR]);
 }, 0);
 
-async function writeScene(out, materials) {
+async function writeScene(out: string, materials: Material[]) {
 const bytes = Buffer.alloc((positions.length + normals.length) * 4);
 positions.forEach((v, i) => bytes.writeFloatLE(v, i * 4));
 normals.forEach((v, i) => bytes.writeFloatLE(v, (positions.length + i) * 4));
@@ -88,7 +90,7 @@ for (const range of meshRanges) {
   );
 }
 const gltf = {
-  asset: { version: '2.0', generator: 'holoim generate-pointing-test-scene.mjs' },
+  asset: { version: '2.0', generator: 'holoim generate-pointing-test-scene.ts' },
   scene: 0,
   scenes: [{ nodes: meshRanges.map((_, i) => i) }],
   nodes: meshRanges.map((range, i) => ({ name: range.name, mesh: i })),
@@ -103,7 +105,7 @@ await writeFile(out, `${JSON.stringify(gltf, null, 2)}\n`);
 console.log(`[pointing-scene] ${out}: ${positions.length / 9} triangles, meshes ${meshRanges.map((range) => range.name).join(', ')}`);
 }
 
-const FLOOR_MATERIAL = { pbrMetallicRoughness: { baseColorFactor: [0.42, 0.45, 0.5, 1], metallicFactor: 0, roughnessFactor: 0.9 } };
+const FLOOR_MATERIAL: Material = { pbrMetallicRoughness: { baseColorFactor: [0.42, 0.45, 0.5, 1], metallicFactor: 0, roughnessFactor: 0.9 } };
 
 addFloor();
 Object.entries(TARGETS).forEach(([name, { center, size }], index) => {

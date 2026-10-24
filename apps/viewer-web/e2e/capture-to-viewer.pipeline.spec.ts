@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { waitForTextContentPrefix } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 const execFileAsync = promisify(execFile);
 
@@ -84,8 +85,8 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
     hooks.advanceTime(5000);
   });
 
-  await capture.getByRole("button", { name: "Start Recording" }).click();
-  await expect(capture.getByRole("button", { name: "Stop Recording" })).toBeVisible();
+  await capture.getByRole("button", { name: CONTROL_NAMES.startRecording }).click();
+  await expect(capture.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible();
   // Walk forward so the export carries real root motion and locomotion clips.
   const steps = 30;
   for (let step = 0; step < steps; step += 1) {
@@ -103,7 +104,7 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   )), { message: "real MediaRecorder produced microphone audio" }).toBeGreaterThan(0);
   await captureEvidence(capture, testInfo, "capture-recording-in-progress");
   const downloadPromise = capture.waitForEvent("download");
-  await capture.getByRole("button", { name: "Stop Recording" }).click();
+  await capture.getByRole("button", { name: CONTROL_NAMES.stopRecording }).click();
   const download = await downloadPromise;
   const glbPath = testInfo.outputPath("capture-export.glb");
   await download.saveAs(glbPath);

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { chromium } from 'playwright';
+import type { XRDevice } from 'iwer';
+import { chromium, type Page } from 'playwright';
 
 import {
   attachXrEnvironment,
@@ -16,6 +17,30 @@ import {
   waitForTextContentPrefix,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
+import type {} from '../src/runtime/automationHooks';
+import type { MockInputState, MockVrPoseInput } from '../src/types/contracts';
+
+type Horizontal = { x: number; z: number };
+type Vec3 = Horizontal & { y: number };
+type LocomotionInput = 'forward' | 'back' | 'right' | 'left';
+// The slice of render_game_to_text this check reads.
+interface State {
+  mode: string;
+  character: { position: Vec3; grounded: boolean; velocityY: number };
+  locomotion?: { state?: string; horizontalSpeed?: number; targetHorizontalSpeed?: number; activeProfile?: string };
+  crouch?: { amount?: number; source?: string };
+  input?: Partial<Record<LocomotionInput | 'crouch', boolean>>;
+  thumbstick?: { turnYaw?: number; snapCount?: number; rigYaw?: number };
+  tracking: Record<'left' | 'right', { poseValid: boolean }>;
+  avatar?: { y?: number; yaw?: number };
+  mockVr?: { enabled?: boolean };
+}
+type StepOptions = { pose?: MockVrPoseInput | undefined; input?: MockInputState | undefined; ms?: number; respawn?: boolean };
+type TimelineEntry = Record<string, unknown>;
+type Stick = { moveX: number; moveY: number; turnX: number };
+type Predicate = (state: State) => boolean;
+type WaitOptions = { stepMs?: number; timeoutMs?: number };
+type PhaseTimer = { mark: (name: string) => void; report: (suffix?: string) => void };
 
 const DEFAULT_XR_TEST_MODE = 'iwer';
 const CAPTURE_SUCCESS_SCREENSHOTS = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS === '1';
@@ -28,26 +53,26 @@ const MIN_TRAVEL_METERS = 0.08;
 // or a wrong yaw sign produce errors of at least pi/2 and still fail.
 const MAX_HEADING_ERROR_RAD = Math.PI / 4;
 
-function assert(condition, message) {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function clamp(value, min, max) {
+function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function horizontalDelta(start, end) {
+function horizontalDelta(start: Horizontal, end: Horizontal) {
   return {
     x: end.x - start.x,
     z: end.z - start.z
   };
 }
 
-function horizontalDistance(delta) {
+function horizontalDistance(delta: Horizontal) {
   return Math.hypot(delta.x, delta.z);
 }
 
-function angleBetweenDeltas(a, b) {
+function angleBetweenDeltas(a: Horizontal, b: Horizontal) {
   const aMag = horizontalDistance(a);
   const bMag = horizontalDistance(b);
   if (aMag < 1e-6 || bMag < 1e-6) return Math.PI;
@@ -57,7 +82,7 @@ function angleBetweenDeltas(a, b) {
 
 // World-space travel direction for each input at a head yaw. Forward is the
 // head's -Z projected on the ground plane; right is forward rotated -90°.
-function expectedDirection(input, yawRad) {
+function expectedDirection(input: LocomotionInput, yawRad: number): Horizontal {
   const forward = { x: -Math.sin(yawRad), z: -Math.cos(yawRad) };
   const right = { x: Math.cos(yawRad), z: -Math.sin(yawRad) };
   if (input === 'forward') return forward;
@@ -66,7 +91,7 @@ function expectedDirection(input, yawRad) {
   return { x: -right.x, z: -right.z };
 }
 
-function mockPose(yawRad, headY = 0) {
+function mockPose(yawRad: number, headY = 0) {
   return {
     enabled: true,
     head: {
@@ -98,7 +123,7 @@ const screenshotDir = process.env.XR_TEST_ARTIFACT_DIR ?? process.env.SCREENSHOT
 await mkdir(screenshotDir, { recursive: true });
 
 const browser = await launchXrBrowser(chromium);
-const consoleErrors = [];
+const consoleErrors: string[] = [];
 const resolvedMode = resolveXrTestMode(
   process.env.XR_TEST_MODE
     ?? (process.env.XR_SUPPORT_SHIM === '0' ? 'off' : DEFAULT_XR_TEST_MODE)
@@ -106,21 +131,21 @@ const resolvedMode = resolveXrTestMode(
 
 // Applies pose and input, then advances the manual clock, in one page turn so
 // no browser event or realtime frame can land between them.
-async function step(page, { pose, input, ms = 0, respawn = false } = {}) {
+async function step(page: Page, { pose, input, ms = 0, respawn = false }: StepOptions = {}): Promise<State> {
   return page.evaluate(({ nextPose, nextInput, deltaMs, shouldRespawn }) => {
     if (shouldRespawn && !window.__respawnCharacter()) throw new Error('Character respawn failed.');
     if (nextPose) window.__setMockVrPose(nextPose);
     if (nextInput) window.__setMockInput(nextInput);
     if (deltaMs > 0) window.advanceTime(deltaMs);
-    return JSON.parse(window.render_game_to_text());
+    return JSON.parse(window.render_game_to_text()) as State;
   }, { nextPose: pose ?? null, nextInput: input ?? null, deltaMs: ms, shouldRespawn: respawn });
 }
 
-function toSlug(label) {
+function toSlug(label: string) {
   return label.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
 }
 
-function summarizeState(state) {
+function summarizeState(state: State) {
   return {
     mode: state.mode,
     position: state.character?.position,
@@ -136,7 +161,7 @@ function summarizeState(state) {
   };
 }
 
-async function captureScreenshot(page, filename, label, { force = false } = {}) {
+async function captureScreenshot(page: Page, filename: string, label: string, { force = false } = {}) {
   if (!force && !CAPTURE_SUCCESS_SCREENSHOTS) {
     return null;
   }
@@ -152,7 +177,7 @@ async function captureScreenshot(page, filename, label, { force = false } = {}) 
   }
 }
 
-async function failWithArtifacts(page, label, message, timeline) {
+async function failWithArtifacts(page: Page, label: string, message: string, timeline: TimelineEntry[]): Promise<never> {
   const timelinePath = path.join(screenshotDir, `${toSlug(label)}-timeline.json`);
   await writeFile(timelinePath, JSON.stringify(timeline, null, 2));
   const screenshotPath = await captureScreenshot(page, `${toSlug(label)}-failure.png`, `${label} failure`, { force: true });
@@ -162,8 +187,8 @@ async function failWithArtifacts(page, label, message, timeline) {
 
 // Simulated-time wait: every iteration advances the manual clock, so the
 // budget is in simulation milliseconds and is identical on every host.
-async function waitForState(page, label, predicate, { stepMs = 80, timeoutMs = 1600 } = {}) {
-  const timeline = [];
+async function waitForState(page: Page, label: string, predicate: Predicate, { stepMs = 80, timeoutMs = 1600 }: WaitOptions = {}): Promise<State> {
+  const timeline: TimelineEntry[] = [];
   for (let elapsedMs = 0; elapsedMs <= timeoutMs; elapsedMs += stepMs) {
     const state = await step(page, { ms: elapsedMs > 0 ? stepMs : 0 });
     timeline.push({ elapsedMs, ...summarizeState(state) });
@@ -174,7 +199,7 @@ async function waitForState(page, label, predicate, { stepMs = 80, timeoutMs = 1
   return failWithArtifacts(page, label, `condition not met after ${timeoutMs} simulated ms`, timeline);
 }
 
-async function waitForReady(page, mark) {
+async function waitForReady(page: Page, mark: (name: string) => void) {
   await page.goto(url.href, { waitUntil: 'networkidle' });
   mark('goto');
 
@@ -196,11 +221,11 @@ async function waitForReady(page, mark) {
   mark('loaded');
 }
 
-function createPhaseTimer(label) {
+function createPhaseTimer(label: string): PhaseTimer {
   let last = Date.now();
-  const phases = [];
+  const phases: string[] = [];
   return {
-    mark: (name) => {
+    mark: (name: string) => {
       const now = Date.now();
       phases.push(`${name} ${((now - last) / 1000).toFixed(1)}s`);
       last = now;
@@ -212,7 +237,7 @@ function createPhaseTimer(label) {
 // Each scenario page gets its own context because Playwright's clock is
 // context-wide and is frozen once a page is ready. Contexts stay open until
 // the browser closes: closing one mid-run makes the next wait on GPU teardown.
-async function openScenarioPage(label, { vr }) {
+async function openScenarioPage(label: string, { vr }: { vr: boolean }) {
   const context = await createXrContext(browser, { viewport: resolveSimulationViewport() });
   const timer = createPhaseTimer(label);
   const page = await context.newPage();
@@ -256,7 +281,7 @@ async function openScenarioPage(label, { vr }) {
 // Every scenario starts from a grounded, idle, standing baseline so shared
 // pages cannot carry state from one check into the next. Respawning returns
 // the character to the same terrain point so slopes cannot bias later trials.
-async function settle(page, label, { pose, respawn = true } = {}) {
+async function settle(page: Page, label: string, { pose, respawn = true }: { pose?: MockVrPoseInput; respawn?: boolean } = {}) {
   await step(page, { pose, input: NO_INPUT, ms: 300, respawn });
   return waitForState(
     page,
@@ -270,14 +295,14 @@ async function settle(page, label, { pose, respawn = true } = {}) {
   );
 }
 
-async function measureMove(page, yawRad, yawId, inputName) {
+async function measureMove(page: Page, yawRad: number, yawId: string, inputName: LocomotionInput) {
   const label = `${inputName}-${yawId}`;
   const start = await settle(page, label, { pose: mockPose(yawRad) });
   assert(start.mode === 'vr', `${label}: expected vr mode, got ${start.mode}`);
   assert(start.tracking.left.poseValid && start.tracking.right.poseValid, `${label}: hand tracking invalid in baseline.`);
   assert(start.locomotion?.activeProfile === 'vr-lower-body', `${label}: expected vr-lower-body profile, got ${start.locomotion?.activeProfile}`);
 
-  const timeline = [];
+  const timeline: TimelineEntry[] = [];
   const engaged = await step(page, { input: { ...NO_MOVE, [inputName]: true }, ms: 120 });
   timeline.push(summarizeState(engaged));
   assert(engaged.input?.[inputName] === true, `${label}: mock input did not engage (state ${JSON.stringify(engaged.input)}).`);
@@ -316,7 +341,7 @@ async function runVrScenarios() {
   ];
   const moves = [];
   for (const heading of headings) {
-    for (const inputName of ['forward', 'back', 'right', 'left']) {
+    for (const inputName of ['forward', 'back', 'right', 'left'] as const) {
       moves.push(await measureMove(page, heading.rad, heading.id, inputName));
     }
   }
@@ -377,8 +402,8 @@ async function runVrScenarios() {
 
   // ── Thumbstick locomotion ──────────────────────────────────────────
   // Heading the avatar faces, from the same look yaw the motor steers by.
-  const headingOf = (state) => state.avatar?.yaw ?? 0;
-  const stickMove = async (label, stick, ms) => {
+  const headingOf = (state: State) => state.avatar?.yaw ?? 0;
+  const stickMove = async (label: string, stick: Stick, ms: number) => {
     const start = await settle(page, label, { pose: mockPose(0) });
     const yaw = headingOf(start);
     for (let elapsed = 0; elapsed < ms; elapsed += 110) {
@@ -389,12 +414,13 @@ async function runVrScenarios() {
     return { yaw, delta, distance: horizontalDistance(delta), end };
   };
 
-  for (const [name, stick, inputName] of [
+  const stickCases: [string, Stick, LocomotionInput][] = [
     ['stick-forward', { moveX: 0, moveY: 1, turnX: 0 }, 'forward'],
     ['stick-back', { moveX: 0, moveY: -1, turnX: 0 }, 'back'],
     ['stick-right', { moveX: 1, moveY: 0, turnX: 0 }, 'right'],
     ['stick-left', { moveX: -1, moveY: 0, turnX: 0 }, 'left']
-  ]) {
+  ];
+  for (const [name, stick, inputName] of stickCases) {
     const { yaw, delta, distance } = await stickMove(name, stick, 440);
     const err = angleBetweenDeltas(delta, expectedDirection(inputName, yaw));
     assert(distance > MIN_TRAVEL_METERS, `${name}: travel too short (${distance.toFixed(3)} m).`);
@@ -421,7 +447,7 @@ async function runVrScenarios() {
   let held = await step(page, { input: { thumbstick: { moveX: 0, moveY: 0, turnX: 1 } }, ms: 110 });
   for (let i = 0; i < 3; i += 1) held = await step(page, { ms: 110 });
   assert((held.thumbstick?.snapCount ?? 0) === preSnaps + 1,
-    `snap-turn: held stick snapped ${held.thumbstick?.snapCount - preSnaps} times, expected 1.`);
+    `snap-turn: held stick snapped ${Number(held.thumbstick?.snapCount) - preSnaps} times, expected 1.`);
   const snapDelta = (held.thumbstick?.turnYaw ?? 0) - preTurnYaw;
   assert(Math.abs(snapDelta + Math.PI / 6) < 0.06, `snap-turn: turn delta ${snapDelta.toFixed(3)} rad, expected ≈ -0.524.`);
   const turnTravel = horizontalDistance(horizontalDelta(preTurnPos, held.character.position));
@@ -462,7 +488,8 @@ async function runThumbstickVideo() {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => {
     window.__setSpectatorView('body-fixed');
-    const devui = window.IWER_DEVICE.devui;
+    // IWER's XRDevice type omits its dev UI; it exists at runtime.
+    const devui = (window.IWER_DEVICE as XRDevice & { devui?: { devUIContainer?: unknown; devUICanvas?: unknown } }).devui;
     for (const element of [devui?.devUIContainer, devui?.devUICanvas, document.getElementById('ui-root'), document.getElementById('VRButton'), document.getElementById('ARButton')]) {
       if (element instanceof HTMLElement) element.style.display = 'none';
     }
@@ -479,7 +506,7 @@ async function runThumbstickVideo() {
     // the stale XR composite and every frame looks identical.
     await captureXrScreenshot(page, path.join(framesDir, name), { timeout: 10_000 }).catch(() => undefined);
   };
-  const drive = async (input, ms) => {
+  const drive = async (input: MockInputState, ms: number) => {
     const start = await step(page, { input, ms: 0 });
     let end = start;
     for (let elapsed = 0; elapsed < ms; elapsed += 100) {
@@ -546,7 +573,7 @@ async function runDesktopScenarios() {
 
   await settle(page, 'desktop-crouch-walk');
   await step(page, { input: { crouch: true, forward: true } });
-  const crouchWalk = (state) => (
+  const crouchWalk = (state: State) => (
     (state.crouch?.amount ?? 0) > 0.2
     && (state.character?.grounded ?? false)
     && state.locomotion?.state === 'walk'
@@ -571,7 +598,7 @@ async function runDesktopScenarios() {
   timer.report('scenarios');
 }
 
-async function timedStage(name, run) {
+async function timedStage(name: string, run: () => Promise<unknown>) {
   const startedAt = Date.now();
   await run();
   console.info(`[vr-locomotion] ${name} passed in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);

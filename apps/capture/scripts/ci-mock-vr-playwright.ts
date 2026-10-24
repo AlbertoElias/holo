@@ -17,6 +17,8 @@ import {
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
 
+import type {} from '../src/runtime/automationHooks';
+import type { MockVrPoseInput, Vec3Like } from '../src/types/contracts';
 import {
   boneOf,
   distance,
@@ -30,13 +32,20 @@ import {
   sensorOf,
   sourcePinchDistanceOf,
   tipOf,
-  trackedJointCountOf
-} from './lib/mock-vr-poses.mjs';
+  trackedJointCountOf,
+  type HandTracking
+} from './lib/mock-vr-poses.ts';
+
+// The slice of a render_game_to_text snapshot this check reads.
+type MockVrSnapshot = {
+  mode: string;
+  tracking: Record<'left' | 'right', HandTracking>;
+};
 
 const DEFAULT_XR_TEST_MODE = 'iwer';
 const CAPTURE_SUCCESS_SCREENSHOTS = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS === '1';
 
-function assert(condition, message) {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
@@ -49,12 +58,12 @@ await mkdir(screenshotDir, { recursive: true });
 const browser = await launchXrBrowser(chromium);
 const context = await createXrContext(browser, { viewport: resolveSimulationViewport() });
 const page = await context.newPage();
-const consoleErrors = [];
+const consoleErrors: string[] = [];
 wireXrConsoleErrors(page, consoleErrors);
 
-async function applyPoseAndSnapshot(pose, advanceMs) {
+async function applyPoseAndSnapshot(pose: MockVrPoseInput, advanceMs: number): Promise<MockVrSnapshot> {
   return page.evaluate(
-    ({ nextPose, ms }) => {
+    ({ nextPose, ms }: { nextPose: MockVrPoseInput; ms: number }) => {
       window.__setMockVrPose(nextPose);
       window.advanceTime(ms);
       return JSON.parse(window.render_game_to_text());
@@ -81,7 +90,7 @@ async function waitForHooks() {
   }
 }
 
-async function captureScreenshot(filename, { force = false } = {}) {
+async function captureScreenshot(filename: string, { force = false } = {}) {
   if (!force && !CAPTURE_SUCCESS_SCREENSHOTS) return;
   try {
     await captureXrScreenshot(page, path.join(screenshotDir, filename));
@@ -112,7 +121,7 @@ try {
   }
   await freezePageClock(page);
 
-  const automaticPinchPhase = await page.evaluate(({ relaxed, pinch }) => {
+  const automaticPinchPhase = await page.evaluate(({ relaxed, pinch }: { relaxed: MockVrPoseInput; pinch: MockVrPoseInput }) => {
     window.__resetHandCalibrationPose();
     window.__setMockVrPose(relaxed);
     window.advanceTime(350);
@@ -131,7 +140,7 @@ try {
   assert(automaticRightPinchDistance < 0.018, `Automatic right pinch does not reach fingertip contact (${automaticRightPinchDistance.toFixed(4)}).`);
   assert(automaticLeftPinchDistance < 0.018, `Automatic left pinch does not reach fingertip contact (${automaticLeftPinchDistance.toFixed(4)}).`);
 
-  const relaxedPhase = await page.evaluate((pose) => {
+  const relaxedPhase = await page.evaluate((pose: MockVrPoseInput) => {
     window.__resetHandCalibrationPose();
     window.__setMockVrPose(pose);
     window.advanceTime(350);
@@ -190,8 +199,8 @@ try {
   assert(rightTrackedJointCount >= 20, `Right finger joint tracked count too low (${rightTrackedJointCount}).`);
 
   const relaxedAvatarPinchDistance = relaxedSnapshot.tracking.right.pinchDistanceMeters;
-  const pinchAvatarDistance = pinchSnapshot.tracking.right.pinchDistanceMeters;
-  const pinchLeftAvatarDistance = pinchSnapshot.tracking.left.pinchDistanceMeters;
+  const pinchAvatarDistance = pinchSnapshot.tracking.right.pinchDistanceMeters!;
+  const pinchLeftAvatarDistance = pinchSnapshot.tracking.left.pinchDistanceMeters!;
   assert(Number.isFinite(relaxedAvatarPinchDistance), 'Missing relaxed avatar pinch distance metric.');
   assert(Number.isFinite(pinchAvatarDistance), 'Missing pinch avatar pinch distance metric.');
   assert(Number.isFinite(pinchLeftAvatarDistance), 'Missing left avatar pinch distance metric.');
@@ -269,11 +278,11 @@ try {
   assert(relaxedRightBone && recoveredWrist, 'Dropout recovery wrist metrics missing.');
   // The motor can settle on sloped terrain between samples. Finger recovery is
   // measured relative to its wrist, preserving the same 2 mm chain tolerance.
-  const relativeTip = (tip, wrist) => ({ x: tip.x - wrist.x, y: tip.y - wrist.y, z: tip.z - wrist.z });
+  const relativeTip = (tip: Vec3Like, wrist: Vec3Like) => ({ x: tip.x - wrist.x, y: tip.y - wrist.y, z: tip.z - wrist.z });
   const tipRecoveryError = distance(relativeTip(relaxedIndexTip, relaxedRightBone), relativeTip(recoveredIndexTip, recoveredWrist));
   const wristTargetError = distance(
-    relativeTip(relaxedRightBone, relaxedSnapshot.tracking.right.targetPosition),
-    relativeTip(recoveredWrist, dropoutRecoveredSnapshot.tracking.right.targetPosition)
+    relativeTip(relaxedRightBone, relaxedSnapshot.tracking.right.targetPosition!),
+    relativeTip(recoveredWrist, dropoutRecoveredSnapshot.tracking.right.targetPosition!)
   );
   console.log(`[mock-vr] dropout tip wrist-relative=${(tipRecoveryError * 1000).toFixed(2)}mm world=${(distance(relaxedIndexTip, recoveredIndexTip) * 1000).toFixed(2)}mm wrist-target-residual-change=${(wristTargetError * 1000).toFixed(2)}mm`);
   assert(wristTargetError < 0.002, `Dropout recovery changed wrist-to-target residual by ${(wristTargetError * 1000).toFixed(1)} mm.`);

@@ -7,6 +7,7 @@ import type { Probe } from "./ar-bubble-types";
 import { captureBubblePixels } from "./bubble-pixel-proof";
 
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Whole-product check: record in capture, export the real GLB, upload it
 // through the viewer UI to a real API, and render it in the feed. Nothing in
@@ -67,8 +68,8 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   await waitForTextContentPrefix(capture, "#status", "loaded");
   await capture.evaluate(() => (window as unknown as CaptureWindow).__setManualClock(true));
 
-  await capture.getByRole("button", { name: "Start Recording" }).click();
-  await expect(capture.getByRole("button", { name: "Stop Recording" })).toBeVisible();
+  await capture.getByRole("button", { name: CONTROL_NAMES.startRecording }).click();
+  await expect(capture.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible();
   // Walk forward so the export carries real root motion and locomotion clips.
   await capture.evaluate((seconds) => {
     const hooks = window as unknown as CaptureWindow;
@@ -80,7 +81,7 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
 
   await captureEvidence(capture, testInfo, "capture-recording-in-progress");
   const downloadPromise = capture.waitForEvent("download");
-  await capture.getByRole("button", { name: "Stop Recording" }).click();
+  await capture.getByRole("button", { name: CONTROL_NAMES.stopRecording }).click();
   const download = await downloadPromise;
   const glbPath = testInfo.outputPath("capture-export.glb");
   await download.saveAs(glbPath);

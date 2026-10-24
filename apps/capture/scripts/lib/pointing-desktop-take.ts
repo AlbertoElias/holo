@@ -1,12 +1,24 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { Browser, Page } from 'playwright';
 
+import { CONTROL_NAMES } from '@holoim/xr-ui-core';
 import { waitForPageFunctions, waitForTextContentPrefix, wireXrConsoleErrors, createXrContext } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import { HOLOIM_MEANING_EXTENSION, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
-import { TARGETS } from './pointing-scene.mjs';
-import { readGlbJson } from './pointing-score.mjs';
+import type { MeaningLinkProvenance, MeaningProvenance } from '../../../../packages/meaning/src/index.ts';
+import type {} from '../../src/runtime/automationHooks';
+import type { MockInputState } from '../../src/types/contracts';
+import { TARGETS, type Vec3 } from './pointing-scene.ts';
+import { readGlbJson, type GltfJson } from './pointing-score.ts';
+
+declare global {
+  interface Window {
+    __lockEvents?: string[];
+    __strayMoves?: Array<[number, number]>;
+  }
+}
 
 // Self-resolving pointing, desktop side. A scripted desktop take in the
 // generated pointing-targets scene, driven through capture's real desktop
@@ -29,17 +41,69 @@ const REST_TOLERANCE_M = 0.06;
 const SCENE = '/fixtures/scenes/pointing-targets.gltf';
 const VIEWPORT = { width: 960, height: 540 };
 
-const sub = (a, b) => a.map((v, i) => v - b[i]);
-const norm = (v) => v.map((x) => x / Math.hypot(...v));
-const angleDeg = (a, b) => (Math.acos(Math.max(-1, Math.min(1, norm(a).reduce((sum, v, i) => sum + v * norm(b)[i], 0)))) * 180) / Math.PI;
-const round = (value, digits = 2) => Number(value.toFixed(digits));
+const sub = (a: number[], b: number[]) => a.map((v, i) => v - b[i]!);
+const norm = (v: number[]) => v.map((x) => x / Math.hypot(...v));
+const angleDeg = (a: number[], b: number[]) => (Math.acos(Math.max(-1, Math.min(1, norm(a).reduce((sum, v, i) => sum + v * norm(b)[i]!, 0)))) * 180) / Math.PI;
+const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 
-export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, consoleErrors }) {
+export type DesktopPointingOptions = {
+  browser: Browser;
+  baseUrl: string;
+  artifactDir: string;
+  consoleErrors: string[];
+};
+
+/** The slice of render_game_to_text() this check reads. */
+type GameState = {
+  mode: string;
+  avatar: { x: number; y: number; z: number; yaw: number };
+  heightAdaptation: { eyeWorld: { x: number; y: number; z: number } };
+  point: { held: boolean; aimPitch: number; landing: Vec3; landed: boolean; direction?: number[] | null };
+};
+
+type Crosshair = { display: string; landed: string | undefined; x: number; y: number } | null;
+
+type HoldEntry = {
+  name: string;
+  view: string;
+  target: string | null | undefined;
+  start: number;
+  end: number;
+  crosshair: Crosshair;
+  landing: Vec3;
+  landed: boolean;
+  landingErrorM?: number;
+  fingerAimErrorDeg?: number;
+  pitchSteer?: { before: number; after: number };
+};
+
+type DesktopLink = { from: string; to: string; start: number; end: number; provenance: MeaningLinkProvenance };
+type DesktopSpan = { bones: string[]; start: number; end: number; provenance: MeaningProvenance };
+
+export type DesktopPointingReport = {
+  label: string;
+  useFor: string;
+  glb: string;
+  sheet: string | null;
+  pointerLock: { headlessGrants: boolean; realEvents: string[]; simulated: boolean; strayMoves?: Array<[number, number]> };
+  releasePaths: Array<{ path: string; held?: boolean; expected?: boolean; ok: boolean }>;
+  restDriftM: { afterReleasePaths: number; afterTake: number };
+  holds: HoldEntry[];
+  status: 'passed' | 'failed';
+  failures: string[];
+  links: DesktopLink[];
+  spans: DesktopSpan[];
+};
+
+export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, consoleErrors }: DesktopPointingOptions): Promise<DesktopPointingReport> {
   const label = 'desktop-pointing-targets';
-  const failures = [];
-  const fail = (message) => failures.push(message);
+  const failures: string[] = [];
+  const fail = (message: string) => failures.push(message);
   const context = await createXrContext(browser, { viewport: VIEWPORT, acceptDownloads: true });
-  const page = await context.newPage();
+  const page: Page = await context.newPage();
+  // tsx compiles with keepNames, which wraps named inner functions of the
+  // page.evaluate callbacks in an __name helper the page lacks.
+  await page.addInitScript('globalThis.__name = (target) => target;');
   wireXrConsoleErrors(page, consoleErrors, { label });
   await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
   const url = new URL(baseUrl);
@@ -50,10 +114,10 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   await waitForPageFunctions(page, ['advanceTime', 'render_game_to_text', '__setMockInput', '__sampleHands', '__setManualClock']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
 
-  const state = () => page.evaluate(() => JSON.parse(window.render_game_to_text()));
+  const state = (): Promise<GameState> => page.evaluate(() => JSON.parse(window.render_game_to_text()) as GameState);
   let elapsed = 0;
   let recording = false;
-  const advance = async (seconds) => {
+  const advance = async (seconds: number) => {
     const steps = Math.max(1, Math.round((seconds * 1000) / STEP_MS));
     await page.evaluate((ms) => window.advanceTime(ms), steps * STEP_MS);
     if (recording) elapsed += steps * STEP_MS / 1000;
@@ -63,26 +127,26 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   // which turns the body, so poses compare independent of facing.
   const wristLocal = async () => {
     const [{ avatar }, hands] = await Promise.all([state(), page.evaluate(() => window.__sampleHands())]);
-    const [x, y, z] = hands.right.avatar.wrist;
+    const [x, y, z] = hands.right.avatar.wrist!;
     const dx = x - avatar.x;
     const dz = z - avatar.z;
     const cos = Math.cos(avatar.yaw);
     const sin = Math.sin(avatar.yaw);
     return [dx * cos - dz * sin, y - avatar.y, dx * sin + dz * cos];
   };
-  const mock = (payload) => page.evaluate((arg) => window.__setMockInput(arg), payload);
+  const mock = (payload: MockInputState) => page.evaluate((arg) => window.__setMockInput(arg), payload);
   const held = async () => (await state()).point.held;
   const canvasCenter = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 };
 
   // --- Pointer lock: record whether headless Chromium grants it, then always simulate it. ---
   await page.evaluate(() => {
     window.__lockEvents = [];
-    document.addEventListener('pointerlockchange', () => window.__lockEvents.push('change'));
-    document.addEventListener('pointerlockerror', () => window.__lockEvents.push('error'));
+    document.addEventListener('pointerlockchange', () => window.__lockEvents!.push('change'));
+    document.addEventListener('pointerlockerror', () => window.__lockEvents!.push('error'));
   });
   await page.mouse.click(canvasCenter.x, canvasCenter.y);
   await page.waitForTimeout(400);
-  const realLock = await page.evaluate(() => ({ granted: document.pointerLockElement === document.querySelector('canvas'), events: window.__lockEvents }));
+  const realLock = await page.evaluate(() => ({ granted: document.pointerLockElement === document.querySelector('canvas'), events: window.__lockEvents! }));
   // macOS Chromium rejects the request ("WrongDocumentError: The root document
   // of this element is not valid for pointer lock"); Linux headless Chromium
   // grants it, and then reports the cursor warping between the viewport origin
@@ -101,7 +165,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
     await page.waitForTimeout(100);
   }
   await page.evaluate(() => {
-    const canvas = document.querySelector('canvas');
+    const canvas = document.querySelector('canvas')!;
     let locked = false;
     Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (locked ? canvas : null) });
     canvas.requestPointerLock = () => {
@@ -117,10 +181,10 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
     // moves the view; only the take's own synthetic pitch steer does.
     window.__strayMoves = [];
     document.addEventListener('mousemove', (event) => {
-      if (locked && event.isTrusted && (event.movementX || event.movementY)) window.__strayMoves.push([event.movementX, event.movementY]);
+      if (locked && event.isTrusted && (event.movementX || event.movementY)) window.__strayMoves!.push([event.movementX, event.movementY]);
     }, true);
   });
-  const pointerLock = { headlessGrants: realLock.granted, realEvents: realLock.events, simulated: true };
+  const pointerLock: DesktopPointingReport['pointerLock'] = { headlessGrants: realLock.granted, realEvents: realLock.events, simulated: true };
   await page.mouse.click(canvasCenter.x, canvasCenter.y);
   await page.waitForTimeout(100);
   if (!(await page.evaluate(() => document.pointerLockElement === document.querySelector('canvas')))) throw new Error('the pointer lock stand-in did not engage');
@@ -133,8 +197,8 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   // --- Phase 0: release paths (not recording, so nothing is exported). ---
   await advance(1.0);
   const baseline = await wristLocal();
-  const releasePaths = [];
-  const expectHeld = async (name, expected) => {
+  const releasePaths: DesktopPointingReport['releasePaths'] = [];
+  const expectHeld = async (name: string, expected: boolean) => {
     await advance(0.1);
     const actual = await held();
     releasePaths.push({ path: name, held: actual, expected, ok: actual === expected });
@@ -160,7 +224,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   await page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
     document.dispatchEvent(new Event('visibilitychange'));
-    delete document.hidden;
+    delete (document as { hidden?: boolean }).hidden;
   });
   await expectHeld('page hidden', false);
   await page.keyboard.up('KeyF');
@@ -173,7 +237,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   await page.mouse.up({ button: 'right' });
   const menuPrevented = await page.evaluate(() => {
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
-    document.querySelector('canvas').dispatchEvent(event);
+    document.querySelector('canvas')!.dispatchEvent(event);
     return event.defaultPrevented;
   });
   releasePaths.push({ path: 'contextmenu cancelled', ok: menuPrevented });
@@ -185,46 +249,53 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   if (restDrift > REST_TOLERANCE_M) fail(`arm did not return to its locomotion pose after release: wrist is ${round(restDrift, 3)} m from baseline (limit ${REST_TOLERANCE_M})`);
 
   // --- Phase 1: the recorded take. ---
-  await page.getByRole('button', { name: 'Start Recording' }).evaluate((el) => el.click());
-  await page.getByRole('button', { name: 'Stop Recording' }).waitFor();
+  await page.getByRole('button', { name: CONTROL_NAMES.startRecording }).evaluate((el) => (el as HTMLElement).click());
+  await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).waitFor();
   recording = true;
   await advance(1.0);
 
   const frameDir = path.join(artifactDir, `${label}-frames`);
   await mkdir(frameDir, { recursive: true });
   let shotIndex = 0;
-  const shoot = async (name) => {
+  const shoot = async (name: string) => {
     // The scene and crosshair only: no app chrome. Close in on the avatar.
     await page.evaluate(() => {
-      document.getElementById('ui-root').style.display = 'none';
+      document.getElementById('ui-root')!.style.display = 'none';
       window.__setManualClock(true, true);
     });
     await new Promise((resolve) => setTimeout(resolve, 150));
     await page.screenshot({ path: path.join(frameDir, `${String(shotIndex).padStart(2, '0')}-${name}.png`), clip: { x: 200, y: 60, width: 560, height: 360 } });
     shotIndex += 1;
     await page.evaluate(() => {
-      document.getElementById('ui-root').style.display = '';
+      document.getElementById('ui-root')!.style.display = '';
       window.__setManualClock(true, false);
     });
   };
   await shoot('idle');
 
-  const aimAt = (point, eye) => {
+  const aimAt = (point: number[], eye: number[]) => {
     const d = sub(point, eye);
-    return { lookYaw: Math.atan2(-d[0], -d[2]), aimPitch: Math.asin(d[1] / Math.hypot(...d)) };
+    return { lookYaw: Math.atan2(-d[0]!, -d[2]!), aimPitch: Math.asin(d[1]! / Math.hypot(...d)) };
   };
-  const holds = [];
-  const takeHold = async ({ name, view, target, sky, press, release }) => {
+  const holds: HoldEntry[] = [];
+  const takeHold = async ({ name, view, target, sky, press, release }: {
+    name: string;
+    view: 'first' | 'third';
+    target?: string;
+    sky?: boolean;
+    press: () => Promise<unknown>;
+    release: () => Promise<unknown>;
+  }) => {
     const wantFirst = view === 'first';
     if ((await state()).mode === 'first' !== wantFirst) {
       await page.keyboard.press('KeyV');
       await advance(0.3);
     }
-    const eyeNow = async () => {
+    const eyeNow = async (): Promise<Vec3> => {
       const eye = (await state()).heightAdaptation.eyeWorld;
       return [eye.x, eye.y, eye.z];
     };
-    const aimFor = async () => (sky ? { lookYaw: 0.25, aimPitch: 0.6 } : aimAt(TARGETS[target].center, await eyeNow()));
+    const aimFor = async () => (sky ? { lookYaw: 0.25, aimPitch: 0.6 } : aimAt(TARGETS[target!]!.center, await eyeNow()));
     // Face the target first; the eye shifts a little as the body turns.
     await mock(await aimFor());
     await advance(0.3);
@@ -237,7 +308,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
     await mock(await aimFor());
     await advance(0.3);
     // Vertical mouse movement under pointer lock steers the aim pitch (a synthetic move: CDP cannot report movementY for a simulated lock).
-    let pitchSteer;
+    let pitchSteer: { before: number; after: number } | undefined;
     if (name === 'B') {
       const before = (await state()).point.aimPitch;
       await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 0, movementY: 12, bubbles: true })));
@@ -249,28 +320,28 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
     }
     await advance(0.5);
     const mid = await state();
-    const crosshair = await page.evaluate(() => {
+    const crosshair: Crosshair = await page.evaluate(() => {
       const element = document.getElementById('point-crosshair');
       const rect = element?.getBoundingClientRect();
-      return element ? { display: getComputedStyle(element).display, landed: element.dataset.landed, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : null;
+      return element ? { display: getComputedStyle(element).display, landed: element.dataset.landed, x: rect!.x + rect!.width / 2, y: rect!.y + rect!.height / 2 } : null;
     });
     const hands = await page.evaluate(() => window.__sampleHands());
-    const tip = hands.right.avatar['index-finger-tip'];
-    const proximal = hands.right.avatar['index-finger-phalanx-proximal'];
+    const tip = hands.right.avatar['index-finger-tip']!;
+    const proximal = hands.right.avatar['index-finger-phalanx-proximal']!;
     const direction = mid.point;
     await shoot(`${name}-${view}`);
     await advance(0.4);
     const end = elapsed;
     await release();
     await advance(0.8);
-    const entry = { name, view, target: sky ? null : target, start: round(start), end: round(end), crosshair, landing: direction.landing, landed: direction.landed };
+    const entry: HoldEntry = { name, view, target: sky ? null : target, start: round(start), end: round(end), crosshair, landing: direction.landing, landed: direction.landed };
     if (!crosshair || crosshair.display !== 'block') fail(`${name}: the crosshair is not shown while the point action is held`);
     else if (crosshair.x < 0 || crosshair.y < 0 || crosshair.x > VIEWPORT.width || crosshair.y > VIEWPORT.height) fail(`${name}: the crosshair is off screen at (${round(crosshair.x)}, ${round(crosshair.y)})`);
     if (sky) {
       if (direction.landed) fail('sky: the aim ray landed on geometry');
       if (crosshair?.landed !== 'false') fail('sky: the crosshair should show the no-landing style');
     } else {
-      const miss = Math.hypot(...sub(direction.landing, TARGETS[target].center));
+      const miss = Math.hypot(...sub(direction.landing, TARGETS[target!]!.center));
       entry.landingErrorM = round(miss);
       if (!direction.landed || miss > LANDING_TOLERANCE_M) fail(`${name}: the aim ray lands ${round(miss)} m from ${target} (limit ${LANDING_TOLERANCE_M})`);
     }
@@ -283,7 +354,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
     if (pitchSteer) entry.pitchSteer = pitchSteer;
     holds.push(entry);
   };
-  const turn = async (yaw) => {
+  const turn = async (yaw: number) => {
     await mock({ lookYaw: yaw });
     await advance(0.6);
   };
@@ -315,7 +386,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   if (afterDrift > REST_TOLERANCE_M) fail(`arm did not return to its locomotion pose after the take: wrist is ${round(afterDrift, 3)} m from baseline (limit ${REST_TOLERANCE_M})`);
 
   const downloaded = page.waitForEvent('download', { timeout: 120_000 });
-  await page.getByRole('button', { name: 'Stop Recording' }).evaluate((el) => el.click());
+  await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).evaluate((el) => (el as HTMLElement).click());
   const download = await downloaded;
   const glbPath = path.join(artifactDir, `${label}.glb`);
   await copyFile(await download.path(), glbPath);
@@ -323,10 +394,10 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
 
   const score = scoreDesktop({ gltf, holds });
   failures.push(...score.failures);
-  pointerLock.strayMoves = await page.evaluate(() => window.__strayMoves);
+  pointerLock.strayMoves = await page.evaluate(() => window.__strayMoves!);
   if (pointerLock.strayMoves.length > 0) fail(`${pointerLock.strayMoves.length} trusted mouse movement(s) reached capture under the lock, first ${pointerLock.strayMoves[0]}: the take's aim depends on host timing`);
   const sheet = writeContactSheet(frameDir, path.join(artifactDir, `${label}-sheet.jpg`));
-  const report = {
+  const report: DesktopPointingReport = {
     label,
     useFor: 'desktop point action',
     glb: glbPath,
@@ -345,8 +416,8 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   return report;
 }
 
-function scoreDesktop({ gltf, holds }) {
-  const failures = [];
+function scoreDesktop({ gltf, holds }: { gltf: GltfJson; holds: HoldEntry[] }): { failures: string[]; links: DesktopLink[]; spans: DesktopSpan[] } {
+  const failures: string[] = [];
   const raw = gltf.extensions?.[HOLOIM_MEANING_EXTENSION];
   if (raw === undefined) return { failures: [`no ${HOLOIM_MEANING_EXTENSION} in the desktop take's GLB`], links: [], spans: [] };
   const validation = validateHoloimMeaning(raw);
@@ -356,14 +427,14 @@ function scoreDesktop({ gltf, holds }) {
   const nodeNames = (gltf.nodes ?? []).map((node) => node.name ?? '');
   if (nodeNames.some((name) => /crosshair/i.test(name))) failures.push('the crosshair appears in the export');
 
-  const links = validation.value.marks.map((mark) => ({
+  const links: DesktopLink[] = validation.value.marks.map((mark) => ({
     from: mark.anchor.from.bone,
     to: mark.anchor.to.bone ?? gltf.nodes?.[mark.anchor.to.node]?.name ?? `node ${mark.anchor.to.node}`,
     start: round(mark.span.start),
     end: round(mark.span.end),
     provenance: mark.provenance
   }));
-  const spans = (validation.value.spans ?? []).map((span) => ({ bones: span.bones, start: round(span.span.start), end: round(span.span.end), provenance: span.provenance }));
+  const spans: DesktopSpan[] = (validation.value.spans ?? []).map((span) => ({ bones: span.bones, start: round(span.span.start), end: round(span.span.end), provenance: span.provenance }));
 
   const linked = holds.filter((hold) => hold.target);
   if (links.length !== linked.length) failures.push(`${links.length} link(s) for ${linked.length} held point(s) with a target`);

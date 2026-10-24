@@ -129,7 +129,7 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
   Set `XR_CHECK_CONCURRENCY=1` for serial, streamed output.
 - CI splits capture XR checks across 2 runners with `XR_SHARD=<i>/2`, which
   packs the listed checks by their CI cost (`CHECK_COST` in
-  `run-xr-checks.mjs`) so every check runs exactly once. Actions bills each
+  `run-xr-checks.ts`) so every check runs exactly once. Actions bills each
   job rounded up to the minute against a monthly cap, so add shards or jobs
   only when the wall-time win outweighs the extra billed minutes.
   Each runner still runs its slice serially: this private repo's
@@ -254,11 +254,20 @@ Supported env vars for smoke and XR scripts:
   the page's timers after XR session entry so IWER's per-frame compositing cannot
   load the runner. Results must not depend on host speed; a check that passes
   locally and fails on CI is a defect in the check or the app.
+- The checks are TypeScript run by `tsx`. Page hooks are typed once in
+  `apps/capture/src/runtime/automationHooks.ts` (global `Window`), and control
+  names come from `CONTROL_NAMES` in `@holoim/xr-ui-core`, so a renamed hook or
+  label fails typecheck. To show a change to the checks proves the same thing,
+  run them in parallel on `main` and on the branch and compare the two
+  `apps/capture/output` folders with
+  `node --import tsx scripts/compare-xr-reports.ts <before> <after>` (from
+  `apps/capture`); it drops timings and paths and compares numbers within the
+  tolerances it declares.
 - Test retries are disabled. Flakes must remain visible and be fixed rather than
   hidden by reruns.
 - Every job has a hard timeout. Timed commands write JSON to
   `output/test-results/` and append their duration to the GitHub job summary.
-  The same folder gets per-check durations from `run-xr-checks.mjs`
+  The same folder gets per-check durations from `run-xr-checks.ts`
   (`xr-checks[-shard-<i>of<n>].json`) and Playwright JSON reports
   (`playwright-web-<script>.json`, `playwright-knowledge.json`) with per-test
   durations.
