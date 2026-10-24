@@ -138,7 +138,10 @@ export async function replayPointingTake({ browser, baseUrl, captureRoot, labels
           errorDeg: Number(angleDeg(sub(hands.tip, hands.proximal), sub(target ?? hands.leftPalm, hands.tip)).toFixed(2))
         });
       }
-      await captureXrScreenshot(page, path.join(frameDir, `${String(nextShot).padStart(2, '0')}.png`));
+      // Evidence for the contact sheet only: a 2-CPU runner can take longer
+      // than the default 3 s to draw a 1280x720 frame (see the locomotion check).
+      await captureXrScreenshot(page, path.join(frameDir, `${String(nextShot).padStart(2, '0')}.png`), { timeout: 10_000 })
+        .catch((error) => console.warn(`[pointing] ${label} frame ${nextShot} not captured: ${error.message.split('\n')[0]}`));
       await page.evaluate(() => {
         window.__setHandOverlay(false);
         window.__setSpectatorView(false);

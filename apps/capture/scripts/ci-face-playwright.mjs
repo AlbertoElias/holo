@@ -206,12 +206,26 @@ try {
     else check(Math.sign(mean) === Math.sign(target.yaw) || target.yaw === 0, `${target.name}: eyes turned the wrong way (yaw ${(mean / DEG).toFixed(1)}°)`);
     if (target.yaw === 0) check(end.gaze.left.pitch > 5 * DEG, `${target.name}: eyes did not look up (pitch ${(end.gaze.left.pitch / DEG).toFixed(1)}°)`);
   }
-  // A source change crossfades instead of popping.
+  // A source change crossfades instead of popping: the expression and the
+  // eyes move at most the crossfade's steepest step. Blinks and the voice jaw
+  // are excluded; liveness drives them fast by design (the fake microphone's
+  // beeps open the jaw within a step).
   let maxJump = 0;
+  let jumpTarget = null;
+  let maxGazeJump = 0;
   for (let i = releaseStart; i < releaseStart + 12 && i < samples.length; i += 1) {
-    for (const name of Object.keys(samples[i].head)) maxJump = Math.max(maxJump, Math.abs((samples[i].head[name] ?? 0) - (samples[i - 1].head[name] ?? 0)));
+    for (const name of Object.keys({ ...samples[i].head, ...samples[i - 1].head })) {
+      if (name.startsWith('eyeBlink') || name === 'jawOpen') continue;
+      const jump = Math.abs((samples[i].head[name] ?? 0) - (samples[i - 1].head[name] ?? 0));
+      if (jump > maxJump) [maxJump, jumpTarget] = [jump, name];
+    }
+    for (const side of ['left', 'right']) {
+      const [a, b] = [samples[i - 1].gaze[side], samples[i].gaze[side]];
+      maxGazeJump = Math.max(maxGazeJump, Math.hypot(b.yaw - a.yaw, b.pitch - a.pitch));
+    }
   }
-  check(maxJump <= 0.3, `release popped: a head target moved ${maxJump.toFixed(3)} in one step`);
+  check(maxJump <= 0.3, `release popped: ${jumpTarget} moved ${maxJump.toFixed(3)} in one step`);
+  check(maxGazeJump <= 8 * DEG, `release popped the eyes ${(maxGazeJump / DEG).toFixed(1)}° in one step`);
 
   await page.evaluate(() => {
     window.IWER_DEVICE.gaze.connected = false;
@@ -226,6 +240,9 @@ try {
   check(live.every((s) => s.expressionSource === 'liveness' && s.gazeSource === 'liveness'), 'liveness did not take the face after gaze dropped');
   check(blinks >= 1 && blinks <= 4, `liveness blinked ${blinks} times in ${LIVENESS_SEC} s`);
   check(saccadeRangeDeg > 2 && saccadeRangeDeg < 13, `liveness saccade range ${saccadeRangeDeg.toFixed(1)}°`);
+  // Chromium's fake microphone beeps about once a second: the voice jaw opens.
+  const jawMax = Math.max(...live.map((sample) => sample.head.jawOpen ?? 0));
+  check(jawMax > 0.1 && jawMax <= 0.55 + TOLERANCE, `liveness voice jaw peaked at ${jawMax.toFixed(3)}`);
 
   // Stop and export; the clock has to run for the export to finish.
   const download = page.waitForEvent('download', { timeout: 60_000 });
@@ -246,8 +263,8 @@ try {
     binding: { headMesh, boundChannels: binding.boundChannels.length, eyes: binding.eyes, unresolvedTargets: binding.unresolvedTargets },
     segments: segmentResults.map(({ name, expressionSource, gaze }) => ({ name, expressionSource, gazeDeg: { left: toDeg(gaze.left), right: toDeg(gaze.right) } })),
     xrGaze: xrResults.map(({ name, gazeSource, gaze }) => ({ name, gazeSource, gazeDeg: { left: toDeg(gaze.left), right: toDeg(gaze.right) } })),
-    release: { maxStepJump: round(maxJump) },
-    liveness: { blinks, saccadeRangeDeg: round(saccadeRangeDeg) },
+    release: { maxStepJump: round(maxJump), target: jumpTarget, maxGazeStepDeg: round(maxGazeJump / DEG) },
+    liveness: { blinks, saccadeRangeDeg: round(saccadeRangeDeg), voiceJawMax: round(jawMax) },
     export: { ...exportResult.summary, exportMs },
     failures
   };
