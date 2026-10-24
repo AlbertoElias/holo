@@ -12,9 +12,11 @@ a gallery of their feed, place several side by side, and control each like a
 video — play, pause, restart, scrub — while moving, scaling and rotating it,
 all without leaving the immersive session.
 
-Capture and viewer present **one XR interface**, built the IWSDK way: the same
-panels, components, follow behavior and interaction, differing only in the
-actions each app supplies.
+Capture and viewer present **one XR interface**, built the IWSDK way and laid
+out as the styleguide places things (§1.2, §6, §9): glyph controls at each
+hologram's foot, a periphery status line that holds state only, and a hand
+dock; the same components and interaction in both apps, differing only in the
+actions each supplies.
 
 Product framing: on flat screens the screen is a portal; in a headset the
 portal disappears and the recipient stands in the event. VR uses a minimal
@@ -28,11 +30,20 @@ neutral space. True scale is fact: life size means the recorded scale.
   (`World.create(container)`, destroyed on exit), as capture does. The flat
   feed and portal stay React Three Fiber.
 - **One XR interface for capture and viewer.** A shared workspace package
-  (`@holoim/xr-ui-iwsdk`, replacing `xr-ui-three`/`xr-ui-r3f`) provides IWSDK
-  `PanelUI` panels (UIKit) with shared components (button, toggle, timeline
-  slider, label pill, status line, scale chip), `Follower` lazy-follow, and
-  IWSDK's ray/touch/grab pointers. `xr-ui-core` keeps the app-agnostic action
-  model. Capture's `VrRecordingPanel` and `VrHud` move onto it.
+  (`@holoim/xr-ui-iwsdk`, replacing `xr-ui-three`/`xr-ui-r3f`) provides three
+  pieces built on IWSDK UI and pointers (ray, touch, grab):
+  - **Foot controls**: one glyph control set at each placed hologram's foot,
+    on the chip (styleguide §5.1, §6, §9.2).
+  - **Periphery status line**: the only thing that follows the head (lazily,
+    IWSDK `Follower`, upper edge of view). It shows state such as
+    "Recording 0:12" and never holds a control (§1.2).
+  - **Hand dock**: glyphs on the non-dominant hand (palm or wrist) in a
+    headset, and the bottom dock on a phone (§1.2, §9.1).
+
+  `xr-ui-core` keeps the app-agnostic action model. Capture's
+  `VrRecordingPanel` and `VrHud` are retired: Record moves to the hand dock as
+  a glyph only, and "Recording 0:12" goes to the status line. There is no
+  head-locked or head-following control panel in either app.
 - **Entry.** Feed card shows "Step inside" (VR, when `immersive-vr` is
   supported) and "View in your room" (AR, unchanged rules). A Quest shows both.
 - **VR space.** IWSDK environment with a neutral gradient dome and a soft floor;
@@ -42,12 +53,17 @@ neutral space. True scale is fact: life size means the recorded scale.
   recorded scale in front of the viewer and focuses it.
 - **Several placed holograms.** Placed holograms stay where they are. Each has
   its own playback state and its own grab/scale/rotate. Selecting a placed
-  hologram focuses it; the control panel binds to the focused one. Only the
-  focused hologram's audio is heard. "Back to gallery" removes one from the
-  space.
-- **Controls for the focused hologram:** play/pause, restart, scrubbable
-  timeline with elapsed/total, recenter, scale chip ("life size" reset), back
-  to gallery, exit.
+  hologram focuses it. Each placed hologram has its own foot controls, so
+  controls act on the hologram they stand under; focus decides only which
+  one is audible (and where sparks show, §8.2). "Back to gallery" removes one
+  from the space.
+- **Controls at each hologram's foot** (styleguide §1.2, §6): Play/Pause
+  with its timecode always there, small and close to the edge, dimming to
+  40% after 4 s unused; restart, scrubbable timeline with elapsed/total,
+  recenter, scale chip ("life size" reset) and back to gallery appear when a
+  hand, ray or tap reaches for them and leave afterwards. Exit is in the hand
+  dock (bottom dock on a phone). Glyphs only within arm's reach; their
+  labels sit 1 m away or more (§9.1).
 - **Move / scale / rotate.** IWSDK `TwoHandsGrabbable` (move, rotate, scale)
   with scale clamped to 0.1×–2× recorded scale; any non-1.0 scale is shown on
   the chip and reversible.
@@ -79,10 +95,13 @@ neutral space. True scale is fact: life size means the recorded scale.
       loaded feed via the cursor, and selecting one places and focuses it
       without ending the session.
 - [ ] At least four holograms can be placed at once; each keeps its own play
-      state and transform; selecting one moves panel focus to it; only the
+      state, transform and foot controls; selecting one focuses it; only the
       focused one is audible.
-- [ ] Every panel control works by controller ray, hand ray/pinch and hand
-      poke in headset VR and AR, and by screen tap in phone AR.
+- [ ] Every foot and hand-dock control works by controller ray, hand
+      ray/pinch and hand poke in headset VR and AR, and by screen tap in
+      phone AR (foot controls and the bottom dock).
+- [ ] Nothing interactive follows or locks to the head: the periphery status
+      line is the only head-following element and holds state only.
 - [ ] Pause freezes the focused hologram's animation and audio at the same
       clip time; play resumes there; restart returns both to 0; loops wrap
       both together.
@@ -95,10 +114,11 @@ neutral space. True scale is fact: life size means the recorded scale.
       texture counts to the baseline for what remains in the space.
 - [ ] Exit destroys the World and returns to the feed at the last focused
       hologram.
-- [ ] Capture's panels are built only from the shared package and capture
-      recording, refit and recenter pass the capture XR suite.
-- [ ] Side-by-side IWER screenshots of capture and viewer panels show the same
-      components, styling and follow behavior.
+- [ ] Capture's XR UI is built only from the shared package (Record in the
+      hand dock, "Recording 0:12" on the status line, no head-locked panel),
+      and capture recording, refit and recenter pass the capture XR suite.
+- [ ] Side-by-side IWER screenshots of capture and viewer show the same
+      foot-control, status-line and hand-dock components and styling.
 - [ ] `/ar/:id` deep links work; AR placement, recenter and bubble specs pass
       (ported as needed); export → upload → render pipeline smoke passes.
 
@@ -113,17 +133,17 @@ neutral space. True scale is fact: life size means the recorded scale.
 | Gallery and placed entities share one cached GLTF (AssetManager clone) and disposal corrupts the source | Dispose only per-clone materials and mixers; evict cache keys only when no entity uses them |
 | Double select on a gallery item while it loads | Load keyed by id; duplicate placement ignored |
 | Hologram fails to load or 404s | Gallery tile shows an error state; nothing else changes |
-| Focus ambiguity when holograms overlap | Last selected wins; focused one shows a ring; panel shows its title |
+| Focus ambiguity when holograms overlap | Last selected wins; the focused one carries the sparks (§8.2); each set of foot controls acts only on the hologram above it, so focus never decides what a control does |
 | Audio of an unfocused hologram keeps playing | Focus change stops audio on the old one and starts the new one from its clock |
-| Grab and panel pointer target the same input | IWSDK pointer priority (touch > grab > ray); panels sit above grab targets |
+| Grab and foot-control pointer target the same input | IWSDK pointer priority (touch > grab > ray); the foot chip sits outside the hologram's grab volume |
 | GLB with a wrong root scale looks absurd at 1.0 | Scale chip makes it visible and reversible; log recorded-scale anomalies; no silent normalisation |
 | Static hologram (no clip) | Timeline/play disabled, "still" state; static GLB fixture |
 | Autoplay blocked | `AudioContext.resume()` inside the first XR select (feed resume does not carry over) |
 | World not torn down on exit or route change (leaked render loop, XR session) | `world.destroy()` on unmount; e2e enters and exits twice and checks one canvas, no session |
 | Duplicate `three` copies across packages | Structural flags, not `instanceof`; typecheck catches clashing `@types/three` |
-| Panel out of reach (tall, short, seated) | `Follower` offset from head height; recenter re-seats it |
+| Controls out of reach (tall, short, seated) | Foot controls move with their hologram, which can be recentered or grabbed closer; the hand dock is always within reach |
 | Session ends unexpectedly | Same exit path as the Exit control |
-| Capture recording regresses while its panels migrate | Capture XR suite before and after; migration is its own commit, last |
+| Capture recording regresses while its UI migrates | Capture XR suite before and after; migration is its own commit, last |
 
 ## Ownership
 
@@ -134,11 +154,11 @@ Implementation order (each step lands green before the next):
 2. **IWSDK viewer shell**: `/vr/:id` and `/ar/:id` mount a World with one
    hologram at recorded scale, AR hit-test/anchor placement ported,
    `HologramPlaybackSystem` with audio, exit/teardown.
-3. **Shared UI package** `@holoim/xr-ui-iwsdk` and the focused-hologram panel
-   in the viewer; grab/scale.
+3. **Shared UI package** `@holoim/xr-ui-iwsdk` (foot controls, periphery
+   status line, hand dock) and the viewer's foot controls; grab/scale.
 4. **Gallery and multiple placed holograms**, focus, feed paging, disposal.
-5. **Capture migration** onto the shared package; retire `xr-ui-three` and
-   `xr-ui-r3f`.
+5. **Capture migration** onto the shared package (Record to the hand dock,
+   status on the status line); retire `xr-ui-three` and `xr-ui-r3f`.
 6. **IWSDK AR by default** (added 2026-10-24, decision A): port bubble
    clipping, aura and depth occlusion to the IWSDK AR shell, port the AR
    specs (with `hand-tracking-fidelity.md`), then make it the `/ar/:id`
@@ -164,8 +184,8 @@ Implementation order (each step lands green before the next):
 
 - **IWSDK for both immersive scenes.** Capture already runs on an IWSDK World;
   the viewer's immersive routes become IWSDK Worlds too, so the shared
-  interface is IWSDK-native: `PanelUI`/UIKit panels, `Follower`, IWSDK
-  pointers and grab components. The capture-specific reasons IWSDK input, UI
+  interface is IWSDK-native: UIKit-based foot controls and hand dock, a
+  `Follower`-driven status line, IWSDK pointers and grab components. The capture-specific reasons IWSDK input, UI
   and audio were switched off (`docs/IWSDK_AI_WORKFLOW.md`,
   `archive/iwsdk-runtime-refactor.md`) are re-tested in the step 1 spike;
   audio stays app-side in both apps.
@@ -174,12 +194,17 @@ Implementation order (each step lands green before the next):
   `arPlacement.ts`.
 - **Feed stays R3F.** The flat feed and portal are not XR; rewriting them buys
   nothing. Entering XR navigates to the IWSDK route.
-- **Same behavior everywhere.** Capture's panel changes from head-locked to
-  lazy-follow and gains ray/pinch alongside poke — intended changes that make
-  the two apps identical.
-- Alternatives rejected: plain-Three shared panel hosted in both IWSDK and R3F
-  (hand-rolls what IWSDK provides); keeping the viewer on R3F with
-  `@react-three/xr` (two stacks for one interface).
+- **Controls where the styleguide puts them (user decision, 2026-10-24).**
+  Controls sit at each placed hologram's foot as glyphs (§9.2); the periphery
+  status line is the only thing that follows the head and holds no control;
+  capture's Record moves to the non-dominant hand dock. This replaces the
+  earlier plan of one lazy-follow panel bound to the focused hologram, which
+  §1.2 forbids. Capture loses its head-locked panel and gains ray/pinch
+  alongside poke, which makes the two apps identical.
+- Alternatives rejected: one lazy-follow panel for the focused hologram
+  (head-following controls break §1.2); plain-Three shared panel hosted in
+  both IWSDK and R3F (hand-rolls what IWSDK provides); keeping the viewer on
+  R3F with `@react-three/xr` (two stacks for one interface).
 
 ## Test plan and evidence
 
@@ -192,8 +217,9 @@ Implementation order (each step lands green before the next):
 | Grab/scale/rotate | Same spec, scripted controller grips | Transforms in report; pending |
 | Memory after remove/page | Same spec | Geometry/texture counts in report; pending |
 | AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | IWSDK shell **pass** (step 2): stands on the floor 1.8 m ahead and anchors, tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
-| Capture on shared panels | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + capture panel screenshot; pending |
-| Same look in both apps | IWER screenshots of both panels via `preview.mjs` | Side-by-side sheet; pending |
+| Capture on the shared UI | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + hand-dock and status-line screenshot; pending |
+| Same look in both apps | IWER screenshots of both apps' foot controls, status line and hand dock via `preview.mjs` | Side-by-side sheet; pending |
+| Nothing interactive follows the head | Same spec: turn the head and read control world positions | Report shows foot controls fixed to their hologram; pending |
 | Pipeline compatibility | `pnpm run test:smoke:pipeline` | Pass output; pending |
 
 ### Step 1 spike results (2026-10-24)
@@ -264,9 +290,9 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   old `VrHud` conflicts with IWSDK input: its proximity touch and its own
   controller `select` both toggled recording when its head-locked pill
   crossed the controller or the ray, so the spike disabled it; step 5 must
-  remove it in the same change that adds the shared panel. The default
-  UIKit font lacks `·` and `×`; panel copy avoids them or the shared
-  package ships a font that has them.
+  remove it in the same change that adds the hand-dock Record. The default
+  UIKit font lacks `·` and `×`, and the styleguide's "Paused · 0:08" needs
+  `·`, so the shared package ships a font that has them.
 
 ### Step 2 results (2026-10-24)
 
@@ -277,8 +303,8 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   at `/ar/:id?shell=iwsdk`. Porting bubble clipping, aura and depth
   occlusion, then making the IWSDK shell the `/ar/:id` default, is a later
   step; the existing AR specs assert those effects.
-- **Feed triggers.** The AR trigger uses the styleguide's "View in AR" label
-  and viewfinder-cube glyph (section 6). The VR trigger is a label-only
+- **Feed triggers.** The AR trigger reads "View in your room" with the
+  styleguide's viewfinder-cube glyph (section 6). The VR trigger is a label-only
   placeholder, "Step inside" (`VR_TRIGGER_PLACEHOLDER_LABEL` in
   `xrSupport.ts`), shown when `immersive-vr` is supported, until the
   styleguide gives it a glyph. Exiting returns to `/` and scrolls to the
@@ -305,10 +331,13 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
 - **Probe.** Development builds expose `window.__HOLOIM_XR_VIEWER__.snapshot()`
   (placement, scale, clip time, audio offset, renderer counts), which the
   spec reads.
-- **Open decisions (with the user via the lead):** the VR trigger's glyph
-  and label; "View in your room" (scope above) vs the styleguide's "View in
-  AR"; styleguide section 1.2 forbids head-locked interactive UI, but step
-  3's lazy-follow panel follows the head; the IWSDK shell's skip of
+- **Decided by the user (2026-10-24):** controls follow the styleguide
+  (foot controls, status line, hand dock; scope and design decision
+  rewritten); the copy stays "View in your room" / "Step inside", and the
+  styleguide's §6 glyph table now says so, with the "Step inside" drawing
+  TBD (the lead is putting options to the user). The feed and the Quick
+  Look link use `XR_ENTRY_LABEL`.
+- **Still open:** the "Step inside" glyph; the IWSDK shell's skip of
   surfaces over 0.5 m (the R3F view still uses the first upward hit); the
   feed's trigger chrome predates the styleguide.
 - **Limits:** the viewer's `@iwsdk/vite-plugin-dev` 0.5.3 still bundles
@@ -319,7 +348,7 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
 Every step, including each spike, ends with a real-time proof video of the
 real workflow in IWER (headset view plus a spectator view where it helps:
 entering, gallery, placing, grabbing, scrubbing, focus and audio switching,
-exit; for capture, record → stop → export on the shared panels). The
+exit; for capture, record → stop → export from the hand dock). The
 implementer previews it as a contact sheet
 (`node packages/tooling-testing/src/preview.mjs`), fixes what it shows, and
 re-records until it is clean; the lead sends the final video to the user as
@@ -330,7 +359,7 @@ evidence is the e2e specs and their `*-report.json`.
 ## Physical-device limits
 
 IWER proves session, input, scheduling and memory behavior only. On devices:
-Quest 3 VR comfort, frame rate with four placed holograms, panel reach and
-readability, grab/pinch/poke feel, audio by ear, recorded-scale realism; Quest
-passthrough AR; Android phone AR tap; capture panel feel after migration.
+Quest 3 VR comfort, frame rate with four placed holograms, foot-control and
+hand-dock reach and readability, grab/pinch/poke feel, audio by ear, recorded-scale realism; Quest
+passthrough AR; Android phone AR tap; capture hand-dock feel after migration.
 Record results here; until then they stay under Unverified in `HANDOFF.md`.

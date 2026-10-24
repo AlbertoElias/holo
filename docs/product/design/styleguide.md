@@ -331,7 +331,8 @@ pills. Three are always there: **Play**, **Free** and **Return**.
 | Free | Leave Follow; move through time and space yourself | "Free" | Four-way arrow cross `M8 1.5v13M1.5 8h13M8 1.5 6 3.5M8 1.5l2 2M8 14.5l-2-2M8 14.5l2-2M1.5 8l2-2M1.5 8l2 2M14.5 8l-2-2M14.5 8l-2 2` |
 | Return | Back to the author's view (Follow) | "Return" | Open arc with an arrowhead `M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.5h2.5` |
 | Record | Start or stop a take (capture) | "Recording 0:12" while recording | Inside the 36 apx gold ring: a 14 apx filled rose circle when idle; a 13 apx rose rounded square (radius 3 apx) while recording |
-| View in AR | Open the hologram in AR Quick Look or WebXR AR | "View in AR" | A cube in viewfinder brackets `M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3`, round joins and caps; on the card, in its shade |
+| View in your room | Open the hologram in AR Quick Look or WebXR AR | "View in your room" | A cube in viewfinder brackets `M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3`, round joins and caps; on the card, in its shade |
+| Step inside | Enter the hologram's event in WebXR VR, at recorded scale | "Step inside" | TBD: options are with the user; until one is chosen the card shows the label alone, in its shade |
 
 The rose record dot has no keyline of its own; the gold ring around it is
 the same as Play's. The Play triangle and the record shapes are filled;
@@ -559,7 +560,7 @@ sparks, flicker or meaning layer can be added. It is a flattened, opt-in
 preview, never the canonical hologram
 ([what a hologram is](../concepts/what-a-hologram-is.md)).
 
-- The feed's "View in AR" entry is the cube glyph on the card, in its shade,
+- The feed's "View in your room" entry is the cube glyph on the card, in its shade,
   and follows the flat rules.
 - **The USDZ carries the edge with a baked halo:** the gold core, the cream
   highlight and a soft halo, static. It is added when the server builds the

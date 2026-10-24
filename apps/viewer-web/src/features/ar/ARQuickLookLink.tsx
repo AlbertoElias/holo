@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { HologramDTO } from "@holoim/contracts";
 
 import { fetchHologram, resolveMediaUrl } from "../feed/api";
+import { XR_ENTRY_LABEL } from "../xr/xrSupport";
 
 type ARQuickLookLinkProps = {
   item: HologramDTO;
@@ -52,8 +53,8 @@ export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
         rel="ar"
         href={resolveMediaUrl(current.usdzUrl)}
         className="ar-trigger-button ar-quicklook-link"
-        aria-label="View in AR"
-        title="View in Augmented Reality"
+        aria-label={XR_ENTRY_LABEL.ar}
+        title={XR_ENTRY_LABEL.ar}
       >
         <img
           src={transparentPixel}
@@ -63,7 +64,7 @@ export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
           height={1}
           style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
         />
-        View in AR
+        {XR_ENTRY_LABEL.ar}
       </a>
     );
   }

@@ -289,7 +289,7 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
   const vrTrigger = page.locator(".vr-trigger-button");
   await expect(vrTrigger).toHaveCount(1, { timeout: 15_000 });
   await expect(vrTrigger).toHaveText("Step inside");
-  await expect(page.locator(".ar-trigger-button")).toHaveAttribute("aria-label", "View in AR");
+  await expect(page.locator(".ar-trigger-button")).toHaveAttribute("aria-label", "View in your room");
 
   const visits: unknown[] = [];
   for (let visit = 1; visit <= 2; visit++) {
@@ -354,7 +354,7 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   await emulatePhone(page);
   await page.goto("/ar/mock-1?shell=iwsdk");
   await waitForIwerRuntime(page);
-  await enterSession(page, "View in AR", "alpha-blend");
+  await enterSession(page, "View in your room", "alpha-blend");
 
   const placed = await waitForSnapshot(page, (s) => s.placement.stage !== "searching" && s.hologram.visible);
   expect(["hit-test", "floor"]).toContain(placed.placement.mode);
