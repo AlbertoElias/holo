@@ -1,11 +1,12 @@
-// The dock (styleguide 5.2, 6.1): a fixed bottom bar on the same shade, its
-// targets kept out of a phone's gesture zones and safe-area insets.
+// The dock (styleguide 5.2, 6.1): a fixed bottom bar on the shade's colours as
+// a band along the bottom edge, its targets kept out of a phone's gesture
+// zones and safe-area insets.
 import type { HTMLAttributes, ReactNode } from "react";
 
 import { PHONE_EDGES, glyphGapApx, type HitInput } from "@holoim/xr-ui-core";
 
 import { defaultHitInput } from "./internal.js";
-import { shadeGradient } from "./Shade.js";
+import { dockShadeGradient } from "./Shade.js";
 
 export interface DockProps extends HTMLAttributes<HTMLDivElement> {
   /** Sets the gap between targets; defaults to touch on a coarse pointer, else mouse. */
@@ -33,7 +34,7 @@ export function Dock({ input, style, children, ...props }: DockProps) {
         paddingBottom: `max(env(safe-area-inset-bottom), ${PHONE_EDGES.bottom}px)`,
         paddingLeft: `max(env(safe-area-inset-left), ${PHONE_EDGES.side}px)`,
         paddingRight: `max(env(safe-area-inset-right), ${PHONE_EDGES.side}px)`,
-        background: shadeGradient(),
+        background: dockShadeGradient(),
         ...style
       }}
     >

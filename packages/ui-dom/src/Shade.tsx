@@ -5,10 +5,23 @@ import { shadeLayout, shadeStops } from "@holoim/xr-ui-core";
 
 import { percent, rgbWithAlpha } from "./internal.js";
 
+function cssStops(): string {
+  return shadeStops()
+    .map((stop) => `${rgbWithAlpha(stop.color, stop.alpha)} ${percent(stop.position)}`)
+    .join(", ");
+}
+
 /** `radial-gradient(closest-side, …)` from the core's stops: deep sea 70%, 50% at 60%, then clear. */
 export function shadeGradient(): string {
-  const stops = shadeStops().map((stop) => `${rgbWithAlpha(stop.color, stop.alpha)} ${percent(stop.position)}`);
-  return `radial-gradient(closest-side, ${stops.join(", ")})`;
+  return `radial-gradient(closest-side, ${cssStops()})`;
+}
+
+/**
+ * The dock's shade (5.2): the same stops as a band run up from the screen's
+ * bottom edge, so only a hologram casts an oval shade.
+ */
+export function dockShadeGradient(): string {
+  return `linear-gradient(to top, ${cssStops()})`;
 }
 
 export interface ShadeProps extends HTMLAttributes<HTMLDivElement> {
