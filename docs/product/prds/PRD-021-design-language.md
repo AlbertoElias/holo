@@ -79,6 +79,8 @@ video app's design language has no meaning layer. Fair comparison: today's UI.
 ## Out Of Scope
 
 - [ ] The full roadmap of section 7 of the concept; restyling every screen.
+  *(Replaced 2026-10-24: the user put every page and the Halo in scope; see
+  the [feature brief](../../features/ui-redesign.md).)*
 
 ## Success Signals
 
@@ -118,5 +120,5 @@ evidence feeds the choice.
     (earlier round): 14 screens of the Light direction over capture renders.
   - [Interactive grammar demo](https://claude.ai/artifact/DAjXaAk4QGmXxN1riUu5bp)
     (earlier round): the held-mode grammar.
-- Feature brief: none
+- Feature brief: [UI and interaction redesign](../../features/ui-redesign.md)
 - Implementation issue: none

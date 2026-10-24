@@ -1,34 +1,38 @@
 # Feature brief: Redesign UI and interaction across capture and viewer
 
 **Lead:** Claude Code (Opus)  
-**Status:** Reviewed (design review 2026-10-24); awaiting the user's answers
-to the questions below
-**Layer:** View (the edge, shade, chip, glyphs, ground, portal and
-Follow/Free). The one held action writes to the Meaning layer. See
+**Status:** Reviewed (design review 2026-10-24; the user's answers recorded
+2026-10-24); awaiting the remaining questions and approval to build
+**Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
+and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
 
 Sources: the [styleguide](../product/design/styleguide.md) and its
 [token file](../product/design/tokens.json) (decided 2026-10-24; the
 styleguide wins where the two differ), and the interaction grammar that still
 stands in [PRD-021](../product/prds/PRD-021-design-language.md) (held modes,
-"this" and "here"). PRD-021 is Draft: this brief is the build plan for its two
-unchecked In Scope items, and it is not approval to build. The `TODOS.md`
-item "Redesign all UI (2D and 3D) and interaction systems" links here.
+the Halo, "this"). PRD-021 is Draft: this brief is the build plan for its
+unchecked In Scope items, widened by the user on 2026-10-24 to every page and
+the Halo. It is not approval to build. The `TODOS.md` item "Redesign all UI
+(2D and 3D) and interaction systems" links here.
 
 The styleguide states decided rules only. This brief is the one place that
-tracks what the design rounds left undecided and which decided values still
-lack a device check. When a question is answered or a check changes a value,
-the result goes into the styleguide and `tokens.json` as a plain rule.
+tracks what is still undecided and which decided values still lack a device
+check. When a question is answered or a check changes a value, the result
+goes into the styleguide and `tokens.json` as a plain rule.
 
 ## User outcome
 
-Capture and the viewer look and behave like one product. On every device a
-hologram is the same object: a portal in one burnt golden edge, its few gold
-glyphs at its foot in a soft shade (flat screens) or on its stage (headsets),
-nothing locked to the head. A person who does the held action once in a
-headset can do it on another device without instruction, and recognises its
-result in the phone portal. Which action, and what "on a phone" means, is
-question Q1.
+Capture and the viewer look and behave like one product, on every page. On
+every device a hologram is the same object: a portal in one burnt golden
+edge, its few gold glyphs at its foot in a soft shade (flat screens) or on
+its stage (headsets), nothing locked to the head.
+
+Capturing and viewing are two flows with their own actions, and each action
+works on every device each flow runs on: VR, AR, phone and desktop. The
+first capture action is **hold to mark "this"**: a person who does it once
+in a headset can do it on a desktop or a phone without instruction, and sees
+what they marked in the portal.
 
 ## Scope
 
@@ -45,135 +49,169 @@ question Q1.
    (DOM), `@holoim/xr-ui-r3f` (viewer 3D) and `@holoim/xr-ui-three`
    (capture 3D). Contract tests for all four, written from the failure list
    below. The existing `xr-ui-core` state contracts are kept (slice 2).
-4. **Materials in the viewer** (`apps/viewer-web`): the flat ground, the
-   burnt edge on every card, the shade, the chip, Play/Free/Return as glyphs,
-   "View in AR", type, motion, and the WebXR AR route rebuilt to the AR rules.
-   The portal viewer and Follow/Free keep their behaviour from the
-   [portal view brief](portal-view.md) and take the new look (slice 3).
-5. **Materials in capture** (`apps/capture`): the desktop and phone overlay
-   in the shade and dock, and the headset rules (slice 4).
-6. **One held-mode action across devices**, chosen by Q1 (slice 5). Letting
-   go always ends it.
-7. **A cross-device task test**, as PRD-021 describes, plus end-to-end runs
-   of the same action on every input (slice 7).
-8. **Device checks.** Every decided value that still lacks a device check,
-   as validation steps ("Physical-device limits"), with emulation and
-   physical results kept apart.
-
-How much of each app is restyled is Q6: every screen, or only the
-record → view loop that PRD-021 names.
+4. **Every page of the viewer** (`apps/viewer-web`) in the new look: the
+   feed, the portal and Follow/Free (all three trial variants), upload, the
+   WebXR AR route, and the empty, offline and error states (slice 3).
+5. **Every page of capture** (`apps/capture`) in the new look, on desktop,
+   phone, VR and AR, with touch input added for phones (capture has none
+   today) (slice 4).
+6. **A handedness setting** in both apps, which swaps the hands of the held
+   grammar (slice 4).
+7. **Hold to mark "this"** while recording, on every capture input:
+   desktop, Quest hands, Quest controllers, phone and phone AR. An
+   explicitly held mark overrides the mark inferred from pointing (slice 5).
+8. **The Halo**, the radial menu with fixed directions, on every device
+   (slice 5; its contents are Q20).
+9. **The Quick Look baked halo** in the server-built USDZ (slice 6).
+10. **A cross-device task test**, as PRD-021 describes, plus end-to-end runs
+    of every action on every input (slice 7).
+11. **Device checks.** Every decided value that still lacks a device check,
+    as validation steps ("Physical-device limits"), with emulation and
+    physical results kept apart.
 
 **Excluded**
 
-- The items the design rounds left undecided (Q12 to Q18). Nothing in this
-  brief picks a value for them.
-- The Halo radial menu, ink drawing, speech commands and the other verbs of
-  the concept's verb table, beyond what the held action needs (Q2).
-- A VR viewing mode in `viewer-web`. It has none today.
+- Identity hues and author initials on marks. They come with the project
+  that adds identities; until then pointing highlights keep today's colour
+  and today's recorded/inferred look.
+- "Here" (marking a place). Only "this" is in this brief.
+- Ink drawing, speech commands and the verbs of the concept's verb table that
+  no action here needs.
+- Viewpoint portals (Q12), until a feature suggests viewpoints.
 - The Follow camera driven by pointing (PRD-030), the time ribbon, layers and
   scrubbing.
 - Any chrome in the exported GLB. The edge, sparks, shade, light, ground,
-  chip, labels and fingertip shade stay in the view layer (styleguide
+  chip, labels, Halo and fingertip shade stay in the view layer (styleguide
   section 1).
-- The Quick Look baked halo, unless Q3 puts it in.
 
-## Questions for the user
+## Decisions and questions
 
-Nothing below is decided. Each answer is recorded here before the slice it
-blocks starts.
+### Answered by the user, 2026-10-24
 
-### Scope and product
+| # | Question | Answer |
+| --- | --- | --- |
+| Q1 | Which held action? | Capturing and viewing are separate flows with their own actions; each action works on every device. Hold to mark "this" is a capture action, so it runs on every capture input (option A). An explicitly held mark overrides an inferred one |
+| Q2 | Is the Halo in? | Yes |
+| Q3 | Is the Quick Look baked halo in? | Yes |
+| Q4 | Identity hue and initial | Part of the identity project, not this one |
+| Q5 | One brief or one per slice? | Whichever is more efficient: one brief, each slice merged on its own after local verification |
+| Q6 | Every page, or the record → view loop? | Every page |
+| Q7 | Is "here" in? | No |
+| Q8 | Dominant hand | A setting changes it |
+| Q9 | Keep the portal's trial variants? | Yes, all three |
+| Q14 | Provenance looks | Start with today's recorded/inferred distinction |
+| Q15 | Soot in VR | Soot exists everywhere it is needed |
+| Q16 | AR brightness threshold | Set by the lead from known data (below) |
+| Q17 | Gaze-and-pinch | In scope; size set by the lead (below) |
+| Q18 | Chip on an unlisted AR target | 92% |
 
-- **Q1. Which held-mode action, and what is the phone step?** PRD-021's
-  outcome, success signal and trial all name the *phone portal*, and the
-  concept gives the phone the role "watch and reply". Three options:
-  - **A. Hold to mark "this" while recording, on every capture input,
-    including Android phone AR.** Extends today's desktop held point. Costs:
-    controllers were left out of the pointing feature by its design review,
-    so this reopens that; the phone AR tap ray comes from the camera, not a
-    bone, and v0's required `from: {bone, node}` cannot say that truthfully,
-    so the meaning record changes; capture has no touch input; there is no
-    Android device to build or test on; and the phone dock's mark glyph
-    conflicts with the rule that all chrome but stop and the running time
-    hides while recording. PRD-021's phone outcome is not delivered, and the
-    trial's phone step may never run.
-  - **B. Hold to mark "this" while watching, in the phone and desktop
-    portal** (and later in a headset viewer). Matches PRD-021 literally.
-    Costs: a viewer's mark is "added", which v0 cannot hold, so the meaning
-    record goes to v1, and viewer marks need storage and a conversation
-    layer.
-  - **C. Hold to mark "this" while recording, on Quest hands and desktop
-    only;** the phone portal is where the mark is recognised. Smallest.
-    The transfer test becomes headset to desktop.
+What follows from those answers:
 
-  Under A and C, a held hand mark raises two rules the meaning-package owner
-  must write: how a recorded link suppresses the inferred link the point
-  detector writes for the same span, and whether a mark resolved from a
-  noisy ray, with no live feedback, may be labelled `recorded`
-  (principle 7). Blocks slice 5 and the trial.
-- **Q2. Is the Halo in this brief?** PRD-021 says to validate one slice of
-  the grammar; the brief assumes no.
-- **Q3. Is the Quick Look baked halo (styleguide 9.5) in this brief?** It is
-  built in `apps/viewer-api` (`tools/glb_to_usdz.py`, run by
-  `src/services/usdz-worker.ts`), not in the two apps PRD-021 names.
-  Styleguide 9.5 names `src/worker.ts` and `tools/preview_usdz.swift`; the
-  second is only a macOS preview tool. If yes: do holograms whose USDZ is
-  already built get the halo (re-converting stored files), or only new
-  ones? Blocks slice 6.
-- **Q4. Where does a person's identity hue and initial come from?** Ink is
-  in the author's hue with their initial (styleguide 1.1, 2.4), but the
-  contracts have no author yet (auth is deferred in
-  [live deployment](live-deployment.md)). Blocks the highlight restyle in
-  slice 3.
-- **Q5. One brief, delivered in slices, or one brief per slice?** The brief
-  assumes one brief, each slice merged on its own after local verification.
-- **Q6. Every screen, or the record → view loop only?** PRD-021 keeps
-  "restyling every screen" out of scope; the `TODOS.md` item says "redesign
-  all UI". Which governs?
-- **Q7. Is "here" in scope?** PRD-021 and the `TODOS.md` item name "this"
-  and "here"; v0 links can point at the floor (`radius`), but no action
-  marks a place.
-- **Q8. How is the dominant hand chosen?** The held grammar has the
-  non-dominant hand hold the mode and carry the record glyph. No handedness
-  setting exists.
-- **Q9. Are the portal's three trial variants kept?** `?portal=freeze`,
-  `drag` and `tilt` are still in PRD-002's trial. Restyle all three, or wait
-  for the trial to pick one?
-- **Q10. What seeds a hologram's edge?** The tears must be the same wherever
-  one hologram appears. The viewer has an upload id; capture's flat preview
-  has none before upload, and writing a seed into the GLB would change the
-  export. Blocks the edge in slice 4.
-- **Q11. Where do Exit and the AR controls live before a hologram is
-  placed, or when it is out of view?** The rules put controls at the
-  hologram's foot, which does not exist then. Blocks the AR route in
-  slice 3.
+- **The held mark is `recorded`** and suppresses any inferred link the point
+  detector writes for an overlapping span (Q1). Controllers are back in,
+  which reverses the pointing brief's choice to leave them out.
+- **Phone capture needs touch input** (look, move, record, hold to mark) and
+  phone AR capture needs a mark whose ray starts at the camera, not a bone.
+  The v0 meaning record requires `from: {bone, node}` and cannot say that
+  truthfully, so phone AR marks need a meaning record change (v1). That goes
+  to the `@holoim/meaning` owner as its own reviewed change, and older
+  readers must keep loading v0 files.
+- **Handedness defaults to right-handed**, stored per device, and changed in
+  each app's settings (Q8).
+- **The Quick Look halo applies to new USDZ files.** Re-converting the files
+  already stored is a separate one-off run, done only on the user's go-ahead.
+  Styleguide 9.5 names the wrong files: the USDZ is built by
+  `apps/viewer-api/tools/glb_to_usdz.py`, run by
+  `src/services/usdz-worker.ts` (`tools/preview_usdz.swift` is only a macOS
+  preview tool).
 
-### Left undecided by the design rounds
+### Set by the lead, on the user's delegation (Q15 to Q17)
 
-- **Q12. Viewpoint portals** (styleguide section 4): how another angle
-  looks, given that a small golden portal's edge reads as a smooth line.
-  Nothing in this brief draws one.
-- **Q13. The rescale indicator** (section 4): rescaling must be visible,
-  labelled and reversible. The portal zoom does not rescale, so nothing in
-  this brief needs one.
-- **Q14. Provenance looks** (section 4): how recorded, inferred and added
-  marks look apart without colliding with hollow (unresolved). Today's
-  pointing highlights tell recorded from inferred; moving them into the
-  author's hue makes a new provenance look, and a lighter inferred style may
-  read as hollow. Blocks the highlight restyle in slice 3.
-- **Q15. Soot in VR** (section 3.2). Capture draws no edge while recording
-  and the viewer has no VR mode, so this blocks nothing known; slice 4
-  checks whether capture shows a hologram in VR when idle.
-- **Q16. The AR brightness threshold for soot** (section 3.2), to be set on
-  an Android device. Android soot itself is decided; until the threshold is
-  set, soot in the Android AR route stays unbuilt and is listed as pending.
-- **Q17. The gaze-and-pinch hit size** (section 6.1). The concept proposed
-  72 apx, rays have 56. visionOS sends gaze and pinch as `transient-pointer`
-  input; which size applies there, or is visionOS out of scope for now?
-- **Q18. The chip on an AR target not listed** (section 2.3). Round 3 gave a
-  value only for known blending, so 92% (the linear-light value) is the
-  cautious reading until one is measured. Use 92% for an unknown AR target,
-  or refuse to start AR there?
+These are starting values, built to and listed as device checks; a check
+that changes one updates the styleguide and `tokens.json`.
+
+- **Soot everywhere it is needed (Q15).**
+  - VR: the flat-screen rule. The renderer knows the luminance of the VR
+    room behind the edge, as it does on a flat screen, so `t(L)` applies with
+    soot 0.6.
+  - AR with a lighting estimate (Android Chrome): soot replaces the glow
+    outright when the room is bright (threshold below).
+  - AR with no lighting estimate (Quest passthrough today): soot stays on at
+    full strength, because legibility against a bright wall matters more
+    than warmth in a dim room. Device check 9 looks at it in a dim room.
+- **The AR brightness threshold (Q16).** WebXR lighting estimation gives
+  spherical-harmonic coefficients in linear light. Take the ambient (first)
+  coefficient's relative luminance, `Y = 0.2126 R + 0.7152 G + 0.0722 B`,
+  and switch soot on at `Y ≥ 0.16` and off below `0.095`. Those are the two
+  luminance points where the flat rule is all soot and all glow, measured in
+  round 3; the gap between them is the hysteresis, so soot does not flicker
+  at the boundary. Device check 2 confirms or replaces them, since the scale
+  of the estimate against camera exposure is not documented the same way on
+  every device.
+- **Gaze and pinch (Q17): 72 apx**, about 1.5° of view. That is the size
+  the concept proposed, and it sits above eye-tracking accuracy (about 1° to
+  1.5°) and in line with Apple's 60 pt minimum for visionOS targets.
+  visionOS sends gaze and pinch as `transient-pointer` input; the hit
+  resolver maps that input to 72 apx. There is no Vision Pro to check it on
+  (device check 10).
+
+### Still open
+
+The user asked what Q10, Q12 and Q13 mean, and for a suggestion on Q11.
+Each has a proposal waiting for an OK.
+
+- **Q10. What makes a hologram's edge the same everywhere?** The tears
+  along the edge are random, drawn from a seed. To look the same in the
+  feed, in AR and in Quick Look, a hologram needs one fixed seed. *Proposal:*
+  the seed is the hologram's id, which the viewer and the USDZ builder both
+  know. Capture's own preview, before upload, uses a seed picked per take:
+  until it is uploaded it is not yet a hologram anyone else sees. Nothing is
+  written into the GLB. Blocks the edge in slices 3, 4 and 6.
+- **Q11. Where do general controls go?** Hologram controls go at its foot;
+  general ones (Exit AR, upload, settings, sign-in later, the Halo, Record
+  before a take) need a home. *Proposal,* from the styleguide's placement
+  table: on phone and desktop, actions go in the **bottom dock** (on its
+  shade, thumb zone on a phone) and lists and settings in a **side sheet**;
+  in a headset, actions go on the **non-dominant wrist** and lists and
+  settings on a **world panel 1 m or more away**. In AR before placement, or
+  with the hologram out of view, Exit and the placing hint are on the wrist
+  (Quest) or in the dock (Android). The top status line shows state only.
+  Blocks the AR route in slice 3 and the shell in slices 3 and 4.
+- **Q12. Viewpoint portals.** An author could suggest other angles to watch
+  from ("see it from behind"). The styleguide says each would be a small
+  golden portal floating in the scene that you step or click into; the open
+  part is its look, because at that size the burnt edge becomes a plain
+  line. No feature suggests viewpoints yet. *Proposal:* out of this brief
+  until one does.
+- **Q13. The rescale indicator.** Rescaling means showing a hologram bigger
+  or smaller than it was recorded, such as a person shrunk onto a table.
+  True scale is a fact (principle 6), so any rescale must be visible,
+  labelled and reversible. Today the AR route silently resizes every
+  hologram so the recording is 1.85 m tall (`AR_MODEL_TARGET_HEIGHT_METERS`,
+  clamped between 0.12× and 2.5×), so a 1.6 m person shows taller than they
+  are, with no label. *Proposal:* AR opens at true scale; if the viewer
+  pinches to resize, a label on the chip shows the scale (for example
+  "1:4" or "½ size") with a glyph that returns to true size. The label's look
+  is new and goes to the user with slice 3's screenshots.
+- **Q19. Viewing in VR.** You said viewing happens in VR too, but
+  `viewer-web` has no VR mode today. Does this brief add one (holograms on
+  stages in the blue-hour room, styleguide 9.1), or is it its own feature?
+- **Q20. What does the first Halo hold?** The concept's directions are
+  fixed (N note, NE symbols, E redo, SE mark moment, S record/stop, SW
+  retake, W undo, NW ink), but most of those actions do not exist yet.
+  *Proposal:* capture's Halo carries S record/stop, W undo the last held
+  mark and E redo it; empty directions draw nothing, and their places stay
+  reserved. The viewer's Halo waits for viewing actions beyond Play, Free and
+  Return.
+- **Q21. Input collisions.** The concept summons the Halo with a
+  right-button hold on desktop and a long-press on a phone, but the held
+  mark already uses the right button on desktop, and the natural phone mark
+  is touch-and-hold on the thing itself. The rule that all chrome but stop
+  hides while recording also leaves no mark button on a phone. *Proposal:*
+  the mark keeps the right button (desktop) and becomes touch-and-hold on the
+  referent (phone and phone AR, no button needed); the Halo moves to a held
+  key on desktop, chosen against capture's key map (Space is taken), and to
+  a long-press on the dock's Halo glyph on a phone.
 
 ### Built to the rule, open to revisit
 
@@ -193,7 +231,7 @@ evidence may send one back to the user.
 
 ## Delivery slices
 
-Each slice leaves `pnpm run verify:pr` green and is merged on its own (Q5).
+Each slice leaves `pnpm run verify:pr` green and is merged on its own.
 Slices 0 to 2 change nothing a person can see.
 
 | Slice | What | Blocked by |
@@ -201,11 +239,11 @@ Slices 0 to 2 change nothing a person can see.
 | 0 | Port the capture XR checks to TypeScript | Nothing |
 | 1 | `@holoim/design-tokens` | Nothing |
 | 2 | Component contracts and their tests | Slice 1 |
-| 3 | Viewer materials, portal and Follow/Free | Slices 0 and 2; Q6, Q9; Q4 and Q14 for highlights; Q11 for the AR route |
-| 4 | Capture materials | Slices 0 and 2; Q6, Q8, Q10 |
-| 5 | The held-mode action | Slice 4; Q1, Q7, Q8 |
-| 6 | Quick Look baked halo | Q3 |
-| 7 | Cross-device task test and device checks | Slices 3 to 5 (6 for check 8) |
+| 3 | Every viewer page | Slices 0 and 2; Q10, Q11, Q13 (Q19 if VR viewing is added) |
+| 4 | Every capture page, touch input, handedness | Slices 0 and 2; Q10, Q11 |
+| 5 | Hold to mark "this" and the Halo | Slice 4; Q20, Q21; the meaning v1 change for phone AR |
+| 6 | Quick Look baked halo | Q10 |
+| 7 | Cross-device task test and device checks | Slices 3 to 6 |
 
 ### Slice 0: port the capture XR checks
 
@@ -258,9 +296,8 @@ it, so design rounds edit one place.
   output, because the packages here are consumed as TypeScript source with
   no build step, the CSS and the Python USDZ tool can read plain files, and
   a token change then shows in review as a diff of real values.
-- Only tokens with a `$value` are generated. Free text and `$extensions`
-  are not exported, so an undecided item (Q12 to Q18) has no value code can
-  read.
+- Only tokens with a `$value` are generated; free text and `$extensions`
+  are not exported, so an undecided item has no value code can read.
 - **The drift check runs when tokens change.** Today
   `isDocumentationFile` in `scripts/verify-changed-core.ts` and the `docs/*`
   rule in `scripts/ci-changed-areas.sh` treat a `tokens.json` edit as
@@ -275,7 +312,8 @@ it, so design rounds edit one place.
   script added to the `lint` of each app that has them. Today `ui-dom`
   hand-writes `uiDomTokens`, `viewer-web`'s `global.css` has 34 hex
   literals and a few components 12 more, and capture has 20 (12 in a debug
-  view, which may be exempted by path).
+  view, which may be exempted by path). Today's pointing highlight colour
+  is not a token colour, so it stays until the identity project.
 - **Colour in three.js.** The apps use three with colour management on, so
   `new Color('#ffc872')` already converts to linear. The package exports
   sRGB hex and one helper that sets the colour space explicitly; chrome
@@ -286,6 +324,8 @@ it, so design rounds edit one place.
   gaps and the chip's shape, as the styleguide's tables give; hit areas come
   from a separate per-input table and are never scaled. Where `tokens.json`
   says less (`appliesTo`), the styleguide wins and the token file is fixed.
+- The values set in this brief (Q15 to Q18) are added to the styleguide and
+  `tokens.json` as plain rules before this slice generates from them.
 - Fraunces and Figtree are self-hosted as WOFF2 for the DOM, and baked to
   MSDF at the styleguide's weights for 3D. Today `global.css` names Space
   Grotesk and never loads it.
@@ -301,39 +341,44 @@ their tests.
 
 | Contract | What it decides |
 | --- | --- |
-| Edge outline | Burnt outline from a seed (Q10): 280 points, waves, tears, jitter, inset, as shares of the short side; the same points for SVG, canvas and three.js |
-| Edge strokes | Halo, core, highlight and soot widths and levels; the 3D halo opacity `min(1, 0.9 × level / 0.5)`; the soot crossfade `t(L)` on flat screens; AR soot from the lighting estimate (threshold: Q16) |
+| Edge outline | Burnt outline from a seed (Q10): 280 points, waves, tears, jitter, inset, as shares of the short side; the same points for SVG, canvas, three.js and the USDZ |
+| Edge strokes | Halo, core, highlight and soot widths and levels; the 3D halo opacity `min(1, 0.9 × level / 0.5)`; the soot rule per target (flat and VR `t(L)`, AR on the estimate with hysteresis, AR without an estimate always on) |
 | Recording edge | Flat screens: halo at level 0.08, core and highlight at 0.55, no sparks. Headsets: no edge |
-| Chip | Opacity per target and blend mode (2.3); where it is mandatory (5.2); the VR fade-in of 0.3 s and hold of at least 2 s |
+| Chip | Opacity per target and blend mode (2.3), 92% on an unlisted AR target; where it is mandatory (5.2); the VR fade-in of 0.3 s and hold of at least 2 s |
 | Shade | The radial gradient, width 120% of the hologram, and the label rim |
 | Glyph | Drawings, ring, stroke, states (rest, cream lift on hover, focus ring, pressed at 55%), the always-there set dimming to 40% after 4 s idle |
-| Hit area | The larger of the drawn size and the input's minimum: mouse 24, touch 44, ray 56, poke 72 and at least 20 mm, with 30 apx gaps; gaze and pinch per Q17 |
-| Placement | Which slot each control lives in (stage base or shade, non-dominant hand or dock, point of action, referent, periphery, world); only the periphery status line follows the head |
+| Hit area | The larger of the drawn size and the input's minimum: mouse 24, touch 44, ray 56, poke 72 and at least 20 mm with 30 apx gaps, gaze and pinch 72 |
+| Placement | Which slot each control lives in (stage base or shade, non-dominant hand or dock, point of action, referent, periphery, world or side sheet; Q11); only the periphery status line follows the head |
+| Handedness | Which hand is dominant, from the setting; every slot and held mode reads it |
 | Headset text | No text within arm's reach; labels, timecode and caption fade within 1 m of a hologram and return beyond it; notes fold to their mark |
 | Motion | Flicker per target (the round 1 levels, the stage-light sine, the VR swing), sparks on the hologram in focus only, reduced motion, chrome unfolding (240 ms in, 400 ms out) |
 | Recording chrome | Everything but stop and the running time hides until the take ends |
+| Halo | Eight fixed directions; ring after about 300 ms; a flick commits without drawing; empty directions reserved (Q20) |
+| Held mode | Starts on hold; ends on release, on tracking loss and on blur; consumes its own release |
+| Scale | True scale by default; a rescale is labelled and reversible (Q13) |
 | Chrome flag | A structural flag on every chrome object, so recording, export and point resolution skip it |
 
 The renderers then implement the contracts:
 
 - `ui-dom` replaces its nine generic components (UiPanel, UiButton, UiPill
   and the rest) with the glyph control, the chip, the shade, the dock, the
-  edge (SVG) and the type roles.
+  side sheet, the Halo, the edge (SVG) and the type roles.
 - `xr-ui-r3f` replaces `HeadLockedActionBar` with controls at the
-  hologram's foot on the chip, and draws the edge in the AR route.
+  hologram's foot on the chip and on the wrist, and draws the edge and the
+  Halo in the AR route.
 - `xr-ui-three` replaces `ThreeLabelPill` and `ThreeRecordingActionPanel`
-  with the wrist glyph, the periphery status line, the chip with hysteresis,
-  and MSDF labels.
+  with the wrist glyphs, the periphery status line, the chip with
+  hysteresis, the world panel, the Halo and MSDF labels.
 
 Contract tests for `ui-dom`, `xr-ui-r3f` and `xr-ui-three` check that each
 renderer carries out the core contract: the same edge points from the same
 seed; hit areas at the input minimum; the chip opacity for the target;
 material colours read back with `getHexString(SRGBColorSpace)` equal to the
-token, with `toneMapped` off; the chrome flag on every chrome object. They
-are chosen from the failure list below, not written to ratify code. Their
-`--passWithNoTests` flags are removed.
+token, with `toneMapped` off; the Halo's directions; the chrome flag on
+every chrome object. They are chosen from the failure list below, not
+written to ratify code. Their `--passWithNoTests` flags are removed.
 
-### Slice 3: viewer materials, portal and Follow/Free
+### Slice 3: every viewer page
 
 - The ground gradient pinned to the screen; nothing bare from 75% down.
 - Every card: the burnt edge, the shade at its foot, Play, Free and Return
@@ -341,63 +386,73 @@ are chosen from the failure list below, not written to ratify code. Their
   tilt toggles in `PortalControls.tsx` appear from the cursor or touch and
   leave, since only Play, Free and Return are always there.
 - Follow and Free keep the portal store's behaviour (`portalStore.ts`,
-  `PortalMode`), for the variants Q9 keeps. Free is the four-way glyph and
-  Return the arc glyph. The portal e2e checks keep passing.
-- Feed-wide notices (empty feed, offline, server error, upload status) on the
-  chip, never under the upload panel.
+  `PortalMode`) in all three variants (`freeze`, `drag`, `tilt`). Free is
+  the four-way glyph and Return the arc glyph. The portal e2e checks keep
+  passing.
+- Upload in the side sheet; feed-wide notices (empty feed, offline, server
+  error, upload status) on the chip, never under the upload panel; general
+  controls in the dock (Q11).
 - "View in AR" as the cube in brackets on the card, in its shade.
 - Sparks on the card nearest the middle only; the others hold and do not
   redraw. Flicker and reduced motion per the styleguide.
-- Pointing highlights in the author's hue with their initial, once Q4 and
-  Q14 are answered.
+- Pointing highlights keep today's colour and recorded/inferred look.
 - The WebXR AR route: controls at the hologram's foot, every row on the chip
-  (97% Quest passthrough, 88% Android Chrome), no head-locked bar, steady
-  stage light, Exit per Q11. Quest AR uses headset sizes (2.5×, rays 56,
-  poke 72, labels fade within 1 m); Android uses flat sizes and touch 44.
-  Android soot waits for Q16.
+  (97% Quest passthrough, 88% Android Chrome, 92% elsewhere), no head-locked
+  bar, steady stage light, soot per Q15 and Q16, Exit per Q11, true scale
+  per Q13. Quest AR uses headset sizes (2.5×, rays 56, poke 72, labels fade
+  within 1 m); Android uses flat sizes and touch 44.
+- If Q19 adds VR viewing: holograms on stages in the blue-hour room, per
+  styleguide 9.1.
 
-### Slice 4: capture materials
+### Slice 4: every capture page, touch input, handedness
 
 - Desktop and phone: the overlay as glyphs in a shade and a bottom dock on
-  the bottom shade, touch words on touch devices (no keyboard help on a
-  phone), glyphs as SVG, never emoji.
-- Headsets: the record glyph on the non-dominant wrist (Q8; no head-locked
-  panel or pill, as `VrHud.ts` and `VrRecordingPanel.ts` draw today),
-  "Recording 0:12" on the periphery status line, labels only 1 m or more
-  away, 2.5× type and glyphs, hit sizes per input, the fingertip shade
-  before a poke, a soft tick on commit, controller pulses. System sounds
-  stay out of the capture mix.
+  the bottom shade, settings in a side sheet, touch words on touch devices
+  (no keyboard help on a phone), glyphs as SVG, never emoji.
+- Touch input for capture on phones: look, move and record by touch, with
+  44 apx targets clear of the gesture zones.
+- Headsets: the record glyph on the non-dominant wrist (no head-locked panel
+  or pill, as `VrHud.ts` and `VrRecordingPanel.ts` draw today), "Recording
+  0:12" on the periphery status line, settings on a world panel, labels
+  only 1 m or more away, 2.5× type and glyphs, hit sizes per input, the
+  fingertip shade before a poke, a soft tick on commit, controller pulses.
+  System sounds stay out of the capture mix.
 - The record control: rose circle when idle, rose rounded square while
   recording, inside the gold ring; the state carried by shape and word.
 - Recording chrome per the styleguide on every target.
+- The handedness setting, right-handed by default, stored per device.
 - Every chrome object carries the chrome flag, so the scene sampler
   (`collectSceneBubbleGroup`, which exports every visible non-skinned mesh)
   and the point resolver skip it.
-- Check whether capture shows a hologram in VR when not recording (Q15).
 
-### Slice 5: the held-mode action (pending Q1)
-
-The inputs, as option A would have them; B and C take a subset or the
-viewer side.
+### Slice 5: hold to mark "this", and the Halo
 
 | Input | Hold | Point | Today |
 | --- | --- | --- | --- |
 | Desktop | Right mouse button while pointer-locked, F as fallback | Mouse aim | Exists (self-resolving pointing) |
 | Quest hands | Non-dominant thumb–middle pinch | Dominant index | New; today a point is only read, never held |
-| Quest controllers | Non-dominant trigger | Dominant ray | New; reopens the pointing brief's choice to leave controllers out |
-| Android phone AR | Hold the dock's mark glyph | Touch the referent | New; capture has no touch input today, and v0 cannot say "from the camera" |
+| Quest controllers | Non-dominant trigger | Dominant ray | New; reverses the pointing brief's choice to leave controllers out |
+| Phone | Touch and hold on the referent (Q21) | The same finger | New; needs slice 4's touch input |
+| Phone AR | Touch and hold on the referent (Q21) | Ray from the camera through the touch | New; needs the meaning v1 change |
 
-Letting go, losing tracking, or the window losing focus ends the mode. No
-mark appears live in the headset (concept, "This and here"); it shows in the
-viewer's portal on phone and desktop. Any change to the meaning record goes
-through the `@holoim/meaning` owner as its own reviewed change.
+- Letting go, losing tracking, or the window losing focus ends the mode.
+- The mark is a `link` with `provenance: recorded`; it suppresses any
+  inferred link for an overlapping span.
+- No mark appears live in the headset (concept, "This and here"); it shows
+  in the viewer's portal on phone and desktop.
+- Undo and redo of the last held mark, through the Halo (Q20).
+- The Halo on every device, with the summon idioms of the concept's verb
+  table except where Q21 moves them.
+- Any change to the meaning record goes through the `@holoim/meaning` owner
+  as its own reviewed change; v0 files keep loading.
 
-### Slice 6: Quick Look baked halo (pending Q3)
+### Slice 6: Quick Look baked halo
 
 `tools/glb_to_usdz.py` adds the gold core, the cream highlight and a static
-soft halo when it builds the USDZ. The outline must match the TypeScript
-edge for the same seed: the worker passes the computed points to the Python
-tool, or a golden-vector test holds the two implementations together. The
+soft halo when it builds a USDZ. The outline matches the TypeScript edge for
+the same seed (Q10): the worker passes the computed points to the Python
+tool, or a golden-vector test holds the two together. New USDZ files only;
+re-converting stored files is a separate run on the user's go-ahead. The
 exported GLB is unchanged.
 
 ### Slice 7: cross-device task test and device checks
@@ -420,27 +475,38 @@ See "Test plan and evidence" and "Physical-device limits".
 - [ ] The `xr-ui-core` state contracts are unchanged and their tests pass;
   the new contracts have tests; `ui-dom`, `xr-ui-r3f` and `xr-ui-three` have
   contract tests and no `--passWithNoTests`.
+- [ ] Every page of both apps is in the new look on each device it runs on;
+  no page mixes old and new UI.
 - [ ] Viewer, phone and desktop: each card shows one burnt edge, the shade,
   and Play, Free and Return in it; nothing bare from 75% down; notices on the
   chip; only the card nearest the middle sparks.
-- [ ] Follow and Free behave as the portal brief requires, and every portal
-  e2e check passes.
+- [ ] Follow and Free behave as the portal brief requires in all three
+  variants, and every portal e2e check passes.
 - [ ] AR (WebXR): no control is head-locked; every row is on the chip at the
   target's opacity; Exit is reachable before placement and with the
-  hologram out of view; the stage light never flickers.
+  hologram out of view; the hologram opens at true scale and any rescale is
+  labelled and reversible; the stage light never flickers.
 - [ ] Capture headset: no head-locked panel; the record glyph is on the
   non-dominant wrist; "Recording 0:12" is on the periphery status line; no
   text within arm's reach; while recording, only stop and the running time
   show.
+- [ ] Capture runs on a phone by touch: look, move, record and hold to mark.
+- [ ] Switching handedness swaps the wrist, the held mode and the pointing
+  hand in both apps.
 - [ ] Hit areas meet the input minimum on every glyph (mouse 24, touch 44,
-  ray 56, poke 72 and 20 mm).
+  ray 56, poke 72 and 20 mm, gaze and pinch 72).
 - [ ] Reduced motion: no sparks, the 8 s halo fade, chrome crossfades in
   place.
-- [ ] The held action (per Q1) produces the expected mark from each of its
-  inputs in end-to-end runs, and the viewer shows it on phone and desktop.
-- [ ] The export → upload → render pipeline e2e passes, and a take without
-  marks exports byte-identical to before, with all chrome visible during
-  the take.
+- [ ] Hold to mark "this" produces a `recorded` link from desktop, hands,
+  controllers, phone and phone AR in end-to-end runs, no inferred link
+  overlaps it, and the viewer shows it on phone and desktop.
+- [ ] The Halo opens with the same directions on every device, and a flick
+  commits without the ring drawing.
+- [ ] The export → upload → render pipeline e2e passes; a take without marks
+  exports byte-identical to before, with all chrome visible during the
+  take; v0 files still load after the meaning change.
+- [ ] New USDZ files carry the baked edge, matching the viewer's outline for
+  the same hologram.
 - [ ] The cross-device task test has run and its results are recorded here.
 - [ ] Every device check below has a recorded physical result, or is listed
   under remaining limits with the reason.
@@ -460,13 +526,17 @@ Listed before choosing isolated tests; contract tests come from this list.
 | The headset factor is applied to type only, leaving strokes and rings at flat size | One size function following the styleguide's tables; contract test per part |
 | The edge differs between SVG, canvas, 3D and the USDZ for one hologram | One seeded outline; same-seed tests; points passed to, or golden-tested against, the Python tool |
 | The edge is clipped square at small sizes | Inset is the larger of 6% and the halo width; test at the 80 px thumbnail |
-| Chrome (stage controls, chip, MSDF text, fingertip shade, edge) is exported in the GLB or becomes a pointing referent | Chrome flag skipped by the sampler and resolver; byte-identical export with chrome visible |
-| A glyph's hit area shrinks to its drawing on touch or rays | Hit-area contract, never scaled; renderer tests per input |
+| Chrome (stage controls, chip, MSDF text, Halo, fingertip shade, edge) is exported in the GLB or becomes a pointing referent | Chrome flag skipped by the sampler and resolver; byte-identical export with chrome visible |
+| A glyph's hit area shrinks to its drawing on touch, rays or gaze | Hit-area contract, never scaled; renderer tests per input |
 | Phone controls reach into gesture zones or safe-area insets | e2e on a 390 × 844 touch viewport measures control boxes against the zones |
+| Phone touch for capture (look, move) fights the feed's or the page's scroll | `touch-action` set per surface; e2e on the touch viewport |
 | A control is head-locked in a headset | IWER check walks the head; every control but the status line stays in world or hand space |
 | Text appears within arm's reach | IWER check measures label distance from the head; under 1 m fails |
-| AR controls or Exit are unreachable before placement or with the hologram out of view | Q11's answer; IWER check before placement and looking away |
+| AR controls or Exit are unreachable before placement or with the hologram out of view | Wrist or dock placement (Q11); IWER check before placement and looking away |
+| A hologram is shown at a scale nobody chose, unlabelled | True scale by default; rescale labelled; AR e2e reads the model's scale |
 | The VR chip flickers on and off at a boundary | 0.3 s fade, 2 s minimum hold; contract test steps a background across the threshold |
+| AR soot flickers as the lighting estimate wavers | On at 0.16, off below 0.095; contract test feeds a noisy estimate |
+| AR with no lighting estimate keeps the glow against a bright wall | Soot always on there; device check 9 |
 | The chip is opaque in AR, hiding the room | Contract: never 100% in AR |
 | Red alone carries the recording state | Shape and word change with it; check asserts the stop shape and "Recording" text |
 | The idle dim hides a control someone is reaching for | Approach of hand, cursor or gaze restores it; test with a cursor near the glyph |
@@ -475,16 +545,20 @@ Listed before choosing isolated tests; contract tests come from this list.
 | A label rename breaks a check that finds a button by name | Names exported from one module, used by capture checks and viewer e2e |
 | The TS port changes what a check proves | Report comparator with declared tolerances |
 | The port breaks a dependant (viewer pointing pipeline, `doctor`, CI sharding) | Those three run in slice 0's evidence |
+| Handedness is read in one place and not another, so the wrist and the held hand disagree | One handedness contract every slot and mode reads; IWER check with both settings |
 | The held mode gets stuck on (release lost on tracking loss or blur) | Mode ends on release, tracking loss and blur; IWER check drops the hand mid-hold |
 | A held mark on hands is confused with an ordinary pinch | Mode uses the non-dominant thumb–middle pinch; IWER check performs both |
 | Releasing a held trigger fires `select` at whatever its ray hits (`VrHud.ts` listens on every controller) | A held mode consumes its own release; IWER check releases over a control |
 | A poke on the wrist record glyph is read as a point at `leftHand`, adding an inferred link at the end of every take | Points at chrome or during a chrome poke are dropped; replay check over a take's stop |
-| A recorded and an inferred link cover the same point | Suppression rule from the meaning owner (Q1); export check |
+| A recorded and an inferred link cover the same point | The held mark suppresses overlapping inferred links; export check |
+| The Halo and the held mark share a trigger (desktop right button, phone long-press) | Separate triggers (Q21); e2e performs both on each device |
+| A Halo flick is read as a drag or a scroll | Flick threshold and direction snapping; e2e flicks each direction with mouse, touch and IWER |
 | The poke tick is picked up by the headset microphone through the air | Listen to a recorded take on a device; if audible, back to the user |
+| A v1 meaning record breaks older readers, or v0 files stop loading | Version bump through the meaning owner; viewer loads both; pipeline e2e with a v0 export |
 | Marks change the GLB for takes without marks | Extension written only when there are marks; byte-identical export check |
 | The viewer hides an old GLB without the meaning extension | Extension is optional; feed e2e includes an older export |
 | Fonts fail to load and text falls back to a different face | Self-hosted WOFF2; e2e checks the computed font family |
-| Old and new UI coexist on one screen mid-redesign | Each slice converts whole screens; merged only when its screens are complete |
+| Old and new UI coexist on one page mid-redesign | Each slice converts whole pages; merged only when its pages are complete |
 
 ## Ownership
 
@@ -495,8 +569,8 @@ Listed before choosing isolated tests; contract tests come from this list.
 | Implementer, slice 0 | Assigned at start (Standard tier) | `apps/capture/scripts/**`, the automation-hook declaration, `.github/workflows/ci.yml` (XR sharding only), the import lines of `apps/viewer-web/e2e/pointing.pipeline.spec.ts`; lands before slice 3 starts |
 | Implementer, slices 1 and 2 | One integrator (contracts are shared) | `packages/design-tokens/**`, `packages/xr-ui-core/**`, `packages/ui-dom/**`, `packages/xr-ui-r3f/**`, `packages/xr-ui-three/**`, the lint rule in `packages/config-eslint/**`, `scripts/verify-changed-core.ts`, `scripts/ci-changed-areas.sh` |
 | Implementer, slice 3 | Assigned at start | `apps/viewer-web/src/**`, `apps/viewer-web/e2e/**` |
-| Implementer, slices 4 and 5 | Assigned at start | `apps/capture/src/**`, capture checks for the held action |
-| Meaning owner | Assigned if Q1 changes the record | `packages/meaning/**`, as its own reviewed change |
+| Implementer, slices 4 and 5 | Assigned at start | `apps/capture/src/**`, capture checks for touch, handedness, the held mark and the Halo |
+| Meaning owner | Assigned for the v1 change | `packages/meaning/**`, as its own reviewed change |
 | Implementer, slice 6 | Assigned at start | `apps/viewer-api/tools/glb_to_usdz.py`, `apps/viewer-api/src/services/usdz-worker.ts` |
 | Independent verifier | A different vendor from the implementer (for example Codex) | Read-only; test artifacts only |
 
@@ -504,8 +578,6 @@ Slices 3 and 4 may run in parallel once slices 0 and 2 are merged; they
 share no files.
 
 ## Design decision
-
-Proposed, and changed by the design review of 2026-10-24:
 
 - **Order:** port the checks and build the token package and contracts
   before any visible change, so every later slice is caught by typed checks
@@ -518,14 +590,16 @@ Proposed, and changed by the design review of 2026-10-24:
   parsing), and moving the file into the package (the styleguide and its
   tokens are edited together in design rounds).
 - **Components** are specified once in `xr-ui-core` and rendered three ways.
-- **Review changes:** Q1 now sets out three options with their costs rather
-  than recommending one; added the chrome-export failure case and chrome
-  flag; the drift check is wired into both classifiers; the port keeps its
-  dependants and full environment; three.js colours stay sRGB with an
-  explicit helper and no tone mapping; the headset factor follows the
-  styleguide's tables; slice 3 no longer settles Android soot, the
-  provenance look or gaze-and-pinch; the USDZ path is corrected; new
-  questions Q6 to Q11; held-mode input collisions added.
+- **Design review, 2026-10-24:** Q1 set out with its costs; the chrome
+  flag and chrome-export failure case added; the drift check wired into both
+  classifiers; the port keeps its dependants and full environment; three.js
+  colours stay sRGB with an explicit helper and no tone mapping; the headset
+  factor follows the styleguide's tables; undecided items left undecided;
+  the USDZ path corrected; held-mode input collisions added.
+- **User's answers, 2026-10-24:** recorded in "Decisions and questions",
+  which widen the scope to every page, the Halo, touch capture on phones,
+  controllers, handedness and the Quick Look halo, and move identity hues to
+  the identity project.
 
 ## Test plan and evidence
 
@@ -534,22 +608,22 @@ Proposed, and changed by the design review of 2026-10-24:
 | Port equivalence | `pnpm run test:xr:capture`, `test:xr:pointing`, `pnpm run doctor`, `pnpm run test:smoke:pipeline` on `main` and on the branch | Emulation (IWER) | Comparator output over `*-report.json`; pending |
 | Tokens and literals | `pnpm run verify:agent` after a token edit | Neither (tooling) | Check output; pending |
 | Contracts | `pnpm --filter @holoim/xr-ui-core test`, and the same for `ui-dom`, `xr-ui-r3f`, `xr-ui-three`, `design-tokens` | Neither (unit) | Test report; pending |
-| Viewer look, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour and font assertions | Emulation (Playwright viewports) | Screenshots at desktop and 390 × 844, previewed with `packages/tooling-testing/src/preview.mjs`; pending |
+| Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | Screenshots at desktop and 390 × 844, previewed with `packages/tooling-testing/src/preview.mjs`; pending |
 | AR route | `pnpm run test:xr:viewer` | Emulation (IWER) | Screenshots and placement report; pending |
-| Capture headset rules | `pnpm --filter @holoim/capture run test:xr:mock` and a new placement scenario | Emulation (IWER) | Placement and label-distance report; pending |
-| Held action on every input | IWER scenarios (hands, controllers), the desktop pointing take, a touch scenario on the phone viewport, per Q1 | Emulation | Exported GLBs with the expected marks; pending |
-| Pipeline | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result and byte-identical export with chrome visible; pending |
+| Capture pages and headset rules | `pnpm --filter @holoim/capture run test:xr:mock`, a new placement scenario, and a touch scenario on the phone viewport | Emulation (IWER, Playwright) | Placement, label-distance and handedness report; pending |
+| Hold to mark on every input | IWER scenarios (hands, controllers), the desktop pointing take, touch scenarios for phone and phone AR | Emulation | Exported GLBs with the expected `recorded` links and no overlapping inferred link; pending |
+| The Halo on every input | Flick and hold scenarios with mouse, touch and IWER (hands, controllers, `transient-pointer` if IWER emulates it) | Emulation | Report of directions committed; pending |
+| Pipeline and USDZ | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result; byte-identical export with chrome visible; v0 and v1 files load; USDZ outline matches; pending |
 | Cross-device task test | The PRD-021 trial (below) | Physical | Recorded results; pending |
 
 ### Cross-device task test
 
-From PRD-021: after doing the held action once in a headset, each
-participant does it on a second device without instruction, and recognises
-a mark in the phone portal. Compare the new grammar with today's UI.
-Measures: unaided success and time to mark. Continue if transfer works;
-revise any idiom that fails on one device. The second device depends on Q1:
-the phone portal (B), desktop capture (C), or desktop capture and an Android
-phone if one is available (A).
+From PRD-021: after holding to mark "this" once in a headset, each
+participant does it on desktop capture and on a phone without instruction,
+then finds what they marked in the phone portal. Compare the new grammar
+with today's UI. Measures: unaided success and time to mark. Continue if
+transfer works; revise any idiom that fails on one device. Phone AR runs
+only if an Android device is available.
 
 ## Physical-device limits
 
@@ -565,15 +639,19 @@ blending and type checks.
 | # | Check | Device | Steps | Passes when | Emulation can show | Physical result |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Blending in AR | Quest 3 passthrough; Android Chrome (ARCore); iPhone AR Quick Look | Run the probe's blend pairs on each | The blend mode is measured on each; the chip keeps its value, or takes round 3's value for the measured mode (88% sRGB, 92% linear) | Nothing: IWER composites in desktop Chromium | Pending |
-| 2 | Soot in bright AR rooms | Android phone | Place a hologram against a white and a beige wall in daylight; screenshot | Soot replaces the glow, with contrast near 3.3:1 and 4.3:1; the threshold is recorded for Q16 | That the code path switches on a mocked lighting estimate | Pending |
+| 2 | Soot in bright AR rooms, and its threshold | Android phone | Place a hologram against a white and a beige wall in daylight and in a dim room; log the estimate's ambient luminance; screenshot | Soot is on in daylight and off in the dim room, with contrast near 3.3:1 and 4.3:1; the logged values confirm or replace 0.16 and 0.095 | That the code path switches on a mocked estimate | Pending |
 | 3 | Headset flicker | Quest 3, VR and AR | One-minute look at a hologram on a table in AR, and in VR | The rating is recorded for the user to judge (the 4 to 8 s looks gave "noticeable") | Nothing | Pending |
 | 4 | Sparks on Android phones | A mid-range Android phone | Scroll the feed for a minute; record the long-frame share | Recorded beside the Quest 2D page's 0.04% (focus only), for the user to judge | That one card animates | Pending |
 | 5 | sRGB blending in Quest VR | Quest 3 | Probe blend pairs in VR | Measured; 72% kept or replaced | Nothing | Pending |
 | 6 | Glyph stroke in a headset | Quest 3 | Look at the glyph row at 1.75 m and at 1 m | 3.75 apx strokes do not shimmer | Nothing | Pending |
 | 7 | Legibility from 1 m to 1.75 m, and the 25 apx initial | Quest 3 | Probe type ratings at 1 m, 1.25 m and 1.5 m, and an author initial | The ratings are recorded; "easy" at each distance keeps the 2.5× rule | Nothing | Pending |
-| 8 | Baked halo in Quick Look (if Q3 is yes) | iPhone | Open a hologram's USDZ in Quick Look on a table; screenshot | The halo reads as a halo, not washed out | Nothing | Pending |
+| 8 | Baked halo in Quick Look | iPhone | Open a hologram's USDZ in Quick Look on a table; screenshot | The halo reads as a halo, not washed out | Nothing | Pending |
+| 9 | Soot always on in Quest AR | Quest 3 passthrough | Look at a hologram in a dim room and against a bright wall | The edge reads against the wall, and the user judges the dim-room look | That soot is on without an estimate | Pending |
+| 10 | Gaze-and-pinch hit size | Apple Vision Pro | Hit each glyph by gaze and pinch at 1.75 m | Hits land at 72 apx without wrong targets | Only if IWER emulates `transient-pointer` | No device: remaining limit |
+| 11 | VR soot | Quest 3 | Look at an edge against a bright part of the VR room | Soot replaces the glow there and nowhere else | That `t(L)` follows the room's luminance | Pending |
 
-Also physical, from PRD-021's technical signal: the held action on each of
-its headset inputs (feel, false starts, stuck modes), the fingertip shade
-and tick on a real poke (and whether the microphone hears the tick), and the
-record glyph on a real wrist.
+Also physical, from PRD-021's technical signal: hold to mark on Quest hands
+and controllers (feel, false starts, stuck modes), the Halo flick on each
+headset input, touch capture and the held mark on a real phone, the
+fingertip shade and tick on a real poke (and whether the microphone hears
+the tick), and the record glyph on a real wrist.

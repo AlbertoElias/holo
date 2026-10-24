@@ -82,6 +82,9 @@ it from the item below instead of duplicating its status here.
   and conversion decisions are made and implementing in
   [`docs/features/live-deployment.md`](docs/features/live-deployment.md)
   (Fly + R2 + async USDZ; auth and Postgres deliberately deferred there).
+  When identities land, that project also gives each person their identity
+  hue and initial for marks (styleguide 1.1 and 2.4); the UI redesign leaves
+  pointing highlights in today's colour until then.
 - [x] Move the generated development SQLite databases out of version control. Local
   setup now runs committed Prisma migrations; route tests own temporary database and
   upload fixtures; generated database files are ignored.
