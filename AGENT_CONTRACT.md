@@ -109,7 +109,7 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
 |---|---|---|
 | Docs-only edit | `pnpm run verify:agent` (runs Knowledge `check:docs` only) | ~2 s |
 | One package edit | `pnpm run verify:agent` | 5–10 s |
-| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|flows\|terrain\|hands\|height\|body>` | 10–45 s |
+| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|flows\|terrain\|hands\|height\|body\|pointing\|object>` | 10–45 s |
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |

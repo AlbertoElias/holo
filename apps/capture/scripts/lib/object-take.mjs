@@ -1,0 +1,516 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+import * as THREE from 'three';
+
+import {
+  attachXrEnvironment,
+  createXrContext,
+  enterIwerSessionFromButton,
+  freezePageClock,
+  waitForIwerRuntime,
+  waitForPageFunctions,
+  waitForTextContentPrefix,
+  waitForXrRenderLoop,
+  wireXrConsoleErrors
+} from '@holoim/tooling-testing/xr-env';
+
+import { angleDeg, findNode, loadTake, objectNodes, relativePose, rigidPose, worldAt } from './object-glb.mjs';
+
+// Explain with an object (PRD-043): scripted takes that load the bracket
+// fixture, grab it, move and turn it, and put it down, through capture's real
+// input paths, then read the exported GLB.
+//   - IWER controllers: a squeeze out of reach and a trigger press grab
+//     nothing; a squeeze with the avatar hand on the object grabs it; moving
+//     and turning the controller moves and turns the object rigidly with the
+//     avatar's hand; releasing leaves it in place.
+//   - Desktop: a take with no object exports no object; the overlay picker
+//     refuses an unsupported file and loads the bracket; G picks it up into
+//     the right hand, Q turns it, walking carries it, G puts it down, and G
+//     out of reach does nothing.
+// Each export is checked: one RecordedObject node, as many keys as the
+// avatar, a valid HOLOIM_objects extension with the hold span, and the
+// object's pose relative to the avatar's RightHand matching capture's.
+
+export const OBJECT_URL = '/fixtures/objects/bracket.glb';
+const SCENE = '/fixtures/scenes/body-floor.gltf';
+const STEP_MS = 1000 / 60;
+const VIEWPORT = { width: 640, height: 400 };
+// Rigid hold, read from capture's own state each step.
+const RIGID_POSITION_M = 0.002;
+const RIGID_ANGLE_DEG = 0.5;
+// GLB against capture.
+const EXPORT_POSITION_M = 0.01;
+const EXPORT_ANGLE_DEG = 1;
+const SPAN_TOLERANCE_SEC = 0.1;
+
+const v3 = (a) => new THREE.Vector3(...a);
+const q4 = (a) => new THREE.Quaternion(...a);
+const round = (value, digits = 4) => Number(value.toFixed(digits));
+const smooth = (t) => t * t * (3 - 2 * t);
+
+function poseOf(entry) {
+  return entry ? { position: v3(entry.position), quaternion: q4(entry.quaternion) } : null;
+}
+
+async function setupPage(browser, { iwer, consoleErrors, label }) {
+  const context = await createXrContext(browser, { viewport: VIEWPORT, acceptDownloads: true });
+  const page = await context.newPage();
+  wireXrConsoleErrors(page, consoleErrors, { label });
+  await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"object-take-input.json"}' }));
+  if (iwer) await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
+  return { context, page };
+}
+
+async function openCapture(page, baseUrl, query) {
+  const url = new URL(baseUrl);
+  url.searchParams.set('scene', SCENE);
+  url.searchParams.set('sceneScale', '1');
+  url.searchParams.set('manualClock', '1');
+  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+  await page.goto(url.href, { waitUntil: 'networkidle' });
+  await waitForPageFunctions(page, ['advanceTime', 'render_game_to_text', '__setManualClock', '__setFrameStepping', '__setSpectatorView']);
+  await waitForTextContentPrefix(page, '#status', 'loaded');
+}
+
+const readState = (page) => page.evaluate(() => JSON.parse(window.render_game_to_text()));
+
+async function clickButton(page, name) {
+  await page.getByRole('button', { name, exact: true }).evaluate((button) => button.click());
+}
+
+async function saveDownload(page, stop, file) {
+  const download = page.waitForEvent('download', { timeout: 30_000 });
+  await stop();
+  await (await download).saveAs(file);
+  return file;
+}
+
+/** Hold relation samples (object in the hand anchor's frame) while an object is held. */
+function holdRelation(state) {
+  const item = state.objects.items[0];
+  if (!item?.heldBy) return null;
+  const hand = poseOf(state.objects.hands[item.heldBy]);
+  return hand ? relativePose(hand, poseOf(item)) : null;
+}
+
+function spread(relations) {
+  const first = relations[0];
+  let position = 0;
+  let angle = 0;
+  for (const relation of relations) {
+    position = Math.max(position, relation.position.distanceTo(first.position));
+    angle = Math.max(angle, angleDeg(relation.quaternion, first.quaternion));
+  }
+  return { position: round(position), angleDeg: round(angle, 3) };
+}
+
+/**
+ * Checks an exported take against capture: the object node, its track
+ * length, the extension, the hold spans, and the object's pose relative to
+ * the avatar's RightHand at every held key against the relation capture read.
+ * `compareTailSec` limits that to the hold's last seconds, for a hold whose
+ * relation changes early (the desktop pickup glide and turn).
+ */
+export function checkObjectExport(buffer, { expectHolds, captureRelation, compareTailSec, fail }) {
+  const take = loadTake(buffer);
+  const nodes = objectNodes(take);
+  const report = { objectNodes: nodes.length, keys: take.times.length, duration: round(take.times.at(-1) ?? 0, 3) };
+  if (nodes.length !== 1) {
+    fail(`export: expected one RecordedObject node, found ${nodes.length}`);
+    return report;
+  }
+  const node = nodes[0];
+  const channels = take.channels.get(node) ?? {};
+  const rootKeys = take.channels.get(findNode(take, 'RecordedAvatar'))?.translation?.keys;
+  report.objectKeys = { translation: channels.translation?.keys ?? 0, rotation: channels.rotation?.keys ?? 0, scale: channels.scale?.keys ?? 0 };
+  if (!channels.translation || !channels.rotation) fail('export: the object node has no position or rotation track');
+  if (channels.translation?.keys !== rootKeys || channels.rotation?.keys !== rootKeys) fail(`export: object keys ${channels.translation?.keys}/${channels.rotation?.keys} differ from the avatar's ${rootKeys}`);
+  if (channels.scale) fail('export: an object present for the whole take has a scale track');
+  if (!take.extension) fail('export: no HOLOIM_objects extension');
+  else if (!take.validation?.ok) fail(`export: invalid HOLOIM_objects: ${take.validation?.errors.join('; ')}`);
+  if (take.json.extensionsRequired?.includes('HOLOIM_objects')) fail('export: HOLOIM_objects must not be required');
+  if (!take.json.extensionsUsed?.includes('HOLOIM_objects')) fail('export: HOLOIM_objects missing from extensionsUsed');
+  const entry = take.validation?.ok ? take.validation.value.objects[0] : undefined;
+  report.extension = entry ?? null;
+  if (entry && entry.node !== node) fail(`export: the extension names node ${entry.node}, the object is node ${node}`);
+  if (entry && (entry.presence.length !== 1 || entry.presence[0].start !== 0 || Math.abs(entry.presence[0].end - report.duration) > 1e-3)) {
+    fail(`export: presence ${JSON.stringify(entry.presence)} does not cover the take`);
+  }
+  if (entry) {
+    if (entry.holds.length !== expectHolds.length) fail(`export: ${entry.holds.length} hold span(s), expected ${expectHolds.length}`);
+    for (const [i, expected] of expectHolds.entries()) {
+      const hold = entry.holds[i];
+      if (!hold) continue;
+      if (hold.hand !== expected.hand) fail(`export: hold ${i} hand ${hold.hand}, expected ${expected.hand}`);
+      const duration = hold.end - hold.start;
+      if (Math.abs(duration - expected.duration) > SPAN_TOLERANCE_SEC) fail(`export: hold ${i} lasts ${round(duration, 3)} s, expected ${round(expected.duration, 3)} s`);
+    }
+  }
+
+  // The object relative to the avatar's RightHand, at every held key, against capture's relation.
+  const hand = findNode(take, 'RightHand');
+  const held = entry?.holds.find((hold) => hold.hand === 'right');
+  if (hand < 0) fail('export: no RightHand bone');
+  if (hand >= 0 && held && captureRelation) {
+    let position = 0;
+    let angle = 0;
+    let checked = 0;
+    take.times.forEach((time, i) => {
+      // Inside the span, away from the grab and release keys.
+      const from = compareTailSec ? held.end - compareTailSec : held.start + 0.05;
+      if (time < from || time > held.end - 0.02) return;
+      const relation = relativePose(rigidPose(worldAt(take, hand, i)), rigidPose(worldAt(take, node, i)));
+      position = Math.max(position, relation.position.distanceTo(captureRelation.position));
+      angle = Math.max(angle, angleDeg(relation.quaternion, captureRelation.quaternion));
+      checked += 1;
+    });
+    report.handRelation = { keys: checked, maxPositionErrorM: round(position), maxAngleErrorDeg: round(angle, 3) };
+    if (checked === 0) fail('export: no held keys to compare');
+    if (position > EXPORT_POSITION_M || angle > EXPORT_ANGLE_DEG) fail(`export: object off the hand by ${round(position)} m / ${round(angle, 2)}° (limits ${EXPORT_POSITION_M} m / ${EXPORT_ANGLE_DEG}°)`);
+  }
+  return report;
+}
+
+/** IWER controllers: negatives, grab, move and turn, release, export. */
+export async function runIwerObjectTake({ browser, baseUrl, artifactDir, consoleErrors }) {
+  const label = 'iwer-object-bracket';
+  const failures = [];
+  const fail = (message) => failures.push(message);
+  await mkdir(artifactDir, { recursive: true });
+  const { context, page } = await setupPage(browser, { iwer: true, consoleErrors, label });
+  try {
+    await openCapture(page, baseUrl, { object: OBJECT_URL });
+    await page.evaluate(() => {
+      window.__setManualClock(true, false);
+      window.IWER_DEVICE.primaryInputMode = 'controller';
+    });
+    await waitForIwerRuntime(page);
+    await enterIwerSessionFromButton(page, '#VRButton', { readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr' });
+    await page.evaluate(() => {
+      window.IWER_DEVICE.controlMode = 'programmatic';
+    });
+    await freezePageClock(page);
+    await waitForXrRenderLoop(page);
+    await page.evaluate(() => window.__setFrameStepping(true, false));
+
+    let steps = 0;
+    const step = async (count = 1) => {
+      for (let i = 0; i < count; i += 1) await page.clock.runFor(STEP_MS);
+      steps += count;
+    };
+    const controller = (side, position, quaternion) => page.evaluate(({ s, p, q }) => {
+      const c = window.IWER_DEVICE.controllers[s];
+      c.position.set(...p);
+      if (q) c.quaternion.set(...q);
+    }, { s: side, p: position, q: quaternion });
+    const button = (side, id, value) => page.evaluate(({ s, i, v }) => window.IWER_DEVICE.controllers[s].updateButtonValue(i, v), { s: side, i: id, v: value });
+    const shot = async (name) => {
+      await page.evaluate(() => {
+        window.__setSpectatorView('body');
+        window.__setFrameStepping(true, true);
+        for (const element of document.querySelectorAll('#ui-root, #VRButton, #ARButton, [data-webxr_runtime] > div')) element.style.visibility = 'hidden';
+      });
+      await step(2);
+      const file = path.join(artifactDir, `${label}-${name}.png`);
+      await page.screenshot({ path: file });
+      await page.evaluate(() => {
+        window.__setSpectatorView(false);
+        window.__setFrameStepping(true, false);
+        for (const element of document.querySelectorAll('#ui-root, #VRButton, #ARButton, [data-webxr_runtime] > div')) element.style.visibility = '';
+      });
+      return file;
+    };
+
+    // Rest: hands low at the sides, so the right hand is far from the object.
+    const rest = { left: [-0.3, 0.9, -0.1], right: [0.3, 0.9, -0.1] };
+    const identity = [0, 0, 0, 1];
+    await controller('left', rest.left, identity);
+    await controller('right', rest.right, identity);
+    await step(20);
+    let state = await readState(page);
+    const loaded = state.objects.items[0];
+    if (!loaded?.placed) {
+      fail('the object did not load and place');
+      return { label, failures };
+    }
+
+    // Out of reach: a squeeze grabs nothing.
+    await button('right', 'squeeze', 1);
+    await step(4);
+    state = await readState(page);
+    if (state.objects.items[0].heldBy) fail('a squeeze out of reach grabbed the object');
+    if (state.objects.grab.right.source !== 'squeeze' || !state.objects.grab.right.pressed) fail(`squeeze not read: ${JSON.stringify(state.objects.grab.right)}`);
+    await button('right', 'squeeze', 0);
+    await step(4);
+
+    // Bring the avatar's right hand onto the object: the hand follows the
+    // controller through the rig and IK, so close the loop on the bone.
+    const rigYaw = state.thumbstick.rigYaw;
+    const toTracking = (delta) => {
+      const c = Math.cos(-rigYaw);
+      const s = Math.sin(-rigYaw);
+      return [delta[0] * c + delta[2] * s, delta[1], -delta[0] * s + delta[2] * c];
+    };
+    let grip = [...rest.right];
+    let reachError = Infinity;
+    for (let iteration = 0; iteration < 16 && reachError > 0.02; iteration += 1) {
+      state = await readState(page);
+      const center = state.objects.items[0].position;
+      const hand = state.objects.hands.right.position;
+      const delta = toTracking(center.map((v, i) => v - hand[i]));
+      reachError = Math.hypot(...delta);
+      grip = grip.map((v, i) => v + delta[i] * 0.8);
+      await controller('right', grip);
+      await step(6);
+    }
+    state = await readState(page);
+    reachError = Math.hypot(...state.objects.items[0].position.map((v, i) => v - state.objects.hands.right.position[i]));
+    if (reachError > 0.06) fail(`the avatar hand never reached the object (${round(reachError, 3)} m)`);
+
+    // The trigger is the HUD's select, never a grab.
+    await button('right', 'trigger', 1);
+    await step(4);
+    state = await readState(page);
+    if (state.objects.items[0].heldBy) fail('the trigger grabbed the object');
+    await button('right', 'trigger', 0);
+    await step(4);
+    state = await readState(page);
+    if (state.objects.items[0].heldBy) fail('the trigger grabbed the object on release');
+
+    await clickButton(page, 'Start Recording');
+    await page.getByRole('button', { name: 'Stop Recording', exact: true }).waitFor({ timeout: 10_000 });
+    await step(18);
+
+    // Grab.
+    await button('right', 'squeeze', 1);
+    const grabStep = steps;
+    await step(2);
+    state = await readState(page);
+    if (state.objects.items[0].heldBy !== 'right') fail(`a squeeze on the object did not grab it (heldBy ${state.objects.items[0].heldBy})`);
+    const grabbedAt = poseOf(state.objects.items[0]);
+    const shots = { grabbed: await shot('1-grabbed') };
+
+    // Move and turn: 30 cm right and 15 cm up, 90° yaw and 30° pitch over 1.5 s.
+    const relations = [];
+    const moveSteps = 90;
+    const yaw = new THREE.Quaternion();
+    const pitch = new THREE.Quaternion();
+    for (let i = 1; i <= moveSteps; i += 1) {
+      const t = smooth(i / moveSteps);
+      yaw.setFromAxisAngle(new THREE.Vector3(0, 1, 0), (Math.PI / 2) * t);
+      pitch.setFromAxisAngle(new THREE.Vector3(1, 0, 0), (Math.PI / 6) * t);
+      const q = yaw.clone().multiply(pitch);
+      await controller('right', [grip[0] + 0.3 * t, grip[1] + 0.15 * t, grip[2]], [q.x, q.y, q.z, q.w]);
+      await step(1);
+      const relation = holdRelation(await readState(page));
+      if (relation) relations.push(relation);
+    }
+    await step(12);
+    state = await readState(page);
+    const movedTo = poseOf(state.objects.items[0]);
+    const holdRelationEnd = holdRelation(state);
+    if (holdRelationEnd) relations.push(holdRelationEnd);
+    shots.moved = await shot('2-moved-turned');
+
+    const moved = movedTo.position.distanceTo(grabbedAt.position);
+    const turned = angleDeg(movedTo.quaternion, grabbedAt.quaternion);
+    // The avatar hand follows the controller through height fit and arm IK, so it travels less.
+    if (moved < 0.1) fail(`the held object moved only ${round(moved, 3)} m`);
+    if (turned < 60) fail(`the held object turned only ${round(turned, 1)}°`);
+    if (relations.length < moveSteps) fail(`the object was dropped while moving (${relations.length}/${moveSteps} held steps)`);
+    const rigid = relations.length ? spread(relations) : null;
+    if (rigid && (rigid.position > RIGID_POSITION_M || rigid.angleDeg > RIGID_ANGLE_DEG)) fail(`the held object slid in the hand: ${JSON.stringify(rigid)}`);
+
+    // Release and move the hand away: the object stays.
+    await button('right', 'squeeze', 0);
+    const releaseStep = steps;
+    await step(2);
+    state = await readState(page);
+    if (state.objects.items[0].heldBy) fail('releasing the squeeze did not release the object');
+    const releasedAt = poseOf(state.objects.items[0]);
+    for (let i = 1; i <= 30; i += 1) {
+      await controller('right', [grip[0] + 0.3 - 0.3 * smooth(i / 30), grip[1] + 0.15 - 0.4 * smooth(i / 30), grip[2] + 0.1 * smooth(i / 30)]);
+      await step(1);
+    }
+    await step(12);
+    state = await readState(page);
+    const settled = poseOf(state.objects.items[0]);
+    const drift = settled.position.distanceTo(releasedAt.position);
+    if (drift > 1e-4) fail(`the released object moved ${round(drift, 5)} m`);
+    shots.released = await shot('3-released');
+
+    const glb = path.join(artifactDir, `${label}.glb`);
+    await saveDownload(page, async () => {
+      await clickButton(page, 'Stop Recording');
+      // Export runs in a worker; keep frames coming for it.
+      for (let i = 0; i < 20; i += 1) await step(1);
+    }, glb);
+    // Capture's own relation while held is the reference for the export.
+    const captureRelation = relations[Math.floor(relations.length / 2)] ?? null;
+    const exportReport = checkObjectExport(await readFile(glb), {
+      expectHolds: [{ hand: 'right', duration: (releaseStep - grabStep) * STEP_MS / 1000 }],
+      captureRelation,
+      fail
+    });
+
+    return {
+      label,
+      status: failures.length ? 'fail' : 'pass',
+      failures,
+      glb,
+      shots,
+      capture: {
+        reachErrorM: round(reachError, 3),
+        movedM: round(moved, 3),
+        turnedDeg: round(turned, 1),
+        heldSteps: relations.length,
+        rigidHold: rigid,
+        releasedDriftM: round(drift, 5),
+        handRelation: captureRelation && { position: captureRelation.position.toArray().map((v) => round(v)), quaternion: captureRelation.quaternion.toArray().map((v) => round(v)) }
+      },
+      export: exportReport
+    };
+  } finally {
+    await context.close();
+  }
+}
+
+/** A copy of the bracket that declares Draco compression, which capture must refuse. */
+async function unsupportedCopy(captureRoot, file) {
+  const source = await readFile(path.join(captureRoot, 'fixtures/objects/bracket.glb'));
+  const jsonLength = source.readUInt32LE(12);
+  const json = JSON.parse(source.subarray(20, 20 + jsonLength).toString('utf8'));
+  json.extensionsUsed = ['KHR_draco_mesh_compression'];
+  const text = Buffer.from(JSON.stringify(json));
+  const padded = Buffer.alloc(Math.ceil(text.length / 4) * 4, 0x20);
+  text.copy(padded);
+  const rest = source.subarray(20 + jsonLength);
+  const header = Buffer.alloc(20);
+  header.writeUInt32LE(0x46546c67, 0);
+  header.writeUInt32LE(2, 4);
+  header.writeUInt32LE(20 + padded.length + rest.length, 8);
+  header.writeUInt32LE(padded.length, 12);
+  header.writeUInt32LE(0x4e4f534a, 16);
+  await writeFile(file, Buffer.concat([header, padded, rest]));
+  return file;
+}
+
+/** Desktop: no-object take, picker refusal and load, G/Q carry, walking, put down, out of reach. */
+export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, artifactDir, consoleErrors }) {
+  const label = 'desktop-object-bracket';
+  const failures = [];
+  const fail = (message) => failures.push(message);
+  await mkdir(artifactDir, { recursive: true });
+  const { context, page } = await setupPage(browser, { iwer: false, consoleErrors, label });
+  try {
+    await openCapture(page, baseUrl, {});
+    const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
+    const record = async (seconds, file, between) => {
+      await page.getByRole('button', { name: 'Start Recording' }).click();
+      await page.getByRole('button', { name: 'Stop Recording' }).waitFor();
+      await advance(0.1);
+      if (between) await between();
+      else await advance(seconds);
+      return saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), file);
+    };
+    await advance(1);
+
+    // A take with no object exports no object node and no extension.
+    const plain = await readFile(await record(0.5, path.join(artifactDir, `${label}-no-object.glb`)));
+    await page.getByRole('button', { name: 'Start Recording' }).waitFor();
+    const plainTake = loadTake(plain);
+    const noObject = { objectNodes: objectNodes(plainTake).length, extension: plainTake.extension !== undefined, extensionsUsed: plainTake.json.extensionsUsed ?? [] };
+    if (noObject.objectNodes !== 0 || noObject.extension || noObject.extensionsUsed.includes('HOLOIM_objects')) fail(`a take without an object exported one: ${JSON.stringify(noObject)}`);
+
+    // The picker refuses an unsupported model and keeps capture working.
+    const picker = page.getByLabel('Choose an object (.glb)');
+    await picker.setInputFiles(await unsupportedCopy(captureRoot, path.join(artifactDir, `${label}-draco.glb`)));
+    await page.getByText('Unsupported in objects: Draco-compressed meshes.').waitFor({ timeout: 10_000 });
+    let state = await readState(page);
+    if (state.objects.items.length !== 0) fail('a refused model was added to the scene');
+    const refusal = 'Unsupported in objects: Draco-compressed meshes.';
+
+    // ...and loads the bracket.
+    await picker.setInputFiles(path.join(captureRoot, 'fixtures/objects/bracket.glb'));
+    await page.getByText('Object: bracket.glb').waitFor({ timeout: 10_000 });
+    await advance(0.1);
+    state = await readState(page);
+    if (state.objects.items[0]?.placed !== true) fail('the picked object was not placed');
+
+    const keyFor = async (code, seconds) => {
+      await page.keyboard.down(code);
+      await advance(seconds);
+      await page.keyboard.up(code);
+    };
+    const focusCanvas = () => page.locator('canvas').first().focus();
+    await focusCanvas();
+
+    let pickedUp;
+    let carried;
+    let putDown;
+    const relations = [];
+    let holdSeconds = 0;
+    const glb = await record(0, path.join(artifactDir, `${label}.glb`), async () => {
+      await advance(0.3);
+      await page.keyboard.press('KeyG');
+      // The arm comes up and the object glides into the hand.
+      await advance(0.5);
+      holdSeconds += 0.5;
+      state = await readState(page);
+      pickedUp = { heldBy: state.objects.items[0].heldBy, carryWeight: state.objects.carryWeight, toHandM: round(v3(state.objects.items[0].position).distanceTo(v3(state.objects.hands.right.position)), 3) };
+      const before = poseOf(state.objects.items[0]);
+      await keyFor('KeyQ', 0.5);
+      await keyFor('KeyW', 1);
+      holdSeconds += 1.5;
+      for (let i = 0; i < 10; i += 1) {
+        await advance(1 / 60);
+        holdSeconds += 1 / 60;
+        const relation = holdRelation(await readState(page));
+        if (relation) relations.push(relation);
+      }
+      state = await readState(page);
+      const after = poseOf(state.objects.items[0]);
+      carried = { movedM: round(after.position.distanceTo(before.position), 3), turnedDeg: round(angleDeg(after.quaternion, before.quaternion), 1) };
+      await page.keyboard.press('KeyG');
+      await advance(0.05);
+      state = await readState(page);
+      const released = poseOf(state.objects.items[0]);
+      await keyFor('KeyS', 1);
+      state = await readState(page);
+      putDown = { heldBy: state.objects.items[0].heldBy, driftM: round(poseOf(state.objects.items[0]).position.distanceTo(released.position), 5) };
+      await advance(0.2);
+    });
+    await page.getByRole('button', { name: 'Start Recording' }).waitFor();
+
+    if (pickedUp.heldBy !== 'right') fail(`G did not pick up the object (heldBy ${pickedUp.heldBy})`);
+    if (pickedUp.carryWeight < 1) fail(`the carry pose did not blend in (${pickedUp.carryWeight})`);
+    if (pickedUp.toHandM > 0.15) fail(`the carried object is ${pickedUp.toHandM} m from the hand`);
+    if (carried.turnedDeg < 30) fail(`Q turned the object only ${carried.turnedDeg}°`);
+    if (carried.movedM < 0.5) fail(`walking carried the object only ${carried.movedM} m`);
+    if (putDown.heldBy) fail('G did not put the object down');
+    if (putDown.driftM > 1e-4) fail(`the put-down object moved ${putDown.driftM} m while the avatar walked away`);
+
+    // Out of reach, G does nothing.
+    await page.keyboard.press('KeyG');
+    await advance(0.2);
+    state = await readState(page);
+    const outOfReach = { heldBy: state.objects.items[0].heldBy };
+    if (outOfReach.heldBy) fail('G picked up an object out of reach');
+
+    const exportReport = checkObjectExport(await readFile(glb), {
+      expectHolds: [{ hand: 'right', duration: holdSeconds }],
+      captureRelation: relations.at(-1) ?? null,
+      compareTailSec: 0.15,
+      fail
+    });
+    const shotFile = path.join(artifactDir, `${label}-put-down.png`);
+    await page.evaluate(() => document.getElementById('ui-root')?.style.setProperty('visibility', 'hidden'));
+    await page.evaluate(() => window.__setManualClock(true, true));
+    await advance(2 / 60);
+    await page.screenshot({ path: shotFile });
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, outOfReach, shots: { final: shotFile }, export: exportReport };
+  } finally {
+    await context.close();
+  }
+}

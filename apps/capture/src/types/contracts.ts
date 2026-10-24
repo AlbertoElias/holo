@@ -93,6 +93,8 @@ export interface UiViewModel {
   recordingMessage: string | null;
   heightFit: { enabled: boolean; pending: boolean; eyeHeight: number | null };
   micPermission: 'pending' | 'granted' | 'denied';
+  /** The supplied object, chosen before recording. */
+  object: { status: 'none' | 'loading' | 'ready' | 'error'; name: string | null; message: string | null };
 }
 
 export interface BoneTransform {

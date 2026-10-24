@@ -52,6 +52,12 @@ export function renderCaptureTextState(c: CaptureContext): string {
     },
     crouch: { amount: crouch.amount, poseAmount: crouch.poseAmount, target: crouch.target, source: crouch.source },
     tracking: { left: c.hands.snapshot('left'), right: c.hands.snapshot('right') },
+    objects: {
+      items: c.objects.interaction.snapshot(),
+      hands: c.objects.interaction.handSnapshot(),
+      grab: { left: c.objects.grabInput.get('left'), right: c.objects.grabInput.get('right') },
+      carryWeight: c.objects.carry.getWeight()
+    },
     heightAdaptation: {
       eyeHeight: heightFit.eyeHeight ?? null,
       scale: avatar.xrHeightScale,

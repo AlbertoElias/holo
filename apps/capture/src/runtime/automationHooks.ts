@@ -20,6 +20,7 @@ export interface AutomationHooks {
   __setSpectatorView: (mode: boolean | SpectatorViewMode) => void;
   __captureHandCalibrationPose: () => Record<VrHandSide, boolean>;
   __resetHandCalibrationPose: () => void;
+  __loadObjectUrl: (url: string) => Promise<boolean>;
 }
 
 export function installAutomationHooks(hooks: AutomationHooks): void {

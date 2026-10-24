@@ -11,6 +11,7 @@ import type { DiagnosticViews } from '../debug/DiagnosticViews';
 import type { DesktopPointAction } from '../input/DesktopPointAction';
 import type { InputController } from '../input/InputController';
 import type { VrLocomotion } from '../input/VrLocomotion';
+import type { CaptureObjects } from '../objects/CaptureObjects';
 import type { CharacterMotor } from '../physics/CharacterMotor';
 import type { RecordingSession } from '../recording/RecordingSession';
 import type { CaptureStage } from '../runtime/captureStage';
@@ -58,6 +59,7 @@ export interface CaptureContext {
   heightFit: HeightFit;
   crouch: CrouchState;
   hands: HandEmbodiment;
+  objects: CaptureObjects;
   animator: LocomotionAnimator;
   terrainLegs: TerrainLegSolver;
   ar: ArSpectator;

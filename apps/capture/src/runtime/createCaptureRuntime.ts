@@ -11,6 +11,7 @@ import { DiagnosticViews } from '../debug/DiagnosticViews';
 import { DesktopPointAction } from '../input/DesktopPointAction';
 import { InputController } from '../input/InputController';
 import { VrLocomotion } from '../input/VrLocomotion';
+import { CaptureObjects } from '../objects/CaptureObjects';
 import { CharacterMotor } from '../physics/CharacterMotor';
 import { RecordingSession } from '../recording/RecordingSession';
 import { activeCamera, type CaptureContext } from '../systems/captureContext';
@@ -86,6 +87,16 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     onSizeLocked: () => heightFit.calibration.interrupt()
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
+  const objects = new CaptureObjects({
+    worldGroup: stage.worldGroup,
+    renderer,
+    loader: stage.loader,
+    avatar,
+    tracking,
+    ui,
+    embodyOffset: config.embodyOffset,
+    isTakeActive: () => ui.getState().recordingState !== 'idle'
+  });
   const vrHud = new VrHud({
     store: ui,
     renderer,
@@ -116,6 +127,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     heightFit,
     crouch: new CrouchState(),
     hands,
+    objects,
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
@@ -173,11 +185,14 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       capture.terrainLegs.attach(avatar);
       hands.attach();
       capture.point.attach();
+      objects.attach();
       // Bind pose is measured before any animation writes the skeleton.
       body.measureBindPose();
       const spawned = await motor.init(avatar);
       hands.ensureSensors();
       if (avatar.avatar) capture.animator.attachClips(avatar.avatar, avatarGltf.animations);
+      // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
+      if (config.objectUrl) await objects.loadUrl(config.objectUrl);
       ui.setLoadState(spawned ? 'ready' : 'warning', spawned ? null : 'Loaded with warnings: spawn/physics setup incomplete.');
       registerCaptureSystems(world);
       started = true;
@@ -193,6 +208,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       getSnapshot: () => ui.getState(),
       refitHeight: () => heightFit.requestRefit(),
       toggleRecording: () => recording.toggle(),
+      loadObjectFile: (file) => void objects.loadFile(file),
       recenterAr: () => {
         if (xrEntry.sessionMode === 'ar' && tracking.isXrPresenting()) capture.ar.recenter();
       }
@@ -224,7 +240,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __setHeightEvidenceView: (enabled) => capture.diagnostics.setHeightEvidenceView(enabled),
         __setSpectatorView: (mode) => capture.diagnostics.setSpectatorView(mode),
         __captureHandCalibrationPose: () => hands.captureCalibrationPose(),
-        __resetHandCalibrationPose: () => hands.resetCalibrationPose()
+        __resetHandCalibrationPose: () => hands.resetCalibrationPose(),
+        __loadObjectUrl: (url) => objects.loadUrl(url)
       });
       // ?manualClock=1: never tick on real time, so a replay starts from the
       // same state on any host (see __setFrameStepping).

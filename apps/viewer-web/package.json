@@ -13,12 +13,13 @@
     "verify:full": "pnpm run verify:fast && pnpm run build",
     "test:e2e": "XR_TEST_MODE=iwer playwright test",
     "test:e2e:mocked": "VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer playwright test e2e/hologram-feed.spec.ts e2e/ar-bubble.spec.ts --workers=1",
-    "test:e2e:pipeline": "RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer playwright test e2e/capture-to-viewer.pipeline.spec.ts e2e/bubble-capture.pipeline.spec.ts e2e/pointing.pipeline.spec.ts --workers=1",
+    "test:e2e:pipeline": "RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer playwright test e2e/capture-to-viewer.pipeline.spec.ts e2e/bubble-capture.pipeline.spec.ts e2e/pointing.pipeline.spec.ts e2e/object.pipeline.spec.ts --workers=1",
     "test:e2e:portal": "VITE_IWER_SEM_SCENE=office_small RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer playwright test e2e/portal.spec.ts e2e/portal.pipeline.spec.ts --workers=1"
   },
   "dependencies": {
     "@holoim/contracts": "workspace:*",
     "@holoim/meaning": "workspace:*",
+    "@holoim/objects": "workspace:*",
     "@holoim/ui-dom": "workspace:*",
     "@holoim/xr-runtime": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",

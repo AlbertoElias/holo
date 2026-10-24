@@ -33,6 +33,9 @@ export class InputController {
   private pointAimPitch = 0;
   private jumpQueued = false;
   private crouchHeld = false;
+  // Desktop object carry: G toggles (queued for the next step), Q/E turn, Z/X tip.
+  private objectToggleQueued = false;
+  private readonly objectTurnKeys = new Set<'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX'>();
   private focusRecoveryUntilMs = 0;
   private lastFocusAttemptMs = 0;
   private readonly options: InputControllerOptions;
@@ -108,6 +111,18 @@ export class InputController {
     return this.crouchHeld;
   }
 
+  consumeObjectToggle(): boolean {
+    const queued = this.objectToggleQueued;
+    this.objectToggleQueued = false;
+    return queued;
+  }
+
+  /** −1..1 turn (Q turns left, positive about world up) and tip (X positive, Z negative) for a carried object. */
+  getObjectTurn(): { yaw: number; pitch: number } {
+    const held = (code: 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX'): number => (this.objectTurnKeys.has(code) ? 1 : 0);
+    return { yaw: held('KeyQ') - held('KeyE'), pitch: held('KeyX') - held('KeyZ') };
+  }
+
   applyMockInput(payload: MockInputState): void {
     if (typeof payload.forward === 'boolean') this.moveState.forward = payload.forward;
     if (typeof payload.back === 'boolean') this.moveState.back = payload.back;
@@ -148,6 +163,8 @@ export class InputController {
     this.moveState.right = false;
     this.crouchHeld = false;
     this.jumpQueued = false;
+    this.objectToggleQueued = false;
+    this.objectTurnKeys.clear();
     this.pointSources.clear();
   }
 
@@ -221,6 +238,17 @@ export class InputController {
       this.startPoint('key');
       event.preventDefault();
     }
+
+    if (!this.options.isXrPresenting()) {
+      if (event.code === 'KeyG' && !event.repeat) {
+        this.objectToggleQueued = true;
+        event.preventDefault();
+      }
+      if (isObjectTurnKey(event.code)) {
+        this.objectTurnKeys.add(event.code);
+        event.preventDefault();
+      }
+    }
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
@@ -235,6 +263,11 @@ export class InputController {
 
     if (event.code === 'KeyF') {
       this.endPoint('key');
+      event.preventDefault();
+    }
+
+    if (isObjectTurnKey(event.code)) {
+      this.objectTurnKeys.delete(event.code);
       event.preventDefault();
     }
   };
@@ -295,4 +328,8 @@ export class InputController {
       look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - event.movementY * sensitivity);
     }
   };
+}
+
+function isObjectTurnKey(code: string): code is 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX' {
+  return code === 'KeyQ' || code === 'KeyE' || code === 'KeyZ' || code === 'KeyX';
 }

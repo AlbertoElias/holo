@@ -26,6 +26,7 @@
     "test:xr:terrain": "node scripts/run-xr-checks.mjs terrain",
     "test:xr:body": "node scripts/run-xr-checks.mjs body",
     "test:xr:pointing": "node scripts/run-xr-checks.mjs pointing",
+    "test:xr:object": "node scripts/run-xr-checks.mjs object",
     "fixtures:hands": "node scripts/run-xr-checks.mjs pose-fixture",
     "fixtures:body": "node scripts/run-xr-checks.mjs body-fixtures",
     "fixtures:pointing": "node scripts/generate-pointing-test-scene.mjs && node scripts/run-xr-checks.mjs pointing-fixture",
@@ -45,6 +46,7 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
     "@holoim/meaning": "workspace:*",
+    "@holoim/objects": "workspace:*",
     "@holoim/ui-dom": "workspace:*",
     "@holoim/xr-runtime": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",

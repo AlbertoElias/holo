@@ -6,4 +6,5 @@ export interface CaptureUiBridge {
   refitHeight: () => boolean;
   toggleRecording: () => void;
   recenterAr: () => void;
+  loadObjectFile: (file: File) => void;
 }

@@ -8,6 +8,7 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 
 
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
+import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipStatus } from "../hologram/useSphereClipping";
 import { ARDepthOcclusion } from "./ARDepthOcclusion";
@@ -120,6 +121,23 @@ function toQuaternionArray(quaternion: Quaternion): [number, number, number, num
   return [quaternion.x, quaternion.y, quaternion.z, quaternion.w];
 }
 
+/**
+ * Bounds of the recording without the objects the author handled: a prop
+ * held below the feet or at arm's length must not lift or shrink the avatar.
+ */
+function boundsWithoutObjects(root: Object3D): Box3 {
+  const bounds = new Box3();
+  const scratch = new Box3();
+  root.updateWorldMatrix(true, true);
+  root.traverse((child) => {
+    const mesh = child as Object3D & { isMesh?: boolean };
+    if (!mesh.isMesh || isInsideRecordedObject(child)) return;
+    scratch.setFromObject(child);
+    if (!scratch.isEmpty()) bounds.union(scratch);
+  });
+  return bounds;
+}
+
 function normalizeSceneAtOrigin(root: Object3D): void {
   const anchor = root.getObjectByName("RecordedAvatar")
     ?? root.getObjectByName("Hips")
@@ -131,7 +149,7 @@ function normalizeSceneAtOrigin(root: Object3D): void {
 
   root.position.sub(anchorPos);
 
-  const bounds = new Box3().setFromObject(root);
+  const bounds = boundsWithoutObjects(root);
   if (!bounds.isEmpty() && Number.isFinite(bounds.min.y)) {
     root.position.y -= bounds.min.y;
   }
@@ -154,13 +172,13 @@ export function ARHologramModel({
     return cloned;
   }, [scene]);
   const modelScale = useMemo(() => {
-    const bounds = new Box3().setFromObject(clonedScene);
+    const bounds = boundsWithoutObjects(clonedScene);
     const size = bounds.getSize(new Vector3());
     if (!Number.isFinite(size.y) || size.y <= 1e-4) return 0.4;
     return Math.min(AR_MODEL_MAX_SCALE, Math.max(AR_MODEL_MIN_SCALE, AR_MODEL_TARGET_HEIGHT_METERS / size.y));
   }, [clonedScene]);
   const modelHeightMeters = useMemo(() => {
-    const bounds = new Box3().setFromObject(clonedScene);
+    const bounds = boundsWithoutObjects(clonedScene);
     const size = bounds.getSize(new Vector3());
     if (!Number.isFinite(size.y) || size.y <= 1e-4) {
       return AR_MODEL_TARGET_HEIGHT_METERS;
