@@ -7,4 +7,5 @@ export interface CaptureUiBridge {
   toggleRecording: () => void;
   recenterAr: () => void;
   loadObjectFile: (file: File) => void;
+  loadTrayFiles: (files: File[]) => void;
 }

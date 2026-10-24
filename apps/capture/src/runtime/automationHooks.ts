@@ -21,6 +21,7 @@ export interface AutomationHooks {
   __captureHandCalibrationPose: () => Record<VrHandSide, boolean>;
   __resetHandCalibrationPose: () => void;
   __loadObjectUrl: (url: string) => Promise<boolean>;
+  __loadTrayUrls: (urls: readonly string[]) => Promise<boolean>;
 }
 
 export function installAutomationHooks(hooks: AutomationHooks): void {

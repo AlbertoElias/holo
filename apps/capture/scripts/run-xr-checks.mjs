@@ -33,6 +33,7 @@ const CHECKS = {
   body: 'scripts/ci-body-replay-playwright.mjs',
   pointing: 'scripts/ci-pointing-playwright.mjs',
   object: 'scripts/ci-object-playwright.mjs',
+  summon: 'scripts/ci-summon-playwright.mjs',
   // Not checks: regenerate the IWER fixtures the hands, body and pointing checks replay.
   'pose-fixture': 'scripts/generate-iwer-pose-fixture.mjs',
   'body-fixtures': 'scripts/generate-iwer-body-fixtures.mjs',
@@ -41,7 +42,7 @@ const CHECKS = {
 };
 
 // Checks that import TypeScript workspace sources (the meaning and objects packages) run under tsx.
-const USES_TSX = new Set(['pointing', 'object']);
+const USES_TSX = new Set(['pointing', 'object', 'summon']);
 
 // Extra environment for entries that share a script.
 const CHECK_ENV = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };

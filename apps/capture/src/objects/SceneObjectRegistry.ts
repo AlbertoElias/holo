@@ -63,9 +63,27 @@ export class SceneObjectRegistry {
     object.wrapper.removeFromParent();
   }
 
-  /** Removes every prepared object: the single-object picker replaces its object. */
+  /** Removes every prepared event object: the single-object picker replaces its object. Tray items stay. */
   clearPrepared(): void {
-    for (const object of this.objects.filter((o) => o.origin === 'prepared')) this.remove(object);
+    for (const object of this.objects.filter((o) => o.origin === 'prepared' && o.layer === 'event')) this.remove(object);
+  }
+
+  /**
+   * A new event object from a tray item (PRD-045): a new id and a clone of
+   * the item's model, which shares its geometry, materials and textures. The
+   * item stays, so it can be summoned again. The caller places it; the
+   * sample store starts its presence at its first sampled frame.
+   */
+  summon(item: SceneObject): SceneObject {
+    const model = item.model.clone(true);
+    model.position.copy(item.model.position);
+    const object = this.add(model, { name: item.name, source: item.source, origin: 'summoned', layer: 'event' });
+    object.wrapper.visible = true;
+    return object;
+  }
+
+  clearSummoned(): void {
+    for (const object of this.objects.filter((o) => o.origin === 'summoned')) this.remove(object);
   }
 
   all(): readonly SceneObject[] {

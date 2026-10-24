@@ -43,7 +43,9 @@ function runs(times: number[], length: number, active: (index: number) => boolea
  * `exportAvatar(i) · relative(i)`, so the object keeps its pose relative to
  * the avatar's bones. Outside its presence spans (PRD-045) the wrapper gets a
  * STEP scale of 0 and holds the nearest present pose; an object present for
- * the whole take gets no scale track. The rest pose is the first present pose.
+ * the whole take gets no scale track. The rest pose (what a still, or a
+ * player that ignores the clip, shows) is the first present pose; for a
+ * summoned object it is the last, where it was placed.
  */
 export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportFrameSpace): ObjectExport {
   const { times } = space;
@@ -88,9 +90,9 @@ export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportF
     node.name = RECORDED_OBJECT_NODE_NAME;
     const model = track.object.model.clone(true);
     node.add(model);
-    const first = present[0]!.first;
-    node.position.fromArray(posValues, first * 3);
-    node.quaternion.fromArray(quatValues, first * 4);
+    const rest = track.object.origin === 'summoned' ? present.at(-1)!.last : present[0]!.first;
+    node.position.fromArray(posValues, rest * 3);
+    node.quaternion.fromArray(quatValues, rest * 4);
     node.updateMatrixWorld(true);
 
     out.tracks.push(new THREE.VectorKeyframeTrack(`${node.uuid}.position`, times, posValues));

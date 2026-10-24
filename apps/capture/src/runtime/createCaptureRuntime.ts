@@ -84,7 +84,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ui,
     renderer,
     getAvatar: () => ({ avatar: avatar.avatar, worldModel: avatar.worldModel }),
-    onSizeLocked: () => heightFit.calibration.interrupt()
+    onSizeLocked: () => heightFit.calibration.interrupt(),
+    onTakeStart: () => objects.startTake()
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
   const objects = new CaptureObjects({
@@ -193,6 +194,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       if (avatar.avatar) capture.animator.attachClips(avatar.avatar, avatarGltf.animations);
       // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
       if (config.objectUrl) await objects.loadUrl(config.objectUrl);
+      if (config.trayUrls.length > 0) await objects.loadTrayUrls(config.trayUrls);
       ui.setLoadState(spawned ? 'ready' : 'warning', spawned ? null : 'Loaded with warnings: spawn/physics setup incomplete.');
       registerCaptureSystems(world);
       started = true;
@@ -209,6 +211,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       refitHeight: () => heightFit.requestRefit(),
       toggleRecording: () => recording.toggle(),
       loadObjectFile: (file) => void objects.loadFile(file),
+      loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       recenterAr: () => {
         if (xrEntry.sessionMode === 'ar' && tracking.isXrPresenting()) capture.ar.recenter();
       }
@@ -241,7 +244,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __setSpectatorView: (mode) => capture.diagnostics.setSpectatorView(mode),
         __captureHandCalibrationPose: () => hands.captureCalibrationPose(),
         __resetHandCalibrationPose: () => hands.resetCalibrationPose(),
-        __loadObjectUrl: (url) => objects.loadUrl(url)
+        __loadObjectUrl: (url) => objects.loadUrl(url),
+        __loadTrayUrls: (urls) => objects.loadTrayUrls(urls)
       });
       // ?manualClock=1: never tick on real time, so a replay starts from the
       // same state on any host (see __setFrameStepping).

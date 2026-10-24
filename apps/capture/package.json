@@ -27,6 +27,7 @@
     "test:xr:body": "node scripts/run-xr-checks.mjs body",
     "test:xr:pointing": "node scripts/run-xr-checks.mjs pointing",
     "test:xr:object": "node scripts/run-xr-checks.mjs object",
+    "test:xr:summon": "node scripts/run-xr-checks.mjs summon",
     "fixtures:hands": "node scripts/run-xr-checks.mjs pose-fixture",
     "fixtures:body": "node scripts/run-xr-checks.mjs body-fixtures",
     "fixtures:pointing": "node scripts/generate-pointing-test-scene.mjs && node scripts/run-xr-checks.mjs pointing-fixture",

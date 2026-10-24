@@ -36,6 +36,9 @@ export class InputController {
   // Desktop object carry: G toggles (queued for the next step), Q/E turn, Z/X tip.
   private objectToggleQueued = false;
   private readonly objectTurnKeys = new Set<'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX'>();
+  // Desktop tray (PRD-045): T holds it open; 1–5 while held summon (queued for the next step).
+  private trayHeld = false;
+  private summonSlotQueued: number | null = null;
   private focusRecoveryUntilMs = 0;
   private lastFocusAttemptMs = 0;
   private readonly options: InputControllerOptions;
@@ -117,6 +120,16 @@ export class InputController {
     return queued;
   }
 
+  isTrayHeld(): boolean {
+    return this.trayHeld;
+  }
+
+  consumeSummonSlot(): number | null {
+    const slot = this.summonSlotQueued;
+    this.summonSlotQueued = null;
+    return slot;
+  }
+
   /** −1..1 turn (Q turns left, positive about world up) and tip (X positive, Z negative) for a carried object. */
   getObjectTurn(): { yaw: number; pitch: number } {
     const held = (code: 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX'): number => (this.objectTurnKeys.has(code) ? 1 : 0);
@@ -165,6 +178,8 @@ export class InputController {
     this.jumpQueued = false;
     this.objectToggleQueued = false;
     this.objectTurnKeys.clear();
+    this.trayHeld = false;
+    this.summonSlotQueued = null;
     this.pointSources.clear();
   }
 
@@ -248,6 +263,15 @@ export class InputController {
         this.objectTurnKeys.add(event.code);
         event.preventDefault();
       }
+      if (event.code === 'KeyT') {
+        this.trayHeld = true;
+        event.preventDefault();
+      }
+      const slot = summonSlot(event.code);
+      if (slot !== null && this.trayHeld && !event.repeat) {
+        this.summonSlotQueued = slot;
+        event.preventDefault();
+      }
     }
   };
 
@@ -268,6 +292,11 @@ export class InputController {
 
     if (isObjectTurnKey(event.code)) {
       this.objectTurnKeys.delete(event.code);
+      event.preventDefault();
+    }
+
+    if (event.code === 'KeyT') {
+      this.trayHeld = false;
       event.preventDefault();
     }
   };
@@ -328,6 +357,12 @@ export class InputController {
       look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - event.movementY * sensitivity);
     }
   };
+}
+
+/** Digit1–Digit5 (and the numpad's) as tray slots 1–5. */
+function summonSlot(code: string): number | null {
+  const match = /^(?:Digit|Numpad)([1-5])$/.exec(code);
+  return match ? Number(match[1]) : null;
 }
 
 function isObjectTurnKey(code: string): code is 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX' {

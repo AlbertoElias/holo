@@ -1,11 +1,11 @@
 # PRD: Summon and place while speaking
 
-**Status:** Draft  
+**Status:** Approved  
 **Source ideas:** IDEA-062  
 **Layer:** Event  
 **Depends on:** IDEA-031 (held-mode grammar), IDEA-059 (recorded object motion)  
 **Owner:** Unassigned  
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-24
 
 ## User Outcome
 
@@ -78,7 +78,7 @@ Continue if gaps shrink; park if authors prefer preparing everything in advance.
 
 ## Decision
 
-Pending until explicitly decided. Drafting this document is not approval to build.
+Approved 2026-10-24: the user asked for PRD-045 to be built after PRD-043.
 
 ## Links
 
@@ -86,5 +86,5 @@ Pending until explicitly decided. Drafting this document is not approval to buil
   [design language](../concepts/design-language.md)
 - Research: [open questions](../research/open-questions.md) (question 13)
 - Mockups: none
-- Feature brief: none
+- Feature brief: [summon and place](../../features/summon-and-place.md)
 - Implementation issue: none

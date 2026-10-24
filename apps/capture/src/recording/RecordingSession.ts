@@ -11,6 +11,8 @@ interface RecordingSessionDeps {
   getAvatar: () => { avatar: THREE.Object3D | undefined; worldModel: THREE.Object3D | undefined };
   // Starting a recording locks avatar size; an in-progress height fit stops.
   onSizeLocked: () => void;
+  /** Before the first frame of a take: summoned objects from the last take leave (PRD-045). */
+  onTakeStart: () => void;
 }
 
 /**
@@ -57,6 +59,7 @@ export class RecordingSession {
     this.sizeLocked = true;
     this.deps.onSizeLocked();
     this.recorder.clear();
+    this.deps.onTakeStart();
     this.recorder.setEnabled(true);
     await this.startInputRecording();
     try {

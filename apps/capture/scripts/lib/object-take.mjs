@@ -49,11 +49,11 @@ const q4 = (a) => new THREE.Quaternion(...a);
 const round = (value, digits = 4) => Number(value.toFixed(digits));
 const smooth = (t) => t * t * (3 - 2 * t);
 
-function poseOf(entry) {
+export function poseOf(entry) {
   return entry ? { position: v3(entry.position), quaternion: q4(entry.quaternion) } : null;
 }
 
-async function setupPage(browser, { iwer, consoleErrors, label }) {
+export async function setupPage(browser, { iwer, consoleErrors, label }) {
   const context = await createXrContext(browser, { viewport: VIEWPORT, acceptDownloads: true });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
@@ -62,24 +62,27 @@ async function setupPage(browser, { iwer, consoleErrors, label }) {
   return { context, page };
 }
 
-async function openCapture(page, baseUrl, query) {
+export async function openCapture(page, baseUrl, query) {
   const url = new URL(baseUrl);
   url.searchParams.set('scene', SCENE);
   url.searchParams.set('sceneScale', '1');
   url.searchParams.set('manualClock', '1');
-  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+  for (const [key, value] of Object.entries(query)) {
+    if (Array.isArray(value)) for (const item of value) url.searchParams.append(key, item);
+    else url.searchParams.set(key, value);
+  }
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['advanceTime', 'render_game_to_text', '__setManualClock', '__setFrameStepping', '__setSpectatorView']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
 }
 
-const readState = (page) => page.evaluate(() => JSON.parse(window.render_game_to_text()));
+export const readState = (page) => page.evaluate(() => JSON.parse(window.render_game_to_text()));
 
-async function clickButton(page, name) {
+export async function clickButton(page, name) {
   await page.getByRole('button', { name, exact: true }).evaluate((button) => button.click());
 }
 
-async function saveDownload(page, stop, file) {
+export async function saveDownload(page, stop, file) {
   const download = page.waitForEvent('download', { timeout: 30_000 });
   await stop();
   await (await download).saveAs(file);

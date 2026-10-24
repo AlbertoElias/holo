@@ -5,6 +5,7 @@ import type { HandPoseSource, VrHandSide } from '../types/contracts';
 import type { XrTracking } from '../xr/XrTracking';
 import type { DesktopCarryPose } from './DesktopCarryPose';
 import type { GrabIntent, ObjectGrabInput } from './ObjectGrabInput';
+import type { ObjectTray } from './ObjectTray';
 import type { SceneObject, SceneObjectRegistry } from './SceneObjectRegistry';
 
 const SIDES = ['left', 'right'] as const;
@@ -23,6 +24,10 @@ const PLACE_BELOW_EYES_M = 0.45;
 export interface ObjectStep {
   vrActive: boolean;
   deltaSec: number;
+  /** A take is recording: only then does a tray pick summon (PRD-045). */
+  recording: boolean;
+  /** The take's clock, for the summon log. */
+  timeSec: number;
   /** The body's facing (the camera's look yaw). */
   bodyYaw: number;
   desktop: {
@@ -33,12 +38,16 @@ export interface ObjectStep {
     turnPitch: number;
     /** The desktop point action owns the right arm while held. */
     pointHeld: boolean;
+    /** 1–5 pressed this step while T holds the tray open, else null. */
+    summonSlot: number | null;
   };
 }
 
 export interface ObjectSnapshot {
   id: string;
   name: string;
+  origin: SceneObject['origin'];
+  layer: SceneObject['layer'];
   placed: boolean;
   heldBy: VrHandSide | null;
   position: [number, number, number];
@@ -89,6 +98,7 @@ export class ObjectInteraction {
       tracking: XrTracking;
       grabInput: ObjectGrabInput;
       carry: DesktopCarryPose;
+      tray: ObjectTray;
       embodyOffset: number;
     }
   ) {}
@@ -96,7 +106,7 @@ export class ObjectInteraction {
   update(step: ObjectStep): void {
     const { registry, carry } = this.deps;
     if (!this.deps.avatar.avatar) return;
-    for (const object of registry.all()) if (!object.placed) this.place(object, step.bodyYaw);
+    for (const object of registry.eventObjects()) if (!object.placed) this.place(object, step.bodyYaw);
     if (this.hold && !registry.all().includes(this.hold.object)) this.release();
 
     if (step.vrActive) {
@@ -115,6 +125,16 @@ export class ObjectInteraction {
     return this.hold?.object === object ? this.hold.side : null;
   }
 
+  /** Whether `side` holds an object (one hold at a time: the first hand wins). */
+  isHolding(side: VrHandSide): boolean {
+    return this.hold?.side === side;
+  }
+
+  /** The avatar's palm (between the wrist and middle knuckle) in world space. */
+  palmPosition(side: VrHandSide, out: THREE.Vector3): THREE.Vector3 | undefined {
+    return this.palmWorld(side, out);
+  }
+
   snapshot(): ObjectSnapshot[] {
     return this.deps.registry.all().map((object) => {
       object.wrapper.updateWorldMatrix(true, false);
@@ -123,6 +143,8 @@ export class ObjectInteraction {
       return {
         id: object.id,
         name: object.name,
+        origin: object.origin,
+        layer: object.layer,
         placed: object.placed,
         heldBy: object.heldBy,
         position: [this.pos.x, this.pos.y, this.pos.z],
@@ -157,7 +179,17 @@ export class ObjectInteraction {
       // First hand wins: the other hand's grab is ignored until release.
       if (!rising || this.hold || !this.readAnchor(side)) continue;
       const palm = this.palmWorld(side, this.pos2);
-      const target = palm && registry.eventObjects().find((object) => this.distanceToObject(object, palm) <= VR_REACH_M);
+      if (!palm) continue;
+      // An open tray's miniature wins over an object in reach (PRD-045).
+      const item = side === 'right' && step.recording ? this.deps.tray.nearestItem(palm, VR_REACH_M) : null;
+      if (item) {
+        const summoned = this.deps.tray.summon(item, step.timeSec);
+        this.writeWorld(summoned, this.deps.tray.miniaturePose(item, this.world));
+        summoned.placed = true;
+        this.grab(summoned, side, false);
+        continue;
+      }
+      const target = registry.eventObjects().find((object) => this.distanceToObject(object, palm) <= VR_REACH_M);
       if (target) this.grab(target, side, false);
     }
 
@@ -174,8 +206,18 @@ export class ObjectInteraction {
   }
 
   private updateDesktop(step: ObjectStep): void {
-    const { carry, registry } = this.deps;
-    if (step.desktop.toggle) {
+    const { carry, registry, tray } = this.deps;
+    const slot = step.desktop.summonSlot;
+    const item = slot !== null && step.recording && !this.hold ? tray.getItems().find((candidate) => candidate.slot === slot) : undefined;
+    if (item && tray.isOpen() && this.readAnchor('right')) {
+      // Appears in the right hand and rises with it as the carry pose blends in.
+      const summoned = tray.summon(item, step.timeSec);
+      this.writeWorld(summoned, tray.miniaturePose(item, this.world));
+      this.writeWorld(summoned, this.inHandPose(summoned, step.bodyYaw, this.world));
+      summoned.placed = true;
+      this.grab(summoned, 'right', false);
+      this.hold!.desktop = true;
+    } else if (step.desktop.toggle) {
       if (this.hold) {
         this.release();
       } else {
@@ -262,7 +304,7 @@ export class ObjectInteraction {
   }
 
   /** Desktop: the object just in front of the palm, keeping its own rotation. */
-  private inHandPose(object: SceneObject, bodyYaw: number, out: THREE.Matrix4): void {
+  private inHandPose(object: SceneObject, bodyYaw: number, out: THREE.Matrix4): THREE.Matrix4 {
     const palm = this.palmWorld('right', this.pos2) ?? this.pos2.setFromMatrixPosition(this.anchor);
     this.box.setFromObject(object.model);
     const radius = this.box.getSize(this.pos).length() / 2;
@@ -270,7 +312,7 @@ export class ObjectInteraction {
     object.wrapper.matrixWorld.decompose(this.pos, this.quat2, this.scale);
     palm.x += -Math.sin(bodyYaw) * radius * 0.6;
     palm.z += -Math.cos(bodyYaw) * radius * 0.6;
-    out.compose(palm, this.quat2, this.unit);
+    return out.compose(palm, this.quat2, this.unit);
   }
 
   private place(object: SceneObject, bodyYaw: number): void {

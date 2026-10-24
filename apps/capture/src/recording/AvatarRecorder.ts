@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { RecordingFrame } from '../types/contracts';
 
 import type { SceneObject } from '../objects/SceneObjectRegistry';
+import { type AuthoringFrame, AuthoringSampleStore, IDLE_AUTHORING_FRAME } from './authoringSpans';
 import { PointDetector, type TrackedHandJointReader } from '../xr/PointDetector';
 import { FrameCaptureStore } from './FrameCaptureStore';
 import { GltfExportComposer } from './GltfExportComposer';
@@ -16,12 +17,17 @@ export class AvatarRecorder {
   private readonly gltfExportComposer = new GltfExportComposer();
   private readonly pointDetector = new PointDetector();
   private readonly objectSamples = new ObjectSampleStore();
+  private readonly authoringSamples = new AuthoringSampleStore();
   /**
    * Point evidence for the take, recorded with the frames' `timeSec`. The
    * desktop point action writes its aim holds and inferred motion here; see
    * `PointSampleStore` for the contract.
    */
   readonly pointSamples = new PointSampleStore();
+
+  isEnabled(): boolean {
+    return this.frameCaptureStore.isEnabled();
+  }
 
   setEnabled(enabled: boolean): void {
     this.frameCaptureStore.setEnabled(enabled);
@@ -32,7 +38,8 @@ export class AvatarRecorder {
   /**
    * Records one step. `hands` (tracked XRHand joints) feeds headset point
    * detection; without it, or for non-`xr-hand` input, no hand samples are kept.
-   * `objects` are the event objects, sampled at the same frame index.
+   * `objects` are the event objects, sampled at the same frame index;
+   * `authoring` is what the tray and hands were doing (PRD-045).
    */
   capture(
     timeSec: number,
@@ -40,7 +47,8 @@ export class AvatarRecorder {
     avatarRoot: THREE.Object3D,
     activeCamera?: THREE.Camera,
     hands?: TrackedHandJointReader,
-    objects: readonly SceneObject[] = []
+    objects: readonly SceneObject[] = [],
+    authoring?: AuthoringFrame
   ): void {
     if (!this.frameCaptureStore.isEnabled() || !avatar) {
       return;
@@ -49,6 +57,8 @@ export class AvatarRecorder {
     this.sceneBubbleSampler.captureSceneBubbleSample(activeCamera, avatarRoot);
     this.frameCaptureStore.captureFrame(timeSec, avatar, avatarRoot);
     this.objectSamples.capture(avatar, objects);
+    // One authoring frame per recorded frame keeps the two stores aligned.
+    this.authoringSamples.capture(authoring ?? IDLE_AUTHORING_FRAME);
     if (hands) this.pointDetector.sample(timeSec, hands, (sample) => this.pointSamples.recordHandSample(sample));
   }
 
@@ -66,6 +76,7 @@ export class AvatarRecorder {
     this.sceneBubbleSampler.clear();
     this.pointSamples.clear();
     this.objectSamples.clear();
+    this.authoringSamples.clear();
     this.pointDetector.reset();
   }
 
@@ -81,7 +92,8 @@ export class AvatarRecorder {
       sceneRoot,
       audioData,
       this.pointSamples,
-      this.objectSamples
+      this.objectSamples,
+      this.authoringSamples
     );
   }
 }

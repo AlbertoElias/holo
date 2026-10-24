@@ -56,16 +56,38 @@ export const recordedObjectSchema = z
   })
   .strict();
 
-/** Version 0 is exact: a future version must bump `version`, so unknown keys are rejected. */
+/**
+ * A span where one arm was operating authoring interface (the PRD-045 tray)
+ * rather than performing. Its motion is not the author's: the exporter
+ * replaced the arm's bone rotations inside it with an eased interpolation
+ * between the frames on either side.
+ */
+export const authoringSpanSchema = z
+  .object({
+    hand: z.enum(["left", "right"]),
+    start: finite.nonnegative(),
+    end: finite.nonnegative()
+  })
+  .strict()
+  .refine((span) => span.end >= span.start, { message: "span.end must not precede span.start" });
+
+/**
+ * Version 0 is exact: a future version must bump `version`, so unknown keys
+ * are rejected. `objects` may be empty only when `authoring` is not (a tray
+ * opened, nothing summoned).
+ */
 export const holoimObjectsSchema = z
   .object({
     version: z.literal(HOLOIM_OBJECTS_VERSION),
-    objects: z.array(recordedObjectSchema).min(1)
+    objects: z.array(recordedObjectSchema),
+    authoring: z.array(authoringSpanSchema).optional()
   })
-  .strict();
+  .strict()
+  .refine((value) => value.objects.length > 0 || (value.authoring?.length ?? 0) > 0, { message: "objects and authoring are both empty" });
 
 export type ObjectSpan = z.infer<typeof objectSpanSchema>;
 export type ObjectHold = z.infer<typeof objectHoldSchema>;
+export type AuthoringSpan = z.infer<typeof authoringSpanSchema>;
 export type ObjectSource = z.infer<typeof objectSourceSchema>;
 export type RecordedObjectEntry = z.infer<typeof recordedObjectSchema>;
 export type HoloimObjects = z.infer<typeof holoimObjectsSchema>;
