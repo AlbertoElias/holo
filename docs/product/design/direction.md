@@ -1,6 +1,6 @@
 # Design Direction
 
-**Status:** Rounds 1 to 3 decided, 2026-10-23. Quest checks confirm item 9, item 10's poke floor and 2.5× type at 1.75 m. Text never sits within arm's reach in a headset; how each AR target blends is still to check on devices, and Quest's AR chip opacity needs a new decision (see Round 3's device results). Round 4 (styleguide) is next. Step 3 of the design-language work:
+**Status:** Rounds 1 to 3 decided; round 3 closed 2026-10-24 with the device results it has, and its unverified gaps are listed under Round 3. Round 4 (styleguide) is next. Step 3 of the design-language work:
 [inventory](inventory/README.md), [principles](principles.md), visual
 foundations, styleguide, then redesigned screens.
 **Tool:** [HoloIM Direction Studio](https://claude.ai/artifact/F8R4gG6Csp3j9EXY9UsP5h),
@@ -11,7 +11,7 @@ Step 3 runs in rounds:
 1. **Character** (decided): the mood and the edge's personality.
 2. **Foundations** (decided): exact colours and contrast, type scale, sizes across
    devices, edge parameters, motion timing.
-3. **Stress test** (decided; device checks partly run): the hardest screens from the inventory, such as errors,
+3. **Stress test** (decided): the hardest screens from the inventory, such as errors,
    AR in a bright room, recording, and legibility in a headset.
 4. **Styleguide**: write it down, then redesign every inventoried screen.
 
@@ -409,7 +409,7 @@ everywhere.
 | Author initial (item 3) | Figtree 600, 10 px; `#081a1e` on a filled mark, the author's hue on a hollow one |
 | Chip rule (item 5) | Flat screens follow item 1. In VR, rows stay bare against the room's walls and take the chip in front of the sky, a hologram or a lit surface, with hysteresis: fade in over 0.3 s, hold at least 2 s. In AR, every row and label sits on the chip. Text over a hologram's own picture always sits on the chip |
 | Recording cue (item 6) | The record control is a filled circle when idle and a rounded square (stop) while recording, beside "Recording 0:12" counting up in place of the timecode. Rose `#ff3b5c` dot, no ring |
-| AR chip (item 7) | `#081a1e` at 92% where the target blends in linear light, 88% where it blends in sRGB; never opaque |
+| AR chip (item 7) | `#081a1e` at 92% where the target blends in linear light, 88% where it blends in sRGB; **97% on Quest AR passthrough**, set by eye from the device check; never opaque |
 | Flicker, flat screens (item 8) | Round 1: halo 0.50, 0.32, 0.58, 0.40 over 2.6 s; light 0.9 + 0.12 · sin 9t · sin 3.7t |
 | Flicker, VR and AR | Halo 0.45 + (round 1 − 0.32) × 0.05 / 0.26, so it swings 0.45 to 0.50 in round 1's rhythm; light on real or room surfaces steady at 0.9 |
 | Sparks (item 9) | Only the hologram you are looking at, or the card nearest the middle of a phone screen, sheds sparks. The others hold a steady glow and, on a phone, do not redraw |
@@ -499,33 +499,32 @@ The probe now counts a button only while it is still in the scene. It also
 records the time between the two blending picks, so a double tap shows, and
 step 5 has a "Type check only" button that skips the pokes.
 
-**Still to run, so these decisions are not yet confirmed on devices:**
+**Round 3 closed with the results above (2026-10-24).** The user chose to go
+with what was measured rather than wait for more devices. Decisions taken from
+the results:
 
-- **Item 7, how each target blends:**
-  - Quest AR by eye: step 2.
-  - A screenshot of the blend patches from each target.
-  - AR Quick Look on an iPhone.
-- **Item 8:** the AR table check (step 3) and a full minute per variant.
+- **Quest AR chip: 97%.** It is set by eye, since Quest passthrough
+  blending was not measured. The lowest chip that read cleanly on a Quest 3
+  was 97%, in two separate sessions. Item 7's rule stays for other targets:
+  92% where a target blends in linear light, 88% where it blends in sRGB.
+- **Text within arm's reach:** none in a headset. Near panels carry glyphs
+  only, with their labels at 1 m or more (2.5× could not be read at 45 cm).
 
-**No Android device is available**, so the Android checks are out of reach
-for now:
+Known gaps, carried into round 4 as unverified rather than blocking:
 
-- **Item 7:** Android AR blending stays unmeasured.
-- **Item 2:** soot in bright rooms is unverified everywhere. It depends on the
-  WebXR lighting estimate, which only Android Chrome gives, so in practice
-  soot in AR only ever shows on Android.
-- **Item 9:** the closest stand-in for a mid-range Android phone is the Quest
-  3's 2D page. Quest Browser is Chromium on Android, on a Snapdragon XR2 Gen 2,
-  and it measured 4.44% long frames with sparks everywhere.
+- **Item 7:**
+  - Blending is unmeasured on Quest AR passthrough, Android AR and AR Quick
+    Look. The iPhone screenshot showed no patches.
+  - Android Chrome AR keeps 88% on the documented assumption that it blends
+    in sRGB.
+- **Item 2:** soot in bright rooms is unverified. It needs the WebXR
+  lighting estimate, which only Android Chrome gives, and no Android device
+  was available.
+- **Item 8:**
+  - No AR table check was run.
+  - The VR room ratings came from 4 to 8 s looks, not a minute.
+- **Item 9 on Android phones:** the Quest 3's 2D page stands in. Quest Browser
+  is Chromium on Android, and it measured 4.44% long frames with sparks
+  everywhere.
 
-Any borrowed Android phone can run steps 2 to 4 with the probe as it is.
-
-**Open from the device results:**
-
-- **Quest AR chip:** the Quest's lowest clean AR chip was 97% twice, above
-  item 7's 88% and 92%. Item 7 needs a new decision for Quest AR passthrough
-  once its blending is known.
-- **Text within arm's reach (decided):** 2.5× holds at 1.75 m but cannot be
-  read at 45 cm, and even 3× takes effort there. Decision: no text within
-  arm's reach in a headset; near panels carry glyphs only, with their labels
-  at 1 m or more.
+The probe can still run any of these: `node scripts/design-probe/server.mjs`.
