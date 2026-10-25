@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FACE_CHANNELS, MAX_PITCH, type FaceChannel } from '@holoim/avatar-face';
-import { FaceRig, type FaceBindingReport } from './FaceRig';
+import { type FaceRigBones, FaceRig, type FaceBindingReport } from './FaceRig';
 import type { FaceCameraState, FaceExpressionSource, FaceGaze, FaceGazeSource, FaceSample, FaceWeights } from './faceTypes';
 import { LivenessFace } from './LivenessFace';
 import { VoiceLevel } from './VoiceLevel';
@@ -57,8 +57,8 @@ export class FaceDriver {
     this.xrGaze = new XrGaze(rig);
   }
 
-  attach(avatar: THREE.Object3D): void {
-    this.rig = new FaceRig(avatar);
+  attach(avatar: THREE.Object3D, bones?: FaceRigBones): void {
+    this.rig = new FaceRig(avatar, bones);
   }
 
   /** Automation: a full face (channels it omits are 0), or null to release. */

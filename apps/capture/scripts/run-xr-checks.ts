@@ -38,6 +38,9 @@ const CHECKS = {
   ui: 'scripts/ci-capture-ui-playwright.ts',
   // Needs the Quest Pro emulator for eye gaze; see CHECK_SERVER_ENV.
   face: 'scripts/ci-face-playwright.ts',
+  // Standard avatar formats: binds generated rigs, replays hands and body on
+  // the geometric ones, and runs the face check (on the face server) on one.
+  avatars: 'scripts/ci-avatar-formats-playwright.ts',
   // Not checks: regenerate the IWER fixtures the hands, body and pointing checks replay.
   'pose-fixture': 'scripts/generate-iwer-pose-fixture.ts',
   'body-fixtures': 'scripts/generate-iwer-body-fixtures.mjs',
@@ -48,6 +51,8 @@ type CheckName = keyof typeof CHECKS;
 
 // .mjs checks that import TypeScript workspace sources (the meaning and objects packages) run under tsx too.
 const USES_TSX: ReadonlySet<CheckName> = new Set(['object', 'summon']);
+// Checks that import the meaning package from Node resolve its sources.
+const USES_SOURCE_CONDITION: ReadonlySet<CheckName> = new Set(['avatars']);
 
 // Extra environment for entries that share a script.
 const CHECK_ENV: Partial<Record<CheckName, Record<string, string>>> = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };
@@ -59,12 +64,13 @@ const CHECK_SERVER_ENV: Partial<Record<CheckName, Record<string, string>>> = { f
 // Checks that legitimately run longer than the default hang guard.
 const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
   body: 360000,
-  face: 360000
+  face: 360000,
+  avatars: 900000
 };
 
 // Serial wall time in seconds on a 2-vCPU CI runner (CI run 39499697917);
 // parallel runs start the longest first and XR_SHARD balances on it.
-const CHECK_COST: Partial<Record<CheckName, number>> = { face: 40, body: 83, height: 45, terrain: 38, hands: 31, locomotion: 21, 'mock-vr': 18, recording: 11 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { face: 40, body: 83, height: 45, terrain: 38, hands: 31, avatars: 120, locomotion: 21, 'mock-vr': 18, recording: 11 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);
@@ -178,13 +184,18 @@ try {
   const runCheck = async (name: CheckName) => {
     const checkStartedAt = Date.now();
     const script: string = CHECKS[name];
-    const args = script.endsWith('.ts') || USES_TSX.has(name) ? ['--import', 'tsx', script] : [script];
+    const args = [
+      ...(USES_SOURCE_CONDITION.has(name) ? ['--conditions=development'] : []),
+      ...(script.endsWith('.ts') || USES_TSX.has(name) ? ['--import', 'tsx', script] : [script])
+    ];
+    // The avatars check runs the face check on the face check's own server.
+    const faceEnv = name === 'avatars' ? { XR_AVATAR_FACE_URL: await baseUrlFor('face') } : {};
     const logPath = path.join(logDir, `${name}.log`);
     const logFd = parallel ? openSync(logPath, 'w') : null;
     let error: Error | null = null;
     try {
       await runCommand('node', args, {
-        env: { ...process.env, ...CHECK_ENV[name], BASE_URL: await baseUrlFor(name), NODE_TLS_REJECT_UNAUTHORIZED: '0' },
+        env: { ...process.env, ...CHECK_ENV[name], ...faceEnv, BASE_URL: await baseUrlFor(name), NODE_TLS_REJECT_UNAUTHORIZED: '0' },
         timeoutMs: process.env.XR_CHECK_TIMEOUT_MS ? checkTimeoutMs : CHECK_TIMEOUT_MS[name] ?? checkTimeoutMs,
         ...(logFd === null ? {} : { stdio: ['ignore', logFd, logFd] })
       });

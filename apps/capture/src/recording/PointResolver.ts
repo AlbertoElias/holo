@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { type MeaningMotionSpan, type MeaningLinkProvenance, type MeaningSpan, resolveHumanoidBone, type VrmHumanoidBone } from '@holoim/meaning';
 
+import { humanoidTagOf } from '../avatar/HumanoidSkeleton';
 import { isThreeBone } from '../shared/threeTypeGuards';
 import type { RecordingFrame, VrHandSide } from '../types/contracts';
 import type { AimHold, HandPointSample, PointSampleStore } from './PointSampleStore';
@@ -402,14 +403,29 @@ function sceneTarget(mesh: THREE.Mesh): Target {
   return { key: `mesh:${mesh.name || 'unnamed'}#${mesh.uuid.slice(0, 8)}`, object: mesh, large: radius > LARGE_SURFACE_RADIUS };
 }
 
-/** VRM humanoid bone → bone. When aliases collide (Mixamo index 3 and 4), the deeper bone, the fingertip, wins. */
+/**
+ * VRM humanoid bone → bone, from the canonical tags the avatar's humanoid
+ * skeleton set at load (clones carry them). A finger's distal bone resolves to
+ * its end site, the fingertip, when the rig has one. Untagged rigs fall back
+ * to bone names.
+ */
 function collectHumanoidBones(root: THREE.Object3D, out: Map<VrmHumanoidBone, THREE.Bone>): void {
   out.clear();
+  const tips = new Map<VrmHumanoidBone, THREE.Bone>();
   root.traverse((obj) => {
     if (!isThreeBone(obj)) return;
-    const bone = resolveHumanoidBone(obj.name);
-    if (bone) out.set(bone, obj);
+    const tag = humanoidTagOf(obj);
+    if (tag.bone) out.set(tag.bone, obj);
+    if (tag.tipOf) tips.set(tag.tipOf, obj);
   });
+  if (out.size === 0) {
+    root.traverse((obj) => {
+      if (!isThreeBone(obj)) return;
+      const bone = resolveHumanoidBone(obj.name);
+      if (bone) out.set(bone, obj);
+    });
+  }
+  for (const [bone, tip] of tips) out.set(bone, tip);
 }
 
 // Mirrors GltfExportComposer: the frame's root transform on the clone, its

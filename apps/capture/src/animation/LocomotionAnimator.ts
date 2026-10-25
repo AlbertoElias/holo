@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import type { VrmHumanoidBone } from '@holoim/meaning';
+
+import type { HumanoidSkeleton } from '../avatar/HumanoidSkeleton';
 
 export type LocomotionState = 'idle' | 'walk' | 'jump' | 'fall';
 export type LocomotionProfile = 'desktop-full' | 'vr-lower-body';
@@ -30,6 +33,9 @@ const CLIP_FALLBACK_ORDER: Readonly<Record<LocomotionState, readonly LocomotionS
 };
 const ROOT_MOTION_TARGETS = ['hips', 'armature', 'root'];
 const LOWER_BODY_TARGETS = ['hips', 'leftupleg', 'leftleg', 'leftfoot', 'lefttoebase', 'rightupleg', 'rightleg', 'rightfoot', 'righttoebase'];
+const LOWER_BODY_BONES: readonly VrmHumanoidBone[] = [
+  'hips', 'leftUpperLeg', 'leftLowerLeg', 'leftFoot', 'leftToes', 'rightUpperLeg', 'rightLowerLeg', 'rightFoot', 'rightToes'
+];
 const WALK_TIME_SCALE_BASE = 1.4;
 const WALK_TIME_SCALE_MIN = 0.15;
 const WALK_TIME_SCALE_MAX = 2.4;
@@ -40,6 +46,8 @@ const WALK_ENTRY_TIME_OFFSET_SEC = 0.12;
 
 export class LocomotionAnimator {
   private mixer: THREE.AnimationMixer | null = null;
+  private lowerBodyNames: ReadonlySet<string> | undefined;
+  private rootMotionNames: ReadonlySet<string> | undefined;
   private readonly actionsByProfile: Record<LocomotionProfile, Partial<Record<LocomotionState, THREE.AnimationAction>>> = {
     'desktop-full': {},
     'vr-lower-body': {}
@@ -49,7 +57,20 @@ export class LocomotionAnimator {
   private activeAction: THREE.AnimationAction | null = null;
   private currentTimeScale = 1;
 
-  attachClips(root: THREE.Object3D, clips: THREE.AnimationClip[]): void {
+  /**
+   * With the avatar's humanoid skeleton, tracks are kept by canonical bone
+   * (the rig's own hips and leg bone names); without it, by the shipped rig's
+   * name suffixes.
+   */
+  attachClips(root: THREE.Object3D, clips: THREE.AnimationClip[], humanoid?: HumanoidSkeleton): void {
+    this.lowerBodyNames = undefined;
+    this.rootMotionNames = undefined;
+    if (humanoid) {
+      const names = (bones: readonly VrmHumanoidBone[]) =>
+        new Set(bones.flatMap((b) => { const bone = humanoid.bone(b); return bone ? [bone.name.toLowerCase()] : []; }));
+      this.lowerBodyNames = names(LOWER_BODY_BONES);
+      this.rootMotionNames = new Set([...names(['hips']), 'armature', 'root']);
+    }
     this.mixer?.stopAllAction();
     this.mixer = new THREE.AnimationMixer(root);
     this.activeAction = null;
@@ -304,10 +325,12 @@ export class LocomotionAnimator {
   }
 
   private isRootMotionTarget(nodeName: string): boolean {
+    if (this.rootMotionNames) return this.rootMotionNames.has(nodeName);
     return ROOT_MOTION_TARGETS.some((target) => nodeName === target || nodeName.endsWith(target));
   }
 
   private isLowerBodyTarget(nodeName: string): boolean {
+    if (this.lowerBodyNames) return this.lowerBodyNames.has(nodeName);
     return LOWER_BODY_TARGETS.some((target) => nodeName === target || nodeName.endsWith(target));
   }
 }

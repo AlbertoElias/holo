@@ -93,6 +93,8 @@ async function replay(fileName: string, { faults = [], video = false, screenshot
   // ?manualClock=1: the app never ticks on real time before the replay.
   const pageUrl = new URL(recording.meta?.query ?? '', baseUrl);
   pageUrl.searchParams.set('manualClock', '1');
+  // XR_AVATAR_URL: run the same check on another avatar (the avatars check sets it per fixture).
+  if (process.env.XR_AVATAR_URL) pageUrl.searchParams.set('avatar', process.env.XR_AVATAR_URL);
   await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__sampleBody', '__setBodyFaults', 'advanceTime']);
   await waitForTextContentPrefix(page, '#status', 'loaded');

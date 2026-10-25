@@ -130,6 +130,8 @@ try {
   await page.route('**/__holoim/input-recordings*', (route: Route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"(discarded by the face check)"}' }));
   const pageUrl = new URL(baseUrl);
   pageUrl.searchParams.set('manualClock', '1');
+  // XR_AVATAR_URL: run the same check on another avatar (the avatars check sets it per fixture).
+  if (process.env.XR_AVATAR_URL) pageUrl.searchParams.set('avatar', process.env.XR_AVATAR_URL);
   await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__setFaceInput', '__sampleFace', '__setSpectatorView']);
   await waitForTextContentPrefix(page, '#status', 'loaded');

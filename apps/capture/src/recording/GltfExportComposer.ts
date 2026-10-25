@@ -5,6 +5,7 @@ import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 import { GLTFAudioPlugin } from './GLTFAudioPlugin';
+import { GLTFHumanoidPlugin } from './GLTFHumanoidPlugin';
 import { GLTFMeaningPlugin } from './GLTFMeaningPlugin';
 import { GLTFObjectsPlugin } from './GLTFObjectsPlugin';
 import { type AuthoringSampleStore, findAuthoringSpans, neutralizeAuthoringSpans, toAuthoringSpans } from './authoringSpans';
@@ -74,11 +75,12 @@ export class GltfExportComposer {
     }
     clone.updateMatrixWorld(true);
 
-    const boneNameToUuid = new Map<string, string>();
+    // Bones by traversal order, which the frame store shares; names may repeat.
+    const boneUuids: string[] = [];
     const boneNames: string[] = [];
     clone.traverse((obj) => {
       if (!isThreeBone(obj)) return;
-      boneNameToUuid.set(obj.name, obj.uuid);
+      boneUuids.push(obj.uuid);
       boneNames.push(obj.name);
     });
 
@@ -111,7 +113,7 @@ export class GltfExportComposer {
     const workerResult = await new Promise<{
       rootPosValues: number[];
       rootQuatValues: number[];
-      boneKeyframes: Array<{ name: string; posValues: number[]; quatValues: number[] }>;
+      boneKeyframes: Array<{ index: number; name: string; posValues: number[]; quatValues: number[] }>;
       morphKeyframes: Array<{ path: string; index: number; values: number[] }>;
       times: number[];
     }>((resolve, reject) => {
@@ -137,7 +139,7 @@ export class GltfExportComposer {
     );
 
     for (const bk of boneKeyframes) {
-      const uuid = boneNameToUuid.get(bk.name);
+      const uuid = boneUuids[bk.index];
       if (!uuid) continue;
       tracks.push(new THREE.VectorKeyframeTrack(`${uuid}.position`, times, bk.posValues));
       tracks.push(new THREE.QuaternionKeyframeTrack(`${uuid}.quaternion`, times, bk.quatValues));
@@ -206,6 +208,7 @@ export class GltfExportComposer {
       if (audioData && audioData.buffer.byteLength > 0) {
         exporter.register((writer) => new GLTFAudioPlugin(writer, audioData.buffer, audioData.mimeType));
       }
+      exporter.register((writer) => new GLTFHumanoidPlugin(writer));
       if (meaning) {
         const draft = meaning;
         exporter.register((writer) => new GLTFMeaningPlugin(writer, draft));
