@@ -412,7 +412,16 @@ right. Play never moves as they come and go. The row stands below the
 viewing box, off the cloche's foot line, and ends above 75% down the screen,
 where the ground is still dark enough for bare gold ([section 9.3](#93-phone-portal)),
 well clear of the dock. Over the hologram's own picture it takes the chip,
-sized to the controls showing.
+sized to the controls showing, padded alike at both ends so Play stays in
+the middle.
+
+**Too many for one row.** When the reach controls do not fit beside Play at
+the input's hit size (a touch phone with a take that has sound), Free,
+highlights, tilt, View in AR and sound unfold in a line of their own above
+Play, centred, a glyph gap (12 apx) over the row, on the same chip when the
+row has one. The timecode stays left of Play and Return right of it. Play
+still never moves, and no glyph shrinks below its input's minimum or enters
+a gesture zone.
 
 | Glyph | Meaning | Label | Drawing (16 × 16 viewBox) |
 | --- | --- | --- | --- |
@@ -683,8 +692,9 @@ the stop shape alone, since no text sits within arm's reach.
 - **Focus:** the card nearest the middle sparks and redraws; the others
   hold.
 - **Controls:** Play alone at rest (Return beside it while driving), the
-  rest on touch, in the row at the card's foot, clear of the gesture zones,
-  the safe-area insets and the dock; touch 44 apx.
+  rest on touch, in the row at the card's foot (in a line above Play when
+  they do not fit beside it), clear of the gesture zones, the safe-area
+  insets and the dock; touch 44 apx, on any device with a touch screen.
 - **Notices:** feed-wide notices (empty, offline, server error, uploading)
   on the chip.
 - **Type:** the flat scale; the phone card title is 21.6 px.
