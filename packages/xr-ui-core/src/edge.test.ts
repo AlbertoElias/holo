@@ -279,4 +279,18 @@ describe("edgeFrame (styleguide 8.5)", () => {
     expect(edgeFrame(VIEW_TARGETS.phone, base).sparks).toBe(120);
     expect(edgeFrame(VIEW_TARGETS.phone, { ...base, inFocus: false }).sparks).toBe(0);
   });
+
+  it("holds a hologram out of focus at a steady 0.50 on every target, flickering or reduced (8.2)", () => {
+    for (const target of [VIEW_TARGETS.phone, VIEW_TARGETS.desktop, VIEW_TARGETS.vr, VIEW_TARGETS.questPassthrough]) {
+      for (const reducedMotion of [false, true]) {
+        // 0%, 40%, 55% and 70% of the flat loop, and the reduced fade's trough.
+        const levels = [0, 1040, 1430, 1820, 4000].map((timeMs) =>
+          edgeFrame(target, { ...base, timeMs, inFocus: false, reducedMotion, soot: { groundLuminance: 0, arSootOn: false } }).glowLevel
+        );
+        expect(new Set(levels), `${target.kind} reduced=${reducedMotion}`).toEqual(new Set([0.5]));
+      }
+    }
+    // The control: in focus, the same instants do flicker.
+    expect(edgeFrame(VIEW_TARGETS.desktop, { ...base, timeMs: 1040 }).glowLevel).toBeCloseTo(0.32, 5);
+  });
 });

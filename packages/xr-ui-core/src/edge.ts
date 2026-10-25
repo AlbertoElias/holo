@@ -320,7 +320,8 @@ const NO_EDGE: EdgeFrame = { drawn: false, glowLevel: 0, sootOpacity: 0, coreOpa
 /**
  * What the edge draws this frame. While recording, flat screens hold the halo
  * at 0.08 with the core and highlight at 0.55 and no sparks; headsets draw no
- * edge at all (VR and AR). Quick Look's edge is baked and static at the resting level.
+ * edge at all (VR and AR). Quick Look's edge is baked and static at the resting level,
+ * and a hologram out of focus holds it steady (8.2).
  */
 export function edgeFrame(target: ViewTarget, options: EdgeFrameOptions): EdgeFrame {
   if (options.recording) {
@@ -328,7 +329,8 @@ export function edgeFrame(target: ViewTarget, options: EdgeFrameOptions): EdgeFr
     const { flatHaloLevel: level, flatCoreAndHighlightOpacity: opacity } = tokens.motion.recording;
     return { drawn: true, ...pick(haloLayers(target, level, options.soot)), coreOpacity: opacity, highlightOpacity: opacity, sparks: 0 };
   }
-  const level = haloLevel(target, options.timeMs, options) ?? edge.halo.level;
+  // Only the hologram in focus flickers; the others hold the resting level (8.2).
+  const level = (options.inFocus ? haloLevel(target, options.timeMs, options) : null) ?? edge.halo.level;
   return {
     drawn: true,
     ...pick(haloLayers(target, level, options.soot)),

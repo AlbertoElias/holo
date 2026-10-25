@@ -188,6 +188,14 @@ export const tokens = {
         embers: 800,
         emberScale: 0.7,
         emberGlow: 1
+      },
+      colors: {
+        glow: '#ff6f22',
+        core: '#ff932b',
+        highlight: '#ffe59f',
+        char: '#250902',
+        ember: '#8a0d01',
+        shade: '#010303'
       }
     }
   },

@@ -202,6 +202,7 @@ body::before {
 /* Play (or Pause) holds the middle; the reach controls unfold either side of
    it, so it never moves as they come and go. */
 .portal-controls {
+  position: relative;
   width: 100%;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -211,7 +212,8 @@ body::before {
 
 .portal-controls-row,
 .portal-controls-side,
-.portal-controls-reach {
+.portal-controls-reach,
+.portal-controls-after-inner {
   display: flex;
   align-items: center;
   column-gap: var(--feed-control-gap);
@@ -259,6 +261,26 @@ body::before {
 
 .portal-controls[data-reach="hidden"] .portal-controls-after {
   transform: translateX(calc(-1 * var(--feed-control-gap)));
+}
+
+/* Too narrow for the reach controls beside Play at the input's hit size (a
+   touch phone, a take with sound): they unfold above Play, centred on a chip
+   of the same colour, so Play holds still, no glyph shrinks and none reaches
+   the phone's back-swipe edges (6.1). */
+.feed-card-foot[data-reach-row="stacked"] .portal-controls-after {
+  position: absolute;
+  bottom: calc(100% + var(--holoim-glyph-gap));
+  left: 50%;
+  translate: -50% 0;
+  max-width: none;
+  padding: var(--holoim-chip-control-row-padding-start);
+  border-radius: var(--holoim-chip-radius);
+  background: var(--chip-surface, transparent);
+}
+
+.feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="hidden"] .portal-controls-after {
+  max-width: none;
+  transform: translateY(var(--holoim-glyph-gap));
 }
 
 .portal-controls[data-reach="shown"] .portal-controls-reach {

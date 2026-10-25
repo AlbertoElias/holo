@@ -38,6 +38,13 @@ describe("chip opacity per target (2.3)", () => {
     expect(alphaOf(chip(VIEW_TARGETS.desktop, { overPicture: true })!.style.background)).toBe(0.72);
   });
 
+  it("hands its surface to what it holds, so a stacked reach line can be the same chip", () => {
+    const over = chip(VIEW_TARGETS.phone, { overPicture: true })!;
+    // The custom property keeps the authored `rgb(r g b / a)`; jsdom reports the background as rgba().
+    expect(over.style.getPropertyValue("--chip-surface")).toMatch(/^rgb\(\d+ \d+ \d+ \/ 0\.72\)$/);
+    expect(alphaOf(over.style.background)).toBe(0.72);
+  });
+
   it("renders nothing in AR Quick Look, which shows only the USDZ", () => {
     expect(chip(VIEW_TARGETS.quickLook)).toBeNull();
   });

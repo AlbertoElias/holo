@@ -23,7 +23,7 @@ import { registerCaptureSystems } from '../systems';
 import type { CaptureUiBridge } from '../ui/captureUiBridge';
 import { PointCrosshair } from '../ui/PointCrosshair';
 import { UIStateStore } from '../ui/UIStateStore';
-import { saveHandedness } from '../ui/handedness';
+import { saveHandedness } from '@holoim/ui-dom';
 import { TouchStickView } from '../ui/TouchStickView';
 import { FlatHalo } from '../ui/flatHalo';
 import { VrChrome } from '../ui/VrChrome';

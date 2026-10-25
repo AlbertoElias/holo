@@ -331,9 +331,9 @@ enter.
   a volume. Seeded 3D noise burns the shell away; only the burning fronts
   remain, torn into dashes, on the near side and the far side alike, so the
   lines in front and behind move against each other as the view turns. A
-  front is a cream core (`#fff3cf`, 1.5 px), gold (`#ffc872`) to 3.2 px, a
-  pixel of char ([section 3.2](#32-strokes-and-soot)) and a faint warm glow
-  to 9 px, in screen pixels at every zoom. The holes are large (2.8 noise
+  front is a cream core (`#ffe59f`, 1.5 px), gold (`#ff932b`) to 3.2 px, a
+  pixel of char (`#250902`, [section 3.2](#32-strokes-and-soot)) and a faint
+  warm glow (`#ff6f22`) to 9 px, in screen pixels at every zoom. The holes are large (2.8 noise
   cycles across the dome) and seeded per hologram, the same in every
   renderer (`clocheBurnAt`, `@holoim/xr-ui-core`).
 - **Quiet over the event.** Where the dome faces the viewer straight on, in
@@ -345,13 +345,19 @@ enter.
   close to the eye fade out. The far edge of the dome is 60% dimmer than the
   near edge.
 - **Embers.** 2,500 embers sit in and just off the shell, a little denser
-  toward the foot, flickering from ember (`#c2410c`) through gold, cream only
+  toward the foot, flickering from ember (`#8a0d01`) through gold, cream only
   at their peaks, drifting slowly. They follow the same quiet rule, are never
   larger than 3.5 px (none becomes a bokeh disc) and vanish close to the eye.
   Out of focus 45% of them drift.
 - **Sparks.** The hologram in focus sheds sparks from its burning fronts
   into the space around it, outward and upward, cream to gold to ember, over
   1.1 to 2.6 s ([section 8.2](#82-sparks-on-focus-only)).
+- **Deeper than the chrome.** The globe burns deeper than the chrome's core:
+  its colours are its own (`edge.cloche.colors`), each the chrome colour it
+  comes from with its linear values shown as sRGB, which is how the approved
+  globe was drawn (gold `#ffc872` becomes `#ff932b`). The DOM chrome keeps
+  `edge.core`, `edge.highlight` and the rest. The Quick Look globe takes the
+  chrome colours converted to linear, so it shows them as the chrome does.
 - **Rest and focus** ease into each other in about 400 ms.
 - **Glow** flickers by target as the halo does ([section 8](#8-motion)). The
   stage light inside the portal is the only light the globe sheds onto the
@@ -419,7 +425,16 @@ right. Play never moves as they come and go. The row stands below the
 viewing box, off the cloche's foot line, and ends above 75% down the screen,
 where the ground is still dark enough for bare gold ([section 9.3](#93-phone-portal)),
 well clear of the dock. Over the hologram's own picture it takes the chip,
-sized to the controls showing.
+sized to the controls showing, padded alike at both ends so Play stays in
+the middle.
+
+**Too many for one row.** When the reach controls do not fit beside Play at
+the input's hit size (a touch phone with a take that has sound), Free,
+highlights, tilt, View in AR and sound unfold in a line of their own above
+Play, centred, a glyph gap (12 apx) over the row, on the same chip when the
+row has one. The timecode stays left of Play and Return right of it. Play
+still never moves, and no glyph shrinks below its input's minimum or enters
+a gesture zone.
 
 | Glyph | Meaning | Label | Drawing (16 × 16 viewBox) |
 | --- | --- | --- | --- |
@@ -699,8 +714,9 @@ the stop shape alone, since no text sits within arm's reach.
 - **Focus:** the card nearest the middle sparks and redraws; the others
   hold.
 - **Controls:** Play alone at rest (Return beside it while driving), the
-  rest on touch, in the row at the card's foot, clear of the gesture zones,
-  the safe-area insets and the dock; touch 44 apx.
+  rest on touch, in the row at the card's foot (in a line above Play when
+  they do not fit beside it), clear of the gesture zones, the safe-area
+  insets and the dock; touch 44 apx, on any device with a touch screen.
 - **Notices:** feed-wide notices (empty, offline, server error, uploading)
   on the chip.
 - **Type:** the flat scale; the phone card title is 21.6 px.

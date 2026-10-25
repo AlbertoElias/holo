@@ -112,6 +112,31 @@ describe("side sheet (1.2, 8.4)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps Tab inside while open, as a modal dialog must, in both directions and from outside", () => {
+    render(
+      <>
+        <button type="button">Behind</button>
+        <SideSheet open title="Library" onClose={() => {}}>
+          <input aria-label="File" />
+          <button type="button">Send</button>
+        </SideSheet>
+      </>
+    );
+    const close = screen.getByRole("button", { name: "Close" });
+    const send = screen.getByRole("button", { name: "Send" });
+    const behind = screen.getByRole("button", { name: "Behind" });
+    send.focus();
+    expect(fireEvent.keyDown(document, { key: "Tab" }), "the browser's own Tab is stopped").toBe(false);
+    expect(document.activeElement, "past the last control comes the first").toBe(close);
+    expect(fireEvent.keyDown(document, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement, "before the first comes the last").toBe(send);
+    behind.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement, "focus outside is brought back in").toBe(close);
+    screen.getByLabelText("File").focus();
+    expect(fireEvent.keyDown(document, { key: "Tab" }), "between controls the browser moves focus").toBe(true);
+  });
+
   it("does not listen for Escape, or exist, while closed", () => {
     const onClose = vi.fn();
     render(<SideSheet open={false} title="Library" onClose={onClose}>x</SideSheet>);

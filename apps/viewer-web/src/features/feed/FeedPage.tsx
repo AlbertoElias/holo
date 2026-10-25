@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { tokens } from "@holoim/design-tokens";
-import { Dock, GlyphControl, SideSheet } from "@holoim/ui-dom";
+import { Dock, GlyphControl, HandednessPicker, SideSheet, useHandedness } from "@holoim/ui-dom";
 import { nearestToMiddle } from "@holoim/xr-ui-core";
 
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
@@ -76,6 +76,8 @@ export function FeedPage() {
   const online = useOnline();
   const [audioMuted, setAudioMuted] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [handedness, setHandedness] = useHandedness();
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -173,10 +175,15 @@ export function FeedPage() {
         {cards}
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
       </section>
-      {/* The sheet answers Upload; on a phone it covers the screen, and the dock would show through it. */}
-      <Dock className="feed-dock" aria-label="Feed" style={uploadOpen ? { visibility: "hidden" } : undefined}>
+      {/* A sheet answers Upload or Settings; on a phone it covers the screen, and the dock would show through it. */}
+      <Dock className="feed-dock" aria-label="Feed" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
         <GlyphControl glyph="upload" showLabel label={VIEWER_CONTROL_NAMES.openUpload} word="Upload" onPress={() => setUploadOpen(true)} />
+        {/* No drawing yet (brief, "still to draw"): the word stands in. */}
+        <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
       </Dock>
+      <SideSheet open={settingsOpen} title="Settings" onClose={() => setSettingsOpen(false)} target={target}>
+        <HandednessPicker value={handedness} onChange={setHandedness} wristControl={VIEWER_CONTROL_NAMES.exitAr} />
+      </SideSheet>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
         <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} />
       </SideSheet>

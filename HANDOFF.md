@@ -28,10 +28,12 @@ next queue item in [`TODOS.md`](TODOS.md).
   baked into Quick Look previews, with the one-off `rebuild:usdz`) were
   merged together on 2026-10-25 after `verify:pr` on the combined tree
   (evidence in the brief). Phone AR marks are deferred to AR recording in
-  [`TODOS.md`](TODOS.md). Next there: slice 7 (cross-device task test and
-  device checks). Open: Codex's independent pass over slices 2 to 5 (at its
-  usage limit on 2026-10-24 and 2026-10-25); real wrist drawings for Exit
-  and Recenter; the physical device checks in the brief.
+  [`TODOS.md`](TODOS.md). The fixes from the
+  cross-vendor review of slices 2 to 4 and the second round (the brief's
+  "Independent verification" rows), with the globe's own colours, landed on
+  `main` on 2026-10-25; Codex's verdict on them is still to be recorded. Next there: slice 7 (cross-device task test and device checks).
+  Open: real wrist drawings for Exit and Recenter; the physical device checks
+  in the brief.
 
 ## Unverified / device-only
 
