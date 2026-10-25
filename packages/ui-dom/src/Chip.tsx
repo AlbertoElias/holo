@@ -39,7 +39,8 @@ export function Chip({ target = VIEW_TARGETS.desktop, overPicture = false, contr
   const surface = chipSurfaceStyle(target, { overPicture, controlRow });
   if (!surface) return null;
   return (
-    <div {...props} style={{ ...surface, ...style }}>
+    // `--chip-surface` lets a row inside draw a second chip of the same colour (a reach line stacked above it).
+    <div {...props} style={{ ...surface, ["--chip-surface" as string]: surface.background, ...style }}>
       {children}
     </div>
   );

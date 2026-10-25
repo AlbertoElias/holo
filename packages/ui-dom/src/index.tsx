@@ -232,6 +232,8 @@ export { EdgeSvg, RESTING_EDGE_FRAME, type EdgeSvgProps } from "./EdgeSvg.js";
 export { GlyphControl, type GlyphControlProps } from "./GlyphControl.js";
 export { GlyphSvg, type GlyphSvgProps } from "./glyphSvg.js";
 export { Halo, HaloRing, type HaloProps, type HaloRingProps, type HaloViewState } from "./Halo.js";
+export { loadHandedness, saveHandedness, useHandedness } from "./handedness.js";
+export { HandednessPicker, type HandednessPickerProps } from "./HandednessPicker.js";
 export { defaultHitInput, useReducedMotion } from "./internal.js";
 export { Shade, shadeGradient, type ShadeProps } from "./Shade.js";
 export { SideSheet, type SideSheetProps } from "./SideSheet.js";

@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 
 import { tokens } from '@holoim/design-tokens';
-import { Chip, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, SideSheet, Type } from '@holoim/ui-dom';
+import { Chip, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, HandednessPicker, SideSheet, Type } from '@holoim/ui-dom';
 import {
   CAPTURE_HALO_ACTIONS,
   PHONE_EDGES,
@@ -14,7 +14,6 @@ import {
   hitAreaApx,
   recordingText,
   type Control,
-  type Handedness,
   type HitInput
 } from '@holoim/xr-ui-core';
 
@@ -237,31 +236,10 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge; state: UiViewModel; touch: boolean; input: HitInput }) {
   const desktop = state.mode === 'desktop-third' || state.mode === 'desktop-first';
-  const options: Array<{ value: Handedness; label: string }> = [
-    { value: 'right', label: 'Right-handed' },
-    { value: 'left', label: 'Left-handed' }
-  ];
   return (
     <>
       <Section title="Hand">
-        <div role="radiogroup" aria-label="Dominant hand" style={{ display: 'flex', flexWrap: 'wrap' }}>
-          {options.map((option) => (
-            <GlyphControl
-              glyph={null}
-              key={option.value}
-              role="radio"
-              aria-checked={state.handedness === option.value}
-              label={option.label}
-              input={input}
-              onPress={() => bridge.setHandedness(option.value)}
-            />
-          ))}
-        </div>
-        <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
-          {/* An option has no selected look in the styleguide yet (brief,
-              slice 4, placeholder), so the choice is said in words. */}
-          {state.handedness === 'right' ? 'Right-handed' : 'Left-handed'}: in a headset, Record sits on your {state.handedness === 'right' ? 'left' : 'right'} wrist.
-        </Type>
+        <HandednessPicker value={state.handedness} onChange={(handedness) => bridge.setHandedness(handedness)} wristControl="Record" input={input} />
       </Section>
 
       {desktop ? (
