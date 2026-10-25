@@ -369,7 +369,15 @@ drives the arms from the measured bind pose, so recordings are unaffected.
 - Remaining for slice 1: the viewer-web anchors (`HOLOIM_humanoid`, then
   the resolver, then legacy names) and the pipeline spec on a non-RPM and a
   −Z export, after `feature/viewer-xr-interface` merges (still open on
-  2026-10-25). Then a real Mixamo and VRM file by hand, and merge.
+  2026-10-25), then merge.
+- Real files checked by hand (2026-10-25) in the capture app: three.js's
+  Mixamo `Xbot.glb` binds by names (mixamo) and pixiv's
+  `VRM1_Constraint_Twist_Sample.vrm` by its `VRMC_vrm` declaration; both
+  bind 54 bones with no required bone missing, no facing correction and no
+  feature off. On desktop both crouch like the shipped avatar (head down
+  17–21 cm, forward 23–24 cm). The VRM keeps its T-pose arms on desktop:
+  the VRM spec requires a T-pose rest, so the desktop limit below applies
+  to every VRM file until a desktop arm pose exists.
 - Not merged to `main`: the slice ships as one change once the viewer step
   lands.
 
