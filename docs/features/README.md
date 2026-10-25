@@ -9,6 +9,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Feature | Status | Brief |
 | --- | --- | --- |
 | Redesign UI and interaction across capture and viewer | Implementing | [ui-redesign.md](ui-redesign.md) |
+| AR recording (the phone as a camera-only author) | Reviewed; awaiting approval | [ar-recording.md](ar-recording.md) |
 | Summon and place while speaking | Verified; lands with PRD-043 | [summon-and-place.md](summon-and-place.md) |
 | Explain with an object | Verifying | [explain-with-an-object.md](explain-with-an-object.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |

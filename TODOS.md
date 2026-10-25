@@ -164,17 +164,14 @@ it from the item below instead of duplicating its status here.
   device-specific placement recovery. Delivered as a "Recenter AR" overlay
   button shown only in AR mode in
   [`docs/features/archive/ar-recenter-control.md`](docs/features/archive/ar-recenter-control.md).
-- [ ] AR recording (phone as a camera-only author): record a take in WebXR
-  AR on a phone, and hold to mark "this" there with a camera ray. Split out of
-  slice 5 of [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)
-  (2026-10-25). Notes: every capture system returns early in AR
-  (`frame.arSpectator`), so no AR take exists yet; a mark's ray would come
-  from the camera through the touch, so its link's `from` is the camera, which
-  `HOLOIM_meaning` v0 cannot say (a v1 change through its owner, v0 files still
-  loading); and IWSDK's `launchXR` has no `dom-overlay` option, so touch over
-  the scene needs a `requestSession` shim. Open product question for the
-  user, not decided: is a take with no performer a hologram
-  ([`what-a-hologram-is.md`](docs/product/concepts/what-a-hologram-is.md))?
+- [ ] AR recording (phone as a camera-only author): in flight in
+  [`docs/features/ar-recording.md`](docs/features/ar-recording.md), which
+  holds the notes that were here.
+- [ ] The Halo in phone AR capture (stop, undo and redo of a held mark there),
+  after AR recording lands: cut from
+  [`docs/features/ar-recording.md`](docs/features/ar-recording.md) by its
+  design review on 2026-10-25; the idiom is the phone's (press and hold the
+  dock's Halo glyph, drag) through the shared screen-input bridge.
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
   and success signal are explicit. The lens points to IDEA-045 (portal view)
