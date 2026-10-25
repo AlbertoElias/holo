@@ -322,6 +322,9 @@ test.describe("phone by touch", () => {
     expect(line.box.y + line.box.height, "the row ends above 75% down").toBeLessThanOrEqual(PHONE.height * 0.75);
 
     // Looking around, moved in: the row is over the hologram's own picture, so it and the reach line take the chip, and Return joins Play.
+    // The row folds 4 s after the last touch, so reach for it again before pressing Free.
+    await card.locator(".feed-card-portal").tap({ force: true });
+    await expect(controls).toHaveAttribute("data-reach", "shown");
     await controls.getByRole("button", { name: "Free" }).tap();
     const portalBox = (await card.locator(".feed-card-portal").boundingBox())!;
     const cdp = await page.context().newCDPSession(page);
