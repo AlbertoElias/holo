@@ -207,8 +207,11 @@ jobs:
     runs-on: ubuntu-latest
     # Shard 1 takes about 9 minutes on a good runner (setup, the app builds and
     # ~7.5 minutes of tests, since PRD-043 added the object take), so 10 left
-    # no margin for a slow runner. The ceiling costs nothing when tests pass.
-    timeout-minutes: 15
+    # no margin for a slow runner. A slow runner stalled it past 15 twice on
+    # 2026-10-25, cancelled with no report. Playwright now stops itself at 16
+    # minutes of tests (playwright.config.ts), inside this ceiling, so a slow
+    # run fails with its diagnostics. The ceiling costs nothing when tests pass.
+    timeout-minutes: 20
     # The pipeline specs dominate this job; Playwright's file sharding splits
     # them between two runners.
     strategy:
@@ -246,7 +249,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Upload failure diagnostics
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-failure-${{ matrix.shard }}-${{ github.run_id }}
