@@ -41,8 +41,15 @@ export function clocheValue(shape: Pick<ClocheShape, "base" | "radii" | "exponen
  * scaled until the furthest point is inside, plus the margin. Fitted once per
  * hologram: a dome that refits as the take plays would breathe. Null with no
  * points.
+ *
+ * With `floorY` (the recorded floor), the foot stands on it instead: a
+ * recorded person stands on the floor, and the ground under it (a terrain's
+ * flanks, water below) is not what the dome is fitted to.
  */
-export function fitCloche(points: readonly Vector3Like[]): ClocheShape | null {
+export function fitCloche(allPoints: readonly Vector3Like[], { floorY }: { floorY?: number | undefined } = {}): ClocheShape | null {
+  const hasFloor = floorY !== undefined && Number.isFinite(floorY);
+  const above = hasFloor ? allPoints.filter((point) => point.y >= floorY) : allPoints;
+  const points = above.length > 0 ? above : allPoints;
   if (points.length === 0) return null;
   const min = { x: Infinity, y: Infinity, z: Infinity };
   const max = { x: -Infinity, y: -Infinity, z: -Infinity };
@@ -54,6 +61,7 @@ export function fitCloche(points: readonly Vector3Like[]): ClocheShape | null {
     max.y = Math.max(max.y, point.y);
     max.z = Math.max(max.z, point.z);
   }
+  if (hasFloor && above.length > 0) min.y = floorY;
   const height = Math.max(max.y - min.y, 0.05);
   const halfX = (max.x - min.x) / 2;
   const halfZ = (max.z - min.z) / 2;

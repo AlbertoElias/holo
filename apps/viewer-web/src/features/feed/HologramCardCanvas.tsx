@@ -19,7 +19,7 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
-import { drawnPoints, motionPoints } from "../hologram/drawnPoints";
+import { drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
 import { readMeaningLinks } from "../meaning/meaningLinks";
@@ -228,7 +228,8 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     // A bubble follows its author, so the walk is read relative to it: the author's full reach, not their path.
     const anchor = bubble ? clonedScene.getObjectByName("RecordedBubbleSphere") ?? undefined : undefined;
     const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, mixer, duration, { anchor, bubble })];
-    const shape = fitCloche(points);
+    // The dome stands on the recorded floor, not on the lowest ground in the bubble (B-022).
+    const shape = fitCloche(points, { floorY: recordedFloorY(clonedScene) ?? undefined });
     if (!shape) return;
     fittedCentre.current = bubble ? bubble.center : null;
     clocheRef.current = shape;
@@ -242,7 +243,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   useEffect(() => {
     if (import.meta.env.DEV) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, objects: recordedObjects });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, objects: recordedObjects, cloche: { shape: clocheRef, fitted: fittedCentre } });
     }
   }, [actions, camera, clonedScene, mixer, pointingProbe, portal, recordedObjects, renderScene, renderer, sphereClip, url]);
 
