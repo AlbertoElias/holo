@@ -224,10 +224,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   const framingRef = useRef<{ key: string; framing: ClocheFraming } | null>(null);
   const fitClocheNow = useCallback(() => {
     const bubble = sphereClip.active && sphereClip.radius > 0 ? { center: sphereClip.center.clone(), radius: sphereClip.radius } : null;
-    const duration = Math.max(0, ...animations.map((clip) => clip.duration));
     // A bubble follows its author, so the walk is read relative to it: the author's full reach, not their path.
     const anchor = bubble ? clonedScene.getObjectByName("RecordedBubbleSphere") ?? undefined : undefined;
-    const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, mixer, duration, { anchor, bubble })];
+    const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble })];
     const shape = fitCloche(points);
     if (!shape) return;
     fittedCentre.current = bubble ? bubble.center : null;
@@ -237,7 +236,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     clonedScene.traverse((child) => {
       if (child.name === "RecordedBubbleSphere") child.visible = false;
     });
-  }, [animations, clonedScene, mixer, sphereClip]);
+  }, [animations, clonedScene, sphereClip]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {

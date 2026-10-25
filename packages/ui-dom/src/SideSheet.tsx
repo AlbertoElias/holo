@@ -23,6 +23,25 @@ export interface SideSheetProps {
   children?: ReactNode;
 }
 
+const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+/** A modal sheet keeps Tab inside it: past the last control to the first, before the first to the last. */
+function keepFocusIn(container: HTMLElement, event: KeyboardEvent): void {
+  const focusable = [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => !node.hidden && node.getAttribute("aria-hidden") !== "true");
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+  const inside = active instanceof Node && container.contains(active);
+  let next: HTMLElement | undefined;
+  if (!first || !last) next = container;
+  else if (!inside || active === container) next = event.shiftKey ? last : first;
+  else if (event.shiftKey && active === first) next = last;
+  else if (!event.shiftKey && active === last) next = first;
+  if (!next) return;
+  event.preventDefault();
+  next.focus({ preventScroll: true });
+}
+
 export function SideSheet({ open, title, onClose, closeLabel = "Close", target = VIEW_TARGETS.desktop, reducedMotion, children }: SideSheetProps) {
   const titleId = useId();
   const systemReducedMotion = useReducedMotion();
@@ -59,6 +78,7 @@ export function SideSheet({ open, title, onClose, closeLabel = "Close", target =
     if (!open) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
+      if (event.key === "Tab" && sheet.current) keepFocusIn(sheet.current, event);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);

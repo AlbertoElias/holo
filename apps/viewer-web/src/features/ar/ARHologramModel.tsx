@@ -532,9 +532,8 @@ export function ARHologramModel({
     if (clocheFitted.current || !group || !clocheChrome) return;
     clocheFitted.current = true;
     const bubble = recordedBubble(clonedScene, group);
-    const duration = Math.max(0, ...arAnimations.map((clip) => clip.duration));
     // In AR the bubble stays put, so the author's whole walk is inside it.
-    const points = [...drawnPoints(clonedScene, bubble, group), ...motionPoints(clonedScene, mixer, duration, { into: group, bubble })];
+    const points = [...drawnPoints(clonedScene, bubble, group), ...motionPoints(clonedScene, arAnimations, { into: group, bubble })];
     const shape = fitCloche(points);
     if (!shape) return;
     // The cloche is the bubble's look now; the recorded sphere's old glass is not drawn.

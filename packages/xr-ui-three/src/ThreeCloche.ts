@@ -26,12 +26,14 @@ import type { BufferGeometry } from "three";
 import {
   AdditiveBlending,
   BufferGeometry as Geometry,
+  Color,
   DoubleSide,
   Float32BufferAttribute,
   Group,
   Mesh,
   PlaneGeometry,
   Points,
+  SRGBColorSpace,
   ShaderMaterial,
   SphereGeometry,
   Vector3
@@ -41,6 +43,18 @@ import { finishChrome } from "./chrome.js";
 
 const { cloche, core, highlight, halo, char, ember } = tokens.edge;
 const { sparks } = tokens.motion;
+
+/**
+ * A token's sRGB channels, unconverted. The shaders write no output
+ * conversion, so they blend in the canvas's own sRGB space, as the page does
+ * for CSS: a covered pixel is the token's hex exactly, never its linear
+ * values drawn as sRGB (#ffc872 as #ff932b).
+ */
+function srgbUniform(hex: string): Color {
+  const channels = { r: 0, g: 0, b: 0 };
+  tokenColor(hex).getRGB(channels, SRGBColorSpace);
+  return new Color(channels.r, channels.g, channels.b);
+}
 
 
 const f = (value: number) => value.toFixed(4);
@@ -324,11 +338,11 @@ export class ThreeCloche {
       uLine: { value: 1 },
       uCharShare: { value: char.rest },
       uSeed: { value: seedOffset },
-      uGlow: { value: tokenColor(halo.color) },
-      uCore: { value: tokenColor(core.color) },
-      uHighlight: { value: tokenColor(highlight.color) },
-      uChar: { value: tokenColor(char.color) },
-      uEmber: { value: tokenColor(ember.color) }
+      uGlow: { value: srgbUniform(halo.color) },
+      uCore: { value: srgbUniform(core.color) },
+      uHighlight: { value: srgbUniform(highlight.color) },
+      uChar: { value: srgbUniform(char.color) },
+      uEmber: { value: srgbUniform(ember.color) }
     };
 
     this.shell = new Mesh(
@@ -387,7 +401,7 @@ export class ThreeCloche {
 
     const shadeMaterial = new ShaderMaterial({
       name: "cloche-shade",
-      uniforms: { uShade: { value: tokenColor(tokens.color.deepSea) }, uOpacity: { value: 1 } },
+      uniforms: { uShade: { value: srgbUniform(tokens.color.deepSea) }, uOpacity: { value: 1 } },
       vertexShader: SHADE_VERTEX,
       fragmentShader: shadeFragment(),
       transparent: true,
