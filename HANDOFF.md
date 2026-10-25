@@ -26,8 +26,12 @@ next queue item in [`TODOS.md`](TODOS.md).
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are merged
   to `main`: slices 0 to 2 on 2026-10-24, and slices 3 (every viewer page)
   and 4 (every capture page, touch, handedness) together after `verify:pr`
-  passed on the combined tree (evidence in the brief). Next there: slice 5
-  (hold to mark "this" and the Halo). Open: Codex's independent pass over
+  passed on the combined tree (evidence in the brief). The user's second
+  round (the 3D cloche halo, fewer controls, no dock shadow, the upload
+  sheet) landed at `02d0282` on 2026-10-25 and is deployed. Held locally
+  (docs only, rides with the next merge): the brief's status line. Next
+  there: slice 5 (hold to mark "this" and the Halo) and slice 6 (the Quick
+  Look cloche). Open: Codex's independent pass over
   slices 2 to 4 (it was at its usage limit on 2026-10-24); real wrist
   drawings for Exit and Recenter, a known gap for a design pass; the
   physical device checks in the brief.

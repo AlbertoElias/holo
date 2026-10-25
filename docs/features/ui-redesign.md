@@ -4,7 +4,9 @@
 **Status:** Implementing (approved by the user 2026-10-24). Slices 0 to 4
 are on `main` (3 and 4 merged together after `verify:pr` on the combined
 tree); the user's second round (dock, controls, upload sheet, soot, the 3D
-cloche) is next to land, then slice 5
+cloche) is on `main` at `02d0282` and deployed. Next: the cross-vendor review
+of slices 2 to 4 and this round, slice 5, slice 6 (the Quick Look cloche),
+then slice 7
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
