@@ -3,7 +3,8 @@
 **Lead:** Claude Code (Opus)  
 **Status:** Implementing (approved by the user 2026-10-24). Slices 0 to 4
 are on `main` (3 and 4 merged together after `verify:pr` on the combined
-tree); slice 5 is next
+tree); the user's second round (dock, controls, upload sheet, soot, the 3D
+cloche) is next to land, then slice 5
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -235,6 +236,57 @@ evidence may send one back to the user.
   feedback (proximity cue, tick, controller pulse), and the chrome motion
   rules (from the source, back to the source; crossfade under reduced
   motion; the world never moves without the user's action).
+
+### The user's second round, 2026-10-25 (lead and Codex decide)
+
+The user, after slices 3 and 4: "dont treat the styleguide as definitive
+objective… finish the project with your's and codex best design decisions
+and we'll keep iterating." Taste calls in this round are the lead's with
+Codex; each is recorded here with its alternatives, and the styleguide and
+`tokens.json` now state the result.
+
+- **No dock shadow.** The dock's band (slice 3) is gone on both apps. The
+  row sits on the chip, sized to its contents: the bottom of the ground is
+  amber, where gold fails (2.1:1). Alternatives: bare glyphs (fail contrast
+  on amber), a lighter band (still a shadow). Only a hologram casts a shade.
+- **Fewer controls, spaced, off the edge line.** At rest a card shows Play
+  (or Pause, now drawn) alone; Return joins it beside Play while driving.
+  On reach the timecode unfolds left and Free, highlights, tilt, View in AR
+  and sound unfold right, two glyph gaps apart. Play never moves. Icons
+  only on the card (new drawings: Pause, Sound on/off, Upload, Close); the
+  word stays the accessible name. Alternatives: a single "more" glyph that
+  opens a tray (one more press for every action), labels beside every glyph
+  (crowds a phone row).
+- **Upload sheet.** Two glyph gaps of padding and between fields, a Close
+  glyph, a dashed drop zone as the file picker (drag and drop; the native
+  input stays as `#glb-upload`), fields as soft wells that turn gold on
+  focus, a switch for Quick Look (`#quicklook-enabled`, `role=switch`), and
+  Upload as glyph and word, right-aligned. The empty-feed notice steps aside
+  while the sheet is open, since it sat on the sheet's title on a phone.
+- **No soot.** The edge's dark halo read as a drop shadow. The cloche keeps
+  the soot rule's input as char: a narrow dark line beside the gold.
+- **The 3D halo: the cloche.** Four candidates rendered in the real viewer
+  (both live GLBs; rest, orbit, side, zoom, inside): a case, three rings, a
+  floating bubble and a dome. Codex (deep) picked the dome, with revisions
+  that are all built: one shoulder curvature for every hologram, a single
+  quiet foot line, burns over the whole shell, a narrow rim with little glow,
+  the dome framed at about 70 to 80% of the viewing box clear of title and
+  controls, the shade from the content's footprint, a fade to nothing inside
+  with no back wall, and one object on every device. The card's canvas now
+  fills the card, so the scene is never cut square; the viewing box between
+  title and controls only frames Follow (`setViewOffset`). After the first
+  render the rim was a rope on zoom, so its widths are now shares of the
+  on-screen radius held between 120 and 200 device pixels (a 2 to 4 px line), the glow is
+  halved, and the inside fade completes before the glass. Rejected: the case
+  (an editor's bounding box), the rings (an atom; they compete with people),
+  the bubble (weightless, sealed).
+- **Per device.** WebXR AR (Quest passthrough, Android) draws the same
+  cloche, fitted in the placed hologram's own space so placement and the
+  viewer's rescale carry it, replacing the flat ring and the bubble's blue
+  glass; the aura stays for now. Capture draws no halo during a take and has
+  no playback review yet; when it gets one, it mounts `ThreeCloche`. Quick
+  Look (slice 6) cannot draw a view-dependent rim, so the plan is gold seams
+  over the shell and an irregular emissive lip at the foot, no shadow.
 
 ## Delivery slices
 
@@ -849,6 +901,9 @@ share no files.
 | Independent verification, slice 4 | Codex (a different vendor), then a same-vendor stand-in | Neither (review) | 2026-10-24: Codex was at its usage limit and could not run. A Claude code-reviewer stood in; it is not independent by vendor. It found one bug: one controller made a select commit twice, because both sides fell back to the same input. It found weak spots: chrome shown vs hidden could not differ, since chrome sits outside the exported model; the occlusion raycast did not skip chrome; a poke armed with no approach; the XR entry mode could go stale; the home bar was not excluded from touch; and several assertions were weak. All are fixed and covered by the check above. Slice 2's `xr-ui-three` and `ui-dom` contracts still have no cross-vendor pass |
 | `verify:pr`, slice 4 | `pnpm run verify:pr`; `test:knowledge` and `test:xr:viewer` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling; `@holoim/ui-dom` 86/86) and builds pass. `test:smoke:pipeline` 6/6 and `test:portal` 6/6 pass. In `test:xr:smoke` every capture check passes (the full `test:xr` tier, now 12 checks with `ui`, passes too). The viewer's `ar-bubble.spec.ts:70` failed twice with B-021 while the machine was loaded (load average about 20) and passed 6/6 alone with B-021's command. In Docker, `test:knowledge` 7/7 and `test:xr:viewer` 9/9. The shared `holoim-ci-playwright` volume holds an arm64 Chromium 1208 marked complete, which an amd64 container cannot launch, so the runs set `PLAYWRIGHT_BROWSERS_PATH=/root/pw-fresh` |
 | `verify:pr`, slices 3 and 4 combined | `pnpm run verify:pr` on the merged tree (`c7ea749`); `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 before the merge to `main`: doctor, lint, typecheck, every unit test (`ui-dom` 87, `xr-ui-core` 84, `xr-ui-three` 77, `xr-ui-r3f` 73, `design-tokens` 33, viewer-web 33, capture 26) and builds pass; `test:smoke:pipeline` 8/8, `test:portal` 6/6, every capture XR check (`ui height terrain body face hands locomotion recording mock-vr`), `test:xr:viewer` 15/15. `test:knowledge` 7/7 in the CI emulator with a fresh `PLAYWRIGHT_BROWSERS_PATH`, since the main checkout's knowledge server holds port 4176 locally |
+| Second round: the cloche, contracts | `xr-ui-core` `cloche.test.ts`, `xr-ui-three` `cloche.test.ts` | Neither (unit) | 2026-10-25, written from failure modes first: no fit for nothing drawn; every drawn point inside the glass with the margin; the foot on the lowest point; a flat take and a wide low one keep 40% shoulders; the shade is the content's footprint × 1.15; Follow keeps every point of the drawn dome inside the viewing box at 78% and fills it (phone and desktop aspects); fully drawn outside, 0 at the glass and monotonic walking out; seeds stable and in range; char at rest on dark ground and full where the soot rule is on. The three.js object: chrome throughout, not tone-mapped, no depth writes; the eye read correctly under a placed, turned and 0.25-scaled parent (AR); inside drops the glass and keeps the floor shade; nothing in a headset while recording. `xr-ui-core` 95, `xr-ui-three` 81, `ui-dom` 88, viewer-web 33 |
+| Second round: viewer pages | `e2e/redesign.spec.ts`, `e2e/hologram-feed.spec.ts`, `e2e/ar-bubble.spec.ts` (IWER, 1280 × 800 and 390 × 844) | Emulation (Playwright, IWER) | 2026-10-25: 15/15. At rest only Play (or Pause) in the row and no Return in Follow; every glyph at the mouse minimum; on reach Free shows and Play neither moves (< 1 px) nor leaves the middle (< 2 px); no two controls closer than a glyph gap; no `.feed-card-edge` or `.feed-card-shade` on the page; the focused card's cloche drawn at opacity 1 with volume; under reduced motion the core steady and the glow within the slow fade (< 0.02 in 0.5 s); the sheet at most 26rem, its drop zone labelled for `#glb-upload`, the Quick Look switch toggled by its label. AR: the cloche drawn, all chrome, not head-locked, the recorded author inside it, standing within the bubble, at the same room position from in front and from behind, char at full strength on a Quest (no estimate), core 1, the old glass sphere hidden, the aura kept with no torus; `ar-cloche-front.png` and `ar-cloche-back.png`. View in AR is a reach control now, so the specs reach for the card before pressing it (`pressViewInAr`). Not checked on a Quest or an Android phone |
+| Second round: Codex on the renders | `codex exec -p deep` with before and after contact sheets (desktop, phone, upload sheet) | Neither (cross-vendor review) | 2026-10-25, first pass: "ship after the must-fixes". Must-fixes, all done: the avatar's head broke through its dome (the fit now samples the author's reach through the take, bones and moving meshes, relative to a following bubble); the dome's far side still showed inside (now 0 there, read back from the shell); the phone row sat at 85% down on amber (now ends above 75%); the dock showed through the phone sheet (hidden while it is open). Taste notes taken: the rim capped at a 2 to 4 px line, the chip over the picture hugging the controls showing. Left: the floor shade's dark crescent under the avatar's terrain (it is the hologram's own shade, kept). Second pass on the fixed renders: each must-fix resolved, none new, "ship on this visual pass"; it notes stills cannot prove the 4% clearance through the whole take, which the fit's contract test and the AR check (author inside from both sides) cover |
 | Hold to mark on every input | IWER scenarios (hands, controllers), the desktop pointing take, touch scenarios for phone and phone AR | Emulation | Exported GLBs with the expected `recorded` links and no overlapping inferred link; pending |
 | The Halo on every input | Flick and hold scenarios with mouse, touch and IWER (hands, controllers, `transient-pointer` if IWER emulates it) | Emulation | Report of directions committed; pending |
 | Pipeline and USDZ | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result; byte-identical export with chrome visible; v0 and v1 files load; USDZ outline matches; pending |

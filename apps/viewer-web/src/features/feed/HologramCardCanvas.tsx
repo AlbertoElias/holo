@@ -1,6 +1,6 @@
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ACESFilmicToneMapping,
   Box3,
@@ -12,12 +12,14 @@ import {
 } from "three";
 import type { AnimationAction, Mesh, Object3D, PointLight } from "three";
 import { tokens } from "@holoim/design-tokens";
-import { stageLight, type ViewTarget } from "@holoim/xr-ui-core";
+import { clocheFollowDirection, clocheFraming, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
+import { Cloche } from "@holoim/xr-ui-r3f";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
+import { drawnPoints, motionPoints } from "../hologram/drawnPoints";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
 import { readMeaningLinks } from "../meaning/meaningLinks";
@@ -46,7 +48,19 @@ type HologramCardCanvasProps = {
   /** The screen the card is on: sets the stage light's flicker (8.1). */
   target: ViewTarget;
   reducedMotion: boolean;
+  /** The hologram's id (Q10): its cloche's burns. */
+  seed: string;
+  /**
+   * The card's viewing box inside the canvas, in CSS px. The canvas covers the
+   * whole card, so nothing is ever cut square; Follow frames the cloche in
+   * this box.
+   */
+  frameRect?: FrameRect | null | undefined;
+  /** What the cloche's char reads (3.2, 3.4): the ground behind its foot. */
+  soot: SootInput;
 };
+
+export type FrameRect = { left: number; top: number; width: number; height: number };
 
 const HOLOGRAM_ANIMATION_SPEED = 1;
 const SPHERE_CLIP_FALLOFF = 1.8;
@@ -61,6 +75,8 @@ const RETURN_SECONDS = 0.45;
 const STAGE_LIGHT_TOWARD_VIEWER = 0.35;
 /** and this far below the Follow target, near the floor at the author's feet. */
 const STAGE_LIGHT_DROP_METERS = 0.7;
+/** Follow looks at the cloche from a little right of front and above (3.4). */
+const FOLLOW_DIRECTION = new Vector3().copy(clocheFollowDirection());
 /** Inside end never comes closer than this share of the Follow distance. */
 const MAX_INSIDE_SHARE = 0.6;
 
@@ -140,8 +156,11 @@ function easeInOut(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, target, reducedMotion }: {
+function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, target, reducedMotion, seed, frameRect, soot }: {
   url: string;
+  seed: string;
+  frameRect?: FrameRect | null | undefined;
+  soot: SootInput;
   target: ViewTarget;
   reducedMotion: boolean;
   active: boolean;
@@ -193,6 +212,32 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   const avatarRootRef = useRef<Object3D | null>(null);
   const avatarAnchorRef = useRef<{ hips: Object3D; head: Object3D | null } | null>(null);
   const { actions, mixer } = useAnimations(animations, clonedScene);
+  // The cloche (3.4), fitted once on the first drawn frame, when the bubble's
+  // live centre and the actions are known. A bubble moves with its author, so
+  // the dome follows it by the centre's shift since the fit.
+  const [cloche, setCloche] = useState<ClocheShape | null>(null);
+  const clocheRef = useRef<ClocheShape | null>(null);
+  const clocheShift = useRef(new Vector3()).current;
+  const fittedCentre = useRef<Vector3 | null>(null);
+  const frameRectRef = useRef(frameRect);
+  frameRectRef.current = frameRect;
+  const framingRef = useRef<{ key: string; framing: ClocheFraming } | null>(null);
+  const fitClocheNow = useCallback(() => {
+    const bubble = sphereClip.active && sphereClip.radius > 0 ? { center: sphereClip.center.clone(), radius: sphereClip.radius } : null;
+    const duration = Math.max(0, ...animations.map((clip) => clip.duration));
+    // A bubble follows its author, so the walk is read relative to it: the author's full reach, not their path.
+    const anchor = bubble ? clonedScene.getObjectByName("RecordedBubbleSphere") ?? undefined : undefined;
+    const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, mixer, duration, { anchor, bubble })];
+    const shape = fitCloche(points);
+    if (!shape) return;
+    fittedCentre.current = bubble ? bubble.center : null;
+    clocheRef.current = shape;
+    setCloche(shape);
+    // The cloche is the bubble's look now; the recorded sphere's old glass is not drawn.
+    clonedScene.traverse((child) => {
+      if (child.name === "RecordedBubbleSphere") child.visible = false;
+    });
+  }, [animations, clonedScene, mixer, sphereClip]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -417,6 +462,8 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
 
   useFrame((frameState, delta) => {
     portal.runtime.playbackSeconds = primaryActionRef.current?.time ?? 0;
+    if (!clocheRef.current) fitClocheNow();
+    if (fittedCentre.current && sphereClip.active) clocheShift.copy(sphereClip.center).sub(fittedCentre.current);
     if (!(camera instanceof PerspectiveCamera)) {
       return;
     }
@@ -443,6 +490,22 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
       pose.followPosition,
       pose.followTarget
     );
+    // Follow frames the whole cloche in the card's viewing box (3.4).
+    const shape = clocheRef.current;
+    const rect = frameRectRef.current;
+    const framed = Boolean(shape && rect && rect.width > 0 && rect.height > 0);
+    if (shape && rect && framed) {
+      const key = `${rect.width}x${rect.height}:${baseFov}`;
+      if (framingRef.current?.key !== key) {
+        framingRef.current = { key, framing: clocheFraming(shape, { fovY: MathUtils.degToRad(baseFov), aspect: rect.width / rect.height }) };
+      }
+      const { target: middle, distance } = framingRef.current.framing;
+      pose.followTarget.set(middle.x, middle.y, middle.z).add(clocheShift);
+      pose.followPosition.copy(pose.followTarget).addScaledVector(FOLLOW_DIRECTION, distance);
+      const reach = Math.max(shape.radii.x, shape.radii.y, shape.radii.z);
+      preferred.near = Math.max(DEFAULT_CAMERA_FRAMING_CONFIG.minNear, (distance - reach * 1.5) / 40);
+      preferred.far = distance + reach * 4;
+    }
     const light = stageLightRef.current;
     if (light) {
       light.position.lerpVectors(pose.followTarget, pose.followPosition, STAGE_LIGHT_TOWARD_VIEWER);
@@ -462,8 +525,15 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     if (state.mode === "follow" && runtime.returnBlend === 0) {
       baseHeightRef.current = canvasHeight;
     }
-    const openRatio = baseHeightRef.current > 0 ? Math.max(canvasHeight / baseHeightRef.current, 1) : 1;
-    camera.fov = MathUtils.radToDeg(2 * Math.atan(Math.tan(MathUtils.degToRad(baseFov) / 2) * openRatio));
+    if (rect && framed) {
+      // The main view is the viewing box; the canvas around it shows more of the same view.
+      camera.fov = baseFov;
+      camera.aspect = rect.width / rect.height;
+      camera.setViewOffset(rect.width, rect.height, -rect.left, -rect.top, frameState.size.width, frameState.size.height);
+    } else {
+      const openRatio = baseHeightRef.current > 0 ? Math.max(canvasHeight / baseHeightRef.current, 1) : 1;
+      camera.fov = MathUtils.radToDeg(2 * Math.atan(Math.tan(MathUtils.degToRad(baseFov) / 2) * openRatio));
+    }
     if (state.mode === "free") {
       const head = avatarAnchorRef.current?.head;
       if (head) {
@@ -511,6 +581,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     <>
       <primitive object={clonedScene} />
       <pointLight ref={stageLightRef} color={tokens.color.glow} decay={2} />
+      {cloche && (
+        <Cloche seed={seed} shape={cloche} shift={clocheShift} target={target} recording={false} inFocus={active} reducedMotion={reducedMotion} soot={soot} />
+      )}
       {meaningLinks.length > 0 && (
         <PointingHighlights
           links={meaningLinks}
@@ -534,7 +607,10 @@ export function HologramCardCanvas({
   colorAccurateMode,
   portal,
   target,
-  reducedMotion
+  reducedMotion,
+  seed,
+  frameRect,
+  soot
 }: HologramCardCanvasProps) {
   return (
     <Canvas
@@ -549,7 +625,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} />
+      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} />
     </Canvas>
   );
 }

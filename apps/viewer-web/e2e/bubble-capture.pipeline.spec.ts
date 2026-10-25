@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import type { Probe } from "./ar-bubble-types";
 import { captureBubblePixels } from "./bubble-pixel-proof";
 
-import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, test, pressViewInAr } from "./bootstrap";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Whole-product check: record in capture, export the real GLB, upload it
@@ -127,7 +127,7 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const feedAfter = await captureBubblePixels(page, "feed", artifactDir);
   expect(feedAfter.sphere, "feed sphere follows recorded motion").not.toEqual(feedBefore.sphere);
   await page.clock.resume();
-  await card.locator(".ar-trigger-button").click();
+  await pressViewInAr(page, card);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await page.evaluate(() => {
     const device = (window as unknown as { IWER_DEVICE: { stereoEnabled: boolean; ipd: number } }).IWER_DEVICE;

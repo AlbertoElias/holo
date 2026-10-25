@@ -125,6 +125,34 @@ export const tokens = {
       blendToLuminance: 0.16,
       arOnLuminance: 0.16,
       arOffLuminance: 0.095
+    },
+    char: {
+      color: '#6b3514',
+      rest: 0.35,
+      bright: 1
+    },
+    cloche: {
+      exponent: 2.6,
+      fitMargin: 1.04,
+      minHeightShare: 0.4,
+      rimAt: 0.9,
+      rimWaves: 0.045,
+      rimTears: 0.05,
+      rimRefMinPx: 120,
+      rimRefMaxPx: 200,
+      coreBand: 0.018,
+      highlightBand: 0.012,
+      charBand: 0.02,
+      glowStart: 0.24,
+      glowShare: 0.16,
+      footWidth: 0.005,
+      footShare: 0.5,
+      followYaw: 18,
+      followPitch: 16,
+      frameShare: 0.78,
+      insideFadeFrom: 1.6,
+      insideFadeTo: 1.05,
+      shadeScale: 1.15
     }
   },
   glyph: {
@@ -166,6 +194,31 @@ export const tokens = {
         d: 'M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3',
         fill: false,
         linejoin: 'round'
+      },
+      pause: {
+        d: 'M5.5 3v10M10.5 3v10',
+        fill: false,
+        linejoin: 'miter'
+      },
+      soundOn: {
+        d: 'M1.5 6h2.5L7.5 3v10L4 10H1.5zM10 5.5a3.5 3.5 0 0 1 0 5M12 3.5a6.3 6.3 0 0 1 0 9',
+        fill: false,
+        linejoin: 'round'
+      },
+      soundOff: {
+        d: 'M1.5 6h2.5L7.5 3v10L4 10H1.5zM10.5 6l4 4M14.5 6l-4 4',
+        fill: false,
+        linejoin: 'round'
+      },
+      upload: {
+        d: 'M8 10V2M4.8 5.2 8 2l3.2 3.2M2 10v3.5h12V10',
+        fill: false,
+        linejoin: 'round'
+      },
+      close: {
+        d: 'M3.5 3.5l9 9M12.5 3.5l-9 9',
+        fill: false,
+        linejoin: 'miter'
       }
     }
   },

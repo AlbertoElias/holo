@@ -71,7 +71,7 @@ describe("glyphs (styleguide 6)", () => {
   });
 
   it("dims the always-there set to 40% after 4 s unused, and restores it as a cursor nears", () => {
-    expect(ALWAYS_THERE).toEqual(["play", "free", "return"]);
+    expect(ALWAYS_THERE).toEqual(["play", "pause", "return"]);
     expect(isIdleDimmed("play", { msSinceUse: 3999, approached: false })).toBe(false);
     expect(isIdleDimmed("play", { msSinceUse: 4000, approached: false })).toBe(true);
     expect(isIdleDimmed("play", { msSinceUse: 60_000, approached: true })).toBe(false);

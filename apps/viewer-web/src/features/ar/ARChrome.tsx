@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "rea
 import { Matrix4, Object3D, Raycaster } from "three";
 
 import { tokens } from "@holoim/design-tokens";
-import { BubbleEdge, HologramFootControls, WristControls, type BubbleShape, type GlyphSpec } from "@holoim/xr-ui-r3f";
+import { Cloche, HologramFootControls, WristControls, type GlyphSpec } from "@holoim/xr-ui-r3f";
 import {
   DEFAULT_HANDEDNESS,
   formatRunningTime,
@@ -18,6 +18,7 @@ import {
   nonDominantHand,
   pausedText,
   scaleState,
+  type ClocheShape,
   type Hand,
   type ViewTarget
 } from "@holoim/xr-ui-core";
@@ -188,9 +189,9 @@ export function ArWristExit({ target, onExit }: { target: ViewTarget; onExit: ()
   return <WristControls handedness={DEFAULT_HANDEDNESS} glyphs={[{ id: null, label: VIEWER_CONTROL_NAMES.exitAr, onSelect: onExit }]} input="ray" wrist={wrist} />;
 }
 
-/** The edge round the bubble (styleguide 9.2), its soot from the lighting estimate (3.2). */
-export function ArBubbleEdge({ seed, bubble, target, reducedMotion }: { seed: string; bubble: BubbleShape; target: ViewTarget; reducedMotion: boolean }) {
+/** The cloche over the placed hologram (styleguide 3.4, 9.2), its char from the lighting estimate (3.2). */
+export function ArCloche({ seed, shape, target, reducedMotion }: { seed: string; shape: ClocheShape; target: ViewTarget; reducedMotion: boolean }) {
   const session = useXR((state) => state.session) ?? null;
   const soot = useArSoot(session);
-  return <BubbleEdge seed={seed} bubble={bubble} target={target} recording={false} inFocus={true} reducedMotion={reducedMotion} soot={soot} />;
+  return <Cloche seed={seed} shape={shape} target={target} recording={false} inFocus={true} reducedMotion={reducedMotion} soot={soot} />;
 }

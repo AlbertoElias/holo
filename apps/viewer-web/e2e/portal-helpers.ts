@@ -102,8 +102,9 @@ export async function waitForFrozenTimes(page: Page, modelPath: string): Promise
 }
 
 export async function cardCenter(page: Page, cardId: string): Promise<{ x: number; y: number }> {
-  const box = await page.locator(`.feed-card[data-card-id="${cardId}"] .feed-card-bubble-shell`).boundingBox();
-  if (!box) throw new Error("bubble not laid out");
+  // The viewing box: the cloche is framed in it, over the canvas that fills the card.
+  const box = await page.locator(`.feed-card[data-card-id="${cardId}"] .feed-card-portal`).boundingBox();
+  if (!box) throw new Error("viewing box not laid out");
   return { x: box.x + box.width / 2, y: box.y + box.height * 0.4 };
 }
 

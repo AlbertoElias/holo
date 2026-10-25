@@ -78,7 +78,7 @@ export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
           style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
         />
         <CubeGlyph />
-        <span>{VIEWER_CONTROL_NAMES.viewInAr}</span>
+        <span className="visually-hidden">{VIEWER_CONTROL_NAMES.viewInAr}</span>
       </a>
     );
   }

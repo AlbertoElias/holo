@@ -10,7 +10,7 @@ import {
   waitForNoIwerSession
 } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, captureEvidence, expect, observeFeedCardRenderer, test, waitForFeedCardPresented } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const mockGlbPath = path.resolve(testDir, "../../capture/public/gltf/models/avatar.glb");
@@ -313,7 +313,7 @@ async function enterMockAr(page: Page): Promise<void> {
   await expect(page.locator(".ar-trigger-button")).toHaveCount(1);
   await waitForFeedCardPresented(page);
 
-  await page.locator(".ar-trigger-button").first().click();
+  await pressViewInAr(page);
   await expect(page).toHaveURL(/\/ar\/mock-1$/);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();

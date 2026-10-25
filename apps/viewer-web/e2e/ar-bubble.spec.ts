@@ -4,13 +4,13 @@ import type * as Three from "three";
 import type { Mesh, Object3D } from "three";
 import { tokens } from "@holoim/design-tokens";
 import { freezePageClock, waitForIwerSession } from "@holoim/tooling-testing/xr-env";
-import { bubbleSilhouette } from "@holoim/xr-ui-core";
+import { clocheCharShare } from "@holoim/xr-ui-core";
 
 import { pinch } from "./ar-gestures";
 import { diagnosticGltf } from "./bubble-fixture";
 import { captureBubblePixels } from "./bubble-pixel-proof";
 
-import { expect, observeFeedCardRenderer, test, waitForFeedCardPresented } from "./bootstrap";
+import { expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 
 import type { Probe } from "./ar-bubble-types";
 type ProbeWindow = Window & { __HOLOIM_AR_TEST_OBSERVER__?: (value: Probe) => void; __bubbleProbe?: Probe };
@@ -28,7 +28,7 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   await observeFeedCardRenderer(page);
   await page.goto("/");
   await waitForFeedCardPresented(page);
-  await page.locator(".ar-trigger-button").first().click();
+  await pressViewInAr(page);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await page.waitForFunction(() => Boolean((window as ProbeWindow).__bubbleProbe?.bubble.active));
   await page.evaluate(() => {
@@ -317,9 +317,10 @@ test("clipping uses deformed vertices and the latest sphere transform at draw ti
   expect(evidence.center).toEqual(evidence.shell);
 });
 
-// Styleguide 9.2: in WebXR AR the edge outlines the bubble, a burnt ring round
-// its silhouette, facing the viewer. Seen from in front and from behind.
-test("the golden edge is a burnt ring round the bubble, facing the viewer from either side", async ({ page }) => {
+// Styleguide 3.4, 9.2: in WebXR AR the halo is the same cloche as on a flat
+// screen, over the placed hologram, in the room. Seen from in front and from
+// behind, it stays where the hologram is.
+test("the cloche stands over the placed hologram, in the room, from either side", async ({ page }) => {
   test.setTimeout(90000);
   const hologram = { id: "bubble-render", url: "/uploads/bubble-render.glb", usdzUrl: null, quickLookEnabled: false, createdAt: "2026-10-18T00:00:00Z", sizeBytes: 4096, filenameOriginal: "bubble-render.glb", hologramName: "Bubble rendering diagnostic", submittedBy: "automation" };
   await page.setViewportSize({ width: 640, height: 480 });
@@ -332,13 +333,14 @@ test("the golden edge is a burnt ring round the bubble, facing the viewer from e
   await observeFeedCardRenderer(page);
   await page.goto("/");
   await waitForFeedCardPresented(page);
-  await page.locator(".ar-trigger-button").first().click();
+  await pressViewInAr(page);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await page.waitForFunction(() => Boolean((window as ProbeWindow).__bubbleProbe?.bubble.active));
   await expect.poll(() => page.locator(".ar-view-container").getAttribute("data-placement-stage")).toMatch(/placed|anchored|locked/);
   const shots = resolve("../../output/redesign-slice-3");
   await mkdir(shots, { recursive: true });
 
+  const placed: number[][] = [];
   for (const side of [{ name: "front", z: 1 }, { name: "back", z: -1 }]) {
     await page.evaluate(async (z) => {
       const { Vector3 } = await import("/node_modules/.vite/deps/three.js") as typeof Three;
@@ -351,28 +353,43 @@ test("the golden edge is a burnt ring round the bubble, facing the viewer from e
       device.quaternion.set(0, z > 0 ? 0 : 1, 0, z > 0 ? 1 : 0);
     }, side.z);
     await page.waitForTimeout(400);
-    const ring = await page.evaluate(async () => {
-      const { Vector3, Quaternion } = await import("/node_modules/.vite/deps/three.js") as typeof Three;
+    const cloche = await page.evaluate(async (exponent) => {
+      const { Vector3 } = await import("/node_modules/.vite/deps/three.js") as typeof Three;
       const { renderer, scene, bubble } = (window as ProbeWindow).__bubbleProbe!;
-      const edge = scene.getObjectByName("bubble-edge");
-      if (!edge) return null;
-      edge.updateWorldMatrix(true, false);
-      const opacity = (name: string) => ((edge.getObjectByName(name) as Mesh).material as Three.Material).opacity;
+      const group = scene.getObjectByName("cloche");
+      if (!group) return null;
+      group.updateWorldMatrix(true, true);
+      const shell = group.getObjectByName("cloche-shell") as Mesh<Three.BufferGeometry, Three.ShaderMaterial>;
+      const uniforms = shell.material.uniforms;
       let unflagged = 0;
       let headLocked = false;
-      edge.traverse((object) => { if (object.userData.holoimChrome !== true) unflagged += 1; });
-      for (let at: Object3D | null = edge; at; at = at.parent) if ((at as Three.Camera).isCamera) headLocked = true;
-      const facing = new Vector3(0, 0, 1).applyQuaternion(edge.getWorldQuaternion(new Quaternion()));
+      let drawn = true;
+      group.traverse((object) => { if (object.userData.holoimChrome !== true) unflagged += 1; });
+      for (let at: Object3D | null = group; at; at = at.parent) {
+        if ((at as Three.Camera).isCamera) headLocked = true;
+        if (!at.visible) drawn = false;
+      }
+      shell.geometry.computeBoundingBox();
+      const radii = shell.geometry.boundingBox!.max.clone();
+      const box = shell.geometry.boundingBox!.clone().applyMatrix4(shell.matrixWorld);
+      // Where the recorded author is, in the dome's own space: inside means |x/rx|^n + |y/ry|^n + |z/rz|^n < 1.
+      const author = (window as ProbeWindow).__bubbleProbe!.model.getObjectByName("RecordedAvatar")!;
+      const local = shell.worldToLocal(author.getWorldPosition(new Vector3()));
+      const authorValue = Math.abs(local.x / radii.x) ** exponent + Math.abs(local.y / radii.y) ** exponent + Math.abs(local.z / radii.z) ** exponent;
       return {
-        visible: edge.visible,
+        drawn,
         eye: renderer.xr.getCamera().getWorldPosition(new Vector3()).toArray(),
         center: [bubble.center.x, bubble.center.y, bubble.center.z],
         radius: bubble.radius,
-        position: edge.getWorldPosition(new Vector3()).toArray(),
-        facing: facing.toArray(),
-        scale: edge.getWorldScale(new Vector3()).x,
-        soot: opacity("edge-soot"), halo: opacity("edge-halo"), core: opacity("edge-core"),
+        position: group.getWorldPosition(new Vector3()).toArray(),
+        width: box.max.x - box.min.x,
+        authorValue,
+        height: box.max.y - box.min.y,
+        opacity: uniforms.uOpacity!.value as number,
+        core: uniforms.uCoreOpacity!.value as number,
+        char: uniforms.uCharShare!.value as number,
         unflagged, headLocked,
+        glass: (window as ProbeWindow).__bubbleProbe!.model.getObjectByName("RecordedBubbleSphere")?.visible ?? false,
         aura: scene.getObjectByName("ARBubbleAura")?.visible ?? false,
         auraTori: (() => {
           let tori = 0;
@@ -380,26 +397,25 @@ test("the golden edge is a burnt ring round the bubble, facing the viewer from e
           return tori;
         })()
       };
-    });
-    expect(ring, "the AR route draws an edge round the bubble").not.toBeNull();
-    const [ex, ey, ez] = ring!.eye;
-    const [cx, cy, cz] = ring!.center;
-    const silhouette = bubbleSilhouette({ x: cx!, y: cy!, z: cz! }, ring!.radius, { x: ex!, y: ey!, z: ez! })!;
-    expect(ring!.visible, `${side.name}: the ring is drawn`).toBe(true);
-    expect(ring!.headLocked, "the ring is in the room, not on the head").toBe(false);
-    expect(ring!.unflagged, "every part of the ring is chrome").toBe(0);
-    expect(ring!.position[0]).toBeCloseTo(silhouette.center.x, 2);
-    expect(ring!.position[1]).toBeCloseTo(silhouette.center.y, 2);
-    expect(ring!.position[2]).toBeCloseTo(silhouette.center.z, 2);
-    const facingEye = ring!.facing[0]! * silhouette.normal.x + ring!.facing[1]! * silhouette.normal.y + ring!.facing[2]! * silhouette.normal.z;
-    expect(facingEye, `${side.name}: the ring faces the viewer`).toBeGreaterThan(0.999);
-    expect(ring!.scale / (silhouette.radius * 2), `${side.name}: the ring sits on the silhouette`).toBeCloseTo(1, 2);
-    // A Quest has no lighting estimate: the soot is always on and the glow gives way to it (3.2).
-    expect(ring!.soot).toBeCloseTo(tokens.edge.soot.arNoEstimateOpacity, 5);
-    expect(ring!.halo).toBe(0);
-    expect(ring!.core).toBe(1);
-    expect(ring!.aura, "the bubble's aura stays").toBe(true);
-    expect(ring!.auraTori, "the aura's cyan equator ring is gone: the gold ring alone outlines the bubble").toBe(0);
-    await page.screenshot({ path: resolve(shots, `ar-ring-${side.name}.png`) });
+    }, tokens.edge.cloche.exponent);
+    expect(cloche, "the AR route draws the cloche").not.toBeNull();
+    expect(cloche!.drawn, `${side.name}: the cloche is drawn`).toBe(true);
+    expect(cloche!.headLocked, "the cloche is in the room, not on the head").toBe(false);
+    expect(cloche!.unflagged, "every part of the cloche is chrome").toBe(0);
+    // The dome is fitted to what the bubble draws, so it centres on the content, not on the bubble's middle.
+    const [cx, , cz] = cloche!.center;
+    expect(cloche!.authorValue, `${side.name}: the recorded author is under the cloche`).toBeLessThan(1);
+    expect(Math.hypot(cloche!.position[0]! - cx!, cloche!.position[2]! - cz!), `${side.name}: the cloche stands within the bubble`).toBeLessThan(cloche!.radius);
+    expect(cloche!.height, "the cloche has volume").toBeGreaterThan(0);
+    placed.push(cloche!.position);
+    expect(cloche!.opacity, "from outside the cloche is fully drawn").toBeGreaterThan(0.99);
+    // A Quest has no lighting estimate: the char beside the gold is at full strength (3.2, 3.4).
+    expect(cloche!.char).toBeCloseTo(clocheCharShare({ sootOpacity: tokens.edge.soot.arNoEstimateOpacity }), 5);
+    expect(cloche!.core).toBe(1);
+    expect(cloche!.glass, "the cloche is the bubble's look: the old glass sphere is not drawn").toBe(false);
+    expect(cloche!.aura, "the bubble's aura stays").toBe(true);
+    expect(cloche!.auraTori, "the aura's cyan equator ring is gone: the gold cloche alone outlines the bubble").toBe(0);
+    await page.screenshot({ path: resolve(shots, `ar-cloche-${side.name}.png`) });
   }
+  expect(placed[1], "the cloche did not move as the viewer walked round it").toEqual(placed[0]);
 });

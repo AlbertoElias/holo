@@ -55,24 +55,32 @@ describe("dock (5.2, 6.1 phone edges)", () => {
 
   it("spaces its glyphs one glyph gap apart (30 apx for a poke)", () => {
     const { container } = render(<Dock input="mouse">x</Dock>);
-    const dock = container.firstElementChild as HTMLElement;
+    const dock = (container.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
     expect(dock.style.gap).toBe("12px");
-    const poke = render(<Dock input="poke">x</Dock>).container.lastElementChild as HTMLElement;
+    const poke = (render(<Dock input="poke">x</Dock>).container.lastElementChild as HTMLElement).firstElementChild as HTMLElement;
     expect(poke.style.gap).toBe("30px");
   });
 });
 
-// The user saw two shadows: the dock painted the hologram's oval shade across
-// the screen, so it read as a second object on the floor (2026-10-24).
-describe("dock shade (5.2)", () => {
-  it("is a band up from the bottom edge in the shade's stops, not a second oval", () => {
+// The user saw two shadows: first the dock's oval shade, then its band along
+// the bottom edge (2026-10-24, 2026-10-25). Only a hologram casts a shade; the
+// dock's row sits on the chip, sized to the row.
+describe("dock surface (5.2)", () => {
+  it("paints nothing across the screen: the bar is clear and lets pointer events through", () => {
     const dock = render(<Dock>x</Dock>).container.firstElementChild as HTMLElement;
-    const gradient = dock.style.background;
-    expect(gradient).toMatch(/^linear-gradient\(to top,/);
-    expect(gradient).not.toMatch(/radial/);
-    const stops = Array.from(gradient.matchAll(/rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\) ([\d.]+)%/g));
-    expect(stops.map((stop) => [Number(stop[4]), Number(stop[5])])).toEqual([[0.7, 0], [0.5, 60], [0, 100]]);
-    for (const stop of stops) expect(stop.slice(1, 4).map(Number)).toEqual([8, 26, 30]);
+    expect(dock.style.background).toBe("");
+    expect(dock.style.pointerEvents).toBe("none");
+  });
+
+  it("puts its row on the flat chip, deep sea at 72%, which takes pointer events", () => {
+    const dock = render(<Dock><button type="button">Upload</button></Dock>).container.firstElementChild as HTMLElement;
+    const row = dock.querySelector("[data-dock-row]") as HTMLElement;
+    expect(row.contains(screen.getByRole("button"))).toBe(true);
+    expect(row.style.pointerEvents).toBe("auto");
+    expect(row.style.background).toMatch(/^rgba\(8, 26, 30,/);
+    expect(alphaOf(row.style.background)).toBe(0.72);
+    expect(row.style.borderRadius).toBe(`${tokens.chip.radius}px`);
+    expect(row.style.background).not.toMatch(/gradient/);
   });
 });
 

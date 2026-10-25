@@ -128,8 +128,9 @@ export function FeedPage() {
         ? { kind: "error", text: error, action: { label: VIEWER_CONTROL_NAMES.retry, onPress: () => void retry() } }
         : isLoading && items.length === 0
           ? { kind: "loading", text: "Loading holograms…" }
-          : !isLoading && items.length === 0
-            ? { kind: "empty", text: "No holograms yet. Upload one to start the feed." }
+          : !isLoading && items.length === 0 && !uploadOpen
+            ? // Upload's own sheet already answers the empty feed; the notice would sit on its title.
+              { kind: "empty", text: "No holograms yet. Upload one to start the feed." }
             : null;
 
   const cards = useMemo(
@@ -154,8 +155,9 @@ export function FeedPage() {
         {cards}
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
       </section>
-      <Dock className="feed-dock" aria-label="Feed">
-        <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openUpload} word="Upload" onPress={() => setUploadOpen(true)} />
+      {/* The sheet answers Upload; on a phone it covers the screen, and the dock would show through it. */}
+      <Dock className="feed-dock" aria-label="Feed" style={uploadOpen ? { visibility: "hidden" } : undefined}>
+        <GlyphControl glyph="upload" showLabel label={VIEWER_CONTROL_NAMES.openUpload} word="Upload" onPress={() => setUploadOpen(true)} />
       </Dock>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
         <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} />

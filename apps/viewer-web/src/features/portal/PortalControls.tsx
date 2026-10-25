@@ -10,11 +10,12 @@ import type { PortalStore } from "./portalStore";
 import { enableTilt } from "./usePortalTriggers";
 import { usePortalValue } from "./usePortalValue";
 
-// The controls at a card's foot, in its shade (styleguide 1.2, 6): Play,
-// Free and Return always there, the timecode beside Play, and the rest
-// (highlights, tilt, View in AR, sound) unfolding from the cursor or touch
-// and leaving afterwards. They are the viewer's own, on the screen rather
-// than in the hologram (principle 1 in what-a-hologram-is.md).
+// The controls at a card's foot, under its cloche (styleguide 1.2, 6): Play
+// or Pause alone in the middle, and Return beside it while the viewer drives.
+// The rest unfold from the cursor or touch and leave afterwards: the timecode
+// to the left; Free, highlights, tilt, View in AR and sound to the right.
+// Play never moves as they come and go. They are the viewer's own, on the
+// screen rather than in the hologram (principle 1 in what-a-hologram-is.md).
 
 const METRICS = glyphMetrics({ headset: false });
 
@@ -87,84 +88,83 @@ export function PortalControls({ store, tiltAvailable, active, reached, children
     action();
   };
 
+  // A touch that lands on a reach control while it is still hidden only reveals it.
+  const reachGuard = {
+    onPointerDownCapture: (event: React.PointerEvent) => {
+      pressRevealsOnly.current = !reached && event.pointerType === "touch";
+    },
+    onClickCapture: (event: React.MouseEvent) => {
+      if (!pressRevealsOnly.current) return;
+      pressRevealsOnly.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+
   return (
-    <div className="portal-controls" data-reach={reached ? "shown" : "hidden"}>
-      <div className="portal-controls-row">
-        {paused ? (
-          <GlyphControl glyph="play" label={VIEWER_CONTROL_NAMES.play} onPress={use(() => store.togglePause())} msSinceUse={msSinceUse} approached={reached} />
-        ) : (
-          <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.pause} onPress={use(() => store.togglePause())} />
-        )}
+    <div className="portal-controls" data-reach={reached ? "shown" : "hidden"} data-portal-mode={mode}>
+      <div className="portal-controls-reach portal-controls-before" {...reachGuard}>
         <Timecode store={store} paused={paused} active={active} />
-        <span className="portal-mode-control" data-active={mode === "free" ? "true" : "false"}>
-          <GlyphControl glyph="free" label={VIEWER_CONTROL_NAMES.free} onPress={use(() => store.enterFree())} msSinceUse={msSinceUse} approached={reached} showLabel />
-        </span>
-        <span className="portal-mode-control" data-active={mode === "follow" ? "true" : "false"}>
-          <GlyphControl
-            glyph="return"
-            label={VIEWER_CONTROL_NAMES.returnToAuthorView}
-            word="Return"
-            onPress={use(() => store.returnToFollow())}
-            msSinceUse={msSinceUse}
-            approached={reached}
-            showLabel
-          />
-        </span>
       </div>
-      <div
-        className="portal-controls-reach"
-        onPointerDownCapture={(event) => {
-          pressRevealsOnly.current = !reached && event.pointerType === "touch";
-        }}
-        onClickCapture={(event) => {
-          if (!pressRevealsOnly.current) return;
-          pressRevealsOnly.current = false;
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-      >
-        {hasHighlights && (
-          <ChromeButton
-            label={VIEWER_CONTROL_NAMES.highlights}
-            pressed={highlights}
-            title={highlights ? "Hide what the author points at" : "Show what the author points at"}
-            onPress={() => store.toggleHighlights()}
-            drawnApx={METRICS.iconApx}
-          >
-            {(appearance) => (
-              <LineIcon appearance={appearance}>
-                <path d="M2 14l4.7-4.7" />
-                <path d="M6 6l4 .7-2 2z" />
-                <circle cx="10.7" cy="5.3" r="3.3" strokeDasharray={highlights ? undefined : "1.3 2"} />
-              </LineIcon>
-            )}
-          </ChromeButton>
+      <div className="portal-controls-row">
+        <GlyphControl
+          glyph={paused ? "play" : "pause"}
+          label={paused ? VIEWER_CONTROL_NAMES.play : VIEWER_CONTROL_NAMES.pause}
+          onPress={use(() => store.togglePause())}
+          msSinceUse={msSinceUse}
+          approached={reached}
+        />
+      </div>
+      <div className="portal-controls-side">
+        {/* Return stays beside Play while looking around, so Play keeps the middle. */}
+        {mode === "free" && (
+          <GlyphControl glyph="return" label={VIEWER_CONTROL_NAMES.returnToAuthorView} onPress={use(() => store.returnToFollow())} msSinceUse={msSinceUse} approached={reached} />
         )}
-        {tiltAvailable && (
-          <ChromeButton
-            label={tiltStatus === "on" ? VIEWER_CONTROL_NAMES.tiltOff : VIEWER_CONTROL_NAMES.tiltOn}
-            pressed={tiltStatus === "on"}
-            title={tiltStatus === "denied" ? "Motion access was declined" : tiltStatus === "unsupported" ? "Motion is not available on this device" : undefined}
-            disabled={tiltStatus === "unsupported"}
-            onPress={() => {
-              if (tiltStatus === "on") {
-                store.setTiltStatus("off");
-              } else {
-                void enableTilt(store);
-              }
-            }}
-            drawnApx={METRICS.iconApx}
-          >
-            {(appearance) => (
-              <LineIcon appearance={appearance}>
-                <rect x="4.7" y="1.7" width="6.6" height="12.6" rx="1.3" />
-                <path d="M2 6c-.8 1.2-.8 2.8 0 4" />
-                <path d="M14 6c.8 1.2.8 2.8 0 4" />
-              </LineIcon>
-            )}
-          </ChromeButton>
-        )}
-        {children}
+        <div className="portal-controls-reach portal-controls-after" {...reachGuard}>
+          {mode === "follow" && <GlyphControl glyph="free" label={VIEWER_CONTROL_NAMES.free} onPress={use(() => store.enterFree())} />}
+          {hasHighlights && (
+            <ChromeButton
+              label={VIEWER_CONTROL_NAMES.highlights}
+              pressed={highlights}
+              title={highlights ? "Hide what the author points at" : "Show what the author points at"}
+              onPress={() => store.toggleHighlights()}
+              drawnApx={METRICS.iconApx}
+            >
+              {(appearance) => (
+                <LineIcon appearance={appearance}>
+                  <path d="M2 14l4.7-4.7" />
+                  <path d="M6 6l4 .7-2 2z" />
+                  <circle cx="10.7" cy="5.3" r="3.3" strokeDasharray={highlights ? undefined : "1.3 2"} />
+                </LineIcon>
+              )}
+            </ChromeButton>
+          )}
+          {tiltAvailable && (
+            <ChromeButton
+              label={tiltStatus === "on" ? VIEWER_CONTROL_NAMES.tiltOff : VIEWER_CONTROL_NAMES.tiltOn}
+              pressed={tiltStatus === "on"}
+              title={tiltStatus === "denied" ? "Motion access was declined" : tiltStatus === "unsupported" ? "Motion is not available on this device" : undefined}
+              disabled={tiltStatus === "unsupported"}
+              onPress={() => {
+                if (tiltStatus === "on") {
+                  store.setTiltStatus("off");
+                } else {
+                  void enableTilt(store);
+                }
+              }}
+              drawnApx={METRICS.iconApx}
+            >
+              {(appearance) => (
+                <LineIcon appearance={appearance}>
+                  <rect x="4.7" y="1.7" width="6.6" height="12.6" rx="1.3" />
+                  <path d="M2 6c-.8 1.2-.8 2.8 0 4" />
+                  <path d="M14 6c.8 1.2.8 2.8 0 4" />
+                </LineIcon>
+              )}
+            </ChromeButton>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );

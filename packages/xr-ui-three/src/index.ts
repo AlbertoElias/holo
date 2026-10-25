@@ -2,6 +2,7 @@ export { ThreeLabelPill, ThreeRecordingActionPanel, type LabelPillStyle } from "
 
 export * from "./chrome.js";
 export * from "./ThreeChip.js";
+export * from "./ThreeCloche.js";
 export * from "./ThreeEdge.js";
 export * from "./ThreeGlyph.js";
 export * from "./ThreeHalo.js";

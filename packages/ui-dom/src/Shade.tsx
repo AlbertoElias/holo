@@ -1,4 +1,4 @@
-// The shade at a hologram's foot (styleguide 5.1) and the dock's shade (5.2).
+// The shade at a hologram's foot (styleguide 5.1).
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 
 import { shadeLayout, shadeStops } from "@holoim/xr-ui-core";
@@ -14,14 +14,6 @@ function cssStops(): string {
 /** `radial-gradient(closest-side, …)` from the core's stops: deep sea 70%, 50% at 60%, then clear. */
 export function shadeGradient(): string {
   return `radial-gradient(closest-side, ${cssStops()})`;
-}
-
-/**
- * The dock's shade (5.2): the same stops as a band run up from the screen's
- * bottom edge, so only a hologram casts an oval shade.
- */
-export function dockShadeGradient(): string {
-  return `linear-gradient(to top, ${cssStops()})`;
 }
 
 export interface ShadeProps extends HTMLAttributes<HTMLDivElement> {

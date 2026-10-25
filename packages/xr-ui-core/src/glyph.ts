@@ -5,7 +5,7 @@ import { tokens } from "@holoim/design-tokens";
 
 const { glyph } = tokens;
 
-/** Glyphs with a decided drawing. Pause, true size, exit, undo, redo and settings have none yet. */
+/** Glyphs with a decided drawing. True size, exit, undo, redo and settings have none yet. */
 export type DrawnGlyph = keyof typeof glyph.path;
 export type GlyphId = DrawnGlyph | "record";
 
@@ -29,7 +29,8 @@ export function glyphDrawing(id: GlyphId, { recording = false }: { recording?: b
       : { kind: "recordIdle", diameterApx: glyph.recordIdle, ringed: true };
   }
   const path = glyph.path[id];
-  const ringed = id === "play";
+  // Pause takes Play's place, so it takes its ring too.
+  const ringed = id === "play" || id === "pause";
   return { kind: "path", ...path, ringed, drawnApx: ringed ? glyph.playTriangle : glyph.icon };
 }
 
@@ -97,8 +98,11 @@ export function glyphAppearance({ hovered = false, focusVisible = false, pressed
   };
 }
 
-/** Play, Free and Return stay visible (1.2); every other control comes from the hand or cursor. */
-export const ALWAYS_THERE: readonly GlyphId[] = ["play", "free", "return"];
+/**
+ * Play (or Pause) stays visible, and Return while the viewer drives (1.2);
+ * every other control, Free included, comes from the hand or cursor.
+ */
+export const ALWAYS_THERE: readonly GlyphId[] = ["play", "pause", "return"];
 
 export interface IdleInput {
   /** Time since anyone used the always-there set. */

@@ -5,10 +5,12 @@
 :root {
   color-scheme: dark;
   font-family: var(--holoim-type-caption-under-card-font-family);
-  /* Space for the card's title above it and the shade below it. */
-  --feed-card-reserve: 200px;
-  /* The portal card is a little taller than wide: people stand. */
-  --feed-card-aspect: 1.2;
+  /* The card's title and controls never run wider than this. */
+  --feed-card-max-width: 720px;
+  /* Room under each card's controls for the fixed dock (its row on the chip, over the home bar). */
+  --feed-dock-clearance: calc(var(--holoim-hit-touch) + 3 * var(--holoim-glyph-gap) + max(env(safe-area-inset-bottom), var(--holoim-hit-phone-home-bar)));
+  /* Controls at the foot stand two glyph gaps apart, so no two crowd. */
+  --feed-control-gap: calc(2 * var(--holoim-glyph-gap));
 }
 
 * {
@@ -56,23 +58,22 @@ body::before {
 
 /* Each card fills the screen. Cards pass vertical swipes to the feed; a
    paused card in the freeze variant keeps every gesture for looking around
-   (PRD-002). */
+   (PRD-002). The canvas covers the whole card, so nothing of the scene is
+   ever cut square; the cloche (3.4) is framed in the viewing box between the
+   title and the controls, which stay clear of the dock. */
 .feed-card {
-  --card-w: min(
-    calc(100vw - 2 * var(--holoim-hit-phone-side-edge)),
-    calc((100svh - var(--feed-card-reserve)) / var(--feed-card-aspect)),
-    720px
-  );
-  --card-h: calc(var(--card-w) * var(--feed-card-aspect));
   position: relative;
   height: 100svh;
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: var(--holoim-glyph-gap);
-  padding: var(--holoim-glyph-gap) var(--holoim-hit-phone-side-edge) calc(var(--feed-card-reserve) / 2);
+  padding:
+    max(env(safe-area-inset-top), calc(2 * var(--holoim-glyph-gap)))
+    var(--holoim-hit-phone-side-edge)
+    /* From 75% down the ground warms to amber, where bare gold fails (9.3): the row ends above it, and clear of the dock. */
+    max(var(--feed-dock-clearance), 25svh);
   overflow: hidden;
   touch-action: pan-y;
 }
@@ -81,10 +82,28 @@ body::before {
   touch-action: none;
 }
 
+.feed-card-bubble-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  outline: none;
+}
+
+.feed-card-bubble {
+  position: absolute;
+  inset: 0;
+}
+
 .feed-card-meta {
-  width: var(--card-w);
+  position: relative;
+  z-index: 1;
+  width: min(var(--feed-card-max-width), 100%);
   display: grid;
   gap: calc(var(--holoim-glyph-gap) / 3);
+  pointer-events: none;
+  /* Going inside the hologram, the title steps aside (8.4: back to its source). */
+  opacity: calc(1 - var(--portal-open, 0));
+  transition: opacity var(--holoim-motion-chrome-out) var(--holoim-motion-chrome-easing);
 }
 
 .feed-card-meta h2,
@@ -98,33 +117,15 @@ body::before {
   font-size: clamp(1.6rem, 3.2vw, var(--holoim-type-title-desktop-font-size));
 }
 
-/* The portal card. Its picture is cut to the burnt outline while closed;
-   zooming in opens it into the whole card, which fills the screen.
-   --portal-open runs from 0 (object) to 1 (inside). */
+/* The viewing box: empty, it only gives Follow its frame. */
 .feed-card-portal {
   position: relative;
-  flex: none;
-  width: var(--card-w);
-  height: var(--card-h);
-}
-
-.feed-card-bubble-shell {
-  position: absolute;
   z-index: 1;
-  left: calc(-1 * var(--portal-x) * var(--portal-open, 0));
-  top: calc(-1 * var(--portal-y) * var(--portal-open, 0));
-  width: calc(var(--card-w) + (100vw - var(--card-w)) * var(--portal-open, 0));
-  height: calc(var(--card-h) + (100svh - var(--card-h)) * var(--portal-open, 0));
-  clip-path: inset(
-    calc(var(--portal-inset) * (1 - var(--portal-open, 0)))
-    round calc(var(--portal-radius) * (1 - var(--portal-open, 0)))
-  );
-  outline: none;
-}
-
-.feed-card-bubble {
-  position: absolute;
-  inset: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  pointer-events: none;
+  border-radius: var(--holoim-chip-radius);
 }
 
 .feed-card canvas {
@@ -146,51 +147,57 @@ body::before {
   margin: 0;
 }
 
-/* The edge belongs to the closed portal; it leaves as the portal opens. */
-.feed-card-edge-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  opacity: calc(1 - var(--portal-open, 0));
-}
-
-.feed-card-edge {
-  position: relative;
-}
-
-.feed-card-sparks {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-/* Keyboard focus on the portal: the glyph focus ring, outside the edge. */
-.feed-card-bubble-shell:focus-visible + .feed-card-edge-layer {
+/* Keyboard focus on the portal: the glyph focus ring round the viewing box. */
+.feed-card-bubble-shell:focus-visible ~ .feed-card-portal {
   outline: var(--holoim-glyph-states-focus-ring-width) solid var(--holoim-glyph-states-focus-ring-color);
   outline-offset: var(--holoim-glyph-states-focus-ring-offset);
-  border-radius: var(--portal-radius);
 }
 
-.feed-card-shade {
-  z-index: 3;
+.feed-card-foot {
+  position: relative;
+  z-index: 1;
+  width: min(var(--feed-card-max-width), 100%);
+  display: flex;
+  justify-content: center;
 }
 
-/* ── Controls at the foot, in the shade ── */
+/* Over the picture the row takes the chip, no wider than the controls showing. */
+.feed-card-foot-chip {
+  max-width: 100%;
+  box-sizing: border-box;
+}
 
+.feed-card-foot-chip .portal-controls {
+  width: auto;
+}
+
+/* ── Controls at the foot ── */
+
+/* Play (or Pause) holds the middle; the reach controls unfold either side of
+   it, so it never moves as they come and go. */
 .portal-controls {
+  width: 100%;
   display: grid;
-  justify-items: center;
-  gap: calc(var(--holoim-glyph-gap) / 2);
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  column-gap: var(--feed-control-gap);
 }
 
 .portal-controls-row,
+.portal-controls-side,
 .portal-controls-reach {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  column-gap: var(--holoim-glyph-gap);
+  column-gap: var(--feed-control-gap);
+}
+
+.portal-controls-before {
+  justify-content: flex-end;
+}
+
+.portal-controls-side,
+.portal-controls-after {
+  justify-content: flex-start;
 }
 
 .portal-timecode {
@@ -203,20 +210,33 @@ body::before {
   white-space: nowrap;
 }
 
-/* Hidden until reached for (1.2): the reach row unfolds from the glyph row
-   (240 ms in, 400 ms out) and crossfades in place under reduced motion. */
+/* Hidden until reached for (1.2): the reach controls unfold from Play
+   (240 ms in, 400 ms out) and crossfade in place under reduced motion. */
 .portal-controls-reach {
   transition:
     opacity var(--holoim-motion-chrome-out) var(--holoim-motion-chrome-easing),
-    transform var(--holoim-motion-chrome-out) var(--holoim-motion-chrome-easing);
+    transform var(--holoim-motion-chrome-out) var(--holoim-motion-chrome-easing),
+    max-width var(--holoim-motion-chrome-out) var(--holoim-motion-chrome-easing);
 }
 
 .portal-controls[data-reach="hidden"] .portal-controls-reach {
   opacity: 0;
-  transform: translateY(calc(-1 * var(--holoim-glyph-gap)));
+  pointer-events: none;
+  /* Folded away, they take no room, so a chip round the row hugs what shows. */
+  max-width: 0;
+  overflow: hidden;
+}
+
+.portal-controls[data-reach="hidden"] .portal-controls-before {
+  transform: translateX(var(--feed-control-gap));
+}
+
+.portal-controls[data-reach="hidden"] .portal-controls-after {
+  transform: translateX(calc(-1 * var(--feed-control-gap)));
 }
 
 .portal-controls[data-reach="shown"] .portal-controls-reach {
+  max-width: 32rem;
   opacity: 1;
   transform: none;
   transition-duration: var(--holoim-motion-chrome-in);
@@ -231,6 +251,21 @@ body::before {
   .feed-scroll {
     scroll-behavior: auto;
   }
+}
+
+/* Wrappers round a reach control take its box, so a press lands on it. */
+.ar-trigger-button,
+.audio-mute-button {
+  display: inline-flex;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* View in AR in Quick Look: a link, drawn as the glyph with its word. */
@@ -297,28 +332,69 @@ body::before {
 
 /* ── The upload form, in the side sheet ── */
 
+/* Fields stand two glyph gaps apart; each is a soft well on the chip, gold
+   only when it has focus. */
 .upload-form {
   display: grid;
-  gap: var(--holoim-glyph-gap);
-  padding-top: var(--holoim-glyph-gap);
+  gap: calc(2 * var(--holoim-glyph-gap));
 }
 
 .upload-form p {
   margin: 0;
 }
 
+.upload-drop {
+  display: grid;
+  justify-items: center;
+  gap: calc(var(--holoim-glyph-gap) / 2);
+  padding: calc(2 * var(--holoim-glyph-gap)) var(--holoim-glyph-gap);
+  border: var(--holoim-glyph-stroke) dashed rgb(var(--holoim-color-gold-rgb) / 0.45);
+  border-radius: var(--holoim-chip-radius);
+  background: rgb(var(--holoim-color-text-rgb) / 0.04);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--holoim-motion-chrome-in) var(--holoim-motion-chrome-easing),
+    background-color var(--holoim-motion-chrome-in) var(--holoim-motion-chrome-easing);
+}
+
+.upload-drop:hover,
+.upload-drop[data-dragging] {
+  border-color: var(--holoim-glyph-color);
+  background: rgb(var(--holoim-color-gold-rgb) / 0.08);
+}
+
+.upload-drop[data-chosen] {
+  border-style: solid;
+}
+
+.upload-drop:has(input:focus-visible) {
+  outline: var(--holoim-glyph-states-focus-ring-width) solid var(--holoim-glyph-states-focus-ring-color);
+  outline-offset: var(--holoim-glyph-states-focus-ring-offset);
+}
+
+.upload-drop:has(input:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.upload-drop-name {
+  overflow-wrap: anywhere;
+}
+
 .upload-field {
   display: grid;
-  gap: calc(var(--holoim-glyph-gap) / 3);
+  gap: calc(var(--holoim-glyph-gap) / 2);
 }
 
 .upload-input {
+  box-sizing: border-box;
   width: 100%;
   min-height: var(--holoim-hit-touch);
-  padding: 0;
-  border: none;
-  border-bottom: var(--holoim-glyph-stroke) solid var(--holoim-color-text-muted);
-  background: transparent;
+  padding: 0 var(--holoim-glyph-gap);
+  border: 1px solid rgb(var(--holoim-color-text-muted-rgb) / 0.3);
+  border-radius: calc(var(--holoim-chip-radius) * 2 / 3);
+  background: rgb(var(--holoim-color-text-rgb) / 0.05);
   color: var(--holoim-color-text);
   font: inherit;
   font-size: var(--holoim-type-caption-under-card-font-size);
@@ -326,31 +402,85 @@ body::before {
 
 .upload-input:focus-visible {
   outline: none;
-  border-bottom-color: var(--holoim-glyph-color);
+  border-color: var(--holoim-glyph-color);
 }
 
-.upload-file {
-  color: var(--holoim-color-text-muted);
-  font: inherit;
-  font-size: var(--holoim-type-byline-font-size);
+.upload-quicklook {
+  display: grid;
+  gap: calc(var(--holoim-glyph-gap) / 2);
 }
 
 .upload-quicklook-toggle {
   display: flex;
   align-items: center;
-  gap: calc(var(--holoim-glyph-gap) / 2);
+  justify-content: space-between;
+  gap: var(--holoim-glyph-gap);
   min-height: var(--holoim-hit-touch);
+  cursor: pointer;
 }
 
-.upload-quicklook-toggle input {
-  accent-color: var(--holoim-glyph-color);
-  width: var(--holoim-glyph-icon);
-  height: var(--holoim-glyph-icon);
+/* The switch: a track the width of two glyphs, its knob gold when on. */
+.upload-switch {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 40px;
+  height: 24px;
+  margin: 0;
+  border: var(--holoim-glyph-stroke) solid var(--holoim-color-text-muted);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color var(--holoim-motion-chrome-in) var(--holoim-motion-chrome-easing),
+    border-color var(--holoim-motion-chrome-in) var(--holoim-motion-chrome-easing);
+}
+
+.upload-switch::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--holoim-color-text-muted);
+  transform: translateY(-50%);
+  transition:
+    transform var(--holoim-motion-chrome-in) var(--holoim-motion-chrome-easing),
+    background-color var(--holoim-motion-chrome-in) var(--holoim-motion-chrome-easing);
+}
+
+.upload-switch:checked {
+  border-color: var(--holoim-glyph-color);
+  background: rgb(var(--holoim-color-gold-rgb) / 0.18);
+}
+
+.upload-switch:checked::before {
+  background: var(--holoim-glyph-color);
+  transform: translate(16px, -50%);
+}
+
+.upload-switch:focus-visible {
+  outline: var(--holoim-glyph-states-focus-ring-width) solid var(--holoim-glyph-states-focus-ring-color);
+  outline-offset: var(--holoim-glyph-states-focus-ring-offset);
+}
+
+.upload-switch:disabled {
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-switch::before {
+    transition: background-color var(--holoim-motion-chrome-in) linear;
+  }
 }
 
 .upload-actions {
   display: flex;
   justify-content: flex-end;
+  padding-top: var(--holoim-glyph-gap);
+  border-top: 1px solid rgb(var(--holoim-color-text-muted-rgb) / 0.2);
 }
 
 /* ── The WebXR AR route's flat states (loading, errors) ── */

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Page } from "@playwright/test";
 
-import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, test, reachFor } from "./bootstrap";
 import {
   PITCH_MAX,
   PITCH_MIN,
@@ -109,6 +109,7 @@ test.describe("phone", () => {
   test("tilt: turning the phone turns the camera, past a small deadzone", async ({ page }, testInfo) => {
     await openFeed(page, "tilt");
     const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+    await reachFor(card);
     await card.getByRole("button", { name: "Look around by tilting the phone" }).click();
     await expect(card.getByRole("button", { name: "Stop looking around by tilting" })).toHaveAttribute("aria-pressed", "true");
     await dispatchOrientation(page, 10, 60);

@@ -1,17 +1,18 @@
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { useXR } from "@react-three/xr";
 import { Box3, LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
 import type { AnimationAction, Group, Object3D } from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { TRUE_SCALE } from "@holoim/xr-ui-core";
+import { TRUE_SCALE, fitCloche, type ClocheShape } from "@holoim/xr-ui-core";
 
 
+import { drawnPoints, motionPoints, recordedBubble } from "../hologram/drawnPoints";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { useSphereClipping } from "../hologram/useSphereClipping";
-import type { SphereClipResult, SphereClipStatus } from "../hologram/useSphereClipping";
+import type { SphereClipStatus } from "../hologram/useSphereClipping";
 import { ARDepthOcclusion } from "./ARDepthOcclusion";
 import { freezeBubbleWrapperMotion } from "./arAnimation";
 import { ARBubbleAura } from "./ARBubbleAura";
@@ -86,8 +87,8 @@ type ARHologramModelProps = {
   playbackSecondsRef?: MutableRefObject<number>;
   /** The controls at the hologram's foot: in its placement, never in its scale. */
   children?: (foot: { frontMeters: number }) => ReactNode;
-  /** World-space chrome that follows the bubble, read every frame (the edge's ring). */
-  bubbleChrome?: (bubble: SphereClipResult) => ReactNode;
+  /** The cloche (styleguide 3.4), drawn in the hologram's own placed and scaled space. */
+  clocheChrome?: (shape: ClocheShape) => ReactNode;
 };
 
 function createPlacementRuntimeState(): PlacementRuntimeState {
@@ -176,7 +177,7 @@ export function ARHologramModel({
   paused = false,
   playbackSecondsRef,
   children,
-  bubbleChrome
+  clocheChrome
 }: ARHologramModelProps) {
   const { scene, animations } = useGLTF(url);
   const renderer = useThree((state) => state.gl);
@@ -522,6 +523,26 @@ export function ARHologramModel({
   }, [mixer, paused]);
 
   // The foot row follows the hologram's placement, not its scale.
+  // The cloche is fitted once, in the group's own space, so placing, moving
+  // and rescaling the hologram carry it along; the take's bubble stays put in AR.
+  const [cloche, setCloche] = useState<ClocheShape | null>(null);
+  const clocheFitted = useRef(false);
+  useFrame(() => {
+    const group = groupRef.current;
+    if (clocheFitted.current || !group || !clocheChrome) return;
+    clocheFitted.current = true;
+    const bubble = recordedBubble(clonedScene, group);
+    const duration = Math.max(0, ...arAnimations.map((clip) => clip.duration));
+    // In AR the bubble stays put, so the author's whole walk is inside it.
+    const points = [...drawnPoints(clonedScene, bubble, group), ...motionPoints(clonedScene, mixer, duration, { into: group, bubble })];
+    const shape = fitCloche(points);
+    if (!shape) return;
+    // The cloche is the bubble's look now; the recorded sphere's old glass is not drawn.
+    const sphere = clonedScene.getObjectByName("RecordedBubbleSphere");
+    if (sphere) sphere.visible = false;
+    setCloche(shape);
+  });
+
   useFrame(() => {
     const group = groupRef.current;
     const foot = footRef.current;
@@ -812,11 +833,11 @@ export function ARHologramModel({
       <group ref={groupRef} scale={[modelScale, modelScale, modelScale]}>
         <primitive object={clonedScene} />
         <ARBubbleAura bubble={sphereClip} />
+        {cloche ? clocheChrome?.(cloche) : null}
       </group>
       <group ref={footRef} name="ar-hologram-foot">
         {children?.({ frontMeters: footFrontMeters })}
       </group>
-      {bubbleChrome?.(sphereClip)}
     </>
   );
 }

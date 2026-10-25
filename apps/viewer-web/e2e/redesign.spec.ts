@@ -6,9 +6,9 @@ import { test as plainTest, type Page } from "@playwright/test";
 import type * as Three from "three";
 import { waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
 import { tokens } from "@holoim/design-tokens";
-import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, sparkCount, VIEW_TARGETS } from "@holoim/xr-ui-core";
+import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, VIEW_TARGETS } from "@holoim/xr-ui-core";
 
-import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented } from "./bootstrap";
+import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 import { pinch } from "./ar-gestures";
 import { installProbe, scrollFeedToTop, waitForPortalReady } from "./portal-helpers";
 
@@ -51,6 +51,32 @@ async function mockFeed(page: Page, feed: typeof items = items): Promise<void> {
   await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
 }
 
+type ClocheReading = { drawn: boolean; opacity: number; core: number; glow: number; radii: { x: number; y: number; z: number } };
+
+/** The cloche's state in a card's scene, read from the shell's uniforms. */
+async function readCloche(page: Page, url: string): Promise<ClocheReading> {
+  await expect.poll(() => page.evaluate((key) => {
+    const probes = (window as unknown as { __portalProbes?: Record<string, { scene?: Three.Scene }> }).__portalProbes ?? {};
+    return Boolean(probes[key]?.scene?.getObjectByName("cloche-shell"));
+  }, url), { timeout: 20_000 }).toBe(true);
+  return page.evaluate((key) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { scene: Three.Scene }> }).__portalProbes;
+    const shell = probes[key]!.scene.getObjectByName("cloche-shell") as Three.Mesh<Three.BufferGeometry, Three.ShaderMaterial>;
+    const uniforms = shell.material.uniforms;
+    let drawn = true;
+    shell.traverseAncestors((node) => { if (!node.visible) drawn = false; });
+    shell.geometry.computeBoundingBox();
+    const size = shell.geometry.boundingBox!.max;
+    return {
+      drawn: drawn && shell.visible,
+      opacity: uniforms.uOpacity!.value as number,
+      core: uniforms.uCoreOpacity!.value as number,
+      glow: uniforms.uGlowLevel!.value as number,
+      radii: { x: size.x, y: size.y, z: size.z }
+    };
+  }, url);
+}
+
 async function openFeed(page: Page): Promise<void> {
   await installProbe(page);
   await mockFeed(page);
@@ -77,31 +103,40 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     expect(ground.position, "the ground does not scroll with the feed").toBe("fixed");
     expect(ground.image).toContain("linear-gradient");
 
-    // Play, Free and Return are always there, as glyphs in the shade; Return's word is short, its name full.
-    const shade = card.locator(".feed-card-shade");
-    await expect(shade.getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();
-    await expect(shade.getByRole("button", { name: "Free" })).toBeVisible();
-    const returnControl = shade.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView });
-    await expect(returnControl).toHaveText("Return");
-    for (const control of await shade.locator(".portal-controls-row button").all()) {
+    // Play (or Pause) is always there, alone in the middle of the foot; the rest come on reach.
+    const controls = card.locator(".portal-controls");
+    const play = controls.getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) });
+    await expect(play).toBeVisible();
+    await expect(controls.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }), "Return comes only while looking around").toHaveCount(0);
+    for (const control of await controls.locator(".portal-controls-row button").all()) {
       const box = await control.boundingBox();
       expect(box!.width, "every glyph's hit area is at least the mouse minimum").toBeGreaterThanOrEqual(hitAreaApx("mouse", 0) - 0.5);
       expect(box!.height).toBeGreaterThanOrEqual(hitAreaApx("mouse", 0) - 0.5);
     }
-    await expect(shade.locator(".portal-timecode")).toHaveCSS("font-family", new RegExp([tokens.type.timecode.fontFamily].flat()[0]!.split(",")[0]!.replace(/"/g, "")));
+    await expect(controls.locator(".portal-timecode")).toHaveCSS("font-family", new RegExp([tokens.type.timecode.fontFamily].flat()[0]!.split(",")[0]!.replace(/"/g, "")));
 
-    // The highlight and tilt toggles come only when reached for.
-    const controls = card.locator(".portal-controls");
+    // Free, the timecode and the toggles come only when reached for, either side of Play, which holds still.
     await expect(controls).toHaveAttribute("data-reach", "hidden");
-    await card.locator(".feed-card-shade").hover();
+    const restingPlay = await play.boundingBox();
+    await card.locator(".feed-card-portal").hover({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
     await page.waitForTimeout(400);
+    await expect(controls.getByRole("button", { name: "Free" })).toBeVisible();
+    const reachedPlay = await play.boundingBox();
+    expect(Math.abs(reachedPlay!.x - restingPlay!.x), "Play does not move as the reach controls come").toBeLessThan(1);
+    expect(Math.abs(reachedPlay!.x + reachedPlay!.width / 2 - viewport.width / 2), "Play holds the middle").toBeLessThan(2);
+    const spacing = await controls.evaluate((row) => [...row.querySelectorAll("button")].map((button) => button.getBoundingClientRect()).sort((a, b) => a.x - b.x));
+    for (let index = 1; index < spacing.length; index += 1) {
+      expect(spacing[index]!.x - (spacing[index - 1]!.x + spacing[index - 1]!.width), "no two controls crowd").toBeGreaterThanOrEqual(tokens.glyph.gap - 0.5);
+    }
     await shot(page, `${label}-feed-reached`);
 
-    // Sparks on the card nearest the middle only; the others hold.
-    const sparking = await page.locator(".feed-card-edge").evaluateAll((edges) => edges.map((edge) => Number(edge.getAttribute("data-edge-sparks") ?? 0)));
-    expect(sparking.filter((count) => count > 0), "exactly one card sparks").toHaveLength(1);
-    expect(Math.max(...sparking)).toBe(sparkCount(label === "phone" ? VIEW_TARGETS.phone : VIEW_TARGETS.desktop, { inFocus: true, reducedMotion: false, recording: false }));
+    // The halo is a 3D cloche over the hologram, in its world space, and no 2D edge or shade is drawn on the page.
+    await expect(page.locator(".feed-card-edge, .feed-card-shade")).toHaveCount(0);
+    const cloche = await readCloche(page, first.url);
+    expect(cloche.drawn, "the focused hologram has its cloche").toBe(true);
+    expect(cloche.opacity, "seen from outside, the cloche is fully drawn").toBeGreaterThan(0.99);
+    expect(cloche.radii.y, "the cloche has volume").toBeGreaterThan(0);
     await expect(card).toHaveAttribute("data-card-focus", "true");
 
     await page.getByRole("button", { name: "Upload a hologram" }).click();
@@ -110,19 +145,29 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     const sheet = page.getByRole("dialog", { name: "Upload a hologram" });
     await expect(sheet).toBeVisible();
     const sheetBox = await sheet.boundingBox();
-    expect(sheetBox!.width, "the sheet is at most 24rem wide and never wider than the screen").toBeLessThanOrEqual(Math.min(viewport.width, 24 * 16) + 0.5);
+    expect(sheetBox!.width, "the sheet is at most 26rem wide and never wider than the screen").toBeLessThanOrEqual(Math.min(viewport.width, 26 * 16) + 0.5);
+    // The file picker is the styled drop zone; the native input stays for the label and for tests.
+    await expect(sheet.locator("label.upload-drop[for='glb-upload']")).toBeVisible();
+    await expect(sheet.getByRole("switch", { name: "iOS Quick Look" })).not.toBeChecked();
+    await sheet.getByText("iOS Quick Look").click();
+    await expect(sheet.getByRole("switch", { name: "iOS Quick Look" })).toBeChecked();
     await sheet.getByRole("button", { name: "Close" }).click();
     await expect(sheet).toHaveCount(0);
   });
 }
 
-test("phone: reduced motion stops the sparks and keeps the controls", async ({ page }) => {
+test("phone: reduced motion holds the cloche still and keeps the controls", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize(PHONE);
   await openFeed(page);
-  const sparking = await page.locator(".feed-card-edge").evaluateAll((edges) => edges.map((edge) => Number(edge.getAttribute("data-edge-sparks") ?? 0)));
-  expect(sparking.every((count) => count === 0), "no sparks under reduced motion").toBe(true);
-  await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .feed-card-shade`).getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();
+  const before = await readCloche(page, first.url);
+  await page.waitForTimeout(500);
+  const after = await readCloche(page, first.url);
+  expect(before.drawn).toBe(true);
+  expect(after.core, "no flicker under reduced motion").toBeCloseTo(before.core, 5);
+  // Reduced motion keeps only the slow resting fade (8.3), never the flicker's swing.
+  expect(Math.abs(after.glow - before.glow), "no flicker in the glow").toBeLessThan(0.02);
+  await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .portal-controls`).getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();
 });
 
 // The server error is the case under test, so the browser's own line for the
@@ -208,7 +253,7 @@ test("AR: controls at the hologram's foot on the chip, Exit always reachable, tr
   await observeFeedCardRenderer(page);
   await page.goto("/");
   await waitForFeedCardPresented(page);
-  await page.locator(".ar-trigger-button").first().click();
+  await pressViewInAr(page);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   const view = page.locator(".ar-view-container");
 
