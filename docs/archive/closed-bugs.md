@@ -347,3 +347,32 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   host, and fails if any trusted mouse movement reaches capture under the lock.
   CI's pipeline failure artifact now includes the take reports. Verified with
   `test:xr:pointing` on macOS and pipeline shard 1 (6/6) under x86_64 emulation.
+
+### B-022 — Recorded floor is not the viewer's floor (feed cloche, AR placement)
+
+- **Area:** `apps/viewer-web` (feed cloche, R3F AR); same pattern on
+  `feature/viewer-xr-interface` (`features/xr/hologramAssets.ts` `standOnFeet`)
+- **Severity:** P1 (every capture with a scene; a recorded person stands on the floor)
+- **Observed:** 2026-10-25, reported by the user on https://holoim-viewer.pages.dev
+- **Evidence:** the floor check in `e2e/bubble-capture.pipeline.spec.ts` on a
+  real capture export: feed cloche foot 2.77 m below the recorded floor; AR
+  recorded floor 12.5 m above the placement surface. Live uploads are
+  consistent (ground 3–15 cm under the foot bones), so export is not at fault.
+- **Expected:** the capture scene's ground under the author is the floor the
+  viewer uses: the cloche's foot and shade on it, and in AR, it on the room floor.
+- **Reproduction:** open a capture with a scene in the feed (the dome's foot
+  sits under the terrain, so the grass reads at mid-height of the hologram) or
+  in AR (the author floats far above the room floor). AR stood the model on the
+  lowest point of the whole scene bubble (terrain flanks, the 6 m bubble
+  sphere); the cloche stood on the lowest drawn point inside the bubble.
+- **Fix:** `7e67238c82cc`. The recorded floor is the `RecordedAvatar` origin
+  (capture stands it on the ground under the author). AR no longer lifts by
+  scene bounds when a file has one and sizes by the person, not the scene;
+  `fitCloche` takes `floorY` and fits the dome to what is above it, in the
+  feed (world floor) and AR (the group's origin). Validation: the floor check
+  in `e2e/bubble-capture.pipeline.spec.ts` (cloche foot and AR placement within
+  5 cm of the recorded floor; before: 2.77 m and 12.5 m), `verify:agent`,
+  `test:e2e:mocked`, `test:e2e:pipeline`. Not fixed on
+  `feature/viewer-xr-interface`: `standOnFeet` there grounds on the whole
+  scene and needs the same rule when that branch merges.
+
