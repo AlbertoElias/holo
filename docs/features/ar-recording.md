@@ -255,7 +255,7 @@ USDZ converter and any glTF tool ignore it.
 | v0 files stop loading, or performer exports change | v0 parsed by the exact v0 schema; the writer's feature-level rule keeps performer takes at v0; the plugin's JSON and the export counts compared with `main`; every existing suite |
 | A cached pre-v1 viewer meets a v1 file | Marks dropped with a warning, take plays (current reader behaviour, unchanged) |
 | A take with no clip freezes meaning time at 0 in the feed | The camera track is the clip; the pipeline spec asserts playback time advances |
-| A prop's `Hips` or `Head` node takes over framing or the AR anchor | `HologramCardCanvas` framing and `ARHologramModel`'s anchor use the set when there is no `RecordedAvatar`; the viewer XR lead is told for the IWSDK AR shell |
+| A prop's `Hips` or `Head` node takes over framing or the AR anchor | `HologramCardCanvas` framing, and `normalizeSceneAtOrigin` in `features/hologram/hologramScene.ts` (it centres on `RecordedAvatar`, then any `Hips` or `mixamorigHips`, and both the R3F AR view and the IWSDK shell call it; the shell then grounds on the lowest point, checked on `feature/viewer-xr-interface` 2026-10-25), use the set when there is no `RecordedAvatar` |
 | The USDZ converter or Quick Look trips on the camera node | The converter reads only meshes and animates rigid nodes; the pipeline spec converts the real take with Quick Look on |
 | A wrong `local-floor` estimate on the phone puts the set in or above the floor | Device check (Physical-device limits) |
 | Phone frame rate drops while recording | Device check |
@@ -267,8 +267,8 @@ USDZ converter and any glTF tool ignore it.
 | Lead | Claude (Opus), this brief | Brief, integration, final handoff |
 | Design reviewer | `design-reviewer` subagent (Opus) | Read-only review; done 2026-10-25 |
 | Meaning owner | One agent, slice 1 only | `packages/meaning/**`; the reader updates in `apps/viewer-web/src/features/meaning/meaningLinks.ts` and capture's scorers |
-| Implementer | Claude (Sonnet) subagents, one slice at a time | Slice 2a: `apps/capture/src/systems/*` (camera-mode gates), `xr/ArSpectator.ts`, `runtime/xrEntry.ts`, `recording/*` (new camera track store, `RecordingSession`, `AudioRecorder`, `GltfExportComposer`), new `scripts/ci-ar-record-playwright.ts`. Slice 2b: `apps/viewer-web/src/features/feed/HologramCardCanvas.tsx` framing, `features/ar/ARHologramModel.tsx` anchor, new `e2e/camera-take.pipeline.spec.ts`. Slice 3: capture's phone AR dock wiring in `apps/capture/src/ui/` after step 5. Slice 4: new `apps/capture/src/xr/ScreenHolds.ts`, `PointSampleStore`, `PointResolver`, `GLTFMeaningPlugin`, the viewer's presence marker |
-| Viewer XR interface lead | `feature/viewer-xr-interface` | `packages/xr-ui-iwsdk/**` (the shared bridge, `isHandheldSession`, the phone dock); this feature consumes them. If that lead prefers, slice 0's package changes are made here under their review |
+| Implementer | Claude (Sonnet) subagents, one slice at a time | Slice 2a: `apps/capture/src/systems/*` (camera-mode gates), `xr/ArSpectator.ts`, `runtime/xrEntry.ts`, `recording/*` (new camera track store, `RecordingSession`, `AudioRecorder`, `GltfExportComposer`), new `scripts/ci-ar-record-playwright.ts`. Slice 2b: `apps/viewer-web/src/features/feed/HologramCardCanvas.tsx` framing, `features/hologram/hologramScene.ts` (`normalizeSceneAtOrigin`, the anchor both AR views share), new `e2e/camera-take.pipeline.spec.ts`. Slice 3: capture's phone AR dock wiring in `apps/capture/src/ui/` after step 5. Slice 4: new `apps/capture/src/xr/ScreenHolds.ts`, `PointSampleStore`, `PointResolver`, `GLTFMeaningPlugin`, the viewer's presence marker |
+| Viewer XR interface lead | `feature/viewer-xr-interface` | Owns `packages/xr-ui-iwsdk/**` and the phone dock. Agreed 2026-10-25: slice 0's package and helper changes are made here, under that lead's review, after `feature/viewer-xr-interface` lands on `main` (they ping when it merges) |
 | Independent verifier | Codex (a different vendor) | Read-only verification; test artifacts only |
 
 ## Design decision
@@ -355,7 +355,11 @@ Q1 to Q3 below.
 Each lands green before the next. Slices 1 and 2a do not wait for slice 0;
 slices 3 and 4 wait for viewer XR step 5.
 
-0. **Device spike and shared input (with the viewer XR interface lead).**
+0. **Device spike and shared input** (this feature, reviewed by the viewer
+   XR interface lead). The device spike can run any time; the package and
+   helper changes wait until `feature/viewer-xr-interface` is on `main`,
+   since that branch changes `xr-ui-iwsdk`, `screenInputBridge.ts` and
+   `xr-viewer.spec.ts` constantly.
    - A bare test page on an Android phone in Chrome (served over the repo's
      HTTPS setup or the live deployment): `interactionMode`; `screen`
      sources with no DOM overlay; the target-ray pose updating every frame
@@ -382,7 +386,10 @@ slices 3 and 4 wait for viewer XR step 5.
      control bridge (`recording.toggle()`) until slice 3. Ends with the AR
      check's recording phases and a GLB inspection report. A local phone
      emulation helper stands in until slice 0's lands.
-   - **2b. Viewer.** Framing and the AR anchor without `RecordedAvatar`; the
+   - **2b. Viewer.** Framing and the shared AR anchor
+     (`normalizeSceneAtOrigin`) without `RecordedAvatar`; re-read how ground
+     is defined first, since a fix for "scene floor sits mid-height" was in
+     flight on `main` on 2026-10-25; the
      camera-take pipeline spec without marks (feed, playback clock, audio,
      USDZ, `/ar`).
 3. **Phone AR chrome.** Record/Stop, Exit, Recenter (between takes) and the
