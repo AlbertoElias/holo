@@ -80,7 +80,9 @@ void main() {
   vPosW = world.xyz;
   vNormalW = normalize(mat3(modelMatrix) * normal);
   vec4 view = viewMatrix * world;
-  vDepthFade = clocheDepthFade(-view.z);
+  // Fronts close to the eye go, as embers do, so none crosses the view big.
+  float w = clocheViewWider();
+  vDepthFade = clocheDepthFade(-view.z) * smoothstep(${f(cloche.emberNearFrom)} * w, ${f(cloche.emberNearTo)} * w, -view.z);
   gl_Position = projectionMatrix * view;
 }`;
 
@@ -97,6 +99,7 @@ uniform float uTime;
 uniform float uGlowLevel;
 uniform float uLine;
 uniform float uCharShare;
+uniform float uRadiusPx;
 varying vec3 vLocal;
 varying vec3 vNormalW;
 varying vec3 vPosW;
@@ -117,7 +120,10 @@ void main() {
   float tear = smoothstep(${f(cloche.tearFrom)}, ${f(cloche.tearTo)}, clocheNoise(q * ${f(cloche.tearFrequency)} + uSeed * 1.3));
   float flicker = 0.75 + 0.25 * clocheNoise(q * 5.0 + vec3(0.0, uTime * 1.7, 0.0));
   vec3 toEye = normalize(cameraPosition - vPosW);
-  float k = tear * clocheQuiet(dot(normalize(vNormalW), toEye)) * vDepthFade * uOpacity;
+  float facing = dot(normalize(vNormalW), toEye);
+  // Zoomed in, the near side steps back a little more.
+  float near = facing > 0.0 ? mix(1.0, ${f(cloche.closeNearShare)}, smoothstep(${f(cloche.closeFromPx)}, ${f(cloche.closeToPx)}, uRadiusPx)) : 1.0;
+  float k = tear * clocheQuiet(facing) * near * vDepthFade * uOpacity;
   vec3 colour = ((uCore * gold + uHighlight * cream) * ${f(cloche.lineGain)} * uLine + uGlow * glow) * flicker * k + uChar * charLine * uCharShare * k;
   // Premultiplied: gold, cream and char cover; the glow only adds light.
   gl_FragColor = vec4(colour, clamp(((gold + cream) * uLine + charLine * uCharShare) * k, 0.0, 1.0));

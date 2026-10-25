@@ -333,8 +333,10 @@ enter.
   front of the event, the fronts fade to nothing; they are whole at the
   silhouette and on the far side (75%), behind the event. In focus they
   reach further in (strength `(1 − N·V)^1.1`); out of focus only the
-  silhouette band burns (`^2.6`). The far edge of the dome is 60% dimmer
-  than the near edge.
+  silhouette band burns (`^2.6`). Zoomed in (the dome's on-screen radius
+  from 300 to 700 device pixels) the near side steps back to 75%, and fronts
+  close to the eye fade out. The far edge of the dome is 60% dimmer than the
+  near edge.
 - **Embers.** 2,500 embers sit in and just off the shell, a little denser
   toward the foot, flickering from ember (`#c2410c`) through gold, cream only
   at their peaks, drifting slowly. They follow the same quiet rule, are never

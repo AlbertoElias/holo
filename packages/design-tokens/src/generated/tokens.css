@@ -126,6 +126,9 @@ docs/product/design/tokens.json. Do not edit; run `pnpm --filter @holoim/design-
   --holoim-edge-cloche-quiet-rest: 2.6;
   --holoim-edge-cloche-quiet-focus: 1.1;
   --holoim-edge-cloche-far-side: 0.75;
+  --holoim-edge-cloche-close-near-share: 0.75;
+  --holoim-edge-cloche-close-from-px: 300;
+  --holoim-edge-cloche-close-to-px: 700;
   --holoim-edge-cloche-depth-dim: 0.6;
   --holoim-edge-cloche-ember-count: 2500;
   --holoim-edge-cloche-ember-rest-share: 0.45;
