@@ -218,6 +218,10 @@ export const tokens = {
       focusRingColor: '#ffc872',
       pressedOpacity: 0.55
     },
+    lantern: {
+      fill: '#081a1e',
+      ink: '#081a1e'
+    },
     path: {
       play: {
         d: 'M4 2.5v11l9-5.5z',

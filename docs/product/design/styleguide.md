@@ -400,14 +400,15 @@ Only where the ground fails:
 | VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s, holds at least 2 s after the background last asks for it, and leaves over 0.4 s, as chrome does |
 | AR (WebXR) | Every row and every label sits on the chip |
 | AR Quick Look | No chip is possible, so no text or controls inside Quick Look |
-| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The bottom dock's row sits on the chip, sized to its contents, because the bottom of the ground is amber, where gold fails (2.1:1); never a band or shadow across the screen. The side sheet is on the chip |
+| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The feed's bottom dock stands on the amber horizon, where gold fails (2.1:1), with no chip, band or shadow across it: each control there is a **lantern**, its glyph in the gold ring (as Play's) round a deep-sea lens, and keyboard focus rings it in deep-sea ink (`glyph.lantern`). Its word does not show: ink text falls below 4.5:1 on most screens there, while the lens holds a control's 3:1. A control with no drawing yet holds its gold word in a lantern capsule, the same ring and lens, where gold on the lens holds 4.5:1. A dock over a picture (AR, capture) keeps its row on the chip, sized to its contents. The side sheet is on the chip |
 | Everywhere | Text over a hologram's own picture always sits on the chip |
 
 ## 6. Glyph controls
 
 Thin gold line glyphs that take their light from the edge; no buttons or
 pills. Icons only on a card: the word is the accessible name, and shows on a
-dock or sheet action where there is room.
+sheet action, or a dock over a picture, where there is room. On the feed's
+amber dock the control is a lantern with no word ([section 5.2](#52-where-the-chip-is-mandatory)).
 
 **Few at rest, the rest on reach.** At rest a card shows **Play** (or
 **Pause**) alone in the middle of its foot, plus **Return** beside it while

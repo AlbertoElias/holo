@@ -6,6 +6,7 @@ import { tokens } from "@holoim/design-tokens";
 import { PHONE_EDGES, VIEW_TARGETS } from "@holoim/xr-ui-core";
 
 import { Dock } from "./Dock.js";
+import { GlyphControl } from "./GlyphControl.js";
 import { Shade } from "./Shade.js";
 import { SideSheet } from "./SideSheet.js";
 import { alphaOf } from "./testHelpers.js";
@@ -63,8 +64,10 @@ describe("dock (5.2, 6.1 phone edges)", () => {
 });
 
 // The user saw two shadows: first the dock's oval shade, then its band along
-// the bottom edge (2026-10-24, 2026-10-25). Only a hologram casts a shade; the
-// dock's row sits on the chip, sized to the row.
+// the bottom edge (2026-10-24, 2026-10-25). Only a hologram casts a shade.
+// Over a picture the dock's row sits on the chip, sized to the row; on the
+// feed's horizon the user found that chip a heavy dark toast (2026-10-25), so
+// each control holds its own lens instead.
 describe("dock surface (5.2)", () => {
   it("paints nothing across the screen: the bar is clear and lets pointer events through", () => {
     const dock = render(<Dock>x</Dock>).container.firstElementChild as HTMLElement;
@@ -81,6 +84,54 @@ describe("dock surface (5.2)", () => {
     expect(alphaOf(row.style.background)).toBe(0.72);
     expect(row.style.borderRadius).toBe(`${tokens.chip.radius}px`);
     expect(row.style.background).not.toMatch(/gradient/);
+  });
+});
+
+describe("dock on the horizon (5.2)", () => {
+  // Failure modes: the chip's slab coming back, a gold word on amber, a
+  // drawing with no lens under it, a gold focus ring lost on amber, a hit
+  // area shrunk to the icon.
+  it("stands bare, each control a lantern: the glyph in a gold ring round a deep-sea lens, no word", () => {
+    const dock = render(
+      <Dock ground="horizon" input="touch"><GlyphControl glyph="upload" label="Upload a hologram" word="Upload" showLabel input="touch" onPress={() => {}} /></Dock>
+    ).container.firstElementChild as HTMLElement;
+    const row = dock.querySelector("[data-dock-row]") as HTMLElement;
+    expect(row.style.background).toBe("");
+    const button = screen.getByRole("button", { name: "Upload a hologram" });
+    expect(button.textContent).toBe("");
+    expect(Number.parseFloat(button.style.minWidth)).toBeGreaterThanOrEqual(44);
+    const lantern = button.querySelector("[data-glyph-lantern]") as HTMLElement;
+    expect(lantern.style.width).toBe(`${tokens.glyph.ring}px`);
+    expect(lantern.style.background).toBe("rgb(8, 26, 30)");
+    expect(lantern.style.boxShadow).toBe(`inset 0 0 0 ${tokens.glyph.stroke}px ${tokens.color.gold}`);
+  });
+
+  it("rings keyboard focus in ink, which holds on amber", () => {
+    render(<Dock ground="horizon"><GlyphControl glyph="upload" label="Upload a hologram" onPress={() => {}} /></Dock>);
+    const button = screen.getByRole("button", { name: "Upload a hologram" });
+    fireEvent.keyDown(document, { key: "Tab" });
+    act(() => button.focus());
+    expect((button.querySelector("[data-glyph-lantern]") as HTMLElement).style.outline).toBe(`1.5px solid ${tokens.glyph.lantern.ink}`);
+  });
+
+  it("holds a control with no drawing yet as its gold word in a lantern capsule, never bare on amber", () => {
+    render(<Dock ground="horizon" input="touch"><GlyphControl glyph={null} label="Settings" input="touch" onPress={() => {}} /></Dock>);
+    const button = screen.getByRole("button", { name: "Settings" });
+    expect(button.textContent).toBe("Settings");
+    const capsule = button.querySelector("[data-glyph-lantern]") as HTMLElement;
+    const lens = document.createElement("span");
+    lens.style.background = tokens.glyph.lantern.fill;
+    expect(capsule.style.background).toBe(lens.style.background);
+    expect(capsule.style.boxShadow).toBe(`inset 0 0 0 ${tokens.glyph.stroke}px ${tokens.color.gold}`);
+    expect(Number.parseFloat(capsule.style.minHeight)).toBe(tokens.glyph.ring);
+    expect(Number.parseFloat(button.style.minHeight)).toBeGreaterThanOrEqual(44);
+  });
+
+  it("keeps the chip over a picture, where the word still shows", () => {
+    const dock = render(<Dock><GlyphControl glyph="upload" label="Upload a hologram" word="Upload" showLabel onPress={() => {}} /></Dock>).container.firstElementChild as HTMLElement;
+    expect((dock.querySelector("[data-dock-row]") as HTMLElement).style.background).toMatch(/^rgba\(8, 26, 30,/);
+    expect(screen.getByRole("button", { name: "Upload a hologram" }).textContent).toBe("Upload");
+    expect(dock.querySelector("[data-glyph-lantern]")).toBeNull();
   });
 });
 

@@ -191,6 +191,10 @@ docs/product/design/tokens.json. Do not edit; run `pnpm --filter @holoim/design-
   --holoim-glyph-states-focus-ring-color: #ffc872;
   --holoim-glyph-states-focus-ring-color-rgb: 255 200 114;
   --holoim-glyph-states-pressed-opacity: 0.55;
+  --holoim-glyph-lantern-fill: #081a1e;
+  --holoim-glyph-lantern-fill-rgb: 8 26 30;
+  --holoim-glyph-lantern-ink: #081a1e;
+  --holoim-glyph-lantern-ink-rgb: 8 26 30;
   --holoim-mark-size: 18px;
   --holoim-mark-hollow-stroke: 2.5px;
   --holoim-mark-note-slip-tint: 0.22;

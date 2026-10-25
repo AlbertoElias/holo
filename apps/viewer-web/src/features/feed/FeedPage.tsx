@@ -158,8 +158,8 @@ export function FeedPage() {
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
       </section>
       {/* A sheet answers Upload or Settings; on a phone it covers the screen, and the dock would show through it. */}
-      <Dock className="feed-dock" aria-label="Feed" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
-        <GlyphControl glyph="upload" showLabel label={VIEWER_CONTROL_NAMES.openUpload} word="Upload" onPress={() => setUploadOpen(true)} />
+      <Dock className="feed-dock" aria-label="Feed" ground="horizon" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
+        <GlyphControl glyph="upload" label={VIEWER_CONTROL_NAMES.openUpload} onPress={() => setUploadOpen(true)} />
         {/* No drawing yet (brief, "still to draw"): the word stands in. */}
         <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
       </Dock>
