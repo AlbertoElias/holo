@@ -818,6 +818,12 @@ Design review (Opus design-reviewer, 2026-10-25), adopted:
 - Headset notices show on the status line; W with nothing held says
   "Nothing to undo"; a handedness change ends a mark and closes the Halo.
 
+Verification, 2026-10-25: `verify:pr` passes step by step on this branch
+(the atlas e2e against this worktree's own knowledge server, since the main
+checkout's server held port 4176). Codex's independent pass is open: it hit
+its usage limit twice before reporting, and its one early note, whether the
+key's ring reads clearly enough over a busy scene, is for that pass.
+
 Not adopted, open to revisit: ending the take at the moment the Halo was
 pressed when S stops it (the release is when the author chose it), and
 requiring the drawn ring before the stick may commit S (a flick is a
