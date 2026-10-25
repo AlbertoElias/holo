@@ -1356,6 +1356,33 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   expect(readingOf(refocused, "mock-1")!.playing, "a tap on an unfocused hologram focuses it, without pausing it").toBe(true);
   expectAudioFocus(refocused, "mock-1");
   await captureEvidence(page, testInfo, "ar-phone-two");
+  // Off the screen's centre, the focused one's reach row still keeps the 16 px gutters
+  // (a row centred on its foot would cross the screen's edge).
+  const phoneWidth = page.viewportSize()!.width;
+  const offCentre: Array<{ side: string; footPx: number; leftPx: number; rightPx: number }> = [];
+  const viewer: Vec3 = [eye[0], eye[1], eye[2] + 0.6];
+  for (const side of [1, -1]) {
+    const toward = [a.worldPosition[0] - viewer[0], a.worldPosition[2] - viewer[2]];
+    const length = Math.hypot(toward[0]!, toward[1]!);
+    // Look beside it, so it stands toward the right (side 1) or left (side -1) of the screen.
+    const look: Vec3 = [a.worldPosition[0] + side * (toward[1]! / length) * 0.35, a.worldPosition[1] + a.recordedSize[1] * 0.45, a.worldPosition[2] - side * (toward[0]! / length) * 0.35];
+    await setPose(page, "head", viewer, look);
+    await waitForGallery(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.boundTo === "mock-1", 5_000);
+    // A few frames for the row to settle at its new place on screen.
+    await page.waitForTimeout(300);
+    const foot = (await gallerySnapshot(page)).controls!.foot;
+    const [chip, rowLeft, rowRight] = await toScreen(page, [foot.worldPosition, foot.reachRow.worldLeft, foot.reachRow.worldRight]);
+    const half = (rowRight!.x - rowLeft!.x) / 2;
+    const reading = { side: side > 0 ? "right" : "left", footPx: chip!.x, leftPx: rowLeft!.x, rightPx: rowRight!.x };
+    offCentre.push(reading);
+    if (side > 0) expect(chip!.x + half, "centred on its foot, the row would cross the right edge").toBeGreaterThan(phoneWidth - 16);
+    else expect(chip!.x - half, "centred on its foot, the row would cross the left edge").toBeLessThan(16);
+    expect(rowLeft!.x, `${reading.side} of centre: row left edge inside the gutter`).toBeGreaterThanOrEqual(16 - 0.01);
+    expect(rowRight!.x, `${reading.side} of centre: row right edge inside the gutter`).toBeLessThanOrEqual(phoneWidth - 16 + 0.01);
+    mark(`ar-off-centre-${reading.side}`);
+    if (side > 0) await captureEvidence(page, testInfo, "ar-phone-off-centre");
+    await dwell(page);
+  }
   await dwell(page);
   await endSession(page);
   await expect(page).toHaveURL(/\/\?shell=iwsdk$/);
@@ -1364,7 +1391,8 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
     holograms: [a, b].map((h) => ({ id: h.id, position: h.worldPosition, mode: h.placement.mode, stage: h.placement.stage })),
     apartM: apart,
     chipWidthM: second.chipWidthM,
-    focusAfterTap: refocused.focusedId
+    focusAfterTap: refocused.focusedId,
+    offCentre
   };
 });
 

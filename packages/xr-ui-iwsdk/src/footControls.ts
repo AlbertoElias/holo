@@ -10,7 +10,7 @@ import {
   type HologramControlActions,
   type HologramControlState
 } from "@holoim/xr-ui-core";
-import { Vector3, type Camera, type Object3D } from "three";
+import { Vector3, type Camera, type Object3D, type PerspectiveCamera } from "three";
 
 import { FONT_FAMILIES, FONT_FAMILY } from "./fonts.js";
 import { createGlyph, type GlyphElement, type GlyphName } from "./glyphs.js";
@@ -47,6 +47,8 @@ const TIMELINE_LENGTH = 160;
 const PHONE_TIMELINE_MIN = 48;
 /** Phone screen gutter each side of the reach row (CSS px; the lead's decision, 2026-10-24). */
 const PHONE_GUTTER = 16;
+/** The row is laid out and kept half a pixel inside the gutter, so settling never leaves it on the line. */
+const PHONE_ROW_INSET = PHONE_GUTTER + 0.5;
 
 const tmp = new Vector3();
 const tmp2 = new Vector3();
@@ -145,6 +147,9 @@ export class FootControls {
   private readonly actions: HologramControlActions;
   private timelineApx: number;
   private readonly rowBudgetApx: number | null;
+  private readonly viewportWidthCss: number | null;
+  /** How far the phone's reach row slides along its chip to stay inside the gutters (apx). */
+  private rowShiftApx = 0;
 
   constructor(world: World, options: FootControlsOptions) {
     this.actions = options.actions;
@@ -154,7 +159,8 @@ export class FootControls {
     this.attention = createAttentionState(performance.now());
     const s = this.metrics.scale;
     this.timelineApx = TIMELINE_LENGTH * s;
-    this.rowBudgetApx = options.target === "ar-phone" && options.viewportWidthCss ? options.viewportWidthCss - 2 * PHONE_GUTTER : null;
+    this.rowBudgetApx = options.target === "ar-phone" && options.viewportWidthCss ? options.viewportWidthCss - 2 * PHONE_ROW_INSET : null;
+    this.viewportWidthCss = this.rowBudgetApx !== null ? options.viewportWidthCss! : null;
 
     // Each row sits on its own chip; the on-reach row unfolds above, so the
     // always-there row never moves under a reaching hand.
@@ -295,6 +301,7 @@ export class FootControls {
 
     this.render();
     this.fitPhoneRow();
+    this.keepPhoneRowOnScreen(input.head);
     return this.reading;
   }
 
@@ -306,6 +313,36 @@ export class FootControls {
     if (Math.abs(next - this.timelineApx) < 0.5) return;
     this.timelineApx = next;
     this.timelineHit.setProperties({ width: next });
+  }
+
+  /**
+   * Slides the phone's reach row along its chip until its edges, as drawn on
+   * screen, sit inside the gutters: a hologram off the screen's centre would
+   * otherwise push the row past the edge. It slides back when there is room.
+   */
+  private keepPhoneRowOnScreen(head: Object3D): void {
+    const camera = head as PerspectiveCamera;
+    if (this.viewportWidthCss === null || this.reachOpacity === 0 || !camera.isPerspectiveCamera) return;
+    const { worldLeft, worldRight, widthApx } = this.reachRowEdges();
+    const width = this.viewportWidthCss;
+    const toPx = (point: [number, number, number]): number | null => {
+      const ndc = new Vector3(...point).project(camera);
+      return ndc.z > 1 ? null : ((ndc.x + 1) / 2) * width;
+    };
+    const [left, right] = [toPx(worldLeft), toPx(worldRight)];
+    if (left === null || right === null || right - left < 1 || widthApx <= 0) return;
+    const apxPerPx = widthApx / (right - left);
+    // Where the row would be drawn unshifted, and the shift that brings it inside.
+    const shiftPx = this.rowShiftApx / apxPerPx;
+    const [unshiftedLeft, unshiftedRight] = [left - shiftPx, right - shiftPx];
+    const inset = PHONE_ROW_INSET;
+    let wantPx = 0;
+    if (unshiftedLeft < inset) wantPx = inset - unshiftedLeft;
+    else if (unshiftedRight > width - inset) wantPx = width - inset - unshiftedRight;
+    const next = wantPx * apxPerPx;
+    if (Math.abs(next - this.rowShiftApx) < 0.25) return;
+    this.rowShiftApx = next;
+    this.reachRow.setProperties({ transformTranslateX: next });
   }
 
   probe(): FootControlsProbe {
