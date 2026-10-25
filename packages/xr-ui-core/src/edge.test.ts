@@ -276,7 +276,7 @@ describe("edgeFrame (styleguide 8.5)", () => {
   });
 
   it("sparks only the hologram in focus", () => {
-    expect(edgeFrame(VIEW_TARGETS.phone, base).sparks).toBe(26);
+    expect(edgeFrame(VIEW_TARGETS.phone, base).sparks).toBe(120);
     expect(edgeFrame(VIEW_TARGETS.phone, { ...base, inFocus: false }).sparks).toBe(0);
   });
 });

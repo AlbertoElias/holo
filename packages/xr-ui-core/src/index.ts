@@ -7,6 +7,7 @@ export { CONTROL_NAMES, type ControlName } from "./controlNames.js";
 export * from "./chip.js";
 export * from "./chromeFlag.js";
 export * from "./cloche.js";
+export * from "./clocheBurn.js";
 export * from "./edge.js";
 export * from "./glyph.js";
 export * from "./halo.js";

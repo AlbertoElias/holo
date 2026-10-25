@@ -1,6 +1,7 @@
-// The 3D halo (styleguide 3.4): the cloche over a hologram, flickering by
-// target, fading as the viewer goes inside, and moving with the hologram
-// when its recorded volume moves (a bubble that follows its author).
+// The 3D halo (styleguide 3.4): the burnt globe over a hologram, burning
+// further in and shedding sparks in focus, fading as the viewer goes inside,
+// and moving with the hologram when its recorded volume moves (a bubble that
+// follows its author).
 import { edgeFrame, type ClocheShape, type SootInput, type Vector3Like, type ViewTarget } from "@holoim/xr-ui-core";
 import { ThreeCloche } from "@holoim/xr-ui-three";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -62,7 +63,7 @@ export function Cloche({ seed, shape, shift, target: targetProp, recording, inFo
       const wider = Math.max(shape.radii.x, shape.radii.y, shape.radii.z) * worldScale;
       const radiusPx = (wider / distance) * (heightPx / 2) * projection;
       const frame = edgeFrame(at, { timeMs: state.clock.elapsedTime * 1000, recording: isRecording, inFocus: focus, reducedMotion: reduced, soot: sootInput });
-      cloche.update(frame, { eye: cloche.eyeInShape(eye), radiusPx });
+      cloche.update(frame, { eye: cloche.eyeInShape(eye), radiusPx, timeS: state.clock.elapsedTime, inFocus: focus, reducedMotion: reduced });
     },
     [cloche, inputs, scratch, shape]
   );

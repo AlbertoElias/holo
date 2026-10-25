@@ -386,7 +386,7 @@ test("the cloche stands over the placed hologram, in the room, from either side"
         authorValue,
         height: box.max.y - box.min.y,
         opacity: uniforms.uOpacity!.value as number,
-        core: uniforms.uCoreOpacity!.value as number,
+        core: uniforms.uLine!.value as number,
         char: uniforms.uCharShare!.value as number,
         unflagged, headLocked,
         glass: (window as ProbeWindow).__bubbleProbe!.model.getObjectByName("RecordedBubbleSphere")?.visible ?? false,

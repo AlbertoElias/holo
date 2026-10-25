@@ -51,9 +51,9 @@ async function mockFeed(page: Page, feed: typeof items = items): Promise<void> {
   await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
 }
 
-type ClocheReading = { drawn: boolean; opacity: number; core: number; glow: number; radii: { x: number; y: number; z: number } };
+type ClocheReading = { drawn: boolean; opacity: number; core: number; glow: number; time: number; embers: number; sparks: number; radii: { x: number; y: number; z: number } };
 
-/** The cloche's state in a card's scene, read from the shell's uniforms. */
+/** The burnt globe's state in a card's scene, read from its parts and the uniforms they share. */
 async function readCloche(page: Page, url: string): Promise<ClocheReading> {
   await expect.poll(() => page.evaluate((key) => {
     const probes = (window as unknown as { __portalProbes?: Record<string, { scene?: Three.Scene }> }).__portalProbes ?? {};
@@ -61,7 +61,10 @@ async function readCloche(page: Page, url: string): Promise<ClocheReading> {
   }, url), { timeout: 20_000 }).toBe(true);
   return page.evaluate((key) => {
     const probes = (window as unknown as { __portalProbes: Record<string, { scene: Three.Scene }> }).__portalProbes;
-    const shell = probes[key]!.scene.getObjectByName("cloche-shell") as Three.Mesh<Three.BufferGeometry, Three.ShaderMaterial>;
+    const scene = probes[key]!.scene;
+    const shell = scene.getObjectByName("cloche-shell") as Three.Mesh<Three.BufferGeometry, Three.ShaderMaterial>;
+    const embers = scene.getObjectByName("cloche-embers") as Three.Points;
+    const sparks = scene.getObjectByName("cloche-sparks") as Three.Points;
     const uniforms = shell.material.uniforms;
     let drawn = true;
     shell.traverseAncestors((node) => { if (!node.visible) drawn = false; });
@@ -70,8 +73,11 @@ async function readCloche(page: Page, url: string): Promise<ClocheReading> {
     return {
       drawn: drawn && shell.visible,
       opacity: uniforms.uOpacity!.value as number,
-      core: uniforms.uCoreOpacity!.value as number,
+      core: uniforms.uLine!.value as number,
       glow: uniforms.uGlowLevel!.value as number,
+      time: uniforms.uTime!.value as number,
+      embers: embers.visible ? embers.geometry.getAttribute("position").count : 0,
+      sparks: sparks.visible ? sparks.geometry.drawRange.count : 0,
       radii: { x: size.x, y: size.y, z: size.z }
     };
   }, url);
@@ -137,6 +143,8 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     expect(cloche.drawn, "the focused hologram has its cloche").toBe(true);
     expect(cloche.opacity, "seen from outside, the cloche is fully drawn").toBeGreaterThan(0.99);
     expect(cloche.radii.y, "the cloche has volume").toBeGreaterThan(0);
+    expect(cloche.embers, "embers burn in the globe's surface").toBe(tokens.edge.cloche.emberCount);
+    expect(cloche.sparks, "the hologram in focus sheds sparks").toBe(tokens.motion.sparks.countFlat);
     await expect(card).toHaveAttribute("data-card-focus", "true");
 
     await page.getByRole("button", { name: "Upload a hologram" }).click();
@@ -165,6 +173,8 @@ test("phone: reduced motion holds the cloche still and keeps the controls", asyn
   const after = await readCloche(page, first.url);
   expect(before.drawn).toBe(true);
   expect(after.core, "no flicker under reduced motion").toBeCloseTo(before.core, 5);
+  expect(after.sparks, "no sparks under reduced motion").toBe(0);
+  expect(after.time, "no drift, flicker or breath").toBe(0);
   // Reduced motion keeps only the slow resting fade (8.3), never the flicker's swing.
   expect(Math.abs(after.glow - before.glow), "no flicker in the glow").toBeLessThan(0.02);
   await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .portal-controls`).getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();

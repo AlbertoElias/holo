@@ -1,6 +1,6 @@
 # HoloIM Styleguide
 
-**Status:** Current, 2026-10-24.
+**Status:** Current, 2026-10-25.
 **Applies to:** `apps/capture` and `apps/viewer-web`, in 3D (VR and AR, with
 hands and controllers) and on flat screens (phone and desktop, with touch and
 mouse).
@@ -218,8 +218,8 @@ resolved. Amber is not a signal: it is the interior light of everything.
 ## 3. The golden edge
 
 One edge, on every target. Around a hologram it is a 3D object, the cloche
-([section 3.4](#34-the-cloche-the-3d-halo)): a glass dome over the event
-whose silhouette burns gold. The flat outline in sections 3.1 to 3.3 remains
+([section 3.4](#34-the-cloche-the-3d-halo)): a dome over the event, burnt
+through, so only torn gold fronts, embers and sparks are left of it. The flat outline in sections 3.1 to 3.3 remains
 for 2D surfaces that frame no hologram (a thumbnail, a slab in a headset
 menu); it is no longer drawn round a feed card.
 
@@ -319,19 +319,36 @@ enter.
   its dome along.
 - **Anchored in the hologram's world.** It orbits, zooms and walks with the
   hologram on every target. It is never on the camera or the screen.
-- **The rim.** At the dome's silhouette, measured in screen pixels: a gold
-  core (`#ffc872`) 1.8% of the dome's on-screen radius wide, a cream thread
-  (`#fff3cf`) inside it, and char beside it ([section 3.2](#32-strokes-and-soot)).
-  The radius it is a share of is held between 120 and 200 device pixels (a 2 to 4 px line), so a
-  far dome keeps a readable line and a near one never becomes a rope.
-  Restrained burns run over the whole shell: broad asymmetry, small tears,
-  intermittent cream, seeded per hologram.
-- **Glow.** A little warm light inside the rim, 0.16 at most, falling off
-  quickly. It flickers by target as the halo does ([section 8](#8-motion)).
-- **The foot.** Where the glass meets the floor, the same line, quieter (half
-  strength) and thinner; content in front of it hides it.
+- **Burnt through.** Revised the same day, after the user found the
+  rim-lit glass "very much 2d": a line at the silhouette is an outline, not
+  a volume. Seeded 3D noise burns the shell away; only the burning fronts
+  remain, torn into dashes, on the near side and the far side alike, so the
+  lines in front and behind move against each other as the view turns. A
+  front is a cream core (`#fff3cf`, 1.5 px), gold (`#ffc872`) to 3.2 px, a
+  pixel of char ([section 3.2](#32-strokes-and-soot)) and a faint warm glow
+  to 9 px, in screen pixels at every zoom. The holes are large (2.8 noise
+  cycles across the dome) and seeded per hologram, the same in every
+  renderer (`clocheBurnAt`, `@holoim/xr-ui-core`).
+- **Quiet over the event.** Where the dome faces the viewer straight on, in
+  front of the event, the fronts fade to nothing; they are whole at the
+  silhouette and on the far side (75%), behind the event. In focus they
+  reach further in (strength `(1 − N·V)^1.1`); out of focus only the
+  silhouette band burns (`^2.6`). The far edge of the dome is 60% dimmer
+  than the near edge.
+- **Embers.** 2,500 embers sit in and just off the shell, a little denser
+  toward the foot, flickering from ember (`#c2410c`) through gold, cream only
+  at their peaks, drifting slowly. They follow the same quiet rule, are never
+  larger than 3.5 px (none becomes a bokeh disc) and vanish close to the eye.
+  Out of focus 45% of them drift.
+- **Sparks.** The hologram in focus sheds sparks from its burning fronts
+  into the space around it, outward and upward, cream to gold to ember, over
+  1.1 to 2.6 s ([section 8.2](#82-sparks-on-focus-only)).
+- **Rest and focus** ease into each other in about 400 ms.
+- **Glow** flickers by target as the halo does ([section 8](#8-motion)). The
+  stage light inside the portal is the only light the globe sheds onto the
+  event; the globe adds none of its own.
 - **Inside.** As the viewer goes in, the dome fades out completely before
-  they reach the glass, so nothing of it stands between them and the event:
+  they reach the shell, so nothing of it stands between them and the event:
   no back wall, no fog.
 - **Framing.** Follow frames the whole dome in the card's viewing box (the
   space between the title and the controls) at 78% of its size, from 18°
@@ -551,12 +568,15 @@ level 0.50 and, on a phone, do not redraw.
 
 | Target | In focus | Sparks |
 | --- | --- | --- |
-| VR and AR | The hologram nearest the head's forward ray | Up to 70; none in peripheral vision, further than 30° from that ray |
-| Phone | The card nearest the middle of the screen | 26 |
-| Desktop | The card nearest the middle of the window | 26 |
+| VR and AR | The hologram nearest the head's forward ray | Up to 160; none in peripheral vision, further than 30° from that ray |
+| Phone | The card nearest the middle of the screen | 120 |
+| Desktop | The card nearest the middle of the window | 120 |
 
-A spark is a gold ember 0.4% to 0.8% of the short side, rising off a random
-point of the edge and fading over 2 to 4 s.
+A spark leaves a burning front of the globe ([section 3.4](#34-the-cloche-the-3d-halo))
+outward and upward, buoyant, curling a little, cream to gold to ember, at
+most 4 px, and fades over 1.1 to 2.6 s. (Raised from 26 and 70 with the
+burnt globe on 2026-10-25: a few sparks on a 2D outline read as sparks; on a
+volume they read as dust.)
 
 ### 8.3 Reduced motion
 
@@ -676,10 +696,11 @@ preview, never the canonical hologram
 - The feed's "View in AR" entry is the cube glyph on the card, in its shade,
   and follows the flat rules.
 - **The USDZ carries the edge with a baked halo:** the gold core, the cream
-  highlight and a soft halo, static. Planned (slice 6) to match the cloche:
-  RealityKit has no view-dependent silhouette, so the dome is carried by its
-  geometry: physical gold seams over the shell and an irregular, emissive
-  lip at its foot, in diffuse and emissive materials, with no shadow. It is added when the server builds the
+  highlight and a soft halo, static. Planned (slice 6) to match the burnt
+  globe: RealityKit has no screen-space line or quiet front, so the globe is
+  baked as geometry: thin emissive gold tubes along the same burning fronts
+  (`clocheBurnAt`, the same seed), a sparse scatter of small emissive ember
+  quads from `clocheEmbers`, and no sparks, with no shadow. It is added when the server builds the
   USDZ (`apps/viewer-api/src/worker.ts`,
   `apps/viewer-api/tools/preview_usdz.swift`), never in the exported GLB, so
   the edge stays in the view layer and the export → upload → render pipeline

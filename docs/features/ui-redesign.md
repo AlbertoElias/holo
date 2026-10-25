@@ -4,8 +4,9 @@
 **Status:** Implementing (approved by the user 2026-10-24). Slices 0 to 4
 are on `main` (3 and 4 merged together after `verify:pr` on the combined
 tree); the user's second round (dock, controls, upload sheet, soot, the 3D
-cloche) is on `main` at `02d0282` and deployed. Next: the cross-vendor review
-of slices 2 to 4 and this round, slice 5, slice 6 (the Quick Look cloche),
+cloche) is on `main` at `02d0282` and deployed. The halo's third pass (the
+burnt globe) replaces the cloche's rim-lit glass. Next: the cross-vendor review
+of slices 2 to 4 and this round, slice 5, slice 6 (the Quick Look globe),
 then slice 7
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
@@ -287,8 +288,53 @@ Codex; each is recorded here with its alternatives, and the styleguide and
   viewer's rescale carry it, replacing the flat ring and the bubble's blue
   glass; the aura stays for now. Capture draws no halo during a take and has
   no playback review yet; when it gets one, it mounts `ThreeCloche`. Quick
-  Look (slice 6) cannot draw a view-dependent rim, so the plan is gold seams
-  over the shell and an irregular emissive lip at the foot, no shadow.
+  Look (slice 6) cannot draw a view-dependent rim; after the third pass
+  (below) it bakes the burnt globe instead.
+
+### The halo, third pass: the burnt globe (2026-10-25)
+
+The user, on the deployed cloche: "we need to figure out the halo effect
+better so it's more ragged and it has the sparks coming out and so that it
+really feels like it wraps the whole 3d object, it looks very much 2d". The
+cloche's line sat at the silhouette in screen space, so it read as an
+outline: it did not change as the view turned, and nothing showed the far
+side.
+
+Five forms were prototyped in the real viewer on the same fitted dome, each
+with 3D sparks, a warm light and depth falloff, and rendered front-on,
+orbited, zoomed, from inside and on a phone, then recorded in motion:
+
+- a burnt shell (seeded 3D noise burns the dome away; only the fronts stay),
+- a cage of torn gold filaments,
+- an ember field on the dome,
+- a burning lip at the foot,
+- ash, the burnt shell with embers.
+
+Codex was at its usage limit, so an Opus design reviewer stood in. It
+ranked ash first (silhouette, far-side lines and embers in depth), then the
+burnt shell, the embers, the cage (a birdcage), and the lip (a flat
+ellipse, so 2D from the side). It picked ash on one condition: the front
+must be quiet over the event. Its tuning is built in:
+
+- the fronts fade where the shell faces the viewer and are whole at the
+  silhouette and on the far side;
+- widths are in screen pixels (a 1.5 px cream core, gold to 3.2 px, a pixel
+  of char);
+- the fronts are torn into dashes with a second noise and have about 40%
+  fewer holes, so the burn reads as burning, not contours;
+- embers are capped at 3.5 px and fade near the eye (no bokeh), mostly gold;
+- out of focus only the silhouette band burns and 45% of the embers drift;
+- focus brings full embers and sparks, eased over about 400 ms.
+
+The first pass at that tuning made the globe vanish, so the gating was
+relaxed until the silhouette carried it again. Sparks rise from 26 to 120 on
+flat screens (70 to 160 in a room) and live 1.1 to 2.6 s: a few sparks read
+on a 2D outline, but on a volume they are dust. The globe sheds no light of
+its own; the portal's stage light already does that.
+
+The burn noise is in `@holoim/xr-ui-core` (`clocheBurn.ts`), with the same
+noise as GLSL, so Quick Look (slice 6) can bake tubes along the same fronts
+for the same seed. Codex reviews the renders when its quota returns.
 
 ## Delivery slices
 
@@ -717,8 +763,10 @@ Built (2026-10-24, branch `claude/sharp-snyder-e9566f`):
 
 ### Slice 6: Quick Look baked halo
 
-`tools/glb_to_usdz.py` adds the gold core, the cream highlight and a static
-soft halo when it builds a USDZ. The outline matches the TypeScript edge for
+`tools/glb_to_usdz.py` adds the burnt globe when it builds a USDZ: thin
+emissive gold tubes along the burning fronts (`clocheBurnAt`, the same seed)
+and a sparse scatter of ember quads (`clocheEmbers`), static, with no sparks
+and no shell. The outline matches the TypeScript edge for
 the same seed (Q10): the worker passes the computed points to the Python
 tool, or a golden-vector test holds the two together. The exported GLB is
 unchanged.
@@ -906,6 +954,9 @@ share no files.
 | Second round: the cloche, contracts | `xr-ui-core` `cloche.test.ts`, `xr-ui-three` `cloche.test.ts` | Neither (unit) | 2026-10-25, written from failure modes first: no fit for nothing drawn; every drawn point inside the glass with the margin; the foot on the lowest point; a flat take and a wide low one keep 40% shoulders; the shade is the content's footprint × 1.15; Follow keeps every point of the drawn dome inside the viewing box at 78% and fills it (phone and desktop aspects); fully drawn outside, 0 at the glass and monotonic walking out; seeds stable and in range; char at rest on dark ground and full where the soot rule is on. The three.js object: chrome throughout, not tone-mapped, no depth writes; the eye read correctly under a placed, turned and 0.25-scaled parent (AR); inside drops the glass and keeps the floor shade; nothing in a headset while recording. `xr-ui-core` 95, `xr-ui-three` 81, `ui-dom` 88, viewer-web 33 |
 | Second round: viewer pages | `e2e/redesign.spec.ts`, `e2e/hologram-feed.spec.ts`, `e2e/ar-bubble.spec.ts` (IWER, 1280 × 800 and 390 × 844) | Emulation (Playwright, IWER) | 2026-10-25: 15/15. At rest only Play (or Pause) in the row and no Return in Follow; every glyph at the mouse minimum; on reach Free shows and Play neither moves (< 1 px) nor leaves the middle (< 2 px); no two controls closer than a glyph gap; no `.feed-card-edge` or `.feed-card-shade` on the page; the focused card's cloche drawn at opacity 1 with volume; under reduced motion the core steady and the glow within the slow fade (< 0.02 in 0.5 s); the sheet at most 26rem, its drop zone labelled for `#glb-upload`, the Quick Look switch toggled by its label. AR: the cloche drawn, all chrome, not head-locked, the recorded author inside it, standing within the bubble, at the same room position from in front and from behind, char at full strength on a Quest (no estimate), core 1, the old glass sphere hidden, the aura kept with no torus; `ar-cloche-front.png` and `ar-cloche-back.png`. View in AR is a reach control now, so the specs reach for the card before pressing it (`pressViewInAr`). Not checked on a Quest or an Android phone |
 | Second round: Codex on the renders | `codex exec -p deep` with before and after contact sheets (desktop, phone, upload sheet) | Neither (cross-vendor review) | 2026-10-25, first pass: "ship after the must-fixes". Must-fixes, all done: the avatar's head broke through its dome (the fit now samples the author's reach through the take, bones and moving meshes, relative to a following bubble); the dome's far side still showed inside (now 0 there, read back from the shell); the phone row sat at 85% down on amber (now ends above 75%); the dock showed through the phone sheet (hidden while it is open). Taste notes taken: the rim capped at a 2 to 4 px line, the chip over the picture hugging the controls showing. Left: the floor shade's dark crescent under the avatar's terrain (it is the hologram's own shade, kept). Second pass on the fixed renders: each must-fix resolved, none new, "ship on this visual pass"; it notes stills cannot prove the 4% clearance through the whole take, which the fit's contract test and the AR check (author inside from both sides) cover |
+| Third pass: the burnt globe, prototypes and pick | Five forms in the real viewer (`?halo=`, dev-only, not committed), rendered front, orbit, side, zoom, inside, phone, and a 42 s motion reel | Emulation (Chromium, SwiftShader) and review | 2026-10-25: Codex returned its usage limit before reading; an Opus design reviewer stood in (same vendor, not independent). Ranking ash, burn, embers, cage, lip; pick ash with a quiet front; its must-fixes built (see the decision above). Reel, zoom still and phone sheet in the ignored `output/halo-v2/`, sent to the user. Codex's pass is owed |
+| Third pass: the burnt globe, contracts | `xr-ui-core` `clocheBurn.test.ts`, `xr-ui-three` `cloche.test.ts` | Neither (unit) | 2026-10-25, from failure modes first: the noise stays in 0 to 1 and the threshold leaves both holes and shell; spark sites lie on the fronts (\|burn\| < 0.02) and on the dome; burns and embers the same per seed on every load and different across seeds; every ember within 3% of the wider radius of the shell and above the floor; normals point out; the quiet rule is 0 face-on, whole at the silhouette, 75% on the far side and further in when focused. The object: shell, embers, sparks and shade chrome, not tone-mapped, no depth writes; inside drops the shell, embers and sparks and keeps the shade; sparks only in focus, none under reduced motion or in a take; focus eases (0.2 to 0.8 after 100 ms, over 0.95 by 600 ms) and jumps with time held at 0 under reduced motion; nothing in a headset while recording. `xr-ui-core` 101, `xr-ui-three` 83 |
+| Third pass: viewer pages | `e2e/redesign.spec.ts`, `e2e/ar-bubble.spec.ts` (IWER, 1280 × 800 and 390 × 844) | Emulation (Playwright, IWER) | 2026-10-25: 9/9. The focused card's globe drawn at opacity 1 with all 2,500 embers and 120 sparks; under reduced motion no sparks and time held at 0, the line steady and the glow within the slow fade; AR: the globe drawn, all chrome, not head-locked, the author inside it from both sides, char at full strength on a Quest, line 1. Not checked on a Quest or an Android phone |
 | Hold to mark on every input | IWER scenarios (hands, controllers), the desktop pointing take, touch scenarios for phone and phone AR | Emulation | Exported GLBs with the expected `recorded` links and no overlapping inferred link; pending |
 | The Halo on every input | Flick and hold scenarios with mouse, touch and IWER (hands, controllers, `transient-pointer` if IWER emulates it) | Emulation | Report of directions committed; pending |
 | Pipeline and USDZ | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result; byte-identical export with chrome visible; v0 and v1 files load; USDZ outline matches; pending |

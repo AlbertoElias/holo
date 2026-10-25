@@ -183,10 +183,10 @@ describe("sparks (styleguide 8.2, 8.3)", () => {
     expect(nearestToForwardRay([{ id: "a", angleDegrees: 50 }])).toBeNull();
   });
 
-  it("sheds 26 on a flat screen, up to 70 in a room, none under reduced motion or while recording", () => {
+  it("sheds 120 on a flat screen, up to 160 in a room, none under reduced motion or while recording", () => {
     const options = { inFocus: true, reducedMotion: false, recording: false };
-    expect(sparkCount(VIEW_TARGETS.phone, options)).toBe(26);
-    expect(sparkCount(VIEW_TARGETS.vr, options)).toBe(70);
+    expect(sparkCount(VIEW_TARGETS.phone, options)).toBe(120);
+    expect(sparkCount(VIEW_TARGETS.vr, options)).toBe(160);
     expect(sparkCount(VIEW_TARGETS.phone, { ...options, reducedMotion: true })).toBe(0);
     expect(sparkCount(VIEW_TARGETS.desktop, { ...options, recording: true })).toBe(0);
   });
