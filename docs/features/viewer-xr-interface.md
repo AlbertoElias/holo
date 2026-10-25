@@ -511,6 +511,12 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   one's audio and starts the new one's from its own clock. Each keeps its
   own play state, transform and grounded two-hand grab. On a phone a tap on
   the focused hologram pauses or resumes it; on another, it focuses it.
+- **Phone row off-centre (the lead, 2026-10-25).** With the focused
+  hologram off the screen's centre, the reach row is drawn in perspective
+  and would cross the screen's edge. Each frame it slides along its chip
+  until its projected edges sit half a pixel inside the 16 px gutters, and
+  slides back when there is room. The spec frames the focused hologram right
+  and left of centre (`arGallery.offCentre`).
 - **Back to gallery (the user, 2026-10-25).** Selecting a placed
   hologram's tile again sends it back: the tile shows its title, muted,
   without its preview while it is placed. No new glyph. When the focused
