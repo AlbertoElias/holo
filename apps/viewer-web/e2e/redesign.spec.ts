@@ -379,7 +379,10 @@ plainTest("phone: feed-wide notices sit on the chip", async ({ page }) => {
   await expect(page.locator('[data-notice="offline"]')).toBeVisible();
   await shot(page, "phone-notice-offline");
   await page.context().setOffline(false);
-  expect(runtimeErrors, "viewer runtime errors").toEqual([]);
+  // The reload and going offline cut IWER's room off its CDN mid-load: the
+  // test's own doing, not the viewer's.
+  const cutOff = /^console\.error: Error loading environment \S+ from CDN TypeError: Failed to fetch/;
+  expect(runtimeErrors.filter((entry) => !cutOff.test(entry)), "viewer runtime errors").toEqual([]);
 });
 
 // ── The WebXR AR route under IWER (a Quest 3 in emulation) ──
