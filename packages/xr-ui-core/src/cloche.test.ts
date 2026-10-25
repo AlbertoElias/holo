@@ -142,8 +142,17 @@ describe("the golden cloche the USDZ builder's port must reproduce (9.5)", () =>
     for (const { seed, offset } of golden.seeds) expect(clocheSeedOffset(seed)).toBe(offset);
   });
 
+  // Within a tolerance, not bit for bit: the fronts and embers run through
+  // Math.sin and Math.cos, which V8 takes from the platform's libm on some
+  // builds (Linux x64), so their last bits differ between machines. The
+  // Python port is held to the same tolerances.
+  const near = (actual: number[], expected: number[], tolerance: number) => {
+    expect(actual.length).toBe(expected.length);
+    actual.forEach((value, i) => expect(Math.abs(value - expected[i]!)).toBeLessThanOrEqual(tolerance * Math.max(1, Math.abs(expected[i]!))));
+  };
+
   it("burns the same globe: noise, holes, tears, dome points, fronts and embers", () => {
-    for (const { at, value } of golden.noise) expect(clocheBurnNoise({ x: at[0]! * 9.3, y: at[1]! * 9.3, z: at[2]! * 9.3 })).toBe(value);
+    for (const { at, value } of golden.noise) near([clocheBurnNoise({ x: at[0]! * 9.3, y: at[1]! * 9.3, z: at[2]! * 9.3 })], [value], 1e-9);
     for (const entry of golden.globe) {
       const shape = fitCloche(golden.fits.find((fit) => fit.name === entry.fit)!.points.map(vector))!;
       const offset = clocheSeedOffset(entry.seed);
@@ -151,16 +160,21 @@ describe("the golden cloche the USDZ builder's port must reproduce (9.5)", () =>
       expect(entry.random.map(() => random())).toEqual(entry.random);
       for (const sample of entry.surface) {
         const point = clocheLocalPoint(shape, vector(sample.direction));
-        expect([point.x, point.y, point.z]).toEqual(sample.point);
+        near([point.x, point.y, point.z], sample.point, 1e-9);
         const normal = clocheNormalAt(shape, point);
-        expect([normal.x, normal.y, normal.z]).toEqual(sample.normal);
-        expect(clocheBurnAt(shape, offset, point)).toBe(sample.burn);
-        expect(clocheTearAt(shape, offset, point)).toBe(sample.tear);
+        near([normal.x, normal.y, normal.z], sample.normal, 1e-9);
+        near([clocheBurnAt(shape, offset, point), clocheTearAt(shape, offset, point)], [sample.burn, sample.tear], 1e-9);
       }
-      expect(clocheBurnFronts(shape, offset, 12).map(({ point, normal }) => ({ point: [point.x, point.y, point.z], normal: [normal.x, normal.y, normal.z] }))).toEqual(entry.fronts);
+      const fronts = clocheBurnFronts(shape, offset, 12);
+      expect(fronts.length).toBe(entry.fronts.length);
+      fronts.forEach(({ point, normal }, i) => {
+        near([point.x, point.y, point.z], entry.fronts[i]!.point, 1e-9);
+        near([normal.x, normal.y, normal.z], entry.fronts[i]!.normal, 1e-9);
+      });
       const embers = clocheEmbers(shape, offset, 64);
-      expect(Array.from(embers.positions)).toEqual(entry.embers.positions);
-      expect(Array.from(embers.seeds)).toEqual(entry.embers.seeds);
+      // Kept in 32-bit floats.
+      near(Array.from(embers.positions), entry.embers.positions, 1e-6);
+      near(Array.from(embers.seeds), entry.embers.seeds, 1e-6);
     }
   });
 
