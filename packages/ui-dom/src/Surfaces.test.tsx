@@ -102,7 +102,10 @@ describe("dock on the horizon (5.2)", () => {
     expect(Number.parseFloat(button.style.minWidth)).toBeGreaterThanOrEqual(44);
     const lantern = button.querySelector("[data-glyph-lantern]") as HTMLElement;
     expect(lantern.style.width).toBe(`${tokens.glyph.ring}px`);
-    expect(lantern.style.background).toBe("rgb(8, 26, 30)");
+    // jsdom serialises the background as rgb(), so compare it with the token read back the same way.
+    const lens = document.createElement("span");
+    lens.style.background = tokens.glyph.lantern.fill;
+    expect(lantern.style.background).toBe(lens.style.background);
     expect(lantern.style.boxShadow).toBe(`inset 0 0 0 ${tokens.glyph.stroke}px ${tokens.color.gold}`);
   });
 
