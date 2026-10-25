@@ -6,6 +6,7 @@ import { apxToMeters, tokens, type HitInput } from "@holoim/design-tokens";
 import {
   HALO_CLOSED,
   haloLayout,
+  haloSlotGlyph,
   stepHalo,
   type HaloAction,
   type HaloDirection,
@@ -27,7 +28,7 @@ export interface ThreeHaloOptions {
   input?: HitInput;
 }
 
-/** A direction that has an action: its glyph (Record) or an empty gold ring until its drawing is decided. */
+/** A direction that has an action: its glyph (Record, Undo, Redo) or an empty gold ring until its drawing is decided. */
 export interface HaloSlotObject {
   direction: HaloDirection;
   action: HaloAction;
@@ -64,7 +65,7 @@ export class ThreeHalo {
     this.group.add(this.slotsGroup);
     for (const slot of this.layout.slots) {
       if (slot.action === null) continue;
-      const glyph = new ThreeGlyph({ id: slot.action === "record" ? "record" : null, input, distanceM, headset: true });
+      const glyph = new ThreeGlyph({ id: slot.action === "record" ? "record" : haloSlotGlyph(slot.action), input, distanceM, headset: true, ringed: true });
       glyph.group.position.set(this.metres(slot.x), this.metres(slot.y), 0);
       this.slotsGroup.add(glyph.group);
       this.objects.set(slot.direction, { direction: slot.direction, action: slot.action, glyph, hitTarget: glyph.hitTarget, hitSizeM: glyph.hitSizeM });

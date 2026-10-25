@@ -174,9 +174,9 @@ describe("headset text (styleguide 7.3)", () => {
 });
 
 describe("recording chrome (styleguide 8.5)", () => {
-  it("hides everything but stop and the running time until the take ends", () => {
+  it("hides everything but stop, the running time and the Halo until the take ends", () => {
     const shown = ALL_CONTROLS.filter((control) => chromeVisible(control, true));
-    expect(shown).toEqual(["timecode", "record", "status"]);
+    expect(shown.sort()).toEqual(["halo", "record", "status", "timecode"]);
     expect(ALL_CONTROLS.every((control) => chromeVisible(control, false))).toBe(true);
   });
 

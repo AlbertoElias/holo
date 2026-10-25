@@ -72,18 +72,18 @@ describe("a hold (6.2)", () => {
     expect(drawn.sort()).toEqual(["e", "s", "w"]);
   });
 
-  it("draws Record's glyph at S and an empty gold ring of the slot size at the other decided places", () => {
+  it("draws Record's glyph at S, and the undo and redo arrows in a gold ring of the slot size at W and E", () => {
     const { elapse, press, container } = setup();
     press();
     elapse(tokens.motion.hold.delay);
     const south = container.querySelector("[data-halo-slot=s]")!;
     expect(south.querySelector("[data-record-shape=idle]")).not.toBeNull();
-    for (const direction of ["w", "e"]) {
-      const svg = container.querySelector(`[data-halo-slot=${direction}] svg`)!;
-      expect(svg.getAttribute("width")).toBe("36");
-      expect(svg.querySelectorAll("circle")).toHaveLength(1);
-      expect(svg.querySelector("path, rect, g")).toBeNull();
-      expect(svg.querySelector("circle")!.getAttribute("stroke")).toBe(tokens.glyph.color);
+    for (const [direction, glyph] of [["w", "undo"], ["e", "redo"]] as const) {
+      const [ring, arrow] = [...container.querySelectorAll(`[data-halo-slot=${direction}] svg`)];
+      expect(ring!.getAttribute("width")).toBe("36");
+      expect(ring!.querySelectorAll("circle")).toHaveLength(1);
+      expect(ring!.querySelector("circle")!.getAttribute("stroke")).toBe(tokens.glyph.color);
+      expect(arrow!.querySelector("path")!.getAttribute("d")).toBe(tokens.glyph.path[glyph].d);
     }
   });
 

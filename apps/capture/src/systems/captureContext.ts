@@ -23,6 +23,7 @@ import type { UIStateStore } from '../ui/UIStateStore';
 import type { VrChrome } from '../ui/VrChrome';
 import type { ArSpectator } from '../xr/ArSpectator';
 import type { HandEmbodiment } from '../xr/HandEmbodiment';
+import type { HeadsetHolds } from '../xr/HeadsetHolds';
 import type { HeightFit } from '../xr/HeightFit';
 import type { XrTracking } from '../xr/XrTracking';
 
@@ -67,6 +68,8 @@ export interface CaptureContext {
   ar: ArSpectator;
   ui: UIStateStore;
   vrChrome: VrChrome;
+  /** The headset's mark "this" and Halo (slice 5). */
+  headsetHolds: HeadsetHolds;
   recording: RecordingSession;
   diagnostics: DiagnosticViews;
   frame: CaptureFrame;

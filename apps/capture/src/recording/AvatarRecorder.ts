@@ -3,7 +3,9 @@ import type { RecordingFrame } from '../types/contracts';
 
 import type { SceneObject } from '../objects/SceneObjectRegistry';
 import { type AuthoringFrame, AuthoringSampleStore, IDLE_AUTHORING_FRAME } from './authoringSpans';
+import type { HeadsetMarkStep } from '../xr/HeadsetHolds';
 import { PointDetector, type TrackedHandJointReader } from '../xr/PointDetector';
+import type { HandPointSample } from './PointSampleStore';
 import { FrameCaptureStore } from './FrameCaptureStore';
 import { GltfExportComposer } from './GltfExportComposer';
 import { ObjectSampleStore } from './ObjectSampleStore';
@@ -39,7 +41,10 @@ export class AvatarRecorder {
    * Records one step. `hands` (tracked XRHand joints) feeds headset point
    * detection; without it, or for non-`xr-hand` input, no hand samples are kept.
    * `objects` are the event objects, sampled at the same frame index;
-   * `authoring` is what the tray and hands were doing (PRD-045).
+   * `authoring` is what the tray and hands were doing (PRD-045). `held` is
+   * the headset mark "this": while it holds, its ray (the dominant index's
+   * filtered fingertip ray, or the dominant controller's) is a held aim
+   * sample, unless the Halo is open meanwhile.
    */
   capture(
     timeSec: number,
@@ -48,7 +53,8 @@ export class AvatarRecorder {
     activeCamera?: THREE.Camera,
     hands?: TrackedHandJointReader,
     objects: readonly SceneObject[] = [],
-    authoring?: AuthoringFrame
+    authoring?: AuthoringFrame,
+    held?: HeadsetMarkStep
   ): void {
     if (!this.frameCaptureStore.isEnabled() || !avatar) {
       return;
@@ -59,7 +65,18 @@ export class AvatarRecorder {
     this.objectSamples.capture(avatar, objects);
     // One authoring frame per recorded frame keeps the two stores aligned.
     this.authoringSamples.capture(authoring ?? IDLE_AUTHORING_FRAME);
-    if (hands) this.pointDetector.sample(timeSec, hands, (sample) => this.pointSamples.recordHandSample(sample));
+    let pointing: HandPointSample | undefined;
+    if (hands) {
+      this.pointDetector.sample(timeSec, hands, (sample) => {
+        this.pointSamples.recordHandSample(sample);
+        if (held?.state === 'held' && held.input === 'hands' && sample.side === held.side) pointing = sample;
+      });
+    }
+    if (held?.state === 'ended') this.pointSamples.endAim(timeSec);
+    if (held?.state !== 'held' || held.paused) return;
+    const ray = held.input === 'hands' ? pointing : held.ray;
+    // A frame the aiming hand or ray is not tracked is a gap inside the hold.
+    if (ray) this.pointSamples.recordAim({ timeSec, side: held.side, input: held.input, origin: ray.origin, direction: ray.direction });
   }
 
   /** What point resolution decided at the latest export, in take seconds. */

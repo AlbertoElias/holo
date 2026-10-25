@@ -5,7 +5,7 @@ import { tokens } from "@holoim/design-tokens";
 
 const { glyph } = tokens;
 
-/** Glyphs with a decided drawing. True size, exit, undo, redo and settings have none yet. */
+/** Glyphs with a decided drawing. True size, exit and settings have none yet. */
 export type DrawnGlyph = keyof typeof glyph.path;
 export type GlyphId = DrawnGlyph | "record";
 

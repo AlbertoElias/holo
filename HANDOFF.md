@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-24
+**Updated:** 2026-10-25
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -22,24 +22,16 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Slice 6 of the UI redesign (the burnt globe baked into Quick Look
-  previews, and the one-off `rebuild:usdz`) is verified on branch
-  `claude/youthful-wing-37f239`, rebased onto `31c082a` (evidence in the
-  brief). Merge it once `main` is green again, after rebasing onto the fix.
-  The production rebuild of stored previews waits for the user's go-ahead.
-- Nothing held. UI redesign slices 0 to 4 (brief
-  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are merged
-  to `main`: slices 0 to 2 on 2026-10-24, and slices 3 (every viewer page)
-  and 4 (every capture page, touch, handedness) together after `verify:pr`
-  passed on the combined tree (evidence in the brief). The user's second
-  round (the 3D cloche halo, fewer controls, no dock shadow, the upload
-  sheet) landed at `02d0282` on 2026-10-25 and is deployed. Held locally
-  (docs only, rides with the next merge): the brief's status line. Next
-  there: slice 5 (hold to mark "this" and the Halo) and slice 6 (the Quick
-  Look cloche). Open: Codex's independent pass over
-  slices 2 to 4 (it was at its usage limit on 2026-10-24); real wrist
-  drawings for Exit and Recenter, a known gap for a design pass; the
-  physical device checks in the brief.
+- Nothing held. UI redesign slices 0 to 6 (brief
+  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
+  `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
+  baked into Quick Look previews, with the one-off `rebuild:usdz`) were
+  merged together on 2026-10-25 after `verify:pr` on the combined tree
+  (evidence in the brief). Phone AR marks are deferred to AR recording in
+  [`TODOS.md`](TODOS.md). Next there: slice 7 (cross-device task test and
+  device checks). Open: Codex's independent pass over slices 2 to 5 (at its
+  usage limit on 2026-10-24 and 2026-10-25); real wrist drawings for Exit
+  and Recenter; the physical device checks in the brief.
 
 ## Unverified / device-only
 

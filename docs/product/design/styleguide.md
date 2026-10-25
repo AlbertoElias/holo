@@ -425,6 +425,8 @@ sized to the controls showing.
 | Sound on / off | Mute or unmute the event | "Mute" / "Unmute" (name) | A speaker with waves, or with a cross (`tokens.json`, `glyph.path.soundOn` / `soundOff`) |
 | Upload | Open the upload sheet; send the upload | "Upload" | An arrow up out of a tray (`glyph.path.upload`) |
 | Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
+| Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
+| Undo / Redo | The Halo's W and E: undo or redo the last held mark | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 
 The rose record dot has no keyline of its own; the gold ring around it is
 the same as Play's. The Play triangle and the record shapes are filled;
@@ -492,6 +494,15 @@ One radial menu with eight directions that never change, on every device:
   2.5× these.
 - A direction with no action draws nothing, and its place stays reserved.
   Capture's Halo carries S, W (undo the last held mark) and E (redo it).
+- Summoned, per input: on desktop hold **B** and move the mouse, or press
+  and hold the dock's Halo glyph; on a phone press and hold the dock's Halo
+  glyph and drag; with Quest hands the dominant thumb–middle pinch and a
+  drag of that hand; with Quest controllers press and hold the
+  non-dominant thumbstick and tilt it. In a headset the ring opens where
+  the summoning hand is, facing the head.
+- The dock's Halo glyph is four arcs around a point, open at the
+  diagonals (`glyph.path.halo`). W and E draw the undo and redo arrows
+  (`glyph.path.undo`, `glyph.path.redo`); S draws Record.
 
 ## 7. Type
 
@@ -608,8 +619,10 @@ hologram.
 | Halo | Holds at level 0.08 | No edge |
 | Gold core and highlight | Drop to 0.55 opacity | No edge |
 
-**Chrome while recording:** everything but the stop control and
-"Recording 0:12" hides until the take ends.
+**Chrome while recording:** everything but the stop control,
+"Recording 0:12" and the Halo glyph hides until the take ends. The Halo
+stays because it carries the take's own actions: stop, and undo or redo the
+held mark.
 
 The state is carried by shape and word, not colour: the record control turns
 from a filled rose circle into a rose rounded square (stop), and

@@ -3,6 +3,8 @@
 // the ring draws after the hold delay; an expert flicks and it never draws.
 import { tokens } from "@holoim/design-tokens";
 
+import type { DrawnGlyph } from "./glyph.js";
+
 export const HALO_DIRECTIONS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const;
 export type HaloDirection = (typeof HALO_DIRECTIONS)[number];
 
@@ -21,6 +23,11 @@ export type HaloAction = (typeof HALO_ACTIONS)[HaloDirection];
 
 /** Capture's first Halo (Q20): S record/stop, W undo the last held mark, E redo it. */
 export const CAPTURE_HALO_ACTIONS: readonly HaloAction[] = ["record", "undo", "redo"];
+
+/** The line glyph drawn in an action's ring; null where the ring is drawn empty (Record draws its own shape). */
+export function haloSlotGlyph(action: HaloAction): DrawnGlyph | null {
+  return action === "undo" || action === "redo" ? action : null;
+}
 
 export interface HaloSlot {
   direction: HaloDirection;

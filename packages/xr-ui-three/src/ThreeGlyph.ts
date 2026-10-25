@@ -41,6 +41,8 @@ export interface ThreeGlyphOptions {
   headset: boolean;
   /** Record shows its stop shape. */
   recording?: boolean;
+  /** Draws the gold ring around a line glyph too (each Halo slot is a glyph ring). */
+  ringed?: boolean;
 }
 
 const RING_SEGMENTS = 64;
@@ -136,7 +138,7 @@ export class ThreeGlyph {
   private readonly recordMaterials: MeshBasicMaterial[] = [];
   private readonly focusMaterial: MeshBasicMaterial;
 
-  constructor({ id, input, distanceM, headset, recording = false }: ThreeGlyphOptions) {
+  constructor({ id, input, distanceM, headset, recording = false, ringed: ringAround = false }: ThreeGlyphOptions) {
     this.id = id;
     this.input = input;
     this.distanceM = distanceM;
@@ -144,8 +146,8 @@ export class ThreeGlyph {
     this.recording = recording;
     const unscaled = glyphMetrics({ headset: false });
     const drawing = id === null ? null : glyphDrawing(id, { recording });
-    const ringed = drawing === null || drawing.ringed;
-    const drawnApx = drawing === null ? unscaled.ringApx : drawnSizeApx(drawing, { headset: false });
+    const ringed = drawing === null || drawing.ringed || ringAround;
+    const drawnApx = drawing === null || ringAround ? Math.max(unscaled.ringApx, drawing ? drawnSizeApx(drawing, { headset: false }) : 0) : drawnSizeApx(drawing, { headset: false });
     this.drawnSizeM = apxToMeters(drawnApx, distanceM, { headset });
     this.hitSizeM = hitAreaMeters(input, drawnApx, distanceM, { headset });
 

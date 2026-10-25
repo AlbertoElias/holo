@@ -36,6 +36,8 @@ interface VrChromeDeps {
   refitHeight: () => void;
   toggleRecording: () => void;
   setHandedness: (handedness: Handedness) => void;
+  /** A select that belongs to a held mark (its trigger or pinch) presses nothing. */
+  ownsSelect?: (source: XRInputSource | undefined) => boolean;
 }
 
 // Set for slice 4 (docs/features/ui-redesign.md); the styleguide gives the
@@ -243,6 +245,15 @@ export class VrChrome {
     };
   }
 
+  /** A committed Halo action: a controller pulses, a hand hears the tick where the ring was. */
+  haloFeedback(side: Hand, at: THREE.Vector3, input: 'hands' | 'controllers'): void {
+    if (input === 'controllers') this.pulse(this.deps.tracking.getChromeInput(side).inputSource, PULSE_COMMIT);
+    else {
+      this.tick.play(at, this.deps.renderer.xr.getCamera());
+      this.feedback.ticks += 1;
+    }
+  }
+
   /** The hand pressing chrome now (its fingertip at a glyph, or just after a commit), whose points are not evidence. */
   pokingHand(elapsedSec: number): Hand | null {
     if (!this.shown || !this.wrist || this.wrist.input !== 'poke') return null;
@@ -357,7 +368,9 @@ export class VrChrome {
 
   private updateStatus(camera: THREE.Camera, deltaSec: number, state: UiViewModel, recording: boolean): void {
     if (!this.status) return;
-    const text = recording ? recordingText(state.recordingElapsedMs) : state.heightFit.pending ? 'Hold still: fitting your height' : '';
+    const base = recording ? recordingText(state.recordingElapsedMs) : state.heightFit.pending ? 'Hold still: fitting your height' : '';
+    // No mark shows live in a headset, so a Halo action is said here (slice 5).
+    const text = state.notice ? (base ? `${base} · ${state.notice}` : state.notice) : base;
     if (text !== this.status.label.getText()) this.status.setText(text);
     this.status.group.visible = text !== '' && chromeVisible('status', recording);
     this.status.update(camera, deltaSec * 1000, false);
@@ -531,6 +544,7 @@ export class VrChrome {
           const chromeInput = this.deps.tracking.getChromeInput(side);
           const hit = this.rays[side].hit;
           if (chromeInput.targetRay !== controller || !hit) continue;
+          if (this.deps.ownsSelect?.(chromeInput.inputSource)) return;
           if (this.commit(hit)) this.pulse(chromeInput.inputSource, PULSE_COMMIT);
           return;
         }
