@@ -41,14 +41,14 @@ import {
 
 import { finishChrome } from "./chrome.js";
 
-const { cloche, core, highlight, halo, char, ember } = tokens.edge;
+const { cloche, halo, char } = tokens.edge;
 const { sparks } = tokens.motion;
 
 /**
  * A token's sRGB channels, unconverted. The shaders write no output
  * conversion, so they blend in the canvas's own sRGB space, as the page does
- * for CSS: a covered pixel is the token's hex exactly, never its linear
- * values drawn as sRGB (#ffc872 as #ff932b).
+ * for CSS: a covered pixel is the token's hex. The globe's own colours
+ * (edge.cloche.colors) burn deeper than the chrome's core.
  */
 function srgbUniform(hex: string): Color {
   const channels = { r: 0, g: 0, b: 0 };
@@ -338,11 +338,11 @@ export class ThreeCloche {
       uLine: { value: 1 },
       uCharShare: { value: char.rest },
       uSeed: { value: seedOffset },
-      uGlow: { value: srgbUniform(halo.color) },
-      uCore: { value: srgbUniform(core.color) },
-      uHighlight: { value: srgbUniform(highlight.color) },
-      uChar: { value: srgbUniform(char.color) },
-      uEmber: { value: srgbUniform(ember.color) }
+      uGlow: { value: srgbUniform(cloche.colors.glow) },
+      uCore: { value: srgbUniform(cloche.colors.core) },
+      uHighlight: { value: srgbUniform(cloche.colors.highlight) },
+      uChar: { value: srgbUniform(cloche.colors.char) },
+      uEmber: { value: srgbUniform(cloche.colors.ember) }
     };
 
     this.shell = new Mesh(
@@ -401,7 +401,7 @@ export class ThreeCloche {
 
     const shadeMaterial = new ShaderMaterial({
       name: "cloche-shade",
-      uniforms: { uShade: { value: srgbUniform(tokens.color.deepSea) }, uOpacity: { value: 1 } },
+      uniforms: { uShade: { value: srgbUniform(cloche.colors.shade) }, uOpacity: { value: 1 } },
       vertexShader: SHADE_VERTEX,
       fragmentShader: shadeFragment(),
       transparent: true,

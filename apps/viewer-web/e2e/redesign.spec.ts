@@ -165,51 +165,37 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
   });
 }
 
-/** sRGB channels of a `#rrggbb` token. */
-function channels(hex: string): [number, number, number] {
-  return [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16)) as [number, number, number];
-}
-
-test("desktop: the cloche's rim is drawn in the token gold, not converted twice or not at all", async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
+test("desktop: the globe burns in its own deeper colours, not the chrome's, and blends them unconverted", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await openFeed(page);
-  await page.mouse.move(2, 2);
   await readCloche(page, first.url);
-  // Only the cloche is drawn, so the author's own lights cannot pass for its rim.
-  await page.evaluate((key) => {
+  // The approved globe drew each chrome colour's linear values as sRGB; its
+  // own tokens hold what that put on screen (styleguide 3.4). A part that
+  // reads the chrome's token, or converts its own again, draws another colour.
+  const drawn = await page.evaluate((key) => {
     const probes = (window as unknown as { __portalProbes: Record<string, { scene: Three.Scene }> }).__portalProbes;
     const scene = probes[key]!.scene;
-    const cloche = scene.getObjectByName("cloche-shell")!.parent!;
-    scene.traverse((node) => {
-      let inCloche = false;
-      node.traverseAncestors((ancestor) => { if (ancestor === cloche) inCloche = true; });
-      if ((node as Three.Mesh).isMesh && node !== cloche && !inCloche) node.visible = false;
+    const hex = (colour: Three.Color) => "#" + [colour.r, colour.g, colour.b].map((value) => Math.round(value * 255).toString(16).padStart(2, "0")).join("");
+    const material = (name: string) => (scene.getObjectByName(name) as Three.Mesh<Three.BufferGeometry, Three.ShaderMaterial>).material;
+    const parts = ["cloche-shell", "cloche-embers", "cloche-sparks"].map((name) => {
+      const uniforms = material(name).uniforms;
+      return {
+        glow: hex(uniforms.uGlow!.value), core: hex(uniforms.uCore!.value), highlight: hex(uniforms.uHighlight!.value),
+        char: hex(uniforms.uChar!.value), ember: hex(uniforms.uEmber!.value)
+      };
     });
+    const names = ["cloche-shell", "cloche-embers", "cloche-sparks", "cloche-shade"];
+    return {
+      parts,
+      shade: hex(material("cloche-shade").uniforms.uShade!.value),
+      converted: names.filter((name) => /colorspace_fragment|linearToOutputTexel|sRGBTransfer/.test(material(name).fragmentShader))
+    };
   }, first.url);
-  await page.waitForTimeout(500);
-  const canvas = page.locator(`.feed-card[data-card-id="${first.id}"] canvas`).first();
-  const png = (await canvas.screenshot()).toString("base64");
-  const gold = channels(tokens.edge.core.color);
-  const linearGold = gold.map((value) => {
-    const c = value / 255;
-    return Math.round(255 * (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  });
-  const counts = await page.evaluate(async ({ data, targets }) => {
-    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
-    const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d")!;
-    context.drawImage(bitmap, 0, 0);
-    const pixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
-    return targets.map((target) => {
-      let count = 0;
-      for (let index = 0; index < pixels.length; index += 4) {
-        if (Math.abs(pixels[index]! - target[0]!) + Math.abs(pixels[index + 1]! - target[1]!) + Math.abs(pixels[index + 2]! - target[2]!) <= 9) count += 1;
-      }
-      return count;
-    });
-  }, { data: png, targets: [gold, linearGold] });
-  expect(counts[0], `pixels of the core's ${tokens.edge.core.color} on the rim`).toBeGreaterThan(40);
-  expect(counts[1], "pixels of the core's linear values written as sRGB (a deep orange)").toBeLessThan(counts[0]! / 10);
+  const { glow, core, highlight, char, ember, shade } = tokens.edge.cloche.colors;
+  for (const part of drawn.parts) expect(part).toEqual({ glow, core, highlight, char, ember });
+  expect(drawn.shade).toBe(shade);
+  expect(core, "the globe's gold is not the chrome's").not.toBe(tokens.edge.core.color);
+  expect(drawn.converted, "no part converts its colours on output").toEqual([]);
 });
 
 test("phone: reduced motion holds the cloche still and keeps the controls", async ({ page }) => {
