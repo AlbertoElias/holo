@@ -127,6 +127,7 @@ it from the item below instead of duplicating its status here.
     not assume the shipped rig's rest pose.
   - Prove it end to end: one fixture avatar per standard through the replay
     harness, checking hand fidelity and export → upload → render.
+  In flight in [`docs/features/avatar-formats.md`](docs/features/avatar-formats.md).
 - [x] Face and expressions on avatars, as the foundation for phone-driven
   avatars. Delivered 2026-10-24 in
   [`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md); device validation is listed in `HANDOFF.md`. Define one canonical expression set and map
