@@ -34,6 +34,9 @@ next queue item in [`TODOS.md`](TODOS.md).
   `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Next there: slice 7 (cross-device task test and device checks).
   Open: real wrist drawings for Exit and Recenter; the physical device checks
   in the brief.
+- The production Quick Look rebuild to ql3 is done: both stored previews are
+  ql3, with the ql2 files and the database backup kept (B-022, evidence in
+  the brief).
 
 ## Unverified / device-only
 
