@@ -80,6 +80,18 @@ export function clocheBurnAt(shape: Pick<ClocheShape, "radii">, seedOffset: numb
   return clocheBurnNoise({ x: local.x * k + seedOffset, y: local.y * k + seedOffset, z: local.z * k + seedOffset }) - cloche.burnThreshold;
 }
 
+/**
+ * How whole a front burns at a point of the shell, 0 (torn away) to 1: the
+ * shell shader's `tear`, which breaks the fronts into dashes. Renderers that
+ * bake the fronts (Quick Look) drop them where it is 0.
+ */
+export function clocheTearAt(shape: Pick<ClocheShape, "radii">, seedOffset: number, local: Vector3Like): number {
+  const k = cloche.burnFrequency / wider(shape);
+  const at = (c: number) => (c * k + seedOffset) * cloche.tearFrequency + seedOffset * 1.3;
+  const t = Math.min(Math.max((noise(at(local.x), at(local.y), at(local.z)) - cloche.tearFrom) / (cloche.tearTo - cloche.tearFrom), 0), 1);
+  return t * t * (3 - 2 * t);
+}
+
 /** The point on the dome in a direction from its foot (y ≥ 0), in the dome's space. */
 export function clocheLocalPoint(shape: Pick<ClocheShape, "radii" | "exponent">, d: Vector3Like): Vector3Like {
   const { radii, exponent: n } = shape;

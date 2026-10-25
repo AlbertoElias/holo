@@ -176,7 +176,19 @@ export const tokens = {
       frameShare: 0.78,
       insideFadeFrom: 1.6,
       insideFadeTo: 1.05,
-      shadeScale: 1.15
+      shadeScale: 1.15,
+      quickLook: {
+        frontRadius: 0.0021,
+        creamShare: 0.25,
+        charShare: 0.65,
+        tearMin: 0.08,
+        frontGlow: 0.9,
+        creamGlow: 0.6,
+        samples: 110,
+        embers: 800,
+        emberScale: 0.7,
+        emberGlow: 1
+      }
     }
   },
   glyph: {

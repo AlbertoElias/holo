@@ -697,16 +697,27 @@ preview, never the canonical hologram
 
 - The feed's "View in AR" entry is the cube glyph on the card, in its shade,
   and follows the flat rules.
-- **The USDZ carries the edge with a baked halo:** the gold core, the cream
-  highlight and a soft halo, static. Planned (slice 6) to match the burnt
-  globe: RealityKit has no screen-space line or quiet front, so the globe is
-  baked as geometry: thin emissive gold tubes along the same burning fronts
-  (`clocheBurnAt`, the same seed), a sparse scatter of small emissive ember
-  quads from `clocheEmbers`, and no sparks, with no shadow. It is added when the server builds the
-  USDZ (`apps/viewer-api/src/worker.ts`,
-  `apps/viewer-api/tools/preview_usdz.swift`), never in the exported GLB, so
-  the edge stays in the view layer and the export → upload → render pipeline
-  is unchanged.
+- **The USDZ carries the burnt globe, baked** (slice 6, decided with
+  Codex on 2026-10-25). RealityKit has no shader, no screen-space line and
+  no quiet front, so the globe is geometry in diffuse and emissive
+  materials only, fitted by `fitCloche` and burnt by the same seed (the
+  hologram's id) as the web:
+
+  | Part | What it is | Value (`edge.cloche.quickLook`) |
+  | --- | --- | --- |
+  | Fronts | Gold tubes along the zero level of `clocheBurnAt` on the dome, torn into dashes where `clocheTearAt` is low, swelling with it | Radius 0.0021 of the dome's wider radius; emissive 0.9; dropped below tear 0.08 |
+  | Cream core | A thinner cream tube showing just past the gold's outer face | 0.25 of the gold; emissive 0.6 |
+  | Char shoulder | An opaque, unlit char tube attached to the gold on the side where the shell remains, torn with it: the front reads as a burning edge and keeps a dark side on light ground | 0.65 of the gold; `edge.char.color`, no emission |
+  | Embers | The web's resting embers for the seed (`clocheEmbers`, seed x within `emberRestShare`), the first 800, as small octahedra in three heats: ember `#c2410c`, gold, cream | Size 0.7 of `emberSize`; emissive 1.0 |
+
+  No sparks, no glass, and the bubble's old shell is hidden. Keep the
+  fronts thin: with no quiet rule, the near side's fronts cross the people
+  inside. Quick Look draws its own grounding shadow under the whole model;
+  no USD attribute opts one mesh out, so the globe's thin parts add little
+  to it. The bake is added only when the server builds the USDZ
+  (`apps/viewer-api/tools/glb_to_usdz.py` with `tools/cloche.py`, run by
+  the USDZ worker), never in the exported GLB, so the edge stays in the view
+  layer and the export → upload → render pipeline is unchanged.
 
 ## 10. Do and don't
 

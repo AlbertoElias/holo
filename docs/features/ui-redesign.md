@@ -768,20 +768,67 @@ Built (2026-10-24, branch `claude/sharp-snyder-e9566f`):
 
 ### Slice 6: Quick Look baked halo
 
-`tools/glb_to_usdz.py` adds the burnt globe when it builds a USDZ: thin
-emissive gold tubes along the burning fronts (`clocheBurnAt`, the same seed)
-and a sparse scatter of ember quads (`clocheEmbers`), static, with no sparks
-and no shell. The outline matches the TypeScript edge for
-the same seed (Q10): the worker passes the computed points to the Python
-tool, or a golden-vector test holds the two together. The exported GLB is
-unchanged.
+Revised on 2026-10-25 for the cloche (styleguide 3.4 and 9.5), and again
+the same day for the burnt globe: the flat outline, core and soft halo of
+the first plan frame no hologram any more, and the seams, lip and glass of
+the first cloche bake went with the cloche's glass.
 
-Existing files are rebuilt by a one-off script: in production, every stored
-hologram's USDZ; locally, only the three most recent. The script writes each
-new USDZ beside the old one and switches the hologram to it only after the
-new file validates, so a failed rebuild leaves the old preview in place, and
-it can resume after an interruption. It runs on production once the slice is
-verified locally against the three local files.
+- **What is baked.** `apps/viewer-api/tools/glb_to_usdz.py` adds
+  `/Root/Cloche` when it builds a USDZ, fitted by `fitCloche`'s rules:
+  exponent 2.6, the foot on the lowest drawn point, a 4% margin, shoulders
+  at least 40% of the wider radius. The form is the burnt globe. RealityKit
+  has no shader and no view-dependent fade, so it is carried by geometry in
+  diffuse and emissive materials only: the burning fronts as thin emissive
+  gold tubes with a cream core on their outer face and a char strand on the
+  shell's side, torn into dashes where the web tears them, and the web's
+  resting embers as small emissive octahedra in three heats (ember, gold,
+  cream). No sparks, no glass. The bubble's old blue shell is hidden, as on
+  the web. Values are tokens (`edge.cloche.quickLook`). The exported GLB is
+  unchanged. `cloche.build(shape, seed)` returns the form as named parts
+  (meshes and materials), and the converter writes whatever it is given, so
+  a later form plugs in without touching the converter.
+- **The same burns as the web (Q10).** The seed is the hologram's id; the
+  worker passes it (`--seed`). `tools/cloche.py` ports `fitCloche`,
+  `clocheSeedOffset` and the burn rules of `clocheBurn.ts`
+  (`clocheBurnAt`, `clocheTearAt` (added for the bake: the shell shader's
+  tear), `clocheLocalPoint`, `clocheNormalAt`, `clocheRandom`,
+  `clocheBurnFronts`, `clocheEmbers`). The fronts are the zero level set of
+  `clocheBurnAt` over the dome, marched on a grid of directions (110 samples
+  per wider radius), so they lie where the web's shell is discarded. A
+  golden-vector file (`packages/xr-ui-core/src/fixtures/cloche-golden.json`)
+  is checked by the TypeScript tests and by `tools/test_cloche.py` (run by
+  the API's vitest suite), so the two cannot drift; four deliberate
+  mutations of the port (hash, tear, ember offset, fbm octave) each fail it.
+- **What is fitted.** The built stage: every visible mesh at the first frame
+  (at most 3,000 points each), kept to the pinned bubble, and the author's
+  joints at eight times through the take with 0.18 m head room, plus the box
+  corners of meshes the take moves by their own transform. The web reads a
+  walk relative to a bubble that follows its author; Quick Look pins the
+  bubble, so the walk is read in place and the dome covers it.
+- **Readback.** `inspect_usdz.py` refits the dome from its own GLB
+  evaluation and checks the recorded foot and radii; every part on the dome
+  (fronts within 2.5 tube radii, embers within their spread); the gold on
+  the burn's zero level (median and 99th percentile of |`clocheBurnAt`| at
+  its vertices); the embers the viewer's own for the seed; opaque matte
+  materials; the seed offset; and the hidden blue shell. The framing extent
+  includes the globe.
+- **No shadow.** Quick Look draws one grounding shadow under the whole
+  model and no USD attribute opts a mesh out; the fronts and embers are thin
+  and sparse, so they add little to it. Recorded as a limit.
+- **Converter version `ql3`.** New uploads store `-ql3.usdz`; deleting a
+  hologram removes every version.
+
+Existing files are rebuilt by a one-off script, `apps/viewer-api/src/rebuild-usdz.ts`
+(`pnpm --filter @holoim/api rebuild:usdz`): in production, every stored
+hologram's USDZ; locally, only the three most recent (`--recent 3`). For each
+`ready` record on an older version it converts the GLB again, inspects the new
+package (a cloche seeded by the id, and no check failed that the old preview
+passed), stores it beside the old file, and only then switches the record,
+so a failed rebuild leaves the old preview in place. It resumes after an
+interruption (switched records are skipped, a journal keeps failures, a
+first signal finishes the hologram in hand). Old files stay unless
+`--delete-old`. It runs on production only with the user's go-ahead, once
+the slice is verified locally against the three local files.
 
 ### Slice 7: cross-device task test and device checks
 
@@ -833,7 +880,7 @@ See "Test plan and evidence" and "Physical-device limits".
 - [ ] The export → upload → render pipeline e2e passes; a take without marks
   exports byte-identical to before, with all chrome visible during the
   take; v0 files still load after the meaning change.
-- [ ] New USDZ files carry the baked edge, matching the viewer's outline for
+- [ ] New USDZ files carry the baked burnt globe, its fronts and embers the viewer's
   the same hologram; the rebuild script has updated the three most recent
   local holograms and then every production hologram, with no preview lost.
 - [ ] The cross-device task test has run and its results are recorded here.
@@ -967,6 +1014,11 @@ share no files.
 | Hold to mark on every input | IWER scenarios (hands, controllers), the desktop pointing take, touch scenarios for phone and phone AR | Emulation | Exported GLBs with the expected `recorded` links and no overlapping inferred link; pending |
 | The Halo on every input | Flick and hold scenarios with mouse, touch and IWER (hands, controllers, `transient-pointer` if IWER emulates it) | Emulation | Report of directions committed; pending |
 | Pipeline and USDZ | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result; byte-identical export with chrome visible; v0 and v1 files load; USDZ outline matches; pending |
+| Quick Look globe: the port | `pnpm --filter @holoim/xr-ui-core test` (golden block) and `python3 apps/viewer-api/tools/test_cloche.py` (run by the API's vitest suite) | Neither (unit) | 2026-10-25: one golden file (`cloche-golden.json`): 4 fits, 5 seeds (empty and non-ASCII included), the noise, and 9 burnt globes (3 domes × 3 seeds: 432 dome points, normals, burns and tears, 8 seeded randoms, 12 front sites, 64 embers each). TypeScript equal; Python within 1e-9 (embers 1e-6, kept in 32-bit floats). Four deliberate mutations of the port (hash, tear, ember offset, fbm octave) each fail it |
+| Quick Look globe: bake and readback | `glb_to_usdz.py --seed <id>` then `inspect_usdz.py` on the three most recent production GLBs (local copy) | Emulation (OpenUSD) | 2026-10-25: all three carry `/Root/Cloche` (form `burnt-globe`, 800 embers); the inspector's own refit matches the recorded foot and radii within 1e-6 m; the gold's vertices sit on the burn's zero level (99th percentile of the burn 0.006 to 0.008); every ember is the viewer's for the seed; no cloche failure. One file (abf8…) keeps joint and vertex tolerance failures that its old ql2 preview already had. Conversion about 2.6 s for an avatar |
+| Quick Look globe: render and review | RealityKit stills (`shot`, Follow camera, dark and light ground) of the real USDZs, reviewed by Codex (a different vendor) against the feed's globe | Emulation (RealityKit on macOS) | 2026-10-25: Codex chose the thinner fronts (0.0021 of the wider radius) and 800 embers over 0.0032 and 360, and asked for a quieter cream (0.25, emissive 0.6) and an opaque char shoulder (0.65) on the shell's side for light ground; renders of that spec show a dark burnt edge on light ground and clean gold on dark. Codex: recognisably the same halo; the near side's fronts still cross the people, which no bake can quiet. The island take's dome is higher than the feed's, because Quick Look pins the bubble and covers the whole walk, so its burns differ from the feed's for walking takes |
+| USDZ rebuild, local | `pnpm --filter @holoim/api rebuild:usdz` against a copy of production's database and files (the three most recent holograms) | Emulation | 2026-10-25, final design: the dry run lists three; a run stopped by SIGINT switched two and left the third on ql2; the resume switched the third; a further run had nothing to do. Earlier, a truncated GLB failed validation, stayed on ql2, was journaled, skipped on rerun and switched with `--retry-failed` once restored. Production not run: it waits for the user's go-ahead |
+| Slice 6, `verify:pr` | `pnpm run verify:pr` on the slice 6 branch rebased onto `31c082a`, ports 3574/3501/5575 | Emulation | 2026-10-25: doctor, lint and typecheck, every unit suite, build, `test:knowledge` 7/7, pipeline 8/8 (capture → viewer asserts the preview's cloche is seeded by the uploaded id and has its fronts), portal 6/6, XR smoke 15/15. Two retries were environmental, not the change: `test:knowledge` reused a stale atlas server on port 4176 started from the main checkout (main fails the same way against it; both pass 7/7 on their own server), and one portal run lost a CDN fetch of an environment map |
 | Cross-device task test | The PRD-021 trial (below) | Physical | Recorded results; pending |
 
 ### Cross-device task test

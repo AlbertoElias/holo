@@ -22,6 +22,11 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- Slice 6 of the UI redesign (the burnt globe baked into Quick Look
+  previews, and the one-off `rebuild:usdz`) is verified on branch
+  `claude/youthful-wing-37f239`, rebased onto `31c082a` (evidence in the
+  brief). Merge it once `main` is green again, after rebasing onto the fix.
+  The production rebuild of stored previews waits for the user's go-ahead.
 - Nothing held. UI redesign slices 0 to 4 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are merged
   to `main`: slices 0 to 2 on 2026-10-24, and slices 3 (every viewer page)
