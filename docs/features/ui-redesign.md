@@ -720,10 +720,12 @@ Found while planning:
 - **Capture's AR is a spectator.** In WebXR AR (Quest passthrough or
   Android) every capture system returns early, recording included
   (`frame.arSpectator`), so no AR take exists to hold a mark in. Phone AR
-  marks need AR recording first, a capability of its own. Sent to the lead
-  as a scope question; until it is answered the phone AR row and the meaning
-  v1 change are not built, and the Halo is built where capture records
-  (desktop, phone, VR).
+  marks need AR recording first, a capability of its own. **Deferred** (the
+  lead, 2026-10-25): phone AR marks are out of slice 5, with no meaning v1
+  change; "AR recording (phone as a camera-only author)" is queued in
+  `TODOS.md`. Whether a take with no performer is a hologram is a product
+  question for the user, open, not decided. The Halo is built where capture
+  records (desktop, phone, VR).
 - **The tray already took two Halo summons.** PRD-045's tray holds on the
   non-dominant Y/B button and on the non-dominant palm turned up: the
   concept's Halo summons for controllers and hands. Taken instead (lead's
@@ -892,7 +894,9 @@ See "Test plan and evidence" and "Physical-device limits".
   place.
 - [ ] Hold to mark "this" produces a `recorded` link from desktop, hands,
   controllers, phone and phone AR in end-to-end runs, no inferred link
-  overlaps it, and the viewer shows it on phone and desktop.
+  overlaps it, and the viewer shows it on phone and desktop. (Emulation
+  passes for all but phone AR, which is deferred to AR recording in
+  `TODOS.md`; device checks are open.)
 - [ ] The Halo opens with the same directions on every device, and a flick
   commits without the ring drawing.
 - [ ] The export → upload → render pipeline e2e passes; a take without marks
@@ -1024,7 +1028,7 @@ share no files.
 | Second round: the cloche, contracts | `xr-ui-core` `cloche.test.ts`, `xr-ui-three` `cloche.test.ts` | Neither (unit) | 2026-10-25, written from failure modes first: no fit for nothing drawn; every drawn point inside the glass with the margin; the foot on the lowest point; a flat take and a wide low one keep 40% shoulders; the shade is the content's footprint × 1.15; Follow keeps every point of the drawn dome inside the viewing box at 78% and fills it (phone and desktop aspects); fully drawn outside, 0 at the glass and monotonic walking out; seeds stable and in range; char at rest on dark ground and full where the soot rule is on. The three.js object: chrome throughout, not tone-mapped, no depth writes; the eye read correctly under a placed, turned and 0.25-scaled parent (AR); inside drops the glass and keeps the floor shade; nothing in a headset while recording. `xr-ui-core` 95, `xr-ui-three` 81, `ui-dom` 88, viewer-web 33 |
 | Second round: viewer pages | `e2e/redesign.spec.ts`, `e2e/hologram-feed.spec.ts`, `e2e/ar-bubble.spec.ts` (IWER, 1280 × 800 and 390 × 844) | Emulation (Playwright, IWER) | 2026-10-25: 15/15. At rest only Play (or Pause) in the row and no Return in Follow; every glyph at the mouse minimum; on reach Free shows and Play neither moves (< 1 px) nor leaves the middle (< 2 px); no two controls closer than a glyph gap; no `.feed-card-edge` or `.feed-card-shade` on the page; the focused card's cloche drawn at opacity 1 with volume; under reduced motion the core steady and the glow within the slow fade (< 0.02 in 0.5 s); the sheet at most 26rem, its drop zone labelled for `#glb-upload`, the Quick Look switch toggled by its label. AR: the cloche drawn, all chrome, not head-locked, the recorded author inside it, standing within the bubble, at the same room position from in front and from behind, char at full strength on a Quest (no estimate), core 1, the old glass sphere hidden, the aura kept with no torus; `ar-cloche-front.png` and `ar-cloche-back.png`. View in AR is a reach control now, so the specs reach for the card before pressing it (`pressViewInAr`). Not checked on a Quest or an Android phone |
 | Second round: Codex on the renders | `codex exec -p deep` with before and after contact sheets (desktop, phone, upload sheet) | Neither (cross-vendor review) | 2026-10-25, first pass: "ship after the must-fixes". Must-fixes, all done: the avatar's head broke through its dome (the fit now samples the author's reach through the take, bones and moving meshes, relative to a following bubble); the dome's far side still showed inside (now 0 there, read back from the shell); the phone row sat at 85% down on amber (now ends above 75%); the dock showed through the phone sheet (hidden while it is open). Taste notes taken: the rim capped at a 2 to 4 px line, the chip over the picture hugging the controls showing. Left: the floor shade's dark crescent under the avatar's terrain (it is the hologram's own shade, kept). Second pass on the fixed renders: each must-fix resolved, none new, "ship on this visual pass"; it notes stills cannot prove the 4% clearance through the whole take, which the fit's contract test and the AR check (author inside from both sides) cover |
-| Hold to mark on every input | `test:xr:marks` (`scripts/ci-held-mark-playwright.ts`): desktop F holds, a phone touch hold, IWER hands (non-dominant thumb–middle pinch, an ordinary pinch, the hand lost mid-hold), IWER controllers (non-dominant trigger); `test:xr:pointing` unchanged; the viewer pointing pipeline uploads the phone and hands takes | Emulation | Passed 2026-10-25: each GLB is valid v0 with a `recorded` link on the held target and no inferred link over it (hands: A recorded twice, B inferred after its undo); the ordinary pinch held nothing; loss ended the mark after the grace (`output/ci-marks/marks-report.json`). Phone AR not built (scope question) |
+| Hold to mark on every input | `test:xr:marks` (`scripts/ci-held-mark-playwright.ts`): desktop F holds, a phone touch hold, IWER hands (non-dominant thumb–middle pinch, an ordinary pinch, the hand lost mid-hold), IWER controllers (non-dominant trigger); `test:xr:pointing` unchanged; the viewer pointing pipeline uploads the phone and hands takes | Emulation | Passed 2026-10-25: each GLB is valid v0 with a `recorded` link on the held target and no inferred link over it (hands: A recorded twice, B inferred after its undo); the ordinary pinch held nothing; loss ended the mark after the grace (`output/ci-marks/marks-report.json`). Phone AR deferred (`TODOS.md`, AR recording) |
 | The Halo on every input | The same check: the B key (hold W, flick E, flick W, hold S), the dock glyph by touch (hold, drag S), the IWER dominant pinch (drag W, drag S), the IWER non-dominant stick (W, E, S) | Emulation | Passed 2026-10-25: every committed action and input logged as expected; the ring drew while B held and not on a flick. `transient-pointer` not emulated by IWER: not built |
 | Pipeline and USDZ | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result; byte-identical export with chrome visible; v0 and v1 files load; USDZ outline matches; pending |
 | Cross-device task test | The PRD-021 trial (below) | Physical | Recorded results; pending |
@@ -1094,5 +1098,5 @@ Slice 5 is unverified on devices; emulation cannot show any of these:
   (iOS Safari has none); the dock glyph's hold and drag next to the home bar.
 - Desktop: B with the mouse on a real pointer lock (CDP reports no
   `movementX` on macOS, so the check moves the mouse synthetically).
-- Not built: gaze-and-pinch and `transient-pointer` (Vision Pro), and phone
-  AR marks, which need AR recording (scope question to the lead).
+- Not built: gaze-and-pinch and `transient-pointer` (Vision Pro); phone AR
+  marks are deferred to AR recording (`TODOS.md`).
