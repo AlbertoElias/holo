@@ -39,7 +39,7 @@ const FACE_ON = 'vrm0-minus-z';
 // -Z, a renamed rig, and one with duplicate bone names.
 const EXPORTED = ['vrm0-minus-z', 'unreal-cm', 'duplicate-names'];
 // The object grip derives its offset from the palm: bone axes and names that differ.
-const OBJECT_ON = ['reoriented-axes', 'unreal-cm'];
+const OBJECT_ON = ['reoriented-axes', 'unreal-cm', 'no-fingers'];
 const REQUIRED_FEATURES_OFF_WHEN_UNMAPPABLE = ['crouch', 'body solver', 'arm IK'];
 
 const fixtures = (await generateAvatarFixtures(fixtureDir)).filter((f) => !only || f.name.includes(only));
@@ -73,6 +73,16 @@ async function checkExport(fixture: FixtureInfo, page: Page): Promise<void> {
   const renamed = Object.entries(declaration.bones).filter(([bone, index]) =>
     nameOf(json, index) !== nameOf(source, sourceMapping.bones[bone as keyof typeof sourceMapping.bones]));
   if (renamed.length > 0) fail(fixture.name, `export declares other nodes than the fixture for ${renamed.map(([bone]) => bone).join(', ')}`);
+  if (fixture.name === 'duplicate-names') {
+    // Names alone cannot tell the avatar's Hips from the prop's: walk up from the declared node.
+    const parentOf = new Map<number, number>();
+    (json.nodes ?? []).forEach((node, i) => node.children?.forEach((child) => parentOf.set(child, i)));
+    for (const bone of ['hips', 'head'] as const) {
+      for (let at = declaration.bones[bone]; at !== undefined; at = parentOf.get(at)) {
+        if (json.nodes?.[at]?.name === 'Prop') { fail(fixture.name, `export declares the prop's ${bone}`); break; }
+      }
+    }
+  }
   const animations = (json.animations ?? []) as { channels: { target: { node?: number; path: string } }[] }[];
   const targets = animations.flatMap((a) => a.channels.map((c) => `${c.target.node}/${c.target.path}`));
   const doubled = targets.filter((t, i) => targets.indexOf(t) !== i);
@@ -141,7 +151,7 @@ for (const fixture of fixtures) {
     for (const pose of ['standing', 'crouched'] as const) {
       for (const [bone, want] of Object.entries(shippedPoses[pose])) {
         const got = poses[pose][bone];
-        if (!got) continue;
+        if (!got) { fail(fixture.name, `${pose} sample has no ${bone}`); continue; }
         const d = Math.hypot(got[0] - want[0], got[1] - want[1], got[2] - want[2]);
         if (d > poseWorst) { poseWorst = d; worstAt = `${pose} ${bone}`; }
       }
@@ -161,8 +171,13 @@ for (const fixture of fixtures) {
     if (warnings.length !== 1) fail(fixture.name, `expected one [avatar] warning, got ${warnings.length}`);
   } else {
     if (report.missingRequired.length > 0) fail(fixture.name, `missing required ${report.missingRequired.join(', ')}`);
-    if (disabled.length > 0) fail(fixture.name, `features off: ${disabled.join(', ')}`);
-    if (warnings.length > 0) fail(fixture.name, `unexpected warning: ${warnings[0]}`);
+    const allowedOff = fixture.expect.noFingers ? ['left fingers', 'right fingers'] : [];
+    const unexpectedOff = disabled.filter((f) => !allowedOff.includes(f));
+    if (unexpectedOff.length > 0) fail(fixture.name, `features off: ${unexpectedOff.join(', ')}`);
+    if (allowedOff.some((f) => !disabled.includes(f))) fail(fixture.name, `expected ${allowedOff.join(' and ')} reported off`);
+    if (fixture.expect.noFingers && !report.notes.some((n) => /grip estimated/.test(n))) fail(fixture.name, 'grip estimate not reported');
+    if (!fixture.expect.noFingers && warnings.length > 0) fail(fixture.name, `unexpected warning: ${warnings[0]}`);
+    if (fixture.expect.noFingers && warnings.length !== 1) fail(fixture.name, `expected one [avatar] warning, got ${warnings.length}`);
   }
   // Facing: compare rotations, since one correction has several Euler spellings.
   if (fixture.name !== 'unmappable') {
@@ -207,6 +222,10 @@ for (const fixture of fixtures.filter((f) => !bindOnly && OBJECT_ON.includes(f.n
   }
 }
 const faceFixture = fixtures.find((f) => f.name === FACE_ON);
+if (!bindOnly && faceFixture && !process.env.XR_AVATAR_FACE_URL) {
+  // Run outside run-xr-checks: no Quest Pro server to run the face check on.
+  fail(FACE_ON, 'face check not run: XR_AVATAR_FACE_URL is unset (run through test:xr:avatars)');
+}
 if (!bindOnly && faceFixture && process.env.XR_AVATAR_FACE_URL) {
   // The face check needs the Quest Pro dev server (run-xr-checks passes its URL).
   if (!await runChild(`${FACE_ON}: face`, 'scripts/ci-face-playwright.ts', {

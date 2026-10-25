@@ -20,6 +20,15 @@ describe("resolveHumanoidRig", () => {
     expect(named(["Bip01_L_UpperArm", "Bip01 R UpperArm"]).bone("rightUpperArm")).toBe("Bip01 R UpperArm");
   });
 
+  it("strips Blender suffixes after a digit, and stacked or vendor prefixes", () => {
+    const blender = named(["Hips.001", "Spine.001", "Spine1.001", "Spine2.001", "LeftHandIndex1.001"]);
+    expect([blender.bone("spine"), blender.bone("chest"), blender.bone("upperChest")]).toEqual(["Spine.001", "Spine1.001", "Spine2.001"]);
+    expect(blender.bone("leftIndexProximal")).toBe("LeftHandIndex1.001");
+    expect(named(["Armature|mixamorig:Hips"]).bone("hips")).toBe("Armature|mixamorig:Hips");
+    expect(named(["Character1_Hips"]).bone("hips")).toBe("Character1_Hips");
+    expect(named(["FullBody_Hips", "FullBody_LeftArmUpper"]).bone("leftUpperArm")).toBe("FullBody_LeftArmUpper");
+  });
+
   it("never lets an end site beat the real distal bone, whatever the order", () => {
     const r = named(["LeftHandIndex4", "LeftHandIndex3", "LeftHandIndex2", "LeftHandIndex1"]);
     expect(r.bone("leftIndexDistal")).toBe("LeftHandIndex3");
@@ -84,6 +93,8 @@ describe("readHumanoidDeclaration", () => {
     })).toEqual({ format: "vrm0", bones: { leftThumbMetacarpal: 4, leftThumbProximal: 5 } });
     expect(readHumanoidDeclaration({ extensions: { VRMC_vrm: { humanoid: { humanBones: { hips: { node: "3" } } } } } }))
       .toEqual({ format: "vrm1", bones: {} });
+    expect(readHumanoidDeclaration({ extensions: { HOLOIM_humanoid: { humanBones: [] }, VRMC_vrm: { humanoid: { humanBones: { hips: { node: 2 } } } } } }))
+      .toEqual({ format: "vrm1", bones: { hips: 2 } });
     expect(readHumanoidDeclaration({})).toBeUndefined();
     expect(readHumanoidDeclaration(null)).toBeUndefined();
   });

@@ -289,7 +289,7 @@ which moves the viewer's anchor lookup. The viewer step is sequenced after it.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Bind (all fixtures) | `pnpm --filter @holoim/capture run test:avatars:bind` (Node) | `output/ci-avatars/<fixture>-binding.json`; 15/15 pass, fixtures byte-identical across two generations |
+| Bind (all fixtures) | `pnpm --filter @holoim/capture run test:avatars:bind` (Node) | `output/ci-avatar-bindings/<fixture>-binding.json`; 16/16 pass, fixtures byte-identical across two generations |
 | Re-orientation is exact | Same check: skinned vertices before and after | max vertex error ≤ 1.5e-7 m |
 | Shipped avatar unchanged | `pnpm --filter @holoim/capture run test:xr` | all 9 checks pass on the final code |
 | In-app binding, facing, crouch pose | `pnpm --filter @holoim/capture run test:xr:avatars` | `output/ci-avatars/<fixture>-humanoid.json`, `avatars-report.json`; worst pose difference 0.92 cm (`unreal-cm`), every other fixture 0 cm; −Z fixture corrected by 180° yaw |
@@ -300,6 +300,28 @@ which moves the viewer's anchor lookup. The viewer step is sequenced after it.
 | No `skeleton.pose()` | Guard in `test:avatars:bind` | pass |
 | Export → upload → render, facing, meaning anchors in viewer-web | Pipeline spec on a non-RPM and a −Z fixture, plus the unchanged spec | pending: viewer step waits on `feature/viewer-xr-interface` |
 | No regression | `pnpm run verify:pr` | doctor, check:all, every unit suite, build:all, knowledge, smoke pipeline (8/8, with the USD converter installed) pass; `test:portal` fails one spec that fails identically on `main` (B-022); `test:xr:smoke` (run separately after it) passes |
+
+Independent verification (2026-10-25, a separate Claude agent; the
+different-vendor rule is not met, as recorded under Ownership): nothing
+blocking. Its findings and their outcomes:
+
+- Fixed: a rig without finger bones fell back to the shipped rig's hand
+  axes for the grip. The palm is now estimated from the forearm → hand line
+  and the avatar's forward (11.6° from the knuckle-built palm on the
+  shipped, re-oriented, A-pose and T-pose rigs). The new `no-fingers`
+  fixture (re-oriented axes, finger joints renamed) runs the object grip.
+- Fixed: Blender suffixes after a digit (`Spine1.001`), stacked prefixes
+  (`Armature|mixamorig:Hips`), Meta's `FullBody_` and HumanIK's
+  `Character1_` prefixes; a malformed `HOLOIM_humanoid` now falls through
+  to `VRMC_vrm`. Covered in `humanoidRig.test.ts`.
+- Fixed in the checks: a bone missing from a pose sample fails; the face
+  step fails when it cannot run; the duplicate-names export fails if the
+  declared hips or head sits under the prop; `test:avatars:bind` no longer
+  deletes the in-app evidence.
+- Not changed (notes): declared bones must be skin joints (VRM does not
+  require it; no real file seen that needs it); `headTip` can pick a hair
+  bone on VRoid-style rigs (only `body-fidelity` reads it); Rigify `DEF-`
+  names are not mapped.
 
 Defects the checks found during implementation, all fixed:
 

@@ -418,6 +418,25 @@ export class AvatarRig {
     return hand.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(palmWorld).normalize();
   }
 
+  /**
+   * The palm frame without knuckles: along the forearm → hand line, with the
+   * index side toward the avatar's forward (true whether the rest palm faces
+   * down or in), in the hand's bind frame.
+   */
+  private estimatePalmInHand(hand: THREE.Bone, foreArm: THREE.Object3D): THREE.Quaternion | undefined {
+    const wrist = hand.getWorldPosition(new THREE.Vector3());
+    const along = wrist.clone().sub(foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.canonicalFrameQuaternion());
+    const across = forward.addScaledVector(along, -forward.dot(along));
+    if (along.lengthSq() < 1e-10 || across.lengthSq() < 1e-10) return undefined;
+    across.normalize();
+    const middle = wrist.clone().addScaledVector(along, 0.08);
+    const index = middle.clone().addScaledVector(across, 0.02);
+    const pinky = middle.clone().addScaledVector(across, -0.02);
+    const palmWorld = palmFrameQuaternion(wrist, index, middle, pinky, new THREE.Quaternion());
+    return palmWorld ? hand.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(palmWorld).normalize() : undefined;
+  }
+
   createArmIkChain(side: VrHandSide): ArmIkChain | undefined {
     const upperArm = this.bone(`${side}UpperArm`);
     const foreArm = this.bone(`${side}LowerArm`);
@@ -449,20 +468,16 @@ export class AvatarRig {
     if (!this.toBindAimInParent(upperArm, this.tmpForeWorld, upperBindAimInParent)) return undefined;
     if (!this.toBindAimInParent(foreArm, this.tmpHandWorld, foreBindAimInParent)) return undefined;
 
-    const palmInHand = this.computePalmInHand(side, hand);
-    // Grip → hand from the rig's own palm frame, so it holds for any hand bone axes.
-    // Without finger bones there is no palm frame; the legacy offset assumes the
-    // shipped rig's hand axes, and the report says so.
-    let handGripRotationOffset: THREE.Quaternion;
-    if (palmInHand) {
-      handGripRotationOffset = GRIP_TO_PALM[side].clone().multiply(palmInHand.clone().invert());
-    } else {
-      const sideTwist = side === 'left' ? -Math.PI * 0.5 : Math.PI * 0.5;
-      handGripRotationOffset = new THREE.Quaternion()
-        .setFromEuler(new THREE.Euler(-Math.PI * 0.5, sideTwist, Math.PI, 'XYZ'))
-        .multiply(handBindQuaternion.clone().invert());
-      this.humanoid?.note(`${side} hand grip uses the shipped rig's hand axes: no index, middle and little proximal bones`);
+    // Grip → hand from the rig's own palm frame, so it holds for any hand bone
+    // axes. Without finger bones the palm is estimated from the forearm and the
+    // avatar's forward (about 12° off on the shipped rig), and the report says so.
+    let palmInHand = this.computePalmInHand(side, hand);
+    if (!palmInHand) {
+      palmInHand = this.estimatePalmInHand(hand, foreArm);
+      this.humanoid?.note(`${side} hand grip estimated from the forearm: no index, middle and little proximal bones`);
     }
+    if (!palmInHand) return undefined;
+    const handGripRotationOffset = GRIP_TO_PALM[side].clone().multiply(palmInHand.clone().invert());
 
     return {
       side,

@@ -56,6 +56,8 @@ export interface FixtureExpect {
   /** Upper arms point this many degrees below horizontal (in the world XY plane) in the node TRS rest pose. */
   readonly armBelowHorizontalDegrees?: number;
   readonly notes: string;
+  /** The required bones resolve and none of the 30 finger bones do (fingers off, grip estimated). */
+  readonly noFingers?: boolean;
 }
 
 export interface FixtureInfo {
@@ -662,6 +664,18 @@ const BUILDERS: Record<string, (ctx: Ctx) => Built> = {
     };
   },
 
+  'no-fingers': (ctx) => {
+    const built = BUILDERS['reoriented-axes']!(ctx);
+    let digit = 0;
+    renameJoints(ctx, (name) => (/Hand(Thumb|Index|Middle|Ring|Pinky)\d/.test(name) ? `digit_${digit++}` : name));
+    return {
+      kind: 'geometric',
+      expect: {
+        ...built.expect, resolvesAll: false, noFingers: true,
+        notes: 'reoriented-axes with every finger joint named `digit_<n>`: no palm frame, so the grip is estimated from the forearm'
+      }
+    };
+  },
   'duplicate-names': (ctx) => {
     addDuplicateNameProp(ctx);
     return {

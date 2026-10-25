@@ -30,7 +30,8 @@ import {
 
 const APP_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
-const OUT_DIR = join(APP_ROOT, 'output', 'ci-avatars');
+// Its own directory: the in-app avatars check keeps its evidence in output/ci-avatars.
+const OUT_DIR = join(APP_ROOT, 'output', 'ci-avatar-bindings');
 const FIXTURE_DIR = join(OUT_DIR, 'fixtures');
 const RERUN_DIR = join(OUT_DIR, 'fixtures-rerun');
 const VERTEX_SAMPLE = 2000;
@@ -255,6 +256,9 @@ async function main(): Promise<void> {
     if (e.resolvesAll) {
       if (mapping.missingRequired.length) fail(`missing required: ${mapping.missingRequired.join(',')}`);
       if (missingFingers.length) fail(`missing fingers: ${missingFingers.join(',')}`);
+    } else if (e.noFingers) {
+      if (mapping.missingRequired.length) fail(`missing required: ${mapping.missingRequired.join(',')}`);
+      if (missingFingers.length !== FINGER_BONES.length) fail(`expected no finger bones, got ${FINGER_BONES.length - missingFingers.length}`);
     } else if (fx.kind === 'negative' && e.source === 'none') {
       if (mapping.missingRequired.length !== VRM_REQUIRED_BONES.length) fail(`expected all 15 required missing, got ${mapping.missingRequired.length}`);
       if (Object.keys(mapping.bones).length) fail(`expected no bones, got ${Object.keys(mapping.bones).length}`);

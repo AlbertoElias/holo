@@ -61,18 +61,24 @@ export function normalizeBoneName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-const PREFIXES = [/^mixamorig\d*/, /^armature/, /^xrfullbodyjoint/, /^xrbodyjoint/];
+// Stripped repeatedly in any order (`Armature|mixamorig:Hips`). `fullbody`
+// is Meta's Unity skeleton (`FullBody_Hips`), `character<n>` HumanIK's.
+const PREFIXES = [/^mixamorig\d*/, /^armature/, /^xrfullbodyjoint/, /^xrbodyjoint/, /^fullbody/, /^character\d*/];
 const SUFFIXES = [/(fb|meta)$/];
 
 /** Keys to try for one normalized name, most specific first. */
 function lookupKeys(normalized: string): string[] {
   const keys = new Set<string>([normalized]);
   let stripped = normalized;
-  for (const re of PREFIXES) stripped = stripped.replace(re, "");
+  for (let previous = ""; previous !== stripped; ) {
+    previous = stripped;
+    for (const re of PREFIXES) stripped = stripped.replace(re, "");
+  }
   keys.add(stripped);
   if (normalized.startsWith("xr")) for (const re of SUFFIXES) keys.add(stripped.replace(re, ""));
-  // Blender duplicate suffix: `Hips.001` → `hips001`.
-  for (const key of [...keys]) if (/[a-z]\d{3}$/.test(key)) keys.add(key.slice(0, -3));
+  // Blender duplicate suffix: `Hips.001` → `hips001`, `Spine1.001` → `spine1001`.
+  // Tried after the whole name, so a name that matches as is never loses digits.
+  for (const key of [...keys]) if (/[a-z]\d*\d{3}$/.test(key)) keys.add(key.slice(0, -3));
   keys.delete("");
   return [...keys];
 }
@@ -288,10 +294,13 @@ export function readHumanoidDeclaration(gltfJson: unknown): HumanoidDeclaration 
     }
     return { format, bones };
   };
+  // A malformed declaration falls through to the next one the file carries.
   const holoim = extensions.HOLOIM_humanoid;
-  if (isRecord(holoim)) return fromMap("holoim", holoim.humanBones);
+  const fromHoloim = isRecord(holoim) ? fromMap("holoim", holoim.humanBones) : undefined;
+  if (fromHoloim) return fromHoloim;
   const vrm1 = extensions.VRMC_vrm;
-  if (isRecord(vrm1) && isRecord(vrm1.humanoid)) return fromMap("vrm1", vrm1.humanoid.humanBones);
+  const fromVrm1 = isRecord(vrm1) && isRecord(vrm1.humanoid) ? fromMap("vrm1", vrm1.humanoid.humanBones) : undefined;
+  if (fromVrm1) return fromVrm1;
   const vrm0 = extensions.VRM;
   if (isRecord(vrm0) && isRecord(vrm0.humanoid) && Array.isArray(vrm0.humanoid.humanBones)) {
     const bones: Partial<Record<VrmHumanoidBone, number>> = {};
