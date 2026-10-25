@@ -126,7 +126,8 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     const restingPlay = await play.boundingBox();
     await card.locator(".feed-card-portal").hover({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
-    await page.waitForTimeout(400);
+    // Measure the settled row: on a loaded runner the unfold can outlast any fixed wait.
+    await controls.evaluate((row) => Promise.all(row.getAnimations({ subtree: true }).map((animation) => animation.finished)));
     await expect(controls.getByRole("button", { name: "Free" })).toBeVisible();
     const reachedPlay = await play.boundingBox();
     expect(Math.abs(reachedPlay!.x - restingPlay!.x), "Play does not move as the reach controls come").toBeLessThan(1);

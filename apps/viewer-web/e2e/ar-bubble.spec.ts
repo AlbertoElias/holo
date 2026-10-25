@@ -129,6 +129,9 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
       renderer.xr.enabled = false;
       renderer.setClearColor(0, 0);
       scene.background = null;
+      // The halo is chrome, not recorded geometry: its embers and sparks
+      // (points, not meshes) would count as geometry outside the bubble.
+      scene.traverse((node) => { if (node.userData.holoimChrome === true) node.visible = false; });
       scene.traverse((node) => {
         if (!(node as Mesh).isMesh) return;
         let ancestor: Object3D | null = node;
