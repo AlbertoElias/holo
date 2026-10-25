@@ -96,6 +96,9 @@ importers:
       '@holoim/xr-ui-core':
         specifier: workspace:*
         version: link:../../packages/xr-ui-core
+      '@holoim/xr-ui-iwsdk':
+        specifier: workspace:*
+        version: link:../../packages/xr-ui-iwsdk
       '@holoim/xr-ui-three':
         specifier: workspace:*
         version: link:../../packages/xr-ui-three
@@ -105,6 +108,9 @@ importers:
       '@mediapipe/tasks-vision':
         specifier: 0.10.17
         version: 0.10.17
+      '@pmndrs/pointer-events':
+        specifier: 6.6.29
+        version: 6.6.29
       '@pmndrs/uikit':
         specifier: 1.0.77
         version: 1.0.77(super-three@0.181.0)

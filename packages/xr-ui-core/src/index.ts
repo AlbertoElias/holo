@@ -211,8 +211,8 @@ export function isLifeSize(scale: number): boolean {
   return Math.abs(scale - 1) < LIFE_SIZE_TOLERANCE;
 }
 
-/** The scale chip: "life size" at recorded scale, otherwise the share of it ("62%"). Rescaling is always labelled. */
-export function scaleLabel(scale: number): string {
+/** The viewer's scale chip: "life size" at recorded scale, otherwise the share of it ("62%"); main's `scaleLabel` (scale.ts) reads "1:4". */
+export function scaleChipLabel(scale: number): string {
   return isLifeSize(scale) ? LIFE_SIZE_LABEL : `${Math.round(scale * 100)}%`;
 }
 

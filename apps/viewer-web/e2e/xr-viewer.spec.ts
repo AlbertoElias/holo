@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { waitForIwerRuntime, waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, test } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 
 // The IWSDK immersive viewer (docs/features/viewer-xr-interface.md, steps 2-4):
 // `/vr/:id` and `/ar/:id?shell=iwsdk` mount one IWSDK World with the opened
@@ -504,8 +504,8 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
   await waitForIwerRuntime(page);
   const vrTrigger = page.locator(".vr-trigger-button");
   await expect(vrTrigger).toHaveCount(1, { timeout: 15_000 });
-  await expect(vrTrigger).toHaveAttribute("aria-label", "Step inside");
-  await expect(page.locator(".ar-trigger-button")).toHaveAttribute("aria-label", "View in your room");
+  await expect(vrTrigger.locator("button")).toHaveAttribute("aria-label", "Step inside");
+  await expect(page.locator(".ar-trigger-button button")).toHaveAttribute("aria-label", "View in your room");
 
   const visits: unknown[] = [];
   for (let visit = 1; visit <= 2; visit++) {
@@ -514,6 +514,7 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
     // The portal takes a few seconds to show the figure.
     if (visit === 1) await dwell(page, 3);
     mark(`step-inside-${visit}`);
+    await reachFor(page.locator(".feed-card").first());
     await page.locator(".vr-trigger-button").click();
     await expect(page).toHaveURL(/\/vr\/mock-1$/);
     await enterSession(page, "Step inside", "opaque");
@@ -589,6 +590,7 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   mark("feed-ready");
   await dwell(page);
   mark("step-inside");
+  await reachFor(page.locator(".feed-card").first());
   await page.locator(".vr-trigger-button").click();
   await enterSession(page, "Step inside", "opaque");
   // Scripted control from here on (and no DevUI over the view).
@@ -1101,6 +1103,7 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   await waitForIwerRuntime(page);
   await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
   mark("feed-ready");
+  await reachFor(page.locator('[data-card-id="mock-1"]'));
   await page.locator('[data-card-id="mock-1"] .vr-trigger-button').click();
   await expect(page).toHaveURL(/\/vr\/mock-1$/);
   await enterSession(page, "Step inside", "opaque");
@@ -1321,6 +1324,7 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   await assertViewerShell(page);
   await waitForIwerRuntime(page);
   await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
+  await reachFor(page.locator('[data-card-id="mock-1"]'));
   await page.locator('[data-card-id="mock-1"] .ar-trigger-button').click();
   await expect(page).toHaveURL(/\/ar\/mock-1\?shell=iwsdk$/);
   await enterSession(page, "View in your room", "alpha-blend");
@@ -1409,11 +1413,12 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   await assertViewerShell(page);
   await waitForIwerRuntime(page);
   const arTrigger = page.locator(".ar-trigger-button");
-  await expect(arTrigger).toHaveAttribute("aria-label", "View in your room", { timeout: 15_000 });
+  await expect(arTrigger.locator("button")).toHaveAttribute("aria-label", "View in your room", { timeout: 15_000 });
   await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 15_000 });
   mark("feed-ready");
   await dwell(page, 3);
   mark("view-in-room");
+  await reachFor(page.locator(".feed-card").first());
   await arTrigger.click();
   await expect(page).toHaveURL(/\/ar\/mock-1\?shell=iwsdk$/);
   await enterSession(page, "View in your room", "alpha-blend");

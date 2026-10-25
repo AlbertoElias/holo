@@ -60,8 +60,8 @@ body::before {
 .xr-view-container {
   position: fixed;
   inset: 0;
-  background: linear-gradient(180deg, #0c2228 0%, #17424a 48%, #575f5a 80%, #b8835e 100%);
-  color: #fff6ea;
+  background: linear-gradient(180deg, var(--holoim-ground-flat-stops));
+  color: var(--holoim-color-text);
 }
 
 .xr-view-scene {

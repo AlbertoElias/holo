@@ -1,6 +1,6 @@
 import { createSystem, Grabbed, type Entity } from "@iwsdk/core";
 import { playbackLabel, type HologramControlActions } from "@holoim/xr-ui-core";
-import { FocusRing, FootControls, HandDock, StatusLine, phoneMetresPerApx, targetMetrics, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
+import { AimRays, FocusRing, FootControls, HandDock, StatusLine, configureXrPointers, handPointerIds, phoneMetresPerApx, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
 import { Vector3, type Object3D } from "three";
 
 import { HologramPlayback, restartHologram, seekHologram, setHologramPlaying } from "./hologramPlayback";
@@ -10,7 +10,8 @@ import { focusedRecord, viewerContext, type PlacedHologram } from "./viewerConte
 // The viewer's XR interface (docs/features/viewer-xr-interface.md, steps 3
 // and 4): foot controls at the focused hologram's foot, with the focus ring
 // around its base, the periphery status line, and Exit in the hand dock
-// (headset) or the bottom dock (phone), all from @holoim/xr-ui-iwsdk. The
+// (headset) or the bottom dock (phone), and the gold aim rays, all from
+// @holoim/xr-ui-iwsdk, as capture's VR chrome is (step 5). The
 // foot controls act on the hologram with audio focus and move with it when
 // focus moves. Built when the session starts, removed when it ends.
 
@@ -34,6 +35,8 @@ interface Ui {
   status: StatusLine;
   dock: HandDock;
   ring: FocusRing;
+  /** Headsets only: a phone has no rays. */
+  rays: AimRays | null;
 }
 
 export class HologramControlsSystem extends createSystem() {
@@ -56,10 +59,10 @@ export class HologramControlsSystem extends createSystem() {
   /** Probe readings for the e2e spec. */
   probe(): unknown {
     if (!this.ui) return null;
-    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: this.ui.dock.probe(), ring: this.ui.ring.probe(), boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
+    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: this.ui.dock.probe(), ring: this.ui.ring.probe(), rays: this.ui.rays?.probe().map((ray) => ({ ...ray, hit: ray.hit ? ray.hit.name || ray.hit.type : null })) ?? [], boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
   }
 
-  update(): void {
+  update(delta: number): void {
     const c = viewerContext(this.world);
     if (!this.xrFrame) return;
     if (!this.ui) {
@@ -68,7 +71,9 @@ export class HologramControlsSystem extends createSystem() {
       this.ui = this.build(target);
       c.target = target;
     }
-    const { foot, status, dock, ring } = this.ui;
+    const { foot, status, dock, ring, rays } = this.ui;
+    rays?.update();
+    status.update(delta * 1000);
     // A phone has no hands to grab with; its taps focus, pause and place instead.
     if (this.ui.target !== "ar-phone") {
       for (const placed of c.placed) {
@@ -167,15 +172,22 @@ export class HologramControlsSystem extends createSystem() {
       actions,
       ...(phoneApx !== null ? { metresPerApx: phoneApx, viewportWidthCss: window.innerWidth } : {})
     });
-    const status = new StatusLine(this.world, this.player.head, targetMetrics(target).chipOpacity);
+    // The XR camera carries the head pose (player.head is not oriented in this IWSDK build).
+    const status = new StatusLine(this.world, this.camera);
     const exit = { id: "exit", glyph: "exit" as const, label: "Exit", onSelect: () => this.options.exit() };
     const dock = target === "ar-phone"
       ? new HandDock(this.world, { kind: "phone", camera, verticalFovRad: fovy, viewportHeightCss: window.innerHeight, viewportWidthCss: window.innerWidth }, [exit])
       // Handedness defaults to right, so the dock sits on the left hand or controller.
-      : new HandDock(this.world, { kind: "hand", space: this.player.gripSpaces.left, ownPointerIds: this.handPointerIds("left") }, [exit]);
+      : new HandDock(this.world, { kind: "hand", space: this.player.gripSpaces.left, ownPointerIds: handPointerIds(this.world, "left") }, [exit]);
+    let rays: AimRays | null = null;
+    if (target !== "ar-phone") {
+      configureXrPointers(this.world);
+      rays = new AimRays(this.world);
+      this.world.scene.add(rays.group);
+    }
     this.placedSequence = -1;
     this.boundTo = null;
-    return { target, foot, status, dock, ring: new FocusRing(this.world.activeLevel.value.object3D!) };
+    return { target, foot, status, dock, ring: new FocusRing(this.world.activeLevel.value.object3D!), rays };
   }
 
   /**
@@ -197,15 +209,6 @@ export class HologramControlsSystem extends createSystem() {
     return view?.projectionMatrix[5] ?? this.camera.projectionMatrix.elements[5]!;
   }
 
-  /** IWSDK keeps each hand's ray, grab and touch pointers private; their ids are read at runtime. */
-  private handPointerIds(hand: "left" | "right"): number[] {
-    const pointers = this.input.xr.multiPointers[hand] as unknown as Partial<Record<"ray" | "grab" | "touch", { pointer?: { id?: number } }>>;
-    return (["ray", "grab", "touch"] as const).flatMap((kind) => {
-      const id = pointers[kind]?.pointer?.id;
-      return typeof id === "number" ? [id] : [];
-    });
-  }
-
   private trackedHands(): Object3D[] {
     const session = this.xrManager.getSession();
     if (!session) return [];
@@ -222,6 +225,7 @@ export class HologramControlsSystem extends createSystem() {
     this.ui.status.dispose();
     this.ui.dock.dispose();
     this.ui.ring.dispose();
+    this.ui.rays?.dispose();
     this.ui = null;
   }
 }

@@ -1,17 +1,19 @@
-import { Follower, FollowBehavior, UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
-import { Vector3, type Object3D } from "three";
+import { tokens } from "@holoim/design-tokens";
+import { startLazyFollow, stepLazyFollow, type LazyFollow } from "@holoim/xr-ui-core";
+import { UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
+import { Euler, MathUtils, Quaternion, Vector3, type Object3D } from "three";
 
 import { FONT_FAMILIES, FONT_FAMILY } from "./fonts.js";
-import { CHIP, COLOR, HEADSET_SCALE, TYPE, metresPerApx, withAlpha } from "./tokens.js";
+import { COLOR, HEADSET_SCALE, TYPE, metresPerApx } from "./tokens.js";
 
 // The periphery status line (styleguide §1.2): the one thing that follows the
-// head, lazily (IWSDK Follower), at the upper edge of view. It shows state
-// such as "Recording 0:12" or "Paused · 0:08" and never holds a control: it
-// is not interactable and takes no pointer events.
+// head, lazily, at the upper edge of view: 1.5 m away, 20° above the line of
+// sight, staying put until the head turns more than 20° from it, then easing
+// back (240 ms) until it is within 1° (`stepLazyFollow`). It shows state such
+// as "Recording 0:12" or "Paused · 0:08", bare in both apps (the user,
+// 2026-10-25), and never holds a control: it takes no pointer events.
 
-/** Ahead and up from the eyes: 1 m away or more, so its text is readable (§7.3). */
-const OFFSET: [number, number, number] = [0, 0.32, -1.4];
-const DISTANCE_M = Math.hypot(OFFSET[1], OFFSET[2]);
+const DISTANCE_M = tokens.placement.statusLine.distanceM;
 
 export interface StatusLineProbe {
   visible: boolean;
@@ -19,6 +21,12 @@ export interface StatusLineProbe {
   worldPosition: [number, number, number];
   interactive: boolean;
 }
+
+const headPosition = new Vector3();
+const headQuaternion = new Quaternion();
+const headScale = new Vector3();
+const headEuler = new Euler();
+const direction = new Vector3();
 
 export class StatusLine {
   readonly entity: Entity;
@@ -28,8 +36,9 @@ export class StatusLine {
   private readonly separator: InstanceType<typeof UIKit.Container>;
   private readonly body: InstanceType<typeof UIKit.Text>;
   private current = "";
+  private follow: LazyFollow | null = null;
 
-  constructor(world: World, head: Object3D, chipOpacity: number) {
+  constructor(world: World, private readonly head: Object3D) {
     const s = HEADSET_SCALE;
     const text = (): InstanceType<typeof UIKit.Text> =>
       new UIKit.Text({ text: "", fontSize: TYPE.timecode.size * s, fontWeight: TYPE.timecode.weight, color: COLOR.textMuted, wordBreak: "keep-all", flexShrink: 0, pointerEvents: "none" });
@@ -40,12 +49,6 @@ export class StatusLine {
       flexDirection: "row",
       alignItems: "center",
       gap: 4 * s,
-      paddingTop: CHIP.paddingBlock * s,
-      paddingBottom: CHIP.paddingBlock * s,
-      paddingLeft: CHIP.paddingInline * s,
-      paddingRight: CHIP.paddingInline * s,
-      borderRadius: CHIP.radius * s,
-      backgroundColor: withAlpha(COLOR.deepSea, chipOpacity),
       pointerEvents: "none"
     });
     this.prefix = text();
@@ -57,7 +60,6 @@ export class StatusLine {
     this.entity.object3D!.name = "StatusLine";
     this.entity.object3D!.add(this.document);
     this.entity.object3D!.visible = false;
-    this.entity.addComponent(Follower, { target: head, offsetPosition: OFFSET, behavior: FollowBehavior.FaceTarget });
   }
 
   /** Shows "prefix · body", or hides the line when there is nothing to report. */
@@ -69,6 +71,30 @@ export class StatusLine {
     this.prefix.setProperties({ text: state.prefix ?? "", display: state.prefix ? "flex" : "none" });
     this.separator.setProperties({ display: state.prefix ? "flex" : "none" });
     this.body.setProperties({ text: state.body });
+  }
+
+  /** One frame of the lazy follow, in world space around the head, facing it. */
+  update(dtMs: number): void {
+    this.head.updateWorldMatrix(true, false);
+    this.head.matrixWorld.decompose(headPosition, headQuaternion, headScale);
+    headEuler.setFromQuaternion(headQuaternion, "YXZ");
+    const yaw = MathUtils.radToDeg(headEuler.y);
+    const pitch = MathUtils.radToDeg(headEuler.x);
+    this.follow = this.follow === null ? startLazyFollow(yaw, pitch) : stepLazyFollow(this.follow, yaw, pitch, dtMs);
+    const yawRad = MathUtils.degToRad(this.follow.yaw);
+    const pitchRad = MathUtils.degToRad(this.follow.pitch);
+    direction.set(-Math.sin(yawRad) * Math.cos(pitchRad), Math.sin(pitchRad), -Math.cos(yawRad) * Math.cos(pitchRad));
+    const object = this.entity.object3D!;
+    const world = headPosition.addScaledVector(direction, DISTANCE_M);
+    object.parent?.updateWorldMatrix(true, false);
+    object.position.copy(object.parent ? object.parent.worldToLocal(world) : world);
+    this.head.getWorldPosition(headPosition);
+    object.lookAt(headPosition);
+  }
+
+  /** Starts the follow afresh, straight ahead of the head (a new session). */
+  reset(): void {
+    this.follow = null;
   }
 
   probe(): StatusLineProbe {

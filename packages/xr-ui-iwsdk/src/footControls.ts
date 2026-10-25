@@ -3,7 +3,7 @@ import {
   createAttentionState,
   elapsedTotalLabel,
   playbackLabel,
-  scaleLabel,
+  scaleChipLabel,
   updateAttention,
   type AttentionReading,
   type AttentionState,
@@ -475,7 +475,7 @@ export class FootControls {
     this.strings.elapsedTotal = still ? "" : elapsedTotalLabel(state);
     this.setText(this.elapsedTotalText, "elapsedTotal", this.strings.elapsedTotal);
     this.elapsedTotalText.setProperties({ opacity: reach * labels });
-    this.strings.scale = scaleLabel(state.scale);
+    this.strings.scale = scaleChipLabel(state.scale);
     this.setText(this.scaleText, "scale", this.strings.scale);
     this.scaleText.setProperties({ opacity: reach * labels });
 

@@ -20,6 +20,9 @@ interface FrameLoopDeps {
   // Reads this frame's device input inside the XR frame callback, before any
   // simulation, so nothing keeps the frame object past it.
   acquire: (frame: XRFrame | undefined) => void;
+  // Samples IWSDK's XR input and runs its pointers on this XR frame, for a
+  // frame that does not step (the manual clock): see `holdXrInputBetweenFrames`.
+  sampleInput: (deltaSec: number, timeSec: number) => void;
   // Draws, or only applies a draw's camera and matrix updates, after a step.
   present: (draw: boolean) => void;
   // Assets loaded: a step presents only then.
@@ -91,7 +94,9 @@ export class FrameLoop {
       this.step(Math.min(deltaSec, MAX_FRAME_STEP_SEC), this.frameSteppingDraws);
     } else if (this.manualClock) {
       // Simulation waits for advanceTime. The frame still applies render()'s
-      // camera updates, so results do not depend on drawing.
+      // camera updates, so results do not depend on drawing, and runs the
+      // chrome's pointers, which need the frame.
+      this.deps.sampleInput(deltaSec, this.clock.elapsedTime);
       this.deps.present(this.manualDraws);
     } else {
       this.step(deltaSec, true);

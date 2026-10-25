@@ -5,3 +5,6 @@ export * from "./statusLine.js";
 export * from "./handDock.js";
 export * from "./galleryShelf.js";
 export * from "./focusRing.js";
+export * from "./worldPanel.js";
+export * from "./aimRays.js";
+export * from "./pointers.js";

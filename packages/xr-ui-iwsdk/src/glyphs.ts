@@ -78,8 +78,9 @@ export interface GlyphElement {
 /**
  * A glyph as a UIKit Content element of `size` apx. With `ring`, it is drawn
  * inside the 36 apx gold ring at `innerSize` apx, as Play and Record are.
+ * With `fill`, the drawing keeps that colour through hover (Record's rose).
  */
-export function createGlyph(name: GlyphName, options: { size: number; color: string; ring?: { innerSize: number; color?: string } }): GlyphElement {
+export function createGlyph(name: GlyphName, options: { size: number; color: string; ring?: { innerSize: number; color?: string }; fill?: string }): GlyphElement {
   const materials: MeshBasicMaterial[] = [];
   const meshes: Mesh[] = [];
   const box = options.ring ? GLYPH.ring : GLYPH.icon;
@@ -116,7 +117,7 @@ export function createGlyph(name: GlyphName, options: { size: number; color: str
     const scale = inner / GLYPH.icon;
     const offset = (box - inner) / 2;
     // Stroke width stays GLYPH.stroke apx whatever the glyph's drawn size.
-    for (const geometry of glyphGeometries(GLYPHS[glyph], GLYPH.stroke / scale)) addMesh(geometry, currentColor, offset, scale);
+    for (const geometry of glyphGeometries(GLYPHS[glyph], GLYPH.stroke / scale)) addMesh(geometry, options.fill ?? currentColor, offset, scale);
     drawingMeshes = meshes.slice(before);
     for (const material of materials) material.opacity = currentOpacity;
   };
@@ -134,7 +135,8 @@ export function createGlyph(name: GlyphName, options: { size: number; color: str
     setColor(color) {
       if (color === currentColor) return;
       currentColor = color;
-      for (const mesh of drawingMeshes) (mesh.material as MeshBasicMaterial).color.set(color);
+      // A drawing in its own colour (Record's rose) keeps it; only the ring brightens.
+      if (!options.fill) for (const mesh of drawingMeshes) (mesh.material as MeshBasicMaterial).color.set(color);
       // The ring brightens with its glyph on hover (§6 states), unless it has its own colour.
       if (ringMesh && !options.ring?.color) (ringMesh.material as MeshBasicMaterial).color.set(color);
     },
