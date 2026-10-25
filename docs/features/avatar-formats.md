@@ -178,21 +178,27 @@ That is honest degradation and keeps the XR recording outcome intact.
 
 ## Acceptance criteria (slice 1)
 
-- [ ] **Bind:** every fixture except the negative ones resolves every
+- [x] **Bind:** every fixture except the negative ones resolves every
   required VRM bone and all 30 finger bones. The binding reports are checked
   in Node, without a browser.
-- [ ] **Shipped avatar unchanged:** its binding report is stable, and its
+- [x] **Shipped avatar unchanged:** its binding report is stable, and its
   existing hand, body, face, object and height checks pass with reports
   within their current thresholds.
-- [ ] **Hand replay:** the recorded headset hand replay passes
+- [x] **Hand replay:** the recorded headset hand replay passes
   `lib/hand-fidelity.ts` thresholds unchanged on the geometric fixtures
   (re-oriented, A-pose, −Z, Z-up) and the cm-scale Unreal fixture.
-- [ ] **Body replay:** the `walk-forward` body replay passes
+- [x] **Body replay:** the `walk-forward` body replay passes
   `lib/body-fidelity.ts` thresholds unchanged on the same fixtures, including
-  crouch.
-- [ ] **Face and objects:** face gaze and the object grip work on the
-  re-oriented Unreal fixture (the existing face and object checks run with
-  `?avatar=`).
+  crouch. Added in implementation: every non-negative fixture's standing and
+  desktop-crouched bones (the crouch pose, which runs without body tracking)
+  land within 1.5 cm of the shipped avatar's, because the VR body replay
+  never exercises the crouch pose.
+- [x] **Face and objects:** face gaze and the object grip work on non-RPM
+  rigs (the existing face and object checks run with `?avatar=`). Amended:
+  the Unreal fixture has no eye bones, so gaze has nothing to turn there; the
+  face check runs on the VRM 0.x −Z fixture instead (non-RPM, with eyes, and
+  through the facing correction). The object grip runs on the re-oriented and
+  the Unreal fixtures.
 - [ ] **Export → upload → render:** an export from a non-RPM fixture keeps
   its source names and carries `HOLOIM_humanoid`. Through the real pipeline,
   the feed card and AR viewer find its hips and head, and `HOLOIM_meaning`
@@ -200,12 +206,12 @@ That is honest degradation and keeps the XR recording outcome intact.
   today.
 - [ ] **Facing:** an exported −Z fixture renders facing the same way as its
   recording in the feed and AR, judged from a numeric yaw in the report.
-- [ ] **Duplicate names:** a fixture with duplicate bone names exports
+- [x] **Duplicate names:** a fixture with duplicate bone names exports
   without losing tracks.
-- [ ] **Unmappable rig:** the unmappable fixture loads without throwing. Its
+- [x] **Unmappable rig:** the unmappable fixture loads without throwing. Its
   report lists the missing bones and disabled features, and one console
   warning names them.
-- [ ] **No pose reset:** no `skeleton.pose()` call exists in capture or
+- [x] **No pose reset:** no `skeleton.pose()` call exists in capture or
   viewer-web.
 
 ## Failure cases considered
@@ -283,15 +289,31 @@ which moves the viewer's anchor lookup. The viewer step is sequenced after it.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Bind (all fixtures) | Node check: generate fixtures, run the resolver on each | `output/ci-avatars/<fixture>-binding.json` — pending |
-| Re-orientation is exact | Node check: skinned vertices before and after, to 1e-5 | same report — pending |
-| Shipped avatar unchanged | `pnpm run test:xr:capture` | existing reports — pending |
-| Hand and body replay on geometric fixtures | New `avatars` XR check | `<fixture>-hand-report.json`, `<fixture>-body-report.json` — pending |
-| Face and objects on a non-RPM rig | `test:xr:face` and object check with `?avatar=` | face and object reports — pending |
-| Export → upload → render, facing, meaning anchors | Pipeline spec on a non-RPM and a −Z fixture, plus the unchanged spec | Playwright report — pending |
-| Duplicate names; unmappable rig | `avatars` check | binding and export reports, console capture — pending |
-| No `skeleton.pose()` | Guard in the `avatars` Node check | pending |
-| No regression | `pnpm run verify:xr`, `pnpm run test:smoke:pipeline`, `pnpm run verify:pr` | pending |
+| Bind (all fixtures) | `pnpm --filter @holoim/capture run test:avatars:bind` (Node) | `output/ci-avatars/<fixture>-binding.json`; 15/15 pass, fixtures byte-identical across two generations |
+| Re-orientation is exact | Same check: skinned vertices before and after | max vertex error ≤ 1.5e-7 m |
+| Shipped avatar unchanged | `pnpm --filter @holoim/capture run test:xr` | all 9 checks pass on the final code |
+| In-app binding, facing, crouch pose | `pnpm --filter @holoim/capture run test:xr:avatars` | `output/ci-avatars/<fixture>-humanoid.json`, `avatars-report.json`; worst pose difference 0.92 cm (`unreal-cm`), every other fixture 0 cm; −Z fixture corrected by 180° yaw |
+| Hand and body replay on geometric fixtures | Same check (re-oriented, A-pose, T-pose, −Z, Z-up, Unreal cm) | `output/ci-avatars/<fixture>/{hands,body}/*-report.json`; all pass unchanged thresholds |
+| Face and objects on a non-RPM rig | Same check: face on `vrm0-minus-z` (Quest Pro server), objects on `reoriented-axes` and `unreal-cm` | `output/ci-avatars/<fixture>/{face,object}/`; pass |
+| `HOLOIM_humanoid` export; duplicate names | Same check: export from `vrm0-minus-z`, `unreal-cm`, `duplicate-names` | declares every required bone on the fixture's own node names; no node path animated twice; hips animated |
+| Unmappable rig | Same check | 15 missing bones; crouch, body solver and arm IK reported off; exactly one `[avatar]` warning |
+| No `skeleton.pose()` | Guard in `test:avatars:bind` | pass |
+| Export → upload → render, facing, meaning anchors in viewer-web | Pipeline spec on a non-RPM and a −Z fixture, plus the unchanged spec | pending: viewer step waits on `feature/viewer-xr-interface` |
+| No regression | `pnpm run verify:pr` | doctor, check:all, every unit suite, build:all, knowledge, smoke pipeline (8/8, with the USD converter installed) pass; `test:portal` fails one spec that fails identically on `main` (B-022); `test:xr:smoke` (run separately after it) passes |
+
+Defects the checks found during implementation, all fixed:
+
+- The face and crouch used the `HumanoidFacing` node's frame as the
+  avatar's +Z-forward frame. That node's own frame is the file's; its parent
+  is the corrected one. On the −Z fixture the eyes turned the wrong way and
+  the crouch folded the body 73 cm off (proved by reverting the fix under
+  the new pose comparison).
+- `FaceRig` measured the eye pivot from skinned vertices without the skin,
+  so a rest pose that differs from the inverse binds put it 22 cm off.
+- Rigs without eye bones (Unreal, Biped) had no viewpoint anchor and turned
+  the body solver off; the anchor is now estimated from the head.
+- The object check found the hand in the export by the RPM name; it now
+  reads `HOLOIM_humanoid` first.
 
 ## Physical-device limits
 
@@ -302,3 +324,30 @@ skins or quirks. A real Mixamo download and a real VRM model are checked by
 hand in the proof video (not committed). Their names and hashes are recorded
 here when run. Hand and body feel on a physical headset stays with the
 existing device checks in `HANDOFF.md`.
+
+A rig whose rest pose is a T-pose stands with its arms out on desktop
+(seen in the proof video): without tracking, the arms keep the rest pose,
+and the clips' arm tracks are slice 2's T-pose correction. In XR the arm IK
+drives the arms from the measured bind pose, so recordings are unaffected.
+
+## Handoff state (2026-10-25)
+
+- Capture side of slice 1 is done, verified and pushed on
+  `feature/avatar-formats` (`db9207e`): resolver, routed lookups, axis
+  fixes, facing, `HOLOIM_humanoid` export, fixtures, `test:avatars:bind` and
+  `test:xr:avatars`.
+- Exports with `HOLOIM_humanoid` upload, render and convert to USDZ as
+  today (smoke pipeline; direct conversion of the −Z, Unreal and
+  duplicate-names exports). The converter lists the extension under its
+  generic "core-material fallback" message, as it does for
+  `KHR_lights_punctual`.
+- Environment: this container's Python lacks `usd-core`, so the smoke
+  pipeline's USDZ step needs `USDZ_PYTHON` pointing at a venv with
+  `usd-core pygltflib numpy pillow`.
+- Remaining for slice 1: the viewer-web anchors (`HOLOIM_humanoid`, then
+  the resolver, then legacy names) and the pipeline spec on a non-RPM and a
+  −Z export, after `feature/viewer-xr-interface` merges (still open on
+  2026-10-25). Then a real Mixamo and VRM file by hand, and merge.
+- Not merged to `main`: the slice ships as one change once the viewer step
+  lands.
+
