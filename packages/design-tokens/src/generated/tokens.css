@@ -150,6 +150,16 @@ docs/product/design/tokens.json. Do not edit; run `pnpm --filter @holoim/design-
   --holoim-edge-cloche-inside-fade-from: 1.6;
   --holoim-edge-cloche-inside-fade-to: 1.05;
   --holoim-edge-cloche-shade-scale: 1.15;
+  --holoim-edge-cloche-quick-look-front-radius: 0.0021;
+  --holoim-edge-cloche-quick-look-cream-share: 0.25;
+  --holoim-edge-cloche-quick-look-char-share: 0.65;
+  --holoim-edge-cloche-quick-look-tear-min: 0.08;
+  --holoim-edge-cloche-quick-look-front-glow: 0.9;
+  --holoim-edge-cloche-quick-look-cream-glow: 0.6;
+  --holoim-edge-cloche-quick-look-samples: 110;
+  --holoim-edge-cloche-quick-look-embers: 800;
+  --holoim-edge-cloche-quick-look-ember-scale: 0.7;
+  --holoim-edge-cloche-quick-look-ember-glow: 1;
   --holoim-glyph-stroke: 1.5px;
   --holoim-glyph-icon: 16px;
   --holoim-glyph-ring: 36px;

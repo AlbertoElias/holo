@@ -3,7 +3,8 @@
 
 Usage: inspect_usdz.py source.glb result.usdz report.json
 Requires the converter's pinned requirements.txt and ffprobe for audio recordings.
-No converter code is imported. Source matrices use column vectors; USD evaluation
+No converter code is imported; the cloche's fit rules come from cloche.py, the
+port held to @holoim/xr-ui-core by golden vectors. Source matrices use column vectors; USD evaluation
 uses UsdSkel.Cache and BlendShapeQuery, rather than counting authored attributes.
 This validates package data, not Apple rendering or physical phone playback.
 """
@@ -24,6 +25,9 @@ import zipfile
 import numpy as np
 from PIL import Image
 from pxr import Usd, UsdGeom, UsdMedia, UsdShade, UsdSkel, Vt
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cloche as cloche_rules  # noqa: E402
 
 
 class Source:
@@ -177,6 +181,12 @@ class Source:
         return self.view(image["bufferView"]) if "bufferView" in image else base64.b64decode(image["uri"].split(",", 1)[1])
 
 
+def _ancestors(prim):
+    while prim:
+        yield prim
+        prim = prim.GetParent()
+
+
 class Inspection:
     def __init__(self, source_path, usdz_path):
         self.source = Source(source_path)
@@ -235,7 +245,7 @@ class Inspection:
         for prim in self.stage.Traverse():
             if prim.IsA(UsdGeom.Xform) and prim.GetCustomDataByKey("gltfNodeIndex") is not None:
                 nodes[prim.GetCustomDataByKey("gltfNodeIndex")] = prim
-            if prim.IsA(UsdGeom.Mesh) and not prim.GetCustomDataByKey("quickLookBackFaces"):
+            if prim.IsA(UsdGeom.Mesh) and not prim.GetCustomDataByKey("quickLookBackFaces") and not prim.GetCustomDataByKey("quickLookCloche"):
                 meshes.append(prim)
             if prim.IsA(UsdSkel.Skeleton):
                 skeletons.append(prim)
@@ -363,7 +373,8 @@ class Inspection:
                 else:
                     matrix = np.array(UsdGeom.XformCache(frame).GetLocalToWorldTransform(prim)).T
                 actual = (matrix @ np.column_stack((np.array(points), np.ones(len(points)))).T).T[:, :3]
-                self.bounds(actual)
+                if mesh.ComputeVisibility(frame) != "invisible":
+                    self.bounds(actual)
                 expected = source.points(index, primitive, time, source.worlds(time))
                 max_vertex = max(max_vertex, self.close(actual, expected, 3e-3, f"mesh {index}/{pindex} evaluated vertices"))
                 if first is None:
@@ -371,6 +382,8 @@ class Inspection:
                 movement = max(movement, float(np.max(np.linalg.norm(actual-first, axis=1))) if len(actual) else 0)
             entry.update({"maximumEvaluatedVertexErrorMeters": max_vertex, "maximumMorphWeightError": max_weight, "maximumVertexMotionMeters": movement, "morphTargetCount": len(primitive.get("targets", [])), "skinned": "skin" in node})
             self.report["geometry"].append(entry)
+
+    def framing(self):
         extent = UsdGeom.Boundable(self.stage.GetDefaultPrim()).GetExtentAttr().Get()
         self.check(extent is not None and np.array(extent).shape == (2, 3), "Root lacks an explicit animation-wide framing extent")
         if extent is not None and np.array(extent).shape == (2, 3):
@@ -378,6 +391,129 @@ class Inspection:
             self.check(np.all(extent[0] <= self.evaluated_min+1e-3) and np.all(extent[1] >= self.evaluated_max-1e-3), "Root framing extent excludes evaluated animation vertices")
             self.check(np.all(extent[1]-extent[0] <= (self.evaluated_max-self.evaluated_min)*1.02+.05), "Root framing extent is oversized versus evaluated vertices")
             self.report["framing"] = {"authoredExtent": extent.tolist(), "evaluatedMinimum": self.evaluated_min.tolist(), "evaluatedMaximum": self.evaluated_max.tolist()}
+
+    def cloche(self):
+        """The baked burnt globe (styleguide 3.4, 9.5): present, refitted here
+        from independently evaluated source points by the viewer's rules, its
+        fronts on the seeded burn's zero level, its embers the viewer's,
+        matte and emissive, replacing the bubble's shell."""
+        source, stage = self.source, self.stage
+        group = stage.GetPrimAtPath("/Root/Cloche")
+        self.check(group.IsValid(), "Cloche missing from the preview")
+        if not group.IsValid():
+            return
+        data = group.GetCustomDataByKey("quickLookCloche") or {}
+        seed = data.get("seed")
+        self.check(isinstance(seed, str) and data.get("seedOffset") == cloche_rules.seed_offset(seed), "Cloche seed offset does not follow its seed")
+        fps = stage.GetTimeCodesPerSecond()
+        duration = stage.GetEndTimeCode() / fps if max(source.keys) > 0 else 0
+        worlds = source.worlds(0)
+        center = radius = None
+        if source.bubble is not None:
+            node = source.doc["nodes"][source.bubble]
+            primitive = source.doc["meshes"][node["mesh"]]["primitives"][0]
+            center = worlds[source.bubble][:3, 3]
+            radius = float(np.linalg.norm(source.accessor(primitive["attributes"]["POSITION"]), axis=1).max() * np.linalg.norm(worlds[source.bubble][:3, :3], axis=0).max())
+        inside = (lambda point: np.linalg.norm(point - center) <= radius) if center is not None else (lambda point: True)
+        drawn, moving, shells = [], [], []
+        for prim in stage.Traverse():
+            if not prim.IsA(UsdGeom.Mesh) or prim.GetCustomDataByKey("quickLookBackFaces") or prim.GetCustomDataByKey("quickLookCloche"):
+                continue
+            mesh = UsdGeom.Mesh(prim)
+            index, pindex = prim.GetCustomDataByKey("gltfNodeIndex"), prim.GetCustomDataByKey("gltfPrimitiveIndex")
+            if index == source.bubble:
+                shells.append(mesh)
+                continue
+            original = mesh.GetPointsAttr().Get()
+            if not original or mesh.ComputeVisibility() == "invisible":
+                continue
+            node = source.doc["nodes"][index]
+            if prim.GetCustomDataByKey("quickLookClippedEnvironment"):
+                matrix = np.array(UsdGeom.XformCache(0).GetLocalToWorldTransform(prim)).T
+                points = (matrix @ np.column_stack((np.array(original), np.ones(len(original)))).T).T[:, :3]
+            else:
+                points = source.points(index, source.doc["meshes"][node["mesh"]]["primitives"][pindex], 0, worlds)
+            if "skin" not in node and any(ancestor.IsA(UsdGeom.Xformable) and UsdGeom.Xformable(ancestor).TransformMightBeTimeVarying() for ancestor in _ancestors(prim)):
+                moving.append((index, np.array(original)))
+            drawn.extend(point for point in points[::max(1, len(points) // 3000)] if inside(point))
+        joints = sorted({index for prim in stage.Traverse() if prim.IsA(UsdSkel.Skeleton) for index in prim.GetCustomDataByKey("gltfJointNodeIndices") or []})
+        if duration > 0:
+            first = {}
+            for sample in range(8):
+                worlds = source.worlds(duration * sample / 8)
+                top = None
+                for index in joints:
+                    point = worlds[index][:3, 3]
+                    drawn.append(point)
+                    if top is None or point[1] > top[1]:
+                        top = point
+                if top is not None:
+                    drawn.append(top + np.array([0, 0.18, 0]))
+                for index, original in moving:
+                    if index not in first:
+                        first[index] = worlds[index]
+                        continue
+                    if np.allclose(first[index], worlds[index], atol=1e-9):
+                        continue
+                    lower, upper = original.min(axis=0), original.max(axis=0)
+                    for i in range(8):
+                        corner = np.array([upper[0] if i & 1 else lower[0], upper[1] if i & 2 else lower[1], upper[2] if i & 4 else lower[2], 1])
+                        point = (worlds[index] @ corner)[:3]
+                        if inside(point):
+                            drawn.append(point)
+        shape = cloche_rules.fit_cloche([[float(c) for c in point] for point in drawn])
+        self.check(shape is not None, "Cloche baked for a hologram that draws nothing")
+        if shape is None:
+            return
+        recorded_base, recorded_radii = np.array(data.get("base", (np.nan,) * 3)), np.array(data.get("radii", (np.nan,) * 3))
+        self.close(recorded_base, shape["base"], 5e-3, "Cloche foot")
+        self.close(recorded_radii, shape["radii"], 5e-3 * max(shape["radii"]), "Cloche radii")
+        translate = np.array(UsdGeom.XformCache(0).GetLocalToWorldTransform(group)).T[:3, 3]
+        self.close(translate, recorded_base, 1e-6, "Cloche placement")
+        n, radii = shape["exponent"], recorded_radii
+        local = {"radii": [float(r) for r in recorded_radii], "exponent": n, "base": [0.0, 0.0, 0.0]}
+        offset = data.get("seedOffset", 0.0)
+        front_radius = float(data.get("frontRadius", 0))
+        ember_reach = cloche_rules.token("edge.cloche.emberSpread") * max(local["radii"]) + float(data.get("emberSize", 0))
+        entry = {"seed": seed, "seedOffset": offset, "form": data.get("form"), "base": recorded_base.tolist(), "radii": recorded_radii.tolist(), "refitBase": shape["base"], "refitRadii": shape["radii"], "fitPoints": len(drawn), "fronts": data.get("fronts"), "frontVertices": data.get("frontVertices"), "embers": data.get("embers"), "parts": {}}
+        names, ember_centres = set(), []
+        for prim in group.GetChildren():
+            mesh = UsdGeom.Mesh(prim)
+            name = prim.GetName()
+            points = np.array(mesh.GetPointsAttr().Get())
+            names.add(name)
+            self.bounds(points + translate)
+            self.check(prim.GetCustomDataByKey("gltfNodeIndex") is None, f"Cloche part {name} claims a GLB node")
+            # Every vertex rides the dome: fronts within a few tube radii, embers within their spread.
+            scale = (np.abs(points / radii) ** n).sum(axis=1) ** (1 / n)
+            off = float(np.max(np.abs(scale - 1) * min(radii))) if len(points) else 0
+            reach = ember_reach if name.startswith("Embers") else 2.5 * front_radius
+            self.check(off <= reach + 1e-4, f"Cloche part {name} leaves the dome by {off:.4f} m")
+            self.check(float(points[:, 1].min()) >= -reach - 1e-4, f"Cloche part {name} sinks below the foot")
+            bound, _ = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial()
+            surface = UsdShade.Shader(stage.GetPrimAtPath(str(bound.GetPath()) + "/Surface")) if bound else None
+            values = {key: surface.GetInput(key).Get() for key in ("metallic", "opacity", "specularColor", "emissiveColor", "diffuseColor")} if surface else {}
+            # Diffuse and emissive only: no reflection over the people inside, no glass.
+            self.check(values.get("metallic") == 0 and values.get("opacity") == 1 and tuple(values.get("specularColor", (1, 1, 1))) == (0, 0, 0), f"Cloche part {name} is not an opaque matte diffuse material")
+            part = {"vertices": len(points), "maximumOffDomeMeters": off, "emissive": list(values.get("emissiveColor", ())), "diffuse": list(values.get("diffuseColor", ()))}
+            if name == "Fronts" and len(points):
+                # The gold lies on the burning fronts: where the seeded noise crosses the threshold.
+                burns = np.array([abs(cloche_rules.burn_at(local, offset, cloche_rules.local_point(local, [float(c) for c in point]))) for point in points])
+                part["burnMedian"], part["burn99"] = float(np.median(burns)), float(np.quantile(burns, 0.99))
+                self.check(part["burnMedian"] <= 0.012 and part["burn99"] <= 0.05, f"Cloche fronts stray from the burn's zero level (median {part['burnMedian']:.3f}, 99% {part['burn99']:.3f})")
+            if name.startswith("Embers"):
+                ember_centres.extend(points.reshape(-1, 6, 3).mean(axis=1))
+            entry["parts"][name] = part
+        self.check("Fronts" in names and ember_centres, "Cloche lacks its burning fronts or its embers")
+        # The embers are the web's own: its first resting embers for this seed.
+        rest = cloche_rules.token("edge.cloche.emberRestShare")
+        expected = [ember["position"] for ember in cloche_rules.embers(local, offset) if ember["seeds"][0] <= rest][:len(ember_centres)]
+        matched = len(ember_centres) == data.get("embers") and len(expected) == len(ember_centres) and all(
+            float(np.min(np.linalg.norm(np.array(expected) - centre, axis=1))) <= 1e-5 for centre in ember_centres)
+        self.check(matched, "Cloche embers are not the viewer's embers for this seed")
+        for mesh in shells:
+            self.check(mesh.ComputeVisibility() == "invisible", "Cloche shares the view with the bubble's old shell")
+        self.report["cloche"] = entry
 
     def materials(self):
         source = self.source
@@ -553,6 +689,8 @@ class Inspection:
         self.check(bool(re.search(r"^    autoPlay = true$", layer_text, re.M)) and bool(re.search(r'^    playbackMode = "loop"$', layer_text, re.M)), "Missing Apple top-level autoplay/loop presentation metadata")
         self.check(UsdGeom.GetStageUpAxis(self.stage) == "Y" and UsdGeom.GetStageMetersPerUnit(self.stage) == 1, "Unexpected stage units or up axis")
         self.geometry()
+        self.cloche()
+        self.framing()
         self.materials()
         self.audio()
         self.report["passed"] = not self.report["failures"]
