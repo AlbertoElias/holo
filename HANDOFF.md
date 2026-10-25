@@ -22,16 +22,16 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- UI redesign slices 0 to 6 (brief
+- Nothing held. UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
   baked into Quick Look previews, with the one-off `rebuild:usdz`) were
   merged together on 2026-10-25 after `verify:pr` on the combined tree
   (evidence in the brief). Phone AR marks are deferred to AR recording in
-  [`TODOS.md`](TODOS.md). Verified and ready on
-  `bug/ui-redesign-verification`: the fixes from the cross-vendor review of
-  slices 2 to 4 and the second round (the brief's "Independent verification"
-  rows). Next there: slice 7 (cross-device task test and device checks).
+  [`TODOS.md`](TODOS.md). The fixes from the
+  cross-vendor review of slices 2 to 4 and the second round (the brief's
+  "Independent verification" rows), with the globe's own colours, landed on
+  `main` on 2026-10-25; Codex's verdict on them is still to be recorded. Next there: slice 7 (cross-device task test and device checks).
   Open: real wrist drawings for Exit and Recenter; the physical device checks
   in the brief.
 
