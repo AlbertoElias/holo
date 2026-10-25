@@ -5,7 +5,7 @@ import { chromium, type Page } from "@playwright/test";
 
 import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, expect, test } from "./bootstrap";
+import { assertViewerShell, expect, reachFor, test } from "./bootstrap";
 import { cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
 import { MARKS, MIDPOINTS, OUTSIDE_TIMES, buildPointingGlb } from "./pointing-fixture";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
@@ -196,7 +196,10 @@ for (const { label, styles } of REAL_EXPORTS) {
     expect(orbited).toMatchObject({ referent: first.referent, style: first.style, line: true });
     await shot(page, uploaded.id, `${label}-5-orbited`);
 
-    // The toggle hides and shows them, by keyboard too.
+    // The toggle hides and shows them, by keyboard too. It is a reach control,
+    // folded once the cursor has been still for a while (a slow settle), so
+    // reach for it as a cursor would.
+    await reachFor(card);
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await settle(page, uploaded.url, (first.start + first.end) / 2, 0);
@@ -270,7 +273,10 @@ test("hand-built take: surface ring, inferred scene link, body part, orbit and t
   expect(orbited).toMatchObject({ referent: "TargetA", style: "recorded", line: true });
   await shot(page, uploaded.id, "5-orbited");
 
-  // The toggle hides and shows them, by keyboard too.
+  // The toggle hides and shows them, by keyboard too. It is a reach control,
+  // folded once the cursor has been still for a while (a slow settle), so
+  // reach for it as a cursor would.
+  await reachFor(card);
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await settle(page, uploaded.url, MIDPOINTS[0]!, 0);
