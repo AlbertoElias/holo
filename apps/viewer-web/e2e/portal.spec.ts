@@ -165,6 +165,70 @@ test("desktop (default): drag rotates, and the wheel or trackpad pinch over the 
   expect(await settleScroll(page), "fully out, the wheel scrolls to the next card").toBeGreaterThan(0);
 });
 
+/** One point in the viewing box on the hologram itself and one off it, as the canvas's hit test sees them. */
+async function hologramPoints(page: Page, cardId: string, modelPath: string): Promise<{ on: { x: number; y: number }; off: { x: number; y: number } }> {
+  const box = await page.locator(`.feed-card[data-card-id="${cardId}"] .feed-card-portal`).boundingBox();
+  if (!box) throw new Error("viewing box not laid out");
+  return page.evaluate(({ box, path }) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { portal: { runtime: { hitTest: ((x: number, y: number) => boolean) | null } } }> }).__portalProbes;
+    const hitTest = Object.entries(probes).find(([url]) => url.endsWith(path))?.[1].portal.runtime.hitTest;
+    if (!hitTest) throw new Error(`no hit test for ${path}`);
+    let on: { x: number; y: number } | null = null;
+    let off: { x: number; y: number } | null = null;
+    for (let row = 1; row < 12; row += 1) {
+      for (let column = 1; column < 12; column += 1) {
+        const point = { x: box.x + (box.width * column) / 12, y: box.y + (box.height * row) / 12 };
+        if (hitTest(point.x, point.y)) on ??= point;
+        else off ??= point;
+      }
+    }
+    if (!on || !off) throw new Error(`the viewing box is all ${on ? "hologram" : "empty space"}`);
+    return { on, off };
+  }, { box, path: modelPath });
+}
+
+test("desktop: the wheel scrolls the feed unless it begins on the hologram itself", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 800, height: 440 });
+  await openFeed(page, null);
+  const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+  // Paused, a plain wheel zooms; before, it did so anywhere on the card.
+  await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
+  await expect(card).toHaveAttribute("data-portal-paused", "true");
+  const { on, off } = await hologramPoints(page, first.id, first.url);
+  const start = await readPortal(page, first.url);
+
+  // Over empty space in the card, the gesture scrolls the feed (past half a
+  // card, so the snap carries it on), and stays a scroll as the next
+  // hologram passes under the pointer.
+  await page.mouse.move(off.x, off.y);
+  for (const delta of [300, 40, 40, 40]) await page.mouse.wheel(0, delta);
+  expect(await settleScroll(page), "the wheel scrolls past the hologram").toBeGreaterThan(0);
+  expect((await readPortal(page, first.url)).zoom, "the hologram it passed did not zoom").toBe(start.zoom);
+  expect((await readPortal(page, second.url)).zoom, "nor the one that came under the pointer").toBe(1);
+  await captureEvidence(page, testInfo, "wheel-scrolls-past-hologram");
+
+  // On the hologram itself, the same wheel zooms and the feed stays put.
+  await scrollFeedToTop(page);
+  if ((await card.getAttribute("data-portal-paused")) !== "true") {
+    await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
+    await expect(card).toHaveAttribute("data-portal-paused", "true");
+  }
+  await page.mouse.move(on.x, on.y);
+  await page.waitForTimeout(400); // a new gesture
+  await page.mouse.wheel(0, -300);
+  await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "the wheel on the hologram zooms" }).toBeLessThan(1);
+  expect(await feedScrollTop(page)).toBe(0);
+
+  // A trackpad pinch still zooms wherever it lands on the card.
+  const pinched = (await readPortal(page, first.url)).zoom;
+  await page.mouse.move(off.x, off.y);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -60);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "a pinch off the hologram zooms" }).toBeLessThan(pinched);
+  expect(await feedScrollTop(page)).toBe(0);
+});
+
 test("desktop freeze: drags only explore while paused, pitch is clamped, keyboard works, and scrolling away resets", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 440 });
   await openFeed(page, "freeze");

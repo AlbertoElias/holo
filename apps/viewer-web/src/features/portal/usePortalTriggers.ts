@@ -15,6 +15,8 @@ const TAP_MAX_MOVE_PX = 10;
 const ORBIT_RADIANS_PER_CARD_WIDTH = Math.PI;
 const WHEEL_ZOOM_PER_PIXEL = 0.0015;
 const CTRL_WHEEL_ZOOM_PER_PIXEL = 0.01;
+/** Wheel events closer than this belong to one gesture, trackpad momentum included. */
+const WHEEL_GESTURE_GAP_MS = 250;
 const KEY_ORBIT_RADIANS = 0.15;
 const KEY_ZOOM_SCALE = 1.25;
 /** Device rotation is amplified so a small wrist turn shows a useful new angle. */
@@ -51,6 +53,8 @@ export function usePortalTriggers(
     const pointers = new Map<number, Pointer>();
     let dragging = false;
     let lastPinch = 0;
+    // Whether the wheel gesture under way zooms, decided where it began.
+    let wheelGesture: { zooms: boolean; lastAt: number } | null = null;
 
     const canDrag = () => (store.getState().paused ? triggers.dragWhilePaused : triggers.dragWhilePlaying);
     const canPinch = () => (store.getState().paused ? triggers.pinchWhilePaused : triggers.pinchWhilePlaying);
@@ -128,8 +132,15 @@ export function usePortalTriggers(
         store.zoomByScale(Math.exp(-event.deltaY * CTRL_WHEEL_ZOOM_PER_PIXEL));
         return;
       }
-      const overBubble = event.target instanceof Element && event.target.closest(".feed-card-bubble-shell") !== null;
-      if (!(paused && triggers.wheelZoomWhilePaused) && !(overBubble && triggers.wheelZoomOverBubble)) return;
+      // The feed scrolls unless the gesture began on the hologram itself. A
+      // scroll that began over empty space stays a scroll when the hologram
+      // then passes under the pointer.
+      if (!wheelGesture || event.timeStamp - wheelGesture.lastAt > WHEEL_GESTURE_GAP_MS) {
+        const overHologram = !isInteractive(event.target) && (store.runtime.hitTest?.(event.clientX, event.clientY) ?? false);
+        wheelGesture = { zooms: overHologram && ((paused && triggers.wheelZoomWhilePaused) || triggers.wheelZoomOverBubble), lastAt: event.timeStamp };
+      }
+      wheelGesture.lastAt = event.timeStamp;
+      if (!wheelGesture.zooms) return;
       // Fully zoomed out, wheeling further out belongs to the feed.
       const { mode, zoom } = store.getState();
       const atOutsideEnd = mode === "follow" || zoom >= 1;

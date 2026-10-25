@@ -7,7 +7,9 @@ import {
   LoopRepeat,
   MathUtils,
   PerspectiveCamera,
+  Raycaster,
   SRGBColorSpace,
+  Vector2,
   Vector3
 } from "three";
 import type { AnimationAction, Mesh, Object3D, PointLight } from "three";
@@ -245,6 +247,38 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
       observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, objects: recordedObjects });
     }
   }, [actions, camera, clonedScene, mixer, pointingProbe, portal, recordedObjects, renderScene, renderer, sphereClip, url]);
+
+  // The wheel zooms only over the hologram itself (usePortalTriggers): a
+  // visible mesh of the recording, not chrome, not clipped away by its
+  // bubble. From inside the bubble everything in view is the hologram.
+  useEffect(() => {
+    const raycaster = new Raycaster();
+    const ndc = new Vector2();
+    const drawn = (object: Object3D | null): boolean => {
+      for (let node = object; node; node = node.parent) {
+        if (!node.visible || node.userData.holoimChrome === true) return false;
+      }
+      return true;
+    };
+    const hitTest = (clientX: number, clientY: number) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return false;
+      const bubble = sphereClip.active && sphereClip.radius > 0 ? sphereClip : null;
+      if (bubble && camera.position.distanceTo(bubble.center) < bubble.radius) return true;
+      raycaster.setFromCamera(ndc, camera);
+      return raycaster.intersectObject(clonedScene, true).some((hit) => (
+        (hit.object as Mesh).isMesh === true
+        && drawn(hit.object)
+        && (!bubble || hit.point.distanceTo(bubble.center) <= bubble.radius)
+      ));
+    };
+    portal.runtime.hitTest = hitTest;
+    return () => {
+      if (portal.runtime.hitTest === hitTest) portal.runtime.hitTest = null;
+    };
+  }, [camera, clonedScene, portal, renderer, sphereClip]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {
