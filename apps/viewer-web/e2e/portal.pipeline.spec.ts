@@ -5,6 +5,7 @@ import { waitForTextContentPrefix } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
 import { cardCenter, installProbe, readPortal, waitForFrozenTimes, waitForPortalReady } from "./portal-helpers";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Portal view (PRD-002) on a real capture export: only the checks that need
 // the recorded bubble, head, and motion. Gesture logic across variants and
@@ -29,8 +30,8 @@ async function recordCaptureGlb(context: BrowserContext, testInfo: TestInfo): Pr
   await capture.goto(captureUrl, { waitUntil: "networkidle" });
   await waitForTextContentPrefix(capture, "#status", "loaded");
   await capture.evaluate(() => (window as unknown as CaptureWindow).__setManualClock(true));
-  await capture.getByRole("button", { name: "Start Recording" }).click();
-  await expect(capture.getByRole("button", { name: "Stop Recording" })).toBeVisible();
+  await capture.getByRole("button", { name: CONTROL_NAMES.startRecording }).click();
+  await expect(capture.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible();
   await capture.evaluate((seconds) => {
     const hooks = window as unknown as CaptureWindow;
     hooks.__setMockInput({ forward: true });
@@ -39,7 +40,7 @@ async function recordCaptureGlb(context: BrowserContext, testInfo: TestInfo): Pr
     hooks.advanceTime(seconds * 1000 * 0.3);
   }, RECORDED_SECONDS);
   const downloadPromise = capture.waitForEvent("download");
-  await capture.getByRole("button", { name: "Stop Recording" }).click();
+  await capture.getByRole("button", { name: CONTROL_NAMES.stopRecording }).click();
   const glbPath = testInfo.outputPath("portal-capture.glb");
   await (await downloadPromise).saveAs(glbPath);
   await capture.close();
@@ -123,13 +124,13 @@ test("portal view on a real capture: freeze, orbit, zoom inside the bubble, Retu
   await captureEvidence(page, testInfo, "real-3-inside");
 
   // Return glides back to the Follow pose.
-  await card.getByRole("button", { name: "Return to the author's view" }).click();
+  await card.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }).click();
   await expect(card).toHaveAttribute("data-portal-mode", "follow");
   await expect.poll(async () => (await readPortal(page, uploaded.url)).cameraDistance, { timeout: 10_000 })
     .toBeCloseTo(start.outsideDistance, 2);
 
   // Play resumes the recorded motion from where it stopped.
-  await card.getByRole("button", { name: "Play" }).click();
+  await card.getByRole("button", { name: CONTROL_NAMES.play }).click();
   await expect(card).toHaveAttribute("data-portal-paused", "false");
   await expect.poll(
     async () => (await readPortal(page, uploaded.url)).actionTimes.join(","),

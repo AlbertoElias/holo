@@ -11,18 +11,24 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck",
     "verify:full": "pnpm run verify:fast && pnpm run test"
   },
   "dependencies": {
-    "react": "^18.3.1"
+    "@holoim/design-tokens": "workspace:*",
+    "@holoim/xr-ui-core": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@holoim/config-eslint": "workspace:*",
     "@holoim/config-ts": "workspace:*",
+    "@testing-library/react": "^16.2.0",
     "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
     "eslint": "catalog:",
+    "jsdom": "^26.0.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -17,6 +17,13 @@
   failure seen only on CI), emulate CI in Docker with `scripts/ci-emulate.sh
   <command>`: a 2-CPU, 7 GB Linux container with Node 24 and Chromium, like a
   hosted runner. See "Emulating CI" in `AGENT_CONTRACT.md`.
+- Every feature, project, and bug fix ends with a proof video: a real-time
+  recording of the actual workflow showing the change working (for a bug,
+  the fixed behavior). Write it, and any script that records it, under the
+  ignored `output/` directory or your scratchpad; never commit, merge, or
+  link it from docs. Watch it yourself as a verification loop (preview it
+  with `preview.mjs`), fix what it shows, then send it to the user before
+  handoff. Durable evidence stays in the e2e checks and their reports.
 
 This pnpm monorepo contains `apps/capture` (WebXR recording and GLTF export),
 `apps/viewer-api` (upload and storage), and `apps/viewer-web` (feed and AR viewer).

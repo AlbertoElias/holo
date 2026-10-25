@@ -269,7 +269,7 @@ async function emulatePhone(page: Page): Promise<void> {
         const fingerMark = (): ((target: [number, number, number]) => void) & { remove(): void } => {
           const mark = document.createElement("div");
           mark.dataset.phoneTap = "";
-          mark.style.cssText = "position:fixed;z-index:99999;pointer-events:none;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:3px solid #fff3cf;background:rgb(255 200 114 / 45%)";
+          mark.style.cssText = "position:fixed;z-index:99999;pointer-events:none;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:3px solid #ffffff;background:rgb(255 255 255 / 40%)";
           document.body.append(mark);
           const move = (target: [number, number, number]) => {
             const { camera } = viewer();

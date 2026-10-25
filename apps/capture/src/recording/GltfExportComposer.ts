@@ -6,6 +6,10 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 import { GLTFAudioPlugin } from './GLTFAudioPlugin';
 import { GLTFMeaningPlugin } from './GLTFMeaningPlugin';
+import { GLTFObjectsPlugin } from './GLTFObjectsPlugin';
+import { type AuthoringSampleStore, findAuthoringSpans, neutralizeAuthoringSpans, toAuthoringSpans } from './authoringSpans';
+import { buildObjectExports, type ObjectExport } from './objectExport';
+import type { ObjectSampleStore } from './ObjectSampleStore';
 import { FrameCaptureStore } from './FrameCaptureStore';
 import type { PointSampleStore } from './PointSampleStore';
 import { type MeaningDraft, PointResolver, type PointResolutionReport } from './PointResolver';
@@ -29,12 +33,22 @@ export class GltfExportComposer {
     bubbleSampler: SceneBubbleSampler,
     sceneRoot?: THREE.Object3D,
     audioData?: { buffer: ArrayBuffer; mimeType: string },
-    pointStore?: PointSampleStore
+    pointStore?: PointSampleStore,
+    objectStore?: ObjectSampleStore,
+    authoringStore?: AuthoringSampleStore
   ): Promise<Blob> {
     this.lastPointReport = undefined;
     await nextFrame();
 
-    const frames = frameStore.getFrames();
+    // Hands-in-menu motion (PRD-045): one rewritten copy of the frames feeds
+    // both the export worker and point resolution, so marks match the arm.
+    const recorded = frameStore.getFrames();
+    const authoringFrames = authoringStore?.getFrames() ?? [];
+    const frameSpans = authoringFrames.length === recorded.length ? findAuthoringSpans(authoringFrames) : [];
+    const frames = frameSpans.length > 0 ? neutralizeAuthoringSpans(recorded, authoringFrames, frameSpans) : recorded;
+    pointStore?.dropHandSamplesWithin(toAuthoringSpans(frameSpans, recorded));
+    // The extension's spans are in take seconds, like presence and holds.
+    const authoring = toAuthoringSpans(frameSpans, recorded, true);
     const normalizeRootMotion = !sceneRoot;
 
     const clone = SkeletonUtils.clone(avatar);
@@ -150,6 +164,14 @@ export class GltfExportComposer {
       new THREE.VectorKeyframeTrack(`${bubbleSphere.uuid}.position`, times, rootPosValues)
     );
 
+    // Event objects: wrapper nodes whose tracks share the take's one clip, so
+    // every player (and USDZ, which converts the first clip) keeps them in sync.
+    let objects: ObjectExport | undefined;
+    if (objectStore?.hasSamples()) {
+      objects = buildObjectExports(objectStore.getTracks(), { times, rootPosValues, rootQuatValues, avatarScale: clone.scale });
+      tracks.push(...objects.tracks);
+    }
+
     const clip = new THREE.AnimationClip('RecordedMotion', -1, tracks);
     const scene = new THREE.Scene();
     scene.add(clone);
@@ -158,6 +180,7 @@ export class GltfExportComposer {
     if (sceneBubble) {
       scene.add(sceneBubble.group);
     }
+    for (const node of objects?.nodes ?? []) scene.add(node);
     this.addRecordedSceneLights(scene);
 
     // Resolution runs here, on the main thread, before parse: it needs the
@@ -186,6 +209,10 @@ export class GltfExportComposer {
       if (meaning) {
         const draft = meaning;
         exporter.register((writer) => new GLTFMeaningPlugin(writer, draft));
+      }
+      if ((objects && objects.drafts.length > 0) || authoring.length > 0) {
+        const drafts = objects?.drafts ?? [];
+        exporter.register((writer) => new GLTFObjectsPlugin(writer, drafts, authoring));
       }
       exporter.parse(
         scene,

@@ -1,15 +1,29 @@
 import { useEffect, useState } from "react";
 
 import type { HologramDTO } from "@holoim/contracts";
+import { tokens } from "@holoim/design-tokens";
+import { glyphAppearance } from "@holoim/xr-ui-core";
+
+import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
+import { LineIcon } from "../portal/PortalControls";
 
 import { fetchHologram, resolveMediaUrl } from "../feed/api";
-import { XR_ENTRY_LABEL } from "../xr/xrSupport";
 
 type ARQuickLookLinkProps = {
   item: HologramDTO;
 };
 
 const MAX_POLLS = 24; // ~2 minutes at 5s intervals
+const REST = glyphAppearance({}, { headset: false });
+
+/** The cube in viewfinder brackets (styleguide 6, 9.5), drawn in the link's current colour. */
+function CubeGlyph() {
+  return (
+    <LineIcon appearance={{ ...REST, color: "currentColor" }}>
+      <path d={tokens.glyph.path.viewInAr.d} />
+    </LineIcon>
+  );
+}
 
 export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
   const [current, setCurrent] = useState(item);
@@ -53,8 +67,7 @@ export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
         rel="ar"
         href={resolveMediaUrl(current.usdzUrl)}
         className="ar-trigger-button ar-quicklook-link"
-        aria-label={XR_ENTRY_LABEL.ar}
-        title={XR_ENTRY_LABEL.ar}
+        aria-label={VIEWER_CONTROL_NAMES.viewInAr}
       >
         <img
           src={transparentPixel}
@@ -64,7 +77,8 @@ export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
           height={1}
           style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
         />
-        {XR_ENTRY_LABEL.ar}
+        <CubeGlyph />
+        <span className="visually-hidden">{VIEWER_CONTROL_NAMES.viewInAr}</span>
       </a>
     );
   }
@@ -79,10 +93,10 @@ export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
       type="button"
       className="ar-trigger-button ar-quicklook-link"
       aria-label={label}
-      title={label}
       disabled
     >
-      {label}
+      <CubeGlyph />
+      <span>{label}</span>
     </button>
   );
 }

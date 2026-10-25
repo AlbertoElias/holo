@@ -1,5 +1,7 @@
 import type { HologramDTO } from "@holoim/contracts";
 
+import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
+
 
 /** Whether this browser can start an immersive VR session ("Step inside"). */
 export async function supportsImmersiveVr(): Promise<boolean> {
@@ -14,8 +16,8 @@ export async function supportsImmersiveVr(): Promise<boolean> {
 
 /** Entry labels on the feed card and the route's enter button (styleguide section 6). */
 export const XR_ENTRY_LABEL = {
-  vr: "Step inside",
-  ar: "View in your room"
+  vr: VIEWER_CONTROL_NAMES.stepInside,
+  ar: VIEWER_CONTROL_NAMES.viewInAr
 } as const;
 
 /** Router state for `/vr/:id` and `/ar/:id`: the feed the card was opened from, for the gallery. */

@@ -1,6 +1,6 @@
 # PRD: One interaction grammar across devices
 
-**Status:** Draft  
+**Status:** Approved  
 **Source ideas:** IDEA-031  
 **Layer:** All layers  
 **Depends on:** a chosen visual direction from the Direction Board; portal view evidence (PRD-002)  
@@ -79,6 +79,8 @@ video app's design language has no meaning layer. Fair comparison: today's UI.
 ## Out Of Scope
 
 - [ ] The full roadmap of section 7 of the concept; restyling every screen.
+  *(Replaced 2026-10-24: the user put every page and the Halo in scope; see
+  the [feature brief](../../features/ui-redesign.md).)*
 
 ## Success Signals
 
@@ -100,9 +102,10 @@ success and time. Continue if transfer works; revise idioms that fail on one dev
 
 ## Decision
 
-Pending until explicitly decided. Drafting this document is not approval to
-build. The portal view (PRD-002) was approved ahead of this redesign; its
-evidence feeds the choice.
+Approved to build on 2026-10-24, through the
+[feature brief](../../features/ui-redesign.md), which widens it to every page
+and the Halo and records every scope answer. The portal view (PRD-002) was
+approved ahead of this redesign; its evidence feeds the choice.
 
 ## Links
 
@@ -118,5 +121,5 @@ evidence feeds the choice.
     (earlier round): 14 screens of the Light direction over capture renders.
   - [Interactive grammar demo](https://claude.ai/artifact/DAjXaAk4QGmXxN1riUu5bp)
     (earlier round): the held-mode grammar.
-- Feature brief: none
+- Feature brief: [UI and interaction redesign](../../features/ui-redesign.md)
 - Implementation issue: none

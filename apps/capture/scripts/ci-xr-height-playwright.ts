@@ -1,4 +1,6 @@
 import type {} from 'three';
+import { CONTROL_NAMES } from '@holoim/xr-ui-core';
+import type {} from '../src/runtime/automationHooks';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -22,21 +24,14 @@ interface State {
   };
   tracking: Record<'left' | 'right', { targetPosition: Vec; bonePosition: Vec; poseValid: boolean }>;
 }
-interface HeightWindow {
-  __setHeightEvidenceView(enabled: boolean): void;
-  __setManualClock(enabled: boolean, draw?: boolean): void;
-  advanceTime(ms: number): void;
-  render_game_to_text(): string;
-  IWER_DEVICE: {
-    controlMode: 'manual' | 'programmatic';
-    position: { set(x: number, y: number, z: number): void };
-    activeSession: XRSession;
-    controllers: Record<'left' | 'right', { connected: boolean; updateButtonValue(id: string, value: number): void; quaternion: { set(x: number, y: number, z: number, w: number): void }; position: { set(x: number, y: number, z: number): void } }>;
-  };
-  __heightSpace?: XRReferenceSpace;
-  __heightPoseMissing?: boolean;
-  __releaseHeightMic?: () => void;
-  __heightGrips?: Partial<Record<'left' | 'right', Vec>>;
+// Hooks this check installs on the page itself.
+declare global {
+  interface Window {
+    __heightSpace?: XRReferenceSpace;
+    __heightPoseMissing?: boolean;
+    __releaseHeightMic?: () => void;
+    __heightGrips?: Partial<Record<'left' | 'right', Vec>>;
+  }
 }
 const visualEvidence = process.env.XR_HEIGHT_VISUALS === '1';
 const artifacts = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-xr-height';
@@ -73,9 +68,8 @@ async function proportionVariant(): Promise<Buffer> {
 
 async function sample(page: Page, ms = 0): Promise<State> {
   return page.evaluate((delta) => {
-    const app = window as unknown as HeightWindow;
-    if (delta) app.advanceTime(delta);
-    return JSON.parse(app.render_game_to_text()) as State;
+    if (delta) window.advanceTime(delta);
+    return JSON.parse(window.render_game_to_text()) as State;
   }, ms);
 }
 async function frames(page: Page, count: number): Promise<State> {
@@ -88,18 +82,16 @@ async function frames(page: Page, count: number): Promise<State> {
 async function captureAvatar(page: Page, name: string): Promise<void> {
   if (!visualEvidence) return;
   await page.evaluate(() => {
-    const app = window as unknown as HeightWindow;
-    app.__setHeightEvidenceView(true);
-    app.__setManualClock(true, true);
+    window.__setHeightEvidenceView(true);
+    window.__setManualClock(true, true);
     // Remove app/emulator HTML chrome only; the live avatar is drawn by Three.
     for (const element of document.querySelectorAll<HTMLElement>('#ui-root, #VRButton, #ARButton, [data-webxr_runtime] > div')) element.style.visibility = 'hidden';
   });
   await page.clock.runFor(34);
   await page.screenshot({ path: path.join(artifacts, `${name}.png`) });
   await page.evaluate(() => {
-    const app = window as unknown as HeightWindow;
-    app.__setHeightEvidenceView(false);
-    app.__setManualClock(true, false);
+    window.__setHeightEvidenceView(false);
+    window.__setManualClock(true, false);
     for (const element of document.querySelectorAll<HTMLElement>('#ui-root, #VRButton, #ARButton, [data-webxr_runtime] > div')) element.style.visibility = '';
   });
 }
@@ -107,25 +99,36 @@ async function clickRefit(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Refit height', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
 }
 async function selectRefitInVr(page: Page, height: number): Promise<void> {
+  for (let i = 0; i < 60 && !(await page.evaluate(() => window.__chromeTarget('refit'))); i += 1) await frames(page, 5);
+  const before = await page.evaluate(() => window.__sampleChrome().ui.handedness);
   await page.evaluate((y) => {
-    const app = window as unknown as HeightWindow;
-    // Opposite controller deliberately points at Record: selecting Right must
-    // use only Right's ray, otherwise a refit unexpectedly starts recording.
-    app.IWER_DEVICE.controllers.left.position.set(0.35, y - 0.15, -0.25);
-    app.IWER_DEVICE.controllers.left.quaternion.set(0, 0, 0, 1);
-    const controller = app.IWER_DEVICE.controllers.right;
-    controller.position.set(0.35, y - 0.32, -0.25);
-    controller.quaternion.set(0, 0, 0, 1);
+    // Refit lives on the settings world panel. The opposite controller
+    // deliberately rests on the hand row: selecting Right must use only
+    // Right's ray, otherwise a refit unexpectedly swaps handedness.
+    const device = window.IWER_DEVICE!;
+    const head = window.__sampleChrome().vr.head;
+    const offset = [head[0]! - device.position.x, head[1]! - device.position.y, head[2]! - device.position.z];
+    // No named helpers in here: tsx would wrap them in a __name the page lacks.
+    const aims = [['left', [head[0]! - 0.2, y - 0.3, head[2]! - 0.2], window.__chromeTarget('hand')!], ['right', [head[0]! + 0.2, y - 0.3, head[2]! - 0.2], window.__chromeTarget('refit')!]] as const;
+    for (const [side, from, target] of aims) {
+      const controller = device.controllers[side]!;
+      controller.position.set(from[0]! - offset[0]!, from[1]! - offset[1]!, from[2]! - offset[2]!);
+      const length = Math.hypot(target[0]! - from[0]!, target[1]! - from[1]!, target[2]! - from[2]!);
+      const [x, y, z] = [0, 1, 2].map((i) => (target[i]! - from[i]!) / length) as [number, number, number];
+      const half = Math.hypot(y, x, 1 - z);
+      controller.quaternion.set(y / half, -x / half, 0, (1 - z) / half);
+    }
   }, height);
   await frames(page, 3);
-  await page.evaluate(() => (window as unknown as HeightWindow).IWER_DEVICE.controllers.right.updateButtonValue('trigger', 1));
+  await page.evaluate(() => window.IWER_DEVICE!.controllers.right!.updateButtonValue('trigger', 1));
   await frames(page, 2);
-  await page.evaluate(() => (window as unknown as HeightWindow).IWER_DEVICE.controllers.right.updateButtonValue('trigger', 0));
+  await page.evaluate(() => window.IWER_DEVICE!.controllers.right!.updateButtonValue('trigger', 0));
   await frames(page, 2);
+  assert.equal(await page.evaluate(() => window.__sampleChrome().ui.handedness), before, 'selecting Refit leaves handedness alone');
 }
 
 async function pose(page: Page, y: number): Promise<void> {
-  await page.evaluate((height) => (window as unknown as HeightWindow).IWER_DEVICE.position.set(0.35, height, -0.25), y);
+  await page.evaluate((height) => window.IWER_DEVICE!.position.set(0.35, height, -0.25), y);
   await page.clock.runFor(34);
 }
 function near(actual: number, expected: number, tolerance: number, label: string): void {
@@ -159,33 +162,31 @@ try {
     // real-time clock ran since load depends on host load, and an unsettled
     // baseline breaks the grounding invariant below.
     await page.evaluate(() => {
-      const app = window as unknown as HeightWindow;
-      app.__setManualClock(true, false);
-      app.advanceTime(2000);
+      window.__setManualClock(true, false);
+      window.advanceTime(2000);
     });
     const baseline = await sample(page);
     if (label === 'seated') assert(baseline.heightAdaptation.minY > 0.15, 'fixture has nonzero base origin');
     await page.evaluate((y: number) => {
-      const app = window as unknown as HeightWindow;
-      app.__setManualClock(true, false);
-      app.IWER_DEVICE.controlMode = 'programmatic';
-      app.IWER_DEVICE.position.set(0.35, y, -0.25);
+      window.__setManualClock(true, false);
+      window.IWER_DEVICE!.controlMode = 'programmatic';
+      window.IWER_DEVICE!.position.set(0.35, y, -0.25);
       // Failure injection at the WebXR API boundary, leaving app calibration real.
       const original = XRFrame.prototype.getViewerPose;
       XRFrame.prototype.getViewerPose = function (space) {
-        app.__heightSpace = space;
-        app.__heightGrips = {};
+        window.__heightSpace = space;
+        window.__heightGrips = {};
         for (const input of this.session.inputSources) {
           if ((input.handedness === 'left' || input.handedness === 'right') && input.gripSpace) {
             const grip = this.getPose(input.gripSpace, space)?.transform.position;
-            if (grip) app.__heightGrips[input.handedness] = { x: grip.x, y: grip.y, z: grip.z };
+            if (grip) window.__heightGrips[input.handedness] = { x: grip.x, y: grip.y, z: grip.z };
           }
         }
-        return app.__heightPoseMissing ? (null as unknown as ReturnType<XRFrame['getViewerPose']>) : original.call(this, space);
+        return window.__heightPoseMissing ? (null as unknown as ReturnType<XRFrame['getViewerPose']>) : original.call(this, space);
       };
     }, height);
     await enterIwerSessionFromButton(page, '#VRButton', {
-      readyCheck: () => JSON.parse((window as unknown as HeightWindow).render_game_to_text()).mode === 'vr'
+      readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr'
     });
     await freezePageClock(page);
     // Session entry finishes on real-time work (makeXRCompatible, reference
@@ -193,12 +194,12 @@ try {
     // manual clock is on, so these frames change no state.
     await waitForXrRenderLoop(page);
     await pose(page, height);
-    await page.evaluate(() => { (window as unknown as HeightWindow).__heightPoseMissing = true; });
+    await page.evaluate(() => { window.__heightPoseMissing = true; });
     const missing = await frames(page, 40);
     assert.equal(missing.heightAdaptation.eyeHeight, null, `${label}: missing tracking calibrated`);
-    await page.evaluate(() => { (window as unknown as HeightWindow).__heightPoseMissing = false; });
+    await page.evaluate(() => { window.__heightPoseMissing = false; });
     await frames(page, 15);
-    await page.evaluate(() => (window as unknown as HeightWindow).IWER_DEVICE.activeSession.dispatchEvent(new Event('visibilitychange')));
+    await page.evaluate(() => window.IWER_DEVICE!.activeSession!.dispatchEvent(new Event('visibilitychange')));
     const interrupted = await frames(page, 15);
     assert.equal(interrupted.heightAdaptation.eyeHeight, null, `${label}: visibility interruption retained pending sample`);
     const calibrated = await frames(page, 30);
@@ -212,15 +213,14 @@ try {
     const baseToBody = calibrated.heightAdaptation.baseWorldY - calibrated.character.position.y;
     near(baseToBody, baseline.heightAdaptation.baseWorldY - baseline.character.position.y, 0.001, `${label} grounding invariant`);
     await page.evaluate((y: number) => {
-      const app = window as unknown as HeightWindow;
       for (const side of ['left', 'right'] as const) {
-        const controller = app.IWER_DEVICE.controllers[side];
+        const controller = window.IWER_DEVICE!.controllers[side]!;
         controller.connected = true;
         controller.position.set(0.35 + (side === 'left' ? -0.16 : 0.16), y - 0.18, -0.25 - 0.22);
       }
     }, height);
     const handAligned = await frames(page, 3);
-    const gripPoses = await page.evaluate(() => (window as unknown as HeightWindow).__heightGrips);
+    const gripPoses = await page.evaluate(() => window.__heightGrips);
     for (const side of ['left', 'right'] as const) {
       const tracked = handAligned.tracking[side];
       assert(tracked.poseValid, `${label} ${side} real controller unavailable`);
@@ -245,13 +245,12 @@ try {
     const raised = await frames(page, 40);
     near(raised.heightAdaptation.scale, scale, 1e-8, `${label} raised head size lock`);
     await page.evaluate(() => {
-      const app = window as unknown as HeightWindow;
-      app.__heightSpace?.dispatchEvent(new Event('reset'));
-      app.__heightPoseMissing = true;
+      window.__heightSpace?.dispatchEvent(new Event('reset'));
+      window.__heightPoseMissing = true;
     });
     const reset = await frames(page, 40);
     near(reset.heightAdaptation.scale, scale, 1e-8, `${label} reset/tracking-loss size lock`);
-    await page.evaluate(() => { (window as unknown as HeightWindow).__heightPoseMissing = false; });
+    await page.evaluate(() => { window.__heightPoseMissing = false; });
     await pose(page, height);
     await frames(page, 45);
     console.log(`[xr-height] ${label}: scale and tracking checks passed`);
@@ -259,9 +258,9 @@ try {
     const awaiting = await frames(page, 15);
     near(awaiting.heightAdaptation.scale, scale, 1e-8, 'pending refit keeps size');
     assert(awaiting.heightAdaptation.refitPending, 'pending refit remains explicit');
-    await page.evaluate(() => { (window as unknown as HeightWindow).__heightPoseMissing = true; });
+    await page.evaluate(() => { window.__heightPoseMissing = true; });
     await frames(page, 40);
-    await page.evaluate(() => { (window as unknown as HeightWindow).__heightPoseMissing = false; });
+    await page.evaluate(() => { window.__heightPoseMissing = false; });
     const refitted = await frames(page, 40);
     assert(!refitted.heightAdaptation.refitPending, 'stable refit completed');
     near(refitted.crouch.amount, 0, 0.01, 'refit sets new neutral baseline');
@@ -290,24 +289,23 @@ try {
       // when XR ends before the asynchronous export has cloned the asset.
       console.log('[xr-height] starting recording');
       await page.evaluate(() => {
-        const app = window as unknown as HeightWindow;
         navigator.mediaDevices.getUserMedia = () => new Promise((_resolve, reject) => {
-          app.__releaseHeightMic = () => reject(new DOMException('Permission denied for test', 'NotAllowedError'));
+          window.__releaseHeightMic = () => reject(new DOMException('Permission denied for test', 'NotAllowedError'));
         });
       });
       await page.keyboard.press('r');
-      await page.waitForFunction(() => Boolean((window as unknown as HeightWindow).__releaseHeightMic));
+      await page.waitForFunction(() => Boolean(window.__releaseHeightMic));
       await frames(page, 12);
       const recording = await sample(page);
       assert(recording.heightAdaptation.recordingSizeLocked);
       assert(await page.getByRole('button', { name: 'Refit height', exact: true }).isDisabled(), 'recording startup disables refit');
       await page.getByRole('button', { name: 'Refit height', exact: true }).dispatchEvent('click');
       assert(!(await sample(page)).heightAdaptation.refitPending, 'recording handler rejects synthetic refit click');
-      await page.evaluate(() => (window as unknown as HeightWindow).IWER_DEVICE.activeSession.end());
+      await page.evaluate(() => window.IWER_DEVICE!.activeSession!.end());
       const recordedExit = await frames(page, 4);
       near(recordedExit.heightAdaptation.scale, scale, 1e-8, 'recording exit size lock');
-      await page.evaluate(() => (window as unknown as HeightWindow).__releaseHeightMic?.());
-      await page.getByRole('button', { name: 'Stop Recording', exact: true }).waitFor();
+      await page.evaluate(() => window.__releaseHeightMic?.());
+      await page.getByRole('button', { name: CONTROL_NAMES.stopRecording, exact: true }).waitFor();
       const downloadPromise = page.waitForEvent('download');
       await page.keyboard.press('r');
       // Export intentionally awaits animation frames; release browser clock.
@@ -322,15 +320,15 @@ try {
       const exported = gltf.nodes.find((node) => node.name === 'RecordedAvatar');
       assert(exported, 'export contains recorded avatar');
       near(exported.scale?.[1] ?? 1, assetScale * scale, 0.0001, 'GLB retains calibrated asset scale');
-      await page.getByRole('button', { name: 'Start Recording', exact: true }).waitFor();
+      await page.getByRole('button', { name: CONTROL_NAMES.startRecording, exact: true }).waitFor();
       reports.push({ stage: 'recording', recording, recordedExit, exported });
     } else {
-      await page.evaluate(() => (window as unknown as HeightWindow).IWER_DEVICE.activeSession.end());
+      await page.evaluate(() => window.IWER_DEVICE!.activeSession!.end());
     }
     const exited = await frames(page, 4);
     near(exited.heightAdaptation.scale, 1, 1e-8, `${label} desktop restored`);
     near(exited.heightAdaptation.avatarHeight, baseline.heightAdaptation.avatarHeight, 1e-8, `${label} desktop height`);
-    await page.evaluate((y: number) => (window as unknown as HeightWindow).IWER_DEVICE.position.set(0.35, y, -0.25), height + 0.1);
+    await page.evaluate((y: number) => window.IWER_DEVICE!.position.set(0.35, y, -0.25), height + 0.1);
     // The page clock is frozen; clicking uses Playwright's independent input clock.
     await enterIwerSessionFromButton(page, '#VRButton');
     await waitForXrRenderLoop(page);

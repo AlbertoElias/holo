@@ -52,7 +52,7 @@ describe("UploadPanel Quick Look opt-in", () => {
     const onUploaded = vi.fn();
     const { container } = render(<UploadPanel onUploaded={onUploaded} />);
 
-    const checkbox = screen.getByLabelText("Enable iOS Quick Look (USDZ)") as HTMLInputElement;
+    const checkbox = screen.getByLabelText("iOS Quick Look") as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
 
     await fillAndSelectFile(container);
@@ -67,7 +67,7 @@ describe("UploadPanel Quick Look opt-in", () => {
     const onUploaded = vi.fn();
     const { container } = render(<UploadPanel onUploaded={onUploaded} />);
 
-    const checkbox = screen.getByLabelText("Enable iOS Quick Look (USDZ)") as HTMLInputElement;
+    const checkbox = screen.getByLabelText("iOS Quick Look") as HTMLInputElement;
     fireEvent.click(checkbox);
     expect(checkbox.checked).toBe(true);
 

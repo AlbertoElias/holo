@@ -5,14 +5,16 @@ import { chromium, type Page } from "@playwright/test";
 
 import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, expect, test } from "./bootstrap";
+import { assertViewerShell, expect, reachFor, test } from "./bootstrap";
 import { cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
 import { MARKS, MIDPOINTS, OUTSIDE_TIMES, buildPointingGlb } from "./pointing-fixture";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Self-resolving pointing in the viewer (PRD-022): the referent lights up while
 // the author points. Two kinds of take go through the real upload → feed → render
 // path: capture's own exports, recorded in the spec's beforeAll (the desktop
-// take is recorded-style, the IWER replay is inferred-style), and a
+// take is recorded-style, the IWER replay is inferred-style, and the held-mark
+// takes are a phone touch hold and IWER hands mixing both), and a
 // hand-built GLB, kept only for what the exports cannot cover: a large-surface
 // ring, an inferred link on a scene object next to a recorded one, and an old
 // recording without the extension.
@@ -114,10 +116,9 @@ function expectedFrom(glb: Buffer): Expected[] {
 test.beforeAll(async () => {
   if (process.env.RUN_E2E_PIPELINE !== "1") return;
   test.setTimeout(300_000);
-  // @ts-expect-error capture's .mjs scripts are untyped
-  const { runDesktopPointingCheck } = await import("../../capture/scripts/lib/pointing-desktop-take.mjs");
-  // @ts-expect-error capture's .mjs scripts are untyped
-  const { replayPointingTake } = await import("../../capture/scripts/lib/pointing-iwer-replay.mjs");
+  const { runDesktopPointingCheck } = await import("../../capture/scripts/lib/pointing-desktop-take.ts");
+  const { replayPointingTake } = await import("../../capture/scripts/lib/pointing-iwer-replay.ts");
+  const { runHeldMarkPhase } = await import("../../capture/scripts/lib/held-mark-takes.ts");
   const browser = await launchXrBrowser(chromium);
   const consoleErrors: string[] = [];
   try {
@@ -126,7 +127,12 @@ test.beforeAll(async () => {
       browser, baseUrl: captureUrl, captureRoot, labelsDir: "fixtures/pointing-labels", artifactDir: takeDir, consoleErrors,
       labelFile: "iwer-pointing-targets.json"
     });
-    for (const [label, report] of [["desktop-recorded", desktop], ["iwer-inferred", iwer]] as const) {
+    // Held marks (slice 5): a phone touch hold, and headset hands where held
+    // marks and inferred points share one take.
+    const run = { browser, baseUrl: captureUrl, artifactDir: takeDir, consoleErrors };
+    const phone = await runHeldMarkPhase(run, "phone");
+    const hands = await runHeldMarkPhase(run, "hands");
+    for (const [label, report] of [["desktop-recorded", desktop], ["iwer-inferred", iwer], ["phone-held", phone], ["hands-held", hands]] as const) {
       expect(report.failures, `${label} take`).toEqual([]);
       exportsByLabel.set(label, { file: report.glb, expected: expectedFrom(await readFile(report.glb)) });
     }
@@ -138,7 +144,9 @@ test.beforeAll(async () => {
 
 const REAL_EXPORTS = [
   { label: "desktop-recorded", styles: ["recorded"] },
-  { label: "iwer-inferred", styles: ["inferred"] }
+  { label: "iwer-inferred", styles: ["inferred"] },
+  { label: "phone-held", styles: ["recorded"] },
+  { label: "hands-held", styles: ["recorded", "inferred"] }
 ] as const;
 
 for (const { label, styles } of REAL_EXPORTS) {
@@ -158,7 +166,7 @@ for (const { label, styles } of REAL_EXPORTS) {
     const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
     await waitForPortalReady(page, uploaded.id, uploaded.url);
     await expect(card).toHaveAttribute("data-model-bubble", "active");
-    await card.getByRole("button", { name: "Pause" }).click();
+    await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
     await expect(card).toHaveAttribute("data-portal-paused", "true");
     const toggle = card.getByRole("button", { name: "Highlight what the author points at" });
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
@@ -197,7 +205,10 @@ for (const { label, styles } of REAL_EXPORTS) {
     expect(orbited).toMatchObject({ referent: first.referent, style: first.style, line: true });
     await shot(page, uploaded.id, `${label}-5-orbited`);
 
-    // The toggle hides and shows them, by keyboard too.
+    // The toggle hides and shows them, by keyboard too. It is a reach control,
+    // folded once the cursor has been still for a while (a slow settle), so
+    // reach for it as a cursor would.
+    await reachFor(card);
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await settle(page, uploaded.url, (first.start + first.end) / 2, 0);
@@ -224,7 +235,7 @@ test("hand-built take: surface ring, inferred scene link, body part, orbit and t
   await expect(card).toHaveAttribute("data-model-bubble", "active");
 
   // Freeze playback; time is set by seeking from here on.
-  await card.getByRole("button", { name: "Pause" }).click();
+  await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
   await expect(card).toHaveAttribute("data-portal-paused", "true");
 
   const toggle = card.getByRole("button", { name: "Highlight what the author points at" });
@@ -271,7 +282,10 @@ test("hand-built take: surface ring, inferred scene link, body part, orbit and t
   expect(orbited).toMatchObject({ referent: "TargetA", style: "recorded", line: true });
   await shot(page, uploaded.id, "5-orbited");
 
-  // The toggle hides and shows them, by keyboard too.
+  // The toggle hides and shows them, by keyboard too. It is a reach control,
+  // folded once the cursor has been still for a while (a slow settle), so
+  // reach for it as a cursor would.
+  await reachFor(card);
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await settle(page, uploaded.url, MIDPOINTS[0]!, 0);
@@ -295,7 +309,7 @@ test("a recording without the extension renders unchanged, with no pointing cont
   const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
   await waitForPortalReady(page, uploaded.id, uploaded.url);
 
-  await expect(card.getByRole("button", { name: "Pause" })).toBeVisible();
+  await expect(card.getByRole("button", { name: CONTROL_NAMES.pause })).toBeVisible();
   await expect(card.getByRole("button", { name: "Highlight what the author points at" })).toHaveCount(0);
   await seek(page, uploaded.url, MIDPOINTS[0]!);
   await page.waitForTimeout(400);

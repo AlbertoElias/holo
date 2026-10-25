@@ -1,3 +1,28 @@
+import { CONTROL_NAMES } from "./controlNames.js";
+
+export { CONTROL_NAMES, type ControlName } from "./controlNames.js";
+
+// The redesigned parts (docs/features/ui-redesign.md, slice 2): each rule
+// and formula of the styleguide written once, for every renderer.
+export * from "./chip.js";
+export * from "./chromeFlag.js";
+export * from "./cloche.js";
+export * from "./clocheBurn.js";
+export * from "./edge.js";
+export * from "./glyph.js";
+export * from "./halo.js";
+export * from "./headsetText.js";
+export * from "./heldMode.js";
+export * from "./hitArea.js";
+export * from "./motion.js";
+export * from "./placement.js";
+export * from "./random.js";
+export * from "./recordingChrome.js";
+export * from "./scale.js";
+export * from "./shade.js";
+export * from "./targets.js";
+export * from "./typeRoles.js";
+
 export type XrMode = "desktop" | "mobile" | "vr" | "ar";
 
 export type UiRecordingStatus = "idle" | "recording" | "exporting";
@@ -25,10 +50,10 @@ export function createRecordingUiState(status: UiRecordingStatus, message: strin
     message,
     canToggle: status !== "exporting",
     actionLabel: status === "recording"
-      ? "Stop Recording"
+      ? CONTROL_NAMES.stopRecording
       : status === "exporting"
         ? (message ?? "Exporting...")
-        : "Start Recording"
+        : CONTROL_NAMES.startRecording
   };
 }
 

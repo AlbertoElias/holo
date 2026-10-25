@@ -57,7 +57,7 @@ async function main() {
   checkOptionalKtxCommand();
   checkPathExists(reporter, rootDir, "public/gltf/models/avatar.glb");
   checkPathExists(reporter, rootDir, "public/gltf/models/scene.glb");
-  checkPathExists(reporter, rootDir, "scripts/ci-mock-vr-playwright.mjs");
+  checkPathExists(reporter, rootDir, "scripts/ci-mock-vr-playwright.ts");
 
   await checkPorts();
 

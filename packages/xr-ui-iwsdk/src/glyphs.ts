@@ -1,3 +1,4 @@
+import { tokens } from "@holoim/design-tokens";
 import { UIKit } from "@iwsdk/core";
 import type { BufferGeometry} from "three";
 import { Color, DoubleSide, Mesh, MeshBasicMaterial, ShapeGeometry, Vector3 } from "three";
@@ -16,19 +17,15 @@ export interface GlyphDrawing {
   fill?: boolean;
 }
 
-/**
- * Styleguide §6 glyphs, path for path; the two must change together.
- */
+const { path } = tokens.glyph;
+
+/** Styleguide §6 glyphs from tokens.json; record's shapes are drawn here to its sizes. */
 export const GLYPHS = {
-  play: { d: "M4 2.5v11l9-5.5z", fill: true },
-  // Two filled bars, the Play triangle's weight.
-  pause: { d: "M4.5 3h2.4v10H4.5zM9.1 3h2.4v10H9.1z", fill: true },
-  // A back-to-start bar and an open triangle.
-  restart: { d: "M3.5 3v10M12.5 3.2 6 8l6.5 4.8z" },
-  // A ring with four ticks, "put it back in front of me".
-  recenter: { d: "M8 1.5v2.5M8 12v2.5M1.5 8H4M12 8h2.5M8 5a3 3 0 1 0 0 6a3 3 0 1 0 0-6" },
-  // An open door frame with an arrow leaving it.
-  exit: { d: "M9 2.5H4.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H9M7 8h7.5M12 5.5 14.5 8 12 10.5" },
+  play: path.play,
+  pause: path.pause,
+  restart: path.restart,
+  recenter: path.recenter,
+  exit: path.exit,
   // Record (§6): filled rose circle idle, rose rounded square while recording.
   recordIdle: { d: "M8 1a7 7 0 1 0 0 14a7 7 0 1 0 0-14z", fill: true },
   recordStop: { d: "M4.5 1.5h7a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3z", fill: true }

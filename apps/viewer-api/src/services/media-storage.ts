@@ -19,7 +19,7 @@ export type PresignedPost = { url: string; fields: Record<string, string> };
 
 /**
  * Object storage for hologram media. Keys are storage-relative
- * (`<file>.glb`, `<file>-ql2.usdz`, `incoming/<intent>.glb`); the driver
+ * (`<file>.glb`, `<file>-ql3.usdz`, `incoming/<intent>.glb`); the driver
  * owns turning a key into a public URL.
  */
 export interface MediaStorage {

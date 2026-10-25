@@ -1,0 +1,41 @@
+/* Fraunces (titles, wordmark) and Figtree (interface), self-hosted as
+ * variable WOFF2 from Fontsource 5.3.0, latin and latin-ext subsets, under
+ * the SIL Open Font License (Fraunces-OFL.txt, Figtree-OFL.txt). Fraunces
+ * carries the opsz axis for "optical sizing auto" (styleguide section 7).
+ * Import once per app: @import "@holoim/design-tokens/fonts.css"; */
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fraunces-latin-ext-opsz-normal.woff2") format("woff2-variations");
+  
+}
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fraunces-latin-opsz-normal.woff2") format("woff2-variations");
+  
+}
+
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url("./figtree-latin-ext-wght-normal.woff2") format("woff2-variations");
+  
+}
+
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url("./figtree-latin-wght-normal.woff2") format("woff2-variations");
+  
+}

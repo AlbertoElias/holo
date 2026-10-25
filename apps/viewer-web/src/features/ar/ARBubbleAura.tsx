@@ -16,16 +16,15 @@ type ARBubbleAuraProps = {
 };
 
 type AuraSegments = {
-  ring: number;
   halo: number;
   base: number;
   secondary: number;
 };
 
 const AURA_SEGMENTS_BY_QUALITY: Record<ArBubbleQuality, AuraSegments> = {
-  high: { ring: 96, halo: 72, base: 64, secondary: 88 },
-  medium: { ring: 64, halo: 48, base: 40, secondary: 52 },
-  low: { ring: 36, halo: 24, base: 24, secondary: 0 }
+  high: { halo: 72, base: 64, secondary: 88 },
+  medium: { halo: 48, base: 40, secondary: 52 },
+  low: { halo: 24, base: 24, secondary: 0 }
 };
 
 function isFiniteVector(vector: Vector3): boolean {
@@ -34,7 +33,6 @@ function isFiniteVector(vector: Vector3): boolean {
 
 export function ARBubbleAura({ bubble, baseWorldPosition }: ARBubbleAuraProps) {
   const rootRef = useRef<Group>(null);
-  const ringRef = useRef<Mesh>(null);
   const haloRef = useRef<Mesh>(null);
   const baseRef = useRef<Mesh>(null);
   const secondaryHaloRef = useRef<Mesh>(null);
@@ -84,16 +82,6 @@ export function ARBubbleAura({ bubble, baseWorldPosition }: ARBubbleAuraProps) {
     const t = state.clock.elapsedTime;
     root.rotation.y = t * 0.14;
 
-    if (ringRef.current) {
-      ringRef.current.rotation.z = t * 0.21;
-      const ringMaterial = ringRef.current.material;
-      if (Array.isArray(ringMaterial)) {
-        ringMaterial.forEach(() => undefined);
-      } else {
-        ringMaterial.opacity = MathUtils.lerp(0.28, 0.48, (Math.sin(t * 1.3) + 1) * 0.5);
-      }
-    }
-
     if (haloRef.current) {
       const haloMaterial = haloRef.current.material;
       if (!Array.isArray(haloMaterial)) {
@@ -130,18 +118,6 @@ export function ARBubbleAura({ bubble, baseWorldPosition }: ARBubbleAuraProps) {
 
   return (
     <group ref={rootRef} name="ARBubbleAura" visible={false}>
-      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]} renderOrder={1003}>
-        <torusGeometry args={[1.07, 0.018, 18, segments.ring]} />
-        <meshBasicMaterial
-          color="#76e4ff"
-          transparent
-          opacity={0.35}
-          depthWrite={false}
-          blending={AdditiveBlending}
-          toneMapped={false}
-        />
-      </mesh>
-
       <mesh ref={haloRef} position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={1002}>
         <ringGeometry args={[1.02, 1.42, segments.halo]} />
         <meshBasicMaterial

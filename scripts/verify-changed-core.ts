@@ -72,7 +72,18 @@ export const VERIFY_DOCS_ACTION: RootAction = {
   command: "pnpm"
 };
 
+// Files outside a package's directory that are that package's source, and
+// files whose change reaches packages that do not depend on their owner.
+// The design token file stays beside the styleguide but generates
+// @holoim/design-tokens, and the shared lint rule in @holoim/config-eslint
+// reads the generated colours, so a token edit lints every package.
+export const RELATED_PACKAGES: Readonly<Record<string, readonly string[]>> = {
+  "docs/product/design/tokens.json": ["@holoim/design-tokens", "@holoim/config-eslint"],
+  "packages/design-tokens/src/generated/tokens.json": ["@holoim/config-eslint"]
+};
+
 export function isDocumentationFile(file: string): boolean {
+  if (file in RELATED_PACKAGES) return false;
   return file.endsWith(".md") || file.startsWith("docs/");
 }
 
@@ -329,11 +340,14 @@ export function selectAffectedPackages(
 
   const directPackages = new Set<string>();
   const fallbackFiles: string[] = [];
+  const knownPackages = new Set(graph.packages.map((workspacePackage) => workspacePackage.name));
   for (const file of codeFiles) {
+    const related = (RELATED_PACKAGES[file] ?? []).filter((name) => knownPackages.has(name));
+    for (const name of related) directPackages.add(name);
     const workspacePackage = packageForFile(graph.packages, file);
     if (workspacePackage) {
       directPackages.add(workspacePackage.name);
-    } else {
+    } else if (related.length === 0) {
       fallbackFiles.push(file);
     }
   }

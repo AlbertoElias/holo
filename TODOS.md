@@ -80,6 +80,9 @@ it from the item below instead of duplicating its status here.
   and conversion decisions are made and implementing in
   [`docs/features/live-deployment.md`](docs/features/live-deployment.md)
   (Fly + R2 + async USDZ; auth and Postgres deliberately deferred there).
+  When identities land, that project also gives each person their identity
+  hue and initial for marks (styleguide 1.1 and 2.4); the UI redesign leaves
+  pointing highlights in today's colour until then.
 - [x] Move the generated development SQLite databases out of version control. Local
   setup now runs committed Prisma migrations; route tests own temporary database and
   upload fixtures; generated database files are ignored.
@@ -101,6 +104,11 @@ it from the item below instead of duplicating its status here.
   behavior checks (`test:xr:*`) across the redesign. Design it through
   `docs/product/concepts/what-a-hologram-is.md`: include the portal viewer
   and Follow/Free, and start marks with "this/here" links read from pointing.
+  Brief: [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md).
+- [ ] Add a VR viewing mode to `apps/viewer-web`: holograms on their stages
+  in the blue-hour room, lit by their own gold light (styleguide 9.1), using
+  the redesign's components. Split out of the UI redesign brief on
+  2026-10-24 as a separate feature; it needs its own brief.
 
 - [ ] Support the standard avatar formats, not one hardcoded skeleton. Today the
   rig finds bones by exact names in about five places
@@ -156,6 +164,17 @@ it from the item below instead of duplicating its status here.
   device-specific placement recovery. Delivered as a "Recenter AR" overlay
   button shown only in AR mode in
   [`docs/features/archive/ar-recenter-control.md`](docs/features/archive/ar-recenter-control.md).
+- [ ] AR recording (phone as a camera-only author): record a take in WebXR
+  AR on a phone, and hold to mark "this" there with a camera ray. Split out of
+  slice 5 of [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)
+  (2026-10-25). Notes: every capture system returns early in AR
+  (`frame.arSpectator`), so no AR take exists yet; a mark's ray would come
+  from the camera through the touch, so its link's `from` is the camera, which
+  `HOLOIM_meaning` v0 cannot say (a v1 change through its owner, v0 files still
+  loading); and IWSDK's `launchXR` has no `dom-overlay` option, so touch over
+  the scene needs a `requestSession` shim. Open product question for the
+  user, not decided: is a take with no performer a hologram
+  ([`what-a-hologram-is.md`](docs/product/concepts/what-a-hologram-is.md))?
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
   and success signal are explicit. The lens points to IDEA-045 (portal view)

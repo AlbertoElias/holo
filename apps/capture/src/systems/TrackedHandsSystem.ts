@@ -20,6 +20,7 @@ export class TrackedHandsSystem extends createSystem() {
       c.point.update({
         held: c.input.isPointHeld(),
         aimPitch: c.input.getPointAimPitch(),
+        screenAim: c.input.getPointScreenAim(),
         lookYaw: c.camera.lookYaw,
         deltaSec: c.frame.deltaSec,
         timeSec: c.frame.elapsedSec

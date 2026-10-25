@@ -30,7 +30,7 @@ export async function startApp({ app, port, env = {} }) {
   process.once('exit', () => server.kill());
   const baseUrl = `https://localhost:${port}/`;
   // The readiness probe hits the local dev server's self-signed certificate,
-  // as in apps/capture/scripts/run-xr-checks.mjs.
+  // as in apps/capture/scripts/run-xr-checks.ts.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   await waitForServer(baseUrl, 120_000, server);
   return { baseUrl, stop: () => stopProcess(server) };

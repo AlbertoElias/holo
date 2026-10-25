@@ -1,4 +1,4 @@
-import { expect, test as base, type Page, type TestInfo } from "@playwright/test";
+import { expect, test as base, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 import { attachXrEnvironment } from "@holoim/tooling-testing/xr-env";
 
@@ -108,3 +108,18 @@ export async function captureEvidence(page: Page, testInfo: TestInfo, name: stri
 }
 
 export { expect };
+
+/**
+ * View in your room is a reach control (styleguide 6): a person's cursor or touch on
+ * the card brings it out before they press it, so a test does the same.
+ */
+export async function pressViewInAr(page: Page, card: Locator = page.locator(".feed-card").first()): Promise<void> {
+  await reachFor(card);
+  await card.locator(".ar-trigger-button").click();
+}
+
+/** A cursor over the card, so its reach controls (Free, tilt, View in your room, Step inside, sound) come out. */
+export async function reachFor(card: Locator): Promise<void> {
+  await card.locator(".feed-card-portal").hover({ force: true });
+  await expect(card.locator(".portal-controls")).toHaveAttribute("data-reach", "shown");
+}

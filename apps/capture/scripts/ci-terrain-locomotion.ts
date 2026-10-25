@@ -6,6 +6,7 @@ import {
   freezePageClock, launchXrBrowser, waitForIwerRuntime, wireXrConsoleErrors,
   waitForPageFunctions, waitForTextContentPrefix
 } from '@holoim/tooling-testing/xr-env';
+import type {} from '../src/runtime/automationHooks';
 
 type Vec = { x: number; y: number; z: number };
 type Leg = { side: string; foot: Vec; groundY: number | null; correction: number; upper: number[]; lower: number[] };
@@ -16,14 +17,6 @@ type State = {
   crouch: { amount: number };
 };
 type Input = { forward?: boolean; back?: boolean; left?: boolean; right?: boolean; crouch?: boolean; jump?: boolean };
-type Hooks = {
-  __setManualClock: (enabled: boolean) => void;
-  __respawnCharacter: () => boolean;
-  __setMockInput: (input: Input) => void;
-  __setMockVrPose: (pose: unknown) => void;
-  advanceTime: (ms: number) => void;
-  render_game_to_text: () => string;
-};
 const idle = { forward: false, back: false, left: false, right: false, crouch: false };
 const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-terrain-locomotion';
 const evidence: Record<string, unknown> = { environment: 'Playwright desktop and IWER mock tracked pose; real GLTF scene loader, avatar, animation and Rapier', geometry: 'Centered 20m floor; ramp y=0.8+0.15x over x=[-3,3],z=[-5,5]; wall z=-4.25', scenarios: {} };
@@ -54,21 +47,19 @@ function sceneGltf(): string {
 }
 async function step(page: Page, ms = 40, input?: Input, respawn = false): Promise<State> {
   return page.evaluate(({ ms, input, respawn }) => {
-    const hooks = window as unknown as Hooks;
-    if (respawn && !hooks.__respawnCharacter()) throw new Error('Respawn failed');
-    if (input) hooks.__setMockInput(input);
-    hooks.advanceTime(ms);
-    return JSON.parse(hooks.render_game_to_text()) as State;
+    if (respawn && !window.__respawnCharacter()) throw new Error('Respawn failed');
+    if (input) window.__setMockInput(input);
+    window.advanceTime(ms);
+    return JSON.parse(window.render_game_to_text()) as State;
   }, { ms, input, respawn });
 }
 async function screenshot(page: Page, filename: string): Promise<void> {
   // Force one ordinary draw through the existing debug clock. Resizing a
   // frozen WebGL canvas clears it before its next requestAnimationFrame.
   await page.evaluate(() => {
-    const hooks = window as unknown as Hooks;
-    hooks.__setManualClock(false);
-    hooks.advanceTime(1000 / 60);
-    hooks.__setManualClock(true);
+    window.__setManualClock(false);
+    window.advanceTime(1000 / 60);
+    window.__setManualClock(true);
   });
   await page.screenshot({ path: path.join(artifactDir, filename) });
 }
@@ -126,13 +117,13 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__setManualClock', '__setMockInput', '__setMockVrPose', '__respawnCharacter', 'advanceTime', 'render_game_to_text']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
-  await page.evaluate(() => (window as unknown as Hooks).__setManualClock(true));
+  await page.evaluate(() => window.__setManualClock(true));
   const desktopReference = mode === 'xr' ? await settle(page) : undefined;
   if (mode === 'xr') {
-    await page.evaluate(() => (window as unknown as Hooks).__setMockVrPose({ enabled: true, head: { position: { x: 0, y: 0, z: 0 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } }, hands: { left: { tracked: true, position: { x: -0.26, y: -0.2, z: -0.42 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } }, right: { tracked: true, position: { x: 0.26, y: -0.2, z: -0.42 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } } } }));
+    await page.evaluate(() => window.__setMockVrPose({ enabled: true, head: { position: { x: 0, y: 0, z: 0 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } }, hands: { left: { tracked: true, position: { x: -0.26, y: -0.2, z: -0.42 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } }, right: { tracked: true, position: { x: 0.26, y: -0.2, z: -0.42 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } } } }));
     await step(page, 120, idle);
     await waitForIwerRuntime(page);
-    await enterIwerSessionFromButton(page, '#VRButton', { readyCheck: () => JSON.parse((window as unknown as Hooks).render_game_to_text()).mode === 'vr' });
+    await enterIwerSessionFromButton(page, '#VRButton', { readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr' });
   }
   await freezePageClock(page);
   const baseline = await settle(page);
@@ -206,10 +197,9 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
     await settle(page);
     await sample(page, 'xr-before-crouched-exit', 25, { ...idle, crouch: true });
     await page.evaluate(async () => {
-      const globals = window as unknown as Hooks & { IWER_DEVICE: { activeSession: { end: () => Promise<void> } } };
-      await globals.IWER_DEVICE.activeSession.end();
-      globals.__setMockVrPose({ enabled: false });
-      globals.__setMockInput({ forward: false, back: false, left: false, right: false, crouch: false });
+      await window.IWER_DEVICE!.activeSession!.end();
+      window.__setMockVrPose({ enabled: false });
+      window.__setMockInput({ forward: false, back: false, left: false, right: false, crouch: false });
     });
     const recovered = (await sample(page, 'xr-after-crouched-exit', 35)).at(-1)!;
     assert(recovered.locomotion.activeProfile === 'desktop-full' && recovered.crouch.amount < 0.01, 'XR exit did not restore desktop standing');

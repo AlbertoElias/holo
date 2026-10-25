@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Page } from "@playwright/test";
 
-import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, test, reachFor } from "./bootstrap";
 import {
   PITCH_MAX,
   PITCH_MIN,
@@ -19,6 +19,7 @@ import {
   waitForFrozenTimes,
   waitForPortalReady
 } from "./portal-helpers";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Portal view (PRD-002) trigger logic on a mocked two-card feed: phone touch,
 // the three variants, keyboard, clamps, and reset on scroll. The real capture
@@ -108,6 +109,7 @@ test.describe("phone", () => {
   test("tilt: turning the phone turns the camera, past a small deadzone", async ({ page }, testInfo) => {
     await openFeed(page, "tilt");
     const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+    await reachFor(card);
     await card.getByRole("button", { name: "Look around by tilting the phone" }).click();
     await expect(card.getByRole("button", { name: "Stop looking around by tilting" })).toHaveAttribute("aria-pressed", "true");
     await dispatchOrientation(page, 10, 60);
@@ -118,7 +120,7 @@ test.describe("phone", () => {
     expect((await readPortal(page, first.url)).tiltYaw, "yaw follows the turn, amplified").toBeCloseTo((-30 * Math.PI / 180) * 1.5, 3);
 
     // Return re-centres tilt on how the phone is held now.
-    await card.getByRole("button", { name: "Return to the author's view" }).click();
+    await card.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }).click();
     await expect(card).toHaveAttribute("data-portal-mode", "follow");
     await dispatchOrientation(page, 41, 60);
     expect((await readPortal(page, first.url)).mode, "holding still after Return stays in Follow").toBe("follow");

@@ -1,3 +1,4 @@
+import { tokens } from "@holoim/design-tokens";
 import { RayInteractable, type Entity, type World } from "@iwsdk/core";
 import { Box3, BoxGeometry, Mesh, MeshBasicMaterial, PointLight, Vector3 } from "three";
 import type { Object3D } from "three";
@@ -14,7 +15,7 @@ import { placedRecord, searchingPlacement, viewerContext, type PlacedHologram } 
 /** How many holograms may stand in the space at once; tune on a Quest (brief). */
 export const MAX_PLACED_HOLOGRAMS = 4;
 
-const STAGE_GLOW = 0xffb066;
+const STAGE_GLOW = tokens.color.glow;
 
 export interface SpaceItem {
   id: string;

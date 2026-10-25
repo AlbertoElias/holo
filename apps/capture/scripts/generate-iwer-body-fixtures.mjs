@@ -300,7 +300,7 @@ try {
     await page.clock.runFor(STEP_MS);
     const before = new Set(await readdir(SAVE_DIR).catch(() => []));
     const clickByText = (text) => page.evaluate((label) => {
-      [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)?.click();
+      [...document.querySelectorAll('button')].find((button) => (button.getAttribute('aria-label') ?? button.textContent?.trim()) === label)?.click();
     }, text);
     await clickByText('Start Recording');
     await page.clock.runFor(STEP_MS);

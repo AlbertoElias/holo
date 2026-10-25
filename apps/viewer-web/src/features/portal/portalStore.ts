@@ -33,6 +33,8 @@ export type PortalRuntime = {
   zoomSpan: number;
   /** 1 right after Return, easing to 0 while the camera glides back. */
   returnBlend: number;
+  /** Where the recording is, seconds, for the timecode. */
+  playbackSeconds: number;
   /** What the camera did last frame, for tests and debugging. */
   measured: { cameraDistance: number; insideDistance: number; outsideDistance: number; target: [number, number, number] };
 };
@@ -65,6 +67,7 @@ export function createPortalStore() {
     followPitch: 0,
     zoomSpan: Math.log(6),
     returnBlend: 0,
+    playbackSeconds: 0,
     measured: { cameraDistance: 0, insideDistance: 0, outsideDistance: 0, target: [0, 0, 0] }
   };
   const listeners = new Set<() => void>();
@@ -102,6 +105,10 @@ export function createPortalStore() {
         yaw: base.yaw + deltaYaw,
         pitch: MathUtils.clamp(base.pitch + deltaPitch, PITCH_MIN, PITCH_MAX)
       });
+    },
+    /** The Free glyph: the viewer drives the camera, starting where Follow left it. */
+    enterFree: () => {
+      if (state.mode !== "free") set(freeFromFollow());
     },
     /** `scale` > 1 moves in (fingers apart), < 1 moves out. */
     zoomByScale: (scale: number) => {

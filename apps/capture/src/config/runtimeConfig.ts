@@ -1,6 +1,10 @@
 export interface RuntimeConfig {
   sceneUrl: string;
   avatarUrl: string;
+  /** The supplied object (PRD-043): a GLB URL, loaded before recording. */
+  objectUrl: string | null;
+  /** The prepared tray (PRD-045): repeated `?tray=` GLB or image URLs, loaded before recording. */
+  trayUrls: string[];
   avatarHeightOverride: number;
   avatarScaleMultiplier: number;
   sceneScaleOverride: number;
@@ -29,6 +33,8 @@ export function loadRuntimeConfig(search = window.location.search): RuntimeConfi
   return {
     sceneUrl: query.get('scene') ?? defaultSceneUrl,
     avatarUrl: query.get('avatar') ?? defaultAvatarUrl,
+    objectUrl: query.get('object'),
+    trayUrls: query.getAll('tray').filter(Boolean),
     avatarHeightOverride: Number(query.get('avatarHeight')),
     avatarScaleMultiplier: Number(query.get('avatarScale') ?? '1'),
     sceneScaleOverride: Number(query.get('sceneScale')),

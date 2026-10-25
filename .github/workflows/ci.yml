@@ -120,7 +120,7 @@ jobs:
     timeout-minutes: 10
     # Each 2-vCPU runner runs its slice serially: two checks at once on one
     # runner pushed cold page loads past the 30 s goto limit (20b1986e40ae).
-    # run-xr-checks.mjs balances the slices by cost and covers every check.
+    # run-xr-checks.ts balances the slices by cost and covers every check.
     strategy:
       fail-fast: false
       matrix:
@@ -205,9 +205,15 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.pipeline == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # The two pipeline specs (~100 s and ~80 s on CI) dominate this job;
-    # Playwright's file sharding gives each runner one.
+    # Shard 1 takes about 9 minutes on a good runner (setup, the app builds and
+    # ~7.5 minutes of tests, since PRD-043 added the object take), so 10 left
+    # no margin for a slow runner. A slow runner stalled it past 15 twice on
+    # 2026-10-25, cancelled with no report. Playwright now stops itself at 16
+    # minutes of tests (playwright.config.ts), inside this ceiling, so a slow
+    # run fails with its diagnostics. The ceiling costs nothing when tests pass.
+    timeout-minutes: 20
+    # The pipeline specs dominate this job; Playwright's file sharding splits
+    # them between two runners.
     strategy:
       fail-fast: false
       matrix:
@@ -243,7 +249,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Upload failure diagnostics
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-failure-${{ matrix.shard }}-${{ github.run_id }}

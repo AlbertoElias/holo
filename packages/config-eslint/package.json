@@ -8,6 +8,9 @@
     ".": "./src/index.mjs",
     "./base": "./src/base.mjs"
   },
+  "scripts": {
+    "test": "node --test src/*.test.mjs"
+  },
   "dependencies": {
     "@eslint/js": "catalog:",
     "eslint-plugin-react-hooks": "^5.1.0",

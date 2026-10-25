@@ -1,8 +1,27 @@
 import { Box3, Vector3 } from "three";
 import type { AnimationClip, Object3D } from "three";
 
+import { isInsideRecordedObject } from "../objects/recordedObjects";
+
 // Recorded holograms are already at true scale; these helpers only place the
 // root and pick what to play. Plain three, shared by the R3F and IWSDK views.
+
+/**
+ * Bounds of the recording without the objects the author handled: a prop
+ * held below the feet or at arm's length must not lift or shrink the avatar.
+ */
+export function boundsWithoutObjects(root: Object3D): Box3 {
+  const bounds = new Box3();
+  const scratch = new Box3();
+  root.updateWorldMatrix(true, true);
+  root.traverse((child) => {
+    const mesh = child as Object3D & { isMesh?: boolean };
+    if (!mesh.isMesh || isInsideRecordedObject(child)) return;
+    scratch.setFromObject(child);
+    if (!scratch.isEmpty()) bounds.union(scratch);
+  });
+  return bounds;
+}
 
 /** Moves the recorded subject's anchor to the origin and its lowest point to y = 0. */
 export function normalizeSceneAtOrigin(root: Object3D): void {
@@ -16,7 +35,7 @@ export function normalizeSceneAtOrigin(root: Object3D): void {
 
   root.position.sub(anchorPos);
 
-  const bounds = new Box3().setFromObject(root);
+  const bounds = boundsWithoutObjects(root);
   if (!bounds.isEmpty() && Number.isFinite(bounds.min.y)) {
     root.position.y -= bounds.min.y;
   }

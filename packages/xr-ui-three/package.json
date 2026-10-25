@@ -11,11 +11,12 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck",
     "verify:full": "pnpm run verify:fast && pnpm run test"
   },
   "dependencies": {
+    "@holoim/design-tokens": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",
     "three": "catalog:"
   },
@@ -24,6 +25,7 @@
     "@holoim/config-ts": "workspace:*",
     "@types/three": "catalog:",
     "eslint": "catalog:",
+    "jsdom": "^26.0.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

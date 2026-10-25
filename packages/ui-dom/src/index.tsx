@@ -45,6 +45,7 @@ const fieldInputStyle: CSSProperties = {
   padding: "0.55rem 0.65rem"
 };
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiPanel({
   children,
   style,
@@ -57,6 +58,7 @@ export function UiPanel({
   );
 }
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiButton({
   children,
   style,
@@ -93,6 +95,7 @@ export function UiButton({
   );
 }
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiField({
   children,
   label,
@@ -108,10 +111,12 @@ export function UiField({
   );
 }
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} style={{ ...fieldInputStyle, ...props.style }} />;
 }
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiNotice({
   title,
   children,
@@ -141,6 +146,7 @@ export function UiNotice({
   );
 }
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiPill({
   children,
   style
@@ -168,6 +174,7 @@ export function UiPill({
   );
 }
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiStack({
   children,
   gap = "0.75rem",
@@ -181,6 +188,7 @@ export function UiStack({
   );
 }
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiFixedSurface({
   children,
   style,
@@ -193,6 +201,7 @@ export function UiFixedSurface({
   );
 }
 
+/** @deprecated Replaced by the redesign components; removed when slices 3 and 4 move the apps over. */
 export function UiActionRow({
   children,
   gap = "0.75rem",
@@ -214,3 +223,16 @@ export function UiActionRow({
     </div>
   );
 }
+
+// The redesigned components (docs/features/ui-redesign.md, slice 2): each
+// renders a contract of @holoim/xr-ui-core.
+export { Chip, chipSurfaceStyle, type ChipProps } from "./Chip.js";
+export { Dock, type DockProps } from "./Dock.js";
+export { EdgeSvg, RESTING_EDGE_FRAME, type EdgeSvgProps } from "./EdgeSvg.js";
+export { GlyphControl, type GlyphControlProps } from "./GlyphControl.js";
+export { GlyphSvg, type GlyphSvgProps } from "./glyphSvg.js";
+export { Halo, HaloRing, type HaloProps, type HaloRingProps, type HaloViewState } from "./Halo.js";
+export { defaultHitInput, useReducedMotion } from "./internal.js";
+export { Shade, shadeGradient, type ShadeProps } from "./Shade.js";
+export { SideSheet, type SideSheetProps } from "./SideSheet.js";
+export { Type, fontStack, typeRoleStyle, type TypeElement, type TypeProps, type TypeRole } from "./typeRoles.js";

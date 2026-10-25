@@ -6,7 +6,8 @@ import { resolve } from "node:path";
 import type { Probe } from "./ar-bubble-types";
 import { captureBubblePixels } from "./bubble-pixel-proof";
 
-import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, test, pressViewInAr } from "./bootstrap";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Whole-product check: record in capture, export the real GLB, upload it
 // through the viewer UI to a real API, and render it in the feed. Nothing in
@@ -67,8 +68,8 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   await waitForTextContentPrefix(capture, "#status", "loaded");
   await capture.evaluate(() => (window as unknown as CaptureWindow).__setManualClock(true));
 
-  await capture.getByRole("button", { name: "Start Recording" }).click();
-  await expect(capture.getByRole("button", { name: "Stop Recording" })).toBeVisible();
+  await capture.getByRole("button", { name: CONTROL_NAMES.startRecording }).click();
+  await expect(capture.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible();
   // Walk forward so the export carries real root motion and locomotion clips.
   await capture.evaluate((seconds) => {
     const hooks = window as unknown as CaptureWindow;
@@ -80,7 +81,7 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
 
   await captureEvidence(capture, testInfo, "capture-recording-in-progress");
   const downloadPromise = capture.waitForEvent("download");
-  await capture.getByRole("button", { name: "Stop Recording" }).click();
+  await capture.getByRole("button", { name: CONTROL_NAMES.stopRecording }).click();
   const download = await downloadPromise;
   const glbPath = testInfo.outputPath("capture-export.glb");
   await download.saveAs(glbPath);
@@ -96,8 +97,8 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const hologramName = `Pipeline ${testInfo.testId.slice(0, 8)}-${Date.now()}`;
   await page.goto("/");
   await assertViewerShell(page);
-  const expandUpload = page.getByRole("button", { name: "Expand upload panel" });
-  if (await expandUpload.isVisible()) await expandUpload.click();
+  // Upload lives in the dock and opens the side sheet (Q11).
+  await page.getByRole("button", { name: "Upload a hologram" }).click();
   await page.getByLabel("Hologram name").fill(hologramName);
   await page.getByLabel("Submitted by").fill("pipeline-e2e");
   await page.locator("#glb-upload").setInputFiles(glbPath);
@@ -126,7 +127,7 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const feedAfter = await captureBubblePixels(page, "feed", artifactDir);
   expect(feedAfter.sphere, "feed sphere follows recorded motion").not.toEqual(feedBefore.sphere);
   await page.clock.resume();
-  await card.locator(".ar-trigger-button").click();
+  await pressViewInAr(page, card);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await page.evaluate(() => {
     const device = (window as unknown as { IWER_DEVICE: { stereoEnabled: boolean; ipd: number } }).IWER_DEVICE;

@@ -27,10 +27,15 @@ import pygltflib
 from PIL import Image
 from pxr import Gf, Kind, Sdf, Usd, UsdGeom, UsdMedia, UsdShade, UsdSkel, Vt
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cloche as cloche_rules  # noqa: E402
+
 FPS = 30.0
 MAX_INPUT_BYTES = 100 * 1024 * 1024
 MAX_VERTICES = 2_000_000
 MAX_SAMPLES = 20_000
+# Scale written for a hidden (zero-scale) node; see `animate`.
+HIDDEN_SCALE = 1e-4
 MAX_DURATION = 600
 MAX_TEXTURE_PIXELS = 4096 * 4096
 MAX_TOTAL_TEXTURE_PIXELS = 64 * 1024 * 1024
@@ -721,6 +726,15 @@ class Converter:
             work = 3 * len(self.animated) + 4 * sum(len(ordered) for _, ordered in animations) + len(morph_names)
             if len(times) > MAX_SAMPLES or len(times) * work > 8_000_000:
                 raise ValueError("Baked animation exceeds conversion budget")
+            # A node whose scale track reaches 0 (a summoned object before it
+            # appears) is hidden by time-sampled visibility, and its scale is
+            # clamped to HIDDEN_SCALE: a zero scale is a singular transform,
+            # and the tiny scale still hides it in players that ignore
+            # animated visibility.
+            hideable = {
+                index for (index, path), (_, source_values, _) in channels.items()
+                if path == "scale" and index in self.ops and np.abs(np.asarray(source_values, dtype=float)).reshape(-1, 3).max(axis=1).min() < 1e-9
+            }
             for time in sorted(times):
                 frame = (offset + time)*FPS
                 values = {key: _sample(*channel, time, rotation=key[1] == "rotation") for key, channel in channels.items()}
@@ -744,7 +758,13 @@ class Converter:
                     t, r, s = _node_trs(self.gltf.nodes[index])
                     ops[0].Set(Gf.Vec3d(*map(float, values.get((index, "translation"), t))), frame)
                     ops[1].Set(_quat(values.get((index, "rotation"), r)), frame)
-                    ops[2].Set(Gf.Vec3d(*map(float, values.get((index, "scale"), s))), frame)
+                    scale = list(map(float, values.get((index, "scale"), s)))
+                    if index in hideable:
+                        hidden = max(abs(v) for v in scale) < 1e-9
+                        UsdGeom.Imageable(ops[0].GetAttr().GetPrim()).CreateVisibilityAttr().Set("invisible" if hidden else "inherited", frame)
+                        if hidden:
+                            scale = [HIDDEN_SCALE] * 3
+                    ops[2].Set(Gf.Vec3d(*scale), frame)
                 weights = []
                 for index, (names, default) in self.morphs.items():
                     value = values.get((index, "weights"), default)
@@ -808,6 +828,125 @@ class Converter:
                 prim.CreateStartTimeAttr().Set(Sdf.TimeCode(0))
                 prim.CreateMediaOffsetAttr().Set(0.0)
                 prim.CreateGainAttr().Set(float(emitter.get("gain", 1)))
+
+    def fit_points(self):
+        """What the hologram draws, for fitting its cloche by the viewer's
+        rules (drawnPoints and motionPoints in viewer-web): every visible
+        mesh at the first frame, kept to the bubble when there is one, and
+        the author's joints through the take with head room over the
+        highest, plus the box corners of meshes the take moves by their own
+        transform. The bubble is pinned here, so the walk is read in the
+        stage's own space rather than relative to a following bubble."""
+        root = UsdSkel.Root(self.stage.GetDefaultPrim())
+        cache = UsdSkel.Cache()
+        cache.Populate(root, Usd.PrimDefaultPredicate)
+        inside = (lambda point: np.linalg.norm(point - self.bubble_center) <= self.bubble_radius) if self.bubble_center is not None else (lambda point: True)
+        xforms = UsdGeom.XformCache(0)
+        drawn, moving = [], []
+        for prim in self.stage.Traverse():
+            if not prim.IsA(UsdGeom.Mesh) or prim.GetCustomDataByKey("quickLookBackFaces") or prim.GetCustomDataByKey("quickLookPinnedBubble"):
+                continue
+            mesh = UsdGeom.Mesh(prim)
+            points = mesh.GetPointsAttr().Get()
+            if not points or mesh.ComputeVisibility() == "invisible":
+                continue
+            skinning = cache.GetSkinningQuery(prim)
+            skeleton = UsdSkel.BindingAPI(prim).GetInheritedSkeleton()
+            sampled = Vt.Vec3fArray(points)
+            if skinning and skeleton:
+                query = cache.GetSkelQuery(skeleton)
+                if not skinning.ComputeSkinnedPoints(query.ComputeSkinningTransforms(0), sampled, 0):
+                    raise ValueError("Unable to evaluate skinned points for the cloche")
+                matrix = np.asarray(xforms.GetLocalToWorldTransform(skeleton.GetPrim()))
+            else:
+                matrix = np.asarray(xforms.GetLocalToWorldTransform(prim))
+                ancestor = prim
+                while ancestor:
+                    if ancestor.IsA(UsdGeom.Xformable) and UsdGeom.Xformable(ancestor).TransformMightBeTimeVarying():
+                        moving.append((prim, np.asarray(points)))
+                        break
+                    ancestor = ancestor.GetParent()
+            step = max(1, len(sampled) // 3000)
+            world = np.asarray(sampled)[::step] @ matrix[:3, :3] + matrix[3, :3]
+            drawn.extend(point for point in world if inside(point))
+        if self.duration > 0:
+            skeletons = [UsdSkel.Skeleton(prim) for prim in self.stage.Traverse() if prim.IsA(UsdSkel.Skeleton)]
+            first = {}
+            for sample in range(8):
+                frame = self.duration * sample / 8 * FPS
+                xforms = UsdGeom.XformCache(frame)
+                top = None
+                for skeleton in skeletons:
+                    query = cache.GetSkelQuery(skeleton)
+                    for joint in query.ComputeJointWorldTransforms(xforms):
+                        point = np.asarray(joint.ExtractTranslation())
+                        drawn.append(point)
+                        if top is None or point[1] > top[1]:
+                            top = point
+                if top is not None:
+                    drawn.append(top + np.array([0, 0.18, 0]))
+                for prim, points in moving:
+                    matrix = np.asarray(xforms.GetLocalToWorldTransform(prim))
+                    if prim not in first:
+                        first[prim] = matrix
+                        continue
+                    if np.array_equal(first[prim], matrix):
+                        continue
+                    lower, upper = points.min(axis=0), points.max(axis=0)
+                    for i in range(8):
+                        corner = np.array([upper[0] if i & 1 else lower[0], upper[1] if i & 2 else lower[1], upper[2] if i & 4 else lower[2]])
+                        point = corner @ matrix[:3, :3] + matrix[3, :3]
+                        if inside(point):
+                            drawn.append(point)
+        return [[float(c) for c in point] for point in drawn]
+
+    def cloche(self, seed):
+        """The halo baked into the preview (styleguide 3.4, 9.5): the dome
+        fitted by fitCloche's rules, then the form `cloche.build` makes of it
+        (the burnt globe: burning fronts and embers), carried by geometry
+        because RealityKit has no shader. It replaces the bubble's old blue
+        shell, as on the web. Never in the GLB: it exists only in this preview."""
+        points = self.fit_points()
+        shape = cloche_rules.fit_cloche(points)
+        if shape is None:
+            return
+        built = cloche_rules.build(shape, seed)
+        group = UsdGeom.Xform.Define(self.stage, "/Root/Cloche")
+        group.AddTranslateOp().Set(Gf.Vec3d(*shape["base"]))
+        group.GetPrim().SetCustomDataByKey("quickLookCloche", {
+            "seed": seed,
+            "base": Gf.Vec3d(*shape["base"]),
+            "radii": Gf.Vec3d(*shape["radii"]),
+            "exponent": shape["exponent"],
+            "fitPoints": len(points),
+            **built["summary"],
+        })
+        for part in built["parts"]:
+            name, geometry = part["name"], part["mesh"]
+            material = UsdShade.Material.Define(self.stage, f"/Root/Materials/Cloche{name}")
+            surface = UsdShade.Shader.Define(self.stage, f"/Root/Materials/Cloche{name}/Surface")
+            surface.CreateIdAttr("UsdPreviewSurface")
+            # Diffuse and emissive only: no reflection, so the fronts never flash over the people inside.
+            for key, kind, value in [("diffuseColor", Sdf.ValueTypeNames.Color3f, Gf.Vec3f(*part["diffuse"])), ("emissiveColor", Sdf.ValueTypeNames.Color3f, Gf.Vec3f(*part["emissive"])), ("metallic", Sdf.ValueTypeNames.Float, 0.0), ("roughness", Sdf.ValueTypeNames.Float, 0.85), ("useSpecularWorkflow", Sdf.ValueTypeNames.Int, 1), ("specularColor", Sdf.ValueTypeNames.Color3f, Gf.Vec3f(0)), ("opacity", Sdf.ValueTypeNames.Float, part["opacity"])]:
+                surface.CreateInput(key, kind).Set(value)
+            surface.CreateOutput("surface", Sdf.ValueTypeNames.Token)
+            material.CreateSurfaceOutput().ConnectToSource(surface.ConnectableAPI(), "surface")
+            mesh = UsdGeom.Mesh.Define(self.stage, f"/Root/Cloche/{name}")
+            mesh.GetPrim().SetCustomDataByKey("quickLookCloche", True)
+            mesh.CreatePointsAttr().Set(Vt.Vec3fArray.FromNumpy(np.asarray(geometry["points"], dtype=np.float32)))
+            mesh.CreateNormalsAttr().Set(Vt.Vec3fArray.FromNumpy(np.asarray(geometry["normals"], dtype=np.float32)))
+            mesh.SetNormalsInterpolation("vertex")
+            mesh.CreateFaceVertexIndicesAttr().Set(Vt.IntArray(geometry["indices"]))
+            mesh.CreateFaceVertexCountsAttr().Set(Vt.IntArray([3] * (len(geometry["indices"]) // 3)))
+            mesh.CreateSubdivisionSchemeAttr().Set("none")
+            # Closed tubes and solids: RealityKit ignores doubleSided.
+            mesh.CreateDoubleSidedAttr().Set(False)
+            mesh.CreateExtentAttr().Set(mesh.ComputeExtent(mesh.GetPointsAttr().Get()))
+            UsdShade.MaterialBindingAPI.Apply(mesh.GetPrim()).Bind(material)
+        for prim in self.stage.Traverse():
+            # Its back faces reference it, so they carry the flag too.
+            if prim.GetCustomDataByKey("quickLookPinnedBubble"):
+                UsdGeom.Imageable(prim).CreateVisibilityAttr().Set("invisible")
 
     def extents(self):
         # The default UsdSkel padding heuristic compares bind-space vertices
@@ -874,7 +1013,7 @@ class Converter:
             root.GetPrim().SetCustomDataByKey("quickLookExtentSamples", len(frames))
 
 
-def _convert_glb_to_usdz(input_path, output_path):
+def _convert_glb_to_usdz(input_path, output_path, seed):
     # pygltflib's Node dataclass omits the standard node.weights override.
     with open(input_path, "rb") as source:
         header = source.read(20)
@@ -924,6 +1063,7 @@ def _convert_glb_to_usdz(input_path, output_path):
             converter.node(index, "/Root")
         converter.finish_geometry()
         converter.animate()
+        converter.cloche(seed)
         converter.extents()
         converter.audio(scene)
         stage.GetRootLayer().Export(layer_path)
@@ -945,7 +1085,7 @@ def _convert_glb_to_usdz(input_path, output_path):
     print(f"Successfully converted {input_path} -> {output_path}")
 
 
-def convert_glb_to_usdz(input_path, output_path):
+def convert_glb_to_usdz(input_path, output_path, seed=None):
     # Finish cleanup before the API's 120-second process deadline. The ffmpeg
     # finally block also kills its process group if this alarm interrupts it.
     def deadline(_number, _frame):
@@ -953,17 +1093,19 @@ def convert_glb_to_usdz(input_path, output_path):
     previous = signal.signal(signal.SIGALRM, deadline)
     signal.alarm(100)
     try:
-        _convert_glb_to_usdz(input_path, output_path)
+        # The hologram's id seeds its cloche's burns (Q10); a file converted on
+        # its own is seeded by its name, as the stored GLB's name.
+        _convert_glb_to_usdz(input_path, output_path, seed if seed is not None else Path(input_path).stem)
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, previous)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        sys.exit(f"Usage: {sys.argv[0]} <input.glb> <output.usdz>")
+    if len(sys.argv) not in (3, 5) or len(sys.argv) == 5 and sys.argv[3] != "--seed":
+        sys.exit(f"Usage: {sys.argv[0]} <input.glb> <output.usdz> [--seed <hologram id>]")
     try:
-        convert_glb_to_usdz(sys.argv[1], sys.argv[2])
+        convert_glb_to_usdz(sys.argv[1], sys.argv[2], sys.argv[4] if len(sys.argv) == 5 else None)
     except Exception as error:
         print(f"Quick Look conversion failed: {error}", file=sys.stderr)
         sys.exit(1)

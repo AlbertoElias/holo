@@ -16,6 +16,7 @@
     "verify:full": "pnpm run verify:fast && pnpm run test"
   },
   "dependencies": {
+    "@holoim/design-tokens": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",
     "@iwsdk/core": "^1.0.1",
     "three": "catalog:"

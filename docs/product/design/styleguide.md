@@ -1,6 +1,6 @@
 # HoloIM Styleguide
 
-**Status:** Current, 2026-10-24.
+**Status:** Current, 2026-10-25.
 **Applies to:** `apps/capture` and `apps/viewer-web`, in 3D (VR and AR, with
 hands and controllers) and on flat screens (phone and desktop, with touch and
 mouse).
@@ -100,7 +100,13 @@ source and goes back there.
 | World (placed by the user, 1 m away or more) | Side sheet | Labels for near panels, long text, library, inbox, settings |
 
 The periphery status line is the one thing that follows the head, lazily,
-and it never holds a control.
+and it never holds a control. It sits 1.5 m away, 20° above the line of
+sight, and stays put until the head turns more than 20° from it; then it
+eases back (time constant 240 ms) until it is within 1°.
+
+In a headset a world panel opens 1.5 m straight ahead and is never nearer
+than 1 m; after that it stays where it is. Wrist glyphs sit 4 cm above the
+back of the non-dominant wrist and are sized for 45 cm, arm's reach.
 
 **The gallery shelf.** In a headset or a room, the feed waits beside the
 viewer as small paused previews on two curved wings, 1.2 m away and below the
@@ -218,8 +224,11 @@ resolved. Amber is not a signal: it is the interior light of everything.
 
 ## 3. The golden edge
 
-One edge, at every size, on every target. It is the same outline in SVG, on
-canvas and in the 3D scene.
+One edge, on every target. Around a hologram it is a 3D object, the cloche
+([section 3.4](#34-the-cloche-the-3d-halo)): a dome over the event, burnt
+through, so only torn gold fronts, embers and sparks are left of it. The flat outline in sections 3.1 to 3.3 remains
+for 2D surfaces that frame no hologram (a thumbnail, a slab in a headset
+menu); it is no longer drawn round a feed card.
 
 ### 3.1 Burnt geometry
 
@@ -255,7 +264,7 @@ the warm halo crossfades into a dark soot halo of the same shape:
 ```txt
 t = clamp((L − 0.095) / (0.16 − 0.095), 0, 1)   L: relative luminance of the ground behind the edge
 glow halo opacity = level × (1 − t)              only this part flickers
-soot halo opacity = soot × t                     soot: 0.6 on flat screens, 1 in AR
+soot halo opacity = soot × t                     soot: 0.6 on flat screens and in VR, 1 in AR
 ```
 
 `t` is 0 (all glow) at about 75% down the gradient and 1 (all soot) at about
@@ -264,11 +273,25 @@ soot halo opacity = soot × t                     soot: 0.6 on flat screens, 1 i
 Per target:
 
 - **Flat screens:** soot 0.6, by the luminance rule above.
-- **AR:** AR has no ground luminance behind the edge, so `t` is 1 when the
-  WebXR lighting estimate says the room is bright, and 0 otherwise: soot at
-  full opacity replaces the glow outright. Where there is no lighting
-  estimate (Quest), the edge is gold only.
+- **VR:** the flat-screen rule. `L` is the luminance of the VR room behind
+  the edge, and soot is 0.6.
+- **AR with a lighting estimate (Android Chrome):** AR has no ground
+  luminance behind the edge, so `t` is 1 while the room is bright and 0
+  otherwise: soot at full opacity replaces the glow outright. Bright is read
+  from the estimate's ambient (first) spherical-harmonic coefficient, in
+  linear light: `Y = 0.2126 R + 0.7152 G + 0.0722 B`. Soot switches on at
+  `Y ≥ 0.16` and off when `Y < 0.095`; between the two it keeps its state, so
+  it does not flicker at the boundary.
+- **AR with no lighting estimate (Quest passthrough):** soot at full opacity,
+  always (`t` = 1). Legibility against a bright wall comes before warmth in a
+  dim room.
 - **AR Quick Look:** none ([section 9.5](#95-ar-quick-look-ios)).
+
+**The cloche draws no soot.** A dark halo round a 3D dome reads as a drop
+shadow, and only a hologram casts a shade. The cloche keeps the soot rule's
+input and turns it into **char**: a narrow dark line (`#6b3514`) beside the
+gold, at 0.35 on dark ground and rising to full strength where `t` reaches 1
+(light ground, a bright AR room, a Quest with no lighting estimate).
 
 ### 3.3 Sizes
 
@@ -286,6 +309,62 @@ On a thumbnail the tears fall below one device pixel and the edge reads as a
 smooth gold line. On a doorway the halo is about 94 apx wide, so glyphs at
 its foot sit inside the glow. Both are intended.
 
+### 3.4 The cloche (the 3D halo)
+
+Decided 2026-10-25 with Codex, from three candidates rendered in the real
+viewer (a case, three rings, a floating bubble, and the cloche). The case read
+as an editor's bounding box, the rings as an atom, and the bubble floated,
+weightless. The cloche keeps the grounded warmth: a little place you could
+enter.
+
+- **Shape.** A superellipsoid dome (exponent 2.6) whose foot rests on the
+  hologram's floor. It is fitted once to what the hologram draws (the bubble's
+  content, never the bubble's mesh; the author's bones through the take when
+  there is no bubble), plus a 4% margin, and never refitted as the take plays,
+  so it never breathes. Its height is at least 40% of its wider radius, so
+  every dome has the same shoulders. A bubble that follows its author carries
+  its dome along.
+- **Anchored in the hologram's world.** It orbits, zooms and walks with the
+  hologram on every target. It is never on the camera or the screen.
+- **Burnt through.** Revised the same day, after the user found the
+  rim-lit glass "very much 2d": a line at the silhouette is an outline, not
+  a volume. Seeded 3D noise burns the shell away; only the burning fronts
+  remain, torn into dashes, on the near side and the far side alike, so the
+  lines in front and behind move against each other as the view turns. A
+  front is a cream core (`#fff3cf`, 1.5 px), gold (`#ffc872`) to 3.2 px, a
+  pixel of char ([section 3.2](#32-strokes-and-soot)) and a faint warm glow
+  to 9 px, in screen pixels at every zoom. The holes are large (2.8 noise
+  cycles across the dome) and seeded per hologram, the same in every
+  renderer (`clocheBurnAt`, `@holoim/xr-ui-core`).
+- **Quiet over the event.** Where the dome faces the viewer straight on, in
+  front of the event, the fronts fade to nothing; they are whole at the
+  silhouette and on the far side (75%), behind the event. In focus they
+  reach further in (strength `(1 − N·V)^1.1`); out of focus only the
+  silhouette band burns (`^2.6`). Zoomed in (the dome's on-screen radius
+  from 300 to 700 device pixels) the near side steps back to 75%, and fronts
+  close to the eye fade out. The far edge of the dome is 60% dimmer than the
+  near edge.
+- **Embers.** 2,500 embers sit in and just off the shell, a little denser
+  toward the foot, flickering from ember (`#c2410c`) through gold, cream only
+  at their peaks, drifting slowly. They follow the same quiet rule, are never
+  larger than 3.5 px (none becomes a bokeh disc) and vanish close to the eye.
+  Out of focus 45% of them drift.
+- **Sparks.** The hologram in focus sheds sparks from its burning fronts
+  into the space around it, outward and upward, cream to gold to ember, over
+  1.1 to 2.6 s ([section 8.2](#82-sparks-on-focus-only)).
+- **Rest and focus** ease into each other in about 400 ms.
+- **Glow** flickers by target as the halo does ([section 8](#8-motion)). The
+  stage light inside the portal is the only light the globe sheds onto the
+  event; the globe adds none of its own.
+- **Inside.** As the viewer goes in, the dome fades out completely before
+  they reach the shell, so nothing of it stands between them and the event:
+  no back wall, no fog.
+- **Framing.** Follow frames the whole dome in the card's viewing box (the
+  space between the title and the controls) at 78% of its size, from 18°
+  right of front and 16° above. Return frames it again.
+- **Never exported.** The GLB never holds the cloche; every renderer fits it
+  from the same rules (`fitCloche`, `@holoim/xr-ui-core`).
+
 ## 4. Viewpoints, scale and provenance
 
 - Another viewpoint is a small golden portal in the scene, never a
@@ -299,21 +378,19 @@ its foot sit inside the glow. Both are intended.
 
 ### 5.1 The shade at a hologram's foot
 
-On flat screens every hologram casts a soft dark shade at its foot, and its
-controls and caption sit in it. The shade moves with its card.
+Every hologram casts a soft dark shade on its own floor, in its world: an
+ellipse 115% of the drawn content's footprint, with the stops below, moving
+with the hologram. It is the only shade anywhere. The cloche casts none, and
+no control, edge or dock casts one on the screen.
 
 ```css
-background: radial-gradient(closest-side,
-  rgba(8,26,30,.7), rgba(8,26,30,.5) 60%, rgba(8,26,30,0));
+/* the stops, as drawn on the floor */
+rgba(8,26,30,.7), rgba(8,26,30,.5) 60%, rgba(8,26,30,0)
 ```
 
-The shade is 120% of the hologram's width. It starts just above the card's
-foot (90 to 95% of the way down the card) and is about 120 px tall on a
-desktop and 24% of the screen's height on a phone.
-
-Keep every label inside 45% of the shade's radius. There, labels and glyphs
-measure 5.43:1 or better, muted timecode 4.75:1 or better and the caption
-10:1 or better.
+The controls no longer sit in a shade: they stand in a row at the card's
+foot, below the viewing box, where the ground is still dark (above 75% down),
+and take the chip when they are over the hologram's own picture.
 
 ### 5.2 Where the chip is mandatory
 
@@ -321,16 +398,28 @@ Only where the ground fails:
 
 | Target | Rule |
 | --- | --- |
-| VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s and holds at least 2 s |
+| VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s, holds at least 2 s after the background last asks for it, and leaves over 0.4 s, as chrome does |
 | AR (WebXR) | Every row and every label sits on the chip |
 | AR Quick Look | No chip is possible, so no text or controls inside Quick Look |
-| Phone and desktop | Controls and captions sit in their hologram's shade. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The bottom dock sits on a shade along the bottom of the screen, the same soft shade a hologram casts |
+| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The bottom dock's row sits on the chip, sized to its contents, because the bottom of the ground is amber, where gold fails (2.1:1); never a band or shadow across the screen. The side sheet is on the chip |
 | Everywhere | Text over a hologram's own picture always sits on the chip |
 
 ## 6. Glyph controls
 
 Thin gold line glyphs that take their light from the edge; no buttons or
-pills. Three are always there: **Play**, **Free** and **Return**.
+pills. Icons only on a card: the word is the accessible name, and shows on a
+dock or sheet action where there is room.
+
+**Few at rest, the rest on reach.** At rest a card shows **Play** (or
+**Pause**) alone in the middle of its foot, plus **Return** beside it while
+the viewer drives (Free). Reaching for the card (a cursor over it, a touch)
+unfolds the rest either side of Play, two glyph gaps (24 apx) apart: the
+timecode to the left; Free, highlights, tilt, View in your room, Step inside and sound to the
+right. Play never moves as they come and go. The row stands below the
+viewing box, off the cloche's foot line, and ends above 75% down the screen,
+where the ground is still dark enough for bare gold ([section 9.3](#93-phone-portal)),
+well clear of the dock. Over the hologram's own picture it takes the chip,
+sized to the controls showing.
 
 | Glyph | Meaning | Label | Drawing (16 × 16 viewBox) |
 | --- | --- | --- | --- |
@@ -344,6 +433,11 @@ pills. Three are always there: **Play**, **Free** and **Return**.
 | Record | Start or stop a take (capture) | "Recording 0:12" while recording | Inside the 36 apx gold ring: a 14 apx filled rose circle when idle; a 13 apx rose rounded square (radius 3 apx) while recording |
 | View in your room | Open the hologram in AR Quick Look or WebXR AR | "View in your room" | A cube in viewfinder brackets `M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3`, round joins and caps; on the card, in its shade |
 | Step inside | Enter the hologram's event in WebXR VR, at recorded scale | "Step inside" | A door frame on a threshold line with a figure standing in it `M3.5 14.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 12.5 3v11.5M1.5 14.5h13M7.1 5.2a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M8 7v3.5M8 10.5l-1.3 3M8 10.5l1.3 3M6.5 8.5h3`, round joins and caps; on the card, in its shade, beside View in your room |
+| Sound on / off | Mute or unmute the event | "Mute" / "Unmute" (name) | A speaker with waves, or with a cross (`tokens.json`, `glyph.path.soundOn` / `soundOff`) |
+| Upload | Open the upload sheet; send the upload | "Upload" | An arrow up out of a tray (`glyph.path.upload`) |
+| Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
+| Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
+| Undo / Redo | The Halo's W and E: undo or redo the last held mark | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 
 The rose record dot has no keyline of its own; the gold ring around it is
 the same as Play's. The Play triangle, the Pause bars and the record shapes are filled;
@@ -374,6 +468,7 @@ input's minimum, centred on the glyph.
 | Mouse | 24 apx | |
 | Touch | 44 apx | |
 | Controller ray or hand ray | 56 apx | About 37 mm at 1.75 m |
+| Gaze and pinch | 72 apx | About 1.5° of view, above eye-tracking accuracy; visionOS sends it as `transient-pointer` input |
 | Hand poke | 72 apx, never under 20 mm; 30 apx gap (5.0 mm at 45 cm) | At 45 cm the 20 mm floor rules: 120 apx |
 
 **Hand feedback.** Hands have no haptics, so a poke shows a proximity cue
@@ -386,6 +481,39 @@ contact. No glow.
 **Phone edges.** Keep every target out of the system's gesture zones and
 the safe-area insets: the back-swipe edges (about 20 apx each side) and the
 home bar (about 34 apx at the bottom).
+
+**Holds.** A button, key, trigger or pinch holds a mode the moment it is
+pressed. A touch on a surface becomes a hold after 300 ms, if it has moved
+less than half a touch target (22 apx); otherwise it is a scroll or a drag.
+A held mode ends on release, on tracking loss and on blur, and its release
+never also selects what is under it.
+
+### 6.2 The Halo
+
+One radial menu with eight directions that never change, on every device:
+
+| N | NE | E | SE | S | SW | W | NW |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Note | Symbols | Redo | Mark moment | Record / stop | Retake | Undo | Ink |
+
+- A press held 300 ms draws the ring. Moving out of the centre (half a glyph
+  ring, 18 apx) points at the nearest direction; releasing there commits it.
+  Released before the ring draws, it is a flick: it commits and nothing is
+  drawn. Released in the centre, or cancelled, it commits nothing.
+- Each direction is a glyph ring (36 apx). Neighbours sit one glyph gap
+  (12 apx) apart, so the ring's radius is about 63 apx. Headset values are
+  2.5× these.
+- A direction with no action draws nothing, and its place stays reserved.
+  Capture's Halo carries S, W (undo the last held mark) and E (redo it).
+- Summoned, per input: on desktop hold **B** and move the mouse, or press
+  and hold the dock's Halo glyph; on a phone press and hold the dock's Halo
+  glyph and drag; with Quest hands the dominant thumb–middle pinch and a
+  drag of that hand; with Quest controllers press and hold the
+  non-dominant thumbstick and tilt it. In a headset the ring opens where
+  the summoning hand is, facing the head.
+- The dock's Halo glyph is four arcs around a point, open at the
+  diagonals (`glyph.path.halo`). W and E draw the undo and redo arrows
+  (`glyph.path.undo`, `glyph.path.redo`); S draws Record.
 
 ## 7. Type
 
@@ -429,7 +557,9 @@ never shift as time runs. It reads "Paused · 0:08" beside Play, and
 
 ### 7.3 Headsets
 
-- **2.5× every flat size**, for type and icons.
+- **2.5× every flat size** of type, icons, glyph strokes, rings, glyph gaps
+  and the chip's shape, as the tables above give. Never hit areas
+  ([section 6.1](#61-hit-sizes-per-input)).
 - **No text within arm's reach.** The Quest 3 focuses at about 1.3 m, and
   at 45 cm 2.5× text cannot be read and 3× takes effort. Panels you touch carry glyphs
   only, and their labels sit 1 m away or more.
@@ -462,12 +592,15 @@ level 0.50 and, on a phone, do not redraw.
 
 | Target | In focus | Sparks |
 | --- | --- | --- |
-| VR and AR | The hologram nearest the head's forward ray | Up to 70; none in peripheral vision |
-| Phone | The card nearest the middle of the screen | 26 |
-| Desktop | The card nearest the middle of the window | 26 |
+| VR and AR | The hologram nearest the head's forward ray | Up to 160; none in peripheral vision, further than 30° from that ray |
+| Phone | The card nearest the middle of the screen | 120 |
+| Desktop | The card nearest the middle of the window | 120 |
 
-A spark is a gold ember 0.4% to 0.8% of the short side, rising off a random
-point of the edge and fading over 2 to 4 s.
+A spark leaves a burning front of the globe ([section 3.4](#34-the-cloche-the-3d-halo))
+outward and upward, buoyant, curling a little, cream to gold to ember, at
+most 4 px, and fades over 1.1 to 2.6 s. (Raised from 26 and 70 with the
+burnt globe on 2026-10-25: a few sparks on a 2D outline read as sparks; on a
+volume they read as dust.)
 
 **Gold floor ring.** In VR and AR, the placed hologram last selected wears a
 gold ring on the floor, 4 cm beyond its footprint, as wide as the gold core
@@ -485,7 +618,7 @@ ease-in-out. The stage light holds steady at 0.9.
 - Controls appear from where the hand or cursor is and leave afterwards;
   everything returns to its source.
 - Chrome **unfolds**: 240 ms in, 400 ms out, ease-out.
-- The VR chip fades in over 0.3 s and holds at least 2 s.
+- The VR chip fades in over 0.3 s, holds at least 2 s and leaves over 0.4 s.
 - The world never moves relative to the head without the user's action.
 - Under reduced motion, chrome crossfades in place instead of moving.
 
@@ -502,8 +635,10 @@ hologram.
 | Halo | Holds at level 0.08 | No edge |
 | Gold core and highlight | Drop to 0.55 opacity | No edge |
 
-**Chrome while recording:** everything but the stop control and
-"Recording 0:12" hides until the take ends.
+**Chrome while recording:** everything but the stop control,
+"Recording 0:12" and the Halo glyph hides until the take ends. The Halo
+stays because it carries the take's own actions: stop, and undo or redo the
+held mark.
 
 The state is carried by shape and word, not colour: the record control turns
 from a filled rose circle into a rose rounded square (stop), and
@@ -517,7 +652,11 @@ the stop shape alone, since no text sits within arm's reach.
 ### 9.1 VR (Quest Browser, WebXR)
 
 - **Ground:** the blue-hour room, not painted. Each hologram lights its stage.
-- **Edge:** three strokes at the slab's size; none while you record.
+- **Edge:** around a hologram, the cloche (section 3.4), the char by the
+  flat-screen rule from the luminance of the room behind it; around a slab,
+  the three strokes at the slab's size. None while you record: capture draws
+  no halo during a take, and its playback review, when it has one, takes the
+  same cloche.
 - **Chip:** 72%, only in front of the sky, a hologram or a lit surface, with
   a 0.3 s fade in and a 2 s hold.
 - **Motion:** gentle flicker and steady stage light; sparks on the hologram
@@ -535,8 +674,13 @@ the stop shape alone, since no text sits within arm's reach.
   on the real surface, which never flickers.
 - **Chip:** every row and label. 97% on Quest passthrough, 88% on Android
   Chrome, 92% on a target that blends in linear light; never opaque.
-- **Edge:** gold only on Quest. On Android, soot at full opacity when the
-  lighting estimate says the room is bright.
+- **Edge:** the cloche ([section 3.4](#34-the-cloche-the-3d-halo)), the
+  same object as on a flat screen, fitted in the placed hologram's own space,
+  so placing, moving and rescaling it carry the dome along. It replaces the
+  bubble's old glass sphere and the flat ring that faced the viewer. Its char
+  is at full strength always on Quest passthrough, which has no lighting
+  estimate; on Android, while the lighting estimate says the room is bright
+  (on at 0.16, off below 0.095; section 3.2). Clear inside, restrained glow.
 - **Motion:** as VR.
 - **Type, glyphs and input:** as VR on a Quest. On an Android phone, flat
   sizes and 44 apx touch targets.
@@ -546,14 +690,17 @@ the stop shape alone, since no text sits within arm's reach.
 ### 9.3 Phone (portal)
 
 - **Ground:** the gradient, pinned to the screen; nothing bare from 75% down.
-- **Hologram:** a portal card with the full edge. Moving the phone moves the
+- **Hologram:** a portal card: the scene fills the card, never cut square,
+  and the cloche is framed in the viewing box between the title and the
+  controls. Moving the phone moves the
   camera in the hologram's world; pinching zooms between inside the world
   and seeing it as an object. On iPhone web the portal turns but does not
   travel without touch.
 - **Focus:** the card nearest the middle sparks and redraws; the others
   hold.
-- **Controls:** Play, Free and Return in the card's shade, clear of the
-  gesture zones and safe-area insets; touch 44 apx.
+- **Controls:** Play alone at rest (Return beside it while driving), the
+  rest on touch, in the row at the card's foot, clear of the gesture zones,
+  the safe-area insets and the dock; touch 44 apx.
 - **Notices:** feed-wide notices (empty, offline, server error, uploading)
   on the chip.
 - **Type:** the flat scale; the phone card title is 21.6 px.
@@ -565,7 +712,8 @@ the stop shape alone, since no text sits within arm's reach.
 - **Ground:** the gradient, pinned to the window.
 - **Hologram:** a portal card; the mouse rotates it, and the wheel or
   trackpad zooms. The card nearest the middle sparks.
-- **Controls:** in the shade; mouse 24 apx; keyboard focus as in section 6.
+- **Controls:** in the row at the card's foot, the rest when the cursor is
+  over the card; mouse 24 apx; keyboard focus as in section 6.
 - **Notices:** on the chip, never under another panel.
 - **Type:** the desktop title is `clamp(1.6rem, 3.2vw, 2.6rem)`.
 
@@ -578,12 +726,27 @@ preview, never the canonical hologram
 
 - The feed's "View in your room" entry is the cube glyph on the card, in its shade,
   and follows the flat rules.
-- **The USDZ carries the edge with a baked halo:** the gold core, the cream
-  highlight and a soft halo, static. It is added when the server builds the
-  USDZ (`apps/viewer-api/src/worker.ts`,
-  `apps/viewer-api/tools/preview_usdz.swift`), never in the exported GLB, so
-  the edge stays in the view layer and the export → upload → render pipeline
-  is unchanged.
+- **The USDZ carries the burnt globe, baked** (slice 6, decided with
+  Codex on 2026-10-25). RealityKit has no shader, no screen-space line and
+  no quiet front, so the globe is geometry in diffuse and emissive
+  materials only, fitted by `fitCloche` and burnt by the same seed (the
+  hologram's id) as the web:
+
+  | Part | What it is | Value (`edge.cloche.quickLook`) |
+  | --- | --- | --- |
+  | Fronts | Gold tubes along the zero level of `clocheBurnAt` on the dome, torn into dashes where `clocheTearAt` is low, swelling with it | Radius 0.0021 of the dome's wider radius; emissive 0.9; dropped below tear 0.08 |
+  | Cream core | A thinner cream tube showing just past the gold's outer face | 0.25 of the gold; emissive 0.6 |
+  | Char shoulder | An opaque, unlit char tube attached to the gold on the side where the shell remains, torn with it: the front reads as a burning edge and keeps a dark side on light ground | 0.65 of the gold; `edge.char.color`, no emission |
+  | Embers | The web's resting embers for the seed (`clocheEmbers`, seed x within `emberRestShare`), the first 800, as small octahedra in three heats: ember `#c2410c`, gold, cream | Size 0.7 of `emberSize`; emissive 1.0 |
+
+  No sparks, no glass, and the bubble's old shell is hidden. Keep the
+  fronts thin: with no quiet rule, the near side's fronts cross the people
+  inside. Quick Look draws its own grounding shadow under the whole model;
+  no USD attribute opts one mesh out, so the globe's thin parts add little
+  to it. The bake is added only when the server builds the USDZ
+  (`apps/viewer-api/tools/glb_to_usdz.py` with `tools/cloche.py`, run by
+  the USDZ worker), never in the exported GLB, so the edge stays in the view
+  layer and the export → upload → render pipeline is unchanged.
 
 ## 10. Do and don't
 

@@ -12,6 +12,7 @@ import type { FaceDriver } from '../face/FaceDriver';
 import type { DesktopPointAction } from '../input/DesktopPointAction';
 import type { InputController } from '../input/InputController';
 import type { VrLocomotion } from '../input/VrLocomotion';
+import type { CaptureObjects } from '../objects/CaptureObjects';
 import type { CharacterMotor } from '../physics/CharacterMotor';
 import type { RecordingSession } from '../recording/RecordingSession';
 import type { CaptureStage } from '../runtime/captureStage';
@@ -19,9 +20,10 @@ import type { ClockMode } from '../runtime/FrameLoop';
 import type { XrEntry } from '../runtime/xrEntry';
 import type { AppMode, CharacterSnapshot } from '../types/contracts';
 import type { UIStateStore } from '../ui/UIStateStore';
-import type { VrHud } from '../ui/VrHud';
+import type { VrChrome } from '../ui/VrChrome';
 import type { ArSpectator } from '../xr/ArSpectator';
 import type { HandEmbodiment } from '../xr/HandEmbodiment';
+import type { HeadsetHolds } from '../xr/HeadsetHolds';
 import type { HeightFit } from '../xr/HeightFit';
 import type { XrTracking } from '../xr/XrTracking';
 
@@ -59,12 +61,15 @@ export interface CaptureContext {
   heightFit: HeightFit;
   crouch: CrouchState;
   hands: HandEmbodiment;
+  objects: CaptureObjects;
   face: FaceDriver;
   animator: LocomotionAnimator;
   terrainLegs: TerrainLegSolver;
   ar: ArSpectator;
   ui: UIStateStore;
-  vrHud: VrHud;
+  vrChrome: VrChrome;
+  /** The headset's mark "this" and Halo (slice 5). */
+  headsetHolds: HeadsetHolds;
   recording: RecordingSession;
   diagnostics: DiagnosticViews;
   frame: CaptureFrame;

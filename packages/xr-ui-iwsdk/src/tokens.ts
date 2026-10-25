@@ -1,78 +1,78 @@
+import { tokens } from "@holoim/design-tokens";
 import { Color } from "three";
 
+// Values from docs/product/design/tokens.json through @holoim/design-tokens.
+// Sizes are apx: angular pixels, size_m = apx × 0.000372 × distance.
 
-// Values from docs/product/design/tokens.json (the styleguide wins where they
-// differ). Sizes are apx: angular pixels, size_m = apx × 0.000372 × distance.
-
-export const APX_PER_METRE_AT_1M = 1 / 0.000372; // $extensions.holoim.sizeFormula
+export const APX_PER_METRE_AT_1M = 1 / tokens.size.radiansPerApx;
 /** Foot controls are sized for this viewing distance (brief: 1.75 m reference). */
 export const FOOT_REFERENCE_DISTANCE_M = 1.75;
 /** The hand dock is read at arm's reach (styleguide §6.1: 45 cm). */
 export const DOCK_REFERENCE_DISTANCE_M = 0.45;
 /** Labels sit 1 m away or more (type.headsetLabelMinDistanceM). */
 export const LABEL_MIN_DISTANCE_M = 1;
-export const HEADSET_SCALE = 2.5; // $extensions.holoim.headsetScale: type and icons, not hit targets
+export const HEADSET_SCALE = tokens.size.headsetScale; // type and icons, not hit targets
 
 export const metresPerApx = (distanceM: number): number => distanceM / APX_PER_METRE_AT_1M;
 
 export const COLOR = {
-  gold: "#ffc872", // color.gold
-  highlight: "#fff3cf", // color.highlight (hover)
-  textMuted: "#bfd0cc", // color.textMuted (timecode)
-  deepSea: "#081a1e", // color.deepSea (chip, shade)
-  record: "#ff3b5c" // color.record
+  gold: tokens.color.gold,
+  highlight: tokens.color.highlight, // hover
+  textMuted: tokens.color.textMuted, // timecode
+  deepSea: tokens.color.deepSea, // chip, shade
+  record: tokens.color.record
 } as const;
 
 export const CHIP_OPACITY = {
-  vr: 0.72, // chip.opacity.vr
-  arQuestPassthrough: 0.97, // chip.opacity.arQuestPassthrough
-  arAndroidChrome: 0.88 // chip.opacity.arAndroidChrome
+  vr: tokens.chip.opacity.vr,
+  arQuestPassthrough: tokens.chip.opacity.arQuestPassthrough,
+  arAndroidChrome: tokens.chip.opacity.arAndroidChrome
 } as const;
 
 export const SHADE = {
-  inner: 0.7, // shade.inner alpha (deepSea)
-  mid: 0.5, // shade.mid alpha
-  midStop: 0.6, // shade.midStop
-  phoneHeight: 0.24 // shade $extensions placement.heightPhone: 24% of screen height
+  inner: tokens.shade.inner.alpha, // deepSea
+  mid: tokens.shade.mid.alpha,
+  midStop: tokens.shade.midStop,
+  phoneHeight: tokens.shade.heightPhoneOfScreen // share of screen height
 } as const;
 
 export const CHIP = {
-  radius: 18, // chip.radius
-  paddingBlock: 5, // chip.paddingBlock
-  paddingInline: 14, // chip.paddingInline
-  controlRowPaddingStart: 3, // chip.controlRowPaddingStart (also top and bottom)
-  vrFadeInMs: 300, // chip.vrFadeIn
-  vrMinHoldMs: 2000 // chip.vrMinHold
+  radius: tokens.chip.radius,
+  paddingBlock: tokens.chip.paddingBlock,
+  paddingInline: tokens.chip.paddingInline,
+  controlRowPaddingStart: tokens.chip.controlRowPaddingStart, // also top and bottom
+  vrFadeInMs: tokens.chip.vrFadeIn,
+  vrMinHoldMs: tokens.chip.vrMinHold
 } as const;
 
 export const GLYPH = {
-  stroke: 1.5, // glyph.stroke
-  icon: 16, // glyph.icon
-  ring: 36, // glyph.ring
-  playTriangle: 14, // glyph.playTriangle
-  gap: 12, // glyph.gap
-  idleAfterMs: 4000, // glyph.idleAfter
-  idleOpacity: 0.4, // glyph.idleOpacity
-  pressedOpacity: 0.55 // glyph.states.pressedOpacity
+  stroke: tokens.glyph.stroke,
+  icon: tokens.glyph.icon,
+  ring: tokens.glyph.ring,
+  playTriangle: tokens.glyph.playTriangle,
+  gap: tokens.glyph.gap,
+  idleAfterMs: tokens.glyph.idleAfter,
+  idleOpacity: tokens.glyph.idleOpacity,
+  pressedOpacity: tokens.glyph.states.pressedOpacity
 } as const;
 
 export const HIT = {
-  touch: 44, // hit.touch
-  ray: 56, // hit.ray
-  poke: 72, // hit.poke
-  pokeFloorMm: 20, // hit.pokeFloorMm
-  pokeGap: 30, // hit.pokeGap
-  phoneHomeBar: 34 // hit.phoneHomeBar
+  touch: tokens.hit.touch,
+  ray: tokens.hit.ray,
+  poke: tokens.hit.poke,
+  pokeFloorMm: tokens.hit.pokeFloorMm,
+  pokeGap: tokens.hit.pokeGap,
+  phoneHomeBar: tokens.hit.phoneHomeBar
 } as const;
 
 export const TYPE = {
-  controlLabel: { size: 14, weight: 500 }, // type.controlLabel
-  timecode: { size: 14.4, weight: 400 } // type.timecode
+  controlLabel: { size: tokens.type.controlLabel.fontSize, weight: tokens.type.controlLabel.fontWeight },
+  timecode: { size: tokens.type.timecode.fontSize, weight: tokens.type.timecode.fontWeight }
 } as const;
 
 export const MOTION = {
-  chromeInMs: 240, // motion.chrome.in
-  chromeOutMs: 400 // motion.chrome.out
+  chromeInMs: tokens.motion.chrome.in,
+  chromeOutMs: tokens.motion.chrome.out
 } as const;
 
 /** Where the controls are drawn, which sets sizes, hit areas and the chip. */

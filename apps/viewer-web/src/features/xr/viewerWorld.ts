@@ -1,3 +1,4 @@
+import { tokens } from "@holoim/design-tokens";
 import {
   AudioSystem,
   DomeGradient,
@@ -26,7 +27,7 @@ import { createViewerContext, focusedRecord, viewerContext, type PlacedHologram,
 const BLUE_HOUR_SKY: [number, number, number, number] = [0.0471, 0.1333, 0.1569, 1]; // ground.top
 const BLUE_HOUR_EQUATOR: [number, number, number, number] = [0.3412, 0.3725, 0.3529, 1]; // ground.grey
 const BLUE_HOUR_GROUND: [number, number, number, number] = [0.7216, 0.5137, 0.3686, 1]; // ground.horizon
-const DEEP_SEA = 0x081a1e;
+const DEEP_SEA = tokens.color.deepSea;
 const VR_FLOOR_RADIUS_M = 12;
 
 export interface ViewerWorld {

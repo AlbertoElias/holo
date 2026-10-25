@@ -10,7 +10,7 @@ import {
   waitForNoIwerSession
 } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, captureEvidence, expect, observeFeedCardRenderer, test, waitForFeedCardPresented } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const mockGlbPath = path.resolve(testDir, "../../capture/public/gltf/models/avatar.glb");
@@ -313,7 +313,7 @@ async function enterMockAr(page: Page): Promise<void> {
   await expect(page.locator(".ar-trigger-button")).toHaveCount(1);
   await waitForFeedCardPresented(page);
 
-  await page.locator(".ar-trigger-button").first().click();
+  await pressViewInAr(page);
   await expect(page).toHaveURL(/\/ar\/mock-1$/);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
@@ -325,7 +325,7 @@ async function enterMockAr(page: Page): Promise<void> {
 async function clickSessionButton(page: Page, label: string): Promise<void> {
   await page.evaluate((text) => {
     const button = Array.from(document.querySelectorAll("button")).find((candidate) => (
-      candidate.textContent?.trim() === text
+      candidate.getAttribute("aria-label") === text || candidate.textContent?.trim() === text
     ));
     if (!(button instanceof HTMLButtonElement)) {
       throw new Error(`${text} button not found.`);
@@ -375,7 +375,7 @@ test("AR places the model on a surface in front of the viewer, recenter places a
   await clickSessionButton(page, "Exit AR");
   await waitForNoIwerSession(page);
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByLabel("Upload Hologram")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Upload a hologram" })).toBeVisible();
   await expect(page.getByText("Mock Runner")).toBeVisible();
   await expect(page.locator(".ar-trigger-button")).toHaveCount(1);
 });
@@ -417,7 +417,7 @@ for (const viewport of [
     await assertViewerShell(page);
     const card = page.locator(".feed-card").first();
     await expect(card).toHaveAttribute("data-model-state", "rendered");
-    const toggle = page.getByRole("button", { name: "Expand upload panel" });
+    const toggle = page.getByRole("button", { name: "Upload a hologram" });
     await expect(toggle).toBeVisible();
     await expect(card.getByRole("heading", { name: "A recorded hologram" })).toBeVisible();
     await expect(card.locator(".feed-card-meta p")).toContainText("By Alberto Elias");
@@ -432,7 +432,7 @@ for (const viewport of [
     expect(metadata!.y).toBeGreaterThanOrEqual(0);
     expect(metadata!.x).toBeGreaterThanOrEqual(0);
     expect(metadata!.x + metadata!.width).toBeLessThanOrEqual(viewport.width);
-    expect(metadata!.y + metadata!.height, "title and author must sit above Upload").toBeLessThan(upload!.y);
+    expect(metadata!.y + metadata!.height, "title and author must sit above the dock's Upload").toBeLessThan(upload!.y);
     const portal = await card.locator(".portal-controls").boundingBox();
     expect(portal).not.toBeNull();
     const overlaps = metadata!.x < portal!.x + portal!.width && portal!.x < metadata!.x + metadata!.width
@@ -446,10 +446,12 @@ for (const viewport of [
 
     if (viewport.width === 390) {
       await toggle.click();
-      await expect(page.getByLabel("Upload Hologram")).toBeVisible();
-      await page.getByRole("button", { name: "Collapse upload panel" }).click();
+      const sheet = page.getByRole("dialog", { name: "Upload a hologram" });
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByLabel("Hologram name")).toBeVisible();
+      await sheet.getByRole("button", { name: "Close" }).click();
       await expect(toggle).toBeVisible();
-      await expect(page.getByLabel("Upload Hologram")).toHaveCount(0);
+      await expect(sheet).toHaveCount(0);
     }
   });
 }
