@@ -1,176 +1,304 @@
 # Feature brief: Standard avatar formats
 
 **Lead:** Claude Code (session 2026-10-25)
-**Status:** Draft
+**Status:** Implementing
 **Layer:** Event (the recorded body; see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
 
 An author can record with any common humanoid avatar (a Mixamo download, a
 VRM 0.x or 1.0 model, an Unreal mannequin export, a Meta Movement SDK or Apple
-ARKit body rig, or a Ready Player Me legacy export) by loading it with
-`?avatar=<url>`. Its head, arms, hands, fingers, legs, crouch, walking and face
-follow the author as they do on the shipped avatar. The hologram they upload
-renders and frames correctly in the feed and in AR. An avatar the system cannot
-map says so: it names what is missing and what that disables, instead of
-silently losing its arms.
+ARKit body rig, a 3ds Max Biped rig, or a Ready Player Me legacy export) by
+loading it with `?avatar=<url>`. Its head, arms, hands, fingers, legs, crouch
+and face follow the author as they do on the shipped avatar. The hologram they
+upload renders, faces and frames correctly in the feed and in AR. An avatar the
+system cannot map says so: it names what is missing and what that disables,
+instead of silently losing its arms.
 
-## Scope
+## Slices
+
+| Slice | Delivers | Status |
+|---|---|---|
+| 1 | Resolver, every capture lookup routed through it, binding report, the four axis-assumption fixes, skeleton-derived facing, `HOLOIM_humanoid` export, viewer-web anchors via the resolver, fixtures and the `avatars` check | Implementing |
+| 2 | Locomotion clips retargeted onto avatars without their own Idle, Walk, Jump or Fall, with the per-bone T-pose correction that needs | Not started |
+
+The design review found that arm IK, finger retargeting and the body solver
+already work in avatar space against the measured bind pose
+(`toBindAimInParent`, direction-mapping finger chains, `setFromUnitVectors`
+on bind hips→head, the knuckle-built `palmInHand`). An A-pose bind therefore
+needs no T-pose correction for them. Only clip retargeting does, so it is
+slice 2. Until then, an avatar without usable clips shows "locomotion: off"
+in its report and walks with the procedural legs, or stands still on desktop.
+That is honest degradation and keeps the XR recording outcome intact.
+
+## Scope (slice 1)
 
 **Included:**
 
-- One canonical humanoid bone resolver. It maps any skeleton to the VRM 1.0
-  humanoid bone set (`packages/meaning/src/humanoid.ts` today), in priority order:
-  1. the file's own humanoid declaration: `VRMC_vrm.humanoid.humanBones`
-     (VRM 1.0) or `VRM.humanoid.humanBones` (VRM 0.x), read from the glTF
-     JSON by node index;
-  2. per-standard name tables, matched case-insensitively after stripping
-     namespaces (`mixamorig1:`, `Armature|`, `root/…/` paths) and known
-     prefixes or suffixes;
-  3. nothing else. There is no topology guessing in this feature (see
-     Excluded).
-- Name tables for Mixamo and Ready Player Me (the same names), VRM and Unity
-  `HumanBodyBones` names (the same vocabulary as VRM 1.0), VRoid (`J_Bip_*`),
-  Character Creator 4 (`CC_Base_*`), the Unreal UE4 and UE5 mannequin
-  (`pelvis`, `spine_01`, `upperarm_l`, `index_01_l`, …), the Meta Movement SDK
-  and OpenXR `XR_FB_body_tracking` joints (`SpineLower`, `LeftArmUpper`,
-  `LeftHandIndexProximal`, `XR_BODY_JOINT_LEFT_ARM_UPPER_FB`, …), and the Apple
-  ARKit body skeleton, which RealityKit and USDZ also use (`hips_joint`,
-  `left_arm_joint`, `left_handIndex_1_joint`, …). The same canonical bone may
-  come from several source bones (Unreal and ARKit have more spine bones than
-  VRM). Each table states which bone wins.
-- Every hardcoded bone lookup in capture goes through the resolver. That
-  covers rig setup, arm and finger chains, crouch, the body solver's bind
-  measurement, body samples, hand embodiment, the terrain leg solver,
-  locomotion track filtering, objects and tray, pointing, debug views, and the
-  face rig's head and eye bones. The inventory is in the design review notes
-  below.
-- Bind-pose normalization. At load, measure each mapped bone's rest
-  direction in avatar space and derive:
-  - the avatar's facing from its own skeleton (lateral = left minus right
-    shoulder or hip, up = head minus hips). It is corrected to the rig's +Z
-    convention, so a VRM 0.x model facing −Z stands the right way round
-    without `avatarForwardOffset`.
-  - anatomical axes per bone (the swing axis for crouch pitch, the palm frame
-    for the hand grip offset, the elbow hint), computed from bone positions
-    instead of assuming the shipped rig's local axes.
-  - a per-bone correction to a canonical T-pose, so an A-pose rig and a
-    T-pose rig retarget to the same pose.
-- Locomotion clips on any avatar. When the loaded avatar has no usable
-  Idle, Walk, Jump or Fall clip, the shipped avatar's clips are retargeted
-  onto it through canonical bones and the T-pose correction. This keeps
-  desktop 2D walking and jumping working.
-- A binding report on the debug surface, like the face rig's report: the
-  detected standard, matched and unmatched canonical bones, missing required
-  bones, and which features are off (arm IK, fingers, crouch, body solver,
-  locomotion, gaze). There is one console warning naming them.
-- Export → upload → render. Exported holograms keep the source bone names
-  (backward compatible) and add a small `HOLOIM_humanoid` glTF extension
-  mapping canonical bones to node indices. viewer-web frames and anchors with
-  that extension first, then the shared name resolver, then today's
-  `RecordedAvatar`, `Hips` or `Head` lookup, so old uploads render as before.
-- Fixture avatars, one per standard, generated deterministically at test
-  time from the shipped `avatar.glb` (renamed bones, re-oriented bone axes,
-  an A-pose bind, a VRM 0.x −Z variant, a VRM 1.0 file with arbitrary names
-  and only the extension to map them, and an unmappable rig). They are
-  written under ignored `output/`, so no avatar binaries are committed.
+- **One canonical resolver** in `@holoim/meaning`, kept free of three.js.
+  Both apps already depend on that package, and `HOLOIM_meaning` already
+  uses `VrmHumanoidBone`.
+  - Input: the candidate nodes `{name, isJoint, nodeIndex}[]` plus any
+    humanoid maps from the glTF JSON. Output: canonical bone → node, the
+    detected standard, and what did not match.
+  - Each app has a thin three adapter. Capture's adapter maps node indices to
+    objects with `gltf.parser.associations`, never by name.
+  - Priority order:
+    1. the file's own declaration: `VRMC_vrm.humanoid.humanBones` (VRM 1.0),
+       `VRM.humanoid.humanBones` (VRM 0.x), or `HOLOIM_humanoid` (our
+       export);
+    2. per-standard name tables;
+    3. nothing else (no topology guessing).
+  - Names are matched as three.js sanitizes them: `GLTFLoader` runs
+    `PropertyBinding.sanitizeNodeName`. So `mixamorig1:Hips` arrives as
+    `mixamorig1Hips`, Blender's `Hips.001` as `Hips001`, and
+    `Bip01 L UpperArm` as `Bip01_L_UpperArm`. Raw names from the JSON are
+    sanitized the same way before matching. Matching is case-insensitive
+    after normalization, and the tables are checked for collisions when the
+    module loads.
+- **Name tables:**
+  - Mixamo and Ready Player Me (the same names, with any `mixamorig\d*`
+    prefix)
+  - VRM 1.0 and Unity `HumanBodyBones` (the same vocabulary)
+  - VRoid (`J_Bip_C_Hips`, `J_Bip_L_UpperArm`, …)
+  - Character Creator 4 (`CC_Base_*`)
+  - 3ds Max Biped (`Bip01 Pelvis`, `Bip001 L UpperArm`, …)
+  - the Unreal UE4 and UE5 mannequin (`pelvis`, `spine_01..05`,
+    `clavicle_l`, `upperarm_l`, `index_01_l`; twist bones ignored)
+  - the Meta Movement SDK and OpenXR `XR_FB_body_tracking` joints
+    (`SpineLower`, `LeftArmUpper`, `LeftHandIndexProximal`,
+    `XR_BODY_JOINT_LEFT_ARM_UPPER_FB`)
+  - the Apple ARKit body skeleton, which RealityKit and USDZ also use
+    (`hips_joint`, `left_arm_joint`, `left_handIndex_1_joint`)
+
+  When several source bones can fill one canonical bone (Unreal and ARKit
+  spines; a Mixamo finger's end site), each table states which wins. The
+  resolver never picks by traversal order.
+- **Every capture lookup goes through the resolver.** That is about 32
+  sites:
+  - `AvatarRig` setup, the arm and finger chains, crouch, and the head and
+    eyes
+  - `VrBodySolver.measureBindPose` and the `BodyTracking` samples
+  - the `HandEmbodiment` joint→bone map and its debug bones
+  - the `TerrainLegSolver` leg scan and the `LocomotionAnimator` track
+    filter (by canonical bone, not by name suffix)
+  - `ObjectInteraction` and `ObjectTray` hands
+  - `PointResolver`, `DiagnosticViews`, and the `FaceRig` head and eye bones
+
+  Mesh lookups such as the face rig's eye meshes and head-mesh hiding stay
+  as they are.
+- **Four axis-assumption fixes**, each computed once at bind:
+  - **Crouch** (`AvatarRig.ts:214`, `:783`): each bone pitches about its
+    swing axis, the avatar's lateral axis in that bone's bind-local frame,
+    instead of local X.
+  - **Hand grip offset** (`AvatarRig.ts:422-424`): built from `palmInHand`.
+    A rig without fingers falls back to the forearm→hand direction plus
+    avatar-down, and the report names the fallback. This is the same
+    palm-down assumption as `DesktopPointAction.ts:118-121`, which uses the
+    same frame.
+  - **Elbow hint** (`AvatarRig.ts:443`): defined in avatar space (lateral,
+    down, back) and converted to local space at bind.
+  - **Leg IK `BIND_FORWARD`** (`body/legIk.ts:13`): expressed in avatar
+    space after facing correction.
+- **Skeleton-derived facing:**
+  - Lateral comes from left minus right upper arm, falling back to upper
+    legs. Up is head minus hips.
+  - Forward is cross-checked against hips→toes. Yaw is snapped to the
+    nearest 90°. The up axis is snapped too when head→hips is not vertical
+    (lying-down or Z-up exports).
+  - When toes and left/right disagree (a mirrored or mislabelled rig), the
+    report says so and the rotation is not applied.
+  - The correction sits on a node inside the subtree `GltfExportComposer`
+    clones (it overwrites the cloned root's quaternion at lines 64-73).
+  - `avatarForwardOffset` keeps today's meaning, applied after
+    normalization, so existing URLs and fixtures are unchanged.
+- **Binding report** on the debug surface, like the face rig's report:
+  - the source (declaration or table) and the detected standard
+  - matched, unmatched and missing-required bones
+  - ambiguities, the facing correction applied, and the grip fallback
+  - features off: arm IK, fingers, crouch, body solver, locomotion, gaze
+
+  There is one console warning naming the missing bones and disabled
+  features.
+- **Export:**
+  - Exported holograms keep source bone names, so existing GLBs stay
+    backward compatible.
+  - They add `HOLOIM_humanoid` in the same shape as VRM,
+    `{humanBones: {hips: {node}, …}}`, so one parser reads all three. It is
+    listed in `extensionsUsed` only, never `extensionsRequired`, and node
+    indices come from `writer.nodeMap` as in `GLTFMeaningPlugin`.
+  - Tracks are keyed by bone identity, not by name, so a file with
+    duplicate bone names no longer drops tracks (`GltfExportComposer.ts:81`
+    and the frame store).
+- **viewer-web:**
+  - Anchors are found by `HOLOIM_humanoid` first, then by the shared
+    resolver on node names, then by today's lookup, all within the
+    `RecordedAvatar` scope so a prop's `Head` cannot take over.
+  - This touches `HologramCardCanvas.tsx` and the scene normalizer. The
+    active `feature/viewer-xr-interface` branch moves that normalizer into
+    `features/hologram/hologramScene.ts`, so this step lands on top of that
+    branch once it merges, never as a parallel edit.
+  - The USDZ converter is checked with a non-RPM export.
+- **Fixtures**, generated deterministically at test time from the shipped
+  `avatar.glb` by a script using `@gltf-transform/core`. They are written to
+  ignored `output/`, so no avatar binaries are committed.
+  - **Renamed:** Mixamo-prefixed (`mixamorig1:`), Unreal at cm scale with
+    generated twist bones and `spine_01..05`, VRoid, CC4, Biped, Meta
+    Movement and ARKit.
+  - **Declared:** a VRM 1.0 file with arbitrary bone names that only its
+    extension maps.
+  - **Geometric:**
+    - **Re-oriented bone axes:** the exact transform needs no re-skinning.
+      For each joint, with correction C, local rotation r' = C_parent⁻¹·r·C
+      and translation t' = C_parent⁻¹·t, the inverse bind matrix becomes
+      IBM' = C⁻¹·IBM, and the same applies to animation keys and to non-joint
+      children of bones. A Node check proves the skinned vertices are
+      identical to 1e-5.
+    - **A-pose:** the cheap route changes only the arm rest rotations and
+      leaves the inverse bind matrices. The mesh renders in A-pose and the
+      app measures bind from node transforms. A guard asserts no
+      `skeleton.pose()` call exists.
+    - **VRM 0.x:** faces −Z.
+    - **Z-up:** a root rotation and scale.
+  - **Negative:** unmappable names, and duplicate bone names.
 
 **Excluded:**
 
-- Topology or heuristic bone guessing for rigs with no recognisable names
-  and no humanoid declaration. They get the binding report and degrade
-  safely.
-- Loading `.vrm` features beyond the humanoid map: spring bones, VRM
-  expressions as a source (the face standards already resolve VRM morph
-  names), MToon materials, VRM look-at constraints, and first-person
-  annotations.
+- Locomotion clip retargeting and the T-pose correction (slice 2).
+- Topology or heuristic bone guessing for unrecognisable rigs. They get the
+  report and degrade safely.
+- `.vrm` features beyond the humanoid map: spring bones, MToon, look-at
+  constraints, first-person annotations. VRM morph names already resolve
+  through `@holoim/avatar-face`.
 - Native USDZ or FBX loading. Apple and Unreal rigs are supported as glTF
   exports carrying their names.
 - An in-app avatar picker or upload UI. Selection stays on `?avatar=`.
-- Phone-driven avatars (TODO item and IDEA-078). This feature is a
-  prerequisite for them.
-- Naturalness work on the solver (separate TODO item).
+- Phone-driven avatars (IDEA-078) and solver naturalness work (separate
+  TODO items).
 
-## Acceptance criteria
+## Acceptance criteria (slice 1)
 
-- [ ] Each generated fixture avatar (Mixamo prefixed, Unreal, VRoid, CC4,
-  Meta Movement, ARKit, VRM 1.0 by extension, VRM 0.x facing −Z, A-pose,
-  re-oriented bone axes) resolves every required VRM bone and all 30 finger
-  bones, and its binding report says so.
-- [ ] The recorded headset hand replay passes the hand fidelity thresholds
-  (`lib/hand-fidelity.ts`) unchanged on every fixture that has fingers.
-- [ ] One body replay fixture (`walk-forward`) passes the body fidelity
-  thresholds (`lib/body-fidelity.ts`) unchanged on every fixture, including
-  the A-pose, re-oriented and −Z variants.
-- [ ] Desktop locomotion on a fixture with no clips of its own plays
-  retargeted Idle and Walk. The canonical bones' avatar-space rotations stay
-  within a stated tolerance of the shipped avatar's at sampled times.
-- [ ] Crouch, face gaze and object grip work on the renamed and re-oriented
-  fixtures (the existing `test:xr:face` and object checks run on one
-  non-RPM fixture).
-- [ ] An exported hologram from a non-RPM fixture keeps its source bone
-  names and carries `HOLOIM_humanoid`. Through the real pipeline (capture
-  export → API upload → viewer-web), the feed card and AR viewer find its hips
-  and head anchor. An existing upload with no extension still renders as it
-  does today.
-- [ ] The unmappable fixture loads without throwing. The report lists its
-  missing bones and disabled features, and one console warning names them.
-- [ ] The shipped avatar's existing capture XR checks and the pipeline smoke
-  test pass unchanged (no regression on the default rig).
+- [ ] **Bind:** every fixture except the negative ones resolves every
+  required VRM bone and all 30 finger bones. The binding reports are checked
+  in Node, without a browser.
+- [ ] **Shipped avatar unchanged:** its binding report is stable, and its
+  existing hand, body, face, object and height checks pass with reports
+  within their current thresholds.
+- [ ] **Hand replay:** the recorded headset hand replay passes
+  `lib/hand-fidelity.ts` thresholds unchanged on the geometric fixtures
+  (re-oriented, A-pose, −Z, Z-up) and the cm-scale Unreal fixture.
+- [ ] **Body replay:** the `walk-forward` body replay passes
+  `lib/body-fidelity.ts` thresholds unchanged on the same fixtures, including
+  crouch.
+- [ ] **Face and objects:** face gaze and the object grip work on the
+  re-oriented Unreal fixture (the existing face and object checks run with
+  `?avatar=`).
+- [ ] **Export → upload → render:** an export from a non-RPM fixture keeps
+  its source names and carries `HOLOIM_humanoid`. Through the real pipeline,
+  the feed card and AR viewer find its hips and head, and `HOLOIM_meaning`
+  bone anchors still resolve. An upload without the extension renders as
+  today.
+- [ ] **Facing:** an exported −Z fixture renders facing the same way as its
+  recording in the feed and AR, judged from a numeric yaw in the report.
+- [ ] **Duplicate names:** a fixture with duplicate bone names exports
+  without losing tracks.
+- [ ] **Unmappable rig:** the unmappable fixture loads without throwing. Its
+  report lists the missing bones and disabled features, and one console
+  warning names them.
+- [ ] **No pose reset:** no `skeleton.pose()` call exists in capture or
+  viewer-web.
 
 ## Failure cases considered
 
 | Failure case | Prevention or evidence |
 |---|---|
-| Two source bones claim one canonical bone (Mixamo `Index3` and `Index4`; Unreal `spine_03` to `spine_05`) | Each table states the winner; the resolver keeps the first by declared priority, never by traversal order. Fixture check. |
-| A mesh or empty node carries a bone name (`Wolf3D_Head`, `EyeLeft`) | Only `Bone`s, or skin joints, are candidates; the face rig keeps its mesh lookup separately. |
-| Duplicate bone names in one file (two `Hips` from an attached prop) | Prefer joints of the avatar's skinned meshes; report the ambiguity. |
-| A case-insensitive match collides (`spine` vs `Spine`) | Tables are normalised once and checked for collisions at module load. |
-| A VRM extension points at a node that is not a joint, or is out of range | Ignore that entry, fall back to names, and report it. |
-| VRM 0.x axis flip (the model faces −Z) | Facing is derived from the skeleton, not the format; the −Z fixture proves it. |
-| An A-pose bind changes arm IK rest, crouch and retargeted clips | T-pose correction per bone; the A-pose fixture runs body, hand and locomotion checks. |
-| Bone local axes differ (Unreal X-along-bone, Blender Y-along-bone) | Anatomical axes come from bone positions; the re-oriented fixture runs every check. |
-| An extra twist or roll bone sits between arm and forearm (Unreal `upperarm_twist_01_l`, Meta `LeftHandWristTwist`) | Chains use canonical bones and measure lengths between them; twist bones are left at rest. |
-| Missing optional bones (no `upperChest`, no toes, no eyes, 3-bone thumb) | Optional set per feature; features degrade one at a time with the report. |
-| Missing required bones | Each feature disables itself; the report names it; nothing throws. |
-| Locomotion clips that target the shipped rig's names on a renamed rig | Retarget through canonical bones; root motion maps to the canonical hips. |
-| Exported GLB loses the mapping, so viewer framing fails on Unreal names | `HOLOIM_humanoid` extension plus the shared resolver in viewer-web; pipeline test on a non-RPM fixture. |
-| Old uploads without the extension | The viewer keeps today's name fallback; the existing pipeline spec runs unchanged. |
-| The body solver measures bind after an animation already ran | It keeps measuring before clips attach (`createCaptureRuntime.ts` order); the normalization uses the bind skeleton, not the current pose. |
-| Scale: centimetre rigs (Unreal 100×) or an armature scale node | Measure in avatar root space after load; the existing height adaptation sets the final scale. The Unreal fixture is exported at cm scale. |
-| Generated fixtures differ from real assets | Fixtures exercise names, axes, pose and facing deterministically; a real third-party Mixamo and VRM file is checked by hand in the proof video and recorded as a remaining limit. |
+| three.js sanitizes names (`mixamorig1:Hips` → `mixamorig1Hips`, `Hips.001` → `Hips001`, spaces → `_`) | The resolver normalizes sanitized and raw names the same way; the Mixamo-prefixed and Biped fixtures prove it. |
+| Two source bones claim one canonical bone (Mixamo `Index3` and `Index4`; Unreal `spine_03` to `spine_05`) | Declared winner per table, never traversal order. Node check. |
+| A mesh or empty node carries a bone name (`Wolf3D_Head`, `EyeLeft`) | Only skin joints and `Bone`s are candidates. |
+| Duplicate bone names (a prop with its own `Hips`) | Prefer joints of the avatar's skinned meshes; report the ambiguity; export keys tracks by identity. Duplicate-name fixture. |
+| Case-insensitive collisions inside or across tables | Collision check at module load. |
+| A declaration points at a non-joint or out-of-range node | Ignore that entry, fall back to names, report it. |
+| VRM 0.x faces −Z; a Z-up export; a slightly asymmetric rest pose | Facing from the skeleton, snapped to 90°; −Z and Z-up fixtures. |
+| Mirrored or mislabelled left/right | Toe cross-check; reported, not applied. |
+| Shoulders missing | Lateral from upper legs. |
+| Bone local axes differ (Unreal X-along-bone, Blender Y-along-bone) | The four fixes use avatar-space axes; re-oriented fixture runs hand and body replays. |
+| An A-pose bind | Chains work against measured bind; A-pose fixture runs hand and body replays. |
+| Twist or extra spine bones between canonical bones | Chains span canonical bones; twist bones stay at rest; Unreal fixture generates them. |
+| Missing optional bones (no `upperChest`, toes, eyes; 3-bone thumb) | Optional set per feature; features degrade one at a time with the report. |
+| Missing required bones | Feature disables itself; report and one warning; nothing throws. Unmappable fixture. |
+| Locomotion clips target names the rig lacks | Slice 1: tracks are filtered by canonical bone; unmatched clips are reported, and locomotion is off. Slice 2 retargets. |
+| Exported GLB loses the VRM mapping | `HOLOIM_humanoid`; viewer reads it first. |
+| Old uploads without the extension | Viewer keeps today's fallback; existing pipeline spec unchanged. |
+| Something starts calling `skeleton.pose()` and snaps an A-pose rig to its inverse bind matrices | Guard check. |
+| The facing correction is lost on export | It sits inside the cloned subtree; −Z export yaw check. |
+| Centimetre rigs (Unreal 100×) or an armature scale node | Measure in avatar root space; height adaptation sets final scale; cm-scale Unreal fixture. |
+| Generated fixtures share the shipped rig's proportions and single skin | Real third-party Mixamo and VRM files are checked by hand in the proof video; their names and hashes are recorded below as a remaining limit. |
+| CI cost of per-fixture replays | Renamed fixtures are checked in Node only; replays run only on 5 geometric fixtures in one `avatars` check with a `CHECK_COST` entry. |
 
 ## Ownership
 
 | Role | Owner | Files or modules |
 |---|---|---|
-| Lead | Claude Code lead session | Brief, integration, final handoff |
-| Design reviewer | `design-reviewer` subagent | Read-only review before implementation |
-| Implementer | Lead, with scoped subagents per module | Resolver package, capture rig modules, viewer-web anchors, fixture generator and check |
-| Independent verifier | Separate Claude agent (Codex is not installed in this environment; recorded as a gap from the different-vendor rule) | Read-only verification; test artifacts only |
+| Lead | Claude Code lead session | Brief, integration, `@holoim/meaning` resolver contract, final handoff |
+| Design reviewer | `design-reviewer` subagent (Opus) | Done 2026-10-25; read-only |
+| Implementer | Lead and scoped subagents, one module each | Resolver; capture rig modules; export; viewer-web anchors (after `feature/viewer-xr-interface` merges); fixture generator and `avatars` check |
+| Independent verifier | Separate Claude agent. Codex is not installed in this environment, so the different-vendor rule is not met; recorded as a gap. | Read-only verification; test artifacts only |
 
 ## Design decision
 
-Pending design review.
+The design review on 2026-10-25 by the `design-reviewer` subagent changed
+the draft as follows:
+
+- **Sliced.** Clip retargeting and the T-pose correction moved to slice 2,
+  because the IK paths already work against the measured bind pose.
+- **Resolver location.** It stays in `@holoim/meaning` as a pure,
+  three-free module with per-app adapters, rather than going into a new
+  package.
+- **Name matching.** Names are matched as three.js sanitizes them, and 3ds
+  Max Biped was added.
+- **Declared bones.** VRM and `HOLOIM_humanoid` entries resolve by node
+  index through `parser.associations`.
+- **Axes.** The draft's generic per-bone "anatomical axes" framework was
+  replaced with fixes at the four known sites.
+- **Facing.** It snaps to 90°, cross-checks against the toes, and sits
+  inside the exported subtree. `avatarForwardOffset` keeps its meaning.
+- **Export extension.** `HOLOIM_humanoid` takes the VRM shape and goes in
+  `extensionsUsed` only. Export keys tracks by bone identity.
+- **Fixtures.** The fixture construction is specified (exact axis
+  re-orientation; the cheap A-pose route with a `skeleton.pose()` guard).
+- **CI cost.** Renamed fixtures are checked in Node only. Replays run only on
+  the geometric fixtures.
+- **Criteria added:** a stable shipped-avatar report, exported facing yaw,
+  duplicate names, `HOLOIM_meaning` anchors on a non-RPM export, and no
+  `skeleton.pose()`.
+
+The review also asked that slice 1 wait for the other "Verifying" features
+that touch `AvatarRig`, `VrBodySolver` and the viewer. Their code is already
+on `main`; they are waiting only on device checks, so nothing blocks.
+
+The one live overlap is `feature/viewer-xr-interface`, active on 2026-10-25,
+which moves the viewer's anchor lookup. The viewer step is sequenced after it.
 
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Fixtures resolve all bones | New `test:xr:avatars` check: generate fixtures, load each in capture, read the binding report | `output/ci-avatars/<fixture>-binding.json` — pending |
-| Hand fidelity on each fixture | `test:xr:avatars` runs the recorded hand replay per fixture | `<fixture>-hand-report.json` — pending |
-| Body fidelity on each fixture | `test:xr:avatars` runs `walk-forward` per fixture | `<fixture>-body-report.json` — pending |
-| Retargeted locomotion | `test:xr:avatars` desktop walk on a clip-less fixture, compared with the shipped avatar | `<fixture>-locomotion-report.json` — pending |
-| Crouch, gaze, grip on non-RPM rig | `test:xr:face` and object check with `?avatar=` set to one fixture | face/object reports — pending |
-| Export → upload → render | Pipeline spec on a non-RPM fixture plus the unchanged existing spec | Playwright report — pending |
-| Unmappable rig degrades safely | `test:xr:avatars` unmappable fixture | binding report and console capture — pending |
+| Bind (all fixtures) | Node check: generate fixtures, run the resolver on each | `output/ci-avatars/<fixture>-binding.json` — pending |
+| Re-orientation is exact | Node check: skinned vertices before and after, to 1e-5 | same report — pending |
+| Shipped avatar unchanged | `pnpm run test:xr:capture` | existing reports — pending |
+| Hand and body replay on geometric fixtures | New `avatars` XR check | `<fixture>-hand-report.json`, `<fixture>-body-report.json` — pending |
+| Face and objects on a non-RPM rig | `test:xr:face` and object check with `?avatar=` | face and object reports — pending |
+| Export → upload → render, facing, meaning anchors | Pipeline spec on a non-RPM and a −Z fixture, plus the unchanged spec | Playwright report — pending |
+| Duplicate names; unmappable rig | `avatars` check | binding and export reports, console capture — pending |
+| No `skeleton.pose()` | Guard in the `avatars` Node check | pending |
 | No regression | `pnpm run verify:xr`, `pnpm run test:smoke:pipeline`, `pnpm run verify:pr` | pending |
 
 ## Physical-device limits
 
-Mapping and retargeting are deterministic and need no headset to prove. The
-remaining limit is real third-party assets: generated fixtures prove names,
-axes, bind pose and facing, but not every exporter's quirks. A real Mixamo
-download and a real VRM model are checked by hand in the proof video (not
-committed). Hand and body feel on a physical headset stays with the existing
-device checks in `HANDOFF.md`.
+Mapping and the axis fixes are deterministic and need no headset to prove.
+The remaining limit is real third-party assets: generated fixtures prove
+names, axes, bind pose and facing, but not every exporter's proportions,
+skins or quirks. A real Mixamo download and a real VRM model are checked by
+hand in the proof video (not committed). Their names and hashes are recorded
+here when run. Hand and body feel on a physical headset stays with the
+existing device checks in `HANDOFF.md`.
