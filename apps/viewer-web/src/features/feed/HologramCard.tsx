@@ -15,7 +15,7 @@ import { createPortalStore } from "../portal/portalStore";
 import { PORTAL_VARIANTS, readPortalVariant } from "../portal/portalVariant";
 import { usePortalTriggers } from "../portal/usePortalTriggers";
 import { usePortalValue } from "../portal/usePortalValue";
-import { supportsImmersiveVr, XR_ENTRY_LABEL } from "../xr/xrSupport";
+import { supportsImmersiveVr, XR_ENTRY_LABEL, type XrFeedState } from "../xr/xrSupport";
 import { resolveMediaUrl } from "./api";
 import { HologramCardCanvas, type HologramRenderInfo } from "./HologramCardCanvas";
 
@@ -25,6 +25,8 @@ type HologramCardProps = {
   muted: boolean;
   onToggleMute: () => void;
   preloadNextUrl?: string | undefined;
+  /** The loaded feed and its cursor, carried into XR for the gallery. */
+  xrFeed?: () => NonNullable<XrFeedState["feed"]>;
 };
 
 type CardModelAvailability = ModelAvailability | "checking";
@@ -68,7 +70,7 @@ class ModelRenderBoundary extends Component<ModelRenderBoundaryProps, ModelRende
   }
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl }: HologramCardProps) {
+export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl, xrFeed }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
@@ -174,10 +176,12 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const handleEnterAR = () => {
     // Opting the feed into the IWSDK AR shell carries over to its AR route.
     const shell = new URLSearchParams(window.location.search).get("shell");
-    navigate(shell === "iwsdk" ? `/ar/${item.id}?shell=iwsdk` : `/ar/${item.id}`);
+    const state: XrFeedState | undefined = xrFeed ? { feed: xrFeed() } : undefined;
+    navigate(shell === "iwsdk" ? `/ar/${item.id}?shell=iwsdk` : `/ar/${item.id}`, { state });
   };
   const handleEnterVR = () => {
-    navigate(`/vr/${item.id}`);
+    const state: XrFeedState | undefined = xrFeed ? { feed: xrFeed() } : undefined;
+    navigate(`/vr/${item.id}`, { state });
   };
   const shouldShowVrTrigger = vrSupported && canRenderModel;
   const shouldShowArTrigger = typeof forcedArSupport === "boolean"

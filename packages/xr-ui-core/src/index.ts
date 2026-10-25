@@ -136,6 +136,32 @@ export interface DockAction {
   onSelect(): void;
 }
 
+// The gallery shelf (docs/features/viewer-xr-interface.md, step 4): feed
+// holograms as small paused previews. A placed hologram leaves its tile empty
+// until it goes back to the gallery: everything returns to its source (§1.2).
+
+/** What a gallery tile shows. */
+export type GalleryTileStatus = "loading" | "ready" | "placing" | "placed" | "error";
+
+export interface GalleryTileState {
+  title: string;
+  status: GalleryTileStatus;
+}
+
+export const GALLERY_LABELS = {
+  loading: "Loading…",
+  error: "Couldn't load",
+  newer: "Newer",
+  older: "Older"
+} as const;
+
+/** The tile's label: the title, or its loading or error state. */
+export function galleryTileLabel(tile: GalleryTileState): string {
+  if (tile.status === "loading") return GALLERY_LABELS.loading;
+  if (tile.status === "error") return GALLERY_LABELS.error;
+  return tile.title;
+}
+
 /** Figtree tabular timecode, "0:08" (styleguide §7.2). */
 export function formatTimecode(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));

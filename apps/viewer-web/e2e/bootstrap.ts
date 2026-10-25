@@ -8,6 +8,14 @@ const nonViewerBodyPattern = /Loading scene\.\.\./i;
 // renders nothing, so it fails tests like an error. Other GPU warnings, such
 // as software-rendering or performance notes, stay non-fatal.
 const webglInvalidOperationPattern = /GL_INVALID_OPERATION/;
+// Console errors a test seeds on purpose (a missing model's 404), matched on
+// the message and the URL it names.
+const expectedConsoleErrors = new WeakMap<Page, RegExp[]>();
+
+/** Accepts console errors matching `pattern` (message or resource URL) for the rest of this test. */
+export function expectConsoleErrors(page: Page, pattern: RegExp): void {
+  expectedConsoleErrors.set(page, [...(expectedConsoleErrors.get(page) ?? []), pattern]);
+}
 
 export const test = base.extend({
   page: async ({ page }, consumePage) => {
@@ -18,7 +26,8 @@ export const test = base.extend({
     });
     page.on("console", (message) => {
       if (message.type() === "error") {
-        runtimeErrors.push(`console.error: ${message.text()}`);
+        const seeded = expectedConsoleErrors.get(page)?.some((pattern) => pattern.test(message.text()) || pattern.test(message.location().url));
+        if (!seeded) runtimeErrors.push(`console.error: ${message.text()}`);
       } else if (message.type() === "warning" && webglInvalidOperationPattern.test(message.text())) {
         runtimeErrors.push(`console.warning: ${message.text()}`);
       }

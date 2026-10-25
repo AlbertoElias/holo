@@ -15,12 +15,11 @@ export interface GrabHands {
   right: Object3D;
 }
 
-export function addTwoHandGrab(entity: Entity, hands: GrabHands): void {
+export function addTwoHandGrab(entity: Entity): void {
   entity.addComponent(TwoHandsGrabbable, {
     scaleMin: [GRAB_SCALE_MIN, GRAB_SCALE_MIN, GRAB_SCALE_MIN],
     scaleMax: [GRAB_SCALE_MAX, GRAB_SCALE_MAX, GRAB_SCALE_MAX]
   });
-  keepGrounded(entity, hands);
 }
 
 type TransformState = { position: Vector3; quaternion: Quaternion; scale: Vector3; pointerAmount: number };
@@ -39,15 +38,13 @@ const midpoint = (hands: GrabHands, out: Vector3): Vector3 =>
  * horizontally by the hands' midpoint, turns by the hands' yaw only, and
  * scales uniformly about itself, clamped to GRAB_SCALE_MIN..MAX; its height
  * never changes. IWSDK keeps the handle in an unexported `Handle` component,
- * found here by id.
+ * found here by id; its grab system creates it on a later frame than the
+ * grab is added, so this returns false until it exists.
  */
-function keepGrounded(entity: Entity, hands: GrabHands): void {
+export function keepGrounded(entity: Entity, hands: GrabHands): boolean {
   const handle = entity.getComponents().find((component) => component?.id === "Handle") as { data: { instance: HandleStoreLike[] } } | undefined;
   const store = handle?.data.instance[entity.index];
-  if (!store) {
-    console.warn("[xr-viewer] two-hand grab handle missing; grab stays IWSDK's default.");
-    return;
-  }
+  if (!store) return false;
   // Baselines, taken when a grab starts and whenever a hand joins or leaves it.
   let pointers = 0;
   const basePosition = new Vector3();
@@ -88,4 +85,5 @@ function keepGrounded(entity: Entity, hands: GrabHands): void {
     const value = options();
     return { ...value, ...(value.scale ? { scale: { ...value.scale, uniform: true } } : {}), apply };
   };
+  return true;
 }

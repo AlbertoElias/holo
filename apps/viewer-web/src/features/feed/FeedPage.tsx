@@ -16,6 +16,10 @@ export function FeedPage() {
   // Leaving an immersive view returns to the hologram that was opened.
   const focusHologramId = (useLocation().state as { focusHologramId?: string } | null)?.focusHologramId ?? null;
   const focusedOnReturn = useRef(false);
+  // Entering XR carries the loaded feed and its cursor to the gallery (router state).
+  const feedSnapshot = useRef({ items, nextCursor: nextCursor ?? null });
+  feedSnapshot.current = { items, nextCursor: nextCursor ?? null };
+  const xrFeed = useCallback(() => feedSnapshot.current, []);
 
   const toggleAudioMute = useCallback(() => {
     setAudioMuted((prev) => {
@@ -93,9 +97,10 @@ export function FeedPage() {
           muted={audioMuted}
           onToggleMute={toggleAudioMute}
           preloadNextUrl={items[index + 1]?.url}
+          xrFeed={xrFeed}
         />
       )),
-    [items, resolvedActiveId, audioMuted, toggleAudioMute]
+    [items, resolvedActiveId, audioMuted, toggleAudioMute, xrFeed]
   );
 
   return (

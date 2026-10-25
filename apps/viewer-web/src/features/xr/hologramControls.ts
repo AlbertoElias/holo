@@ -1,19 +1,25 @@
 import { createSystem, Grabbed, type Entity } from "@iwsdk/core";
 import { playbackLabel, type HologramControlActions } from "@holoim/xr-ui-core";
-import { FootControls, HandDock, StatusLine, phoneMetresPerApx, targetMetrics, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
-import { Box3, Vector3, type Object3D } from "three";
+import { FocusRing, FootControls, HandDock, StatusLine, phoneMetresPerApx, targetMetrics, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
+import { Vector3, type Object3D } from "three";
 
 import { HologramPlayback, restartHologram, seekHologram, setHologramPlaying } from "./hologramPlayback";
-import { addTwoHandGrab } from "./twoHandGrab";
-import { viewerContext } from "./viewerContext";
+import { addTwoHandGrab, keepGrounded } from "./twoHandGrab";
+import { focusedRecord, viewerContext, type PlacedHologram } from "./viewerContext";
 
-// The viewer's XR interface (docs/features/viewer-xr-interface.md, step 3):
-// foot controls at the focused hologram's foot, the periphery status line,
-// and Exit in the hand dock (headset) or the bottom dock (phone), all from
-// @holoim/xr-ui-iwsdk. Built when the session starts, removed when it ends.
+// The viewer's XR interface (docs/features/viewer-xr-interface.md, steps 3
+// and 4): foot controls at the focused hologram's foot, with the focus ring
+// around its base, the periphery status line, and Exit in the hand dock
+// (headset) or the bottom dock (phone), all from @holoim/xr-ui-iwsdk. The
+// foot controls act on the hologram with audio focus and move with it when
+// focus moves. Built when the session starts, removed when it ends.
 
 /** Gap between the hologram's pointer box and the chip, so grab and controls never share a target. */
 const CHIP_CLEARANCE_M = 0.05;
+/** Frames to wait for IWSDK's grab handle before warning that grab is not grounded. */
+const GROUNDING_WARN_FRAMES = 30;
+/** The focus ring stands this far outside the hologram's pointer box. */
+const RING_CLEARANCE_M = 0.04;
 
 const anchor = new Vector3();
 const headPosition = new Vector3();
@@ -27,14 +33,19 @@ interface Ui {
   foot: FootControls;
   status: StatusLine;
   dock: HandDock;
+  ring: FocusRing;
 }
 
 export class HologramControlsSystem extends createSystem() {
   options: HologramControlsOptions = { exit: () => this.world.exitXR() };
   private ui: Ui | null = null;
   private placedSequence = -1;
-  /** Horizontal half-diagonal of the hologram's pointer box at recorded scale. */
-  private footprintRadius: number | null = null;
+  /** The hologram the foot controls are on; a focus change turns them to the viewer again. */
+  private boundTo: Entity | null = null;
+  private readonly grabbable = new WeakSet<Entity>();
+  /** Grabbable holograms whose grab is not yet kept on the ground, with the frames waited. */
+  private readonly ungrounded = new Map<Entity, number>();
+  private chipMeasured = false;
 
   init(): void {
     const onSessionEnd = (): void => this.teardown();
@@ -45,36 +56,62 @@ export class HologramControlsSystem extends createSystem() {
   /** Probe readings for the e2e spec. */
   probe(): unknown {
     if (!this.ui) return null;
-    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: this.ui.dock.probe() };
+    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: this.ui.dock.probe(), ring: this.ui.ring.probe(), boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
   }
 
   update(): void {
     const c = viewerContext(this.world);
-    const hologram = c.focused;
-    const object = hologram?.object3D;
-    if (!hologram || !object || !this.xrFrame) return;
+    if (!this.xrFrame) return;
     if (!this.ui) {
       const target = this.detectTarget();
       if (!target) return;
-      this.ui = this.build(hologram, target);
+      this.ui = this.build(target);
+      c.target = target;
     }
-    const { foot, status, dock } = this.ui;
+    const { foot, status, dock, ring } = this.ui;
+    // A phone has no hands to grab with; its taps focus, pause and place instead.
+    if (this.ui.target !== "ar-phone") {
+      for (const placed of c.placed) {
+        if (this.grabbable.has(placed.entity)) continue;
+        this.grabbable.add(placed.entity);
+        addTwoHandGrab(placed.entity);
+        this.ungrounded.set(placed.entity, 0);
+      }
+      for (const [entity, frames] of this.ungrounded) {
+        if (!c.placed.some((placed) => placed.entity === entity) || keepGrounded(entity, this.player.gripSpaces)) {
+          this.ungrounded.delete(entity);
+          continue;
+        }
+        if (frames === GROUNDING_WARN_FRAMES) console.warn("[xr-viewer] two-hand grab handle missing; grab stays IWSDK's default.");
+        this.ungrounded.set(entity, frames + 1);
+      }
+    }
+    // The dock hides while the hand it sits on grabs (brief: palm dock vs two-hand grab).
+    dock.setVisible(!c.placed.some((placed) => placed.entity.hasComponent(Grabbed)));
+    dock.update();
 
-    const placed = c.placement.stage !== "searching" && object.visible;
+    const record = focusedRecord(c);
+    const object = record?.entity.object3D;
+    const placed = Boolean(record && object && record.placement.stage !== "searching" && object.visible);
     foot.setVisible(placed);
-    if (!placed) {
+    if (!record || !object || !placed) {
+      ring.hide();
       status.set(null);
+      this.boundTo = null;
       return;
     }
     object.getWorldPosition(anchor);
     this.player.head.getWorldPosition(headPosition);
-    if (c.placement.sequence !== this.placedSequence) {
-      // The chip turns to the viewer only when the hologram is placed or recentered.
-      this.placedSequence = c.placement.sequence;
+    if (record.entity !== this.boundTo || record.placement.sequence !== this.placedSequence) {
+      // The chip turns to the viewer only when its hologram is placed, recentered or focused.
+      this.boundTo = record.entity;
+      this.placedSequence = record.placement.sequence;
       foot.faceViewer(anchor, headPosition);
     }
+    const hologram = record.entity;
     const scale = object.scale.x;
-    foot.follow(anchor, (this.footprint(object) * scale) + CHIP_CLEARANCE_M);
+    foot.follow(anchor, (record.footprintRadius * scale) + CHIP_CLEARANCE_M);
+    ring.show(anchor, (record.footprintRadius * scale) + RING_CLEARANCE_M);
 
     const state = {
       playing: Boolean(hologram.getValue(HologramPlayback, "playing")),
@@ -89,36 +126,46 @@ export class HologramControlsSystem extends createSystem() {
       hands: this.trackedHands(),
       hologramDistanceM: Math.hypot(headPosition.x - anchor.x, headPosition.z - anchor.z)
     });
+    if (!this.chipMeasured) this.measureChip();
     // State only: the line reports a paused hologram and holds no control.
     const label = playbackLabel(state);
     status.set(label.prefix ? { prefix: label.prefix, body: label.time } : null);
-    // The dock hides while the hand it sits on grabs (brief: palm dock vs two-hand grab).
-    dock.setVisible(!hologram.hasComponent(Grabbed));
-    dock.update();
   }
 
-  private build(hologram: Entity, target: XrUiTarget): Ui {
-    const object = hologram.object3D!;
-    // A phone has no hands to grab with; its taps pause and place instead.
-    if (target !== "ar-phone") addTwoHandGrab(hologram, this.player.gripSpaces);
+  /** The chip's widest row, once laid out, sets how far apart placed holograms stand. */
+  private measureChip(): void {
+    const foot = this.ui!.foot.probe();
+    if (foot.reachRow.widthApx <= 0) return;
+    this.chipMeasured = true;
+    viewerContext(this.world).chipWidthM = foot.reachRow.widthApx * foot.metresPerApx * foot.worldScale;
+  }
+
+  private build(target: XrUiTarget): Ui {
+    // Every action acts on the focused hologram, the one the controls stand at.
+    const on = (act: (record: PlacedHologram) => void) => () => {
+      const record = focusedRecord(viewerContext(this.world));
+      if (record) act(record);
+    };
     const actions: HologramControlActions = {
-      togglePlay: () => setHologramPlaying(hologram, !hologram.getValue(HologramPlayback, "playing")),
-      restart: () => restartHologram(hologram),
-      seek: (clipTime) => seekHologram(hologram, clipTime),
-      recenter: () => {
+      togglePlay: on(({ entity }) => setHologramPlaying(entity, !entity.getValue(HologramPlayback, "playing"))),
+      restart: on(({ entity }) => restartHologram(entity)),
+      seek: (clipTime) => on(({ entity }) => seekHologram(entity, clipTime))(),
+      recenter: on((record) => {
         // Default placement and recorded scale.
-        object.scale.setScalar(1);
-        viewerContext(this.world).recenterRequested = true;
-      },
-      resetScale: () => object.scale.setScalar(1)
+        record.entity.object3D!.scale.setScalar(1);
+        record.recenterRequested = true;
+      }),
+      resetScale: on(({ entity }) => entity.object3D!.scale.setScalar(1))
     };
     const camera = this.camera;
     // The XR view's projection, not the page camera's: flat sizes are pixels of the image the phone shows.
     const fovy = 2 * Math.atan(1 / this.viewProjectionYScale());
+    const phoneApx = target === "ar-phone" ? phoneMetresPerApx(fovy, window.innerHeight) : null;
+    viewerContext(this.world).phoneMetresPerApx = phoneApx;
     const foot = new FootControls(this.world, {
       target,
       actions,
-      ...(target === "ar-phone" ? { metresPerApx: phoneMetresPerApx(fovy, window.innerHeight), viewportWidthCss: window.innerWidth } : {})
+      ...(phoneApx !== null ? { metresPerApx: phoneApx, viewportWidthCss: window.innerWidth } : {})
     });
     const status = new StatusLine(this.world, this.player.head, targetMetrics(target).chipOpacity);
     const exit = { id: "exit", glyph: "exit" as const, label: "Exit", onSelect: () => this.options.exit() };
@@ -127,7 +174,8 @@ export class HologramControlsSystem extends createSystem() {
       // Handedness defaults to right, so the dock sits on the left hand or controller.
       : new HandDock(this.world, { kind: "hand", space: this.player.gripSpaces.left, ownPointerIds: this.handPointerIds("left") }, [exit]);
     this.placedSequence = -1;
-    return { target, foot, status, dock };
+    this.boundTo = null;
+    return { target, foot, status, dock, ring: new FocusRing(this.world.activeLevel.value.object3D!) };
   }
 
   /**
@@ -158,15 +206,6 @@ export class HologramControlsSystem extends createSystem() {
     });
   }
 
-  private footprint(object: Object3D): number {
-    if (this.footprintRadius === null) {
-      const hitBox = object.getObjectByName("HologramHitBox");
-      const size = new Box3().setFromObject(hitBox ?? object).getSize(new Vector3()).divideScalar(object.scale.x || 1);
-      this.footprintRadius = Math.hypot(size.x, size.z) / 2;
-    }
-    return this.footprintRadius;
-  }
-
   private trackedHands(): Object3D[] {
     const session = this.xrManager.getSession();
     if (!session) return [];
@@ -182,6 +221,7 @@ export class HologramControlsSystem extends createSystem() {
     this.ui.foot.dispose();
     this.ui.status.dispose();
     this.ui.dock.dispose();
+    this.ui.ring.dispose();
     this.ui = null;
   }
 }

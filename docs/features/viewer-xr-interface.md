@@ -265,10 +265,10 @@ Implementation order (each step lands green before the next):
 |---|---|---|
 | Spikes | Throwaway IWER runs (phone AR tap; capture with input + UI on) and a production build, 2026-10-24 | **Both GO**; results in "Step 1 spike results" below |
 | VR entry, recorded scale, teardown | IWER spec `xr-viewer.spec.ts` (Quest 3 profile) in `test:xr:viewer` | **Pass** 2026-10-24: scale 1, on the floor 1.50 m ahead, two enter/exit visits with equal renderer counts; screenshot + `output/test-results/xr-viewer-report.json` |
-| Gallery, multiple placed, focus, audio focus | Same spec on a seeded 12-item feed | Report with entity states + screenshot; pending |
+| Gallery, multiple placed, focus, audio focus | Same spec on a seeded 12-item feed (`/uploads/missing-5.glb` answers 404) | **Pass** (step 4): the shelf shows the 10 items the card carried (one feed fetch); four placed at recorded scale, base on the floor, feet 4–6 cm above it, upright, at least the chip width + 30 apx apart, every body clear of the shelf and every foot chip in sight from the eyes; a fifth select returns `full`; the 404 tile reads "Couldn't load" and selecting it changes nothing; a paused hologram holds its clock while the others play; a ray on a body moves focus, ring and foot controls, and only the focused one is heard (audio within 11 ms of its clip); a double select is ignored while loading; "Older" fetches with cursor `10` (Runner 7–12); exit returns to the focused one's card; phone AR places two on the floor 1.0 m apart and a tap moves focus without pausing; `gallery` and `arGallery` in the report, screenshots `vr-gallery-four`, `ar-phone-two` |
 | Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | **Pass** (steps 2–3): clip clock 1.00× wall clock; ray pause holds clock and audio; a held-trigger scrub lands within 5% of the aimed time with the pose at that time; resume, restart and a phone timeline drag reschedule audio within 50 ms; `vrControls` and `ar.phoneControls` in the report |
 | Grab/scale/rotate | Same spec, scripted controller grips | **Pass** (step 3): two-hand grip grab spreads, carries, lifts and turns it; uniform scale, clamped at 2× ("200%"), base on the floor (0 mm) and upright at every step; scale chip "life size" resets scale in place; recenter 1.50 m ahead at recorded scale; `vrControls.grab` in the report |
-| Memory after remove/page | Same spec | Geometry/texture counts in report; pending |
+| Memory after remove/page | Same spec | **Pass** (step 4): after sending two back and paging out and back, 74 geometries and 180 textures, as at the baseline (UIKit text buffers that grew are counted apart, 33 → 35); the cache keeps only models in use (`gallery.renderer`, `gallery.cacheAfter`) |
 | AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | Step 3 **pass**: phone foot controls at flat sizes (16/36 apx, 44 apx touch, chip 0.88), a tap on the play glyph pauses without moving the hologram, a 30-frame finger drag on the timeline scrubs within 5%, and Exit in the bottom dock (16 CSS px, bottom centre) leaves; IWSDK shell **pass** (step 2), opened from the feed card at `/?shell=iwsdk`: stands on the floor 1.8 m ahead and anchors, lit like VR (mean luminance of the hologram's pixels 67 in AR vs 71 in VR; the unlit build read 19 and fails the 30 threshold), tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
 | Capture on the shared UI | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + hand-dock and status-line screenshot; pending |
 | Same look in both apps | IWER screenshots of both apps' foot controls, status line and hand dock via `preview.mjs` | Side-by-side sheet; pending |
@@ -482,6 +482,50 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   drawings (2026-10-24). They are in styleguide §6 path for path.
 - **Limits.** The grounded grab and the uniform-scale patch rely on IWSDK's
   internal `Handle` component. Emulation evidence only.
+
+### Step 4 results (2026-10-25)
+
+- **Gallery shelf.** Two curved deep-sea boards, 1.2 m from the viewer's
+  spot at 0.9 m high, at the sides (boards 75°–135° either way; tiles at
+  85°, 105° and 125°), so the space in front stays free. Six tiles a page,
+  each a small paused preview (0.28 m, posed a third of the way into its
+  clip) with its title on a chip above it. "Newer" and "Older" at the
+  wings' ends page the feed (text labels: there is no paging glyph).
+  Paging past the loaded feed fetches the next page with its cursor. The
+  card hands its loaded feed and cursor to the viewer in router state; a
+  deep link fetches the first page.
+- **Placing (the lead, 2026-10-25).** The first hologram stands 1.5 m
+  ahead and fixes the stage. Each next one takes the nearest place, on
+  arcs from the stage's distance outward (0.25 m apart), centre first, right
+  before left, where, seen from the stage's origin, it is fully visible,
+  hides no placed hologram, stands at least the chip width (or both
+  footprints) + 30 apx from each, and stays clear of the wings. With the
+  fixture's arms-out figures (about 1 m apart) three fit 1.5 m out; the
+  fourth stands about 3.5 m out, 66° right. The viewer can grab-move any
+  of them. In AR the same place is hit-tested straight down and anchored.
+  At most four (`MAX_PLACED_HOLOGRAMS`).
+- **Focus.** The last hologram selected (a ray or tap on its body, or on
+  arrival) has focus: the one set of foot controls binds to it and faces the
+  viewer, a gold floor ring (1.4% of its diameter, 4 cm beyond its
+  footprint) marks it, and only it is heard. Focus moving stops the old
+  one's audio and starts the new one's from its own clock. Each keeps its
+  own play state, transform and grounded two-hand grab. On a phone a tap on
+  the focused hologram pauses or resumes it; on another, it focuses it.
+- **Back to gallery (the user, 2026-10-25).** Selecting a placed
+  hologram's tile again sends it back: the tile shows its title, muted,
+  without its preview while it is placed. No new glyph. When the focused
+  one leaves, focus returns to the one focused before it.
+- **Disposal.** Models load once into a reference-counted cache shared by
+  previews and placed clones. A clone disposes only its own skeletons and
+  mixer; the cache disposes a model's geometry, materials and textures when
+  its last user releases it. A failed load is not cached and marks its tile.
+  A select of a tile that is loading, or a second select within 400 ms, is
+  ignored.
+- **Renderer counts.** UIKit grows text buffers when labels first show and
+  keeps them, so the spec counts geometries under the UI roots apart and
+  compares the rest, after showing the controls once before the baseline.
+- **Open.** The fifth select is refused silently. The dark boards barely
+  show against the floor. Emulation evidence only.
 
 ### Video verification loop
 

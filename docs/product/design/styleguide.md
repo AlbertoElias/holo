@@ -102,6 +102,13 @@ source and goes back there.
 The periphery status line is the one thing that follows the head, lazily,
 and it never holds a control.
 
+**The gallery shelf.** In a headset or a room, the feed waits beside the
+viewer as small paused previews on two curved wings, 1.2 m away and below the
+eyes, leaving the space ahead to the stage. Selecting a preview brings its
+hologram out onto the stage; selecting its tile again sends it back, with no
+extra glyph. A placed hologram stands where the viewer sees it whole: never
+behind a wing or another hologram.
+
 **Always there, and hidden until reached for.** Play, Free and Return stay
 visible, small and close to the edge. Every other control appears from the
 hand or cursor and leaves afterwards. When nobody has used the always-there
@@ -461,6 +468,11 @@ level 0.50 and, on a phone, do not redraw.
 
 A spark is a gold ember 0.4% to 0.8% of the short side, rising off a random
 point of the edge and fading over 2 to 4 s.
+
+**Gold floor ring.** In VR and AR, the placed hologram last selected wears a
+gold ring on the floor, 4 cm beyond its footprint, as wide as the gold core
+(1.4% of the ring's diameter). Only it is heard, and its foot controls are
+the ones showing.
 
 ### 8.3 Reduced motion
 

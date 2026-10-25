@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { waitForIwerRuntime, waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, test } from "./bootstrap";
 
-// The IWSDK immersive viewer (docs/features/viewer-xr-interface.md, step 2):
-// `/vr/:id` and `/ar/:id?shell=iwsdk` mount one IWSDK World with one hologram
-// at recorded scale. The page's development probe (`__HOLOIM_XR_VIEWER__`)
+// The IWSDK immersive viewer (docs/features/viewer-xr-interface.md, steps 2-4):
+// `/vr/:id` and `/ar/:id?shell=iwsdk` mount one IWSDK World with the opened
+// hologram at recorded scale, and a gallery of the feed to place more from. The page's development probe (`__HOLOIM_XR_VIEWER__`)
 // reports placement, scale, playback and audio; each test adds its readings
 // to `output/test-results/xr-viewer-report.json`.
 
@@ -872,6 +872,499 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
     recenter: { distanceM: recenterDistance, position: recentered.hologram.worldPosition, scale: recentered.hologram.worldScale[0] },
     headTurn: { footMovedM: footMoved, statusMovedM: statusMoved },
     dock: first.dock
+  };
+});
+
+// Step 4: a seeded 12-item feed for the gallery. The feed API pages by an
+// index cursor, so the first page (10) leaves two past the loaded feed. One
+// item's model is missing (404).
+const GALLERY_FEED_SIZE = 12;
+const GALLERY_MISSING_ID = "mock-5";
+const galleryItem = (n: number) => ({
+  ...mockHologram,
+  id: `mock-${n}`,
+  url: `mock-${n}` === GALLERY_MISSING_ID ? `/uploads/missing-${n}.glb` : `/uploads/mock-avatar-${n}.glb`,
+  filenameOriginal: `mock-avatar-${n}.glb`,
+  hologramName: `Runner ${n}`,
+  createdAt: new Date(Date.UTC(2026, 9, 24) - n * 60_000).toISOString()
+});
+
+async function mockGalleryFeed(page: Page): Promise<{ feedRequests: Array<{ cursor: string | null; limit: number }> }> {
+  const glb = await avatarWithAudio();
+  const items = Array.from({ length: GALLERY_FEED_SIZE }, (_, i) => galleryItem(i + 1));
+  const feedRequests: Array<{ cursor: string | null; limit: number }> = [];
+  await page.route("**/api/holograms?*", (route) => {
+    const url = new URL(route.request().url());
+    const limit = Number(url.searchParams.get("limit") ?? "10");
+    const cursor = url.searchParams.get("cursor");
+    const start = cursor ? Number(cursor) : 0;
+    feedRequests.push({ cursor, limit });
+    const end = start + limit;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: items.slice(start, end), nextCursor: end < items.length ? String(end) : null })
+    });
+  });
+  await page.route(/\/api\/holograms\/mock-\d+$/, (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").pop();
+    const item = items.find((candidate) => candidate.id === id);
+    return item
+      ? route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(item) })
+      : route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "Not found" }) });
+  });
+  await page.route("**/uploads/mock-avatar-*", (route) => route.fulfill({ status: 200, body: glb, contentType: "model/gltf-binary" }));
+  await page.route("**/uploads/missing-*", (route) => route.fulfill({ status: 404, contentType: "text/plain", body: "Not found" }));
+  // The browser logs the seeded 404; nothing else may error.
+  expectConsoleErrors(page, /\/uploads\/missing-\d+\.glb$/);
+  return { feedRequests };
+}
+
+type HologramReading = ViewerSnapshot["hologram"] & { id: string; focused: boolean; audible: boolean; footprintRadius: number; placement: ViewerSnapshot["placement"] };
+type TileProbe = { index: number; title: string | null; label: string; status: string; hasPreview: boolean; worldPosition: Vec3; panelPosition: Vec3 };
+type GalleryProbe = {
+  page: number;
+  pageSize: number;
+  loadedItems: number;
+  nextCursor: string | null;
+  fetching: boolean;
+  errors: string[];
+  lastSelect: { index: number; result: string } | null;
+  slots: Array<string | null>;
+  shelf: { visible: boolean; tiles: TileProbe[]; paging: Record<"newer" | "older", { visible: boolean; worldPosition: Vec3 }> } | null;
+};
+type GallerySnapshot = ViewerSnapshot & {
+  focusedId: string | null;
+  holograms: HologramReading[];
+  stage: { origin: Vec3; forward: Vec3; distanceM: number; floorY: number } | null;
+  chipWidthM: number;
+  gallery: GalleryProbe;
+  cache: Record<string, number>;
+  controls: (Controls & { ring: { visible: boolean; worldPosition: Vec3; radiusM: number }; boundTo: string | null }) | null;
+};
+
+const gallerySnapshot = (page: Page) => snapshot(page) as Promise<GallerySnapshot>;
+const waitForGallery = (page: Page, accept: (s: GallerySnapshot) => boolean, timeout = 15_000) =>
+  waitForSnapshot(page, (s) => accept(s as GallerySnapshot), timeout) as Promise<GallerySnapshot>;
+const readingOf = (s: GallerySnapshot, id: string) => s.holograms.find((h) => h.id === id);
+/** Page tiles have their previews, or their error. */
+const pageSettled = (s: GallerySnapshot) => Boolean(s.gallery.shelf?.visible) && s.gallery.shelf!.tiles.every((t) => t.status === "empty" || t.status === "error" || t.status === "placed" || t.hasPreview);
+/** The recorded person's feet on the ground they stand on: the lowest bone at most 15 cm above the base, never below it. */
+const feetOnGround = (h: HologramReading) => h.lowestBoneY! - h.worldPosition[1] > -0.01 && h.lowestBoneY! - h.worldPosition[1] < 0.15;
+
+/**
+ * Renderer counts once they hold still for half a second (previews and text
+ * upload over a few frames). `geometries` leaves out the UI's own (UIKit
+ * keeps grown text buffers); `allGeometries` is the renderer's whole count.
+ */
+async function settledRenderer(page: Page): Promise<{ geometries: number; textures: number; allGeometries: number; uiGeometries: number }> {
+  const read = async () => {
+    const r = (await gallerySnapshot(page)).renderer as ViewerSnapshot["renderer"] & { uiGeometries: number };
+    return { geometries: r.geometries - r.uiGeometries, textures: r.textures, allGeometries: r.geometries, uiGeometries: r.uiGeometries };
+  };
+  let previous = await read();
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(250);
+    const next = await read();
+    if (next.allGeometries === previous.allGeometries && next.textures === previous.textures) {
+      await page.waitForTimeout(250);
+      const confirm = await read();
+      if (confirm.allGeometries === next.allGeometries && confirm.textures === next.textures) return confirm;
+    }
+    previous = next;
+  }
+  throw new Error("renderer counts never settled");
+}
+
+/**
+ * Shows every part of the focused hologram's controls once (the on-reach row,
+ * and the status line by a pause and resume), so renderer counts compare
+ * holograms and previews, not UI uploaded on first show.
+ */
+async function warmControls(page: Page, eye: Vec3): Promise<void> {
+  const play = (await gallerySnapshot(page)).controls!.foot.buttons.play.worldPosition;
+  await setPose(page, "head", eye, play);
+  await waitForGallery(page, (g) => g.controls!.foot.reachOpacity === 1, 5_000);
+  for (const playing of [false, true]) {
+    // The paused label beside it moves the glyph on its centred row.
+    const at = (await gallerySnapshot(page)).controls!.foot.buttons.play.worldPosition;
+    await rayClick(page, at, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2]);
+    await waitForGallery(page, (g) => g.hologram!.playing === playing && g.controls!.status.visible === !playing, 5_000);
+  }
+}
+
+/** Turns the head toward a tile and selects it with the right controller's ray. */
+async function selectTile(page: Page, index: number, eye: Vec3): Promise<void> {
+  const tile = (await gallerySnapshot(page)).gallery.shelf!.tiles[index]!;
+  await setPose(page, "head", eye, tile.worldPosition);
+  await rayClick(page, tile.worldPosition, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2]);
+}
+
+async function selectPaging(page: Page, key: "newer" | "older", eye: Vec3): Promise<void> {
+  const label = (await gallerySnapshot(page)).gallery.shelf!.paging[key];
+  expect(label.visible, `${key} shows`).toBe(true);
+  const target = label.worldPosition;
+  await setPose(page, "head", eye, target);
+  await rayClick(page, target, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2]);
+}
+
+/** Selects a placed hologram by aiming the ray at its body (it takes audio focus). */
+async function selectBody(page: Page, id: string, eye: Vec3): Promise<void> {
+  const h = readingOf(await gallerySnapshot(page), id)!;
+  const body: Vec3 = [h.worldPosition[0], h.worldPosition[1] + h.recordedSize[1] * 0.55, h.worldPosition[2]];
+  await setPose(page, "head", eye, body);
+  await rayClick(page, body, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2]);
+}
+
+/** Only the focused hologram is heard, from its own clock. */
+function expectAudioFocus(s: GallerySnapshot, id: string): number {
+  expect(s.focusedId).toBe(id);
+  for (const h of s.holograms) {
+    expect(h.audible, `${h.id} audible`).toBe(h.id === id);
+    if (h.id !== id) expect(h.audio?.playing ?? false, `${h.id} is silent`).toBe(false);
+  }
+  const focused = readingOf(s, id)!;
+  if (!focused.playing) return 0;
+  expect(focused.audio?.playing, `${id} is heard`).toBe(true);
+  const drift = Math.abs(focused.audio!.scheduledOffset - focused.clipTime);
+  expect(drift, `${id} audio ${focused.audio!.scheduledOffset.toFixed(3)} vs clip ${focused.clipTime.toFixed(3)}`).toBeLessThan(AUDIO_SYNC_TOLERANCE_S);
+  return drift;
+}
+
+interface Bounds { name: string; min: Vec3; max: Vec3 }
+
+/** World-axis bounds of the shelf's boards and tile panels and of each placed hologram's hit box, from their vertices. */
+async function sceneBounds(page: Page): Promise<{ shelf: Bounds[]; holograms: Record<string, Bounds> }> {
+  return page.evaluate(() => {
+    type Node = { name: string; parent: Node | null; children: Node[]; matrixWorld: { elements: number[] }; geometry?: { attributes: { position?: { count: number; getX(i: number): number; getY(i: number): number; getZ(i: number): number } } }; isInstancedMesh?: boolean };
+    const world = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { scene: Node & { updateMatrixWorld(force: boolean): void } } } }).__HOLOIM_XR_VIEWER__.world;
+    world.scene.updateMatrixWorld(true);
+    const boundsOf = (root: Node, name: string) => {
+      const min = [Infinity, Infinity, Infinity];
+      const max = [-Infinity, -Infinity, -Infinity];
+      const visit = (node: Node) => {
+        const position = node.geometry?.attributes.position;
+        if (position && !node.isInstancedMesh) {
+          const e = node.matrixWorld.elements;
+          for (let i = 0; i < position.count; i++) {
+            const [x, y, z] = [position.getX(i), position.getY(i), position.getZ(i)];
+            const p = [e[0]! * x + e[4]! * y + e[8]! * z + e[12]!, e[1]! * x + e[5]! * y + e[9]! * z + e[13]!, e[2]! * x + e[6]! * y + e[10]! * z + e[14]!];
+            for (let a = 0; a < 3; a++) {
+              min[a] = Math.min(min[a]!, p[a]!);
+              max[a] = Math.max(max[a]!, p[a]!);
+            }
+          }
+        }
+        node.children.forEach(visit);
+      };
+      visit(root);
+      return { name, min, max };
+    };
+    const shelf: Array<{ name: string; min: number[]; max: number[] }> = [];
+    const holograms: Record<string, { name: string; min: number[]; max: number[] }> = {};
+    const walk = (node: Node) => {
+      if (/^(GalleryBoard|GalleryTilePanel\d+)$/.test(node.name)) shelf.push(boundsOf(node, `${node.name}#${shelf.length}`));
+      else if (node.name === "HologramHitBox" && node.parent?.name.startsWith("Hologram-")) holograms[node.parent.name.slice("Hologram-".length)] = boundsOf(node, node.parent.name);
+      node.children.forEach(walk);
+    };
+    walk(world.scene);
+    return { shelf: shelf.filter((part) => Number.isFinite(part.min[0])), holograms };
+  }) as Promise<{ shelf: Bounds[]; holograms: Record<string, Bounds> }>;
+}
+
+const boxesMeet = (a: Bounds, b: Bounds) => [0, 1, 2].every((i) => a.min[i]! <= b.max[i]! && b.min[i]! <= a.max[i]!);
+
+/** Whether the segment from `from` to `to` passes through the box (slab test). */
+function segmentMeetsBox(from: Vec3, to: Vec3, box: Bounds): boolean {
+  let [t0, t1] = [0, 1];
+  for (let i = 0; i < 3; i++) {
+    const d = to[i]! - from[i]!;
+    if (Math.abs(d) < 1e-9) {
+      if (from[i]! < box.min[i]! || from[i]! > box.max[i]!) return false;
+      continue;
+    }
+    const [a, b] = [(box.min[i]! - from[i]!) / d, (box.max[i]! - from[i]!) / d];
+    t0 = Math.max(t0, Math.min(a, b));
+    t1 = Math.min(t1, Math.max(a, b));
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+test("VR gallery: pages the feed past its cursor, places four, each keeps its state, focus moves the audio, a double select and a 404 change nothing, removing and paging return renderer counts, and exit returns to the focused one", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const { marks, mark, markFirstCommit } = createTimeline();
+  markFirstCommit(page);
+  const { feedRequests } = await mockGalleryFeed(page);
+  await page.goto("/");
+  await assertViewerShell(page);
+  await waitForIwerRuntime(page);
+  await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
+  mark("feed-ready");
+  await page.locator('[data-card-id="mock-1"] .vr-trigger-button').click();
+  await expect(page).toHaveURL(/\/vr\/mock-1$/);
+  await enterSession(page, "Step inside", "opaque");
+  await setPose(page, "head", null, null);
+
+  // The opened hologram stands in front; the shelf shows the feed carried from the card.
+  const entered = await waitForGallery(page, (s) => s.placement.stage === "placed" && Boolean(s.controls) && pageSettled(s), 25_000);
+  mark("gallery-shown");
+  const eye: Vec3 = (await readHeadPose(page)).position;
+  const shelf = entered.gallery.shelf!;
+  expect(entered.gallery.loadedItems, "the card's loaded feed, not a refetch").toBe(10);
+  expect(entered.gallery.nextCursor).toBe("10");
+  expect(feedRequests.filter((r) => r.cursor === null), "one first-page fetch, by the feed").toHaveLength(1);
+  expect(shelf.tiles.map((t) => t.title)).toEqual(["Runner 1", "Runner 2", "Runner 3", "Runner 4", "Runner 5", "Runner 6"]);
+  expect(shelf.tiles[0]!.status, "the opened hologram's tile is empty while it is placed").toBe("placed");
+  expect(shelf.tiles[0]!.hasPreview).toBe(false);
+  expect(shelf.tiles.filter((t) => t.status === "ready").every((t) => t.hasPreview), "paused previews").toBe(true);
+  expect(shelf.paging.newer.visible).toBe(false);
+  expect(shelf.paging.older.visible).toBe(true);
+  // The 404 shows on its tile and nothing else changes.
+  const missing = shelf.tiles[4]!;
+  expect(missing).toMatchObject({ title: "Runner 5", status: "error", label: "Couldn't load", hasPreview: false });
+  // Wings at the sides: the shelf never stands between the eyes and the stage.
+  for (const tile of shelf.tiles) {
+    const toTile = Math.atan2(tile.worldPosition[0] - eye[0], -(tile.worldPosition[2] - eye[2])) * (180 / Math.PI);
+    expect(Math.abs(toTile), `tile ${tile.index} at ${toTile.toFixed(0)}°`).toBeGreaterThan(75);
+  }
+  await warmControls(page, eye);
+  const baseline = await settledRenderer(page);
+  mark("baseline");
+  await dwell(page);
+
+  // Place three more: each at recorded scale on the floor beside the others, focused on arrival.
+  const placedOrder = ["mock-2", "mock-3", "mock-4"];
+  // Each one's foot chip, read while it has focus (one set of controls follows focus).
+  const chipAt = (g: GallerySnapshot, id: string) => g.controls?.boundTo === id && horizontal(g.controls.foot.worldPosition, readingOf(g, id)!.worldPosition) < readingOf(g, id)!.footprintRadius + 0.1;
+  const chips: Record<string, Vec3> = { "mock-1": entered.controls!.foot.worldPosition };
+  for (const [i, id] of placedOrder.entries()) {
+    await selectTile(page, i + 1, eye);
+    const s = await waitForGallery(page, (g) => readingOf(g, id)?.placement.stage === "placed" && g.focusedId === id && chipAt(g, id));
+    chips[id] = s.controls!.foot.worldPosition;
+    expect(s.gallery.lastSelect).toMatchObject({ index: i + 1, result: "placed" });
+    expect(s.gallery.shelf!.tiles[i + 1]!.status).toBe("placed");
+    mark(`placed-${id}`);
+  }
+  const four = await gallerySnapshot(page);
+  expect(four.holograms.map((h) => h.id)).toEqual(["mock-1", "mock-2", "mock-3", "mock-4"]);
+  const groundDetails = four.holograms.map((h) => ({ id: h.id, baseY: h.worldPosition[1], feetAboveBaseM: h.lowestBoneY! - h.worldPosition[1], tiltRad: h.tiltRad, scale: h.worldScale[0] }));
+  for (const h of four.holograms) {
+    expect(h.worldScale.every((v) => Math.abs(v - 1) < 1e-6), `${h.id} at recorded scale`).toBe(true);
+    expect(Math.abs(h.worldPosition[1]), `${h.id} base on the floor`).toBeLessThan(0.005);
+    expect(feetOnGround(h), `${h.id} feet ${(h.lowestBoneY! - h.worldPosition[1]).toFixed(3)} m above its base`).toBe(true);
+    expect(h.tiltRad, `${h.id} upright`).toBeLessThan(1e-3);
+  }
+  // Neighbours keep at least the chip's width plus a 30 apx gap.
+  const minGap = four.chipWidthM + 30 * 0.000372 * 1.75;
+  let closest = Infinity;
+  for (const [i, a] of four.holograms.entries()) {
+    for (const b of four.holograms.slice(i + 1)) closest = Math.min(closest, horizontal(a.worldPosition, b.worldPosition));
+  }
+  expect(closest, `closest pair ${closest.toFixed(3)} m vs chip ${four.chipWidthM.toFixed(3)} m + gap`).toBeGreaterThanOrEqual(minGap - 1e-3);
+  // Placed where the viewer sees them whole: no hologram's bounds meet the
+  // shelf, and none stands between the eyes and another's foot chip.
+  const bounds = await sceneBounds(page);
+  const shelfHits = Object.entries(bounds.holograms).flatMap(([id, box]) => bounds.shelf.filter((part) => boxesMeet(box, part)).map((part) => `${id} meets ${part.name}`));
+  expect(shelfHits, "holograms clear of the shelf").toEqual([]);
+  const blockedChips = Object.entries(chips).flatMap(([id, chip]) =>
+    Object.entries(bounds.holograms)
+      .filter(([other, box]) => other !== id && segmentMeetsBox(eye, chip, box))
+      .map(([other]) => `${other} hides ${id}'s chip`)
+  );
+  expect(blockedChips, "every foot chip in sight").toEqual([]);
+  const visibility = { shelfParts: bounds.shelf.length, chips, places: four.holograms.map((h) => ({ id: h.id, position: h.worldPosition })) };
+  await captureEvidence(page, testInfo, "vr-gallery-four");
+
+  // A fifth is refused: the cap is four.
+  const fifth = await page.evaluate(() => (window as unknown as { __HOLOIM_XR_VIEWER__: { gallery: { select(i: number): Promise<string> } } }).__HOLOIM_XR_VIEWER__.gallery.select(5));
+  expect(fifth).toBe("full");
+  expect((await gallerySnapshot(page)).holograms).toHaveLength(4);
+  // The 404 tile: selecting it changes nothing.
+  await selectTile(page, 4, eye);
+  const afterMissing = await waitForGallery(page, (g) => g.gallery.lastSelect?.index === 4);
+  expect(afterMissing.gallery.lastSelect!.result).toBe("error");
+  expect(afterMissing.holograms.map((h) => h.id)).toEqual(["mock-1", "mock-2", "mock-3", "mock-4"]);
+  expect(afterMissing.focusedId).toBe("mock-4");
+
+  // Each keeps its own state: pause the focused one at its foot.
+  const playButton = (await gallerySnapshot(page)).controls!.foot.buttons.play.worldPosition;
+  await setPose(page, "head", eye, playButton);
+  await rayClick(page, playButton, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2]);
+  const paused4 = await waitForGallery(page, (g) => readingOf(g, "mock-4")?.playing === false);
+  expect(paused4.controls!.boundTo).toBe("mock-4");
+  expect(paused4.controls!.foot.text.playback).toMatch(/^Paused · /);
+  expect(readingOf(paused4, "mock-4")!.audio?.playing ?? false, "pausing stops its audio").toBe(false);
+  for (const id of ["mock-1", "mock-2", "mock-3"]) expect(readingOf(paused4, id)!.playing, `${id} still plays`).toBe(true);
+  mark("paused-mock-4");
+  await dwell(page);
+
+  // Focus moves to another by selecting its body: the ring and the controls follow, and so does the audio.
+  const focusMoves: unknown[] = [];
+  for (const id of ["mock-2", "mock-1"]) {
+    await selectBody(page, id, eye);
+    const s = await waitForGallery(page, (g) => g.focusedId === id && g.controls?.boundTo === id);
+    const h = readingOf(s, id)!;
+    expect(horizontal(s.controls!.ring.worldPosition, h.worldPosition), "ring around its base").toBeLessThan(0.01);
+    expect(s.controls!.ring.visible).toBe(true);
+    expect(horizontal(s.controls!.foot.worldPosition, h.worldPosition), "controls at its foot").toBeLessThan(h.footprintRadius + 0.1);
+    const drift = expectAudioFocus(s, id);
+    focusMoves.push({ id, driftS: drift, ring: s.controls!.ring, foot: s.controls!.foot.worldPosition });
+    mark(`focus-${id}`);
+    await dwell(page);
+  }
+  // Two play at once; only the focused one is heard. The paused one held its clock the whole time.
+  const both = await gallerySnapshot(page);
+  expect(readingOf(both, "mock-1")!.playing && readingOf(both, "mock-2")!.playing).toBe(true);
+  expect(Math.abs(readingOf(both, "mock-4")!.clipTime - readingOf(paused4, "mock-4")!.clipTime), "paused clock held").toBeLessThan(1e-6);
+  expectAudioFocus(both, "mock-1");
+  // Seeking the focused one on its timeline moves only its clock.
+  const timeline = both.controls!.foot.timeline;
+  await setPose(page, "head", eye, timeline.worldStart);
+  await page.waitForTimeout(300);
+  const scrubTo = lerp3(timeline.worldStart, timeline.worldEnd, 0.25);
+  await rayClick(page, scrubTo, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2]);
+  const sought = await waitForGallery(page, (g) => {
+    const h = readingOf(g, "mock-1")!;
+    return Math.abs(h.clipTime / h.duration - 0.25) < 0.08;
+  });
+  expect(Math.abs(readingOf(sought, "mock-4")!.clipTime - readingOf(paused4, "mock-4")!.clipTime), "others' clocks untouched").toBeLessThan(1e-6);
+  expectAudioFocus(sought, "mock-1");
+  mark("seek-mock-1");
+
+  // A double select while one loads: placing is keyed by id, the second is ignored.
+  const double = await page.evaluate(async () => {
+    const probe = (window as unknown as { __HOLOIM_XR_VIEWER__: { space: { remove(id: string): boolean; place(item: { id: string; url: string }): Promise<string> }; gallery: { select(i: number): Promise<string> } } }).__HOLOIM_XR_VIEWER__;
+    probe.space.remove("mock-3");
+    // The same URL the gallery resolves, so the load is keyed as its tile's.
+    const url = "/uploads/mock-avatar-3.glb";
+    const first = probe.space.place({ id: "mock-3", url });
+    const second = probe.space.place({ id: "mock-3", url });
+    const repeat = [await probe.gallery.select(1), await probe.gallery.select(1)];
+    return { first: await first, second: await second, repeat };
+  });
+  expect(double.first).toBe("placed");
+  expect(double.second, "second select while loading").toBe("loading");
+  // A repeated press of a tile (here, mock-2's: send back, then the same press again) is one select.
+  expect(double.repeat).toEqual(["removed", "ignored-repeat"]);
+  const afterDouble = await waitForGallery(page, (g) => readingOf(g, "mock-3")?.placement.stage === "placed");
+  expect(afterDouble.holograms.filter((h) => h.id === "mock-3"), "one mock-3").toHaveLength(1);
+  expect(afterDouble.holograms.map((h) => h.id).sort()).toEqual(["mock-1", "mock-3", "mock-4"]);
+
+  // Back to the gallery from the shelf: removing the rest returns their tiles.
+  for (const [index, id] of [[2, "mock-3"], [3, "mock-4"]] as const) {
+    await selectTile(page, index, eye);
+    const s = await waitForGallery(page, (g) => !readingOf(g, id) && g.gallery.shelf!.tiles[index]!.status === "ready");
+    expect(s.gallery.lastSelect).toMatchObject({ index, result: "removed" });
+    mark(`removed-${id}`);
+  }
+  // Page past the loaded feed: the next page is fetched with the feed cursor.
+  await selectPaging(page, "older", eye);
+  const older = await waitForGallery(page, (g) => g.gallery.page === 1 && pageSettled(g));
+  mark("page-older");
+  expect(feedRequests.some((r) => r.cursor === "10"), "fetched past the loaded feed with its cursor").toBe(true);
+  expect(older.gallery.loadedItems).toBe(GALLERY_FEED_SIZE);
+  expect(older.gallery.nextCursor).toBeNull();
+  expect(older.gallery.shelf!.tiles.map((t) => t.title)).toEqual(["Runner 7", "Runner 8", "Runner 9", "Runner 10", "Runner 11", "Runner 12"]);
+  expect(older.gallery.shelf!.paging).toMatchObject({ newer: { visible: true }, older: { visible: false } });
+  await dwell(page);
+  const olderRenderer = await settledRenderer(page);
+  await selectPaging(page, "newer", eye);
+  const back = await waitForGallery(page, (g) => g.gallery.page === 0 && pageSettled(g));
+  mark("page-newer");
+  expect(back.holograms.map((h) => h.id)).toEqual(["mock-1"]);
+  await warmControls(page, eye);
+  const afterRenderer = await settledRenderer(page);
+  // Removed holograms and paged-out previews leave nothing behind.
+  expect({ geometries: afterRenderer.geometries, textures: afterRenderer.textures }, `renderer counts back to the baseline ${JSON.stringify(baseline)}`).toEqual({ geometries: baseline.geometries, textures: baseline.textures });
+  expect(Object.keys(back.cache).sort(), "cache holds only what is in the space and on the shelf").toEqual(
+    ["mock-avatar-1", "mock-avatar-2", "mock-avatar-3", "mock-avatar-4", "mock-avatar-6"].map((name) => `/uploads/${name}.glb`)
+  );
+
+  // Exit returns to the feed at the last focused hologram.
+  await selectTile(page, 2, eye);
+  await waitForGallery(page, (g) => g.focusedId === "mock-3" && readingOf(g, "mock-3")?.placement.stage === "placed");
+  const beforeExit = await gallerySnapshot(page);
+  mark("vr-exit");
+  await endSession(page);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator(".xr-view-container")).toHaveCount(0);
+  await expect(page.locator('[data-card-id="mock-3"]'), "back on the focused hologram's card").toBeInViewport({ timeout: 10_000 });
+
+  report.gallery = {
+    timeline: marks,
+    feedRequests,
+    entered: { loadedItems: entered.gallery.loadedItems, nextCursor: entered.gallery.nextCursor, tiles: shelf.tiles.map(({ index, title, status, label }) => ({ index, title, status, label })) },
+    placed: four.holograms.map((h) => ({ id: h.id, position: h.worldPosition, scale: h.worldScale[0], focused: h.focused })),
+    ground: groundDetails,
+    spacing: { closestM: closest, chipWidthM: four.chipWidthM, minimumM: minGap }, visibility,
+    fifthSelect: fifth,
+    missingTile: { tile: missing, select: afterMissing.gallery.lastSelect },
+    paused: { id: "mock-4", clipTime: readingOf(paused4, "mock-4")!.clipTime, playback: paused4.controls!.foot.text.playback },
+    focusMoves,
+    doubleSelect: double,
+    paging: { older: older.gallery.shelf!.tiles.map((t) => t.title), loadedItems: older.gallery.loadedItems },
+    renderer: { baseline, olderPage: olderRenderer, afterRemoveAndPage: afterRenderer },
+    cacheAfter: back.cache,
+    exit: { focusedId: beforeExit.focusedId }
+  };
+});
+
+test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor side by side, each focused by a tap", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const { marks, mark, markFirstCommit } = createTimeline();
+  markFirstCommit(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await emulatePhone(page);
+  await mockGalleryFeed(page);
+  await page.goto("/?shell=iwsdk");
+  await assertViewerShell(page);
+  await waitForIwerRuntime(page);
+  await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
+  await page.locator('[data-card-id="mock-1"] .ar-trigger-button').click();
+  await expect(page).toHaveURL(/\/ar\/mock-1\?shell=iwsdk$/);
+  await enterSession(page, "View in your room", "alpha-blend");
+  await setPose(page, "head", null, null);
+  const first = await waitForGallery(page, (s) => s.placement.stage !== "searching" && Boolean(s.controls) && pageSettled(s), 25_000);
+  mark("ar-first");
+  expect(first.controls!.target).toBe("ar-phone");
+  const eye: Vec3 = (await readHeadPose(page)).position;
+  const tile = first.gallery.shelf!.tiles[1]!;
+  // Turn to the shelf and tap Runner 2.
+  await setPose(page, "head", eye, tile.worldPosition);
+  await dwell(page);
+  await phoneTap(page, tile.worldPosition);
+  const second = await waitForGallery(page, (s) => readingOf(s, "mock-2")?.placement.stage === "anchored" && s.focusedId === "mock-2", 15_000);
+  mark("ar-second");
+  const [a, b] = [readingOf(second, "mock-1")!, readingOf(second, "mock-2")!];
+  expect(["hit-test", "floor"], "on the floor point a hit test found, or the floor estimate").toContain(b.placement.mode);
+  for (const h of [a, b]) {
+    expect(h.worldScale[0], `${h.id} at recorded scale`).toBeCloseTo(1, 6);
+    expect(feetOnGround(h), `${h.id} feet on its ground`).toBe(true);
+    expect(Math.abs(h.worldPosition[1] - a.worldPosition[1]), `${h.id} on the same floor`).toBeLessThan(0.05);
+  }
+  const apart = horizontal(a.worldPosition, b.worldPosition);
+  expect(apart, "side by side, chips apart").toBeGreaterThanOrEqual(second.chipWidthM);
+  expectAudioFocus(second, "mock-2");
+  // Turn back to the stage: both stand there; a tap on the first focuses it.
+  const middle = lerp3(a.worldPosition, b.worldPosition, 0.5);
+  await setPose(page, "head", [eye[0], eye[1], eye[2] + 0.6], [middle[0], 0.7, middle[2]]);
+  await dwell(page);
+  await phoneTap(page, [a.worldPosition[0], a.worldPosition[1] + a.recordedSize[1] * 0.55, a.worldPosition[2]]);
+  const refocused = await waitForGallery(page, (s) => s.focusedId === "mock-1" && s.controls?.boundTo === "mock-1");
+  mark("ar-refocus");
+  expect(readingOf(refocused, "mock-1")!.playing, "a tap on an unfocused hologram focuses it, without pausing it").toBe(true);
+  expectAudioFocus(refocused, "mock-1");
+  await captureEvidence(page, testInfo, "ar-phone-two");
+  await dwell(page);
+  await endSession(page);
+  await expect(page).toHaveURL(/\/\?shell=iwsdk$/);
+  report.arGallery = {
+    timeline: marks,
+    holograms: [a, b].map((h) => ({ id: h.id, position: h.worldPosition, mode: h.placement.mode, stage: h.placement.stage })),
+    apartM: apart,
+    chipWidthM: second.chipWidthM,
+    focusAfterTap: refocused.focusedId
   };
 });
 
