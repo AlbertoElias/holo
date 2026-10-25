@@ -1,4 +1,5 @@
 import type { DesktopViewMode, MockInputState } from '../types/contracts';
+import type { FlatHalo } from '../ui/flatHalo';
 import { TouchInput, type TouchStick } from './TouchInput';
 
 export interface MoveState {
@@ -25,6 +26,8 @@ interface InputControllerOptions {
   onRecordToggle: () => void;
   /** The walk stick appeared, moved or left. */
   onTouchStick?: (stick: TouchStick | null) => void;
+  /** The Halo a held B summons (slice 5). */
+  halo?: FlatHalo;
 }
 
 const MOUSE_LOOK_RAD_PER_PX = 0.0025;
@@ -37,8 +40,13 @@ export class InputController {
   readonly moveState: MoveState = { forward: false, back: false, left: false, right: false };
 
   // Point action sources held now: 'mouse' (right button under pointer lock),
-  // 'key' (F), 'mock' (automation). Any one holds the action.
-  private readonly pointSources = new Set<'mouse' | 'key' | 'mock'>();
+  // 'key' (F), 'touch' (touch and hold on the scene), 'mock' (automation).
+  // Any one holds the action.
+  private readonly pointSources = new Set<PointSource>();
+  /** Where the holding finger is, CSS px, while 'touch' holds the point. */
+  private touchAim: { x: number; y: number } | null = null;
+  private haloKeyHeld = false;
+  private lastMouse = { x: 0, y: 0 };
   private pointAimPitch = 0;
   private jumpQueued = false;
   private crouchHeld = false;
@@ -61,7 +69,16 @@ export class InputController {
       isXrPresenting: options.isXrPresenting,
       onMove: (x, y) => this.applyStick(x, y),
       onLook: (dx, dy) => this.applyLook(dx, dy, TOUCH_LOOK_RAD_PER_PX),
-      onStick: (stick) => options.onTouchStick?.(stick)
+      onStick: (stick) => options.onTouchStick?.(stick),
+      onHold: (phase, point) => {
+        if (phase === 'end') {
+          this.endPoint('touch');
+          this.touchAim = null;
+          return;
+        }
+        this.touchAim = point;
+        if (phase === 'start') this.startPoint('touch');
+      }
     });
   }
 
@@ -84,6 +101,11 @@ export class InputController {
   /** Whether the desktop point action is held (right button, F, or the mock hook). */
   isPointHeld(): boolean {
     return this.pointSources.size > 0;
+  }
+
+  /** While a touch holds the point: the finger, CSS px. The camera ray through it aims. */
+  getPointScreenAim(): { x: number; y: number } | null {
+    return this.pointSources.has('touch') ? this.touchAim : null;
   }
 
   /** Aim pitch (radians above the horizon) while held; the mouse's vertical axis drives it. */
@@ -175,7 +197,7 @@ export class InputController {
     }
   }
 
-  private startPoint(source: 'mouse' | 'key' | 'mock'): void {
+  private startPoint(source: PointSource): void {
     if (this.options.isXrPresenting()) return;
     if (this.pointSources.size === 0) {
       const look = this.options.look;
@@ -185,7 +207,7 @@ export class InputController {
     this.pointSources.add(source);
   }
 
-  private endPoint(source: 'mouse' | 'key' | 'mock'): void {
+  private endPoint(source: PointSource): void {
     this.pointSources.delete(source);
   }
 
@@ -211,6 +233,9 @@ export class InputController {
     this.trayHeld = false;
     this.summonSlotQueued = null;
     this.pointSources.clear();
+    this.touchAim = null;
+    this.haloKeyHeld = false;
+    this.options.halo?.cancel();
   }
 
   private restoreDesktopFocus(): void {
@@ -287,6 +312,14 @@ export class InputController {
       event.preventDefault();
     }
 
+    // B holds the Halo; the mouse points its direction meanwhile (slice 5).
+    if (event.code === 'KeyB' && !event.repeat && !this.options.isXrPresenting() && this.options.halo) {
+      this.haloKeyHeld = true;
+      const locked = document.pointerLockElement === this.options.domElement;
+      this.options.halo.press(locked ? { x: window.innerWidth / 2, y: window.innerHeight / 2 } : this.lastMouse);
+      event.preventDefault();
+    }
+
     if (!this.options.isXrPresenting()) {
       if (event.code === 'KeyG' && !event.repeat) {
         this.objectToggleQueued = true;
@@ -320,6 +353,12 @@ export class InputController {
 
     if (event.code === 'KeyF') {
       this.endPoint('key');
+      event.preventDefault();
+    }
+
+    if (event.code === 'KeyB' && this.haloKeyHeld) {
+      this.haloKeyHeld = false;
+      this.options.halo?.release();
       event.preventDefault();
     }
 
@@ -394,6 +433,12 @@ export class InputController {
   }
 
   private readonly onMouseMove = (event: MouseEvent): void => {
+    this.lastMouse = { x: event.clientX, y: event.clientY };
+    // While B holds the Halo the mouse picks its direction: no look, no aim.
+    if (this.haloKeyHeld) {
+      this.options.halo?.move(event.movementX, event.movementY);
+      return;
+    }
     if (this.options.isXrPresenting() || document.pointerLockElement !== this.options.domElement) {
       return;
     }
@@ -401,6 +446,8 @@ export class InputController {
     this.applyLook(event.movementX, event.movementY, MOUSE_LOOK_RAD_PER_PX);
   };
 }
+
+type PointSource = 'mouse' | 'key' | 'touch' | 'mock';
 
 /** Digit1–Digit5 (and the numpad's) as tray slots 1–5. */
 function summonSlot(code: string): number | null {

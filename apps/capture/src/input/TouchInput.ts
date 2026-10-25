@@ -1,4 +1,4 @@
-import { PHONE_EDGES, TOUCH_HOLD_SLOP_APX } from '@holoim/xr-ui-core';
+import { HELD_IDLE, HOLD_DELAY_MS, PHONE_EDGES, TOUCH_HOLD_SLOP_APX, stepHeldMode, type HeldModeEvent, type HeldModeState } from '@holoim/xr-ui-core';
 import { tokens } from '@holoim/design-tokens';
 
 /** A touch walk stick: where it went down and where the finger is now, CSS px. */
@@ -16,6 +16,8 @@ export interface TouchInputOptions {
   onLook: (dx: number, dy: number) => void;
   /** The stick appeared, moved or left (null). */
   onStick: (stick: TouchStick | null) => void;
+  /** Touch and hold on the scene (slice 5): the mark "this" starts, its finger moves, or it ends. CSS px. */
+  onHold?: (phase: 'start' | 'move' | 'end', point: { x: number; y: number }) => void;
 }
 
 // The share of the screen's width, from the left, where a touch walks; a
@@ -30,12 +32,18 @@ export const STICK_TRAVEL_APX = tokens.hit.touch;
  * the left of the scene to walk with a stick that appears under the finger,
  * drag anywhere else to look. Touches that start in the back-swipe edges are
  * left to the system (styleguide 6.1, "Phone edges"); the dock's controls
- * sit above the scene and never reach it.
+ * sit above the scene and never reach it. A look touch that rests inside
+ * the slop for the hold delay becomes the held mark "this" (styleguide 6.1,
+ * "Holds"): from then on the finger aims and the view stays still, until it
+ * lifts. The walk side never holds, so a resting thumb on the stick never marks.
  */
 export class TouchInput {
   private stickId: number | null = null;
   private stick: TouchStick | null = null;
   private readonly lookPointers = new Map<number, { x: number; y: number }>();
+  private held: HeldModeState = HELD_IDLE;
+  private holdDown: { id: number; x: number; y: number } | null = null;
+  private holdTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: TouchInputOptions) {}
 
@@ -49,6 +57,7 @@ export class TouchInput {
 
   /** Blur, hidden page or XR entry: every touch ends. */
   reset(): void {
+    this.feedHold({ type: 'blur' });
     if (this.stickId !== null) this.options.onMove(0, 0);
     this.stickId = null;
     this.stick = null;
@@ -56,8 +65,30 @@ export class TouchInput {
     this.options.onStick(null);
   }
 
-  snapshot(): { stick: TouchStick | null; looking: number } {
-    return { stick: this.stick, looking: this.lookPointers.size };
+  snapshot(): { stick: TouchStick | null; looking: number; hold: HeldModeState['phase'] } {
+    return { stick: this.stick, looking: this.lookPointers.size, hold: this.held.phase };
+  }
+
+  private feedHold(event: HeldModeEvent, point?: { x: number; y: number }): void {
+    const before = this.held;
+    const step = stepHeldMode(this.held, event);
+    this.held = step.state;
+    if (this.held.phase !== 'pending' && this.holdTimer !== null) {
+      clearTimeout(this.holdTimer);
+      this.holdTimer = null;
+    }
+    const at = point ?? (this.holdDown ? this.lookPointers.get(this.holdDown.id) ?? this.holdDown : { x: 0, y: 0 });
+    if (step.started) {
+      this.options.onHold?.('start', at);
+      // A short buzz where the device has one: the hold began.
+      try {
+        navigator.vibrate?.(10);
+      } catch {
+        // Feedback only.
+      }
+    }
+    if (step.ended && before.phase === 'held') this.options.onHold?.('end', at);
+    if (this.held.phase === 'idle') this.holdDown = null;
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
@@ -75,6 +106,14 @@ export class TouchInput {
       return;
     }
     this.lookPointers.set(event.pointerId, point);
+    if (this.held.phase === 'idle' && this.lookPointers.size === 1) {
+      this.holdDown = { id: event.pointerId, ...point };
+      this.feedHold({ type: 'press', source: `touch:${event.pointerId}`, atMs: event.timeStamp, delayMs: HOLD_DELAY_MS });
+      this.holdTimer = setTimeout(() => {
+        this.holdTimer = null;
+        this.feedHold({ type: 'tick', atMs: Number.POSITIVE_INFINITY });
+      }, HOLD_DELAY_MS);
+    }
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
@@ -97,6 +136,14 @@ export class TouchInput {
     const last = this.lookPointers.get(event.pointerId);
     if (!last) return;
     this.lookPointers.set(event.pointerId, point);
+    const source = `touch:${event.pointerId}`;
+    if (this.held.phase === 'held' && this.held.source === source) {
+      this.options.onHold?.('move', point);
+      return;
+    }
+    if (this.held.phase === 'pending' && this.held.source === source && this.holdDown) {
+      this.feedHold({ type: 'move', source, distanceApx: Math.hypot(point.x - this.holdDown.x, point.y - this.holdDown.y) });
+    }
     this.options.onLook(point.x - last.x, point.y - last.y);
   };
 
@@ -108,6 +155,8 @@ export class TouchInput {
       this.options.onMove(0, 0);
       this.options.onStick(null);
     }
+    const point = this.lookPointers.get(event.pointerId);
     this.lookPointers.delete(event.pointerId);
+    this.feedHold(event.type === 'pointercancel' ? { type: 'trackingLost', source: `touch:${event.pointerId}` } : { type: 'release', source: `touch:${event.pointerId}`, atMs: event.timeStamp }, point);
   };
 }

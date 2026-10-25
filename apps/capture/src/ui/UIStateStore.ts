@@ -2,6 +2,9 @@ import type { Handedness } from '@holoim/xr-ui-core';
 import type { AppMode, UiViewModel } from '../types/contracts';
 import { loadHandedness } from './handedness';
 
+/** How long a Halo action's notice stays (slice 5 build plan). */
+const NOTICE_MS = 1500;
+
 export class UIStateStore {
   private value: UiViewModel = {
     mode: 'desktop-third',
@@ -17,8 +20,10 @@ export class UIStateStore {
     faceCamera: 'off',
     handedness: loadHandedness(),
     recordingElapsedMs: 0,
-    xrEntry: { vr: 'unknown', ar: 'unknown' }
+    xrEntry: { vr: 'unknown', ar: 'unknown' },
+    notice: null
   };
+  private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   private listeners = new Set<(state: UiViewModel) => void>();
 
@@ -44,6 +49,18 @@ export class UIStateStore {
     const whole = Math.max(0, Math.floor(ms / 1000) * 1000);
     if (this.value.recordingState !== 'recording' || whole === this.value.recordingElapsedMs) return;
     this.value = { ...this.value, recordingElapsedMs: whole };
+    this.emit();
+  }
+
+  /** Says `text` on the status line for `ms`, replacing any notice still showing. */
+  flashNotice(text: string, ms = NOTICE_MS): void {
+    if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
+    this.noticeTimer = setTimeout(() => {
+      this.noticeTimer = null;
+      this.value = { ...this.value, notice: null };
+      this.emit();
+    }, ms);
+    this.value = { ...this.value, notice: text };
     this.emit();
   }
 

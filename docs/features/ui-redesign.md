@@ -713,6 +713,126 @@ Built (2026-10-24, branch `claude/sharp-snyder-e9566f`):
 - Any change to the meaning record goes through the `@holoim/meaning` owner
   as its own reviewed change; v0 files keep loading.
 
+#### Slice 5 build plan (lead, 2026-10-25)
+
+Found while planning:
+
+- **Capture's AR is a spectator.** In WebXR AR (Quest passthrough or
+  Android) every capture system returns early, recording included
+  (`frame.arSpectator`), so no AR take exists to hold a mark in. Phone AR
+  marks need AR recording first, a capability of its own. Sent to the lead
+  as a scope question; until it is answered the phone AR row and the meaning
+  v1 change are not built, and the Halo is built where capture records
+  (desktop, phone, VR).
+- **The tray already took two Halo summons.** PRD-045's tray holds on the
+  non-dominant Y/B button and on the non-dominant palm turned up: the
+  concept's Halo summons for controllers and hands. Taken instead (lead's
+  call, open to revisit):
+
+| Input | Mark "this" | Halo |
+| --- | --- | --- |
+| Desktop | Right button under pointer lock, or F (built) | Hold **B** and move the mouse; or press and hold the dock's Halo glyph |
+| Phone | Touch and hold the scene (look side) 300 ms within 22 apx, then the finger aims | Press and hold the dock's Halo glyph, drag |
+| Quest hands | Non-dominant thumb–middle pinch; the dominant index aims | **Dominant** thumb–middle pinch, drag the hand |
+| Quest controllers | Non-dominant trigger; the dominant ray aims | Press and hold the **non-dominant thumbstick**, tilt it (that stick stops walking or turning while held) |
+
+  Hands use the one alternate pinch on each hand: on the non-dominant hand it
+  holds "this", on the dominant hand it summons the Halo. Rejected: palm-up
+  and Y/B (the tray's), a long index pinch (the Grab verb), X/A (Speak's).
+  B on desktop: the left hand stays on the keys while the right hand flicks
+  the mouse; Space, R, F, C, V, G, T, Q, E, Z, X and 1 to 5 are taken, Tab
+  moves keyboard focus.
+
+How it is built:
+
+1. **One aim-hold record for every input.** `PointSampleStore` aim holds
+   gain the input that made them (`desktop`, `touch`, `hands`,
+   `controllers`). Desktop keeps its path; a phone hold casts a camera ray
+   through the finger and the arm points at what it lands on; a hand hold
+   takes the dominant index's filtered ray (`PointDetector`) whatever its
+   pose score; a controller hold takes the dominant target ray. Headset
+   holds resolve against the scene and the body (never the pointing arm), as
+   inferred points do; desktop and phone holds against the scene only, as
+   today. Each becomes a `recorded` link with the dominant hand as `from`,
+   which v0 already says truthfully.
+2. **Suppression by the hold's span.** After resolution every inferred
+   link is trimmed by the take's held spans (the hold, not its link, padded
+   0.25 s each side); a piece shorter than the point dwell is dropped. The
+   report says "trimmed by hold" or "suppressed by hold", so a hold that
+   lands on nothing still overrides a guess made meanwhile, and a guess
+   outside the hold survives. A tap (shorter than 0.2 s) or an undone hold
+   suppresses nothing.
+3. **Held modes through `stepHeldMode`.** Hands: the non-dominant
+   thumb–middle tips within 1.5 cm enter, beyond 3 cm leave, and only while
+   the thumb–index gap is wider by at least 1 cm (an ordinary pinch never
+   holds); a hand that loses tracking ends the mode. Controllers: the
+   non-dominant trigger above 0.5; a lost source ends it, and the trigger's
+   own select is swallowed while the mark holds and on its release. Phone:
+   the look-side touch waits out the hold delay inside the slop; moving out
+   first makes it a look drag. Every mode ends on blur and hidden page.
+   Headset modes start only while recording (no live mark in a headset).
+4. **Undo and redo.** The store keeps the take's holds and a redo stack:
+   W undoes the last hold (ending it if open), E restores the last undone
+   one, a new hold clears the redo stack. Undoing a hold lifts its
+   suppression. Only during a take; afterwards the take is exported.
+5. **The Halo.** `stepHalo` drives all of them; S toggles recording through
+   the Record control's own gate, W and E undo and redo. Flat screens draw
+   the ring with `@holoim/ui-dom` (a presentational `HaloRing` split out of
+   `Halo` so a held key can drive it; the key's ring opens at the mouse,
+   moved in until the whole ring is in the window, found by the proof
+   video when the mouse rested on the dock); headsets draw `ThreeHalo` where the
+   summoning hand is, facing the head. The dock's Halo glyph stays during a
+   take (it carries stop and undo), so `chromeVisible` keeps `halo` while
+   recording; styleguide 8.5 says so. A hand summoning the Halo gives no
+   point evidence meanwhile, as a poking hand does. Commits pulse a
+   controller and tick for a hand; the flat status line says "Mark undone"
+   or "Mark restored" for 1.5 s.
+6. **Glyphs.** Undo, redo and the Halo get drawings in `tokens.json`
+   (Codex reviews them with the screenshots).
+
+Design review (Opus design-reviewer, 2026-10-25), adopted:
+
+- The controller mark runs on the trigger's own `selectstart` and
+  `selectend`, and chrome ignores a select the mark owns (`ownsSelect`),
+  including one within 0.3 s of a mark's release.
+- The stick Halo opens only from a stick at rest; the stick stays locked
+  out of locomotion until it recentres; its release latches the last
+  direction for 100 ms, since a stick springs back as the press lets go.
+- Undo while a mark holds ends it and drops samples until that input
+  releases, so the same press does not open a new hold.
+- A hold is opened and closed by its writer; non-desktop holds bridge
+  frame gaps, and a holding hand gets 0.25 s of grace before tracking loss
+  ends it. A hand mark reads only that side's own hand: with it gone,
+  tracking lends the side the other hand's joints, which read as a release
+  (found by the marks check).
+- The aim pauses while the Halo is open; the view does not turn while B
+  holds.
+- The hands mark needs the thumb–index gap over 4 cm and never starts on a
+  hand that grabs or holds the tray; the hand Halo's drag is measured in the
+  head's yaw frame, so turning does not change the choice.
+- A touch hold is backdated to the touch's start; the touch input is not
+  written to the export (links are built field by field, and v0 says the
+  dominant hand truthfully).
+- Headset notices show on the status line; W with nothing held says
+  "Nothing to undo"; a handedness change ends a mark and closes the Halo.
+
+Not adopted, open to revisit: ending the take at the moment the Halo was
+pressed when S stops it (the release is when the author chose it), and
+requiring the drawn ring before the stick may commit S (a flick is a
+commit on every input). Known limits: an undone desktop or phone hold keeps
+its inferred arm-motion span; the byte-identical export check holds only
+for takes with no holds.
+
+Checks (emulation): `test:xr:pointing` adds a held-mark phase per input
+(desktop with Halo undo and redo, phone touch, IWER hands, IWER
+controllers) and reads the exported GLB for one `recorded` link per hold
+on the right referent and no inferred link overlapping a hold; release
+paths (release, tracking loss, blur) and the ordinary pinch are exercised.
+A Halo phase flicks and holds every direction with mouse, the B key,
+touch, IWER hands and IWER controllers, and reports what committed and
+whether the ring drew. The viewer pointing pipeline shows a held mark on
+phone and desktop.
+
 ### Slice 6: Quick Look baked halo
 
 `tools/glb_to_usdz.py` adds the gold core, the cream highlight and a static
@@ -904,8 +1024,8 @@ share no files.
 | Second round: the cloche, contracts | `xr-ui-core` `cloche.test.ts`, `xr-ui-three` `cloche.test.ts` | Neither (unit) | 2026-10-25, written from failure modes first: no fit for nothing drawn; every drawn point inside the glass with the margin; the foot on the lowest point; a flat take and a wide low one keep 40% shoulders; the shade is the content's footprint × 1.15; Follow keeps every point of the drawn dome inside the viewing box at 78% and fills it (phone and desktop aspects); fully drawn outside, 0 at the glass and monotonic walking out; seeds stable and in range; char at rest on dark ground and full where the soot rule is on. The three.js object: chrome throughout, not tone-mapped, no depth writes; the eye read correctly under a placed, turned and 0.25-scaled parent (AR); inside drops the glass and keeps the floor shade; nothing in a headset while recording. `xr-ui-core` 95, `xr-ui-three` 81, `ui-dom` 88, viewer-web 33 |
 | Second round: viewer pages | `e2e/redesign.spec.ts`, `e2e/hologram-feed.spec.ts`, `e2e/ar-bubble.spec.ts` (IWER, 1280 × 800 and 390 × 844) | Emulation (Playwright, IWER) | 2026-10-25: 15/15. At rest only Play (or Pause) in the row and no Return in Follow; every glyph at the mouse minimum; on reach Free shows and Play neither moves (< 1 px) nor leaves the middle (< 2 px); no two controls closer than a glyph gap; no `.feed-card-edge` or `.feed-card-shade` on the page; the focused card's cloche drawn at opacity 1 with volume; under reduced motion the core steady and the glow within the slow fade (< 0.02 in 0.5 s); the sheet at most 26rem, its drop zone labelled for `#glb-upload`, the Quick Look switch toggled by its label. AR: the cloche drawn, all chrome, not head-locked, the recorded author inside it, standing within the bubble, at the same room position from in front and from behind, char at full strength on a Quest (no estimate), core 1, the old glass sphere hidden, the aura kept with no torus; `ar-cloche-front.png` and `ar-cloche-back.png`. View in AR is a reach control now, so the specs reach for the card before pressing it (`pressViewInAr`). Not checked on a Quest or an Android phone |
 | Second round: Codex on the renders | `codex exec -p deep` with before and after contact sheets (desktop, phone, upload sheet) | Neither (cross-vendor review) | 2026-10-25, first pass: "ship after the must-fixes". Must-fixes, all done: the avatar's head broke through its dome (the fit now samples the author's reach through the take, bones and moving meshes, relative to a following bubble); the dome's far side still showed inside (now 0 there, read back from the shell); the phone row sat at 85% down on amber (now ends above 75%); the dock showed through the phone sheet (hidden while it is open). Taste notes taken: the rim capped at a 2 to 4 px line, the chip over the picture hugging the controls showing. Left: the floor shade's dark crescent under the avatar's terrain (it is the hologram's own shade, kept). Second pass on the fixed renders: each must-fix resolved, none new, "ship on this visual pass"; it notes stills cannot prove the 4% clearance through the whole take, which the fit's contract test and the AR check (author inside from both sides) cover |
-| Hold to mark on every input | IWER scenarios (hands, controllers), the desktop pointing take, touch scenarios for phone and phone AR | Emulation | Exported GLBs with the expected `recorded` links and no overlapping inferred link; pending |
-| The Halo on every input | Flick and hold scenarios with mouse, touch and IWER (hands, controllers, `transient-pointer` if IWER emulates it) | Emulation | Report of directions committed; pending |
+| Hold to mark on every input | `test:xr:marks` (`scripts/ci-held-mark-playwright.ts`): desktop F holds, a phone touch hold, IWER hands (non-dominant thumb–middle pinch, an ordinary pinch, the hand lost mid-hold), IWER controllers (non-dominant trigger); `test:xr:pointing` unchanged; the viewer pointing pipeline uploads the phone and hands takes | Emulation | Passed 2026-10-25: each GLB is valid v0 with a `recorded` link on the held target and no inferred link over it (hands: A recorded twice, B inferred after its undo); the ordinary pinch held nothing; loss ended the mark after the grace (`output/ci-marks/marks-report.json`). Phone AR not built (scope question) |
+| The Halo on every input | The same check: the B key (hold W, flick E, flick W, hold S), the dock glyph by touch (hold, drag S), the IWER dominant pinch (drag W, drag S), the IWER non-dominant stick (W, E, S) | Emulation | Passed 2026-10-25: every committed action and input logged as expected; the ring drew while B held and not on a flick. `transient-pointer` not emulated by IWER: not built |
 | Pipeline and USDZ | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result; byte-identical export with chrome visible; v0 and v1 files load; USDZ outline matches; pending |
 | Cross-device task test | The PRD-021 trial (below) | Physical | Recorded results; pending |
 
@@ -957,3 +1077,22 @@ fingertip shade's look, and whether the take's microphone hears the tick;
 with Quest controllers, the pulse strengths and the ray landing on the wrist
 glyph; the world panel's 1.5 m legibility (check 7); and a left-handed
 participant through the whole capture flow.
+
+Slice 5 is unverified on devices; emulation cannot show any of these:
+
+- Quest 3 hands: whether the non-dominant thumb–middle pinch (1.5 cm on,
+  3 cm off, index clear by 4 cm) is reliable and free of false starts while
+  holding, grabbing, waving or making a fist; whether the dominant pinch
+  opens the Halo when a pointing thumb rests on the middle finger (IWER's
+  point pose keeps 9 cm between them; a real hand may not); the 0.25 s
+  loss grace; the Halo drag distance and its tick.
+- Quest controllers: the trigger hold's feel; the thumbstick press-and-tilt
+  ergonomics (pressing while tilting, the rest threshold 0.2, the 100 ms
+  release latch); that walking and turning stop on that stick while held.
+- A real phone: the 300 ms touch hold within 22 apx against look drags; the
+  arm and the ray landing under the finger; `navigator.vibrate` on Android
+  (iOS Safari has none); the dock glyph's hold and drag next to the home bar.
+- Desktop: B with the mouse on a real pointer lock (CDP reports no
+  `movementX` on macOS, so the check moves the mouse synthetically).
+- Not built: gaze-and-pinch and `transient-pointer` (Vision Pro), and phone
+  AR marks, which need AR recording (scope question to the lead).

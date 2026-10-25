@@ -10,11 +10,13 @@ import {
   glyphAppearance,
   glyphDrawing,
   haloLayout,
+  haloSlotGlyph,
   stepHalo,
   type HaloAction,
   type HaloCommit,
   type HaloDirection,
   type HaloEvent,
+  type HaloLayout,
   type HaloState,
   type HaloStep
 } from "@holoim/xr-ui-core";
@@ -35,11 +37,13 @@ export interface HaloProps {
   onCommit: (commit: HaloCommit) => void;
   /** What the press starts on. An element, or a function of the Halo's state. Defaults to an empty ring. */
   trigger?: ReactNode | ((state: HaloViewState) => ReactNode);
+  /** Draws the ring this far above the trigger, apx, so a trigger by a screen edge keeps every place in view. Movement still counts from the press. */
+  ringLiftApx?: number;
 }
 
 const CLOSED_VIEW: HaloViewState = { ringDrawn: false, highlighted: null };
 
-export function Halo({ actions, onCommit, trigger }: HaloProps) {
+export function Halo({ actions, onCommit, trigger, ringLiftApx = 0 }: HaloProps) {
   const layout = useMemo(() => haloLayout(actions, { headset: false }), [actions]);
   const [view, setView] = useState<HaloViewState>(CLOSED_VIEW);
   const machine = useRef<HaloState>(HALO_CLOSED);
@@ -123,38 +127,65 @@ export function Halo({ actions, onCommit, trigger }: HaloProps) {
       style={{ position: "relative", display: "inline-flex", touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
     >
       {triggerNode}
-      {view.ringDrawn ? (
-        <div data-halo-ring="" style={{ position: "absolute", left: "50%", top: "50%", width: 0, height: 0, pointerEvents: "none" }}>
-          {layout.slots.map((slot) => (
-            <div
-              key={slot.direction}
-              data-halo-place={slot.direction}
-              style={{
-                position: "absolute",
-                left: slot.x,
-                top: -slot.y,
-                width: layout.slotApx,
-                height: layout.slotApx,
-                transform: "translate(-50%, -50%)"
-              }}
-            >
-              {slot.action === null ? null : (
-                <div data-halo-slot={slot.direction} data-action={slot.action} data-highlighted={view.highlighted === slot.direction ? "" : undefined}>
-                  <HaloSlotDrawing action={slot.action} highlighted={view.highlighted === slot.direction} slotApx={layout.slotApx} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null}
+      {view.ringDrawn ? <HaloRing layout={layout} highlighted={view.highlighted} liftApx={ringLiftApx} /> : null}
     </div>
   );
 }
 
-/** Record has a decided drawing; every other action is an empty gold ring of the slot size until one is. */
+export interface HaloRingProps {
+  /** From `haloLayout(actions, { headset: false })`. */
+  layout: HaloLayout;
+  highlighted: HaloDirection | null;
+  /** Moves the drawing up from its parent's centre, apx. */
+  liftApx?: number;
+}
+
+/**
+ * The drawn ring alone, centred on its parent's centre: eight reserved
+ * places, a glyph ring where a direction has an action. `Halo` draws it for
+ * a pointer; an app draws it for any other summon (a held key) from the
+ * same `stepHalo` state.
+ */
+export function HaloRing({ layout, highlighted, liftApx = 0 }: HaloRingProps) {
+  return (
+    <div data-halo-ring="" style={{ position: "absolute", left: "50%", top: liftApx ? `calc(50% - ${liftApx}px)` : "50%", width: 0, height: 0, pointerEvents: "none" }}>
+      {layout.slots.map((slot) => (
+        <div
+          key={slot.direction}
+          data-halo-place={slot.direction}
+          style={{
+            position: "absolute",
+            left: slot.x,
+            top: -slot.y,
+            width: layout.slotApx,
+            height: layout.slotApx,
+            transform: "translate(-50%, -50%)"
+          }}
+        >
+          {slot.action === null ? null : (
+            <div data-halo-slot={slot.direction} data-action={slot.action} data-highlighted={highlighted === slot.direction ? "" : undefined}>
+              <HaloSlotDrawing action={slot.action} highlighted={highlighted === slot.direction} slotApx={layout.slotApx} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Record draws its own ring; undo and redo sit in a gold ring of the slot size; an action with no drawing is the ring alone. */
 function HaloSlotDrawing({ action, highlighted, slotApx }: { action: HaloAction; highlighted: boolean; slotApx: number }) {
   const appearance = glyphAppearance({ hovered: highlighted }, { headset: false });
-  return action === "record"
-    ? <GlyphSvg drawing={glyphDrawing("record")} appearance={appearance} />
-    : <RingSvg sizeApx={slotApx} appearance={appearance} />;
+  if (action === "record") return <GlyphSvg drawing={glyphDrawing("record")} appearance={appearance} />;
+  const drawn = haloSlotGlyph(action);
+  return (
+    <div style={{ position: "relative", width: slotApx, height: slotApx }}>
+      <RingSvg sizeApx={slotApx} appearance={appearance} />
+      {drawn ? (
+        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
+          <GlyphSvg drawing={glyphDrawing(drawn)} appearance={appearance} />
+        </div>
+      ) : null}
+    </div>
+  );
 }

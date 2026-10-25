@@ -1,5 +1,6 @@
-import type { Handedness } from '@holoim/xr-ui-core';
+import { nonDominantHand, type Handedness } from '@holoim/xr-ui-core';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { Vector3 } from 'three';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { AvatarRig } from '../avatar/AvatarRig';
@@ -24,12 +25,15 @@ import { PointCrosshair } from '../ui/PointCrosshair';
 import { UIStateStore } from '../ui/UIStateStore';
 import { saveHandedness } from '../ui/handedness';
 import { TouchStickView } from '../ui/TouchStickView';
+import { FlatHalo } from '../ui/flatHalo';
 import { VrChrome } from '../ui/VrChrome';
+import { HeadsetHolds } from '../xr/HeadsetHolds';
 import { ArSpectator } from '../xr/ArSpectator';
 import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
 import { XrTracking } from '../xr/XrTracking';
 import { installAutomationHooks } from './automationHooks';
+import { createHaloActions } from './haloActions';
 import { createCaptureStage } from './captureStage';
 import { renderCaptureTextState } from './captureTextState';
 import { FrameLoop } from './FrameLoop';
@@ -76,12 +80,23 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   ui.setXrEntry(xrEntry.offers);
   xrEntry.onChange(() => ui.setXrEntry(xrEntry.offers));
   const touchStick = new TouchStickView(container);
+  // The Halo's actions (slice 5), one runner for every input that summons it.
+  const haloActions = createHaloActions({
+    ui,
+    recording: { toggle: () => recording.toggle() },
+    getPointSamples: () => recording.recorder.pointSamples,
+    getTimeSec: () => capture.frame.elapsedSec
+  });
+  const flatHalo = new FlatHalo((commit) => {
+    if (commit.action) haloActions.run(commit.action, 'key');
+  });
   const input = new InputController({
     domElement: renderer.domElement,
     isXrPresenting: () => tracking.isXrPresenting(),
     look: camera,
     onRecordToggle: () => recording.toggle(),
-    onTouchStick: (stick) => touchStick.update(stick)
+    onTouchStick: (stick) => touchStick.update(stick),
+    halo: flatHalo
   });
   const setHandedness = (handedness: Handedness): void => {
     saveHandedness(handedness);
@@ -119,8 +134,22 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     tracking,
     refitHeight: () => heightFit.requestRefit(),
     toggleRecording: () => recording.toggle(),
-    setHandedness
+    setHandedness,
+    ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec)
   });
+  const headsetHolds = new HeadsetHolds({
+    tracking,
+    root: vrChrome.root,
+    renderer,
+    getHandedness: () => ui.getState().handedness,
+    // A hand grabbing, or holding the tray open, is doing that: no mark or Halo on it.
+    isHandBusy: (side) => objects.grabInput.get(side).pressed || (side === nonDominantHand(ui.getState().handedness) && objects.trayGesture.isHeld()),
+    onHaloAction: (action, kind, side, at) => {
+      haloActions.run(action, kind);
+      vrChrome.haloFeedback(side, at, kind);
+    }
+  });
+  headsetHolds.bind();
 
   const capture: CaptureContext = {
     config,
@@ -151,6 +180,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
     ui,
     vrChrome,
+    headsetHolds,
     recording,
     diagnostics: new DiagnosticViews({
       scene,
@@ -231,6 +261,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       getSnapshot: () => ui.getState(),
       refitHeight: () => heightFit.requestRefit(),
       toggleRecording: () => recording.toggle(),
+      halo: { subscribe: flatHalo.subscribe, getSnapshot: flatHalo.getSnapshot, layout: flatHalo.layout },
+      runHaloAction: (action, kind) => {
+        haloActions.run(action, kind);
+      },
       loadObjectFile: (file) => void objects.loadFile(file),
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       toggleFaceCamera: () => capture.face.toggleCamera(),
@@ -287,6 +321,19 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __setChromeProbe: (mode) => chromeProbe.set(mode, avatar.worldModel, avatar.avatarRoot, vrChrome.root),
         __setChromeVisible: (visible) => {
           vrChrome.root.visible = visible;
+        },
+        __sampleHolds: () => ({
+          headset: headsetHolds.snapshot(),
+          holds: recording.recorder.pointSamples.holdCounts(),
+          touch: input.touch.snapshot().hold,
+          flatHalo: flatHalo.getSnapshot(),
+          actions: haloActions.log
+        }),
+        __projectToScreen: (point) => {
+          const ndc = new Vector3(point[0], point[1], point[2]).project(stage.desktopCamera);
+          if (ndc.z > 1) return null;
+          const rect = renderer.domElement.getBoundingClientRect();
+          return { x: rect.left + ((ndc.x + 1) / 2) * rect.width, y: rect.top + ((1 - ndc.y) / 2) * rect.height };
         }
       });
       // ?manualClock=1: never tick on real time, so a replay starts from the

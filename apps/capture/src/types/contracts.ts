@@ -107,6 +107,8 @@ export interface UiViewModel {
   recordingElapsedMs: number;
   /** What the dock's VR and AR entries offer. */
   xrEntry: { vr: XrEntryOffer; ar: XrEntryOffer };
+  /** A brief word after a Halo action ("Mark undone"), on the status line; null otherwise. */
+  notice: string | null;
 }
 
 export type XrEntryOffer = 'unknown' | 'unsupported' | 'available' | 'active';
