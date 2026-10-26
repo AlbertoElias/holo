@@ -42,6 +42,8 @@ import {
 export const NEAR_HAND_DISTANCE_M = 0.3;
 export const NEAR_HEAD_RAY_DEG = 15;
 const CHIP_LIFT_M = 0.02;
+/** A long frame (a loaded device) steps a fade by at most this, so it still reads as a fade rather than a pop. */
+const FADE_MAX_STEP_MS = 50;
 /** Timeline length in apx before the target scale; no token yet. */
 const TIMELINE_LENGTH = 160;
 /** On a phone the timeline gives way so the reach row fits the screen; it stays at least this long to scrub. */
@@ -305,10 +307,11 @@ export class FootControls {
     }
 
     // Chrome unfolds 240 ms in and 400 ms out (§8.4).
-    const step = this.reading.revealed ? delta / MOTION.chromeInMs : -delta / MOTION.chromeOutMs;
+    const fadeDelta = Math.min(delta, FADE_MAX_STEP_MS);
+    const step = this.reading.revealed ? fadeDelta / MOTION.chromeInMs : -fadeDelta / MOTION.chromeOutMs;
     this.reachOpacity = Math.min(1, Math.max(0, this.reachOpacity + step));
     // VR rows are bare against walls; their chip fades in over its own 0.3 s (§5.2, §9.2). AR always shows it with the row.
-    const chipStep = this.reading.revealed ? delta / CHIP.vrFadeInMs : -delta / MOTION.chromeOutMs;
+    const chipStep = this.reading.revealed ? fadeDelta / CHIP.vrFadeInMs : -fadeDelta / MOTION.chromeOutMs;
     this.reachChipFade = this.target === "vr" ? Math.min(1, Math.max(0, this.reachChipFade + chipStep)) : this.reachOpacity;
     this.reachRow.setProperties({ display: this.reachOpacity > 0 ? "flex" : "none" });
     // No text within 1 m of the hologram (§7.3); glyphs stay.
