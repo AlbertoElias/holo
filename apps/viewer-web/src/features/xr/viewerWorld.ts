@@ -44,6 +44,8 @@ const VR_SLIDE_SPEED_MPS = 3.2;
 // frame (a model loading, the session starting) drops the rig through the
 // floor before its ground ray can catch it. Steps are clamped to this.
 const VR_LOCOMOTION_MAX_STEP_S = 1 / 20;
+/** Within this of the floor the rig stands on it (the float spring's bob). */
+const VR_RIG_FLOOR_SNAP_M = 0.05;
 
 export interface ViewerWorld {
   world: World;
@@ -133,7 +135,14 @@ function addVrRoom(world: World): void {
   locomotion.config.turningAngle.value = VR_SNAP_TURN_DEG;
   locomotion.config.slidingSpeed.value = VR_SLIDE_SPEED_MPS;
   const step = locomotion.update.bind(locomotion);
-  locomotion.update = (delta: number) => step(Math.min(delta, VR_LOCOMOTION_MAX_STEP_S));
+  locomotion.update = (delta: number) => {
+    step(Math.min(delta, VR_LOCOMOTION_MAX_STEP_S));
+    // The room is flat: the rig stands on y = 0 rather than on the
+    // character's float spring, which bobs a couple of cm while it moves and
+    // can sleep a few mm off. IWER and headset poses then stay floor poses.
+    const rig = world.player.position;
+    if (Math.abs(rig.y) < VR_RIG_FLOOR_SNAP_M) rig.y = 0;
+  };
   // The World's loop runs while the opened hologram loads, before this floor
   // exists, and the locomotor falls with nothing under it: stand the rig back
   // on the floor's origin now that there is one.
@@ -355,6 +364,7 @@ function installXrViewerProbe(world: World, cache: HologramAssetCache, space: Ho
       setHologramPlaying(focused, playing);
       seekHologram(focused, clipTime);
     },
+    takeFadeLog: () => world.getSystem(HologramControlsSystem)?.takeFadeLog() ?? [],
     snapshot: () => {
       const c = viewerContext(world);
       const session = world.renderer.xr.getSession();

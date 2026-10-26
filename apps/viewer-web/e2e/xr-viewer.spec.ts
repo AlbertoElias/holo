@@ -554,31 +554,19 @@ async function settledReachRow(page: Page): Promise<ReachRowReading> {
  * The VR reach chip's fade-in against its glyphs' (§5.2: 0.3 s; §8.4: 240 ms).
  * Both advance on the same frame deltas, so on a frame mid-fade the chip
  * stands at 240/300 of the glyphs' progress, or at 0.8 or more once the
- * glyphs are full. IWER's frames can be far apart (0.1 s to seconds), so one
- * reveal may finish in a frame: the head looks away and back until a frame
- * is caught mid-fade. The page samples every 20 ms, faster than its frames.
+ * glyphs are full. The viewer logs both on every frame. IWER's frames can be
+ * far apart (0.1 s to seconds), so one reveal may finish in one frame: the
+ * head looks away and back until a frame is caught mid-fade.
  */
 async function measureChipFade(page: Page, eye: Vec3, chip: Vec3): Promise<Array<{ glyph: number; chip: number }>> {
+  const takeLog = () => page.evaluate(() => (window as unknown as { __HOLOIM_XR_VIEWER__: { takeFadeLog(): Array<{ reach: number; chip: number }> } }).__HOLOIM_XR_VIEWER__.takeFadeLog());
   for (let attempt = 0; attempt < 12; attempt++) {
     await setPose(page, "head", eye, [eye[0], eye[1] + 4, eye[2] + 1]);
     await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 0 && s.controls!.foot.reachChipFade === 0, 6_000);
-    await page.evaluate(() => {
-      type Probe = { snapshot(): { controls: { foot: { reachOpacity: number; reachChipFade: number } } | null } };
-      const w = window as unknown as { __HOLOIM_XR_VIEWER__: Probe; __fadeSamples?: Array<[number, number]>; __fadeTimer?: number };
-      w.__fadeSamples = [];
-      w.__fadeTimer = window.setInterval(() => {
-        const foot = w.__HOLOIM_XR_VIEWER__.snapshot().controls?.foot;
-        if (foot) w.__fadeSamples!.push([foot.reachOpacity, foot.reachChipFade]);
-      }, 20);
-    });
+    await takeLog();
     await setPose(page, "head", eye, chip);
     await waitForSnapshot(page, (s) => s.controls!.foot.reachChipFade === 1, 3_000);
-    const samples = await page.evaluate(() => {
-      const w = window as unknown as { __fadeSamples: Array<[number, number]>; __fadeTimer: number };
-      window.clearInterval(w.__fadeTimer);
-      return w.__fadeSamples;
-    });
-    const midFade = samples.filter(([, chipFade]) => chipFade > 0 && chipFade < 1).map(([glyph, chipFade]) => ({ glyph, chip: chipFade }));
+    const midFade = (await takeLog()).filter((frame) => frame.chip > 0 && frame.chip < 1).map((frame) => ({ glyph: frame.reach, chip: frame.chip }));
     if (midFade.length) return midFade;
   }
   return [];
@@ -1437,8 +1425,8 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   };
 });
 
-/** The locomotion rig's rest height on the floor: IWSDK's float spring sleeps within this. */
-const RIG_FLOOR_TOLERANCE_M = 0.02;
+/** The locomotion rig stands on the flat floor (the viewer snaps IWSDK's float spring to it). */
+const RIG_FLOOR_TOLERANCE_M = 1e-6;
 
 /** Holds an IWER controller's thumbstick at (x, y); forward is y = −1 (WebXR standard mapping). */
 async function setStick(page: Page, side: "left" | "right", x: number, y: number): Promise<void> {
@@ -1495,7 +1483,7 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   await enterSession(page, "Step inside", "opaque");
   await setPose(page, "head", null, null);
   const entered = await waitForGallery(page, (s) => s.placement.stage === "placed" && Boolean(s.controls) && pageSettled(s), 25_000);
-  // The rig is still at the floor origin: IWER poses are world poses (to its float) until the viewer moves.
+  // The rig is still at the floor origin: IWER poses are world poses until the viewer moves.
   const eye: Vec3 = (await readHeadPose(page)).position;
   expect(Math.hypot(entered.player.position[0], entered.player.position[2]), `rig at the origin ${JSON.stringify(entered.player.position)}`).toBeLessThan(1e-6);
   expect(Math.abs(entered.player.position[1]), "rig on the floor").toBeLessThan(RIG_FLOOR_TOLERANCE_M);
@@ -1544,11 +1532,9 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   const slide = [0, 1, 2].map((i) => slid.player.position[i]! - before.player.position[i]!) as Vec3;
   expect(-slide[2], `slid ${slide[2].toFixed(3)} m along the head's forward (−z)`).toBeGreaterThan(0.3);
   expect(Math.abs(slide[0]), "straight ahead").toBeLessThan(Math.abs(slide[2]) * 0.1);
-  // IWSDK's character floats on a spring while moving (a couple of cm) and settles on the floor.
-  expect(Math.abs(slid.player.position[1]), "the rig stays at the local floor while it slides").toBeLessThan(0.05);
+  expect(Math.abs(slid.player.position[1]), "the rig stays on the local floor while it slides").toBeLessThan(RIG_FLOOR_TOLERANCE_M);
   expect(Math.abs(slid.player.yawRad - before.player.yawRad), "a slide does not turn").toBeLessThan(1e-6);
-  // Released: the rig holds still on the floor. IWSDK's engine sleeps once
-  // grounded, so its float spring can stop a few mm up; holograms stay at y = 0.
+  // Released: the rig holds still on the floor.
   const settled = await waitForGallery(page, (g) => Math.abs(g.player.position[1]) < RIG_FLOOR_TOLERANCE_M, 5_000);
   expect(horizontal(settled.player.position, slid.player.position), "stops when the stick is released").toBeLessThan(0.01);
   expect(Math.abs(settled.player.position[1]), "at rest on the local floor").toBeLessThan(RIG_FLOOR_TOLERANCE_M);
@@ -1583,7 +1569,7 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   const aiming = await gallerySnapshot(page);
   expect(horizontal(aiming.player.position, turned.player.position), "aiming alone does not move").toBeLessThan(1e-3);
   await setStick(page, "right", 0, 0);
-  // Landed once the rig has moved and its float spring has settled on the floor.
+  // Landed once the rig has moved, standing on the floor.
   const landed = await waitForGallery(page, (g) => horizontal(g.player.position, turned.player.position) > 0.5 && Math.abs(g.player.position[1]) < RIG_FLOOR_TOLERANCE_M, 5_000);
   const jump = horizontal(landed.player.position, turned.player.position);
   expect(jump, `teleported ${jump.toFixed(2)} m`).toBeGreaterThan(0.75);

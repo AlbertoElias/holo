@@ -360,6 +360,11 @@ export class FootControls {
     this.reachRow.setProperties({ transformTranslateX: next });
   }
 
+  /** The on-reach fades alone: cheap enough to read every frame. */
+  fades(): { reach: number; chip: number } {
+    return { reach: this.reachOpacity, chip: this.reachChipFade };
+  }
+
   probe(): FootControlsProbe {
     const object = this.entity.object3D!;
     object.updateWorldMatrix(true, true);

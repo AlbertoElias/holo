@@ -52,11 +52,18 @@ export class HologramControlsSystem extends createSystem() {
   /** Grabbable holograms whose grab is not yet kept on the ground, with the frames waited. */
   private readonly ungrounded = new Map<Entity, number>();
   private chipMeasured = false;
+  /** Development only: the foot controls' on-reach fades on each recent frame, for the e2e spec. */
+  private readonly fadeLog: Array<{ reach: number; chip: number }> = [];
 
   init(): void {
     const onSessionEnd = (): void => this.teardown();
     this.xrManager.addEventListener("sessionend", onSessionEnd);
     this.cleanupFuncs.push(() => this.xrManager.removeEventListener("sessionend", onSessionEnd), () => this.teardown());
+  }
+
+  /** The foot controls' on-reach fades on each frame since the last read, oldest first (development only). */
+  takeFadeLog(): Array<{ reach: number; chip: number }> {
+    return this.fadeLog.splice(0);
   }
 
   /** Probe readings for the e2e spec. */
@@ -135,6 +142,10 @@ export class HologramControlsSystem extends createSystem() {
       hands: this.trackedHands(),
       hologramDistanceM: Math.hypot(headPosition.x - anchor.x, headPosition.z - anchor.z)
     });
+    if (import.meta.env.DEV) {
+      this.fadeLog.push(foot.fades());
+      if (this.fadeLog.length > 64) this.fadeLog.shift();
+    }
     if (!this.chipMeasured) this.measureChip();
     // State only: the line reports a paused hologram and holds no control.
     const label = playbackLabel(state);
