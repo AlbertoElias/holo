@@ -21,7 +21,8 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
-import { drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
+import { drawnBounds, drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
+import { isCameraTake } from "../hologram/hologramScene";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
@@ -215,6 +216,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   const scratchBoundsRef = useRef(new Box3());
   const framingTargetsRef = useRef<Object3D[]>([]);
   const avatarRootRef = useRef<Object3D | null>(null);
+  // A camera take has no avatar: the set is what is framed, and no node named Hips or Head is the author.
+  const cameraTakeRef = useRef(false);
+  const setBoundsRef = useRef<Box3 | null>(null);
   const avatarAnchorRef = useRef<{ hips: Object3D; head: Object3D | null } | null>(null);
   const { actions, mixer } = useAnimations(animations, clonedScene);
   // The cloche (3.4), fitted once on the first drawn frame, when the bubble's
@@ -323,6 +327,21 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   } | null => {
     clonedScene.updateWorldMatrix(true, true);
 
+    if (cameraTakeRef.current) {
+      // The set and its objects as drawn: not the author's camera, the bubble's sphere or chrome.
+      // Read once, as it first stands: the set is still and every frame asks.
+      const setBounds = setBoundsRef.current ??= drawnBounds(clonedScene);
+      if (setBounds.isEmpty()) return null;
+      const target = computeDesiredFraming(setBounds, perspectiveCamera, DEFAULT_CAMERA_FRAMING_CONFIG);
+      const distance = MathUtils.clamp(target.distance * CARD_CAMERA_DISTANCE_SCALE, 1.4, 14);
+      return {
+        focus: target.focus,
+        distance,
+        near: Math.max(distance / 500, DEFAULT_CAMERA_FRAMING_CONFIG.minNear),
+        far: Math.max(distance * 20, 100)
+      };
+    }
+
     const avatarAnchors = avatarAnchorRef.current;
     if (avatarAnchors?.hips) {
       const hipsWorld = avatarAnchors.hips.getWorldPosition(new Vector3());
@@ -404,14 +423,18 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     prepareAnimatedScene(clonedScene);
     framingTargetsRef.current = getFramingTargets(clonedScene);
     const avatarRootByName = findObjectByName(clonedScene, ["RecordedAvatar"]);
+    const cameraTake = isCameraTake(clonedScene);
+    cameraTakeRef.current = cameraTake;
+    setBoundsRef.current = null;
     // Within the avatar when the export names it, so a recorded object's own
-    // bone names (a prop with a "Head") never take over the framing.
+    // bone names (a prop with a "Head") never take over the framing. A camera
+    // take has no avatar, so no node's name is the author.
     const avatarScope = avatarRootByName ?? clonedScene;
-    const hips = findObjectByName(avatarScope, ["Hips", "mixamorigHips"]);
-    const head = findObjectByName(avatarScope, ["Head", "mixamorigHead"]);
+    const hips = cameraTake ? null : findObjectByName(avatarScope, ["Hips", "mixamorigHips"]);
+    const head = cameraTake ? null : findObjectByName(avatarScope, ["Head", "mixamorigHead"]);
 
     avatarRootRef.current = avatarRootByName ?? (hips ? getTopLevelAncestor(hips, clonedScene) : null);
-    if (!avatarRootRef.current && framingTargetsRef.current.length > 0) {
+    if (!cameraTake && !avatarRootRef.current && framingTargetsRef.current.length > 0) {
       avatarRootRef.current = framingTargetsRef.current[0] ?? null;
     }
 

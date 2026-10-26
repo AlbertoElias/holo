@@ -4,8 +4,9 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 
+import { drawnBounds } from "../hologram/drawnPoints";
 import { decodeGltfAudio, type DecodedGltfAudio } from "../hologram/gltfAudio";
-import { normalizeSceneAtOrigin, rankClipsForPlayback } from "../hologram/hologramScene";
+import { isCameraTake, normalizeSceneAtOrigin, rankClipsForPlayback } from "../hologram/hologramScene";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { freezeBubbleWrapperMotion } from "../ar/arAnimation";
 
@@ -102,7 +103,9 @@ export function cloneHologram(loaded: LoadedHologram): Object3D {
 /**
  * A small paused preview for the gallery shelf: a clone posed a third of the
  * way into its clip, scaled to `heightM`, standing on its feet. Its mixer is
- * used once for the pose and dropped.
+ * used once for the pose and dropped. A camera take has no person and no feet:
+ * its set stands on its origin, and the set's largest extent (floor to top
+ * included) is scaled to `heightM`, the bubble's sphere left out.
  */
 export function clonePreview(loaded: LoadedHologram, heightM: number): Object3D {
   const root = cloneSkeleton(loaded.gltf.scene);
@@ -118,10 +121,18 @@ export function clonePreview(loaded: LoadedHologram, heightM: number): Object3D 
     mixer.uncacheRoot(root);
   }
   normalizeSceneAtOrigin(root);
+  const cameraTake = isCameraTake(root);
   // A tile fits the whole recording, terrain included, so it stands on its lowest point.
-  standOnLowestPoint(root);
-  const size = new Box3().setFromObject(root, true).getSize(new Vector3());
-  const scale = size.y > 1e-3 ? heightM / size.y : 1;
+  if (!cameraTake) standOnLowestPoint(root);
+  let extent: number;
+  if (cameraTake) {
+    const set = drawnBounds(root);
+    set.expandByPoint(new Vector3(0, 0, 0));
+    extent = Math.max(...set.getSize(new Vector3()).toArray());
+  } else {
+    extent = new Box3().setFromObject(root, true).getSize(new Vector3()).y;
+  }
+  const scale = extent > 1e-3 ? heightM / extent : 1;
   root.scale.multiplyScalar(scale);
   root.position.multiplyScalar(scale);
   root.name = "GalleryPreview";
@@ -168,10 +179,11 @@ function disposeScene(scene: Object3D): void {
  * not computed, so a person can float about a hip height off the floor.
  * Re-stand it on its posed vertices. A capture's avatar origin is already
  * its recorded floor (B-022): the ground around it may reach below and
- * stays there, unclipped.
+ * stays there, unclipped. A camera take's floor is its set's origin, which
+ * normalizeSceneAtOrigin leaves in place.
  */
 function standOnFeet(root: Object3D): void {
-  if (root.getObjectByName("RecordedAvatar")) return;
+  if (root.getObjectByName("RecordedAvatar") || isCameraTake(root)) return;
   standOnLowestPoint(root);
 }
 

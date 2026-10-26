@@ -8,8 +8,8 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import { TRUE_SCALE, fitCloche, type ClocheShape } from "@holoim/xr-ui-core";
 
 
-import { drawnPoints, motionPoints, recordedBubble } from "../hologram/drawnPoints";
-import { boundsWithoutObjects, normalizeSceneAtOrigin } from "../hologram/hologramScene";
+import { drawnBounds, drawnPoints, motionPoints, recordedBubble } from "../hologram/drawnPoints";
+import { boundsWithoutObjects, isCameraTake, normalizeSceneAtOrigin } from "../hologram/hologramScene";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { useSphereClipping } from "../hologram/useSphereClipping";
@@ -159,8 +159,9 @@ export function ARHologramModel({
   // and only the viewer's own, labelled rescale changes it.
   const modelScale = scaleFactor;
   const modelHeightMeters = useMemo(() => {
-    // The recorded person's height, not the scene's around them.
-    const bounds = boundsWithoutObjects(clonedScene.getObjectByName("RecordedAvatar") ?? clonedScene);
+    // The recorded person's height, not the scene's around them. A camera
+    // take has no one: its size is what it draws, not the bubble's sphere.
+    const bounds = isCameraTake(clonedScene) ? drawnBounds(clonedScene) : boundsWithoutObjects(clonedScene.getObjectByName("RecordedAvatar") ?? clonedScene);
     const size = bounds.getSize(new Vector3());
     if (!Number.isFinite(size.y) || size.y <= 1e-4) {
       return AR_UNKNOWN_HEIGHT_METERS;

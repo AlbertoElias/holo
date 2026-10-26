@@ -3,7 +3,8 @@ import { DepthOccludable, RayInteractable, type Entity, type World } from "@iwsd
 import { Box3, BoxGeometry, Mesh, MeshBasicMaterial, PointLight, Vector3 } from "three";
 import type { Object3D } from "three";
 
-import { boundsWithoutObjects } from "../hologram/hologramScene";
+import { drawnBounds } from "../hologram/drawnPoints";
+import { boundsWithoutObjects, isCameraTake } from "../hologram/hologramScene";
 import { cloneHologram, disposeClone, type HologramAssetCache } from "./hologramAssets";
 import { HologramBubble } from "./hologramBubble";
 import { createHologramRuntime, disposeHologramRuntime, HologramPlayback, setHologramPlaying, type HologramRuntime } from "./hologramPlayback";
@@ -134,13 +135,16 @@ export class HologramSpace {
     // the recorded person's, not the scene's around them (B-022).
     (model as Object3D & { pointerEvents?: string }).pointerEvents = "none";
     const recordedAvatar = model.getObjectByName("RecordedAvatar");
-    const body = recordedAvatar ? boundsWithoutObjects(recordedAvatar) : new Box3().setFromObject(model);
+    // A camera take has no person: its body is what it draws, from the floor up, not the bubble's sphere.
+    const cameraTake = isCameraTake(model);
+    const body = recordedAvatar ? boundsWithoutObjects(recordedAvatar) : cameraTake ? drawnBounds(model) : new Box3().setFromObject(model);
+    if (cameraTake) body.min.y = 0;
     const size = body.getSize(new Vector3());
     const hitBox = new Mesh(new BoxGeometry(size.x, size.y, Math.max(size.z, 0.3)), new MeshBasicMaterial({ visible: false }));
     hitBox.name = "HologramHitBox";
     // Over the person, from the floor up.
     const centre = body.getCenter(new Vector3());
-    hitBox.position.set(recordedAvatar ? centre.x : 0, size.y / 2, recordedAvatar ? centre.z : 0);
+    hitBox.position.set(recordedAvatar || cameraTake ? centre.x : 0, size.y / 2, recordedAvatar || cameraTake ? centre.z : 0);
     // IWSDK's two-hand grab denies rays on the hologram; the box takes them back
     // for selecting it, and keeps a ray press from starting a one-hand drag.
     (hitBox as Mesh & { pointerEventsType?: unknown }).pointerEventsType = "all";
