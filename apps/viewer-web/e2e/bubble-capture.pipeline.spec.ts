@@ -66,7 +66,8 @@ function expectOnRecordedFloor(report: FloorReport) {
 
 test("real capture bubble exports, uploads and draws in feed and immersive AR", async ({ page, context }, testInfo) => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture dev server and a live API.");
-  test.setTimeout(120_000);
+  // A hosted runner takes about 4× as long as a workstation (43 s here).
+  test.setTimeout(240_000);
 
   await page.addInitScript(() => {
     const hooks = window as unknown as { __feedProbe?: Probe; __bubbleProbe?: Probe; __HOLOIM_FEED_TEST_OBSERVER__?: (probe: Probe) => void; __HOLOIM_AR_TEST_OBSERVER__?: (probe: Probe) => void };
@@ -154,9 +155,10 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
     const device = (window as unknown as { IWER_DEVICE: { stereoEnabled: boolean; ipd: number } }).IWER_DEVICE;
     device.stereoEnabled = true; device.ipd = 0.064;
   });
+  // The hologram loads in real time: wait for its bubble before freezing the clock, which stops the frames that would draw it.
+  await page.waitForFunction(() => Boolean((window as unknown as { __bubbleProbe?: Probe }).__bubbleProbe?.bubble.active), null, { timeout: 90_000 });
   await freezePageClock(page);
   await page.clock.runFor(1500);
-  await page.waitForFunction(() => Boolean((window as unknown as { __bubbleProbe?: Probe }).__bubbleProbe?.bubble.active));
   const arBefore = await captureBubblePixels(page, "ar", artifactDir);
   await page.clock.runFor(400);
   const arAfter = await captureBubblePixels(page, "ar", artifactDir);
