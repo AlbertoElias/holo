@@ -1,17 +1,18 @@
 import { useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import type { HologramDTO } from "@holoim/contracts";
+import type { HologramDTO, UserDTO } from "@holoim/contracts";
 import { UiButton, UiField, UiInput, UiNotice, UiPanel, UiStack } from "@holoim/ui-dom";
 
 import { uploadHologram } from "../feed/api";
 
 type UploadPanelProps = {
   onUploaded: (item: HologramDTO) => void;
+  currentUser?: UserDTO | null;
 };
 
 const submittedByStorageKey = "holoim.upload.submittedBy";
 
-export function UploadPanel({ onUploaded }: UploadPanelProps) {
+export function UploadPanel({ onUploaded, currentUser = null }: UploadPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +63,7 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
     }
 
     const trimmedName = hologramName.trim();
-    const trimmedSubmittedBy = submittedBy.trim();
+    const trimmedSubmittedBy = currentUser?.displayName ?? submittedBy.trim();
     if (!trimmedName || !trimmedSubmittedBy) {
       setError("Hologram name and submitted by are required.");
       return;
@@ -122,8 +123,14 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
                 />
               </UiField>
               <UiField label="Submitted by">
-                <UiInput value={submittedBy} onChange={onSubmittedByChange} maxLength={80} disabled={isUploading} />
+                <UiInput
+                  value={currentUser ? currentUser.displayName : submittedBy}
+                  onChange={onSubmittedByChange}
+                  maxLength={80}
+                  disabled={isUploading || Boolean(currentUser)}
+                />
               </UiField>
+              {currentUser ? <p className="upload-caption">Uploads are credited to your verified account name.</p> : null}
               <input
                 ref={fileInputRef}
                 id="glb-upload"

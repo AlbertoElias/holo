@@ -23,7 +23,9 @@ function fakeDto(quickLookEnabled: boolean): HologramDTO {
     sizeBytes: 12,
     filenameOriginal: "avatar.glb",
     hologramName: "Demo",
-    submittedBy: "Tester"
+    submittedBy: "Tester",
+    submittedByVerified: false,
+    ownedByViewer: false
   };
 }
 

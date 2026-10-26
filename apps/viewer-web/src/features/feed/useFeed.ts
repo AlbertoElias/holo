@@ -42,6 +42,10 @@ export function useFeed() {
     setItems((prev) => [item, ...prev.filter((existing) => existing.id !== item.id)]);
   }, []);
 
+  const removeItem = useCallback((id: string) => {
+    setItems((prev) => prev.filter((existing) => existing.id !== id));
+  }, []);
+
   const canLoadMore = useMemo(() => nextCursor !== null, [nextCursor]);
 
   return {
@@ -51,6 +55,11 @@ export function useFeed() {
     canLoadMore,
     nextCursor,
     addToTop,
+    removeItem,
+    reload: async () => {
+      initializedRef.current = true;
+      await load();
+    },
     loadMore: async () => {
       if (nextCursor) {
         await load(nextCursor);

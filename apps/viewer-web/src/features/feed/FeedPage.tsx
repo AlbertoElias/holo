@@ -1,13 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HologramCard } from "./HologramCard";
+import { deleteHologram } from "./api";
 import { pickActiveCard } from "./visibility";
 import { useFeed } from "./useFeed";
+import { AuthPanel } from "../auth/AuthPanel";
+import { useCurrentUser } from "../auth/useCurrentUser";
 import { UploadPanel } from "../upload/UploadPanel";
 import { resumeAudioContext } from "../hologram/useGltfAudio";
+import type { HologramDTO } from "@holoim/contracts";
 
 export function FeedPage() {
-  const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop } = useFeed();
+  const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop, removeItem, reload } = useFeed();
+  const { user, logout } = useCurrentUser();
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    // Reload so ownedByViewer flags match the signed-in state.
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  const handleDelete = useCallback(
+    async (item: HologramDTO) => {
+      await deleteHologram(item.id);
+      removeItem(item.id);
+    },
+    [removeItem]
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [audioMuted, setAudioMuted] = useState(true);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -79,15 +99,19 @@ export function FeedPage() {
           active={item.id === resolvedActiveId}
           muted={audioMuted}
           onToggleMute={toggleAudioMute}
+          onDelete={handleDelete}
           preloadNextUrl={items[index + 1]?.url}
         />
       )),
-    [items, resolvedActiveId, audioMuted, toggleAudioMute]
+    [items, resolvedActiveId, audioMuted, toggleAudioMute, handleDelete]
   );
 
   return (
     <main className="app-shell">
-      <UploadPanel onUploaded={addToTop} />
+      <div className="feed-side-panels">
+        <AuthPanel user={user} onSignOut={logout} />
+        <UploadPanel onUploaded={addToTop} currentUser={user} />
+      </div>
       <section ref={feedRef} className="feed-scroll" aria-label="Hologram feed">
         {cards}
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />

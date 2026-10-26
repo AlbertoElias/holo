@@ -28,6 +28,7 @@ import {
   listHolograms,
   transitionUsdzStatus
 } from "../services/hologram-repo.js";
+import { optionalAuthUser } from "../services/auth.js";
 import { saveUploadedGlb, UploadValidationError, validateGlbMeta } from "../services/hologram-storage.js";
 import type { MediaStorage } from "../services/media-storage.js";
 import { usdzFilenameFor, withHologramLock } from "../services/usdz-converter.js";
@@ -60,10 +61,11 @@ type HologramRecord = {
   usdzPath: string | null;
   usdzStatus: string;
   quickLookEnabled: boolean;
+  ownerId?: string | null;
   createdAt: Date;
 };
 
-function toDto(record: HologramRecord, storage: MediaStorage) {
+function toDto(record: HologramRecord, storage: MediaStorage, viewerId?: string | null) {
   const status: UsdzStatus = USDZ_STATUSES.has(record.usdzStatus)
     ? (record.usdzStatus as UsdzStatus)
     : "none";
@@ -78,7 +80,9 @@ function toDto(record: HologramRecord, storage: MediaStorage) {
     sizeBytes: record.sizeBytes,
     filenameOriginal: record.filenameOriginal,
     hologramName: record.hologramName,
-    submittedBy: record.submittedBy
+    submittedBy: record.submittedBy,
+    submittedByVerified: record.ownerId != null,
+    ownedByViewer: viewerId != null && record.ownerId === viewerId
   };
 }
 
@@ -93,6 +97,8 @@ export async function registerHologramRoutes(
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid upload request." });
     }
+    const authUser = await optionalAuthUser(request.headers);
+    const submittedBy = authUser?.displayName ?? parsed.data.submittedBy;
     if (parsed.data.sizeBytes > MAX_GLB_BYTES) {
       return reply.status(413).send({ error: "File exceeds 25MB limit." });
     }
@@ -122,10 +128,11 @@ export async function registerHologramRoutes(
       storageKey,
       filenameOriginal: parsed.data.filenameOriginal,
       hologramName: parsed.data.hologramName,
-      submittedBy: parsed.data.submittedBy,
+      submittedBy,
       mimeType: "model/gltf-binary",
       sizeBytes: parsed.data.sizeBytes,
-      expiresAt
+      expiresAt,
+      ownerId: authUser?.id ?? null
     });
     const intent = await getUploadIntentByStorageKey(storageKey);
     if (!intent) {
@@ -150,6 +157,7 @@ export async function registerHologramRoutes(
       return reply.status(400).send({ error: "Invalid complete request." });
     }
 
+    const authUser = await optionalAuthUser(request.headers);
     const intent = await getUploadIntentById(parsed.data.intentId);
     if (!intent) {
       return reply.status(404).send({ error: "Upload intent not found." });
@@ -157,7 +165,7 @@ export async function registerHologramRoutes(
     if (intent.completedHologramId) {
       const existing = await getHologramById(intent.completedHologramId);
       if (existing) {
-        return reply.send(hologramDtoSchema.parse(toDto(existing, storage)));
+        return reply.send(hologramDtoSchema.parse(toDto(existing, storage, authUser?.id)));
       }
     }
     if (intent.expiresAt.getTime() < Date.now()) {
@@ -190,11 +198,12 @@ export async function registerHologramRoutes(
       filenameStored,
       mimeType: intent.mimeType,
       sizeBytes: head.sizeBytes,
-      storagePath: `uploads/${filenameStored}`
+      storagePath: `uploads/${filenameStored}`,
+      ownerId: intent.ownerId ?? null
     });
     await completeUploadIntent(intent.id, created.id);
 
-    return reply.status(201).send(hologramDtoSchema.parse(toDto(created, storage)));
+    return reply.status(201).send(hologramDtoSchema.parse(toDto(created, storage, authUser?.id)));
   });
 
   app.post("/holograms", async (request, reply) => {
@@ -255,6 +264,8 @@ export async function registerHologramRoutes(
         return reply.status(400).send({ error: "Missing or invalid upload fields." });
       }
 
+      const authUser = await optionalAuthUser(request.headers);
+
       if (storage.kind !== "local") {
         await storage.putFile(storedUpload.storedFilename, storedUpload.absolutePath, "model/gltf-binary");
       }
@@ -262,15 +273,16 @@ export async function registerHologramRoutes(
       const created = await createHologram({
         filenameOriginal: uploadedFileMeta.filename,
         hologramName: parsedFields.data.hologramName,
-        submittedBy: parsedFields.data.submittedBy,
+        submittedBy: authUser?.displayName ?? parsedFields.data.submittedBy,
         filenameStored: storedUpload.storedFilename,
         mimeType: uploadedFileMeta.mimetype,
         sizeBytes: storedUpload.sizeBytes,
         storagePath: storedUpload.relativeStoragePath,
-        quickLookEnabled: parsedFields.data.quickLookEnabled
+        quickLookEnabled: parsedFields.data.quickLookEnabled,
+        ownerId: authUser?.id ?? null
       });
 
-      const dto = hologramDtoSchema.parse(toDto(created, storage));
+      const dto = hologramDtoSchema.parse(toDto(created, storage, authUser?.id));
       return reply.status(201).send(dto);
     } catch (error) {
       if (error instanceof UploadValidationError) {
@@ -292,6 +304,7 @@ export async function registerHologramRoutes(
       return reply.status(400).send({ error: "Invalid query params." });
     }
 
+    const authUser = await optionalAuthUser(request.headers);
     const result = await listHolograms(
       parsed.data.cursor
         ? {
@@ -304,7 +317,7 @@ export async function registerHologramRoutes(
     );
 
     const payload = paginatedHologramsSchema.parse({
-      items: result.items.map((item) => toDto(item, storage)),
+      items: result.items.map((item) => toDto(item, storage, authUser?.id)),
       nextCursor: result.nextCursor
     });
 
@@ -322,7 +335,8 @@ export async function registerHologramRoutes(
       return reply.status(404).send({ error: "Hologram not found." });
     }
 
-    return reply.send(hologramDtoSchema.parse(toDto(item, storage)));
+    const authUser = await optionalAuthUser(request.headers);
+    return reply.send(hologramDtoSchema.parse(toDto(item, storage, authUser?.id)));
   });
 
   app.get("/holograms/:id/usdz", async (request, reply) => {
@@ -381,6 +395,16 @@ export async function registerHologramRoutes(
       const item = await getHologramById(params.data.id);
       if (!item) {
         return reply.status(404).send({ error: "Hologram not found." });
+      }
+
+      if (item.ownerId) {
+        const authUser = await optionalAuthUser(request.headers);
+        if (!authUser) {
+          return reply.status(401).send({ error: "Sign in required to delete this hologram." });
+        }
+        if (authUser.id !== item.ownerId) {
+          return reply.status(403).send({ error: "Only the creator can delete this hologram." });
+        }
       }
 
       const usdzKeys = new Set([

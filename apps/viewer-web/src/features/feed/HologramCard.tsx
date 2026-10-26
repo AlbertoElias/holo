@@ -23,6 +23,7 @@ type HologramCardProps = {
   active: boolean;
   muted: boolean;
   onToggleMute: () => void;
+  onDelete?: ((item: HologramDTO) => Promise<void> | void) | undefined;
   preloadNextUrl?: string | undefined;
 };
 
@@ -67,7 +68,7 @@ class ModelRenderBoundary extends Component<ModelRenderBoundaryProps, ModelRende
   }
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl }: HologramCardProps) {
+export function HologramCard({ item, active, muted, onToggleMute, onDelete, preloadNextUrl }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
@@ -282,7 +283,20 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
         )}
         <div className="feed-card-meta">
           <h2>{item.hologramName}</h2>
-          <p>{`By ${item.submittedBy} - ${new Date(item.createdAt).toLocaleString()}`}</p>
+          <p>
+            {`By ${item.submittedBy} - ${new Date(item.createdAt).toLocaleString()}`}
+            {item.submittedByVerified ? <span className="verified-badge">Verified creator</span> : null}
+          </p>
+          {item.ownedByViewer && onDelete ? (
+            <button
+              className="feed-card-delete"
+              type="button"
+              onClick={() => void onDelete(item)}
+              aria-label={`Delete ${item.hologramName}`}
+            >
+              Delete my hologram
+            </button>
+          ) : null}
         </div>
       </div>
     </article>
