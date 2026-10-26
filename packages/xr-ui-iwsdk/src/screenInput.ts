@@ -35,6 +35,14 @@ export interface ScreenTouch {
   /** Target ray in world space where the finger went down. */
   downRay: Ray;
   /**
+   * The direction of the down ray in the viewer's own frame (where the finger
+   * is on the screen), read from the touch event's own frame: it is the ray's
+   * pose against the viewer, so a head that turned since the camera was last
+   * updated reads no finger movement. Null when the viewer space was not ready
+   * or the ray had no finite pose.
+   */
+  downViewDirection: Vector3 | null;
+  /**
    * Target ray in world space, refreshed every frame while the finger is down,
    * in place (clone it to keep one). A frame without a finite pose leaves the
    * last finite ray.
@@ -102,6 +110,8 @@ export class ScreenInputSystem extends createSystem() {
   /** Fingers with a pose when they came down; a subset of `active`. */
   private readonly touches = new Map<XRInputSource, ScreenTouch>();
   private session: XRSession | null = null;
+  /** The session's viewer reference space, for `viewDirection`; null until it resolves. */
+  private viewerSpace: XRReferenceSpace | null = null;
   private downRay: Ray | null = null;
   private downHit = false;
   private readonly poseMatrix = new Matrix4();
@@ -173,6 +183,13 @@ export class ScreenInputSystem extends createSystem() {
     this.pinch = null;
     this.pinched = false;
     this.session = session;
+    this.viewerSpace = null;
+    session?.requestReferenceSpace("viewer").then(
+      (space) => {
+        if (this.session === session) this.viewerSpace = space;
+      },
+      () => {}
+    );
     session?.addEventListener("selectstart", this.onSelectStart as EventListener);
     session?.addEventListener("selectend", this.onSelectEnd as EventListener);
     for (const touch of ended) this.onTouchEnd?.(touch, { cancelled: true });
@@ -201,13 +218,24 @@ export class ScreenInputSystem extends createSystem() {
     return true;
   }
 
+  /**
+   * A source's target ray direction in the viewer's own frame, from `frame`; null without a viewer space or a finite pose.
+   * The ray is read against the viewer space, not through `getViewerPose`, which a touch event's frame refuses
+   * (it is not an animation frame); both poses of the pair come from the one frame.
+   */
+  private viewDirection(frame: XRFrame, source: XRInputSource): Vector3 | null {
+    const pose = this.viewerSpace ? frame.getPose(source.targetRaySpace, this.viewerSpace) : undefined;
+    if (!pose || !isFiniteMatrix(pose.transform.matrix)) return null;
+    return new Vector3(0, 0, -1).transformDirection(this.poseMatrix.fromArray(pose.transform.matrix));
+  }
+
   private followTouch(frame: XRFrame, touch: ScreenTouch): void {
     this.worldRay(frame, touch.source, touch.ray);
   }
 
   private beginTouch(frame: XRFrame, source: XRInputSource, extra: Pick<ScreenTouch, "downRay" | "beganOnChrome" | "hitObject">): void {
     const ray = extra.downRay.clone();
-    const touch: ScreenTouch = { source, downAt: performance.now(), ray, pinched: this.pinched, ...extra };
+    const touch: ScreenTouch = { source, downAt: performance.now(), ray, downViewDirection: this.viewDirection(frame, source), pinched: this.pinched, ...extra };
     this.touches.set(source, touch);
     this.followTouch(frame, touch);
     this.onTouchStart?.(touch);

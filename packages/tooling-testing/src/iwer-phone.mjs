@@ -208,15 +208,46 @@ export async function emulatePhone(page, options = {}) {
         // One finger that the caller moves between frames by hand, for what `press` cannot do: touch down, move
         // before the simulation steps, and lift later. A frame passes at each call.
         let held = null;
-        const fingerDown = async (point) => {
+        const fingerDown = async (point, headPose) => {
           const session = sessionOf();
           if (!EventCtor) throw new Error('phone: XRInputSourceEvent unavailable');
           if (held) throw new Error('phone: a finger is already down');
           const finger = newFinger(point);
           held = finger;
           screenSources.push(finger.source);
+          if (!headPose) {
+            await frameOf(session);
+            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
+            return;
+          }
+          // The touch lands in the frame after the head moved, before the app's callback for that frame has drawn it, as
+          // a browser delivers input ahead of the next animation frame: the event's poses are the new ones and the app's
+          // camera still holds the last drawn frame's. The app's next callback is held up behind the touch.
+          const original = session.requestAnimationFrame;
+          let landing = null;
+          let landed;
+          const touched = new Promise((resolve) => (landed = resolve));
+          session.requestAnimationFrame = function (callback) {
+            return original.call(this, (time, frame) => {
+              if (landing) {
+                const land = landing;
+                landing = null;
+                session.requestAnimationFrame = original;
+                land(frame);
+              }
+              callback(time, frame);
+            });
+          };
+          await frameOf(session, () => {
+            device.position.set(...headPose.position);
+            device.quaternion.set(...headPose.quaternion);
+            landing = (frame) => {
+              session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source }));
+              landed();
+            };
+          });
+          await touched;
           await frameOf(session);
-          await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
         };
         const fingerMove = async (point) => {
           if (!held) throw new Error('phone: no finger is down');
@@ -281,10 +312,12 @@ export function phoneHold(page, point, ms, options = {}) {
 /**
  * One finger moved by hand: `phoneFingerDown` puts it down on a point, `phoneFingerMove` moves it (one frame
  * each), `phoneFingerUp` lifts it. Frames pass, the simulation does not step; the caller steps it when it
- * wants the finger judged (a drag that finishes before the first step).
+ * wants the finger judged (a drag that finishes before the first step). With `headPose` the head moves to it
+ * inside the touch's own frame, after the app has taken that frame's camera: the touch event carries the new
+ * viewer pose while the app's camera still holds the old one (a phone turning as the finger lands).
  */
-export function phoneFingerDown(page, point) {
-  return page.evaluate((target) => window.__phoneFingerDown(target), point);
+export function phoneFingerDown(page, point, options = {}) {
+  return page.evaluate(([target, headPose]) => window.__phoneFingerDown(target, headPose), [point, options.headPose ?? null]);
 }
 export function phoneFingerMove(page, point) {
   return page.evaluate((target) => window.__phoneFingerMove(target), point);

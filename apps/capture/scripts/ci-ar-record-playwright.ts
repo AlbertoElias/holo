@@ -58,8 +58,9 @@ import {
 //                     placements: Record by the dock, then with the head still: a one-frame tap on the bracket
 //                     (no hold), a 1 s hold on the bracket, a 1 s hold on empty floor (a hold, no referent), a 1 s
 //                     hold that begins on the dock's chip (no hold, no dock action), a drag of 100 apx that ends
-//                     before the first simulation step and then stays still past the hold delay (no hold), a 1 s
-//                     hold that begins on the status chip with the bracket behind it (no hold), a 1 s hold on TargetA, and a
+//                     before the first simulation step and then stays still past the hold delay (no hold), a finger
+//                     still at the screen centre while the head turns 4 degrees as it lands, judged after the hold
+//                     delay (a hold, no referent), a 1 s hold that begins on the status chip with the bracket behind it (no hold), a 1 s hold on TargetA, and a
 //                     1 s hold on TargetA while the head walks toward it and turns with the finger fixed on the
 //                     screen; Stop by the dock. Exactly three recorded links from RecordedAuthorCamera
 //                     (RecordedObject, TargetA, TargetA), spans starting at the touch, HOLOIM_meaning version 1,
@@ -1291,6 +1292,48 @@ async function earlyDragScenario(page: Page, report: PhaseReport, scenarios: Mar
   if (after.screenHold.phase !== 'none') report.failures.push(`${name}: a finger is still tracked after the touch (${after.screenHold.phase})`);
 }
 
+/** How far the head turns between the last frame before touchdown and touchdown: 4 degrees is about 32 apx on the phone viewport, past the 22 apx slop. */
+const TURN_AT_TOUCHDOWN_DEG = 4;
+
+/**
+ * A finger lands at the centre of the screen as the head turns {@link TURN_AT_TOUCHDOWN_DEG} degrees
+ * between the app's last camera update and the touch event; the finger does not move on the glass and the
+ * first simulation step comes after the hold delay. The turn is the phone's, not the finger's: the touch
+ * must become a hold. (A baseline taken from the app's older camera reads the turn as about 32 apx of drag.)
+ */
+async function turnAtTouchdownScenario(page: Page, report: PhaseReport, scenarios: MarkScenario[], head: Pose): Promise<void> {
+  const name = 'turn-at-touchdown';
+  const before = await arOf(page);
+  const centre = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2, PHONE_VIEWPORT.height / 2, 1.5);
+  const turned = new THREE.Quaternion(...head.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (TURN_AT_TOUCHDOWN_DEG * Math.PI) / 180));
+  await phoneFingerDown(page, centre, { headPose: { position: head.position, quaternion: [turned.x, turned.y, turned.z, turned.w] } });
+  await page.waitForTimeout(400);
+  const stepped: ArState[] = [];
+  for (let i = 0; i < 3; i += 1) {
+    await nextXrFrame(page);
+    await advance(page, STEP_MS);
+    stepped.push(await arOf(page));
+  }
+  const during = stepped[stepped.length - 1]!;
+  await phoneFingerUp(page);
+  for (let i = 0; i < 3; i += 1) await advance(page, STEP_MS);
+  const after = await arOf(page);
+  scenarios.push({
+    name,
+    holdsBefore: before.screenHolds.kept,
+    holdsAfter: after.screenHolds.kept,
+    trackedAfter: after.screenHold.phase,
+    phaseWhileDown: during.screenHold.phase,
+    slopWhileDownApx: during.screenHold.slopApx
+  });
+  if (during.screenHold.phase !== 'held') report.failures.push(`${name}: the finger stayed at the screen centre while the head turned ${TURN_AT_TOUCHDOWN_DEG} degrees at touchdown and the tracked phase is ${during.screenHold.phase} (slop ${during.screenHold.slopApx} apx), expected held`);
+  if (after.screenHolds.kept !== before.screenHolds.kept + 1) report.failures.push(`${name}: the take kept ${after.screenHolds.kept - before.screenHolds.kept} new hold(s), expected 1`);
+  if (after.screenHold.phase !== 'none') report.failures.push(`${name}: a finger is still tracked after the touch (${after.screenHold.phase})`);
+  await setHeadPose(page, head.position, head.quaternion);
+  await nextXrFrame(page);
+  await advance(page, STEP_MS);
+}
+
 type Marked = { report: PhaseReport; take: CameraTakeReport | null; links: MeaningLinkReport[]; targetAWorld: Vec3 | null };
 
 /**
@@ -1357,6 +1400,8 @@ async function marksPhase(run: Run, phase: 'marks-a' | 'marks-b', start: { posit
     const dragFrom = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2, PHONE_VIEWPORT.height / 2, 1.5);
     const dragTo = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2 + EARLY_DRAG_APX, PHONE_VIEWPORT.height / 2, 1.5);
     await earlyDragScenario(page, report, scenarios, dragFrom, dragTo);
+    // A finger that stays put while the head turns as it lands is a hold.
+    await turnAtTouchdownScenario(page, report, scenarios, standing);
 
     // A hold that begins on the status chip with the bracket behind it: the chip is chrome and does nothing.
     const status = (await dockState(page)).statusLine?.chip;
@@ -1474,9 +1519,9 @@ function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: Mean
     return;
   }
   const holds = resolution.aimHolds;
-  if (holds.length !== 4 || holds.some((hold) => hold.input !== 'screen')) report.failures.push(`resolution lists ${holds.length} hold(s) [${holds.map((hold) => hold.input).join(', ')}], expected 4 screen holds (bracket, floor, TargetA, TargetA walking)`);
+  if (holds.length !== 5 || holds.some((hold) => hold.input !== 'screen')) report.failures.push(`resolution lists ${holds.length} hold(s) [${holds.map((hold) => hold.input).join(', ')}], expected 5 screen holds (bracket, floor, turn at touchdown, TargetA, TargetA walking)`);
   const unlinked = resolution.runs.filter((resolved) => !resolved.linked);
-  if (unlinked.length !== 1 || unlinked[0]!.reason !== 'no referent') report.failures.push(`resolution: unlinked runs ${JSON.stringify(unlinked.map((resolved) => resolved.reason))}, expected exactly one "no referent" (the floor)`);
+  if (unlinked.length !== 2 || unlinked.some((resolved) => resolved.reason !== 'no referent')) report.failures.push(`resolution: unlinked runs ${JSON.stringify(unlinked.map((resolved) => resolved.reason))}, expected exactly two "no referent" (the floor, the turn at touchdown)`);
   if (resolution.runs.filter((resolved) => resolved.linked).length !== links.length) report.failures.push('resolution: linked runs and links in the file differ');
 }
 

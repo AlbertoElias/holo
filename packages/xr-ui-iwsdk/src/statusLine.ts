@@ -53,6 +53,7 @@ export class StatusLine {
   private readonly body: InstanceType<typeof UIKit.Text>;
   private current = "";
   private follow: LazyFollow | null = null;
+  private shielding = false;
 
   private readonly phone: StatusLineOptions["phone"];
   private readonly metresPerApx: number;
@@ -74,9 +75,10 @@ export class StatusLine {
       flexDirection: "row",
       alignItems: "center",
       gap: 4 * s,
-      // A headset's line is never hit. A phone's chip is a shield: a finger that goes down on it hits chrome and does nothing,
-      // so a hold that begins there cannot mark the scene behind it (`ScreenInputSystem` reads `beganOnChrome` from the hit).
-      pointerEvents: phone ? "auto" : "none",
+      // A headset's line is never hit. A phone's chip is a shield while it shows (`shield`): a finger that goes down on it
+      // hits chrome and does nothing, so a hold that begins there cannot mark the scene behind it (`ScreenInputSystem`
+      // reads `beganOnChrome` from the hit). Hidden, it is not there to hit.
+      pointerEvents: "none",
       ...(phone
         ? {
             anchorX: "center" as const,
@@ -103,8 +105,6 @@ export class StatusLine {
     if (phone) {
       // Top centre, inside the top safe area, on the camera (the one thing besides the dock that rides the screen).
       head.add(this.entity.object3D!);
-      // Hit by the screen pointer, which visits only interactables (a headset's line stays out of it).
-      this.entity.addComponent(RayInteractable);
       const halfHeight = PHONE_DOCK_DEPTH_M * Math.tan(phone.verticalFovRad / 2);
       this.entity.object3D!.position.set(0, halfHeight - this.topApx * this.metresPerApx, -PHONE_DOCK_DEPTH_M);
     }
@@ -114,11 +114,24 @@ export class StatusLine {
   set(state: { prefix: string | null; body: string } | null): void {
     const text = state ? (state.prefix ? `${state.prefix} · ${state.body}` : state.body) : "";
     this.entity.object3D!.visible = Boolean(state);
+    this.shield(Boolean(state));
     if (text === this.current || !state) return;
     this.current = text;
     this.prefix.setProperties({ text: state.prefix ?? "", display: state.prefix ? "flex" : "none" });
     this.separator.setProperties({ display: state.prefix ? "flex" : "none" });
     this.body.setProperties({ text: state.body });
+  }
+
+  /**
+   * A phone's chip takes pointer hits only while it shows: UIKit's pointer events and the entity's `RayInteractable`
+   * (the screen pointer visits only interactables) go on and off together, since `visible` alone stops neither.
+   */
+  private shield(on: boolean): void {
+    if (!this.phone || on === this.shielding) return;
+    this.shielding = on;
+    this.root.setProperties({ pointerEvents: on ? "auto" : "none" });
+    if (on) this.entity.addComponent(RayInteractable);
+    else this.entity.removeComponent(RayInteractable);
   }
 
   /** One frame of the lazy follow, in world space around the head, facing it. */

@@ -29,7 +29,7 @@ export interface ScreenHoldSnapshot {
 
 interface Tracked {
   touch: ScreenTouch;
-  /** The finger's direction in the camera's own frame, taken at the touchdown: where it is on the screen. Null only when the camera had no pose then; the first step takes it. */
+  /** The finger's direction in the camera's own frame, taken at the touchdown: where it is on the screen. Null only when neither the touch event nor the camera had a pose then; the first step takes it. */
   baseline: THREE.Vector3 | null;
   /** Rays from touchdown until the hold delay passes; written all at once if it does, so the hold starts at the touch. */
   pending: AimPointSample[];
@@ -79,8 +79,9 @@ export class ScreenHolds {
     if (this.tracked) return;
     if (touch.beganOnChrome || touch.pinched || !this.deps.isTakeOpen()) return;
     const first = this.sample(touch.downRay, timeSec);
-    // The camera as the last frame left it: the touch event carries no viewer pose of its own, and a frame's turn is a fraction of the slop.
-    const baseline = this.cameraFrameDirection(touch.downRay.direction);
+    // Where the finger is on the screen, read from the touch event's own frame, whatever the camera did since it was last updated.
+    // Without it, the camera as the last frame left it: a turn since then would show as finger movement.
+    const baseline = touch.downViewDirection && isFiniteVector3Like(touch.downViewDirection) ? touch.downViewDirection.clone() : this.cameraFrameDirection(touch.downRay.direction);
     this.tracked = { touch, baseline, pending: first ? [first] : [], held: false, dead: false, slopApx: 0 };
   }
 
