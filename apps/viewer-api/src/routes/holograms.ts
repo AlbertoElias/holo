@@ -29,6 +29,7 @@ import {
   transitionUsdzStatus
 } from "../services/hologram-repo.js";
 import { optionalAuthUser } from "../services/auth.js";
+import { createFeedSnapshotWriter } from "../services/feed-snapshot.js";
 import { saveUploadedGlb, UploadValidationError, validateGlbMeta } from "../services/hologram-storage.js";
 import type { MediaStorage } from "../services/media-storage.js";
 import { usdzFilenameFor, usdzFilenamesFor, withHologramLock } from "../services/usdz-converter.js";
@@ -91,6 +92,13 @@ export async function registerHologramRoutes(
   options: { uploadsRoot: string; storage: MediaStorage }
 ): Promise<void> {
   const { uploadsRoot, storage } = options;
+  // The anonymous first page, kept beside the media for the viewer's edge; rewritten
+  // after every upload and delete, and at boot.
+  const refreshFeedSnapshot = createFeedSnapshotWriter(storage, async () => {
+    const result = await listHolograms({ limit: listQuerySchema.parse({}).limit });
+    return paginatedHologramsSchema.parse({ items: result.items.map((item) => toDto(item, storage)), nextCursor: result.nextCursor });
+  }, app.log);
+  void refreshFeedSnapshot();
 
   app.post("/holograms/uploads/initiate", async (request, reply) => {
     const parsed = initiateUploadRequestSchema.safeParse(request.body);
@@ -202,6 +210,7 @@ export async function registerHologramRoutes(
       ownerId: intent.ownerId ?? null
     });
     await completeUploadIntent(intent.id, created.id);
+    await refreshFeedSnapshot();
 
     return reply.status(201).send(hologramDtoSchema.parse(toDto(created, storage, authUser?.id)));
   });
@@ -283,6 +292,7 @@ export async function registerHologramRoutes(
       });
 
       const dto = hologramDtoSchema.parse(toDto(created, storage, authUser?.id));
+      await refreshFeedSnapshot();
       return reply.status(201).send(dto);
     } catch (error) {
       if (error instanceof UploadValidationError) {
@@ -428,6 +438,7 @@ export async function registerHologramRoutes(
       }
 
       await deleteHologramById(item.id);
+      await refreshFeedSnapshot();
 
       return reply.send(
         deleteHologramResponseSchema.parse({

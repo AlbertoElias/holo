@@ -7,3 +7,8 @@
 name = "holoim-viewer"
 pages_build_output_dir = "dist"
 compatibility_date = "2025-01-01"
+
+# The feed snapshot the API writes (feed/latest.json), read by functions/index.ts.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "holoim-media"

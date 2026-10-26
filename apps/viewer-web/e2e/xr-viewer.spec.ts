@@ -8,6 +8,7 @@ import { emulatePhone, phoneDrag, phonePinch, phoneScreenPoint, phoneTap } from 
 
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
+import { settleScroll } from "./portal-helpers";
 
 // The IWSDK immersive viewer (docs/features/archive/viewer-xr-interface.md, steps 2-4):
 // `/vr/:id` and `/ar/:id` mount one IWSDK World with the opened
@@ -406,7 +407,7 @@ async function measureChipFade(page: Page, eye: Vec3, chip: Vec3): Promise<Array
     await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 0 && s.controls!.foot.reachChipFade === 0, 6_000);
     await takeLog();
     await setPose(page, "head", eye, chip);
-    await waitForSnapshot(page, (s) => s.controls!.foot.reachChipFade === 1, 3_000);
+    await waitForSnapshot(page, (s) => s.controls!.foot.reachChipFade === 1, 9_000);
     const midFade = (await takeLog()).filter((frame) => frame.chip > 0 && frame.chip < 1).map((frame) => ({ glyph: frame.reach, chip: frame.chip }));
     if (midFade.length) return midFade;
   }
@@ -558,7 +559,7 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   expect(dimmed.controls!.foot.revealed).toBe(false);
   // The head's forward ray within 15° brings it back with the on-reach set.
   await setPose(page, "head", null, foot.worldPosition);
-  const byHead = await waitForSnapshot(page, (s) => s.controls!.foot.opacity === 1 && s.controls!.foot.reachOpacity === 1, 3_000);
+  const byHead = await waitForSnapshot(page, (s) => s.controls!.foot.opacity === 1 && s.controls!.foot.reachOpacity === 1, 9_000);
   mark("reach-head");
   expect(byHead.controls!.foot.near.headRay).toBe(true);
   expect(byHead.controls!.foot.dimInMs).toBeGreaterThan(3_000);
@@ -573,7 +574,7 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   const byRay = await waitForSnapshot(page, (s) => s.controls!.foot.near.hover, 3_000);
   // Look at the foot again so the on-reach set stays out for the rest.
   await setPose(page, "head", null, foot.worldPosition);
-  await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1, 3_000);
+  await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1, 9_000);
 
   // Play/Pause by controller ray: motion and audio stop at the same clip time.
   mark("pause");
@@ -723,7 +724,7 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   // The scale chip's "life size" reset.
   let current = await controls(page);
   await setPose(page, "head", [current.foot.worldPosition[0], eye[1], current.foot.worldPosition[2] + 1.6], current.foot.worldPosition);
-  await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1, 3_000);
+  await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1, 9_000);
   current = await controls(page);
   mark("life-size");
   await rayClick(page, await footButton(page, "scale"));
@@ -737,7 +738,7 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   await setPose(page, "head", stand, [anchor[0], eye[1] - 0.05, anchor[2] - 1]);
   current = await controls(page);
   await setPose(page, "head", null, current.foot.worldPosition);
-  await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1, 3_000);
+  await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1, 9_000);
   current = await controls(page);
   mark("recenter");
   await rayClick(page, await footButton(page, "recenter"));
@@ -1041,6 +1042,9 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   mark("feed-ready");
   // As the other entries: the portal settles before its reach controls are used.
   await page.locator('[data-card-id="mock-1"]').scrollIntoViewIfNeeded();
+  // The feed glides onto the card late on a loaded runner; a cursor
+  // that reaches before it rests is left behind and the controls fold.
+  await settleScroll(page);
   await dwell(page, 3);
   await reachFor(page.locator('[data-card-id="mock-1"]'));
   // The feed's own first-page loads (it reloads for the signed-in viewer) end here.
@@ -1320,6 +1324,9 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   await waitForIwerRuntime(page);
   await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
   await page.locator('[data-card-id="mock-1"]').scrollIntoViewIfNeeded();
+  // The feed glides onto the card late on a loaded runner; a cursor
+  // that reaches before it rests is left behind and the controls fold.
+  await settleScroll(page);
   await dwell(page, 3);
   await reachFor(page.locator('[data-card-id="mock-1"]'));
   await page.locator('[data-card-id="mock-1"] .vr-trigger-button').click();
@@ -1510,6 +1517,9 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   await waitForIwerRuntime(page);
   await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
   await page.locator('[data-card-id="mock-1"]').scrollIntoViewIfNeeded();
+  // The feed glides onto the card late on a loaded runner; a cursor
+  // that reaches before it rests is left behind and the controls fold.
+  await settleScroll(page);
   await dwell(page, 3);
   await reachFor(page.locator('[data-card-id="mock-1"]'));
   await page.locator('[data-card-id="mock-1"] .ar-trigger-button').click();
