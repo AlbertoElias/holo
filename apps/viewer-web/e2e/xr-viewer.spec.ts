@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Page } from "@playwright/test";
 import { waitForIwerRuntime, waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
-import { emulatePhone, phoneDrag, phonePinch, phoneTap } from "@holoim/tooling-testing/iwer-phone";
+import { emulatePhone, phoneDrag, phonePinch, phoneScreenPoint, phoneTap } from "@holoim/tooling-testing/iwer-phone";
 
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
@@ -1781,6 +1781,33 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const dragDrift = Math.abs(dragAudio.hologram.audio!.scheduledOffset - dragAudio.hologram.clipTime);
   expect(dragDrift, "audio resumes at the dragged time").toBeLessThan(AUDIO_SYNC_TOLERANCE_S);
   await captureEvidence(page, testInfo, "ar-phone-controls");
+
+  // The status chip shields the scene behind it only while it shows: playing again hid it, so a tap on empty
+  // floor at the chip's former rectangle places the hologram there, as a floor tap does anywhere.
+  const hiddenStatus = (await snapshot(page)).controls!.status;
+  expect(hiddenStatus.visible, "playing again hides the status chip").toBe(false);
+  expect(hiddenStatus.chip, "the hidden chip still has its rectangle").not.toBeNull();
+  const chipCentre = { x: hiddenStatus.chip!.left + hiddenStatus.chip!.width / 2, y: hiddenStatus.chip!.top + hiddenStatus.chip!.height / 2 };
+  const beforeChipTap = await snapshot(page);
+  const lookedFrom = (await readHeadPose(page)).position;
+  // Turn a quarter away from the hologram and tilt the phone down 70 degrees, so the ray through the top of the screen reaches the bare floor, then find the floor point on it.
+  const level = Math.hypot(beforeChipTap.hologram.worldPosition[0] - lookedFrom[0], beforeChipTap.hologram.worldPosition[2] - lookedFrom[2]) || 1;
+  const ahead = [-(beforeChipTap.hologram.worldPosition[2] - lookedFrom[2]) / level, (beforeChipTap.hologram.worldPosition[0] - lookedFrom[0]) / level];
+  const tilt = (70 * Math.PI) / 180;
+  await setPose(page, "head", null, [lookedFrom[0] + ahead[0]! * Math.cos(tilt) * 2, lookedFrom[1] - Math.sin(tilt) * 2, lookedFrom[2] + ahead[1]! * Math.cos(tilt) * 2]);
+  const throughChip = await phoneScreenPoint(page, chipCentre.x, chipCentre.y, 1);
+  const tilted = (await readHeadPose(page)).position;
+  const floorY = beforeChipTap.hologram.worldPosition[1];
+  expect(throughChip[1], "the ray through the chip points down at the floor").toBeLessThan(tilted[1]);
+  const reach = (floorY - tilted[1]) / (throughChip[1] - tilted[1]);
+  const chipFloor: Vec3 = [tilted[0] + (throughChip[0] - tilted[0]) * reach, floorY, tilted[2] + (throughChip[2] - tilted[2]) * reach];
+  await dwell(page);
+  mark("tap-through-hidden-chip");
+  await phoneTap(page, chipFloor);
+  const throughHidden = await waitForSnapshot(page, (s) => s.placement.mode === "tap" && s.placement.sequence > beforeChipTap.placement.sequence, 3_000);
+  expect(horizontal(throughHidden.hologram.worldPosition, chipFloor), "moved to the floor point behind the hidden chip").toBeLessThan(0.05);
+  await setPose(page, "head", stepBack, [throughHidden.hologram.worldPosition[0], throughHidden.hologram.worldPosition[1] + tall * 0.45, throughHidden.hologram.worldPosition[2]]);
+  await page.waitForTimeout(600);
 
   // Two fingers rescale it about its feet (Q13): closing them halves it, and
   // neither finger taps (it keeps playing where it stands).

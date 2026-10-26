@@ -146,21 +146,27 @@ export async function emulatePhone(page, options = {}) {
             remove: () => mark.remove()
           };
         };
-        /** A finger down toward `path[0]`, held while it moves along `path` (one point per frame), then lifted. */
-        const press = async (path, holdMs) => {
+        /**
+         * A finger down toward `path[0]`, held while it moves along `path` (one point per frame), then lifted.
+         * With `screenLocked` the finger stays at the screen position it went down on while the head moves
+         * (walking or turning with a finger on the glass); otherwise it follows the point in the room.
+         */
+        const press = async (path, holdMs, screenLocked = false) => {
           const session = sessionOf();
           if (!EventCtor) throw new Error('phone: XRInputSourceEvent unavailable');
           const finger = newFinger(path[0]);
+          const lockedAt = screenLocked ? toViewerSpace(path[0]) : null;
+          const place = (point) => (lockedAt ? fromViewerSpace(lockedAt) : point);
           screenSources.push(finger.source);
           await frameOf(session);
           await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
           for (const point of path.slice(1)) {
             // The finger moves: the source's target ray follows it, frame by frame.
-            await frameOf(session, () => finger.move(point));
+            await frameOf(session, () => finger.move(place(point)));
           }
           // The ray keeps tracking the last point while held, so a camera that walks still points the finger at it.
           const until = performance.now() + holdMs;
-          while (performance.now() < until) await frameOf(session, () => finger.move(path[path.length - 1]));
+          while (performance.now() < until) await frameOf(session, () => finger.move(place(path[path.length - 1])));
           await frameOf(session, (frame) => {
             session.dispatchEvent(new EventCtor('select', { frame, inputSource: finger.source }));
             session.dispatchEvent(new EventCtor('selectend', { frame, inputSource: finger.source }));
@@ -199,12 +205,84 @@ export async function emulatePhone(page, options = {}) {
           }
           await frameOf(session);
         };
+        // One finger that the caller moves between frames by hand, for what `press` cannot do: touch down, move
+        // before the simulation steps, and lift later. A frame passes at each call.
+        let held = null;
+        const fingerDown = async (point, headPose) => {
+          const session = sessionOf();
+          if (!EventCtor) throw new Error('phone: XRInputSourceEvent unavailable');
+          if (held) throw new Error('phone: a finger is already down');
+          const finger = newFinger(point);
+          held = finger;
+          screenSources.push(finger.source);
+          if (!headPose) {
+            await frameOf(session);
+            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
+            return;
+          }
+          // The touch lands in the frame after the head moved, before the app's callback for that frame has drawn it, as
+          // a browser delivers input ahead of the next animation frame: the event's poses are the new ones and the app's
+          // camera still holds the last drawn frame's. The app's next callback is held up behind the touch.
+          const original = session.requestAnimationFrame;
+          let landing = null;
+          let landed;
+          const touched = new Promise((resolve) => (landed = resolve));
+          session.requestAnimationFrame = function (callback) {
+            return original.call(this, (time, frame) => {
+              if (landing) {
+                const land = landing;
+                landing = null;
+                session.requestAnimationFrame = original;
+                land(frame);
+              }
+              callback(time, frame);
+            });
+          };
+          await frameOf(session, () => {
+            device.position.set(...headPose.position);
+            device.quaternion.set(...headPose.quaternion);
+            landing = (frame) => {
+              session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source }));
+              landed();
+            };
+          });
+          await touched;
+          await frameOf(session);
+        };
+        const fingerMove = async (point) => {
+          if (!held) throw new Error('phone: no finger is down');
+          const finger = held;
+          await frameOf(sessionOf(), () => finger.move(point));
+        };
+        const fingerUp = async () => {
+          if (!held) throw new Error('phone: no finger is down');
+          const session = sessionOf();
+          const finger = held;
+          held = null;
+          await frameOf(session, (frame) => {
+            session.dispatchEvent(new EventCtor('select', { frame, inputSource: finger.source }));
+            session.dispatchEvent(new EventCtor('selectend', { frame, inputSource: finger.source }));
+          });
+          screenSources.splice(screenSources.indexOf(finger.source), 1);
+          finger.remove();
+          await frameOf(session);
+        };
         const phone = window;
+        phone.__phoneFingerDown = fingerDown;
+        phone.__phoneFingerMove = fingerMove;
+        phone.__phoneFingerUp = fingerUp;
         // A tap toward a point, released on the next frame: emulated frames take ~150 ms, and
         // pointer-events counts a press longer than 300 ms as no click.
         phone.__phoneTap = (target) => press([target], 0);
         // A hold toward a point for `holdMs` of wall-clock time, frame by frame (the ray follows the moving head).
-        phone.__phoneHold = (target, holdMs) => press([target], holdMs);
+        phone.__phoneHold = (target, holdMs, screenLocked) => press([target], holdMs, screenLocked);
+        // The room point `distance` m along the ray through a CSS px position of the screen, from the head as it is now.
+        phone.__phoneScreenPoint = (x, y, distance) => {
+          const tan = tanHalf();
+          const ndcX = (x / innerWidth) * 2 - 1;
+          const ndcY = 1 - (y / innerHeight) * 2;
+          return fromViewerSpace([ndcX * tan * (innerWidth / innerHeight) * distance, ndcY * tan * distance, -distance]);
+        };
         // A held drag from one point to another over `frames` frames.
         phone.__phoneDrag = (from, to, frames, holdMs) =>
           press(
@@ -222,9 +300,38 @@ export function phoneTap(page, point) {
   return page.evaluate((target) => window.__phoneTap(target), point);
 }
 
-/** A touch held on a point for `ms` of wall-clock time, then lifted. Frames advance while held. */
-export function phoneHold(page, point, ms) {
-  return page.evaluate(([target, holdMs]) => window.__phoneHold(target, holdMs), [point, ms]);
+/**
+ * A touch held on a point for `ms` of wall-clock time, then lifted. Frames advance while held, and the
+ * finger follows the point as the head moves. With `screenLocked` it stays where it went down on the
+ * screen instead (a finger on the glass while the phone walks or turns).
+ */
+export function phoneHold(page, point, ms, options = {}) {
+  return page.evaluate(([target, holdMs, locked]) => window.__phoneHold(target, holdMs, locked), [point, ms, options.screenLocked === true]);
+}
+
+/**
+ * One finger moved by hand: `phoneFingerDown` puts it down on a point, `phoneFingerMove` moves it (one frame
+ * each), `phoneFingerUp` lifts it. Frames pass, the simulation does not step; the caller steps it when it
+ * wants the finger judged (a drag that finishes before the first step). With `headPose` the head moves to it
+ * inside the touch's own frame, after the app has taken that frame's camera: the touch event carries the new
+ * viewer pose while the app's camera still holds the old one (a phone turning as the finger lands).
+ */
+export function phoneFingerDown(page, point, options = {}) {
+  return page.evaluate(([target, headPose]) => window.__phoneFingerDown(target, headPose), [point, options.headPose ?? null]);
+}
+export function phoneFingerMove(page, point) {
+  return page.evaluate((target) => window.__phoneFingerMove(target), point);
+}
+export function phoneFingerUp(page) {
+  return page.evaluate(() => window.__phoneFingerUp());
+}
+
+/**
+ * The room point `distance` m along the ray through a CSS px position on the screen, for the head
+ * as it is now: where to put a finger that starts on a screen position (the dock, a chip).
+ */
+export function phoneScreenPoint(page, x, y, distance = 1.5) {
+  return page.evaluate(([px, py, d]) => window.__phoneScreenPoint(px, py, d), [x, y, distance]);
 }
 
 /**
