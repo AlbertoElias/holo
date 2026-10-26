@@ -1,5 +1,6 @@
 import { createSystem, Grabbed, type Entity } from "@iwsdk/core";
-import { playbackLabel, type HologramControlActions } from "@holoim/xr-ui-core";
+import { loadHandedness } from "@holoim/ui-dom";
+import { markChromeTree, nonDominantHand, playbackLabel, type Hand, type HologramControlActions } from "@holoim/xr-ui-core";
 import { AimRays, FocusRing, FootControls, GRIP_PALM, HandDock, StatusLine, configureXrPointers, handPointerIds, phoneMetresPerApx, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
 import { Vector3, type Object3D } from "three";
 
@@ -34,6 +35,8 @@ interface Ui {
   foot: FootControls;
   status: StatusLine;
   dock: HandDock;
+  /** The hand the dock rides; null on a phone. */
+  dockHand: Hand | null;
   ring: FocusRing;
   /** Headsets only: a phone has no rays. */
   rays: AimRays | null;
@@ -59,7 +62,7 @@ export class HologramControlsSystem extends createSystem() {
   /** Probe readings for the e2e spec. */
   probe(): unknown {
     if (!this.ui) return null;
-    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: this.ui.dock.probe(), ring: this.ui.ring.probe(), rays: this.ui.rays?.probe().map((ray) => ({ ...ray, hit: ray.hit ? ray.hit.name || ray.hit.type : null })) ?? [], boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
+    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: { ...this.ui.dock.probe(), hand: this.ui.dockHand }, ring: this.ui.ring.probe(), rays: this.ui.rays?.probe().map((ray) => ({ ...ray, hit: ray.hit ? ray.hit.name || ray.hit.type : null })) ?? [], boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
   }
 
   update(delta: number): void {
@@ -177,17 +180,26 @@ export class HologramControlsSystem extends createSystem() {
     const exit = { id: "exit", glyph: "exit" as const, label: "Exit", onSelect: () => this.options.exit() };
     const dock = target === "ar-phone"
       ? new HandDock(this.world, { kind: "phone", camera, verticalFovRad: fovy, viewportHeightCss: window.innerHeight, viewportWidthCss: window.innerWidth }, [exit])
-      // Handedness defaults to right, so the dock sits on the left hand or controller.
-      : new HandDock(this.world, { kind: "hand", space: this.player.gripSpaces.left, ownPointerIds: handPointerIds(this.world, "left"), palm: GRIP_PALM.left }, [exit]);
+      : this.handDock(exit);
     let rays: AimRays | null = null;
     if (target !== "ar-phone") {
       configureXrPointers(this.world);
       rays = new AimRays(this.world);
+      // Chrome, not the recording: pixel checks and pointing skip it.
+      markChromeTree(rays.group);
       this.world.scene.add(rays.group);
     }
     this.placedSequence = -1;
     this.boundTo = null;
-    return { target, foot, status, dock, ring: new FocusRing(this.world.activeLevel.value.object3D!), rays };
+    const ring = new FocusRing(this.world.activeLevel.value.object3D!);
+    markChromeTree(ring.mesh);
+    return { target, foot, status, dock, dockHand: target === "ar-phone" ? null : nonDominantHand(loadHandedness()), ring, rays };
+  }
+
+  /** On the non-dominant hand or controller, as set in the feed's settings on this device (right-handed by default). */
+  private handDock(exit: ConstructorParameters<typeof HandDock>[2][number]): HandDock {
+    const hand = nonDominantHand(loadHandedness());
+    return new HandDock(this.world, { kind: "hand", space: this.player.gripSpaces[hand], ownPointerIds: handPointerIds(this.world, hand), palm: GRIP_PALM[hand] }, [exit]);
   }
 
   /**

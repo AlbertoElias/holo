@@ -23,9 +23,15 @@ export function boundsWithoutObjects(root: Object3D): Box3 {
   return bounds;
 }
 
-/** Moves the recorded subject's anchor to the origin and its lowest point to y = 0. */
+/**
+ * Puts the recorded floor at the origin, under the author. A capture's
+ * avatar origin is on its floor (B-022): the scene around it (terrain
+ * flanks, water, the bubble sphere) reaches far below and must not lift it.
+ * Other files stand on their lowest drawn point.
+ */
 export function normalizeSceneAtOrigin(root: Object3D): void {
-  const anchor = root.getObjectByName("RecordedAvatar")
+  const recordedAvatar = root.getObjectByName("RecordedAvatar");
+  const anchor = recordedAvatar
     ?? root.getObjectByName("Hips")
     ?? root.getObjectByName("mixamorigHips")
     ?? root;
@@ -34,6 +40,7 @@ export function normalizeSceneAtOrigin(root: Object3D): void {
   if (!Number.isFinite(anchorPos.x) || !Number.isFinite(anchorPos.y) || !Number.isFinite(anchorPos.z)) return;
 
   root.position.sub(anchorPos);
+  if (recordedAvatar) return;
 
   const bounds = boundsWithoutObjects(root);
   if (!bounds.isEmpty() && Number.isFinite(bounds.min.y)) {

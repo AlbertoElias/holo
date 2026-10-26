@@ -1,4 +1,5 @@
 import { tokens } from "@holoim/design-tokens";
+import { readIwerRuntime } from "@holoim/xr-runtime";
 import {
   AudioSystem,
   DomeGradient,
@@ -13,8 +14,9 @@ import { Box3, CircleGeometry, Color, Mesh, MeshStandardMaterial, Quaternion, Ve
 import type { Object3D } from "three";
 
 import { resumeAudioContext } from "../hologram/gltfAudio";
+import { HologramBubbleSystem } from "./bubbleSystem";
 import { HologramAssetCache } from "./hologramAssets";
-import { HologramPlayback, HologramPlaybackSystem, type HologramRuntime } from "./hologramPlayback";
+import { HologramPlayback, HologramPlaybackSystem, seekHologram, setHologramPlaying, type HologramRuntime } from "./hologramPlayback";
 import { HologramControlsSystem } from "./hologramControls";
 import { HologramSpace } from "./hologramSpace";
 import { GallerySystem, type GalleryFeed } from "./gallerySystem";
@@ -49,6 +51,36 @@ export interface ViewerWorldOptions {
   onSessionEnd(focusedId: string | null): void;
 }
 
+/**
+ * Depth occlusion in AR. Off under the IWER emulator, which computes emulated
+ * depth with a synchronous GPU readback every frame that stalls software-GL
+ * runners; a development build can turn it on there with `?depth=on`.
+ */
+function wantsDepthOcclusion(): boolean {
+  if (!readIwerRuntime().available) return true;
+  return import.meta.env.DEV && new URLSearchParams(window.location.search).get("depth") === "on";
+}
+
+/**
+ * Runs `launch` with extra optional session features: IWSDK's feature flags
+ * have no light estimation, which the cloche's AR char reads (3.2).
+ * `launchXR` requests its session synchronously.
+ */
+function withOptionalFeatures(features: string[], launch: () => void): void {
+  const xr = navigator.xr;
+  if (!xr) return launch();
+  const requestSession = xr.requestSession;
+  xr.requestSession = (mode, init) => {
+    const optionalFeatures = [...new Set([...(init?.optionalFeatures ?? []), ...features])];
+    return requestSession.call(xr, mode, { ...init, optionalFeatures });
+  };
+  try {
+    launch();
+  } finally {
+    xr.requestSession = requestSession;
+  }
+}
+
 /** Image-based light from the blue-hour gradient: lights the hologram in VR and AR alike. */
 function addRoomLight(world: World): void {
   world.activeLevel.value.addComponent(IBLGradient, { sky: BLUE_HOUR_SKY, equator: BLUE_HOUR_EQUATOR, ground: BLUE_HOUR_GROUND, intensity: 1 });
@@ -69,6 +101,7 @@ function addVrRoom(world: World): void {
 
 export async function createViewerWorld(container: HTMLDivElement, options: ViewerWorldOptions): Promise<ViewerWorld> {
   const isAr = options.mode === "ar";
+  const depthOcclusion = isAr && wantsDepthOcclusion();
   const cache = new HologramAssetCache();
   // Load the opened hologram alongside the World, so entering never waits on it.
   const [created, opened] = await Promise.allSettled([
@@ -76,7 +109,9 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
       xr: {
         sessionMode: isAr ? SessionMode.ImmersiveAR : SessionMode.ImmersiveVR,
         referenceSpace: { type: ReferenceSpaceType.LocalFloor },
-        features: isAr ? { hitTest: true, anchors: true } : { handTracking: true },
+        features: isAr
+          ? { hitTest: true, anchors: true, ...(depthOcclusion ? { depthSensing: { usage: "gpu-optimized" as const } } : {}) }
+          : { handTracking: true },
         offer: "none"
       },
       features: { locomotion: false, physics: false, grabbing: true, spatialUI: true }
@@ -90,20 +125,25 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
   }
   const world = created.value;
   // Hologram audio is app-side (HologramPlaybackSystem): IWSDK's AudioSystem
-  // cannot seek and ramps on wall-clock time.
+  // cannot seek and ramps on wall-clock time. Its listener stays on the head
+  // after it goes and ramps every frame on three's clock, which can step
+  // backwards under a test's fake clock, so it goes too.
+  (world.getSystem(AudioSystem) as { listener?: Object3D } | undefined)?.listener?.removeFromParent();
   world.unregisterSystem(AudioSystem);
   world.globals.viewer = createViewerContext(options.mode);
   addRoomLight(world);
   if (!isAr) addVrRoom(world);
 
-  world.registerSystem(HologramPlaybackSystem).registerSystem(HologramControlsSystem).registerSystem(GallerySystem);
+  world.registerSystem(HologramPlaybackSystem).registerSystem(HologramBubbleSystem).registerSystem(HologramControlsSystem).registerSystem(GallerySystem);
+  world.getSystem(HologramBubbleSystem)!.occlusionRequested = depthOcclusion;
   if (isAr) world.registerSystem(ArPlacementSystem).registerSystem(ScreenInputSystem);
   else world.registerSystem(VrPlacementSystem);
 
   const space = new HologramSpace(world, cache, {
     // A phone has no play glyph within thumb reach of the body; its tap on the focused hologram pauses it.
     tapTogglesPlay: () => viewerContext(world).target === "ar-phone",
-    onRemove: (entity) => world.getSystem(ArPlacementSystem)?.forget(entity)
+    onRemove: (entity) => world.getSystem(ArPlacementSystem)?.forget(entity),
+    ...(import.meta.env.DEV ? { onPlaced: (record: PlacedHologram) => observePlaced(world, record) } : {})
   });
   const gallery = world.getSystem(GallerySystem)!;
   gallery.configure({ feed: options.feed, space, cache, loadMore: options.loadMore });
@@ -135,7 +175,8 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
     world,
     enter: () => {
       resumeAudioContext();
-      world.launchXR();
+      if (isAr) withOptionalFeatures(["light-estimation"], () => world.launchXR());
+      else world.launchXR();
     },
     exit: () => world.exitXR(),
     destroy: () => {
@@ -150,6 +191,29 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
       cache.dispose();
     }
   };
+}
+
+/**
+ * Opt-in local e2e observer, as the R3F AR view offers it: the AR bubble and
+ * floor specs inspect the last placed hologram's model, bubble and cloche,
+ * and the real XR cameras and pixels. Development builds only.
+ */
+function observePlaced(world: World, record: PlacedHologram): void {
+  const observer = (window as Window & { __HOLOIM_AR_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_AR_TEST_OBSERVER__;
+  if (!observer) return;
+  const runtime = record.entity.getValue(HologramPlayback, "runtime") as HologramRuntime | undefined;
+  const actions = Object.fromEntries((runtime?.actions ?? []).map((action, index) => [action.getClip().name || `clip-${index}`, action]));
+  observer({
+    renderer: world.renderer,
+    scene: world.scene,
+    camera: world.camera,
+    model: record.model,
+    bubble: record.bubble.bubble,
+    actions,
+    mixer: runtime?.mixer,
+    cloche: { get current() { return record.bubble.shape; } },
+    group: { current: record.entity.object3D }
+  });
 }
 
 /** Development-only window probe the e2e spec reads (`xr-viewer-report.json`). */
@@ -223,6 +287,13 @@ function installXrViewerProbe(world: World, cache: HologramAssetCache, space: Ho
     get hologram(): Entity | null {
       return viewerContext(world).focused;
     },
+    /** Holds the focused hologram at `clipTime` (paused), or plays it from there. */
+    setClock: (clipTime: number, playing: boolean) => {
+      const focused = viewerContext(world).focused;
+      if (!focused) return;
+      setHologramPlaying(focused, playing);
+      seekHologram(focused, clipTime);
+    },
     snapshot: () => {
       const c = viewerContext(world);
       const session = world.renderer.xr.getSession();
@@ -241,6 +312,15 @@ function installXrViewerProbe(world: World, cache: HologramAssetCache, space: Ho
         gallery: gallery.probe(),
         cache: cache.keys(),
         controls: world.getSystem(HologramControlsSystem)?.probe() ?? null,
+        bubbles: {
+          ...world.getSystem(HologramBubbleSystem)!.probe(),
+          holograms: c.placed.map((record) => ({
+            id: record.id,
+            clipping: record.bubble.bubble.active,
+            radius: record.bubble.bubble.radius,
+            cloche: record.bubble.shape !== null
+          }))
+        },
         renderer: {
           geometries: world.renderer.info.memory.geometries,
           uiGeometries: uiGeometries(world),

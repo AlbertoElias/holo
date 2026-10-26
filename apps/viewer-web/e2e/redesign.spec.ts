@@ -447,15 +447,19 @@ test("left-handed, set in the feed's settings: kept on this device, and AR puts 
   await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 
   await pressViewInAr(page);
+  const container = page.locator(".xr-view-container");
+  await expect(container).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
+  if ((await container.getAttribute("data-xr-state")) === "ready") await page.getByRole("button", { name: "View in your room" }).click();
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
-  await page.waitForFunction(() => Boolean((window as ArWindow).__arProbe));
   await expect.poll(() => page.evaluate(() => {
-    const scene = (window as ArWindow).__arProbe!.scene;
-    return { right: scene.getObjectByName("wrist-glyphs-right")?.visible ?? false, left: Boolean(scene.getObjectByName("wrist-glyphs-left")) };
-  }), { message: "Exit on the non-dominant (right) wrist, and none on the left" }).toEqual({ right: true, left: false });
+    const dock = (window as { __HOLOIM_XR_VIEWER__?: { snapshot(): { controls: { dock: { mount: string; hand: string | null } } | null } } }).__HOLOIM_XR_VIEWER__?.snapshot().controls?.dock;
+    return dock ? { mount: dock.mount, hand: dock.hand } : null;
+  }), { message: "Exit on the non-dominant (right) hand", timeout: 15_000 }).toEqual({ mount: "hand", hand: "right" });
 });
 
-test("AR: controls at the hologram's foot on the chip, Exit always reachable, true scale and a labelled rescale", async ({ page }) => {
+// The R3F view, kept behind `?shell=r3f` while the IWSDK shell becomes the
+// default; xr-viewer.spec.ts covers the same controls there.
+test("AR (R3F fallback): controls at the hologram's foot on the chip, Exit always reachable, true scale and a labelled rescale", async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 640, height: 480 });
   await page.addInitScript(() => {
@@ -463,7 +467,7 @@ test("AR: controls at the hologram's foot on the chip, Exit always reachable, tr
   });
   await mockFeed(page, [first]);
   await observeFeedCardRenderer(page);
-  await page.goto("/");
+  await page.goto("/?shell=r3f");
   await waitForFeedCardPresented(page);
   await pressViewInAr(page);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });

@@ -26,6 +26,7 @@
     "@holoim/xr-ui-core": "workspace:*",
     "@holoim/xr-ui-iwsdk": "workspace:*",
     "@holoim/xr-ui-r3f": "workspace:*",
+    "@holoim/xr-ui-three": "workspace:*",
     "@iwsdk/core": "^1.0.1",
     "@pmndrs/pointer-events": "6.6.29",
     "@react-three/drei": "^9.120.4",

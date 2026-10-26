@@ -4,7 +4,7 @@ import { Plane, Quaternion, Vector3 } from "three";
 import type { Matrix4, Object3D, Ray } from "three";
 
 import { computeFloorPlacement } from "../ar/arPlacement";
-import { focusedRecord, viewerContext, type PlacedHologram, type PlacementMode, type Stage, type ViewerContext } from "./viewerContext";
+import { focusedRecord, viewerContext, type PlacedHologram, type PlacementMode, type PlacementReason, type Stage, type ViewerContext } from "./viewerContext";
 
 // VR: the first hologram stands on the floor 1.5 m ahead of the viewer, facing
 // them, and fixes the stage's front; each next one takes the first free place
@@ -51,7 +51,7 @@ function facePoint(object: Object3D, target: Vector3): void {
   object.rotation.set(0, Math.atan2(dx, dz), 0);
 }
 
-function placeRecord(record: PlacedHologram, head: Vector3, position: Vector3, mode: PlacementMode, anchored: boolean): void {
+function placeRecord(record: PlacedHologram, head: Vector3, position: Vector3, mode: PlacementMode, anchored: boolean, reason?: PlacementReason): void {
   const object = record.entity.object3D!;
   object.position.copy(position);
   facePoint(object, head);
@@ -61,7 +61,8 @@ function placeRecord(record: PlacedHologram, head: Vector3, position: Vector3, m
     stage: anchored ? "anchored" : "placed",
     mode,
     sequence: record.placement.sequence + 1,
-    position: [position.x, position.y, position.z]
+    position: [position.x, position.y, position.z],
+    ...(reason ? { reason } : {})
   };
 }
 
@@ -374,7 +375,7 @@ export class ArPlacementSystem extends createSystem() {
     if (hit && hitPose) {
       const p = hitPose.transform.position;
       const position = new Vector3(p.x, p.y, p.z).applyMatrix4(this.player.matrixWorld);
-      placeRecord(record, headPosition, position, "hit-test", false);
+      placeRecord(record, headPosition, position, "hit-test", false, "hit-test");
       state.ahead = false;
       c.stage ??= stageAt(headPosition, position);
       void hit.createAnchor?.()?.then((anchor) => this.adoptAnchor(record, anchor), () => undefined);
@@ -387,7 +388,7 @@ export class ArPlacementSystem extends createSystem() {
       eyeToFloorMeters: headPosition.y
     });
     floor.position.y = 0;
-    placeRecord(record, headPosition, floor.position, "floor", false);
+    placeRecord(record, headPosition, floor.position, "floor", false, this.hitTestSource ? "hit-test-timeout" : "hit-test-unavailable");
     state.ahead = false;
     c.stage ??= stageAt(headPosition, floor.position);
     state.pendingAnchorPose = record.entity.object3D!.matrixWorld.clone().setPosition(floor.position);

@@ -145,6 +145,10 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   expect(feedAfter.sphere, "feed sphere follows recorded motion").not.toEqual(feedBefore.sphere);
   await page.clock.resume();
   await pressViewInAr(page, card);
+  // The IWSDK shell, the default: it enters at once, or offers its entry button.
+  const xrView = page.locator(".xr-view-container");
+  await expect(xrView).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
+  if ((await xrView.getAttribute("data-xr-state")) === "ready") await page.getByRole("button", { name: "View in your room" }).click();
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await page.evaluate(() => {
     const device = (window as unknown as { IWER_DEVICE: { stereoEnabled: boolean; ipd: number } }).IWER_DEVICE;

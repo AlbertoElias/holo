@@ -268,10 +268,10 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   }, []);
 
   const handleEnterAR = () => {
-    // Opting the feed into the IWSDK AR shell carries over to its AR route.
+    // Opting the feed into the R3F AR view (the temporary fallback) carries over to its AR route.
     const shell = new URLSearchParams(window.location.search).get("shell");
     const state: XrFeedState | undefined = xrFeed ? { feed: xrFeed() } : undefined;
-    navigate(shell === "iwsdk" ? `/ar/${item.id}?shell=iwsdk` : `/ar/${item.id}`, { state });
+    navigate(shell === "r3f" ? `/ar/${item.id}?shell=r3f` : `/ar/${item.id}`, { state });
   };
   const handleEnterVR = () => {
     const state: XrFeedState | undefined = xrFeed ? { feed: xrFeed() } : undefined;

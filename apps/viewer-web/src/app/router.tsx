@@ -15,11 +15,11 @@ function VrRoute() {
   );
 }
 
-// The IWSDK AR view runs behind ?shell=iwsdk until it has the R3F view's
-// bubble clipping, aura and depth occlusion (viewer-xr-interface brief).
+// The IWSDK AR view is the default (viewer-xr-interface step 6); the R3F
+// view stays behind ?shell=r3f as a temporary fallback.
 function ArRoute() {
   const [params] = useSearchParams();
-  if (params.get("shell") !== "iwsdk") return <ARView />;
+  if (params.get("shell") === "r3f") return <ARView />;
   return (
     <Suspense fallback={null}>
       <XrHologramView mode="ar" />

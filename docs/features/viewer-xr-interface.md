@@ -1,7 +1,7 @@
 # Feature brief: Shared XR interface and viewer VR/AR
 
 **Lead:** Claude (Opus)  
-**Status:** Implementing (approved 2026-10-24; step 1 spikes GO; step 2 viewer shell done)
+**Status:** Implementing (approved 2026-10-24; steps 1–5 done; step 6: IWSDK is the `/ar/:id` default, R3F kept behind `?shell=r3f`)
 **Layer:** view (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -270,11 +270,13 @@ Implementation order (each step lands green before the next):
 | Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | **Pass** (steps 2–3): clip clock 1.00× wall clock; ray pause holds clock and audio; a held-trigger scrub lands within 5% of the aimed time with the pose at that time; resume, restart and a phone timeline drag reschedule audio within 50 ms; `vrControls` and `ar.phoneControls` in the report |
 | Grab/scale/rotate | Same spec, scripted controller grips | **Pass** (step 3): two-hand grip grab spreads, carries, lifts and turns it; uniform scale, clamped at 2× ("200%"), base on the floor (0 mm) and upright at every step; scale chip "life size" resets scale in place; recenter 1.50 m ahead at recorded scale; `vrControls.grab` in the report |
 | Memory after remove/page | Same spec | **Pass** (step 4): after sending two back and paging out and back, 74 geometries and 180 textures, as at the baseline (UIKit text buffers that grew are counted apart, 33 → 35); the cache keeps only models in use (`gallery.renderer`, `gallery.cacheAfter`) |
-| AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | Step 3 **pass**: phone foot controls at flat sizes (16/36 apx, 44 apx touch, chip 0.88), a tap on the play glyph pauses without moving the hologram, a 30-frame finger drag on the timeline scrubs within 5%, and Exit in the bottom dock (16 CSS px, bottom centre) leaves; IWSDK shell **pass** (step 2), opened from the feed card at `/?shell=iwsdk`: stands on the floor 1.8 m ahead and anchors, lit like VR (mean luminance of the hologram's pixels 67 in AR vs 71 in VR; the unlit build read 19 and fails the 30 threshold), tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
+| AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id` (`?shell=iwsdk` before step 6) with an emulated phone (mono, no controllers, screen taps) | Step 3 **pass**: phone foot controls at flat sizes (16/36 apx, 44 apx touch, chip 0.88), a tap on the play glyph pauses without moving the hologram, a 30-frame finger drag on the timeline scrubs within 5%, and Exit in the bottom dock (16 CSS px, bottom centre) leaves; IWSDK shell **pass** (step 2), opened from the feed card at `/?shell=iwsdk`: stands on the floor 1.8 m ahead and anchors, lit like VR (mean luminance of the hologram's pixels 67 in AR vs 71 in VR; the unlit build read 19 and fails the 30 threshold), tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
 | Capture on the shared UI | `pnpm run test:xr:smoke` + capture `run-xr-checks.ts ui recording mock-vr hands body height marks` | **Pass** (step 5), results in "Step 5 results" below; `output/ci-capture-ui/ui-report.json` |
 | Same look in both apps | IWER screenshots of both apps' hand dock, status line and aim rays via `preview.mjs` | Side-by-side sheet (step 5), see "Step 5 results" |
 | Nothing interactive follows the head | Same spec: turn the head and read control world positions | **Pass** (step 3): foot controls moved 0 m on a head turn while the status line (no interactive parts) followed; `vrControls.headTurn` |
-| Pipeline compatibility | `pnpm run test:smoke:pipeline` | Pass output; pending |
+| AR on the IWSDK default (step 6) | `hologram-feed.spec.ts`, `ar-bubble.spec.ts`, `redesign.spec.ts` in `test:xr:viewer`, read from `__HOLOIM_XR_VIEWER__` and the dev placement observer | **Pass** (step 6): hit-test placement on the floor in front (base on IWER's surface within 0.1 m, under 0.5 m), recenter by ray on the foot row places again in front, Exit from the left-hand dock returns to the feed; no hit test → the floor 1.8 m ahead, reason `hit-test-unavailable`; clipping, the cloche, aura, a pinned rim and the scale chip in `ar-bubble`; left-handed puts the dock on the right hand; the R3F view's own controls test runs on `/?shell=r3f` |
+| Recorded floor (B-022) in the IWSDK shells | `xr-viewer.spec.ts` "B-022" tests on a ledge fixture (`terrainGltf`: author's floor 1 m above the lowest terrain) | **Pass** (step 6), VR and phone AR: the author's floor on the floor (< 1 cm), cloche foot on it (< 5 cm), the drop still 1.00 m below and inside the bubble (unclipped); with the old lowest-point rule both fail (author 1.6 m up) |
+| Pipeline compatibility | `pnpm run test:smoke:pipeline` | **Pass** (step 6) `bubble-capture.pipeline` on the IWSDK default: AR cloche foot and placement at 0.000, recorded floor −0.024, feet +0.036 (`output/bubble-rendering/capture/floor-report.json`); full suite below |
 
 ### Step 1 spike results (2026-10-24)
 
@@ -600,9 +602,63 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   0:04"). The gold rays, cream on a hit, the bare status type and the dock
   rings match. The dock contents differ by design: recenter and exit in the
   viewer, Record in capture.
-- **Open.** The viewer's scale chip still reads "62%" / "life size"
-  (`scaleChipLabel`). Main's `scaleLabel` reads "1:4" and nothing at true
-  scale; whether the viewer adopts it is the user's call.
+- **Decided in step 6 (the user):** XR keeps "62%" / "life size"
+  (`scaleChipLabel`), not main's "1:4".
+
+### Step 6 results (2026-10-25)
+
+- **Floor (B-022) in the IWSDK shells.** Merged `bug/viewer-floor`.
+  `standOnFeet` and `hologramScene.ts` now take the RecordedAvatar origin as
+  the floor and leave the rest of the scene where it is; only a GLB with no
+  RecordedAvatar falls back to its lowest point. A gallery tile still fits
+  the whole recording. Terrain below the author's floor stays drawn and
+  inside the clip sphere. New `xr-viewer.spec.ts` checks for VR and phone
+  AR use a ledge fixture whose drop falls 1 m below the author.
+- **Scale chip:** "62%" / "life size" stays in XR (the user), not main's
+  "1:4". The R3F fallback keeps its "1:" label.
+- **AR bubble ported.** `HologramBubble` (one per placed hologram) and
+  `HologramBubbleSystem` bring the R3F view's look to both IWSDK shells:
+  - sphere clipping (`applySphereClipping`, moved out of the React hook,
+    0.2 m falloff);
+  - the aura (`BubbleAura`, a plain three class the R3F wrapper reuses);
+  - the burnt-globe cloche from `@holoim/xr-ui-three`, fitted with its foot
+    on the recorded floor, sparks on the hologram nearest the head ray
+    (8.2), soot from light estimation in AR and the ground grey in VR (9.1);
+  - in AR, depth occlusion (`depthSensing: gpu-optimized`), with the
+    foot row, status line, dock, focus ring and rays drawn over it. IWER
+    has no depth data, so the shell does not ask for it there; dev
+    `?depth=on` forces it.
+  The cloche and aura take no pointer events, so the body box still gets
+  taps and grabs. IWSDK's audio listener is removed: under a frozen page
+  clock its ramps threw.
+- **Routing.** `/ar/:id` opens the IWSDK shell; `?shell=r3f` (on the feed or
+  the route) opens the R3F view, a temporary fallback. Exit goes to `/`.
+- **Placement reason.** The AR placement state now says why:
+  `hit-test`, `hit-test-timeout` or `hit-test-unavailable`.
+- **Left-handed.** The IWSDK hand dock follows the feed's handedness
+  setting (the R3F wrist did; the IWSDK dock was always on the left).
+- **Specs ported.** `ar-bubble.spec.ts` (4), the AR cases of
+  `hologram-feed.spec.ts`, the left-handed case of `redesign.spec.ts` and
+  `bubble-capture.pipeline.spec.ts` assert the same things against the
+  IWSDK shell. The R3F controls case in `redesign.spec.ts` runs on
+  `/?shell=r3f`. In IWER's `office_small` the default level gaze meets a
+  1.3 m desk or the walls first, so the hit-test case looks down at open
+  floor, as a placing user does.
+- **R3F view kept.** The `?shell=r3f` fallback still needs `ARView` and its
+  components, so nothing is retired yet.
+- **Checks (2026-10-25).** `pnpm run verify:agent` passes.
+  `test:xr:viewer` passes 25 of 25. `test:smoke:pipeline` passes 10 of 10.
+  In `verify:pr`, doctor, `check:all`, every unit suite and `build:all`
+  pass, as do `test:portal` (6) and `test:xr:smoke` (25). The knowledge
+  atlas e2e did not run cleanly: a day-old knowledge dev server from the
+  main checkout holds port 4176, and Playwright reused it (main's docs, so 3
+  of 7 fail). Its `check:docs` passes.
+- **Open (the user's call).**
+  - The IWSDK phone shell has no two-finger pinch to rescale; the R3F
+    view had one.
+  - The skip of surfaces over 0.5 m is still the IWSDK rule.
+  - In `office_small` the floor fallback (1.8 m ahead) lands 4 cm from the
+    wall, among furniture; real rooms vary.
 
 ### Video verification loop
 

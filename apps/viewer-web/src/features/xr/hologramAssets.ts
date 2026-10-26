@@ -118,7 +118,8 @@ export function clonePreview(loaded: LoadedHologram, heightM: number): Object3D 
     mixer.uncacheRoot(root);
   }
   normalizeSceneAtOrigin(root);
-  standOnFeet(root);
+  // A tile fits the whole recording, terrain included, so it stands on its lowest point.
+  standOnLowestPoint(root);
   const size = new Box3().setFromObject(root, true).getSize(new Vector3());
   const scale = size.y > 1e-3 ? heightM / size.y : 1;
   root.scale.multiplyScalar(scale);
@@ -162,12 +163,19 @@ function disposeScene(scene: Object3D): void {
 }
 
 /**
- * normalizeSceneAtOrigin stands the model on its bounds, but a skinned mesh's
- * bounds follow bone matrices a fresh clone has not computed, so a recorded
- * person can float about a hip height off the floor. Re-stand it on its
- * posed vertices.
+ * normalizeSceneAtOrigin stands a file without a recorded avatar on its
+ * bounds, but a skinned mesh's bounds follow bone matrices a fresh clone has
+ * not computed, so a person can float about a hip height off the floor.
+ * Re-stand it on its posed vertices. A capture's avatar origin is already
+ * its recorded floor (B-022): the ground around it may reach below and
+ * stays there, unclipped.
  */
 function standOnFeet(root: Object3D): void {
+  if (root.getObjectByName("RecordedAvatar")) return;
+  standOnLowestPoint(root);
+}
+
+function standOnLowestPoint(root: Object3D): void {
   root.updateMatrixWorld(true);
   root.traverse((object) => {
     const mesh = object as Object3D & { isSkinnedMesh?: boolean; skeleton?: { update(): void } };

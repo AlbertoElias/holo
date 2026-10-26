@@ -11,8 +11,6 @@ import { XR_ENTRY_LABEL, type XrFeedState } from "./xrSupport";
 
 type ViewState = "loading" | "ready" | "immersive" | "error";
 
-/** The IWSDK AR shell is opt-in (`?shell=iwsdk`); leaving it keeps the feed opted in. */
-const feedPath = (mode: XrViewMode): string => (mode === "ar" ? "/?shell=iwsdk" : "/");
 
 const galleryItems = (items: readonly HologramDTO[]): GalleryFeed["items"] =>
   items.map((item) => ({ id: item.id, title: item.hologramName, url: resolveMediaUrl(item.url) }));
@@ -53,7 +51,7 @@ export function XrHologramView({ mode }: { mode: XrViewMode }) {
     let viewer: ViewerWorld | null = null;
     // Exit returns to the feed at the last focused hologram.
     const backToFeed = (focusedId: string | null): void =>
-      void navigate(feedPath(mode), { replace: true, state: { focusHologramId: focusedId ?? id } });
+      void navigate("/", { replace: true, state: { focusHologramId: focusedId ?? id } });
 
     void (async () => {
       try {
@@ -112,7 +110,7 @@ export function XrHologramView({ mode }: { mode: XrViewMode }) {
                 {XR_ENTRY_LABEL[mode]}
               </UiButton>
             ) : null}
-            <UiButton type="button" tone="ghost" onClick={() => void navigate(feedPath(mode), { state: { focusHologramId: id } })}>
+            <UiButton type="button" tone="ghost" onClick={() => void navigate("/", { state: { focusHologramId: id } })}>
               Back to feed
             </UiButton>
           </UiStack>

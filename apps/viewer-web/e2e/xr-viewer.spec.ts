@@ -6,9 +6,10 @@ import type { Page } from "@playwright/test";
 import { waitForIwerRuntime, waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
+import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
 
 // The IWSDK immersive viewer (docs/features/viewer-xr-interface.md, steps 2-4):
-// `/vr/:id` and `/ar/:id?shell=iwsdk` mount one IWSDK World with the opened
+// `/vr/:id` and `/ar/:id` mount one IWSDK World with the opened
 // hologram at recorded scale, and a gallery of the feed to place more from. The page's development probe (`__HOLOIM_XR_VIEWER__`)
 // reports placement, scale, playback and audio; each test adds its readings
 // to `output/test-results/xr-viewer-report.json`.
@@ -180,8 +181,8 @@ async function avatarWithAudio(): Promise<Buffer> {
   return Buffer.concat([header, chunk(0x4e4f534a, jsonBytes), chunk(0x004e4942, newBin)]);
 }
 
-async function mockFeed(page: Page): Promise<void> {
-  const glb = await avatarWithAudio();
+async function mockFeed(page: Page, glb?: Buffer): Promise<void> {
+  glb ??= await avatarWithAudio();
   await page.route("**/api/holograms?*", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -418,7 +419,7 @@ async function endSession(page: Page): Promise<void> {
 }
 
 async function expectTornDown(page: Page): Promise<void> {
-  await expect(page).toHaveURL(/\/(\?shell=iwsdk)?$/);
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(".xr-view-container")).toHaveCount(0);
   expect(await page.evaluate(() => "__HOLOIM_XR_VIEWER__" in window), "probe removed with the World").toBe(false);
   await expect(page.locator('[data-card-id="mock-1"]'), "back on the opened hologram's card").toBeInViewport({ timeout: 10_000 });
@@ -1340,7 +1341,7 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   await page.setViewportSize({ width: 390, height: 844 });
   await emulatePhone(page);
   await mockGalleryFeed(page);
-  await page.goto("/?shell=iwsdk");
+  await page.goto("/");
   await assertViewerShell(page);
   await waitForIwerRuntime(page);
   await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
@@ -1348,7 +1349,7 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   await dwell(page, 3);
   await reachFor(page.locator('[data-card-id="mock-1"]'));
   await page.locator('[data-card-id="mock-1"] .ar-trigger-button').click();
-  await expect(page).toHaveURL(/\/ar\/mock-1\?shell=iwsdk$/);
+  await expect(page).toHaveURL(/\/ar\/mock-1$/);
   await enterSession(page, "View in your room", "alpha-blend");
   await setPose(page, "head", null, null);
   const first = await waitForGallery(page, (s) => s.placement.stage !== "searching" && Boolean(s.controls) && pageSettled(s), 25_000);
@@ -1410,7 +1411,7 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   }
   await dwell(page);
   await endSession(page);
-  await expect(page).toHaveURL(/\/\?shell=iwsdk$/);
+  await expect(page).toHaveURL(/\/$/);
   report.arGallery = {
     timeline: marks,
     holograms: [a, b].map((h) => ({ id: h.id, position: h.worldPosition, mode: h.placement.mode, stage: h.placement.stage })),
@@ -1428,8 +1429,8 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   await page.setViewportSize({ width: 390, height: 844 });
   await mockFeed(page);
   await emulatePhone(page);
-  // The feed opted into the IWSDK AR shell; its "View in your room" trigger opens it.
-  await page.goto("/?shell=iwsdk");
+  // The feed's "View in your room" trigger opens the IWSDK AR shell, the default.
+  await page.goto("/");
   mark("feed-loaded");
   await assertViewerShell(page);
   await waitForIwerRuntime(page);
@@ -1441,7 +1442,7 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   mark("view-in-room");
   await reachFor(page.locator(".feed-card").first());
   await arTrigger.click();
-  await expect(page).toHaveURL(/\/ar\/mock-1\?shell=iwsdk$/);
+  await expect(page).toHaveURL(/\/ar\/mock-1$/);
   await enterSession(page, "View in your room", "alpha-blend");
   mark("ar-immersive");
 
@@ -1592,4 +1593,104 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
       drag: { duration, target: 0.8 * duration, clipTime: dragged.hologram.clipTime, resumeAudioDriftS: dragDrift }
     }
   };
+});
+
+type FloorReading = {
+  placementY: number;
+  authorY: number;
+  clocheBaseY: number | null;
+  terrainLowestY: number;
+  terrainVisible: boolean;
+  /** The terrain's farthest corner from the clip sphere's centre, over its radius: under 1 is all inside, unclipped. */
+  terrainReach: number;
+};
+
+/** B-022 in the IWSDK shells: where the author's recorded floor and the terrain below it end up. */
+async function readFloor(page: Page): Promise<FloorReading> {
+  return page.evaluate(() => {
+    type V = { x: number; y: number; z: number; clone(): V; set(x: number, y: number, z: number): V; distanceTo(v: V): number };
+    type O = { name: string; visible: boolean; parent: O | null; getObjectByName(name: string): O | undefined; getWorldPosition(v: V): V; localToWorld(v: V): V; updateWorldMatrix(p: boolean, c: boolean): void; traverse(f: (o: O) => void): void; isMesh?: boolean; geometry?: { boundingBox: { min: V; max: V } | null; computeBoundingBox(): void }; matrixWorld: unknown };
+    const probe = (window as unknown as { __floorProbe: { model: O; group: { current: O }; cloche: { current: { base: { x: number; y: number; z: number } } | null }; bubble: { radius: number; center: V } } }).__floorProbe;
+    const group = probe.group.current;
+    group.updateWorldMatrix(true, true);
+    const at = probe.bubble.center.clone();
+    const placementY = group.getWorldPosition(at.clone()).y;
+    const authorY = probe.model.getObjectByName("RecordedAvatar")!.getWorldPosition(at.clone()).y;
+    const shape = probe.cloche.current;
+    const clocheBaseY = shape ? group.localToWorld(at.clone().set(shape.base.x, shape.base.y, shape.base.z)).y : null;
+    const terrain = probe.model.getObjectByName("RecordedSceneBubble")!;
+    let terrainLowestY = Infinity;
+    let reach = 0;
+    let terrainVisible = true;
+    for (let node: O | null = terrain; node; node = node.parent) terrainVisible &&= node.visible;
+    terrain.traverse((node) => {
+      if (!node.isMesh || !node.geometry) return;
+      node.geometry.computeBoundingBox();
+      const { min, max } = node.geometry.boundingBox!;
+      for (const x of [min.x, max.x]) for (const y of [min.y, max.y]) for (const z of [min.z, max.z]) {
+        const corner = node.localToWorld(at.clone().set(x, y, z));
+        terrainLowestY = Math.min(terrainLowestY, corner.y);
+        reach = Math.max(reach, corner.distanceTo(probe.bubble.center) / probe.bubble.radius);
+      }
+    });
+    return { placementY, authorY, clocheBaseY, terrainLowestY, terrainVisible, terrainReach: reach };
+  });
+}
+
+function expectOnRecordedFloor(label: string, floor: FloorReading): void {
+  expect(Math.abs(floor.authorY - floor.placementY), `${label}: the author's recorded floor on the floor (${JSON.stringify(floor)})`).toBeLessThan(0.01);
+  expect(floor.clocheBaseY, `${label}: cloche fitted`).not.toBeNull();
+  expect(Math.abs(floor.clocheBaseY! - floor.placementY), `${label}: cloche foot on the floor`).toBeLessThan(0.05);
+  expect(floor.placementY - floor.terrainLowestY, `${label}: the terrain below the author's floor still hangs below it`).toBeCloseTo(TERRAIN_DROP_M, 2);
+  expect(floor.terrainVisible, `${label}: terrain drawn`).toBe(true);
+  expect(floor.terrainReach, `${label}: terrain inside the bubble, so not clipped`).toBeLessThan(1);
+}
+
+async function observeFloor(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    (window as unknown as { __HOLOIM_AR_TEST_OBSERVER__: (value: unknown) => void }).__HOLOIM_AR_TEST_OBSERVER__ = (value) => {
+      (window as unknown as { __floorProbe: unknown }).__floorProbe = value;
+    };
+  });
+}
+
+test("B-022: VR stands an author recorded on a ledge on its recorded floor, with the drop below it still in view", async ({ page }, testInfo) => {
+  await observeFloor(page);
+  await mockFeed(page, terrainGltf());
+  await page.goto("/");
+  await assertViewerShell(page);
+  await waitForIwerRuntime(page);
+  await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 15_000 });
+  await reachFor(page.locator(".feed-card").first());
+  await page.locator(".vr-trigger-button").click();
+  await enterSession(page, "Step inside", "opaque");
+  const placed = await waitForSnapshot(page, (s) => s.placement.stage === "placed" && s.hologram.visible);
+  expect(placed.hologram.worldPosition[1], "VR places on the floor").toBeCloseTo(0, 3);
+  await page.waitForFunction(() => Boolean((window as unknown as { __floorProbe?: { bubble: { active: boolean } } }).__floorProbe?.bubble.active));
+  const floor = await readFloor(page);
+  expectOnRecordedFloor("VR", floor);
+  await captureEvidence(page, testInfo, "vr-recorded-floor");
+  await endSession(page);
+});
+
+test("B-022: phone AR stands an author recorded on a ledge on the room's floor, with the drop below it still in view", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await observeFloor(page);
+  await mockFeed(page, terrainGltf());
+  await emulatePhone(page);
+  await page.goto("/");
+  await assertViewerShell(page);
+  await waitForIwerRuntime(page);
+  await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 15_000 });
+  await reachFor(page.locator(".feed-card").first());
+  await page.locator(".ar-trigger-button").click();
+  await expect(page).toHaveURL(/\/ar\/mock-1$/);
+  await enterSession(page, "View in your room", "alpha-blend");
+  const placed = await waitForSnapshot(page, (s) => s.placement.stage !== "searching" && s.hologram.visible);
+  expect(placed.hologram.worldPosition[1], "AR stands it on a floor, not furniture").toBeLessThan(0.5);
+  await page.waitForFunction(() => Boolean((window as unknown as { __floorProbe?: { bubble: { active: boolean } } }).__floorProbe?.bubble.active));
+  const floor = await readFloor(page);
+  expectOnRecordedFloor("AR", floor);
+  await captureEvidence(page, testInfo, "ar-recorded-floor");
+  await endSession(page);
 });

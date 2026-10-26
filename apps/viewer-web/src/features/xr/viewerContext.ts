@@ -2,6 +2,8 @@ import type { Entity, World } from "@iwsdk/core";
 import type { XrUiTarget } from "@holoim/xr-ui-iwsdk";
 import type { Object3D, Vector3 } from "three";
 
+import type { HologramBubble } from "./hologramBubble";
+
 export type XrViewMode = "vr" | "ar";
 
 export type PlacementStage = "searching" | "placed" | "anchored";
@@ -13,7 +15,11 @@ export interface PlacementState {
   /** Bumps on every placement, so observers can tell re-placements apart. */
   sequence: number;
   position: [number, number, number] | null;
+  /** AR, placing ahead: a hit test found the surface, or why it stands on the floor estimate. */
+  reason?: PlacementReason;
 }
+
+export type PlacementReason = "hit-test" | "hit-test-timeout" | "hit-test-unavailable";
 
 /** One hologram placed in the space (step 4: up to MAX_PLACED_HOLOGRAMS). */
 export interface PlacedHologram {
@@ -23,6 +29,8 @@ export interface PlacedHologram {
   entity: Entity;
   /** The recorded scene's clone under the entity. */
   model: Object3D;
+  /** Its bubble's clipping, aura and cloche. */
+  bubble: HologramBubble;
   placement: PlacementState;
   /** Asks the placement system to place it again in front of the viewer. */
   recenterRequested: boolean;

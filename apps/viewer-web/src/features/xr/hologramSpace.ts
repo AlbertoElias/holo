@@ -3,7 +3,9 @@ import { RayInteractable, type Entity, type World } from "@iwsdk/core";
 import { Box3, BoxGeometry, Mesh, MeshBasicMaterial, PointLight, Vector3 } from "three";
 import type { Object3D } from "three";
 
+import { boundsWithoutObjects } from "../hologram/hologramScene";
 import { cloneHologram, disposeClone, type HologramAssetCache } from "./hologramAssets";
+import { HologramBubble } from "./hologramBubble";
 import { createHologramRuntime, disposeHologramRuntime, HologramPlayback, setHologramPlaying, type HologramRuntime } from "./hologramPlayback";
 import { placedRecord, searchingPlacement, viewerContext, type PlacedHologram } from "./viewerContext";
 
@@ -33,7 +35,7 @@ export class HologramSpace {
   /** Called when a placement or removal changes what is in the space. */
   onChange: () => void = () => undefined;
 
-  constructor(private readonly world: World, private readonly cache: HologramAssetCache, private readonly options: { tapTogglesPlay: () => boolean; onRemove(entity: Entity): void }) {}
+  constructor(private readonly world: World, private readonly cache: HologramAssetCache, private readonly options: { tapTogglesPlay: () => boolean; onRemove(entity: Entity): void; onPlaced?(record: PlacedHologram): void }) {}
 
   isPlaced(id: string): boolean {
     return viewerContext(this.world).placed.some((record) => record.id === id);
@@ -65,6 +67,7 @@ export class HologramSpace {
       const record = this.createRecord(item, model, createHologramRuntime(model, loaded.clips, loaded.audio));
       viewerContext(this.world).placed.push(record);
       this.focus(record.entity);
+      this.options.onPlaced?.(record);
       return "placed";
     } finally {
       this.loading.delete(item.id);
@@ -121,12 +124,17 @@ export class HologramSpace {
     stageLight.position.set(0, 0.35, 0.6);
     object.add(stageLight);
     // Taps and rays hit a body-sized box, not the skinned triangles: forgiving
-    // to aim at, and cheap for pointers that move every frame.
+    // to aim at, and cheap for pointers that move every frame. The body is
+    // the recorded person's, not the scene's around them (B-022).
     (model as Object3D & { pointerEvents?: string }).pointerEvents = "none";
-    const size = new Box3().setFromObject(model).getSize(new Vector3());
+    const recordedAvatar = model.getObjectByName("RecordedAvatar");
+    const body = recordedAvatar ? boundsWithoutObjects(recordedAvatar) : new Box3().setFromObject(model);
+    const size = body.getSize(new Vector3());
     const hitBox = new Mesh(new BoxGeometry(size.x, size.y, Math.max(size.z, 0.3)), new MeshBasicMaterial({ visible: false }));
     hitBox.name = "HologramHitBox";
-    hitBox.position.y = size.y / 2;
+    // Over the person, from the floor up.
+    const centre = body.getCenter(new Vector3());
+    hitBox.position.set(recordedAvatar ? centre.x : 0, size.y / 2, recordedAvatar ? centre.z : 0);
     // IWSDK's two-hand grab denies rays on the hologram; the box takes them back
     // for selecting it, and keeps a ray press from starting a one-hand drag.
     (hitBox as Mesh & { pointerEventsType?: unknown }).pointerEventsType = "all";
@@ -143,6 +151,7 @@ export class HologramSpace {
       url: item.url,
       entity,
       model,
+      bubble: new HologramBubble(object, model, built.runtime.actions.map((action) => action.getClip()), item.id),
       placement: searchingPlacement(),
       recenterRequested: false,
       footprintRadius: Math.hypot(size.x, Math.max(size.z, 0.3)) / 2
@@ -160,6 +169,7 @@ export class HologramSpace {
   private disposeRecord(record: PlacedHologram): void {
     const runtime = record.entity.getValue(HologramPlayback, "runtime") as HologramRuntime | undefined;
     if (runtime) disposeHologramRuntime(runtime);
+    record.bubble.dispose();
     const hitBox = record.entity.object3D?.getObjectByName("HologramHitBox") as Mesh<BoxGeometry, MeshBasicMaterial> | undefined;
     hitBox?.geometry.dispose();
     hitBox?.material.dispose();
