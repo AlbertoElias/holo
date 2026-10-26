@@ -2,8 +2,8 @@
 
 Production shape (decided in
 [features/live-deployment.md](features/live-deployment.md)): Fly.io hosts the
-API (one machine, volume for SQLite + local uploads), Cloudflare Pages hosts
-the viewer, and Cloudflare R2 serves media once `STORAGE_DRIVER=s3`.
+API (one machine, volume for SQLite), Cloudflare Pages hosts
+the viewer, and Cloudflare R2 serves media from `media.holostud.io`.
 
 Nothing here requires a dashboard-only step that an agent cannot reproduce
 from the CLI. Secrets are never committed; only variable names live in the
@@ -99,10 +99,20 @@ no API, so no `WEB_ORIGINS` change is needed unless that changes.
 
 ## 3. Media on R2 (Phase 2)
 
-The code already supports R2; this section is a configuration flip, not
-a project. Stay on the Fly volume while all of these hold: a handful of
-demo holograms, Quick Look opt-in, one machine, low download traffic.
-Move when any trigger hits:
+**Live since 2026-10-25.** Bucket `holoim-media`, served from
+`https://media.holostud.io` (zone `holostud.io`, registered at Hover with
+Cloudflare nameservers). `fly.toml` sets `STORAGE_DRIVER = "s3"`; the
+`S3_*` values and `PUBLIC_MEDIA_BASE_URL` are Fly secrets. The steps below
+are kept for rebuilding the setup from scratch.
+
+The move was triggered by load time: the feed fetched four ~5 MB GLBs
+uncompressed from one Fly region behind a scale-to-zero machine (6–20 s
+each). R2 behind the zone serves them from the edge, brotli-compressed
+(5.3 MB → 1.5 MB).
+
+The original guidance: stay on the Fly volume while all of these hold: a
+handful of demo holograms, Quick Look opt-in, one machine, low download
+traffic. Move when any trigger hits:
 
 - Volume passes ~70% full, or opted-in USDZ pairs grow past ~50.
 - Download traffic becomes public/shared (Fly egress is $0.02/GB and
@@ -113,11 +123,11 @@ Move when any trigger hits:
 1. Create the bucket: `wrangler r2 bucket create holoim-media`.
 2. Attach a public custom domain (e.g. `media.<your-domain>`) in the R2
    dashboard — the `r2.dev` URL is rate-limited and not for production.
-3. Create an R2 API token (Object Read & Write, this bucket) and set:
+3. Create an R2 API token (Object Read & Write, this bucket) and set the
+   secrets (`STORAGE_DRIVER = "s3"` itself lives in `fly.toml`):
 
 ```sh
 fly secrets set -a holoim-api \
-  STORAGE_DRIVER="s3" \
   S3_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com" \
   S3_REGION="auto" \
   S3_BUCKET="holoim-media" \
@@ -145,6 +155,31 @@ fly deploy -c fly.toml
   }
 ]
 ```
+
+5. Zone rules for the media host. Cloudflare neither caches the `.glb`
+   extension nor compresses `model/gltf-binary` by default, so without
+   these the files pass through uncached (`cf-cache-status: DYNAMIC`) and
+   uncompressed. USDZ is already a zip, so only GLB is compressed.
+
+```sh
+cf rulesets entrypoint update http_request_cache_settings -z holostud.io --rules \
+  '[{"expression":"(http.host eq \"media.holostud.io\")","action":"set_cache_settings",
+     "action_parameters":{"cache":true,"edge_ttl":{"mode":"respect_origin"},"browser_ttl":{"mode":"respect_origin"}}}]'
+cf rulesets entrypoint update http_response_compression -z holostud.io --rules \
+  '[{"expression":"(http.host eq \"media.holostud.io\" and ends_with(http.request.uri.path, \".glb\"))",
+     "action":"compress_response","action_parameters":{"algorithms":[{"name":"brotli"},{"name":"gzip"}]}}]'
+```
+
+   Check: a second `curl -H 'Accept-Encoding: br' -I` of a GLB shows
+   `content-encoding: br` and `cf-cache-status: HIT`.
+
+6. Copy existing media from the volume before switching the driver
+   (`fly ssh console -a holoim-api -C "ls /data/uploads"`, then
+   `wrangler r2 object put holoim-media/<file> --remote` with
+   `--content-type model/gltf-binary` or `model/vnd.usdz+zip`
+   `--content-disposition inline`, and
+   `--cache-control "public, max-age=31536000, immutable"`). The DTO
+   builds URLs from storage keys, so no database rewrite is needed.
 
 With `STORAGE_DRIVER=s3`, uploads go browser → R2 directly (presigned
 POST, 25 MB cap enforced by policy + completion checks), and the DTO
