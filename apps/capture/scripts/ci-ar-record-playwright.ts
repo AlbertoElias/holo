@@ -13,7 +13,7 @@ import {
   waitForTextContentPrefix,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
-import { emulatePhone, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
+import { emulatePhone, phoneTap, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
 
 import type {} from '../src/runtime/automationHooks';
 import {
@@ -50,6 +50,15 @@ import {
 //   interaction-undefined  flag on, a phone whose interactionMode is undefined: treated like a headset.
 //   phone-flag-off    phone AR without the flag: spectator, no camera take. Record only: Stop in a
 //                     spectator session is main's behaviour and out of scope here.
+//   phone-dock        slice 3, at a 412x915 portrait phone: the bottom dock (Recenter, Record, Exit) laid
+//                     out on the screen; Recenter between takes moves the set; Record and Stop by tap export
+//                     a take; Exit by tap mid-take exports the second. Screenshots of the view between
+//                     takes and while recording go to <artifactDir>/phone-dock-*.png.
+//   dock-exit-idle    Exit by tap with no take ends the session; nothing downloads.
+// The dock is driven by taps (phoneTap) at the buttons' world positions, read from the page's
+// __samplePhoneChrome probe, in phone-a, phone-b, phone-dock and dock-exit-idle. The other phases press
+// Record through __toggleRecording. Quest passthrough, a device with no interactionMode and a phone with the
+// flag off must have no dock at all.
 // How the path is compared: each walk step sets the head pose (in the set frame, converted to the room
 // with the live world frame), waits for one real XR frame, then advances the simulation by STEP_MS. The
 // recorder samples the camera each simulated frame, so one pose is held for several samples. The script
@@ -68,6 +77,9 @@ const videoDir = process.env.AR_RECORD_VIDEO_DIR;
 const SCENE = '/fixtures/scenes/pointing-targets.gltf';
 const OBJECT_URL = '/fixtures/objects/bracket.glb';
 const VIEWPORT = { width: 640, height: 400 };
+const PHONE_VIEWPORT = { width: 412, height: 915 };
+/** A flat stand-in for the camera image behind the canvas in screenshots; IWER has no passthrough. */
+const BACKDROP = 'linear-gradient(#5a5347, #3b362e)';
 const STEP_MS = 100;
 const STEP_SEC = STEP_MS / 1000;
 const WALK_STEPS = 30;
@@ -92,7 +104,9 @@ const PHASES = [
   'empty-set',
   'quest-passthrough',
   'interaction-undefined',
-  'phone-flag-off'
+  'phone-flag-off',
+  'phone-dock',
+  'dock-exit-idle'
 ] as const;
 type Phase = (typeof PHASES)[number];
 
@@ -111,6 +125,22 @@ type ArState = {
   cameraSamples: number;
   micPermission: string;
   micHeld: boolean;
+};
+
+/** `__samplePhoneChrome`: the dock's three one-glyph docks and the status line. */
+type DockId = 'record' | 'recenter' | 'exit';
+type DockProbe = {
+  visible: boolean;
+  metresPerApx: number;
+  hitApx: number;
+  glyphApx: number;
+  buttons: Record<string, { worldPosition: Vec3; recording: boolean }>;
+};
+type PhoneProbe = {
+  built: boolean;
+  viewport: { width: number; height: number; fovyDeg: number } | null;
+  docks: Partial<Record<DockId, DockProbe>>;
+  statusLine: { visible: boolean; text: string } | null;
 };
 
 type StepCoverage = {
@@ -179,6 +209,7 @@ type OpenOptions = {
    */
   mic?: 'gate' | 'track';
   video?: boolean;
+  viewport?: { width: number; height: number };
 };
 
 /** Every download a page made, in order. */
@@ -186,7 +217,7 @@ const downloadLog = new WeakMap<Page, string[]>();
 
 async function openPage(run: Run, options: OpenOptions): Promise<Page> {
   const context = await createXrContext(run.browser, {
-    viewport: VIEWPORT,
+    viewport: options.viewport ?? VIEWPORT,
     acceptDownloads: true,
     ...(options.video && videoDir ? { recordVideo: { dir: videoDir, size: VIEWPORT } } : {})
   });
@@ -290,6 +321,101 @@ const captureRecenter = (page: Page): Promise<boolean> =>
     return true;
   });
 const pressRecenter = (page: Page) => page.evaluate(() => (window as unknown as { __pressRecenter: () => void }).__pressRecenter());
+
+// --- The phone dock ---
+
+const phoneChrome = (page: Page): Promise<PhoneProbe> => page.evaluate(() => window.__samplePhoneChrome() as unknown as PhoneProbe);
+
+/** The dock after a simulation step has laid it out and shown or hidden its buttons. */
+async function dockState(page: Page): Promise<PhoneProbe> {
+  await advance(page, STEP_MS);
+  return phoneChrome(page);
+}
+
+/** What the dock shows, for the report. */
+const dockSummary = (probe: PhoneProbe) => ({
+  built: probe.built,
+  shown: Object.fromEntries((['recenter', 'record', 'exit'] as const).map((id) => [id, probe.docks[id]?.visible ?? false])) as Record<DockId, boolean>,
+  recordShape: probe.docks.record?.buttons.record?.recording ? 'stop' : 'record',
+  statusLine: probe.statusLine?.text ?? ''
+});
+
+/** Failures for a dock that shows exactly `expected` (Exit is always shown once the dock is built). */
+function dockFailures(label: string, probe: PhoneProbe, expected: Record<DockId, boolean>): string[] {
+  if (!probe.built) return [`${label}: the phone dock is not built`];
+  const shown = dockSummary(probe).shown;
+  return (Object.keys(expected) as DockId[]).filter((id) => shown[id] !== expected[id]).map((id) => `${label}: ${id} is ${shown[id] ? 'shown' : 'hidden'}, expected ${expected[id] ? 'shown' : 'hidden'}`);
+}
+
+/**
+ * Taps a dock button where it stands in the room now, with the head still. Throws when the button
+ * is not shown, unless `hidden` says the tap is meant for a button that is not (nothing may happen).
+ * Exit ends the session mid-tap, so the tap is not waited for past `endsSession`.
+ */
+async function tapDock(page: Page, id: DockId, options: { hidden?: boolean; endsSession?: boolean } = {}): Promise<void> {
+  // Two real frames: the XR camera, and the dock hung on it, have taken the head's latest pose.
+  await nextXrFrame(page);
+  await nextXrFrame(page);
+  const dock = (await phoneChrome(page)).docks[id];
+  if (!dock) throw new Error(`the ${id} dock is not built`);
+  if (!dock.visible && !options.hidden) throw new Error(`the ${id} dock is not shown`);
+  const tap = phoneTap(page, dock.buttons[id]!.worldPosition);
+  if (options.endsSession) await Promise.race([tap.catch(() => undefined), page.waitForTimeout(4000)]);
+  else await tap;
+}
+
+/** Where each dock button's centre lands on the screen (CSS px), from the head pose last set and the XR view's fov. */
+async function dockOnScreen(page: Page, probe: PhoneProbe): Promise<Record<DockId, { x: number; y: number }>> {
+  const head = await page.evaluate(() => {
+    const { position: p, quaternion: q } = window.IWER_DEVICE!;
+    return { p: [p.x, p.y, p.z] as Vec3, q: [q.x, q.y, q.z, q.w] as Quat };
+  });
+  const position = new THREE.Vector3(...head.p);
+  const inverse = new THREE.Quaternion(...head.q).invert();
+  const { width, height, fovyDeg } = probe.viewport!;
+  const tan = Math.tan((fovyDeg * Math.PI) / 360);
+  const screen = {} as Record<DockId, { x: number; y: number }>;
+  for (const id of ['recenter', 'record', 'exit'] as const) {
+    const local = new THREE.Vector3(...probe.docks[id]!.buttons[id]!.worldPosition).sub(position).applyQuaternion(inverse);
+    const ndcX = local.x / (-local.z * tan * (width / height));
+    const ndcY = local.y / (-local.z * tan);
+    screen[id] = { x: ((ndcX + 1) / 2) * width, y: ((1 - ndcY) / 2) * height };
+  }
+  return screen;
+}
+
+/**
+ * Prepares the page to be photographed as a phone shows it: the DOM overlay is not there in phone AR
+ * (no dom-overlay), and IWER has no camera image, so a flat stand-in sits behind the canvas.
+ */
+async function showCanvasOnly(page: Page): Promise<void> {
+  await page.addStyleTag({ content: `html, body { background: ${BACKDROP} !important; } body * { visibility: hidden !important; background: transparent !important; } body canvas { visibility: visible !important; }` });
+}
+
+async function screenshot(page: Page, name: string, report: PhaseReport): Promise<void> {
+  // Two real frames and a step: the latest pose and chrome state have been drawn.
+  await nextXrFrame(page);
+  await advance(page, STEP_MS);
+  await nextXrFrame(page);
+  await nextXrFrame(page);
+  const file = path.join(artifactDir, name);
+  await page.screenshot({ path: file });
+  const shots = (report.notes.screenshots ??= []) as string[];
+  shots.push(file);
+}
+
+/** A session that is not a camera author has no phone dock: nothing built, nothing to tap. */
+async function noDockFailures(page: Page): Promise<string[]> {
+  const probe = await dockState(page);
+  return probe.built || Object.keys(probe.docks).length > 0 || probe.statusLine ? [`a phone dock exists in a session that is not a camera author (${JSON.stringify(dockSummary(probe))})`] : [];
+}
+
+/** Record by a tap on the dock. */
+async function startRecordingByDock(page: Page): Promise<void> {
+  await tapDock(page, 'record');
+  await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).ar.recordingState === 'recording', null, { timeout: 20000 });
+  await advance(page, STEP_MS);
+}
 
 async function startRecording(page: Page): Promise<void> {
   await toggle(page);
@@ -429,8 +555,15 @@ async function walkPhase(run: Run, phase: 'phone-a' | 'phone-b', start: { positi
       report.ar.settlingRefused = refused;
       if (refused.notice !== SETTLE_NOTICE) report.failures.push(`Record while settling: notice ${JSON.stringify(refused.notice)}, expected ${JSON.stringify(SETTLE_NOTICE)}`);
       if (refused.recordingState !== 'idle') report.failures.push(`Record while settling left recordingState ${refused.recordingState}`);
+      // The dock does not offer Record yet (Exit, and Recenter, between takes, are there).
+      const settling = await dockState(page);
+      report.notes.dockWhileSettling = dockSummary(settling);
+      report.failures.push(...dockFailures('while settling', settling, { record: false, recenter: true, exit: true }));
     }
     await settle(page);
+    const settled = await dockState(page);
+    report.notes.dockSettled = dockSummary(settled);
+    report.failures.push(...dockFailures('after settling', settled, { record: true, recenter: true, exit: true }));
 
     const frameValues = await worldFrame(page);
     report.worldFrame = frameValues.map((value) => round(value, 4));
@@ -446,9 +579,21 @@ async function walkPhase(run: Run, phase: 'phone-a' | 'phone-b', start: { positi
     const first = setToRoom(frame, walkPose(0));
     await setHeadPose(page, first.position, first.quaternion);
     await nextXrFrame(page);
-    await startRecording(page);
+    await startRecordingByDock(page);
     report.ar.recording = await arOf(page);
     if (report.ar.recording.takeKind !== 'camera') report.failures.push(`take kind ${report.ar.recording.takeKind}, expected camera`);
+    // A take hides Recenter (Record is Stop, Exit stays); a tap where Recenter was does nothing.
+    const recordingDock = await dockState(page);
+    report.notes.dockWhileRecording = dockSummary(recordingDock);
+    report.failures.push(...dockFailures('while recording', recordingDock, { record: true, recenter: false, exit: false }));
+    if (dockSummary(recordingDock).recordShape !== 'stop') report.failures.push('Record is not the stop shape while recording');
+    await tapDock(page, 'recenter', { hidden: true });
+    const hiddenTapped = await arOf(page);
+    if (hiddenTapped.notice === RECENTER_NOTICE || hiddenTapped.recordingState !== 'recording') report.failures.push(`a tap on the hidden Recenter did something (notice ${JSON.stringify(hiddenTapped.notice)}, ${hiddenTapped.recordingState})`);
+    if (!same(await worldFrame(page), frameValues)) report.failures.push('the set moved when the hidden Recenter was tapped mid-take');
+    await tapDock(page, 'exit', { hidden: true, endsSession: true });
+    const exitTapped = await arOf(page);
+    if (exitTapped.sessionMode !== 'ar' || exitTapped.recordingState !== 'recording') report.failures.push(`a tap on the hidden Exit did something (${exitTapped.sessionMode}, ${exitTapped.recordingState})`);
     // Recenter in the middle of the take is refused: no notice-less success, and the set does not move.
     await walk(page, frame, pace, async (step) => {
       if (step !== 10) return;
@@ -462,9 +607,12 @@ async function walkPhase(run: Run, phase: 'phone-a' | 'phone-b', start: { positi
     // Hold the last pose one more step so the final step has samples.
     await advance(page, STEP_MS);
     report.ar.walked = await arOf(page);
+    const walkedDock = await phoneChrome(page);
+    report.notes.statusWhileRecording = walkedDock.statusLine?.text ?? null;
+    if (!/^Recording 0:0[1-9]/.test(walkedDock.statusLine?.text ?? '')) report.failures.push(`status line ${JSON.stringify(walkedDock.statusLine?.text)} while recording, expected "Recording 0:0n"`);
 
     const download = expectDownload(page, 30000);
-    await toggle(page);
+    await tapDock(page, 'record');
     const saved = await advanceUntilDownload(page, download);
     report.ar.stopped = await arOf(page);
     if (!saved) {
@@ -499,6 +647,11 @@ async function walkPhase(run: Run, phase: 'phone-a' | 'phone-b', start: { positi
       }
     }
     await expectDownloadCount(page, report, 1);
+    // Between takes again: Recenter is back, and Record is the record shape.
+    const afterDock = await dockState(page);
+    report.notes.dockAfterStop = dockSummary(afterDock);
+    report.failures.push(...dockFailures('after Stop', afterDock, { record: true, recenter: true, exit: true }));
+    if (dockSummary(afterDock).recordShape !== 'record') report.failures.push('Record is still the stop shape after the take');
     if (pace) await page.waitForTimeout(1500);
     return { report, take, frame: frameValues };
   } finally {
@@ -781,6 +934,7 @@ async function headsetPhase(run: Run, phase: 'quest-passthrough' | 'interaction-
     if (!ar.spectator) report.failures.push('not a spectator in AR');
     if (ar.performerHidden) report.failures.push('performer hidden in a spectator session');
     if (ar.micHeld) report.failures.push('microphone held open in a spectator session');
+    report.failures.push(...(await noDockFailures(page)));
     const expectedMode = phase === 'quest-passthrough' ? 'world-space' : null;
     if (ar.interactionMode !== expectedMode) report.failures.push(`interactionMode ${ar.interactionMode}, expected ${expectedMode}`);
     for (const press of ['first', 'second'] as const) {
@@ -818,6 +972,7 @@ async function flagOffPhase(run: Run): Promise<PhaseReport> {
     if (ar.performerHidden) report.failures.push('performer hidden in a spectator session');
     if (ar.micHeld) report.failures.push('microphone held open in a spectator session');
     if (ar.interactionMode !== 'screen-space') report.failures.push(`interactionMode ${ar.interactionMode}, expected screen-space`);
+    report.failures.push(...(await noDockFailures(page)));
     await toggle(page);
     for (let i = 0; i < 20; i += 1) {
       await advance(page, STEP_MS);
@@ -826,6 +981,123 @@ async function flagOffPhase(run: Run): Promise<PhaseReport> {
     report.ar.afterRecord = await arOf(page);
     report.notes.afterToggleRecording = { recordingState: report.ar.afterRecord.recordingState, notice: report.ar.afterRecord.notice };
     if (report.ar.afterRecord.takeKind === 'camera') report.failures.push('take kind camera in a spectator session');
+    await expectDownloadCount(page, report, 0);
+    return report;
+  } finally {
+    await page.context().close();
+  }
+}
+
+/**
+ * The phone dock at a 412x915 portrait phone (slice 3): its layout on the screen, Recenter between
+ * takes, only Stop while recording (Recenter and Exit hidden and inert), Record and Stop by tap, and
+ * two screenshots of the view: between takes and while recording.
+ */
+async function dockPhase(run: Run): Promise<PhaseReport> {
+  const report: PhaseReport = { phase: 'phone-dock', failures: [], notes: {}, ar: {}, takes: [] };
+  const page = await openPage(run, { phone: true, flag: true, scene: true, viewport: PHONE_VIEWPORT });
+  try {
+    await enterAr(page);
+    report.ar.entered = await arOf(page);
+    let frameValues = await worldFrame(page);
+
+    // Layout: Record in the middle of the bottom edge, Recenter and Exit a glyph pitch (hit area + 12 apx) either side.
+    const between = await dockState(page);
+    report.notes.dockBetweenTakes = dockSummary(between);
+    report.failures.push(...dockFailures('between takes', between, { record: true, recenter: true, exit: true }));
+    if (!between.built) return report;
+    const screen = await dockOnScreen(page, between);
+    const metrics = Object.fromEntries((['recenter', 'record', 'exit'] as const).map((id) => [id, { hitApx: between.docks[id]!.hitApx, glyphApx: between.docks[id]!.glyphApx, screenCssPx: { x: round(screen[id].x, 1), y: round(screen[id].y, 1) } }]));
+    report.notes.dockLayout = { viewport: between.viewport, ...metrics };
+    const { width, height } = PHONE_VIEWPORT;
+    const pitch = between.docks.record!.hitApx + 12;
+    const near = (a: number, b: number, what: string) => {
+      if (Math.abs(a - b) > 1) report.failures.push(`dock layout: ${what} ${round(a, 1)}, expected ${round(b, 1)}`);
+    };
+    near(screen.record.x, width / 2, 'Record x');
+    near(screen.recenter.x, width / 2 - pitch, 'Recenter x');
+    near(screen.exit.x, width / 2 + pitch, 'Exit x');
+    near(screen.recenter.y, screen.record.y, 'Recenter y');
+    near(screen.exit.y, screen.record.y, 'Exit y');
+    if (screen.record.y < height * 0.85 || screen.record.y > height) report.failures.push(`dock layout: the dock is at y ${round(screen.record.y, 1)} of ${height}, expected the bottom 15%`);
+    if (between.docks.record!.glyphApx !== 36 || between.docks.exit!.glyphApx !== 16 || between.docks.recenter!.glyphApx !== 16) report.failures.push('dock layout: glyphs are not the ring at 36 apx and icons at 16 apx');
+    if ((['recenter', 'record', 'exit'] as const).some((id) => between.docks[id]!.hitApx < 44)) report.failures.push('dock layout: a hit area is under 44 apx');
+    await showCanvasOnly(page);
+    await screenshot(page, 'phone-dock-between-takes.png', report);
+
+    // Recenter between takes moves the set to where the phone now looks.
+    const moved = setToRoom(toMatrix(frameValues), { position: [0.8, 1.5, 0.2], quaternion: quat(0.5, 0) });
+    await setHeadPose(page, moved.position, moved.quaternion);
+    await nextXrFrame(page);
+    await tapDock(page, 'recenter');
+    await settle(page, false);
+    const recentered = await worldFrame(page);
+    const delta = new THREE.Vector3().setFromMatrixPosition(toMatrix(recentered)).distanceTo(new THREE.Vector3().setFromMatrixPosition(toMatrix(frameValues)));
+    report.notes.recenterByDockMovedM = round(delta);
+    if (delta < 0.3) report.failures.push(`Recenter by the dock did not move the set (${round(delta)} m)`);
+    frameValues = recentered;
+    const frame = toMatrix(frameValues);
+
+    // The take: Record by tap. While it runs only Stop shows; a tap where Recenter or Exit were does nothing.
+    const first = setToRoom(frame, walkPose(0));
+    await setHeadPose(page, first.position, first.quaternion);
+    await nextXrFrame(page);
+    await startRecordingByDock(page);
+    const recording = await dockState(page);
+    report.notes.dockWhileRecording = dockSummary(recording);
+    report.failures.push(...dockFailures('while recording', recording, { record: true, recenter: false, exit: false }));
+    for (const id of ['exit', 'recenter'] as const) {
+      await tapDock(page, id, { hidden: true, endsSession: id === 'exit' });
+      const tapped = await arOf(page);
+      if (tapped.sessionMode !== 'ar' || tapped.recordingState !== 'recording' || tapped.notice === RECENTER_NOTICE) report.failures.push(`a tap on the hidden ${id} did something (${tapped.sessionMode}, ${tapped.recordingState}, ${JSON.stringify(tapped.notice)})`);
+    }
+    if (!same(await worldFrame(page), frameValues)) report.failures.push('the set moved while recording');
+    for (let i = 0; i < 14; i += 1) {
+      const room = setToRoom(frame, walkPose(i));
+      await setHeadPose(page, room.position, room.quaternion);
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
+    }
+    const walked = await dockState(page);
+    report.notes.dockWalked = dockSummary(walked);
+    if (dockSummary(walked).recordShape !== 'stop') report.failures.push('Record is not the stop shape while recording');
+    if (!/^Recording 0:0[1-9]/.test(walked.statusLine?.text ?? '')) report.failures.push(`status line ${JSON.stringify(walked.statusLine?.text)} while recording, expected "Recording 0:0n"`);
+    await screenshot(page, 'phone-dock-recording.png', report);
+
+    // Stop by tap exports exactly one take, and the dock is whole again.
+    const stopped = expectDownload(page, 30000);
+    await tapDock(page, 'record');
+    const saved = await advanceUntilDownload(page, stopped);
+    if (!saved) {
+      report.failures.push('no GLB downloaded after Stop by the dock');
+      return report;
+    }
+    checkTake(report, await readFile(await saveDownload(saved, 'phone-dock-take', report)), { audio: true });
+    await expectDownloadCount(page, report, 1);
+    const betweenAgain = await dockState(page);
+    report.notes.dockAfterStop = dockSummary(betweenAgain);
+    report.failures.push(...dockFailures('after Stop', betweenAgain, { record: true, recenter: true, exit: true }));
+    return report;
+  } finally {
+    await page.context().close();
+  }
+}
+
+/** Exit by tap with no take running: the session ends, nothing downloads. */
+async function dockExitIdlePhase(run: Run): Promise<PhaseReport> {
+  const report: PhaseReport = { phase: 'dock-exit-idle', failures: [], notes: {}, ar: {}, takes: [] };
+  const page = await openPage(run, { phone: true, flag: true, scene: true });
+  try {
+    await enterAr(page);
+    report.ar.entered = await arOf(page);
+    await tapDock(page, 'exit', { endsSession: true });
+    for (let i = 0; i < 5; i += 1) await advance(page, STEP_MS);
+    const ended = await arOf(page);
+    report.ar.afterExit = ended;
+    if (ended.sessionMode !== 'none') report.failures.push(`sessionMode ${ended.sessionMode} after Exit`);
+    if (await page.evaluate(() => window.IWER_DEVICE!.activeSession !== null && window.IWER_DEVICE!.activeSession !== undefined)) report.failures.push('the XR session is still active after Exit');
+    if ((await phoneChrome(page)).built) report.failures.push('the phone dock is still built after Exit');
+    if (ended.micHeld) report.failures.push('the held microphone outlived the session');
     await expectDownloadCount(page, report, 0);
     return report;
   } finally {
@@ -868,8 +1140,12 @@ try {
       finish(await emptySetPhase(run));
     } else if (phase === 'quest-passthrough' || phase === 'interaction-undefined') {
       finish(await headsetPhase(run, phase));
-    } else {
+    } else if (phase === 'phone-flag-off') {
       finish(await flagOffPhase(run));
+    } else if (phase === 'phone-dock') {
+      finish(await dockPhase(run));
+    } else {
+      finish(await dockExitIdlePhase(run));
     }
   }
   if (walked['phone-a']?.take && walked['phone-b']?.take) {

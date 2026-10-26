@@ -5,6 +5,7 @@ import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, UiViewModel, VrHandSide } from '../types/contracts';
 import type { TouchStick } from '../input/TouchInput';
 import type { FlatHaloView } from '../ui/flatHalo';
+import type { PhoneArChromeProbe } from '../ui/PhoneArChrome';
 import type { VrChromeSnapshot } from '../ui/VrChrome';
 import type { HeadsetHolds } from '../xr/HeadsetHolds';
 import type { HaloActionRecord } from './haloActions';
@@ -38,6 +39,8 @@ export interface AutomationHooks {
   __toggleFaceCamera: () => void;
   /** The chrome as drawn: the overlay's view model, the headset chrome's placement, the touch stick (slice 4 reports). */
   __sampleChrome: () => { ui: UiViewModel; vr: VrChromeSnapshot; touch: { stick: TouchStick | null; looking: number; hold: string } };
+  /** The phone camera author's bottom dock (button positions and visibility) and status line, or built: false. */
+  __samplePhoneChrome: () => PhoneArChromeProbe;
   /** World position of the wrist's record glyph or a world-panel row, for checks that aim at it. */
   __chromeTarget: (target: 'record' | 'refit' | 'hand') => number[] | null;
   /** Keep the last take's samples after export so `__reexportLastTake` can export them again. */

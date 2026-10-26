@@ -20,6 +20,7 @@ import type { ClockMode } from '../runtime/FrameLoop';
 import type { XrEntry } from '../runtime/xrEntry';
 import type { AppMode, CharacterSnapshot } from '../types/contracts';
 import type { UIStateStore } from '../ui/UIStateStore';
+import type { PhoneArChrome } from '../ui/PhoneArChrome';
 import type { VrChrome } from '../ui/VrChrome';
 import type { ArSpectator } from '../xr/ArSpectator';
 import type { HandEmbodiment } from '../xr/HandEmbodiment';
@@ -72,6 +73,8 @@ export interface CaptureContext {
   ar: ArSpectator;
   ui: UIStateStore;
   vrChrome: VrChrome;
+  /** The bottom dock and status line of a phone camera author (slice 3). */
+  phoneChrome: PhoneArChrome;
   /** The headset's mark "this" and Halo (slice 5). */
   headsetHolds: HeadsetHolds;
   recording: RecordingSession;

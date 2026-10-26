@@ -1,10 +1,12 @@
 import type { World } from '@iwsdk/core';
+import { ScreenInputSystem } from '@holoim/xr-ui-iwsdk';
 import { BodyPoseSystem } from './BodyPoseSystem';
 import { CalibrationSystem } from './CalibrationSystem';
 import { CameraSystem } from './CameraSystem';
 import { CaptureControlSystem } from './CaptureControlSystem';
 import { CaptureStateSystem } from './CaptureStateSystem';
 import { CaptureUiSystem } from './CaptureUiSystem';
+import { captureContext } from './captureContext';
 import { CAPTURE_COMPONENTS } from './components';
 import { DiagnosticsSystem } from './DiagnosticsSystem';
 import { FaceSystem } from './FaceSystem';
@@ -36,6 +38,10 @@ export function registerCaptureSystems(world: World): void {
     .registerSystem(CaptureUiSystem, { priority: 80 })
     .registerSystem(RecordingSystem, { priority: 90 })
     .registerSystem(DiagnosticsSystem, { priority: 100 });
+  // A phone camera author's taps arrive as screen input sources, which IWSDK's
+  // own input never drives; this turns them into the pointer events the dock
+  // listens to. Without the flag, phone AR is as it was.
+  if (captureContext(world).config.arCameraAuthor) world.registerSystem(ScreenInputSystem, { priority: 12 });
   // Native state and controls serve IWSDK's ECS tools, which (like World's
   // MCP runtime) exist only in development builds.
   if (import.meta.env.DEV) registerNativeStateAndControls(world);

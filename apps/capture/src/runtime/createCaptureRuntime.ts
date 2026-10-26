@@ -26,6 +26,7 @@ import { UIStateStore } from '../ui/UIStateStore';
 import { saveHandedness } from '@holoim/ui-dom';
 import { TouchStickView } from '../ui/TouchStickView';
 import { FlatHalo } from '../ui/flatHalo';
+import { PhoneArChrome } from '../ui/PhoneArChrome';
 import { VrChrome } from '../ui/VrChrome';
 import { HeadsetHolds } from '../xr/HeadsetHolds';
 import { ArSpectator } from '../xr/ArSpectator';
@@ -144,6 +145,27 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     setHandedness,
     ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec)
   });
+  // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.
+  const recenterAr = (): void => {
+    if (xrEntry.sessionMode !== 'ar' || !tracking.isXrPresenting()) return;
+    if (recording.isTakeBusy()) {
+      ui.flashNotice('Stop recording to recenter.');
+      return;
+    }
+    capture.ar.recenter();
+  };
+  const phoneChrome = new PhoneArChrome({
+    world,
+    store: ui,
+    renderer,
+    xrCamera: stage.xrCamera,
+    isSettled: () => capture.ar.isSettled(),
+    isTakeBusy: () => recording.isTakeBusy(),
+    toggleRecording: () => recording.toggle(),
+    recenter: recenterAr,
+    // The session ends as Android's back ends it: a take in progress stops and exports on the session's end.
+    exit: () => xrEntry.toggle('ar')
+  });
   const headsetHolds = new HeadsetHolds({
     tracking,
     root: vrChrome.root,
@@ -187,6 +209,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
     ui,
     vrChrome,
+    phoneChrome,
     headsetHolds,
     recording,
     diagnostics: new DiagnosticViews({
@@ -288,14 +311,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         // requestSession synchronously, and never awaited before it.
         if (entering && mode === 'ar' && config.arCameraAuthor) recording.holdMicForArTake();
       },
-      recenterAr: () => {
-        if (xrEntry.sessionMode !== 'ar' || !tracking.isXrPresenting()) return;
-        if (recording.isTakeBusy()) {
-          ui.flashNotice('Stop recording to recenter.');
-          return;
-        }
-        capture.ar.recenter();
-      }
+      recenterAr
     },
     start: async () => {
       installAutomationHooks({
@@ -330,6 +346,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __setFaceInput: (sample) => capture.face.setAutomationInput(sample),
         __sampleFace: () => capture.face.snapshot(),
         __toggleFaceCamera: () => capture.face.toggleCamera(),
+        __samplePhoneChrome: () => phoneChrome.probe(),
         __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),
         __chromeTarget: (target) => vrChrome.targetPosition(target),
         __setRetainLastTake: (retain) => recording.setRetainLastTake(retain),

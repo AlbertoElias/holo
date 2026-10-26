@@ -84,8 +84,10 @@ export class XrSessionSystem extends createSystem() {
       c.ar.onEntered();
       this.cameraAuthor = c.config.arCameraAuthor && isHandheldSession(this.session, { strict: true });
       // The idle performer is not in a camera take; it comes back on exit.
-      if (this.cameraAuthor) c.avatar.avatarRoot.visible = false;
-      else if (c.config.arCameraAuthor) c.recording.releaseHeldMic();
+      if (this.cameraAuthor) {
+        c.avatar.avatarRoot.visible = false;
+        c.phoneChrome.show();
+      } else if (c.config.arCameraAuthor) c.recording.releaseHeldMic();
     } else {
       c.vrChrome.show();
       c.hands.resetRuntimeState();
@@ -104,6 +106,7 @@ export class XrSessionSystem extends createSystem() {
     this.unbindSession();
     if (exitingAr) {
       if (this.cameraAuthor) c.recording.endCameraTake();
+      c.phoneChrome.hide();
       this.cameraAuthor = false;
       c.avatar.avatarRoot.visible = true;
       c.recording.releaseHeldMic();

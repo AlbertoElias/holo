@@ -39,6 +39,12 @@ export class CameraRecorder {
     return this.track.getSamples().length;
   }
 
+  /** The take's running time so far: first to latest sample. */
+  get elapsedSec(): number {
+    const samples = this.track.getSamples();
+    return samples.length > 1 ? samples[samples.length - 1]!.timeSec - samples[0]!.timeSec : 0;
+  }
+
   /**
    * Records one step. `xrCamera` is the XR view camera (three's array camera)
    * whose world pose and first view projection are read; `setFrame` is the
