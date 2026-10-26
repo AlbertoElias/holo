@@ -11,9 +11,11 @@ import {
   Raycaster,
   RingGeometry,
   SphereGeometry,
+  SRGBColorSpace,
   Vector3
 } from "three";
 import type { Group, Material, Object3D } from "three";
+import { tokenColor } from "@holoim/design-tokens/three";
 
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import type { PortalStore } from "../portal/portalStore";
@@ -44,6 +46,11 @@ export type PointingProbe = {
     line: boolean;
     glow: boolean;
     ring: boolean;
+    fromKind: ResolvedLink["fromKind"];
+    /** Where the drawn ink starts and ends, in world space, read back off the line's own transform. */
+    ink: { from: [number, number, number]; to: [number, number, number] } | null;
+    /** The ink's colour as drawn (sRGB hex). */
+    inkHex: string | null;
   }>;
 };
 
@@ -70,9 +77,9 @@ function referentMeshes(to: Object3D): Mesh[] {
   return meshes;
 }
 
-function overlayMaterial(blend = false): MeshBasicMaterial {
+function overlayMaterial(color: Color, blend = false): MeshBasicMaterial {
   return new MeshBasicMaterial({
-    color: HIGHLIGHT_COLOR,
+    color,
     transparent: true,
     depthWrite: false,
     toneMapped: false,
@@ -93,9 +100,14 @@ type Props = {
   falloffWidth: number;
   getPlaybackTime: () => number;
   probe: PointingProbe;
+  /**
+   * The author's identity hue (styleguide 2.4). A camera link's ink is theirs,
+   * as the mark it starts from is; a performer's links keep the highlight colour.
+   */
+  authorHex: string;
 };
 
-export function PointingHighlights({ links, portal, bubble, falloffWidth, getPlaybackTime, probe }: Props) {
+export function PointingHighlights({ links, portal, bubble, falloffWidth, getPlaybackTime, probe, authorHex }: Props) {
   const groupRef = useRef<Group>(null);
   const visualsRef = useRef<LinkVisuals[]>([]);
   const savedRef = useRef(new Map<EmissiveMaterial, Saved>());
@@ -113,10 +125,12 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
     const group = groupRef.current;
     if (!group) return;
     const saved = savedRef.current;
-    const visuals = links.map((): LinkVisuals => {
-      const line = new Mesh(new CylinderGeometry(LINE_RADIUS, LINE_RADIUS, 1, 8, 1, true), overlayMaterial());
-      const glow = new Mesh(new SphereGeometry(GLOW_RADIUS, 20, 14), overlayMaterial(true));
-      const ring = new Mesh(new RingGeometry(0.92, 1, 64), overlayMaterial());
+    const authorColor = tokenColor(authorHex);
+    const visuals = links.map((link): LinkVisuals => {
+      const ink = link.fromKind === "camera" ? authorColor : HIGHLIGHT_COLOR;
+      const line = new Mesh(new CylinderGeometry(LINE_RADIUS, LINE_RADIUS, 1, 8, 1, true), overlayMaterial(ink));
+      const glow = new Mesh(new SphereGeometry(GLOW_RADIUS, 20, 14), overlayMaterial(ink, true));
+      const ring = new Mesh(new RingGeometry(0.92, 1, 64), overlayMaterial(ink));
       for (const part of [line, glow, ring]) {
         part.visible = false;
         part.frustumCulled = false;
@@ -140,7 +154,7 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
       }
       visualsRef.current = [];
     };
-  }, [links]);
+  }, [authorHex, links]);
 
   useFrame(() => {
     const visuals = visualsRef.current;
@@ -178,7 +192,8 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
         } else {
           link.to.getWorldPosition(scratch.to);
         }
-        const fade = Math.min(edgeFade(scratch.from), edgeFade(scratch.to));
+        // A camera is not clipped by the bubble (the mark stands wherever the author did), so only the referent fades.
+        const fade = link.fromKind === "camera" ? edgeFade(scratch.to) : Math.min(edgeFade(scratch.from), edgeFade(scratch.to));
         const power = strength * fade;
         const body = anchor.to.bone !== undefined;
         const meshes = body ? [] : referentMeshes(link.to);
@@ -203,7 +218,7 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
           (entry.glow.material as MeshBasicMaterial).opacity = power * style.glow;
         }
 
-        // Thin ray from the fingertip to the referent.
+        // Thin ray from the fingertip, or the author's camera mark, to the referent.
         scratch.dir.subVectors(scratch.to, scratch.from);
         const length = scratch.dir.length();
         entry.line.visible = length > 1e-4 && power > 0;
@@ -249,7 +264,10 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
           emissive: null as number | null,
           line: entry.line.visible,
           glow: entry.glow.visible,
-          ring: entry.ring.visible
+          ring: entry.ring.visible,
+          fromKind: link.fromKind,
+          ink: entry.line.visible ? inkEnds(entry.line, scratch) : null,
+          inkHex: entry.line.visible ? `#${(entry.line.material as MeshBasicMaterial).color.getHexString(SRGBColorSpace)}` : null
         };
         probe.links.push(record);
         sampled.push({ record, material: sampledMaterial });
@@ -277,6 +295,13 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
   });
 
   return <group ref={groupRef} />;
+}
+
+/** The two ends of the line as it stands: its unit-height cylinder, scaled along its own axis. */
+function inkEnds(line: Mesh, scratch: { dir: Vector3; up: Vector3 }): { from: [number, number, number]; to: [number, number, number] } {
+  const half = scratch.dir.copy(scratch.up).applyQuaternion(line.quaternion).multiplyScalar(line.scale.y / 2);
+  const p = line.position;
+  return { from: [p.x - half.x, p.y - half.y, p.z - half.z], to: [p.x + half.x, p.y + half.y, p.z + half.z] };
 }
 
 /** Surface normal where the ray meets the referent, so the ring lies on the surface. */

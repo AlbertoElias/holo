@@ -4,10 +4,21 @@ import path from "node:path";
 import { chromium, type Page } from "@playwright/test";
 import type * as Three from "three";
 
+import type * as DrawnPoints from "../src/features/hologram/drawnPoints";
+
 import { launchXrBrowser, waitForIwerSession } from "@holoim/tooling-testing/xr-env";
 
+// The package's source, not its build: the e2e run does not build workspace packages.
+import { encodeHoloimMeaning } from "../../../packages/meaning/src/meaning.ts";
+import type { MeaningLinkMark } from "../../../packages/meaning/src/meaning.ts";
+import { CONTROL_NAMES } from "@holoim/xr-ui-core";
+import { tokens } from "@holoim/design-tokens";
+import { Quaternion, Vector3 } from "three";
+
+import { identityOf } from "../src/features/presence/identityHue";
 import { assertViewerShell, expect, pressViewInAr, reachFor, test } from "./bootstrap";
 import { installProbe, waitForPortalReady } from "./portal-helpers";
+import { buildPointingGlb } from "./pointing-fixture";
 
 // A camera take (AR recording, slice 2b): a phone's handheld AR export has no
 // skin and no RecordedAvatar. Its author is a camera node, RecordedAuthorCamera,
@@ -39,9 +50,11 @@ type Vec3 = [number, number, number];
 type GltfJson = {
   nodes: Array<{ name?: string; mesh?: number; extras?: { yfov?: number } }>;
   skins?: unknown[];
-  animations: Array<{ samplers: Array<{ input: number }> }>;
-  accessors: Array<{ max?: number[] }>;
-  extensions?: { KHR_audio?: unknown };
+  animations: Array<{ samplers: Array<{ input: number; output: number }>; channels: Array<{ sampler: number; target: { node: number; path: string } }> }>;
+  accessors: Array<{ max?: number[]; bufferView: number; byteOffset?: number; count: number }>;
+  bufferViews: Array<{ byteOffset?: number; byteLength: number }>;
+  extensions?: { KHR_audio?: unknown; HOLOIM_meaning?: unknown };
+  extensionsUsed?: string[];
 };
 
 function parseGlb(buffer: Buffer): { json: GltfJson; rest: Buffer } {
@@ -218,6 +231,8 @@ async function readSet(page: Page, mode: "feed" | "ar"): Promise<SetReading & { 
     model.traverse((node) => {
       const mesh = node as Three.Mesh;
       if (!mesh.isMesh) return;
+      // The set as drawn: the author's mark is chrome, and stands wherever the author did.
+      for (let n: Three.Object3D | null = node; n; n = n.parent) if (n.userData.holoimChrome === true) return;
       mesh.geometry.computeBoundingBox();
       const box = mesh.geometry.boundingBox!;
       const inSphere = (() => { for (let n: Three.Object3D | null = node; n; n = n.parent) if (n.name === "RecordedBubbleSphere") return true; return false; })();
@@ -541,4 +556,412 @@ test("props named Hips and Head do not take over: the same take frames and ancho
   expect(distance(ar.max, real!.ar.max)).toBeLessThanOrEqual(ONE_CM);
   expect(Math.abs((ar.clocheBaseY ?? Number.NaN) - (real!.ar.clocheBaseY ?? Number.NaN)), "the dome stands where it did").toBeLessThanOrEqual(ONE_CM);
   await page.screenshot({ path: path.join(evidenceDir, "ar-placed-bone-names.png") });
+});
+
+// The author's camera in the viewer (AR recording, slice 4, Q1 A): a mark in
+// the author's identity hue and initial at RecordedAuthorCamera, turned the way
+// it looked, with the clip; a camera link's ink runs from it to its referent
+// during the link's span.
+
+const SPAN = { start: 1.0, end: 2.2 };
+const IN_SPAN_TIMES = [1.2, 1.6, 2.0];
+const OUTSIDE_SPAN_TIMES = [0.3, 2.8];
+const PRESENCE_TIMES = [0, 0.8, 1.6, 2.4, 3.1];
+const MARK_FACING_TOLERANCE_DEG = 3;
+/** The mark is sized a frame behind the card's camera, which moves when the card is orbited or zoomed. */
+const MARK_SIZE_TOLERANCE_PX = 0.75;
+const REFERENT = "BracketUpright";
+const REFERENT_POINT: Vec3 = [0, 0, 0];
+
+/**
+ * STAND-IN, to be replaced by the real hold once capture writes camera marks
+ * (slice 4's capture half): the recorded take with a v1 HOLOIM_meaning record
+ * written into its GLB JSON by hand, one `recorded` link from the camera node
+ * to an event object's node, spanning SPAN. The record goes through the
+ * meaning package's own writer rule, so it is a record capture could emit.
+ */
+function withStandInCameraLink(buffer: Buffer): Buffer {
+  const { json, rest } = parseGlb(buffer);
+  const camera = json.nodes.findIndex((node) => node.name === "RecordedAuthorCamera");
+  const referent = json.nodes.findIndex((node) => node.name === REFERENT);
+  expect(camera >= 0 && referent >= 0, "the take has a camera node and an event object's node").toBe(true);
+  const mark: MeaningLinkMark = {
+    kind: "link",
+    anchor: { from: { camera: true, node: camera }, to: { node: referent, point: REFERENT_POINT } },
+    span: SPAN,
+    provenance: { value: "recorded" }
+  };
+  const record = encodeHoloimMeaning({ marks: [mark], spans: [] });
+  expect(record.version, "a camera link is a v1 record").toBe(1);
+  json.extensions = { ...json.extensions, HOLOIM_meaning: record };
+  json.extensionsUsed = [...new Set([...(json.extensionsUsed ?? []), "HOLOIM_meaning"])];
+  return buildGlb(json, rest);
+}
+
+/** The camera node's pose at `time` from the file's own keyframes: the oracle for what the viewer plays. */
+function cameraPoseAt(json: GltfJson, bin: Buffer, time: number): { position: Vec3; forward: Vec3 } {
+  const index = json.nodes.findIndex((node) => node.name === "RecordedAuthorCamera");
+  const animation = json.animations[0]!;
+  const read = (accessorIndex: number, width: number): number[][] => {
+    const accessor = json.accessors[accessorIndex]!;
+    const view = json.bufferViews[accessor.bufferView]!;
+    const base = 8 + (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+    return Array.from({ length: accessor.count }, (_, row) => Array.from({ length: width }, (_, col) => bin.readFloatLE(base + (row * width + col) * 4)));
+  };
+  const sample = (path: string, width: number): { a: number[]; b: number[]; t: number } => {
+    const channel = animation.channels.find((candidate) => candidate.target.node === index && candidate.target.path === path)!;
+    const sampler = animation.samplers[channel.sampler]!;
+    const times = read(sampler.input, 1).map(([t]) => t!);
+    const values = read(sampler.output, width);
+    if (time <= times[0]!) return { a: values[0]!, b: values[0]!, t: 0 };
+    if (time >= times.at(-1)!) return { a: values.at(-1)!, b: values.at(-1)!, t: 0 };
+    const upper = times.findIndex((t) => t >= time);
+    return { a: values[upper - 1]!, b: values[upper]!, t: (time - times[upper - 1]!) / (times[upper]! - times[upper - 1]!) };
+  };
+  const moved = sample("translation", 3);
+  const turned = sample("rotation", 4);
+  const position = moved.a.map((value, i) => value + (moved.b[i]! - value) * moved.t) as Vec3;
+  const rotation = new Quaternion(...(turned.a as [number, number, number, number])).slerp(new Quaternion(...(turned.b as [number, number, number, number])), turned.t);
+  const forward = new Vector3(0, 0, -1).applyQuaternion(rotation);
+  return { position, forward: forward.toArray() as Vec3 };
+}
+
+/** Moves the paused animation to `seconds`, as playback would have. */
+async function seek(page: Page, modelPath: string, seconds: number): Promise<void> {
+  await page.evaluate(([target, time]) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { actions: Record<string, { time: number } | null>; mixer: { update: (delta: number) => void } }> }).__portalProbes;
+    const probe = Object.entries(probes).find(([url]) => url.endsWith(target as string))![1];
+    for (const action of Object.values(probe.actions)) if (action) action.time = time as number;
+    probe.mixer.update(0);
+  }, [modelPath, seconds] as const);
+}
+
+type InkReading = {
+  index: number;
+  style: string;
+  strength: number;
+  referent: string;
+  line: boolean;
+  fromKind: "bone" | "camera";
+  ink: { from: Vec3; to: Vec3 } | null;
+  inkHex: string | null;
+};
+
+type MarkReading = {
+  present: boolean;
+  chrome: boolean;
+  /** Every mesh and sprite in the mark is chrome too. */
+  allChrome: boolean;
+  nodeAt: Vec3;
+  markAt: Vec3;
+  /** Where the nose's tip stands against the mark, as a unit vector. */
+  noseDirection: Vec3;
+  /** The node's -Z axis in the world. */
+  nodeBack: Vec3;
+  /** Its diameter on screen, in CSS px, and where it stands on the page. */
+  screenDiameter: number;
+  screenAt: [number, number];
+  identity: { index: number; hex: string; initial: string } | null;
+  markCount: number;
+  /** Where the link's referent point stands in the world. */
+  referentAt: Vec3;
+};
+
+async function readMark(page: Page, modelPath: string): Promise<MarkReading> {
+  return page.evaluate(async ([target, referentName, referentPoint]) => {
+    const moduleUrl = "/node_modules/.vite/deps/three.js";
+    const { Vector3 } = await import(moduleUrl) as typeof Three;
+    const probes = (window as unknown as { __portalProbes: Record<string, {
+      model: Three.Object3D;
+      camera: Three.PerspectiveCamera;
+      renderer: Three.WebGLRenderer;
+      presence: { node: Three.Object3D | null; mark: Three.Object3D | null; nose: Three.Mesh | null; identity: { index: number; hex: string; initial: string } | null; diameter: number };
+    }> }).__portalProbes;
+    const probe = Object.entries(probes).find(([url]) => url.endsWith(target as string))![1];
+    const { node, mark, nose, identity } = probe.presence;
+    const referent = probe.model.getObjectByName(referentName as string)!;
+    referent.updateWorldMatrix(true, false);
+    const referentAt = new Vector3(...(referentPoint as [number, number, number])).applyMatrix4(referent.matrixWorld);
+    let markCount = 0;
+    probe.model.traverse((child) => { if (child.name === "RecordedAuthorCameraMark") markCount += 1; });
+    if (!node || !mark || !nose) {
+      return { present: false, chrome: false, allChrome: false, nodeAt: [0, 0, 0], markAt: [0, 0, 0], noseDirection: [0, 0, 0], nodeBack: [0, 0, 0], screenDiameter: 0, screenAt: [0, 0], identity: null, markCount, referentAt: referentAt.toArray() as [number, number, number] };
+    }
+    node.updateWorldMatrix(true, false);
+    mark.updateWorldMatrix(true, true);
+    const nodeAt = node.getWorldPosition(new Vector3());
+    const markAt = mark.getWorldPosition(new Vector3());
+    nose.geometry.computeBoundingBox();
+    const tip = nose.localToWorld(new Vector3(0, 0, nose.geometry.boundingBox!.min.z));
+    const noseDirection = tip.sub(markAt).normalize();
+    const nodeBack = new Vector3(0, 0, -1).transformDirection(node.matrixWorld);
+    let allChrome = true;
+    mark.traverse((child) => { if (child.userData.holoimChrome !== true) allChrome = false; });
+    const { camera, renderer } = probe;
+    camera.updateMatrixWorld();
+    const canvas = renderer.domElement.getBoundingClientRect();
+    const toPage = (point: Three.Vector3): [number, number] => {
+      const ndc = point.clone().project(camera);
+      return [canvas.left + ((ndc.x + 1) / 2) * canvas.width, canvas.top + ((1 - ndc.y) / 2) * canvas.height];
+    };
+    const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    const diameter = probe.presence.diameter;
+    const [x1, y1] = toPage(markAt.clone().addScaledVector(right, diameter / 2));
+    const [x2, y2] = toPage(markAt.clone().addScaledVector(right, -diameter / 2));
+    return {
+      present: true,
+      chrome: mark.userData.holoimChrome === true,
+      allChrome,
+      nodeAt: nodeAt.toArray() as [number, number, number],
+      markAt: markAt.toArray() as [number, number, number],
+      noseDirection: noseDirection.toArray() as [number, number, number],
+      nodeBack: nodeBack.toArray() as [number, number, number],
+      screenDiameter: Math.hypot(x1 - x2, y1 - y2),
+      screenAt: toPage(markAt),
+      identity,
+      markCount,
+      referentAt: referentAt.toArray() as [number, number, number]
+    };
+  }, [modelPath, REFERENT, REFERENT_POINT] as const);
+}
+
+async function readInk(page: Page, modelPath: string): Promise<InkReading[]> {
+  return page.evaluate((target) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { pointing: { links: InkReading[] } }> }).__portalProbes;
+    return JSON.parse(JSON.stringify(Object.entries(probes).find(([url]) => url.endsWith(target))![1].pointing.links)) as InkReading[];
+  }, modelPath);
+}
+
+/** Seeks, waits for the ink to reach `expected` links, and one more frame so a screenshot shows what was read. */
+async function settleInk(page: Page, modelPath: string, seconds: number, expected: number): Promise<InkReading[]> {
+  await seek(page, modelPath, seconds);
+  await expect.poll(async () => (await readInk(page, modelPath)).length, { timeout: 15_000 }).toBe(expected);
+  await page.waitForTimeout(400);
+  return readInk(page, modelPath);
+}
+
+/**
+ * What the dome is fitted to, with and without the mark on the camera node:
+ * the same drawn bounds, drawn points and motion points, exactly.
+ */
+async function readFitWithAndWithoutMark(page: Page, modelPath: string): Promise<{ with: FitReading; without: FitReading }> {
+  return page.evaluate(async (target) => {
+    const sourceUrl = "/src/features/hologram/drawnPoints.ts";
+    const points = await import(/* @vite-ignore */ sourceUrl) as typeof DrawnPoints;
+    const probes = (window as unknown as { __portalProbes: Record<string, {
+      model: Three.Object3D;
+      actions: Record<string, { getClip: () => Three.AnimationClip } | null>;
+      bubble: { active: boolean; radius: number; center: Three.Vector3 };
+      presence: { node: Three.Object3D | null; mark: Three.Object3D | null };
+    }> }).__portalProbes;
+    const probe = Object.entries(probes).find(([url]) => url.endsWith(target))![1];
+    const { node, mark } = probe.presence;
+    const clips = Object.values(probe.actions).filter(Boolean).map((action) => action!.getClip());
+    const bubble = probe.bubble.active && probe.bubble.radius > 0 ? { center: probe.bubble.center.clone(), radius: probe.bubble.radius } : null;
+    const read = (): FitReading => {
+      const bounds = points.drawnBounds(probe.model);
+      const drawn = points.drawnPoints(probe.model, bubble);
+      const motion = points.motionPoints(probe.model, clips, { bubble });
+      const flat = (list: Three.Vector3[]) => list.flatMap((point) => point.toArray());
+      return { bounds: [...bounds.min.toArray(), ...bounds.max.toArray()], drawn: flat(drawn), motion: flat(motion) };
+    };
+    const withMark = read();
+    node!.remove(mark!);
+    const withoutMark = read();
+    node!.add(mark!);
+    return { with: withMark, without: withoutMark };
+  }, modelPath);
+}
+
+type FitReading = { bounds: number[]; drawn: number[]; motion: number[] };
+
+/** The page's pixels at CSS rectangle `clip`, as RGBA rows: a PNG decoded in the page. */
+async function pixelsAt(page: Page, clip: { x: number; y: number; width: number; height: number }): Promise<{ width: number; height: number; scale: number; data: number[] }> {
+  const png = await page.screenshot({ clip });
+  return page.evaluate(async ([base64, width]) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${base64 as string}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(image, 0, 0);
+    return { width: image.width, height: image.height, scale: image.width / (width as number), data: Array.from(context.getImageData(0, 0, image.width, image.height).data) };
+  }, [png.toString("base64"), clip.width] as const);
+}
+
+const hexToRgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+const angleDegrees = (a: readonly number[], b: readonly number[]): number => {
+  const dot = a.reduce((sum, value, i) => sum + value * b[i]!, 0) / (Math.hypot(...a) * Math.hypot(...b));
+  return (Math.acos(Math.min(1, Math.max(-1, dot))) * 180) / Math.PI;
+};
+
+test("a camera take shows the author's camera as a mark that follows the clip, and a camera link's ink runs from it to its referent", async ({ page }) => {
+  test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture export and a live API.");
+  test.setTimeout(300_000);
+  expect(real, "the take's own test ran first").toBeDefined();
+  await mkdir(evidenceDir, { recursive: true });
+  const original = await readFile(takeFile);
+  const { json: fileJson, rest: bin } = parseGlb(original);
+  const duration = takeDurationSeconds(fileJson);
+  expect(fileJson.nodes.findIndex((node) => node.name === "RecordedAuthorCamera"), "the camera node has no parent: its pose in the file is its pose in the set's frame").toBeGreaterThanOrEqual(0);
+
+  const { uploaded, card } = await playTake(page, "Camera take link", withStandInCameraLink(original), false);
+  await expect(card).toHaveAttribute("data-model-bubble", "active");
+  await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
+  await expect(card).toHaveAttribute("data-portal-paused", "true");
+  const identity = identityOf("camera-take-e2e");
+  // The card's camera eases in over its first seconds; the mark's size follows it a frame behind, so read once it rests.
+  let previousCamera = (await readFeed(page, uploaded.id)).camera;
+  await expect.poll(async () => {
+    const camera = (await readFeed(page, uploaded.id)).camera;
+    const moved = distance(previousCamera, camera);
+    previousCamera = camera;
+    return moved;
+  }, { message: "the card's camera settles", timeout: 15_000, intervals: [500] }).toBeLessThan(1e-3);
+
+  // The mark follows the clip: where the file's keyframes put the camera and where it looked, at several times.
+  const reads: Array<{ time: number; mark: MarkReading; expected: ReturnType<typeof cameraPoseAt> }> = [];
+  for (const time of PRESENCE_TIMES) {
+    await seek(page, uploaded.url, time);
+    await page.waitForTimeout(200);
+    const mark = await readMark(page, uploaded.url);
+    const expected = cameraPoseAt(fileJson, bin, time);
+    reads.push({ time, mark, expected });
+    expect(mark.present, `the camera take shows the author's camera at ${time}s`).toBe(true);
+    expect(mark.markCount, "one mark").toBe(1);
+    expect(distance(mark.markAt, expected.position), `at ${time}s the mark stands where the file's keyframes put the camera`).toBeLessThanOrEqual(ONE_CM);
+    expect(distance(mark.markAt, mark.nodeAt), "and on the camera node").toBeLessThanOrEqual(ONE_CM);
+    expect(angleDegrees(mark.noseDirection, expected.forward), `at ${time}s the mark faces the way the camera looked`).toBeLessThanOrEqual(MARK_FACING_TOLERANCE_DEG);
+    expect(angleDegrees(mark.noseDirection, mark.nodeBack), "and along the node's -Z").toBeLessThanOrEqual(MARK_FACING_TOLERANCE_DEG);
+    expect(mark.chrome && mark.allChrome, "the mark is chrome: framing, the dome and hit tests never see it").toBe(true);
+    expect(mark.identity, "the author's identity").toEqual(identity);
+    expect(Math.abs(mark.screenDiameter - tokens.mark.size), `the mark is ${tokens.mark.size} apx across (1 apx is 1 CSS px on a flat screen)`).toBeLessThanOrEqual(MARK_SIZE_TOLERANCE_PX);
+  }
+  const travelled = Math.max(...reads.map((r) => distance(r.mark.markAt, reads[0]!.mark.markAt)));
+  const turned = Math.max(...reads.map((r) => angleDegrees(r.mark.noseDirection, reads[0]!.mark.noseDirection)));
+  expect(travelled, "the camera really moves in the take, so the follow is not a still pose").toBeGreaterThan(0.3);
+  expect(turned, "and turns").toBeGreaterThan(5);
+
+  // The dome and framing ignore the mark: the same fit with and without it, and the same card as before the mark.
+  const fit = await readFitWithAndWithoutMark(page, uploaded.url);
+  expect(fit.with.bounds, "drawn bounds").toEqual(fit.without.bounds);
+  expect(fit.with.drawn.length, "drawn points").toBe(fit.without.drawn.length);
+  expect(fit.with.drawn).toEqual(fit.without.drawn);
+  expect(fit.with.motion).toEqual(fit.without.motion);
+  expect(fit.with.drawn.length, "the set has drawn points").toBeGreaterThan(0);
+  const feed = await readFeed(page, uploaded.id);
+  expectFramed(feed);
+  expect(distance(feed.camera, real!.feed.camera), "the card's camera is where the take's own test read it").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(feed.min, real!.feed.min) + distance(feed.max, real!.feed.max), "the set is where it was").toBeLessThanOrEqual(ONE_CM);
+  expect(Math.abs((feed.clocheBaseY ?? Number.NaN)), "the dome stands on the set's origin").toBeLessThanOrEqual(ONE_CM);
+
+  // The ink: absent outside the span, from the mark to the referent inside it, in the author's hue.
+  for (const time of OUTSIDE_SPAN_TIMES) {
+    expect(await settleInk(page, uploaded.url, time, 0), `no ink at ${time}s, outside ${SPAN.start} to ${SPAN.end} s`).toEqual([]);
+  }
+  const inks: Array<{ time: number; ink: InkReading; mark: MarkReading }> = [];
+  for (const time of IN_SPAN_TIMES) {
+    const [ink, ...others] = await settleInk(page, uploaded.url, time, 1);
+    expect(others).toEqual([]);
+    expect(ink, `ink at ${time}s`).toMatchObject({ fromKind: "camera", style: "recorded", referent: REFERENT, line: true, strength: 1 });
+    const mark = await readMark(page, uploaded.url);
+    expect(distance(ink!.ink!.from, mark.markAt), `at ${time}s the ink starts at the mark`).toBeLessThanOrEqual(ONE_CM);
+    expect(distance(ink!.ink!.from, cameraPoseAt(fileJson, bin, time).position), "which is where the camera was").toBeLessThanOrEqual(ONE_CM);
+    expect(distance(ink!.ink!.to, mark.referentAt), `and ends at the referent's point`).toBeLessThanOrEqual(ONE_CM);
+    expect(ink!.inkHex, "in the author's identity hue").toBe(identity.hex);
+    inks.push({ time, ink: ink!, mark });
+  }
+  expect(distance(inks[0]!.ink.ink!.from, inks.at(-1)!.ink.ink!.from), "the ink's start travels with the camera across the span").toBeGreaterThan(0.1);
+  await settleInk(page, uploaded.url, 2.6, 0);
+
+  // The mark on screen: its hue is the author's, its initial in deep sea.
+  const middle = IN_SPAN_TIMES[1]!;
+  await settleInk(page, uploaded.url, middle, 1);
+  const shown = await readMark(page, uploaded.url);
+  const half = 14;
+  const clip = { x: Math.round(shown.screenAt[0] - half), y: Math.round(shown.screenAt[1] - half), width: half * 2, height: half * 2 };
+  await card.screenshot({ path: path.join(evidenceDir, "feed-card-camera-mark-ink.png") });
+  await page.screenshot({ path: path.join(evidenceDir, "feed-card-camera-mark-zoom.png"), clip: { x: clip.x - 60, y: clip.y - 60, width: 150, height: 150 } });
+  const pixels = await pixelsAt(page, clip);
+  const at = (dx: number, dy: number): [number, number, number] => {
+    const x = Math.round((half + dx) * pixels.scale);
+    const y = Math.round((half + dy) * pixels.scale);
+    const i = (y * pixels.width + x) * 4;
+    return [pixels.data[i]!, pixels.data[i + 1]!, pixels.data[i + 2]!];
+  };
+  const hue = hexToRgb(identity.hex);
+  const ring = Array.from({ length: 8 }, (_, k) => (k * Math.PI) / 4).map((angle) => at(7 * Math.cos(angle) + (shown.screenAt[0] - Math.round(shown.screenAt[0])), 7 * Math.sin(angle)));
+  const faceMatches = ring.filter((rgb) => rgb.every((value, i) => Math.abs(value - hue[i]!) <= 24)).length;
+  expect(faceMatches, `the mark's face is the author's hue ${identity.hex} (${ring.map((rgb) => rgb.join(",")).join(" | ")})`).toBeGreaterThanOrEqual(6);
+  // The initial is thin type on a small face: count the pixels that read as deep sea ink rather than the hue, by how dark they are.
+  const lightness = (rgb: readonly number[]) => 0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!;
+  let initialPixels = 0;
+  for (let dy = -4; dy <= 4; dy += 1) for (let dx = -4; dx <= 4; dx += 1) {
+    if (lightness(at(dx, dy)) < lightness(hue) * 0.6) initialPixels += 1;
+  }
+  expect(initialPixels, `the initial "${identity.initial}" is drawn in deep sea on the face`).toBeGreaterThanOrEqual(6);
+
+  // Outside the span the mark still stands where the camera is, with no ink.
+  await settleInk(page, uploaded.url, OUTSIDE_SPAN_TIMES[1]!, 0);
+  const outside = await readMark(page, uploaded.url);
+  expect(outside.present).toBe(true);
+  expect(distance(outside.markAt, cameraPoseAt(fileJson, bin, OUTSIDE_SPAN_TIMES[1]!).position)).toBeLessThanOrEqual(ONE_CM);
+  await card.screenshot({ path: path.join(evidenceDir, "feed-card-camera-mark-outside-span.png") });
+
+  // Orbiting the card keeps the mark on the camera, the same size on screen, and the ink on its referent.
+  await settleInk(page, uploaded.url, middle, 1);
+  const box = await page.locator(`.feed-card[data-card-id="${uploaded.id}"] .feed-card-portal`).boundingBox();
+  const centre = { x: box!.x + box!.width / 2, y: box!.y + box!.height * 0.4 };
+  await page.mouse.move(centre.x, centre.y);
+  await page.mouse.down();
+  await page.mouse.move(centre.x - 20, centre.y - 5, { steps: 2 });
+  await page.mouse.move(centre.x - 220, centre.y - 30, { steps: 6 });
+  await page.mouse.up();
+  await expect(card).toHaveAttribute("data-portal-mode", "free");
+  const [orbited] = await settleInk(page, uploaded.url, middle, 1);
+  const orbitedMark = await readMark(page, uploaded.url);
+  expect(distance(orbitedMark.markAt, cameraPoseAt(fileJson, bin, middle).position), "after orbiting, the mark is still on the camera").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(orbited!.ink!.from, orbitedMark.markAt), "and the ink still starts at it").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(orbited!.ink!.to, orbitedMark.referentAt), "and ends on the referent").toBeLessThanOrEqual(ONE_CM);
+  expect(Math.abs(orbitedMark.screenDiameter - tokens.mark.size), "the mark keeps its size on screen").toBeLessThanOrEqual(MARK_SIZE_TOLERANCE_PX);
+  await card.screenshot({ path: path.join(evidenceDir, "feed-card-camera-mark-orbited.png") });
+
+  await writeFile(path.join(evidenceDir, "camera-mark-report.json"), JSON.stringify({
+    stand_in: "the camera link is written into the GLB by this spec until capture writes camera marks",
+    span: SPAN,
+    identity,
+    markSizeApx: tokens.mark.size,
+    presence: reads.map((r) => ({
+      time: r.time,
+      markAt: r.mark.markAt,
+      keyframeAt: r.expected.position,
+      positionErrorM: distance(r.mark.markAt, r.expected.position),
+      facingErrorDeg: angleDegrees(r.mark.noseDirection, r.expected.forward),
+      screenDiameterPx: r.mark.screenDiameter
+    })),
+    cameraTravelM: travelled,
+    cameraTurnDeg: turned,
+    ink: inks.map((i) => ({ time: i.time, from: i.ink.ink!.from, to: i.ink.ink!.to, markAt: i.mark.markAt, referentAt: i.mark.referentAt, startErrorM: distance(i.ink.ink!.from, i.mark.markAt), endErrorM: distance(i.ink.ink!.to, i.mark.referentAt), hex: i.ink.inkHex })),
+    fit: { boundsEqual: true, drawnPoints: fit.with.drawn.length / 3, motionPoints: fit.with.motion.length / 3, bounds: fit.with.bounds },
+    feed: { camera: feed.camera, setRect: feed.setRect, box: feed.box, clocheBaseY: feed.clocheBaseY, cameraAgainstTakesOwnTestM: distance(feed.camera, real!.feed.camera) },
+    face: { ring, initialPixels },
+    durationS: duration
+  }, null, 2));
+});
+
+test("a performer's take has no camera mark", async ({ page }) => {
+  test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
+  test.setTimeout(180_000);
+  const { uploaded, card } = await playTake(page, "Performer take", buildPointingGlb(), false);
+  await expect(card).toHaveAttribute("data-model-bubble", "active");
+  const reading = await page.evaluate((target) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { model: Three.Object3D; presence: { mark: unknown; node: unknown } }> }).__portalProbes;
+    const probe = Object.entries(probes).find(([url]) => url.endsWith(target))![1];
+    let marks = 0;
+    probe.model.traverse((child) => { if (child.name === "RecordedAuthorCameraMark" || child.userData.holoimChrome === true) marks += 1; });
+    return { marks, mark: probe.presence.mark, node: probe.presence.node };
+  }, uploaded.url);
+  expect(reading, "no presence mark in a take with a performer").toEqual({ marks: 0, mark: null, node: null });
 });

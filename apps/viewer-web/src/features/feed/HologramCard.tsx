@@ -437,6 +437,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
                 seed={item.id}
                 frameRect={frameRect}
                 soot={soot}
+                author={item.submittedBy}
               />
             </ModelRenderBoundary>
           ) : (
