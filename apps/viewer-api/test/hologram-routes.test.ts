@@ -69,6 +69,17 @@ function multipartUpload(input: {
   return { boundary, payload: Buffer.concat(chunks) };
 }
 
+// The feed snapshot (feed/latest.json) lives beside the media; these checks count media only.
+async function mediaObjects(root: string): Promise<string[]> {
+  return (await readdir(root)).filter((name) => name !== "feed");
+}
+
+async function feedSnapshotIds(root: string): Promise<string[]> {
+  const snapshot = JSON.parse(await readFile(path.join(root, "feed", "latest.json"), "utf8")) as { items: { id: string; ownedByViewer: boolean }[] };
+  expect(snapshot.items.every((item) => !item.ownedByViewer), "the snapshot is the anonymous page").toBe(true);
+  return snapshot.items.map((item) => item.id);
+}
+
 async function uploadHologram(
   app: FastifyInstance,
   input: { hologramName: string; submittedBy?: string; file?: Buffer; quickLookEnabled?: boolean }
@@ -252,7 +263,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     expect(response.json()).toEqual({ error: "Quick Look is not enabled for this hologram." });
     // No conversion ran and no USDZ file was published.
     await expect(access(path.join(converterControl, "calls"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await readdir(uploadsRoot)).toEqual([path.basename(created.url)]);
+    expect(await mediaObjects(uploadsRoot)).toEqual([path.basename(created.url)]);
     await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({
       quickLookEnabled: false,
       usdzPath: null
@@ -362,6 +373,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 
   it("deletes the database record and both stored representations", async () => {
     const created = await uploadHologram(app, { hologramName: "Delete route", quickLookEnabled: true });
+    expect(await feedSnapshotIds(uploadsRoot), "an upload is in the feed snapshot at once").toEqual([created.id]);
     await runWorkerOnce();
     const glbPath = path.join(uploadsRoot, path.basename(created.url));
     const usdzPath = path.join(uploadsRoot, usdzFilenameFor(path.basename(created.url)));
@@ -380,6 +392,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     await expect(access(glbPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(access(usdzPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toBeNull();
+    expect(await feedSnapshotIds(uploadsRoot), "a delete leaves the feed snapshot at once").toEqual([]);
 
     const getResponse = await app.inject({ method: "GET", url: `/api/holograms/${created.id}` });
     expect(getResponse.statusCode).toBe(404);
@@ -439,7 +452,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       usdzPath: null
     });
     expect(await readFile(path.join(uploadsRoot, glbFilename))).toEqual(source);
-    expect(await readdir(uploadsRoot)).toEqual([glbFilename]);
+    expect(await mediaObjects(uploadsRoot)).toEqual([glbFilename]);
 
     await rm(path.join(converterControl, "fail"));
     const retried = await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` });
@@ -458,7 +471,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     expect(deletion.statusCode).toBe(200);
     await workerRun;
     await delay(50);
-    expect(await readdir(uploadsRoot)).toEqual([]);
+    expect(await mediaObjects(uploadsRoot)).toEqual([]);
     await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toBeNull();
     expect((await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` })).statusCode).toBe(404);
   });
