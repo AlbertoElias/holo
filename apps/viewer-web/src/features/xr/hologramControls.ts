@@ -196,7 +196,8 @@ export class HologramControlsSystem extends createSystem() {
       ...(phoneApx !== null ? { metresPerApx: phoneApx, viewportWidthCss: window.innerWidth } : {})
     });
     // The XR camera carries the head pose (player.head is not oriented in this IWSDK build).
-    const status = new StatusLine(this.world, this.camera);
+    // On a phone the line stands at the screen's top centre, on the chip; a headset's follows the head.
+    const status = new StatusLine(this.world, this.camera, target === "ar-phone" ? { phone: { verticalFovRad: fovy, viewportHeightCss: window.innerHeight, viewportWidthCss: window.innerWidth } } : {});
     const exit = { id: "exit", glyph: "exit" as const, label: "Exit", onSelect: () => this.options.exit() };
     const dock = target === "ar-phone"
       ? new HandDock(this.world, { kind: "phone", camera, verticalFovRad: fovy, viewportHeightCss: window.innerHeight, viewportWidthCss: window.innerWidth }, [exit])

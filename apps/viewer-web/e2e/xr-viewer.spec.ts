@@ -84,9 +84,21 @@ type FootProbe = {
 type Controls = {
   target: "vr" | "ar-quest" | "ar-phone";
   foot: FootProbe;
-  status: { visible: boolean; text: string; worldPosition: Vec3; interactive: boolean };
-  dock: { mount: "hand" | "phone"; hand: "left" | "right" | null; visible: boolean; metresPerApx: number; hitApx: number; glyphApx: number; buttons: Record<string, { worldPosition: Vec3 }> };
+  status: { visible: boolean; text: string; worldPosition: Vec3; interactive: boolean; chip: ScreenRect | null };
+  dock: {
+    mount: "hand" | "phone";
+    hand: "left" | "right" | null;
+    visible: boolean;
+    metresPerApx: number;
+    hitApx: number;
+    glyphApx: number;
+    buttons: Record<string, { worldPosition: Vec3; shown: boolean; hitApx: number; glyphApx: number }>;
+    chip: ScreenRect | null;
+    safeArea: { insets: { top: number; right: number; bottom: number; left: number }; bottomClearApx: number } | null;
+  };
 };
+/** CSS px from the screen's top left. */
+type ScreenRect = { left: number; top: number; width: number; height: number };
 
 const report: Record<string, unknown> = {};
 // XR_PROOF_VIDEO=1 holds key moments a little longer for the proof recording.
@@ -1665,8 +1677,24 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
     return { widthPx: Math.abs(b.x - a.x) / 2 * innerWidth, x: (a.x + 1) / 2 * innerWidth, y: (1 - a.y) / 2 * innerHeight, innerWidth, innerHeight };
   }, { at: phone.dock.buttons.exit!.worldPosition, glyphM: phone.dock.glyphApx * phone.dock.metresPerApx });
   expect(dockOnScreen.widthPx, "Exit glyph in CSS px").toBeCloseTo(phone.dock.glyphApx, 0);
-  expect(dockOnScreen.x, "dock centred").toBeCloseTo(dockOnScreen.innerWidth / 2, 0);
+  expect(dockOnScreen.x, "a lone action is centred").toBeCloseTo(dockOnScreen.innerWidth / 2, 0);
   expect(dockOnScreen.y, "dock in the thumb zone").toBeGreaterThan(dockOnScreen.innerHeight * 0.85);
+  // The row sits on a chip fitted to what shows (Exit alone: 3 + 44 + 14 wide, 3 + 44 + 3 high), above the
+  // home bar and the system's inset, clear of the back-swipe edges; no shade spreads along the screen (§5.1, §5.2, §6.1).
+  const dockChrome = await phoneDockChrome(page, phone.dock);
+  report.phoneDockChrome = dockChrome;
+  expect(dockChrome.shades, "no screen-wide shade: only a hologram casts one").toEqual([]);
+  expect(dockChrome.chromeFlagged, "the dock and everything on it carry the chrome flag").toBe(true);
+  expect(dockChrome.chip, "the chip is on screen").not.toBeNull();
+  const chip = dockChrome.chip!;
+  expect(chip.width, "chip fits Exit alone: 3 + 44 start + 14 end").toBeCloseTo(61, 3);
+  expect(chip.height, "chip fits the 44 apx target with 3 top and bottom").toBeCloseTo(50, 3);
+  const clearBottom = Math.max(phone.dock.safeArea!.insets.bottom, 34) + 12;
+  expect(dockOnScreen.innerHeight - (chip.top + chip.height), "chip bottom edge above the home bar and safe area, plus the 12 apx gap").toBeGreaterThanOrEqual(clearBottom - 0.01);
+  expect(chip.left, "chip clear of the back-swipe edge").toBeGreaterThanOrEqual(Math.max(phone.dock.safeArea!.insets.left, 20));
+  expect(dockOnScreen.innerWidth - (chip.left + chip.width), "chip clear of the back-swipe edge").toBeGreaterThanOrEqual(Math.max(phone.dock.safeArea!.insets.right, 20));
+  expect(dockOnScreen.y + phone.dock.hitApx / 2, "the whole 44 apx target above the home bar and safe area").toBeLessThanOrEqual(dockOnScreen.innerHeight - clearBottom + 0.5);
+  expect(dockOnScreen.x, "Exit stands on the chip, 3 apx in from its start").toBeCloseTo(chip.left + 3 + phone.dock.hitApx / 2, 0);
   // Frame the whole hologram, its foot in the lower half of the screen: the controls come
   // (on a phone the screen is the hand), and the reach row fits the screen's 16 px gutters.
   const standing = moved.hologram.worldPosition;
@@ -1720,6 +1748,20 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const glyphPaused = await waitForSnapshot(page, (s) => !s.hologram.playing, 3_000);
   expect(glyphPaused.placement.sequence, "a tap on the controls never moves the hologram").toBe(moved.placement.sequence);
   expect(glyphPaused.controls!.foot.text.playback).toMatch(/^Paused · /);
+  // The status line is the phone's top status line: top centre inside the top safe area, on the chip, in flat sizes (§1.2, §7.2, §9.2).
+  const statusChrome = await phoneStatusChrome(page, glyphPaused.controls!);
+  report.phoneStatusChrome = statusChrome;
+  expect(statusChrome.text).toMatch(/^Paused · /);
+  expect(statusChrome.chip, "the status chip is laid out").not.toBeNull();
+  const statusChip = statusChrome.chip!;
+  expect(statusChip.left + statusChip.width / 2, "centred on the screen").toBeCloseTo(statusChrome.innerWidth / 2, 0);
+  expect(statusChip.top, "inside the top safe area").toBeGreaterThanOrEqual(statusChrome.insets.top);
+  expect(statusChip.top + statusChip.height, "at the top of the screen, not 31% down").toBeLessThan(statusChrome.innerHeight * 0.15);
+  expect(statusChip.height, "5 apx block padding round the 14.4 px line").toBeGreaterThanOrEqual(10 + 14.4);
+  expect(statusChrome.projectedCentre.x, "drawn where the probe says").toBeCloseTo(statusChrome.innerWidth / 2, 0);
+  expect(statusChrome.projectedTop, "its top edge is where the chip rectangle says").toBeCloseTo(statusChip.top, 0);
+  expect(statusChrome.chromeFlagged).toBe(true);
+  await phoneChromeShot(page, "viewer-phone-dock-and-status");
   await dwell(page);
 
   // A held finger dragged along the timeline scrubs it (the bridge moves the pointer every frame).
@@ -1800,6 +1842,71 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
     }
   };
 });
+
+/** What a phone's dock is made of, read off the live scene: shades by name, the chrome flag, the chip's rectangle. */
+async function phoneDockChrome(page: Page, dock: Controls["dock"]) {
+  const inScene = await page.evaluate(() => {
+    type O = { name: string; userData: Record<string, unknown>; children: O[]; parent: O | null };
+    const world = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { scene: O } } }).__HOLOIM_XR_VIEWER__.world;
+    const shades: string[] = [];
+    let dockObject: O | null = null;
+    const inDockOrCamera = (object: O): boolean => {
+      for (let node: O | null = object; node; node = node.parent) if (node.name === "HandDock" || (node as unknown as { isCamera?: boolean }).isCamera) return true;
+      return false;
+    };
+    const visit = (object: O) => {
+      // The hologram's own floor shade ("cloche-shade") is the only one allowed; none hangs on the dock or the camera.
+      if (/shade/i.test(object.name) && (object.name === "PhoneDockShade" || inDockOrCamera(object))) shades.push(object.name);
+      if (object.name === "HandDock") dockObject = object;
+      object.children.forEach(visit);
+    };
+    visit(world.scene);
+    const flagged = (object: O | null): boolean => {
+      for (let node = object; node; node = node.parent) if (node.userData.holoimChrome === true) return true;
+      return false;
+    };
+    return { shades, chromeFlagged: dockObject !== null && flagged(dockObject) };
+  });
+  return { ...inScene, chip: dock.chip, safeArea: dock.safeArea, buttons: dock.buttons };
+}
+
+/** The phone status line as drawn: its probe, and where its chip's top edge and centre project to on the screen. */
+async function phoneStatusChrome(page: Page, controls: Controls) {
+  const { status } = controls;
+  const view = await page.evaluate((at) => {
+    type V = { x: number; y: number; project(c: unknown): V };
+    type O = { name: string; userData: Record<string, unknown>; children: O[]; parent: O | null };
+    const world = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { camera: { position: { constructor: new (x: number, y: number, z: number) => V } }; scene: O } } }).__HOLOIM_XR_VIEWER__.world;
+    const Vector = world.camera.position.constructor;
+    const centre = new Vector(...at).project(world.camera);
+    let line: O | null = null;
+    const visit = (object: O) => {
+      if (object.name === "StatusLine") line = object;
+      object.children.forEach(visit);
+    };
+    visit(world.scene);
+    let flagged = false;
+    for (let node: O | null = line; node; node = node.parent) if (node.userData.holoimChrome === true) flagged = true;
+    return { x: (centre.x + 1) / 2 * innerWidth, y: (1 - centre.y) / 2 * innerHeight, flagged, innerWidth, innerHeight };
+  }, status.worldPosition);
+  const insets = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px)";
+    document.body.append(probe);
+    const top = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    probe.remove();
+    return { top };
+  });
+  // The object's origin is the chip's top centre (anchored top), so its projection is the chip's top edge.
+  return { text: status.text, visible: status.visible, chip: status.chip, insets, innerWidth: view.innerWidth, innerHeight: view.innerHeight, projectedCentre: { x: view.x, y: view.y }, projectedTop: view.y, chromeFlagged: view.flagged };
+}
+
+/** An honest screenshot of the phone view (the emulated room behind the chrome) for review, under output/phone-chrome/. */
+async function phoneChromeShot(page: Page, name: string): Promise<void> {
+  const dir = path.resolve(testDir, "../../../output/phone-chrome");
+  await mkdir(dir, { recursive: true });
+  await page.screenshot({ path: path.join(dir, `${name}.png`) });
+}
 
 type FloorReading = {
   placementY: number;

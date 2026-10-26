@@ -43,6 +43,8 @@ export type PointingProbe = {
     referent: string;
     /** Emissive intensity of the referent's first mesh, when it is lit by emissive. */
     emissive: number | null;
+    /** That mesh's emissive colour (sRGB hex): the author's hue for a camera link, else the highlight colour. */
+    emissiveHex: string | null;
     line: boolean;
     glow: boolean;
     ring: boolean;
@@ -101,8 +103,9 @@ type Props = {
   getPlaybackTime: () => number;
   probe: PointingProbe;
   /**
-   * The author's identity hue (styleguide 2.4). A camera link's ink is theirs,
-   * as the mark it starts from is; a performer's links keep the highlight colour.
+   * The author's identity hue (styleguide 2.4). A camera link's ink and its
+   * referent's emphasis are theirs, as the mark it starts from is; a performer's
+   * links keep the highlight colour.
    */
   authorHex: string;
 };
@@ -121,11 +124,12 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
     raycaster: new Raycaster()
   }), []);
 
+  const authorColor = useMemo(() => tokenColor(authorHex), [authorHex]);
+
   useEffect(() => {
     const group = groupRef.current;
     if (!group) return;
     const saved = savedRef.current;
-    const authorColor = tokenColor(authorHex);
     const visuals = links.map((link): LinkVisuals => {
       const ink = link.fromKind === "camera" ? authorColor : HIGHLIGHT_COLOR;
       const line = new Mesh(new CylinderGeometry(LINE_RADIUS, LINE_RADIUS, 1, 8, 1, true), overlayMaterial(ink));
@@ -154,7 +158,7 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
       }
       visualsRef.current = [];
     };
-  }, [authorHex, links]);
+  }, [authorColor, links]);
 
   useFrame(() => {
     const visuals = visualsRef.current;
@@ -162,8 +166,8 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
     const enabled = portal.getState().highlights;
     const time = getPlaybackTime();
     const saved = savedRef.current;
-    const wanted = new Map<EmissiveMaterial, number>();
-    const sampled: { record: { emissive: number | null }; material: EmissiveMaterial | null }[] = [];
+    const wanted = new Map<EmissiveMaterial, { level: number; color: Color }>();
+    const sampled: { record: { emissive: number | null; emissiveHex: string | null }; material: EmissiveMaterial | null }[] = [];
     probe.links = [];
 
     const edgeFade = (position: Vector3): number => {
@@ -204,7 +208,9 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
           for (const material of materials) {
             if (!isEmissive(material)) continue;
             usesEmissive = true;
-            wanted.set(material, Math.max(wanted.get(material) ?? 0, power * style.emissive));
+            // The strongest request wins the material, and its colour: the author's hue for a camera link.
+            const level = power * style.emissive;
+            if (level >= (wanted.get(material)?.level ?? 0)) wanted.set(material, { level, color: link.fromKind === "camera" ? authorColor : HIGHLIGHT_COLOR });
           }
         }
         const firstMaterial = meshes[0] && (Array.isArray(meshes[0].material) ? meshes[0].material[0] : meshes[0].material);
@@ -262,6 +268,7 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
           strength,
           referent: link.to.name,
           emissive: null as number | null,
+          emissiveHex: null as string | null,
           line: entry.line.visible,
           glow: entry.glow.visible,
           ring: entry.ring.visible,
@@ -275,11 +282,11 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
     });
 
     // Apply the strongest request per material; restore the rest.
-    wanted.forEach((level, material) => {
+    wanted.forEach(({ level, color }, material) => {
       if (!saved.has(material)) {
         saved.set(material, { color: material.emissive.clone(), intensity: material.emissiveIntensity });
       }
-      material.emissive.copy(HIGHLIGHT_COLOR);
+      material.emissive.copy(color);
       const original = saved.get(material)!;
       // A plain material has black emissive (intensity is moot); keep a glowing one at least as bright.
       material.emissiveIntensity = original.color.getHex() === 0 ? level : Math.max(original.intensity, level);
@@ -291,7 +298,10 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
       saved.delete(material);
     });
     // The probe reports what the viewer sees, so sample once the pass has written it.
-    for (const { record, material } of sampled) record.emissive = material ? material.emissiveIntensity : null;
+    for (const { record, material } of sampled) {
+      record.emissive = material ? material.emissiveIntensity : null;
+      record.emissiveHex = material ? `#${material.emissive.getHexString(SRGBColorSpace)}` : null;
+    }
   });
 
   return <group ref={groupRef} />;
