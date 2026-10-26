@@ -58,6 +58,20 @@ function followScrolls(): void {
 
 /** A flick this fast, or a drag this far into the card, turns the feed to the next card. */
 const FLICK_PX_PER_MS = 0.3;
+/**
+ * The settle under way on each feed, by scroller: it owns the snapping it
+ * suspended until it lands. A later swipe on any card of that feed takes it
+ * over, so an earlier settle cannot restore snapping under it.
+ */
+const settles = new WeakMap<HTMLElement, { timer: number; landed: () => void }>();
+
+function cancelSettle(scroller: HTMLElement): void {
+  const settle = settles.get(scroller);
+  if (!settle) return;
+  window.clearTimeout(settle.timer);
+  scroller.removeEventListener("scrollend", settle.landed);
+  settles.delete(scroller);
+}
 /** A flick's speed is read over the last stretch of the swipe, not one event. */
 const FLICK_WINDOW_MS = 100;
 const FLICK_CARD_FRACTION = 0.2;
@@ -125,20 +139,11 @@ export function usePortalTriggers(
     // A swipe the browser would not scroll, because it began sideways, is
     // scrolled here and settled on a card on release.
     let feedSwipe: { scroller: HTMLElement; startTop: number; samples: { at: number; top: number }[] } | null = null;
-    // Each settle owns the snapping it suspended until it lands; a later
-    // swipe takes that over, so an earlier settle cannot restore it under it.
-    let settling: { scroller: HTMLElement; timer: number; landed: () => void } | null = null;
+    let settledOn: HTMLElement | null = null;
 
     const canDrag = () => (store.getState().paused ? triggers.dragWhilePaused : triggers.dragWhilePlaying);
     const canPinch = () => (store.getState().paused ? triggers.pinchWhilePaused : triggers.pinchWhilePlaying);
     const captures = () => store.getState().paused && !triggers.scrollWhilePaused;
-
-    const cancelSettling = () => {
-      if (!settling) return;
-      window.clearTimeout(settling.timer);
-      settling.scroller.removeEventListener("scrollend", settling.landed);
-      settling = null;
-    };
 
     const endFeedSwipe = (settle: boolean) => {
       if (!feedSwipe) return;
@@ -164,11 +169,13 @@ export function usePortalTriggers(
       scroller.scrollTo({ top: target, behavior: "smooth" });
       // Snapping comes back once the glide has landed on the card.
       const landed = () => {
-        cancelSettling();
+        cancelSettle(scroller);
         restore();
       };
-      settling = { scroller, timer: window.setTimeout(landed, 800), landed };
+      cancelSettle(scroller);
+      settles.set(scroller, { timer: window.setTimeout(landed, 800), landed });
       scroller.addEventListener("scrollend", landed);
+      settledOn = scroller;
     };
 
     const onPointerDown = (event: PointerEvent) => {
@@ -215,7 +222,7 @@ export function usePortalTriggers(
         dragging = true;
         const scroller = looking && canDrag() ? null : scrollParent(card);
         if (scroller) {
-          cancelSettling();
+          cancelSettle(scroller);
           scroller.dataset.portalScrolling = "";
           feedSwipe = { scroller, startTop: scroller.scrollTop, samples: [] };
         }
@@ -358,7 +365,8 @@ export function usePortalTriggers(
       card.removeEventListener("wheel", onWheel);
       card.removeEventListener("keydown", onKeyDown);
       endFeedSwipe(false);
-      cancelSettling();
+      // A settle this card began lands at once, rather than leave the feed unsnapped.
+      if (settledOn) settles.get(settledOn)?.landed();
     };
   }, [cardRef, store, triggers]);
 
