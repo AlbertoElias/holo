@@ -11,8 +11,8 @@
   --feed-dock-clearance: calc(var(--holoim-hit-touch) + 3 * var(--holoim-glyph-gap) + max(env(safe-area-inset-bottom), var(--holoim-hit-phone-home-bar)));
   /* Controls at the foot stand two glyph gaps apart, so no two crowd. */
   --feed-control-gap: calc(2 * var(--holoim-glyph-gap));
-  /* Room the Settings corner takes from the right of the screen: its word, its chip and the side edge. */
-  --feed-settings-clearance: calc(var(--holoim-hit-phone-side-edge) + 7rem);
+  /* Room the Settings corner takes from the right of the screen: its word, its chip and the edge it keeps (a notch's inset, or the side edge). */
+  --feed-settings-clearance: calc(max(env(safe-area-inset-right), var(--holoim-hit-phone-side-edge)) + 7rem);
 }
 
 * {

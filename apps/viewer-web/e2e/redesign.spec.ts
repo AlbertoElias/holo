@@ -293,6 +293,14 @@ test.describe("phone by touch", () => {
     const title = (await page.locator(".feed-card-title").first().boundingBox())!;
     expect(title.x + title.width, "the title stops short of Settings").toBeLessThanOrEqual(corner.x);
     await shot(page, "phone-settings-corner");
+    // A narrow desktop window, where the title's column reaches the corner too.
+    await page.setViewportSize({ width: 760, height: 700 });
+    await expect.poll(async () => {
+      const narrowCorner = (await settings.boundingBox())!;
+      const narrowTitle = (await page.locator(".feed-card-title").first().boundingBox())!;
+      return narrowCorner.x - (narrowTitle.x + narrowTitle.width);
+    }, { message: "a 760 px window's title stops short of Settings" }).toBeGreaterThanOrEqual(0);
+    await page.setViewportSize(PHONE);
     await settings.tap();
     const sheet = page.getByRole("dialog", { name: "Settings" });
     await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.x + box.width); }, { message: "the sheet unfolds from that corner's side" }).toBe(PHONE.width);
