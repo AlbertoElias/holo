@@ -37,7 +37,15 @@ async function readSnapshot(env: Env): Promise<{ json: string; newestUrl: string
   }
 }
 
-export async function onRequestGet({ request, env, next }: PagesContext): Promise<Response> {
+export async function onRequestGet(context: PagesContext): Promise<Response> {
+  try {
+    return await withSnapshot(context);
+  } catch {
+    return context.next();
+  }
+}
+
+async function withSnapshot({ request, env, next }: PagesContext): Promise<Response> {
   // The page changes with every upload, so never answer from a validator the browser kept.
   const headers = new Headers(request.headers);
   headers.delete("if-none-match");
