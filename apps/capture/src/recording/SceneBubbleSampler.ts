@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isInChrome } from '@holoim/xr-ui-core';
 
 import { isThreeMesh, isThreeSkinnedMesh } from '../shared/threeTypeGuards';
 import { isFiniteVector3Like } from '../shared/math';
@@ -81,6 +82,8 @@ export class SceneBubbleSampler {
       if (!isThreeMesh(obj)) return;
       if (!obj.visible) return;
       if (isThreeSkinnedMesh(obj)) return;
+      // Chrome (wrist glyphs, labels, panels, rays) is view layer, never the event (styleguide 1).
+      if (isInChrome(obj)) return;
       const bubbleMesh = this.createSceneBubbleMesh(sceneRoot, obj);
       if (bubbleMesh) {
         group.add(bubbleMesh);
@@ -274,6 +277,8 @@ export class SceneBubbleSampler {
         for (const hit of hits) {
           if (hit.distance < OCCLUSION_HIT_MIN_DISTANCE) continue;
           if (hit.object === sourceMesh) continue;
+          // Chrome is not part of the event; it never hides the floor under it.
+          if (isInChrome(hit.object)) continue;
           occluded = true;
           break;
         }

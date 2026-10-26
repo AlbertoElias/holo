@@ -10,6 +10,7 @@ import {
   haloMaterialOpacity,
   type EdgeFrame,
   type EdgePoint,
+  type EdgeShape,
   type EdgeStroke
 } from "@holoim/xr-ui-core";
 import { BufferAttribute, BufferGeometry, Float32BufferAttribute, Group, Mesh, type MeshBasicMaterial } from "three";
@@ -22,6 +23,8 @@ export interface ThreeEdgeOptions {
   /** The card's size in metres. */
   width: number;
   height: number;
+  /** Default `"roundedRect"`; `"circle"` for the AR bubble (9.2). */
+  shape?: EdgeShape;
   /** Render order of the soot ribbon; the others follow. Default 0. */
   baseRenderOrder?: number;
 }
@@ -110,8 +113,8 @@ export class ThreeEdge {
   readonly meshes: Record<EdgeLayer, Mesh>;
   readonly materials: Record<EdgeLayer, MeshBasicMaterial>;
 
-  constructor({ seed, width, height, baseRenderOrder = 0 }: ThreeEdgeOptions) {
-    const outline = edgeOutline({ seed, width, height });
+  constructor({ seed, width, height, shape, baseRenderOrder = 0 }: ThreeEdgeOptions) {
+    const outline = edgeOutline({ seed, width, height, ...(shape ? { shape } : {}) });
     this.points = edgePointsYUp(outline, width, height);
     this.strokes = edgeStrokes(outline.shortSide);
     const meshes = {} as Record<EdgeLayer, Mesh>;

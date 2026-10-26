@@ -1,0 +1,28 @@
+/* Capture's page (docs/features/ui-redesign.md, slice 4). Every value is a
+ * token from @holoim/design-tokens; nothing here is a design value. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--holoim-color-deep-sea);
+  color: var(--holoim-color-text);
+  font-family: var(--holoim-font-ui);
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+/* Touch drives look and walk on the scene itself, so the browser must not
+ * scroll, zoom or swipe back from it. */
+#app canvas {
+  touch-action: none;
+}
+
+/* The dock spans the screen on its shade; only its controls take pointers,
+ * so a drag that starts beside them still looks around. */
+[data-capture-dock] > * {
+  pointer-events: auto;
+}

@@ -93,7 +93,7 @@ try {
   await freezePageClock(page);
   const before = new Set(await readdir(FIXTURE_DIR).catch(() => []));
   const clickByText = (text: string) => page.evaluate((label) => {
-    [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)?.click();
+    [...document.querySelectorAll('button')].find((button) => (button.getAttribute('aria-label') ?? button.textContent?.trim()) === label)?.click();
   }, text);
 
   const placeHands = (seconds: number) => page.evaluate((s) => {

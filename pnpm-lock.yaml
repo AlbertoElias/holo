@@ -78,6 +78,9 @@ importers:
       '@holoim/avatar-face':
         specifier: workspace:*
         version: link:../../packages/avatar-face
+      '@holoim/design-tokens':
+        specifier: workspace:*
+        version: link:../../packages/design-tokens
       '@holoim/meaning':
         specifier: workspace:*
         version: link:../../packages/meaning
@@ -306,6 +309,9 @@ importers:
       '@holoim/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@holoim/design-tokens':
+        specifier: workspace:*
+        version: link:../../packages/design-tokens
       '@holoim/meaning':
         specifier: workspace:*
         version: link:../../packages/meaning

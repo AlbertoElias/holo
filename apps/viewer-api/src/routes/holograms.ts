@@ -31,7 +31,7 @@ import {
 import { optionalAuthUser } from "../services/auth.js";
 import { saveUploadedGlb, UploadValidationError, validateGlbMeta } from "../services/hologram-storage.js";
 import type { MediaStorage } from "../services/media-storage.js";
-import { usdzFilenameFor, withHologramLock } from "../services/usdz-converter.js";
+import { usdzFilenameFor, usdzFilenamesFor, withHologramLock } from "../services/usdz-converter.js";
 
 const listQuerySchema = z.object({
   cursor: z.string().optional(),
@@ -408,7 +408,7 @@ export async function registerHologramRoutes(
       }
 
       const usdzKeys = new Set([
-        usdzFilenameFor(item.filenameStored),
+        ...usdzFilenamesFor(item.filenameStored),
         ...(item.usdzPath ? [path.posix.basename(item.usdzPath)] : [])
       ]);
 

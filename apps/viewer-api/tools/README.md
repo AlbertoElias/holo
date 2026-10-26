@@ -4,7 +4,7 @@ The original GLB is canonical. `glb_to_usdz.py` produces a self-contained phone
 preview for the viewer's existing `rel="ar"` link. Quick Look is opt-in per
 upload (`quickLookEnabled`, default off, set by the upload checkbox): opted-in
 uploads are queued at upload time and converted asynchronously by the API's
-embedded worker, which stores the versioned `*-ql2.usdz`, records it as
+embedded worker, which stores the versioned `*-ql3.usdz`, records it as
 `usdzPath` with `usdzStatus=ready`, and the Quick Look endpoint then redirects
 to that stored package. A failed conversion leaves the GLB untouched, marks
 the record `failed`, and a later Quick Look request re-queues it.
@@ -26,7 +26,7 @@ ffmpeg. `USDZ_PYTHON` is an executable path, not a shell command.
 Standalone conversion and independent readback:
 
 ```sh
-python apps/viewer-api/tools/glb_to_usdz.py recording.glb recording.usdz
+python apps/viewer-api/tools/glb_to_usdz.py recording.glb recording.usdz --seed <hologram id>
 python apps/viewer-api/tools/inspect_usdz.py recording.glb recording.usdz report.json
 python apps/viewer-api/tools/exercise_usdz.py recording.glb output/quicklook-challenges
 ```
@@ -77,6 +77,26 @@ capture). Do not reuse another session's servers.
   the animation boundary. Synthetic manual-clock captures can have a longer
   real-time audio track than their simulation timeline; readback reports both.
 
+- **The halo, the burnt globe** (styleguide 3.4 and 9.5), is baked in as
+  `/Root/Cloche`, never in the GLB. `cloche.py` ports `fitCloche`, the seed
+  offset and the burn rules of `clocheBurn.ts` (burn and tear noise, dome
+  points and normals, front sites, embers) from `@holoim/xr-ui-core`;
+  `test_cloche.py` holds it to
+  `packages/xr-ui-core/src/fixtures/cloche-golden.json`, which the
+  TypeScript tests check too (run by the API's vitest suite). The fit reads
+  the built stage: visible meshes at the first frame, kept to the pinned
+  bubble, and the author's joints at eight times through the take with head
+  room, so a walk stays under the dome. RealityKit has no shader, so the
+  globe is geometry: the burning fronts, marched from the same seeded noise
+  the web's shell is discarded by and torn by the same tear noise, as thin
+  emissive gold tubes with a cream core and a char strand on the shell's
+  side, and the web's resting embers as small emissive octahedra. No sparks,
+  no glass. `build(shape, seed)` returns the form as named parts (meshes and
+  materials), so the converter writes whatever form it is given. The
+  bubble's blue shell is hidden, as on the web. The seed is the hologram's
+  id (`--seed`; the file name without it). Quick Look still draws its own
+  grounding shadow under the whole model: no USD attribute opts one mesh out.
+
 Optional lights/material extensions use the documented core-material fallback.
 Unsupported **required** extensions fail explicitly. Browser lighting, arbitrary
 shaders, transmission and per-frame point animation are not reproduced.
@@ -103,7 +123,20 @@ be retried by uploading again; deletion removes both formats.
 
 Bump `USDZ_CONVERTER_VERSION` whenever a released converter changes, so new
 uploads store a new versioned package. Stored packages are served as-is and
-are not regenerated when missing.
+are not regenerated when missing; deleting a hologram removes every version.
+
+Moving stored previews onto a new version is a one-off run of
+`src/rebuild-usdz.ts` (`pnpm --filter @holoim/api rebuild:usdz`, or
+`node apps/viewer-api/dist/apps/viewer-api/src/rebuild-usdz.js` in the
+image). For each `ready` hologram on an older version it converts the GLB
+again, inspects the new package with `inspect_usdz.py` (it must carry a
+cloche seeded by the hologram's id and fail no check the old preview passed),
+stores it beside the old file, and only then switches the record. A failure
+leaves the old preview served and is kept in the journal
+(`usdz-rebuild-<version>.json` beside the uploads root). It resumes after an
+interruption; a first SIGINT/SIGTERM finishes the hologram in hand. Flags:
+`--dry-run`, `--recent N`, `--retry-failed`, `--delete-old` (old files are
+kept by default), `--journal FILE`.
 
 ## Evidence boundaries
 

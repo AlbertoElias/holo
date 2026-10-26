@@ -121,8 +121,8 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   const hologramName = `Pipeline ${testInfo.testId.slice(0, 8)}-${Date.now()}`;
   await page.goto("/");
   await assertViewerShell(page);
-  const expandUpload = page.getByRole("button", { name: "Expand upload panel" });
-  if (await expandUpload.isVisible()) await expandUpload.click();
+  // Upload lives in the dock and opens the side sheet (Q11).
+  await page.getByRole("button", { name: "Upload a hologram" }).click();
   await page.getByLabel("Hologram name").fill(hologramName);
   await page.getByLabel("Submitted by").fill("pipeline-e2e");
   // This pipeline is the Quick Look demo path, so it opts in to USDZ generation.
@@ -180,7 +180,7 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
     expect(response.ok(), response.statusText()).toBe(true);
     expect(response.headers()["content-type"]).toContain("model/vnd.usdz+zip");
     expect(response.headers()["content-disposition"]).toBe("inline");
-    expect(response.url()).toMatch(/-ql2\.usdz$/);
+    expect(response.url()).toMatch(/-ql3\.usdz$/);
   }
   const usdzBytes = await responses[0]!.body();
   expect(await responses[1]!.body()).toEqual(usdzBytes);
@@ -195,12 +195,16 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   const report = JSON.parse(await readFile(reportPath, "utf8")) as {
     passed: boolean;
     geometry: Array<{ skinned?: boolean; maximumVertexMotionMeters?: number; morphTargetCount?: number }>;
+    cloche?: { seed: string; seams: number; parts: Record<string, { vertices: number }> };
   };
   expect(report.geometry.some((mesh) => mesh.skinned && (mesh.maximumVertexMotionMeters ?? 0) > 0.01),
     "actual captured avatar changes evaluated geometry").toBe(true);
   expect(report.geometry.filter((mesh) => (mesh.morphTargetCount ?? 0) > 0).length,
     "all captured facial meshes survive").toBe(4);
   expect(report.passed, "independent USD animation/material/audio validation").toBe(true);
+  // The baked cloche (styleguide 9.5), refitted by the inspector, burns by this hologram's id as the web does.
+  expect(report.cloche?.seed, "the preview's cloche is seeded by the hologram's id").toBe(uploaded.id);
+  expect(report.cloche?.parts.Fronts?.vertices ?? 0, "the cloche has its burning fronts").toBeGreaterThan(0);
   await testInfo.attach("quicklook-validation", { path: reportPath, contentType: "application/json" });
   await testInfo.attach("quicklook-demo", { path: usdzPath, contentType: "model/vnd.usdz+zip" });
   const cached = await page.request.get(quickLookUrl);

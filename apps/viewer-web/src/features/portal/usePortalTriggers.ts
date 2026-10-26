@@ -15,6 +15,30 @@ const TAP_MAX_MOVE_PX = 10;
 const ORBIT_RADIANS_PER_CARD_WIDTH = Math.PI;
 const WHEEL_ZOOM_PER_PIXEL = 0.0015;
 const CTRL_WHEEL_ZOOM_PER_PIXEL = 0.01;
+/** Wheel events closer than this belong to one gesture, trackpad momentum included. */
+const WHEEL_GESTURE_GAP_MS = 250;
+/**
+ * The wheel gesture under way, followed on the window rather than per card: a
+ * scroll crosses cards, the card that slides under the pointer must not start
+ * a gesture of its own, and none may be missed while focus moves between cards.
+ * A card decides it on the gesture's first event; a gesture that began
+ * anywhere else has no card and only scrolls.
+ */
+let wheelGesture: { first: WheelEvent; card: HTMLElement | null; zooms: boolean; lastAt: number } | null = null;
+let followingWheelGestures = false;
+
+function followWheelGestures(): void {
+  if (followingWheelGestures || typeof window === "undefined") return;
+  followingWheelGestures = true;
+  window.addEventListener("wheel", (event) => {
+    // A trackpad pinch (ctrl+wheel) zooms wherever it lands; it is no scroll.
+    if (event.ctrlKey) return;
+    if (!wheelGesture || event.timeStamp - wheelGesture.lastAt > WHEEL_GESTURE_GAP_MS) {
+      wheelGesture = { first: event, card: null, zooms: false, lastAt: event.timeStamp };
+    }
+    wheelGesture.lastAt = event.timeStamp;
+  }, { capture: true, passive: true });
+}
 const KEY_ORBIT_RADIANS = 0.15;
 const KEY_ZOOM_SCALE = 1.25;
 /** Device rotation is amplified so a small wrist turn shows a useful new angle. */
@@ -128,8 +152,16 @@ export function usePortalTriggers(
         store.zoomByScale(Math.exp(-event.deltaY * CTRL_WHEEL_ZOOM_PER_PIXEL));
         return;
       }
-      const overBubble = event.target instanceof Element && event.target.closest(".feed-card-bubble-shell") !== null;
-      if (!(paused && triggers.wheelZoomWhilePaused) && !(overBubble && triggers.wheelZoomOverBubble)) return;
+      // The feed scrolls unless the gesture began on the hologram itself. A
+      // scroll that began over empty space stays a scroll when this or the
+      // next card's hologram then passes under the pointer.
+      if (!wheelGesture) return;
+      if (wheelGesture.first === event) {
+        const overHologram = !isInteractive(event.target) && (store.runtime.hitTest?.(event.clientX, event.clientY) ?? false);
+        wheelGesture.card = card;
+        wheelGesture.zooms = overHologram && ((paused && triggers.wheelZoomWhilePaused) || triggers.wheelZoomOverBubble);
+      }
+      if (!wheelGesture.zooms || wheelGesture.card !== card) return;
       // Fully zoomed out, wheeling further out belongs to the feed.
       const { mode, zoom } = store.getState();
       const atOutsideEnd = mode === "follow" || zoom >= 1;
@@ -186,6 +218,7 @@ export function usePortalTriggers(
     card.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerCancel);
+    followWheelGestures();
     card.addEventListener("wheel", onWheel, { passive: false });
     card.addEventListener("keydown", onKeyDown);
     return () => {

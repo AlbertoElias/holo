@@ -9,6 +9,7 @@ import { fetchHologram, resolveMediaUrl } from "../feed/api";
 import { checkModelAvailability } from "../hologram/modelAvailability";
 import type { SphereClipStatus } from "../hologram/useSphereClipping";
 import type { ArPlacementStatus } from "./ARHologramModel";
+import { arSessionInit } from "./arSessionInit";
 import {
   isPlacementResolved,
   resolveArSupportMessage,
@@ -76,6 +77,11 @@ export function useArController(): UseArControllerResult {
   const forcedArSupport = useMemo(() => readForcedArSupportOverride(), []);
 
   const store = useMemo(() => {
+    // Depth occlusion is disabled under the IWER emulator (see
+    // resolveDepthOcclusionStatus), and IWER computes emulated depth with a
+    // synchronous GPU readback every frame that stalls software-GL runners.
+    const depthSensing = !readIwerRuntime().available;
+    const domOverlay = typeof document === "undefined" ? undefined : document.createElement("div");
     const xrStore = createXRStore({
       offerSession: false,
       emulate: false,
@@ -92,10 +98,8 @@ export function useArController(): UseArControllerResult {
       meshDetection: false,
       planeDetection: true,
       hitTest: true,
-      // Depth occlusion is disabled under the IWER emulator (see
-      // resolveDepthOcclusionStatus), and IWER computes emulated depth with a
-      // synchronous GPU readback every frame that stalls software-GL runners.
-      depthSensing: !readIwerRuntime().available
+      depthSensing,
+      ...(domOverlay ? { domOverlay, customSessionInit: arSessionInit(domOverlay, depthSensing) } : {})
     });
 
     const originalOnBeforeFrame = xrStore.onBeforeFrame;

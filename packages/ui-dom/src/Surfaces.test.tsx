@@ -6,6 +6,7 @@ import { tokens } from "@holoim/design-tokens";
 import { PHONE_EDGES, VIEW_TARGETS } from "@holoim/xr-ui-core";
 
 import { Dock } from "./Dock.js";
+import { GlyphControl } from "./GlyphControl.js";
 import { Shade } from "./Shade.js";
 import { SideSheet } from "./SideSheet.js";
 import { alphaOf } from "./testHelpers.js";
@@ -53,13 +54,87 @@ describe("dock (5.2, 6.1 phone edges)", () => {
     expect(dock.style.paddingRight).toBe("max(env(safe-area-inset-right), 20px)");
   });
 
-  it("sits on the shade's gradient and spaces its glyphs one glyph gap apart (30 apx for a poke)", () => {
+  it("spaces its glyphs one glyph gap apart (30 apx for a poke)", () => {
     const { container } = render(<Dock input="mouse">x</Dock>);
-    const dock = container.firstElementChild as HTMLElement;
+    const dock = (container.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
     expect(dock.style.gap).toBe("12px");
-    expect(dock.style.background).toMatch(/^radial-gradient\(closest-side,/);
-    const poke = render(<Dock input="poke">x</Dock>).container.lastElementChild as HTMLElement;
+    const poke = (render(<Dock input="poke">x</Dock>).container.lastElementChild as HTMLElement).firstElementChild as HTMLElement;
     expect(poke.style.gap).toBe("30px");
+  });
+});
+
+// The user saw two shadows: first the dock's oval shade, then its band along
+// the bottom edge (2026-10-24, 2026-10-25). Only a hologram casts a shade.
+// Over a picture the dock's row sits on the chip, sized to the row; on the
+// feed's horizon the user found that chip a heavy dark toast (2026-10-25), so
+// each control holds its own lens instead.
+describe("dock surface (5.2)", () => {
+  it("paints nothing across the screen: the bar is clear and lets pointer events through", () => {
+    const dock = render(<Dock>x</Dock>).container.firstElementChild as HTMLElement;
+    expect(dock.style.background).toBe("");
+    expect(dock.style.pointerEvents).toBe("none");
+  });
+
+  it("puts its row on the flat chip, deep sea at 72%, which takes pointer events", () => {
+    const dock = render(<Dock><button type="button">Upload</button></Dock>).container.firstElementChild as HTMLElement;
+    const row = dock.querySelector("[data-dock-row]") as HTMLElement;
+    expect(row.contains(screen.getByRole("button"))).toBe(true);
+    expect(row.style.pointerEvents).toBe("auto");
+    expect(row.style.background).toMatch(/^rgba\(8, 26, 30,/);
+    expect(alphaOf(row.style.background)).toBe(0.72);
+    expect(row.style.borderRadius).toBe(`${tokens.chip.radius}px`);
+    expect(row.style.background).not.toMatch(/gradient/);
+  });
+});
+
+describe("dock on the horizon (5.2)", () => {
+  // Failure modes: the chip's slab coming back, a gold word on amber, a
+  // drawing with no lens under it, a gold focus ring lost on amber, a hit
+  // area shrunk to the icon.
+  it("stands bare, each control a lantern: the glyph in a gold ring round a deep-sea lens, no word", () => {
+    const dock = render(
+      <Dock ground="horizon" input="touch"><GlyphControl glyph="upload" label="Upload a hologram" word="Upload" showLabel input="touch" onPress={() => {}} /></Dock>
+    ).container.firstElementChild as HTMLElement;
+    const row = dock.querySelector("[data-dock-row]") as HTMLElement;
+    expect(row.style.background).toBe("");
+    const button = screen.getByRole("button", { name: "Upload a hologram" });
+    expect(button.textContent).toBe("");
+    expect(Number.parseFloat(button.style.minWidth)).toBeGreaterThanOrEqual(44);
+    const lantern = button.querySelector("[data-glyph-lantern]") as HTMLElement;
+    expect(lantern.style.width).toBe(`${tokens.glyph.ring}px`);
+    // jsdom serialises the background as rgb(), so compare it with the token read back the same way.
+    const lens = document.createElement("span");
+    lens.style.background = tokens.glyph.lantern.fill;
+    expect(lantern.style.background).toBe(lens.style.background);
+    expect(lantern.style.boxShadow).toBe(`inset 0 0 0 ${tokens.glyph.stroke}px ${tokens.color.gold}`);
+  });
+
+  it("rings keyboard focus in ink, which holds on amber", () => {
+    render(<Dock ground="horizon"><GlyphControl glyph="upload" label="Upload a hologram" onPress={() => {}} /></Dock>);
+    const button = screen.getByRole("button", { name: "Upload a hologram" });
+    fireEvent.keyDown(document, { key: "Tab" });
+    act(() => button.focus());
+    expect((button.querySelector("[data-glyph-lantern]") as HTMLElement).style.outline).toBe(`1.5px solid ${tokens.glyph.lantern.ink}`);
+  });
+
+  it("holds a control with no drawing yet as its gold word in a lantern capsule, never bare on amber", () => {
+    render(<Dock ground="horizon" input="touch"><GlyphControl glyph={null} label="Settings" input="touch" onPress={() => {}} /></Dock>);
+    const button = screen.getByRole("button", { name: "Settings" });
+    expect(button.textContent).toBe("Settings");
+    const capsule = button.querySelector("[data-glyph-lantern]") as HTMLElement;
+    const lens = document.createElement("span");
+    lens.style.background = tokens.glyph.lantern.fill;
+    expect(capsule.style.background).toBe(lens.style.background);
+    expect(capsule.style.boxShadow).toBe(`inset 0 0 0 ${tokens.glyph.stroke}px ${tokens.color.gold}`);
+    expect(Number.parseFloat(capsule.style.minHeight)).toBe(tokens.glyph.ring);
+    expect(Number.parseFloat(button.style.minHeight)).toBeGreaterThanOrEqual(44);
+  });
+
+  it("keeps the chip over a picture, where the word still shows", () => {
+    const dock = render(<Dock><GlyphControl glyph="upload" label="Upload a hologram" word="Upload" showLabel onPress={() => {}} /></Dock>).container.firstElementChild as HTMLElement;
+    expect((dock.querySelector("[data-dock-row]") as HTMLElement).style.background).toMatch(/^rgba\(8, 26, 30,/);
+    expect(screen.getByRole("button", { name: "Upload a hologram" }).textContent).toBe("Upload");
+    expect(dock.querySelector("[data-glyph-lantern]")).toBeNull();
   });
 });
 
@@ -89,6 +164,31 @@ describe("side sheet (1.2, 8.4)", () => {
     render(<SideSheet open title="Library" onClose={onClose}>x</SideSheet>);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Tab inside while open, as a modal dialog must, in both directions and from outside", () => {
+    render(
+      <>
+        <button type="button">Behind</button>
+        <SideSheet open title="Library" onClose={() => {}}>
+          <input aria-label="File" />
+          <button type="button">Send</button>
+        </SideSheet>
+      </>
+    );
+    const close = screen.getByRole("button", { name: "Close" });
+    const send = screen.getByRole("button", { name: "Send" });
+    const behind = screen.getByRole("button", { name: "Behind" });
+    send.focus();
+    expect(fireEvent.keyDown(document, { key: "Tab" }), "the browser's own Tab is stopped").toBe(false);
+    expect(document.activeElement, "past the last control comes the first").toBe(close);
+    expect(fireEvent.keyDown(document, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement, "before the first comes the last").toBe(send);
+    behind.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement, "focus outside is brought back in").toBe(close);
+    screen.getByLabelText("File").focus();
+    expect(fireEvent.keyDown(document, { key: "Tab" }), "between controls the browser moves focus").toBe(true);
   });
 
   it("does not listen for Escape, or exist, while closed", () => {

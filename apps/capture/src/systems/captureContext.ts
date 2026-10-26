@@ -20,9 +20,10 @@ import type { ClockMode } from '../runtime/FrameLoop';
 import type { XrEntry } from '../runtime/xrEntry';
 import type { AppMode, CharacterSnapshot } from '../types/contracts';
 import type { UIStateStore } from '../ui/UIStateStore';
-import type { VrHud } from '../ui/VrHud';
+import type { VrChrome } from '../ui/VrChrome';
 import type { ArSpectator } from '../xr/ArSpectator';
 import type { HandEmbodiment } from '../xr/HandEmbodiment';
+import type { HeadsetHolds } from '../xr/HeadsetHolds';
 import type { HeightFit } from '../xr/HeightFit';
 import type { XrTracking } from '../xr/XrTracking';
 
@@ -66,7 +67,9 @@ export interface CaptureContext {
   terrainLegs: TerrainLegSolver;
   ar: ArSpectator;
   ui: UIStateStore;
-  vrHud: VrHud;
+  vrChrome: VrChrome;
+  /** The headset's mark "this" and Halo (slice 5). */
+  headsetHolds: HeadsetHolds;
   recording: RecordingSession;
   diagnostics: DiagnosticViews;
   frame: CaptureFrame;

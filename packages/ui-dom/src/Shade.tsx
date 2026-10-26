@@ -1,14 +1,19 @@
-// The shade at a hologram's foot (styleguide 5.1) and the dock's shade (5.2).
+// The shade at a hologram's foot (styleguide 5.1).
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 
 import { shadeLayout, shadeStops } from "@holoim/xr-ui-core";
 
 import { percent, rgbWithAlpha } from "./internal.js";
 
+function cssStops(): string {
+  return shadeStops()
+    .map((stop) => `${rgbWithAlpha(stop.color, stop.alpha)} ${percent(stop.position)}`)
+    .join(", ");
+}
+
 /** `radial-gradient(closest-side, …)` from the core's stops: deep sea 70%, 50% at 60%, then clear. */
 export function shadeGradient(): string {
-  const stops = shadeStops().map((stop) => `${rgbWithAlpha(stop.color, stop.alpha)} ${percent(stop.position)}`);
-  return `radial-gradient(closest-side, ${stops.join(", ")})`;
+  return `radial-gradient(closest-side, ${cssStops()})`;
 }
 
 export interface ShadeProps extends HTMLAttributes<HTMLDivElement> {

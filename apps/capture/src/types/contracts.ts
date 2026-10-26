@@ -1,3 +1,6 @@
+import type { Handedness } from '@holoim/xr-ui-core';
+
+
 export type AppMode = 'desktop-third' | 'desktop-first' | 'vr' | 'mock-vr' | 'ar';
 
 export type DesktopViewMode = 'third' | 'first';
@@ -98,7 +101,17 @@ export interface UiViewModel {
   /** The prepared tray (PRD-045): item names in slot order. */
   tray: { names: string[]; loading: boolean; message: string | null };
   faceCamera: 'off' | 'starting' | 'tracking' | 'no-face' | 'denied' | 'unavailable';
+  /** The dominant hand, stored per device (docs/features/ui-redesign.md, Q8). */
+  handedness: Handedness;
+  /** Running time of the take, whole seconds as ms, on the simulation clock. */
+  recordingElapsedMs: number;
+  /** What the dock's VR and AR entries offer. */
+  xrEntry: { vr: XrEntryOffer; ar: XrEntryOffer };
+  /** A brief word after a Halo action ("Mark undone"), on the status line; null otherwise. */
+  notice: string | null;
 }
+
+export type XrEntryOffer = 'unknown' | 'unsupported' | 'available' | 'active';
 
 export interface BoneTransform {
   name: string;

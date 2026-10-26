@@ -1,23 +1,87 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { HologramCard } from "./HologramCard";
-import { deleteHologram } from "./api";
-import { pickActiveCard } from "./visibility";
-import { useFeed } from "./useFeed";
-import { AuthPanel } from "../auth/AuthPanel";
-import { useCurrentUser } from "../auth/useCurrentUser";
-import { UploadPanel } from "../upload/UploadPanel";
+import { tokens } from "@holoim/design-tokens";
+import { Dock, GlyphControl, HandednessPicker, SideSheet, useHandedness } from "@holoim/ui-dom";
+import { nearestToMiddle } from "@holoim/xr-ui-core";
+
+import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
+import { useFlatTarget } from "../chrome/useFlatScreen";
 import { resumeAudioContext } from "../hologram/useGltfAudio";
 import type { HologramDTO } from "@holoim/contracts";
 
+import { AuthPanel } from "../auth/AuthPanel";
+import { useCurrentUser } from "../auth/useCurrentUser";
+import { UploadPanel, type UploadStatus } from "../upload/UploadPanel";
+import { deleteHologram } from "./api";
+import { FeedNotice, type FeedNoticeContent } from "./FeedNotice";
+import { HologramCard } from "./HologramCard";
+import { useFeed } from "./useFeed";
+
+function useOnline(): boolean {
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+  return online;
+}
+
+/** The card nearest the middle of the feed's window (styleguide 8.2): it plays, sparks and redraws. */
+function useFocusedCard(feedRef: React.RefObject<HTMLElement | null>, itemCount: number): string | null {
+  const [focused, setFocused] = useState<string | null>(null);
+  useEffect(() => {
+    const feed = feedRef.current;
+    if (!feed) return undefined;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const view = feed.getBoundingClientRect();
+      const cards = Array.from(feed.querySelectorAll<HTMLElement>("[data-card-id]")).map((card) => {
+        const box = card.getBoundingClientRect();
+        return { id: card.dataset.cardId ?? "", centerX: box.left - view.left + box.width / 2, centerY: box.top - view.top + box.height / 2 };
+      });
+      const next = nearestToMiddle(cards, { width: view.width, height: view.height });
+      setFocused((current) => (next === null || next === current ? current : next));
+    };
+    const schedule = () => {
+      if (frame === 0) frame = requestAnimationFrame(measure);
+    };
+    measure();
+    feed.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (frame !== 0) cancelAnimationFrame(frame);
+      feed.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [feedRef, itemCount]);
+  return focused;
+}
+
+function uploadNotice(status: UploadStatus): FeedNoticeContent {
+  switch (status.kind) {
+    case "uploading":
+      return { kind: "upload", text: `Uploading “${status.name}”…` };
+    case "uploaded":
+      return { kind: "upload", text: `Uploaded “${status.name}”` };
+    case "error":
+      return { kind: "error", text: status.message };
+  }
+}
+
 export function FeedPage() {
-  const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop, removeItem, reload } = useFeed();
+  const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop, removeItem, retry } = useFeed();
   const { user, logout } = useCurrentUser();
   const userId = user?.id ?? null;
 
   useEffect(() => {
     // Reload so ownedByViewer flags match the signed-in state.
-    void reload();
+    void retry();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
@@ -28,10 +92,16 @@ export function FeedPage() {
     },
     [removeItem]
   );
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const target = useFlatTarget();
+  const online = useOnline();
   const [audioMuted, setAudioMuted] = useState(true);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [handedness, setHandedness] = useHandedness();
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const focusedId = useFocusedCard(feedRef, items.length);
 
   const toggleAudioMute = useCallback(() => {
     setAudioMuted((prev) => {
@@ -42,29 +112,6 @@ export function FeedPage() {
       return next;
     });
   }, []);
-
-  useEffect(() => {
-    if (!feedRef.current) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const id = pickActiveCard(entries);
-        if (id) {
-          setActiveId(id);
-        }
-      },
-      { threshold: [0.7, 0.85, 1] }
-    );
-
-    const cards = feedRef.current.querySelectorAll<HTMLElement>("[data-card-id]");
-    cards.forEach((card) => observer.observe(card));
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [items]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -82,13 +129,32 @@ export function FeedPage() {
     return () => observer.disconnect();
   }, [canLoadMore, loadMore, nextCursor]);
 
+  // "Uploaded" stays as long as an unused control stays bright, then leaves.
   useEffect(() => {
-    if (!activeId && items[0]) {
-      setActiveId(items[0].id);
-    }
-  }, [activeId, items]);
+    if (uploadStatus?.kind !== "uploaded") return undefined;
+    const timer = window.setTimeout(() => setUploadStatus(null), tokens.glyph.idleAfter);
+    return () => window.clearTimeout(timer);
+  }, [uploadStatus]);
 
-  const resolvedActiveId = activeId ?? items[0]?.id ?? null;
+  const onUploaded = useCallback((item: Parameters<typeof addToTop>[0]) => {
+    addToTop(item);
+    setUploadOpen(false);
+    feedRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [addToTop]);
+
+  const resolvedFocusId = focusedId ?? items[0]?.id ?? null;
+  const notice: FeedNoticeContent | null = uploadStatus
+    ? uploadNotice(uploadStatus)
+    : !online
+      ? { kind: "offline", text: "You're offline. The feed loads again when you're back online." }
+      : error
+        ? { kind: "error", text: error, action: { label: VIEWER_CONTROL_NAMES.retry, onPress: () => void retry() } }
+        : isLoading && items.length === 0
+          ? { kind: "loading", text: "Loading holograms…" }
+          : !isLoading && items.length === 0 && !uploadOpen
+            ? // Upload's own sheet already answers the empty feed; the notice would sit on its title.
+              { kind: "empty", text: "No holograms yet. Upload one to start the feed." }
+            : null;
 
   const cards = useMemo(
     () =>
@@ -96,28 +162,37 @@ export function FeedPage() {
         <HologramCard
           key={item.id}
           item={item}
-          active={item.id === resolvedActiveId}
+          active={item.id === resolvedFocusId}
           muted={audioMuted}
           onToggleMute={toggleAudioMute}
           onDelete={handleDelete}
           preloadNextUrl={items[index + 1]?.url}
+          target={target}
         />
       )),
-    [items, resolvedActiveId, audioMuted, toggleAudioMute, handleDelete]
+    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, target]
   );
 
   return (
-    <main className="app-shell">
-      <div className="feed-side-panels">
-        <AuthPanel user={user} onSignOut={logout} />
-        <UploadPanel onUploaded={addToTop} currentUser={user} />
-      </div>
+    <main className="app-shell" data-flat-device={target.device}>
       <section ref={feedRef} className="feed-scroll" aria-label="Hologram feed">
         {cards}
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
-        {isLoading ? <p className="feed-state">Loading…</p> : null}
-        {error ? <p className="feed-error">{error}</p> : null}
       </section>
+      {/* A sheet answers Upload or Settings; on a phone it covers the screen, and the dock would show through it. */}
+      <Dock className="feed-dock" aria-label="Feed" ground="horizon" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
+        <GlyphControl glyph="upload" label={VIEWER_CONTROL_NAMES.openUpload} onPress={() => setUploadOpen(true)} />
+        {/* No drawing yet (brief, "still to draw"): the word stands in. */}
+        <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
+      </Dock>
+      <SideSheet open={settingsOpen} title="Settings" onClose={() => setSettingsOpen(false)} target={target}>
+        <HandednessPicker value={handedness} onChange={setHandedness} wristControl={VIEWER_CONTROL_NAMES.exitAr} />
+      </SideSheet>
+      <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
+        <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} currentUser={user} />
+      </SideSheet>
+      <AuthPanel user={user} onSignOut={logout} />
+      <FeedNotice notice={notice} target={target} />
     </main>
   );
 }

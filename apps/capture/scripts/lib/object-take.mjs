@@ -427,6 +427,8 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     if (noObject.objectNodes !== 0 || noObject.extension || noObject.extensionsUsed.includes('HOLOIM_objects')) fail(`a take without an object exported one: ${JSON.stringify(noObject)}`);
 
     // The picker refuses an unsupported model and keeps capture working.
+    // The pickers live in the settings side sheet.
+    await page.getByRole('button', { name: 'Settings' }).click();
     const picker = page.getByLabel('Choose an object (.glb)');
     await picker.setInputFiles(await unsupportedCopy(captureRoot, path.join(artifactDir, `${label}-draco.glb`)));
     await page.getByText('Unsupported in objects: Draco-compressed meshes.').waitFor({ timeout: 10_000 });
@@ -437,6 +439,8 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     // ...and loads the bracket.
     await picker.setInputFiles(path.join(captureRoot, 'fixtures/objects/bracket.glb'));
     await page.getByText('Object: bracket.glb').waitFor({ timeout: 10_000 });
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
     await advance(0.1);
     state = await readState(page);
     if (state.objects.items[0]?.placed !== true) fail('the picked object was not placed');

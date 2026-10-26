@@ -1,6 +1,7 @@
 // The golden edge (styleguide 3): one burnt outline from a seed, its strokes,
 // soot per target, and the quieter edge while recording (8.5). SVG, canvas,
-// three.js and the USDZ builder all draw `edgeOutline`'s points.
+// three.js and the USDZ builder all draw `edgeOutline`'s points. In WebXR AR
+// the outline is a circle around the bubble's silhouette (9.2).
 import { tokens } from "@holoim/design-tokens";
 
 import { haloLevel, sparkCount, type MotionOptions } from "./motion.js";
@@ -23,9 +24,13 @@ export interface EdgeTear {
   depth: number;
 }
 
+/** A card's rounded rectangle, or the circle around the AR bubble's silhouette. */
+export type EdgeShape = "roundedRect" | "circle";
+
 export interface EdgeOutline {
   /** `edge.samples` points of a closed loop, clockwise, origin top-left, y down, in the card's units. */
   points: EdgePoint[];
+  /** The card's short side, or the circle's diameter: strokes and offsets are shares of it. */
   shortSide: number;
   /** Distance from the card's sides to the undisplaced outline. */
   inset: number;
@@ -38,6 +43,8 @@ export interface EdgeOutlineOptions {
   seed: string;
   width: number;
   height: number;
+  /** Default `"roundedRect"`. A circle's diameter is the short side, centred, with no inset. */
+  shape?: EdgeShape;
 }
 
 interface Frame {
@@ -75,6 +82,12 @@ function roundedRectFrame(left: number, top: number, w: number, h: number, r: nu
   return corner(left + r, top + r, Math.PI);
 }
 
+/** A point and its outward normal at `u` along a circle, clockwise from the top in y-down coordinates. */
+function circleFrame(cx: number, cy: number, r: number, u: number): Frame {
+  const angle = -Math.PI / 2 + 2 * Math.PI * u;
+  return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), nx: Math.cos(angle), ny: Math.sin(angle) };
+}
+
 function loopDistance(a: number, b: number): number {
   const d = Math.abs(a - b) % 1;
   return Math.min(d, 1 - d);
@@ -82,18 +95,19 @@ function loopDistance(a: number, b: number): number {
 
 /**
  * The burnt outline (3.1): a rounded rectangle (radius 7% of the short side)
- * inset by the larger of 6% and the halo width, displaced along its normal by
+ * inset by the larger of 6% and the halo width, or a circle on the bubble's
+ * silhouette with no inset (9.2), displaced along its normal by
  * low waves (3 to 9, about 2%), tears (16 to 38, about 0.9% deep, the deepest
  * 1.4×) and per-point jitter (0.7%), sampled at 280 points.
  *
  * Random draws, in order (the Python port follows it): wave phase, wave
  * count, tear count, then per tear its centre, half width and depth, then
- * per sample its jitter.
+ * per sample its jitter. Both shapes draw the same sequence.
  */
-export function edgeOutline({ seed, width, height }: EdgeOutlineOptions): EdgeOutline {
+export function edgeOutline({ seed, width, height, shape = "roundedRect" }: EdgeOutlineOptions): EdgeOutline {
   const random = seededRandom(seed);
   const shortSide = Math.min(width, height);
-  const inset = Math.max(edge.insetMin, edge.halo.width) * shortSide;
+  const inset = shape === "circle" ? 0 : Math.max(edge.insetMin, edge.halo.width) * shortSide;
   const radius = edge.radius * shortSide;
   const wavePhase = random() * Math.PI * 2;
   const waves = edge.wavesMin + Math.floor(random() * (edge.wavesMax - edge.wavesMin + 1));
@@ -109,7 +123,10 @@ export function edgeOutline({ seed, width, height }: EdgeOutlineOptions): EdgeOu
   const points: EdgePoint[] = [];
   for (let i = 0; i < edge.samples; i += 1) {
     const u = i / edge.samples;
-    const frame = roundedRectFrame(inset, inset, width - 2 * inset, height - 2 * inset, radius, u);
+    const frame =
+      shape === "circle"
+        ? circleFrame(width / 2, height / 2, shortSide / 2, u)
+        : roundedRectFrame(inset, inset, width - 2 * inset, height - 2 * inset, radius, u);
     let offset = edge.waveAmplitude * Math.sin(2 * Math.PI * waves * u + wavePhase);
     for (const tear of tears) offset -= tear.depth * Math.max(0, 1 - loopDistance(u, tear.centre) / tear.halfWidth);
     offset += edge.jitter * (random() * 2 - 1);
@@ -127,6 +144,43 @@ export function edgePathData(points: readonly EdgePoint[], digits = 2): string {
 /** Points centred on the card with y up, for three.js. */
 export function edgePointsYUp(outline: EdgeOutline, width: number, height: number): EdgePoint[] {
   return outline.points.map((p) => ({ x: p.x - width / 2, y: height / 2 - p.y }));
+}
+
+// --- The AR bubble's silhouette (9.2) ---
+
+export interface Vector3Like {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface BubbleSilhouette {
+  /** The silhouette circle's centre, on the line from the bubble's centre to the eye. */
+  center: Vector3Like;
+  radius: number;
+  /** Unit normal of the circle's plane, pointing at the eye. */
+  normal: Vector3Like;
+}
+
+/**
+ * Where a sphere's outline sits for an eye: the circle where the lines from
+ * the eye touch the sphere, `r²/d` towards the eye from the centre with
+ * radius `r·√(d² − r²)/d`. Null when the eye is on or inside the sphere,
+ * which has no outline from there.
+ */
+export function bubbleSilhouette(center: Vector3Like, radius: number, eye: Vector3Like): BubbleSilhouette | null {
+  const dx = eye.x - center.x;
+  const dy = eye.y - center.y;
+  const dz = eye.z - center.z;
+  const distance = Math.hypot(dx, dy, dz);
+  if (!(radius > 0) || distance <= radius) return null;
+  const normal = { x: dx / distance, y: dy / distance, z: dz / distance };
+  const towardEye = (radius * radius) / distance;
+  return {
+    center: { x: center.x + normal.x * towardEye, y: center.y + normal.y * towardEye, z: center.z + normal.z * towardEye },
+    radius: (radius * Math.sqrt(distance * distance - radius * radius)) / distance,
+    normal
+  };
 }
 
 export interface EdgeStroke {
@@ -266,7 +320,8 @@ const NO_EDGE: EdgeFrame = { drawn: false, glowLevel: 0, sootOpacity: 0, coreOpa
 /**
  * What the edge draws this frame. While recording, flat screens hold the halo
  * at 0.08 with the core and highlight at 0.55 and no sparks; headsets draw no
- * edge at all (VR and AR). Quick Look's edge is baked and static at the resting level.
+ * edge at all (VR and AR). Quick Look's edge is baked and static at the resting level,
+ * and a hologram out of focus holds it steady (8.2).
  */
 export function edgeFrame(target: ViewTarget, options: EdgeFrameOptions): EdgeFrame {
   if (options.recording) {
@@ -274,7 +329,8 @@ export function edgeFrame(target: ViewTarget, options: EdgeFrameOptions): EdgeFr
     const { flatHaloLevel: level, flatCoreAndHighlightOpacity: opacity } = tokens.motion.recording;
     return { drawn: true, ...pick(haloLayers(target, level, options.soot)), coreOpacity: opacity, highlightOpacity: opacity, sparks: 0 };
   }
-  const level = haloLevel(target, options.timeMs, options) ?? edge.halo.level;
+  // Only the hologram in focus flickers; the others hold the resting level (8.2).
+  const level = (options.inFocus ? haloLevel(target, options.timeMs, options) : null) ?? edge.halo.level;
   return {
     drawn: true,
     ...pick(haloLayers(target, level, options.soot)),

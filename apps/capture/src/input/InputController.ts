@@ -1,4 +1,6 @@
 import type { DesktopViewMode, MockInputState } from '../types/contracts';
+import type { FlatHalo } from '../ui/flatHalo';
+import { TouchInput, type TouchStick } from './TouchInput';
 
 export interface MoveState {
   forward: boolean;
@@ -22,14 +24,29 @@ interface InputControllerOptions {
   isXrPresenting: () => boolean;
   look: DesktopLook;
   onRecordToggle: () => void;
+  /** The walk stick appeared, moved or left. */
+  onTouchStick?: (stick: TouchStick | null) => void;
+  /** The Halo a held B summons (slice 5). */
+  halo?: FlatHalo;
 }
+
+const MOUSE_LOOK_RAD_PER_PX = 0.0025;
+// A finger drags a shorter way than a locked mouse for the same turn.
+const TOUCH_LOOK_RAD_PER_PX = 0.006;
+// Stick share past which a direction is held (the motor walks in eight directions).
+const STICK_DIRECTION_THRESHOLD = 0.38;
 
 export class InputController {
   readonly moveState: MoveState = { forward: false, back: false, left: false, right: false };
 
   // Point action sources held now: 'mouse' (right button under pointer lock),
-  // 'key' (F), 'mock' (automation). Any one holds the action.
-  private readonly pointSources = new Set<'mouse' | 'key' | 'mock'>();
+  // 'key' (F), 'touch' (touch and hold on the scene), 'mock' (automation).
+  // Any one holds the action.
+  private readonly pointSources = new Set<PointSource>();
+  /** Where the holding finger is, CSS px, while 'touch' holds the point. */
+  private touchAim: { x: number; y: number } | null = null;
+  private haloKeyHeld = false;
+  private lastMouse = { x: 0, y: 0 };
   private pointAimPitch = 0;
   private jumpQueued = false;
   private crouchHeld = false;
@@ -41,10 +58,28 @@ export class InputController {
   private summonSlotQueued: number | null = null;
   private focusRecoveryUntilMs = 0;
   private lastFocusAttemptMs = 0;
+  private lastPointerType = 'mouse';
   private readonly options: InputControllerOptions;
+  readonly touch: TouchInput;
 
   constructor(options: InputControllerOptions) {
     this.options = options;
+    this.touch = new TouchInput({
+      domElement: options.domElement,
+      isXrPresenting: options.isXrPresenting,
+      onMove: (x, y) => this.applyStick(x, y),
+      onLook: (dx, dy) => this.applyLook(dx, dy, TOUCH_LOOK_RAD_PER_PX),
+      onStick: (stick) => options.onTouchStick?.(stick),
+      onHold: (phase, point) => {
+        if (phase === 'end') {
+          this.endPoint('touch');
+          this.touchAim = null;
+          return;
+        }
+        this.touchAim = point;
+        if (phase === 'start') this.startPoint('touch');
+      }
+    });
   }
 
   init(): void {
@@ -59,11 +94,18 @@ export class InputController {
     document.addEventListener('contextmenu', this.onContextMenu, true);
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
     this.options.domElement.addEventListener('click', this.onClick);
+    this.options.domElement.addEventListener('pointerdown', this.onPointerDown, true);
+    this.touch.init();
   }
 
   /** Whether the desktop point action is held (right button, F, or the mock hook). */
   isPointHeld(): boolean {
     return this.pointSources.size > 0;
+  }
+
+  /** While a touch holds the point: the finger, CSS px. The camera ray through it aims. */
+  getPointScreenAim(): { x: number; y: number } | null {
+    return this.pointSources.has('touch') ? this.touchAim : null;
   }
 
   /** Aim pitch (radians above the horizon) while held; the mouse's vertical axis drives it. */
@@ -155,7 +197,7 @@ export class InputController {
     }
   }
 
-  private startPoint(source: 'mouse' | 'key' | 'mock'): void {
+  private startPoint(source: PointSource): void {
     if (this.options.isXrPresenting()) return;
     if (this.pointSources.size === 0) {
       const look = this.options.look;
@@ -165,11 +207,21 @@ export class InputController {
     this.pointSources.add(source);
   }
 
-  private endPoint(source: 'mouse' | 'key' | 'mock'): void {
+  private endPoint(source: PointSource): void {
     this.pointSources.delete(source);
   }
 
+  /** The touch stick as the four walk keys. */
+  private applyStick(x: number, y: number): void {
+    this.moveState.forward = y > STICK_DIRECTION_THRESHOLD;
+    this.moveState.back = y < -STICK_DIRECTION_THRESHOLD;
+    this.moveState.right = x > STICK_DIRECTION_THRESHOLD;
+    this.moveState.left = x < -STICK_DIRECTION_THRESHOLD;
+    if (x !== 0 || y !== 0) this.focusRecoveryUntilMs = 0;
+  }
+
   private clearMovementState(): void {
+    this.touch.reset();
     this.moveState.forward = false;
     this.moveState.back = false;
     this.moveState.left = false;
@@ -181,6 +233,9 @@ export class InputController {
     this.trayHeld = false;
     this.summonSlotQueued = null;
     this.pointSources.clear();
+    this.touchAim = null;
+    this.haloKeyHeld = false;
+    this.options.halo?.cancel();
   }
 
   private restoreDesktopFocus(): void {
@@ -221,6 +276,9 @@ export class InputController {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    // A focused control (a button in the dock or the side sheet, a file
+    // picker) takes Space and Enter as its press; the scene never jumps on them.
+    if ((event.code === 'Space' || event.key === 'Enter') && isControl(event.target)) return;
     if (this.setMoveStateFromKeyboardEvent(event, true)) {
       this.focusRecoveryUntilMs = 0;
       event.preventDefault();
@@ -251,6 +309,14 @@ export class InputController {
 
     if (event.code === 'KeyF' && !event.repeat) {
       this.startPoint('key');
+      event.preventDefault();
+    }
+
+    // B holds the Halo; the mouse points its direction meanwhile (slice 5).
+    if (event.code === 'KeyB' && !event.repeat && !this.options.isXrPresenting() && this.options.halo) {
+      this.haloKeyHeld = true;
+      const locked = document.pointerLockElement === this.options.domElement;
+      this.options.halo.press(locked ? { x: window.innerWidth / 2, y: window.innerHeight / 2 } : this.lastMouse);
       event.preventDefault();
     }
 
@@ -287,6 +353,12 @@ export class InputController {
 
     if (event.code === 'KeyF') {
       this.endPoint('key');
+      event.preventDefault();
+    }
+
+    if (event.code === 'KeyB' && this.haloKeyHeld) {
+      this.haloKeyHeld = false;
+      this.options.halo?.release();
       event.preventDefault();
     }
 
@@ -331,33 +403,51 @@ export class InputController {
     if (document.pointerLockElement !== this.options.domElement) this.endPoint('mouse');
   };
 
+  private readonly onPointerDown = (event: PointerEvent): void => {
+    this.lastPointerType = event.pointerType;
+  };
+
   private readonly onClick = (): void => {
     this.options.domElement.focus({ preventScroll: true });
+    // Touch looks by dragging; there is no pointer to lock.
+    if (this.lastPointerType === 'touch') return;
     if (!this.options.isXrPresenting() && document.pointerLockElement !== this.options.domElement) {
       // Browsers that refuse the lock reject the request; clicking again retries.
       void Promise.resolve(this.options.domElement.requestPointerLock()).catch(() => undefined);
     }
   };
 
+  private applyLook(dx: number, dy: number, sensitivity: number): void {
+    if (this.options.isXrPresenting()) return;
+    const look = this.options.look;
+    look.lookYaw -= dx * sensitivity;
+    if (this.pointSources.size > 0) {
+      // Held: vertical motion aims the point (first person's view follows it).
+      this.pointAimPitch = look.clampFirstPersonPitch(this.pointAimPitch - dy * sensitivity);
+      if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
+    } else if (look.desktopViewMode === 'third') {
+      look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - dy * sensitivity);
+    } else {
+      look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - dy * sensitivity);
+    }
+  }
+
   private readonly onMouseMove = (event: MouseEvent): void => {
+    this.lastMouse = { x: event.clientX, y: event.clientY };
+    // While B holds the Halo the mouse picks its direction: no look, no aim.
+    if (this.haloKeyHeld) {
+      this.options.halo?.move(event.movementX, event.movementY);
+      return;
+    }
     if (this.options.isXrPresenting() || document.pointerLockElement !== this.options.domElement) {
       return;
     }
 
-    const sensitivity = 0.0025;
-    const look = this.options.look;
-    look.lookYaw -= event.movementX * sensitivity;
-    if (this.pointSources.size > 0) {
-      // Held: vertical mouse aims the point (first person's view follows it).
-      this.pointAimPitch = look.clampFirstPersonPitch(this.pointAimPitch - event.movementY * sensitivity);
-      if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
-    } else if (look.desktopViewMode === 'third') {
-      look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - event.movementY * sensitivity);
-    } else {
-      look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - event.movementY * sensitivity);
-    }
+    this.applyLook(event.movementX, event.movementY, MOUSE_LOOK_RAD_PER_PX);
   };
 }
+
+type PointSource = 'mouse' | 'key' | 'touch' | 'mock';
 
 /** Digit1–Digit5 (and the numpad's) as tray slots 1–5. */
 function summonSlot(code: string): number | null {
@@ -367,4 +457,8 @@ function summonSlot(code: string): number | null {
 
 function isObjectTurnKey(code: string): code is 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX' {
   return code === 'KeyQ' || code === 'KeyE' || code === 'KeyZ' || code === 'KeyX';
+}
+
+function isControl(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('button, input, select, textarea, [contenteditable="true"], [role="radio"], [role="button"]') !== null;
 }

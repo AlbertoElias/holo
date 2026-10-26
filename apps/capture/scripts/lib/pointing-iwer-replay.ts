@@ -152,7 +152,7 @@ export async function replayPointingTake({ browser, baseUrl, captureRoot, labels
   }, recording);
 
   const clickByText = (text: string) => page.evaluate((name) => {
-    [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === name)?.click();
+    [...document.querySelectorAll('button')].find((button) => (button.getAttribute('aria-label') ?? button.textContent?.trim()) === name)?.click();
   }, text);
   await clickByText(CONTROL_NAMES.startRecording);
   await page.clock.runFor(STEP_MS);

@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-24
+**Updated:** 2026-10-25
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -22,10 +22,21 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Nothing held. UI redesign slices 0, 1 and 2 (brief
-  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) were
-  merged to `main` together on 2026-10-24, verified locally with `verify:pr`
-  (evidence in the brief); slices 3 and 4 are next there.
+- Nothing held. UI redesign slices 0 to 6 (brief
+  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
+  `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
+  baked into Quick Look previews, with the one-off `rebuild:usdz`) were
+  merged together on 2026-10-25 after `verify:pr` on the combined tree
+  (evidence in the brief). Phone AR marks are deferred to AR recording in
+  [`TODOS.md`](TODOS.md). The fixes from the
+  cross-vendor review of slices 2 to 4 and the second round (the brief's
+  "Independent verification" rows), with the globe's own colours, landed on
+  `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Next there: slice 7 (cross-device task test and device checks).
+  Open: real wrist drawings for Exit and Recenter; the physical device checks
+  in the brief.
+- The production Quick Look rebuild to ql3 is done: both stored previews are
+  ql3, with the ql2 files and the database backup kept (B-022, evidence in
+  the brief).
 
 ## Unverified / device-only
 

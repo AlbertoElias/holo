@@ -56,8 +56,8 @@ export function useFeed() {
     nextCursor,
     addToTop,
     removeItem,
-    reload: async () => {
-      initializedRef.current = true;
+    /** Loads the first page again, after an error. */
+    retry: async () => {
       await load();
     },
     loadMore: async () => {

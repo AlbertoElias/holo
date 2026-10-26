@@ -2,6 +2,9 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 
+import "@holoim/design-tokens/tokens.css";
+import "@holoim/design-tokens/fonts.css";
+
 import { router } from "./app/router";
 import "./styles/global.css";
 

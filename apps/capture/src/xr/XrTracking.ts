@@ -475,6 +475,23 @@ export class XrTracking {
     return true;
   }
 
+  /**
+   * What drives `side` now, for chrome that follows a hand: its target-ray
+   * object (rays, selects) and grip object (a controller's wrist), and the
+   * input source behind them (for haptics). Undefined parts are untracked.
+   */
+  getChromeInput(side: VrHandSide): { hand: boolean; targetRay: THREE.Group | undefined; grip: THREE.Group | undefined; inputSource: XRInputSource | undefined } {
+    // Chrome takes only this side's own input, never the nearest tracked slot:
+    // with one controller on, both sides would otherwise share it, and one
+    // select would commit twice and the wrist would ride the pointing hand.
+    const own = { ownSideOnly: true };
+    const hand = this.resolveSlot('hand', side, own);
+    const targetRay = this.resolveSlot('controller', side, own);
+    const grip = this.resolveSlot('grip', side, own);
+    const inputSource = (targetRay?.inputSource ?? hand?.inputSource) as XRInputSource | undefined;
+    return { hand: Boolean(hand?.inputSource?.hand), targetRay: targetRay?.object, grip: grip?.object, inputSource };
+  }
+
   getHandPoseSource(side: VrHandSide): HandPoseSource {
     return this.handPoseSource[side];
   }
@@ -570,7 +587,7 @@ export class XrTracking {
 
   // The slot tracking `side`: its declared handedness, then its remembered
   // side, then whichever tracked slot lies furthest to that side of the head.
-  private resolveSlot(kind: SlotKind, side: VrHandSide): InputSlot | undefined {
+  private resolveSlot(kind: SlotKind, side: VrHandSide, { ownSideOnly = false }: { ownSideOnly?: boolean } = {}): InputSlot | undefined {
     const slots = this.slots[kind];
     const space = SLOT_SPACE[kind];
     const read = (slot: InputSlot): boolean => this.readSlotPosition(kind, slot.object);
@@ -579,6 +596,7 @@ export class XrTracking {
     if (explicit && read(explicit)) return explicit;
     const hinted = slots.find((slot) => slot.handednessHint === side && slot.inputSource?.[space]);
     if (hinted && read(hinted)) return hinted;
+    if (ownSideOnly) return undefined;
 
     let fallback: InputSlot | undefined;
     let fallbackScore = -Infinity;

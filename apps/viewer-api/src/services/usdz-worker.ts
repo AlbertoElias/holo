@@ -6,9 +6,9 @@ import path from "node:path";
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/prisma.js";
 import type { MediaStorage } from "./media-storage.js";
-import { convertGlbToUsdz, usdzFilenameFor } from "./usdz-converter.js";
+import { convertGlbToUsdz, usdzFilenameFor, type ConversionOptions } from "./usdz-converter.js";
 
-export type GlbToUsdzConverter = (glbAbsolutePath: string, usdzAbsolutePath: string) => Promise<void>;
+export type GlbToUsdzConverter = (glbAbsolutePath: string, usdzAbsolutePath: string, options?: ConversionOptions) => Promise<void>;
 
 export type UsdzWorkerOptions = {
   storage: MediaStorage;
@@ -77,7 +77,7 @@ export async function processNextUsdzConversion(options: UsdzWorkerOptions): Pro
       const glbPath = path.join(workDir, glbKey);
       const usdzTempPath = path.join(workDir, usdzKey);
       await storage.downloadToFile(glbKey, glbPath);
-      await convert(glbPath, usdzTempPath);
+      await convert(glbPath, usdzTempPath, { seed: record.id });
       await storage.putFile(usdzKey, usdzTempPath, "model/vnd.usdz+zip", undefined, "inline");
     }
 

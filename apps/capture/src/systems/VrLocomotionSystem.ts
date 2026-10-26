@@ -37,8 +37,9 @@ export class VrLocomotionSystem extends createSystem() {
 
     // Real controllers write the state the mock hook writes in checks.
     if (c.frame.xrPresenting && !c.tracking.mock.enabled) {
-      const move = c.tracking.getThumbstickAxes('left');
-      const turn = c.tracking.getThumbstickAxes('right');
+      // A stick pointing the Halo, or not yet recentred after it, neither walks nor turns.
+      const move = c.headsetHolds.locomotionBlocked('left') ? { x: 0, y: 0 } : c.tracking.getThumbstickAxes('left');
+      const turn = c.headsetHolds.locomotionBlocked('right') ? { x: 0, y: 0 } : c.tracking.getThumbstickAxes('right');
       if (move) loco.setThumbstick({ moveX: move.x, moveY: move.y });
       if (turn) loco.setThumbstick({ turnX: turn.x });
     }

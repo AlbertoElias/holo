@@ -9,9 +9,11 @@ export interface AuthoringFrame {
   trayOpen: boolean;
   /** Each hand holds no object. */
   empty: Record<VrHandSide, boolean>;
-  /** The right palm is within the tray zone. */
-  rightNearTray: boolean;
-  /** A tray item was summoned into the right hand this frame. */
+  /** The hand holding the tray up (the non-dominant hand in a headset). */
+  holder: VrHandSide;
+  /** The other, summoning palm is within the tray zone. */
+  summonerNearTray: boolean;
+  /** A tray item was summoned into the summoning hand this frame. */
   summoned: boolean;
   /** The hand's pose came from tracking (not a held or fallback pose). */
   tracked: Record<VrHandSide, boolean>;
@@ -21,7 +23,8 @@ export interface AuthoringFrame {
 export const IDLE_AUTHORING_FRAME: Readonly<AuthoringFrame> = {
   trayOpen: false,
   empty: { left: true, right: true },
-  rightNearTray: false,
+  holder: 'left',
+  summonerNearTray: false,
   summoned: false,
   tracked: { left: true, right: true }
 };
@@ -79,19 +82,23 @@ function runs(length: number, active: (index: number) => boolean): Array<{ first
 }
 
 /**
- * The take's hands-in-menu spans. The left arm is in the menu while the tray
- * is open (it holds it up; the tray never opens over a held object). The
- * right arm is in it from the frame its empty palm enters the tray zone
+ * The take's hands-in-menu spans. The holding arm (left for the right-handed)
+ * is in the menu while the tray is open (it holds it up; the tray never opens
+ * over a held object). The summoning arm is in it from the frame its empty
+ * palm enters the tray zone
  * until a summon or the tray closing; a run that ends because the hand left
  * the zone or grabbed an event object was content, and stays live.
  */
 export function findAuthoringSpans(frames: readonly AuthoringFrame[]): AuthoringFrameSpan[] {
   const spans: AuthoringFrameSpan[] = [];
-  for (const run of runs(frames.length, (i) => frames[i]!.trayOpen && frames[i]!.empty.left)) spans.push({ hand: 'left', ...run });
-  for (const run of runs(frames.length, (i) => frames[i]!.trayOpen && frames[i]!.empty.right && frames[i]!.rightNearTray)) {
-    const next = frames[run.last + 1];
-    const endedInMenu = !next || next.summoned || !next.trayOpen;
-    if (endedInMenu) spans.push({ hand: 'right', ...run });
+  for (const holder of ['left', 'right'] as const) {
+    const summoner = holder === 'left' ? 'right' : 'left';
+    for (const run of runs(frames.length, (i) => frames[i]!.trayOpen && frames[i]!.holder === holder && frames[i]!.empty[holder])) spans.push({ hand: holder, ...run });
+    for (const run of runs(frames.length, (i) => frames[i]!.trayOpen && frames[i]!.holder === holder && frames[i]!.empty[summoner] && frames[i]!.summonerNearTray)) {
+      const next = frames[run.last + 1];
+      const endedInMenu = !next || next.summoned || !next.trayOpen;
+      if (endedInMenu) spans.push({ hand: summoner, ...run });
+    }
   }
   return spans.sort((a, b) => a.first - b.first || a.hand.localeCompare(b.hand));
 }

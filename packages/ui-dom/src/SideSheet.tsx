@@ -6,9 +6,9 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { VIEW_TARGETS, chromeTransition, glyphMetrics, type ViewTarget } from "@holoim/xr-ui-core";
 
 import { chipSurfaceStyle } from "./Chip.js";
-import { GlyphButton } from "./GlyphButton.js";
+import { GlyphControl } from "./GlyphControl.js";
 import { useReducedMotion } from "./internal.js";
-import { Type, typeRoleStyle } from "./typeRoles.js";
+import { Type } from "./typeRoles.js";
 
 export interface SideSheetProps {
   open: boolean;
@@ -21,6 +21,25 @@ export interface SideSheetProps {
   /** Overrides `prefers-reduced-motion`. */
   reducedMotion?: boolean;
   children?: ReactNode;
+}
+
+const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+/** A modal sheet keeps Tab inside it: past the last control to the first, before the first to the last. */
+function keepFocusIn(container: HTMLElement, event: KeyboardEvent): void {
+  const focusable = [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => !node.hidden && node.getAttribute("aria-hidden") !== "true");
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+  const inside = active instanceof Node && container.contains(active);
+  let next: HTMLElement | undefined;
+  if (!first || !last) next = container;
+  else if (!inside || active === container) next = event.shiftKey ? last : first;
+  else if (event.shiftKey && active === first) next = last;
+  else if (!event.shiftKey && active === last) next = first;
+  if (!next) return;
+  event.preventDefault();
+  next.focus({ preventScroll: true });
 }
 
 export function SideSheet({ open, title, onClose, closeLabel = "Close", target = VIEW_TARGETS.desktop, reducedMotion, children }: SideSheetProps) {
@@ -59,6 +78,7 @@ export function SideSheet({ open, title, onClose, closeLabel = "Close", target =
     if (!open) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
+      if (event.key === "Tab" && sheet.current) keepFocusIn(sheet.current, event);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -85,7 +105,13 @@ export function SideSheet({ open, title, onClose, closeLabel = "Close", target =
         top: 0,
         right: 0,
         bottom: 0,
-        width: "min(100%, 24rem)",
+        width: "min(100%, 26rem)",
+        boxSizing: "border-box",
+        // A form needs room: two glyph gaps all round, never the chip's tight row padding.
+        padding: `max(env(safe-area-inset-top), ${metrics.gapApx * 2}px) ${metrics.gapApx * 2}px ${metrics.gapApx * 2}px`,
+        display: "flex",
+        flexDirection: "column",
+        gap: metrics.gapApx * 2,
         overflowY: "auto",
         outline: "none",
         zIndex: 10,
@@ -98,10 +124,7 @@ export function SideSheet({ open, title, onClose, closeLabel = "Close", target =
         <Type variant="titlePhoneCard" as="h2" id={titleId} style={{ margin: 0 }}>
           {title}
         </Type>
-        <GlyphButton label={closeLabel} onPress={onClose} drawnApx={metrics.iconApx}>
-          {/* The styleguide has no Close drawing yet (brief, slice 2), so the control is its word. */}
-          {(appearance) => <span style={{ ...typeRoleStyle("controlLabel"), color: appearance.color }}>{closeLabel}</span>}
-        </GlyphButton>
+        <GlyphControl glyph="close" label={closeLabel} onPress={onClose} />
       </div>
       {children}
     </div>

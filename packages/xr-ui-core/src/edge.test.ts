@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import golden from "./fixtures/edge-golden.json" with { type: "json" };
 import {
   ambientLuminance,
+  bubbleSilhouette,
   edgeFrame,
   edgeOutline,
   edgePathData,
@@ -23,7 +24,8 @@ import {
 // Failure cases (docs/features/ui-redesign.md): the edge differs between SVG,
 // canvas, 3D and the USDZ for one hologram; the edge is clipped square at
 // small sizes; AR soot flickers as the lighting estimate wavers; AR with no
-// estimate keeps the glow against a bright wall.
+// estimate keeps the glow against a bright wall; the AR ring slides off the
+// bubble's outline as the viewer walks round it, or changes its tears.
 
 describe("edgeOutline (styleguide 3.1)", () => {
   it("draws the same points from the same seed, and different tears from another", () => {
@@ -97,6 +99,96 @@ describe("edgeOutline (styleguide 3.1)", () => {
     expect(yUp[10]).toEqual({ x: outline.points[10]!.x - 150, y: 120 - outline.points[10]!.y });
   });
 });
+
+describe("the circle around the AR bubble (styleguide 9.2)", () => {
+  const circle = (seed: string, diameter: number) => edgeOutline({ seed, width: diameter, height: diameter, shape: "circle" });
+
+  it("draws the same points from the same seed, and other tears from another", () => {
+    expect(circle("hologram-a", 1)).toEqual(circle("hologram-a", 1));
+    expect(circle("hologram-b", 1).points).not.toEqual(circle("hologram-a", 1).points);
+  });
+
+  it("keeps a hologram's waves and tears from its card, and leaves the card's outline as it was", () => {
+    const card = edgeOutline({ seed: "same", width: 300, height: 240 });
+    expect(edgeOutline({ seed: "same", width: 300, height: 240, shape: "roundedRect" })).toEqual(card);
+    const ring = edgeOutline({ seed: "same", width: 240, height: 240, shape: "circle" });
+    expect(ring.waves).toBe(card.waves);
+    expect(ring.tears).toEqual(card.tears);
+  });
+
+  it("follows the circle: every point within the waves, tears and jitter of the radius, clockwise from the top", () => {
+    const { edge } = tokens;
+    const most = edge.waveAmplitude + edge.tearAmplitude * 1.4 + edge.jitter;
+    for (const seed of ["a", "b", "c", "d"]) {
+      const outline = circle(seed, 2);
+      expect(outline.inset).toBe(0);
+      expect(outline.shortSide).toBe(2);
+      for (const point of outline.points) expect(Math.abs(Math.hypot(point.x - 1, point.y - 1) - 1)).toBeLessThanOrEqual(most * 2 + 1e-9);
+      const [first, second] = outline.points;
+      expect(first!.y).toBeLessThan(1);
+      expect(second!.x).toBeGreaterThan(first!.x);
+    }
+  });
+
+  it("scales with the bubble: points and strokes are shares of the diameter", () => {
+    const small = circle("same", 0.4);
+    const large = circle("same", 4);
+    large.points.forEach((point, i) => {
+      expect(point.x / 10).toBeCloseTo(small.points[i]!.x, 9);
+      expect(point.y / 10).toBeCloseTo(small.points[i]!.y, 9);
+    });
+    expect(edgeStrokes(large.shortSide).halo.width / 10).toBeCloseTo(edgeStrokes(small.shortSide).halo.width, 12);
+    expect(edgeStrokes(large.shortSide).core.width / 10).toBeCloseTo(edgeStrokes(small.shortSide).core.width, 12);
+  });
+});
+
+describe("bubbleSilhouette (styleguide 9.2)", () => {
+  const centre = { x: 0.2, y: 1.1, z: -1.5 };
+  const radius = 0.6;
+
+  it("stays on the sphere's outline as the viewer walks round it", () => {
+    for (let step = 0; step < 12; step += 1) {
+      const angle = (step / 12) * Math.PI * 2;
+      const distance = 1 + step * 0.4;
+      const eye = { x: centre.x + distance * Math.sin(angle), y: 1.6, z: centre.z + distance * Math.cos(angle) };
+      const ring = bubbleSilhouette(centre, radius, eye)!;
+      const toEye = { x: eye.x - centre.x, y: eye.y - centre.y, z: eye.z - centre.z };
+      const length = Math.hypot(toEye.x, toEye.y, toEye.z);
+      expect(ring.normal.x * length).toBeCloseTo(toEye.x, 9);
+      expect(ring.normal.z * length).toBeCloseTo(toEye.z, 9);
+      // Points round the circle: on the sphere, and the line from the eye only touches it there.
+      const helper = Math.abs(ring.normal.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+      const u = normalize(cross(ring.normal, helper));
+      const v = cross(ring.normal, u);
+      for (let k = 0; k < 8; k += 1) {
+        const a = (k / 8) * Math.PI * 2;
+        const point = {
+          x: ring.center.x + ring.radius * (Math.cos(a) * u.x + Math.sin(a) * v.x),
+          y: ring.center.y + ring.radius * (Math.cos(a) * u.y + Math.sin(a) * v.y),
+          z: ring.center.z + ring.radius * (Math.cos(a) * u.z + Math.sin(a) * v.z)
+        };
+        const fromCentre = sub(point, centre);
+        expect(Math.hypot(fromCentre.x, fromCentre.y, fromCentre.z)).toBeCloseTo(radius, 9);
+        expect(dot(fromCentre, sub(point, eye))).toBeCloseTo(0, 9);
+      }
+    }
+  });
+
+  it("nears the sphere's own size from far away, and has no outline from inside", () => {
+    expect(bubbleSilhouette(centre, radius, { x: centre.x, y: centre.y, z: centre.z + 100 })!.radius).toBeCloseTo(radius, 4);
+    expect(bubbleSilhouette(centre, radius, { x: centre.x, y: centre.y, z: centre.z + 0.3 })).toBeNull();
+    expect(bubbleSilhouette(centre, 0, { x: 0, y: 0, z: 5 })).toBeNull();
+  });
+});
+
+type V = { x: number; y: number; z: number };
+const sub = (a: V, b: V): V => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const dot = (a: V, b: V) => a.x * b.x + a.y * b.y + a.z * b.z;
+const cross = (a: V, b: V): V => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
+const normalize = (a: V): V => {
+  const length = Math.hypot(a.x, a.y, a.z);
+  return { x: a.x / length, y: a.y / length, z: a.z / length };
+};
 
 describe("edgeStrokes (styleguide 3.2, 3.3)", () => {
   it("matches the reference sizes for an 80 px thumbnail and a phone card", () => {
@@ -184,7 +276,21 @@ describe("edgeFrame (styleguide 8.5)", () => {
   });
 
   it("sparks only the hologram in focus", () => {
-    expect(edgeFrame(VIEW_TARGETS.phone, base).sparks).toBe(26);
+    expect(edgeFrame(VIEW_TARGETS.phone, base).sparks).toBe(120);
     expect(edgeFrame(VIEW_TARGETS.phone, { ...base, inFocus: false }).sparks).toBe(0);
+  });
+
+  it("holds a hologram out of focus at a steady 0.50 on every target, flickering or reduced (8.2)", () => {
+    for (const target of [VIEW_TARGETS.phone, VIEW_TARGETS.desktop, VIEW_TARGETS.vr, VIEW_TARGETS.questPassthrough]) {
+      for (const reducedMotion of [false, true]) {
+        // 0%, 40%, 55% and 70% of the flat loop, and the reduced fade's trough.
+        const levels = [0, 1040, 1430, 1820, 4000].map((timeMs) =>
+          edgeFrame(target, { ...base, timeMs, inFocus: false, reducedMotion, soot: { groundLuminance: 0, arSootOn: false } }).glowLevel
+        );
+        expect(new Set(levels), `${target.kind} reduced=${reducedMotion}`).toEqual(new Set([0.5]));
+      }
+    }
+    // The control: in focus, the same instants do flicker.
+    expect(edgeFrame(VIEW_TARGETS.desktop, { ...base, timeMs: 1040 }).glowLevel).toBeCloseTo(0.32, 5);
   });
 });

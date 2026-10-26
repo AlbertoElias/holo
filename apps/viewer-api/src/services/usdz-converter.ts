@@ -7,8 +7,11 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const CONVERSION_TIMEOUT_MS = 120_000;
-// Bump whenever conversion changes: existing uploads must not keep the old preview.
-export const USDZ_CONVERTER_VERSION = "ql2";
+// Bump whenever conversion changes: new uploads store a new versioned package,
+// and scripts/rebuild-usdz.ts moves stored ones onto it (ql3: the baked cloche).
+export const USDZ_CONVERTER_VERSION = "ql3";
+/** Earlier versions a stored hologram may still hold, until the rebuild moves it on. */
+const PREVIOUS_USDZ_VERSIONS = ["ql2"];
 const lifecycleLocks = new Map<string, Promise<unknown>>();
 const MAX_ACTIVE_CONVERSIONS = 2;
 const MAX_PENDING_CONVERSIONS = 8;
@@ -44,21 +47,31 @@ async function withConversionSlot(operation: () => Promise<void>): Promise<void>
   }
 }
 // Works from src (tsx), from the compiled dist tree, and in the container.
-function resolveScriptPath(): string {
+export function resolveToolPath(name: string): string {
   const candidates = [
-    path.join(import.meta.dirname, "..", "..", "tools", "glb_to_usdz.py"),
-    path.join(import.meta.dirname, "..", "..", "..", "tools", "glb_to_usdz.py"),
-    path.join(process.cwd(), "apps/viewer-api/tools/glb_to_usdz.py"),
-    path.join(process.cwd(), "tools/glb_to_usdz.py")
+    path.join(import.meta.dirname, "..", "..", "tools", name),
+    path.join(import.meta.dirname, "..", "..", "..", "tools", name),
+    path.join(process.cwd(), "apps/viewer-api/tools", name),
+    path.join(process.cwd(), "tools", name)
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
 }
 
-const SCRIPT_PATH = resolveScriptPath();
+const SCRIPT_PATH = resolveToolPath("glb_to_usdz.py");
 
 export function usdzFilenameFor(glbFilename: string): string {
   return glbFilename.replace(/\.glb$/i, `-${USDZ_CONVERTER_VERSION}.usdz`);
 }
+
+/** Every preview name a hologram may have stored, current first: deletion removes them all. */
+export function usdzFilenamesFor(glbFilename: string): string[] {
+  return [USDZ_CONVERTER_VERSION, ...PREVIOUS_USDZ_VERSIONS].map((version) => glbFilename.replace(/\.glb$/i, `-${version}.usdz`));
+}
+
+export type ConversionOptions = {
+  /** The hologram's id: its cloche's burns (styleguide 3.4, Q10), the same as on the web. */
+  seed?: string;
+};
 
 async function hasConversion(filename: string): Promise<boolean> {
   try {
@@ -70,12 +83,12 @@ async function hasConversion(filename: string): Promise<boolean> {
   }
 }
 
-async function runConversion(glbAbsolutePath: string, usdzAbsolutePath: string): Promise<void> {
+async function runConversion(glbAbsolutePath: string, usdzAbsolutePath: string, { seed }: ConversionOptions): Promise<void> {
   if (await hasConversion(usdzAbsolutePath)) return;
   // Keep incomplete packages private, then publish atomically after success.
   const temporaryPath = path.join(path.dirname(usdzAbsolutePath), `.${randomUUID()}.usdz`);
   try {
-    await execFileAsync(process.env.USDZ_PYTHON ?? "python3", [SCRIPT_PATH, glbAbsolutePath, temporaryPath], {
+    await execFileAsync(process.env.USDZ_PYTHON ?? "python3", [SCRIPT_PATH, glbAbsolutePath, temporaryPath, ...(seed ? ["--seed", seed] : [])], {
       timeout: CONVERSION_TIMEOUT_MS,
       maxBuffer: 1024 * 1024,
       cwd: process.cwd()
@@ -89,8 +102,9 @@ async function runConversion(glbAbsolutePath: string, usdzAbsolutePath: string):
 
 export async function convertGlbToUsdz(
   glbAbsolutePath: string,
-  usdzAbsolutePath: string
+  usdzAbsolutePath: string,
+  options: ConversionOptions = {}
 ): Promise<void> {
   if (await hasConversion(usdzAbsolutePath)) return;
-  await withConversionSlot(() => runConversion(glbAbsolutePath, usdzAbsolutePath));
+  await withConversionSlot(() => runConversion(glbAbsolutePath, usdzAbsolutePath, options));
 }
