@@ -1,5 +1,5 @@
 import { tokens } from "@holoim/design-tokens";
-import { startLazyFollow, stepLazyFollow, type LazyFollow } from "@holoim/xr-ui-core";
+import { markChrome, startLazyFollow, stepLazyFollow, type LazyFollow } from "@holoim/xr-ui-core";
 import { UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
 import { Euler, MathUtils, Quaternion, Vector3, type Object3D } from "three";
 
@@ -58,6 +58,7 @@ export class StatusLine {
     this.document = new UIKitDocument(this.root);
     this.entity = world.createTransformEntity(undefined, { parent: world.activeLevel.value });
     this.entity.object3D!.name = "StatusLine";
+    markChrome(this.entity.object3D!);
     this.entity.object3D!.add(this.document);
     this.entity.object3D!.visible = false;
   }

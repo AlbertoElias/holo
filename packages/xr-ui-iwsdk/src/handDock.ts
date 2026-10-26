@@ -1,6 +1,6 @@
 import { apxToMeters, hitAreaMeters, tokens } from "@holoim/design-tokens";
 import { PokeInteractable, RayInteractable, UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
-import { glyphGapApx, type DockAction } from "@holoim/xr-ui-core";
+import { glyphGapApx, markChrome, type DockAction } from "@holoim/xr-ui-core";
 import { CanvasTexture, Matrix4, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace, Vector3, type Material, type Object3D } from "three";
 
 import { createGlyph, type GlyphElement, type GlyphName } from "./glyphs.js";
@@ -156,6 +156,8 @@ export class HandDock {
     this.entity = world.createTransformEntity(undefined, { parent: world.activeLevel.value });
     const object = this.entity.object3D!;
     object.name = "HandDock";
+    // The dock and its shade are chrome (touches that begin on it never become marks), not the recorded scene.
+    markChrome(object);
     object.add(this.document);
     this.entity.addComponent(RayInteractable);
     if (!phone) this.entity.addComponent(PokeInteractable);
