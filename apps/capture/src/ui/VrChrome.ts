@@ -75,7 +75,7 @@ const raycaster = new THREE.Raycaster();
 
 /**
  * Capture's chrome in a headset (styleguide 1.2, 6.1, 8.5, 9.1), built from
- * @holoim/xr-ui-iwsdk as the viewer's is (docs/features/viewer-xr-interface.md,
+ * @holoim/xr-ui-iwsdk as the viewer's is (docs/features/archive/viewer-xr-interface.md,
  * step 5): the record glyph in the hand dock on the non-dominant wrist,
  * "Recording 0:12" on the periphery status line, refit and handedness on a
  * world panel opened 1.5 m ahead, and the gold aim rays. Nothing is locked to

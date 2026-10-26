@@ -1,7 +1,7 @@
 # Feature brief: Shared XR interface and viewer VR/AR
 
 **Lead:** Claude (Opus)  
-**Status:** Implementing (approved 2026-10-24; steps 1–5 done; step 6: IWSDK is the `/ar/:id` default, R3F kept behind `?shell=r3f`)
+**Status:** Complete (2026-10-26; independent verification by Muse, defects resolved; device checks in `HANDOFF.md`)
 **Layer:** view (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -32,8 +32,9 @@ neutral space. True scale is fact: life size means the recorded scale.
 - **One XR interface for capture and viewer.** A shared workspace package
   (`@holoim/xr-ui-iwsdk`, replacing `xr-ui-three`/`xr-ui-r3f`) provides three
   pieces built on IWSDK UI and pointers (ray, touch, grab):
-  - **Foot controls**: one glyph control set at each placed hologram's foot,
-    on the chip (styleguide §5.1, §6, §9.2).
+  - **Foot controls**: one glyph control set, at the focused hologram's
+    foot, on the chip (styleguide §5.1, §6, §9.2). It moves to whichever
+    hologram takes focus (the user, 2026-10-26: "One set on focused").
   - **Periphery status line**: the only thing that follows the head (lazily,
     IWSDK `Follower`, upper edge of view). It shows state such as
     "Recording 0:12" and never holds a control (§1.2).
@@ -55,8 +56,10 @@ neutral space. True scale is fact: life size means the recorded scale.
   `fetchHolograms(cursor)` (no API change). Selecting one places it at
   recorded scale in front of the viewer and focuses it.
 - **Several placed holograms.** Placed holograms stay where they are. Each has
-  its own playback state, grab/scale/rotate and foot controls; every foot
-  control acts on its own hologram. Two kinds of focus, kept apart:
+  its own playback state and grab/scale/rotate. One foot-control set stands at
+  the focused hologram's foot and acts only on it; selecting another
+  hologram's body moves the set there (the user, 2026-10-26). Two kinds of
+  focus, kept apart:
   - **Audio focus**: the hologram whose body or foot control was last
     selected. Only it is heard. A head turn never changes it.
   - **Spark focus**: the hologram nearest the head's forward ray (§8.2). It
@@ -133,9 +136,16 @@ neutral space. True scale is fact: life size means the recorded scale.
       loaded feed via the cursor, and selecting one places and focuses it
       without ending the session.
 - [ ] At least four holograms can be placed at once; each keeps its own play
-      state, transform and foot controls, and the foot chips never overlap.
-      Selecting one gives it audio focus, and only it is heard. A head turn
-      moves the sparks but never the audio.
+      state and transform, and none stands on another's foot chip. One
+      foot-control set stands at the focused hologram's foot and follows
+      focus (the user, 2026-10-26). Selecting one gives it audio focus, and
+      only it is heard. A head turn moves the sparks but never the audio or
+      the foot controls.
+- [ ] In VR, the left thumbstick slides, the right snap-turns 30° about the
+      head and, pulled back, aims a teleport that lands on release. Placed
+      holograms stay standing where they are, the foot controls stay at the
+      focused one's foot, the shelf stays put and answers, and recenter
+      places 1.5 m ahead of wherever the viewer now stands.
 - [ ] Foot controls work by controller ray, hand ray/pinch and screen tap
       (phone AR), and by poke where they are within reach. The hand dock
       works by poke and ray; the phone bottom dock by screen tap.
@@ -195,6 +205,10 @@ neutral space. True scale is fact: life size means the recorded scale.
 | Duplicate `three` copies across packages | Structural flags, not `instanceof`; typecheck catches clashing `@types/three` |
 | Controls out of reach (tall, short, seated) | Foot controls move with their hologram, which can be recentered or grabbed closer; the hand dock is always within reach |
 | Session ends unexpectedly | Same exit path as the Exit control |
+| Locomotion drags placed holograms, the foot chip or the shelf along with the rig | All three live in the level, not under the player; the locomotion spec checks each holds still (< 1e-6 m) through slide, turn and teleport |
+| The rig walks on the drawn floor 1 cm below y = 0 (B-022) and every placement sinks with the head height | Locomotion walks an undrawn disc at y = 0; within 5 cm of it the rig stands on y = 0 (IWSDK's float spring bobs and can sleep a few mm off); the spec checks the rig and every base on the floor |
+| Teleport aim fires while the right ray points at a control | IWSDK drops the aim while the ray is busy; the spec aims at open floor |
+| Snap turn swings the head round the rig origin | IWSDK pivots on the head; the spec checks the head moves < 1 cm |
 | Capture recording regresses while its UI migrates | Capture XR suite before and after; migration is its own commit, last |
 
 ## Ownership
@@ -270,7 +284,7 @@ Implementation order (each step lands green before the next):
 | Gallery, multiple placed, focus, audio focus | Same spec on a seeded 12-item feed (`/uploads/missing-5.glb` answers 404) | **Pass** (step 4): the shelf shows the 10 items the card carried (one feed fetch); four placed at recorded scale, base on the floor, feet 4–6 cm above it, upright, at least the chip width + 30 apx apart, every body clear of the shelf and every foot chip in sight from the eyes; a fifth select returns `full`; the 404 tile reads "Couldn't load" and selecting it changes nothing; a paused hologram holds its clock while the others play; a ray on a body moves focus, ring and foot controls, and only the focused one is heard (audio within 11 ms of its clip); a double select is ignored while loading; "Older" fetches with cursor `10` (Runner 7–12); exit returns to the focused one's card; phone AR places two on the floor 1.0 m apart and a tap moves focus without pausing; `gallery` and `arGallery` in the report, screenshots `vr-gallery-four`, `ar-phone-two` |
 | Playback, scrub, loop, audio scheduling | Same spec, clock and audio offsets read from the page | **Pass** (steps 2–3): clip clock 1.00× wall clock; ray pause holds clock and audio; a held-trigger scrub lands within 5% of the aimed time with the pose at that time; resume, restart and a phone timeline drag reschedule audio within 50 ms; `vrControls` and `ar.phoneControls` in the report |
 | Grab/scale/rotate | Same spec, scripted controller grips | **Pass** (step 3): two-hand grip grab spreads, carries, lifts and turns it; uniform scale, clamped at 2× ("200%"), base on the floor (0 mm) and upright at every step; scale chip "life size" resets scale in place; recenter 1.50 m ahead at recorded scale; `vrControls.grab` in the report |
-| Memory after remove/page | Same spec | **Pass** (step 4): after sending two back and paging out and back, 74 geometries and 180 textures, as at the baseline (UIKit text buffers that grew are counted apart, 33 → 35); the cache keeps only models in use (`gallery.renderer`, `gallery.cacheAfter`) |
+| Memory after remove/page | Same spec | **Pass** (step 4): after sending two back and paging out and back, 79 geometries and 179 textures, as at the baseline (78 before the locomotion walk disc; the 74/180 first recorded here was stale) (UIKit text buffers that grew are counted apart, 33 → 35); the cache keeps only models in use (`gallery.renderer`, `gallery.cacheAfter`) |
 | AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id` (`?shell=iwsdk` before step 6) with an emulated phone (mono, no controllers, screen taps) | Step 3 **pass**: phone foot controls at flat sizes (16/36 apx, 44 apx touch, chip 0.88), a tap on the play glyph pauses without moving the hologram, a 30-frame finger drag on the timeline scrubs within 5%, and Exit in the bottom dock (16 CSS px, bottom centre) leaves; IWSDK shell **pass** (step 2), opened from the feed card at `/?shell=iwsdk`: stands on the floor 1.8 m ahead and anchors, lit like VR (mean luminance of the hologram's pixels 67 in AR vs 71 in VR; the unlit build read 19 and fails the 30 threshold), tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
 | Capture on the shared UI | `pnpm run test:xr:smoke` + capture `run-xr-checks.ts ui recording mock-vr hands body height marks` | **Pass** (step 5), results in "Step 5 results" below; `output/ci-capture-ui/ui-report.json` |
 | Same look in both apps | IWER screenshots of both apps' hand dock, status line and aim rays via `preview.mjs` | Side-by-side sheet (step 5), see "Step 5 results" |
@@ -808,3 +822,41 @@ The lead triaged each finding against the code.
 
 Not covered by this verification: the verifier proof video (Muse ran read-only,
 with no recording), and everything under "Physical-device limits".
+
+**Resolution (2026-10-26)**
+
+1. **Defect 1, resolved by user decision.** The user chose "One set on
+   focused": one foot-control set, bound to the focused hologram. Scope and
+   criterion 4 now say so. The gallery spec now also asserts that spark focus
+   follows the head ray: a look at mock-2 carries the sparks there, while
+   the audio and the foot controls stay on mock-1 (`gallery.sparkMoves`).
+2. **Defect 2, fixed.** The VR World enables IWSDK locomotion, in-thread
+   (`useWorker: false`): slide on the left stick at 3.2 m/s, 30° snap turns
+   on the right stick, teleport with the right stick pulled back, and no
+   jump. These follow capture's archived `vr-thumbstick-locomotion.md`. The
+   rig walks an undrawn disc at y = 0 whose rotation is baked into its
+   geometry: an object rotation was read before IWSDK composed it, and the
+   rig met a vertical wall and fell. The World's loop also runs while the
+   opened hologram loads, before the floor exists, so the rig is stood back
+   on the floor once there is one. Steps are clamped to 50 ms, because IWER
+   frames ran 0.08–4.4 s apart and the locomotor integrates gravity over a
+   whole frame. On the flat room the rig stands on y = 0 within 5 cm, so
+   IWSDK's float spring neither bobs the head nor sleeps a few mm off. The new spec "VR locomotion" runs slide, snap
+   turn, teleport, recenter from the new spot, and a shelf select from
+   there. Measured: slide along −z, turn −30.00°, head pivot 0 m, teleport
+   1.26 m behind, recenter 1.500 m ahead of the moved viewer. Placed
+   holograms, the foot chip and the shelf tiles move < 1e-6 m throughout.
+   Bases stay on the floor within 5 mm (`locomotion` in the report).
+3. **Defect 3, fixed.** `TargetMetrics.reachHitMin` gives the foot controls
+   72 apx (47 mm at 1.75 m) in `vr` and `ar-quest`. The ray-only gallery
+   shelf keeps 56 apx. The spec asserts `hitApx: 72` and ≥ 20 mm.
+4. **Defect 4, fixed.** In VR the reach row's chip has its own fade, 0.3 s
+   in (`CHIP.vrFadeInMs`) and 400 ms out. Its glyphs keep 240 ms (§8.4). The
+   probe reports `reachChipFade` and, in development, a per-frame log of
+   both fades. The locomotion spec takes the frames mid-fade and checks the
+   chip against the glyphs at 240/300 (IWER frames here ran 0.1 s to
+   seconds apart, so a wall-clock span cannot resolve 240 vs 300 ms).
+5. **Defect 5, fixed.** The dock hides only while one of its own hand's
+   pointers holds a grab (`grabPointerIds`). The foot-controls spec now
+   grabs with the dominant hand alone and asserts that the left-hand dock
+   stays visible.

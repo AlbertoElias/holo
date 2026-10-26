@@ -30,7 +30,7 @@ import {
 } from "./tokens.js";
 
 // One glyph control set at a placed hologram's foot (styleguide §1.2, §6,
-// §9.2; docs/features/viewer-xr-interface.md). Play/Pause with its timecode is
+// §9.2; docs/features/archive/viewer-xr-interface.md). Play/Pause with its timecode is
 // always there and dims when unused; restart, the timeline, recenter and the
 // scale chip appear when something comes near and leave afterwards. The chip
 // keeps its world size whatever the hologram's grab scale, sits 2 cm above

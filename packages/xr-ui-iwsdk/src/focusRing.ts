@@ -2,7 +2,7 @@ import { Color, Mesh, MeshBasicMaterial, RingGeometry, Vector3, type Object3D } 
 
 import { COLOR } from "./tokens.js";
 
-// The focus ring (docs/features/viewer-xr-interface.md, step 4): a bare gold
+// The focus ring (docs/features/archive/viewer-xr-interface.md, step 4): a bare gold
 // line on the ground around the focused hologram's base, the one that is
 // heard and that the foot controls act on. Like the golden edge (§3.3) its
 // width is a share of its size, the gold core's 1.4% of the short side (here

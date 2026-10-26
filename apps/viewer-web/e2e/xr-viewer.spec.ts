@@ -8,7 +8,7 @@ import { waitForIwerRuntime, waitForIwerSession, waitForNoIwerSession } from "@h
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
 
-// The IWSDK immersive viewer (docs/features/viewer-xr-interface.md, steps 2-4):
+// The IWSDK immersive viewer (docs/features/archive/viewer-xr-interface.md, steps 2-4):
 // `/vr/:id` and `/ar/:id` mount one IWSDK World with the opened
 // hologram at recorded scale, and a gallery of the feed to place more from. The page's development probe (`__HOLOIM_XR_VIEWER__`)
 // reports placement, scale, playback and audio; each test adds its readings

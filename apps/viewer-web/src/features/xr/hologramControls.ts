@@ -8,7 +8,7 @@ import { HologramPlayback, restartHologram, seekHologram, setHologramPlaying } f
 import { addTwoHandGrab, grabPointerIds, keepGrounded } from "./twoHandGrab";
 import { focusedRecord, viewerContext, type PlacedHologram } from "./viewerContext";
 
-// The viewer's XR interface (docs/features/viewer-xr-interface.md, steps 3
+// The viewer's XR interface (docs/features/archive/viewer-xr-interface.md, steps 3
 // and 4): foot controls at the focused hologram's foot, with the focus ring
 // around its base, the periphery status line, and Exit in the hand dock
 // (headset) or the bottom dock (phone), and the gold aim rays, all from

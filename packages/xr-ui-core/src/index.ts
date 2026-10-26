@@ -127,7 +127,7 @@ export interface XrUiActions {
   exportRecording?: () => void;
 }
 
-// Hologram controls (docs/features/viewer-xr-interface.md): the app-agnostic
+// Hologram controls (docs/features/archive/viewer-xr-interface.md): the app-agnostic
 // action model behind the foot controls, status line and hand dock. Each app
 // supplies the actions; @holoim/xr-ui-iwsdk draws them.
 
@@ -161,7 +161,7 @@ export interface DockAction {
   onSelect(): void;
 }
 
-// The gallery shelf (docs/features/viewer-xr-interface.md, step 4): feed
+// The gallery shelf (docs/features/archive/viewer-xr-interface.md, step 4): feed
 // holograms as small paused previews. A placed hologram leaves its tile empty
 // until it goes back to the gallery: everything returns to its source (§1.2).
 

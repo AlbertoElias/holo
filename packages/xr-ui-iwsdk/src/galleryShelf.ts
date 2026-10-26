@@ -5,7 +5,7 @@ import { Color, DoubleSide, Group, Mesh, MeshStandardMaterial, RingGeometry, Vec
 import { FONT_FAMILIES, FONT_FAMILY } from "./fonts.js";
 import { CHIP, COLOR, TYPE, metresPerApx, targetMetrics, withAlpha, type XrUiTarget } from "./tokens.js";
 
-// The gallery (docs/features/viewer-xr-interface.md, step 4): feed holograms
+// The gallery (docs/features/archive/viewer-xr-interface.md, step 4): feed holograms
 // as small paused previews on a curved shelf around the viewer, in two wings
 // at their sides, so the space in front stays free for placed holograms and
 // a wing never stands between the eyes and a placed hologram's feet. Each
