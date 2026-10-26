@@ -15,7 +15,7 @@
   never push or dispatch CI to find out whether something works.
 - When running a test directly does not reproduce a problem (for example a
   failure seen only on CI), emulate CI in Docker with `scripts/ci-emulate.sh
-  <command>`: a 2-CPU, 7 GB Linux container with Node 24 and Chromium, like a
+  <command>`: a 4-CPU, 16 GB Linux container with Node 24 and Chromium, like a
   hosted runner. See "Emulating CI" in `AGENT_CONTRACT.md`.
 - Every feature, project, and bug fix ends with a proof video: a real-time
   recording of the actual workflow showing the change working (for a bug,

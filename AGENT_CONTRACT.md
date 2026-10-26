@@ -78,9 +78,9 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 When running a check directly does not reproduce a problem, and especially a
 failure seen only on CI, run it with `scripts/ci-emulate.sh <command>` (Docker
 must be running). It copies the working tree, including uncommitted edits,
-into a `node:24-bookworm` container pinned to 2 CPUs (`--cpuset-cpus`, so
-`availableParallelism()` is 2 and the harness chooses CI's concurrency) and
-7 GB, sets `CI=true`, and repeats the CI setup (frozen install, `.env`, Prisma,
+into a `node:24-bookworm` container pinned to 4 CPUs (`--cpuset-cpus`, so
+`availableParallelism()` is 4 and the harness chooses CI's concurrency) and
+16 GB, sets `CI=true`, and repeats the CI setup (frozen install, `.env`, Prisma,
 Chromium with `--with-deps`) before running the command. The pnpm store and
 browsers persist in Docker volumes, so only the first run downloads them.
 Outputs and Playwright reports are copied to `output/ci-emulate/`.
@@ -90,7 +90,9 @@ scripts/ci-emulate.sh pnpm run test:xr:viewer
 scripts/ci-emulate.sh pnpm --filter @holoim/viewer-web exec playwright test e2e/ar.spec.ts --repeat-each=20 --workers=1
 ```
 
-`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0,1`). The container is a
+`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`); `0,1` emulates
+the 2-vCPU runner this repo had while it was private. The script warns when
+Docker Desktop has less than the runner's 16 GB. The container is a
 close emulation, not the runner image: a failure that reproduces only on
 hosted CI is still a defect to explain, not something to rerun.
 - `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
@@ -131,13 +133,15 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
   Set `XR_CHECK_CONCURRENCY=1` for serial, streamed output.
 - CI splits capture XR checks across 2 runners with `XR_SHARD=<i>/2`, which
   packs the listed checks by their CI cost (`CHECK_COST` in
-  `run-xr-checks.ts`) so every check runs exactly once. Actions bills each
-  job rounded up to the minute against a monthly cap, so add shards or jobs
-  only when the wall-time win outweighs the extra billed minutes.
-  Each runner still runs its slice serially: this private repo's
-  `ubuntu-latest` runner has 2 vCPUs, so the default is 1. Running 2 at a time
-  passed on the branch but timed out on main: the hand and body checks each
-  open 2 pages at once, and cold page loads then pass the 30 s goto limit.
+  `run-xr-checks.ts`) so every check runs exactly once. The repository is
+  public, so standard runners are not billed; shards trade setup time for
+  wall time.
+  Each runner still runs its slice serially (`XR_CHECK_CONCURRENCY=1` in
+  `ci.yml`). The public `ubuntu-latest` runner has 4 vCPUs, which would
+  default to 2 at a time; on the earlier 2-vCPU runner, 2 at a time passed on
+  the branch but timed out on main: the hand and body checks each open 2
+  pages at once, and cold page loads then pass the 30 s goto limit. Measure
+  2 at a time with `scripts/ci-emulate.sh` before lifting the pin.
   The pipeline job runs its two specs as Playwright shards
   (`pnpm run test:smoke:pipeline --shard=<i>/2`); the capture-to-viewer spec
   (~100 s on CI) is the long pole. Update `CHECK_COST` from the CI

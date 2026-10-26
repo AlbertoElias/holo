@@ -118,15 +118,18 @@ jobs:
     if: needs.changes.outputs.capture_xr == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Each 2-vCPU runner runs its slice serially: two checks at once on one
+    # Each runner runs its slice serially: two checks at once on one 2-vCPU
     # runner pushed cold page loads past the 30 s goto limit (20b1986e40ae).
-    # run-xr-checks.ts balances the slices by cost and covers every check.
+    # The public runner has 4 vCPUs, which would default to 2 at a time, so
+    # the concurrency is pinned. run-xr-checks.ts balances the slices by cost
+    # and covers every check.
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2]
     env:
       XR_SHARD: ${{ matrix.shard }}/2
+      XR_CHECK_CONCURRENCY: 1
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup

@@ -21,6 +21,13 @@ device checks under Unverified below. Otherwise pick the next queue item in
 
 ## Ready to merge (grouped)
 
+- `infra/ci-emulate-public` (pushed, not on `main`): the repository is public
+  since 2026-10-26, so `ubuntu-latest` is a 4-vCPU / 16 GB runner and Actions
+  minutes are free. `scripts/ci-emulate.sh` now matches it (and keys its
+  browser volume by architecture), the docs say so, and the CI capture XR job
+  pins `XR_CHECK_CONCURRENCY=1` so 4 vCPUs do not switch it to 2 at a time.
+  Verified: capture XR shard 1/2 passes in the emulator (267 s). Merge it
+  with the next finished change.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
