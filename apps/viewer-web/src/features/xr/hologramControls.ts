@@ -233,6 +233,10 @@ export class HologramControlsSystem extends createSystem() {
     const refSpace = this.xrManager.getReferenceSpace();
     const views = refSpace ? this.xrFrame!.getViewerPose(refSpace)?.views.length : undefined;
     if (!views) return null;
+    // Unverified on a device: a phone browser that reported 'world-space' would
+    // be taken for a headset here and get headset controls; if Android Chrome
+    // ever does, this must not regress phone AR (device check in
+    // docs/features/ar-recording.md).
     return isHandheldSession(session, { strict: false, monoView: views === 1 }) ? "ar-phone" : "ar-quest";
   }
 
