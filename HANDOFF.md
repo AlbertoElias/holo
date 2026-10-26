@@ -22,7 +22,13 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Nothing held. UI redesign slices 0 to 6 (brief
+- `feature/ar-recording` (documentation only, rides along with the next
+  merge): the approved brief
+  [`docs/features/ar-recording.md`](docs/features/ar-recording.md), the
+  no-performer decision in `what-a-hologram-is.md`, and its `TODOS.md`
+  entries. Its implementation starts from slices 1 and 2a; slice 0 waits for
+  `feature/viewer-xr-interface` to land.
+- UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
   baked into Quick Look previews, with the one-off `rebuild:usdz`) were

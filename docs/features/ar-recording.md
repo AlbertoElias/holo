@@ -1,7 +1,7 @@
 # Feature brief: AR recording (the phone as a camera-only author)
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed (design review 2026-10-25 adopted; awaiting the user's approval)
+**Status:** Approved (the user, 2026-10-25, with the recommended answers to Q1 to Q3); not started
 **Layer:** event (the author's camera, voice and the set over time) and
 meaning (a held mark whose `from` is the camera); see
 `docs/product/concepts/what-a-hologram-is.md`
@@ -82,8 +82,8 @@ queue entry recorded, checked against the tree at `5f9d376`:
   - the event objects;
   - `RecordedAuthorCamera`, a node animated by the take's clip (translation
     and rotation, so every camera take has a clip and a duration), with its
-    `yfov` in the node's `extras` (open question Q2 asks whether it is a
-    glTF camera instead);
+    `yfov` in the node's `extras`, a plain node and not a glTF camera
+    (Q2);
   - `KHR_audio`, `HOLOIM_objects` as today, and `HOLOIM_meaning` v1 when it
     holds a camera mark.
 - **Touch in phone AR without `dom-overlay`.** Taps and holds arrive as
@@ -329,9 +329,12 @@ Record hidden while placing and refused on an empty set; the phone AR Halo
 cut; no `exercise_usdz.py` change; slice 2 split. Surfaced to the user as
 Q1 to Q3 below.
 
-### Open questions for the user
+### Decisions (the user, 2026-10-25)
 
-- **Q1. How the viewer shows the author's camera.** (A, recommended) a small
+The user approved the brief on 2026-10-25 with answer A to each question
+below; the B and C options are kept for the record.
+
+- **Q1. How the viewer shows the author's camera.** (A, chosen) a small
   filled mark in the author's identity hue with their initial (styleguide
   2.4), Presence material, at the camera node and turned the way it looked;
   a camera link's ink starts there; the dome keeps fitting the set, so the
@@ -341,12 +344,12 @@ Q1 to Q3 below.
   feed card, and Quick Look needs the presence baked into the GLB as a mesh
   so both fit the same points. Codex reviews screenshots of the chosen form
   against the styleguide before the user sees it.
-- **Q2. A plain node or a glTF camera.** (A, recommended) `RecordedAuthorCamera`
+- **Q2. A plain node or a glTF camera.** (A, chosen) `RecordedAuthorCamera`
   is a plain node with `yfov` in `extras`: presence only. (B) it carries a
   glTF perspective camera: standard and readable by any tool, but tools such
   as Blender or Babylon's sandbox offer it as the view, against "never the
   view".
-- **Q3. A camera take with no set.** (A, recommended) refuse Record when the
+- **Q3. A camera take with no set.** (A, chosen) refuse Record when the
   set has nothing drawn: a voice and a moving point is not much of an event.
   (B) allow it: the take is the voice and the author's path alone.
 
