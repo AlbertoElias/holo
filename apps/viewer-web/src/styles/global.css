@@ -113,22 +113,11 @@ body::before {
 }
 
 .auth-panel {
-  position: fixed;
-  z-index: 10;
-  top: 1rem;
-  right: 1rem;
-  width: min(320px, calc(100vw - 2rem));
+  margin-top: 1rem;
   background: rgb(4 10 15 / 86%);
   border: 1px solid rgb(139 194 255 / 24%);
   border-radius: 14px;
   padding: 0.85rem;
-  backdrop-filter: blur(8px);
-}
-
-@media (max-width: 768px) {
-  .auth-panel {
-    width: min(250px, calc(100vw - 2rem));
-  }
 }
 
 .auth-signed-in {

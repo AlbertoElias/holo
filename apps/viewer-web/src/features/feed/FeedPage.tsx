@@ -187,11 +187,11 @@ export function FeedPage() {
       </Dock>
       <SideSheet open={settingsOpen} title="Settings" onClose={() => setSettingsOpen(false)} target={target}>
         <HandednessPicker value={handedness} onChange={setHandedness} wristControl={VIEWER_CONTROL_NAMES.exitAr} />
+        <AuthPanel user={user} onSignOut={logout} />
       </SideSheet>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
         <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} currentUser={user} />
       </SideSheet>
-      <AuthPanel user={user} onSignOut={logout} />
       <FeedNotice notice={notice} target={target} />
     </main>
   );
