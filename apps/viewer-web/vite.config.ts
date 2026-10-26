@@ -23,6 +23,16 @@ const semConfig = semScene && isSemScene(semScene)
   ? { defaultScene: semScene }
   : undefined;
 
+// Vendor packages the feed needs for its first render; long-lived chunks that
+// stay cached across app deploys.
+const reactVendor = new Set(["react", "react-dom", "scheduler", "react-router", "react-router-dom"]);
+const threeVendor = new Set(["three", "super-three", "@react-three/fiber", "@react-three/drei", "three-stdlib"]);
+
+function packageName(id: string): string | undefined {
+  const match = /.*\/node_modules\/((?:@[^/]+\/)?[^/]+)/.exec(id);
+  return match?.[1];
+}
+
 export default defineConfig({
   resolve: {
     // @holoim/xr-ui-iwsdk resolves its own pnpm copy of @iwsdk/core (no React
@@ -42,27 +52,21 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        // Group by exact package name, never by path substring: pnpm paths
+        // carry peer names (".../iwer@x_super-three@y/..."), so a substring
+        // match on "three" pulled the IWER emulator into the eager chunk.
+        // Anything unlisted (the AR-only @react-three/xr, the emulator that
+        // @pmndrs/xr imports only when `emulate` is on) stays in whichever
+        // lazy chunk imports it.
         manualChunks(id) {
-          if (id.includes("node_modules")) {
-            if (
-              id.includes("@react-three/fiber") ||
-              id.includes("@react-three/drei") ||
-              id.includes("@react-three/xr") ||
-              id.includes("three") ||
-              id.includes("react-dom") ||
-              id.includes("react-router-dom") ||
-              id.includes("react")
-            ) {
-              return "react-three-vendor";
-            }
-
-            if (id.includes("@react-three/uikit") || id.includes("@holoim/ui-dom")) {
-              return "ui-vendor";
-            }
-
-            if (id.includes("@holoim/xr-runtime") || id.includes("@holoim/xr-ui-core") || id.includes("@holoim/xr-ui-r3f")) {
-              return "xr-vendor";
-            }
+          const name = packageName(id);
+          if (name && reactVendor.has(name)) {
+            return "react-vendor";
+          }
+          // three's core only: its examples/jsm addons follow whichever
+          // chunk imports them (most belong to the lazy IWSDK view).
+          if (name && threeVendor.has(name) && !id.includes("/examples/jsm/")) {
+            return "three-vendor";
           }
         }
       }

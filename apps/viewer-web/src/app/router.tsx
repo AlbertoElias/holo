@@ -2,11 +2,12 @@ import { lazy, Suspense } from "react";
 import { createBrowserRouter, useSearchParams } from "react-router-dom";
 
 import { FeedPage } from "../features/feed/FeedPage";
-import { ARView } from "../features/ar/ARView";
 import { AuthVerifyPage } from "../features/auth/AuthVerifyPage";
 
 // The IWSDK World only loads on the immersive routes.
 const XrHologramView = lazy(() => import("../features/xr/XrHologramView").then((m) => ({ default: m.XrHologramView })));
+// The R3F AR view pulls in @react-three/xr, which the feed never needs.
+const ARView = lazy(() => import("../features/ar/ARView").then((m) => ({ default: m.ARView })));
 
 function VrRoute() {
   return (
@@ -20,10 +21,9 @@ function VrRoute() {
 // view stays behind ?shell=r3f as a temporary fallback.
 function ArRoute() {
   const [params] = useSearchParams();
-  if (params.get("shell") === "r3f") return <ARView />;
   return (
     <Suspense fallback={null}>
-      <XrHologramView mode="ar" />
+      {params.get("shell") === "r3f" ? <ARView /> : <XrHologramView mode="ar" />}
     </Suspense>
   );
 }
