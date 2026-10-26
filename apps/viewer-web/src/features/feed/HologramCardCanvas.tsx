@@ -20,6 +20,7 @@ import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
 import { drawnPoints, motionPoints } from "../hologram/drawnPoints";
+import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
 import { readMeaningLinks } from "../meaning/meaningLinks";
@@ -383,24 +384,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
 
     const rankedActions = allActions
       .slice()
-      .sort((a, b) => {
-        const aName = a.getClip().name.toLowerCase();
-        const bName = b.getClip().name.toLowerCase();
-        const motionTerms = ["body", "move", "walk", "run", "idle", "anim", "record"];
-        const aHasMotionName = motionTerms.some((term) => aName.includes(term)) ? 1 : 0;
-        const bHasMotionName = motionTerms.some((term) => bName.includes(term)) ? 1 : 0;
-        if (bHasMotionName !== aHasMotionName) {
-          return bHasMotionName - aHasMotionName;
-        }
-
-        const aTracks = a.getClip().tracks.length;
-        const bTracks = b.getClip().tracks.length;
-        if (bTracks !== aTracks) {
-          return bTracks - aTracks;
-        }
-
-        return b.getClip().duration - a.getClip().duration;
-      });
+      .sort((a, b) => compareTakeClips(a.getClip(), b.getClip()));
 
     const primaryAction = rankedActions[0];
     if (!primaryAction) {
@@ -413,7 +397,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     primaryAction.setLoop(LoopRepeat, Infinity);
     primaryAction.clampWhenFinished = false;
     const animSpeed = HOLOGRAM_ANIMATION_SPEED;
-    primaryAction.setEffectiveWeight(1);
+    primaryAction.setEffectiveWeight(TAKE_CLIP_WEIGHT.primary);
     primaryAction.setEffectiveTimeScale(animSpeed);
     primaryAction.play();
     primaryAction.paused = !active;
@@ -423,7 +407,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
       action.enabled = true;
       action.setLoop(LoopRepeat, Infinity);
       action.clampWhenFinished = false;
-      action.setEffectiveWeight(0.35);
+      action.setEffectiveWeight(TAKE_CLIP_WEIGHT.secondary);
       action.setEffectiveTimeScale(animSpeed);
       action.play();
       action.paused = !active;

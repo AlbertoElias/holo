@@ -266,7 +266,8 @@ body::before {
 
 @media (prefers-reduced-motion: reduce) {
   .portal-controls-reach,
-  .portal-controls[data-reach="hidden"] .portal-controls-reach {
+  .portal-controls[data-reach="hidden"] .portal-controls-reach,
+  .feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="hidden"] .portal-controls-after {
     transform: none;
   }
 

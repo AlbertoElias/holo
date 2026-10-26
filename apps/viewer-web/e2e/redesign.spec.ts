@@ -284,6 +284,13 @@ test.describe("phone by touch", () => {
     const controls = card.locator(".portal-controls");
     const play = controls.getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) });
     const restingPlay = (await play.boundingBox())!;
+    // Folded, the line above Play waits in place: it slides in, except under reduced motion, where it only fades (8.3).
+    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "stacked");
+    const foldedShift = () => controls.locator(".portal-controls-after").evaluate((node) => getComputedStyle(node).transform);
+    expect(await foldedShift(), "folded, the line sits a gap lower").not.toBe("none");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(foldedShift, { message: "under reduced motion it does not move", timeout: 2000 }).toBe("none");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
     await card.locator(".feed-card-portal").tap({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
     await expect(controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }), "a take with a voice has its sound control").toHaveCount(1);
