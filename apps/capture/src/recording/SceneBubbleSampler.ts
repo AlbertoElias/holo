@@ -16,6 +16,11 @@ export interface SceneBubble {
   clippedBySource: Map<THREE.Mesh, THREE.Mesh>;
 }
 
+/** A mesh the recorded set draws: visible, not skinned, not chrome. */
+function isSetMesh(obj: THREE.Object3D): obj is THREE.Mesh {
+  return isThreeMesh(obj) && obj.visible && !isThreeSkinnedMesh(obj) && !isInChrome(obj);
+}
+
 export class SceneBubbleSampler {
   private static readonly UP = new THREE.Vector3(0, 1, 0);
 
@@ -33,6 +38,8 @@ export class SceneBubbleSampler {
   private readonly tmpSampleDelta = new THREE.Vector3();
   private readonly occlusionRaycaster = new THREE.Raycaster();
   private readonly sceneBubbleSamples: THREE.Vector3[] = [];
+  /** Source mesh → frame matrix scratch; used only when a take clips in a frame other than the world's. */
+  private readonly tmpFramed = new THREE.Matrix4();
 
   captureSceneBubbleSample(activeCamera: THREE.Camera | undefined, avatarRoot: THREE.Object3D): void {
     if (activeCamera) {
@@ -43,6 +50,11 @@ export class SceneBubbleSampler {
 
     avatarRoot.getWorldPosition(this.tmpAvatarRootPos);
     this.appendSceneBubbleSample(this.tmpAvatarRootPos);
+  }
+
+  /** A camera take's bubble point (a camera position in the set's frame, or the set's origin). */
+  captureSceneBubblePoint(point: THREE.Vector3): void {
+    this.appendSceneBubbleSample(point);
   }
 
   clear(): void {
@@ -71,20 +83,23 @@ export class SceneBubbleSampler {
    * The world model clipped to the recorded bubble, as exported, with each
    * source mesh's clipped copy. Point resolution casts only against these
    * clipped meshes, never the source scene, the bubble sphere or lights.
+   *
+   * `frame`, when given, re-expresses the clip in another frame (a camera
+   * take's set frame, `inverse(worldGroup.matrixWorld)`): the bubble samples
+   * are in that frame, and each clipped mesh is posed in it. The occlusion
+   * test stays in world space, where the scene it casts against lives.
+   * Without it, the world frame is used, as for every performer take.
    */
-  collectSceneBubbleGroup(sceneRoot: THREE.Object3D): SceneBubble | undefined {
+  collectSceneBubbleGroup(sceneRoot: THREE.Object3D, frame?: THREE.Matrix4): SceneBubble | undefined {
     if (this.sceneBubbleSamples.length === 0) return undefined;
     sceneRoot.updateMatrixWorld(true);
     const group = new THREE.Group();
     group.name = 'RecordedSceneBubble';
     const clippedBySource = new Map<THREE.Mesh, THREE.Mesh>();
     sceneRoot.traverse((obj) => {
-      if (!isThreeMesh(obj)) return;
-      if (!obj.visible) return;
-      if (isThreeSkinnedMesh(obj)) return;
       // Chrome (wrist glyphs, labels, panels, rays) is view layer, never the event (styleguide 1).
-      if (isInChrome(obj)) return;
-      const bubbleMesh = this.createSceneBubbleMesh(sceneRoot, obj);
+      if (!isSetMesh(obj)) return;
+      const bubbleMesh = this.createSceneBubbleMesh(sceneRoot, obj, frame);
       if (bubbleMesh) {
         group.add(bubbleMesh);
         clippedBySource.set(obj, bubbleMesh);
@@ -119,7 +134,7 @@ export class SceneBubbleSampler {
     this.sceneBubbleSamples.push(source.clone());
   }
 
-  private createSceneBubbleMesh(sceneRoot: THREE.Object3D, sourceMesh: THREE.Mesh): THREE.Mesh | undefined {
+  private createSceneBubbleMesh(sceneRoot: THREE.Object3D, sourceMesh: THREE.Mesh, frame?: THREE.Matrix4): THREE.Mesh | undefined {
     const sourceGeometry = sourceMesh.geometry;
     const positionAttr = sourceGeometry.getAttribute('position');
     if (!positionAttr || positionAttr.count < 3) return undefined;
@@ -132,6 +147,8 @@ export class SceneBubbleSampler {
       ? sourceGeometry.groups
       : [{ start: 0, count: indexCount, materialIndex: 0 }];
     let groupCursor = 0;
+    // Vertices are tested where the bubble samples are: the world, or the frame.
+    const clipMatrix = frame ? this.tmpFramed.multiplyMatrices(frame, sourceMesh.matrixWorld) : sourceMesh.matrixWorld;
 
     const keptIndicesByMaterial = new Map<number, number[]>();
     for (let triStart = 0; triStart + 2 < indexCount; triStart += 3) {
@@ -150,9 +167,9 @@ export class SceneBubbleSampler {
       const i1 = sourceIndex ? sourceIndex.getX(triStart + 1) : triStart + 1;
       const i2 = sourceIndex ? sourceIndex.getX(triStart + 2) : triStart + 2;
 
-      this.tmpTriA.fromBufferAttribute(positionAttr, i0).applyMatrix4(sourceMesh.matrixWorld);
-      this.tmpTriB.fromBufferAttribute(positionAttr, i1).applyMatrix4(sourceMesh.matrixWorld);
-      this.tmpTriC.fromBufferAttribute(positionAttr, i2).applyMatrix4(sourceMesh.matrixWorld);
+      this.tmpTriA.fromBufferAttribute(positionAttr, i0).applyMatrix4(clipMatrix);
+      this.tmpTriB.fromBufferAttribute(positionAttr, i1).applyMatrix4(clipMatrix);
+      this.tmpTriC.fromBufferAttribute(positionAttr, i2).applyMatrix4(clipMatrix);
 
       if (!this.triangleInsideBubble(this.tmpTriA, this.tmpTriB, this.tmpTriC)) {
         continue;
@@ -204,9 +221,13 @@ export class SceneBubbleSampler {
 
     const clippedMesh = new THREE.Mesh(clippedGeometry, sourceMesh.material);
     clippedMesh.name = sourceMesh.name ? `${sourceMesh.name}_RecordedBubble` : 'RecordedBubbleMesh';
-    sourceMesh.getWorldPosition(this.tmpPos);
-    sourceMesh.getWorldQuaternion(this.tmpQuat);
-    sourceMesh.getWorldScale(this.tmpScale);
+    if (frame) {
+      clipMatrix.decompose(this.tmpPos, this.tmpQuat, this.tmpScale);
+    } else {
+      sourceMesh.getWorldPosition(this.tmpPos);
+      sourceMesh.getWorldQuaternion(this.tmpQuat);
+      sourceMesh.getWorldScale(this.tmpScale);
+    }
     clippedMesh.position.copy(this.tmpPos);
     clippedMesh.quaternion.copy(this.tmpQuat);
     clippedMesh.scale.copy(this.tmpScale);
@@ -214,6 +235,33 @@ export class SceneBubbleSampler {
     clippedMesh.receiveShadow = sourceMesh.receiveShadow;
     clippedMesh.renderOrder = sourceMesh.renderOrder;
     return clippedMesh;
+  }
+
+  /**
+   * Whether the clip of `sceneRoot` to the samples so far keeps any triangle:
+   * the same inside test as `collectSceneBubbleGroup`, stopping at the first.
+   * A camera take asks this at Record, so a set too far away to clip is
+   * refused then instead of failing at export.
+   */
+  clipsAnything(sceneRoot: THREE.Object3D, frame?: THREE.Matrix4): boolean {
+    if (this.sceneBubbleSamples.length === 0) return false;
+    sceneRoot.updateMatrixWorld(true);
+    let found = false;
+    sceneRoot.traverse((obj) => {
+      if (found || !isSetMesh(obj)) return;
+      const positionAttr = obj.geometry.getAttribute('position');
+      if (!positionAttr) return;
+      const index = obj.geometry.getIndex();
+      const count = index ? index.count : positionAttr.count;
+      const matrix = frame ? this.tmpFramed.multiplyMatrices(frame, obj.matrixWorld) : obj.matrixWorld;
+      for (let i = 0; i + 2 < count && !found; i += 3) {
+        this.tmpTriA.fromBufferAttribute(positionAttr, index ? index.getX(i) : i).applyMatrix4(matrix);
+        this.tmpTriB.fromBufferAttribute(positionAttr, index ? index.getX(i + 1) : i + 1).applyMatrix4(matrix);
+        this.tmpTriC.fromBufferAttribute(positionAttr, index ? index.getX(i + 2) : i + 2).applyMatrix4(matrix);
+        found = this.triangleInsideBubble(this.tmpTriA, this.tmpTriB, this.tmpTriC);
+      }
+    });
+    return found;
   }
 
   private triangleInsideBubble(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): boolean {

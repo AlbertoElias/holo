@@ -50,6 +50,10 @@ export interface AutomationHooks {
   __setChromeVisible: (visible: boolean) => void;
   /** Held marks and the Halo (slice 5): the headset modes, the take's holds, the touch hold and every committed Halo action. */
   __sampleHolds: () => HoldsSnapshot;
+  /** Record or Stop, through the same `recording.toggle()` the dock, the key and the wrist glyph reach. */
+  __toggleRecording: () => void;
+  /** `worldGroup.matrixWorld` (column-major, 16 numbers): the set's frame in the room, for scripting a camera walk in the set's frame. */
+  __arWorldFrame: () => number[];
   /** CSS px of a world point in the flat-screen view, or null behind the camera: where a check touches to aim at it. */
   __projectToScreen: (point: readonly number[]) => { x: number; y: number } | null;
 }

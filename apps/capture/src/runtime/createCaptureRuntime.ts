@@ -113,7 +113,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     renderer,
     getAvatar: () => ({ avatar: avatar.avatar, worldModel: avatar.worldModel }),
     onSizeLocked: () => heightFit.calibration.interrupt(),
-    onTakeStart: () => objects.startTake()
+    onTakeStart: () => objects.startTake(),
+    isCameraAuthor: () => capture.frame.arCameraAuthor,
+    isPlacementSettled: () => capture.ar.isSettled(),
+    setFrame: stage.worldGroup
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
   const objects = new CaptureObjects({
@@ -192,7 +195,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       getBodyYaw: () => body.solver.bodyYaw,
       getHud: () => vrChrome.root
     }),
-    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arSpectator: false, vrActive: false, bodyTracking: false, character: null },
+    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arSpectator: false, arCameraAuthor: false, vrActive: false, bodyTracking: false, character: null },
     clockMode: () => loop.clockMode
   };
   world.globals.capture = capture;
@@ -269,9 +272,21 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       toggleFaceCamera: () => capture.face.toggleCamera(),
       setHandedness,
-      toggleXr: (mode) => xrEntry.toggle(mode),
+      toggleXr: (mode) => {
+        const entering = !world.session;
+        xrEntry.toggle(mode);
+        // Camera takes need the microphone, and a prompt needs this tap's user
+        // activation. It is asked for after launchXR, which has already called
+        // requestSession synchronously, and never awaited before it.
+        if (entering && mode === 'ar' && config.arCameraAuthor) recording.holdMicForArTake();
+      },
       recenterAr: () => {
-        if (xrEntry.sessionMode === 'ar' && tracking.isXrPresenting()) capture.ar.recenter();
+        if (xrEntry.sessionMode !== 'ar' || !tracking.isXrPresenting()) return;
+        if (ui.getState().recordingState !== 'idle') {
+          ui.flashNotice('Stop recording to recenter.');
+          return;
+        }
+        capture.ar.recenter();
       }
     },
     start: async () => {
@@ -329,6 +344,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           flatHalo: flatHalo.getSnapshot(),
           actions: haloActions.log
         }),
+        __toggleRecording: () => recording.toggle(),
+        __arWorldFrame: () => stage.worldGroup.matrixWorld.toArray(),
         __projectToScreen: (point) => {
           const ndc = new Vector3(point[0], point[1], point[2]).project(stage.desktopCamera);
           if (ndc.z > 1) return null;

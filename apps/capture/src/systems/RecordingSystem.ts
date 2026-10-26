@@ -15,6 +15,11 @@ export class RecordingSystem extends createSystem() {
 
   update(): void {
     const c = this.capture;
+    if (c.frame.arCameraAuthor) {
+      // The phone is a camera: its path, the objects and the set, in the set's frame.
+      c.recording.cameraRecorder.capture(c.frame.elapsedSec, c.stage.worldGroup, c.stage.renderer.xr.getCamera(), c.objects.registry.eventObjects());
+      return;
+    }
     if (c.frame.arSpectator) return;
     const held = c.frame.vrActive
       ? c.headsetHolds.update({ timeSec: c.frame.elapsedSec, presenting: c.frame.xrPresenting && !c.tracking.mock.enabled, recording: c.recording.recorder.isEnabled(), camera: c.stage.xrCamera })

@@ -37,6 +37,10 @@ export interface CaptureFrame {
   xrPresenting: boolean;
   // An AR session presents: only the spectator runs; later systems skip.
   arSpectator: boolean;
+  // The AR session is a handheld camera author (`?arCamera=1`, strict
+  // handheld check, decided once on entry). Still `arSpectator` for every
+  // system that returns early; only recording and diagnostics look past it.
+  arCameraAuthor: boolean;
   // VR embodiment, from a real session or the mock pose hook.
   vrActive: boolean;
   // Real-XR body solver active with a valid head this step.
