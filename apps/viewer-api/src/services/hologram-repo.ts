@@ -14,6 +14,7 @@ export type CreateHologramInput = {
   sizeBytes: number;
   storagePath: string;
   quickLookEnabled: boolean;
+  ownerId?: string | null;
 };
 
 export async function createHologram(input: CreateHologramInput) {
@@ -27,6 +28,7 @@ export async function createHologram(input: CreateHologramInput) {
       sizeBytes: input.sizeBytes,
       storagePath: input.storagePath,
       quickLookEnabled: input.quickLookEnabled,
+      ownerId: input.ownerId ?? null,
       usdzStatus: input.quickLookEnabled ? "pending" : "none"
     }
   });
@@ -58,6 +60,7 @@ export type CreateUploadIntentInput = {
   mimeType: string;
   sizeBytes: number;
   expiresAt: Date;
+  ownerId?: string | null;
 };
 
 export async function createUploadIntent(input: CreateUploadIntentInput) {

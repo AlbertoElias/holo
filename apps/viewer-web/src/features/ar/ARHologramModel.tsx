@@ -2,16 +2,16 @@ import { useAnimations, useGLTF } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { useXR } from "@react-three/xr";
-import { Box3, LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
-import type { AnimationAction, Group, Object3D } from "three";
+import { LoopRepeat, MathUtils, Quaternion, Vector3 } from "three";
+import type { AnimationAction, Group } from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { TRUE_SCALE, fitCloche, type ClocheShape } from "@holoim/xr-ui-core";
 
 
 import { drawnPoints, motionPoints, recordedBubble } from "../hologram/drawnPoints";
+import { boundsWithoutObjects, normalizeSceneAtOrigin } from "../hologram/hologramScene";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
-import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipStatus } from "../hologram/useSphereClipping";
 import { ARDepthOcclusion } from "./ARDepthOcclusion";
@@ -134,40 +134,6 @@ function toQuaternionArray(quaternion: Quaternion): [number, number, number, num
   return [quaternion.x, quaternion.y, quaternion.z, quaternion.w];
 }
 
-/**
- * Bounds of the recording without the objects the author handled: a prop
- * held below the feet or at arm's length must not lift or shrink the avatar.
- */
-function boundsWithoutObjects(root: Object3D): Box3 {
-  const bounds = new Box3();
-  const scratch = new Box3();
-  root.updateWorldMatrix(true, true);
-  root.traverse((child) => {
-    const mesh = child as Object3D & { isMesh?: boolean };
-    if (!mesh.isMesh || isInsideRecordedObject(child)) return;
-    scratch.setFromObject(child);
-    if (!scratch.isEmpty()) bounds.union(scratch);
-  });
-  return bounds;
-}
-
-function normalizeSceneAtOrigin(root: Object3D): void {
-  const anchor = root.getObjectByName("RecordedAvatar")
-    ?? root.getObjectByName("Hips")
-    ?? root.getObjectByName("mixamorigHips")
-    ?? root;
-
-  const anchorPos = anchor.getWorldPosition(new Vector3());
-  if (!Number.isFinite(anchorPos.x) || !Number.isFinite(anchorPos.y) || !Number.isFinite(anchorPos.z)) return;
-
-  root.position.sub(anchorPos);
-
-  const bounds = boundsWithoutObjects(root);
-  if (!bounds.isEmpty() && Number.isFinite(bounds.min.y)) {
-    root.position.y -= bounds.min.y;
-  }
-}
-
 export function ARHologramModel({
   enableDepthOcclusion,
   url,
@@ -193,7 +159,8 @@ export function ARHologramModel({
   // and only the viewer's own, labelled rescale changes it.
   const modelScale = scaleFactor;
   const modelHeightMeters = useMemo(() => {
-    const bounds = boundsWithoutObjects(clonedScene);
+    // The recorded person's height, not the scene's around them.
+    const bounds = boundsWithoutObjects(clonedScene.getObjectByName("RecordedAvatar") ?? clonedScene);
     const size = bounds.getSize(new Vector3());
     if (!Number.isFinite(size.y) || size.y <= 1e-4) {
       return AR_UNKNOWN_HEIGHT_METERS;
@@ -224,6 +191,7 @@ export function ARHologramModel({
   const xrSessionRef = useRef<XRSession | null>(null);
   const originReferenceSpace = useXR((state) => state.originReferenceSpace);
   const groupRef = useRef<Group>(null);
+  const clocheRef = useRef<ClocheShape | null>(null);
   const footRef = useRef<Group>(null);
   const primaryActionRef = useRef<AnimationAction | null>(null);
   const placementStateRef = useRef<PlacementRuntimeState>(createPlacementRuntimeState());
@@ -245,7 +213,7 @@ export function ARHologramModel({
       const observer = (window as Window & {
         __HOLOIM_AR_TEST_OBSERVER__?: (value: unknown) => void;
       }).__HOLOIM_AR_TEST_OBSERVER__;
-      observer?.({ renderer, scene: renderScene, model: clonedScene, bubble: sphereClip, actions, mixer });
+      observer?.({ renderer, scene: renderScene, model: clonedScene, bubble: sphereClip, actions, mixer, cloche: clocheRef, group: groupRef });
     }
   }, [actions, clonedScene, mixer, renderScene, renderer, sphereClip]);
 
@@ -535,11 +503,13 @@ export function ARHologramModel({
     const bubble = recordedBubble(clonedScene, group);
     // In AR the bubble stays put, so the author's whole walk is inside it.
     const points = [...drawnPoints(clonedScene, bubble, group), ...motionPoints(clonedScene, arAnimations, { into: group, bubble })];
-    const shape = fitCloche(points);
+    // The dome stands on the recorded floor, which normalising put at the group's origin, on the placement surface (B-022).
+    const shape = fitCloche(points, { floorY: 0 });
     if (!shape) return;
     // The cloche is the bubble's look now; the recorded sphere's old glass is not drawn.
     const sphere = clonedScene.getObjectByName("RecordedBubbleSphere");
     if (sphere) sphere.visible = false;
+    clocheRef.current = shape;
     setCloche(shape);
   });
 

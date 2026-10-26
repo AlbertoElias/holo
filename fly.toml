@@ -1,6 +1,6 @@
 # HoloIM viewer API — single-machine beta.
 # Deploy from the workspace root:  fly deploy -c fly.toml
-# One machine only: SQLite and local uploads live on its volume. Do not
+# One machine only: SQLite lives on its volume (media is on R2). Do not
 # scale this app horizontally until Postgres replaces SQLite
 # (see docs/DEPLOYMENT.md).
 app = "holoim-api"
@@ -11,7 +11,9 @@ primary_region = "iad"
 
 [env]
   PORT = "3001"
-  STORAGE_DRIVER = "local"
+  # Media on R2 behind media.holostud.io; S3_* and PUBLIC_MEDIA_BASE_URL
+  # are Fly secrets (docs/DEPLOYMENT.md section 3).
+  STORAGE_DRIVER = "s3"
   USDZ_WORKER_ENABLED = "true"
 
 [http_service]

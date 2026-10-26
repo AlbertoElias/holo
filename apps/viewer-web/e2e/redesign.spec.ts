@@ -6,7 +6,7 @@ import { test as plainTest, type Page } from "@playwright/test";
 import type * as Three from "three";
 import { waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
 import { tokens } from "@holoim/design-tokens";
-import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, VIEW_TARGETS } from "@holoim/xr-ui-core";
+import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, PHONE_EDGES, VIEW_TARGETS } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 import { pinch } from "./ar-gestures";
@@ -270,6 +270,42 @@ async function avatarWithSound(): Promise<Buffer> {
 test.describe("phone by touch", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
 
+  // Failure modes: Settings back in the dock beside Upload (two lanterns, one
+  // place), lost in the status line's centre or a gesture edge, a long title
+  // running under it, a hit under the touch minimum, its sheet unfolding
+  // from the other side.
+  test("Settings waits in the top corner its sheet unfolds from, apart from Upload's dock, and a long title stops short of it", async ({ page }) => {
+    const long = { ...first, hologramName: "The whole kitchen, the morning before the guests came" };
+    await installProbe(page);
+    await mockFeed(page, [long]);
+    await page.goto("/");
+    await assertViewerShell(page);
+    await waitForPortalReady(page, long.id, long.url);
+    const dock = page.getByRole("toolbar", { name: "Feed" });
+    await expect(dock.getByRole("button"), "Upload stands alone in the dock").toHaveCount(1);
+    await expect(dock.getByRole("button", { name: "Upload a hologram" })).toBeVisible();
+    const settings = page.getByRole("button", { name: "Settings" });
+    const corner = (await settings.boundingBox())!;
+    expect(corner.y, "at the top of the screen").toBeLessThan(PHONE.height * 0.08);
+    expect(PHONE.width - (corner.x + corner.width), "in the right corner, clear of the side edge").toBeGreaterThanOrEqual(PHONE_EDGES.side - 1);
+    expect(PHONE.width - (corner.x + corner.width), "and close to it").toBeLessThan(PHONE_EDGES.side + 24);
+    expect(corner.height, "a touch-sized hit").toBeGreaterThanOrEqual(hitAreaApx("touch", 0) - 0.5);
+    const title = (await page.locator(".feed-card-title").first().boundingBox())!;
+    expect(title.x + title.width, "the title stops short of Settings").toBeLessThanOrEqual(corner.x);
+    await shot(page, "phone-settings-corner");
+    // A narrow desktop window, where the title's column reaches the corner too.
+    await page.setViewportSize({ width: 760, height: 700 });
+    await expect.poll(async () => {
+      const narrowCorner = (await settings.boundingBox())!;
+      const narrowTitle = (await page.locator(".feed-card-title").first().boundingBox())!;
+      return narrowCorner.x - (narrowTitle.x + narrowTitle.width);
+    }, { message: "a 760 px window's title stops short of Settings" }).toBeGreaterThanOrEqual(0);
+    await page.setViewportSize(PHONE);
+    await settings.tap();
+    const sheet = page.getByRole("dialog", { name: "Settings" });
+    await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.x + box.width); }, { message: "the sheet unfolds from that corner's side" }).toBe(PHONE.width);
+  });
+
   test("every reach control fits the screen at the touch minimum, clear of the gesture edges", async ({ page }) => {
     const sounding = await avatarWithSound();
     await installProbe(page);
@@ -348,6 +384,25 @@ test.describe("phone by touch", () => {
     expect(overPicture).not.toBe("rgba(0, 0, 0, 0)");
     const freePlay = (await play.boundingBox())!;
     expect(Math.abs(freePlay.x + freePlay.width / 2 - PHONE.width / 2), "Play still holds the middle beside Return").toBeLessThan(2);
+    // The chip hugs what shows: from its edge to the first and last mark on it alike, reached and folded.
+    const chipEnds = () => chip.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const row = node.querySelector<HTMLElement>(".portal-controls")!;
+      const marks = [...row.querySelectorAll(".portal-timecode, button svg")].filter((mark) => {
+        const folded = mark.closest(".portal-controls-reach");
+        return !folded || (row.dataset.reach === "shown" && getComputedStyle(folded).position !== "absolute");
+      }).map((mark) => mark.getBoundingClientRect());
+      return { start: Math.min(...marks.map((mark) => mark.left)) - box.left, end: box.right - Math.max(...marks.map((mark) => mark.right)) };
+    });
+    // Read once the unfolding has run; a loaded runner draws it late.
+    const endsApart = async () => {
+      const ends = await chipEnds();
+      return Math.abs(ends.start - ends.end);
+    };
+    await expect.poll(endsApart, { message: "reached, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
+    await expect(controls).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
+    await expect.poll(endsApart, { message: "folded, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
+    expect(Math.abs((await play.boundingBox())!.x + freePlay.width / 2 - PHONE.width / 2), "folded, Play still holds the middle").toBeLessThan(2);
     for (const button of await controls.locator("button").all()) {
       const box = (await button.boundingBox())!;
       expect(box.x + box.width, "clear of the right back-swipe edge").toBeLessThanOrEqual(PHONE.width - side + 0.5);
@@ -457,15 +512,19 @@ test("left-handed, set in the feed's settings: kept on this device, and AR puts 
   await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 
   await pressViewInAr(page);
+  const container = page.locator(".xr-view-container");
+  await expect(container).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
+  if ((await container.getAttribute("data-xr-state")) === "ready") await page.getByRole("button", { name: "View in your room" }).click();
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
-  await page.waitForFunction(() => Boolean((window as ArWindow).__arProbe));
   await expect.poll(() => page.evaluate(() => {
-    const scene = (window as ArWindow).__arProbe!.scene;
-    return { right: scene.getObjectByName("wrist-glyphs-right")?.visible ?? false, left: Boolean(scene.getObjectByName("wrist-glyphs-left")) };
-  }), { message: "Exit on the non-dominant (right) wrist, and none on the left" }).toEqual({ right: true, left: false });
+    const dock = (window as { __HOLOIM_XR_VIEWER__?: { snapshot(): { controls: { dock: { mount: string; hand: string | null } } | null } } }).__HOLOIM_XR_VIEWER__?.snapshot().controls?.dock;
+    return dock ? { mount: dock.mount, hand: dock.hand } : null;
+  }), { message: "Exit on the non-dominant (right) hand", timeout: 15_000 }).toEqual({ mount: "hand", hand: "right" });
 });
 
-test("AR: controls at the hologram's foot on the chip, Exit always reachable, true scale and a labelled rescale", async ({ page }) => {
+// The R3F view, kept behind `?shell=r3f` while the IWSDK shell becomes the
+// default; xr-viewer.spec.ts covers the same controls there.
+test("AR (R3F fallback): controls at the hologram's foot on the chip, Exit always reachable, true scale and a labelled rescale", async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 640, height: 480 });
   await page.addInitScript(() => {
@@ -473,7 +532,7 @@ test("AR: controls at the hologram's foot on the chip, Exit always reachable, tr
   });
   await mockFeed(page, [first]);
   await observeFeedCardRenderer(page);
-  await page.goto("/");
+  await page.goto("/?shell=r3f");
   await waitForFeedCardPresented(page);
   await pressViewInAr(page);
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });

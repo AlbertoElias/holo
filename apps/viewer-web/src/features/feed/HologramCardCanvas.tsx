@@ -14,14 +14,14 @@ import {
 } from "three";
 import type { AnimationAction, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
 import { tokens } from "@holoim/design-tokens";
-import { clocheFollowDirection, clocheFraming, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
+import { clocheFollowDirection, clocheFraming, clocheValue, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
 import { Cloche } from "@holoim/xr-ui-r3f";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
-import { drawnPoints, motionPoints } from "../hologram/drawnPoints";
+import { drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
@@ -67,6 +67,8 @@ export type FrameRect = { left: number; top: number; width: number; height: numb
 
 const HOLOGRAM_ANIMATION_SPEED = 1;
 const SPHERE_CLIP_FALLOFF = 1.8;
+/** Points sampled along a touch ray across the cloche, enough to find a dome a few hundredths of its size thick. */
+const GLASS_RAY_SAMPLES = 48;
 const CARD_CAMERA_DISTANCE_SCALE = 1.36;
 const CARD_CAMERA_POSITION_OFFSET = new Vector3(0.62, 0.36, 0.18);
 const CARD_CAMERA_LOOK_AT_OFFSET = new Vector3(0, -0.14, 0);
@@ -230,7 +232,8 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     // A bubble follows its author, so the walk is read relative to it: the author's full reach, not their path.
     const anchor = bubble ? clonedScene.getObjectByName("RecordedBubbleSphere") ?? undefined : undefined;
     const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble })];
-    const shape = fitCloche(points);
+    // The dome stands on the recorded floor, not on the lowest ground in the bubble (B-022).
+    const shape = fitCloche(points, { floorY: recordedFloorY(clonedScene) ?? undefined });
     if (!shape) return;
     fittedCentre.current = bubble ? bubble.center : null;
     clocheRef.current = shape;
@@ -244,24 +247,39 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   useEffect(() => {
     if (import.meta.env.DEV) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, objects: recordedObjects });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, objects: recordedObjects, cloche: { shape: clocheRef, fitted: fittedCentre } });
     }
   }, [actions, camera, clonedScene, mixer, pointingProbe, portal, recordedObjects, renderScene, renderer, sphereClip, url]);
 
   // The wheel zooms only over the hologram itself (usePortalTriggers): a
   // visible mesh of the recording, not chrome, not clipped away by its
   // bubble (recorded objects are never clipped). From inside the bubble
-  // everything in view is the hologram.
+  // everything in view is the hologram. A finger is broader than a cursor, so
+  // a touch counts anywhere inside the cloche's glass as well.
   useEffect(() => {
     const raycaster = new Raycaster();
     const ndc = new Vector2();
+    const centre = new Vector3();
+    const sample = new Vector3();
+    const throughGlass = () => {
+      const shape = clocheRef.current;
+      if (!shape) return false;
+      const reach = Math.max(shape.radii.x, shape.radii.y, shape.radii.z);
+      centre.set(shape.base.x, shape.base.y + shape.radii.y / 2, shape.base.z).add(clocheShift);
+      const nearest = raycaster.ray.direction.dot(sample.copy(centre).sub(raycaster.ray.origin));
+      for (let step = 0; step <= GLASS_RAY_SAMPLES; step += 1) {
+        raycaster.ray.at(nearest - reach + (2 * reach * step) / GLASS_RAY_SAMPLES, sample).sub(clocheShift);
+        if (sample.y >= shape.base.y && clocheValue(shape, sample) < 1) return true;
+      }
+      return false;
+    };
     const drawn = (object: Object3D | null): boolean => {
       for (let node = object; node; node = node.parent) {
         if (!node.visible || node.userData.holoimChrome === true) return false;
       }
       return true;
     };
-    const hitTest = (clientX: number, clientY: number) => {
+    const hitTest = (clientX: number, clientY: number, options?: { glass?: boolean }) => {
       const rect = renderer.domElement.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return false;
       ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
@@ -277,6 +295,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
         if (skinned.boundingBox) skinned.computeBoundingBox();
       });
       raycaster.setFromCamera(ndc, camera);
+      if (options?.glass && throughGlass()) return true;
       return raycaster.intersectObject(clonedScene, true).some((hit) => (
         (hit.object as Mesh).isMesh === true
         && drawn(hit.object)
@@ -287,7 +306,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     return () => {
       if (portal.runtime.hitTest === hitTest) portal.runtime.hitTest = null;
     };
-  }, [camera, clonedScene, portal, renderer, sphereClip]);
+  }, [camera, clocheShift, clonedScene, portal, renderer, sphereClip]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {

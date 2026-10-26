@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-25
+**Updated:** 2026-10-26
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -13,12 +13,11 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-Face and expressions on avatars is complete (brief
-[`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md)):
-webcam, WebXR eye gaze and liveness drive synthesized ARKit shapes, and
-`test:xr:face` (`FACE_VIDEO=1` for the proof video) runs in the capture XR
-suite. Next: validate the face on devices (see Unverified below), or pick the
-next queue item in [`TODOS.md`](TODOS.md).
+The shared XR interface and viewer VR/AR is complete and on `main` (brief
+[`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md)).
+Next: AR recording (camera-only takes, meaning v1) starts its slice 0, and the
+device checks under Unverified below. Otherwise pick the next queue item in
+[`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
@@ -29,8 +28,8 @@ next queue item in [`TODOS.md`](TODOS.md).
   as a feature level; performer takes still write v0) and phone camera takes
   in capture behind `?arCamera=1`, off by default. `verify:pr` and
   `test:xr:ar-record` (12 phases) pass; the cross-vendor verifier's verdict is
-  "ship behind the flag". Evidence is in the brief. Slice 0 waits for
-  `feature/viewer-xr-interface` to land; B-024 is open.
+  "ship behind the flag". Evidence is in the brief. Slices 0, 2b, 3 and 4
+  are in progress on the branch; B-024 is open.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
@@ -48,6 +47,16 @@ next queue item in [`TODOS.md`](TODOS.md).
   the brief).
 
 ## Unverified / device-only
+
+- Shared XR interface and viewer VR/AR (brief
+  [`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md),
+  on `main` with B-022): IWER only so far. On devices, check Quest 3 VR
+  comfort, including slide, snap turn and teleport. Check foot-control and
+  hand-dock reach and readability, the feel of grab, pinch and poke (and that
+  one pinch never fires a foot control twice), and the frame rate with four
+  holograms placed. Check audio by ear, Quest passthrough AR, Android phone
+  AR tap and two-finger pinch, and the feel of capture's chrome (hand-dock
+  Record, status line).
 
 - Self-resolving pointing on a Quest and a phone: score at least three new
   headset takes with 20 or more author-labelled points against PRD-022's

@@ -106,7 +106,7 @@ describe("states (6)", () => {
     document.body.innerHTML = "";
     expect(press("play", { msSinceUse: 9000, approached: true }).button.style.opacity).toBe("1");
     document.body.innerHTML = "";
-    // Only Play, Free and Return are always there (1.2); View in AR comes and goes.
+    // Only Play, Free and Return are always there (1.2); View in your room comes and goes.
     expect(press("viewInAr", { msSinceUse: 9000 }).button.style.opacity).toBe("1");
   });
 

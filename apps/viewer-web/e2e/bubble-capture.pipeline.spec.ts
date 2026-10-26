@@ -5,6 +5,7 @@ import { freezePageClock, waitForIwerSession, waitForTextContentPrefix } from "@
 import { resolve } from "node:path";
 import type { Probe } from "./ar-bubble-types";
 import { captureBubblePixels } from "./bubble-pixel-proof";
+import { measureFloor, type FloorReport } from "./floor-proof";
 
 import { assertViewerShell, captureEvidence, expect, test, pressViewInAr } from "./bootstrap";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
@@ -46,6 +47,21 @@ function animationDurationSeconds(gltf: GltfJson): number {
     }
   }
   return duration;
+}
+
+/** Floors agree to within this; the foot bone is the ankle, this far above its floor at most. */
+const FLOOR_TOLERANCE_METERS = 0.05;
+const ANKLE_HEIGHT_METERS = 0.2;
+
+// B-022: the recorded floor is the floor the viewer uses, in the feed and in AR.
+function expectOnRecordedFloor(report: FloorReport) {
+  const { mode, recordedFloorY, footBoneY, clocheBaseY, placementY } = report;
+  expect(Math.abs(clocheBaseY - recordedFloorY), `${mode}: cloche foot on the recorded floor`).toBeLessThanOrEqual(FLOOR_TOLERANCE_METERS);
+  expect(footBoneY - recordedFloorY, `${mode}: feet not under the recorded floor`).toBeGreaterThanOrEqual(-FLOOR_TOLERANCE_METERS);
+  expect(footBoneY - recordedFloorY, `${mode}: feet on the recorded floor`).toBeLessThanOrEqual(ANKLE_HEIGHT_METERS);
+  if (placementY !== null) {
+    expect(Math.abs(placementY - recordedFloorY), `${mode}: recorded floor on the room floor`).toBeLessThanOrEqual(FLOOR_TOLERANCE_METERS);
+  }
 }
 
 test("real capture bubble exports, uploads and draws in feed and immersive AR", async ({ page, context }, testInfo) => {
@@ -125,9 +141,14 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const feedBefore = await captureBubblePixels(page, "feed", artifactDir);
   await page.clock.runFor(400);
   const feedAfter = await captureBubblePixels(page, "feed", artifactDir);
+  const feedFloor = await measureFloor(page, "feed");
   expect(feedAfter.sphere, "feed sphere follows recorded motion").not.toEqual(feedBefore.sphere);
   await page.clock.resume();
   await pressViewInAr(page, card);
+  // The IWSDK shell, the default: it enters at once, or offers its entry button.
+  const xrView = page.locator(".xr-view-container");
+  await expect(xrView).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
+  if ((await xrView.getAttribute("data-xr-state")) === "ready") await page.getByRole("button", { name: "View in your room" }).click();
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await page.evaluate(() => {
     const device = (window as unknown as { IWER_DEVICE: { stereoEnabled: boolean; ipd: number } }).IWER_DEVICE;
@@ -139,8 +160,12 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const arBefore = await captureBubblePixels(page, "ar", artifactDir);
   await page.clock.runFor(400);
   const arAfter = await captureBubblePixels(page, "ar", artifactDir);
+  const arFloor = await measureFloor(page, "ar");
   expect(arAfter.time, "capture animation advances in immersive AR").not.toEqual(arBefore.time);
   expect(arAfter.sphere, "AR sphere stays pinned").toEqual(arBefore.sphere);
   await writeFile(resolve(artifactDir, "metrics.json"), JSON.stringify({ feedBefore, feedAfter, arBefore, arAfter }, null, 2));
+  await writeFile(resolve(artifactDir, "floor-report.json"), JSON.stringify({ feed: feedFloor, ar: arFloor }, null, 2));
+  expectOnRecordedFloor(feedFloor);
+  expectOnRecordedFloor(arFloor);
 
 });

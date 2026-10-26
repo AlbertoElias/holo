@@ -34,7 +34,7 @@ import { HeightFit } from '../xr/HeightFit';
 import { XrTracking } from '../xr/XrTracking';
 import { installAutomationHooks } from './automationHooks';
 import { createHaloActions } from './haloActions';
-import { createCaptureStage } from './captureStage';
+import { createCaptureStage, holdXrInputBetweenFrames, syncPlayerToRig } from './captureStage';
 import { renderCaptureTextState } from './captureTextState';
 import { FrameLoop } from './FrameLoop';
 import { mountXrEntry } from './xrEntry';
@@ -133,6 +133,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     getHandedness: () => ui.getState().handedness
   });
   const vrChrome = new VrChrome({
+    world,
+    xrCamera: stage.xrCamera,
     store: ui,
     renderer,
     scene,
@@ -203,9 +205,13 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   world.globals.capture = capture;
 
   let started = false;
+  const sampleXrInput = holdXrInputBetweenFrames(world);
   const loop = new FrameLoop({
     world,
+    sampleInput: sampleXrInput,
     acquire: (frame) => {
+      // IWSDK's pointers live under world.player; capture moves its own rig.
+      syncPlayerToRig(world, cameraRig);
       tracking.captureFloorHeadPose(frame);
       if (frame) {
         recording.recordInputFrame(frame);

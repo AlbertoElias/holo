@@ -5,6 +5,8 @@ import {
   paginatedHologramsSchema
 } from "@holoim/contracts";
 
+import { authHeaders } from "../auth/auth";
+
 const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "";
 const apiBase = `${apiOrigin}/api`;
 
@@ -33,7 +35,7 @@ export async function fetchHolograms(cursor?: string, limit = 10): Promise<Pagin
 
   let response: Response;
   try {
-    response = await fetch(`${apiBase}/holograms?${params.toString()}`);
+    response = await fetch(`${apiBase}/holograms?${params.toString()}`, { headers: authHeaders() });
   } catch {
     throw new Error(`Unable to reach API at ${resolveApiBaseForMessage()}. Start the API server and try again.`);
   }
@@ -45,10 +47,20 @@ export async function fetchHolograms(cursor?: string, limit = 10): Promise<Pagin
   return paginatedHologramsSchema.parse(await response.json());
 }
 
+export async function deleteHologram(id: string): Promise<void> {
+  const response = await fetch(`${apiBase}/holograms/${id}`, {
+    method: "DELETE",
+    headers: authHeaders()
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, `Failed to delete hologram (${response.status}).`));
+  }
+}
+
 export async function fetchHologram(id: string): Promise<HologramDTO> {
   let response: Response;
   try {
-    response = await fetch(`${apiBase}/holograms/${id}`);
+    response = await fetch(`${apiBase}/holograms/${id}`, { headers: authHeaders() });
   } catch {
     throw new Error(`Unable to reach API at ${resolveApiBaseForMessage()}. Start the API server and try again.`);
   }
@@ -80,6 +92,7 @@ async function uploadMultipart(input: UploadHologramInput): Promise<HologramDTO>
   try {
     response = await fetch(`${apiBase}/holograms`, {
       method: "POST",
+      headers: authHeaders(),
       body: formData
     });
   } catch {
@@ -98,7 +111,7 @@ async function tryInitiateDirectUpload(input: UploadHologramInput): Promise<Init
   try {
     const response = await fetch(`${apiBase}/holograms/uploads/initiate`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...authHeaders() },
       body: JSON.stringify({
         filenameOriginal: input.file.name,
         hologramName: input.hologramName,
@@ -140,7 +153,7 @@ export async function uploadHologram(input: UploadHologramInput): Promise<Hologr
   try {
     completeResponse = await fetch(`${apiBase}/holograms/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...authHeaders() },
       body: JSON.stringify({ intentId: initiated.intentId })
     });
   } catch {

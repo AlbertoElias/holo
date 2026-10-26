@@ -7,6 +7,51 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-025 — Portal "desktop freeze" check finds the feed back at the top
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("desktop freeze: … scrolling away resets"), portal scroll capture
+- **Severity:** P3
+- **Observed:** 2026-10-26, on `main` at `ac700f0f`
+- **Evidence:** `expect(await feedScrollTop(page)).toBeGreaterThan(0)` at
+  `portal.spec.ts:408` receives 0. Fails 3 of 3 on `main` when the whole
+  `portal.spec.ts` runs (`--repeat-each=3`, one worker), passes 3 of 3 when
+  the test runs alone. The paused card's capture may undo the instant
+  `scrollIntoView` before the reset lands.
+- **Expected:** scrolling to the next card from a paused card stays there.
+- **Reproduction:** `E2E_BASE_URL=https://localhost:3274 E2E_API_PORT=3101 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1`
+
+### B-024 — CI's pipeline shard can spend its whole timeout installing ffmpeg
+
+- **Area:** `.github/workflows/ci.yml` pipeline job (`apt-get install ffmpeg`), `scripts/ci-emulate.sh`
+- **Severity:** P2
+- **Observed:** 2026-10-26, runs for `4178f157` and `da4a008b`
+- **Evidence:** in both runs shard 1/2 never started its tests: the
+  "Install Quick Look conversion dependencies" step pulled ffmpeg's ~90
+  packages from `azure.archive.ubuntu.com` at minutes per package and the
+  job hit `timeout-minutes: 20` (cancelled; CI Gate failed, deploy
+  skipped). Shard 2/2 installed the same packages in seconds. The same
+  tests pass locally in 5.2 min. Separately, `ci-emulate.sh` cannot run
+  this suite: it installs Chromium through `@holoim/capture`, but the
+  pipeline launches `chromium_headless_shell-1208`, which is missing.
+- **Expected:** a slow apt mirror does not cancel the run; e.g. a
+  static ffmpeg binary or a cached `.deb` set, and a step timeout so the
+  failure names the install rather than the job.
+- **Reproduction:** intermittent on hosted runners; see the two runs above.
+
+### B-023 — The live API rejects Pages preview origins
+
+- **Area:** `holoim-api` CORS (`WEB_ORIGINS` secret, `apps/viewer-api/src/lib/cors.ts`)
+- **Severity:** P3
+- **Observed:** 2026-10-26, verifying the GLB probe fix on a Pages preview
+- **Evidence:** `curl -H "Origin: https://bug-glb-probe-cache.holoim-viewer.pages.dev"
+  "https://holoim-api.fly.dev/api/holograms?limit=1"` returns no
+  `access-control-allow-origin`, so a preview's feed fails with a CORS
+  error. `isAllowedWebOrigin` does match wildcards, so the secret most
+  likely lacks the `https://*.holoim-viewer.pages.dev` entry that
+  `docs/DEPLOYMENT.md` sets (not checked: secret values are not readable).
+- **Expected:** previews at `*.holoim-viewer.pages.dev` load the live feed.
+- **Reproduction:** the curl above; or open any preview deploy of the viewer.
+
 ### B-022 — Quick Look conversions fail while production's shared CPU is throttled
 
 - **Area:** `apps/viewer-api` USDZ worker and `rebuild:usdz` (`glb_to_usdz.py`'s 100 s alarm, the converter's 120 s limit)

@@ -179,24 +179,40 @@ async function readSurfaceHeightBelow(page: Page, [x, y, z]: [number, number, nu
   }, { px: x, py: y, pz: z });
 }
 
-async function readPlacementState(page: Page): Promise<PlacementState> {
-  return page.evaluate(() => {
-    const root = document.querySelector(".ar-view-container");
-    if (!(root instanceof HTMLElement)) {
-      throw new Error("AR root container not found.");
-    }
+// The IWSDK shell's development probe: the focused hologram's placement.
+type XrViewerSnapshot = {
+  placement: { stage: string; mode: string | null; reason?: string; sequence: number; position: [number, number, number] | null };
+  bubbles: { occlusion: { requested: boolean; drawing: boolean } };
+  controls: {
+    target: string;
+    foot: { reachOpacity: number; buttons: Record<"recenter", { worldPosition: Vec3 }> };
+    dock: { mount: string; hand: string | null; buttons: Record<"exit", { worldPosition: Vec3 }> };
+  } | null;
+};
+type Vec3 = [number, number, number];
+type ProbeWindow = Window & { __HOLOIM_XR_VIEWER__?: { snapshot(): XrViewerSnapshot } };
 
-    return {
-      anchored: root.dataset.placementAnchored === "true",
-      mode: root.dataset.placementMode ?? "",
-      reason: root.dataset.placementReason ?? "",
-      sequence: Number(root.dataset.placementSequence ?? "0"),
-      stage: root.dataset.placementStage ?? "",
-      position: root.dataset.placementPosition
-        ? root.dataset.placementPosition.split(",").map(Number) as [number, number, number]
-        : null
-    };
+async function viewerSnapshot(page: Page): Promise<XrViewerSnapshot> {
+  return page.evaluate(() => {
+    const probe = (window as ProbeWindow).__HOLOIM_XR_VIEWER__;
+    if (!probe) throw new Error("XR viewer probe not found.");
+    return probe.snapshot();
   });
+}
+
+function toPlacementState(placement: XrViewerSnapshot["placement"]): PlacementState {
+  return {
+    anchored: placement.stage === "anchored",
+    mode: placement.mode ?? "",
+    reason: placement.reason ?? "",
+    sequence: placement.sequence,
+    stage: placement.stage,
+    position: placement.position
+  };
+}
+
+async function readPlacementState(page: Page): Promise<PlacementState> {
+  return toPlacementState((await viewerSnapshot(page)).placement);
 }
 
 async function waitForPlacement(
@@ -207,17 +223,14 @@ async function waitForPlacement(
   try {
     await page.waitForFunction(
       (expected) => {
-        const root = document.querySelector(".ar-view-container");
-        if (!(root instanceof HTMLElement)) {
-          return false;
-        }
-
+        const placement = (window as ProbeWindow).__HOLOIM_XR_VIEWER__?.snapshot().placement;
+        if (!placement) return false;
         const state = {
-          anchored: root.dataset.placementAnchored === "true",
-          mode: root.dataset.placementMode ?? "",
-          reason: root.dataset.placementReason ?? "",
-          sequence: Number(root.dataset.placementSequence ?? "0"),
-          stage: root.dataset.placementStage ?? ""
+          anchored: placement.stage === "anchored",
+          mode: placement.mode ?? "",
+          reason: placement.reason ?? "",
+          sequence: placement.sequence,
+          stage: placement.stage
         };
 
         if (typeof expected.minSequence === "number" && state.sequence < expected.minSequence) {
@@ -241,7 +254,7 @@ async function waitForPlacement(
         if (Array.isArray(expected.excludedStages) && expected.excludedStages.includes(state.stage)) {
           return false;
         }
-        if (expected.placedByModel && !root.dataset.placementPosition) {
+        if (expected.placedByModel && !placement.position) {
           return false;
         }
 
@@ -253,7 +266,7 @@ async function waitForPlacement(
   } catch (error) {
     console.error("placement-wait-timeout", {
       expectation,
-      placement: await readPlacementState(page),
+      placement: await readPlacementState(page).catch((reason: Error) => reason.message),
       session: await readIwerSessionState(page),
       environment: await page.evaluate(() => ({
         hasSem: Boolean(window.IWER_DEVICE?.sem),
@@ -269,7 +282,7 @@ async function waitForPlacement(
         trackedMeshesCount: window.IWER_DEVICE?.sem?.trackedMeshes?.size ?? 0
       })),
       timeline: await page.evaluate(() => (window as Window & { __placementTimeline?: string[] }).__placementTimeline ?? []),
-      arConsole: arConsoleLines.get(page) ?? []
+      viewerConsole: viewerConsoleLines.get(page) ?? []
     });
     throw error;
   }
@@ -278,29 +291,28 @@ async function waitForPlacement(
 }
 
 // A placement timeout only shows the final state; record every placement
-// attribute change and AR log line so the dump says which side stalled.
-const arConsoleLines = new WeakMap<Page, string[]>();
+// change and viewer log line so the dump says which side stalled.
+const viewerConsoleLines = new WeakMap<Page, string[]>();
 
 async function recordPlacementTimeline(page: Page): Promise<void> {
   const lines: string[] = [];
-  arConsoleLines.set(page, lines);
+  viewerConsoleLines.set(page, lines);
   page.on("console", (message) => {
     const text = message.text();
-    if (text.startsWith("[AR")) {
+    if (text.startsWith("[xr-viewer")) {
       lines.push(text);
     }
   });
   await page.addInitScript(() => {
     const timeline: string[] = [];
     (window as Window & { __placementTimeline?: string[] }).__placementTimeline = timeline;
-    new MutationObserver(() => {
-      const root = document.querySelector(".ar-view-container");
-      if (!(root instanceof HTMLElement)) return;
-      const { placementStage, placementMode, placementReason, placementSequence, placementPosition } = root.dataset;
-      const entry = [placementStage, placementMode, placementReason, placementSequence, placementPosition].join("|");
+    setInterval(() => {
+      const placement = (window as ProbeWindow).__HOLOIM_XR_VIEWER__?.snapshot().placement;
+      if (!placement) return;
+      const entry = [placement.stage, placement.mode, placement.reason, placement.sequence, placement.position?.join(",")].join("|");
       if (timeline.at(-1)?.endsWith(entry)) return;
       timeline.push(`${Math.round(performance.now())}ms ${entry}`);
-    }).observe(document, { attributes: true, subtree: true, childList: true, attributeFilter: ["data-placement-stage", "data-placement-sequence", "data-placement-position"] });
+    }, 50);
   });
 }
 
@@ -315,28 +327,84 @@ async function enterMockAr(page: Page): Promise<void> {
 
   await pressViewInAr(page);
   await expect(page).toHaveURL(/\/ar\/mock-1$/);
+  const container = page.locator(".xr-view-container");
+  await expect(container).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
+  if ((await container.getAttribute("data-xr-state")) === "ready") await page.getByRole("button", { name: "View in your room" }).click();
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
-  await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
+  await expect(container).toHaveAttribute("data-xr-state", "immersive");
 }
 
-// IWER's overlay intercepts pointer input during a session, so session
-// controls are clicked through the DOM; a missed click then fails the wait
-// that follows instead of passing silently.
-async function clickSessionButton(page: Page, label: string): Promise<void> {
-  await page.evaluate((text) => {
-    const button = Array.from(document.querySelectorAll("button")).find((candidate) => (
-      candidate.getAttribute("aria-label") === text || candidate.textContent?.trim() === text
-    ));
-    if (!(button instanceof HTMLButtonElement)) {
-      throw new Error(`${text} button not found.`);
+/**
+ * Moves the IWER headset or a controller to `position` facing `lookAt`
+ * (yaw then pitch); IWER's DevUI stops rewriting poses once control is
+ * programmatic.
+ */
+async function setPose(page: Page, who: "head" | "left" | "right", position: Vec3 | null, lookAt: Vec3 | null): Promise<void> {
+  await page.evaluate(({ who, position, lookAt }) => {
+    type V = { x: number; y: number; z: number; set(x: number, y: number, z: number): void };
+    type Q = { set(x: number, y: number, z: number, w: number): void };
+    const device = (window as unknown as { IWER_DEVICE: { controlMode: string; position: V; quaternion: Q; controllers: Record<"left" | "right", { position: V; quaternion: Q }> } }).IWER_DEVICE;
+    device.controlMode = "programmatic";
+    const tracked = who === "head" ? device : device.controllers[who];
+    if (position) tracked.position.set(...position);
+    if (lookAt) {
+      const p = tracked.position;
+      const [dx, dy, dz] = [lookAt[0] - p.x, lookAt[1] - p.y, lookAt[2] - p.z];
+      const yaw = Math.atan2(-dx, -dz);
+      const pitch = Math.asin(dy / Math.hypot(dx, dy, dz));
+      const [sy, cy, sp, cp] = [Math.sin(yaw / 2), Math.cos(yaw / 2), Math.sin(pitch / 2), Math.cos(pitch / 2)];
+      tracked.quaternion.set(cy * sp, sy * cp, -sy * sp, cy * cp);
     }
-    button.click();
-  }, label);
+  }, { who, position, lookAt });
+  await page.waitForTimeout(60);
 }
 
+/** Aims the right controller's ray at a world point and pulls the trigger. */
+async function rayClick(page: Page, target: Vec3, from: Vec3): Promise<void> {
+  await setPose(page, "right", from, target);
+  await page.waitForTimeout(80);
+  for (const value of [1, 0]) {
+    await page.evaluate((v) => {
+      (window as unknown as { IWER_DEVICE: { controllers: Record<string, { updateButtonValue(id: string, v: number): void }> } }).IWER_DEVICE.controllers.right!.updateButtonValue("trigger", v);
+    }, value);
+    await page.waitForTimeout(80);
+  }
+}
+
+/**
+ * Recenter from the hologram's foot: looking at the chip reveals its reach
+ * row, the right controller's ray then holds it (hover) while the head looks
+ * back where it was, and the trigger selects Recenter, which places again
+ * along that gaze.
+ */
+async function recenterFromFoot(page: Page): Promise<void> {
+  const head = await readViewerPose(page);
+  await setPose(page, "head", null, (await viewerSnapshot(page)).controls!.foot.buttons.recenter.worldPosition);
+  await expect.poll(async () => (await viewerSnapshot(page)).controls!.foot.reachOpacity, { timeout: 3_000 }).toBe(1);
+  const recenter = (await viewerSnapshot(page)).controls!.foot.buttons.recenter.worldPosition;
+  await setPose(page, "right", [head.position[0] + 0.25, head.position[1] - 0.35, head.position[2] - 0.2], recenter);
+  await page.evaluate((q) => {
+    (window as unknown as { IWER_DEVICE: { quaternion: { set(x: number, y: number, z: number, w: number): void } } }).IWER_DEVICE.quaternion.set(...q);
+  }, head.quaternion);
+  await page.waitForTimeout(150);
+  await rayClick(page, recenter, [head.position[0] + 0.25, head.position[1] - 0.35, head.position[2] - 0.2]);
+}
+
+/** Exit from the hand dock on the non-dominant (left) controller, by the right controller's ray. */
+async function exitFromDock(page: Page): Promise<void> {
+  const [x, y, z] = (await readViewerPose(page)).position;
+  await setPose(page, "head", null, [x - 0.15, y - 0.4, z - 0.4]);
+  await setPose(page, "left", [x - 0.15, y - 0.45, z - 0.35], [x - 0.15, y - 0.45, z - 1.35]);
+  await page.waitForTimeout(250);
+  const exit = (await viewerSnapshot(page)).controls!.dock.buttons.exit.worldPosition;
+  await rayClick(page, exit, [x + 0.15, y - 0.4, z - 0.15]);
+}
+
+// The IWSDK shell places ahead by hit test, skipping surfaces over 0.5 m (a
+// recorded person stands on the floor); the floor estimate is its fallback.
 const HIT_TEST_PLACEMENT = {
-  allowedModes: ["hit-test", "floor"],
-  allowedReasons: ["hit-test-stable", "hit-test-anchor", "plane-detected", "plane-detected-anchor"],
+  allowedModes: ["hit-test"],
+  allowedReasons: ["hit-test"],
   excludedStages: ["searching", "unplaced"],
   placedByModel: true
 };
@@ -347,6 +415,23 @@ test("AR places the model on a surface in front of the viewer, recenter places a
   await mockFeed(page);
   await setDesktopNavigatorOverrides(page);
 
+  // Looking down at the room's open floor under a metre away, as a phone or
+  // headset user does to place: the placement ray (19° below the gaze) from
+  // a level head meets the walls first, and straight ahead of IWER's default
+  // pose is a 1.3 m desk, which the shell skips (a person stands on the floor).
+  await page.addInitScript(() => {
+    const timer = setInterval(() => {
+      const device = (window as unknown as { IWER_DEVICE?: { controlMode: string; quaternion: { set(x: number, y: number, z: number, w: number): void } } }).IWER_DEVICE;
+      if (!device) return;
+      clearInterval(timer);
+      // IWER's DevUI rewrites the pose every frame unless control is programmatic.
+      device.controlMode = "programmatic";
+      // Yaw toward the clear floor at (0.7, 0, 0.3), then pitch 45° down.
+      const [yaw, pitch] = [Math.atan2(-0.7, -0.3), -45 * Math.PI / 180];
+      const [sy, cy, sp, cp] = [Math.sin(yaw / 2), Math.cos(yaw / 2), Math.sin(pitch / 2), Math.cos(pitch / 2)];
+      device.quaternion.set(cy * sp, sy * cp, -sy * sp, cy * cp);
+    }, 20);
+  });
   await enterMockAr(page);
   const runtimeState = await waitForIwerRuntime(page);
   expect(runtimeState.isSecureContext).toBeTruthy();
@@ -354,8 +439,8 @@ test("AR places the model on a surface in front of the viewer, recenter places a
   expect(sessionState?.environmentBlendMode).toBe("alpha-blend");
   const environmentState = await waitForIwerEnvironment(page, { minTrackedPlanes: 1 });
   expect(environmentState.hasSem).toBeTruthy();
-  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion", "disabled");
-  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-depth-occlusion-reason", "iwer-runtime");
+  // IWER has no depth data to occlude with: the shell does not ask for it there.
+  expect((await viewerSnapshot(page)).bubbles.occlusion, "depth occlusion under IWER").toEqual({ requested: false, drawing: false });
 
   const placement = await waitForPlacement(page, { minSequence: 1, ...HIT_TEST_PLACEMENT });
   expect(["anchored", "placed", "locked"]).toContain(placement.stage);
@@ -364,15 +449,18 @@ test("AR places the model on a surface in front of the viewer, recenter places a
   const surfaceDetail = `placement ${JSON.stringify(placement)}, surface y ${String(surfaceY)}`;
   expect(surfaceY, `emulated room surface under the model (${surfaceDetail})`).not.toBeNull();
   expect(Math.abs(placement.position![1] - surfaceY!), `model base to surface in m (${surfaceDetail})`).toBeLessThan(0.1);
+  expect(placement.position![1], `on the floor, not the desk (${surfaceDetail})`).toBeLessThan(0.5);
   await captureEvidence(page, testInfo, "ar-placed-on-surface");
 
   // Only the model's own placements carry a position and advance its
   // sequence, so a higher model-reported sequence proves recenter re-placed.
-  await clickSessionButton(page, "Recenter Model");
+  await recenterFromFoot(page);
   const replaced = await waitForPlacement(page, { ...HIT_TEST_PLACEMENT, minSequence: placement.sequence + 1 });
   expect(["anchored", "placed", "locked"]).toContain(replaced.stage);
+  expectPlacedInFrontOnSurface(replaced, await readViewerPose(page));
 
-  await clickSessionButton(page, "Exit AR");
+  expect((await viewerSnapshot(page)).controls!.dock, "Exit on the non-dominant (left) hand").toMatchObject({ mount: "hand", hand: "left" });
+  await exitFromDock(page);
   await waitForNoIwerSession(page);
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("button", { name: "Upload a hologram" })).toBeVisible();
@@ -398,7 +486,7 @@ test("AR placement falls back when hit-test is unavailable", async ({ page }, te
   );
 
   expect(placement.anchored).toBe(false);
-  expect(["floor", "visibility-fallback"]).toContain(placement.mode);
+  expect(placement.mode).toBe("floor");
   expect(["hit-test-unavailable", "hit-test-timeout"]).toContain(placement.reason);
   await captureEvidence(page, testInfo, "ar-fallback-placement");
 });
@@ -455,3 +543,53 @@ for (const viewport of [
     }
   });
 }
+
+// A GLB is a megabyte or more: downloading every card's at once slows the one
+// on screen. The focused card loads first and alone, the next ones follow one
+// at a time in feed order, and a card far down waits for the feed to near it.
+test("feed downloads holograms in feed order, one at a time", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const holograms = Array.from({ length: 5 }, (_, index) => ({
+    ...mockHologram,
+    id: `mock-${index + 1}`,
+    url: `/uploads/mock-${index + 1}.glb`,
+    hologramName: `Hologram ${index + 1}`
+  }));
+  await page.route("**/api/holograms?*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ items: holograms, nextCursor: null })
+  }));
+  const downloads: { url: string; start: number; end: number }[] = [];
+  const startedAt = Date.now();
+  await page.route("**/uploads/**", async (route) => {
+    const request = route.request();
+    const full = request.method() === "GET" && !request.headers().range;
+    const download = full ? { url: new URL(request.url()).pathname, start: Date.now() - startedAt, end: Number.NaN } : null;
+    if (download) {
+      downloads.push(download);
+      // Long enough that downloads running at once would overlap.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    await route.fulfill({ status: 200, path: mockGlbPath, contentType: "model/gltf-binary", headers: { "accept-ranges": "bytes" } });
+    if (download) download.end = Date.now() - startedAt;
+  });
+
+  await page.goto("/");
+  await assertViewerShell(page);
+  const cards = page.locator(".feed-card");
+  await expect(cards.nth(2)).toHaveAttribute("data-model-state", "rendered", { timeout: 30_000 });
+  // Nothing else is near the top of the feed: the fourth and fifth wait.
+  await page.waitForTimeout(1_500);
+  await expect(cards.nth(3)).toHaveAttribute("data-model-state", "queued");
+  expect(downloads.map((download) => download.url)).toEqual(["/uploads/mock-1.glb", "/uploads/mock-2.glb", "/uploads/mock-3.glb"]);
+  for (let index = 1; index < downloads.length; index += 1) {
+    expect(downloads[index]!.start, `${downloads[index]!.url} starts after ${downloads[index - 1]!.url} finished`).toBeGreaterThanOrEqual(downloads[index - 1]!.end);
+  }
+
+  // Scrolling to the third card brings the fourth and fifth into reach.
+  await cards.nth(2).scrollIntoViewIfNeeded();
+  await expect(cards.nth(4)).toHaveAttribute("data-model-state", "rendered", { timeout: 30_000 });
+  expect(downloads.map((download) => download.url).slice(3)).toEqual(["/uploads/mock-4.glb", "/uploads/mock-5.glb"]);
+  await testInfo.attach("glb-downloads.json", { body: JSON.stringify(downloads, null, 2), contentType: "application/json" });
+});
