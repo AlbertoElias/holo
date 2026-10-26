@@ -13,15 +13,19 @@ import {
   waitForTextContentPrefix,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
-import { emulatePhone, phoneTap, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
+import { emulatePhone, phoneHold, phoneScreenPoint, phoneTap, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
 
 import type {} from '../src/runtime/automationHooks';
+import type { PointResolutionReport } from '../src/recording/PointResolver';
+import { TARGETS } from './lib/pointing-scene.ts';
 import {
   assertCameraTake,
   compareNodePositions,
   comparePaths,
   inspectCameraTake,
+  CAMERA_NODE_NAME as CAMERA_NODE,
   type CameraTakeReport,
+  type MeaningLinkReport,
   type NodeComparison,
   type PathComparison
 } from './lib/camera-take-glb.ts';
@@ -50,6 +54,15 @@ import {
 //   interaction-undefined  flag on, a phone whose interactionMode is undefined: treated like a headset.
 //   phone-flag-off    phone AR without the flag: spectator, no camera take. Record only: Stop in a
 //                     spectator session is main's behaviour and out of scope here.
+//   marks-a/marks-b   slice 4, at a 412x915 portrait phone, the same prepared set and bracket, under two
+//                     placements: Record by the dock, then with the head still: a one-frame tap on the bracket
+//                     (no hold), a 1 s hold on the bracket, a 1 s hold on empty floor (a hold, no referent), a 1 s
+//                     hold that begins on the dock's chip (no hold, no dock action), a 1 s hold on TargetA, and a
+//                     1 s hold on TargetA while the head walks toward it and turns with the finger fixed on the
+//                     screen; Stop by the dock. Exactly three recorded links from RecordedAuthorCamera
+//                     (RecordedObject, TargetA, TargetA), spans starting at the touch, HOLOIM_meaning version 1,
+//                     "no referent" in the resolver's report; to.point of the still holds agrees across the two
+//                     placements within 1 cm.
 //   phone-dock        slice 3, at a 412x915 portrait phone: the bottom dock (Recenter, Record, Exit) laid
 //                     out on the screen; Recenter between takes moves the set; Record and Stop by tap export
 //                     a take; Exit by tap mid-take exports the second. Screenshots of the view between
@@ -95,6 +108,8 @@ const EMPTY_NOTICE = 'Nothing to record: no part of the set is near.';
 const PHASES = [
   'phone-a',
   'phone-b',
+  'marks-a',
+  'marks-b',
   'mic-denied',
   'session-end',
   'page-hidden',
@@ -123,6 +138,12 @@ type ArState = {
   notice: string | null;
   takeKind: string;
   cameraSamples: number;
+  /** The camera take's running time: first to latest camera sample, seconds. */
+  takeSec: number;
+  /** The finger being tracked for a hold: none, pending (waiting out the delay), dead (a drag) or held. */
+  screenHold: { phase: 'none' | 'pending' | 'dead' | 'held'; slopApx: number | null };
+  /** Holds the take keeps in its point store. */
+  screenHolds: { kept: number; undone: number };
   micPermission: string;
   micHeld: boolean;
 };
@@ -138,6 +159,8 @@ type DockProbe = {
 };
 type PhoneProbe = {
   built: boolean;
+  /** The dock's chip on the screen (CSS px from the top left), null while no control shows. */
+  chip: { left: number; top: number; width: number; height: number } | null;
   viewport: { width: number; height: number; fovyDeg: number } | null;
   docks: Partial<Record<DockId, DockProbe>>;
   statusLine: { visible: boolean; text: string } | null;
@@ -153,6 +176,26 @@ type StepCoverage = {
   scriptDurationSec: number;
 };
 
+type MarkScenario = {
+  name: string;
+  /** Take seconds at the touch's `selectstart` and `selectend`, read from the page. */
+  downSec?: number;
+  upSec?: number;
+  /** Wall-clock milliseconds between them. */
+  touchMs?: number;
+  holdsBefore: number;
+  holdsAfter: number;
+  /** Where the tracked finger stood once the touch ended. */
+  trackedAfter: string;
+  [fact: string]: unknown;
+};
+type MarkFacts = {
+  scenarios: MarkScenario[];
+  links: MeaningLinkReport[];
+  /** The resolver's report for the take, from the page. */
+  resolution: unknown;
+};
+
 type PhaseReport = {
   phase: Phase;
   failures: string[];
@@ -162,6 +205,7 @@ type PhaseReport = {
   take?: CameraTakeReport;
   scriptVsExport?: StepCoverage;
   worldFrame?: number[];
+  marks?: MarkFacts;
 };
 
 type Run = { browser: Browser; consoleErrors: string[] };
@@ -908,11 +952,14 @@ async function emptySetPhase(run: Run): Promise<PhaseReport> {
     report.ar.entered = await arOf(page);
     if (!report.ar.entered.cameraAuthor) report.failures.push('camera author mode is off in a phone AR session with the flag on');
     await toggle(page);
+    // The notice shows for 4 s of wall-clock time: read it as soon as it is up, not after a fixed wait that a slow machine outlasts.
     for (let i = 0; i < 12; i += 1) {
       await advance(page, STEP_MS);
-      await page.waitForTimeout(250);
+      await page.waitForTimeout(100);
+      report.ar.after = await arOf(page);
+      if (report.ar.after.notice) break;
     }
-    report.ar.after = await arOf(page);
+    if (!report.ar.after) throw new Error('the page was never read');
     if (report.ar.after.recordingState !== 'idle') report.failures.push(`recordingState ${report.ar.after.recordingState} after a refused Record`);
     if (report.ar.after.notice !== EMPTY_NOTICE) report.failures.push(`notice ${JSON.stringify(report.ar.after.notice)}, expected ${JSON.stringify(EMPTY_NOTICE)}`);
     await expectDownloadCount(page, report, 0);
@@ -1105,6 +1152,263 @@ async function dockExitIdlePhase(run: Run): Promise<PhaseReport> {
   }
 }
 
+// --- Marks: fingers held on the screen (slice 4) ---
+
+const MARK_HOLD_MS = 1000;
+/** A hold begins at the touch: its span starts within this of the touch's `selectstart`, in take seconds. */
+const MARK_START_TOLERANCE_SEC = 0.05;
+/** The most a hold's end may trail the finger lifting, in take seconds: one emulated frame (about 150 ms) and a step. */
+const MARK_END_TOLERANCE_SEC = 0.3;
+/** A tap must stay under the 300 ms hold delay; a host whose emulated frames are slower cannot show it. */
+const TAP_LIMIT_MS = 270;
+const MARK_POINT_TOLERANCE_CM = 1;
+
+type TouchLog = Array<{ type: 'selectstart' | 'selectend'; takeSec: number; wall: number }>;
+
+/** Logs every touch's start and end with the take's running time, from inside the page. */
+const watchTouches = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __touchLog: TouchLog };
+    w.__touchLog = [];
+    for (const type of ['selectstart', 'selectend'] as const) {
+      window.IWER_DEVICE!.activeSession!.addEventListener(type, () => {
+        w.__touchLog.push({ type, takeSec: JSON.parse(window.render_game_to_text()).ar.takeSec, wall: performance.now() });
+      });
+    }
+  });
+const touchLog = (page: Page) => page.evaluate(() => (window as unknown as { __touchLog: TouchLog }).__touchLog);
+
+/** The camera orientation that looks from `eye` toward `target` (three's lookAt: -Z toward the target, Y up). */
+function lookQuat(eye: Vec3, target: Vec3): Quat {
+  const m = new THREE.Matrix4().lookAt(new THREE.Vector3(...eye), new THREE.Vector3(...target), new THREE.Vector3(0, 1, 0));
+  const q = new THREE.Quaternion().setFromRotationMatrix(m);
+  return [q.x, q.y, q.z, q.w];
+}
+
+/**
+ * Runs `touch` while the simulation advances beside it (the manual clock steps only when asked, and a
+ * hold is judged at steps), optionally moving the head as the touch proceeds (`progress` in [0, 1] over
+ * the hold's length).
+ */
+async function stepWhile(page: Page, touch: Promise<void>, move?: (progress: number) => Promise<void>): Promise<void> {
+  let done = false;
+  let failure: unknown;
+  const finished = touch.then(
+    () => {
+      done = true;
+    },
+    (error: unknown) => {
+      done = true;
+      failure = error;
+    }
+  );
+  const started = Date.now();
+  while (!done) {
+    if (move) await move(Math.min(1, (Date.now() - started) / MARK_HOLD_MS));
+    await nextXrFrame(page);
+    await advance(page, 150);
+  }
+  await finished;
+  if (failure) throw failure;
+}
+
+/** One touch of the take, with what the page and the point store made of it. */
+async function touchScenario(
+  page: Page,
+  report: PhaseReport,
+  scenarios: MarkScenario[],
+  name: string,
+  touch: () => Promise<void>,
+  expectedNewHolds: number,
+  move?: (progress: number) => Promise<void>
+): Promise<MarkScenario> {
+  const before = await arOf(page);
+  const logFrom = (await touchLog(page)).length;
+  await stepWhile(page, touch(), move);
+  for (let i = 0; i < 3; i += 1) await advance(page, STEP_MS);
+  const after = await arOf(page);
+  const log = (await touchLog(page)).slice(logFrom);
+  const down = log.find((entry) => entry.type === 'selectstart');
+  const up = log.find((entry) => entry.type === 'selectend');
+  const scenario: MarkScenario = {
+    name,
+    ...(down ? { downSec: round(down.takeSec, 3) } : {}),
+    ...(up ? { upSec: round(up.takeSec, 3) } : {}),
+    ...(down && up ? { touchMs: Math.round(up.wall - down.wall) } : {}),
+    holdsBefore: before.screenHolds.kept,
+    holdsAfter: after.screenHolds.kept,
+    trackedAfter: after.screenHold.phase
+  };
+  scenarios.push(scenario);
+  if (!down || !up) report.failures.push(`${name}: the touch left no selectstart/selectend in the page`);
+  const added = after.screenHolds.kept - before.screenHolds.kept;
+  if (added !== expectedNewHolds) report.failures.push(`${name}: the take kept ${added} new hold(s), expected ${expectedNewHolds}`);
+  if (after.screenHold.phase !== 'none') report.failures.push(`${name}: a finger is still tracked after the touch (${after.screenHold.phase})`);
+  // None of these touches is a dock action: the take runs on, the session stays, nothing downloads.
+  if (after.recordingState !== 'recording' || after.sessionMode !== 'ar') report.failures.push(`${name}: the touch changed the take or the session (${after.recordingState}, ${after.sessionMode})`);
+  if ((downloadLog.get(page) ?? []).length > 0) report.failures.push(`${name}: a download began during the take`);
+  return scenario;
+}
+
+type Marked = { report: PhaseReport; take: CameraTakeReport | null; links: MeaningLinkReport[]; targetAWorld: Vec3 | null };
+
+/**
+ * Hold to mark from the camera, under one placement: Record by the dock, then with the head still a
+ * tap, holds on the bracket, on empty floor, from the dock's chip and on TargetA, and a hold on TargetA
+ * while the head walks toward it and turns with the finger fixed on the screen. Stop by the dock; the
+ * links in the export are the facts.
+ */
+async function marksPhase(run: Run, phase: 'marks-a' | 'marks-b', start: { position: Vec3; yaw: number }): Promise<Marked> {
+  const report: PhaseReport = { phase, failures: [], notes: {}, ar: {}, takes: [] };
+  const page = await openPage(run, { phone: true, flag: true, scene: true, object: true, viewport: PHONE_VIEWPORT });
+  const scenarios: MarkScenario[] = [];
+  try {
+    const placement = await placeObjectOnDesktop(page);
+    if (!placement.placed) report.failures.push('the prepared object was not placed on the desktop before AR');
+    await enterAr(page, start);
+    const frame = toMatrix(await worldFrame(page));
+    report.worldFrame = frame.toArray().map((value) => round(value, 4));
+    report.ar.entered = await arOf(page);
+    const room = (point: Vec3): Vec3 => {
+      const v = new THREE.Vector3(...point).applyMatrix4(frame);
+      return [v.x, v.y, v.z];
+    };
+    // Where to aim, in the room as placed: the bracket's centre (the object is in the set, so it moved with it).
+    const item = await page.evaluate(() => JSON.parse(window.render_game_to_text()).objects.items[0] as { boundsMin: Vec3; boundsMax: Vec3 });
+    const bracket = item.boundsMin.map((value, k) => (value + item.boundsMax[k]!) / 2) as Vec3;
+    const targetA = room(TARGETS.TargetA!.center);
+    const floor = room([0.7, 0, -0.4]);
+    report.notes.aim = { bracketInRoom: bracket.map((v) => round(v, 3)), targetAInRoom: targetA.map((v) => round(v, 3)), floorInRoom: floor.map((v) => round(v, 3)) };
+
+    const eye: Vec3 = [0, 1.5, 0.6];
+    const standing = setToRoom(frame, { position: eye, quaternion: lookQuat(eye, [0, 1.5, -1.5]) });
+    await setHeadPose(page, standing.position, standing.quaternion);
+    await nextXrFrame(page);
+    // The dock hangs on the camera in a simulation step: one step, so it stands where this head is.
+    await advance(page, STEP_MS);
+    await startRecordingByDock(page);
+    await watchTouches(page);
+    for (let i = 0; i < 3; i += 1) {
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
+    }
+
+    // A one-frame tap never marks: it ends before the 300 ms hold delay.
+    const tap = await touchScenario(page, report, scenarios, 'tap-on-bracket', () => phoneTap(page, bracket), 0);
+    if ((tap.touchMs ?? Infinity) > TAP_LIMIT_MS) report.failures.push(`tap-on-bracket: the tap lasted ${tap.touchMs} ms; emulated frames are too slow to show a tap under the 300 ms hold delay`);
+
+    await touchScenario(page, report, scenarios, 'hold-on-bracket', () => phoneHold(page, bracket, MARK_HOLD_MS), 1);
+    // Floor where the set has none: a hold the take keeps, with nothing to name.
+    await touchScenario(page, report, scenarios, 'hold-on-empty-floor', () => phoneHold(page, floor, MARK_HOLD_MS), 1);
+
+    // A hold that begins on the dock: the chip around Record, beside the ring's hit area.
+    const dock = await dockState(page);
+    report.notes.dockWhileHolding = dockSummary(dock);
+    if (!dock.chip) {
+      report.failures.push('the dock reports no chip while recording');
+    } else {
+      const chipPoint = await phoneScreenPoint(page, dock.chip.left + dock.chip.width - 8, dock.chip.top + dock.chip.height / 2, 1);
+      report.notes.chip = dock.chip;
+      await touchScenario(page, report, scenarios, 'hold-on-dock-chip', () => phoneHold(page, chipPoint, MARK_HOLD_MS), 0);
+    }
+
+    await touchScenario(page, report, scenarios, 'hold-on-target-a', () => phoneHold(page, targetA, MARK_HOLD_MS), 1);
+
+    // The finger stays on the screen while the head walks 0.3 m toward TargetA and turns 8 degrees: the
+    // ray sweeps 8 degrees across the target, 64 px of the world's direction but none on the screen.
+    const walkEye = (progress: number): Pose => {
+      const position: Vec3 = [TARGETS.TargetA!.center[0], TARGETS.TargetA!.center[1], -1.2 - 0.3 * progress];
+      return setToRoom(frame, { position, quaternion: quat((8 * Math.PI / 180) * progress, 0) });
+    };
+    const walkStart = walkEye(0);
+    await setHeadPose(page, walkStart.position, walkStart.quaternion);
+    await nextXrFrame(page);
+    await advance(page, STEP_MS);
+    await touchScenario(
+      page,
+      report,
+      scenarios,
+      'hold-on-target-a-walking',
+      () => phoneHold(page, targetA, MARK_HOLD_MS, { screenLocked: true }),
+      1,
+      async (progress) => {
+        const pose = walkEye(progress);
+        await setHeadPose(page, pose.position, pose.quaternion);
+      }
+    );
+
+    // Stop by the dock, then read what the export made of it.
+    const download = expectDownload(page, 30000);
+    await tapDock(page, 'record');
+    const saved = await advanceUntilDownload(page, download);
+    if (!saved) {
+      report.failures.push('no GLB downloaded after Stop');
+      report.marks = { scenarios, links: [], resolution: null };
+      return { report, take: null, links: [], targetAWorld: null };
+    }
+    const glb = await saveDownload(saved, phase, report);
+    const take = checkTake(report, await readFile(glb), { audio: true });
+    await expectDownloadCount(page, report, 1);
+    const resolution = (await page.evaluate(() => window.__lastPointReport())) as PointResolutionReport | null;
+    const links = [...take.meaningLinks].sort((a, b) => a.span.start - b.span.start);
+    report.marks = { scenarios, links, resolution };
+    checkMarkLinks(report, take, links, scenarios, resolution);
+    const targetANode = take.setNodes.find((node) => node.name.startsWith('TargetA'));
+    const targetALink = links.find((link) => link.to.nodeName.startsWith('TargetA'));
+    const targetAWorld = targetANode && targetALink?.to.point ? (targetALink.to.point.map((v, k) => v + targetANode.worldTranslation[k]!) as Vec3) : null;
+    return { report, take, links, targetAWorld };
+  } finally {
+    await page.context().close();
+  }
+}
+
+/** The facts of the take's links against the touches that made them. */
+function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: MeaningLinkReport[], scenarios: MarkScenario[], resolution: PointResolutionReport | null): void {
+  if (take.meaningVersion !== 1) report.failures.push(`HOLOIM_meaning version ${take.meaningVersion}, expected 1 (a camera link)`);
+  const expected = [
+    { scenario: 'hold-on-bracket', to: 'RecordedObject' },
+    { scenario: 'hold-on-target-a', to: 'TargetA' },
+    { scenario: 'hold-on-target-a-walking', to: 'TargetA' }
+  ];
+  if (links.length !== expected.length) report.failures.push(`${links.length} link(s) in the take, expected exactly ${expected.length} (bracket, TargetA, TargetA walking); the tap, the floor and the chip must make none`);
+  const cameraNode = take.camera?.nodeIndex;
+  links.forEach((link, i) => {
+    const want = expected[i];
+    if (link.from.camera !== true || link.from.bone !== undefined) report.failures.push(`link ${i}: from is not the camera form (${JSON.stringify(link.from)})`);
+    if (link.from.nodeName !== CAMERA_NODE) report.failures.push(`link ${i}: from names node ${JSON.stringify(link.from.nodeName)}, expected ${CAMERA_NODE}`);
+    if (link.from.node !== cameraNode) report.failures.push(`link ${i}: from.node ${link.from.node} is not the camera node ${cameraNode}`);
+    if (link.provenance !== 'recorded') report.failures.push(`link ${i}: provenance ${link.provenance}, expected recorded`);
+    if (!want) return;
+    if (!link.to.nodeName.startsWith(want.to)) report.failures.push(`link ${i} (${want.scenario}): to node ${JSON.stringify(link.to.nodeName)}, expected ${want.to}`);
+    if (!link.to.point || link.to.point.some((v) => !Number.isFinite(v))) report.failures.push(`link ${i}: to.point is missing or not finite`);
+    const touch = scenarios.find((scenario) => scenario.name === want.scenario);
+    if (touch?.downSec === undefined || touch.upSec === undefined) return;
+    // The span starts at the touch, not 300 ms later when the hold qualified, and ends when the finger lifted.
+    if (Math.abs(link.span.start - touch.downSec) > MARK_START_TOLERANCE_SEC) report.failures.push(`link ${i} (${want.scenario}): span starts at ${link.span.start} s, the touch at ${touch.downSec} s (limit ${MARK_START_TOLERANCE_SEC})`);
+    if (Math.abs(link.span.end - touch.upSec) > MARK_END_TOLERANCE_SEC) report.failures.push(`link ${i} (${want.scenario}): span ends at ${link.span.end} s, the finger lifted at ${touch.upSec} s (limit ${MARK_END_TOLERANCE_SEC})`);
+    // A hold lasts at least the 300 ms hold delay; its length beyond that follows the emulated frames, which vary with the machine's load.
+    if (link.span.end - link.span.start < 0.3) report.failures.push(`link ${i} (${want.scenario}): span ${link.span.start}..${link.span.end} s is shorter than the 300 ms hold delay`);
+  });
+  const targetANode = take.setNodes.find((node) => node.name.startsWith('TargetA'));
+  const stillLink = links[1];
+  if (targetANode && stillLink?.to.point) {
+    const world = stillLink.to.point.map((v, k) => v + targetANode.worldTranslation[k]!);
+    const centre = TARGETS.TargetA!.center;
+    const offM = Math.hypot(...world.map((v, k) => v - centre[k]!));
+    report.notes.targetAHitFromCentreM = round(offM, 3);
+    if (offM > 0.45) report.failures.push(`the TargetA hit is ${round(offM, 3)} m from the box's centre; the ray did not land on the box`);
+  }
+  if (!resolution) {
+    report.failures.push('the page reported no point resolution for the take');
+    return;
+  }
+  const holds = resolution.aimHolds;
+  if (holds.length !== 4 || holds.some((hold) => hold.input !== 'screen')) report.failures.push(`resolution lists ${holds.length} hold(s) [${holds.map((hold) => hold.input).join(', ')}], expected 4 screen holds (bracket, floor, TargetA, TargetA walking)`);
+  const unlinked = resolution.runs.filter((resolved) => !resolved.linked);
+  if (unlinked.length !== 1 || unlinked[0]!.reason !== 'no referent') report.failures.push(`resolution: unlinked runs ${JSON.stringify(unlinked.map((resolved) => resolved.reason))}, expected exactly one "no referent" (the floor)`);
+  if (resolution.runs.filter((resolved) => resolved.linked).length !== links.length) report.failures.push('resolution: linked runs and links in the file differ');
+}
+
 // --- Main ---
 
 await mkdir(artifactDir, { recursive: true });
@@ -1116,8 +1420,10 @@ const browser = await launchXrBrowser(chromium, { args: FAKE_MIC_ARGS });
 const run: Run = { browser, consoleErrors };
 const selected = (phase: Phase) => !only || only.some((part) => phase.includes(part));
 let comparison: Comparison | undefined;
+let marksComparison: unknown;
 try {
   const walked: Partial<Record<'phone-a' | 'phone-b', Walked>> = {};
+  const marked: Partial<Record<'marks-a' | 'marks-b', Marked>> = {};
   const finish = (report: PhaseReport) => {
     reports.push(report);
     const s = report.scriptVsExport;
@@ -1132,6 +1438,13 @@ try {
     } else if (phase === 'phone-b') {
       walked[phase] = await walkPhase(run, phase, { position: [1.2, 1.6, -0.8], yaw: 1.2 });
       finish(walked[phase]!.report);
+    } else if (phase === 'marks-a') {
+      marked[phase] = await marksPhase(run, phase, { position: [0, 1.6, 0], yaw: 0 });
+      finish(marked[phase]!.report);
+    } else if (phase === 'marks-b') {
+      // A quarter turn: the room-axis bounds of the bracket then still centre on the bracket, so both placements aim at the same point of it.
+      marked[phase] = await marksPhase(run, phase, { position: [1.2, 1.6, -0.8], yaw: Math.PI / 2 });
+      finish(marked[phase]!.report);
     } else if (phase === 'mic-denied' || phase === 'session-end' || phase === 'page-hidden') {
       finish(await interruptPhase(run, phase));
     } else if (phase === 'hidden-at-start' || phase === 'restored-at-start' || phase === 'ended-at-start') {
@@ -1156,7 +1469,27 @@ try {
       `[ar-record] placements differ by ${comparison.worldFrameDeltaM} m, ${comparison.worldFrameDeltaDeg} deg; camera path ${comparison.cameraPath.maxPositionCm} cm, ${comparison.cameraPath.maxRotationDeg} deg over ${comparison.cameraPath.samples} samples; set nodes ${comparison.setNodes.maxCm} cm; object ${comparison.objects.map((o) => `${o.positionCm} cm ${o.rotationDeg} deg`).join(', ')}`
     );
   }
-  await writeFile(path.join(artifactDir, 'ar-record-report.json'), JSON.stringify({ reports, comparison, consoleErrors, seconds: round((Date.now() - startedAt) / 1000, 1) }, null, 2));
+  if (marked['marks-a']?.take && marked['marks-b']?.take) {
+    // The same holds under two placements: where each landed, in the node it hit, agrees.
+    const a = marked['marks-a'];
+    const b = marked['marks-b'];
+    const reportB = b.report;
+    const toPointDiffCm = a.links.map((link, i) => {
+      const other = b.links[i];
+      return link.to.point && other?.to.point ? round(Math.hypot(...link.to.point.map((v, k) => v - other.to.point![k]!)) * 100, 3) : Infinity;
+    });
+    // The walking hold's ray sweeps with wall-clock frames, so only the still holds are held to the centimetre.
+    const stillIndices = [0, 1];
+    for (const i of stillIndices) {
+      if (!(toPointDiffCm[i]! <= MARK_POINT_TOLERANCE_CM)) reportB.failures.push(`link ${i}: to.point differs across placements by ${toPointDiffCm[i]} cm (limit ${MARK_POINT_TOLERANCE_CM})`);
+    }
+    if (a.links.length !== b.links.length || a.links.some((link, i) => link.to.nodeName !== b.links[i]?.to.nodeName)) reportB.failures.push('the two placements made different links');
+    const deltaM = new THREE.Vector3().setFromMatrixPosition(toMatrix(a.report.worldFrame!)).distanceTo(new THREE.Vector3().setFromMatrixPosition(toMatrix(b.report.worldFrame!)));
+    if (!(deltaM > 0.5)) reportB.failures.push(`the two placements are too alike (${round(deltaM)} m); the cross-placement mark check proves nothing`);
+    marksComparison = { toPointDiffCm, stillHoldsToleranceCm: MARK_POINT_TOLERANCE_CM, placementDeltaM: round(deltaM) };
+    console.log(`[ar-record] marks: to.point differs across placements by ${toPointDiffCm.join(', ')} cm (${a.links.length} links; placements ${round(deltaM)} m apart)`);
+  }
+  await writeFile(path.join(artifactDir, 'ar-record-report.json'), JSON.stringify({ reports, comparison, marksComparison, consoleErrors, seconds: round((Date.now() - startedAt) / 1000, 1) }, null, 2));
   const failures = reports.flatMap((report) => report.failures.map((failure) => `${report.phase}: ${failure}`));
   if (consoleErrors.length > 0) failures.push(`console errors:\n${consoleErrors.join('\n')}`);
   if (failures.length > 0) throw new Error(`AR recording check failed:\n- ${failures.join('\n- ')}`);

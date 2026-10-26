@@ -8,7 +8,7 @@ import { GLTFAudioPlugin } from './GLTFAudioPlugin';
 import { GLTFMeaningPlugin } from './GLTFMeaningPlugin';
 import { GLTFObjectsPlugin } from './GLTFObjectsPlugin';
 import { type AuthoringSampleStore, findAuthoringSpans, neutralizeAuthoringSpans, toAuthoringSpans } from './authoringSpans';
-import type { CameraTrackStore } from './CameraTrackStore';
+import { AUTHOR_CAMERA_NODE_NAME, type CameraTrackStore } from './CameraTrackStore';
 import { buildObjectExports, type ObjectExport } from './objectExport';
 import type { ObjectSampleStore } from './ObjectSampleStore';
 import { FrameCaptureStore } from './FrameCaptureStore';
@@ -238,11 +238,15 @@ export class GltfExportComposer {
    * `RecordedAuthorCamera`, a plain node (not a glTF camera) whose `yfov`
    * rides in `extras`. One clip, `RecordedMotion`, animates the camera and
    * the objects; its times are take seconds from the first sample.
+   * `HOLOIM_meaning` is written only when a hold landed on something, and then
+   * as v1 (its links come from the camera node).
    */
   async exportCameraTakeToGlbBlob(input: {
     track: CameraTrackStore;
     bubbleSampler: SceneBubbleSampler;
     objectStore: ObjectSampleStore;
+    /** The take's held marks (finger holds on the screen), in the set's frame. */
+    pointStore: PointSampleStore;
     sceneRoot: THREE.Object3D;
     /** `inverse(worldGroup.matrixWorld)`: world to the set's frame. */
     setInverse: THREE.Matrix4;
@@ -264,7 +268,7 @@ export class GltfExportComposer {
     }
 
     const camera = new THREE.Object3D();
-    camera.name = 'RecordedAuthorCamera';
+    camera.name = AUTHOR_CAMERA_NODE_NAME;
     camera.userData = { yfov };
     camera.position.fromArray(posValues, 0);
     camera.quaternion.fromArray(quatValues, 0);
@@ -295,11 +299,32 @@ export class GltfExportComposer {
     this.addRecordedSceneLights(scene);
     const clip = new THREE.AnimationClip('RecordedMotion', -1, tracks);
 
+    // Held marks: cast against the set and the objects as exported, in the set's frame. The
+    // objects stand still in a camera take (a camera author cannot grab one), so their rest pose is theirs throughout.
+    let meaning: MeaningDraft | undefined;
+    if (input.pointStore.hasSamples()) {
+      scene.updateMatrixWorld(true);
+      const { draft, report } = this.pointResolver.resolveCamera({
+        store: input.pointStore,
+        startSec: t0,
+        endSec: samples.at(-1)!.timeSec,
+        camera,
+        sceneMeshes: [...sceneBubble.clippedBySource.values()],
+        objects: objects?.nodes ?? []
+      });
+      this.lastPointReport = report;
+      if (draft.marks.length > 0) meaning = draft;
+    }
+
     return new Promise<Blob>((resolve, reject) => {
       const exporter = new GLTFExporter();
       const audioData = input.audioData;
       if (audioData && audioData.buffer.byteLength > 0) {
         exporter.register((writer) => new GLTFAudioPlugin(writer, audioData.buffer, audioData.mimeType));
+      }
+      if (meaning) {
+        const draft = meaning;
+        exporter.register((writer) => new GLTFMeaningPlugin(writer, draft));
       }
       if (objects && objects.drafts.length > 0) {
         const drafts = objects.drafts;

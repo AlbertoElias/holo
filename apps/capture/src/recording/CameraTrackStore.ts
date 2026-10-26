@@ -2,6 +2,9 @@ import * as THREE from 'three';
 
 import { isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 
+/** The name of the node the camera track animates; a camera link's `from.node` must be this node. */
+export const AUTHOR_CAMERA_NODE_NAME = 'RecordedAuthorCamera';
+
 /** One step of the author's camera, in the set's frame. */
 export interface CameraSample {
   timeSec: number;

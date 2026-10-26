@@ -52,7 +52,7 @@ type GltfFile = {
   accessors?: Array<{ bufferView?: number; byteOffset?: number; componentType: number; count: number; type: string }>;
   bufferViews?: Array<{ buffer?: number; byteOffset?: number; byteStride?: number; byteLength?: number }>;
   animations?: GltfAnimation[];
-  extensions?: Record<string, { version?: unknown; objects?: Array<{ node?: number }>; audio?: Array<{ bufferView?: number; uri?: string }> } | undefined>;
+  extensions?: Record<string, { version?: unknown; objects?: Array<{ node?: number }>; audio?: Array<{ bufferView?: number; uri?: string }>; marks?: unknown[] } | undefined>;
   extensionsUsed?: string[];
 };
 
@@ -75,6 +75,14 @@ export type SetNode = {
   animated: boolean;
 };
 
+export type MeaningLinkReport = {
+  /** A camera link names its node (`camera: true`); a bone link its bone. */
+  from: { camera?: boolean; bone?: string; node: number; nodeName: string };
+  to: { node: number; nodeName: string; point: Vec3 | null; radius: number | null };
+  span: { start: number; end: number };
+  provenance: string;
+};
+
 export type CameraTakeReport = {
   skins: number;
   nodeCount: number;
@@ -89,6 +97,8 @@ export type CameraTakeReport = {
   audio: { sources: number; payloadBytes: number };
   /** `HOLOIM_meaning` version, or null when the file has none. */
   meaningVersion: number | null;
+  /** `HOLOIM_meaning` links, with the node names their indices point at. */
+  meaningLinks: MeaningLinkReport[];
   holoimObjects: boolean;
   camera: null | {
     nodeIndex: number;
@@ -283,6 +293,16 @@ export function inspectCameraTake(glb: Buffer): CameraTakeReport {
   }
 
   const meaningVersion = gltf.extensions?.HOLOIM_meaning?.version;
+  const meaningLinks = ((gltf.extensions?.HOLOIM_meaning?.marks ?? []) as Array<{
+    anchor: { from: { camera?: boolean; bone?: string; node: number }; to: { node: number; point?: Vec3; radius?: number } };
+    span: { start: number; end: number };
+    provenance: { value: string };
+  }>).map((mark): MeaningLinkReport => ({
+    from: { ...mark.anchor.from, nodeName: names[mark.anchor.from.node] ?? '' },
+    to: { node: mark.anchor.to.node, nodeName: names[mark.anchor.to.node] ?? '', point: mark.anchor.to.point ?? null, radius: mark.anchor.to.radius ?? null },
+    span: mark.span,
+    provenance: mark.provenance.value
+  }));
   return {
     skins: gltf.skins?.length ?? 0,
     nodeCount: nodes.length,
@@ -294,6 +314,7 @@ export function inspectCameraTake(glb: Buffer): CameraTakeReport {
     khrAudio: Boolean(gltf.extensions?.KHR_audio) || (gltf.extensionsUsed ?? []).includes('KHR_audio'),
     audio: { sources: audioEntries.length, payloadBytes: audioBytes },
     meaningVersion: typeof meaningVersion === 'number' ? meaningVersion : gltf.extensions?.HOLOIM_meaning ? NaN : null,
+    meaningLinks,
     holoimObjects: Boolean(gltf.extensions?.HOLOIM_objects),
     camera: cameraNode
       ? {

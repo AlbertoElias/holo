@@ -86,6 +86,10 @@ export function renderCaptureTextState(c: CaptureContext): string {
       notice: c.ui.getState().notice,
       takeKind: c.recording.kind,
       cameraSamples: c.recording.cameraRecorder.sampleCount,
+      // The camera take's running time (first to latest camera sample), and its screen holds (slice 4).
+      takeSec: c.recording.cameraRecorder.elapsedSec,
+      screenHold: c.screenHolds.snapshot(),
+      screenHolds: c.recording.cameraRecorder.pointSamples.holdCounts(),
       micPermission: c.ui.getState().micPermission,
       micHeld: c.recording.isMicHeld()
     }

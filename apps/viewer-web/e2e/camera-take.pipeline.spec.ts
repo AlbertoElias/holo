@@ -8,9 +8,6 @@ import type * as DrawnPoints from "../src/features/hologram/drawnPoints";
 
 import { launchXrBrowser, waitForIwerSession } from "@holoim/tooling-testing/xr-env";
 
-// The package's source, not its build: the e2e run does not build workspace packages.
-import { encodeHoloimMeaning } from "../../../packages/meaning/src/meaning.ts";
-import type { MeaningLinkMark } from "../../../packages/meaning/src/meaning.ts";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 import { tokens } from "@holoim/design-tokens";
 import { Quaternion, Vector3 } from "three";
@@ -419,6 +416,14 @@ test.beforeAll(async () => {
     expect(recording.failures, "capture's camera take").toEqual([]);
     expect(consoleErrors, "capture runtime errors").toEqual([]);
     takeFile = recording.glb;
+    const [link] = recording.take.meaningLinks;
+    expect(link, "the hold on the bracket made one camera link").toBeDefined();
+    SPAN = { ...link!.span };
+    REFERENT = link!.to.nodeName;
+    REFERENT_POINT = link!.to.point!;
+    const inside = (share: number) => Math.round((SPAN.start + (SPAN.end - SPAN.start) * share) * 100) / 100;
+    IN_SPAN_TIMES = [inside(0.2), inside(0.5), inside(0.8)];
+    OUTSIDE_SPAN_TIMES = [Math.round(SPAN.start * 30) / 100, Math.min(SPAN.end + 0.6, recording.take.duration - 0.2)];
   } finally {
     await browser.close();
   }
@@ -563,40 +568,16 @@ test("props named Hips and Head do not take over: the same take frames and ancho
 // it looked, with the clip; a camera link's ink runs from it to its referent
 // during the link's span.
 
-const SPAN = { start: 1.0, end: 2.2 };
-const IN_SPAN_TIMES = [1.2, 1.6, 2.0];
-const OUTSIDE_SPAN_TIMES = [0.3, 2.8];
+// The link is the take's own: the hold capture recorded on the bracket (set in beforeAll from the take's HOLOIM_meaning).
+let SPAN = { start: 1.0, end: 2.2 };
+let IN_SPAN_TIMES = [1.2, 1.6, 2.0];
+let OUTSIDE_SPAN_TIMES = [0.3, 2.8];
 const PRESENCE_TIMES = [0, 0.8, 1.6, 2.4, 3.1];
 const MARK_FACING_TOLERANCE_DEG = 3;
 /** The mark is sized a frame behind the card's camera, which moves when the card is orbited or zoomed. */
 const MARK_SIZE_TOLERANCE_PX = 0.75;
-const REFERENT = "BracketUpright";
-const REFERENT_POINT: Vec3 = [0, 0, 0];
-
-/**
- * STAND-IN, to be replaced by the real hold once capture writes camera marks
- * (slice 4's capture half): the recorded take with a v1 HOLOIM_meaning record
- * written into its GLB JSON by hand, one `recorded` link from the camera node
- * to an event object's node, spanning SPAN. The record goes through the
- * meaning package's own writer rule, so it is a record capture could emit.
- */
-function withStandInCameraLink(buffer: Buffer): Buffer {
-  const { json, rest } = parseGlb(buffer);
-  const camera = json.nodes.findIndex((node) => node.name === "RecordedAuthorCamera");
-  const referent = json.nodes.findIndex((node) => node.name === REFERENT);
-  expect(camera >= 0 && referent >= 0, "the take has a camera node and an event object's node").toBe(true);
-  const mark: MeaningLinkMark = {
-    kind: "link",
-    anchor: { from: { camera: true, node: camera }, to: { node: referent, point: REFERENT_POINT } },
-    span: SPAN,
-    provenance: { value: "recorded" }
-  };
-  const record = encodeHoloimMeaning({ marks: [mark], spans: [] });
-  expect(record.version, "a camera link is a v1 record").toBe(1);
-  json.extensions = { ...json.extensions, HOLOIM_meaning: record };
-  json.extensionsUsed = [...new Set([...(json.extensionsUsed ?? []), "HOLOIM_meaning"])];
-  return buildGlb(json, rest);
-}
+let REFERENT = "RecordedObject";
+let REFERENT_POINT: Vec3 = [0, 0, 0];
 
 /** The camera node's pose at `time` from the file's own keyframes: the oracle for what the viewer plays. */
 function cameraPoseAt(json: GltfJson, bin: Buffer, time: number): { position: Vec3; forward: Vec3 } {
@@ -807,7 +788,7 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
   const duration = takeDurationSeconds(fileJson);
   expect(fileJson.nodes.findIndex((node) => node.name === "RecordedAuthorCamera"), "the camera node has no parent: its pose in the file is its pose in the set's frame").toBeGreaterThanOrEqual(0);
 
-  const { uploaded, card } = await playTake(page, "Camera take link", withStandInCameraLink(original), false);
+  const { uploaded, card } = await playTake(page, "Camera take link", original, false);
   await expect(card).toHaveAttribute("data-model-bubble", "active");
   await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
   await expect(card).toHaveAttribute("data-portal-paused", "true");
@@ -929,7 +910,9 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
   await card.screenshot({ path: path.join(evidenceDir, "feed-card-camera-mark-orbited.png") });
 
   await writeFile(path.join(evidenceDir, "camera-mark-report.json"), JSON.stringify({
-    stand_in: "the camera link is written into the GLB by this spec until capture writes camera marks",
+    link: "recorded by capture's hold on the bracket during the walk (apps/capture/scripts/lib/camera-take-recording.ts)",
+    referent: REFERENT,
+    referentPoint: REFERENT_POINT,
     span: SPAN,
     identity,
     markSizeApx: tokens.mark.size,

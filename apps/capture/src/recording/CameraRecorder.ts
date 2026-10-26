@@ -4,6 +4,8 @@ import type { SceneObject } from '../objects/SceneObjectRegistry';
 import { CameraTrackStore } from './CameraTrackStore';
 import { GltfExportComposer } from './GltfExportComposer';
 import { ObjectSampleStore } from './ObjectSampleStore';
+import { PointSampleStore } from './PointSampleStore';
+import type { PointResolutionReport } from './PointResolver';
 import { SceneBubbleSampler } from './SceneBubbleSampler';
 
 /**
@@ -19,6 +21,12 @@ export class CameraRecorder {
   private readonly sceneBubbleSampler = new SceneBubbleSampler();
   private readonly objectSamples = new ObjectSampleStore();
   private readonly gltfExportComposer = new GltfExportComposer();
+  /**
+   * The take's held marks: finger holds on the screen, in the set's frame,
+   * written by `ScreenHolds` at the same simulation times as the camera
+   * samples. Open exactly while the take is.
+   */
+  readonly pointSamples = new PointSampleStore();
   private enabled = false;
   private originAdded = false;
   /** Where the camera stood when `hasSetInReach` admitted the take, in the set's frame. */
@@ -33,6 +41,13 @@ export class CameraRecorder {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    // A hold still down when the take stops is closed at that moment.
+    this.pointSamples.setEnabled(enabled);
+  }
+
+  /** What point resolution decided at the latest export, in take seconds. */
+  getLastPointReport(): PointResolutionReport | undefined {
+    return this.gltfExportComposer.lastPointReport;
   }
 
   get sampleCount(): number {
@@ -95,6 +110,7 @@ export class CameraRecorder {
     this.track.clear();
     this.sceneBubbleSampler.clear();
     this.objectSamples.clear();
+    this.pointSamples.clear();
     this.originAdded = false;
     this.admittedAt = null;
   }
@@ -106,6 +122,7 @@ export class CameraRecorder {
       track: this.track,
       bubbleSampler: this.sceneBubbleSampler,
       objectStore: this.objectSamples,
+      pointStore: this.pointSamples,
       sceneRoot,
       setInverse: this.setInverse,
       audioData

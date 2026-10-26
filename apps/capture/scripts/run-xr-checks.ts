@@ -60,15 +60,15 @@ const CHECK_SERVER_ENV: Partial<Record<CheckName, Record<string, string>>> = { f
 
 // Checks that legitimately run longer than the default hang guard.
 const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
-  // Fourteen phases, two of them driving the phone dock by taps (about 150 s locally).
-  'ar-record': 240000,
+  // Sixteen phases, two of them driving the phone dock by taps and two holding the phone screen (about 200 s locally).
+  'ar-record': 300000,
   body: 360000,
   face: 360000
 };
 
 // Serial wall time in seconds on a 2-vCPU CI runner (CI run 39499697917);
 // parallel runs start the longest first and XR_SHARD balances on it.
-const CHECK_COST: Partial<Record<CheckName, number>> = { face: 40, marks: 19, body: 83, height: 45, terrain: 38, hands: 31, locomotion: 21, 'mock-vr': 18, recording: 11, 'ar-record': 85 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { face: 40, marks: 19, body: 83, height: 45, terrain: 38, hands: 31, locomotion: 21, 'mock-vr': 18, recording: 11, 'ar-record': 110 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);

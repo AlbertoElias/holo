@@ -18,6 +18,7 @@ export class RecordingSystem extends createSystem() {
     if (c.frame.arCameraAuthor) {
       // The phone is a camera: its path, the objects and the set, in the set's frame.
       c.recording.cameraRecorder.capture(c.frame.elapsedSec, c.stage.worldGroup, c.stage.renderer.xr.getCamera(), c.objects.registry.eventObjects());
+      c.screenHolds.step(c.frame.elapsedSec);
       return;
     }
     if (c.frame.arSpectator) return;

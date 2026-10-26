@@ -5,6 +5,7 @@ import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, UiViewModel, VrHandSide } from '../types/contracts';
 import type { TouchStick } from '../input/TouchInput';
 import type { FlatHaloView } from '../ui/flatHalo';
+import type { PointResolutionReport } from '../recording/PointResolver';
 import type { PhoneArChromeProbe } from '../ui/PhoneArChrome';
 import type { VrChromeSnapshot } from '../ui/VrChrome';
 import type { HeadsetHolds } from '../xr/HeadsetHolds';
@@ -55,6 +56,8 @@ export interface AutomationHooks {
   __sampleHolds: () => HoldsSnapshot;
   /** Record or Stop, through the same `recording.toggle()` the dock, the key and the wrist glyph reach. */
   __toggleRecording: () => void;
+  /** What point resolution decided at the latest camera take's export (holds, referents, "no referent"), or null. */
+  __lastPointReport: () => PointResolutionReport | null;
   /** `worldGroup.matrixWorld` (column-major, 16 numbers): the set's frame in the room, for scripting a camera walk in the set's frame. */
   __arWorldFrame: () => number[];
   /** CSS px of a world point in the flat-screen view, or null behind the camera: where a check touches to aim at it. */

@@ -12,7 +12,7 @@ import {
   waitForTextContentPrefix,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
-import { emulatePhone, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
+import { emulatePhone, phoneHold, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
 
 import type {} from '../../src/runtime/automationHooks';
 import { assertCameraTake, inspectCameraTake, type CameraTakeReport } from './camera-take-glb.ts';
@@ -25,8 +25,11 @@ import { assertCameraTake, inspectCameraTake, type CameraTakeReport } from './ca
 // world frame), Stop, save the download. The same setup and walk as
 // ci-ar-record-playwright.ts's phone-a phase, which keeps its own copy for now.
 // Used by the viewer's camera-take pipeline spec, which uploads the take.
-// `duringWalk` is where a later step adds touches (slice 4's hold): it runs
-// after each step's head pose is set and one real XR frame has passed.
+// A real hold marks the bracket (slice 4): at walk step HOLD_STEP a finger goes
+// down on the bracket's centre, as seen from the head then, and stays for a
+// second on the glass while the head walks toward the bracket (the finger
+// ray stays on it). `duringWalk` runs after each step's head pose is set and
+// one real XR frame has passed, for any further touches.
 // The browser needs the fake microphone: launch it with FAKE_MIC_ARGS.
 
 export const FAKE_MIC_ARGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'];
@@ -36,6 +39,11 @@ const OBJECT_URL = '/fixtures/objects/bracket.glb';
 const VIEWPORT = { width: 640, height: 400 };
 const STEP_MS = 100;
 export const WALK_STEPS = 30;
+/** The walk step at which the finger goes down on the bracket. */
+export const HOLD_STEP = 8;
+const HOLD_MS = 1000;
+/** How far the head walks toward the bracket while the finger is down. */
+const HOLD_APPROACH_M = 0.4;
 
 export type CameraTakeRun = {
   browser: Browser;
@@ -85,6 +93,29 @@ const advance = (page: Page, ms: number) => page.evaluate((value) => window.adva
 /** One real XR frame (emulated frames take about 150 ms); the simulation moves only on advanceTime. */
 const nextXrFrame = (page: Page) =>
   page.evaluate(() => new Promise<void>((resolve) => window.IWER_DEVICE!.activeSession!.requestAnimationFrame(() => resolve())));
+
+/** Runs `touch` while the simulation advances beside it (the manual clock steps only when asked), moving the head as it proceeds. */
+async function stepWhile(page: Page, touch: Promise<void>, move: (progress: number) => Promise<void>): Promise<void> {
+  let done = false;
+  let failure: unknown;
+  const finished = touch.then(
+    () => {
+      done = true;
+    },
+    (error: unknown) => {
+      done = true;
+      failure = error;
+    }
+  );
+  const started = Date.now();
+  while (!done) {
+    await move(Math.min(1, (Date.now() - started) / HOLD_MS));
+    await nextXrFrame(page);
+    await advance(page, 150);
+  }
+  await finished;
+  if (failure) throw failure;
+}
 
 async function openPage(run: CameraTakeRun): Promise<Page> {
   const context = await createXrContext(run.browser, { viewport: VIEWPORT, acceptDownloads: true });
@@ -166,11 +197,26 @@ export async function recordCameraTake(run: CameraTakeRun): Promise<CameraTakeRe
     const recording = await arOf(page);
     if (recording.takeKind !== 'camera') failures.push(`take kind ${recording.takeKind}, expected camera`);
 
+    // The bracket's centre in the room as placed (the object is in the set, so the bounds moved with it).
+    const item = await page.evaluate(() => JSON.parse(window.render_game_to_text()).objects.items[0] as { boundsMin: Vec3; boundsMax: Vec3 });
+    const bracket = item.boundsMin.map((value, k) => (value + item.boundsMax[k]!) / 2) as Vec3;
+    notes.bracketInRoom = bracket.map((v) => round(v, 3));
+
     for (let i = 0; i < WALK_STEPS; i += 1) {
       const room = setToRoom(frame, walkPose(i));
       await setHeadPose(page, room.position, room.quaternion);
       await nextXrFrame(page);
       await run.duringWalk?.(page, i);
+      if (i === HOLD_STEP) {
+        // A finger on the bracket for HOLD_MS, locked to its place on the glass; the head walks along the finger's ray toward it.
+        const from = new THREE.Vector3(...room.position);
+        const toward = new THREE.Vector3(...bracket).sub(from).normalize();
+        const touch = phoneHold(page, bracket, HOLD_MS, { screenLocked: true });
+        await stepWhile(page, touch, async (progress) => {
+          const at = from.clone().addScaledVector(toward, HOLD_APPROACH_M * progress);
+          await setHeadPose(page, [at.x, at.y, at.z], room.quaternion);
+        });
+      }
       await advance(page, STEP_MS);
     }
     // Hold the last pose one more step so the final step has samples.
@@ -189,6 +235,15 @@ export async function recordCameraTake(run: CameraTakeRun): Promise<CameraTakeRe
     failures.push(...assertCameraTake(take));
     if (!take.khrAudio || take.audio.sources < 1 || take.audio.payloadBytes <= 0) failures.push('KHR_audio does not carry audio although the microphone was granted');
     notes.cameraKeys = take.camera?.translationKeys;
+    // The hold made exactly one mark: a recorded link from the camera node to the bracket, in a version 1 record.
+    if (take.meaningVersion !== 1) failures.push(`HOLOIM_meaning version ${take.meaningVersion}, expected 1 for a camera link`);
+    if (take.meaningLinks.length !== 1) failures.push(`the take has ${take.meaningLinks.length} links, expected exactly the one hold on the bracket`);
+    const link = take.meaningLinks[0];
+    if (link && (!link.from.camera || link.from.nodeName !== 'RecordedAuthorCamera' || link.to.nodeName !== 'RecordedObject' || !link.to.point)) {
+      failures.push(`the link is not from the camera node to the bracket's node (${JSON.stringify(link)})`);
+    }
+    if (link && link.provenance !== 'recorded') failures.push(`the link's provenance is ${link.provenance}, expected recorded`);
+    notes.link = link ?? null;
     return { glb, filename: saved.suggestedFilename(), bytes: bytes.length, take, failures, notes };
   } finally {
     await page.context().close();

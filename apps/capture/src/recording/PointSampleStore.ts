@@ -20,18 +20,21 @@ export interface HandPointSample {
 /**
  * What held the mark "this" (docs/features/ui-redesign.md, slice 5): the
  * desktop point action, a phone's touch and hold, the non-dominant
- * thumb–middle pinch, or the non-dominant trigger.
+ * thumb–middle pinch, or the non-dominant trigger; and, in a camera take
+ * (docs/features/ar-recording.md), a finger held on the screen in phone AR.
  */
-export type AimInput = 'desktop' | 'touch' | 'hands' | 'controllers';
+export type AimInput = 'desktop' | 'touch' | 'hands' | 'controllers' | 'screen';
 
 /**
  * One frame of a held mark: the ray that decides the referent. Desktop: the
  * eye-origin aim ray; phone: the camera ray through the finger; hands: the
- * dominant index's filtered fingertip ray; controllers: the dominant target ray.
+ * dominant index's filtered fingertip ray; controllers: the dominant target ray;
+ * screen (a camera take): the target ray of the finger held on the phone's
+ * screen, in the set's frame.
  */
 export interface AimPointSample {
   timeSec: number;
-  /** The avatar hand that shows the point; it becomes the link's `from`. */
+  /** The avatar hand that shows the point; it becomes the link's `from`. A camera take's `screen` holds have no hand: any side, ignored. */
   side: VrHandSide;
   /** Default `desktop`. */
   input?: AimInput;

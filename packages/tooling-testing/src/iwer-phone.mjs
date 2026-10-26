@@ -146,21 +146,27 @@ export async function emulatePhone(page, options = {}) {
             remove: () => mark.remove()
           };
         };
-        /** A finger down toward `path[0]`, held while it moves along `path` (one point per frame), then lifted. */
-        const press = async (path, holdMs) => {
+        /**
+         * A finger down toward `path[0]`, held while it moves along `path` (one point per frame), then lifted.
+         * With `screenLocked` the finger stays at the screen position it went down on while the head moves
+         * (walking or turning with a finger on the glass); otherwise it follows the point in the room.
+         */
+        const press = async (path, holdMs, screenLocked = false) => {
           const session = sessionOf();
           if (!EventCtor) throw new Error('phone: XRInputSourceEvent unavailable');
           const finger = newFinger(path[0]);
+          const lockedAt = screenLocked ? toViewerSpace(path[0]) : null;
+          const place = (point) => (lockedAt ? fromViewerSpace(lockedAt) : point);
           screenSources.push(finger.source);
           await frameOf(session);
           await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
           for (const point of path.slice(1)) {
             // The finger moves: the source's target ray follows it, frame by frame.
-            await frameOf(session, () => finger.move(point));
+            await frameOf(session, () => finger.move(place(point)));
           }
           // The ray keeps tracking the last point while held, so a camera that walks still points the finger at it.
           const until = performance.now() + holdMs;
-          while (performance.now() < until) await frameOf(session, () => finger.move(path[path.length - 1]));
+          while (performance.now() < until) await frameOf(session, () => finger.move(place(path[path.length - 1])));
           await frameOf(session, (frame) => {
             session.dispatchEvent(new EventCtor('select', { frame, inputSource: finger.source }));
             session.dispatchEvent(new EventCtor('selectend', { frame, inputSource: finger.source }));
@@ -204,7 +210,14 @@ export async function emulatePhone(page, options = {}) {
         // pointer-events counts a press longer than 300 ms as no click.
         phone.__phoneTap = (target) => press([target], 0);
         // A hold toward a point for `holdMs` of wall-clock time, frame by frame (the ray follows the moving head).
-        phone.__phoneHold = (target, holdMs) => press([target], holdMs);
+        phone.__phoneHold = (target, holdMs, screenLocked) => press([target], holdMs, screenLocked);
+        // The room point `distance` m along the ray through a CSS px position of the screen, from the head as it is now.
+        phone.__phoneScreenPoint = (x, y, distance) => {
+          const tan = tanHalf();
+          const ndcX = (x / innerWidth) * 2 - 1;
+          const ndcY = 1 - (y / innerHeight) * 2;
+          return fromViewerSpace([ndcX * tan * (innerWidth / innerHeight) * distance, ndcY * tan * distance, -distance]);
+        };
         // A held drag from one point to another over `frames` frames.
         phone.__phoneDrag = (from, to, frames, holdMs) =>
           press(
@@ -222,9 +235,21 @@ export function phoneTap(page, point) {
   return page.evaluate((target) => window.__phoneTap(target), point);
 }
 
-/** A touch held on a point for `ms` of wall-clock time, then lifted. Frames advance while held. */
-export function phoneHold(page, point, ms) {
-  return page.evaluate(([target, holdMs]) => window.__phoneHold(target, holdMs), [point, ms]);
+/**
+ * A touch held on a point for `ms` of wall-clock time, then lifted. Frames advance while held, and the
+ * finger follows the point as the head moves. With `screenLocked` it stays where it went down on the
+ * screen instead (a finger on the glass while the phone walks or turns).
+ */
+export function phoneHold(page, point, ms, options = {}) {
+  return page.evaluate(([target, holdMs, locked]) => window.__phoneHold(target, holdMs, locked), [point, ms, options.screenLocked === true]);
+}
+
+/**
+ * The room point `distance` m along the ray through a CSS px position on the screen, for the head
+ * as it is now: where to put a finger that starts on a screen position (the dock, a chip).
+ */
+export function phoneScreenPoint(page, x, y, distance = 1.5) {
+  return page.evaluate(([px, py, d]) => window.__phoneScreenPoint(px, py, d), [x, y, distance]);
 }
 
 /**

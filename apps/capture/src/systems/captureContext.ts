@@ -26,6 +26,7 @@ import type { ArSpectator } from '../xr/ArSpectator';
 import type { HandEmbodiment } from '../xr/HandEmbodiment';
 import type { HeadsetHolds } from '../xr/HeadsetHolds';
 import type { HeightFit } from '../xr/HeightFit';
+import type { ScreenHolds } from '../xr/ScreenHolds';
 import type { XrTracking } from '../xr/XrTracking';
 
 /** Facts about the current simulation step, written once by their owner. */
@@ -77,6 +78,8 @@ export interface CaptureContext {
   phoneChrome: PhoneArChrome;
   /** The headset's mark "this" and Halo (slice 5). */
   headsetHolds: HeadsetHolds;
+  /** A finger held on the phone's screen marks "this" from the camera (ar-recording slice 4). */
+  screenHolds: ScreenHolds;
   recording: RecordingSession;
   diagnostics: DiagnosticViews;
   frame: CaptureFrame;

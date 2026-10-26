@@ -1,4 +1,5 @@
 import { nonDominantHand, type Handedness } from '@holoim/xr-ui-core';
+import { ScreenInputSystem } from '@holoim/xr-ui-iwsdk';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Vector3 } from 'three';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
@@ -32,6 +33,7 @@ import { HeadsetHolds } from '../xr/HeadsetHolds';
 import { ArSpectator } from '../xr/ArSpectator';
 import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
+import { ScreenHolds } from '../xr/ScreenHolds';
 import { XrTracking } from '../xr/XrTracking';
 import { installAutomationHooks } from './automationHooks';
 import { createHaloActions } from './haloActions';
@@ -211,6 +213,13 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     vrChrome,
     phoneChrome,
     headsetHolds,
+    screenHolds: new ScreenHolds({
+      samples: () => recording.cameraRecorder.pointSamples,
+      isTakeOpen: () => recording.cameraRecorder.isEnabled(),
+      setFrame: stage.worldGroup,
+      xrCamera: () => renderer.xr.getCamera(),
+      viewport: () => ({ width: window.innerWidth, height: window.innerHeight })
+    }),
     recording,
     diagnostics: new DiagnosticViews({
       scene,
@@ -228,10 +237,15 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   world.globals.capture = capture;
 
   let started = false;
-  const sampleXrInput = holdXrInputBetweenFrames(world);
+  const holdXrInput = holdXrInputBetweenFrames(world);
   const loop = new FrameLoop({
     world,
-    sampleInput: sampleXrInput,
+    sampleInput: (deltaSec, timeSec) => {
+      holdXrInput(deltaSec, timeSec);
+      // Fingers held on the screen: under the manual clock the steps run outside XR frames, so their rays refresh here.
+      const xrFrame = renderer.xr.getFrame();
+      if (xrFrame) world.getSystem(ScreenInputSystem)?.refreshTouches(xrFrame);
+    },
     acquire: (frame) => {
       // IWSDK's pointers live under world.player; capture moves its own rig.
       syncPlayerToRig(world, cameraRig);
@@ -370,6 +384,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           actions: haloActions.log
         }),
         __toggleRecording: () => recording.toggle(),
+        __lastPointReport: () => recording.cameraRecorder.getLastPointReport() ?? null,
         __arWorldFrame: () => stage.worldGroup.matrixWorld.toArray(),
         __projectToScreen: (point) => {
           const ndc = new Vector3(point[0], point[1], point[2]).project(stage.desktopCamera);

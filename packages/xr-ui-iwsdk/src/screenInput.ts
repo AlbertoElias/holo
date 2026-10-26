@@ -124,9 +124,18 @@ export class ScreenInputSystem extends createSystem() {
 
   update(): void {
     if (this.active.size === 0 || !this.xrFrame) return;
-    for (const touch of this.touches.values()) this.followTouch(this.xrFrame, touch);
+    this.refreshTouches(this.xrFrame);
     this.updatePointer(this.xrFrame);
     for (const touch of [...this.touches.values()]) this.onTouchMove?.(touch);
+  }
+
+  /**
+   * Refreshes every finger's `ray` from `frame`. `update` does this each step
+   * inside an XR frame; a clock that steps outside XR frames (capture's manual
+   * clock) calls it from the frame itself, so its steps read the latest ray.
+   */
+  refreshTouches(frame: XRFrame): void {
+    for (const touch of this.touches.values()) this.followTouch(frame, touch);
   }
 
   private updatePointer(frame: XRFrame): void {
