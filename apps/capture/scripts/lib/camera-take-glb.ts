@@ -38,6 +38,8 @@ type GltfNode = {
   translation?: number[];
   rotation?: number[];
   scale?: number[];
+  /** A node's local transform may be a column-major matrix instead of TRS. */
+  matrix?: number[];
   extras?: Record<string, unknown>;
 };
 type GltfAnimation = {
@@ -48,7 +50,7 @@ type GltfFile = {
   nodes?: GltfNode[];
   skins?: unknown[];
   accessors?: Array<{ bufferView?: number; byteOffset?: number; componentType: number; count: number; type: string }>;
-  bufferViews?: Array<{ byteOffset?: number; byteStride?: number; byteLength?: number }>;
+  bufferViews?: Array<{ buffer?: number; byteOffset?: number; byteStride?: number; byteLength?: number }>;
   animations?: GltfAnimation[];
   extensions?: Record<string, { version?: unknown; objects?: Array<{ node?: number }>; audio?: Array<{ bufferView?: number; uri?: string }> } | undefined>;
   extensionsUsed?: string[];
@@ -163,8 +165,9 @@ function samplesOf(gltf: GltfFile, bin: Buffer | null, animation: GltfAnimation,
 
 const round = (value: number, places = 3) => Number(value.toFixed(places));
 
-/** Composes TRS matrices up the parent chain (column-major 4x4). */
+/** A node's local matrix (column-major 4x4): its `matrix` when given, else its TRS. */
 function composeMatrix(node: GltfNode): number[] {
+  if (node.matrix?.length === 16) return [...node.matrix];
   const [x, y, z, w] = (node.rotation ?? [0, 0, 0, 1]) as Quat;
   const [sx, sy, sz] = (node.scale ?? [1, 1, 1]) as Vec3;
   const [tx, ty, tz] = (node.translation ?? [0, 0, 0]) as Vec3;
@@ -269,7 +272,13 @@ export function inspectCameraTake(glb: Buffer): CameraTakeReport {
   const audioEntries = gltf.extensions?.KHR_audio?.audio ?? [];
   let audioBytes = 0;
   for (const entry of audioEntries) {
-    if (typeof entry.bufferView === 'number') audioBytes += gltf.bufferViews?.[entry.bufferView]?.byteLength ?? 0;
+    if (typeof entry.bufferView === 'number') {
+      // Count only bytes the BIN chunk really holds, and not a run of zeros.
+      const view = gltf.bufferViews?.[entry.bufferView];
+      const start = view?.byteOffset ?? 0;
+      const length = view?.byteLength ?? 0;
+      if (bin && (view?.buffer ?? 0) === 0 && length > 0 && start + length <= bin.length && bin.subarray(start, start + length).some((byte) => byte !== 0)) audioBytes += length;
+    }
     else if (typeof entry.uri === 'string' && entry.uri.startsWith('data:')) audioBytes += Math.max(0, entry.uri.length - entry.uri.indexOf(',') - 1);
   }
 
