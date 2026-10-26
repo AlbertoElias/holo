@@ -1,5 +1,5 @@
 import { tokens } from "@holoim/design-tokens";
-import { RayInteractable, type Entity, type World } from "@iwsdk/core";
+import { DepthOccludable, RayInteractable, type Entity, type World } from "@iwsdk/core";
 import { Box3, BoxGeometry, Mesh, MeshBasicMaterial, PointLight, Vector3 } from "three";
 import type { Object3D } from "three";
 
@@ -35,7 +35,13 @@ export class HologramSpace {
   /** Called when a placement or removal changes what is in the space. */
   onChange: () => void = () => undefined;
 
-  constructor(private readonly world: World, private readonly cache: HologramAssetCache, private readonly options: { tapTogglesPlay: () => boolean; onRemove(entity: Entity): void; onPlaced?(record: PlacedHologram): void }) {}
+  constructor(private readonly world: World, private readonly cache: HologramAssetCache, private readonly options: {
+    tapTogglesPlay: () => boolean;
+    onRemove(entity: Entity): void;
+    onPlaced?(record: PlacedHologram): void;
+    /** AR with depth sensing: real surfaces in front hide the hologram (IWSDK's DepthSensingSystem). */
+    occludable?: boolean;
+  }) {}
 
   isPlaced(id: string): boolean {
     return viewerContext(this.world).placed.some((record) => record.id === id);
@@ -156,6 +162,8 @@ export class HologramSpace {
       recenterRequested: false,
       footprintRadius: Math.hypot(size.x, Math.max(size.z, 0.3)) / 2
     };
+    // After the bubble patches its materials, so the occlusion chains onto the clipping.
+    if (this.options.occludable) entity.addComponent(DepthOccludable);
     // Selecting a hologram focuses it; on a phone, a tap on the focused one pauses or resumes it.
     hitBox.addEventListener("click" as never, () => {
       const c = viewerContext(this.world);

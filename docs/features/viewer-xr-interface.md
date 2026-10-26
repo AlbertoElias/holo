@@ -624,13 +624,19 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   - the burnt-globe cloche from `@holoim/xr-ui-three`, fitted with its foot
     on the recorded floor, sparks on the hologram nearest the head ray
     (8.2), soot from light estimation in AR and the ground grey in VR (9.1);
-  - in AR, depth occlusion (`depthSensing: gpu-optimized`), with the
-    foot row, status line, dock, focus ring and rays drawn over it. IWER
-    has no depth data, so the shell does not ask for it there; dev
+  - in AR, depth occlusion (`depthSensing: gpu-optimized`) through IWSDK's
+    own `DepthSensingSystem`: each placed hologram is a `DepthOccludable`,
+    chained after the clipping patch. IWSDK turns three's depth-sensing
+    mesh off, so the R3F view's prepass draws nothing there (the first
+    port did, and the proof video showed it). The controls are not
+    occludable, so a real table never hides them. Under IWER the shell
+    does not ask for depth (its emulated depth stalls software GL); dev
     `?depth=on` forces it.
   The cloche and aura take no pointer events, so the body box still gets
   taps and grabs. IWSDK's audio listener is removed: under a frozen page
   clock its ramps threw.
+- **VR floor.** The VR room's floor plane sits 1 cm under y = 0, so a
+  take's recorded ground at its floor draws instead of z-fighting it.
 - **Routing.** `/ar/:id` opens the IWSDK shell; `?shell=r3f` (on the feed or
   the route) opens the R3F view, a temporary fallback. Exit goes to `/`.
 - **Placement reason.** The AR placement state now says why:
@@ -659,6 +665,9 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   - The skip of surfaces over 0.5 m is still the IWSDK rule.
   - In `office_small` the floor fallback (1.8 m ahead) lands 4 cm from the
     wall, among furniture; real rooms vary.
+  - In VR the opaque floor hides recorded terrain below the author's floor
+    (it stays drawn and unclipped, but under the floor). Should VR's floor
+    open inside the bubble, as AR's real floor cannot?
 
 ### Video verification loop
 

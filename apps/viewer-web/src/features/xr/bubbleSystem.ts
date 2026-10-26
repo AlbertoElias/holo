@@ -2,25 +2,21 @@ import { tokens } from "@holoim/design-tokens";
 import { angleBetweenDegrees, arCompositorFromUserAgent, nearestToForwardRay, relativeLuminance, VIEW_TARGETS, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
 import { createSystem } from "@iwsdk/core";
 import { Vector3 } from "three";
-import type { Material, Mesh, Object3D } from "three";
 
 import { ArSoot } from "../ar/arSoot";
-import { DepthOcclusion } from "../ar/depthOcclusion";
 import { viewerContext } from "./viewerContext";
 
 // Drives every placed hologram's bubble (`HologramBubble`): clipping, aura
 // and cloche, with sparks on the one nearest the head's forward ray (8.2),
-// the char from the room (3.2), and, in AR, depth occlusion behind real
-// surfaces with the controls exempt from it.
+// and the char from the room (3.2). In AR, IWSDK's DepthSensingSystem
+// occludes the holograms behind real surfaces (each is a DepthOccludable);
+// the controls are not occludable, so a real table never hides them.
 
 /** VR's room behind the edge is the blue-hour horizon band (9.1: the flat-screen rule from its luminance). */
 const VR_SOOT: SootInput = { groundLuminance: relativeLuminance(tokens.color.ground.grey) };
 
-/** The XR UI roots: drawn over real surfaces, never hidden by them. */
-const CONTROL_ROOT = /^(FootControls|StatusLine|HandDock|FocusRing|AimRays|Gallery)/;
-
 export interface BubbleSystemProbe {
-  /** Depth occlusion asked for and drawing this frame. */
+  /** Depth occlusion asked for, and drawing (the session delivers GPU depth). */
   occlusion: { requested: boolean; drawing: boolean };
   sootOn: boolean | null;
   sparkFocusId: string | null;
@@ -29,7 +25,6 @@ export interface BubbleSystemProbe {
 export class HologramBubbleSystem extends createSystem() {
   /** Whether the session should occlude holograms behind real surfaces (it asked for depth sensing). */
   occlusionRequested = false;
-  private readonly occlusion = new DepthOcclusion();
   private readonly soot = new ArSoot();
   private readonly reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
   private occluding = false;
@@ -49,9 +44,7 @@ export class HologramBubbleSystem extends createSystem() {
     if (isAr) {
       this.soot.attach(renderer.xr.getSession());
       this.soot.update(this.xrFrame ?? undefined);
-      const occluding = this.occlusion.update(renderer, this.occlusionRequested);
-      if (occluding) this.exemptControls();
-      this.occluding = occluding;
+      this.occluding = this.occlusionRequested && renderer.xr.isPresenting && (renderer.xr as { hasDepthSensing?(): boolean }).hasDepthSensing?.() === true;
     }
     const target = this.viewTarget(isAr);
     const soot: SootInput = isAr ? { arSootOn: this.soot.sootOn } : VR_SOOT;
@@ -95,19 +88,4 @@ export class HologramBubbleSystem extends createSystem() {
     });
     return nearestToForwardRay(candidates);
   }
-
-  /** The controls draw over the depth the occlusion pass wrote: a real table never hides the foot chip. */
-  private exemptControls(): void {
-    for (const root of this.world.scene.children.flatMap(controlRoots)) {
-      root.traverse((object) => {
-        const material = (object as Mesh).material as Material | Material[] | undefined;
-        for (const each of Array.isArray(material) ? material : material ? [material] : []) each.depthTest = false;
-      });
-    }
-  }
-}
-
-function controlRoots(object: Object3D): Object3D[] {
-  if (CONTROL_ROOT.test(object.name)) return [object];
-  return object.children.flatMap(controlRoots);
 }

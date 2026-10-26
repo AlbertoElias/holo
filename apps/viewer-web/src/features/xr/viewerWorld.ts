@@ -6,6 +6,7 @@ import {
   Grabbed,
   IBLGradient,
   ReferenceSpaceType,
+  DepthSensingSystem,
   SessionMode,
   World,
   type Entity
@@ -95,6 +96,8 @@ function addVrRoom(world: World): void {
     new MeshStandardMaterial({ color: new Color(DEEP_SEA), roughness: 0.95, metalness: 0 })
   );
   floor.rotation.x = -Math.PI / 2;
+  // Just under the recorded floor (B-022: at y = 0), so a take's own ground draws instead of fighting it.
+  floor.position.y = -0.01;
   floor.name = "ViewerFloor";
   world.createTransformEntity(floor, { parent: level });
 }
@@ -135,6 +138,9 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
   if (!isAr) addVrRoom(world);
 
   world.registerSystem(HologramPlaybackSystem).registerSystem(HologramBubbleSystem).registerSystem(HologramControlsSystem).registerSystem(GallerySystem);
+  // IWSDK draws its own occlusion into each DepthOccludable's materials (it
+  // turns three's depth-sensing mesh off).
+  if (depthOcclusion) world.registerSystem(DepthSensingSystem);
   world.getSystem(HologramBubbleSystem)!.occlusionRequested = depthOcclusion;
   if (isAr) world.registerSystem(ArPlacementSystem).registerSystem(ScreenInputSystem);
   else world.registerSystem(VrPlacementSystem);
@@ -143,6 +149,7 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
     // A phone has no play glyph within thumb reach of the body; its tap on the focused hologram pauses it.
     tapTogglesPlay: () => viewerContext(world).target === "ar-phone",
     onRemove: (entity) => world.getSystem(ArPlacementSystem)?.forget(entity),
+    occludable: depthOcclusion,
     ...(import.meta.env.DEV ? { onPlaced: (record: PlacedHologram) => observePlaced(world, record) } : {})
   });
   const gallery = world.getSystem(GallerySystem)!;

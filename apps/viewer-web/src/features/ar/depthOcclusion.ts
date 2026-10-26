@@ -1,7 +1,8 @@
 import type { Material, Mesh, Object3D, WebGLRenderer, WebXRManager } from "three";
 
-// Depth occlusion in plain three: shared by the R3F view (`ARDepthOcclusion`)
-// and the IWSDK shells.
+// Depth occlusion in plain three, for the R3F view (`ARDepthOcclusion`). The
+// IWSDK shells use IWSDK's DepthSensingSystem instead: IWSDK turns three's
+// depth-sensing mesh off.
 
 type DepthAwareWebXRManager = WebXRManager & {
   getDepthSensingMesh?: () => Object3D | null;
