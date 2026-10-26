@@ -495,7 +495,11 @@ merge to `main`, per `AGENT_CONTRACT.md`.
 IWER proves session, input and export behaviour only, and it has no phone
 profile: the phone is emulated (mono view, transient screen sources,
 `interactionMode` from the device config), with frames about 150 ms apart.
-On an Android phone in Chrome, record in this brief: touch delivery as
+On an Android phone in Chrome, record in this brief: the session's
+`interactionMode` (if Chrome reports `world-space` or nothing, capture stays
+a spectator, and the viewer's `detectTarget` takes a `world-space` phone for a
+headset, which must not regress phone AR to headset controls: the viewer XR
+lead's condition, 2026-10-26); touch delivery as
 `screen` sources without `dom-overlay`; the 300 ms hold versus a tap and the
 22 apx slop, standing and walking; the microphone prompt beside
 `requestSession`; the `local-floor` height against the real floor; camera
