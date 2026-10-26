@@ -1,7 +1,7 @@
 # Feature brief: AR recording (the phone as a camera-only author)
 
 **Lead:** Claude (Opus)  
-**Status:** Approved (the user, 2026-10-25, with the recommended answers to Q1 to Q3); not started
+**Status:** Approved (the user, 2026-10-25, with the recommended answers to Q1 to Q3); in progress: slices 1 and 2a built and checked locally (pushed on `feature/ar-recording`, flag off); independent verification of 2a pending; slice 0 waits for `feature/viewer-xr-interface`, slices 3 and 4 for its step 5
 **Layer:** event (the author's camera, voice and the set over time) and
 meaning (a held mark whose `from` is the camera); see
 `docs/product/concepts/what-a-hologram-is.md`
@@ -248,7 +248,7 @@ USDZ converter and any glTF tool ignore it.
 | Emulated frames (about 150 ms each) blur the 300 ms hold boundary | The checks use 1 s holds and one-frame taps only; the boundary and slop are device checks |
 | Tracking is lost (phone covered, fast motion) and poses go NaN | Non-finite poses are skipped, never written; the hold bridges gaps as touch holds do today |
 | Record pressed while the set is still settling, or Recenter during a take | Record hidden until the 36 placement frames end; Recenter hidden while recording (styleguide 8.5) and refused mid-take |
-| A take with nothing in it but a moving camera; `normalizeRootMotion` recentres it | Record refused when the set has nothing drawn (Q3) |
+| A take with nothing in it but a moving camera; `normalizeRootMotion` recentres it | Record refused when the set has nothing drawn (Q3), read as "nothing of the set within the take's 6 m bubble around the camera and the set origin at Record" (lead, slice 2a): the export clips to that bubble, so a set that is drawn but out of reach (capture's default scene from its spawn) would otherwise fail at export |
 | Awaiting the microphone uses up the user activation and `requestSession` is rejected | `requestSession` is called in the entry tap; the microphone is asked for in parallel (or on an earlier step), never awaited before it. Denied → silent take with a notice (checked) |
 | Back button, system exit or the page hiding mid-take | Stops and exports the take, as Stop does (checked for session end and `visibilitychange`); an unload mid-export loses the take, as on any device today |
 | A hold lands on the real room | No link; the report says "no referent"; nothing is invented |
@@ -389,6 +389,18 @@ slices 3 and 4 wait for viewer XR step 5.
      control bridge (`recording.toggle()`) until slice 3. Ends with the AR
      check's recording phases and a GLB inspection report. A local phone
      emulation helper stands in until slice 0's lands.
+     Built 2026-10-25: the flag is `?arCamera=1`; `isHandheldSession` is
+     `apps/capture/src/xr/handheldSession.ts` until slice 0 moves it;
+     `frame.arCameraAuthor` beside `arSpectator`; `CameraTrackStore` and
+     `CameraRecorder` feed `GltfExportComposer.exportCameraTakeToGlbBlob`;
+     Record and Stop through `window.__toggleRecording()` (and the `R` key);
+     the check's helpers are `scripts/lib/iwer-phone.ts` (its `interactionMode`
+     patches IWER's private device state, as the viewer spec does) and
+     `scripts/lib/camera-take-glb.ts`. A camera author cannot place objects,
+     so an object is in a camera take only if it was placed before AR. Found
+     on the way: B-024 (the bubble clip drops a large floor, in performer
+     takes too); the viewer floor fix on `bug/viewer-floor` grounds on
+     `RecordedAvatar`, so 2b needs its own floor rule for camera takes.
    - **2b. Viewer.** Framing and the shared AR anchor
      (`normalizeSceneAtOrigin`) without `RecordedAvatar`; re-read how ground
      is defined first, since a fix for "scene floor sits mid-height" was in
@@ -420,13 +432,13 @@ v0 for one with a camera `from`.
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 | --- | --- | --- |
 | Device assumptions | Slice 0 spike page on an Android phone in Chrome | Results recorded in this brief; pending (needs the user's phone) |
-| Camera mode on a phone, spectator on a Quest, flag off unchanged | `test:xr:ar-record` (new, `scripts/ci-ar-record-playwright.ts`, in `test:xr`): IWER with the phone helper enters capture AR from `#ARButton`; further phases enter Quest passthrough AR, and phone AR with the flag off | `output/ci-ar-record/ar-record-report.json` (mode, performer hidden, takes); pending |
-| Camera take export | Same check: Record, a scripted camera walk (`xr_set_transform` on the head) under two set placements, Stop; reads the GLB | Report: skins, node names, per-placement differences of the camera path (cm, degrees), set nodes, objects and `to.point`, `KHR_audio`; pending |
+| Camera mode on a phone, spectator on a Quest, flag off unchanged | `test:xr:ar-record` (new, `scripts/ci-ar-record-playwright.ts`, in `test:xr`): IWER with the phone helper enters capture AR from `#ARButton`; further phases enter Quest passthrough AR, and phone AR with the flag off | `output/ci-ar-record/ar-record-report.json` (mode, performer hidden, takes). Slice 2a, 2026-10-25 (`apps/capture/output/ci-ar-record/`, 8 phases, about 67 s, pass): phone with `?arCamera=1` is a camera author (`interactionMode` `screen-space`, performer hidden, restored on exit); Quest 3 passthrough (`world-space`) and the phone without the flag stay spectators with the performer visible, no microphone held and no camera take; on the default scene Record is refused ("Nothing to record: no part of the set is near.") and nothing downloads |
+| Camera take export | Same check: Record, a scripted camera walk (`xr_set_transform` on the head) under two set placements, Stop; reads the GLB | Report: skins, node names, per-placement differences of the camera path (cm, degrees), set nodes, objects and `to.point`, `KHR_audio`. Slice 2a, 2026-10-25: 0 skins, no `RecordedAvatar`, `RecordedAuthorCamera` with `extras.yfov` 1.5708 (IWER's 90°) and 192 keys over 3.18 s, static `RecordedBubbleSphere` at the set origin, `KHR_audio`, no chrome nodes; the exported path matches the scripted set-frame walk within 0.00 cm and 0.03°; a second placement 1.04 m away (no rotation: `ArSpectator` places by position only) gives 0 cm and 0° differences in the camera path, set nodes and the placed object's track (one `RecordedObject`, still in the set frame). `to.point` waits for slice 4 |
 | Hold to mark from the camera | Same check: a 1 s hold on an object, a one-frame tap, a 1 s hold on empty floor, a 1 s hold that starts on the dock | Report: links with `from`, `to`, spans; the "no referent" entry; pending |
-| Versions and performer exports | Same check plus the existing `test:xr:pointing` and `test:xr:marks`; the plugin's JSON for a fixed performer draft against `main`'s | Versions per take; JSON comparison; node and channel counts; pending |
+| Versions and performer exports | Same check plus the existing `test:xr:pointing` and `test:xr:marks`; the plugin's JSON for a fixed performer draft against `main`'s | Versions per take; JSON comparison; node and channel counts. Slices 1 and 2a, 2026-10-25: the plugin's JSON is identical to `main`'s (see the v0 row); `test:xr:recording`, `test:xr:pointing` and `test:xr:marks` pass on the final tree, and the performer path through `SceneBubbleSampler` is unchanged when no frame is given. Camera takes write no `HOLOIM_meaning` until slice 4; node and channel counts compared then |
 | Pipeline | `camera-take.pipeline.spec.ts` (new, in `test:e2e:pipeline`): uploads the check's GLB through the real API with Quick Look on | Feed screenshot, playback times across a loop, link draw window, USDZ status `ready`, `/ar` anchor and placement numbers; pending |
-| v0 still loads | Slice 1 package tests; `test:smoke:pipeline`, `test:portal`, `test:xr:marks` unchanged | Pass output; pending |
-| Mic denied, session end and hidden page mid-take | `test:xr:ar-record` phases with the permission denied, with `xr_end_session` mid-take, and with the page hidden | Report entries; pending |
+| v0 still loads | Slice 1 package tests; `test:smoke:pipeline`, `test:portal`, `test:xr:marks` unchanged | Slice 1 (2026-10-25): `pnpm --filter @holoim/meaning run verify:full` passes 47 tests chosen from the slice 1 failure list (v0 bone file valid; v0 with `camera` rejected; v1 camera valid; `camera: false` and `camera` beside `bone` rejected; version 2, a string version and a missing version rejected; camera with `inferred` rejected; a v0 record returned deep-equal; the writer picks v0 for bone-only and v1 for a camera `from`). `encodeHoloimMeaning` on a fixed performer draft, keys shuffled, gives JSON identical to `main`'s `assertHoloimMeaning` (scratch comparison against `origin/main`'s `meaning.ts`). Suites: pending (`verify:pr`) |
+| Mic denied, session end and hidden page mid-take | `test:xr:ar-record` phases with the permission denied, with `xr_end_session` mid-take, and with the page hidden | Slice 2a, 2026-10-25: mic denied → `micPermission` `denied`, notice "No microphone: this take is silent.", a valid take without `KHR_audio`; the session ending and the page hiding mid-take each export one take that passes the inspector |
 | Proof video | Real-time IWER recording of the phone AR take (dock, walk, hold) and its playback in the feed | Under ignored `output/`, previewed with `preview.mjs`, sent to the user; never committed |
 
 `pnpm run verify:agent` in the edit loop; `pnpm run verify:pr` before the
