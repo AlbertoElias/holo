@@ -155,8 +155,10 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
     const device = (window as unknown as { IWER_DEVICE: { stereoEnabled: boolean; ipd: number } }).IWER_DEVICE;
     device.stereoEnabled = true; device.ipd = 0.064;
   });
-  // The hologram loads in real time: wait for its bubble before freezing the clock, which stops the frames that would draw it.
+  // The hologram loads and finds its place in real time: wait for its bubble and its placement (as ar-bubble.spec does)
+  // before freezing the clock, which stops the frames and the search timer that would finish them.
   await page.waitForFunction(() => Boolean((window as unknown as { __bubbleProbe?: Probe }).__bubbleProbe?.bubble.active), null, { timeout: 90_000 });
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __HOLOIM_XR_VIEWER__: { snapshot(): { placement: { stage: string } } } }).__HOLOIM_XR_VIEWER__.snapshot().placement.stage), { timeout: 30_000 }).toMatch(/placed|anchored/);
   await freezePageClock(page);
   await page.clock.runFor(1500);
   const arBefore = await captureBubblePixels(page, "ar", artifactDir);
