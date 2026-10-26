@@ -54,6 +54,13 @@ body::before {
   scroll-behavior: smooth;
 }
 
+/* A sideways-started swipe the browser would not scroll is scrolled by the
+   card (usePortalTriggers); snapping waits until it settles on a card. */
+.feed-scroll[data-portal-scrolling] {
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+}
+
 .feed-sentinel {
   height: 1px;
 }

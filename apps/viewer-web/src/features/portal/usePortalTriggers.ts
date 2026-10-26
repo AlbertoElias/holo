@@ -39,6 +39,26 @@ function followWheelGestures(): void {
     wheelGesture.lastAt = event.timeStamp;
   }, { capture: true, passive: true });
 }
+/**
+ * When the feed last scrolled, followed on the window like the wheel: a touch
+ * that lands while the feed is still gliding stops or continues the scroll,
+ * whatever slid under the finger.
+ */
+let lastScrollAt = Number.NEGATIVE_INFINITY;
+let followingScrolls = false;
+const SCROLL_SETTLE_MS = 200;
+
+function followScrolls(): void {
+  if (followingScrolls || typeof window === "undefined") return;
+  followingScrolls = true;
+  window.addEventListener("scroll", (event) => {
+    lastScrollAt = event.timeStamp;
+  }, { capture: true, passive: true });
+}
+
+/** A flick this fast, or a drag this far into the card, turns the feed to the next card. */
+const FLICK_PX_PER_MS = 0.3;
+const FLICK_CARD_FRACTION = 0.2;
 const KEY_ORBIT_RADIANS = 0.15;
 const KEY_ZOOM_SCALE = 1.25;
 /** Device rotation is amplified so a small wrist turn shows a useful new angle. */
@@ -51,6 +71,20 @@ type Pointer = { x: number; y: number; startX: number; startY: number };
 
 function isInteractive(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
+}
+
+function scrollParent(element: HTMLElement): HTMLElement | null {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(node).overflowY)) return node;
+  }
+  return null;
+}
+
+/** The scroll positions the feed snaps to, from its children's snap alignment. */
+function snapStops(scroller: HTMLElement): number[] {
+  return [...scroller.children]
+    .filter((child): child is HTMLElement => child instanceof HTMLElement && getComputedStyle(child).scrollSnapAlign.includes("start"))
+    .map((child) => child.offsetTop);
 }
 
 function pinchDistance(pointers: Map<number, Pointer>): number {
@@ -75,15 +109,54 @@ export function usePortalTriggers(
     const pointers = new Map<number, Pointer>();
     let dragging = false;
     let lastPinch = 0;
+    // A touch looks around only when it starts on the hologram itself, as
+    // the wheel zooms; any other one-finger swipe belongs to the feed.
+    let looking = false;
+    // A swipe the browser would not scroll, because it began sideways, is
+    // scrolled here and settled on a card on release.
+    let feedSwipe: { scroller: HTMLElement; startTop: number; velocity: number; at: number } | null = null;
 
     const canDrag = () => (store.getState().paused ? triggers.dragWhilePaused : triggers.dragWhilePlaying);
     const canPinch = () => (store.getState().paused ? triggers.pinchWhilePaused : triggers.pinchWhilePlaying);
+    const captures = () => store.getState().paused && !triggers.scrollWhilePaused;
+
+    const endFeedSwipe = (settle: boolean) => {
+      if (!feedSwipe) return;
+      const { scroller, startTop, velocity } = feedSwipe;
+      feedSwipe = null;
+      const restore = () => delete scroller.dataset.portalScrolling;
+      if (!settle) {
+        restore();
+        return;
+      }
+      const stops = snapStops(scroller);
+      const from = stops.reduce((best, stop) => (Math.abs(stop - startTop) < Math.abs(best - startTop) ? stop : best), startTop);
+      const moved = scroller.scrollTop - from;
+      const turns = Math.abs(velocity) > FLICK_PX_PER_MS || Math.abs(moved) > card.clientHeight * FLICK_CARD_FRACTION;
+      const direction = Math.abs(velocity) > FLICK_PX_PER_MS ? Math.sign(velocity) : Math.sign(moved);
+      const target = turns
+        ? (direction > 0 ? stops.find((stop) => stop > from + 1) : [...stops].reverse().find((stop) => stop < from - 1)) ?? from
+        : from;
+      scroller.scrollTo({ top: target, behavior: "smooth" });
+      // Snapping comes back once the glide has landed on the card.
+      let restored = false;
+      const once = () => {
+        if (restored) return;
+        restored = true;
+        restore();
+      };
+      scroller.addEventListener("scrollend", once, { once: true });
+      window.setTimeout(once, 800);
+    };
 
     const onPointerDown = (event: PointerEvent) => {
       if (isInteractive(event.target) || (event.pointerType === "mouse" && event.button !== 0)) return;
       if (pointers.size === 0) {
         dragging = false;
         lastPinch = 0;
+        looking = event.pointerType === "mouse"
+          || captures()
+          || (event.timeStamp - lastScrollAt > SCROLL_SETTLE_MS && (store.runtime.hitTest?.(event.clientX, event.clientY, { glass: true }) ?? false));
       }
       pointers.set(event.pointerId, {
         x: event.clientX,
@@ -116,12 +189,30 @@ export function usePortalTriggers(
 
       if (!dragging && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > TAP_MAX_MOVE_PX) {
         dragging = true;
-        if (canDrag()) card.setPointerCapture?.(event.pointerId);
+        const scroller = looking ? null : scrollParent(card);
+        if (scroller) {
+          scroller.dataset.portalScrolling = "";
+          feedSwipe = { scroller, startTop: scroller.scrollTop, velocity: 0, at: event.timeStamp };
+        }
+        if (scroller || (looking && canDrag())) card.setPointerCapture?.(event.pointerId);
       }
-      if (dragging && canDrag()) {
+      if (!dragging) return;
+      if (feedSwipe) {
+        const { scroller } = feedSwipe;
+        scroller.scrollTo({ top: scroller.scrollTop - dy, behavior: "instant" });
+        const elapsed = Math.max(event.timeStamp - feedSwipe.at, 1);
+        feedSwipe.velocity = feedSwipe.velocity * 0.5 + (-dy / elapsed) * 0.5;
+        feedSwipe.at = event.timeStamp;
+      } else if (looking && canDrag()) {
         const radiansPerPixel = ORBIT_RADIANS_PER_CARD_WIDTH / Math.max(card.clientWidth, 1);
         store.orbitBy(-dx * radiansPerPixel, dy * radiansPerPixel);
       }
+    };
+
+    // The browser scrolls a vertical swipe by itself (touch-action: pan-y);
+    // one that starts on the hologram is kept from it, to look around.
+    const onTouchMove = (event: TouchEvent) => {
+      if (looking && pointers.size > 0 && canDrag() && event.cancelable) event.preventDefault();
     };
 
     const onPointerUp = (event: PointerEvent) => {
@@ -131,15 +222,21 @@ export function usePortalTriggers(
       const wasTap = !dragging
         && pointers.size === 0
         && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) <= TAP_MAX_MOVE_PX;
-      if (pointers.size === 0) dragging = false;
+      if (pointers.size === 0) {
+        dragging = false;
+        endFeedSwipe(true);
+      }
       if (pointers.size < 2) lastPinch = 0;
       if (wasTap && triggers.tapToPause) store.togglePause();
     };
 
     // The browser took the touch over for scrolling; the gesture is not ours.
     const onPointerCancel = (event: PointerEvent) => {
-      pointers.delete(event.pointerId);
-      if (pointers.size === 0) dragging = false;
+      if (!pointers.delete(event.pointerId)) return;
+      if (pointers.size === 0) {
+        dragging = false;
+        endFeedSwipe(false);
+      }
       lastPinch = 0;
     };
 
@@ -216,18 +313,22 @@ export function usePortalTriggers(
     // upload panel; releases are heard on the window so none is missed.
     card.addEventListener("pointerdown", onPointerDown);
     card.addEventListener("pointermove", onPointerMove);
+    card.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerCancel);
     followWheelGestures();
+    followScrolls();
     card.addEventListener("wheel", onWheel, { passive: false });
     card.addEventListener("keydown", onKeyDown);
     return () => {
       card.removeEventListener("pointerdown", onPointerDown);
       card.removeEventListener("pointermove", onPointerMove);
+      card.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerCancel);
       card.removeEventListener("wheel", onWheel);
       card.removeEventListener("keydown", onKeyDown);
+      endFeedSwipe(false);
     };
   }, [active, cardRef, store, triggers]);
 
