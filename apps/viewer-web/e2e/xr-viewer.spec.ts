@@ -1037,7 +1037,7 @@ type GallerySnapshot = ViewerSnapshot & {
   cache: Record<string, number>;
   controls: (Controls & { ring: { visible: boolean; worldPosition: Vec3; radiusM: number }; boundTo: string | null }) | null;
   bubbles: { sparkFocusId: string | null };
-  player: { position: Vec3; yawRad: number };
+  player: { position: Vec3; yawRad: number; vignetteAlpha: number };
 };
 
 const gallerySnapshot = (page: Page) => snapshot(page) as Promise<GallerySnapshot>;
@@ -1508,6 +1508,13 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   const tilesOf = (g: GallerySnapshot) => g.gallery.shelf!.tiles.map((t) => t.worldPosition);
 
   /** Placed holograms, their foot chip and the shelf have not moved; every base is still on the floor. */
+  // IWSDK eases the slide's black comfort vignette by 10 × the frame delta; on
+  // a long frame that overshoots and the view goes black. It stays within the
+  // comfort strength (IWSDK's 0.5).
+  const expectVignetteInRange = (g: GallerySnapshot, step: string) => {
+    expect(g.player.vignetteAlpha, `${step}: comfort vignette not negative`).toBeGreaterThanOrEqual(0);
+    expect(g.player.vignetteAlpha, `${step}: comfort vignette within its strength`).toBeLessThanOrEqual(0.5 + 1e-6);
+  };
   const expectSpaceHeld = (g: GallerySnapshot, step: string) => {
     for (const h of g.holograms) {
       const was = readingOf(before, h.id)!;
@@ -1520,12 +1527,16 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
     expect(horizontal(g.controls!.foot.worldPosition, before.controls!.foot.worldPosition), `${step}: foot chip held`).toBeLessThan(1e-6);
     expect(g.controls!.foot.yaw, `${step}: the chip does not turn with the viewer`).toBeCloseTo(before.controls!.foot.yaw, 6);
     tilesOf(g).forEach((tile, i) => expect(horizontal(tile, tilesOf(before)[i]!), `${step}: shelf tile ${i} held`).toBeLessThan(1e-6));
+    expectVignetteInRange(g, step);
   };
 
   // Slide: the left stick pushed forward carries the rig the way the head faces, on the floor.
   mark("slide");
   await setStick(page, "left", 0, -1);
   await page.waitForTimeout(700);
+  const sliding = await gallerySnapshot(page);
+  expectVignetteInRange(sliding, "sliding");
+  expect(sliding.player.vignetteAlpha, "the comfort vignette closes in while sliding").toBeGreaterThan(0);
   await setStick(page, "left", 0, 0);
   await page.waitForTimeout(300);
   const slid = await gallerySnapshot(page);

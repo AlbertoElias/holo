@@ -10,6 +10,7 @@ import {
   ReferenceSpaceType,
   DepthSensingSystem,
   SessionMode,
+  SlideSystem,
   TurningMethod,
   World,
   type Entity
@@ -42,10 +43,17 @@ const VR_SNAP_TURN_DEG = 30;
 const VR_SLIDE_SPEED_MPS = 3.2;
 // IWSDK's locomotor integrates gravity over the whole frame delta: one long
 // frame (a model loading, the session starting) drops the rig through the
-// floor before its ground ray can catch it. Steps are clamped to this.
+// floor before its ground ray can catch it, and the slide's comfort vignette
+// eases by 10 × delta, which overshoots past 0.1 s and turns it solid black.
+// Steps are clamped to this.
 const VR_LOCOMOTION_MAX_STEP_S = 1 / 20;
 /** Within this of the floor the rig stands on it (the float spring's bob). */
 const VR_RIG_FLOOR_SNAP_M = 0.05;
+
+function clampStep(system: { update(delta: number): void }): void {
+  const step = system.update.bind(system);
+  system.update = (delta: number) => step(Math.min(delta, VR_LOCOMOTION_MAX_STEP_S));
+}
 
 export interface ViewerWorld {
   world: World;
@@ -134,9 +142,19 @@ function addVrRoom(world: World): void {
   const locomotion = world.getSystem(LocomotionSystem)!;
   locomotion.config.turningAngle.value = VR_SNAP_TURN_DEG;
   locomotion.config.slidingSpeed.value = VR_SLIDE_SPEED_MPS;
+  clampStep(locomotion);
+  // The slide system registers once the locomotor is ready.
+  let slideClamped = false;
   const step = locomotion.update.bind(locomotion);
   locomotion.update = (delta: number) => {
-    step(Math.min(delta, VR_LOCOMOTION_MAX_STEP_S));
+    step(delta);
+    if (!slideClamped) {
+      const slide = world.getSystem(SlideSystem);
+      if (slide) {
+        clampStep(slide);
+        slideClamped = true;
+      }
+    }
     // The room is flat: the rig stands on y = 0 rather than on the
     // character's float spring, which bobs a couple of cm while it moves and
     // can sleep a few mm off. IWER and headset poses then stay floor poses.
@@ -381,7 +399,9 @@ function installXrViewerProbe(world: World, cache: HologramAssetCache, space: Ho
         // The locomotion rig: where the viewer's floor origin stands and how far it has turned.
         player: {
           position: world.player.getWorldPosition(new Vector3()).toArray(),
-          yawRad: new Euler().setFromQuaternion(world.player.getWorldQuaternion(new Quaternion()), "YXZ").y
+          yawRad: new Euler().setFromQuaternion(world.player.getWorldQuaternion(new Quaternion()), "YXZ").y,
+          // The slide's comfort vignette (private in IWSDK 1.0.1).
+          vignetteAlpha: (world.getSystem(SlideSystem) as unknown as { vignette?: { material: { uniforms: { uAlpha: { value: number } } } } } | undefined)?.vignette?.material.uniforms.uAlpha.value ?? 0
         },
         stage: c.stage ? { origin: c.stage.origin.toArray(), forward: c.stage.forward.toArray(), distanceM: c.stage.distanceM, floorY: c.stage.floorY } : null,
         chipWidthM: c.chipWidthM,

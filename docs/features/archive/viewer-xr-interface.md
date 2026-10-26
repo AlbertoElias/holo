@@ -847,6 +847,13 @@ with no recording), and everything under "Physical-device limits".
    1.26 m behind, recenter 1.500 m ahead of the moved viewer. Placed
    holograms, the foot chip and the shelf tiles move < 1e-6 m throughout.
    Bases stay on the floor within 5 mm (`locomotion` in the report).
+   The proof video then showed IWSDK's black comfort vignette as solid
+   wedges across the view after a slide. `SlideSystem` eases it by
+   10 × delta, which overshoots on frames over 0.1 s and diverges past
+   0.2 s. A headset's hitch while sliding (a model loading) would do the
+   same. The slide system's step takes the same 50 ms clamp. The spec
+   asserts the vignette engages while sliding and stays within 0–0.5 at
+   every step. Without the clamp it read −0.50.
 3. **Defect 3, fixed.** `TargetMetrics.reachHitMin` gives the foot controls
    72 apx (47 mm at 1.75 m) in `vr` and `ar-quest`. The ray-only gallery
    shelf keeps 56 apx. The spec asserts `hitApx: 72` and ≥ 20 mm.
