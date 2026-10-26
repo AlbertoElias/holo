@@ -63,7 +63,7 @@ const PATH_TOLERANCE_CM = 1;
 const PATH_TOLERANCE_DEG = 1;
 const FAKE_MIC_ARGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'];
 
-const PHASES = ['phone-a', 'phone-b', 'mic-denied', 'session-end', 'page-hidden', 'empty-set', 'quest-passthrough', 'phone-flag-off'] as const;
+const PHASES = ['phone-a', 'phone-b', 'mic-denied', 'session-end', 'page-hidden', 'hidden-at-start', 'empty-set', 'quest-passthrough', 'phone-flag-off'] as const;
 type Phase = (typeof PHASES)[number];
 
 type ArState = {
@@ -134,6 +134,8 @@ type OpenOptions = {
   scene?: boolean;
   object?: boolean;
   micDenied?: boolean;
+  /** getUserMedia waits on `window.__micGate` (a pending promise until `__openMicGate()`), and records every stream it hands out in `window.__mics`. */
+  micGate?: boolean;
   video?: boolean;
 };
 
@@ -152,6 +154,23 @@ async function openPage(run: Run, options: OpenOptions): Promise<Page> {
   if (options.micDenied) {
     await page.addInitScript(() => {
       navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
+    });
+  }
+  if (options.micGate) {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __micGate: Promise<void>; __openMicGate: () => void; __mics: { calls: number; streams: MediaStream[] } };
+      w.__mics = { calls: 0, streams: [] };
+      w.__micGate = new Promise<void>((resolve) => {
+        w.__openMicGate = resolve;
+      });
+      const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (constraints) => {
+        w.__mics.calls += 1;
+        await w.__micGate;
+        const stream = await real(constraints);
+        w.__mics.streams.push(stream);
+        return stream;
+      };
     });
   }
   await attachXrEnvironment(page, { mode: 'iwer' });
@@ -453,6 +472,73 @@ async function interruptPhase(run: Run, phase: 'mic-denied' | 'session-end' | 'p
   }
 }
 
+/** The page hides while Record is waiting for the microphone: the take never begins and nothing downloads. */
+async function hiddenAtStartPhase(run: Run): Promise<PhaseReport> {
+  const report: PhaseReport = { phase: 'hidden-at-start', failures: [], notes: {}, ar: {}, takes: [] };
+  const page = await openPage(run, { phone: true, flag: true, scene: true, micGate: true });
+  try {
+    // The AR entry holds the microphone; its request stays pending behind the gate, so Record's start waits on it.
+    await enterAr(page);
+    report.ar.entered = await arOf(page);
+    const frame = toMatrix(await worldFrame(page));
+    const first = setToRoom(frame, walkPose(0));
+    await setHeadPose(page, first.position, first.quaternion);
+    await nextXrFrame(page);
+    const states = new Set<string>();
+    const download = expectDownload(page, 5000);
+    await page.evaluate(() => window.__toggleRecording());
+    await page.waitForTimeout(300);
+    report.ar.pending = await arOf(page);
+    states.add(report.ar.pending.recordingState);
+    if (report.ar.pending.recordingState !== 'idle') report.failures.push(`recordingState ${report.ar.pending.recordingState} while the microphone was still pending, expected idle`);
+    // The page hides, the microphone arrives while hidden, then the page shows again.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => (window as unknown as { __openMicGate: () => void }).__openMicGate());
+    for (let i = 0; i < 10; i += 1) {
+      await advance(page, STEP_MS);
+      await page.waitForTimeout(150);
+      states.add((await arOf(page)).recordingState);
+    }
+    report.ar.hiddenAfterGrant = await arOf(page);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    for (let i = 0; i < 20; i += 1) {
+      await advance(page, STEP_MS);
+      await page.waitForTimeout(150);
+      states.add((await arOf(page)).recordingState);
+    }
+    report.ar.after = await arOf(page);
+    const saved = await download;
+    report.notes.statesSeen = [...states];
+    if (saved) {
+      report.failures.push(`a take ${saved.suggestedFilename()} was downloaded although the page hid before recording began`);
+      await saveDownload(saved, 'hidden-at-start', report);
+    }
+    if (states.has('recording') || states.has('exporting')) report.failures.push(`recordingState passed through ${[...states].join(', ')}; no take should have begun`);
+    if (report.ar.after.recordingState !== 'idle') report.failures.push(`recordingState ${report.ar.after.recordingState} at the end, expected idle`);
+    if (report.ar.after.cameraSamples !== 0) report.failures.push(`${report.ar.after.cameraSamples} camera samples recorded for a take that never began`);
+    const mics = await page.evaluate(() => {
+      const mics = (window as unknown as { __mics: { calls: number; streams: MediaStream[] } }).__mics;
+      return { calls: mics.calls, streams: mics.streams.length, liveTracks: mics.streams.flatMap((stream) => stream.getAudioTracks()).filter((track) => track.readyState === 'live').length };
+    });
+    report.notes.mic = mics;
+    if (mics.liveTracks > 1) report.failures.push(`${mics.liveTracks} live microphone tracks left; only the session's held one may remain`);
+    // Two calls are expected: the page's startup permission check (its stream is released at once) and the entry hold, which Record's start shares.
+    if (mics.calls > 2) report.failures.push(`${mics.calls} getUserMedia calls; the entry hold and Record should share one request`);
+    return report;
+  } finally {
+    await page.context().close();
+  }
+}
+
 async function emptySetPhase(run: Run): Promise<PhaseReport> {
   const report: PhaseReport = { phase: 'empty-set', failures: [], notes: {}, ar: {}, takes: [] };
   const page = await openPage(run, { phone: true, flag: true, scene: false });
@@ -546,6 +632,8 @@ try {
       finish(walked[phase]!.report);
     } else if (phase === 'mic-denied' || phase === 'session-end' || phase === 'page-hidden') {
       finish(await interruptPhase(run, phase));
+    } else if (phase === 'hidden-at-start') {
+      finish(await hiddenAtStartPhase(run));
     } else if (phase === 'empty-set') {
       finish(await emptySetPhase(run));
     } else {

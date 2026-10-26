@@ -156,6 +156,8 @@ export class RecordingSession {
       ui.flashNotice('Wait for the set to settle before recording.', NOTICE_MS);
       return;
     }
+    // Cleared before the reach test, which keeps where the camera stood for the take's bubble.
+    this.cameraRecorder.clear();
     if (!worldModel || !this.cameraRecorder.hasSetInReach(this.deps.setFrame, this.deps.renderer.xr.getCamera(), worldModel)) {
       ui.flashNotice('Nothing to record: no part of the set is near.', NOTICE_MS);
       return;
@@ -164,7 +166,6 @@ export class RecordingSession {
     this.sizeLocked = true;
     this.deps.onSizeLocked();
     this.lastTake = null;
-    this.cameraRecorder.clear();
     this.deps.onTakeStart();
     this.cameraRecorder.setEnabled(true);
     try {
@@ -174,8 +175,9 @@ export class RecordingSession {
     } finally {
       ui.setMicPermission(this.audio.getPermissionState());
     }
-    if (!this.deps.isCameraAuthor()) {
-      // The session ended while the microphone was starting: nothing was recorded.
+    if (!this.deps.isCameraAuthor() || document.visibilityState === 'hidden') {
+      // The session ended, or the page hid, while the microphone was starting:
+      // the take never began, so nothing is exported.
       this.cameraRecorder.setEnabled(false);
       this.cameraRecorder.clear();
       if (this.audio.isRecording()) await this.audio.stop().catch(() => undefined);

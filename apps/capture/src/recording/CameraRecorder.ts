@@ -21,6 +21,8 @@ export class CameraRecorder {
   private readonly gltfExportComposer = new GltfExportComposer();
   private enabled = false;
   private originAdded = false;
+  /** Where the camera stood when `hasSetInReach` admitted the take, in the set's frame. */
+  private admittedAt: THREE.Vector3 | null = null;
   private readonly setInverse = new THREE.Matrix4();
   private readonly cameraPosition = new THREE.Vector3();
   private readonly origin = new THREE.Vector3(0, 0, 0);
@@ -51,8 +53,11 @@ export class CameraRecorder {
     if (!this.track.capture(timeSec, setFrame.matrixWorld, xrCamera.matrixWorld, firstView)) return;
 
     // The bubble is pinned at the set's origin and follows the camera's path.
+    // The points that admitted the take are pinned, so its export clips at
+    // least what Record saw within reach.
     if (!this.originAdded) {
-      this.sceneBubbleSampler.captureSceneBubblePoint(this.origin);
+      this.sceneBubbleSampler.pinSceneBubblePoint(this.origin);
+      if (this.admittedAt) this.sceneBubbleSampler.pinSceneBubblePoint(this.admittedAt);
       this.originAdded = true;
     }
     const last = this.track.getSamples().at(-1)!;
@@ -64,7 +69,8 @@ export class CameraRecorder {
   /**
    * Whether a take started now would hold any of the set: the set clipped to
    * the bubble around its origin and the camera where it stands (Q3 refuses
-   * Record when it would not).
+   * Record when it would not). Call after `clear`: an admitted position is
+   * kept for the take's bubble.
    */
   hasSetInReach(setFrame: THREE.Object3D, xrCamera: THREE.Camera, sceneRoot: THREE.Object3D): boolean {
     setFrame.updateWorldMatrix(true, false);
@@ -74,7 +80,9 @@ export class CameraRecorder {
     probe.captureSceneBubblePoint(this.origin);
     xrCamera.getWorldPosition(this.cameraPosition).applyMatrix4(this.setInverse);
     probe.captureSceneBubblePoint(this.cameraPosition);
-    return probe.clipsAnything(sceneRoot, this.setInverse);
+    if (!probe.clipsAnything(sceneRoot, this.setInverse)) return false;
+    this.admittedAt = this.cameraPosition.clone();
+    return true;
   }
 
   clear(): void {
@@ -82,6 +90,7 @@ export class CameraRecorder {
     this.sceneBubbleSampler.clear();
     this.objectSamples.clear();
     this.originAdded = false;
+    this.admittedAt = null;
   }
 
   async exportToGlbBlob(setFrame: THREE.Object3D, sceneRoot: THREE.Object3D, audioData?: { buffer: ArrayBuffer; mimeType: string }): Promise<Blob> {
