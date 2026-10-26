@@ -22,12 +22,15 @@ next queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- `feature/ar-recording` (documentation only, rides along with the next
-  merge): the approved brief
-  [`docs/features/ar-recording.md`](docs/features/ar-recording.md), the
-  no-performer decision in `what-a-hologram-is.md`, and its `TODOS.md`
-  entries. Its implementation starts from slices 1 and 2a; slice 0 waits for
-  `feature/viewer-xr-interface` to land.
+- `feature/ar-recording` (rides along with the next merge): the approved
+  brief [`docs/features/ar-recording.md`](docs/features/ar-recording.md), the
+  no-performer decision in `what-a-hologram-is.md`, its `TODOS.md` entries,
+  and slices 1 and 2a, verified: `HOLOIM_meaning` v1 (camera `from`, version
+  as a feature level; performer takes still write v0) and phone camera takes
+  in capture behind `?arCamera=1`, off by default. `verify:pr` and
+  `test:xr:ar-record` (12 phases) pass; the cross-vendor verifier's verdict is
+  "ship behind the flag". Evidence is in the brief. Slice 0 waits for
+  `feature/viewer-xr-interface` to land; B-024 is open.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
