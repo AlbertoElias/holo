@@ -488,6 +488,23 @@ const toScreen = (page: Page, points: Vec3[]) =>
     });
   }, points);
 
+/**
+ * The phone reach row's projected edges once its per-frame fit has caught up
+ * with the last head move (up to 5 s): a fixed wait can read a frame early.
+ */
+type ReachRowReading = { foot: NonNullable<ViewerSnapshot["controls"]>["foot"]; left: { x: number; y: number }; right: { x: number; y: number } };
+async function settledReachRow(page: Page): Promise<ReachRowReading> {
+  const width = page.viewportSize()!.width;
+  let reading: ReachRowReading | null = null;
+  await expect.poll(async () => {
+    const foot = (await snapshot(page)).controls!.foot;
+    const [left, right] = await toScreen(page, [foot.reachRow.worldLeft, foot.reachRow.worldRight]);
+    reading = { foot, left: left!, right: right! };
+    return left!.x >= 16 - 0.01 && right!.x <= width - 16 + 0.01;
+  }, { timeout: 5_000 }).toBe(true).catch(() => undefined);
+  return reading!;
+}
+
 const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const horizontal = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 const controls = async (page: Page) => (await snapshot(page)).controls!;
@@ -1103,6 +1120,9 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   await waitForIwerRuntime(page);
   await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
   mark("feed-ready");
+  // As the other entries: the portal settles before its reach controls are used.
+  await page.locator('[data-card-id="mock-1"]').scrollIntoViewIfNeeded();
+  await dwell(page, 3);
   await reachFor(page.locator('[data-card-id="mock-1"]'));
   await page.locator('[data-card-id="mock-1"] .vr-trigger-button').click();
   await expect(page).toHaveURL(/\/vr\/mock-1$/);
@@ -1324,6 +1344,8 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   await assertViewerShell(page);
   await waitForIwerRuntime(page);
   await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
+  await page.locator('[data-card-id="mock-1"]').scrollIntoViewIfNeeded();
+  await dwell(page, 3);
   await reachFor(page.locator('[data-card-id="mock-1"]'));
   await page.locator('[data-card-id="mock-1"] .ar-trigger-button').click();
   await expect(page).toHaveURL(/\/ar\/mock-1\?shell=iwsdk$/);
@@ -1372,10 +1394,9 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
     const look: Vec3 = [a.worldPosition[0] + side * (toward[1]! / length) * 0.35, a.worldPosition[1] + a.recordedSize[1] * 0.45, a.worldPosition[2] - side * (toward[0]! / length) * 0.35];
     await setPose(page, "head", viewer, look);
     await waitForGallery(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.boundTo === "mock-1", 5_000);
-    // A few frames for the row to settle at its new place on screen.
-    await page.waitForTimeout(300);
-    const foot = (await gallerySnapshot(page)).controls!.foot;
-    const [chip, rowLeft, rowRight] = await toScreen(page, [foot.worldPosition, foot.reachRow.worldLeft, foot.reachRow.worldRight]);
+    // The row settles at its new place on screen.
+    const { foot, left: rowLeft, right: rowRight } = await settledReachRow(page);
+    const [chip] = await toScreen(page, [foot.worldPosition]);
     const half = (rowRight!.x - rowLeft!.x) / 2;
     const reading = { side: side > 0 ? "right" : "left", footPx: chip!.x, leftPx: rowLeft!.x, rightPx: rowRight!.x };
     offCentre.push(reading);
@@ -1500,13 +1521,9 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   await setPose(page, "head", null, [standing[0], standing[1] + tall * 0.45, standing[2]]);
   const rowBudget = page.viewportSize()!.width - 32;
   const near = await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.foot.reachRow.widthApx > 0 && s.controls!.foot.reachRow.widthApx <= rowBudget + 0.5, 3_000);
-  const foot = near.controls!.foot;
-  const [crown, feet, rowLeft, rowRight] = await toScreen(page, [
-    [standing[0], standing[1] + tall, standing[2]],
-    standing,
-    foot.reachRow.worldLeft,
-    foot.reachRow.worldRight
-  ]);
+  expect(near.controls!.foot.reachRow.widthApx).toBeGreaterThan(0);
+  const { foot, left: rowLeft, right: rowRight } = await settledReachRow(page);
+  const [crown, feet] = await toScreen(page, [[standing[0], standing[1] + tall, standing[2]], standing]);
   const phoneSize = page.viewportSize()!;
   await captureEvidence(page, testInfo, "ar-phone-framed");
   expect(crown!.y, "the hologram's head is in view").toBeGreaterThan(0);

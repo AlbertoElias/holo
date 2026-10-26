@@ -209,9 +209,10 @@ Implementation order (each step lands green before the next):
    status line, hand dock) and the viewer's foot controls; grab/scale.
 4. **Gallery and multiple placed holograms**, focus, feed paging, disposal.
 5. **Capture migration** onto the shared package (Record to the hand dock,
-   status on the status line); retire `xr-ui-three` and `xr-ui-r3f`. The
-   exported GLB has no UIKit or font nodes, and its node and channel counts
-   match before and after the migration.
+   status on the status line). `xr-ui-three` and `xr-ui-r3f` stay (the user,
+   2026-10-25): main's redesign uses them for the flat feed, ARChrome and
+   capture's Halo. The exported GLB has no UIKit or font nodes, and its node
+   and channel counts match before and after the migration.
 6. **IWSDK AR by default** (added 2026-10-24, decision A): port bubble
    clipping, aura and depth occlusion to the IWSDK AR shell, port the AR
    specs (with `hand-tracking-fidelity.md`), then make it the `/ar/:id`
@@ -270,8 +271,8 @@ Implementation order (each step lands green before the next):
 | Grab/scale/rotate | Same spec, scripted controller grips | **Pass** (step 3): two-hand grip grab spreads, carries, lifts and turns it; uniform scale, clamped at 2× ("200%"), base on the floor (0 mm) and upright at every step; scale chip "life size" resets scale in place; recenter 1.50 m ahead at recorded scale; `vrControls.grab` in the report |
 | Memory after remove/page | Same spec | **Pass** (step 4): after sending two back and paging out and back, 74 geometries and 180 textures, as at the baseline (UIKit text buffers that grew are counted apart, 33 → 35); the cache keeps only models in use (`gallery.renderer`, `gallery.cacheAfter`) |
 | AR placement + phone tap | `xr-viewer.spec.ts` on `/ar/:id?shell=iwsdk` with an emulated phone (mono, no controllers, screen taps) | Step 3 **pass**: phone foot controls at flat sizes (16/36 apx, 44 apx touch, chip 0.88), a tap on the play glyph pauses without moving the hologram, a 30-frame finger drag on the timeline scrubs within 5%, and Exit in the bottom dock (16 CSS px, bottom centre) leaves; IWSDK shell **pass** (step 2), opened from the feed card at `/?shell=iwsdk`: stands on the floor 1.8 m ahead and anchors, lit like VR (mean luminance of the hologram's pixels 67 in AR vs 71 in VR; the unlit build read 19 and fails the 30 threshold), tap on the hologram pauses and resumes, tap on the floor moves it (0 mm miss) and re-anchors; porting `hologram-feed`/`ar-bubble` waits for the bubble decision below |
-| Capture on the shared UI | `pnpm run test:xr:smoke` + capture record/refit checks | Pass output + hand-dock and status-line screenshot; pending |
-| Same look in both apps | IWER screenshots of both apps' foot controls, status line and hand dock via `preview.mjs` | Side-by-side sheet; pending |
+| Capture on the shared UI | `pnpm run test:xr:smoke` + capture `run-xr-checks.ts ui recording mock-vr hands body height marks` | **Pass** (step 5), results in "Step 5 results" below; `output/ci-capture-ui/ui-report.json` |
+| Same look in both apps | IWER screenshots of both apps' hand dock, status line and aim rays via `preview.mjs` | Side-by-side sheet (step 5), see "Step 5 results" |
 | Nothing interactive follows the head | Same spec: turn the head and read control world positions | **Pass** (step 3): foot controls moved 0 m on a head turn while the status line (no interactive parts) followed; `vrControls.headTurn` |
 | Pipeline compatibility | `pnpm run test:smoke:pipeline` | Pass output; pending |
 
@@ -532,6 +533,76 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   compares the rest, after showing the controls once before the baseline.
 - **Open.** The fifth select is refused silently. The dark boards barely
   show against the floor. Emulation evidence only.
+
+### Step 5 results (2026-10-25)
+
+- **Merged main first (the user, 2026-10-25: "Merge main, port
+  VrChrome").** Main's ui-redesign is the authority for shared visuals.
+  Kept from this branch: the IWSDK shell, `xr-ui-iwsdk`, and the doorway,
+  restart, recenter and exit glyphs. Pause is the filled bars, and the AR
+  entry is "View in your room", next to "Step inside" (the user).
+  `xr-ui-iwsdk` reads its colours and glyphs from `@holoim/design-tokens`.
+- **Capture's headset chrome on `xr-ui-iwsdk`.** `VrChrome` keeps its
+  public API and snapshot. It builds:
+  - Record/Stop on the non-dominant hand dock, 4 cm off the wrist joint or
+    grip;
+  - the bare periphery status line ("Recording 0:12"), with no chip in
+    either app (the user);
+  - the world panel with "Refit height" and the handedness row, opened
+    level 1.5 m ahead, where they stay (the user: off the hand dock);
+  - main capture's gold aim line in both apps. IWSDK's own ray and cursor
+    are hidden (the user).
+  IWSDK's pointers dispatch every chrome event. The old HUD's own select
+  binding and poke commit are gone. Recording input stays capture's own.
+  The poke rules, pulses, tick, 0.5 s "pressing chrome" release, hit rules,
+  draw order and `holoimChrome` flag carry over unchanged. The poke
+  distances are still slice 4's, open to revisit.
+- **IWSDK in capture.** `spatialUI` is on and `InputSystem` stays. Its
+  controller and hand visual adapters get a loader that returns an empty
+  scene, so no model loads from the CDN: the production build made no
+  request off its origin. Audio, Environment, Light and Gaze stay removed.
+  Each frame copies the camera rig's world pose to `world.player` before
+  `world.update`. Under the manual clock, `world.update` runs outside any
+  XR frame, where IWSDK would disable its pointers. A step without a frame
+  keeps the last input sample, and the frame loop samples on each XR frame.
+- **Found on the way.**
+  - IWSDK's TransformSystem moves any entity whose parent is not an
+    entity back under the level. The dock therefore follows capture's
+    wrist (a plain three object) by copying its pose. The status line,
+    panel and dock live under IWSDK's level and are marked and hidden with
+    the rest of the chrome.
+  - Capture now dedupes IWSDK, UIKit, pointer-events and three, as the
+    viewer does. Two copies registered `LevelTag` twice.
+  - The production bundle crashed at startup with a TDZ error: rollup put
+    the design packages in a chunk that the xr chunk and the debug chunk
+    imported from each other. three and the design packages now get leaf
+    chunks.
+- **Kept, not retired.** `xr-ui-r3f` serves the feed's card canvas,
+  ARChrome and R3F AR. `xr-ui-three` serves the Halo (`HeadsetHolds`) and
+  `xr-ui-r3f`.
+- **Checks (2026-10-25, after merging main at de8a3f8).**
+  - Capture `run-xr-checks.ts ui recording mock-vr hands body height
+    marks`: all pass.
+  - The 14 hand and body replay outputs (`*-samples.json`,
+    `*-report.json`) are byte-identical to the merged tree before the port.
+  - `pnpm run test:xr:smoke`: 23 of 23 pass.
+  - `pnpm run verify:agent` and `pnpm --filter "@holoim/capture..." run
+    build` pass. The production bundle, served by `vite preview` with IWER
+    injected, shows the wrist dock, the panel rows and the rays, with no
+    page error and no request off its origin.
+- **Viewer specs on main's redesign.** Main hides a card's reach controls
+  until a pointer reaches the card, so `xr-viewer.spec.ts` now calls
+  `reachFor` before "Step inside" and "View in your room", and lets the
+  portal settle first. The phone reach row's gutter fit is polled until it
+  settles; a fixed 300 ms wait read a frame early under the full suite.
+- **Same look.** A side-by-side IWER sheet compares the viewer's hand dock,
+  aim rays and status line ("Paused · 0:00") with capture's ("Recording
+  0:04"). The gold rays, cream on a hit, the bare status type and the dock
+  rings match. The dock contents differ by design: recenter and exit in the
+  viewer, Record in capture.
+- **Open.** The viewer's scale chip still reads "62%" / "life size"
+  (`scaleChipLabel`). Main's `scaleLabel` reads "1:4" and nothing at true
+  scale; whether the viewer adopts it is the user's call.
 
 ### Video verification loop
 
