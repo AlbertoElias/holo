@@ -87,7 +87,7 @@ Supporting work. Approve each with the workflow it unblocks; PRD-038 and PRD-039
 | [PRD-039: Limits that protect without blocking creation](PRD-039-upload-limits.md) | IDEA-055 | Draft |
 | [PRD-040: Know about failures before creators report them](PRD-040-observability.md) | IDEA-056 | Draft |
 | [PRD-038: Report and hide](PRD-038-report-and-hide.md) | IDEA-053 | Draft |
-| [PRD-037: Creator identity and ownership](PRD-037-creator-identity.md) | IDEA-052 | Draft |
+| [PRD-037: Creator identity and ownership](PRD-037-creator-identity.md) | IDEA-052 | Delivered |
 
 ## Conversation and async structure
 

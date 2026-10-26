@@ -29,6 +29,7 @@ type HologramCardProps = {
   active: boolean;
   muted: boolean;
   onToggleMute: () => void;
+  onDelete?: ((item: HologramDTO) => Promise<void> | void) | undefined;
   preloadNextUrl?: string | undefined;
   target: ViewTarget & { kind: "flat" };
 };
@@ -205,7 +206,7 @@ function formatByline(item: HologramDTO): string {
   return `By ${item.submittedBy} · ${new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl, target }: HologramCardProps) {
+export function HologramCard({ item, active, muted, onToggleMute, onDelete, preloadNextUrl, target }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
@@ -413,7 +414,18 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
         </Type>
         <Type variant="byline" as="p">
           {formatByline(item)}
+          {item.submittedByVerified ? <span className="verified-badge">Verified creator</span> : null}
         </Type>
+        {item.ownedByViewer && onDelete ? (
+          <button
+            className="feed-card-delete"
+            type="button"
+            onClick={() => void onDelete(item)}
+            aria-label={`Delete ${item.hologramName}`}
+          >
+            Delete my hologram
+          </button>
+        ) : null}
       </header>
 
       <div ref={portalRef} className="feed-card-portal" aria-hidden="true" />

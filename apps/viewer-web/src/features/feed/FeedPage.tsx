@@ -7,7 +7,12 @@ import { nearestToMiddle } from "@holoim/xr-ui-core";
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
 import { useFlatTarget } from "../chrome/useFlatScreen";
 import { resumeAudioContext } from "../hologram/useGltfAudio";
+import type { HologramDTO } from "@holoim/contracts";
+
+import { AuthPanel } from "../auth/AuthPanel";
+import { useCurrentUser } from "../auth/useCurrentUser";
 import { UploadPanel, type UploadStatus } from "../upload/UploadPanel";
+import { deleteHologram } from "./api";
 import { FeedNotice, type FeedNoticeContent } from "./FeedNotice";
 import { HologramCard } from "./HologramCard";
 import { useFeed } from "./useFeed";
@@ -70,7 +75,23 @@ function uploadNotice(status: UploadStatus): FeedNoticeContent {
 }
 
 export function FeedPage() {
-  const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop, retry } = useFeed();
+  const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop, removeItem, retry } = useFeed();
+  const { user, logout } = useCurrentUser();
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    // Reload so ownedByViewer flags match the signed-in state.
+    void retry();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  const handleDelete = useCallback(
+    async (item: HologramDTO) => {
+      await deleteHologram(item.id);
+      removeItem(item.id);
+    },
+    [removeItem]
+  );
   const target = useFlatTarget();
   const online = useOnline();
   const [audioMuted, setAudioMuted] = useState(true);
@@ -144,11 +165,12 @@ export function FeedPage() {
           active={item.id === resolvedFocusId}
           muted={audioMuted}
           onToggleMute={toggleAudioMute}
+          onDelete={handleDelete}
           preloadNextUrl={items[index + 1]?.url}
           target={target}
         />
       )),
-    [items, resolvedFocusId, audioMuted, toggleAudioMute, target]
+    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, target]
   );
 
   return (
@@ -168,9 +190,10 @@ export function FeedPage() {
       </Chip>
       <SideSheet open={settingsOpen} title="Settings" onClose={() => setSettingsOpen(false)} target={target}>
         <HandednessPicker value={handedness} onChange={setHandedness} wristControl={VIEWER_CONTROL_NAMES.exitAr} />
+        <AuthPanel user={user} onSignOut={logout} />
       </SideSheet>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
-        <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} />
+        <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} currentUser={user} />
       </SideSheet>
       <FeedNotice notice={notice} target={target} />
     </main>

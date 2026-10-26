@@ -1,6 +1,6 @@
 # PRD: Creator identity and ownership
 
-**Status:** Draft  
+**Status:** Delivered (viewer slice; capture sign-in deferred)  
 **Source ideas:** IDEA-052  
 **Layer:** All layers  
 **Depends on:** a chosen workflow that needs ownership (replies, deletion, private sharing)  

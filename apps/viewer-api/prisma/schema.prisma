@@ -7,6 +7,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  displayName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  holograms     Hologram[]
+  uploadIntents UploadIntent[]
+  sessions      Session[]
+}
+
+model MagicLinkToken {
+  id          String    @id @default(cuid())
+  email       String
+  displayName String?
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 model Hologram {
   id               String    @id @default(cuid())
   filenameOriginal String
@@ -24,10 +59,13 @@ model Hologram {
   usdzAttempts     Int       @default(0)
   usdzError        String?
   quickLookEnabled Boolean   @default(false)
+  ownerId          String?
+  owner            User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   createdAt        DateTime  @default(now())
 
   @@index([createdAt(sort: Desc)])
   @@index([usdzStatus])
+  @@index([ownerId])
 }
 
 model UploadIntent {
@@ -41,5 +79,7 @@ model UploadIntent {
   sizeBytes           Int
   expiresAt           DateTime
   completedHologramId String?   @unique
+  ownerId             String?
+  owner               User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   createdAt           DateTime  @default(now())
 }

@@ -136,6 +136,56 @@ body::before {
   overflow-wrap: anywhere;
 }
 
+.auth-panel {
+  margin-top: 1rem;
+  background: rgb(4 10 15 / 86%);
+  border: 1px solid rgb(139 194 255 / 24%);
+  border-radius: 14px;
+  padding: 0.85rem;
+}
+
+.auth-signed-in {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.verified-badge {
+  margin-left: 0.45rem;
+  padding: 0.08rem 0.45rem;
+  border: 1px solid rgb(120 220 170 / 55%);
+  border-radius: 999px;
+  color: #9be7c0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.auth-dev-link {
+  color: #9fd3ff;
+  font-size: 0.78rem;
+}
+
+.auth-verify {
+  max-width: 28rem;
+  margin: 12vh auto;
+  padding: 1rem;
+  text-align: center;
+}
+
+.feed-card-delete {
+  margin-top: 0.45rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid rgb(255 150 150 / 45%);
+  border-radius: 999px;
+  background: transparent;
+  color: #ffb3b3;
+  font-size: 0.68rem;
+  cursor: pointer;
+  pointer-events: auto;
+  justify-self: start;
+}
+
 [data-flat-device="desktop"] .feed-card-title {
   /* The desktop title scales with the window (7.1), up to its token size. */
   font-size: clamp(1.6rem, 3.2vw, var(--holoim-type-title-desktop-font-size));

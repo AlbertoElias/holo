@@ -161,6 +161,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
         "usdzAttempts" INTEGER NOT NULL DEFAULT 0,
         "usdzError" TEXT,
         "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
+        "ownerId" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -176,6 +177,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
         "sizeBytes" INTEGER NOT NULL,
         "expiresAt" DATETIME NOT NULL,
         "completedHologramId" TEXT,
+        "ownerId" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
