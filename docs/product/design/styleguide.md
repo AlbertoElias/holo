@@ -695,13 +695,18 @@ the stop shape alone, since no text sits within arm's reach.
   controls. Moving the phone moves the
   camera in the hologram's world; pinching zooms between inside the world
   and seeing it as an object. On iPhone web the portal turns but does not
-  travel without touch.
+  travel without touch. A swipe looks around only when it starts on the
+  hologram or inside its glass; any other swipe scrolls the feed, even one
+  that begins sideways, and a touch while the feed still glides goes to the
+  feed. A pinch zooms anywhere on the card.
 - **Focus:** the card nearest the middle sparks and redraws; the others
   hold.
 - **Controls:** Play alone at rest (Return beside it while driving), the
   rest on touch, in the row at the card's foot (in a line above Play when
   they do not fit beside it), clear of the gesture zones, the safe-area
   insets and the dock; touch 44 apx, on any device with a touch screen.
+  Over the picture the row's chip hugs the controls showing, the same room
+  at both ends, and Play stays at the middle of the card.
 - **Notices:** feed-wide notices (empty, offline, server error, uploading)
   on the chip.
 - **Type:** the flat scale; the phone card title is 21.6 px.
@@ -711,8 +716,9 @@ the stop shape alone, since no text sits within arm's reach.
 ### 9.4 Desktop
 
 - **Ground:** the gradient, pinned to the window.
-- **Hologram:** a portal card; the mouse rotates it, and the wheel or
-  trackpad zooms. The card nearest the middle sparks.
+- **Hologram:** a portal card; the mouse rotates it, and the wheel zooms
+  when the gesture begins on the hologram (anywhere else it scrolls the
+  feed); a trackpad pinch zooms anywhere. The card nearest the middle sparks.
 - **Controls:** in the row at the card's foot, the rest when the cursor is
   over the card; mouse 24 apx; keyboard focus as in section 6.
 - **Notices:** on the chip, never under another panel.
