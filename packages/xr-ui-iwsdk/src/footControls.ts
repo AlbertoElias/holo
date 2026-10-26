@@ -103,7 +103,7 @@ export interface FootControlsProbe {
   metresPerApx: number;
   sizes: { glyphIconApx: number; ringApx: number; strokeApx: number; hitApx: number };
   text: { playback: string; elapsedTotal: string; scale: string };
-  buttons: Record<string, { worldPosition: [number, number, number]; visible: boolean }>;
+  buttons: Record<string, { worldPosition: [number, number, number]; visible: boolean; hovered?: boolean; pressed?: boolean }>;
   timeline: { worldStart: [number, number, number]; worldEnd: [number, number, number]; fraction: number; lengthApx: number };
   /** The on-reach chip's left and right edges (world), and its laid-out width. */
   reachRow: { worldLeft: [number, number, number]; worldRight: [number, number, number]; widthApx: number };
@@ -370,7 +370,7 @@ export class FootControls {
     object.updateWorldMatrix(true, true);
     const buttons: FootControlsProbe["buttons"] = {};
     for (const [id, button] of this.buttons) {
-      buttons[id] = { worldPosition: button.hit.getWorldPosition(new Vector3()).toArray() as [number, number, number], visible: this.isShown(button.hit) };
+      buttons[id] = { worldPosition: button.hit.getWorldPosition(new Vector3()).toArray() as [number, number, number], visible: this.isShown(button.hit), hovered: button.hovered, pressed: button.pressed };
     }
     buttons.scale = { worldPosition: this.scaleButton.getWorldPosition(new Vector3()).toArray() as [number, number, number], visible: this.isShown(this.scaleButton) };
     const [start, end] = this.timelineEnds();

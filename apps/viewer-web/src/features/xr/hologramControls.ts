@@ -26,6 +26,14 @@ const RING_CLEARANCE_M = 0.04;
 const anchor = new Vector3();
 const headPosition = new Vector3();
 
+/** What a ray hit, by the nearest name up its tree ("Mesh" when nothing is named). */
+function namedAncestor(object: Object3D): string {
+  for (let node: Object3D | null = object; node; node = node.parent) {
+    if (node.name) return node === object ? node.name : `${node.name}>${object.name || object.type}`;
+  }
+  return object.type;
+}
+
 export interface HologramControlsOptions {
   exit(): void;
 }
@@ -69,7 +77,7 @@ export class HologramControlsSystem extends createSystem() {
   /** Probe readings for the e2e spec. */
   probe(): unknown {
     if (!this.ui) return null;
-    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: { ...this.ui.dock.probe(), hand: this.ui.dockHand }, ring: this.ui.ring.probe(), rays: this.ui.rays?.probe().map((ray) => ({ ...ray, hit: ray.hit ? ray.hit.name || ray.hit.type : null })) ?? [], boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
+    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: { ...this.ui.dock.probe(), hand: this.ui.dockHand }, ring: this.ui.ring.probe(), rays: this.ui.rays?.probe().map((ray) => ({ ...ray, hit: ray.hit ? namedAncestor(ray.hit) : null })) ?? [], boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
   }
 
   update(delta: number): void {

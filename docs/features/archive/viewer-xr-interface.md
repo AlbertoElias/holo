@@ -853,7 +853,13 @@ with no recording), and everything under "Physical-device limits".
    0.2 s. A headset's hitch while sliding (a model loading) would do the
    same. The slide system's step takes the same 50 ms clamp. The spec
    asserts the vignette engages while sliding and stays within 0–0.5 at
-   every step. Without the clamp it read −0.50.
+   every step. Without the clamp it read −0.50. The vignette also takes no
+   ray: it is an open cylinder before the eyes. After merging main, the
+   recenter click aimed at the button's position from the frame its row
+   opened, 4 cm before the row's layout settled. It now waits for the
+   glyph to settle and re-reads it on each try (6/6 repeats). The probe now
+   names each ray hit's nearest named ancestor and each foot button's
+   hover and press.
 3. **Defect 3, fixed.** `TargetMetrics.reachHitMin` gives the foot controls
    72 apx (47 mm at 1.75 m) in `vr` and `ar-quest`. The ray-only gallery
    shelf keeps 56 apx. The spec asserts `hitApx: 72` and ≥ 20 mm.

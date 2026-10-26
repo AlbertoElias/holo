@@ -50,6 +50,11 @@ const VR_LOCOMOTION_MAX_STEP_S = 1 / 20;
 /** Within this of the floor the rig stands on it (the float spring's bob). */
 const VR_RIG_FLOOR_SNAP_M = 0.05;
 
+/** The slide's comfort vignette (private in IWSDK 1.0.1). */
+function slideVignette(slide: SlideSystem | undefined): (Mesh & { material: { uniforms: { uAlpha: { value: number } } } }) | undefined {
+  return (slide as unknown as { vignette?: Mesh & { material: { uniforms: { uAlpha: { value: number } } } } } | undefined)?.vignette;
+}
+
 function clampStep(system: { update(delta: number): void }): void {
   const step = system.update.bind(system);
   system.update = (delta: number) => step(Math.min(delta, VR_LOCOMOTION_MAX_STEP_S));
@@ -144,15 +149,19 @@ function addVrRoom(world: World): void {
   locomotion.config.slidingSpeed.value = VR_SLIDE_SPEED_MPS;
   clampStep(locomotion);
   // The slide system registers once the locomotor is ready.
-  let slideClamped = false;
+  let slideReady = false;
   const step = locomotion.update.bind(locomotion);
   locomotion.update = (delta: number) => {
     step(delta);
-    if (!slideClamped) {
+    if (!slideReady) {
       const slide = world.getSystem(SlideSystem);
       if (slide) {
         clampStep(slide);
-        slideClamped = true;
+        // The vignette is an open cylinder before the eyes: a controller's ray
+        // crosses its far wall and would stop there. It is never a target.
+        const vignette = slideVignette(slide);
+        if (vignette) vignette.raycast = () => {};
+        slideReady = true;
       }
     }
     // The room is flat: the rig stands on y = 0 rather than on the
@@ -400,8 +409,7 @@ function installXrViewerProbe(world: World, cache: HologramAssetCache, space: Ho
         player: {
           position: world.player.getWorldPosition(new Vector3()).toArray(),
           yawRad: new Euler().setFromQuaternion(world.player.getWorldQuaternion(new Quaternion()), "YXZ").y,
-          // The slide's comfort vignette (private in IWSDK 1.0.1).
-          vignetteAlpha: (world.getSystem(SlideSystem) as unknown as { vignette?: { material: { uniforms: { uAlpha: { value: number } } } } } | undefined)?.vignette?.material.uniforms.uAlpha.value ?? 0
+          vignetteAlpha: slideVignette(world.getSystem(SlideSystem))?.material.uniforms.uAlpha.value ?? 0
         },
         stage: c.stage ? { origin: c.stage.origin.toArray(), forward: c.stage.forward.toArray(), distanceM: c.stage.distanceM, floorY: c.stage.floorY } : null,
         chipWidthM: c.chipWidthM,

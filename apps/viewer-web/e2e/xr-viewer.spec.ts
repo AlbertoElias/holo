@@ -1202,6 +1202,8 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   await page.locator('[data-card-id="mock-1"]').scrollIntoViewIfNeeded();
   await dwell(page, 3);
   await reachFor(page.locator('[data-card-id="mock-1"]'));
+  // The feed's own first-page loads (it reloads for the signed-in viewer) end here.
+  const feedRequestsBeforeVr = feedRequests.length;
   await page.locator('[data-card-id="mock-1"] .vr-trigger-button').click();
   await expect(page).toHaveURL(/\/vr\/mock-1$/);
   await enterSession(page, "Step inside", "opaque");
@@ -1214,7 +1216,8 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   const shelf = entered.gallery.shelf!;
   expect(entered.gallery.loadedItems, "the card's loaded feed, not a refetch").toBe(10);
   expect(entered.gallery.nextCursor).toBe("10");
-  expect(feedRequests.filter((r) => r.cursor === null), "one first-page fetch, by the feed").toHaveLength(1);
+  expect(feedRequests.filter((r) => r.cursor === null).length, "the feed fetched its first page").toBeGreaterThan(0);
+  expect(feedRequests.slice(feedRequestsBeforeVr), "VR fetches nothing on entry").toEqual([]);
   expect(shelf.tiles.map((t) => t.title)).toEqual(["Runner 1", "Runner 2", "Runner 3", "Runner 4", "Runner 5", "Runner 6"]);
   expect(shelf.tiles[0]!.status, "the opened hologram's tile is empty while it is placed").toBe("placed");
   expect(shelf.tiles[0]!.hasPreview).toBe(false);
@@ -1440,9 +1443,9 @@ async function setStick(page: Page, side: "left" | "right", x: number, y: number
  * 300 ms of frame time (pmndrs pointer events), and on a loaded machine IWER
  * frames can be further apart than that, so one click can be lost in emulation.
  */
-async function rayClickUntil(page: Page, target: Vec3, from: Vec3, done: (g: GallerySnapshot) => boolean): Promise<GallerySnapshot> {
+async function rayClickUntil(page: Page, target: Vec3 | (() => Promise<Vec3>), from: Vec3, done: (g: GallerySnapshot) => boolean): Promise<GallerySnapshot> {
   for (let attempt = 0; attempt < 4; attempt++) {
-    await rayClick(page, target, from);
+    await rayClick(page, typeof target === "function" ? await target() : target, from);
     try {
       return await waitForGallery(page, done, 3_000);
     } catch (error) {
@@ -1599,10 +1602,22 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   // Look at the chip so its reach row opens, then aim at the recenter glyph where the row laid it out.
   const [chipRig] = await toRig(page, [landed.controls!.foot.worldPosition]);
   await setPose(page, "head", eye, chipRig!);
-  const reached = await waitForGallery(page, (g) => g.controls!.foot.reachOpacity === 1, 5_000);
-  const [recenterRig] = await toRig(page, [reached.controls!.foot.buttons.recenter.worldPosition]);
-  await setPose(page, "head", eye, recenterRig!);
-  const recentered = await rayClickUntil(page, recenterRig!, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2], (g) => readingOf(g, "mock-2")!.placement.sequence > readingOf(landed, "mock-2")!.placement.sequence);
+  await waitForGallery(page, (g) => g.controls!.foot.reachOpacity === 1, 5_000);
+  // The row lays its buttons out over the frames after it opens: aim where the glyph has settled, read again each try.
+  const recenterRig = async (): Promise<Vec3> => {
+    let at = (await gallerySnapshot(page)).controls!.foot.buttons.recenter.worldPosition;
+    for (let read = 0; read < 10; read++) {
+      await page.waitForTimeout(250);
+      const next = (await gallerySnapshot(page)).controls!.foot.buttons.recenter.worldPosition;
+      const moved = Math.hypot(next[0] - at[0], next[1] - at[1], next[2] - at[2]);
+      at = next;
+      if (moved < 1e-4) break;
+    }
+    const [rig] = await toRig(page, [at]);
+    return rig!;
+  };
+  await setPose(page, "head", eye, await recenterRig());
+  const recentered = await rayClickUntil(page, recenterRig, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2], (g) => readingOf(g, "mock-2")!.placement.sequence > readingOf(landed, "mock-2")!.placement.sequence);
   const moved = readingOf(recentered, "mock-2")!;
   const viewer = (await readHeadPose(page)).position;
   expect(Math.abs(horizontal(moved.worldPosition, viewer) - 1.5), `recentered ${horizontal(moved.worldPosition, viewer).toFixed(3)} m from the moved viewer`).toBeLessThan(0.05);
