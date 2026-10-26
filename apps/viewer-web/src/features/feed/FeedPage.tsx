@@ -15,6 +15,7 @@ import { UploadPanel, type UploadStatus } from "../upload/UploadPanel";
 import { deleteHologram } from "./api";
 import { FeedNotice, type FeedNoticeContent } from "./FeedNotice";
 import { HologramCard } from "./HologramCard";
+import { nearFocus, nextModelLoads } from "./modelLoadOrder";
 import { useFeed } from "./useFeed";
 
 function useOnline(): boolean {
@@ -143,6 +144,20 @@ export function FeedPage() {
   }, [addToTop]);
 
   const resolvedFocusId = focusedId ?? items[0]?.id ?? null;
+
+  // Holograms download in feed order rather than all at once (modelLoadOrder.ts).
+  const [loadsStarted, setLoadsStarted] = useState<ReadonlySet<string>>(() => new Set());
+  const [loadsSettled, setLoadsSettled] = useState<ReadonlySet<string>>(() => new Set());
+  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  useEffect(() => {
+    const next = nextModelLoads(itemIds, resolvedFocusId, loadsStarted, loadsSettled);
+    if (next.length > 0) setLoadsStarted((current) => new Set([...current, ...next]));
+  }, [itemIds, resolvedFocusId, loadsStarted, loadsSettled]);
+  // The cards next in line check their file early, so a download starts as soon as its turn comes.
+  const loadsNear = useMemo(() => new Set(nearFocus(itemIds, resolvedFocusId)), [itemIds, resolvedFocusId]);
+  const onModelSettled = useCallback((id: string) => {
+    setLoadsSettled((current) => (current.has(id) ? current : new Set([...current, id])));
+  }, []);
   const notice: FeedNoticeContent | null = uploadStatus
     ? uploadNotice(uploadStatus)
     : !online
@@ -158,7 +173,7 @@ export function FeedPage() {
 
   const cards = useMemo(
     () =>
-      items.map((item, index) => (
+      items.map((item) => (
         <HologramCard
           key={item.id}
           item={item}
@@ -166,11 +181,12 @@ export function FeedPage() {
           muted={audioMuted}
           onToggleMute={toggleAudioMute}
           onDelete={handleDelete}
-          preloadNextUrl={items[index + 1]?.url}
+          loadTurn={loadsStarted.has(item.id) ? "load" : loadsNear.has(item.id) ? "check" : "wait"}
+          onModelSettled={onModelSettled}
           target={target}
         />
       )),
-    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, target]
+    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, loadsStarted, loadsNear, onModelSettled, target]
   );
 
   return (
