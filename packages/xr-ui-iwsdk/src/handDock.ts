@@ -1,7 +1,7 @@
 import { apxToMeters, hitAreaMeters, tokens } from "@holoim/design-tokens";
 import { PokeInteractable, RayInteractable, UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
 import { glyphGapApx, type DockAction } from "@holoim/xr-ui-core";
-import { CanvasTexture, Euler, Matrix4, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace, Vector3, type Material, type Object3D } from "three";
+import { CanvasTexture, Matrix4, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace, Vector3, type Material, type Object3D } from "three";
 
 import { createGlyph, type GlyphElement, type GlyphName } from "./glyphs.js";
 import { POKE } from "./pointers.js";
@@ -24,8 +24,11 @@ const PHONE_DOCK_DEPTH_M = 0.3;
 const ARM_REACH_M = tokens.placement.armReachM;
 
 export type HandDockMount =
-  /** `ownPointerIds`: the pointers of the hand the dock rides on, which must reach past it. */
-  | { kind: "hand"; space: Object3D; ownPointerIds: readonly number[] }
+  /**
+   * `ownPointerIds`: the pointers of the hand the dock rides on, which must reach past it.
+   * `palm`: the direction out of the palm in `space`'s axes; the row sits on the inside of the wrist (the user, 2026-10-25).
+   */
+  | { kind: "hand"; space: Object3D; ownPointerIds: readonly number[]; palm: readonly [number, number, number] }
   | { kind: "phone"; camera: Object3D; verticalFovRad: number; viewportHeightCss: number; viewportWidthCss: number };
 
 export interface HandDockOptions {
@@ -66,12 +69,14 @@ interface DockButton {
   recording: boolean;
 }
 
-// 4 cm out of the back of the wrist (its local +Y), faces looking along it (§1.2).
-const WRIST_OFFSET = new Matrix4().compose(
-  new Vector3(0, tokens.placement.wristOffsetM, 0),
-  new Quaternion().setFromEuler(new Euler(-Math.PI / 2, 0, 0)),
-  new Vector3(1, 1, 1)
-);
+/** Out of the palm in WebXR grip space: the back of the right hand is +X, of the left −X. */
+export const GRIP_PALM = { left: [1, 0, 0], right: [-1, 0, 0] } as const;
+
+// 4 cm out of the inside of the wrist, faces looking out of the palm (§1.2).
+function wristOffset(palm: readonly [number, number, number]): Matrix4 {
+  const out = new Vector3(...palm).normalize();
+  return new Matrix4().compose(out.clone().multiplyScalar(tokens.placement.wristOffsetM), new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), out), new Vector3(1, 1, 1));
+}
 const followMatrix = new Matrix4();
 
 const tipLocal = new Vector3();
@@ -96,6 +101,7 @@ export class HandDock {
   private shade: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null;
   /** A wrist space outside IWSDK's entity tree, whose pose the dock copies each frame. */
   private follows: Object3D | null = null;
+  private readonly wristOffset: Matrix4 | null;
 
   constructor(world: World, mount: HandDockMount, actions: readonly DockAction[], options: HandDockOptions = {}) {
     this.mount = mount;
@@ -154,13 +160,14 @@ export class HandDock {
     this.entity.addComponent(RayInteractable);
     if (!phone) this.entity.addComponent(PokeInteractable);
 
+    this.wristOffset = mount.kind === "hand" ? wristOffset(mount.palm) : null;
     if (mount.kind === "hand") {
       // IWSDK's TransformSystem moves an entity back under the level unless its
       // parent is an entity too, so a plain three space (capture's wrist) is
       // followed instead of parented.
       if ((mount.space as Object3D & { entityIdx?: number }).entityIdx !== undefined) {
         mount.space.add(object);
-        WRIST_OFFSET.decompose(object.position, object.quaternion, object.scale);
+        this.wristOffset!.decompose(object.position, object.quaternion, object.scale);
       } else {
         this.follows = mount.space;
         this.follow();
@@ -261,7 +268,7 @@ export class HandDock {
     if (!this.follows) return;
     const object = this.entity.object3D!;
     this.follows.updateWorldMatrix(true, false);
-    followMatrix.multiplyMatrices(this.follows.matrixWorld, WRIST_OFFSET);
+    followMatrix.multiplyMatrices(this.follows.matrixWorld, this.wristOffset!);
     if (object.parent) {
       object.parent.updateWorldMatrix(true, false);
       followMatrix.premultiply(object.parent.matrixWorld.clone().invert());

@@ -39,6 +39,9 @@ const POKE_RELEASE_SEC = 0.5;
 /** Controller pulses: a light one on hover, a firmer one on commit. */
 const PULSE_HOVER = { intensity: 0.15, durationMs: 12 };
 const PULSE_COMMIT = { intensity: 0.5, durationMs: 30 };
+// A controller's grip to the wrist joint's axes, in which the palm faces −Y.
+const GRIP_TO_JOINT_LEFT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+const GRIP_TO_JOINT_RIGHT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
 const SHADE_SEGMENTS = 32;
 
 type RowId = 'refit' | 'hand';
@@ -282,7 +285,7 @@ export class VrChrome {
     if (key !== this.dockKey) {
       this.dock?.dispose();
       const record: DockAction = { id: 'record', glyph: 'record', label: 'Record', onSelect: () => this.deps.toggleRecording() };
-      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier) }, [record], {
+      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier), palm: [0, -1, 0] }, [record], {
         input,
         drawOverBody: true,
         canCommit: (_action, pointerId) => this.canRecord(pointerId),
@@ -306,7 +309,7 @@ export class VrChrome {
     return !(viaRay && hand && this.deps.tracking.getChromeInput(hand).hand);
   }
 
-  /** The carrying hand's wrist joint, or its controller's grip; false when neither is tracked. */
+  /** The carrying hand's wrist joint, or its controller's grip in the joint's axes; false when neither is tracked. */
   private placeWristAnchor(side: Hand): boolean {
     const tracking = this.deps.tracking;
     const chromeInput = tracking.getChromeInput(side);
@@ -315,6 +318,10 @@ export class VrChrome {
     } else if (chromeInput.grip) {
       chromeInput.grip.updateWorldMatrix(true, false);
       chromeInput.grip.matrixWorld.decompose(tmpA, tmpQuat, tmpScale);
+      // In the joint's axes, as the anchor is: out of the palm is −Y. The grip's
+      // palm is +X on the left hand and −X on the right (WebXR), a quarter turn
+      // about the grip's rod axis (Z) away.
+      tmpQuat.multiply(side === 'left' ? GRIP_TO_JOINT_LEFT : GRIP_TO_JOINT_RIGHT);
     } else {
       return false;
     }

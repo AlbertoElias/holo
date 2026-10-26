@@ -1,6 +1,6 @@
 import { createSystem, Grabbed, type Entity } from "@iwsdk/core";
 import { playbackLabel, type HologramControlActions } from "@holoim/xr-ui-core";
-import { AimRays, FocusRing, FootControls, HandDock, StatusLine, configureXrPointers, handPointerIds, phoneMetresPerApx, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
+import { AimRays, FocusRing, FootControls, GRIP_PALM, HandDock, StatusLine, configureXrPointers, handPointerIds, phoneMetresPerApx, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
 import { Vector3, type Object3D } from "three";
 
 import { HologramPlayback, restartHologram, seekHologram, setHologramPlaying } from "./hologramPlayback";
@@ -178,7 +178,7 @@ export class HologramControlsSystem extends createSystem() {
     const dock = target === "ar-phone"
       ? new HandDock(this.world, { kind: "phone", camera, verticalFovRad: fovy, viewportHeightCss: window.innerHeight, viewportWidthCss: window.innerWidth }, [exit])
       // Handedness defaults to right, so the dock sits on the left hand or controller.
-      : new HandDock(this.world, { kind: "hand", space: this.player.gripSpaces.left, ownPointerIds: handPointerIds(this.world, "left") }, [exit]);
+      : new HandDock(this.world, { kind: "hand", space: this.player.gripSpaces.left, ownPointerIds: handPointerIds(this.world, "left"), palm: GRIP_PALM.left }, [exit]);
     let rays: AimRays | null = null;
     if (target !== "ar-phone") {
       configureXrPointers(this.world);
