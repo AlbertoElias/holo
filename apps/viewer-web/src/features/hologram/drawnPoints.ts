@@ -3,7 +3,9 @@
 // chrome, kept to the bubble when the take has one, and the author's bones
 // through the take, so a walk stays under the dome.
 import { isInChrome } from "@holoim/xr-ui-core";
-import { AnimationMixer, Matrix4, Sphere, Vector3 } from "three";
+import { AnimationMixer, LoopRepeat, Matrix4, Sphere, Vector3 } from "three";
+
+import { compareTakeClips, TAKE_CLIP_WEIGHT } from "./takePlayback";
 import type { AnimationClip, Bone, Mesh, Object3D, SkinnedMesh } from "three";
 
 const BUBBLE_MESH_NAME = "RecordedBubbleSphere";
@@ -93,9 +95,11 @@ export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D
  * the anchor is then, and put back where it is now: the dome travels with the
  * bubble, so only the author's reach inside it matters.
  *
- * Each clip is played alone on a mixer of its own, so a viewer's paused or
- * stopped playback cannot freeze the samples at one time, and its playback
- * is never touched. Stopping that mixer puts the pose back as it was.
+ * The clips play together on a mixer of their own, ranked and weighted as
+ * the viewer plays them, so a clip on a child bone stacks on its parent's as
+ * it does on screen; a viewer's paused or stopped playback cannot freeze the
+ * samples at one time, and its playback is never touched. Stopping that
+ * mixer puts the pose back as it was.
  */
 export function motionPoints(
   root: Object3D,
@@ -152,13 +156,14 @@ export function motionPoints(
     }
   };
   const sampler = new AnimationMixer(root);
-  for (const clip of played) {
-    sampler.stopAllAction();
-    sampler.clipAction(clip).play();
-    for (let sample = 0; sample < MOTION_SAMPLES; sample += 1) {
-      sampler.setTime((clip.duration * sample) / MOTION_SAMPLES);
-      readSample();
-    }
+  played.sort(compareTakeClips).forEach((clip, index) => {
+    const weight = index === 0 ? TAKE_CLIP_WEIGHT.primary : TAKE_CLIP_WEIGHT.secondary;
+    sampler.clipAction(clip).setLoop(LoopRepeat, Infinity).setEffectiveWeight(weight).play();
+  });
+  const span = Math.max(...played.map((clip) => clip.duration));
+  for (let sample = 0; sample < MOTION_SAMPLES; sample += 1) {
+    sampler.setTime((span * sample) / MOTION_SAMPLES);
+    readSample();
   }
   sampler.stopAllAction();
   sampler.uncacheRoot(root);

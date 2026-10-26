@@ -86,13 +86,14 @@ test.describe("phone", () => {
     await captureEvidence(page, testInfo, "phone-freeze-looking-around");
   });
 
-  test("drag (default): a sideways swipe orbits and a pinch zooms while playing; vertical swipes still browse", async ({ page }, testInfo) => {
+  test("drag (default): a sideways swipe on the hologram orbits and a pinch zooms while playing", async ({ page }, testInfo) => {
     await openFeed(page, null);
     const cdp = await page.context().newCDPSession(page);
     await expect(page.locator(`.feed-card[data-card-id="${first.id}"]`)).toHaveAttribute("data-portal-variant", "drag");
     const start = await readPortal(page, first.url);
     const center = await cardCenter(page, first.id);
-    await touchSwipe(page, cdp, { x: center.x + 110, y: center.y }, -220, 0);
+    const { on } = await hologramPoints(page, first.id, first.url, true);
+    await touchSwipe(page, cdp, on, -220, 0);
     await expect.poll(async () => (await readPortal(page, first.url)).mode).toBe("free");
     const dragged = await readPortal(page, first.url);
     expect(dragged.paused, "still playing").toBe(false);
@@ -102,8 +103,98 @@ test.describe("phone", () => {
     await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "pinching out moves in while playing" }).toBeLessThan(0.7);
     expect((await readPortal(page, first.url)).paused).toBe(false);
     await captureEvidence(page, testInfo, "phone-drag-variant");
-    await touchSwipe(page, cdp, { x: center.x, y: center.y + 150 }, 0, -480);
-    expect(await settleScroll(page), "a vertical swipe still browses").toBeGreaterThan(300);
+  });
+
+  test("drag (default): a swipe off the hologram scrolls, even one that begins sideways, and never turns it; one on the hologram looks around", async ({ page }, testInfo) => {
+    await openFeed(page, null);
+    const cdp = await page.context().newCDPSession(page);
+    const { on, off } = await hologramPoints(page, first.id, first.url, true);
+    const box = await page.locator(`.feed-card[data-card-id="${first.id}"] .feed-card-portal`).boundingBox();
+    if (!box) throw new Error("viewing box not laid out");
+    // Low in the viewing box, clear of the hologram and its glass.
+    const below = { x: off.x, y: box.y + box.height * 0.92 };
+    expect(await page.evaluate(({ x, y, path }) => {
+      const probes = (window as unknown as { __portalProbes: Record<string, { portal: { runtime: { hitTest: (x: number, y: number, o?: { glass?: boolean }) => boolean } } }> }).__portalProbes;
+      return Object.entries(probes).find(([url]) => url.endsWith(path))![1].portal.runtime.hitTest(x, y, { glass: true });
+    }, { ...below, path: first.url }), "the swipe starts off the hologram").toBe(false);
+
+    // A thumb often drifts sideways before it goes up; the browser will not
+    // scroll a swipe that begins sideways, so the card scrolls it.
+    const path = [[4, -1], [9, -3], [14, -5], [17, -20], [19, -80], [20, -200], [21, -340], [21, -480]] as const;
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [below] });
+    for (const [dx, dy] of path) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: below.x + dx, y: below.y + dy }] });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    expect(await settleScroll(page), "the drifting swipe browses to the next card").toBe(PHONE.height);
+    expect((await readPortal(page, first.url)).mode, "and the hologram it began beside did not turn").toBe("follow");
+    expect((await readPortal(page, second.url)).mode, "nor the one that came under the finger").toBe("follow");
+
+    // A swipe that crosses the hologram from below it still scrolls.
+    await scrollFeedToTop(page);
+    await touchSwipe(page, cdp, below, 0, -480);
+    expect(await settleScroll(page), "a vertical swipe across the hologram browses").toBe(PHONE.height);
+    expect((await readPortal(page, first.url)).mode).toBe("follow");
+
+    const touchPath = async (from: { x: number; y: number }, steps: readonly (readonly [number, number])[]) => {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
+      for (const [dx, dy] of steps) {
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: from.x + dx, y: from.y + dy }] });
+        await page.waitForTimeout(16);
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    };
+
+    // A short sideways nudge off the hologram that ends drifting a pixel or
+    // two up is no flick: it neither browses nor turns the hologram.
+    await scrollFeedToTop(page);
+    await touchPath(below, [[-6, 0], [-9, 0], [-14, -2]]);
+    expect(await settleScroll(page), "a couple of pixels of drift is no flick").toBe(0);
+    expect((await readPortal(page, first.url)).mode, "a sideways swipe off the hologram does not turn it").toBe("follow");
+
+    // A swipe carried past the middle, where focus moves to the next card,
+    // and brought back, stays with the finger and settles on the first card.
+    await touchPath(below, [[4, -1], [9, -3], [14, -5], [16, -120], [17, -300], [17, -500], [17, -400], [17, -250], [17, -100]]);
+    expect(await settleScroll(page), "the swipe brought back settles where it began").toBe(0);
+
+    // A pinch off the hologram zooms and keeps the feed still, even as the
+    // fingers move up while they spread.
+    const zoomBefore = (await readPortal(page, first.url)).zoom;
+    const pinchAt = (gap: number, rise: number) => [{ x: below.x, y: below.y - 40 - rise - gap / 2, id: 0 }, { x: below.x, y: below.y - 40 - rise + gap / 2, id: 1 }];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pinchAt(40, 0) });
+    for (let i = 1; i <= 6; i += 1) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pinchAt(40 + 30 * i, 20 * i) });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    expect(await settleScroll(page), "a pinch does not scroll").toBe(0);
+    await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "a pinch off the hologram zooms" }).toBeLessThan(zoomBefore);
+    const firstCard = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+    await firstCard.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }).click({ force: true });
+    await expect(firstCard).toHaveAttribute("data-portal-mode", "follow");
+
+    // A touch that stops the feed's glide is not a tap: nothing pauses. The
+    // glide stays short of the middle, so the card keeps focus.
+    const feed = page.locator(".feed-scroll");
+    await feed.evaluate((element) => { element.style.scrollSnapType = "none"; });
+    await feed.evaluate((element) => element.scrollTo({ top: 300, behavior: "smooth" }));
+    await expect.poll(() => feedScrollTop(page), { timeout: 2000, intervals: [10] }).toBeGreaterThan(20);
+    await page.touchscreen.tap(below.x, below.y);
+    await page.waitForTimeout(400);
+    await expect(firstCard).toHaveAttribute("data-card-focus", "true");
+    expect((await readPortal(page, first.url)).paused, "the card it stopped on did not pause").toBe(false);
+    await feed.evaluate((element) => { element.style.scrollSnapType = ""; });
+    await scrollFeedToTop(page);
+
+    // On the hologram, even a vertical swipe looks around and keeps the feed still.
+    const start = await readPortal(page, first.url);
+    await touchSwipe(page, cdp, on, 0, 160);
+    expect(await settleScroll(page), "a swipe on the hologram does not browse").toBe(0);
+    const looked = await readPortal(page, first.url);
+    expect(looked.mode).toBe("free");
+    expect(looked.pitch, "a downward drag on the hologram raises the view").toBeGreaterThan(start.followPitch + 0.1);
+    await captureEvidence(page, testInfo, "phone-touch-scroll-or-look");
   });
 
   test("tilt: turning the phone turns the camera, past a small deadzone", async ({ page }, testInfo) => {
@@ -163,6 +254,115 @@ test("desktop (default): drag rotates, and the wheel or trackpad pinch over the 
   expect(await settleScroll(page), "zooming out does not scroll the feed").toBe(0);
   await page.mouse.wheel(0, 500);
   expect(await settleScroll(page), "fully out, the wheel scrolls to the next card").toBeGreaterThan(0);
+});
+
+/** One point in the viewing box, within the window, on the hologram itself and one off it, as the canvas's hit test sees them. */
+/** A point on the hologram and one off it in the viewing box; `glass` counts its cloche, as a touch does. */
+async function hologramPoints(page: Page, cardId: string, modelPath: string, glass = false): Promise<{ on: { x: number; y: number }; off: { x: number; y: number } }> {
+  const box = await page.locator(`.feed-card[data-card-id="${cardId}"] .feed-card-portal`).boundingBox();
+  if (!box) throw new Error("viewing box not laid out");
+  return page.evaluate(({ box, path, glass }) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { portal: { runtime: { hitTest: ((x: number, y: number, options?: { glass?: boolean }) => boolean) | null } } }> }).__portalProbes;
+    const hitTest = Object.entries(probes).find(([url]) => url.endsWith(path))?.[1].portal.runtime.hitTest;
+    if (!hitTest) throw new Error(`no hit test for ${path}`);
+    let on: { x: number; y: number } | null = null;
+    let off: { x: number; y: number } | null = null;
+    for (let row = 1; row < 12; row += 1) {
+      for (let column = 1; column < 12; column += 1) {
+        const point = { x: box.x + (box.width * column) / 12, y: box.y + (box.height * row) / 12 };
+        if (point.y < 4 || point.y > window.innerHeight - 4) continue;
+        if (hitTest(point.x, point.y, { glass })) on ??= point;
+        else off ??= point;
+      }
+    }
+    if (!on || !off) throw new Error(`the viewing box is all ${on ? "hologram" : "empty space"}`);
+    return { on, off };
+  }, { box, path: modelPath, glass });
+}
+
+test("desktop: the wheel scrolls the feed unless it begins on the hologram itself", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 800, height: 440 });
+  await openFeed(page, null);
+  const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+  // Paused, a plain wheel zooms; before, it did so anywhere on the card.
+  await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
+  await expect(card).toHaveAttribute("data-portal-paused", "true");
+  const { on, off } = await hologramPoints(page, first.id, first.url);
+  const start = await readPortal(page, first.url);
+
+  // Over empty space in the card, the gesture scrolls the feed (past half a
+  // card, so the snap carries it on), and stays a scroll as the next
+  // hologram passes under the pointer.
+  await page.mouse.move(off.x, off.y);
+  for (const delta of [300, 40, 40, 40]) await page.mouse.wheel(0, delta);
+  expect(await settleScroll(page), "the wheel scrolls past the hologram").toBeGreaterThan(0);
+  expect((await readPortal(page, first.url)).zoom, "the hologram it passed did not zoom").toBe(start.zoom);
+  expect((await readPortal(page, second.url)).zoom, "nor the one that came under the pointer").toBe(1);
+  await captureEvidence(page, testInfo, "wheel-scrolls-past-hologram");
+
+  // On the hologram itself, the same wheel zooms and the feed stays put.
+  await scrollFeedToTop(page);
+  if ((await card.getAttribute("data-portal-paused")) !== "true") {
+    await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
+    await expect(card).toHaveAttribute("data-portal-paused", "true");
+  }
+  await page.mouse.move(on.x, on.y);
+  await page.waitForTimeout(400); // a new gesture
+  await page.mouse.wheel(0, -300);
+  await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "the wheel on the hologram zooms" }).toBeLessThan(1);
+  expect(await feedScrollTop(page)).toBe(0);
+
+  // A trackpad pinch still zooms wherever it lands on the card.
+  const pinched = (await readPortal(page, first.url)).zoom;
+  await page.mouse.move(off.x, off.y);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -60);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "a pinch off the hologram zooms" }).toBeLessThan(pinched);
+  expect(await feedScrollTop(page)).toBe(0);
+});
+
+test("desktop: a scroll back up stays a scroll as the card above, and its hologram, come under the pointer", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 800, height: 440 });
+  await openFeed(page, null);
+  const feed = page.locator(".feed-scroll");
+  const above = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+  const below = page.locator(`.feed-card[data-card-id="${second.id}"]`);
+  const cardHeight = await above.evaluate((element) => element.offsetHeight);
+  const scrollTo = (top: number) => feed.evaluate((element, to) => element.scrollTo({ top: to, behavior: "instant" }), top);
+  // Without snapping, a part-way scroll stays where the wheel leaves it.
+  await feed.evaluate((element) => { element.style.scrollSnapType = "none"; });
+  // Where the card above shows its hologram, most of the way back up.
+  const partWay = Math.round(cardHeight * 0.35);
+  await scrollTo(partWay);
+  const { on: onAbove } = await hologramPoints(page, first.id, first.url);
+  await scrollTo(cardHeight);
+  await expect(below).toHaveAttribute("data-card-focus", "true");
+  await waitForPortalReady(page, second.id, second.url);
+  const { off: offBelow } = await hologramPoints(page, second.id, second.url);
+  const zoomAbove = (await readPortal(page, first.url)).zoom;
+
+  // The gesture begins over empty space on the card below and carries the
+  // feed back up until the card above takes focus, its hologram now under
+  // the pointer; the gesture goes on (as trackpad momentum does) and still
+  // scrolls. The wheel events carry their own times, 50 ms apart as a
+  // trackpad's are: on a slow runner the round trips between them would
+  // otherwise pass the gesture gap and split the gesture.
+  const cdp = await page.context().newCDPSession(page);
+  let clock = Date.now() / 1000;
+  const wheel = async (at: { x: number; y: number }, deltaX: number, deltaY: number) => {
+    clock += 0.05;
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: at.x, y: at.y, deltaX, deltaY, timestamp: clock });
+  };
+  await page.mouse.move(offBelow.x, offBelow.y);
+  await wheel(offBelow, 0, partWay - cardHeight);
+  await page.mouse.move(onAbove.x, onAbove.y);
+  for (let i = 0; i < 40 && (await above.getAttribute("data-card-focus")) !== "true"; i += 1) await wheel(onAbove, 1, 0);
+  await expect(above).toHaveAttribute("data-card-focus", "true");
+  for (const delta of [-40, -40]) await wheel(onAbove, 0, delta);
+  await expect.poll(() => feedScrollTop(page), { message: "the wheel kept scrolling over the hologram above" }).toBeLessThan(partWay - 40);
+  expect((await readPortal(page, first.url)).zoom, "the hologram above did not zoom").toBe(zoomAbove);
+  await captureEvidence(page, testInfo, "wheel-scrolls-back-up-past-hologram");
 });
 
 test("desktop freeze: drags only explore while paused, pitch is clamped, keyboard works, and scrolling away resets", async ({ page }) => {

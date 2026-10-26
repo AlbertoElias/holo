@@ -14,10 +14,13 @@ export type PortalTriggers = {
   pinchWhilePlaying: boolean;
   /** Two-finger pinch zooms while paused. */
   pinchWhilePaused: boolean;
-  /** A plain mouse wheel zooms while paused; ctrl+wheel (trackpad pinch) follows the pinch switches. */
+  /**
+   * A plain mouse wheel over the hologram zooms while paused; anywhere else the
+   * feed scrolls. ctrl+wheel (trackpad pinch) follows the pinch switches.
+   */
   wheelZoomWhilePaused: boolean;
   /**
-   * A plain wheel over the bubble zooms at any time. Fully zoomed out, wheeling
+   * A plain wheel over the hologram zooms at any time. Fully zoomed out, wheeling
    * further out passes through, so the feed still scrolls to the next card.
    */
   wheelZoomOverBubble: boolean;

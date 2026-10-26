@@ -1,6 +1,6 @@
 // Small browser helpers shared by the redesigned components. No design value
 // lives here: every size, colour and timing comes from the tokens or the core.
-import { useEffect, useState } from "react";
+import { createContext, useEffect, useState } from "react";
 
 import type { HitInput } from "@holoim/xr-ui-core";
 
@@ -12,6 +12,9 @@ function matches(query: string): boolean {
     return false;
   }
 }
+
+/** True inside a dock on the amber horizon (5.2): glyph controls there draw as lanterns. */
+export const OnHorizon = createContext(false);
 
 /**
  * The input a DOM page sizes for (6.1): touch wherever a finger can reach the

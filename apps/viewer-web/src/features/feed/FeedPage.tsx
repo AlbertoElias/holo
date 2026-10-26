@@ -2,15 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { tokens } from "@holoim/design-tokens";
-import { Dock, GlyphControl, HandednessPicker, SideSheet, useHandedness } from "@holoim/ui-dom";
+import { Chip, Dock, GlyphControl, HandednessPicker, SideSheet, useHandedness } from "@holoim/ui-dom";
 import { nearestToMiddle } from "@holoim/xr-ui-core";
 
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
 import { useFlatTarget } from "../chrome/useFlatScreen";
 import { resumeAudioContext } from "../hologram/useGltfAudio";
+import type { HologramDTO } from "@holoim/contracts";
+
+import { AuthPanel } from "../auth/AuthPanel";
+import { useCurrentUser } from "../auth/useCurrentUser";
 import { UploadPanel, type UploadStatus } from "../upload/UploadPanel";
+import { deleteHologram } from "./api";
 import { FeedNotice, type FeedNoticeContent } from "./FeedNotice";
 import { HologramCard } from "./HologramCard";
+import { nearFocus, nextModelLoads } from "./modelLoadOrder";
 import { useFeed } from "./useFeed";
 
 function useOnline(): boolean {
@@ -71,7 +77,23 @@ function uploadNotice(status: UploadStatus): FeedNoticeContent {
 }
 
 export function FeedPage() {
-  const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop, retry } = useFeed();
+  const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop, removeItem, retry } = useFeed();
+  const { user, logout } = useCurrentUser();
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    // Reload so ownedByViewer flags match the signed-in state.
+    void retry();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  const handleDelete = useCallback(
+    async (item: HologramDTO) => {
+      await deleteHologram(item.id);
+      removeItem(item.id);
+    },
+    [removeItem]
+  );
   const target = useFlatTarget();
   const online = useOnline();
   const [audioMuted, setAudioMuted] = useState(true);
@@ -139,6 +161,20 @@ export function FeedPage() {
   }, [addToTop]);
 
   const resolvedFocusId = focusedId ?? items[0]?.id ?? null;
+
+  // Holograms download in feed order rather than all at once (modelLoadOrder.ts).
+  const [loadsStarted, setLoadsStarted] = useState<ReadonlySet<string>>(() => new Set());
+  const [loadsSettled, setLoadsSettled] = useState<ReadonlySet<string>>(() => new Set());
+  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  useEffect(() => {
+    const next = nextModelLoads(itemIds, resolvedFocusId, loadsStarted, loadsSettled);
+    if (next.length > 0) setLoadsStarted((current) => new Set([...current, ...next]));
+  }, [itemIds, resolvedFocusId, loadsStarted, loadsSettled]);
+  // The cards next in line check their file early, so a download starts as soon as its turn comes.
+  const loadsNear = useMemo(() => new Set(nearFocus(itemIds, resolvedFocusId)), [itemIds, resolvedFocusId]);
+  const onModelSettled = useCallback((id: string) => {
+    setLoadsSettled((current) => (current.has(id) ? current : new Set([...current, id])));
+  }, []);
   const notice: FeedNoticeContent | null = uploadStatus
     ? uploadNotice(uploadStatus)
     : !online
@@ -154,19 +190,21 @@ export function FeedPage() {
 
   const cards = useMemo(
     () =>
-      items.map((item, index) => (
+      items.map((item) => (
         <HologramCard
           key={item.id}
           item={item}
           active={item.id === resolvedFocusId}
           muted={audioMuted}
           onToggleMute={toggleAudioMute}
-          preloadNextUrl={items[index + 1]?.url}
+          onDelete={handleDelete}
+          loadTurn={loadsStarted.has(item.id) ? "load" : loadsNear.has(item.id) ? "check" : "wait"}
+          onModelSettled={onModelSettled}
           target={target}
           xrFeed={xrFeed}
         />
       )),
-    [items, resolvedFocusId, audioMuted, toggleAudioMute, target, xrFeed]
+    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, loadsStarted, loadsNear, onModelSettled, target, xrFeed]
   );
 
   return (
@@ -176,16 +214,20 @@ export function FeedPage() {
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
       </section>
       {/* A sheet answers Upload or Settings; on a phone it covers the screen, and the dock would show through it. */}
-      <Dock className="feed-dock" aria-label="Feed" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
-        <GlyphControl glyph="upload" showLabel label={VIEWER_CONTROL_NAMES.openUpload} word="Upload" onPress={() => setUploadOpen(true)} />
-        {/* No drawing yet (brief, "still to draw"): the word stands in. */}
-        <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
+      <Dock className="feed-dock" aria-label="Feed" ground="horizon" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
+        <GlyphControl glyph="upload" label={VIEWER_CONTROL_NAMES.openUpload} onPress={() => setUploadOpen(true)} />
       </Dock>
+      {/* Settings waits in the corner its sheet unfolds from (1.2), apart from the dock's making. Its chip all but
+          vanishes on the night sky and keeps the word legible over a hologram's picture. No drawing yet: the word stands in. */}
+      <Chip className="feed-settings" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
+        <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
+      </Chip>
       <SideSheet open={settingsOpen} title="Settings" onClose={() => setSettingsOpen(false)} target={target}>
         <HandednessPicker value={handedness} onChange={setHandedness} wristControl={VIEWER_CONTROL_NAMES.exitAr} />
+        <AuthPanel user={user} onSignOut={logout} />
       </SideSheet>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
-        <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} />
+        <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} currentUser={user} />
       </SideSheet>
       <FeedNotice notice={notice} target={target} />
     </main>

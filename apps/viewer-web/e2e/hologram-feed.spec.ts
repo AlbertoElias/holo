@@ -543,3 +543,53 @@ for (const viewport of [
     }
   });
 }
+
+// A GLB is a megabyte or more: downloading every card's at once slows the one
+// on screen. The focused card loads first and alone, the next ones follow one
+// at a time in feed order, and a card far down waits for the feed to near it.
+test("feed downloads holograms in feed order, one at a time", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const holograms = Array.from({ length: 5 }, (_, index) => ({
+    ...mockHologram,
+    id: `mock-${index + 1}`,
+    url: `/uploads/mock-${index + 1}.glb`,
+    hologramName: `Hologram ${index + 1}`
+  }));
+  await page.route("**/api/holograms?*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ items: holograms, nextCursor: null })
+  }));
+  const downloads: { url: string; start: number; end: number }[] = [];
+  const startedAt = Date.now();
+  await page.route("**/uploads/**", async (route) => {
+    const request = route.request();
+    const full = request.method() === "GET" && !request.headers().range;
+    const download = full ? { url: new URL(request.url()).pathname, start: Date.now() - startedAt, end: Number.NaN } : null;
+    if (download) {
+      downloads.push(download);
+      // Long enough that downloads running at once would overlap.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    await route.fulfill({ status: 200, path: mockGlbPath, contentType: "model/gltf-binary", headers: { "accept-ranges": "bytes" } });
+    if (download) download.end = Date.now() - startedAt;
+  });
+
+  await page.goto("/");
+  await assertViewerShell(page);
+  const cards = page.locator(".feed-card");
+  await expect(cards.nth(2)).toHaveAttribute("data-model-state", "rendered", { timeout: 30_000 });
+  // Nothing else is near the top of the feed: the fourth and fifth wait.
+  await page.waitForTimeout(1_500);
+  await expect(cards.nth(3)).toHaveAttribute("data-model-state", "queued");
+  expect(downloads.map((download) => download.url)).toEqual(["/uploads/mock-1.glb", "/uploads/mock-2.glb", "/uploads/mock-3.glb"]);
+  for (let index = 1; index < downloads.length; index += 1) {
+    expect(downloads[index]!.start, `${downloads[index]!.url} starts after ${downloads[index - 1]!.url} finished`).toBeGreaterThanOrEqual(downloads[index - 1]!.end);
+  }
+
+  // Scrolling to the third card brings the fourth and fifth into reach.
+  await cards.nth(2).scrollIntoViewIfNeeded();
+  await expect(cards.nth(4)).toHaveAttribute("data-model-state", "rendered", { timeout: 30_000 });
+  expect(downloads.map((download) => download.url).slice(3)).toEqual(["/uploads/mock-4.glb", "/uploads/mock-5.glb"]);
+  await testInfo.attach("glb-downloads.json", { body: JSON.stringify(downloads, null, 2), contentType: "application/json" });
+});

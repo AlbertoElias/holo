@@ -2,6 +2,7 @@ import { Box3, Vector3 } from "three";
 import type { AnimationClip, Object3D } from "three";
 
 import { isInsideRecordedObject } from "../objects/recordedObjects";
+import { compareTakeClips } from "./takePlayback";
 
 // Recorded holograms are already at true scale; these helpers only place the
 // root and pick what to play. Plain three, shared by the R3F and IWSDK views.
@@ -48,21 +49,7 @@ export function normalizeSceneAtOrigin(root: Object3D): void {
   }
 }
 
-const MOTION_TERMS = ["body", "move", "walk", "run", "idle", "anim", "record"];
-
-/** Clips ordered for playback: the recorded body motion first. */
+/** Clips ordered for playback: the recorded body motion first (the feed's take order). */
 export function rankClipsForPlayback<T extends AnimationClip>(clips: readonly T[]): T[] {
-  return clips.slice().sort((a, b) => {
-    const aName = a.name.toLowerCase();
-    const bName = b.name.toLowerCase();
-    const aHasMotionName = MOTION_TERMS.some((term) => aName.includes(term)) ? 1 : 0;
-    const bHasMotionName = MOTION_TERMS.some((term) => bName.includes(term)) ? 1 : 0;
-    if (bHasMotionName !== aHasMotionName) {
-      return bHasMotionName - aHasMotionName;
-    }
-    if (b.tracks.length !== a.tracks.length) {
-      return b.tracks.length - a.tracks.length;
-    }
-    return b.duration - a.duration;
-  });
+  return clips.slice().sort(compareTakeClips);
 }

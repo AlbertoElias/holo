@@ -9,6 +9,8 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Feature | Status | Brief |
 | --- | --- | --- |
 | Shared XR interface and viewer VR/AR | Complete | [viewer-xr-interface.md](archive/viewer-xr-interface.md) |
+| Creator accounts (IDEA-052) | Complete | [creator-accounts.md](archive/creator-accounts.md) |
+| Snappy feed first load | Implementing | [snappy-feed-first-load.md](snappy-feed-first-load.md) |
 | Redesign UI and interaction across capture and viewer | Implementing | [ui-redesign.md](ui-redesign.md) |
 | Summon and place while speaking | Verified; lands with PRD-043 | [summon-and-place.md](summon-and-place.md) |
 | Explain with an object | Verifying | [explain-with-an-object.md](explain-with-an-object.md) |

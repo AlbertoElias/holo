@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 
 import { tokens } from '@holoim/design-tokens';
-import { Chip, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, HandednessPicker, SideSheet, Type } from '@holoim/ui-dom';
+import { Chip, defaultHitInput, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, HandednessPicker, SideSheet, Type } from '@holoim/ui-dom';
 import {
   CAPTURE_HALO_ACTIONS,
   PHONE_EDGES,
@@ -96,7 +96,9 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   const recording = createRecordingUiState(state.recordingState, state.recordingMessage);
   const isRecording = recording.status === 'recording';
   const target = touch ? VIEW_TARGETS.phone : VIEW_TARGETS.desktop;
-  const input: HitInput = touch ? 'touch' : 'mouse';
+  // The layout and help follow the primary pointer; hit areas take a finger
+  // wherever one can reach the screen, a touch laptop's too (6.1).
+  const input: HitInput = touch ? 'touch' : defaultHitInput();
   const show = (control: Control): boolean => chromeVisible(control, isRecording);
   const notice = resolveNotice(state);
   const vrMode = state.mode === 'vr' || state.mode === 'mock-vr';
@@ -161,7 +163,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
             </Type>
           ) : null}
         </span>
-        {!vrMode && state.mode !== 'ar' && show('halo') ? <DockHalo bridge={bridge} input={input} /> : null}
+        {!vrMode && state.mode !== 'ar' && show('halo') ? <DockHalo bridge={bridge} input={input} touch={touch} /> : null}
         {vrMode && show('record') && !isRecording ? (
           <GlyphControl glyph={null} label="Refit height" input={input} disabled={!state.heightFit.enabled} onPress={() => bridge.refitHeight()} />
         ) : null}
@@ -184,7 +186,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 // The Halo on a flat screen (slice 5): press and hold its dock glyph, move
 // towards a direction, let go; a flick commits without the ring drawing. Its
 // ring is lifted above the dock so the south place stays on screen.
-function DockHalo({ bridge, input }: { bridge: CaptureUiBridge; input: HitInput }) {
+function DockHalo({ bridge, input, touch }: { bridge: CaptureUiBridge; input: HitInput; touch: boolean }) {
   const { layout } = bridge.halo;
   const hit = hitAreaApx(input, glyphMetrics({ headset: false }).iconApx);
   return (
@@ -193,7 +195,7 @@ function DockHalo({ bridge, input }: { bridge: CaptureUiBridge; input: HitInput 
         actions={CAPTURE_HALO_ACTIONS}
         ringLiftApx={layout.radiusApx + layout.slotApx / 2 + glyphMetrics({ headset: false }).gapApx}
         onCommit={(commit) => {
-          if (commit.action) bridge.runHaloAction(commit.action, input === 'touch' ? 'touch' : 'mouse');
+          if (commit.action) bridge.runHaloAction(commit.action, touch ? 'touch' : 'mouse');
         }}
         trigger={(view) => (
           <span role="img" aria-label="Halo: hold and move to a direction" style={{ display: 'inline-grid', placeItems: 'center', width: hit, height: hit, cursor: 'pointer' }}>

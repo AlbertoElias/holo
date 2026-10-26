@@ -97,7 +97,7 @@ source and goes back there.
 | Point of action (fingertip, ray hit, gaze) | Cursor or touch point | Menus that bloom from the hand, ink |
 | Referent (the mark or bone being edited) | Popover pinned to the object's screen position | Editing a mark |
 | Periphery (lazy-follow, upper edge of view) | Top status line | State only, such as "Recording 0:12"; never controls |
-| World (placed by the user, 1 m away or more) | Side sheet | Labels for near panels, long text, library, inbox, settings |
+| World (placed by the user, 1 m away or more) | Side sheet, opened from the top corner it unfolds from | Labels for near panels, long text, library, inbox, settings |
 
 The periphery status line is the one thing that follows the head, lazily,
 and it never holds a control. It sits 1.5 m away, 20° above the line of
@@ -407,14 +407,15 @@ Only where the ground fails:
 | VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s, holds at least 2 s after the background last asks for it, and leaves over 0.4 s, as chrome does |
 | AR (WebXR) | Every row and every label sits on the chip |
 | AR Quick Look | No chip is possible, so no text or controls inside Quick Look |
-| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The bottom dock's row sits on the chip, sized to its contents, because the bottom of the ground is amber, where gold fails (2.1:1); never a band or shadow across the screen. The side sheet is on the chip |
+| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The feed's bottom dock stands on the amber horizon, where gold fails (2.1:1), with no chip, band or shadow across it: each control there is a **lantern**, its glyph in the gold ring (as Play's) round a deep-sea lens, and keyboard focus rings it in deep-sea ink (`glyph.lantern`). Its word does not show: ink text falls below 4.5:1 on most screens there, while the lens holds a control's 3:1. A control with no drawing yet holds its gold word in a lantern capsule, the same ring and lens, where gold on the lens holds 4.5:1. The dock holds making (Upload); Settings is not in it but waits in the top right corner, where its side sheet unfolds from, its word on the chip: the chip all but vanishes on the night sky and keeps the word legible over a hologram's picture, and a title stops short of it. That corner is not the status line, which keeps the top's centre and never holds a control. A dock over a picture (AR, capture) keeps its row on the chip, sized to its contents. The side sheet is on the chip |
 | Everywhere | Text over a hologram's own picture always sits on the chip |
 
 ## 6. Glyph controls
 
 Thin gold line glyphs that take their light from the edge; no buttons or
 pills. Icons only on a card: the word is the accessible name, and shows on a
-dock or sheet action where there is room.
+sheet action, or a dock over a picture, where there is room. On the feed's
+amber dock the control is a lantern with no word ([section 5.2](#52-where-the-chip-is-mandatory)).
 
 **Few at rest, the rest on reach.** At rest a card shows **Play** (or
 **Pause**) alone in the middle of its foot, plus **Return** beside it while
@@ -714,13 +715,18 @@ the stop shape alone, since no text sits within arm's reach.
   controls. Moving the phone moves the
   camera in the hologram's world; pinching zooms between inside the world
   and seeing it as an object. On iPhone web the portal turns but does not
-  travel without touch.
+  travel without touch. A swipe looks around only when it starts on the
+  hologram or inside its glass; any other swipe scrolls the feed, even one
+  that begins sideways, and a touch while the feed still glides goes to the
+  feed. A pinch zooms anywhere on the card.
 - **Focus:** the card nearest the middle sparks and redraws; the others
   hold.
 - **Controls:** Play alone at rest (Return beside it while driving), the
   rest on touch, in the row at the card's foot (in a line above Play when
   they do not fit beside it), clear of the gesture zones, the safe-area
   insets and the dock; touch 44 apx, on any device with a touch screen.
+  Over the picture the row's chip hugs the controls showing, the same room
+  at both ends, and Play stays at the middle of the card.
 - **Notices:** feed-wide notices (empty, offline, server error, uploading)
   on the chip.
 - **Type:** the flat scale; the phone card title is 21.6 px.
@@ -730,8 +736,9 @@ the stop shape alone, since no text sits within arm's reach.
 ### 9.4 Desktop
 
 - **Ground:** the gradient, pinned to the window.
-- **Hologram:** a portal card; the mouse rotates it, and the wheel or
-  trackpad zooms. The card nearest the middle sparks.
+- **Hologram:** a portal card; the mouse rotates it, and the wheel zooms
+  when the gesture begins on the hologram (anywhere else it scrolls the
+  feed); a trackpad pinch zooms anywhere. The card nearest the middle sparks.
 - **Controls:** in the row at the card's foot, the rest when the cursor is
   over the card; mouse 24 apx; keyboard focus as in section 6.
 - **Notices:** on the chip, never under another panel.

@@ -30,7 +30,9 @@ import { USDZ_CONVERTER_VERSION, convertGlbToUsdz, resolveToolPath, usdzFilename
 // preview once its record is switched (left in place by default).
 
 const execFileAsync = promisify(execFile);
-const INSPECTION_TIMEOUT_MS = 180_000;
+// Generous: a long take inspects in about a minute on a laptop and several
+// on production's shared CPU, where 180 s killed the first run's inspector.
+const INSPECTION_TIMEOUT_MS = 900_000;
 
 type Outcome = { status: "switched" | "failed" | "changed"; at: string; from: string; to: string; reason?: string; newFailures?: string[] };
 type Journal = { version: string; holograms: Record<string, Outcome> };

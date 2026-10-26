@@ -16,6 +16,7 @@ import {
   inputFromPointerType,
   inputFromTargetRayMode,
   isIdleDimmed,
+  lanternLook,
   noteFolded,
   pausedText,
   placeControl,
@@ -68,6 +69,35 @@ describe("glyphs (styleguide 6)", () => {
     expect(glyphAppearance({ focusVisible: true }, flat).focusRing).toEqual({ width: 1.5, offset: 3, color: tokens.color.gold });
     expect(glyphAppearance({ pressed: true }, flat).opacity).toBe(0.55);
     expect(glyphAppearance({ hovered: true }, flat).recordColor).toBe(tokens.color.record);
+  });
+
+  // The feed's dock on the amber horizon (5.2). Failure modes: a lens or a
+  // focus ring that vanishes on amber (a control's boundary needs 3:1), a
+  // lens too light to carry gold, a ring that ignores the hover lift.
+  it("keeps a lantern legible on the horizon: gold in a deep-sea lens, an ink focus ring", () => {
+    const channel = (hex: string, i: number) => {
+      const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (hex: string) => 0.2126 * channel(hex, 0) + 0.7152 * channel(hex, 1) + 0.0722 * channel(hex, 2);
+    const contrast = (a: string, b: string) => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    const mix = (a: string, b: string, t: number) => `#${[0, 1, 2].map((i) => Math.round(parseInt(a.slice(1 + i * 2, 3 + i * 2), 16) * (1 - t) + parseInt(b.slice(1 + i * 2, 3 + i * 2), 16) * t).toString(16).padStart(2, "0")).join("")}`;
+    const flat = { headset: false };
+    const idle = lanternLook(glyphAppearance({}, flat), flat);
+    // The dock's middle sits 56 apx up: 30% of the way from grey (80%) to
+    // the horizon on a 440 px laptop window, further down on taller screens.
+    for (const ground of [mix(tokens.color.ground.grey, tokens.color.ground.horizon, 0.3), tokens.color.ground.horizon]) {
+      expect(contrast(idle.fill, ground), `the lens on ${ground}`).toBeGreaterThanOrEqual(3);
+      expect(contrast(idle.ink, ground), `the focus ring on ${ground}`).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrast(tokens.color.gold, tokens.color.ground.horizon), "bare gold fails at the horizon, hence the lantern").toBeLessThan(3);
+    expect(contrast(idle.ringColor, idle.fill), "the glyph on its lens").toBeGreaterThanOrEqual(4.5);
+    expect(idle).toMatchObject({ ringApx: 36, ringWidthApx: 1.5, ringColor: tokens.color.gold, focusRing: null });
+    expect(lanternLook(glyphAppearance({ hovered: true }, flat), flat).ringColor).toBe(tokens.color.highlight);
+    expect(lanternLook(glyphAppearance({ focusVisible: true }, flat), flat).focusRing).toEqual({ width: 1.5, offset: 3, color: idle.ink });
   });
 
   it("dims the always-there set to 40% after 4 s unused, and restores it as a cursor nears", () => {

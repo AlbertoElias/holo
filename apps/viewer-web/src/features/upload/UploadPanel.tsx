@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
-import type { HologramDTO } from "@holoim/contracts";
+import type { HologramDTO, UserDTO } from "@holoim/contracts";
 import { glyphAppearance, glyphDrawing } from "@holoim/xr-ui-core";
 import { GlyphControl, GlyphSvg, Type } from "@holoim/ui-dom";
 
@@ -18,13 +18,14 @@ export type UploadStatus =
 type UploadPanelProps = {
   onUploaded: (item: HologramDTO) => void;
   onStatus?: (status: UploadStatus | null) => void;
+  currentUser?: UserDTO | null;
 };
 
 const UPLOAD_DRAWING = glyphDrawing("upload");
 const DROP_APPEARANCE = glyphAppearance({}, { headset: false });
 const submittedByStorageKey = "holoim.upload.submittedBy";
 
-export function UploadPanel({ onUploaded, onStatus }: UploadPanelProps) {
+export function UploadPanel({ onUploaded, onStatus, currentUser = null }: UploadPanelProps) {
   const formId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -59,7 +60,7 @@ export function UploadPanel({ onUploaded, onStatus }: UploadPanelProps) {
     }
 
     const trimmedName = hologramName.trim();
-    const trimmedSubmittedBy = submittedBy.trim();
+    const trimmedSubmittedBy = currentUser?.displayName ?? submittedBy.trim();
     if (!trimmedName || !trimmedSubmittedBy) {
       onStatus?.({ kind: "error", message: "A hologram name and who submitted it are both needed." });
       return;
@@ -171,8 +172,15 @@ export function UploadPanel({ onUploaded, onStatus }: UploadPanelProps) {
       </label>
       <label className="upload-field">
         <Type variant="byline">Submitted by</Type>
-        <input className="upload-input" value={submittedBy} onChange={onSubmittedByChange} maxLength={80} disabled={isUploading} />
+        <input
+          className="upload-input"
+          value={currentUser ? currentUser.displayName : submittedBy}
+          onChange={onSubmittedByChange}
+          maxLength={80}
+          disabled={isUploading || Boolean(currentUser)}
+        />
       </label>
+      {currentUser ? <p className="upload-caption">Uploads are credited to your verified account name.</p> : null}
       <div className="upload-quicklook">
         <label htmlFor="quicklook-enabled" className="upload-quicklook-toggle">
           <Type variant="captionUnderCard">iOS Quick Look</Type>

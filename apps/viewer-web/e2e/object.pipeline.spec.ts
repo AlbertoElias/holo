@@ -287,6 +287,8 @@ test("real capture export: the object plays in the hand, matches the track, orbi
   await page.mouse.move(view.x + 420, view.y + 10, { steps: 10 });
   await page.mouse.up();
   await expect(card).toHaveAttribute("data-portal-mode", "free");
+  // The wheel zooms only on the hologram itself; the drag ended off it.
+  await page.mouse.move(view.x, view.y);
   for (let i = 0; i < 6; i += 1) await page.mouse.wheel(0, -300);
   await page.waitForTimeout(500);
 

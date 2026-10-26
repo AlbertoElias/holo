@@ -6,7 +6,7 @@ import { test as plainTest, type Page } from "@playwright/test";
 import type * as Three from "three";
 import { waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
 import { tokens } from "@holoim/design-tokens";
-import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, VIEW_TARGETS } from "@holoim/xr-ui-core";
+import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, PHONE_EDGES, VIEW_TARGETS } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 import { pinch } from "./ar-gestures";
@@ -270,6 +270,42 @@ async function avatarWithSound(): Promise<Buffer> {
 test.describe("phone by touch", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
 
+  // Failure modes: Settings back in the dock beside Upload (two lanterns, one
+  // place), lost in the status line's centre or a gesture edge, a long title
+  // running under it, a hit under the touch minimum, its sheet unfolding
+  // from the other side.
+  test("Settings waits in the top corner its sheet unfolds from, apart from Upload's dock, and a long title stops short of it", async ({ page }) => {
+    const long = { ...first, hologramName: "The whole kitchen, the morning before the guests came" };
+    await installProbe(page);
+    await mockFeed(page, [long]);
+    await page.goto("/");
+    await assertViewerShell(page);
+    await waitForPortalReady(page, long.id, long.url);
+    const dock = page.getByRole("toolbar", { name: "Feed" });
+    await expect(dock.getByRole("button"), "Upload stands alone in the dock").toHaveCount(1);
+    await expect(dock.getByRole("button", { name: "Upload a hologram" })).toBeVisible();
+    const settings = page.getByRole("button", { name: "Settings" });
+    const corner = (await settings.boundingBox())!;
+    expect(corner.y, "at the top of the screen").toBeLessThan(PHONE.height * 0.08);
+    expect(PHONE.width - (corner.x + corner.width), "in the right corner, clear of the side edge").toBeGreaterThanOrEqual(PHONE_EDGES.side - 1);
+    expect(PHONE.width - (corner.x + corner.width), "and close to it").toBeLessThan(PHONE_EDGES.side + 24);
+    expect(corner.height, "a touch-sized hit").toBeGreaterThanOrEqual(hitAreaApx("touch", 0) - 0.5);
+    const title = (await page.locator(".feed-card-title").first().boundingBox())!;
+    expect(title.x + title.width, "the title stops short of Settings").toBeLessThanOrEqual(corner.x);
+    await shot(page, "phone-settings-corner");
+    // A narrow desktop window, where the title's column reaches the corner too.
+    await page.setViewportSize({ width: 760, height: 700 });
+    await expect.poll(async () => {
+      const narrowCorner = (await settings.boundingBox())!;
+      const narrowTitle = (await page.locator(".feed-card-title").first().boundingBox())!;
+      return narrowCorner.x - (narrowTitle.x + narrowTitle.width);
+    }, { message: "a 760 px window's title stops short of Settings" }).toBeGreaterThanOrEqual(0);
+    await page.setViewportSize(PHONE);
+    await settings.tap();
+    const sheet = page.getByRole("dialog", { name: "Settings" });
+    await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.x + box.width); }, { message: "the sheet unfolds from that corner's side" }).toBe(PHONE.width);
+  });
+
   test("every reach control fits the screen at the touch minimum, clear of the gesture edges", async ({ page }) => {
     const sounding = await avatarWithSound();
     await installProbe(page);
@@ -284,6 +320,13 @@ test.describe("phone by touch", () => {
     const controls = card.locator(".portal-controls");
     const play = controls.getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) });
     const restingPlay = (await play.boundingBox())!;
+    // Folded, the line above Play waits in place: it slides in, except under reduced motion, where it only fades (8.3).
+    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "stacked");
+    const foldedShift = () => controls.locator(".portal-controls-after").evaluate((node) => getComputedStyle(node).transform);
+    expect(await foldedShift(), "folded, the line sits a gap lower").not.toBe("none");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(foldedShift, { message: "under reduced motion it does not move", timeout: 2000 }).toBe("none");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
     await card.locator(".feed-card-portal").tap({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
     await expect(controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }), "a take with a voice has its sound control").toHaveCount(1);
@@ -322,6 +365,9 @@ test.describe("phone by touch", () => {
     expect(line.box.y + line.box.height, "the row ends above 75% down").toBeLessThanOrEqual(PHONE.height * 0.75);
 
     // Looking around, moved in: the row is over the hologram's own picture, so it and the reach line take the chip, and Return joins Play.
+    // The row folds 4 s after the last touch, so reach for it again before pressing Free.
+    await card.locator(".feed-card-portal").tap({ force: true });
+    await expect(controls).toHaveAttribute("data-reach", "shown");
     await controls.getByRole("button", { name: "Free" }).tap();
     const portalBox = (await card.locator(".feed-card-portal").boundingBox())!;
     const cdp = await page.context().newCDPSession(page);
@@ -338,6 +384,25 @@ test.describe("phone by touch", () => {
     expect(overPicture).not.toBe("rgba(0, 0, 0, 0)");
     const freePlay = (await play.boundingBox())!;
     expect(Math.abs(freePlay.x + freePlay.width / 2 - PHONE.width / 2), "Play still holds the middle beside Return").toBeLessThan(2);
+    // The chip hugs what shows: from its edge to the first and last mark on it alike, reached and folded.
+    const chipEnds = () => chip.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const row = node.querySelector<HTMLElement>(".portal-controls")!;
+      const marks = [...row.querySelectorAll(".portal-timecode, button svg")].filter((mark) => {
+        const folded = mark.closest(".portal-controls-reach");
+        return !folded || (row.dataset.reach === "shown" && getComputedStyle(folded).position !== "absolute");
+      }).map((mark) => mark.getBoundingClientRect());
+      return { start: Math.min(...marks.map((mark) => mark.left)) - box.left, end: box.right - Math.max(...marks.map((mark) => mark.right)) };
+    });
+    // Read once the unfolding has run; a loaded runner draws it late.
+    const endsApart = async () => {
+      const ends = await chipEnds();
+      return Math.abs(ends.start - ends.end);
+    };
+    await expect.poll(endsApart, { message: "reached, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
+    await expect(controls).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
+    await expect.poll(endsApart, { message: "folded, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
+    expect(Math.abs((await play.boundingBox())!.x + freePlay.width / 2 - PHONE.width / 2), "folded, Play still holds the middle").toBeLessThan(2);
     for (const button of await controls.locator("button").all()) {
       const box = (await button.boundingBox())!;
       expect(box.x + box.width, "clear of the right back-swipe edge").toBeLessThanOrEqual(PHONE.width - side + 0.5);

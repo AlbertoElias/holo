@@ -9,7 +9,8 @@ import { TRUE_SCALE, fitCloche, type ClocheShape } from "@holoim/xr-ui-core";
 
 
 import { drawnPoints, motionPoints, recordedBubble } from "../hologram/drawnPoints";
-import { boundsWithoutObjects, normalizeSceneAtOrigin, rankClipsForPlayback } from "../hologram/hologramScene";
+import { boundsWithoutObjects, normalizeSceneAtOrigin } from "../hologram/hologramScene";
+import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipStatus } from "../hologram/useSphereClipping";
@@ -739,9 +740,9 @@ export function ARHologramModel({
       return;
     }
 
-    const rankedActions = rankClipsForPlayback(allActions.map((action) => action.getClip()))
-      .map((clip) => allActions.find((action) => action.getClip() === clip))
-      .filter((action): action is AnimationAction => Boolean(action));
+    const rankedActions = allActions
+      .slice()
+      .sort((a, b) => compareTakeClips(a.getClip(), b.getClip()));
 
     const primaryAction = rankedActions[0];
     if (!primaryAction) {
@@ -753,7 +754,7 @@ export function ARHologramModel({
     primaryAction.enabled = true;
     primaryAction.setLoop(LoopRepeat, Infinity);
     primaryAction.clampWhenFinished = false;
-    primaryAction.setEffectiveWeight(1);
+    primaryAction.setEffectiveWeight(TAKE_CLIP_WEIGHT.primary);
     primaryAction.setEffectiveTimeScale(HOLOGRAM_ANIMATION_SPEED);
     primaryAction.play();
 
@@ -762,7 +763,7 @@ export function ARHologramModel({
       action.enabled = true;
       action.setLoop(LoopRepeat, Infinity);
       action.clampWhenFinished = false;
-      action.setEffectiveWeight(0.35);
+      action.setEffectiveWeight(TAKE_CLIP_WEIGHT.secondary);
       action.setEffectiveTimeScale(HOLOGRAM_ANIMATION_SPEED);
       action.play();
     });
