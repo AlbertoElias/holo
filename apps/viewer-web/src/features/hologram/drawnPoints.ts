@@ -3,8 +3,10 @@
 // chrome, kept to the bubble when the take has one, and the author's bones
 // through the take, so a walk stays under the dome.
 import { isInChrome } from "@holoim/xr-ui-core";
-import { Matrix4, Sphere, Vector3 } from "three";
-import type { AnimationMixer, Bone, Mesh, Object3D, SkinnedMesh } from "three";
+import { AnimationMixer, LoopRepeat, Matrix4, Sphere, Vector3 } from "three";
+
+import { compareTakeClips, TAKE_CLIP_WEIGHT } from "./takePlayback";
+import type { AnimationClip, Bone, Mesh, Object3D, SkinnedMesh } from "three";
 
 const BUBBLE_MESH_NAME = "RecordedBubbleSphere";
 /** Enough points per mesh to find its extent, without walking every vertex of a dense scene. */
@@ -74,16 +76,21 @@ export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D
  * driven by bones), kept to `bubble` when there is one. With `anchor` (a
  * bubble that follows its author), each sample is taken relative to where
  * the anchor is then, and put back where it is now: the dome travels with the
- * bubble, so only the author's reach inside it matters. Puts the mixer back
- * where it was.
+ * bubble, so only the author's reach inside it matters.
+ *
+ * The clips play together on a mixer of their own, ranked and weighted as
+ * the viewer plays them, so a clip on a child bone stacks on its parent's as
+ * it does on screen; a viewer's paused or stopped playback cannot freeze the
+ * samples at one time, and its playback is never touched. Stopping that
+ * mixer puts the pose back as it was.
  */
 export function motionPoints(
   root: Object3D,
-  mixer: AnimationMixer,
-  duration: number,
+  clips: readonly AnimationClip[],
   { into, anchor, bubble = null }: { into?: Object3D | undefined; anchor?: Object3D | undefined; bubble?: DrawnBubble } = {}
 ): Vector3[] {
-  if (!(duration > 0)) return [];
+  const played = clips.filter((clip) => clip.duration > 0);
+  if (played.length === 0) return [];
   const bones: Bone[] = [];
   const meshes: Mesh[] = [];
   root.traverse((child) => {
@@ -96,7 +103,6 @@ export function motionPoints(
   root.updateWorldMatrix(true, true);
   const anchorNow = anchor?.getWorldPosition(new Vector3()) ?? null;
   const anchorThen = new Vector3();
-  const startedAt = mixer.time;
   const firstMatrices = new Map<Mesh, Matrix4>();
   const corner = new Vector3();
   const place = (point: Vector3) => {
@@ -104,8 +110,7 @@ export function motionPoints(
     if (space) point.applyMatrix4(space);
     return point;
   };
-  for (let sample = 0; sample < MOTION_SAMPLES; sample += 1) {
-    mixer.setTime((duration * sample) / MOTION_SAMPLES);
+  const readSample = () => {
     root.updateWorldMatrix(true, true);
     if (anchor && anchorNow) anchor.getWorldPosition(anchorThen);
     let top: Vector3 | null = null;
@@ -132,8 +137,19 @@ export function motionPoints(
         points.push(point);
       }
     }
+  };
+  const sampler = new AnimationMixer(root);
+  played.sort(compareTakeClips).forEach((clip, index) => {
+    const weight = index === 0 ? TAKE_CLIP_WEIGHT.primary : TAKE_CLIP_WEIGHT.secondary;
+    sampler.clipAction(clip).setLoop(LoopRepeat, Infinity).setEffectiveWeight(weight).play();
+  });
+  const span = Math.max(...played.map((clip) => clip.duration));
+  for (let sample = 0; sample < MOTION_SAMPLES; sample += 1) {
+    sampler.setTime((span * sample) / MOTION_SAMPLES);
+    readSample();
   }
-  mixer.setTime(startedAt);
+  sampler.stopAllAction();
+  sampler.uncacheRoot(root);
   root.updateWorldMatrix(true, true);
   return points;
 }

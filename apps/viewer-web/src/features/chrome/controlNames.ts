@@ -15,6 +15,7 @@ export const VIEWER_CONTROL_NAMES = {
   soundOn: "Unmute audio",
   soundOff: "Mute audio",
   openUpload: "Upload a hologram",
+  openSettings: "Settings",
   submitUpload: "Upload",
   retry: "Try again",
   exitAr: "Exit AR",

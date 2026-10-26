@@ -41,9 +41,16 @@ describe("hit area (6.1): a glyph's box is the larger of its drawing and the inp
     expect(button.style.minHeight).toBe(`${expected}px`);
   });
 
-  it("takes the input from a coarse pointer when none is given, and mouse when matchMedia is missing", () => {
+  it("takes touch wherever a coarse pointer exists when none is given, and mouse when matchMedia is missing", () => {
     vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)", addEventListener() {}, removeEventListener() {} }));
     expect(press("free").button.style.minWidth).toBe("44px");
+    // A touch laptop: the primary pointer is fine, but a finger can still press.
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(any-pointer: coarse)", addEventListener() {}, removeEventListener() {} }));
+    document.body.innerHTML = "";
+    expect(press("free").button.style.minWidth, "a touch screen beside a mouse gets the touch minimum").toBe("44px");
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: fine)" || query === "(any-pointer: fine)", addEventListener() {}, removeEventListener() {} }));
+    document.body.innerHTML = "";
+    expect(press("free").button.style.minWidth, "a mouse alone keeps the mouse minimum").toBe("24px");
     vi.unstubAllGlobals();
     // jsdom has no matchMedia.
     expect(typeof window.matchMedia).toBe("undefined");

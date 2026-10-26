@@ -1,6 +1,6 @@
 import type { Handedness } from '@holoim/xr-ui-core';
 import type { AppMode, UiViewModel } from '../types/contracts';
-import { loadHandedness } from './handedness';
+import { loadHandedness } from '@holoim/ui-dom';
 
 /** How long a Halo action's notice stays (slice 5 build plan). */
 const NOTICE_MS = 1500;

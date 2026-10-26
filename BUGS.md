@@ -7,6 +7,23 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-022 — Quick Look conversions fail while production's shared CPU is throttled
+
+- **Area:** `apps/viewer-api` USDZ worker and `rebuild:usdz` (`glb_to_usdz.py`'s 100 s alarm, the converter's 120 s limit)
+- **Severity:** P2
+- **Observed:** 2026-10-25, during the production ql3 rebuild
+- **Evidence:** after a few minutes of sustained conversion and inspection
+  on `holoim-api` (shared-cpu-2x), the long take `cmvmig68e0000oejsj9pd83rz`
+  converted past 100 s three times (12.6 s on a laptop) and its inspection
+  ran past 900 s (75 s on a laptop): Fly's shared CPU drops to its baseline
+  once the burst balance is spent. The record went to `failed`, so Quick
+  Look returned 202 until a later request re-queued it on a recovered CPU.
+- **Expected:** a conversion that fails only because the CPU is slow is
+  retried later, not marked failed; or the limits follow the work.
+- **Reproduction:** drain the burst balance (several conversions in a row,
+  or the rebuild with both inspections), then request
+  `/api/holograms/<id>/usdz` for a long take whose preview is not current.
+
 ### B-020 — Capture's height check is not repeatable
 
 - **Area:** `apps/capture` XR checks (`test:xr:height`)

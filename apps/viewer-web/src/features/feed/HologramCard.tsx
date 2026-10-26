@@ -1,12 +1,12 @@
 import { useGLTF } from "@react-three/drei";
-import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { HologramDTO } from "@holoim/contracts";
 import { tokens } from "@holoim/design-tokens";
 import { Chip, GlyphControl, Type, useReducedMotion } from "@holoim/ui-dom";
-import { flatGroundColorAt, relativeLuminance, type ViewTarget } from "@holoim/xr-ui-core";
+import { controlRowPaddingApx, flatGroundColorAt, relativeLuminance, type ViewTarget } from "@holoim/xr-ui-core";
 import { readXrCapabilities } from "@holoim/xr-runtime";
 
 import { isIOSDevice } from "../ar/isIOSDevice";
@@ -109,6 +109,48 @@ function useReach(cardRef: React.RefObject<HTMLElement | null>): boolean {
   return reached;
 }
 
+type ReachRow = "beside" | "stacked";
+
+/**
+ * Whether the reach controls fit beside Play at the input's hit size (1.2,
+ * 6.1), or unfold above it on a chip of their own: on a touch phone a take
+ * with sound already runs into the back-swipe edge. Play holds the middle
+ * and never moves either way.
+ */
+function useReachRow(footRef: React.RefObject<HTMLElement | null>): ReachRow {
+  const [row, setRow] = useState<ReachRow>("beside");
+  useLayoutEffect(() => {
+    const foot = footRef.current;
+    if (!foot || typeof ResizeObserver === "undefined") return undefined;
+    const resized = new ResizeObserver(() => measure());
+    const measure = () => {
+      const play = foot.querySelector<HTMLElement>(".portal-controls-row");
+      const side = foot.querySelector<HTMLElement>(".portal-controls-side");
+      const reach = foot.querySelector<HTMLElement>(".portal-controls-after-inner");
+      if (!play || !side || !reach) return;
+      resized.observe(reach);
+      const gap = parseFloat(getComputedStyle(side).columnGap) || 0;
+      // Return stays beside Play in Free; the reach controls follow it.
+      const alwaysBeside = [...side.children].filter((child) => !child.classList.contains("portal-controls-after"));
+      const needed = alwaysBeside.reduce((width, child) => width + child.getBoundingClientRect().width + gap, 0) + reach.scrollWidth;
+      const chip = play.closest<HTMLElement>(".feed-card-foot-chip");
+      const chipEnd = chip ? parseFloat(getComputedStyle(chip).paddingInlineEnd) || 0 : 0;
+      const room = foot.clientWidth / 2 - play.getBoundingClientRect().width / 2 - gap - chipEnd;
+      setRow(needed > room ? "stacked" : "beside");
+    };
+    // The controls mount once the model can render, and Return, sound and AR come and go.
+    const mutated = new MutationObserver(measure);
+    resized.observe(foot);
+    mutated.observe(foot, { childList: true, subtree: true });
+    measure();
+    return () => {
+      resized.disconnect();
+      mutated.disconnect();
+    };
+  }, [footRef]);
+  return row;
+}
+
 function formatByline(item: HologramDTO): string {
   return `By ${item.submittedBy} · ${new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
 }
@@ -135,6 +177,8 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const portalRef = useRef<HTMLDivElement>(null);
   const portalBox = useElementBox(portalRef);
   const reached = useReach(cardRef);
+  const footRef = useRef<HTMLDivElement>(null);
+  const reachRow = useReachRow(footRef);
   const portal = useMemo(() => createPortalStore(), []);
   const portalVariant = useMemo(() => readPortalVariant(), []);
   const portalTriggers = PORTAL_VARIANTS[portalVariant];
@@ -323,10 +367,11 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
 
       <div ref={portalRef} className="feed-card-portal" aria-hidden="true" />
 
-      <div className="feed-card-foot">
+      <div ref={footRef} className="feed-card-foot" data-reach-row={reachRow}>
         {portalOpen > 0 ? (
           // Over the hologram's own picture, text always takes the chip (5.2).
-          <Chip className="feed-card-foot-chip" target={target} overPicture controlRow>{controls}</Chip>
+          // Play holds the middle of the row, so the chip pads both ends alike (the row's own padding is for Play at the start).
+          <Chip className="feed-card-foot-chip" target={target} overPicture controlRow style={{ paddingInlineStart: controlRowPaddingApx(target).end }}>{controls}</Chip>
         ) : controls}
       </div>
     </article>

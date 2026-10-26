@@ -188,6 +188,14 @@ export const tokens = {
         embers: 800,
         emberScale: 0.7,
         emberGlow: 1
+      },
+      colors: {
+        glow: '#ff6f22',
+        core: '#ff932b',
+        highlight: '#ffe59f',
+        char: '#250902',
+        ember: '#8a0d01',
+        shade: '#010303'
       }
     }
   },
@@ -209,6 +217,10 @@ export const tokens = {
       focusRingOffset: 3,
       focusRingColor: '#ffc872',
       pressedOpacity: 0.55
+    },
+    lantern: {
+      fill: '#081a1e',
+      ink: '#081a1e'
     },
     path: {
       play: {

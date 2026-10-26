@@ -9,6 +9,7 @@ import { TRUE_SCALE, fitCloche, type ClocheShape } from "@holoim/xr-ui-core";
 
 
 import { drawnPoints, motionPoints, recordedBubble } from "../hologram/drawnPoints";
+import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { useSphereClipping } from "../hologram/useSphereClipping";
@@ -532,9 +533,8 @@ export function ARHologramModel({
     if (clocheFitted.current || !group || !clocheChrome) return;
     clocheFitted.current = true;
     const bubble = recordedBubble(clonedScene, group);
-    const duration = Math.max(0, ...arAnimations.map((clip) => clip.duration));
     // In AR the bubble stays put, so the author's whole walk is inside it.
-    const points = [...drawnPoints(clonedScene, bubble, group), ...motionPoints(clonedScene, mixer, duration, { into: group, bubble })];
+    const points = [...drawnPoints(clonedScene, bubble, group), ...motionPoints(clonedScene, arAnimations, { into: group, bubble })];
     const shape = fitCloche(points);
     if (!shape) return;
     // The cloche is the bubble's look now; the recorded sphere's old glass is not drawn.
@@ -772,24 +772,7 @@ export function ARHologramModel({
 
     const rankedActions = allActions
       .slice()
-      .sort((a, b) => {
-        const aName = a.getClip().name.toLowerCase();
-        const bName = b.getClip().name.toLowerCase();
-        const motionTerms = ["body", "move", "walk", "run", "idle", "anim", "record"];
-        const aHasMotionName = motionTerms.some((term) => aName.includes(term)) ? 1 : 0;
-        const bHasMotionName = motionTerms.some((term) => bName.includes(term)) ? 1 : 0;
-        if (bHasMotionName !== aHasMotionName) {
-          return bHasMotionName - aHasMotionName;
-        }
-
-        const aTracks = a.getClip().tracks.length;
-        const bTracks = b.getClip().tracks.length;
-        if (bTracks !== aTracks) {
-          return bTracks - aTracks;
-        }
-
-        return b.getClip().duration - a.getClip().duration;
-      });
+      .sort((a, b) => compareTakeClips(a.getClip(), b.getClip()));
 
     const primaryAction = rankedActions[0];
     if (!primaryAction) {
@@ -801,7 +784,7 @@ export function ARHologramModel({
     primaryAction.enabled = true;
     primaryAction.setLoop(LoopRepeat, Infinity);
     primaryAction.clampWhenFinished = false;
-    primaryAction.setEffectiveWeight(1);
+    primaryAction.setEffectiveWeight(TAKE_CLIP_WEIGHT.primary);
     primaryAction.setEffectiveTimeScale(HOLOGRAM_ANIMATION_SPEED);
     primaryAction.play();
 
@@ -810,7 +793,7 @@ export function ARHologramModel({
       action.enabled = true;
       action.setLoop(LoopRepeat, Infinity);
       action.clampWhenFinished = false;
-      action.setEffectiveWeight(0.35);
+      action.setEffectiveWeight(TAKE_CLIP_WEIGHT.secondary);
       action.setEffectiveTimeScale(HOLOGRAM_ANIMATION_SPEED);
       action.play();
     });

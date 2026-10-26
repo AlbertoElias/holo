@@ -7,10 +7,12 @@ import {
   LoopRepeat,
   MathUtils,
   PerspectiveCamera,
+  Raycaster,
   SRGBColorSpace,
+  Vector2,
   Vector3
 } from "three";
-import type { AnimationAction, Mesh, Object3D, PointLight } from "three";
+import type { AnimationAction, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
 import { tokens } from "@holoim/design-tokens";
 import { clocheFollowDirection, clocheFraming, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
 import { Cloche } from "@holoim/xr-ui-r3f";
@@ -20,11 +22,12 @@ import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
 import { drawnPoints, motionPoints } from "../hologram/drawnPoints";
+import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
 import { readMeaningLinks } from "../meaning/meaningLinks";
 import type { MeaningGltf } from "../meaning/meaningLinks";
-import { readRecordedObjects } from "../objects/recordedObjects";
+import { isInsideRecordedObject, readRecordedObjects } from "../objects/recordedObjects";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
 import { INSIDE_DISTANCE, anglesFromPose, freeCameraPose } from "../portal/portalStore";
 import type { PortalStore } from "../portal/portalStore";
@@ -224,10 +227,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   const framingRef = useRef<{ key: string; framing: ClocheFraming } | null>(null);
   const fitClocheNow = useCallback(() => {
     const bubble = sphereClip.active && sphereClip.radius > 0 ? { center: sphereClip.center.clone(), radius: sphereClip.radius } : null;
-    const duration = Math.max(0, ...animations.map((clip) => clip.duration));
     // A bubble follows its author, so the walk is read relative to it: the author's full reach, not their path.
     const anchor = bubble ? clonedScene.getObjectByName("RecordedBubbleSphere") ?? undefined : undefined;
-    const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, mixer, duration, { anchor, bubble })];
+    const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble })];
     const shape = fitCloche(points);
     if (!shape) return;
     fittedCentre.current = bubble ? bubble.center : null;
@@ -237,7 +239,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     clonedScene.traverse((child) => {
       if (child.name === "RecordedBubbleSphere") child.visible = false;
     });
-  }, [animations, clonedScene, mixer, sphereClip]);
+  }, [animations, clonedScene, sphereClip]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -245,6 +247,47 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
       observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, objects: recordedObjects });
     }
   }, [actions, camera, clonedScene, mixer, pointingProbe, portal, recordedObjects, renderScene, renderer, sphereClip, url]);
+
+  // The wheel zooms only over the hologram itself (usePortalTriggers): a
+  // visible mesh of the recording, not chrome, not clipped away by its
+  // bubble (recorded objects are never clipped). From inside the bubble
+  // everything in view is the hologram.
+  useEffect(() => {
+    const raycaster = new Raycaster();
+    const ndc = new Vector2();
+    const drawn = (object: Object3D | null): boolean => {
+      for (let node = object; node; node = node.parent) {
+        if (!node.visible || node.userData.holoimChrome === true) return false;
+      }
+      return true;
+    };
+    const hitTest = (clientX: number, clientY: number) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return false;
+      const bubble = sphereClip.active && sphereClip.radius > 0 ? sphereClip : null;
+      if (bubble && camera.position.distanceTo(bubble.center) < bubble.radius) return true;
+      // A skinned mesh caches its bounds on its first raycast; a body that
+      // has since walked out of them would be missed, so pose them now.
+      clonedScene.traverse((node) => {
+        const skinned = node as SkinnedMesh;
+        if (!skinned.isSkinnedMesh) return;
+        skinned.computeBoundingSphere();
+        if (skinned.boundingBox) skinned.computeBoundingBox();
+      });
+      raycaster.setFromCamera(ndc, camera);
+      return raycaster.intersectObject(clonedScene, true).some((hit) => (
+        (hit.object as Mesh).isMesh === true
+        && drawn(hit.object)
+        && (!bubble || isInsideRecordedObject(hit.object) || hit.point.distanceTo(bubble.center) <= bubble.radius)
+      ));
+    };
+    portal.runtime.hitTest = hitTest;
+    return () => {
+      if (portal.runtime.hitTest === hitTest) portal.runtime.hitTest = null;
+    };
+  }, [camera, clonedScene, portal, renderer, sphereClip]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {
@@ -384,24 +427,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
 
     const rankedActions = allActions
       .slice()
-      .sort((a, b) => {
-        const aName = a.getClip().name.toLowerCase();
-        const bName = b.getClip().name.toLowerCase();
-        const motionTerms = ["body", "move", "walk", "run", "idle", "anim", "record"];
-        const aHasMotionName = motionTerms.some((term) => aName.includes(term)) ? 1 : 0;
-        const bHasMotionName = motionTerms.some((term) => bName.includes(term)) ? 1 : 0;
-        if (bHasMotionName !== aHasMotionName) {
-          return bHasMotionName - aHasMotionName;
-        }
-
-        const aTracks = a.getClip().tracks.length;
-        const bTracks = b.getClip().tracks.length;
-        if (bTracks !== aTracks) {
-          return bTracks - aTracks;
-        }
-
-        return b.getClip().duration - a.getClip().duration;
-      });
+      .sort((a, b) => compareTakeClips(a.getClip(), b.getClip()));
 
     const primaryAction = rankedActions[0];
     if (!primaryAction) {
@@ -414,7 +440,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     primaryAction.setLoop(LoopRepeat, Infinity);
     primaryAction.clampWhenFinished = false;
     const animSpeed = HOLOGRAM_ANIMATION_SPEED;
-    primaryAction.setEffectiveWeight(1);
+    primaryAction.setEffectiveWeight(TAKE_CLIP_WEIGHT.primary);
     primaryAction.setEffectiveTimeScale(animSpeed);
     primaryAction.play();
     primaryAction.paused = !active;
@@ -424,7 +450,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
       action.enabled = true;
       action.setLoop(LoopRepeat, Infinity);
       action.clampWhenFinished = false;
-      action.setEffectiveWeight(0.35);
+      action.setEffectiveWeight(TAKE_CLIP_WEIGHT.secondary);
       action.setEffectiveTimeScale(animSpeed);
       action.play();
       action.paused = !active;

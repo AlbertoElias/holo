@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,7 +10,7 @@ import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, VIEW
 
 import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 import { pinch } from "./ar-gestures";
-import { installProbe, scrollFeedToTop, waitForPortalReady } from "./portal-helpers";
+import { installProbe, readPortal, scrollFeedToTop, touchPinch, waitForPortalReady } from "./portal-helpers";
 
 // The viewer's pages in the redesigned look (docs/features/ui-redesign.md,
 // slice 3), on a mocked feed at desktop size and at 390 × 844, and the WebXR
@@ -165,6 +165,39 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
   });
 }
 
+test("desktop: the globe burns in its own deeper colours, not the chrome's, and blends them unconverted", async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  await openFeed(page);
+  await readCloche(page, first.url);
+  // The approved globe drew each chrome colour's linear values as sRGB; its
+  // own tokens hold what that put on screen (styleguide 3.4). A part that
+  // reads the chrome's token, or converts its own again, draws another colour.
+  const drawn = await page.evaluate((key) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { scene: Three.Scene }> }).__portalProbes;
+    const scene = probes[key]!.scene;
+    const hex = (colour: Three.Color) => "#" + [colour.r, colour.g, colour.b].map((value) => Math.round(value * 255).toString(16).padStart(2, "0")).join("");
+    const material = (name: string) => (scene.getObjectByName(name) as Three.Mesh<Three.BufferGeometry, Three.ShaderMaterial>).material;
+    const parts = ["cloche-shell", "cloche-embers", "cloche-sparks"].map((name) => {
+      const uniforms = material(name).uniforms;
+      return {
+        glow: hex(uniforms.uGlow!.value), core: hex(uniforms.uCore!.value), highlight: hex(uniforms.uHighlight!.value),
+        char: hex(uniforms.uChar!.value), ember: hex(uniforms.uEmber!.value)
+      };
+    });
+    const names = ["cloche-shell", "cloche-embers", "cloche-sparks", "cloche-shade"];
+    return {
+      parts,
+      shade: hex(material("cloche-shade").uniforms.uShade!.value),
+      converted: names.filter((name) => /colorspace_fragment|linearToOutputTexel|sRGBTransfer/.test(material(name).fragmentShader))
+    };
+  }, first.url);
+  const { glow, core, highlight, char, ember, shade } = tokens.edge.cloche.colors;
+  for (const part of drawn.parts) expect(part).toEqual({ glow, core, highlight, char, ember });
+  expect(drawn.shade).toBe(shade);
+  expect(core, "the globe's gold is not the chrome's").not.toBe(tokens.edge.core.color);
+  expect(drawn.converted, "no part converts its colours on output").toEqual([]);
+});
+
 test("phone: reduced motion holds the cloche still and keeps the controls", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize(PHONE);
@@ -179,6 +212,148 @@ test("phone: reduced motion holds the cloche still and keeps the controls", asyn
   // Reduced motion keeps only the slow resting fade (8.3), never the flicker's swing.
   expect(Math.abs(after.glow - before.glow), "no flicker in the glow").toBeLessThan(0.02);
   await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .portal-controls`).getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();
+});
+
+/** A tenth of a second of silence as a 16-bit mono WAV. */
+function silentWav(): Buffer {
+  const rate = 8000;
+  const samples = rate / 10;
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + samples * 2, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(rate, 24);
+  wav.writeUInt32LE(rate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(samples * 2, 40);
+  return wav;
+}
+
+/** The avatar with a KHR_audio track, as a capture with a voice exports it, so the card shows its sound control. */
+async function avatarWithSound(): Promise<Buffer> {
+  const glb = await readFile(avatarGlb);
+  const jsonLength = glb.readUInt32LE(12);
+  const json = JSON.parse(glb.subarray(20, 20 + jsonLength).toString("utf8")) as {
+    buffers: { byteLength: number }[];
+    bufferViews: { buffer: number; byteOffset: number; byteLength: number }[];
+    extensions?: Record<string, unknown>;
+    extensionsUsed?: string[];
+  };
+  const binStart = 20 + jsonLength + 8;
+  const bin = glb.subarray(binStart, binStart + glb.readUInt32LE(20 + jsonLength));
+  const wav = silentWav();
+  json.bufferViews.push({ buffer: 0, byteOffset: bin.length, byteLength: wav.length });
+  json.extensions = { ...json.extensions, KHR_audio: { audio: [{ bufferView: json.bufferViews.length - 1, mimeType: "audio/wav" }], sources: [{ audio: 0, loop: true }] } };
+  json.extensionsUsed = [...(json.extensionsUsed ?? []), "KHR_audio"];
+  const pad = (bytes: Buffer, fill: number) => Buffer.concat([bytes, Buffer.alloc((4 - (bytes.length % 4)) % 4, fill)]);
+  const newBin = pad(Buffer.concat([bin, wav]), 0);
+  json.buffers[0]!.byteLength = newBin.length;
+  const newJson = pad(Buffer.from(JSON.stringify(json)), 0x20);
+  const header = Buffer.alloc(12);
+  header.write("glTF", 0);
+  header.writeUInt32LE(2, 4);
+  header.writeUInt32LE(12 + 8 + newJson.length + 8 + newBin.length, 8);
+  const chunk = (type: number, body: Buffer) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32LE(body.length, 0);
+    head.writeUInt32LE(type, 4);
+    return Buffer.concat([head, body]);
+  };
+  return Buffer.concat([header, chunk(0x4e4f534a, newJson), chunk(0x004e4942, newBin)]);
+}
+
+test.describe("phone by touch", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
+
+  test("every reach control fits the screen at the touch minimum, clear of the gesture edges", async ({ page }) => {
+    const sounding = await avatarWithSound();
+    await installProbe(page);
+    await mockFeed(page);
+    await page.route(`**${first.url}`, (route) => route.fulfill({ body: sounding, contentType: "model/gltf-binary" }));
+    await page.goto("/");
+    await assertViewerShell(page);
+    await waitForPortalReady(page, first.id, first.url);
+    await scrollFeedToTop(page);
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches), "a touch phone has a coarse pointer").toBe(true);
+    const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+    const controls = card.locator(".portal-controls");
+    const play = controls.getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) });
+    const restingPlay = (await play.boundingBox())!;
+    // Folded, the line above Play waits in place: it slides in, except under reduced motion, where it only fades (8.3).
+    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "stacked");
+    const foldedShift = () => controls.locator(".portal-controls-after").evaluate((node) => getComputedStyle(node).transform);
+    expect(await foldedShift(), "folded, the line sits a gap lower").not.toBe("none");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(foldedShift, { message: "under reduced motion it does not move", timeout: 2000 }).toBe("none");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await card.locator(".feed-card-portal").tap({ force: true });
+    await expect(controls).toHaveAttribute("data-reach", "shown");
+    await expect(controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }), "a take with a voice has its sound control").toHaveCount(1);
+    await page.waitForTimeout(400);
+    await shot(page, "phone-touch-feed-reached");
+    const boxes = await controls.evaluate((row) =>
+      [...row.querySelectorAll("button")].map((button) => ({ name: button.getAttribute("aria-label"), ...button.getBoundingClientRect().toJSON() as DOMRect }))
+    );
+    expect(boxes.length, "the reach row shows more than Play").toBeGreaterThan(2);
+    const { side, bottom } = { side: tokens.hit.phoneSideEdge, bottom: tokens.hit.phoneHomeBar };
+    for (const box of boxes) {
+      expect(box.width, `${box.name}: the touch minimum`).toBeGreaterThanOrEqual(hitAreaApx("touch", 0) - 0.5);
+      expect(box.height, `${box.name}: the touch minimum`).toBeGreaterThanOrEqual(hitAreaApx("touch", 0) - 0.5);
+      expect(box.x, `${box.name}: clear of the left back-swipe edge`).toBeGreaterThanOrEqual(side - 0.5);
+      expect(box.x + box.width, `${box.name}: clear of the right back-swipe edge`).toBeLessThanOrEqual(PHONE.width - side + 0.5);
+      expect(box.y + box.height, `${box.name}: clear of the home bar`).toBeLessThanOrEqual(PHONE.height - bottom + 0.5);
+    }
+    for (const a of boxes) {
+      for (const b of boxes) {
+        if (a === b) continue;
+        const apart = a.x + a.width <= b.x + 0.5 || b.x + b.width <= a.x + 0.5 || a.y + a.height <= b.y + 0.5 || b.y + b.height <= a.y + 0.5;
+        expect(apart, `${a.name} and ${b.name} do not overlap`).toBe(true);
+      }
+    }
+    // Too many for one row beside Play, so they unfold above it, on the chip, and Play holds still.
+    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "stacked");
+    const reachedPlay = (await play.boundingBox())!;
+    expect(Math.abs(reachedPlay.x - restingPlay.x) + Math.abs(reachedPlay.y - restingPlay.y), "Play does not move").toBeLessThan(1);
+    expect(Math.abs(reachedPlay.x + reachedPlay.width / 2 - PHONE.width / 2), "Play holds the middle").toBeLessThan(2);
+    const line = await controls.locator(".portal-controls-after").evaluate((node) => ({ box: node.getBoundingClientRect().toJSON() as DOMRect, background: getComputedStyle(node).backgroundColor }));
+    expect(line.box.y + line.box.height, "the reach line is above Play").toBeLessThanOrEqual(reachedPlay.y);
+    // Over the picture the row is on a chip and the reach line takes the same one; over the ground both are bare.
+    const chip = card.locator(".feed-card-foot-chip");
+    const chipBackground = (await chip.count()) > 0 ? await chip.evaluate((node) => getComputedStyle(node).backgroundColor) : "rgba(0, 0, 0, 0)";
+    expect(line.background, "the reach line is on the row's own surface").toBe(chipBackground);
+    expect(line.box.y + line.box.height, "the row ends above 75% down").toBeLessThanOrEqual(PHONE.height * 0.75);
+
+    // Looking around, moved in: the row is over the hologram's own picture, so it and the reach line take the chip, and Return joins Play.
+    // The row folds 4 s after the last touch, so reach for it again before pressing Free.
+    await card.locator(".feed-card-portal").tap({ force: true });
+    await expect(controls).toHaveAttribute("data-reach", "shown");
+    await controls.getByRole("button", { name: "Free" }).tap();
+    const portalBox = (await card.locator(".feed-card-portal").boundingBox())!;
+    const cdp = await page.context().newCDPSession(page);
+    await touchPinch(page, cdp, { x: portalBox.x + portalBox.width / 2, y: portalBox.y + portalBox.height / 2 }, 60, 260);
+    await expect.poll(async () => (await readPortal(page, first.url)).zoom).toBeLessThan(0.9);
+    await expect(chip).toHaveCount(1);
+    await card.locator(".feed-card-portal").tap({ force: true });
+    await expect(controls).toHaveAttribute("data-reach", "shown");
+    await expect(controls.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView })).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot(page, "phone-touch-free-reached");
+    const overPicture = await controls.locator(".portal-controls-after").evaluate((node) => getComputedStyle(node).backgroundColor);
+    expect(overPicture, "over the picture the reach line takes the same chip").toBe(await chip.evaluate((node) => getComputedStyle(node).backgroundColor));
+    expect(overPicture).not.toBe("rgba(0, 0, 0, 0)");
+    const freePlay = (await play.boundingBox())!;
+    expect(Math.abs(freePlay.x + freePlay.width / 2 - PHONE.width / 2), "Play still holds the middle beside Return").toBeLessThan(2);
+    for (const button of await controls.locator("button").all()) {
+      const box = (await button.boundingBox())!;
+      expect(box.x + box.width, "clear of the right back-swipe edge").toBeLessThanOrEqual(PHONE.width - side + 0.5);
+      expect(box.x).toBeGreaterThanOrEqual(side - 0.5);
+    }
+  });
 });
 
 // The server error is the case under test, so the browser's own line for the
@@ -214,7 +389,10 @@ plainTest("phone: feed-wide notices sit on the chip", async ({ page }) => {
   await expect(page.locator('[data-notice="offline"]')).toBeVisible();
   await shot(page, "phone-notice-offline");
   await page.context().setOffline(false);
-  expect(runtimeErrors, "viewer runtime errors").toEqual([]);
+  // The reload and going offline cut IWER's room off its CDN mid-load: the
+  // test's own doing, not the viewer's.
+  const cutOff = /^console\.error: Error loading environment \S+ from CDN TypeError: Failed to fetch/;
+  expect(runtimeErrors.filter((entry) => !cutOff.test(entry)), "viewer runtime errors").toEqual([]);
 });
 
 // ── The WebXR AR route under IWER (a Quest 3 in emulation) ──
@@ -253,6 +431,39 @@ async function selectInRoom(page: Page, label: string): Promise<void> {
   await page.evaluate(() => (window as unknown as { IWER_DEVICE: IwerDevice }).IWER_DEVICE.controllers.right.updateButtonValue("trigger", 0));
   await page.waitForTimeout(150);
 }
+
+test("left-handed, set in the feed's settings: kept on this device, and AR puts Exit on the right wrist", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 640, height: 480 });
+  await page.addInitScript(() => {
+    (window as ArWindow).__HOLOIM_AR_TEST_OBSERVER__ = (value) => { (window as ArWindow).__arProbe = value; };
+  });
+  await mockFeed(page, [first]);
+  await observeFeedCardRenderer(page);
+  await page.goto("/");
+  await waitForFeedCardPresented(page);
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  const sheet = page.getByRole("dialog", { name: "Settings" });
+  await expect(sheet.getByRole("radio", { name: "Right-handed" }), "right-handed by default").toHaveAttribute("aria-checked", "true");
+  await sheet.getByRole("radio", { name: "Left-handed" }).click();
+  await expect(sheet.getByText("Left-handed: in a headset, Exit AR sits on your right wrist.")).toBeVisible();
+  await shot(page, "settings-left-handed");
+  await page.reload();
+  await waitForFeedCardPresented(page);
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" }).getByRole("radio", { name: "Left-handed" }), "kept across a reload").toHaveAttribute("aria-checked", "true");
+  await page.getByRole("dialog", { name: "Settings" }).getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
+
+  await pressViewInAr(page);
+  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
+  await page.waitForFunction(() => Boolean((window as ArWindow).__arProbe));
+  await expect.poll(() => page.evaluate(() => {
+    const scene = (window as ArWindow).__arProbe!.scene;
+    return { right: scene.getObjectByName("wrist-glyphs-right")?.visible ?? false, left: Boolean(scene.getObjectByName("wrist-glyphs-left")) };
+  }), { message: "Exit on the non-dominant (right) wrist, and none on the left" }).toEqual({ right: true, left: false });
+});
 
 test("AR: controls at the hologram's foot on the chip, Exit always reachable, true scale and a labelled rescale", async ({ page }) => {
   test.setTimeout(120_000);
