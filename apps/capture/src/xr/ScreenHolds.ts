@@ -29,7 +29,7 @@ export interface ScreenHoldSnapshot {
 
 interface Tracked {
   touch: ScreenTouch;
-  /** The finger's direction in the camera's own frame, taken at the touchdown: where it is on the screen. Null only when neither the touch event nor the camera had a pose then; the first step takes it. */
+  /** The finger's direction in the viewer's own frame, taken at the touchdown: where it is on the screen. Null when the viewer space was not ready then; the slop is then measured between world rays, without turn compensation. */
   baseline: THREE.Vector3 | null;
   /** Rays from touchdown until the hold delay passes; written all at once if it does, so the hold starts at the touch. */
   pending: AimPointSample[];
@@ -46,8 +46,9 @@ interface Tracked {
  * (`performance.now()`, as the phone's hold everywhere) and stays within
  * `TOUCH_HOLD_SLOP_APX` of where it began on the screen becomes a hold, and
  * the hold is backdated to the touch. The slop is measured on the screen:
- * the finger's ray direction in the camera's own frame at the start against
- * the same finger's now, projected through the XR camera, so walking or
+ * the finger's ray direction in the viewer's own frame at the start (turned
+ * back to world with the viewer's pose now) against the same finger's now,
+ * projected through the XR camera, so walking or
  * turning with the finger still on the glass does not cancel it. Once held it
  * lasts until the finger lifts, whatever the finger does (as the held-mode
  * machine's `held` phase).
@@ -62,7 +63,6 @@ interface Tracked {
 export class ScreenHolds {
   private tracked: Tracked | null = null;
   private readonly setInverse = new THREE.Matrix4();
-  private readonly cameraQuaternion = new THREE.Quaternion();
   private readonly localDirection = new THREE.Vector3();
   private readonly worldRay = new THREE.Ray();
 
@@ -71,7 +71,7 @@ export class ScreenHolds {
   snapshot(): ScreenHoldSnapshot {
     const t = this.tracked;
     if (!t) return { phase: 'none', slopApx: null };
-    return { phase: t.held ? 'held' : t.dead ? 'dead' : 'pending', slopApx: t.baseline ? Math.round(t.slopApx * 10) / 10 : null };
+    return { phase: t.held ? 'held' : t.dead ? 'dead' : 'pending', slopApx: Math.round(t.slopApx * 10) / 10 };
   }
 
   /** A finger went down (`ScreenInputSystem.onTouchStart`), at simulation time `timeSec`. */
@@ -80,8 +80,8 @@ export class ScreenHolds {
     if (touch.beganOnChrome || touch.pinched || !this.deps.isTakeOpen()) return;
     const first = this.sample(touch.downRay, timeSec);
     // Where the finger is on the screen, read from the touch event's own frame, whatever the camera did since it was last updated.
-    // Without it, the camera as the last frame left it: a turn since then would show as finger movement.
-    const baseline = touch.downViewDirection && isFiniteVector3Like(touch.downViewDirection) ? touch.downViewDirection.clone() : this.cameraFrameDirection(touch.downRay.direction);
+    // Null when the viewer space was not ready: no other pose pairs with the touchdown ray, so `step` falls back to the world rays.
+    const baseline = touch.downViewDirection && isFiniteVector3Like(touch.downViewDirection) ? touch.downViewDirection.clone() : null;
     this.tracked = { touch, baseline, pending: first ? [first] : [], held: false, dead: false, slopApx: 0 };
   }
 
@@ -119,20 +119,24 @@ export class ScreenHolds {
       return;
     }
     if (t.dead) return;
-    camera.getWorldQuaternion(this.cameraQuaternion);
-    if (!isFiniteQuaternionLike(this.cameraQuaternion)) return;
-    if (!t.baseline) {
-      t.baseline = ray.direction.clone().applyQuaternion(this.cameraQuaternion.clone().invert());
-    } else {
-      // Where the finger began, as the camera sees it now: its direction in the camera's frame at the start, turned with the camera.
-      this.worldRay.set(ray.origin, this.localDirection.copy(t.baseline).applyQuaternion(this.cameraQuaternion));
-      t.slopApx = screenDistancePx(this.worldRay, ray, camera, this.deps.viewport());
-      if (!Number.isFinite(t.slopApx)) return;
-      if (t.slopApx > TOUCH_HOLD_SLOP_APX) {
-        t.dead = true;
-        t.pending.length = 0;
-        return;
-      }
+    // The touchdown ray as it points now: turned with the viewer from its viewer-frame direction. The viewer, not the
+    // render camera: the spec lets a view sit rotated against the viewer, and the baseline is viewer-local.
+    // Without a viewer-frame baseline nothing turns with the viewer, so the touchdown world ray stands in and a turn
+    // reads as movement: failing closed (a cancelled hold), never a hold from a mixed pair of poses.
+    let from = t.touch.downRay;
+    if (t.baseline) {
+      const viewer = t.touch.viewerQuaternion;
+      // The viewer has no finite pose this step: no sample, as tracking lost.
+      if (!viewer || !isFiniteQuaternionLike(viewer)) return;
+      this.worldRay.set(ray.origin, this.localDirection.copy(t.baseline).applyQuaternion(viewer));
+      from = this.worldRay;
+    }
+    t.slopApx = screenDistancePx(from, ray, camera, this.deps.viewport());
+    if (!Number.isFinite(t.slopApx)) return;
+    if (t.slopApx > TOUCH_HOLD_SLOP_APX) {
+      t.dead = true;
+      t.pending.length = 0;
+      return;
     }
     const sample = this.sample(ray, timeSec);
     if (sample) t.pending.push(sample);
@@ -142,17 +146,6 @@ export class ScreenHolds {
     const store = this.deps.samples();
     for (const backdated of t.pending) store.recordAim(backdated);
     t.pending = [];
-  }
-
-  /** A world direction in the XR camera's own frame, or null when the camera has no finite pose. */
-  private cameraFrameDirection(direction: THREE.Vector3): THREE.Vector3 | null {
-    const camera = this.deps.xrCamera();
-    camera.updateMatrixWorld(true);
-    if (!camera.matrixWorld.elements.every(Number.isFinite)) return null;
-    camera.getWorldQuaternion(this.cameraQuaternion);
-    if (!isFiniteQuaternionLike(this.cameraQuaternion)) return null;
-    const local = direction.clone().applyQuaternion(this.cameraQuaternion.clone().invert());
-    return isFiniteVector3Like(local) ? local : null;
   }
 
   private write(ray: THREE.Ray, timeSec: number): void {

@@ -1,7 +1,7 @@
 import { createSystem } from "@iwsdk/core";
 import { createRayPointer, type Pointer } from "@pmndrs/pointer-events";
 import { isInChrome } from "@holoim/xr-ui-core";
-import { Matrix4, Object3D, Ray, Vector3, type Camera } from "three";
+import { Matrix4, Object3D, Quaternion, Ray, Vector3, type Camera } from "three";
 
 // Phone AR delivers screen taps as transient input sources (handedness
 // 'none', targetRayMode 'screen' or 'transient-pointer'). IWSDK's input
@@ -42,6 +42,15 @@ export interface ScreenTouch {
    * or the ray had no finite pose.
    */
   downViewDirection: Vector3 | null;
+  /**
+   * The viewer's world orientation, refreshed every animation frame while the
+   * finger is down, in place (the same frame and composition as `ray`). It
+   * turns `downViewDirection` back into a world direction without going
+   * through a render view, which the spec lets sit rotated against the viewer.
+   * Null before the first frame after the touchdown, and on a frame without a
+   * finite viewer pose.
+   */
+  viewerQuaternion: Quaternion | null;
   /**
    * Target ray in world space, refreshed every frame while the finger is down,
    * in place (clone it to keep one). A frame without a finite pose leaves the
@@ -115,6 +124,8 @@ export class ScreenInputSystem extends createSystem() {
   private downRay: Ray | null = null;
   private downHit = false;
   private readonly poseMatrix = new Matrix4();
+  private readonly scratchPosition = new Vector3();
+  private readonly scratchScale = new Vector3();
 
   init(): void {
     this.player.add(this.raySpace);
@@ -145,7 +156,10 @@ export class ScreenInputSystem extends createSystem() {
    * clock) calls it from the frame itself, so its steps read the latest ray.
    */
   refreshTouches(frame: XRFrame): void {
-    for (const touch of this.touches.values()) this.followTouch(frame, touch);
+    for (const touch of this.touches.values()) {
+      this.followTouch(frame, touch);
+      this.followViewer(frame, touch);
+    }
   }
 
   private updatePointer(frame: XRFrame): void {
@@ -233,9 +247,29 @@ export class ScreenInputSystem extends createSystem() {
     this.worldRay(frame, touch.source, touch.ray);
   }
 
+  /** Refreshes `viewerQuaternion` from an animation frame (`getViewerPose` is illegal on a touch event's frame, so only `refreshTouches` calls this). */
+  private followViewer(frame: XRFrame, touch: ScreenTouch): void {
+    const refSpace = this.xrManager.getReferenceSpace();
+    let pose: XRViewerPose | null | undefined;
+    try {
+      pose = refSpace ? frame.getViewerPose(refSpace) : undefined;
+    } catch {
+      // Not an animation frame (InvalidStateError): no viewer pose to read.
+    }
+    if (!pose || !isFiniteMatrix(pose.transform.matrix)) {
+      touch.viewerQuaternion = null;
+      return;
+    }
+    // Composed as `worldRay` composes the target ray: the pose, premultiplied by the player.
+    this.poseMatrix.fromArray(pose.transform.matrix).premultiply(this.player.matrixWorld);
+    const quaternion = touch.viewerQuaternion ?? new Quaternion();
+    this.poseMatrix.decompose(this.scratchPosition, quaternion, this.scratchScale);
+    touch.viewerQuaternion = quaternion;
+  }
+
   private beginTouch(frame: XRFrame, source: XRInputSource, extra: Pick<ScreenTouch, "downRay" | "beganOnChrome" | "hitObject">): void {
     const ray = extra.downRay.clone();
-    const touch: ScreenTouch = { source, downAt: performance.now(), ray, downViewDirection: this.viewDirection(frame, source), pinched: this.pinched, ...extra };
+    const touch: ScreenTouch = { source, downAt: performance.now(), ray, downViewDirection: this.viewDirection(frame, source), viewerQuaternion: null, pinched: this.pinched, ...extra };
     this.touches.set(source, touch);
     this.followTouch(frame, touch);
     this.onTouchStart?.(touch);

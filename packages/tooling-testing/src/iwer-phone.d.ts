@@ -13,3 +13,5 @@ export function phoneScreenPoint(page: Page, x: number, y: number, distance?: nu
 export function phoneDrag(page: Page, from: PhoneVec3, to: PhoneVec3, frames: number, holdMs?: number): Promise<void>;
 export function phonePinch(page: Page, centre: PhoneVec3, fromPx: number, toPx: number, frames: number): Promise<void>;
 export function setHeadPose(page: Page, position: PhoneVec3, quaternion: PhoneQuat): Promise<void>;
+export function phoneViewOffset(page: Page, yawDeg: number): Promise<void>;
+export function phoneViewerSpaceUnavailable(page: Page, unavailable: boolean): Promise<void>;

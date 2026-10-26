@@ -9,7 +9,12 @@
 //     `XRSession.interactionMode`). There is no public setter and the apps do
 //     not construct the device, so this patches that private state;
 //   - screen taps, holds, drags and pinches delivered as transient `screen`
-//     input sources inside XR frames.
+//     input sources inside XR frames. The event's frame is the spec's: its
+//     `getViewerPose` throws (InvalidStateError), as on any frame that is not
+//     an animation frame, so an app that calls it from a touch handler fails;
+//   - two faults an app must survive, off until asked for: a view rotated
+//     against the viewer (`phoneViewOffset`) and a viewer space with no pose
+//     relations (`phoneViewerSpaceUnavailable`).
 //
 // App-agnostic: the session comes from `IWER_DEVICE.activeSession` and the
 // finger's ray is computed from the device's own head pose and vertical fov,
@@ -29,6 +34,48 @@ export async function emulatePhone(page, options = {}) {
   await page.addInitScript('globalThis.__name = globalThis.__name || ((target) => target);');
   await page.addInitScript((interactionMode) => {
     let deviceValue;
+    // WebXR faults for the phone, installed once per page and inert until `phoneViewOffset` or
+    // `phoneViewerSpaceUnavailable` turns them on.
+    function patchWebXr() {
+      if (globalThis.__phoneWebXrPatched) return;
+      globalThis.__phoneWebXrPatched = true;
+      const viewerSpaces = new WeakSet();
+      const requestReferenceSpace = XRSession.prototype.requestReferenceSpace;
+      XRSession.prototype.requestReferenceSpace = function (type) {
+        return requestReferenceSpace.call(this, type).then((space) => {
+          if (type === 'viewer') viewerSpaces.add(space);
+          return space;
+        });
+      };
+      // The spec lets getPose return null when a relation cannot be determined.
+      const getPose = XRFrame.prototype.getPose;
+      XRFrame.prototype.getPose = function (space, baseSpace) {
+        if (globalThis.__phoneViewerSpaceUnavailable && viewerSpaces.has(baseSpace)) return null;
+        return getPose.call(this, space, baseSpace);
+      };
+      // The spec lets a view sit rotated against the viewer: each view's transform is the viewer's turned by
+      // the offset about the view's own up axis, with its projection and viewport unchanged.
+      const getViewerPose = XRFrame.prototype.getViewerPose;
+      XRFrame.prototype.getViewerPose = function (space) {
+        const pose = getViewerPose.call(this, space);
+        const yawDeg = globalThis.__phoneViewYawDeg;
+        if (!pose || !yawDeg) return pose;
+        const half = (yawDeg * Math.PI) / 360;
+        const b = { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) };
+        for (const view of pose.views) {
+          const { position: p, orientation: a } = view.transform;
+          const turned = {
+            x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+            y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+            z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+            w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
+          };
+          const transform = new XRRigidTransform({ x: p.x, y: p.y, z: p.z, w: 1 }, turned);
+          Object.defineProperty(view, 'transform', { value: transform, configurable: true });
+        }
+        return pose;
+      };
+    }
     Object.defineProperty(window, 'IWER_DEVICE', {
       configurable: true,
       get: () => deviceValue,
@@ -52,8 +99,26 @@ export async function emulatePhone(page, options = {}) {
           if (device.hands?.[side]) device.hands[side].connected = false;
         }
         const screenSources = [];
+        patchWebXr();
         const baseGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(device), 'inputSources').get;
         Object.defineProperty(device, 'inputSources', { get: () => [...baseGetter.call(device), ...screenSources] });
+
+        // The frame a touch event carries: everything of the animation frame, except `getViewerPose`, which the
+        // spec refuses on a frame that is not passed to a requestAnimationFrame callback. (IWER keeps the real
+        // frame's private state behind its methods, so they are bound to it.)
+        const eventFrame = (frame) =>
+          new Proxy(frame, {
+            get(target, key) {
+              if (key === 'getViewerPose') {
+                return () => {
+                  throw new DOMException('getViewerPose can only be called on XRFrame objects passed to XRSession.requestAnimationFrame callbacks.', 'InvalidStateError');
+                };
+              }
+              const value = Reflect.get(target, key, target);
+              return typeof value === 'function' ? value.bind(target) : value;
+            }
+          });
+        const touchEvent = (type, frame, source) => new EventCtor(type, { frame: eventFrame(frame), inputSource: source });
 
         const frameOf = (session, inFrame) =>
           new Promise((resolve) =>
@@ -159,7 +224,7 @@ export async function emulatePhone(page, options = {}) {
           const place = (point) => (lockedAt ? fromViewerSpace(lockedAt) : point);
           screenSources.push(finger.source);
           await frameOf(session);
-          await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
+          await frameOf(session, (frame) => session.dispatchEvent(touchEvent('selectstart', frame, finger.source)));
           for (const point of path.slice(1)) {
             // The finger moves: the source's target ray follows it, frame by frame.
             await frameOf(session, () => finger.move(place(point)));
@@ -168,8 +233,8 @@ export async function emulatePhone(page, options = {}) {
           const until = performance.now() + holdMs;
           while (performance.now() < until) await frameOf(session, () => finger.move(place(path[path.length - 1])));
           await frameOf(session, (frame) => {
-            session.dispatchEvent(new EventCtor('select', { frame, inputSource: finger.source }));
-            session.dispatchEvent(new EventCtor('selectend', { frame, inputSource: finger.source }));
+            session.dispatchEvent(touchEvent('select', frame, finger.source));
+            session.dispatchEvent(touchEvent('selectend', frame, finger.source));
           });
           screenSources.splice(screenSources.indexOf(finger.source), 1);
           finger.remove();
@@ -190,7 +255,7 @@ export async function emulatePhone(page, options = {}) {
           for (const finger of fingers) {
             screenSources.push(finger.source);
             await frameOf(session);
-            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
+            await frameOf(session, (frame) => session.dispatchEvent(touchEvent('selectstart', frame, finger.source)));
           }
           for (let i = 1; i <= frames; i++) {
             const spread = fromPx + (toPx - fromPx) * (i / frames);
@@ -199,7 +264,7 @@ export async function emulatePhone(page, options = {}) {
             });
           }
           for (const finger of fingers) {
-            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectend', { frame, inputSource: finger.source })));
+            await frameOf(session, (frame) => session.dispatchEvent(touchEvent('selectend', frame, finger.source)));
             screenSources.splice(screenSources.indexOf(finger.source), 1);
             finger.remove();
           }
@@ -217,7 +282,7 @@ export async function emulatePhone(page, options = {}) {
           screenSources.push(finger.source);
           if (!headPose) {
             await frameOf(session);
-            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
+            await frameOf(session, (frame) => session.dispatchEvent(touchEvent('selectstart', frame, finger.source)));
             return;
           }
           // The touch lands in the frame after the head moved, before the app's callback for that frame has drawn it, as
@@ -242,7 +307,7 @@ export async function emulatePhone(page, options = {}) {
             device.position.set(...headPose.position);
             device.quaternion.set(...headPose.quaternion);
             landing = (frame) => {
-              session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source }));
+              session.dispatchEvent(touchEvent('selectstart', frame, finger.source));
               landed();
             };
           });
@@ -260,8 +325,8 @@ export async function emulatePhone(page, options = {}) {
           const finger = held;
           held = null;
           await frameOf(session, (frame) => {
-            session.dispatchEvent(new EventCtor('select', { frame, inputSource: finger.source }));
-            session.dispatchEvent(new EventCtor('selectend', { frame, inputSource: finger.source }));
+            session.dispatchEvent(touchEvent('select', frame, finger.source));
+            session.dispatchEvent(touchEvent('selectend', frame, finger.source));
           });
           screenSources.splice(screenSources.indexOf(finger.source), 1);
           finger.remove();
@@ -360,4 +425,26 @@ export function setHeadPose(page, position, quaternion) {
     },
     [position, quaternion]
   );
+}
+
+/**
+ * Turns every XR view `yawDeg` degrees about its own up axis against the viewer pose (0 clears it), as a
+ * runtime may place a view: the app's render camera then points elsewhere than the viewer, while the
+ * touch rays stay in viewer space. Takes effect from the next frame.
+ */
+export function phoneViewOffset(page, yawDeg) {
+  return page.evaluate((deg) => {
+    globalThis.__phoneViewYawDeg = deg;
+  }, yawDeg);
+}
+
+/**
+ * While on, `getPose` against a viewer reference space returns null, as a runtime may before it can relate
+ * the two (and as a viewer space that never resolved would leave an app without one). Needs the session to
+ * have started after `emulatePhone`.
+ */
+export function phoneViewerSpaceUnavailable(page, unavailable) {
+  return page.evaluate((flag) => {
+    globalThis.__phoneViewerSpaceUnavailable = flag;
+  }, unavailable);
 }
