@@ -716,3 +716,95 @@ Quest 3 VR comfort, frame rate with four placed holograms, foot-control and
 hand-dock reach and readability, grab/pinch/poke feel, audio by ear, recorded-scale realism; Quest
 passthrough AR; Android phone AR tap; capture hand-dock feel after migration.
 Record results here; until then they stay under Unverified in `HANDOFF.md`.
+
+## Independent verification (Muse, 2026-10-26)
+
+Verifier: Muse (Meta), `muse exec --effort high`, write-disabled, untrusted
+workspace (no project rules or skills loaded). The run was planned for Codex
+`-p deep`; that run hit its usage limit before it started, so the user moved
+it to Muse. Either way it is a different vendor from the Claude implementers.
+Inputs were this brief and the tree at `d0f6ab3b3456`. The "Step N results"
+sections were marked as claims to check, not evidence. Muse's sandbox cannot
+start browsers, so the suites ran outside it on the same tree, and it read
+their logs:
+
+| Suite | Exit | Result |
+|---|---|---|
+| `pnpm run test:xr:viewer` | 0 | 25 passed (6.9 min) |
+| `pnpm run test:xr:smoke` | 0 | capture checks (mock-vr, recording, locomotion, terrain, hands, height, body, face, ui, marks) pass; 25 passed (6.6 min) |
+| `pnpm run test:smoke:pipeline` | 0 | 10 passed (4.9 min) |
+
+The lead triaged each finding against the code.
+
+**Per criterion**
+
+| Criterion | Verdict | Evidence / note |
+|---|---|---|
+| "Step inside" gating, IWSDK VR at recorded scale 1.5 m ahead | Pass | `HologramCard.tsx:280`, `xrSupport.ts:7`; spec asserts scale, floor and distance |
+| Recorded scale 1.0, "life size"; R3F keeps normalisation | Pass | `hologramAssets.ts:93`; spec `worldScale=1` for all four |
+| Gallery around viewer, cursor paging, select places and focuses | Pass | `gallerySystem.ts:108`; spec fetches cursor `10` |
+| Four placed, each with its own play state, transform **and foot controls**; audio focus | **Fail** | Own state, transform and audio focus hold, but there is one shared foot-control set bound to the focused hologram (defect 1). "Chips never overlap" is vacuous with one chip. Sparks follow focus in code (`bubbleSystem.ts:77`), but no spec asserts it |
+| Foot controls by ray, hand ray/pinch, tap, poke; dock by poke/ray/tap | Pass (partial evidence) | Ray and tap exercised; poke/pinch commits exist in code only, with no spec |
+| Nothing interactive head-locked; status line state-only | Pass | Spec: foot moved < 1e-6 m while status moved > 0.3 m |
+| Glyph dims to 40% after 4 s; three return triggers; probe | Pass | `xr-ui-core/src/index.ts:250`; all three triggers driven |
+| Pause / play / restart / loop keep animation and audio together | Pass (loop wrap code-only) | `hologramPlayback.ts:87`; no spec crosses a loop boundary |
+| Scrub pose + scheduled audio offset ≤ 50 ms | Pass | `gltfAudio.ts:117` matches the briefed formula; measured drift ≈ 1.3 ms |
+| Two-hand grab grounded within 5 mm, clamped; recenter | Pass | `twoHandGrab.ts:59`; base < 0.005 m checked at every step |
+| Removal + paging return geometry/texture counts to baseline | Pass | 78/179 → 78/179 excluding UIKit text buffers (33 → 35, disclosed at `viewerWorld.ts:288`). The 74/180 baseline quoted above is stale text |
+| Exit destroys World, returns to last focused card | Pass | `viewerWorld.ts:208`; spec checks the probe and container are gone |
+| Capture UI only from the shared package; capture suite | Pass | `VrChrome.ts:14`; `VrHud`/`VrRecordingPanel` removed; export hash identical with chrome shown or hidden |
+| Same components and tokens in both apps; contact sheet | Pass | Shared package; sheet under ignored `output/` |
+| `/ar/:id` deep links; AR specs; pipeline smoke | Pass | `router.tsx:18`; suites green |
+
+**Confirmed defects** (ranked)
+
+1. **Major: one foot-control set, not one per placed hologram.**
+   `apps/viewer-web/src/features/xr/hologramControls.ts:33` (single `foot`,
+   rebound to focus at `boundTo`). Scope says "one glyph control set at each
+   placed hologram's foot … every foot control acts on its own hologram", and
+   criterion 4 says each keeps its own foot controls. Step 4 moved to one
+   set bound to focus without recording a user decision. Repro: in
+   `/vr/:id` place two holograms; the unfocused one shows no controls and
+   cannot be paused without first focusing it. Either implement per-hologram
+   sets, or record a scope change the user approves and amend the criterion.
+2. **Major (scope gap, no criterion): VR locomotion is off.**
+   `apps/viewer-web/src/features/xr/viewerWorld.ts:129` sets
+   `locomotion: false`. Scope lists IWSDK slide, snap turn and teleport. The
+   step 2 notes mention it only as a limit. Repro: in `/vr/:id` the thumbsticks
+   do nothing. Implement it, or move it out of scope with the user's approval.
+3. **Minor: headset foot-control hit area is the ray minimum (56 apx) for
+   poke too.** `packages/xr-ui-iwsdk/src/tokens.ts:91-92` gives `vr` and
+   `ar-quest` `HIT.ray`. Styleguide §6.1 and §9.2 require poke at 72 apx,
+   ≥ 20 mm. This is consumed at `footControls.ts:198,220,512`. Repro: the
+   probe reports `hitApx: 56` for VR, and the criterion requires poke within
+   reach.
+4. **Minor: VR chip fades in over 240 ms, not the briefed 0.3 s.**
+   `packages/xr-ui-iwsdk/src/footControls.ts:304` ramps `reachOpacity` with
+   `MOTION.chromeInMs`, and the chip background is multiplied by it (`:467`).
+   `CHIP.vrFadeInMs` (`tokens.ts:44`) is never read. The 2 s hold is correct.
+5. **Minor: hand dock hides on any grab, not only its own hand's.**
+   `apps/viewer-web/src/features/xr/hologramControls.ts:98` hides the dock if
+   any placed hologram has `Grabbed`. Its comment and the failure-case table
+   say it should hide only while the dock's (non-dominant) hand grabs. Repro: a
+   one-hand grab with the dominant hand hides the dock.
+
+**Dismissed findings**
+
+- *Status line hand-rolls lazy follow instead of IWSDK `Follower`*
+  (`statusLine.ts:77`): the behaviour matches the criterion (lazy, upper
+  edge, state only). The brief names `Follower` as the mechanism, not as an
+  acceptance criterion. Not a defect.
+- *Anonymous `sessionstart` listener never removed*
+  (`XrHologramView.tsx:76`): it is attached to the World's renderer, which
+  `viewer.destroy()` drops on exit. Each entry creates a new World, so
+  listeners neither accumulate nor double-fire.
+- *Risks Muse left unconfirmed*: (a) no debounce on foot-control `click`, so
+  ray + touch from one pinch might double-toggle on a Quest; IWER shows a
+  single fire, so this goes on the device checklist, not the defect list.
+  (b) `@types/three` 0.173 against runtime 0.181: a type-only skew, with one
+  runtime `three` via the catalog pin and Vite `dedupe`. (c) The capture
+  `input.update` patch (`captureStage.ts:120`): replay suites pass with
+  identical canonical export hashes. None is reproducible in emulation.
+
+Not covered by this verification: the verifier proof video (Muse ran read-only,
+with no recording), and everything under "Physical-device limits".
