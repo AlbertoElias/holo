@@ -7,6 +7,7 @@ import { AnimationMixer, Matrix4, Sphere, Vector3 } from "three";
 import type { AnimationClip, Bone, Mesh, Object3D, SkinnedMesh } from "three";
 
 const BUBBLE_MESH_NAME = "RecordedBubbleSphere";
+const AVATAR_NAME = "RecordedAvatar";
 /** Enough points per mesh to find its extent, without walking every vertex of a dense scene. */
 const POINTS_PER_MESH = 3000;
 /** Times through the take at which the bones are read. */
@@ -38,6 +39,22 @@ export function recordedBubble(root: Object3D, into?: Object3D): DrawnBubble {
   const space = toSpace(into);
   if (space) sphere.applyMatrix4(space);
   return sphere.radius > 0 ? { center: sphere.center, radius: sphere.radius } : null;
+}
+
+/**
+ * The recorded floor's height, in `into`'s space (or world): capture stands
+ * the exported avatar's origin on the ground under the author, so its height
+ * is the floor, whatever else the scene holds above or below. Null for a file
+ * without a recorded avatar.
+ */
+export function recordedFloorY(root: Object3D, into?: Object3D): number | null {
+  const avatar = root.getObjectByName(AVATAR_NAME);
+  if (!avatar) return null;
+  root.updateWorldMatrix(true, true);
+  const origin = avatar.getWorldPosition(new Vector3());
+  const space = toSpace(into);
+  if (space) origin.applyMatrix4(space);
+  return Number.isFinite(origin.y) ? origin.y : null;
 }
 
 /** `bubble` is in the same space as the points: world, or `into`'s. */

@@ -158,7 +158,8 @@ export function ARHologramModel({
   // and only the viewer's own, labelled rescale changes it.
   const modelScale = scaleFactor;
   const modelHeightMeters = useMemo(() => {
-    const bounds = boundsWithoutObjects(clonedScene);
+    // The recorded person's height, not the scene's around them.
+    const bounds = boundsWithoutObjects(clonedScene.getObjectByName("RecordedAvatar") ?? clonedScene);
     const size = bounds.getSize(new Vector3());
     if (!Number.isFinite(size.y) || size.y <= 1e-4) {
       return AR_UNKNOWN_HEIGHT_METERS;
@@ -189,6 +190,7 @@ export function ARHologramModel({
   const xrSessionRef = useRef<XRSession | null>(null);
   const originReferenceSpace = useXR((state) => state.originReferenceSpace);
   const groupRef = useRef<Group>(null);
+  const clocheRef = useRef<ClocheShape | null>(null);
   const footRef = useRef<Group>(null);
   const primaryActionRef = useRef<AnimationAction | null>(null);
   const placementStateRef = useRef<PlacementRuntimeState>(createPlacementRuntimeState());
@@ -210,7 +212,7 @@ export function ARHologramModel({
       const observer = (window as Window & {
         __HOLOIM_AR_TEST_OBSERVER__?: (value: unknown) => void;
       }).__HOLOIM_AR_TEST_OBSERVER__;
-      observer?.({ renderer, scene: renderScene, model: clonedScene, bubble: sphereClip, actions, mixer });
+      observer?.({ renderer, scene: renderScene, model: clonedScene, bubble: sphereClip, actions, mixer, cloche: clocheRef, group: groupRef });
     }
   }, [actions, clonedScene, mixer, renderScene, renderer, sphereClip]);
 
@@ -500,11 +502,13 @@ export function ARHologramModel({
     const bubble = recordedBubble(clonedScene, group);
     // In AR the bubble stays put, so the author's whole walk is inside it.
     const points = [...drawnPoints(clonedScene, bubble, group), ...motionPoints(clonedScene, arAnimations, { into: group, bubble })];
-    const shape = fitCloche(points);
+    // The dome stands on the recorded floor, which normalising put at the group's origin, on the placement surface (B-022).
+    const shape = fitCloche(points, { floorY: 0 });
     if (!shape) return;
     // The cloche is the bubble's look now; the recorded sphere's old glass is not drawn.
     const sphere = clonedScene.getObjectByName("RecordedBubbleSphere");
     if (sphere) sphere.visible = false;
+    clocheRef.current = shape;
     setCloche(shape);
   });
 
