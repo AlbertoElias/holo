@@ -15,8 +15,10 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 The shared XR interface and viewer VR/AR is complete and on `main` (brief
 [`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md)).
-Next: AR recording (camera-only takes, meaning v1) starts its slice 0, and the
-device checks under Unverified below. Otherwise pick the next queue item in
+Next: AR recording (camera-only takes, meaning v1) is built and verified on
+`feature/ar-recording`; it waits for the user's call on the `?arCamera=1` flag
+and for `main` to be green before it merges with slice 0's branch. Its device
+checks stay unverified (no Android phone). Otherwise pick the next queue item in
 [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
@@ -28,8 +30,13 @@ device checks under Unverified below. Otherwise pick the next queue item in
   as a feature level; performer takes still write v0) and phone camera takes
   in capture behind `?arCamera=1`, off by default. `verify:pr` and
   `test:xr:ar-record` (12 phases) pass; the cross-vendor verifier's verdict is
-  "ship behind the flag". Evidence is in the brief. Slices 0, 2b, 3 and 4
-  are in progress on the branch; B-024 is open.
+  "ship behind the flag". Slices 0, 2b, 3 and 4 followed (shared screen
+  input, viewer framing of camera takes, the phone dock, hold to mark from
+  the camera with the identity-hue presence mark): `verify:pr` passed on
+  `14b5738` after merging `origin/main`, and the verifier's re-check of the
+  last fix is again "ship behind the flag". Slice 0 is also on
+  `feature/xr-shared-screen-input`, approved by the viewer XR lead, and
+  merges with this branch. Evidence is in the brief; B-024 is open.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
