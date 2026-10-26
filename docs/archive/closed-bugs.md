@@ -375,4 +375,6 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   `test:e2e:mocked`, `test:e2e:pipeline`. Not fixed on
   `feature/viewer-xr-interface`: `standOnFeet` there grounds on the whole
   scene and needs the same rule when that branch merges.
+  The recorded ground below the author's floor (slopes, water) stays visible
+  under the dome and below the room floor, unclipped (user decision, 2026-10-25).
 
