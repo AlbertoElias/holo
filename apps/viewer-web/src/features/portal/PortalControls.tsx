@@ -13,7 +13,7 @@ import { usePortalValue } from "./usePortalValue";
 // The controls at a card's foot, under its cloche (styleguide 1.2, 6): Play
 // or Pause alone in the middle, and Return beside it while the viewer drives.
 // The rest unfold from the cursor or touch and leave afterwards: the timecode
-// to the left; Free, highlights, tilt, View in AR and sound to the right.
+// to the left; Free, highlights, tilt, View in your room, Step inside and sound to the right.
 // Play never moves as they come and go. They are the viewer's own, on the
 // screen rather than in the hologram (principle 1 in what-a-hologram-is.md).
 
@@ -68,7 +68,7 @@ export type PortalControlsProps = {
   active: boolean;
   /** A cursor or touch is on the card: the reach controls show and the always-there set is at full strength. */
   reached: boolean;
-  /** More reach controls, after the portal's own (View in AR, sound). */
+  /** More reach controls, after the portal's own (View in your room, Step inside, sound). */
   children?: ReactNode;
 };
 

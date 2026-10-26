@@ -1,4 +1,4 @@
-import { AudioSystem, EnvironmentSystem, GazeSystem, InputSystem, LightSystem, ReferenceSpaceType, SessionMode, World } from '@iwsdk/core';
+import { AudioSystem, EnvironmentSystem, GazeSystem, LightSystem, ReferenceSpaceType, SessionMode, World } from '@iwsdk/core';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -39,7 +39,8 @@ export async function createCaptureStage(container: HTMLElement): Promise<Captur
       restoreCameraOnExit: false
     },
     input: { canvasPointerEvents: false },
-    features: { locomotion: false, physics: false, grabbing: false, spatialUI: false }
+    // Spatial UI and pointers for the headset chrome (@holoim/xr-ui-iwsdk, as the viewer).
+    features: { locomotion: false, physics: false, grabbing: false, spatialUI: true }
   });
   removeCompetingSdkSystems(world);
 
@@ -81,9 +82,11 @@ function createCamera(): THREE.PerspectiveCamera {
 
 // SDK systems that would become a second owner of something capture owns.
 function removeCompetingSdkSystems(world: World): void {
-  // Renders its own controller/hand models (loaded from a CDN) and ray
-  // pointers; capture reads three's controllers and hands directly.
-  world.unregisterSystem(InputSystem);
+  // InputSystem stays, for its pointers only: they dispatch pointer events to
+  // the chrome, while capture still reads three's controllers and hands for
+  // recording. Its controller and hand models would load from a CDN and
+  // duplicate capture's avatar hands, so they never load.
+  disableSdkInputVisuals(world);
   // Would clear the background and clear alpha in AR, duplicating capture's AR
   // spectator; capture lights its scene itself.
   world.unregisterSystem(EnvironmentSystem);
@@ -97,4 +100,50 @@ function removeCompetingSdkSystems(world: World): void {
   for (const child of [...world.player.head.children]) {
     if (child.type === 'AudioListener') child.removeFromParent();
   }
+}
+
+// IWSDK's XR input visuals load controller and hand models from the
+// webxr-input-profiles CDN even when toggled off; a loader that returns an
+// empty scene leaves input tracked with no visual and no request.
+function disableSdkInputVisuals(world: World): void {
+  const adapters = (world.input.xr as unknown as {
+    visualAdapters: Record<'controller' | 'hand', Record<'left' | 'right', { assetLoader: unknown; toggleVisual(enabled: boolean): void }>>;
+  }).visualAdapters;
+  const noModels = { loadGLTF: async () => ({ scene: new THREE.Group() }) };
+  for (const kind of ['controller', 'hand'] as const) {
+    for (const side of ['left', 'right'] as const) {
+      adapters[kind][side].assetLoader = noModels;
+      adapters[kind][side].toggleVisual(false);
+    }
+  }
+}
+
+/**
+ * Copies the camera rig's world pose to `world.player`, where IWSDK keeps its
+ * pointer spaces, so its rays and pokes start from capture's controllers and
+ * hands. Only pointers read the player (a float32 entity transform); recording
+ * reads three's rig.
+ */
+export function syncPlayerToRig(world: World, cameraRig: THREE.Object3D): void {
+  cameraRig.updateMatrixWorld();
+  cameraRig.matrixWorld.decompose(world.player.position, world.player.quaternion, world.player.scale);
+}
+
+/**
+ * IWSDK samples XR input inside `world.update`, which needs the XR frame, but
+ * under capture's manual clock `world.update` runs from `advanceTime`, outside
+ * any frame, where IWSDK would disable every pointer. A step without a frame
+ * keeps the last sample instead; the returned sampler takes one on the frame.
+ */
+export function holdXrInputBetweenFrames(world: World): (deltaSec: number, timeSec: number) => void {
+  const input = world.input as unknown as { update(xrManager: THREE.WebXRManager, delta: number, time: number): void };
+  const update = input.update.bind(input);
+  const xr = world.renderer.xr;
+  input.update = (xrManager, delta, time) => {
+    if (xrManager.getSession() && !xrManager.getFrame()) return;
+    update(xrManager, delta, time);
+  };
+  return (deltaSec, timeSec) => {
+    if (xr.getSession() && xr.getFrame()) update(xr, deltaSec, timeSec);
+  };
 }

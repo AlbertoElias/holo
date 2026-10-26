@@ -409,7 +409,7 @@ for (const variant of !runs('immersive') ? [] : [
 // --- iOS Quick Look entry (iPhone user agent in Chromium) ---------------------
 if (runs('quicklook')) console.log('viewer: Quick Look');
 for (const [key, overrides, label] of !runs('quicklook') ? [] : [
-  ['ready', { quickLookEnabled: true, usdzStatus: 'ready', usdzUrl: '/uploads/walk.usdz' }, 'USDZ ready: "View in AR" link (rel="ar")'],
+  ['ready', { quickLookEnabled: true, usdzStatus: 'ready', usdzUrl: '/uploads/walk.usdz' }, 'USDZ ready: "View in your room" link (rel="ar")'],
   ['preparing', { quickLookEnabled: true, usdzStatus: 'processing' }, 'USDZ converting: "Preparing preview…" (disabled)'],
   ['failed', { quickLookEnabled: true, usdzStatus: 'failed' }, 'USDZ failed: "Preview unavailable" (disabled)']
 ]) {

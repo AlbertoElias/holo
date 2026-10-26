@@ -20,6 +20,7 @@ import { createPortalStore } from "../portal/portalStore";
 import { PORTAL_VARIANTS, readPortalVariant } from "../portal/portalVariant";
 import { usePortalTriggers } from "../portal/usePortalTriggers";
 import { usePortalValue } from "../portal/usePortalValue";
+import { supportsImmersiveVr, type XrFeedState } from "../xr/xrSupport";
 import { resolveMediaUrl } from "./api";
 import { HologramCardCanvas, type FrameRect, type HologramRenderInfo } from "./HologramCardCanvas";
 import { LOAD_TURN_MS, watchDownloadEnd } from "./modelLoadOrder";
@@ -36,6 +37,8 @@ type HologramCardProps = {
   /** The hologram has loaded, or will not: the next card may start. */
   onModelSettled: (id: string) => void;
   target: ViewTarget & { kind: "flat" };
+  /** The loaded feed and its cursor, carried into XR for the gallery. */
+  xrFeed?: () => NonNullable<XrFeedState["feed"]>;
 };
 
 type CardModelAvailability = ModelAvailability | "queued" | "checking";
@@ -210,12 +213,13 @@ function formatByline(item: HologramDTO): string {
   return `By ${item.submittedBy} · ${new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, onDelete, loadTurn, onModelSettled, target }: HologramCardProps) {
+export function HologramCard({ item, active, muted, onToggleMute, onDelete, loadTurn, onModelSettled, target, xrFeed }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const [arSupported, setArSupported] = useState<boolean>(false);
+  const [vrSupported, setVrSupported] = useState<boolean>(false);
   const isIOS = useMemo(() => isIOSDevice(), []);
   const forcedArSupport = useMemo(() => {
     if (typeof window === "undefined") {
@@ -329,9 +333,21 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
       });
   }, [forcedArSupport]);
 
+  useEffect(() => {
+    void supportsImmersiveVr().then(setVrSupported);
+  }, []);
+
   const handleEnterAR = () => {
-    navigate(`/ar/${item.id}`);
+    // Opting the feed into the R3F AR view (the temporary fallback) carries over to its AR route.
+    const shell = new URLSearchParams(window.location.search).get("shell");
+    const state: XrFeedState | undefined = xrFeed ? { feed: xrFeed() } : undefined;
+    navigate(shell === "r3f" ? `/ar/${item.id}?shell=r3f` : `/ar/${item.id}`, { state });
   };
+  const handleEnterVR = () => {
+    const state: XrFeedState | undefined = xrFeed ? { feed: xrFeed() } : undefined;
+    navigate(`/vr/${item.id}`, { state });
+  };
+  const shouldShowVrTrigger = vrSupported && canRenderModel;
   const shouldShowArTrigger = typeof forcedArSupport === "boolean"
     ? forcedArSupport
     : arSupported && !isIOS && canRenderModel;
@@ -356,6 +372,11 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
       {shouldShowArTrigger && (
         <span className="ar-trigger-button">
           <GlyphControl glyph="viewInAr" label={VIEWER_CONTROL_NAMES.viewInAr} onPress={handleEnterAR} />
+        </span>
+      )}
+      {shouldShowVrTrigger && (
+        <span className="vr-trigger-button">
+          <GlyphControl glyph="stepInside" label={VIEWER_CONTROL_NAMES.stepInside} onPress={handleEnterVR} />
         </span>
       )}
       {shouldShowQuickLook && <ARQuickLookLink item={item} />}

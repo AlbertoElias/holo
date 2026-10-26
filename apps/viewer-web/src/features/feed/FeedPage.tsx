@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import { tokens } from "@holoim/design-tokens";
 import { Chip, Dock, GlyphControl, HandednessPicker, SideSheet, useHandedness } from "@holoim/ui-dom";
@@ -103,6 +104,13 @@ export function FeedPage() {
   const feedRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const focusedId = useFocusedCard(feedRef, items.length);
+  // Leaving an immersive view returns to the hologram that was opened.
+  const focusHologramId = (useLocation().state as { focusHologramId?: string } | null)?.focusHologramId ?? null;
+  const focusedOnReturn = useRef(false);
+  // Entering XR carries the loaded feed and its cursor to the gallery (router state).
+  const feedSnapshot = useRef({ items, nextCursor: nextCursor ?? null });
+  feedSnapshot.current = { items, nextCursor: nextCursor ?? null };
+  const xrFeed = useCallback(() => feedSnapshot.current, []);
 
   const toggleAudioMute = useCallback(() => {
     setAudioMuted((prev) => {
@@ -129,6 +137,15 @@ export function FeedPage() {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [canLoadMore, loadMore, nextCursor]);
+
+  useEffect(() => {
+    if (!focusHologramId || focusedOnReturn.current) return;
+    const card = feedRef.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(focusHologramId)}"]`);
+    if (!card) return;
+    focusedOnReturn.current = true;
+    // Focus follows the card nearest the middle, so scrolling to it focuses it.
+    card.scrollIntoView({ block: "center" });
+  }, [focusHologramId, items]);
 
   // "Uploaded" stays as long as an unused control stays bright, then leaves.
   useEffect(() => {
@@ -184,9 +201,10 @@ export function FeedPage() {
           loadTurn={loadsStarted.has(item.id) ? "load" : loadsNear.has(item.id) ? "check" : "wait"}
           onModelSettled={onModelSettled}
           target={target}
+          xrFeed={xrFeed}
         />
       )),
-    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, loadsStarted, loadsNear, onModelSettled, target]
+    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, loadsStarted, loadsNear, onModelSettled, target, xrFeed]
   );
 
   return (

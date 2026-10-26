@@ -108,6 +108,13 @@ In a headset a world panel opens 1.5 m straight ahead and is never nearer
 than 1 m; after that it stays where it is. Wrist glyphs sit 4 cm above the
 back of the non-dominant wrist and are sized for 45 cm, arm's reach.
 
+**The gallery shelf.** In a headset or a room, the feed waits beside the
+viewer as small paused previews on two curved wings, 1.2 m away and below the
+eyes, leaving the space ahead to the stage. Selecting a preview brings its
+hologram out onto the stage; selecting its tile again sends it back, with no
+extra glyph. A placed hologram stands where the viewer sees it whole: never
+behind a wing or another hologram.
+
 **Always there, and hidden until reached for.** Play, Free and Return stay
 visible, small and close to the edge. Every other control appears from the
 hand or cursor and leaves afterwards. When nobody has used the always-there
@@ -414,7 +421,7 @@ amber dock the control is a lantern with no word ([section 5.2](#52-where-the-ch
 **Pause**) alone in the middle of its foot, plus **Return** beside it while
 the viewer drives (Free). Reaching for the card (a cursor over it, a touch)
 unfolds the rest either side of Play, two glyph gaps (24 apx) apart: the
-timecode to the left; Free, highlights, tilt, View in AR and sound to the
+timecode to the left; Free, highlights, tilt, View in your room, Step inside and sound to the
 right. Play never moves as they come and go. The row stands below the
 viewing box, off the cloche's foot line, and ends above 75% down the screen,
 where the ground is still dark enough for bare gold ([section 9.3](#93-phone-portal)),
@@ -435,9 +442,13 @@ a gesture zone.
 | Play / Pause | Play or pause the event | "Paused · 0:08" beside it | Filled triangle `M4 2.5v11l9-5.5z`, drawn at 14 apx inside the 36 apx gold ring |
 | Free | Leave Follow; move through time and space yourself | "Free" | Four-way arrow cross `M8 1.5v13M1.5 8h13M8 1.5 6 3.5M8 1.5l2 2M8 14.5l-2-2M8 14.5l2-2M1.5 8l2-2M1.5 8l2 2M14.5 8l-2-2M14.5 8l-2 2` |
 | Return | Back to the author's view (Follow) | "Return" | Open arc with an arrowhead `M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.5h2.5` |
+| Pause | Shown in the Play ring while the event plays; pauses it | "Paused · 0:08" once paused | Two filled bars `M4.5 3h2.4v10H4.5zM9.1 3h2.4v10H9.1z`, the Play triangle's weight, inside the same ring |
+| Restart | Back to the event's start, keeping play or pause | None | A back-to-start bar and an open triangle `M3.5 3v10M12.5 3.2 6 8l6.5 4.8z` |
+| Recenter | Put the hologram back in front of the viewer | None | A ring with four ticks `M8 1.5v2.5M8 12v2.5M1.5 8H4M12 8h2.5M8 5a3 3 0 1 0 0 6a3 3 0 1 0 0-6` |
+| Exit | Leave the immersive session | None | An open door frame with an arrow leaving it `M9 2.5H4.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H9M7 8h7.5M12 5.5 14.5 8 12 10.5` |
 | Record | Start or stop a take (capture) | "Recording 0:12" while recording | Inside the 36 apx gold ring: a 14 apx filled rose circle when idle; a 13 apx rose rounded square (radius 3 apx) while recording |
-| View in AR | Open the hologram in AR Quick Look or WebXR AR | "View in AR" | A cube in viewfinder brackets `M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3`, round joins and caps; a reach control on the card |
-| Pause | Pause the playing event | "Pause" (name) | Two bars `M5.5 3v10M10.5 3v10`, inside the 36 apx gold ring as Play |
+| View in your room | Open the hologram in AR Quick Look or WebXR AR | "View in your room" | A cube in viewfinder brackets `M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3`, round joins and caps; on the card, in its shade |
+| Step inside | Enter the hologram's event in WebXR VR, at recorded scale | "Step inside" | A door frame on a threshold line with a figure standing in it `M3.5 14.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 12.5 3v11.5M1.5 14.5h13M7.1 5.2a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M8 7v3.5M8 10.5l-1.3 3M8 10.5l1.3 3M6.5 8.5h3`, round joins and caps; on the card, in its shade, beside View in your room |
 | Sound on / off | Mute or unmute the event | "Mute" / "Unmute" (name) | A speaker with waves, or with a cross (`tokens.json`, `glyph.path.soundOn` / `soundOff`) |
 | Upload | Open the upload sheet; send the upload | "Upload" | An arrow up out of a tray (`glyph.path.upload`) |
 | Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
@@ -445,7 +456,7 @@ a gesture zone.
 | Undo / Redo | The Halo's W and E: undo or redo the last held mark | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 
 The rose record dot has no keyline of its own; the gold ring around it is
-the same as Play's. The Play triangle and the record shapes are filled;
+the same as Play's. The Play triangle, the Pause bars and the record shapes are filled;
 every other glyph is a line.
 
 | Token | Flat | Headset (2.5×) |
@@ -607,6 +618,11 @@ most 4 px, and fades over 1.1 to 2.6 s. (Raised from 26 and 70 with the
 burnt globe on 2026-10-25: a few sparks on a 2D outline read as sparks; on a
 volume they read as dust.)
 
+**Gold floor ring.** In VR and AR, the placed hologram last selected wears a
+gold ring on the floor, 4 cm beyond its footprint, as wide as the gold core
+(1.4% of the ring's diameter). Only it is heard, and its foot controls are
+the ones showing.
+
 ### 8.3 Reduced motion
 
 When the viewer asks for reduced motion, on every target: no sparks, and the
@@ -685,7 +701,11 @@ the stop shape alone, since no text sits within arm's reach.
 - **Type, glyphs and input:** as VR on a Quest. On an Android phone, flat
   sizes and 44 apx touch targets.
 - **Placement:** controls at the hologram's foot, on the chip. Nothing fills
-  the view or follows the head except the periphery status line.
+  the view or follows the head except the periphery status line. One
+  exception, on an Android phone only: the foot chip turns (yaw only) every
+  frame to stay level on screen as the viewer walks round. It turns where it
+  stands and never moves after the viewer. Headsets turn it only when the
+  hologram is placed or recentered.
 
 ### 9.3 Phone (portal)
 
@@ -731,7 +751,7 @@ sparks, flicker or meaning layer can be added. It is a flattened, opt-in
 preview, never the canonical hologram
 ([what a hologram is](../concepts/what-a-hologram-is.md)).
 
-- The feed's "View in AR" entry is the cube glyph on the card, in its shade,
+- The feed's "View in your room" entry is the cube glyph on the card, in its shade,
   and follows the flat rules.
 - **The USDZ carries the burnt globe, baked** (slice 6, decided with
   Codex on 2026-10-25). RealityKit has no shader, no screen-space line and

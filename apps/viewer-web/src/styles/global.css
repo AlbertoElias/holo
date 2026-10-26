@@ -65,6 +65,32 @@ body::before {
   height: 1px;
 }
 
+/* IWSDK immersive routes: the flat ground from tokens.json until the session starts. */
+.xr-view-container {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, var(--holoim-ground-flat-stops));
+  color: var(--holoim-color-text);
+}
+
+.xr-view-scene {
+  position: absolute;
+  inset: 0;
+}
+
+/* The World's canvas only matters in the session; until then the ground shows. */
+.xr-view-container:not([data-xr-state="immersive"]) .xr-view-scene {
+  visibility: hidden;
+}
+
+.xr-view-entry {
+  position: absolute;
+  inset: 0 0 25%;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
 /* Each card fills the screen. Cards pass vertical swipes to the feed; a
    paused card in the freeze variant keeps every gesture for looking around
    (PRD-002). The canvas covers the whole card, so nothing of the scene is
@@ -378,7 +404,7 @@ body::before {
   white-space: nowrap;
 }
 
-/* View in AR in Quick Look: a link, drawn as the glyph with its word. */
+/* View in your room in Quick Look: a link, drawn as the glyph with its word. */
 .ar-quicklook-link {
   display: inline-flex;
   align-items: center;
