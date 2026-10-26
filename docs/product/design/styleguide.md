@@ -97,7 +97,7 @@ source and goes back there.
 | Point of action (fingertip, ray hit, gaze) | Cursor or touch point | Menus that bloom from the hand, ink |
 | Referent (the mark or bone being edited) | Popover pinned to the object's screen position | Editing a mark |
 | Periphery (lazy-follow, upper edge of view) | Top status line | State only, such as "Recording 0:12"; never controls |
-| World (placed by the user, 1 m away or more) | Side sheet | Labels for near panels, long text, library, inbox, settings |
+| World (placed by the user, 1 m away or more) | Side sheet, opened from the top corner it unfolds from | Labels for near panels, long text, library, inbox, settings |
 
 The periphery status line is the one thing that follows the head, lazily,
 and it never holds a control. It sits 1.5 m away, 20° above the line of
@@ -400,7 +400,7 @@ Only where the ground fails:
 | VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s, holds at least 2 s after the background last asks for it, and leaves over 0.4 s, as chrome does |
 | AR (WebXR) | Every row and every label sits on the chip |
 | AR Quick Look | No chip is possible, so no text or controls inside Quick Look |
-| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The feed's bottom dock stands on the amber horizon, where gold fails (2.1:1), with no chip, band or shadow across it: each control there is a **lantern**, its glyph in the gold ring (as Play's) round a deep-sea lens, and keyboard focus rings it in deep-sea ink (`glyph.lantern`). Its word does not show: ink text falls below 4.5:1 on most screens there, while the lens holds a control's 3:1. A control with no drawing yet holds its gold word in a lantern capsule, the same ring and lens, where gold on the lens holds 4.5:1. A dock over a picture (AR, capture) keeps its row on the chip, sized to its contents. The side sheet is on the chip |
+| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The feed's bottom dock stands on the amber horizon, where gold fails (2.1:1), with no chip, band or shadow across it: each control there is a **lantern**, its glyph in the gold ring (as Play's) round a deep-sea lens, and keyboard focus rings it in deep-sea ink (`glyph.lantern`). Its word does not show: ink text falls below 4.5:1 on most screens there, while the lens holds a control's 3:1. A control with no drawing yet holds its gold word in a lantern capsule, the same ring and lens, where gold on the lens holds 4.5:1. The dock holds making (Upload); Settings is not in it but waits in the top right corner, where its side sheet unfolds from, its word on the chip: the chip all but vanishes on the night sky and keeps the word legible over a hologram's picture, and a title stops short of it. That corner is not the status line, which keeps the top's centre and never holds a control. A dock over a picture (AR, capture) keeps its row on the chip, sized to its contents. The side sheet is on the chip |
 | Everywhere | Text over a hologram's own picture always sits on the chip |
 
 ## 6. Glyph controls

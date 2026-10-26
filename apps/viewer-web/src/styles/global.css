@@ -11,6 +11,8 @@
   --feed-dock-clearance: calc(var(--holoim-hit-touch) + 3 * var(--holoim-glyph-gap) + max(env(safe-area-inset-bottom), var(--holoim-hit-phone-home-bar)));
   /* Controls at the foot stand two glyph gaps apart, so no two crowd. */
   --feed-control-gap: calc(2 * var(--holoim-glyph-gap));
+  /* Room the Settings corner takes from the right of the screen: its word, its chip and the side edge. */
+  --feed-settings-clearance: calc(var(--holoim-hit-phone-side-edge) + 7rem);
 }
 
 * {
@@ -104,6 +106,21 @@ body::before {
   /* Going inside the hologram, the title steps aside (8.4: back to its source). */
   opacity: calc(1 - var(--portal-open, 0));
   transition: opacity var(--holoim-motion-chrome-out) var(--holoim-motion-chrome-easing);
+}
+
+/* A title reaching the right of the screen stops short of the Settings corner. */
+.feed-card-meta {
+  padding-inline-end: max(0px, var(--feed-settings-clearance) - max(var(--holoim-hit-phone-side-edge), (100vw - var(--feed-card-max-width)) / 2));
+}
+
+/* ── Settings, in the top corner its side sheet unfolds from ── */
+
+.feed-settings {
+  position: fixed;
+  z-index: 10;
+  top: max(env(safe-area-inset-top), var(--holoim-glyph-gap));
+  right: max(env(safe-area-inset-right), var(--holoim-hit-phone-side-edge));
+  display: flex;
 }
 
 .feed-card-meta h2,

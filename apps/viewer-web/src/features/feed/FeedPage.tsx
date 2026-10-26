@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { tokens } from "@holoim/design-tokens";
-import { Dock, GlyphControl, HandednessPicker, SideSheet, useHandedness } from "@holoim/ui-dom";
+import { Chip, Dock, GlyphControl, HandednessPicker, SideSheet, useHandedness } from "@holoim/ui-dom";
 import { nearestToMiddle } from "@holoim/xr-ui-core";
 
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
@@ -160,9 +160,12 @@ export function FeedPage() {
       {/* A sheet answers Upload or Settings; on a phone it covers the screen, and the dock would show through it. */}
       <Dock className="feed-dock" aria-label="Feed" ground="horizon" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
         <GlyphControl glyph="upload" label={VIEWER_CONTROL_NAMES.openUpload} onPress={() => setUploadOpen(true)} />
-        {/* No drawing yet (brief, "still to draw"): the word stands in. */}
-        <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
       </Dock>
+      {/* Settings waits in the corner its sheet unfolds from (1.2), apart from the dock's making. Its chip all but
+          vanishes on the night sky and keeps the word legible over a hologram's picture. No drawing yet: the word stands in. */}
+      <Chip className="feed-settings" style={uploadOpen || settingsOpen ? { visibility: "hidden" } : undefined}>
+        <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
+      </Chip>
       <SideSheet open={settingsOpen} title="Settings" onClose={() => setSettingsOpen(false)} target={target}>
         <HandednessPicker value={handedness} onChange={setHandedness} wristControl={VIEWER_CONTROL_NAMES.exitAr} />
       </SideSheet>

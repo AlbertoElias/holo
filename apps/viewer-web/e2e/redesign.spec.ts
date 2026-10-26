@@ -6,7 +6,7 @@ import { test as plainTest, type Page } from "@playwright/test";
 import type * as Three from "three";
 import { waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
 import { tokens } from "@holoim/design-tokens";
-import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, VIEW_TARGETS } from "@holoim/xr-ui-core";
+import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, PHONE_EDGES, VIEW_TARGETS } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 import { pinch } from "./ar-gestures";
@@ -269,6 +269,34 @@ async function avatarWithSound(): Promise<Buffer> {
 
 test.describe("phone by touch", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
+
+  // Failure modes: Settings back in the dock beside Upload (two lanterns, one
+  // place), lost in the status line's centre or a gesture edge, a long title
+  // running under it, a hit under the touch minimum, its sheet unfolding
+  // from the other side.
+  test("Settings waits in the top corner its sheet unfolds from, apart from Upload's dock, and a long title stops short of it", async ({ page }) => {
+    const long = { ...first, hologramName: "The whole kitchen, the morning before the guests came" };
+    await installProbe(page);
+    await mockFeed(page, [long]);
+    await page.goto("/");
+    await assertViewerShell(page);
+    await waitForPortalReady(page, long.id, long.url);
+    const dock = page.getByRole("toolbar", { name: "Feed" });
+    await expect(dock.getByRole("button"), "Upload stands alone in the dock").toHaveCount(1);
+    await expect(dock.getByRole("button", { name: "Upload a hologram" })).toBeVisible();
+    const settings = page.getByRole("button", { name: "Settings" });
+    const corner = (await settings.boundingBox())!;
+    expect(corner.y, "at the top of the screen").toBeLessThan(PHONE.height * 0.08);
+    expect(PHONE.width - (corner.x + corner.width), "in the right corner, clear of the side edge").toBeGreaterThanOrEqual(PHONE_EDGES.side - 1);
+    expect(PHONE.width - (corner.x + corner.width), "and close to it").toBeLessThan(PHONE_EDGES.side + 24);
+    expect(corner.height, "a touch-sized hit").toBeGreaterThanOrEqual(hitAreaApx("touch", 0) - 0.5);
+    const title = (await page.locator(".feed-card-title").first().boundingBox())!;
+    expect(title.x + title.width, "the title stops short of Settings").toBeLessThanOrEqual(corner.x);
+    await shot(page, "phone-settings-corner");
+    await settings.tap();
+    const sheet = page.getByRole("dialog", { name: "Settings" });
+    await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.x + box.width); }, { message: "the sheet unfolds from that corner's side" }).toBe(PHONE.width);
+  });
 
   test("every reach control fits the screen at the touch minimum, clear of the gesture edges", async ({ page }) => {
     const sounding = await avatarWithSound();
