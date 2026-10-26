@@ -24,7 +24,21 @@ export function addTwoHandGrab(entity: Entity): void {
 
 type TransformState = { position: Vector3; quaternion: Quaternion; scale: Vector3; pointerAmount: number };
 type HandleState = { current: TransformState; first: boolean };
-type HandleStoreLike = { getOptions: () => { scale?: false | Record<string, unknown>; apply?: (state: HandleState, target: Object3D) => void } };
+type HandleStoreLike = {
+  getOptions: () => { scale?: false | Record<string, unknown>; apply?: (state: HandleState, target: Object3D) => void };
+  /** The pointers holding the handle now (pmndrs handle store). */
+  capturedObjects?: Map<number, unknown>;
+};
+
+function handleStore(entity: Entity): HandleStoreLike | undefined {
+  const handle = entity.getComponents().find((component) => component?.id === "Handle") as { data: { instance: HandleStoreLike[] } } | undefined;
+  return handle?.data.instance[entity.index];
+}
+
+/** The ids of the pointers grabbing `entity` now; none when it has no grab handle yet. */
+export function grabPointerIds(entity: Entity): number[] {
+  return [...(handleStore(entity)?.capturedObjects?.keys() ?? [])];
+}
 
 const yawOf = (quaternion: Quaternion): number => new Euler().setFromQuaternion(quaternion, "YXZ").y;
 const midpoint = (hands: GrabHands, out: Vector3): Vector3 =>
@@ -42,8 +56,7 @@ const midpoint = (hands: GrabHands, out: Vector3): Vector3 =>
  * grab is added, so this returns false until it exists.
  */
 export function keepGrounded(entity: Entity, hands: GrabHands): boolean {
-  const handle = entity.getComponents().find((component) => component?.id === "Handle") as { data: { instance: HandleStoreLike[] } } | undefined;
-  const store = handle?.data.instance[entity.index];
+  const store = handleStore(entity);
   if (!store) return false;
   // Baselines, taken when a grab starts and whenever a hand joins or leaves it.
   let pointers = 0;

@@ -5,13 +5,16 @@ import {
   DomeGradient,
   Grabbed,
   IBLGradient,
+  LocomotionEnvironment,
+  LocomotionSystem,
   ReferenceSpaceType,
   DepthSensingSystem,
   SessionMode,
+  TurningMethod,
   World,
   type Entity
 } from "@iwsdk/core";
-import { Box3, CircleGeometry, Color, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from "three";
+import { Box3, CircleGeometry, Color, Euler, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from "three";
 import type { Object3D } from "three";
 
 import { resumeAudioContext } from "../hologram/gltfAudio";
@@ -33,6 +36,14 @@ const BLUE_HOUR_EQUATOR: [number, number, number, number] = [0.3412, 0.3725, 0.3
 const BLUE_HOUR_GROUND: [number, number, number, number] = [0.7216, 0.5137, 0.3686, 1]; // ground.horizon
 const DEEP_SEA = tokens.color.deepSea;
 const VR_FLOOR_RADIUS_M = 12;
+// VR locomotion as capture moves (archived vr-thumbstick-locomotion.md):
+// 30° snap turns and a walking pace for a 1.75 m person (1.8 × height / s).
+const VR_SNAP_TURN_DEG = 30;
+const VR_SLIDE_SPEED_MPS = 3.2;
+// IWSDK's locomotor integrates gravity over the whole frame delta: one long
+// frame (a model loading, the session starting) drops the rig through the
+// floor before its ground ray can catch it. Steps are clamped to this.
+const VR_LOCOMOTION_MAX_STEP_S = 1 / 20;
 
 export interface ViewerWorld {
   world: World;
@@ -109,6 +120,24 @@ function addVrRoom(world: World): void {
   floor.position.y = -0.01;
   floor.name = "ViewerFloor";
   world.createTransformEntity(floor, { parent: level });
+  // What locomotion walks on: an undrawn disc at the local floor (y = 0), so
+  // the player rig stays at floor height and placements keep standing on y = 0.
+  // Flat in its geometry: the locomotor can read the mesh on the frame it is
+  // created, before IWSDK's transforms have composed an object rotation.
+  const walk = new Mesh(new CircleGeometry(VR_FLOOR_RADIUS_M, 64).rotateX(-Math.PI / 2));
+  walk.visible = false;
+  walk.name = "ViewerWalkSurface";
+  world.createTransformEntity(walk, { parent: level }).addComponent(LocomotionEnvironment);
+  // Slide (left stick), snap turn (right stick x) and teleport (right stick back, release to land).
+  const locomotion = world.getSystem(LocomotionSystem)!;
+  locomotion.config.turningAngle.value = VR_SNAP_TURN_DEG;
+  locomotion.config.slidingSpeed.value = VR_SLIDE_SPEED_MPS;
+  const step = locomotion.update.bind(locomotion);
+  locomotion.update = (delta: number) => step(Math.min(delta, VR_LOCOMOTION_MAX_STEP_S));
+  // The World's loop runs while the opened hologram loads, before this floor
+  // exists, and the locomotor falls with nothing under it: stand the rig back
+  // on the floor's origin now that there is one.
+  locomotion.setPlayerPosition(new Vector3(0, 0, 0));
 }
 
 export async function createViewerWorld(container: HTMLDivElement, options: ViewerWorldOptions): Promise<ViewerWorld> {
@@ -126,7 +155,13 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
           : { handTracking: true },
         offer: "none"
       },
-      features: { locomotion: false, physics: false, grabbing: true, spatialUI: true }
+      features: {
+        // In-thread, so the rig lands where the locomotor puts it on the same frame (no worker lerp).
+        locomotion: isAr ? false : { useWorker: false, turningMethod: TurningMethod.SnapTurn, enableJumping: false },
+        physics: false,
+        grabbing: true,
+        spatialUI: true
+      }
     }),
     cache.acquire(options.initial.url)
   ]);
@@ -333,6 +368,11 @@ function installXrViewerProbe(world: World, cache: HologramAssetCache, space: Ho
         hologram: focused ? holograms.find((reading) => reading.id === focused.id)! : null,
         focusedId: focused?.id ?? null,
         holograms,
+        // The locomotion rig: where the viewer's floor origin stands and how far it has turned.
+        player: {
+          position: world.player.getWorldPosition(new Vector3()).toArray(),
+          yawRad: new Euler().setFromQuaternion(world.player.getWorldQuaternion(new Quaternion()), "YXZ").y
+        },
         stage: c.stage ? { origin: c.stage.origin.toArray(), forward: c.stage.forward.toArray(), distanceM: c.stage.distanceM, floorY: c.stage.floorY } : null,
         chipWidthM: c.chipWidthM,
         gallery: gallery.probe(),

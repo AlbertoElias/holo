@@ -69,6 +69,7 @@ type FootProbe = {
   dimInMs: number;
   revealed: boolean;
   reachOpacity: number;
+  reachChipFade: number;
   near: { hover: boolean; hand: boolean; headRay: boolean };
   labelOpacity: number;
   chipOpacity: number;
@@ -83,7 +84,7 @@ type Controls = {
   target: "vr" | "ar-quest" | "ar-phone";
   foot: FootProbe;
   status: { visible: boolean; text: string; worldPosition: Vec3; interactive: boolean };
-  dock: { mount: "hand" | "phone"; visible: boolean; metresPerApx: number; hitApx: number; glyphApx: number; buttons: Record<string, { worldPosition: Vec3 }> };
+  dock: { mount: "hand" | "phone"; hand: "left" | "right" | null; visible: boolean; metresPerApx: number; hitApx: number; glyphApx: number; buttons: Record<string, { worldPosition: Vec3 }> };
 };
 
 const report: Record<string, unknown> = {};
@@ -549,6 +550,40 @@ async function settledReachRow(page: Page): Promise<ReachRowReading> {
   return reading!;
 }
 
+/**
+ * The VR reach chip's fade-in against its glyphs' (§5.2: 0.3 s; §8.4: 240 ms).
+ * Both advance on the same frame deltas, so on a frame mid-fade the chip
+ * stands at 240/300 of the glyphs' progress, or at 0.8 or more once the
+ * glyphs are full. IWER's frames can be far apart (0.1 s to seconds), so one
+ * reveal may finish in a frame: the head looks away and back until a frame
+ * is caught mid-fade. The page samples every 20 ms, faster than its frames.
+ */
+async function measureChipFade(page: Page, eye: Vec3, chip: Vec3): Promise<Array<{ glyph: number; chip: number }>> {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await setPose(page, "head", eye, [eye[0], eye[1] + 4, eye[2] + 1]);
+    await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 0 && s.controls!.foot.reachChipFade === 0, 6_000);
+    await page.evaluate(() => {
+      type Probe = { snapshot(): { controls: { foot: { reachOpacity: number; reachChipFade: number } } | null } };
+      const w = window as unknown as { __HOLOIM_XR_VIEWER__: Probe; __fadeSamples?: Array<[number, number]>; __fadeTimer?: number };
+      w.__fadeSamples = [];
+      w.__fadeTimer = window.setInterval(() => {
+        const foot = w.__HOLOIM_XR_VIEWER__.snapshot().controls?.foot;
+        if (foot) w.__fadeSamples!.push([foot.reachOpacity, foot.reachChipFade]);
+      }, 20);
+    });
+    await setPose(page, "head", eye, chip);
+    await waitForSnapshot(page, (s) => s.controls!.foot.reachChipFade === 1, 3_000);
+    const samples = await page.evaluate(() => {
+      const w = window as unknown as { __fadeSamples: Array<[number, number]>; __fadeTimer: number };
+      window.clearInterval(w.__fadeTimer);
+      return w.__fadeSamples;
+    });
+    const midFade = samples.filter(([, chipFade]) => chipFade > 0 && chipFade < 1).map(([glyph, chipFade]) => ({ glyph, chip: chipFade }));
+    if (midFade.length) return midFade;
+  }
+  return [];
+}
+
 const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const horizontal = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 const controls = async (page: Page) => (await snapshot(page)).controls!;
@@ -669,7 +704,9 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   const first = placed.controls!;
   const foot = first.foot;
   expect(first.target).toBe("vr");
-  expect(foot.sizes, "headset glyphs are 2.5x; ray hit areas are not scaled").toEqual({ glyphIconApx: 40, ringApx: 90, strokeApx: 3.75, hitApx: 56 });
+  // Within reach the foot controls are poked too: 72 apx, never under 20 mm at the 1.75 m reference (§6.1, §9.2).
+  expect(foot.sizes, "headset glyphs are 2.5x; poke hit areas are not scaled").toEqual({ glyphIconApx: 40, ringApx: 90, strokeApx: 3.75, hitApx: 72 });
+  expect(foot.sizes.hitApx * 0.000372 * 1.75 * 1000, "foot poke target in mm").toBeGreaterThanOrEqual(20);
   expect(foot.chipOpacity, "VR chip").toBe(0.72);
   expect(foot.metresPerApx, "sized for 1.75 m").toBeCloseTo(0.000372 * 1.75, 8);
   expect(foot.worldPosition[1] - anchor[1], "2 cm above the anchor").toBeCloseTo(0.02, 3);
@@ -780,6 +817,13 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   await setPose(page, "right", [anchor[0] + 0.12, chest, front], [anchor[0] + 0.12, chest, anchor[2] - 1]);
   // Grab pointers pick up what they touch on the next frames.
   await page.waitForTimeout(250);
+  // A grab by the dominant (right) hand alone leaves the dock on the left hand in view.
+  await setButton(page, "right", "squeeze", 1);
+  const oneHand = await waitForSnapshot(page, (s) => s.hologram.grabbed, 3_000);
+  expect(oneHand.controls!.dock.hand).toBe("left");
+  expect(oneHand.controls!.dock.visible, "the other hand's grab leaves the dock").toBe(true);
+  await setButton(page, "right", "squeeze", 0);
+  await waitForSnapshot(page, (s) => !s.hologram.grabbed, 3_000);
   await setButton(page, "left", "squeeze", 1);
   await setButton(page, "right", "squeeze", 1);
   const grabbed = await waitForSnapshot(page, (s) => s.hologram.grabbed, 3_000);
@@ -1004,6 +1048,8 @@ type GallerySnapshot = ViewerSnapshot & {
   gallery: GalleryProbe;
   cache: Record<string, number>;
   controls: (Controls & { ring: { visible: boolean; worldPosition: Vec3; radiusM: number }; boundTo: string | null }) | null;
+  bubbles: { sparkFocusId: string | null };
+  player: { position: Vec3; yawRad: number };
 };
 
 const gallerySnapshot = (page: Page) => snapshot(page) as Promise<GallerySnapshot>;
@@ -1285,6 +1331,19 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   expect(readingOf(both, "mock-1")!.playing && readingOf(both, "mock-2")!.playing).toBe(true);
   expect(Math.abs(readingOf(both, "mock-4")!.clipTime - readingOf(paused4, "mock-4")!.clipTime), "paused clock held").toBeLessThan(1e-6);
   expectAudioFocus(both, "mock-1");
+  // Spark focus follows the head's forward ray (§8.2), not the selection: a
+  // look at mock-2 carries the sparks there, and the audio and the foot
+  // controls stay with mock-1 until it is selected.
+  const sparkMoves: unknown[] = [];
+  for (const id of ["mock-2", "mock-1"]) {
+    const at = readingOf(both, id)!.worldPosition;
+    await setPose(page, "head", eye, [at[0], at[1] + 0.9, at[2]]);
+    const s = await waitForGallery(page, (g) => g.bubbles.sparkFocusId === id, 5_000);
+    expect(s.controls!.boundTo, "foot controls stay on the selected one").toBe("mock-1");
+    expectAudioFocus(s, "mock-1");
+    sparkMoves.push({ lookAt: id, sparkFocusId: s.bubbles.sparkFocusId, focusedId: s.focusedId });
+    mark(`sparks-${id}`);
+  }
   // Seeking the focused one on its timeline moves only its clock.
   const timeline = both.controls!.foot.timeline;
   await setPose(page, "head", eye, timeline.worldStart);
@@ -1369,11 +1428,220 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
     missingTile: { tile: missing, select: afterMissing.gallery.lastSelect },
     paused: { id: "mock-4", clipTime: readingOf(paused4, "mock-4")!.clipTime, playback: paused4.controls!.foot.text.playback },
     focusMoves,
+    sparkMoves,
     doubleSelect: double,
     paging: { older: older.gallery.shelf!.tiles.map((t) => t.title), loadedItems: older.gallery.loadedItems },
     renderer: { baseline, olderPage: olderRenderer, afterRemoveAndPage: afterRenderer },
     cacheAfter: back.cache,
     exit: { focusedId: beforeExit.focusedId }
+  };
+});
+
+/** The locomotion rig's rest height on the floor: IWSDK's float spring sleeps within this. */
+const RIG_FLOOR_TOLERANCE_M = 0.02;
+
+/** Holds an IWER controller's thumbstick at (x, y); forward is y = −1 (WebXR standard mapping). */
+async function setStick(page: Page, side: "left" | "right", x: number, y: number): Promise<void> {
+  await page.evaluate(({ side, x, y }) => {
+    (window as unknown as { IWER_DEVICE: { controllers: Record<string, { updateAxes(id: string, x: number, y: number): void }> } }).IWER_DEVICE.controllers[side]!.updateAxes("thumbstick", x, y);
+  }, { side, x, y });
+}
+
+/**
+ * Ray-clicks until `done` reads true. A click is a press and release within
+ * 300 ms of frame time (pmndrs pointer events), and on a loaded machine IWER
+ * frames can be further apart than that, so one click can be lost in emulation.
+ */
+async function rayClickUntil(page: Page, target: Vec3, from: Vec3, done: (g: GallerySnapshot) => boolean): Promise<GallerySnapshot> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await rayClick(page, target, from);
+    try {
+      return await waitForGallery(page, done, 3_000);
+    } catch (error) {
+      if (attempt === 3) throw error;
+    }
+  }
+  throw new Error("unreachable");
+}
+
+/** World points in the player rig's space, where IWER poses the headset and controllers once locomotion has moved it. */
+const toRig = (page: Page, points: Vec3[]) =>
+  page.evaluate((points) => {
+    type M = { clone(): M; invert(): M };
+    type V = { x: number; y: number; z: number; applyMatrix4(m: M): V };
+    const world = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { player: { matrixWorld: M }; camera: { position: { constructor: new (x: number, y: number, z: number) => V } } } } }).__HOLOIM_XR_VIEWER__.world;
+    const inverse = world.player.matrixWorld.clone().invert();
+    const Vector = world.camera.position.constructor;
+    return points.map((point) => {
+      const p = new Vector(...point).applyMatrix4(inverse);
+      return [p.x, p.y, p.z] as Vec3;
+    });
+  }, points);
+
+test("VR locomotion: the left stick slides, the right stick snap-turns 30° and teleports, and placed holograms, their foot controls and the shelf stay where they stand", async ({ page }, testInfo) => {
+  test.setTimeout(150_000);
+  const { marks, mark, markFirstCommit } = createTimeline();
+  markFirstCommit(page);
+  await mockGalleryFeed(page);
+  await page.goto("/");
+  await assertViewerShell(page);
+  await waitForIwerRuntime(page);
+  await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 20_000 });
+  await page.locator('[data-card-id="mock-1"]').scrollIntoViewIfNeeded();
+  await dwell(page, 3);
+  await reachFor(page.locator('[data-card-id="mock-1"]'));
+  await page.locator('[data-card-id="mock-1"] .vr-trigger-button').click();
+  await expect(page).toHaveURL(/\/vr\/mock-1$/);
+  await enterSession(page, "Step inside", "opaque");
+  await setPose(page, "head", null, null);
+  const entered = await waitForGallery(page, (s) => s.placement.stage === "placed" && Boolean(s.controls) && pageSettled(s), 25_000);
+  // The rig is still at the floor origin: IWER poses are world poses (to its float) until the viewer moves.
+  const eye: Vec3 = (await readHeadPose(page)).position;
+  expect(Math.hypot(entered.player.position[0], entered.player.position[2]), `rig at the origin ${JSON.stringify(entered.player.position)}`).toBeLessThan(1e-6);
+  expect(Math.abs(entered.player.position[1]), "rig on the floor").toBeLessThan(RIG_FLOOR_TOLERANCE_M);
+  await selectTile(page, 1, eye);
+  await waitForGallery(page, (g) => readingOf(g, "mock-2")?.placement.stage === "placed" && g.focusedId === "mock-2" && g.controls?.boundTo === "mock-2");
+  mark("two-placed");
+  // Ahead and level, the controllers lowered out of every pointer's way.
+  await setPose(page, "head", eye, [eye[0], eye[1], eye[2] - 2]);
+  await setPose(page, "left", [eye[0] - 0.25, eye[1] - 0.5, eye[2] - 0.2], [eye[0] - 0.25, 0, eye[2] - 0.6]);
+  await setPose(page, "right", [eye[0] + 0.25, eye[1] - 0.5, eye[2] - 0.2], [eye[0] + 0.25, 0, eye[2] - 0.6]);
+  // The bare VR row's chip fades in over its own 0.3 s, after its glyphs' 240 ms.
+  const fade = await measureChipFade(page, eye, (await gallerySnapshot(page)).controls!.foot.worldPosition);
+  expect(fade.length, "a frame with the chip mid-fade").toBeGreaterThan(0);
+  for (const { glyph, chip } of fade) {
+    if (glyph < 1) expect(chip / glyph, `chip ${chip.toFixed(3)} vs glyphs ${glyph.toFixed(3)}: 0.3 s vs 240 ms`).toBeCloseTo(240 / 300, 2);
+    else expect(chip, `chip ${chip.toFixed(3)} with the glyphs full`).toBeGreaterThanOrEqual(240 / 300 - 1e-3);
+  }
+  mark("chip-fade");
+  await setPose(page, "head", eye, [eye[0], eye[1], eye[2] - 2]);
+  await dwell(page);
+  const before = await gallerySnapshot(page);
+  const tilesOf = (g: GallerySnapshot) => g.gallery.shelf!.tiles.map((t) => t.worldPosition);
+
+  /** Placed holograms, their foot chip and the shelf have not moved; every base is still on the floor. */
+  const expectSpaceHeld = (g: GallerySnapshot, step: string) => {
+    for (const h of g.holograms) {
+      const was = readingOf(before, h.id)!;
+      expect(Math.hypot(h.worldPosition[0] - was.worldPosition[0], h.worldPosition[1] - was.worldPosition[1], h.worldPosition[2] - was.worldPosition[2]), `${step}: ${h.id} stays where it stands`).toBeLessThan(1e-6);
+      expect(Math.abs(h.worldPosition[1]), `${step}: ${h.id} base on the floor`).toBeLessThan(0.005);
+      expect(feetOnGround(h), `${step}: ${h.id} feet on the floor`).toBe(true);
+      expect(h.tiltRad, `${step}: ${h.id} upright`).toBeLessThan(1e-3);
+    }
+    expect(g.controls!.boundTo, `${step}: one foot-control set, on the focused hologram`).toBe("mock-2");
+    expect(horizontal(g.controls!.foot.worldPosition, before.controls!.foot.worldPosition), `${step}: foot chip held`).toBeLessThan(1e-6);
+    expect(g.controls!.foot.yaw, `${step}: the chip does not turn with the viewer`).toBeCloseTo(before.controls!.foot.yaw, 6);
+    tilesOf(g).forEach((tile, i) => expect(horizontal(tile, tilesOf(before)[i]!), `${step}: shelf tile ${i} held`).toBeLessThan(1e-6));
+  };
+
+  // Slide: the left stick pushed forward carries the rig the way the head faces, on the floor.
+  mark("slide");
+  await setStick(page, "left", 0, -1);
+  await page.waitForTimeout(700);
+  await setStick(page, "left", 0, 0);
+  await page.waitForTimeout(300);
+  const slid = await gallerySnapshot(page);
+  const slide = [0, 1, 2].map((i) => slid.player.position[i]! - before.player.position[i]!) as Vec3;
+  expect(-slide[2], `slid ${slide[2].toFixed(3)} m along the head's forward (−z)`).toBeGreaterThan(0.3);
+  expect(Math.abs(slide[0]), "straight ahead").toBeLessThan(Math.abs(slide[2]) * 0.1);
+  // IWSDK's character floats on a spring while moving (a couple of cm) and settles on the floor.
+  expect(Math.abs(slid.player.position[1]), "the rig stays at the local floor while it slides").toBeLessThan(0.05);
+  expect(Math.abs(slid.player.yawRad - before.player.yawRad), "a slide does not turn").toBeLessThan(1e-6);
+  // Released: the rig holds still on the floor. IWSDK's engine sleeps once
+  // grounded, so its float spring can stop a few mm up; holograms stay at y = 0.
+  const settled = await waitForGallery(page, (g) => Math.abs(g.player.position[1]) < RIG_FLOOR_TOLERANCE_M, 5_000);
+  expect(horizontal(settled.player.position, slid.player.position), "stops when the stick is released").toBeLessThan(0.01);
+  expect(Math.abs(settled.player.position[1]), "at rest on the local floor").toBeLessThan(RIG_FLOOR_TOLERANCE_M);
+  expectSpaceHeld(settled, "slide");
+  await dwell(page, 0.6);
+
+  // Snap turn: a right-stick flick held for a while turns 30° once, about the head.
+  mark("snap-turn");
+  const headBeforeTurn = (await readHeadPose(page)).position;
+  await setStick(page, "right", 1, 0);
+  await page.waitForTimeout(500);
+  await setStick(page, "right", 0, 0);
+  await page.waitForTimeout(200);
+  const turned = await gallerySnapshot(page);
+  const turnDeg = ((turned.player.yawRad - settled.player.yawRad) * 180) / Math.PI;
+  expect(turnDeg, `one snap to the right, ${turnDeg.toFixed(2)}°`).toBeCloseTo(-30, 1);
+  const headAfterTurn = (await readHeadPose(page)).position;
+  expect(horizontal(headAfterTurn, headBeforeTurn), "the turn pivots on the head").toBeLessThan(0.01);
+  expectSpaceHeld(turned, "snap turn");
+  await dwell(page, 0.6);
+
+  // Teleport: pull the right stick back, aim at open floor behind (the holograms
+  // and the shelf stand ahead and at the sides, and a ray on them holds the aim), release to land.
+  mark("teleport");
+  const turnedForward = (await readHeadPose(page)).forward;
+  const aimWorld: Vec3 = [headAfterTurn[0] - turnedForward[0] * 2.5, 0, headAfterTurn[2] - turnedForward[2] * 2.5];
+  const [aimRig] = await toRig(page, [aimWorld]);
+  await setPose(page, "right", [eye[0] + 0.2, eye[1] - 0.3, eye[2] - 0.2], aimRig!);
+  await setStick(page, "right", 0, 1);
+  // IWSDK eases its landing marker a fifth of the way to the arc's hit each frame.
+  await page.waitForTimeout(2_500);
+  const aiming = await gallerySnapshot(page);
+  expect(horizontal(aiming.player.position, turned.player.position), "aiming alone does not move").toBeLessThan(1e-3);
+  await setStick(page, "right", 0, 0);
+  // Landed once the rig has moved and its float spring has settled on the floor.
+  const landed = await waitForGallery(page, (g) => horizontal(g.player.position, turned.player.position) > 0.5 && Math.abs(g.player.position[1]) < RIG_FLOOR_TOLERANCE_M, 5_000);
+  const jump = horizontal(landed.player.position, turned.player.position);
+  expect(jump, `teleported ${jump.toFixed(2)} m`).toBeGreaterThan(0.75);
+  // Toward the aim: behind, along the turned facing.
+  const toLanding = [landed.player.position[0] - turned.player.position[0], landed.player.position[2] - turned.player.position[2]];
+  const along = -(toLanding[0]! * turnedForward[0] + toLanding[1]! * turnedForward[2]) / (jump * Math.hypot(turnedForward[0], turnedForward[2]));
+  expect(along, `landed ${(Math.acos(Math.min(1, along)) * 180 / Math.PI).toFixed(0)}° off the aim`).toBeGreaterThan(Math.cos((20 * Math.PI) / 180));
+  expect(Math.abs(landed.player.position[1]), "lands on the local floor").toBeLessThan(RIG_FLOOR_TOLERANCE_M);
+  expect(Math.abs(landed.player.yawRad - turned.player.yawRad), "a teleport keeps the facing").toBeLessThan(1e-6);
+  expectSpaceHeld(landed, "teleport");
+  await dwell(page);
+
+  // From the new spot, recenter brings the focused hologram 1.5 m ahead of the viewer, standing on the floor.
+  mark("recenter-after-moving");
+  const head = await readHeadPose(page);
+  // Look at the chip so its reach row opens, then aim at the recenter glyph where the row laid it out.
+  const [chipRig] = await toRig(page, [landed.controls!.foot.worldPosition]);
+  await setPose(page, "head", eye, chipRig!);
+  const reached = await waitForGallery(page, (g) => g.controls!.foot.reachOpacity === 1, 5_000);
+  const [recenterRig] = await toRig(page, [reached.controls!.foot.buttons.recenter.worldPosition]);
+  await setPose(page, "head", eye, recenterRig!);
+  const recentered = await rayClickUntil(page, recenterRig!, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2], (g) => readingOf(g, "mock-2")!.placement.sequence > readingOf(landed, "mock-2")!.placement.sequence);
+  const moved = readingOf(recentered, "mock-2")!;
+  const viewer = (await readHeadPose(page)).position;
+  expect(Math.abs(horizontal(moved.worldPosition, viewer) - 1.5), `recentered ${horizontal(moved.worldPosition, viewer).toFixed(3)} m from the moved viewer`).toBeLessThan(0.05);
+  expect(Math.abs(moved.worldPosition[1]), "recentered on the floor").toBeLessThan(0.005);
+  expect(feetOnGround(moved)).toBe(true);
+  expect(horizontal(recentered.controls!.foot.worldPosition, moved.worldPosition), "its foot controls came with it").toBeLessThan(moved.footprintRadius + 0.1);
+  expect(horizontal(readingOf(recentered, "mock-1")!.worldPosition, readingOf(before, "mock-1")!.worldPosition), "the other stays where it stood").toBeLessThan(1e-6);
+  mark("recentered");
+  await dwell(page);
+
+  // The shelf still answers from here: a tile places its hologram on the stage's floor.
+  mark("shelf-after-moving");
+  const tileWorld = recentered.gallery.shelf!.tiles[2]!.worldPosition;
+  const [tileRig] = await toRig(page, [tileWorld]);
+  await setPose(page, "head", eye, tileRig!);
+  await rayClickUntil(page, tileRig!, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2], (g) => g.gallery.lastSelect?.index === 2);
+  const third = await waitForGallery(page, (g) => readingOf(g, "mock-3")?.placement.stage === "placed" && g.focusedId === "mock-3");
+  const mock3 = readingOf(third, "mock-3")!;
+  expect(Math.abs(mock3.worldPosition[1]), "placed on the floor after moving").toBeLessThan(0.005);
+  expect(feetOnGround(mock3)).toBe(true);
+  expect(third.controls!.boundTo).toBe("mock-3");
+  mark("placed-mock-3");
+  await captureEvidence(page, testInfo, "vr-locomotion");
+  await endSession(page);
+  await expect(page).toHaveURL(/\/$/);
+
+  report.locomotion = {
+    timeline: marks,
+    player: { before: before.player, slid: slid.player, turned: turned.player, landed: landed.player },
+    slideM: slide,
+    turnDeg,
+    chipFade: fade,
+    teleportM: jump,
+    headPivotM: horizontal(headAfterTurn, headBeforeTurn),
+    recenter: { distanceM: horizontal(moved.worldPosition, viewer), headBefore: head.position, position: moved.worldPosition },
+    shelfPlace: mock3.worldPosition
   };
 });
 

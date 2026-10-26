@@ -95,6 +95,8 @@ export interface FootControlsProbe {
   revealed: boolean;
   /** Opacity of the on-reach set, while it fades. */
   reachOpacity: number;
+  /** How far the on-reach chip has faded in (0-1): over 0.3 s in VR (§5.2), with its glyphs elsewhere. */
+  reachChipFade: number;
   near: { hover: boolean; hand: boolean; headRay: boolean };
   labelOpacity: number;
   chipOpacity: number;
@@ -139,6 +141,7 @@ export class FootControls {
   private yaw = 0;
   private pitch = 0;
   private reachOpacity = 0;
+  private reachChipFade = 0;
   private lastNow = 0;
   private reading: AttentionReading = { opacity: 1, revealed: false, dimInMs: GLYPH.idleAfterMs };
   private nearFlags = { hover: false, hand: false, headRay: false };
@@ -195,7 +198,7 @@ export class FootControls {
 
     this.timelineHit = new UIKit.Container({
       width: this.timelineApx,
-      height: this.metrics.hitMin,
+      height: this.metrics.reachHitMin,
       justifyContent: "center",
       flexDirection: "column"
     });
@@ -216,8 +219,8 @@ export class FootControls {
     this.addButton(this.reachRow, "recenter", "recenter", () => this.actions.recenter());
 
     this.scaleButton = new UIKit.Container({
-      height: this.metrics.hitMin,
-      minWidth: this.metrics.hitMin,
+      height: this.metrics.reachHitMin,
+      minWidth: this.metrics.reachHitMin,
       alignItems: "center",
       justifyContent: "center",
       paddingLeft: CHIP.paddingInline * s * 0.5,
@@ -304,6 +307,9 @@ export class FootControls {
     // Chrome unfolds 240 ms in and 400 ms out (§8.4).
     const step = this.reading.revealed ? delta / MOTION.chromeInMs : -delta / MOTION.chromeOutMs;
     this.reachOpacity = Math.min(1, Math.max(0, this.reachOpacity + step));
+    // VR rows are bare against walls; their chip fades in over its own 0.3 s (§5.2, §9.2). AR always shows it with the row.
+    const chipStep = this.reading.revealed ? delta / CHIP.vrFadeInMs : -delta / MOTION.chromeOutMs;
+    this.reachChipFade = this.target === "vr" ? Math.min(1, Math.max(0, this.reachChipFade + chipStep)) : this.reachOpacity;
     this.reachRow.setProperties({ display: this.reachOpacity > 0 ? "flex" : "none" });
     // No text within 1 m of the hologram (§7.3); glyphs stay.
     this.labelOpacity = input.hologramDistanceM >= LABEL_MIN_DISTANCE_M ? 1 : 0;
@@ -373,11 +379,12 @@ export class FootControls {
       dimInMs: this.reading.dimInMs,
       revealed: this.reading.revealed,
       reachOpacity: this.reachOpacity,
+      reachChipFade: this.reachChipFade,
       near: { ...this.nearFlags },
       labelOpacity: this.labelOpacity,
       chipOpacity: this.metrics.chipOpacity,
       metresPerApx: this.metresPerApx,
-      sizes: { glyphIconApx: GLYPH.icon * s, ringApx: GLYPH.ring * s, strokeApx: GLYPH.stroke * s, hitApx: this.metrics.hitMin },
+      sizes: { glyphIconApx: GLYPH.icon * s, ringApx: GLYPH.ring * s, strokeApx: GLYPH.stroke * s, hitApx: this.metrics.reachHitMin },
       text: { ...this.strings },
       buttons,
       timeline: { worldStart: start.toArray() as [number, number, number], worldEnd: end.toArray() as [number, number, number], fraction: this.fraction(), lengthApx: this.timelineApx },
@@ -464,7 +471,7 @@ export class FootControls {
     const labels = this.labelOpacity;
 
     this.alwaysRow.setProperties({ backgroundColor: withAlpha(COLOR.deepSea, this.metrics.chipOpacity * always) });
-    this.reachRow.setProperties({ backgroundColor: withAlpha(COLOR.deepSea, this.metrics.chipOpacity * reach) });
+    this.reachRow.setProperties({ backgroundColor: withAlpha(COLOR.deepSea, this.metrics.chipOpacity * Math.min(reach, this.reachChipFade)) });
     this.playButton.glyph.setDrawing(state.playing ? "pause" : "play");
     for (const button of this.buttons.values()) {
       const base = button === this.playButton ? always : reach;
@@ -509,7 +516,7 @@ export class FootControls {
     const s = this.metrics.scale;
     const drawn = (ring ? GLYPH.ring : GLYPH.icon) * s;
     // Hit area: the larger of the drawn size and the input's minimum, centred (§6.1).
-    const size = Math.max(drawn, this.metrics.hitMin);
+    const size = Math.max(drawn, this.metrics.reachHitMin);
     const hit = new UIKit.Container({ width: size, height: size, alignItems: "center", justifyContent: "center" });
     const glyph = createGlyph(glyphName, { size: drawn, color: COLOR.gold, ...(ring ? { ring: { innerSize: GLYPH.playTriangle } } : {}) });
     glyph.element.setProperties({ pointerEvents: "none" });

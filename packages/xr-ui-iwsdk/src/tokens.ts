@@ -83,14 +83,23 @@ export interface TargetMetrics {
   scale: number;
   /** Minimum hit area for the target's pointer (apx, never scaled). */
   hitMin: number;
+  /**
+   * Minimum hit area for controls that can be within reach, such as the foot
+   * controls: in a headset they are poked as well as rayed (§6.1, §9.2), so
+   * 72 apx and never under 20 mm at the foot's reference distance.
+   */
+  reachHitMin: number;
   chipOpacity: number;
 }
 
+/** The poke minimum at the foot controls' reference distance (apx). */
+const FOOT_POKE_MIN = Math.max(HIT.poke, HIT.pokeFloorMm / 1000 / metresPerApx(FOOT_REFERENCE_DISTANCE_M));
+
 export function targetMetrics(target: XrUiTarget): TargetMetrics {
   switch (target) {
-    case "vr": return { scale: HEADSET_SCALE, hitMin: HIT.ray, chipOpacity: CHIP_OPACITY.vr };
-    case "ar-quest": return { scale: HEADSET_SCALE, hitMin: HIT.ray, chipOpacity: CHIP_OPACITY.arQuestPassthrough };
-    case "ar-phone": return { scale: 1, hitMin: HIT.touch, chipOpacity: CHIP_OPACITY.arAndroidChrome };
+    case "vr": return { scale: HEADSET_SCALE, hitMin: HIT.ray, reachHitMin: FOOT_POKE_MIN, chipOpacity: CHIP_OPACITY.vr };
+    case "ar-quest": return { scale: HEADSET_SCALE, hitMin: HIT.ray, reachHitMin: FOOT_POKE_MIN, chipOpacity: CHIP_OPACITY.arQuestPassthrough };
+    case "ar-phone": return { scale: 1, hitMin: HIT.touch, reachHitMin: HIT.touch, chipOpacity: CHIP_OPACITY.arAndroidChrome };
   }
 }
 

@@ -5,7 +5,7 @@ import { AimRays, FocusRing, FootControls, GRIP_PALM, HandDock, StatusLine, conf
 import { Vector3, type Object3D } from "three";
 
 import { HologramPlayback, restartHologram, seekHologram, setHologramPlaying } from "./hologramPlayback";
-import { addTwoHandGrab, keepGrounded } from "./twoHandGrab";
+import { addTwoHandGrab, grabPointerIds, keepGrounded } from "./twoHandGrab";
 import { focusedRecord, viewerContext, type PlacedHologram } from "./viewerContext";
 
 // The viewer's XR interface (docs/features/viewer-xr-interface.md, steps 3
@@ -94,8 +94,9 @@ export class HologramControlsSystem extends createSystem() {
         this.ungrounded.set(entity, frames + 1);
       }
     }
-    // The dock hides while the hand it sits on grabs (brief: palm dock vs two-hand grab).
-    dock.setVisible(!c.placed.some((placed) => placed.entity.hasComponent(Grabbed)));
+    // The dock hides while the hand it sits on grabs (brief: palm dock vs two-hand grab); the other hand's grab leaves it.
+    const dockPointers = this.ui.dockHand ? handPointerIds(this.world, this.ui.dockHand) : [];
+    dock.setVisible(!c.placed.some((placed) => placed.entity.hasComponent(Grabbed) && grabPointerIds(placed.entity).some((id) => dockPointers.includes(id))));
     dock.update();
 
     const record = focusedRecord(c);
