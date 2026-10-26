@@ -384,6 +384,23 @@ test.describe("phone by touch", () => {
     expect(overPicture).not.toBe("rgba(0, 0, 0, 0)");
     const freePlay = (await play.boundingBox())!;
     expect(Math.abs(freePlay.x + freePlay.width / 2 - PHONE.width / 2), "Play still holds the middle beside Return").toBeLessThan(2);
+    // The chip hugs what shows: from its edge to the first and last mark on it alike, reached and folded.
+    const chipEnds = () => chip.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const row = node.querySelector<HTMLElement>(".portal-controls")!;
+      const marks = [...row.querySelectorAll(".portal-timecode, button svg")].filter((mark) => {
+        const folded = mark.closest(".portal-controls-reach");
+        return !folded || (row.dataset.reach === "shown" && getComputedStyle(folded).position !== "absolute");
+      }).map((mark) => mark.getBoundingClientRect());
+      return { start: Math.min(...marks.map((mark) => mark.left)) - box.left, end: box.right - Math.max(...marks.map((mark) => mark.right)) };
+    });
+    const reachedEnds = await chipEnds();
+    expect(Math.abs(reachedEnds.start - reachedEnds.end), `reached, the chip's ends match (${JSON.stringify(reachedEnds)})`).toBeLessThan(3);
+    await expect(controls).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
+    await page.waitForTimeout(500);
+    const foldedEnds = await chipEnds();
+    expect(Math.abs(foldedEnds.start - foldedEnds.end), `folded, the chip's ends match (${JSON.stringify(foldedEnds)})`).toBeLessThan(3);
+    expect(Math.abs((await play.boundingBox())!.x + freePlay.width / 2 - PHONE.width / 2), "folded, Play still holds the middle").toBeLessThan(2);
     for (const button of await controls.locator("button").all()) {
       const box = (await button.boundingBox())!;
       expect(box.x + box.width, "clear of the right back-swipe edge").toBeLessThanOrEqual(PHONE.width - side + 0.5);

@@ -151,6 +151,56 @@ function useReachRow(footRef: React.RefObject<HTMLElement | null>): ReachRow {
   return row;
 }
 
+/**
+ * The chip round the controls hugs what shows, so it is wider on the side
+ * with more controls; it shifts by the difference so Play stays at the middle
+ * of the card while the reach controls come and go.
+ */
+function usePlayHeldMiddle(footRef: React.RefObject<HTMLElement | null>, chipShown: boolean): void {
+  useLayoutEffect(() => {
+    const foot = footRef.current;
+    if (!foot || !chipShown || typeof ResizeObserver === "undefined") return undefined;
+    const measure = () => {
+      const chip = foot.querySelector<HTMLElement>(".feed-card-foot-chip");
+      const controls = chip?.querySelector<HTMLElement>(".portal-controls");
+      const play = controls?.querySelector<HTMLElement>(".portal-controls-row");
+      if (!chip || !controls || !play) return;
+      resized.observe(controls);
+      // Glyphs sit inset in their hit areas and text does not; the start
+      // pads by the difference, so the first and last marks sit alike from
+      // the chip's ends.
+      const inset = (button: HTMLElement | undefined, end: "left" | "right") => {
+        const mark = button?.querySelector("svg");
+        if (!button || !mark) return 0;
+        const outer = button.getBoundingClientRect();
+        const inner = mark.getBoundingClientRect();
+        return end === "left" ? inner.left - outer.left : outer.right - inner.right;
+      };
+      const glyphs = [...chip.querySelectorAll<HTMLElement>(".portal-controls-side button")]
+        .filter((button) => {
+          const after = button.closest<HTMLElement>(".portal-controls-after");
+          return !after || (controls.dataset.reach === "shown" && getComputedStyle(after).position !== "absolute");
+        });
+      const startsOnText = controls.dataset.reach === "shown" && controls.querySelector(".portal-timecode") !== null;
+      const lead = inset(glyphs.at(-1), "right") - (startsOnText ? 0 : inset(play.querySelector("button") ?? undefined, "left"));
+      chip.style.setProperty("--feed-controls-lead", `${lead}px`);
+      const shift = parseFloat(chip.style.getPropertyValue("--feed-controls-shift")) || 0;
+      const footBox = foot.getBoundingClientRect();
+      const playBox = play.getBoundingClientRect();
+      chip.style.setProperty("--feed-controls-shift", `${shift + footBox.left + footBox.width / 2 - (playBox.left + playBox.width / 2)}px`);
+    };
+    const resized = new ResizeObserver(measure);
+    resized.observe(foot);
+    const mutated = new MutationObserver(measure);
+    mutated.observe(foot, { childList: true, subtree: true, attributeFilter: ["data-reach"] });
+    measure();
+    return () => {
+      resized.disconnect();
+      mutated.disconnect();
+    };
+  }, [chipShown, footRef]);
+}
+
 function formatByline(item: HologramDTO): string {
   return `By ${item.submittedBy} · ${new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
 }
@@ -186,6 +236,7 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
   const portalPaused = usePortalValue(portal, (state) => state.paused);
   // How far the view has gone inside: 0 in Follow or fully zoomed out, 1 at eye level.
   const portalOpen = usePortalValue(portal, (state) => (state.mode === "free" ? Math.round((1 - state.zoom) * 100) / 100 : 0));
+  usePlayHeldMiddle(footRef, portalOpen > 0);
 
   useEffect(() => {
     let cancelled = false;
@@ -370,8 +421,8 @@ export function HologramCard({ item, active, muted, onToggleMute, preloadNextUrl
       <div ref={footRef} className="feed-card-foot" data-reach-row={reachRow}>
         {portalOpen > 0 ? (
           // Over the hologram's own picture, text always takes the chip (5.2).
-          // Play holds the middle of the row, so the chip pads both ends alike (the row's own padding is for Play at the start).
-          <Chip className="feed-card-foot-chip" target={target} overPicture controlRow style={{ paddingInlineStart: controlRowPaddingApx(target).end }}>{controls}</Chip>
+          // The chip pads both ends alike (the row's own padding is for Play at the start) and hugs the controls showing.
+          <Chip className="feed-card-foot-chip" target={target} overPicture controlRow style={{ paddingInlineStart: `calc(${controlRowPaddingApx(target).end}px + var(--feed-controls-lead, 0px))` }}>{controls}</Chip>
         ) : controls}
       </div>
     </article>

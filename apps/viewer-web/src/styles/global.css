@@ -185,14 +185,27 @@ body::before {
   justify-content: center;
 }
 
-/* Over the picture the row takes the chip, no wider than the controls showing. */
+/* Over the picture the row takes the chip, no wider than the controls
+   showing: each side of Play only as wide as its own controls, and the chip
+   shifted so Play still holds the middle (usePlayHeldMiddle). */
 .feed-card-foot-chip {
   max-width: 100%;
   box-sizing: border-box;
+  translate: var(--feed-controls-shift, 0px) 0;
 }
 
 .feed-card-foot-chip .portal-controls {
   width: auto;
+  grid-template-columns: auto auto auto;
+}
+
+/* With the reach controls folded, no gap is left where they were. */
+.feed-card-foot-chip .portal-controls[data-reach="hidden"] .portal-controls-row {
+  margin-inline-start: calc(-1 * var(--feed-control-gap));
+}
+
+.feed-card-foot:not([data-reach-row="stacked"]) .feed-card-foot-chip .portal-controls[data-reach="hidden"] .portal-controls-after {
+  margin-inline-start: calc(-1 * var(--feed-control-gap));
 }
 
 /* ── Controls at the foot ── */

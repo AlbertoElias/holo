@@ -189,7 +189,7 @@ export function usePortalTriggers(
 
       if (!dragging && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > TAP_MAX_MOVE_PX) {
         dragging = true;
-        const scroller = looking ? null : scrollParent(card);
+        const scroller = looking && canDrag() ? null : scrollParent(card);
         if (scroller) {
           scroller.dataset.portalScrolling = "";
           feedSwipe = { scroller, startTop: scroller.scrollTop, velocity: 0, at: event.timeStamp };
