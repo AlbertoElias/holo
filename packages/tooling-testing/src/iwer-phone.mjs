@@ -34,8 +34,8 @@ export async function emulatePhone(page, options = {}) {
   await page.addInitScript('globalThis.__name = globalThis.__name || ((target) => target);');
   await page.addInitScript((interactionMode) => {
     let deviceValue;
-    // WebXR faults for the phone, installed once per page and inert until `phoneViewOffset` or
-    // `phoneViewerSpaceUnavailable` turns them on.
+    // WebXR faults for the phone, installed once per page and inert until `phoneViewOffset`,
+    // `phoneViewerSpaceUnavailable` or `phoneTargetRayLost` turns them on.
     function patchWebXr() {
       if (globalThis.__phoneWebXrPatched) return;
       globalThis.__phoneWebXrPatched = true;
@@ -51,6 +51,9 @@ export async function emulatePhone(page, options = {}) {
       const getPose = XRFrame.prototype.getPose;
       XRFrame.prototype.getPose = function (space, baseSpace) {
         if (globalThis.__phoneViewerSpaceUnavailable && viewerSpaces.has(baseSpace)) return null;
+        if (globalThis.__phoneTargetRayLost && !viewerSpaces.has(baseSpace)) {
+          for (const source of this.session.inputSources) if (source.targetRaySpace === space) return null;
+        }
         return getPose.call(this, space, baseSpace);
       };
       // The spec lets a view sit rotated against the viewer: each view's transform is the viewer's turned by
@@ -447,4 +450,15 @@ export function phoneViewerSpaceUnavailable(page, unavailable) {
   return page.evaluate((flag) => {
     globalThis.__phoneViewerSpaceUnavailable = flag;
   }, unavailable);
+}
+
+/**
+ * While on, `getPose` of an input source's target-ray space returns null against any space but a viewer
+ * reference space (the touchdown's viewer-local direction still resolves), as a runtime may for a frame in
+ * which it cannot place the finger. Needs the session to have started after `emulatePhone`.
+ */
+export function phoneTargetRayLost(page, lost) {
+  return page.evaluate((flag) => {
+    globalThis.__phoneTargetRayLost = flag;
+  }, lost);
 }

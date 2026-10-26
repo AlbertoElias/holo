@@ -112,6 +112,8 @@ export class ScreenHolds {
     // Tracking lost: no pose to read the screen from, and no sample to write.
     if (!camera.matrixWorld.elements.every(Number.isFinite)) return;
     const ray = t.touch.ray;
+    // The finger had no pose this frame: where it is is unknown, so no sample and no slop against this frame's viewer.
+    if (!t.touch.rayCurrent) return;
     if (!isFiniteVector3Like(ray.origin) || !isFiniteVector3Like(ray.direction)) return;
 
     if (t.held) {

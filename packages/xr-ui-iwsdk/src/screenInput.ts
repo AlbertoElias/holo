@@ -57,6 +57,8 @@ export interface ScreenTouch {
    * last finite ray.
    */
   ray: Ray;
+  /** `ray` is from the latest frame: false when that frame had no finite pose for the finger and `ray` is the last one. */
+  rayCurrent: boolean;
   /**
    * The finger went down on chrome: the pointer's hit at down is an object
    * that is, or descends from, one flagged with `CHROME_FLAG`. A hit on a
@@ -244,7 +246,7 @@ export class ScreenInputSystem extends createSystem() {
   }
 
   private followTouch(frame: XRFrame, touch: ScreenTouch): void {
-    this.worldRay(frame, touch.source, touch.ray);
+    touch.rayCurrent = this.worldRay(frame, touch.source, touch.ray);
   }
 
   /** Refreshes `viewerQuaternion` from an animation frame (`getViewerPose` is illegal on a touch event's frame, so only `refreshTouches` calls this). */
@@ -269,7 +271,7 @@ export class ScreenInputSystem extends createSystem() {
 
   private beginTouch(frame: XRFrame, source: XRInputSource, extra: Pick<ScreenTouch, "downRay" | "beganOnChrome" | "hitObject">): void {
     const ray = extra.downRay.clone();
-    const touch: ScreenTouch = { source, downAt: performance.now(), ray, downViewDirection: this.viewDirection(frame, source), viewerQuaternion: null, pinched: this.pinched, ...extra };
+    const touch: ScreenTouch = { source, downAt: performance.now(), ray, downViewDirection: this.viewDirection(frame, source), viewerQuaternion: null, rayCurrent: false, pinched: this.pinched, ...extra };
     this.touches.set(source, touch);
     this.followTouch(frame, touch);
     this.onTouchStart?.(touch);

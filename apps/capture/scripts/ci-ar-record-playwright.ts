@@ -13,7 +13,7 @@ import {
   waitForTextContentPrefix,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
-import { emulatePhone, phoneFingerDown, phoneFingerMove, phoneFingerUp, phoneHold, phoneScreenPoint, phoneTap, phoneViewOffset, phoneViewerSpaceUnavailable, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
+import { emulatePhone, phoneFingerDown, phoneFingerMove, phoneFingerUp, phoneHold, phoneScreenPoint, phoneTap, phoneTargetRayLost, phoneViewOffset, phoneViewerSpaceUnavailable, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
 
 import type {} from '../src/runtime/automationHooks';
 import type { PointResolutionReport } from '../src/recording/PointResolver';
@@ -60,7 +60,8 @@ import {
 //                     hold that begins on the dock's chip (no hold, no dock action), a drag of 100 apx that ends
 //                     before the first simulation step and then stays still past the hold delay (no hold), a finger
 //                     still at the screen centre while the head turns 4 degrees as it lands, judged after the hold
-//                     delay (a hold, no referent), a 1 s hold that begins on the status chip with the bracket behind it (no hold), a 1 s hold on TargetA, and a
+//                     delay (a hold, no referent), a finger still while its ray is unplaceable for four frames and the head
+//                     turns 4 degrees (a hold, no referent), a 1 s hold that begins on the status chip with the bracket behind it (no hold), a 1 s hold on TargetA, and a
 //                     1 s hold on TargetA while the head walks toward it and turns with the finger fixed on the
 //                     screen; Stop by the dock. Exactly three recorded links from RecordedAuthorCamera
 //                     (RecordedObject, TargetA, TargetA), spans starting at the touch, HOLOIM_meaning version 1,
@@ -1334,6 +1335,57 @@ async function turnAtTouchdownScenario(page: Page, report: PhaseReport, scenario
   await advance(page, STEP_MS);
 }
 
+/**
+ * The finger lands and stays still; the runtime cannot place the finger's ray for four frames while the head turns {@link TURN_AT_TOUCHDOWN_DEG} degrees (the viewer pose is fine). The
+ * frames without the finger are skipped, never read as the stale ray against that frame's viewer (about
+ * 32 apx of drag); once the ray returns the finger is where it was, and past the hold delay it is a hold.
+ */
+async function targetRayLostScenario(page: Page, report: PhaseReport, scenarios: MarkScenario[], head: Pose): Promise<void> {
+  const name = 'target-ray-lost-while-turning';
+  const before = await arOf(page);
+  const centre = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2, PHONE_VIEWPORT.height / 2, 1.5);
+  await phoneFingerDown(page, centre);
+  // The hold delay is wall time, and a slow machine could latch the hold before the ray is lost and make the
+  // check vacuous: the first step after the touchdown is therefore a lost one.
+  const turned = new THREE.Quaternion(...head.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (TURN_AT_TOUCHDOWN_DEG * Math.PI) / 180));
+  await phoneTargetRayLost(page, true);
+  await setHeadPose(page, head.position, [turned.x, turned.y, turned.z, turned.w]);
+  const lostSteps: ArState[] = [];
+  for (let i = 0; i < 4; i += 1) {
+    await nextXrFrame(page);
+    await advance(page, STEP_MS);
+    lostSteps.push(await arOf(page));
+  }
+  await phoneTargetRayLost(page, false);
+  await page.waitForTimeout(400);
+  const stepped: ArState[] = [];
+  for (let i = 0; i < 3; i += 1) {
+    await nextXrFrame(page);
+    await advance(page, STEP_MS);
+    stepped.push(await arOf(page));
+  }
+  const during = stepped[stepped.length - 1]!;
+  await phoneFingerUp(page);
+  for (let i = 0; i < 3; i += 1) await advance(page, STEP_MS);
+  const after = await arOf(page);
+  scenarios.push({
+    name,
+    holdsBefore: before.screenHolds.kept,
+    holdsAfter: after.screenHolds.kept,
+    trackedAfter: after.screenHold.phase,
+    phaseWhileDown: during.screenHold.phase,
+    slopWhileDownApx: during.screenHold.slopApx
+  });
+  const notPending = lostSteps.find((facts) => facts.screenHold.phase !== 'pending');
+  if (notPending) report.failures.push(`${name}: a step without the finger's pose left the tracked phase ${notPending.screenHold.phase} (slop ${notPending.screenHold.slopApx} apx), expected pending${notPending.screenHold.phase === 'dead' ? ': the stale ray was compared with that frame\'s viewer' : ''}`);
+  if (during.screenHold.phase !== 'held') report.failures.push(`${name}: the finger stayed still while its ray was lost for several frames and the head turned ${TURN_AT_TOUCHDOWN_DEG} degrees, and the tracked phase is ${during.screenHold.phase} (slop ${during.screenHold.slopApx} apx), expected held`);
+  if (after.screenHolds.kept !== before.screenHolds.kept + 1) report.failures.push(`${name}: the take kept ${after.screenHolds.kept - before.screenHolds.kept} new hold(s), expected 1`);
+  if (after.screenHold.phase !== 'none') report.failures.push(`${name}: a finger is still tracked after the touch (${after.screenHold.phase})`);
+  await setHeadPose(page, head.position, head.quaternion);
+  await nextXrFrame(page);
+  await advance(page, STEP_MS);
+}
+
 /** How far every view is turned against the viewer in the view-offset scenario: 3 degrees is about 24 apx on the phone viewport, past the 22 apx slop. */
 const VIEW_OFFSET_DEG = 3;
 
@@ -1485,6 +1537,8 @@ async function marksPhase(run: Run, phase: 'marks-a' | 'marks-b', start: { posit
     await earlyDragScenario(page, report, scenarios, dragFrom, dragTo);
     // A finger that stays put while the head turns as it lands is a hold.
     await turnAtTouchdownScenario(page, report, scenarios, standing);
+    // A finger whose ray the runtime cannot place for some frames, while the head turns, is skipped on those frames.
+    await targetRayLostScenario(page, report, scenarios, standing);
     // The views turned against the viewer, and a touch with no viewer-frame baseline.
     await viewOffsetScenario(page, report, scenarios);
     await noViewerBaselineScenarios(page, report, scenarios, dragFrom, dragTo);
@@ -1605,9 +1659,9 @@ function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: Mean
     return;
   }
   const holds = resolution.aimHolds;
-  if (holds.length !== 7 || holds.some((hold) => hold.input !== 'screen')) report.failures.push(`resolution lists ${holds.length} hold(s) [${holds.map((hold) => hold.input).join(', ')}], expected 7 screen holds (bracket, floor, turn at touchdown, view offset, no viewer baseline, TargetA, TargetA walking)`);
+  if (holds.length !== 8 || holds.some((hold) => hold.input !== 'screen')) report.failures.push(`resolution lists ${holds.length} hold(s) [${holds.map((hold) => hold.input).join(', ')}], expected 8 screen holds (bracket, floor, turn at touchdown, target ray lost, view offset, no viewer baseline, TargetA, TargetA walking)`);
   const unlinked = resolution.runs.filter((resolved) => !resolved.linked);
-  if (unlinked.length !== 4 || unlinked.some((resolved) => resolved.reason !== 'no referent')) report.failures.push(`resolution: unlinked runs ${JSON.stringify(unlinked.map((resolved) => resolved.reason))}, expected exactly four "no referent" (the floor, the turn at touchdown, the view offset, no viewer baseline)`);
+  if (unlinked.length !== 5 || unlinked.some((resolved) => resolved.reason !== 'no referent')) report.failures.push(`resolution: unlinked runs ${JSON.stringify(unlinked.map((resolved) => resolved.reason))}, expected exactly five "no referent" (the floor, the turn at touchdown, the target ray lost, the view offset, no viewer baseline)`);
   if (resolution.runs.filter((resolved) => resolved.linked).length !== links.length) report.failures.push('resolution: linked runs and links in the file differ');
 }
 

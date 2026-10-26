@@ -15,3 +15,4 @@ export function phonePinch(page: Page, centre: PhoneVec3, fromPx: number, toPx: 
 export function setHeadPose(page: Page, position: PhoneVec3, quaternion: PhoneQuat): Promise<void>;
 export function phoneViewOffset(page: Page, yawDeg: number): Promise<void>;
 export function phoneViewerSpaceUnavailable(page: Page, unavailable: boolean): Promise<void>;
+export function phoneTargetRayLost(page: Page, lost: boolean): Promise<void>;
