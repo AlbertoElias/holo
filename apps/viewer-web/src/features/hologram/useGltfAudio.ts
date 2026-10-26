@@ -8,9 +8,13 @@ export interface GltfAudioResult {
   hasAudio: boolean;
 }
 
+/** Playback time running back by more than this is the motion wrapping, not frame noise. */
+const WRAP_BACK_SEC = 0.05;
+
 /**
  * `playing` starts and stops the sound. `getPlaybackTime` reports the
- * animation's current time, so every (re)start lands where the motion is.
+ * animation's current time, so every (re)start lands where the motion is,
+ * including each time the motion loops back to its start.
  */
 export function useGltfAudio(
   gltf: GltfAudioSource,
@@ -75,24 +79,51 @@ export function useGltfAudio(
     gainRef.current = gain;
 
     const buffer = audioBufferRef.current;
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.loop = loopRef.current;
-    source.connect(gain);
-    const time = Math.max(getPlaybackTimeRef.current?.() ?? 0, 0);
-    const offset = source.loop ? time % buffer.duration : time;
-    if (offset < buffer.duration) {
-      source.start(0, offset);
-    }
-    sourceRef.current = source;
+    let source: AudioBufferSourceNode | null = null;
+    // (Re)starts the sound where the motion is. Looping alone would run the sound by its own length, which
+    // is not the motion's (a camera take's audio is not as long as its motion).
+    const start = (time: number): void => {
+      if (source) {
+        try {
+          source.stop();
+        } catch {
+          // already stopped
+        }
+        source.disconnect();
+        source = null;
+      }
+      const next = ctx.createBufferSource();
+      next.buffer = buffer;
+      next.loop = loopRef.current;
+      next.connect(gain);
+      const offset = next.loop ? time % buffer.duration : time;
+      if (offset < buffer.duration) {
+        next.start(0, offset);
+      }
+      source = next;
+      sourceRef.current = next;
+    };
+    let lastTime = Math.max(getPlaybackTimeRef.current?.() ?? 0, 0);
+    start(lastTime);
+
+    // The motion wrapping to its start restarts the sound with it, as the XR player does.
+    let frame = 0;
+    const watch = (): void => {
+      const time = Math.max(getPlaybackTimeRef.current?.() ?? 0, 0);
+      if (time < lastTime - WRAP_BACK_SEC) start(time);
+      lastTime = time;
+      frame = requestAnimationFrame(watch);
+    };
+    if (getPlaybackTimeRef.current) frame = requestAnimationFrame(watch);
 
     return () => {
+      cancelAnimationFrame(frame);
       try {
-        source.stop();
+        source?.stop();
       } catch {
         // already stopped
       }
-      source.disconnect();
+      source?.disconnect();
       sourceRef.current = null;
       gain.disconnect();
       gainRef.current = null;

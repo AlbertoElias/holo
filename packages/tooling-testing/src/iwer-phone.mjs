@@ -205,7 +205,41 @@ export async function emulatePhone(page, options = {}) {
           }
           await frameOf(session);
         };
+        // One finger that the caller moves between frames by hand, for what `press` cannot do: touch down, move
+        // before the simulation steps, and lift later. A frame passes at each call.
+        let held = null;
+        const fingerDown = async (point) => {
+          const session = sessionOf();
+          if (!EventCtor) throw new Error('phone: XRInputSourceEvent unavailable');
+          if (held) throw new Error('phone: a finger is already down');
+          const finger = newFinger(point);
+          held = finger;
+          screenSources.push(finger.source);
+          await frameOf(session);
+          await frameOf(session, (frame) => session.dispatchEvent(new EventCtor('selectstart', { frame, inputSource: finger.source })));
+        };
+        const fingerMove = async (point) => {
+          if (!held) throw new Error('phone: no finger is down');
+          const finger = held;
+          await frameOf(sessionOf(), () => finger.move(point));
+        };
+        const fingerUp = async () => {
+          if (!held) throw new Error('phone: no finger is down');
+          const session = sessionOf();
+          const finger = held;
+          held = null;
+          await frameOf(session, (frame) => {
+            session.dispatchEvent(new EventCtor('select', { frame, inputSource: finger.source }));
+            session.dispatchEvent(new EventCtor('selectend', { frame, inputSource: finger.source }));
+          });
+          screenSources.splice(screenSources.indexOf(finger.source), 1);
+          finger.remove();
+          await frameOf(session);
+        };
         const phone = window;
+        phone.__phoneFingerDown = fingerDown;
+        phone.__phoneFingerMove = fingerMove;
+        phone.__phoneFingerUp = fingerUp;
         // A tap toward a point, released on the next frame: emulated frames take ~150 ms, and
         // pointer-events counts a press longer than 300 ms as no click.
         phone.__phoneTap = (target) => press([target], 0);
@@ -242,6 +276,21 @@ export function phoneTap(page, point) {
  */
 export function phoneHold(page, point, ms, options = {}) {
   return page.evaluate(([target, holdMs, locked]) => window.__phoneHold(target, holdMs, locked), [point, ms, options.screenLocked === true]);
+}
+
+/**
+ * One finger moved by hand: `phoneFingerDown` puts it down on a point, `phoneFingerMove` moves it (one frame
+ * each), `phoneFingerUp` lifts it. Frames pass, the simulation does not step; the caller steps it when it
+ * wants the finger judged (a drag that finishes before the first step).
+ */
+export function phoneFingerDown(page, point) {
+  return page.evaluate((target) => window.__phoneFingerDown(target), point);
+}
+export function phoneFingerMove(page, point) {
+  return page.evaluate((target) => window.__phoneFingerMove(target), point);
+}
+export function phoneFingerUp(page) {
+  return page.evaluate(() => window.__phoneFingerUp());
 }
 
 /**

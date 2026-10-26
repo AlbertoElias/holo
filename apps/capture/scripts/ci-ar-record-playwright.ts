@@ -13,7 +13,7 @@ import {
   waitForTextContentPrefix,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
-import { emulatePhone, phoneHold, phoneScreenPoint, phoneTap, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
+import { emulatePhone, phoneFingerDown, phoneFingerMove, phoneFingerUp, phoneHold, phoneScreenPoint, phoneTap, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
 
 import type {} from '../src/runtime/automationHooks';
 import type { PointResolutionReport } from '../src/recording/PointResolver';
@@ -57,7 +57,9 @@ import {
 //   marks-a/marks-b   slice 4, at a 412x915 portrait phone, the same prepared set and bracket, under two
 //                     placements: Record by the dock, then with the head still: a one-frame tap on the bracket
 //                     (no hold), a 1 s hold on the bracket, a 1 s hold on empty floor (a hold, no referent), a 1 s
-//                     hold that begins on the dock's chip (no hold, no dock action), a 1 s hold on TargetA, and a
+//                     hold that begins on the dock's chip (no hold, no dock action), a drag of 100 apx that ends
+//                     before the first simulation step and then stays still past the hold delay (no hold), a 1 s
+//                     hold that begins on the status chip with the bracket behind it (no hold), a 1 s hold on TargetA, and a
 //                     1 s hold on TargetA while the head walks toward it and turns with the finger fixed on the
 //                     screen; Stop by the dock. Exactly three recorded links from RecordedAuthorCamera
 //                     (RecordedObject, TargetA, TargetA), spans starting at the touch, HOLOIM_meaning version 1,
@@ -163,7 +165,8 @@ type PhoneProbe = {
   chip: { left: number; top: number; width: number; height: number } | null;
   viewport: { width: number; height: number; fovyDeg: number } | null;
   docks: Partial<Record<DockId, DockProbe>>;
-  statusLine: { visible: boolean; text: string } | null;
+  /** The status line's chip on the screen on a phone, once laid out. */
+  statusLine: { visible: boolean; text: string; chip?: { left: number; top: number; width: number; height: number } | null } | null;
 };
 
 type StepCoverage = {
@@ -1250,6 +1253,44 @@ async function touchScenario(
   return scenario;
 }
 
+/** The screen distance a finger moves in the early-drag scenario: well past the 22 apx slop. */
+const EARLY_DRAG_APX = 100;
+
+/**
+ * A finger goes down, moves `EARLY_DRAG_APX` and stays still beyond the hold delay, all before the
+ * simulation steps once; then it steps. The finger left its touchdown spot before the first step saw it,
+ * so it is a drag: no hold, nothing in the take.
+ */
+async function earlyDragScenario(page: Page, report: PhaseReport, scenarios: MarkScenario[], from: Vec3, to: Vec3): Promise<void> {
+  const name = 'early-drag';
+  const before = await arOf(page);
+  await phoneFingerDown(page, from);
+  await phoneFingerMove(page, to);
+  await phoneFingerMove(page, to);
+  await page.waitForTimeout(400);
+  const stepped: ArState[] = [];
+  for (let i = 0; i < 3; i += 1) {
+    await nextXrFrame(page);
+    await advance(page, STEP_MS);
+    stepped.push(await arOf(page));
+  }
+  const during = stepped[stepped.length - 1]!;
+  await phoneFingerUp(page);
+  for (let i = 0; i < 3; i += 1) await advance(page, STEP_MS);
+  const after = await arOf(page);
+  scenarios.push({
+    name,
+    holdsBefore: before.screenHolds.kept,
+    holdsAfter: after.screenHolds.kept,
+    trackedAfter: after.screenHold.phase,
+    phaseWhileDown: during.screenHold.phase,
+    slopWhileDownApx: during.screenHold.slopApx
+  });
+  if (during.screenHold.phase !== 'dead') report.failures.push(`${name}: the finger moved ${EARLY_DRAG_APX} apx before the first step and the tracked phase is ${during.screenHold.phase}, expected dead`);
+  if (stepped.some((facts) => facts.screenHold.phase === 'held') || after.screenHolds.kept !== before.screenHolds.kept) report.failures.push(`${name}: the take kept ${after.screenHolds.kept - before.screenHolds.kept} new hold(s), expected none`);
+  if (after.screenHold.phase !== 'none') report.failures.push(`${name}: a finger is still tracked after the touch (${after.screenHold.phase})`);
+}
+
 type Marked = { report: PhaseReport; take: CameraTakeReport | null; links: MeaningLinkReport[]; targetAWorld: Vec3 | null };
 
 /**
@@ -1310,6 +1351,36 @@ async function marksPhase(run: Run, phase: 'marks-a' | 'marks-b', start: { posit
       const chipPoint = await phoneScreenPoint(page, dock.chip.left + dock.chip.width - 8, dock.chip.top + dock.chip.height / 2, 1);
       report.notes.chip = dock.chip;
       await touchScenario(page, report, scenarios, 'hold-on-dock-chip', () => phoneHold(page, chipPoint, MARK_HOLD_MS), 0);
+    }
+
+    // A drag that is over before the simulation takes its first step, then still past the hold delay: a drag, never a hold.
+    const dragFrom = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2, PHONE_VIEWPORT.height / 2, 1.5);
+    const dragTo = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2 + EARLY_DRAG_APX, PHONE_VIEWPORT.height / 2, 1.5);
+    await earlyDragScenario(page, report, scenarios, dragFrom, dragTo);
+
+    // A hold that begins on the status chip with the bracket behind it: the chip is chrome and does nothing.
+    const status = (await dockState(page)).statusLine?.chip;
+    if (!status || !dock.viewport) {
+      report.failures.push('the status line reports no chip while recording');
+    } else {
+      report.notes.statusChip = status;
+      const cx = status.left + status.width / 2;
+      const cy = status.top + status.height / 2;
+      // Turn the head so the ray through the chip's centre passes through the bracket.
+      const tan = Math.tan((dock.viewport.fovyDeg * Math.PI) / 360);
+      const toChip = new THREE.Vector3(((cx / dock.viewport.width) * 2 - 1) * tan * (dock.viewport.width / dock.viewport.height), (1 - (cy / dock.viewport.height) * 2) * tan, -1).normalize();
+      const aimed = new THREE.Quaternion(...lookQuat(standing.position, bracket)).multiply(new THREE.Quaternion().setFromUnitVectors(toChip, new THREE.Vector3(0, 0, -1)));
+      await setHeadPose(page, standing.position, [aimed.x, aimed.y, aimed.z, aimed.w]);
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
+      const chipPoint = await phoneScreenPoint(page, cx, cy, 1);
+      const behind = new THREE.Vector3(...chipPoint).sub(new THREE.Vector3(...standing.position)).angleTo(new THREE.Vector3(...bracket).sub(new THREE.Vector3(...standing.position)));
+      report.notes.statusChipRayToBracketDeg = round((behind * 180) / Math.PI, 3);
+      if (behind > (1 * Math.PI) / 180) report.failures.push(`the ray through the status chip misses the bracket by ${round((behind * 180) / Math.PI, 2)} degrees; the scenario does not test a hold with an object behind the chip`);
+      await touchScenario(page, report, scenarios, 'hold-on-status-chip', () => phoneHold(page, chipPoint, MARK_HOLD_MS), 0);
+      await setHeadPose(page, standing.position, standing.quaternion);
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
     }
 
     await touchScenario(page, report, scenarios, 'hold-on-target-a', () => phoneHold(page, targetA, MARK_HOLD_MS), 1);

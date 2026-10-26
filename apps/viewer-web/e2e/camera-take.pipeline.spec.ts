@@ -34,8 +34,13 @@ const takeDir = path.resolve(import.meta.dirname, "../../../output/camera-take/t
 let takeFile = "";
 const evidenceDir = path.resolve(import.meta.dirname, "../../../output/camera-take");
 const DESKTOP = { width: 1280, height: 720 };
+/** The least time to watch the loop; a longer take is watched for 2.3 of its lengths. */
 const LOOP_SAMPLE_MS = 9_000;
 const CLOCK_TOLERANCE_S = 0.08;
+/** After a wrap the voice restarts on the next frame: samples this early in the loop are not judged. */
+const VOICE_RESTART_GRACE_S = 0.5;
+/** How far the voice's place may differ from the clip's time: a frame of a loaded machine and the output's latency. */
+const VOICE_SYNC_TOLERANCE_S = 0.25;
 const SET_MARGIN_PX = 4;
 /** The set's centre on screen, off the viewing box's centre by at most this share of its size. */
 const CENTRE_TOLERANCE = 0.05;
@@ -45,7 +50,7 @@ const SHELF_PREVIEW_M = 0.28;
 
 type Vec3 = [number, number, number];
 type GltfJson = {
-  nodes: Array<{ name?: string; mesh?: number; extras?: { yfov?: number } }>;
+  nodes: Array<{ name?: string; mesh?: number; children?: number[]; extras?: { yfov?: number } }>;
   skins?: unknown[];
   animations: Array<{ samplers: Array<{ input: number; output: number }>; channels: Array<{ sampler: number; target: { node: number; path: string } }> }>;
   accessors: Array<{ max?: number[]; bufferView: number; byteOffset?: number; count: number }>;
@@ -141,7 +146,7 @@ async function showOnly(page: Page, id: string): Promise<void> {
 /** Records what the page's audio graph is asked to do, so "audio plays" is a reading and not a hope. */
 async function observeAudio(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    type Started = { duration: number; loop: boolean; gain: { gain: { value: number } } | null; started: boolean; stopped: boolean };
+    type Started = { duration: number; loop: boolean; gain: { gain: { value: number } } | null; started: boolean; stopped: boolean; offset: number; contextStart: number };
     const hooks = window as unknown as { __audio: { sources: Started[]; contexts: AudioContext[] } };
     hooks.__audio = { sources: [], contexts: [] };
     const proto = AudioContext.prototype;
@@ -149,13 +154,16 @@ async function observeAudio(page: Page): Promise<void> {
     proto.createBufferSource = function (this: AudioContext) {
       const source = createBufferSource.call(this);
       if (!hooks.__audio.contexts.includes(this)) hooks.__audio.contexts.push(this);
-      const entry: Started = { duration: 0, loop: false, gain: null, started: false, stopped: false };
+      const entry: Started = { duration: 0, loop: false, gain: null, started: false, stopped: false, offset: 0, contextStart: 0 };
       hooks.__audio.sources.push(entry);
       const start = source.start.bind(source);
       source.start = (...args: Parameters<AudioBufferSourceNode["start"]>) => {
         entry.started = true;
         entry.duration = source.buffer?.duration ?? 0;
         entry.loop = source.loop;
+        // Where in its buffer the sound began, and when on the context's clock: its position later is read from these.
+        entry.offset = args[1] ?? 0;
+        entry.contextStart = source.context.currentTime;
         return start(...args);
       };
       const stop = source.stop.bind(source);
@@ -186,19 +194,32 @@ async function readAudio(page: Page) {
   });
 }
 
-/** The primary action's time, sampled on every frame for `ms`, with the wall clock beside it. */
-async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ clip: number; samples: Array<[number, number]> }> {
-  return page.evaluate(([target, span]) => new Promise<{ clip: number; samples: Array<[number, number]> }>((resolve) => {
+/**
+ * The primary action's time, sampled on every frame for `ms`, with the wall clock beside it and, third, where
+ * in its buffer the voice is (null while none plays): the playing source's start offset plus the audio
+ * context's time since it began, wrapped by the buffer if it loops.
+ */
+async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ clip: number; samples: Array<[number, number, number | null]> }> {
+  return page.evaluate(([target, span]) => new Promise<{ clip: number; samples: Array<[number, number, number | null]> }>((resolve) => {
     type Action = { time: number; getClip: () => { duration: number } };
+    type Source = { duration: number; loop: boolean; started: boolean; stopped: boolean; offset: number; contextStart: number };
     const probes = (window as unknown as { __portalProbes: Record<string, { actions: Record<string, Action | null> }> }).__portalProbes;
+    const audio = (window as unknown as { __audio: { sources: Source[]; contexts: AudioContext[] } }).__audio;
     const probe = Object.entries(probes).find(([url]) => url.endsWith(target as string))![1];
     const actions = Object.values(probe.actions).filter(Boolean) as Action[];
     const action = actions[0]!;
-    const samples: Array<[number, number]> = [];
+    const samples: Array<[number, number, number | null]> = [];
     const begin = performance.now();
+    const voiceAt = (): number | null => {
+      const source = audio.sources.filter((entry) => entry.started && !entry.stopped).at(-1);
+      const context = audio.contexts[0];
+      if (!source || !context) return null;
+      const at = source.offset + (context.currentTime - source.contextStart);
+      return source.loop ? at % source.duration : at;
+    };
     const step = () => {
       const now = performance.now();
-      samples.push([now - begin, action.time]);
+      samples.push([now - begin, action.time, voiceAt()]);
       if (now - begin < (span as number)) requestAnimationFrame(step);
       else resolve({ clip: action.getClip().duration, samples });
     };
@@ -459,7 +480,9 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   expect(audio.playing[0]!.duration, "the voice has length").toBeGreaterThan(0.5);
 
   // Playback: the clip's time advances as the wall clock does and wraps at the take's duration.
-  const { clip, samples } = await sampleLoop(page, uploaded.url, LOOP_SAMPLE_MS);
+  // Long enough for two wraps whatever the take's length: capture's take is longer on a loaded machine.
+  const sampleMs = Math.max(LOOP_SAMPLE_MS, Math.ceil(duration * 2.3 * 1000));
+  const { clip, samples } = await sampleLoop(page, uploaded.url, sampleMs);
   expect(Math.abs(clip - duration), "the playing clip is the take's").toBeLessThan(0.01);
   let wraps = 0;
   let worstClockError = 0;
@@ -473,10 +496,26 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
     worstClockError = Math.max(worstClockError, Math.abs(advanced - (wall - previousWall) / 1000));
     highest = Math.max(highest, time);
   }
-  expect(wraps, `the take loops in ${LOOP_SAMPLE_MS / 1000} s`).toBeGreaterThanOrEqual(2);
+  expect(wraps, `the take loops in ${sampleMs / 1000} s`).toBeGreaterThanOrEqual(2);
   expect(worstClockError, "time passes as the wall clock does across each wrap, so the loop is the take's duration").toBeLessThan(CLOCK_TOLERANCE_S);
   expect(highest, "playback reaches the end of the take").toBeGreaterThan(duration - 0.5);
   expect(highest, "and never passes it").toBeLessThanOrEqual(duration + 1e-3);
+
+  // The voice and the motion wrap together: the voice's place in its buffer follows the clip's time across
+  // both wraps, though its buffer is not the clip's length (sampleLoop's audio position). The voice loops, so
+  // its place is the clip's time modulo its own length, and the error is the distance round that circle. A
+  // frame after a wrap is skipped: the voice restarts on the next frame, and the audio clock reads in render
+  // quanta; what is allowed beyond that is the 100 ms of a loaded machine's frame and the output's latency.
+  const voiceLength = audio.playing[0]!.duration;
+  const voiceError = (time: number, voice: number): number => {
+    const apart = Math.abs(voice - time) % voiceLength;
+    return Math.min(apart, voiceLength - apart);
+  };
+  const voiced = samples.filter(([, time, voice]) => voice !== null && time > VOICE_RESTART_GRACE_S);
+  expect(voiced.length, "the voice is sampled across the loops").toBeGreaterThan(samples.length / 2);
+  const worstVoiceError = Math.max(...voiced.map(([, time, voice]) => voiceError(time, voice!)));
+  expect(worstVoiceError, `the voice stays with the motion across ${wraps} wraps (the voice is ${voiceLength.toFixed(2)} s, the clip ${clip.toFixed(2)} s)`).toBeLessThan(VOICE_SYNC_TOLERANCE_S);
+  expect((await readAudio(page)).started, "the voice started again at each wrap").toBeGreaterThanOrEqual(1 + wraps);
 
   // Framing: the set (not the camera, the bubble's sphere or any prop's name) fills the viewing box.
   const feed = await readFeed(page, uploaded.id);
@@ -656,7 +695,7 @@ async function readMark(page: Page, modelPath: string): Promise<MarkReading> {
       model: Three.Object3D;
       camera: Three.PerspectiveCamera;
       renderer: Three.WebGLRenderer;
-      presence: { node: Three.Object3D | null; mark: Three.Object3D | null; nose: Three.Mesh | null; identity: { index: number; hex: string; initial: string } | null; diameter: number };
+      presence: { node: Three.Object3D | null; mark: Three.Object3D | null; nose: Three.Mesh | null; identity: { index: number; hex: string; initial: string } | null };
     }> }).__portalProbes;
     const probe = Object.entries(probes).find(([url]) => url.endsWith(target as string))![1];
     const { node, mark, nose, identity } = probe.presence;
@@ -686,7 +725,10 @@ async function readMark(page: Page, modelPath: string): Promise<MarkReading> {
       return [canvas.left + ((ndc.x + 1) / 2) * canvas.width, canvas.top + ((1 - ndc.y) / 2) * canvas.height];
     };
     const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
-    const diameter = probe.presence.diameter;
+    // The face's own world scale, as the scene has it now: a unit sprite is as wide as its scale, so this is
+    // what is drawn, not the diameter the probe says it set.
+    const face = mark.children.find((child) => (child as Three.Sprite).isSprite);
+    const diameter = face ? face.getWorldScale(new Vector3()).x : 0;
     const [x1, y1] = toPage(markAt.clone().addScaledVector(right, diameter / 2));
     const [x2, y2] = toPage(markAt.clone().addScaledVector(right, -diameter / 2));
     return {
@@ -786,7 +828,9 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
   const original = await readFile(takeFile);
   const { json: fileJson, rest: bin } = parseGlb(original);
   const duration = takeDurationSeconds(fileJson);
-  expect(fileJson.nodes.findIndex((node) => node.name === "RecordedAuthorCamera"), "the camera node has no parent: its pose in the file is its pose in the set's frame").toBeGreaterThanOrEqual(0);
+  const cameraIndex = fileJson.nodes.findIndex((node) => node.name === "RecordedAuthorCamera");
+  expect(cameraIndex, "the take has a camera node").toBeGreaterThanOrEqual(0);
+  expect(fileJson.nodes.filter((node) => node.children?.includes(cameraIndex)).length, "the camera node has no parent: its pose in the file is its pose in the set's frame").toBe(0);
 
   const { uploaded, card } = await playTake(page, "Camera take link", original, false);
   await expect(card).toHaveAttribute("data-model-bubble", "active");
@@ -855,7 +899,7 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
     inks.push({ time, ink: ink!, mark });
   }
   expect(distance(inks[0]!.ink.ink!.from, inks.at(-1)!.ink.ink!.from), "the ink's start travels with the camera across the span").toBeGreaterThan(0.1);
-  await settleInk(page, uploaded.url, 2.6, 0);
+  await settleInk(page, uploaded.url, OUTSIDE_SPAN_TIMES[1]!, 0);
 
   // The mark on screen: its hue is the author's, its initial in deep sea.
   const middle = IN_SPAN_TIMES[1]!;

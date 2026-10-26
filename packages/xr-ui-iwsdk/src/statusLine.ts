@@ -1,6 +1,6 @@
 import { tokens } from "@holoim/design-tokens";
 import { markChrome, startLazyFollow, stepLazyFollow, type LazyFollow } from "@holoim/xr-ui-core";
-import { UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
+import { RayInteractable, UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
 import { Euler, MathUtils, Quaternion, Vector3, type Object3D } from "three";
 
 import { FONT_FAMILIES, FONT_FAMILY } from "./fonts.js";
@@ -13,7 +13,8 @@ import { CHIP, CHIP_OPACITY, COLOR, GLYPH, HEADSET_SCALE, TYPE, metresPerApx, wi
 // sight, staying put until the head turns more than 20° from it, then easing
 // back (240 ms) until it is within 1° (`stepLazyFollow`). It shows state such
 // as "Recording 0:12" or "Paused · 0:08", bare in both apps (the user,
-// 2026-10-25), and never holds a control: it takes no pointer events.
+// 2026-10-25), and never holds a control: a headset's line takes no pointer
+// events, and a phone's chip takes them only to shield the scene behind it.
 //
 // On a phone the line is a screen's top status line instead (§1.2, §9.2): at
 // the top centre, inside the top safe area, hung on the camera like the bottom
@@ -73,7 +74,9 @@ export class StatusLine {
       flexDirection: "row",
       alignItems: "center",
       gap: 4 * s,
-      pointerEvents: "none",
+      // A headset's line is never hit. A phone's chip is a shield: a finger that goes down on it hits chrome and does nothing,
+      // so a hold that begins there cannot mark the scene behind it (`ScreenInputSystem` reads `beganOnChrome` from the hit).
+      pointerEvents: phone ? "auto" : "none",
       ...(phone
         ? {
             anchorX: "center" as const,
@@ -100,6 +103,8 @@ export class StatusLine {
     if (phone) {
       // Top centre, inside the top safe area, on the camera (the one thing besides the dock that rides the screen).
       head.add(this.entity.object3D!);
+      // Hit by the screen pointer, which visits only interactables (a headset's line stays out of it).
+      this.entity.addComponent(RayInteractable);
       const halfHeight = PHONE_DOCK_DEPTH_M * Math.tan(phone.verticalFovRad / 2);
       this.entity.object3D!.position.set(0, halfHeight - this.topApx * this.metresPerApx, -PHONE_DOCK_DEPTH_M);
     }
