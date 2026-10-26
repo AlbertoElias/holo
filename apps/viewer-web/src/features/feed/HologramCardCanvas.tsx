@@ -12,7 +12,7 @@ import {
   Vector2,
   Vector3
 } from "three";
-import type { AnimationAction, Mesh, Object3D, PointLight } from "three";
+import type { AnimationAction, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
 import { tokens } from "@holoim/design-tokens";
 import { clocheFollowDirection, clocheFraming, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
 import { Cloche } from "@holoim/xr-ui-r3f";
@@ -27,7 +27,7 @@ import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
 import { readMeaningLinks } from "../meaning/meaningLinks";
 import type { MeaningGltf } from "../meaning/meaningLinks";
-import { readRecordedObjects } from "../objects/recordedObjects";
+import { isInsideRecordedObject, readRecordedObjects } from "../objects/recordedObjects";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
 import { INSIDE_DISTANCE, anglesFromPose, freeCameraPose } from "../portal/portalStore";
 import type { PortalStore } from "../portal/portalStore";
@@ -250,7 +250,8 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
 
   // The wheel zooms only over the hologram itself (usePortalTriggers): a
   // visible mesh of the recording, not chrome, not clipped away by its
-  // bubble. From inside the bubble everything in view is the hologram.
+  // bubble (recorded objects are never clipped). From inside the bubble
+  // everything in view is the hologram.
   useEffect(() => {
     const raycaster = new Raycaster();
     const ndc = new Vector2();
@@ -267,11 +268,19 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
       if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return false;
       const bubble = sphereClip.active && sphereClip.radius > 0 ? sphereClip : null;
       if (bubble && camera.position.distanceTo(bubble.center) < bubble.radius) return true;
+      // A skinned mesh caches its bounds on its first raycast; a body that
+      // has since walked out of them would be missed, so pose them now.
+      clonedScene.traverse((node) => {
+        const skinned = node as SkinnedMesh;
+        if (!skinned.isSkinnedMesh) return;
+        skinned.computeBoundingSphere();
+        if (skinned.boundingBox) skinned.computeBoundingBox();
+      });
       raycaster.setFromCamera(ndc, camera);
       return raycaster.intersectObject(clonedScene, true).some((hit) => (
         (hit.object as Mesh).isMesh === true
         && drawn(hit.object)
-        && (!bubble || hit.point.distanceTo(bubble.center) <= bubble.radius)
+        && (!bubble || isInsideRecordedObject(hit.object) || hit.point.distanceTo(bubble.center) <= bubble.radius)
       ));
     };
     portal.runtime.hitTest = hitTest;

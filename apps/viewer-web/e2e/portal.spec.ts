@@ -165,7 +165,7 @@ test("desktop (default): drag rotates, and the wheel or trackpad pinch over the 
   expect(await settleScroll(page), "fully out, the wheel scrolls to the next card").toBeGreaterThan(0);
 });
 
-/** One point in the viewing box on the hologram itself and one off it, as the canvas's hit test sees them. */
+/** One point in the viewing box, within the window, on the hologram itself and one off it, as the canvas's hit test sees them. */
 async function hologramPoints(page: Page, cardId: string, modelPath: string): Promise<{ on: { x: number; y: number }; off: { x: number; y: number } }> {
   const box = await page.locator(`.feed-card[data-card-id="${cardId}"] .feed-card-portal`).boundingBox();
   if (!box) throw new Error("viewing box not laid out");
@@ -178,6 +178,7 @@ async function hologramPoints(page: Page, cardId: string, modelPath: string): Pr
     for (let row = 1; row < 12; row += 1) {
       for (let column = 1; column < 12; column += 1) {
         const point = { x: box.x + (box.width * column) / 12, y: box.y + (box.height * row) / 12 };
+        if (point.y < 4 || point.y > window.innerHeight - 4) continue;
         if (hitTest(point.x, point.y)) on ??= point;
         else off ??= point;
       }
@@ -227,6 +228,42 @@ test("desktop: the wheel scrolls the feed unless it begins on the hologram itsel
   await page.keyboard.up("Control");
   await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "a pinch off the hologram zooms" }).toBeLessThan(pinched);
   expect(await feedScrollTop(page)).toBe(0);
+});
+
+test("desktop: a scroll back up stays a scroll as the card above, and its hologram, come under the pointer", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 800, height: 440 });
+  await openFeed(page, null);
+  const feed = page.locator(".feed-scroll");
+  const above = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+  const below = page.locator(`.feed-card[data-card-id="${second.id}"]`);
+  const cardHeight = await above.evaluate((element) => element.offsetHeight);
+  const scrollTo = (top: number) => feed.evaluate((element, to) => element.scrollTo({ top: to, behavior: "instant" }), top);
+  // Without snapping, a part-way scroll stays where the wheel leaves it.
+  await feed.evaluate((element) => { element.style.scrollSnapType = "none"; });
+  // Where the card above shows its hologram, most of the way back up.
+  const partWay = Math.round(cardHeight * 0.35);
+  await scrollTo(partWay);
+  const { on: onAbove } = await hologramPoints(page, first.id, first.url);
+  await scrollTo(cardHeight);
+  await expect(below).toHaveAttribute("data-card-focus", "true");
+  await waitForPortalReady(page, second.id, second.url);
+  const { off: offBelow } = await hologramPoints(page, second.id, second.url);
+  const zoomAbove = (await readPortal(page, first.url)).zoom;
+
+  // The gesture begins over empty space on the card below and carries the
+  // feed back up until the card above takes focus, its hologram now under
+  // the pointer; the gesture goes on (as trackpad momentum does) and still
+  // scrolls.
+  await page.mouse.move(offBelow.x, offBelow.y);
+  await page.waitForTimeout(400); // a new gesture
+  await page.mouse.wheel(0, partWay - cardHeight);
+  await page.mouse.move(onAbove.x, onAbove.y);
+  for (let i = 0; i < 40 && (await above.getAttribute("data-card-focus")) !== "true"; i += 1) await page.mouse.wheel(1, 0);
+  await expect(above).toHaveAttribute("data-card-focus", "true");
+  for (const delta of [-40, -40]) await page.mouse.wheel(0, delta);
+  await expect.poll(() => feedScrollTop(page), { message: "the wheel kept scrolling over the hologram above" }).toBeLessThan(partWay - 40);
+  expect((await readPortal(page, first.url)).zoom, "the hologram above did not zoom").toBe(zoomAbove);
+  await captureEvidence(page, testInfo, "wheel-scrolls-back-up-past-hologram");
 });
 
 test("desktop freeze: drags only explore while paused, pitch is clamped, keyboard works, and scrolling away resets", async ({ page }) => {
