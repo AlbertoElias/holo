@@ -1,4 +1,4 @@
-import { HOLOIM_MEANING_EXTENSION, validateHoloimMeaning } from "@holoim/meaning";
+import { HOLOIM_MEANING_EXTENSION, isCameraFrom, validateHoloimMeaning } from "@holoim/meaning";
 import type { MeaningLinkMark } from "@holoim/meaning";
 import type { Object3D } from "three";
 
@@ -16,8 +16,10 @@ export type MeaningGltf = {
 export type ResolvedLink = {
   mark: MeaningLinkMark;
   style: "recorded" | "inferred";
-  /** The author's fingertip (or hand) in the card's scene. */
+  /** The author's fingertip, hand, or camera in the card's scene. */
   from: Object3D;
+  /** Which form of presence `from` is: a performer's bone or the author's camera. */
+  fromKind: "bone" | "camera";
   /** The referent: a scene node, or a bone of the author's body. */
   to: Object3D;
 };
@@ -60,7 +62,7 @@ export function readMeaningLinks(gltf: MeaningGltf, clone: Object3D): ResolvedLi
     const from = nodes.get(mark.anchor.from.node);
     const to = nodes.get(mark.anchor.to.node);
     if (!from || !to) continue;
-    links.push({ mark, style: mark.provenance.value, from, to });
+    links.push({ mark, style: mark.provenance.value, from, fromKind: isCameraFrom(mark.anchor.from) ? "camera" : "bone", to });
   }
   return links;
 }

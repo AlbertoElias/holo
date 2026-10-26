@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { GLTFExporterPlugin } from 'three/examples/jsm/exporters/GLTFExporter.js';
-import { assertHoloimMeaning, HOLOIM_MEANING_EXTENSION, HOLOIM_MEANING_VERSION, type MeaningLinkMark } from '@holoim/meaning';
+import { encodeHoloimMeaning, HOLOIM_MEANING_EXTENSION, type MeaningLinkMark } from '@holoim/meaning';
 
 import type { MeaningDraft } from './PointResolver';
 
@@ -17,6 +17,8 @@ interface GLTFWriterInternal {
  * exist only once the writer has processed the scene, so drafts carry
  * objects and are mapped through the writer's `nodeMap` here. A link whose
  * node was not exported is dropped; nothing is written when nothing is left.
+ * The version is chosen by `encodeHoloimMeaning` (lowest that accepts the
+ * record); drafts only carry bone froms, so today's takes keep writing v0.
  */
 export class GLTFMeaningPlugin implements GLTFExporterPlugin {
   private readonly writer: GLTFWriterInternal;
@@ -45,7 +47,7 @@ export class GLTFMeaningPlugin implements GLTFExporterPlugin {
     }
     if (marks.length === 0 && this.draft.spans.length === 0) return;
 
-    const meaning = assertHoloimMeaning({ version: HOLOIM_MEANING_VERSION, marks, spans: this.draft.spans });
+    const meaning = encodeHoloimMeaning({ marks, spans: this.draft.spans });
     const json = this.writer.json;
     if (!json.extensions) json.extensions = {};
     json.extensions[HOLOIM_MEANING_EXTENSION] = meaning;
