@@ -79,6 +79,14 @@ Or connect the GitHub repo in the Pages dashboard with build command
 `https://<branch>.holoim-viewer.pages.dev` URLs, which the API allows via
 the `WEB_ORIGINS` wildcard above.
 
+The Pages Function `apps/viewer-web/functions/index.ts` serves `/` with
+the feed's first page inlined, plus a preload for the newest GLB, so a
+first visit does not wait for the API's cold start. It reads
+`feed/latest.json` from R2 through the `MEDIA` binding in
+`apps/viewer-web/wrangler.toml`. The API rewrites that object after every
+upload and delete, and at boot. Without the object or the binding, the
+page is served unchanged and the feed loads from the API as before.
+
 ## 2b. Capture on Cloudflare Pages
 
 The capture app is a static Vite build with no API wiring, so it deploys
