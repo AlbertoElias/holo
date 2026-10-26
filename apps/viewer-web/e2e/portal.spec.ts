@@ -253,14 +253,21 @@ test("desktop: a scroll back up stays a scroll as the card above, and its hologr
   // The gesture begins over empty space on the card below and carries the
   // feed back up until the card above takes focus, its hologram now under
   // the pointer; the gesture goes on (as trackpad momentum does) and still
-  // scrolls.
+  // scrolls. The wheel events carry their own times, 50 ms apart as a
+  // trackpad's are: on a slow runner the round trips between them would
+  // otherwise pass the gesture gap and split the gesture.
+  const cdp = await page.context().newCDPSession(page);
+  let clock = Date.now() / 1000;
+  const wheel = async (at: { x: number; y: number }, deltaX: number, deltaY: number) => {
+    clock += 0.05;
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: at.x, y: at.y, deltaX, deltaY, timestamp: clock });
+  };
   await page.mouse.move(offBelow.x, offBelow.y);
-  await page.waitForTimeout(400); // a new gesture
-  await page.mouse.wheel(0, partWay - cardHeight);
+  await wheel(offBelow, 0, partWay - cardHeight);
   await page.mouse.move(onAbove.x, onAbove.y);
-  for (let i = 0; i < 40 && (await above.getAttribute("data-card-focus")) !== "true"; i += 1) await page.mouse.wheel(1, 0);
+  for (let i = 0; i < 40 && (await above.getAttribute("data-card-focus")) !== "true"; i += 1) await wheel(onAbove, 1, 0);
   await expect(above).toHaveAttribute("data-card-focus", "true");
-  for (const delta of [-40, -40]) await page.mouse.wheel(0, delta);
+  for (const delta of [-40, -40]) await wheel(onAbove, 0, delta);
   await expect.poll(() => feedScrollTop(page), { message: "the wheel kept scrolling over the hologram above" }).toBeLessThan(partWay - 40);
   expect((await readPortal(page, first.url)).zoom, "the hologram above did not zoom").toBe(zoomAbove);
   await captureEvidence(page, testInfo, "wheel-scrolls-back-up-past-hologram");
