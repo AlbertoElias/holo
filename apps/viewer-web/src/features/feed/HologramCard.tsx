@@ -22,6 +22,7 @@ import { usePortalTriggers } from "../portal/usePortalTriggers";
 import { usePortalValue } from "../portal/usePortalValue";
 import { resolveMediaUrl } from "./api";
 import { HologramCardCanvas, type FrameRect, type HologramRenderInfo } from "./HologramCardCanvas";
+import { watchDownloadEnd } from "./modelLoadOrder";
 
 type HologramCardProps = {
   item: HologramDTO;
@@ -30,11 +31,14 @@ type HologramCardProps = {
   muted: boolean;
   onToggleMute: () => void;
   onDelete?: ((item: HologramDTO) => Promise<void> | void) | undefined;
-  preloadNextUrl?: string | undefined;
+  /** Whether the card may download its hologram yet, only check the file, or must wait (modelLoadOrder.ts). */
+  loadTurn: "load" | "check" | "wait";
+  /** The hologram has loaded, or will not: the next card may start. */
+  onModelSettled: (id: string) => void;
   target: ViewTarget & { kind: "flat" };
 };
 
-type CardModelAvailability = ModelAvailability | "checking";
+type CardModelAvailability = ModelAvailability | "queued" | "checking";
 
 const COLOR_ACCURATE_MODE = true;
 
@@ -206,7 +210,7 @@ function formatByline(item: HologramDTO): string {
   return `By ${item.submittedBy} · ${new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, onDelete, preloadNextUrl, target }: HologramCardProps) {
+export function HologramCard({ item, active, muted, onToggleMute, onDelete, loadTurn, onModelSettled, target }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
@@ -219,7 +223,9 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, prel
     }
     return (window as Window & { __HOLOIM_AR_SUPPORTED_OVERRIDE__?: boolean }).__HOLOIM_AR_SUPPORTED_OVERRIDE__;
   }, []);
-  const [modelAvailability, setModelAvailability] = useState<CardModelAvailability>("checking");
+  const mayLoad = loadTurn === "load";
+  const mayCheck = loadTurn !== "wait";
+  const [modelAvailability, setModelAvailability] = useState<CardModelAvailability>("queued");
   const [modelRenderFailed, setModelRenderFailed] = useState(false);
   const [renderInfo, setRenderInfo] = useState<HologramRenderInfo | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
@@ -241,9 +247,13 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, prel
 
   useEffect(() => {
     let cancelled = false;
-    setModelAvailability("checking");
     setModelRenderFailed(false);
     setRenderInfo(null);
+    if (!mayCheck) {
+      setModelAvailability("queued");
+      return undefined;
+    }
+    setModelAvailability("checking");
 
     checkModelAvailability(modelUrl)
       .then((availability) => {
@@ -260,9 +270,20 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, prel
     return () => {
       cancelled = true;
     };
-  }, [modelUrl]);
+  }, [modelUrl, mayCheck]);
 
-  const canRenderModel = modelAvailability === "ready" && !modelRenderFailed;
+  const canRenderModel = modelAvailability === "ready" && mayLoad && !modelRenderFailed;
+  const [modelDownloaded, setModelDownloaded] = useState(false);
+  useEffect(() => {
+    setModelDownloaded(false);
+    if (!canRenderModel) return undefined;
+    return watchDownloadEnd(modelUrl, performance.now(), () => setModelDownloaded(true));
+  }, [canRenderModel, modelUrl]);
+  const modelSettled = mayLoad && (modelDownloaded || renderInfo !== null || modelRenderFailed
+    || (modelAvailability !== "queued" && modelAvailability !== "checking" && modelAvailability !== "ready"));
+  useEffect(() => {
+    if (modelSettled) onModelSettled(item.id);
+  }, [modelSettled, onModelSettled, item.id]);
   usePortalTriggers(cardRef, portal, portalTriggers, active && canRenderModel);
 
   // A card scrolled away starts over in Follow, playing, when it comes back.
@@ -271,7 +292,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, prel
   }, [active, portal]);
   const unavailableMessage = modelRenderFailed
     ? "Hologram failed to load"
-    : modelAvailability === "checking"
+    : modelAvailability === "checking" || modelAvailability === "queued" || !mayLoad
       ? "Loading hologram…"
       : modelAvailability === "missing"
         ? "Hologram file missing"
@@ -286,15 +307,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, prel
     }
 
     useGLTF.preload(modelUrl);
-    if (preloadNextUrl) {
-      const preloadUrl = resolveMediaUrl(preloadNextUrl);
-      void checkModelAvailability(preloadUrl).then((availability) => {
-        if (availability === "ready") {
-          useGLTF.preload(preloadUrl);
-        }
-      });
-    }
-  }, [canRenderModel, modelUrl, preloadNextUrl]);
+  }, [canRenderModel, modelUrl]);
 
   useEffect(() => {
     if (typeof forcedArSupport === "boolean") {
@@ -359,7 +372,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, prel
       data-portal-variant={portalVariant}
       data-portal-mode={portalMode}
       data-portal-paused={portalPaused ? "true" : "false"}
-      data-model-state={modelRenderFailed ? "failed" : renderInfo ? "rendered" : modelAvailability}
+      data-model-state={modelRenderFailed ? "failed" : renderInfo ? "rendered" : modelAvailability === "ready" && !mayLoad ? "queued" : modelAvailability}
       data-model-animations={renderInfo ? String(renderInfo.animationCount) : undefined}
       data-model-bubble={renderInfo ? (renderInfo.bubbleActive ? "active" : "missing") : undefined}
     >

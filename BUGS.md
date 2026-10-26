@@ -7,6 +7,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-025 — Portal "desktop freeze" check finds the feed back at the top
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("desktop freeze: … scrolling away resets"), portal scroll capture
+- **Severity:** P3
+- **Observed:** 2026-10-26, on `main` at `ac700f0f`
+- **Evidence:** `expect(await feedScrollTop(page)).toBeGreaterThan(0)` at
+  `portal.spec.ts:408` receives 0. Fails 3 of 3 on `main` when the whole
+  `portal.spec.ts` runs (`--repeat-each=3`, one worker), passes 3 of 3 when
+  the test runs alone. The paused card's capture may undo the instant
+  `scrollIntoView` before the reset lands.
+- **Expected:** scrolling to the next card from a paused card stays there.
+- **Reproduction:** `E2E_BASE_URL=https://localhost:3274 E2E_API_PORT=3101 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1`
+
 ### B-024 — CI's pipeline shard can spend its whole timeout installing ffmpeg
 
 - **Area:** `.github/workflows/ci.yml` pipeline job (`apt-get install ffmpeg`), `scripts/ci-emulate.sh`
