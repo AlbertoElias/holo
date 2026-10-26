@@ -32,12 +32,16 @@ type PhoneWindow = Window & {
   __phoneHold?: (target: Vec3, holdMs: number) => Promise<void>;
 };
 
-/** Makes the page's IWER device a handheld phone. Call before the page loads. */
-export async function emulatePhone(page: Page): Promise<void> {
+/**
+ * Makes the page's IWER device a handheld phone. Call before the page loads.
+ * `interactionMode: 'unset'` leaves the mode undefined, as Chrome on Android
+ * may, to check that an unknown device is never taken for a phone.
+ */
+export async function emulatePhone(page: Page, options: { interactionMode?: 'screen-space' | 'unset' } = {}): Promise<void> {
   // tsx compiles with keepNames, which wraps named inner functions of the
   // init script in an __name helper the page lacks.
   await page.addInitScript('globalThis.__name = globalThis.__name || ((target) => target);');
-  await page.addInitScript(() => {
+  await page.addInitScript((interactionMode) => {
     type Space = object;
     type Device = {
       stereoEnabled: boolean;
@@ -60,9 +64,9 @@ export async function emulatePhone(page: Page): Promise<void> {
         // A phone reports screen-space interaction; IWER keeps it in private device state.
         let patched = false;
         for (const key of Object.getOwnPropertySymbols(device)) {
-          const state = (device as unknown as Record<symbol, { interactionMode?: string }>)[key];
+          const state = (device as unknown as Record<symbol, { interactionMode?: string | undefined }>)[key];
           if (state && typeof state === 'object' && 'interactionMode' in state) {
-            state.interactionMode = 'screen-space';
+            state.interactionMode = interactionMode === 'unset' ? undefined : 'screen-space';
             patched = true;
           }
         }
@@ -179,7 +183,7 @@ export async function emulatePhone(page: Page): Promise<void> {
         phone.__phoneHold = (target, holdMs) => press([target], holdMs);
       }
     });
-  });
+  }, options.interactionMode ?? 'screen-space');
 }
 
 /** One-frame tap with a transient `screen` source aimed at a point (reference-space coordinates). */

@@ -17,8 +17,10 @@ export class XrSessionSystem extends createSystem() {
 
   private readonly onSessionEnd = (): void => {
     this.capture.input.onXrSessionEnded();
-    // A take in progress stops and exports now, as Stop does.
+    // A take in progress stops and exports now, as Stop does, and the held
+    // microphone goes now: no further frame may come to run onExited.
     if (this.cameraAuthor) this.capture.recording.endCameraTake();
+    this.capture.recording.releaseHeldMic();
   };
 
   // A recenter re-origins tracking space; the body realigns rather than

@@ -263,24 +263,24 @@ export class SceneBubbleSampler {
       if (!positionAttr || positionAttr.count < 3) return;
       const index = geometry.getIndex();
       const count = index ? index.count : positionAttr.count;
-      // Only triangles a draw group covers are exported, as in createSceneBubbleMesh.
+      // Triangles are walked against the draw groups exactly as createSceneBubbleMesh walks them.
       const groups = geometry.groups.length > 0 ? geometry.groups : [{ start: 0, count }];
+      let groupCursor = 0;
       const matrix = frame ? this.tmpFramed.multiplyMatrices(frame, obj.matrixWorld) : obj.matrixWorld;
       const vertex = (i: number) => (index ? index.getX(i) : i);
-      for (const group of groups) {
-        const groupEnd = Math.min(count, group.start + group.count);
-        for (let i = group.start; i + 2 < groupEnd && !found; i += 3) {
-          this.tmpTriA.fromBufferAttribute(positionAttr, vertex(i)).applyMatrix4(matrix);
-          this.tmpTriB.fromBufferAttribute(positionAttr, vertex(i + 1)).applyMatrix4(matrix);
-          this.tmpTriC.fromBufferAttribute(positionAttr, vertex(i + 2)).applyMatrix4(matrix);
-          if (!this.triangleInsideBubble(this.tmpTriA, this.tmpTriB, this.tmpTriC)) continue;
-          // The export then drops what is hidden from above; test that in world space.
-          this.tmpTriA.fromBufferAttribute(positionAttr, vertex(i)).applyMatrix4(obj.matrixWorld);
-          this.tmpTriB.fromBufferAttribute(positionAttr, vertex(i + 1)).applyMatrix4(obj.matrixWorld);
-          this.tmpTriC.fromBufferAttribute(positionAttr, vertex(i + 2)).applyMatrix4(obj.matrixWorld);
-          found = !this.isOccludedFromAbove(sceneRoot, obj, this.tmpTriA, this.tmpTriB, this.tmpTriC);
-        }
-        if (found) break;
+      for (let i = 0; i + 2 < count && !found; i += 3) {
+        while (groupCursor < groups.length - 1 && i >= groups[groupCursor]!.start + groups[groupCursor]!.count) groupCursor += 1;
+        const group = groups[groupCursor]!;
+        if (i < group.start || i + 2 >= group.start + group.count) continue;
+        this.tmpTriA.fromBufferAttribute(positionAttr, vertex(i)).applyMatrix4(matrix);
+        this.tmpTriB.fromBufferAttribute(positionAttr, vertex(i + 1)).applyMatrix4(matrix);
+        this.tmpTriC.fromBufferAttribute(positionAttr, vertex(i + 2)).applyMatrix4(matrix);
+        if (!this.triangleInsideBubble(this.tmpTriA, this.tmpTriB, this.tmpTriC)) continue;
+        // The export then drops what is hidden from above; test that in world space.
+        this.tmpTriA.fromBufferAttribute(positionAttr, vertex(i)).applyMatrix4(obj.matrixWorld);
+        this.tmpTriB.fromBufferAttribute(positionAttr, vertex(i + 1)).applyMatrix4(obj.matrixWorld);
+        this.tmpTriC.fromBufferAttribute(positionAttr, vertex(i + 2)).applyMatrix4(obj.matrixWorld);
+        found = !this.isOccludedFromAbove(sceneRoot, obj, this.tmpTriA, this.tmpTriB, this.tmpTriC);
       }
     });
     return found;

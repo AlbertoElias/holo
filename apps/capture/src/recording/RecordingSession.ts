@@ -16,6 +16,12 @@ interface RecordingSessionDeps {
   onTakeStart: () => void;
   /** The AR session authors a camera take (docs/features/ar-recording.md): decided once per session. */
   isCameraAuthor: () => boolean;
+  /**
+   * Why Record is refused in this session, or null: with camera takes on, an
+   * AR session that is not a phone (a headset in passthrough) spectates and
+   * records nothing.
+   */
+  recordRefusal: () => string | null;
   /** The set's placement has finished its entry frames. */
   isPlacementSettled: () => boolean;
   /** The group whose local frame a camera take is recorded in. */
@@ -39,6 +45,8 @@ export class RecordingSession {
   /** Decided at start; a take keeps its kind until it has exported. */
   private takeKind: TakeKind = 'performer';
   private readonly audio = new AudioRecorder();
+  /** A camera take admitted and waiting for its microphone; cancelled by a hidden page or the session's end. */
+  private startingCamera: { cancelled: boolean } | null = null;
   private inputRecording: InputRecordingSession | null = null;
   private sizeLocked = false;
   // Checks re-export the last take to compare bytes (chrome visible or not);
@@ -80,11 +88,20 @@ export class RecordingSession {
     this.audio.releaseHeldStream();
   }
 
-  /** The XR session ended, or the page hid: a camera take in progress stops and exports as Stop does. */
+  /**
+   * The XR session ended, or the page hid: a camera take in progress stops and
+   * exports as Stop does, and one still waiting for its microphone never begins.
+   */
   endCameraTake(): void {
+    if (this.startingCamera) this.startingCamera.cancelled = true;
     if (this.takeKind !== 'camera') return;
     if (this.deps.ui.getState().recordingState !== 'recording') return;
     void this.stopAndExportCamera();
+  }
+
+  /** A take is starting, recording or exporting: placement must not move under it. */
+  isTakeBusy(): boolean {
+    return this.startingCamera !== null || this.deps.ui.getState().recordingState !== 'idle';
   }
 
   get isSizeLocked(): boolean {
@@ -127,6 +144,11 @@ export class RecordingSession {
   }
 
   private async start(): Promise<void> {
+    const refusal = this.deps.recordRefusal();
+    if (refusal) {
+      this.deps.ui.flashNotice(refusal, NOTICE_MS);
+      return;
+    }
     if (this.deps.isCameraAuthor()) {
       await this.startCamera();
       return;
@@ -152,6 +174,7 @@ export class RecordingSession {
   private async startCamera(): Promise<void> {
     const ui = this.deps.ui;
     const { worldModel } = this.deps.getAvatar();
+    if (this.startingCamera) return;
     if (!this.deps.isPlacementSettled()) {
       ui.flashNotice('Wait for the set to settle before recording.', NOTICE_MS);
       return;
@@ -168,16 +191,19 @@ export class RecordingSession {
     this.lastTake = null;
     this.deps.onTakeStart();
     this.cameraRecorder.setEnabled(true);
+    const start = { cancelled: false };
+    this.startingCamera = start;
     try {
       await this.audio.start();
     } catch {
       // Audio capture is best-effort; the take is silent
     } finally {
       ui.setMicPermission(this.audio.getPermissionState());
+      this.startingCamera = null;
     }
-    if (!this.deps.isCameraAuthor() || document.visibilityState === 'hidden') {
-      // The session ended, or the page hid, while the microphone was starting:
-      // the take never began, so nothing is exported.
+    if (start.cancelled || !this.deps.isCameraAuthor() || document.visibilityState === 'hidden') {
+      // The session ended, or the page hid (even if it came back), while the
+      // microphone was starting: the take never began, so nothing is exported.
       this.cameraRecorder.setEnabled(false);
       this.cameraRecorder.clear();
       if (this.audio.isRecording()) await this.audio.stop().catch(() => undefined);
