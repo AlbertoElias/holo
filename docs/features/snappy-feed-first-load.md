@@ -41,7 +41,7 @@ bundle split (parallel `js-bundle` session), cursor pages after the first.
 
 | Failure case | Prevention or evidence |
 |---|---|
-| A stuck or slow download blocks every later card | The focused card never waits behind a background download; a card's turn ends when its bytes arrive, its file proves missing, or it fails |
+| A stuck or slow download blocks every later card | The focused card never waits behind a background download; a turn ends when the bytes arrive, the file proves missing, the load fails, or after 12 s (`LOAD_TURN_MS`) |
 | The next download waits for the previous card to parse and draw (seconds on a weak GPU) | A turn ends at the resource-timing entry for the full GLB, not at render; nearby cards run the small availability probe early |
 | Snapshot write fails after an upload or delete | The SPA still fetches the live list and replaces the snapshot's items once the API answers; the next successful write repairs the snapshot |
 | Snapshot lists a deleted hologram | Its GLB 404s and the card says the file is missing until the live list removes it |

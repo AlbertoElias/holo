@@ -10,6 +10,8 @@
 export const LOAD_AHEAD = 2;
 /** How many cards above the focused one stay loaded for a scroll back. */
 export const LOAD_BEHIND = 1;
+/** A download still running after this long gives up its turn, so a stalled request cannot hold the queue. */
+export const LOAD_TURN_MS = 12_000;
 
 /** The cards next to the focused one, nearest first: below (older) before above. */
 export function nearFocus(ids: readonly string[], focusedId: string | null): string[] {

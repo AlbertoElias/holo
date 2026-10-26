@@ -22,7 +22,7 @@ import { usePortalTriggers } from "../portal/usePortalTriggers";
 import { usePortalValue } from "../portal/usePortalValue";
 import { resolveMediaUrl } from "./api";
 import { HologramCardCanvas, type FrameRect, type HologramRenderInfo } from "./HologramCardCanvas";
-import { watchDownloadEnd } from "./modelLoadOrder";
+import { LOAD_TURN_MS, watchDownloadEnd } from "./modelLoadOrder";
 
 type HologramCardProps = {
   item: HologramDTO;
@@ -284,6 +284,11 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
   useEffect(() => {
     if (modelSettled) onModelSettled(item.id);
   }, [modelSettled, onModelSettled, item.id]);
+  useEffect(() => {
+    if (!mayLoad) return undefined;
+    const timer = window.setTimeout(() => onModelSettled(item.id), LOAD_TURN_MS);
+    return () => window.clearTimeout(timer);
+  }, [mayLoad, onModelSettled, item.id]);
   usePortalTriggers(cardRef, portal, portalTriggers, active && canRenderModel);
 
   // A card scrolled away starts over in Follow, playing, when it comes back.
