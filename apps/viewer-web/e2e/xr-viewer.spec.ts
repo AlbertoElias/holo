@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Page } from "@playwright/test";
 import { waitForIwerRuntime, waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
+import { emulatePhone, phoneDrag, phonePinch, phoneTap } from "@holoim/tooling-testing/iwer-phone";
 
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
@@ -197,172 +198,6 @@ async function mockFeed(page: Page, glb?: Buffer): Promise<void> {
   await page.route("**/uploads/**", (route) => route.fulfill({ status: 200, body: glb, contentType: "model/gltf-binary" }));
 }
 
-/**
- * IWER has no phone profile; emulate one as the step 1 spike did: mono view,
- * no controllers or hands, and screen taps delivered as transient
- * `screen` input sources (`window.__phoneTap`).
- */
-async function emulatePhone(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    type Device = {
-      stereoEnabled: boolean;
-      fovy: number;
-      viewerSpace: unknown;
-      controllers: Record<"left" | "right", { connected: boolean; inputSource: { targetRaySpace: object } & object }>;
-      hands?: Record<"left" | "right", { connected: boolean }>;
-      inputSources: unknown[];
-    };
-    let deviceValue: Device | undefined;
-    Object.defineProperty(window, "IWER_DEVICE", {
-      configurable: true,
-      get: () => deviceValue,
-      set: (device: Device) => {
-        deviceValue = device;
-        device.stereoEnabled = false;
-        // A phone reports screen-space interaction (WebXR DOM Overlays); IWER keeps it in its private device state.
-        for (const key of Object.getOwnPropertySymbols(device)) {
-          const state = (device as unknown as Record<symbol, { interactionMode?: string }>)[key];
-          if (state && typeof state === "object" && "interactionMode" in state) state.interactionMode = "screen-space";
-        }
-        const InputSource = device.controllers.right.inputSource.constructor as new (...args: unknown[]) => object;
-        const Space = device.controllers.right.inputSource.targetRaySpace.constructor as new (...args: unknown[]) => object;
-        for (const side of ["left", "right"] as const) {
-          device.controllers[side].connected = false;
-          if (device.hands?.[side]) device.hands[side].connected = false;
-        }
-        const screenSources: object[] = [];
-        const baseGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(device), "inputSources")!.get!;
-        Object.defineProperty(device, "inputSources", { get: () => [...(baseGetter.call(device) as unknown[]), ...screenSources] });
-
-        const frameOf = (session: XRSession, inFrame?: (frame: XRFrame) => void) =>
-          new Promise<void>((resolve) => session.requestAnimationFrame((_t, frame) => {
-            inFrame?.(frame);
-            resolve();
-          }));
-        const viewer = () => {
-          const probe = (window as { __HOLOIM_XR_VIEWER__?: { world: { camera: { worldToLocal(v: unknown): { x: number; y: number; z: number }; position: { constructor: new (x: number, y: number, z: number) => object } }; renderer: { xr: { getSession(): XRSession | null } } } } }).__HOLOIM_XR_VIEWER__;
-          const session = probe?.world.renderer.xr.getSession();
-          if (!probe || !session) throw new Error("no XR session");
-          return { camera: probe.world.camera, session };
-        };
-        // The ray from the viewer through a world point, as a column-major viewer-space matrix.
-        const aimAt = (target: [number, number, number]): Float32Array => {
-          const { camera } = viewer();
-          const Vector = camera.position.constructor;
-          const local = camera.worldToLocal(new Vector(...target));
-          const length = Math.hypot(local.x, local.y, local.z);
-          const [x, y, z] = [local.x / length, local.y / length, local.z / length];
-          // Rotation taking -Z onto (x, y, z).
-          const axis = [y, -x, 0];
-          const axisLength = Math.hypot(axis[0]!, axis[1]!);
-          const angle = Math.acos(Math.min(1, Math.max(-1, -z)));
-          const [ax, ay] = axisLength > 1e-6 ? [axis[0]! / axisLength, axis[1]! / axisLength] : [1, 0];
-          const c = Math.cos(angle);
-          const s = Math.sin(angle);
-          const t = 1 - c;
-          return new Float32Array([
-            t * ax * ax + c, t * ax * ay, -s * ay, 0,
-            t * ax * ay, t * ay * ay + c, s * ax, 0,
-            s * ay, -s * ax, c, 0,
-            0, 0, 0, 1
-          ]);
-        };
-        // A finger mark where the finger is, for recordings.
-        const fingerMark = (): ((target: [number, number, number]) => void) & { remove(): void } => {
-          const mark = document.createElement("div");
-          mark.dataset.phoneTap = "";
-          mark.style.cssText = "position:fixed;z-index:99999;pointer-events:none;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:3px solid #ffffff;background:rgb(255 255 255 / 40%)";
-          document.body.append(mark);
-          const move = (target: [number, number, number]) => {
-            const { camera } = viewer();
-            const Vector = camera.position.constructor;
-            const screen = (new Vector(...target) as unknown as { project(c: unknown): { x: number; y: number } }).project(camera);
-            mark.style.left = `${(screen.x + 1) / 2 * innerWidth}px`;
-            mark.style.top = `${(1 - screen.y) / 2 * innerHeight}px`;
-          };
-          return Object.assign(move, { remove: () => setTimeout(() => mark.remove(), 600) });
-        };
-        const EventCtor = (globalThis as { XRInputSourceEvent?: new (type: string, init: object) => Event }).XRInputSourceEvent;
-        /** A finger down toward `path[0]`, held while it moves along `path` (one point per frame), then lifted. */
-        const press = async (path: Array<[number, number, number]>, holdMs: number) => {
-          const { session } = viewer();
-          if (!EventCtor) throw new Error("XRInputSourceEvent unavailable");
-          const mark = fingerMark();
-          mark(path[0]!);
-          const space = new Space(device.viewerSpace, aimAt(path[0]!));
-          const state = Object.getOwnPropertySymbols(space).map((key) => (space as Record<symbol, { offsetMatrix?: Float32Array }>)[key]).find((value) => value?.offsetMatrix)!;
-          const source = new InputSource("none", "screen", ["generic-touchscreen", "generic-button"], space);
-          screenSources.push(source);
-          await frameOf(session);
-          await frameOf(session, (frame) => session.dispatchEvent(new EventCtor("selectstart", { frame, inputSource: source })));
-          for (const point of path.slice(1)) {
-            // The finger moves: the source's target ray follows it, frame by frame.
-            await frameOf(session, () => {
-              state.offsetMatrix!.set(aimAt(point));
-              mark(point);
-            });
-          }
-          if (holdMs > 0) await new Promise((resolve) => setTimeout(resolve, holdMs));
-          await frameOf(session, (frame) => {
-            session.dispatchEvent(new EventCtor("select", { frame, inputSource: source }));
-            session.dispatchEvent(new EventCtor("selectend", { frame, inputSource: source }));
-          });
-          screenSources.splice(screenSources.indexOf(source), 1);
-          mark.remove();
-          await frameOf(session);
-        };
-        // Two fingers either side of a world point, `fromPx` then `toPx` apart on the screen over `frames` frames.
-        const pinch = async (centre: [number, number, number], fromPx: number, toPx: number, frames: number) => {
-          const { session, camera } = viewer();
-          if (!EventCtor) throw new Error("XRInputSourceEvent unavailable");
-          type V = { x: number; y: number; z: number; project(c: unknown): V; unproject(c: unknown): V; toArray(): [number, number, number] };
-          const Vector = camera.position.constructor as unknown as new (x: number, y: number, z: number) => V;
-          const at = (spreadPx: number, side: 1 | -1): [number, number, number] => {
-            const screen = new Vector(...centre).project(camera);
-            screen.x += side * spreadPx / innerWidth;
-            return screen.unproject(camera).toArray();
-          };
-          const fingers = ([1, -1] as const).map((side) => {
-            const space = new Space(device.viewerSpace, aimAt(at(fromPx, side)));
-            const state = Object.getOwnPropertySymbols(space).map((key) => (space as Record<symbol, { offsetMatrix?: Float32Array }>)[key]).find((value) => value?.offsetMatrix)!;
-            const source = new InputSource("none", "screen", ["generic-touchscreen", "generic-button"], space);
-            const mark = fingerMark();
-            mark(at(fromPx, side));
-            return { side, state, source, mark };
-          });
-          for (const finger of fingers) {
-            screenSources.push(finger.source);
-            await frameOf(session);
-            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor("selectstart", { frame, inputSource: finger.source })));
-          }
-          for (let i = 1; i <= frames; i++) {
-            const spread = fromPx + (toPx - fromPx) * (i / frames);
-            await frameOf(session, () => {
-              for (const finger of fingers) {
-                finger.state.offsetMatrix!.set(aimAt(at(spread, finger.side)));
-                finger.mark(at(spread, finger.side));
-              }
-            });
-          }
-          for (const finger of fingers) {
-            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor("selectend", { frame, inputSource: finger.source })));
-            screenSources.splice(screenSources.indexOf(finger.source), 1);
-            finger.mark.remove();
-          }
-          await frameOf(session);
-        };
-        (window as { __phonePinch?: unknown }).__phonePinch = pinch;
-        // A tap toward a world point, released on the next frame: emulated frames take ~150 ms, and
-        // pointer-events counts a press longer than 300 ms as no click.
-        (window as { __phoneTap?: unknown }).__phoneTap = (target: [number, number, number]) => press([target], 0);
-        // A held drag from one world point to another over `frames` frames.
-        (window as { __phoneDrag?: unknown }).__phoneDrag = (from: [number, number, number], to: [number, number, number], frames: number) =>
-          press(Array.from({ length: frames + 1 }, (_, i) => from.map((v, k) => v + (to[k]! - v) * (i / frames)) as [number, number, number]), 100);
-      }
-    });
-  });
-}
-
 async function snapshot(page: Page): Promise<ViewerSnapshot> {
   return page.evaluate(() => {
     const probe = (window as { __HOLOIM_XR_VIEWER__?: { snapshot(): unknown } }).__HOLOIM_XR_VIEWER__;
@@ -467,12 +302,6 @@ async function expectTornDown(page: Page): Promise<void> {
   await expect(page.locator('[data-card-id="mock-1"]'), "back on the opened hologram's card").toBeInViewport({ timeout: 10_000 });
 }
 
-const phoneTap = (page: Page, target: Vec3) =>
-  page.evaluate((t) => (window as unknown as { __phoneTap(t: Vec3): Promise<void> }).__phoneTap(t), target);
-const phonePinch = (page: Page, centre: Vec3, fromPx: number, toPx: number, frames: number) =>
-  page.evaluate(([c, f, t, n]) => (window as unknown as { __phonePinch(c: Vec3, f: number, t: number, n: number): Promise<void> }).__phonePinch(c, f, t, n), [centre, fromPx, toPx, frames] as const);
-const phoneDrag = (page: Page, from: Vec3, to: Vec3, frames: number) =>
-  page.evaluate(([f, t, n]) => (window as unknown as { __phoneDrag(f: Vec3, t: Vec3, n: number): Promise<void> }).__phoneDrag(f, t, n), [from, to, frames] as const);
 
 type Tracked = "head" | "left" | "right";
 

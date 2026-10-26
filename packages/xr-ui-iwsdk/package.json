@@ -19,6 +19,7 @@
     "@holoim/design-tokens": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",
     "@iwsdk/core": "^1.0.1",
+    "@pmndrs/pointer-events": "6.6.29",
     "three": "catalog:"
   },
   "devDependencies": {

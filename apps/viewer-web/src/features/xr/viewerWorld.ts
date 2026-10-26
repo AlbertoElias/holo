@@ -1,5 +1,6 @@
 import { tokens } from "@holoim/design-tokens";
 import { readIwerRuntime } from "@holoim/xr-runtime";
+import { ScreenInputSystem } from "@holoim/xr-ui-iwsdk";
 import {
   AudioSystem,
   DomeGradient,
@@ -26,7 +27,6 @@ import { HologramControlsSystem } from "./hologramControls";
 import { HologramSpace } from "./hologramSpace";
 import { GallerySystem, type GalleryFeed } from "./gallerySystem";
 import { ArPlacementSystem, VrPlacementSystem } from "./placementSystems";
-import { ScreenInputSystem } from "./screenInputBridge";
 import { GRAB_SCALE_MAX, GRAB_SCALE_MIN } from "./twoHandGrab";
 import { createViewerContext, focusedRecord, viewerContext, type PlacedHologram, type XrViewMode } from "./viewerContext";
 

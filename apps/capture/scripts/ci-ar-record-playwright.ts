@@ -13,6 +13,7 @@ import {
   waitForTextContentPrefix,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
+import { emulatePhone, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
 
 import type {} from '../src/runtime/automationHooks';
 import {
@@ -24,7 +25,6 @@ import {
   type NodeComparison,
   type PathComparison
 } from './lib/camera-take-glb.ts';
-import { emulatePhone, setHeadPose, type Quat, type Vec3 } from './lib/iwer-phone.ts';
 
 // Camera author mode (docs/features/ar-recording.md, slice 2a): phone AR in
 // IWER with the phone helper records a scripted camera walk and exports a

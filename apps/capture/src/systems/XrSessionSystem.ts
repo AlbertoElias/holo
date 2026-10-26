@@ -1,5 +1,5 @@
 import { createSystem } from '@iwsdk/core';
-import { isHandheldSession } from '../xr/handheldSession';
+import { isHandheldSession } from '@holoim/xr-ui-iwsdk';
 import { type CaptureContext, captureContext } from './captureContext';
 
 /**

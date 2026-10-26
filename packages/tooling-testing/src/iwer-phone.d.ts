@@ -1,0 +1,11 @@
+import type { Page } from "@playwright/test";
+
+export type PhoneVec3 = [number, number, number];
+export type PhoneQuat = [number, number, number, number];
+
+export function emulatePhone(page: Page, options?: { interactionMode?: "screen-space" | "unset" }): Promise<void>;
+export function phoneTap(page: Page, point: PhoneVec3): Promise<void>;
+export function phoneHold(page: Page, point: PhoneVec3, ms: number): Promise<void>;
+export function phoneDrag(page: Page, from: PhoneVec3, to: PhoneVec3, frames: number, holdMs?: number): Promise<void>;
+export function phonePinch(page: Page, centre: PhoneVec3, fromPx: number, toPx: number, frames: number): Promise<void>;
+export function setHeadPose(page: Page, position: PhoneVec3, quaternion: PhoneQuat): Promise<void>;

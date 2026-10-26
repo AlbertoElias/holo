@@ -378,6 +378,28 @@ slices 3 and 4 wait for viewer XR step 5.
      controllers and hands off, transient screen sources inside XR frames,
      `interactionMode` through IWER's device config) becomes a helper in
      `packages/tooling-testing`.
+   Built 2026-10-26 (package and helpers; the device spike is pending):
+   `ScreenInputSystem` in `xr-ui-iwsdk/src/screenInput.ts` keeps the
+   viewer's taps, drags and pinch and adds a `ScreenTouch` per finger
+   (`downAt`, `downRay`, `ray` refreshed every frame and kept at the last
+   finite pose, `beganOnChrome`, `hitObject`, `pinched`) with
+   `onTouchStart`, `onTouchMove` and `onTouchEnd(touch, { cancelled })`
+   (cancelled when pinched or when the session ends); `beganOnChrome` reads
+   `CHROME_FLAG` on the hit or its ancestors, and the package's dock, foot
+   controls, status line and world panel now carry the flag at their roots.
+   `screenDistancePx` gives the slop on the screen.
+   `isHandheldSession(session, { strict: true } | { strict: false, monoView })`
+   in `handheldSession.ts`; capture calls it strict, the viewer non-strict
+   with its one-view fallback. `@holoim/tooling-testing/iwer-phone` (tap,
+   hold, drag, pinch, head pose, `interactionMode`) serves both
+   `xr-viewer.spec.ts` and `test:xr:ar-record`. Checks: `verify:agent`,
+   `xr-ui-iwsdk` `verify:full`, `tooling-testing` `verify:fast`,
+   `test:xr:ar-record` (pass, 103 s), capture `ui` (pass), and
+   `xr-viewer.spec.ts` (8 of 8 pass). A throwaway spec confirmed the touch
+   records in viewer phone AR (a hold on the hologram is not chrome; holds on
+   Play and on the dock's Exit are; a drag refreshes `ray` and keeps
+   `downRay`; both pinch fingers end cancelled); slice 4's check makes it
+   permanent.
 1. **`HOLOIM_meaning` v1 (meaning owner).** Schema, the normalising reader,
    reader updates, the feature-level writer rule, isolated tests from the
    list below. No behaviour changes. Can start now.
@@ -394,9 +416,9 @@ slices 3 and 4 wait for viewer XR step 5.
      `frame.arCameraAuthor` beside `arSpectator`; `CameraTrackStore` and
      `CameraRecorder` feed `GltfExportComposer.exportCameraTakeToGlbBlob`;
      Record and Stop through `window.__toggleRecording()` (and the `R` key);
-     the check's helpers are `scripts/lib/iwer-phone.ts` (its `interactionMode`
-     patches IWER's private device state, as the viewer spec does) and
-     `scripts/lib/camera-take-glb.ts`. A camera author cannot place objects,
+     the check's helpers are the phone emulation (since slice 0
+     `@holoim/tooling-testing/iwer-phone`; its `interactionMode` patches
+     IWER's private device state) and `scripts/lib/camera-take-glb.ts`. A camera author cannot place objects,
      so an object is in a camera take only if it was placed before AR. Found
      on the way: B-024 (the bubble clip drops a large floor, in performer
      takes too); the viewer floor fix on `bug/viewer-floor` grounds on

@@ -1,7 +1,7 @@
 import { createSystem, Grabbed, type Entity } from "@iwsdk/core";
 import { loadHandedness } from "@holoim/ui-dom";
 import { markChromeTree, nonDominantHand, playbackLabel, type Hand, type HologramControlActions } from "@holoim/xr-ui-core";
-import { AimRays, FocusRing, FootControls, GRIP_PALM, HandDock, StatusLine, configureXrPointers, handPointerIds, phoneMetresPerApx, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
+import { AimRays, FocusRing, FootControls, GRIP_PALM, HandDock, StatusLine, configureXrPointers, handPointerIds, isHandheldSession, phoneMetresPerApx, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
 import { Vector3, type Object3D } from "three";
 
 import { HologramPlayback, restartHologram, seekHologram, setHologramPlaying } from "./hologramPlayback";
@@ -228,11 +228,12 @@ export class HologramControlsSystem extends createSystem() {
    */
   private detectTarget(): XrUiTarget | null {
     if (viewerContext(this.world).mode === "vr") return "vr";
-    if ((this.xrManager.getSession() as (XRSession & { interactionMode?: string }) | null)?.interactionMode === "screen-space") return "ar-phone";
+    const session = this.xrManager.getSession();
+    if (isHandheldSession(session, { strict: true })) return "ar-phone";
     const refSpace = this.xrManager.getReferenceSpace();
     const views = refSpace ? this.xrFrame!.getViewerPose(refSpace)?.views.length : undefined;
     if (!views) return null;
-    return views === 1 ? "ar-phone" : "ar-quest";
+    return isHandheldSession(session, { strict: false, monoView: views === 1 }) ? "ar-phone" : "ar-quest";
   }
 
   private viewProjectionYScale(): number {
