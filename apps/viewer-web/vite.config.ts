@@ -63,7 +63,9 @@ export default defineConfig({
           if (name && reactVendor.has(name)) {
             return "react-vendor";
           }
-          if (name && threeVendor.has(name)) {
+          // three's core only: its examples/jsm addons follow whichever
+          // chunk imports them (most belong to the lazy IWSDK view).
+          if (name && threeVendor.has(name) && !id.includes("/examples/jsm/")) {
             return "three-vendor";
           }
         }
