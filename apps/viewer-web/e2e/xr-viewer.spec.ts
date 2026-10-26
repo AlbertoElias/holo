@@ -310,6 +310,47 @@ async function emulatePhone(page: Page): Promise<void> {
           mark.remove();
           await frameOf(session);
         };
+        // Two fingers either side of a world point, `fromPx` then `toPx` apart on the screen over `frames` frames.
+        const pinch = async (centre: [number, number, number], fromPx: number, toPx: number, frames: number) => {
+          const { session, camera } = viewer();
+          if (!EventCtor) throw new Error("XRInputSourceEvent unavailable");
+          type V = { x: number; y: number; z: number; project(c: unknown): V; unproject(c: unknown): V; toArray(): [number, number, number] };
+          const Vector = camera.position.constructor as unknown as new (x: number, y: number, z: number) => V;
+          const at = (spreadPx: number, side: 1 | -1): [number, number, number] => {
+            const screen = new Vector(...centre).project(camera);
+            screen.x += side * spreadPx / innerWidth;
+            return screen.unproject(camera).toArray();
+          };
+          const fingers = ([1, -1] as const).map((side) => {
+            const space = new Space(device.viewerSpace, aimAt(at(fromPx, side)));
+            const state = Object.getOwnPropertySymbols(space).map((key) => (space as Record<symbol, { offsetMatrix?: Float32Array }>)[key]).find((value) => value?.offsetMatrix)!;
+            const source = new InputSource("none", "screen", ["generic-touchscreen", "generic-button"], space);
+            const mark = fingerMark();
+            mark(at(fromPx, side));
+            return { side, state, source, mark };
+          });
+          for (const finger of fingers) {
+            screenSources.push(finger.source);
+            await frameOf(session);
+            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor("selectstart", { frame, inputSource: finger.source })));
+          }
+          for (let i = 1; i <= frames; i++) {
+            const spread = fromPx + (toPx - fromPx) * (i / frames);
+            await frameOf(session, () => {
+              for (const finger of fingers) {
+                finger.state.offsetMatrix!.set(aimAt(at(spread, finger.side)));
+                finger.mark(at(spread, finger.side));
+              }
+            });
+          }
+          for (const finger of fingers) {
+            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor("selectend", { frame, inputSource: finger.source })));
+            screenSources.splice(screenSources.indexOf(finger.source), 1);
+            finger.mark.remove();
+          }
+          await frameOf(session);
+        };
+        (window as { __phonePinch?: unknown }).__phonePinch = pinch;
         // A tap toward a world point, released on the next frame: emulated frames take ~150 ms, and
         // pointer-events counts a press longer than 300 ms as no click.
         (window as { __phoneTap?: unknown }).__phoneTap = (target: [number, number, number]) => press([target], 0);
@@ -427,6 +468,8 @@ async function expectTornDown(page: Page): Promise<void> {
 
 const phoneTap = (page: Page, target: Vec3) =>
   page.evaluate((t) => (window as unknown as { __phoneTap(t: Vec3): Promise<void> }).__phoneTap(t), target);
+const phonePinch = (page: Page, centre: Vec3, fromPx: number, toPx: number, frames: number) =>
+  page.evaluate(([c, f, t, n]) => (window as unknown as { __phonePinch(c: Vec3, f: number, t: number, n: number): Promise<void> }).__phonePinch(c, f, t, n), [centre, fromPx, toPx, frames] as const);
 const phoneDrag = (page: Page, from: Vec3, to: Vec3, frames: number) =>
   page.evaluate(([f, t, n]) => (window as unknown as { __phoneDrag(f: Vec3, t: Vec3, n: number): Promise<void> }).__phoneDrag(f, t, n), [from, to, frames] as const);
 
@@ -1422,7 +1465,7 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   };
 });
 
-test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram pauses and resumes it, a tap on the floor moves it, and exit returns to the feed", async ({ page }, testInfo) => {
+test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram pauses and resumes it, a tap on the floor moves it, two fingers rescale it, and exit returns to the feed", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const { marks, mark, markFirstCommit } = createTimeline();
   markFirstCommit(page);
@@ -1519,7 +1562,13 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   // (on a phone the screen is the hand), and the reach row fits the screen's 16 px gutters.
   const standing = moved.hologram.worldPosition;
   const tall = moved.hologram.recordedSize[1];
-  await setPose(page, "head", null, [standing[0], standing[1] + tall * 0.45, standing[2]]);
+  // In office_small the clear floor in front of the desk is under a metre
+  // away: step back to 1.5 m, as a viewer would, to see all of it.
+  const eyeNow = (await readHeadPose(page)).position;
+  const away = [eyeNow[0] - standing[0], eyeNow[2] - standing[2]];
+  const awayLength = Math.hypot(away[0]!, away[1]!) || 1;
+  const stepBack: Vec3 = [standing[0] + (away[0]! / awayLength) * 1.5, eyeNow[1], standing[2] + (away[1]! / awayLength) * 1.5];
+  await setPose(page, "head", stepBack, [standing[0], standing[1] + tall * 0.45, standing[2]]);
   const rowBudget = page.viewportSize()!.width - 32;
   const near = await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.foot.reachRow.widthApx > 0 && s.controls!.foot.reachRow.widthApx <= rowBudget + 0.5, 3_000);
   expect(near.controls!.foot.reachRow.widthApx).toBeGreaterThan(0);
@@ -1557,6 +1606,30 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const dragDrift = Math.abs(dragAudio.hologram.audio!.scheduledOffset - dragAudio.hologram.clipTime);
   expect(dragDrift, "audio resumes at the dragged time").toBeLessThan(AUDIO_SYNC_TOLERANCE_S);
   await captureEvidence(page, testInfo, "ar-phone-controls");
+
+  // Two fingers rescale it about its feet (Q13): closing them halves it, and
+  // neither finger taps (it keeps playing where it stands).
+  const beforePinch = await snapshot(page);
+  const [px, py, pz] = beforePinch.hologram.worldPosition;
+  const pinchAt: Vec3 = [px, py + beforePinch.hologram.recordedSize[1] * 0.5, pz];
+  mark("ar-pinch-in");
+  await phonePinch(page, pinchAt, 240, 120, 12);
+  const shrunk = await waitForSnapshot(page, (s) => s.hologram.worldScale[0] < 0.75, 3_000);
+  expect(shrunk.hologram.worldScale[0], "half the spread, about half the size").toBeGreaterThan(0.4);
+  expect(shrunk.hologram.worldScale[0], "half the spread, about half the size").toBeLessThan(0.6);
+  expect(shrunk.controls!.foot.text.scale, "the chip says how big").toBe(`${Math.round(shrunk.hologram.worldScale[0] * 100)}%`);
+  expect(horizontal(shrunk.hologram.worldPosition, beforePinch.hologram.worldPosition), "a pinch never moves it").toBeLessThan(0.001);
+  expect(Math.abs(shrunk.hologram.worldPosition[1] - py), "its feet stay on the floor").toBeLessThan(0.001);
+  expect(shrunk.placement.sequence, "neither finger tapped the floor").toBe(beforePinch.placement.sequence);
+  expect(shrunk.hologram.playing, "neither finger tapped the hologram").toBe(true);
+  await captureEvidence(page, testInfo, "ar-phone-pinched");
+  await dwell(page);
+  mark("ar-pinch-out");
+  await phonePinch(page, pinchAt, 120, 240, 12);
+  const restored = await waitForSnapshot(page, (s) => s.hologram.worldScale[0] > 0.9, 3_000);
+  expect(restored.hologram.worldScale[0], "back near the recorded scale, it snaps to life size").toBeCloseTo(1, 6);
+  expect(restored.controls!.foot.text.scale).toBe("life size");
+  await dwell(page);
 
   // Exit from the bottom dock.
   await dwell(page);

@@ -23,6 +23,7 @@ import { HologramSpace } from "./hologramSpace";
 import { GallerySystem, type GalleryFeed } from "./gallerySystem";
 import { ArPlacementSystem, VrPlacementSystem } from "./placementSystems";
 import { ScreenInputSystem } from "./screenInputBridge";
+import { GRAB_SCALE_MAX, GRAB_SCALE_MIN } from "./twoHandGrab";
 import { createViewerContext, focusedRecord, viewerContext, type PlacedHologram, type XrViewMode } from "./viewerContext";
 
 // Design tokens (docs/product/design/tokens.json): the VR room is the
@@ -50,6 +51,14 @@ export interface ViewerWorldOptions {
   loadMore(cursor: string): Promise<GalleryFeed>;
   /** The immersive session ended (exit control, system button or error), with the last focused hologram. */
   onSessionEnd(focusedId: string | null): void;
+}
+
+/** Within 4% of the recorded scale a pinch snaps back to life size. */
+const PINCH_TRUE_SCALE_SNAP = 0.04;
+
+function pinchScale(scale: number): number {
+  const clamped = Math.min(GRAB_SCALE_MAX, Math.max(GRAB_SCALE_MIN, scale));
+  return Math.abs(clamped - 1) < PINCH_TRUE_SCALE_SNAP ? 1 : clamped;
 }
 
 /**
@@ -160,8 +169,18 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
 
   if (isAr) {
     const placement = world.getSystem(ArPlacementSystem)!;
-    world.getSystem(ScreenInputSystem)!.onTap = (tap) => {
+    const screen = world.getSystem(ScreenInputSystem)!;
+    screen.onTap = (tap) => {
       if (!tap.hitObject) placement.placeAtTap(tap.ray);
+    };
+    // Two fingers rescale the focused hologram about its feet (Q13), within the grab's limits.
+    let pinchBase = 1;
+    screen.onPinchStart = () => {
+      pinchBase = focusedRecord(viewerContext(world))?.entity.object3D?.scale.x ?? 1;
+    };
+    screen.onPinch = (factor) => {
+      const object = focusedRecord(viewerContext(world))?.entity.object3D;
+      if (object) object.scale.setScalar(pinchScale(pinchBase * factor));
     };
   }
 

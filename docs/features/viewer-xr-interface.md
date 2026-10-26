@@ -659,15 +659,39 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
   atlas e2e did not run cleanly: a day-old knowledge dev server from the
   main checkout holds port 4176, and Playwright reused it (main's docs, so 3
   of 7 fail). Its `check:docs` passes.
-- **Open (the user's call).**
-  - The IWSDK phone shell has no two-finger pinch to rescale; the R3F
-    view had one.
-  - The skip of surfaces over 0.5 m is still the IWSDK rule.
-  - In `office_small` the floor fallback (1.8 m ahead) lands 4 cm from the
-    wall, among furniture; real rooms vary.
-  - In VR the opaque floor hides recorded terrain below the author's floor
-    (it stays drawn and unclipped, but under the floor). Should VR's floor
-    open inside the bubble, as AR's real floor cannot?
+- **Decided after step 6 (the user, 2026-10-25).**
+  - **Pinch on the phone: yes.** Two fingers on the screen rescale the
+    focused hologram about its feet, between 10% and 200% (the headset
+    grab's limits), snapping to life size within 4%. Each finger is an XR
+    screen input (the shell has no DOM overlay); a second finger cancels the
+    first one's press, so neither taps. `xr-viewer.spec.ts` pinches in to
+    about half and back out to "life size" on the emulated phone.
+  - **Floor only (surfaces over 0.5 m skipped): kept**, unless the user says
+    otherwise.
+  - **VR's floor stays solid:** recorded terrain below the author's floor
+    stays under it in VR.
+  - **The floor fallback no longer lands in walls or furniture.** Placement
+    now casts a fan of rays (slopes 0.35, 0.7, 1.2 and 2 below the view)
+    and stands on the first floor hit at least 0.6 m ahead, so it finds
+    the floor in front of a desk instead of the desk. When no ray finds
+    floor, the estimate stands 0.5 m short of the nearest thing the rays
+    met, between 0.6 and 1.8 m ahead. The trade-off: in a cramped room it
+    stands closer than a phone can frame (a 1.6 m figure needs about
+    1.4 m), and the viewer steps back or pinches. In IWER's
+    `office_small`, straight ahead it now stands 0.6 m away, not 1.8 m
+    (inside the desk, against the wall).
+- **Open after step 6: the phone's reach row once the viewer walks round.**
+  As the brief requires, the row faces the viewer only when the hologram is
+  placed, recentered or focused, never per frame. So after a phone walks
+  about 2 m round to the side, the row stays inside the 16 px gutters
+  (178–371 px of 390, measured with the B-022 capture in `living_room`) but
+  is seen at an angle: its ends differ by about 150 px in height. Neither
+  the bubble work nor occlusion changed this, because `footControls.ts` and
+  `hologramControls.ts` are as they were in step 5. Recenter turns it back.
+  The decision: should the phone, and only the phone, re-face the viewer
+  each frame (the styleguide says nothing interactive follows the head)?
+  `xr-viewer.spec.ts` already asserts the gutter fit on the IWSDK default
+  route (`/ar/mock-1`, entered from the card), both centred and off centre.
 
 ### Video verification loop
 

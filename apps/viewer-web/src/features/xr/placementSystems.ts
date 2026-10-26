@@ -20,8 +20,11 @@ const VR_PLACEMENT_DISTANCE_M = 1.5;
 const AR_HIT_TEST_TIMEOUT_MS = 3500;
 const AR_TAP_MAX_DISTANCE_M = 8;
 // As the R3F view (ARHologramModel.tsx): aim the hit test slightly down so it
-// finds the floor ahead, and keep only surfaces that face up.
-const AR_HIT_TEST_RAY_DIRECTION = { x: 0, y: -0.35, z: -1, w: 0 };
+// finds the floor ahead, and keep only surfaces that face up. When that ray
+// meets furniture or a wall first, steeper rays find the floor in front of it,
+// tried in order; floor closer than AR_MIN_AHEAD_M is too close to stand on.
+const AR_HIT_TEST_RAY_SLOPES = [0.35, 0.7, 1.2, 2];
+const AR_MIN_AHEAD_M = 0.6;
 const AR_MIN_SURFACE_UP_DOT = 0.8;
 // A recorded person at true scale stands on the floor, not on furniture:
 // surfaces higher than this above the local floor are skipped.
@@ -32,8 +35,10 @@ const AR_MAX_STANDING_SURFACE_M = 0.5;
 const AR_REGROUND_RAY_HEIGHT_M = 1;
 const AR_REGROUND_TIMEOUT_MS = 1000;
 // Without a usable hit, stand it on the local floor (y = 0) this far ahead,
-// the R3F view's minimum, so the whole figure fits in view.
+// the R3F view's minimum, so the whole figure fits in view; but short of
+// anything the rays met in the way (a wall, a desk), by this much.
 const AR_FLOOR_FALLBACK_DISTANCE_M = 1.8;
+const AR_FALLBACK_CLEARANCE_M = 0.5;
 /** Neighbours keep the chip width plus a 30 apx gap between them (brief). */
 const PLACEMENT_GAP_M = 30 * metresPerApx(FOOT_REFERENCE_DISTANCE_M);
 /** Free places tried beside the first: right, left, then further out. */
@@ -49,6 +54,12 @@ function facePoint(object: Object3D, target: Vector3): void {
   const dx = target.x - object.position.x;
   const dz = target.z - object.position.z;
   object.rotation.set(0, Math.atan2(dx, dz), 0);
+}
+
+/** The floor estimate's distance ahead: the usual one, or short of what the rays met in the way. */
+function fallbackDistance(nearestBlockM: number | null): number {
+  if (nearestBlockM === null) return AR_FLOOR_FALLBACK_DISTANCE_M;
+  return Math.min(AR_FLOOR_FALLBACK_DISTANCE_M, Math.max(AR_MIN_AHEAD_M, nearestBlockM - AR_FALLBACK_CLEARANCE_M));
 }
 
 function placeRecord(record: PlacedHologram, head: Vector3, position: Vector3, mode: PlacementMode, anchored: boolean, reason?: PlacementReason): void {
@@ -176,10 +187,13 @@ interface ArRecordState {
   /** Searching with the viewer's ray (first placement, recenter) rather than at a stage place. */
   ahead: boolean;
   searchStartedAt: number;
+  /** While searching ahead: the nearest horizontal distance at which a ray met something it cannot stand on. */
+  nearestBlockM: number | null;
 }
 
 export class ArPlacementSystem extends createSystem() {
-  private hitTestSource: XRHitTestSource | null = null;
+  /** One per ray in AR_HIT_TEST_RAY_SLOPES; empty without hit test. */
+  private hitTestSources: XRHitTestSource[] = [];
   private session: XRSession | null = null;
   private readonly states = new Map<Entity, ArRecordState>();
 
@@ -232,7 +246,7 @@ export class ArPlacementSystem extends createSystem() {
   private state(entity: Entity): ArRecordState {
     let state = this.states.get(entity);
     if (!state) {
-      state = { anchor: null, pendingAnchorPose: null, grabbed: false, reground: null, ahead: false, searchStartedAt: performance.now() };
+      state = { anchor: null, pendingAnchorPose: null, grabbed: false, reground: null, ahead: false, searchStartedAt: performance.now(), nearestBlockM: null };
       this.states.set(entity, state);
     }
     return state;
@@ -248,6 +262,7 @@ export class ArPlacementSystem extends createSystem() {
       record.placement = { ...record.placement, stage: "searching" };
       state.ahead = true;
       state.searchStartedAt = performance.now();
+      state.nearestBlockM = null;
     }
 
     if (record.entity.hasComponent(Grabbed)) {
@@ -337,24 +352,30 @@ export class ArPlacementSystem extends createSystem() {
   private async startSession(session: XRSession | null): Promise<void> {
     if (!session || this.session === session) return;
     this.session = session;
-    for (const state of this.states.values()) state.searchStartedAt = performance.now();
+    for (const state of this.states.values()) {
+      state.searchStartedAt = performance.now();
+      state.nearestBlockM = null;
+    }
     try {
       const viewerSpace = await session.requestReferenceSpace("viewer");
-      const offsetRay = typeof XRRay === "function" ? new XRRay({ x: 0, y: 0, z: 0, w: 1 }, AR_HIT_TEST_RAY_DIRECTION) : undefined;
-      this.hitTestSource = (await session.requestHitTestSource?.({
-        space: viewerSpace,
-        entityTypes: ["plane", "mesh"],
-        ...(offsetRay ? { offsetRay } : {})
-      })) ?? null;
+      const sources: XRHitTestSource[] = [];
+      // Without XRRay only the straight-ahead ray is possible.
+      for (const slope of typeof XRRay === "function" ? AR_HIT_TEST_RAY_SLOPES : [null]) {
+        const offsetRay = slope === null ? undefined : new XRRay({ x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: -slope, z: -1, w: 0 });
+        const source = await session.requestHitTestSource?.({ space: viewerSpace, entityTypes: ["plane", "mesh"], ...(offsetRay ? { offsetRay } : {}) });
+        if (source) sources.push(source);
+      }
+      this.hitTestSources = sources;
     } catch (error) {
       console.warn("[xr-viewer] hit test unavailable; placing on the floor estimate.", error);
-      this.hitTestSource = null;
+      for (const source of this.hitTestSources) source.cancel();
+      this.hitTestSources = [];
     }
   }
 
   private stopSession(): void {
-    this.hitTestSource?.cancel();
-    this.hitTestSource = null;
+    for (const source of this.hitTestSources) source.cancel();
+    this.hitTestSources = [];
     for (const entity of [...this.states.keys()]) this.forget(entity);
     this.session = null;
   }
@@ -362,19 +383,25 @@ export class ArPlacementSystem extends createSystem() {
   private searchAhead(c: ViewerContext, record: PlacedHologram, state: ArRecordState, frame: XRFrame, refSpace: XRReferenceSpace): void {
     if (!readHead(this)) return;
     let hit: XRHitTestResult | undefined;
-    let hitPose: XRPose | undefined;
-    for (const result of this.hitTestSource ? frame.getHitTestResults(this.hitTestSource) : []) {
-      const pose = result.getPose(refSpace);
+    let position: Vector3 | undefined;
+    // The first ray, in order, whose nearest hit can be stood on.
+    for (const source of this.hitTestSources) {
+      const result = frame.getHitTestResults(source)[0];
+      const pose = result?.getPose(refSpace);
+      if (!result || !pose) continue;
+      const p = pose.transform.position;
+      const at = new Vector3(p.x, p.y, p.z).applyMatrix4(this.player.matrixWorld);
+      const ahead = Math.hypot(at.x - headPosition.x, at.z - headPosition.z);
       // Column 1 of the pose matrix is the surface normal; walls fail this.
-      if (pose && (pose.transform.matrix[5] ?? 0) >= AR_MIN_SURFACE_UP_DOT && pose.transform.position.y <= AR_MAX_STANDING_SURFACE_M) {
+      if ((pose.transform.matrix[5] ?? 0) >= AR_MIN_SURFACE_UP_DOT && p.y <= AR_MAX_STANDING_SURFACE_M) {
+        if (ahead < AR_MIN_AHEAD_M) continue;
         hit = result;
-        hitPose = pose;
+        position = at;
         break;
       }
+      state.nearestBlockM = Math.min(state.nearestBlockM ?? Infinity, ahead);
     }
-    if (hit && hitPose) {
-      const p = hitPose.transform.position;
-      const position = new Vector3(p.x, p.y, p.z).applyMatrix4(this.player.matrixWorld);
+    if (hit && position) {
       placeRecord(record, headPosition, position, "hit-test", false, "hit-test");
       state.ahead = false;
       c.stage ??= stageAt(headPosition, position);
@@ -383,12 +410,12 @@ export class ArPlacementSystem extends createSystem() {
     }
     if (performance.now() - state.searchStartedAt < AR_HIT_TEST_TIMEOUT_MS) return;
     const floor = computeFloorPlacement(headPosition, headQuaternion, {
-      distanceMeters: AR_FLOOR_FALLBACK_DISTANCE_M,
+      distanceMeters: fallbackDistance(state.nearestBlockM),
       minFloorY: 0,
       eyeToFloorMeters: headPosition.y
     });
     floor.position.y = 0;
-    placeRecord(record, headPosition, floor.position, "floor", false, this.hitTestSource ? "hit-test-timeout" : "hit-test-unavailable");
+    placeRecord(record, headPosition, floor.position, "floor", false, this.hitTestSources.length > 0 ? "hit-test-timeout" : "hit-test-unavailable");
     state.ahead = false;
     c.stage ??= stageAt(headPosition, floor.position);
     state.pendingAnchorPose = record.entity.object3D!.matrixWorld.clone().setPosition(floor.position);
