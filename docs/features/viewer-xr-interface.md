@@ -79,8 +79,9 @@ neutral space. True scale is fact: life size means the recorded scale.
     size ignores the hologram's grab scale, so a 0.1× hologram keeps
     full-size controls. Its position is fixed to the hologram, 2 cm above
     the anchor and in front of the feet, outside the hologram's pointer box.
-    Its yaw faces the viewer only when the hologram is placed or recentered,
-    never per frame.
+    In a headset its yaw faces the viewer only when the hologram is placed
+    or recentered, never per frame. On a phone it also turns (yaw only)
+    every frame to face back along the phone's view, without moving.
   - **Chip per target (§5.2, §9):** VR rows are bare against walls and take
     the chip at 72% (0.3 s fade in, 2 s hold) in front of a lit floor. AR
     always shows the chip, 97% on Quest passthrough and 88% on Android
@@ -680,18 +681,20 @@ used IWER 2.6 with IWSDK 1.0.1 and are emulation evidence only.
     1.4 m), and the viewer steps back or pinches. In IWER's
     `office_small`, straight ahead it now stands 0.6 m away, not 1.8 m
     (inside the desk, against the wall).
-- **Open after step 6: the phone's reach row once the viewer walks round.**
-  As the brief requires, the row faces the viewer only when the hologram is
-  placed, recentered or focused, never per frame. So after a phone walks
-  about 2 m round to the side, the row stays inside the 16 px gutters
-  (178–371 px of 390, measured with the B-022 capture in `living_room`) but
-  is seen at an angle: its ends differ by about 150 px in height. Neither
-  the bubble work nor occlusion changed this, because `footControls.ts` and
-  `hologramControls.ts` are as they were in step 5. Recenter turns it back.
-  The decision: should the phone, and only the phone, re-face the viewer
-  each frame (the styleguide says nothing interactive follows the head)?
-  `xr-viewer.spec.ts` already asserts the gutter fit on the IWSDK default
-  route (`/ar/mock-1`, entered from the card), both centred and off centre.
+- **The phone's reach row turns to face the phone (the user, 2026-10-25).**
+  After a phone walked about 2 m round, the row was seen at an angle: its
+  ends differed by about 150 px in height (the brief then turned it only on
+  place, recenter or focus; the bubble work did not change that). Now, on a
+  phone only, the chip turns (yaw only) every frame to face back along the
+  phone's view, so its rows stay level on screen. It stays where it was
+  placed; it never follows the viewer. Facing the phone's position was not
+  enough, because the chip stands in front of the feet, off the line of
+  sight: that still left a 70 px skew. Headsets keep the place, recenter
+  and focus rule. The styleguide (§9.2, placement) records the exception.
+  `xr-viewer.spec.ts` walks the phone 2 m round on the IWSDK default route
+  and asserts that the row's ends are within 10 px of level (measured
+  0.0 px), that it stays inside the 16 px gutters (16.5–373.5 of 390 px),
+  and that the chip has not moved.
 
 ### Video verification loop
 

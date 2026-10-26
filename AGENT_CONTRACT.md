@@ -46,6 +46,8 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - `pnpm run dev`
 - `pnpm run dev:knowledge`
 - `pnpm run test:knowledge`
+  (set `KNOWLEDGE_E2E_PORT=<port>` to run its e2e on its own dev server when
+  another one already holds 4176, which it would otherwise reuse)
 
 ### App-level (optional when scoping work)
 

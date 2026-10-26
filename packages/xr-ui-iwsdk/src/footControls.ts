@@ -35,7 +35,8 @@ import {
 // scale chip appear when something comes near and leave afterwards. The chip
 // keeps its world size whatever the hologram's grab scale, sits 2 cm above
 // the anchor in front of the feet, and turns to face the viewer only when the
-// hologram is placed or recentered.
+// hologram is placed or recentered (on a phone it also turns to face the
+// phone every frame, without moving).
 
 /** Brief: a hand within 0.3 m or the head's forward ray within 15° brings the controls. */
 export const NEAR_HAND_DISTANCE_M = 0.3;
@@ -284,9 +285,17 @@ export class FootControls {
     });
     this.used = false;
     if (this.target === "ar-phone") {
+      const object = this.entity.object3D!;
+      // The phone's exception to "nothing interactive follows the head": the
+      // chip stays where it was placed but turns (yaw only) to face the phone
+      // every frame, so its rows stay level on screen as the viewer walks round.
+      // It faces back along the phone's view, not toward the phone's position:
+      // the chip stands off the line of sight, in front of the feet.
+      const view = input.head.getWorldDirection(new Vector3());
+      object.rotation.set(this.pitch, Math.atan2(-view.x, -view.z), 0, "YXZ");
+      object.updateMatrixWorld();
       // Flat sizes are CSS pixels on screen (§9.2) at any distance: scale by the
       // controls' depth in view (the reach row's, where the widest row sits).
-      const object = this.entity.object3D!;
       const at = (this.reachOpacity > 0 ? this.reachRow : this.alwaysRow).getWorldPosition(new Vector3());
       const depth = -at.applyMatrix4(input.head.matrixWorld.clone().invert()).z;
       if (depth > 0.05) object.scale.setScalar(depth / FOOT_REFERENCE_DISTANCE_M);

@@ -111,7 +111,7 @@ export class HologramControlsSystem extends createSystem() {
     object.getWorldPosition(anchor);
     this.player.head.getWorldPosition(headPosition);
     if (record.entity !== this.boundTo || record.placement.sequence !== this.placedSequence) {
-      // The chip turns to the viewer only when its hologram is placed, recentered or focused.
+      // The chip turns to the viewer when its hologram is placed, recentered or focused (a phone's also turns each frame).
       this.boundTo = record.entity;
       this.placedSequence = record.placement.sequence;
       foot.faceViewer(anchor, headPosition);

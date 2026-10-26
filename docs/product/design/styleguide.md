@@ -700,7 +700,11 @@ the stop shape alone, since no text sits within arm's reach.
 - **Type, glyphs and input:** as VR on a Quest. On an Android phone, flat
   sizes and 44 apx touch targets.
 - **Placement:** controls at the hologram's foot, on the chip. Nothing fills
-  the view or follows the head except the periphery status line.
+  the view or follows the head except the periphery status line. One
+  exception, on an Android phone only: the foot chip turns (yaw only) every
+  frame to stay level on screen as the viewer walks round. It turns where it
+  stands and never moves after the viewer. Headsets turn it only when the
+  hologram is placed or recentered.
 
 ### 9.3 Phone (portal)
 

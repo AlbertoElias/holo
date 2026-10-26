@@ -1572,7 +1572,7 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const rowBudget = page.viewportSize()!.width - 32;
   const near = await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.foot.reachRow.widthApx > 0 && s.controls!.foot.reachRow.widthApx <= rowBudget + 0.5, 3_000);
   expect(near.controls!.foot.reachRow.widthApx).toBeGreaterThan(0);
-  const { foot, left: rowLeft, right: rowRight } = await settledReachRow(page);
+  let { foot, left: rowLeft, right: rowRight } = await settledReachRow(page);
   const [crown, feet] = await toScreen(page, [[standing[0], standing[1] + tall, standing[2]], standing]);
   const phoneSize = page.viewportSize()!;
   await captureEvidence(page, testInfo, "ar-phone-framed");
@@ -1581,6 +1581,30 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   // The row is fitted to the gutters exactly; allow float error.
   expect(rowLeft!.x, "reach row left edge inside the 16 px gutter").toBeGreaterThanOrEqual(16 - 0.01);
   expect(rowRight!.x, "reach row right edge inside the 16 px gutter").toBeLessThanOrEqual(phoneSize.width - 16 + 0.01);
+  await dwell(page);
+
+  // Walking 2 m round it, the phone's row stays where it was placed but turns
+  // to face the phone every frame: level on screen and inside the gutters.
+  mark("walk-round");
+  const lookAt: Vec3 = [standing[0], standing[1] + tall * 0.45, standing[2]];
+  const startAngle = Math.atan2(away[0]!, away[1]!);
+  const walkAngle = 2 / 1.5;
+  for (let i = 1; i <= 20; i++) {
+    const angle = startAngle + walkAngle * (i / 20);
+    await setPose(page, "head", [standing[0] + Math.sin(angle) * 1.5, eyeNow[1], standing[2] + Math.cos(angle) * 1.5], lookAt);
+    await page.waitForTimeout(40);
+  }
+  const walked = await settledReachRow(page);
+  const walkedRow = { leftPx: walked.left.x, rightPx: walked.right.x, tiltPx: walked.right.y - walked.left.y };
+  expect(Math.abs(walkedRow.tiltPx), `after walking round, the row's ends are level on screen (${walkedRow.tiltPx.toFixed(1)} px apart)`).toBeLessThanOrEqual(10);
+  expect(walked.left.x, "after walking round, row left edge inside the gutter").toBeGreaterThanOrEqual(16 - 0.01);
+  expect(walked.right.x, "after walking round, row right edge inside the gutter").toBeLessThanOrEqual(phoneSize.width - 16 + 0.01);
+  expect(horizontal(walked.foot.worldPosition, foot.worldPosition), "the row turns in place; it never follows the viewer").toBeLessThan(0.001);
+  await captureEvidence(page, testInfo, "ar-phone-walked-round");
+  await setPose(page, "head", stepBack, lookAt);
+  // The row turns back and its slide settles over a few frames.
+  await page.waitForTimeout(600);
+  ({ foot, left: rowLeft, right: rowRight } = await settledReachRow(page));
   await dwell(page);
   mark("tap-play-glyph");
   await phoneTap(page, foot.buttons.play.worldPosition);
@@ -1656,7 +1680,7 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
     tapMove: { target: floorTarget, position: moved.hologram.worldPosition, missM: miss, reanchored: Boolean(reanchored) },
     phoneControls: {
       sizes: phone.foot.sizes,
-      reachRowPx: { left: rowLeft!.x, right: rowRight!.x, screenWidth: phoneSize.width, timelineApx: foot.timeline.lengthApx },
+      reachRowPx: { left: rowLeft!.x, right: rowRight!.x, screenWidth: phoneSize.width, timelineApx: foot.timeline.lengthApx, walkedRound: walkedRow },
       bodyInViewPx: { crown: crown!.y, feet: feet!.y, screenHeight: phoneSize.height },
       dockOnScreen,
       chipOpacity: phone.foot.chipOpacity,
