@@ -394,12 +394,14 @@ test.describe("phone by touch", () => {
       }).map((mark) => mark.getBoundingClientRect());
       return { start: Math.min(...marks.map((mark) => mark.left)) - box.left, end: box.right - Math.max(...marks.map((mark) => mark.right)) };
     });
-    const reachedEnds = await chipEnds();
-    expect(Math.abs(reachedEnds.start - reachedEnds.end), `reached, the chip's ends match (${JSON.stringify(reachedEnds)})`).toBeLessThan(3);
+    // Read once the unfolding has run; a loaded runner draws it late.
+    const endsApart = async () => {
+      const ends = await chipEnds();
+      return Math.abs(ends.start - ends.end);
+    };
+    await expect.poll(endsApart, { message: "reached, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
     await expect(controls).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
-    await page.waitForTimeout(500);
-    const foldedEnds = await chipEnds();
-    expect(Math.abs(foldedEnds.start - foldedEnds.end), `folded, the chip's ends match (${JSON.stringify(foldedEnds)})`).toBeLessThan(3);
+    await expect.poll(endsApart, { message: "folded, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
     expect(Math.abs((await play.boundingBox())!.x + freePlay.width / 2 - PHONE.width / 2), "folded, Play still holds the middle").toBeLessThan(2);
     for (const button of await controls.locator("button").all()) {
       const box = (await button.boundingBox())!;

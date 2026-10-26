@@ -123,7 +123,9 @@ export async function settleScroll(page: Page): Promise<number> {
     }));
     readings.push(top);
     const lastThree = readings.slice(-3);
-    if (lastThree.length === 3 && lastThree.every((value) => value === top) && Math.abs(top / cardHeight - Math.round(top / cardHeight)) < 0.01) {
+    // On a card to the pixel: a glide that starts late (a loaded runner)
+    // must not pass for settled while it waits a few pixels off.
+    if (lastThree.length === 3 && lastThree.every((value) => value === top) && Math.abs(top - Math.round(top / cardHeight) * cardHeight) < 1) {
       return top;
     }
     await page.waitForTimeout(150);

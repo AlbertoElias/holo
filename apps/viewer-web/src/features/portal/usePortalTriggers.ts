@@ -63,7 +63,7 @@ const FLICK_PX_PER_MS = 0.3;
  * suspended until it lands. A later swipe on any card of that feed takes it
  * over, so an earlier settle cannot restore snapping under it.
  */
-const settles = new WeakMap<HTMLElement, { timer: number; landed: () => void }>();
+const settles = new WeakMap<HTMLElement, { timer: number; landed: (event?: Event) => void }>();
 
 function cancelSettle(scroller: HTMLElement): void {
   const settle = settles.get(scroller);
@@ -167,10 +167,16 @@ export function usePortalTriggers(
         ? (direction > 0 ? stops.find((stop) => stop > from + 1) : [...stops].reverse().find((stop) => stop < from - 1)) ?? from
         : from;
       scroller.scrollTo({ top: target, behavior: "smooth" });
-      // Snapping comes back once the glide has landed on the card.
-      const landed = () => {
+      // Snapping comes back once the glide has landed on the card. The end
+      // of the swipe's own last scroll may be reported after the glide has
+      // begun, so only an end at the card counts; past the time a glide
+      // takes, the feed is put on the card in any case.
+      const landed = (event?: Event) => {
+        const away = Math.abs(scroller.scrollTop - target) > 1;
+        if (event && away) return;
         cancelSettle(scroller);
         restore();
+        if (away) scroller.scrollTo({ top: target, behavior: "instant" });
       };
       cancelSettle(scroller);
       settles.set(scroller, { timer: window.setTimeout(landed, 800), landed });
