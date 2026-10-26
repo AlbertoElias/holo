@@ -30,11 +30,11 @@ bundle split (parallel `js-bundle` session), cursor pages after the first.
       until the feed scrolls near it.
 - [x] Live: in a fresh browser at ~1 MB/s the first GLB finishes noticeably
       sooner than with all downloads in parallel.
-- [ ] A cold first visit renders the newest hologram without waiting on the
+- [x] A cold first visit renders the newest hologram without waiting on the
       Fly API.
 - [ ] A new upload, or a delete, shows in the edge list on the next page load
       (see Design decision for the bound).
-- [ ] When the snapshot is missing or old, the feed still works from the
+- [x] When the snapshot is missing or old, the feed still works from the
       live API exactly as today.
 
 ## Failure cases considered
@@ -46,7 +46,8 @@ bundle split (parallel `js-bundle` session), cursor pages after the first.
 | Snapshot write fails after an upload or delete | The SPA still fetches the live list and replaces the snapshot's items once the API answers; the next successful write repairs the snapshot |
 | Snapshot lists a deleted hologram | Its GLB 404s and the card says the file is missing until the live list removes it |
 | Snapshot is per-anonymous, live list is per-viewer (`ownedByViewer`) | The live list always replaces the snapshot, so owner controls appear once the API answers |
-| Preloaded GLB downloaded twice (preload/fetch mode mismatch) | Preload uses `as="fetch" crossorigin="anonymous"` to match GLTFLoader's fetch; checked by wire bytes on the preview deploy |
+| Preloaded GLB downloaded twice (preload/fetch mode mismatch) | Preload uses `as="fetch" crossorigin="anonymous"` to match GLTFLoader's fetch. Checked by wire bytes on the preview deploy: the loader's fetch is served from the HTTP cache (Playwright routing turns that cache off, so the measurement must not route) |
+| The browser keeps an old page via ETag | The function strips conditional request headers and the ETag, and sends `Cache-Control: no-cache` |
 | The Pages Function errors or R2 is unreachable | The function serves the unmodified `index.html` |
 
 ## Ownership
@@ -84,7 +85,10 @@ bounded only by the TTL unless the API purges with a new token.
 |---|---|---|
 | Feed order | `e2e/hologram-feed.spec.ts` "feed downloads holograms in feed order, one at a time" | Passes; `glb-downloads.json` attachment |
 | Live first GLB sooner | Fresh Chromium, CDP throttle 1 MB/s, 40 ms, against production and a preview deploy (warm API) | Production: 5 GLBs start together, first done 4.3–5.8 s, first card rendered 8.6–8.7 s. Preview: first done 3.8–4.3 s, then one at a time, first card rendered 4.2–4.7 s |
-| Cold visit, upload freshness | Preview deploy with the R2 binding, API stopped | pending |
+| Cold visit | Preview deploy with the R2 binding; API unreachable (`--host-resolver-rules` blackholes holoim-api.fly.dev, so the HTTP cache stays on) | Newest GLB starts at 0.5 s from the preload, rendered at 3.5–3.7 s with no API at all. Production, with the list delayed 14 s: rendered at 23.9 s. The loader's own fetch is an HTTP-cache hit (about 20 ms, no wire bytes): no double download |
+| Snapshot replaced by the live list | `e2e/hologram-feed.spec.ts` "feed renders the edge snapshot while the API sleeps, then takes the API's list" | Passes |
+| Upload and delete rewrite the snapshot | `apps/viewer-api/test/hologram-routes.test.ts` "deletes the database record…" (snapshot after upload and after delete) | Passes |
+| Production snapshot | After deploy: `feed/latest.json` rewritten at API boot | pending |
 
 ## Physical-device limits
 

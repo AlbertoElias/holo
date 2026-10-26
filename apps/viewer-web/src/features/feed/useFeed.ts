@@ -1,11 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { HologramDTO } from "@holoim/contracts";
+import { paginatedHologramsSchema, type HologramDTO, type PaginatedHolograms } from "@holoim/contracts";
 
 import { fetchHolograms } from "./api";
 
+declare global {
+  interface Window {
+    /** The first page as the edge last saw it (functions/index.ts); the API's answer replaces it. */
+    __HOLOIM_FEED__?: unknown;
+  }
+}
+
+function readEdgeSnapshot(): PaginatedHolograms | null {
+  if (typeof window === "undefined") return null;
+  const parsed = paginatedHologramsSchema.safeParse(window.__HOLOIM_FEED__);
+  return parsed.success ? parsed.data : null;
+}
+
 export function useFeed() {
-  const [items, setItems] = useState<HologramDTO[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [snapshot] = useState(readEdgeSnapshot);
+  const [items, setItems] = useState<HologramDTO[]>(() => snapshot?.items ?? []);
+  const [nextCursor, setNextCursor] = useState<string | null>(() => snapshot?.nextCursor ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const initializedRef = useRef(false);

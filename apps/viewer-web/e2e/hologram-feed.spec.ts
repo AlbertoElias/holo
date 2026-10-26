@@ -505,3 +505,36 @@ test("feed downloads holograms in feed order, one at a time", async ({ page }, t
   expect(downloads.map((download) => download.url).slice(3)).toEqual(["/uploads/mock-4.glb", "/uploads/mock-5.glb"]);
   await testInfo.attach("glb-downloads.json", { body: JSON.stringify(downloads, null, 2), contentType: "application/json" });
 });
+
+// The edge puts the first page into the HTML (functions/index.ts) so a first
+// visit does not wait for the API to wake; the API's answer still wins.
+test("feed renders the edge snapshot while the API sleeps, then takes the API's list", async ({ page }) => {
+  test.setTimeout(60_000);
+  const snapshotItem = { ...mockHologram, hologramName: "From the edge" };
+  const liveItems = [
+    { ...mockHologram, id: "mock-new", url: "/uploads/mock-new.glb", hologramName: "Uploaded since" },
+    { ...mockHologram, hologramName: "From the API" }
+  ];
+  await page.addInitScript((feed) => {
+    (window as Window & { __HOLOIM_FEED__?: unknown }).__HOLOIM_FEED__ = feed;
+  }, { items: [snapshotItem], nextCursor: null });
+  let wake: () => void = () => undefined;
+  const awake = new Promise<void>((resolve) => { wake = resolve; });
+  await page.route("**/api/holograms?*", async (route) => {
+    await awake;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: liveItems, nextCursor: null }) });
+  });
+  await page.route("**/uploads/**", (route) => route.fulfill({ status: 200, path: mockGlbPath, contentType: "model/gltf-binary", headers: { "accept-ranges": "bytes" } }));
+
+  await page.goto("/");
+  const first = page.locator(".feed-card").first();
+  await expect(first).toHaveAttribute("data-model-state", "rendered", { timeout: 30_000 });
+  await expect(first.getByRole("heading", { name: "From the edge" })).toBeVisible();
+  await expect(page.locator(".feed-card")).toHaveCount(1);
+
+  wake();
+  await expect(page.locator(".feed-card")).toHaveCount(2);
+  await expect(page.getByRole("heading", { name: "Uploaded since" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "From the API" })).toBeAttached();
+  await expect(page.getByRole("heading", { name: "From the edge" })).toHaveCount(0);
+});
