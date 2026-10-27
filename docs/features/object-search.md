@@ -178,6 +178,7 @@ Built in two sessions (API: `feature/object-search-api`; capture:
 | `test:xr:smoke` | 29 of 30; the VR locomotion test failed once and passed 2 of 2 on rerun (flaky, untouched by this slice) |
 | `verify:pr` stages up to the pipeline | pass |
 | Live proof: headset Find against live Poly Haven, Chairs → six results with thumbnails → pick → summon | in `output/`, not committed |
+| `verify:pr` after merging `main` (AR recording, CI deploy move) on 2026-10-27 | doctor, lint, typecheck, unit (API 69, capture 26, viewer 42, packages), build, knowledge, pipeline pass; `test:xr:smoke` 30 of 30 including `ar-record` quest-passthrough; `test:xr:summon` pass. `test:portal`: the desktop-freeze test failed in 3 of 4 full-suite runs but passed alone 3 times and in the 4th suite run (9 of 9); `main` passed it too. It uses a mocked feed without credits, the only viewer path this feature changes, so it is recorded as an order- and load-dependent flake |
 
 Codex (`-p standard`) reviewed the capture half; all 10 findings were fixed
 before integration. The live proof found a defect the fixtures hid:
