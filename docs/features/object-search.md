@@ -1,7 +1,7 @@
 # Feature brief: Find an object by asking (slice 1)
 
 **Lead:** Claude Code (Opus 5.5)  
-**Status:** Implementing (started 2026-10-27 on `feature/object-search`; the user asked for it to be built overnight without approvals, so every decision marked provisional in PRD-060 is pending their review)  
+**Status:** Verifying (emulation and pipeline evidence complete 2026-10-27; started 2026-10-27 on `feature/object-search`; the user asked for it to be built overnight without approvals, so every decision marked provisional in PRD-060 is pending their review)  
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
 **PRD:** [PRD-060](../product/prds/PRD-060-find-an-object-by-asking.md) (IDEA-079), "First Slice"
 
@@ -26,22 +26,22 @@ objects, image search, search during a take (PRD-060 Q1–Q7).
 
 ## Acceptance criteria
 
-- [ ] `GET /api/objects/search?q=` returns at most six Poly Haven models,
+- [x] `GET /api/objects/search?q=` returns at most six Poly Haven models,
       each CC0, at most 8 MB packed at 1k, with title, author, source URL,
       thumbnail and real dimensions; an empty or over-long query is a 400.
-- [ ] `GET /api/objects/polyhaven/:id.glb` returns one GLB that passes
+- [x] `GET /api/objects/polyhaven/:id.glb` returns one GLB that passes
       capture's `checkSuppliedGlb` and carries `asset.copyright` and
       `asset.extras.holoimCredit`; unknown ids are 404, upstream failures 502,
       and only Poly Haven's own hosts are fetched.
-- [ ] Capture's Find field shows the results; picking one adds it to the tray
+- [x] Capture's Find field shows the results; picking one adds it to the tray
       under its title, with the tray's existing limits and messages; the field
       is disabled while recording.
-- [ ] A take that summons a found object exports `holoimCredit` on that
+- [x] A take that summons a found object exports `holoimCredit` on that
       `RecordedObject` node and the credit in `asset.copyright`;
       `HOLOIM_objects` stays v0 and valid.
-- [ ] The viewer card shows "Object: “Title” by Author, Poly Haven, CC0",
+- [x] The viewer card shows "Object: “Title” by Author, Poly Haven, CC0",
       linking to the source; takes without credits show nothing new.
-- [ ] The converted USDZ keeps the credit in its root layer's
+- [x] The converted USDZ keeps the credit in its root layer's
       `customLayerData`.
 
 ## Failure cases considered
@@ -64,7 +64,7 @@ objects, image search, search during a take (PRD-060 Q1–Q7).
 | Implementer (API) | Claude subagent | `apps/viewer-api/src/routes/objects.ts`, `src/services/polyhaven*`, `tools/glb_to_usdz.py` credit, tests |
 | Implementer (capture) | Claude subagent | `apps/capture/src/objects/*`, `src/recording/*`, `src/ui/*`, summon check |
 | Implementer (viewer) | Claude subagent | `apps/viewer-web/src/features/feed/*`, `src/features/objects/*` |
-| Independent verifier | Codex (pending) | Read-only verification |
+| Independent verifier | Codex (`-p standard`) | Read-only verification |
 
 ## Design decision
 
@@ -86,10 +86,40 @@ objects, image search, search during a take (PRD-060 Q1–Q7).
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Search, pack, errors, host allowlist | `pnpm --filter @holoim/api test` (fixture registry) | pending |
-| Find → tray → summon → export credit | `SUMMON_ONLY=desktop pnpm --filter @holoim/capture run test:xr:summon` | pending |
-| Upload → viewer credit → USDZ credit | `e2e/object-search.pipeline.spec.ts` | pending |
-| Live flow | proof video against live Poly Haven (in `output/`, not committed) | pending |
+| Search, pack, errors, host allowlist, unloadable models never shown | `pnpm --filter @holoim/api test` (fixture registry, no network) | `test/object-routes.test.ts`: 12 tests pass |
+| Find → tray → summon → export credit | `pnpm --filter @holoim/capture run test:xr:summon` (`find` phase) | pass; `apps/capture/output/ci-summon/report.json` shows node `extras.holoimCredit`, one `asset.copyright` line, `HOLOIM_objects` v0 valid |
+| Real API → take → upload → viewer credit → USDZ credit | `e2e/object-search.pipeline.spec.ts` (in `test:smoke:pipeline`) | pass: chair summoned twice beside an uncredited bracket; one credit on the card with an https link, observer `credits` = 1; USDZ `holoim:copyright` and one `holoim:credits` entry; `output/object-search-viewer/report.json`, `card.png` |
+| No regressions | `pnpm run verify:pr` | pass 2026-10-27 (all tiers, including `summon.pipeline.spec.ts` and the XR smoke) |
+| Live flow | proof video against live Poly Haven (in `output/`, not committed) | see handoff |
+
+## Independent verification
+
+Codex (`-p standard`, read-only) reviewed the slice diff on 2026-10-27 and
+asked for changes. All six findings were fixed in `d4ab21d`:
+
+1. Must-fix: a key released while the Find field had focus stuck movement.
+   Releases are always processed, and focusing a text field clears held keys.
+2. Must-fix: search could show Draco, meshopt, quantized, basisu or skinned
+   models that the tray then refused. Each candidate's glTF is now vetted
+   with capture's rules before it is shown.
+3. The single-object picker dropped a credited GLB's credit; it keeps it.
+4. The USDZ listed a twice-summoned model's credit twice; deduped by source.
+5. Credit links were below the 44 px touch hit area; an inset hit area fixes it.
+6. Find controls lacked the styleguide's hover, pressed and focus states; they
+   use `GlyphControl` and its appearance logic.
+
+The automated security review also flagged a `javascript:` link risk in the
+credit (now https only) and a download cap applied after buffering (now
+enforced while streaming).
+
+## Open for the user
+
+Every PRD-060 decision this slice rests on is provisional (Q1 Poly Haven only,
+Q2 CC0 and CC-BY only, Q3 desktop text before the take, Q4 filter without
+re-encoding, Q5 no library, Q6 no images, Q7 credit line on the card). The
+card credit line answers Q7 provisionally in place of a details view, which
+the viewer does not have. A deployed capture needs `VITE_API_ORIGIN` (or an
+`/api` route) to reach the API; the dev and e2e setups use a proxy.
 
 ## Physical-device limits
 

@@ -11,7 +11,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |
 | Shared XR interface and viewer VR/AR | Complete | [viewer-xr-interface.md](archive/viewer-xr-interface.md) |
 | Creator accounts (IDEA-052) | Complete | [creator-accounts.md](archive/creator-accounts.md) |
-| Find an object by asking (PRD-060) | Implementing | [object-search.md](object-search.md) |
+| Find an object by asking (PRD-060) | Verifying | [object-search.md](object-search.md) |
 | Snappy feed first load | Shipped | [snappy-feed-first-load.md](snappy-feed-first-load.md) |
 | Redesign UI and interaction across capture and viewer | Implementing | [ui-redesign.md](ui-redesign.md) |
 | Summon and place while speaking | Complete | [summon-and-place.md](archive/summon-and-place.md) |
