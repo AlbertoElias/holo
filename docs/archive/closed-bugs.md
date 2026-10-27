@@ -422,3 +422,16 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   fixed: the seek window, preview loads past 15 s, and two test budgets.
   `verify:fast` for `@holoim/web`. Still a device question: a
   press spanning a frame hitch over 800 ms is no click (HANDOFF).
+
+### B-027 — Three immersive viewer checks fail on hosted runners
+
+- **Area:** `apps/viewer-web/e2e/xr-viewer.spec.ts` "VR gallery:", "VR foot controls:", "VR locomotion:" (and, once split from locomotion, "VR recenter after moving:")
+- **Severity:** P2
+- **Observed:** 2026-10-26, CI runs 40406523825 and 40436776761 on `main`
+- **Closed:** 2026-10-26, with B-026 on branch `claude/xr-viewer-spec-flake-e86824`
+- **Cause:** B-026: the spec held its input for wall-clock time while IWSDK
+  reads it on frame time, so a slow runner lost clicks and long frames
+  stretched the locomotion slide past its window.
+- **Fix:** the spec waits on rendered frames (B-026). The four checks keep
+  their own CI job, `xr-viewer-vr` (`test:e2e:xr-viewer-vr`), now without
+  `continue-on-error` and back in the CI Gate.

@@ -209,6 +209,34 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The viewer's longest VR checks run on their own runner: they wait on
+  # rendered frames (B-026), and a 2-CPU runner draws few of them.
+  xr-viewer-vr:
+    name: Viewer VR gallery, foot controls and locomotion
+    needs: [changes]
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          playwright: "true"
+      - name: Viewer VR gallery, foot controls and locomotion
+        run: pnpm timed xr-viewer-vr -- pnpm --filter @holoim/web run test:e2e:xr-viewer-vr
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-viewer-vr-failure-${{ github.run_id }}
+          path: |
+            apps/viewer-web/test-results
+            apps/viewer-web/playwright-report
+            output/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   pipeline:
     name: Capture to viewer pipeline (shard ${{ matrix.shard }}/2)
     needs: [changes]
@@ -317,7 +345,7 @@ jobs:
     # occasionally creating two runs for one push) would still start a runner
     # here only to report failure. Failed or skipped jobs still reach the gate.
     if: ${{ !cancelled() }}
-    needs: [changes, quality, capture-xr, e2e, pipeline, portal]
+    needs: [changes, quality, capture-xr, e2e, xr-viewer-vr, pipeline, portal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
@@ -325,6 +353,7 @@ jobs:
       QUALITY_RESULT: ${{ needs.quality.result }}
       CAPTURE_XR_RESULT: ${{ needs.capture-xr.result }}
       E2E_RESULT: ${{ needs.e2e.result }}
+      XR_VIEWER_VR_RESULT: ${{ needs.xr-viewer-vr.result }}
       PIPELINE_RESULT: ${{ needs.pipeline.result }}
       PORTAL_RESULT: ${{ needs.portal.result }}
     steps:
@@ -337,6 +366,7 @@ jobs:
             echo "| Quality, unit tests and build | ${QUALITY_RESULT} |"
             echo "| Capture XR checks (all shards) | ${CAPTURE_XR_RESULT} |"
             echo "| Viewer and Knowledge browser checks (all shards) | ${E2E_RESULT} |"
+            echo "| Viewer VR gallery, foot controls and locomotion | ${XR_VIEWER_VR_RESULT} |"
             echo "| Capture to viewer pipeline (all shards) | ${PIPELINE_RESULT} |"
             echo "| Portal view end-to-end | ${PORTAL_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -349,5 +379,6 @@ jobs:
           ok "${QUALITY_RESULT}"
           ok "${CAPTURE_XR_RESULT}"
           ok "${E2E_RESULT}"
+          ok "${XR_VIEWER_VR_RESULT}"
           ok "${PIPELINE_RESULT}"
           ok "${PORTAL_RESULT}"
