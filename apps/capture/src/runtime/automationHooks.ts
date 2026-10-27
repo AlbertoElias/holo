@@ -8,7 +8,10 @@ import type { TouchStick } from '../input/TouchInput';
 import type { FlatHaloView } from '../ui/flatHalo';
 import type { PointResolutionReport } from '../recording/PointResolver';
 import type { PhoneArChromeProbe } from '../ui/PhoneArChrome';
-import type { VrChromeSnapshot } from '../ui/VrChrome';
+import type { ChromeTarget, VrChromeSnapshot } from '../ui/VrChrome';
+import type { prefetchStats } from '../objects/objectSearch';
+import type { ObjectSearchState } from '../objects/objectSearchSession';
+import type { voiceLog } from '../objects/voiceInput';
 import type { HeadsetHolds } from '../xr/HeadsetHolds';
 import type { HaloActionRecord } from './haloActions';
 
@@ -46,7 +49,9 @@ export interface AutomationHooks {
   /** The phone camera author's bottom dock (button positions and visibility) and status line, or built: false. */
   __samplePhoneChrome: () => PhoneArChromeProbe;
   /** World position of the wrist's record glyph or a world-panel row, for checks that aim at it. */
-  __chromeTarget: (target: 'record' | 'refit' | 'hand') => number[] | null;
+  __chromeTarget: (target: ChromeTarget) => number[] | null;
+  /** Find (PRD-060): the headset panel's search state, voice paths taken, and GLB prefetches. */
+  __sampleObjectSearch: () => { headset: ObjectSearchState; voiceLog: typeof voiceLog; prefetch: typeof prefetchStats };
   /** Keep the last take's samples after export so `__reexportLastTake` can export them again. */
   __setRetainLastTake: (retain: boolean) => void;
   /** The last take exported again against the scene as it is now: the GLB's bytes (base64) and size. */

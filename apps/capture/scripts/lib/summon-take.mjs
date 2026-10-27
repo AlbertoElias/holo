@@ -10,7 +10,7 @@ import {
   waitForXrRenderLoop
 } from '@holoim/tooling-testing/xr-env';
 
-import { angleDeg, findNode, loadTake, objectNodes, relativePose, rigidPose, worldAt } from './object-glb.mjs';
+import { angleDeg, findNode, loadTake, objectNodes, readGlb, relativePose, rigidPose, worldAt } from './object-glb.mjs';
 import { clickButton, openCapture, OBJECT_URL, poseOf, readState, saveDownload, setupPage } from './object-take.mjs';
 
 // Summon and place while speaking (PRD-045): scripted IWER takes through
@@ -31,7 +31,7 @@ import { clickButton, openCapture, OBJECT_URL, poseOf, readState, saveDownload, 
 export const TRAY_URLS = [OBJECT_URL, '/fixtures/objects/diagram.png'];
 // Meshes in each tray item's model: the bracket's three parts, the image card.
 const ITEM_MESHES = { 'bracket.glb': 3, 'diagram.png': 1 };
-const STEP_MS = 1000 / 60;
+export const STEP_MS = 1000 / 60;
 const EXPORT_POSITION_M = 0.01;
 const EXPORT_ANGLE_DEG = 1;
 const INTERPOLATION_DEG = 0.5;
@@ -198,7 +198,7 @@ export function checkSummonExport(buffer, { summons, fail }) {
   return report;
 }
 
-async function enterIwer(page, mode) {
+export async function enterIwer(page, mode) {
   await page.evaluate((m) => {
     window.__setManualClock(true, false);
     window.IWER_DEVICE.primaryInputMode = m;
@@ -213,7 +213,7 @@ async function enterIwer(page, mode) {
   await page.evaluate(() => window.__setFrameStepping(true, false));
 }
 
-function stepper(page) {
+export function stepper(page) {
   const state = { steps: 0 };
   state.step = async (count = 1) => {
     for (let i = 0; i < count; i += 1) await page.clock.runFor(STEP_MS);
@@ -222,7 +222,7 @@ function stepper(page) {
   return state;
 }
 
-function shooter(page, step, artifactDir, label) {
+export function shooter(page, step, artifactDir, label) {
   return async (name) => {
     await page.evaluate(() => {
       window.__setSpectatorView('body');
@@ -242,7 +242,7 @@ function shooter(page, step, artifactDir, label) {
 }
 
 /** Closes the loop on the avatar's right hand bone, moving `input` until the bone reaches `target()`. */
-async function reach(page, step, { move, start, target, rigYaw, tolerance = 0.02 }) {
+export async function reach(page, step, { move, start, target, rigYaw, tolerance = 0.02 }) {
   const toTracking = (delta) => {
     const c = Math.cos(-rigYaw);
     const s = Math.sin(-rigYaw);
@@ -265,7 +265,7 @@ async function reach(page, step, { move, start, target, rigYaw, tolerance = 0.02
   return { at, error };
 }
 
-const summonedItems = (state) => state.objects.items.filter((item) => item.origin === 'summoned');
+export const summonedItems = (state) => state.objects.items.filter((item) => item.origin === 'summoned');
 
 function handRelationOf(state, id) {
   const item = state.objects.items.find((candidate) => candidate.id === id);
@@ -654,6 +654,140 @@ export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, arti
     if (exported.objectNodes !== 1 || exported.origins?.[0] !== 'summoned') fail(`desktop export: ${JSON.stringify(exported)}`);
     if (exported.authoring?.length) fail('a desktop take has authoring spans (no arm moves for the desktop tray)');
     return { label, status: failures.length ? 'fail' : 'pass', failures, glb, refusal, withoutT, trayShown, summoned, placed, export: exported };
+  } finally {
+    await context.close();
+  }
+}
+
+export const PIXEL_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+/**
+ * Find an object by asking (PRD-060), desktop, without the live registry:
+ * the search and GLB routes are fulfilled from the credited bracket fixture.
+ * Type in Find, pick the result, summon it, and the exported RecordedObject
+ * node carries the credit in its extras and `asset.copyright` while
+ * HOLOIM_objects stays valid v0.
+ */
+export async function runDesktopFindTake({ browser, baseUrl, captureRoot, artifactDir, consoleErrors }) {
+  const label = 'desktop-find';
+  const failures = [];
+  const fail = (message) => failures.push(message);
+  await mkdir(artifactDir, { recursive: true });
+  const fixture = await readFile(path.join(captureRoot, 'fixtures/objects/credited-bracket.glb'));
+  const credit = readGlb(fixture).json.asset.extras.holoimCredit;
+  const { context, page } = await setupPage(browser, { iwer: false, consoleErrors, label });
+  try {
+    const queries = [];
+    await page.route('**/api/objects/search*', (route) => {
+      queries.push(new URL(route.request().url()).searchParams.get('q'));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          results: [{ id: 'test_bracket', source: credit.source, title: credit.title, author: credit.author, licence: credit.licence, sourceUrl: credit.sourceUrl, thumbnailUrl: PIXEL_PNG, glbPath: '/api/objects/polyhaven/test_bracket.glb', dimensionsM: [0.85, 0.77, 1.07], bytes: fixture.length }]
+        })
+      });
+    });
+    await page.route('**/api/objects/polyhaven/*.glb', (route) => route.fulfill({ status: 200, contentType: 'model/gltf-binary', body: fixture }));
+    await openCapture(page, baseUrl, {});
+    const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
+    await advance(1);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByLabel('Find an object').fill('bracket');
+    await page.keyboard.press('Enter');
+    const pick = page.getByRole('button', { name: `Add ${credit.title} to the tray` });
+    await pick.waitFor({ timeout: 10_000 });
+    const shown = (await pick.innerText()).replace(/\s+/g, ' ');
+    if (!shown.includes('Test Author · Poly Haven · CC0') || !shown.includes('85 × 77 × 107 cm')) fail(`result text: ${shown}`);
+    await pick.click();
+    await page.getByText('Tray: 1').waitFor({ timeout: 10_000 });
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+
+    await page.locator('canvas').first().focus();
+    await page.getByRole('button', { name: 'Start Recording' }).click();
+    await page.getByRole('button', { name: 'Stop Recording' }).waitFor();
+    await advance(0.2);
+    await page.keyboard.down('KeyT');
+    await advance(0.1);
+    await page.keyboard.press('Digit1');
+    await advance(0.3);
+    await page.keyboard.up('KeyT');
+    await page.keyboard.press('KeyG');
+    await advance(0.2);
+    const state = await readState(page);
+    const summoned = summonedItems(state).map((item) => item.name);
+    if (summoned[0] !== credit.title) fail(`T + 1 summoned ${JSON.stringify(summoned)}, expected ${credit.title}`);
+    const glb = await saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), path.join(artifactDir, `${label}.glb`));
+    const take = loadTake(await readFile(glb));
+    const nodes = objectNodes(take);
+    const extras = nodes.map((node) => take.json.nodes[node]?.extras ?? null);
+    const copyright = take.json.asset.copyright ?? null;
+    const exported = { objectNodes: nodes.length, extras, copyright, valid: take.validation?.ok ?? false, version: take.validation?.ok ? take.validation.value.version : null, entryKeys: take.validation?.ok ? Object.keys(take.validation.value.objects[0] ?? {}) : null };
+    if (!exported.valid) fail(`HOLOIM_objects invalid: ${take.validation?.errors?.join('; ') ?? 'absent'}`);
+    if (nodes.length !== 1) fail(`${nodes.length} RecordedObject nodes, expected 1`);
+    if (JSON.stringify(extras[0]?.holoimCredit) !== JSON.stringify(credit)) fail(`node extras ${JSON.stringify(extras[0])}, expected the fixture credit`);
+    if (!copyright?.includes(`“${credit.title}” by ${credit.author}, ${credit.source}, CC0`)) fail(`asset.copyright is ${JSON.stringify(copyright)}`);
+    if (exported.entryKeys?.includes('credit')) fail('the credit leaked into HOLOIM_objects');
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, queries, shown, summoned, export: exported };
+  } finally {
+    await context.close();
+  }
+}
+
+/**
+ * Find an object by asking against the real API (PRD-060 e2e): no routes of
+ * our own are faked. Capture's same-origin /api reaches viewer-api, which
+ * searches a fixture registry. Only Poly Haven's thumbnail CDN is stubbed so
+ * nothing leaves the machine. Picks the first result for `query`, adds the
+ * uncredited bracket, summons the found model twice and the bracket once.
+ */
+export async function runDesktopFindApiTake({ browser, baseUrl, captureRoot, artifactDir, consoleErrors, query }) {
+  const label = 'desktop-find-api';
+  const failures = [];
+  await mkdir(artifactDir, { recursive: true });
+  const { context, page } = await setupPage(browser, { iwer: false, consoleErrors, label });
+  try {
+    const searches = [];
+    page.on('response', (response) => {
+      if (response.url().includes('/api/objects/search')) searches.push({ url: response.url(), status: response.status() });
+    });
+    await page.route('https://cdn.polyhaven.com/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(PIXEL_PNG.split(',')[1], 'base64') }));
+    await openCapture(page, baseUrl, {});
+    const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
+    await advance(1);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByLabel('Find an object').fill(query);
+    await page.keyboard.press('Enter');
+    const picks = page.getByRole('button', { name: /^Add .* to the tray$/ });
+    await picks.first().waitFor({ timeout: 15_000 });
+    const resultNames = await picks.evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
+    const pick = picks.first();
+    const shown = (await pick.innerText()).replace(/\s+/g, ' ');
+    await pick.click();
+    await page.getByText('Tray: 1').waitFor({ timeout: 20_000 });
+    await page.getByLabel('Add tray items (.glb, .png, .jpg)').setInputFiles([path.join(captureRoot, 'fixtures/objects/bracket.glb')]);
+    await page.getByText('Tray: 2').waitFor({ timeout: 10_000 });
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+
+    await page.locator('canvas').first().focus();
+    await page.getByRole('button', { name: 'Start Recording' }).click();
+    await page.getByRole('button', { name: 'Stop Recording' }).waitFor();
+    await advance(0.2);
+    for (const digit of ['Digit1', 'Digit1', 'Digit2']) {
+      await page.keyboard.down('KeyT');
+      await advance(0.1);
+      await page.keyboard.press(digit);
+      await advance(0.4);
+      await page.keyboard.up('KeyT');
+      await page.keyboard.press('KeyG');
+      await advance(0.3);
+    }
+    const state = await readState(page);
+    const summoned = summonedItems(state).map((item) => item.name);
+    const glb = await saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), path.join(artifactDir, `${label}.glb`));
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, searches, resultNames, shown, summoned };
   } finally {
     await context.close();
   }

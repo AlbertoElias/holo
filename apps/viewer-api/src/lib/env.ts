@@ -10,6 +10,19 @@ const boolFromEnvFalse = z
   .transform((value) => (typeof value === "boolean" ? value : value.toLowerCase() === "true" || value === "1"))
   .default(false);
 
+/** Unset or blank means not configured, so `KEY=` in a .env file turns a feature off. */
+const optionalSecret = z
+  .string()
+  .optional()
+  .transform((value) => (value && value.trim().length > 0 ? value.trim() : undefined));
+
+function list(value: string): string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1).default("file:./prisma/dev.db"),
   PORT: z.coerce.number().int().positive().default(3001),
@@ -34,7 +47,23 @@ const envSchema = z.object({
   USDZ_STALE_CLAIM_MS: z.coerce.number().int().positive().default(600_000),
   AUTH_MAGIC_LINK_TTL_MS: z.coerce.number().int().positive().default(900_000),
   AUTH_SESSION_TTL_MS: z.coerce.number().int().positive().default(2_592_000_000),
-  AUTH_DEV_EXPOSE_MAGIC_LINK: boolFromEnvFalse
+  AUTH_DEV_EXPOSE_MAGIC_LINK: boolFromEnvFalse,
+  // Object search (PRD-060). Downloads are only allowed from the API host
+  // and these comma-separated hosts.
+  POLYHAVEN_API_ORIGIN: z.string().url().default("https://api.polyhaven.com"),
+  POLYHAVEN_ALLOWED_HOSTS: z.string().default("dl.polyhaven.org,cdn.polyhaven.com"),
+  // Poly Pizza (PRD-060 slice 2): searched only when a key is set.
+  POLYPIZZA_API_KEY: optionalSecret,
+  POLYPIZZA_API_ORIGIN: z.string().url().default("https://api.poly.pizza/v1.1"),
+  POLYPIZZA_ALLOWED_HOSTS: z.string().default("static.poly.pizza"),
+  // Voice search: Cloudflare Workers AI transcription, off unless both are set.
+  WORKERS_AI_ACCOUNT_ID: optionalSecret,
+  WORKERS_AI_API_TOKEN: optionalSecret,
+  WORKERS_AI_API_ORIGIN: z.string().url().default("https://api.cloudflare.com/client/v4"),
+  // Origins besides the web origins that may call /api/objects/* (the
+  // capture app). Poly Pizza's terms forbid offering its models to third
+  // parties, so these routes do not answer any origin.
+  CAPTURE_ORIGINS: z.string().default("https://holoim-capture.pages.dev,https://*.holoim-capture.pages.dev")
 });
 
 const parsed = envSchema.parse({
@@ -59,7 +88,16 @@ const parsed = envSchema.parse({
   USDZ_STALE_CLAIM_MS: process.env.USDZ_STALE_CLAIM_MS,
   AUTH_MAGIC_LINK_TTL_MS: process.env.AUTH_MAGIC_LINK_TTL_MS,
   AUTH_SESSION_TTL_MS: process.env.AUTH_SESSION_TTL_MS,
-  AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK
+  AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK,
+  POLYHAVEN_API_ORIGIN: process.env.POLYHAVEN_API_ORIGIN,
+  POLYHAVEN_ALLOWED_HOSTS: process.env.POLYHAVEN_ALLOWED_HOSTS,
+  POLYPIZZA_API_KEY: process.env.POLYPIZZA_API_KEY,
+  POLYPIZZA_API_ORIGIN: process.env.POLYPIZZA_API_ORIGIN,
+  POLYPIZZA_ALLOWED_HOSTS: process.env.POLYPIZZA_ALLOWED_HOSTS,
+  WORKERS_AI_ACCOUNT_ID: process.env.WORKERS_AI_ACCOUNT_ID,
+  WORKERS_AI_API_TOKEN: process.env.WORKERS_AI_API_TOKEN,
+  WORKERS_AI_API_ORIGIN: process.env.WORKERS_AI_API_ORIGIN,
+  CAPTURE_ORIGINS: process.env.CAPTURE_ORIGINS
 });
 
 if (parsed.STORAGE_DRIVER === "s3") {
@@ -79,7 +117,8 @@ if (parsed.STORAGE_DRIVER === "s3") {
 
 export const env = {
   ...parsed,
-  WEB_ORIGIN_LIST: parsed.WEB_ORIGINS.split(",")
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0)
+  POLYHAVEN_ALLOWED_HOST_LIST: list(parsed.POLYHAVEN_ALLOWED_HOSTS).map((host) => host.toLowerCase()),
+  POLYPIZZA_ALLOWED_HOST_LIST: list(parsed.POLYPIZZA_ALLOWED_HOSTS).map((host) => host.toLowerCase()),
+  WEB_ORIGIN_LIST: list(parsed.WEB_ORIGINS),
+  CAPTURE_ORIGIN_LIST: list(parsed.CAPTURE_ORIGINS)
 };

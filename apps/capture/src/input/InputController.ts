@@ -87,6 +87,7 @@ export class InputController {
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('keyup', this.onKeyUp, true);
     window.addEventListener('blur', this.onWindowBlur);
+    document.addEventListener('focusin', this.onFocusIn);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     document.addEventListener('mousemove', this.onMouseMove);
     document.addEventListener('mousedown', this.onMouseDown, true);
@@ -276,6 +277,8 @@ export class InputController {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    // Typing in a text field (the Find field) never moves, records or summons.
+    if (isTextEntry(event.target)) return;
     // A focused control (a button in the dock or the side sheet, a file
     // picker) takes Space and Enter as its press; the scene never jumps on them.
     if ((event.code === 'Space' || event.key === 'Enter') && isControl(event.target)) return;
@@ -342,6 +345,8 @@ export class InputController {
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
+    // Releases are always processed: a key held before focus moved into a text
+    // field must still end when it is let go.
     if (this.setMoveStateFromKeyboardEvent(event, false)) {
       event.preventDefault();
     }
@@ -375,6 +380,12 @@ export class InputController {
 
   private readonly onWindowBlur = (): void => {
     this.clearMovementState();
+  };
+
+  private readonly onFocusIn = (event: FocusEvent): void => {
+    // Focus entering a text field drops every held key, since their releases
+    // would otherwise be lost to the field.
+    if (isTextEntry(event.target)) this.clearMovementState();
   };
 
   private readonly onVisibilityChange = (): void => {
@@ -457,6 +468,10 @@ function summonSlot(code: string): number | null {
 
 function isObjectTurnKey(code: string): code is 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX' {
   return code === 'KeyQ' || code === 'KeyE' || code === 'KeyZ' || code === 'KeyX';
+}
+
+function isTextEntry(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('input[type="search"], input[type="text"], textarea, [contenteditable="true"]') !== null;
 }
 
 function isControl(target: EventTarget | null): boolean {

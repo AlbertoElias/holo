@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import type { ObjectCredit } from '@holoim/objects';
+
 import type { AvatarRig } from '../avatar/AvatarRig';
 import type { VrHandSide } from '../types/contracts';
 import type { SceneObject, SceneObjectRegistry } from './SceneObjectRegistry';
@@ -73,8 +75,8 @@ export class ObjectTray {
     return this.items.reduce((sum, item) => sum + item.bytes, 0);
   }
 
-  add(model: THREE.Object3D, options: { name: string; source: SceneObject['source']; kind: TrayItemKind; bytes: number }): TrayItem {
-    const object = this.registry.add(model, { name: options.name, source: options.source, origin: 'prepared', layer: 'authoring' });
+  add(model: THREE.Object3D, options: { name: string; source: SceneObject['source']; kind: TrayItemKind; bytes: number; credit?: ObjectCredit | undefined }): TrayItem {
+    const object = this.registry.add(model, { name: options.name, source: options.source, credit: options.credit, origin: 'prepared', layer: 'authoring' });
     // Tray items are laid out here, never placed in the scene.
     object.placed = true;
     object.wrapper.visible = false;

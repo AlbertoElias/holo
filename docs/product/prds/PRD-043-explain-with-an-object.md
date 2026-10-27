@@ -108,5 +108,5 @@ The recipient trial remains a research step after the pipeline ships.
 - Research: [open questions](../research/open-questions.md) (questions 1, 12)
 - Related PRDs: [PRD-002 portal view](PRD-002-portal-view.md)
 - Mockups: none
-- Feature brief: [explain-with-an-object](../../features/explain-with-an-object.md)
+- Feature brief: [explain-with-an-object](../../features/archive/explain-with-an-object.md)
 - Implementation issue: none

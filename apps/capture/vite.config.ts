@@ -5,6 +5,8 @@ import { defineConfig, type Connect, type Plugin } from 'vite';
 import { iwsdkDev, type AiMode } from '@iwsdk/vite-plugin-dev';
 import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
 
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:3001';
+
 function getAiMode(): AiMode | undefined {
   const mode = process.env.IWSDK_DEV_AI_MODE;
   return mode === 'agent' || mode === 'collaborate' ? mode : undefined;
@@ -243,8 +245,13 @@ export default defineConfig(async ({ command }) => {
     define: {
       __HOLOIM_TEST_HOOKS__: JSON.stringify(command === 'serve' || testBuild)
     },
+    // Object search and its GLBs come from viewer-api (PRD-060).
     server: {
-      host: '0.0.0.0'
+      host: '0.0.0.0',
+      proxy: { '/api': { target: apiProxyTarget, changeOrigin: true } }
+    },
+    preview: {
+      proxy: { '/api': { target: apiProxyTarget, changeOrigin: true } }
     },
     build: {
       rollupOptions: {

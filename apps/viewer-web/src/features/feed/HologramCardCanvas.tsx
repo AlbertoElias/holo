@@ -14,6 +14,7 @@ import {
 } from "three";
 import type { AnimationAction, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
 import { tokens } from "@holoim/design-tokens";
+import type { ObjectCredit } from "@holoim/objects";
 import { clocheFollowDirection, clocheFraming, clocheValue, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
 import { Cloche } from "@holoim/xr-ui-r3f";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -31,7 +32,7 @@ import { readMeaningLinks } from "../meaning/meaningLinks";
 import type { MeaningGltf } from "../meaning/meaningLinks";
 import { AuthorCameraMark, createPresenceProbe } from "../presence/AuthorCameraMark";
 import { identityOf } from "../presence/identityHue";
-import { isInsideRecordedObject, readRecordedObjects } from "../objects/recordedObjects";
+import { isInsideRecordedObject, readObjectCredits, readRecordedObjects } from "../objects/recordedObjects";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
 import { INSIDE_DISTANCE, anglesFromPose, freeCameraPose } from "../portal/portalStore";
 import type { PortalStore } from "../portal/portalStore";
@@ -50,6 +51,7 @@ type HologramCardCanvasProps = {
   active: boolean;
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
+  onCredits: (credits: ObjectCredit[]) => void;
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   colorAccurateMode: boolean;
   portal: PortalStore;
@@ -168,7 +170,7 @@ function easeInOut(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author }: {
+function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author }: {
   url: string;
   author: string;
   seed: string;
@@ -179,6 +181,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   active: boolean;
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
+  onCredits: (credits: ObjectCredit[]) => void;
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   portal: PortalStore;
 }) {
@@ -213,6 +216,10 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   const sphereClip = useSphereClipping(clonedScene, { falloffWidth: SPHERE_CLIP_FALLOFF });
   const meaningLinks = useMemo(() => readMeaningLinks(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
   const recordedObjects = useMemo(() => readRecordedObjects(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
+  const credits = useMemo(() => readObjectCredits(recordedObjects), [recordedObjects]);
+  useEffect(() => {
+    onCredits(credits);
+  }, [credits, onCredits]);
   const pointingProbe = useRef<PointingProbe>({ links: [] }).current;
   const presenceProbe = useRef(createPresenceProbe()).current;
   const authorHex = useMemo(() => identityOf(author).hex, [author]);
@@ -261,9 +268,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   useEffect(() => {
     if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, presence: presenceProbe, objects: recordedObjects, cloche: { shape: clocheRef, fitted: fittedCentre } });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre } });
     }
-  }, [actions, camera, clonedScene, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, sphereClip, url]);
+  }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, sphereClip, url]);
 
   // The wheel zooms only over the hologram itself (usePortalTriggers): a
   // visible mesh of the recording, not chrome, not clipped away by its
@@ -681,6 +688,7 @@ export function HologramCardCanvas({
   active,
   muted,
   onHasAudio,
+  onCredits,
   onRendered,
   colorAccurateMode,
   portal,
@@ -704,7 +712,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} />
+      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} />
     </Canvas>
   );
 }

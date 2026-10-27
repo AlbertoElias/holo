@@ -30,7 +30,7 @@ Follow the agreed order in what a hologram is: faithful events, then meaning rea
 | [PRD-003: HoloGrammar v0, the smallest meaning-layer record](PRD-003-hologrammar-v0.md) | IDEA-001 | Draft |
 | [PRD-023: Hand-path ribbons](PRD-023-hand-path-ribbons.md) | IDEA-033 | Draft |
 | [PRD-024: True-scale measurements from gestures](PRD-024-gesture-measurements.md) | IDEA-034 | Draft |
-| [PRD-043: Explain with an object](PRD-043-explain-with-an-object.md) | IDEA-059 | Draft |
+| [PRD-043: Explain with an object](PRD-043-explain-with-an-object.md) | IDEA-059 | Delivered |
 | [PRD-051: Review a take before sending](PRD-051-recording-review.md) | IDEA-069 | Draft |
 
 ## View: built on the portal
@@ -69,7 +69,8 @@ Start with PRD-051 to learn which repairs authors need; the design-language choi
 | [PRD-015: Retake one segment](PRD-015-segment-retakes.md) | IDEA-021 | Draft |
 | [PRD-016: Message-first editor, first lane operation](PRD-016-message-first-editor.md) | IDEA-022 | Draft |
 | [PRD-044: Give an image or chart a place](PRD-044-mixed-media-layers.md) | IDEA-061 | Draft |
-| [PRD-045: Summon and place while speaking](PRD-045-authoring-while-speaking.md) | IDEA-062 | Approved |
+| [PRD-045: Summon and place while speaking](PRD-045-authoring-while-speaking.md) | IDEA-062 | Delivered |
+| [PRD-060: Find an object by asking](PRD-060-find-an-object-by-asking.md) | IDEA-079 | Approved |
 | [PRD-005: Gesture-drawn marks](PRD-005-gesture-drawn-marks.md) | IDEA-004 | Draft |
 | [PRD-004: Starter symbol set](PRD-004-starter-symbols.md) | IDEA-003 | Draft |
 | [PRD-021: One interaction grammar across devices](PRD-021-design-language.md) | IDEA-031 | Draft |

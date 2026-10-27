@@ -1,12 +1,12 @@
 import type * as THREE from 'three';
 import type { GLTFExporterPlugin } from 'three/examples/jsm/exporters/GLTFExporter.js';
-import { assertHoloimObjects, type AuthoringSpan, HOLOIM_OBJECTS_EXTENSION, HOLOIM_OBJECTS_VERSION, type RecordedObjectEntry } from '@holoim/objects';
+import { assertHoloimObjects, type AuthoringSpan, formatCredit, HOLOIM_OBJECTS_EXTENSION, HOLOIM_OBJECTS_VERSION, type RecordedObjectEntry } from '@holoim/objects';
 
 import type { ObjectExportDraft } from './objectExport';
 
 /** Internal GLTFWriter fields not exposed in the public type declarations. */
 interface GLTFWriterInternal {
-  json: { extensions?: Record<string, unknown> };
+  json: { extensions?: Record<string, unknown>; asset?: { copyright?: string } };
   extensionsUsed: Record<string, boolean>;
   nodeMap: Map<THREE.Object3D, number>;
 }
@@ -30,10 +30,17 @@ export class GLTFObjectsPlugin implements GLTFExporterPlugin {
 
   afterParse(): void {
     const objects: RecordedObjectEntry[] = [];
-    for (const draft of this.drafts) {
+    const credits = new Set<string>();
+    for (const { credit, ...draft } of this.drafts) {
       const node = this.writer.nodeMap.get(draft.node);
       if (node === undefined) continue;
       objects.push({ ...draft, node });
+      if (credit) credits.add(formatCredit(credit));
+    }
+    // The credit rides on the node's extras and here, outside HOLOIM_objects (PRD-060).
+    if (credits.size > 0) {
+      this.writer.json.asset ??= {};
+      this.writer.json.asset.copyright = [...credits].join('; ');
     }
     if (objects.length === 0 && this.authoring.length === 0) return;
 

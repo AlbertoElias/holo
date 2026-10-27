@@ -1,7 +1,9 @@
 import type * as THREE from 'three';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-import type { ObjectSource } from '@holoim/objects';
+import { type ObjectCredit, type ObjectSource, readCredit } from '@holoim/objects';
+
+import { takePrefetchedGlb } from './objectSearch';
 
 /**
  * Refusal limits for a supplied model. Exported textures are re-encoded as
@@ -28,6 +30,8 @@ export interface SuppliedObjectInput {
 export interface LoadedSuppliedObject {
   model: THREE.Object3D;
   source: ObjectSource;
+  /** From the GLB's `asset.extras` (PRD-060); outside `source`, which is the strict v0 schema. */
+  credit?: ObjectCredit | undefined;
 }
 
 export class SuppliedObjectError extends Error {}
@@ -43,6 +47,8 @@ export function nameFromUrl(url: string): string {
 }
 
 export async function fetchSuppliedObject(url: string): Promise<SuppliedObjectInput> {
+  const cached = await takePrefetchedGlb(url);
+  if (cached) return { name: nameFromUrl(url), bytes: cached };
   const response = await fetch(url);
   if (!response.ok) throw new SuppliedObjectError(`Could not load the object (${response.status}).`);
   return { name: nameFromUrl(url), bytes: await response.arrayBuffer() };
@@ -50,6 +56,22 @@ export async function fetchSuppliedObject(url: string): Promise<SuppliedObjectIn
 
 export async function readSuppliedObjectFile(file: File): Promise<SuppliedObjectInput> {
   return { name: file.name, bytes: await file.arrayBuffer() };
+}
+
+interface GlbJson {
+  asset?: { extras?: unknown };
+  extensionsUsed?: string[];
+  extensionsRequired?: string[];
+  skins?: unknown[];
+}
+
+function readGlbJson(bytes: ArrayBuffer): GlbJson {
+  const jsonLength = new DataView(bytes).getUint32(12, true);
+  try {
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(bytes, 20, jsonLength))) as GlbJson;
+  } catch {
+    throw new SuppliedObjectError('The object file is not valid glTF.');
+  }
 }
 
 /** Checks the GLB before parsing it; throws a `SuppliedObjectError` the overlay shows. */
@@ -61,13 +83,7 @@ export function checkSuppliedGlb(bytes: ArrayBuffer): void {
   if (bytes.byteLength < 20 || view.getUint32(0, true) !== GLB_MAGIC || view.getUint32(16, true) !== JSON_CHUNK) {
     throw new SuppliedObjectError('The object must be a binary glTF (.glb) file.');
   }
-  const jsonLength = view.getUint32(12, true);
-  let json: { extensionsUsed?: string[]; extensionsRequired?: string[]; skins?: unknown[] };
-  try {
-    json = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes, 20, jsonLength))) as typeof json;
-  } catch {
-    throw new SuppliedObjectError('The object file is not valid glTF.');
-  }
+  const json = readGlbJson(bytes);
   const used = new Set([...(json.extensionsUsed ?? []), ...(json.extensionsRequired ?? [])]);
   const unsupported = [...used].filter((name) => name in UNSUPPORTED_EXTENSIONS).map((name) => UNSUPPORTED_EXTENSIONS[name]);
   if (unsupported.length > 0) throw new SuppliedObjectError(`Unsupported in objects: ${unsupported.join(', ')}.`);
@@ -90,5 +106,6 @@ export async function parseSuppliedObject(loader: GLTFLoader, input: SuppliedObj
     throw new SuppliedObjectError(`The object could not be parsed: ${(error as Error).message}`);
   }
   const sha256 = await sha256Hex(input.bytes);
-  return { model: gltf.scene, source: sha256 ? { name: input.name, sha256 } : { name: input.name } };
+  const credit = readCredit(readGlbJson(input.bytes).asset?.extras);
+  return { model: gltf.scene, source: sha256 ? { name: input.name, sha256 } : { name: input.name }, ...(credit ? { credit } : {}) };
 }
