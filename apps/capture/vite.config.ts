@@ -63,9 +63,10 @@ function inputRecordingSinkPlugin(outputDir: string): Plugin {
 }
 
 // `vite preview` serves only the build, but the browser checks load scenes
-// and objects from fixtures/ by URL (?scene=/fixtures/...), which the dev
-// server served from the app root. Preview of the e2e test build serves them
-// too; the deployed app never runs under preview.
+// and objects from fixtures/ by URL (?scene=/fixtures/...) and avatars they
+// generate into output/ (?avatar=/output/...), which the dev server served
+// from the app root. Preview of the e2e test build serves both too; the
+// deployed app never runs under preview.
 const FIXTURE_TYPES: Record<string, string> = {
   '.gltf': 'model/gltf+json',
   '.glb': 'model/gltf-binary',
@@ -76,18 +77,21 @@ const FIXTURE_TYPES: Record<string, string> = {
   '.ktx2': 'image/ktx2'
 };
 
-function previewFixturesPlugin(fixturesDir: string): Plugin {
+function previewTestFilesPlugin(appRoot: string, directories: readonly string[]): Plugin {
   return {
-    name: 'holoim-preview-fixtures',
+    name: 'holoim-preview-test-files',
     configurePreviewServer(server) {
-      server.middlewares.use('/fixtures', (req, res, next) => {
-        const file = path.join(fixturesDir, decodeURIComponent(new URL(req.url ?? '/', 'http://fixtures').pathname));
-        if (!file.startsWith(fixturesDir + path.sep)) return next();
-        fs.readFile(file).then((body) => {
-          res.setHeader('content-type', FIXTURE_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream');
-          res.end(body);
-        }, () => next());
-      });
+      for (const directory of directories) {
+        const root = path.join(appRoot, directory);
+        server.middlewares.use(`/${directory}`, (req, res, next) => {
+          const file = path.join(root, decodeURIComponent(new URL(req.url ?? '/', 'http://files').pathname));
+          if (!file.startsWith(root + path.sep)) return next();
+          fs.readFile(file).then((body) => {
+            res.setHeader('content-type', FIXTURE_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream');
+            res.end(body);
+          }, () => next());
+        });
+      }
     }
   };
 }
@@ -222,7 +226,7 @@ export default defineConfig(async ({ command }) => {
     stripUikitmlSourcemapsPlugin(),
     preserveModelAssetsPlugin(sourcePublicDir, tempPublicDir),
     inputRecordingSinkPlugin(path.resolve('fixtures/input-recordings')),
-    previewFixturesPlugin(path.resolve('fixtures')),
+    previewTestFilesPlugin(path.resolve('.'), ['fixtures', 'output']),
     optimizeGLTF({
       level: 'medium'
     })

@@ -1,9 +1,11 @@
-// Test-only entry point served by Vite, excluded from the production bundle.
+// Test-only entry point: served by the dev server, and built into the e2e test
+// build (vite.config.ts) but never into the production bundle.
 import React, { useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Canvas, useThree } from "@react-three/fiber";
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, SphereGeometry } from "three";
 import { useSphereClipping } from "../src/features/hologram/useSphereClipping";
+import { installTestModules } from "../src/testHooks";
 
 const scene = new Group();
 const shell = new Mesh(new SphereGeometry(2, 32, 24), new MeshBasicMaterial());
@@ -37,4 +39,6 @@ function App() {
   Object.assign(window, { __bubbleLifecycle: state, __bubbleMount: mount, __bubbleFalloff: setFalloff });
   return <Canvas camera={{ position: [0, 0, 5] }}><>{mounted && <Model falloff={falloff} />}</></Canvas>;
 }
+// The spec reads three from window.__HOLOIM_TEST_MODULES__, as on the app's pages.
+installTestModules();
 createRoot(document.getElementById("root")!).render(<App />);

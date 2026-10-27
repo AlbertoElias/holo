@@ -6,6 +6,7 @@
 #
 #   scripts/ci-emulate.sh pnpm run test:xr:viewer
 #   CI_EMULATE_CPUS=0 scripts/ci-emulate.sh pnpm run test:xr:capture
+#   XR_SHARD=1/2 scripts/ci-emulate.sh pnpm run test:xr:capture
 #
 # CPUs are pinned with --cpuset-cpus rather than --cpus so the harness sees
 # 4 CPUs (os.availableParallelism) and picks the same concurrency as CI.
@@ -31,9 +32,18 @@ mkdir -p "$out"
 
 printf -v cmd '%q ' "$@"
 
+# Test settings set on the host reach the container, so
+# `XR_SHARD=1/2 scripts/ci-emulate.sh pnpm run test:xr:capture` runs one slice.
+env_args=()
+while IFS= read -r name; do
+  case "$name" in
+    XR_*|HOLOIM_*|BODY_REPLAY_*|HAND_REPLAY_*|AR_RECORD_*|FACE_*|CAPTURE_IWER_*|VITE_IWER_*) env_args+=(-e "$name") ;;
+  esac
+done < <(compgen -e)
+
 docker run --rm --init \
   --cpuset-cpus="$cpus" --memory="$memory" --shm-size=2g \
-  -e CI=true -e HOME=/root \
+  -e CI=true -e HOME=/root ${env_args[@]+"${env_args[@]}"} \
   -v "$root":/src:ro \
   -v "$out":/out \
   -v holoim-ci-pnpm-store:/root/.local/share/pnpm/store \

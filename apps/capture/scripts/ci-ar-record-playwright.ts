@@ -305,7 +305,9 @@ async function openPage(run: Run, options: OpenOptions): Promise<Page> {
       const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
       navigator.mediaDevices.getUserMedia = async (constraints) => {
         // The face driver's voice meter asks for the microphone on the desktop; it is not the recording's.
-        if (new Error().stack?.includes('VoiceLevel')) return real(constraints);
+        // Told apart by its constraints: a built bundle minifies the VoiceLevel name out of stacks.
+        const audio = constraints?.audio;
+        if (typeof audio === 'object' && audio !== null && 'noiseSuppression' in audio) return real(constraints);
         w.__mics.calls += 1;
         await w.__micGate;
         const stream = await real(constraints);

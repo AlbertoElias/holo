@@ -17,7 +17,7 @@
 // HOLOIM_TEST_BUILD_FORCE=1 rebuilds even when the fingerprint matches.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -55,7 +55,33 @@ function git(args) {
   return result.stdout;
 }
 
-/** Hash of every build input as it stands on disk, or null outside a git checkout. */
+const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'output', 'test-results', 'playwright-report', '.iwsdk', '.wrangler', 'coverage']);
+
+/** Without git (the CI emulation copies the tree without .git): hash the same inputs by walking them. */
+function walkFingerprint(app, env) {
+  const { dir } = appConfig(app);
+  const excluded = [`${dir}/scripts`, `${dir}/fixtures`, 'packages/tooling-testing', 'packages/tooling-scripts', 'packages/config-eslint'];
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify({ RECIPE, app, variant: variantOf(app, env).values, walked: true }));
+  const walk = (relative) => {
+    for (const entry of readdirSync(path.join(repoRoot, relative), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const child = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRS.has(entry.name) && !excluded.includes(child)) walk(child);
+      } else if (entry.isFile() && !child.endsWith('.tsbuildinfo') && !(child.startsWith(`${dir}/e2e/`) && child.endsWith('.ts'))) {
+        // (tsbuildinfo: written by the package builds this build runs.)
+        hash.update(child);
+        hash.update(readFileSync(path.join(repoRoot, child)));
+      }
+    }
+  };
+  walk(dir);
+  walk('packages');
+  hash.update(readFileSync(path.join(repoRoot, 'pnpm-lock.yaml')));
+  return hash.digest('hex');
+}
+
+/** Hash of every build input as it stands on disk. */
 function fingerprint(app, env) {
   const { dir } = appConfig(app);
   const pathspecs = [
@@ -72,7 +98,7 @@ function fingerprint(app, env) {
   ];
   const index = git(['ls-files', '-s', '-z', '--', ...pathspecs]);
   const status = git(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', ...pathspecs]);
-  if (index === null || status === null) return null;
+  if (index === null || status === null) return walkFingerprint(app, env);
   const hash = createHash('sha256');
   hash.update(JSON.stringify({ RECIPE, app, variant: variantOf(app, env).values }));
   hash.update(index);
@@ -112,9 +138,14 @@ function withLock(lockDir, action) {
   }
 }
 
+// Output goes to stderr: Playwright's webServer shows only stderr, and a
+// failed build must say why there.
 function run(command, args, options) {
-  const result = spawnSync(command, args, { stdio: 'inherit', ...options });
-  if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed (${result.signal ?? `exit ${result.status}`})`);
+  const result = spawnSync(command, args, { stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024, ...options });
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`.trimEnd();
+  const failed = result.status !== 0;
+  if (failed && output) process.stderr.write(`${output}\n`);
+  if (failed) throw new Error(`${command} ${args.join(' ')} failed (${result.error?.message ?? result.signal ?? `exit ${result.status}`})`);
 }
 
 /**
