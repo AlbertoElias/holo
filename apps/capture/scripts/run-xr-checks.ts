@@ -65,7 +65,8 @@ const CHECK_SERVER_ENV: Partial<Record<CheckName, Record<string, string>>> = { f
 
 // Checks that legitimately run longer than the default hang guard.
 const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
-  // Sixteen phases, two of them driving the phone dock by taps and two holding the phone screen (about 200 s locally).
+  // Sixteen phases on a frozen page clock but marks-low-fps (about 80 s locally); real time is page loads, session
+  // entry, the microphone and the exports. A loaded runner can still take 200 s.
   'ar-record': 300000,
   body: 360000,
   face: 360000,

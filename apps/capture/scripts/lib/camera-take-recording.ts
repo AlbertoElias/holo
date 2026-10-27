@@ -157,7 +157,8 @@ async function advanceUntilDownload(page: Page, download: Promise<Download | nul
   });
   for (let i = 0; i < seconds * 5 && result === undefined; i += 1) {
     await advance(page, STEP_MS);
-    await page.waitForTimeout(200);
+    // Ends as soon as the download arrives; the export also waits on real work, so a step may wait up to 200 ms.
+    await Promise.race([download, new Promise((resolve) => setTimeout(resolve, 200))]);
   }
   return result ?? null;
 }

@@ -156,7 +156,8 @@ async function desktopPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   let ringBox: Box | null = null;
   const keyHalo = async (dx: number, dy: number, held: boolean) => {
     await page.keyboard.down('KeyB');
-    if (held) await page.waitForTimeout(450);
+    // Held past the hold delay: the ring is drawn once the delay ends (a wall-clock timer in the page).
+    if (held) await page.locator('[data-capture-key-halo]').waitFor({ timeout: 5000 }).catch(() => undefined);
     const box = await page.evaluate(() => {
       const ring = document.querySelector('[data-capture-key-halo]');
       if (!ring) return null;
@@ -254,6 +255,7 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   // Moving out of the slop before the hold delay makes it a look drag.
   await touch(cdp, 'touchStart', [{ x: at.x, y: at.y + 60 }]);
   await touch(cdp, 'touchMove', [{ x: at.x + 40, y: at.y + 60 }]);
+  // Past the hold delay with nothing to wait for: it must not become a hold (a slow host only makes this vacuous).
   await page.waitForTimeout(450);
   const dragPhase = (await holdsOf(page)).touch;
   await touch(cdp, 'touchEnd', []);
@@ -261,10 +263,11 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   await page.evaluate((yaw) => window.__setMockInput({ lookYaw: yaw }), Math.atan2(-(center('TargetA')[0] - eye.x), -(center('TargetA')[2] - eye.z)));
   await advance(0.4);
   await touch(cdp, 'touchStart', [at]);
-  await page.waitForTimeout(450);
+  // Resting past the hold delay (a wall-clock timer in the page) holds; wait for that rather than a fixed time.
+  await page.waitForFunction(() => window.__sampleHolds().touch === 'held', null, { timeout: 5000, polling: 25 }).catch(() => undefined);
   await advance(0.1);
   const holdPhase = (await holdsOf(page)).touch;
-  if (holdPhase !== 'held') failures.push(`a touch resting 450 ms is ${holdPhase}, not held`);
+  if (holdPhase !== 'held') failures.push(`a touch resting past the hold delay is ${holdPhase}, not held`);
   const landed = await page.evaluate(() => JSON.parse(window.render_game_to_text()).point as { held: boolean; landed: boolean });
   if (!landed.held || !landed.landed) failures.push(`the touch hold's ray: ${JSON.stringify(landed)}`);
   await advance(1.2);
@@ -275,6 +278,7 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   if (!glyph) throw new Error('phone: no Halo glyph in the dock while recording');
   const start = { x: glyph.x + glyph.width / 2, y: glyph.y + glyph.height / 2 };
   await touch(cdp, 'touchStart', [start]);
+  // Held past the hold delay (a wall-clock timer in the page; the glyph's ring has no marker apart from the glyph).
   await page.waitForTimeout(450);
   const ringShown = await page.locator('[data-capture-halo] [data-halo-ring], [data-capture-halo] svg circle').count();
   for (const step of [20, 40, 60, 80]) await touch(cdp, 'touchMove', [{ x: start.x - step, y: start.y }]);
@@ -322,13 +326,17 @@ const clickByText = (page: Page, text: string) => page.evaluate((name) => {
   [...document.querySelectorAll('button')].find((button) => (button.getAttribute('aria-label') ?? button.textContent?.trim()) === name)?.click();
 }, text);
 
-/** Export runs on animation frames; release them until the file lands. */
+/**
+ * Export runs on animation frames and on real work (the GLB encode); release frames until the file lands,
+ * each release ending early when it does. At most 40 s of page time, under the export's own 60 s timeout
+ * (a page-clock timer), so a slow host waits longer in real time instead of timing the export out.
+ */
 async function settleDownload(page: Page, downloaded: Promise<Download>): Promise<Download> {
   let settled = false;
   downloaded.then(() => { settled = true; }, () => { settled = true; });
-  for (let attempt = 0; attempt < 1200 && !settled; attempt += 1) {
+  for (let attempt = 0; attempt < 400 && !settled; attempt += 1) {
     await page.clock.runFor(100);
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await Promise.race([downloaded.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 25))]);
   }
   return downloaded;
 }
