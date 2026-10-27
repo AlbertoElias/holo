@@ -36,8 +36,9 @@ const evidenceDir = path.resolve(import.meta.dirname, "../../../output/camera-ta
 const DESKTOP = { width: 1280, height: 720 };
 /** The least time to watch the loop; a longer take is watched for 2.3 of its lengths. */
 const LOOP_SAMPLE_MS = 9_000;
-const CLOCK_TOLERANCE_S = 0.08;
-/** Over the whole watch, the clip's unwrapped advance against the wall clock's: a wrong playback rate. */
+/** The clip's advance in one update against the delta the mixer was given: float error only. */
+const CLOCK_TOLERANCE_S = 0.002;
+/** Over the whole watch, the clip's unwrapped advance against the wall clock's: a wrong playback rate. Sums, so frame jitter cancels. */
 const PLAYBACK_RATE_TOLERANCE = 0.02;
 /** After a wrap the voice restarts on the next frame: samples this early in the loop are not judged. */
 const VOICE_RESTART_GRACE_S = 0.5;
@@ -204,10 +205,15 @@ async function readAudio(page: Page) {
  * The samples are taken inside `mixer.update`, not in a frame callback of the test's own: R3F renders every
  * card's canvas in one frame loop and reads each root's clock just before that root, so a callback's wall time
  * also carries how long the frame's renders took, and on a loaded 2-CPU runner one slow frame beside a fast one
- * differs by more than the playback check allows while playback runs at real speed (B-031).
+ * differs by more than the playback check allows while playback runs at real speed (B-031). The delta the mixer
+ * was given is recorded with each sample, so the playback check compares the clip's time with the clock the
+ * mixer itself ran on, which no wall-clock jitter on a loaded runner can move.
  */
-async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ clip: number; samples: Array<[number, number, number | null]> }> {
-  return page.evaluate(([target, span]) => new Promise<{ clip: number; samples: Array<[number, number, number | null]> }>((resolve) => {
+/** [wall ms since the watch began, the clip's time after the update, the voice's place (null while none), the delta in seconds the mixer was given]. */
+type LoopSample = [number, number, number | null, number];
+
+async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ clip: number; samples: LoopSample[] }> {
+  return page.evaluate(([target, span]) => new Promise<{ clip: number; samples: LoopSample[] }>((resolve) => {
     type Action = { time: number; getClip: () => { duration: number } };
     type Mixer = { update: (delta: number) => unknown };
     type Source = { duration: number; loop: boolean; started: boolean; stopped: boolean; offset: number; contextStart: number };
@@ -217,7 +223,7 @@ async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ 
     const actions = Object.values(probe.actions).filter(Boolean) as Action[];
     const action = actions[0]!;
     const mixer = probe.mixer;
-    const samples: Array<[number, number, number | null]> = [];
+    const samples: LoopSample[] = [];
     const begin = performance.now();
     const voiceAt = (): number | null => {
       const source = audio.sources.filter((entry) => entry.started && !entry.stopped).at(-1);
@@ -232,7 +238,7 @@ async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ 
     mixer.update = (delta: number) => {
       const now = performance.now();
       const result = update.call(mixer, delta);
-      samples.push([now - begin, action.time, voiceAt()]);
+      samples.push([now - begin, action.time, voiceAt(), delta]);
       if (now - begin >= (span as number)) {
         delete (mixer as Partial<Mixer>).update;
         resolve({ clip: action.getClip().duration, samples });
@@ -438,6 +444,51 @@ async function playTake(page: Page, name: string, glb: Buffer, quickLook: boolea
 
 let real: { feed: FeedReading; ar: ArReading } | undefined;
 
+/** Frames the page has drawn since the call: what a settled mark, ink or screenshot is read after. */
+async function nextFrames(page: Page, count = 3): Promise<void> {
+  await page.evaluate((n) => new Promise<void>((resolve) => {
+    let left = n;
+    const tick = () => (left-- <= 0 ? resolve() : requestAnimationFrame(tick));
+    requestAnimationFrame(tick);
+  }), count);
+}
+
+/** Waits for the card's camera to rest (it eases in over its first seconds) and reads the feed. */
+async function readSettledFeed(page: Page, cardId: string): Promise<FeedReading> {
+  let feed = await readFeed(page, cardId);
+  await expect.poll(async () => {
+    const before = feed.camera;
+    feed = await readFeed(page, cardId);
+    return distance(before, feed.camera);
+  }, { message: "the card's camera settles", timeout: 15_000, intervals: [500] }).toBeLessThan(1e-3);
+  return feed;
+}
+
+/**
+ * The take as the feed and AR draw it, read once on a page of its own in the test's context: what the copies with
+ * renamed props and the camera mark are compared with. The take's own test records the same reading as part of
+ * its checks; any test that needs it alone builds it here, so none depends on another having run first.
+ */
+let referencePromise: Promise<{ feed: FeedReading; ar: ArReading }> | undefined;
+function referenceTake(page: Page): Promise<{ feed: FeedReading; ar: ArReading }> {
+  if (real) return Promise.resolve(real);
+  referencePromise ??= (async () => {
+    const own = await page.context().newPage();
+    try {
+      const { uploaded, card } = await playTake(own, "Camera take reference", await readFile(takeFile), false);
+      await expect(card).toHaveAttribute("data-model-bubble", "active");
+      await reachFor(card);
+      const feed = await readSettledFeed(own, uploaded.id);
+      await enterAr(own, uploaded.id);
+      real = { feed, ar: await readAr(own) };
+      return real;
+    } finally {
+      await own.close();
+    }
+  })();
+  return referencePromise;
+}
+
 // The take is recorded here, in the running capture app, as a phone in AR
 // walks round its set. Nothing is committed, so a break in capture's export
 // shows up as a failure in this spec.
@@ -494,9 +545,10 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   expect(audio.playing, "one voice plays, once").toHaveLength(1);
   expect(audio.playing[0]!.duration, "the voice has length").toBeGreaterThan(0.5);
 
-  // Playback: the clip's time advances as the wall clock does and wraps at the take's duration. Each step is one
-  // update of the mixer against the wall clock read at that update, so a stall, a skip, a wrong speed or a wrap
-  // that loses or adds time shows here, and uneven frames do not (sampleLoop).
+  // Playback: the clip's time advances by exactly the delta the mixer was given and wraps at the take's duration.
+  // Each step is one update of the mixer against its own delta, so a skip, a wrong speed or a wrap that loses or
+  // adds time shows here whatever the frame pacing (sampleLoop). That the deltas themselves add up to the wall
+  // clock is checked once over the whole watch, where a loaded frame cannot show.
   // Long enough for two wraps whatever the take's length: capture's take is longer on a loaded machine.
   const sampleMs = Math.max(LOOP_SAMPLE_MS, Math.ceil(duration * 2.3 * 1000));
   const { clip, samples } = await sampleLoop(page, uploaded.url, sampleMs);
@@ -505,20 +557,24 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   let worstClockError = 0;
   let highest = 0;
   let totalAdvanced = 0;
+  let totalDelta = 0;
   for (let i = 1; i < samples.length; i += 1) {
-    const [wall, time] = samples[i]!;
-    const [previousWall, previousTime] = samples[i - 1]!;
+    const [, time, , delta] = samples[i]!;
+    const [, previousTime] = samples[i - 1]!;
     const wrapped = time < previousTime;
     if (wrapped) wraps += 1;
     const advanced = time - previousTime + (wrapped ? duration : 0);
     totalAdvanced += advanced;
-    worstClockError = Math.max(worstClockError, Math.abs(advanced - (wall - previousWall) / 1000));
+    worstClockError = Math.max(worstClockError, Math.abs(advanced - delta));
+    totalDelta += delta;
     highest = Math.max(highest, time);
   }
   const totalWall = (samples.at(-1)![0] - samples[0]![0]) / 1000;
   const playbackRate = totalAdvanced / totalWall;
+  const deltaRate = totalAdvanced / totalDelta;
   expect(wraps, `the take loops in ${sampleMs / 1000} s`).toBeGreaterThanOrEqual(2);
-  expect(worstClockError, "time passes as the wall clock does across each wrap, so the loop is the take's duration").toBeLessThan(CLOCK_TOLERANCE_S);
+  expect(worstClockError, "the clip advances by the mixer's own delta across each wrap, so the loop is the take's duration").toBeLessThan(CLOCK_TOLERANCE_S);
+  expect(Math.abs(deltaRate - 1), `the clip plays at the mixer's speed (${deltaRate.toFixed(6)}×)`).toBeLessThan(1e-3);
   expect(Math.abs(playbackRate - 1), `the take plays at real speed (${playbackRate.toFixed(4)}× over ${totalWall.toFixed(1)} s)`).toBeLessThan(PLAYBACK_RATE_TOLERANCE);
   expect(highest, "playback reaches the end of the take").toBeGreaterThan(duration - 0.5);
   expect(highest, "and never passes it").toBeLessThanOrEqual(duration + 1e-3);
@@ -579,11 +635,11 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   expect(Math.abs(tile.originY), "and nothing of the set is below its origin").toBeLessThanOrEqual(ONE_CM);
   expect(tile.sphereExtent, "the bubble's sphere would have been far larger than the tile").toBeGreaterThan(SHELF_PREVIEW_M * 2);
 
-  real = { feed, ar };
+  real ??= { feed, ar };
   await writeFile(path.join(evidenceDir, "report.json"), JSON.stringify({
     take: takeFile,
     durationS: duration,
-    loop: { clipS: clip, wraps, worstClockErrorS: worstClockError, playbackRate, highestS: highest, samples: samples.length },
+    loop: { clipS: clip, wraps, worstClockErrorS: worstClockError, playbackRate, deltaRate, highestS: highest, samples: samples.length },
     audio,
     feed: { setRect: rect, box, offset: [offsetX, offsetY], clocheBaseY: feed.clocheBaseY, set: { min: feed.min, max: feed.max } },
     usdz: { status: "ready", bytes: usdzBytes.length },
@@ -595,32 +651,27 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
 test("props named Hips and Head do not take over: the same take frames and anchors identically", async ({ page }) => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture export and a live API.");
   test.setTimeout(240_000);
-  expect(real, "the take's own test ran first").toBeDefined();
+  const reference = await referenceTake(page);
   const renamed = withBoneNames(await readFile(takeFile));
   expect(parseGlb(renamed).json.nodes.filter((node) => node.name === "Hips" || node.name === "Head").length, "the props are named like bones").toBe(2);
 
   const { uploaded, card } = await playTake(page, "Camera take bone names", renamed, false);
   await expect(card).toHaveAttribute("data-model-bubble", "active");
-  // The take's own test read it with the cursor over the card (its controls out) after seconds of playing: the same here.
+  // The reference is read with the cursor over the card (its controls out) once the camera has settled: the same here.
   await reachFor(card);
-  let feed = await readFeed(page, uploaded.id);
-  await expect.poll(async () => {
-    const before = feed.camera;
-    feed = await readFeed(page, uploaded.id);
-    return distance(before, feed.camera);
-  }, { message: "the card's camera settles", timeout: 15_000, intervals: [500] }).toBeLessThan(1e-3);
+  const feed = await readSettledFeed(page, uploaded.id);
   expectFramed(feed);
-  expect(distance(feed.camera, real!.feed.camera), "the card's camera is where it was").toBeLessThanOrEqual(ONE_CM);
-  expect(distance(feed.min, real!.feed.min) + distance(feed.max, real!.feed.max), "the set is where it was").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(feed.camera, reference.feed.camera), "the card's camera is where it was").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(feed.min, reference.feed.min) + distance(feed.max, reference.feed.max), "the set is where it was").toBeLessThanOrEqual(ONE_CM);
   expect(feed.modelAt).toEqual([0, 0, 0]);
 
   await enterAr(page, uploaded.id);
   const ar = await readAr(page);
   expect(distance(ar.modelAt, [0, 0, 0]), "AR anchors on the set's origin, not on a node called Hips").toBeLessThanOrEqual(ONE_CM);
   expect(distance(ar.sphereAt, [0, 0, 0])).toBeLessThanOrEqual(ONE_CM);
-  expect(distance(ar.min, real!.ar.min), "the set stands where it did").toBeLessThanOrEqual(ONE_CM);
-  expect(distance(ar.max, real!.ar.max)).toBeLessThanOrEqual(ONE_CM);
-  expect(Math.abs((ar.clocheBaseY ?? Number.NaN) - (real!.ar.clocheBaseY ?? Number.NaN)), "the dome stands where it did").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(ar.min, reference.ar.min), "the set stands where it did").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(ar.max, reference.ar.max)).toBeLessThanOrEqual(ONE_CM);
+  expect(Math.abs((ar.clocheBaseY ?? Number.NaN) - (reference.ar.clocheBaseY ?? Number.NaN)), "the dome stands where it did").toBeLessThanOrEqual(ONE_CM);
   await page.screenshot({ path: path.join(evidenceDir, "ar-placed-bone-names.png") });
 });
 
@@ -781,7 +832,7 @@ async function readInk(page: Page, modelPath: string): Promise<InkReading[]> {
 async function settleInk(page: Page, modelPath: string, seconds: number, expected: number): Promise<InkReading[]> {
   await seek(page, modelPath, seconds);
   await expect.poll(async () => (await readInk(page, modelPath)).length, { timeout: 15_000 }).toBe(expected);
-  await page.waitForTimeout(400);
+  await nextFrames(page);
   return readInk(page, modelPath);
 }
 
@@ -845,7 +896,7 @@ const angleDegrees = (a: readonly number[], b: readonly number[]): number => {
 test("a camera take shows the author's camera as a mark that follows the clip, and a camera link's ink runs from it to its referent", async ({ page }) => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture export and a live API.");
   test.setTimeout(300_000);
-  expect(real, "the take's own test ran first").toBeDefined();
+  const reference = await referenceTake(page);
   await mkdir(evidenceDir, { recursive: true });
   const original = await readFile(takeFile);
   const { json: fileJson, rest: bin } = parseGlb(original);
@@ -872,9 +923,14 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
   const reads: Array<{ time: number; mark: MarkReading; expected: ReturnType<typeof cameraPoseAt> }> = [];
   for (const time of PRESENCE_TIMES) {
     await seek(page, uploaded.url, time);
-    await page.waitForTimeout(200);
-    const mark = await readMark(page, uploaded.url);
     const expected = cameraPoseAt(fileJson, bin, time);
+    // The mark follows the clip a frame behind: wait for it to arrive, then read.
+    await expect.poll(async () => {
+      const read = await readMark(page, uploaded.url);
+      return read.present ? distance(read.markAt, expected.position) : Infinity;
+    }, { message: `the mark reaches the camera's place at ${time}s`, timeout: 15_000 }).toBeLessThanOrEqual(ONE_CM);
+    await nextFrames(page);
+    const mark = await readMark(page, uploaded.url);
     reads.push({ time, mark, expected });
     expect(mark.present, `the camera take shows the author's camera at ${time}s`).toBe(true);
     expect(mark.markCount, "one mark").toBe(1);
@@ -900,8 +956,8 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
   expect(fit.with.drawn.length, "the set has drawn points").toBeGreaterThan(0);
   const feed = await readFeed(page, uploaded.id);
   expectFramed(feed);
-  expect(distance(feed.camera, real!.feed.camera), "the card's camera is where the take's own test read it").toBeLessThanOrEqual(ONE_CM);
-  expect(distance(feed.min, real!.feed.min) + distance(feed.max, real!.feed.max), "the set is where it was").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(feed.camera, reference.feed.camera), "the card's camera is where the take's own test read it").toBeLessThanOrEqual(ONE_CM);
+  expect(distance(feed.min, reference.feed.min) + distance(feed.max, reference.feed.max), "the set is where it was").toBeLessThanOrEqual(ONE_CM);
   expect(Math.abs((feed.clocheBaseY ?? Number.NaN)), "the dome stands on the set's origin").toBeLessThanOrEqual(ONE_CM);
 
   // The ink: absent outside the span, from the mark to the referent inside it, in the author's hue.
@@ -994,7 +1050,7 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
     cameraTurnDeg: turned,
     ink: inks.map((i) => ({ time: i.time, from: i.ink.ink!.from, to: i.ink.ink!.to, markAt: i.mark.markAt, referentAt: i.mark.referentAt, startErrorM: distance(i.ink.ink!.from, i.mark.markAt), endErrorM: distance(i.ink.ink!.to, i.mark.referentAt), hex: i.ink.inkHex })),
     fit: { boundsEqual: true, drawnPoints: fit.with.drawn.length / 3, motionPoints: fit.with.motion.length / 3, bounds: fit.with.bounds },
-    feed: { camera: feed.camera, setRect: feed.setRect, box: feed.box, clocheBaseY: feed.clocheBaseY, cameraAgainstTakesOwnTestM: distance(feed.camera, real!.feed.camera) },
+    feed: { camera: feed.camera, setRect: feed.setRect, box: feed.box, clocheBaseY: feed.clocheBaseY, cameraAgainstTakesOwnTestM: distance(feed.camera, reference.feed.camera) },
     face: { ring, initialPixels },
     durationS: duration
   }, null, 2));
