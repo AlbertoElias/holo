@@ -458,6 +458,8 @@ jobs:
             python3 -m venv ~/.venv-usdz
             ~/.venv-usdz/bin/pip install -r apps/viewer-api/tools/requirements.txt
           fi
+          # Recorded audio in a take converts through ffmpeg, as in the pipeline job.
+          command -v ffmpeg || scripts/ci-apt.sh 240 sudo sh -c 'apt-get update && apt-get install -y --no-install-recommends ffmpeg'
       - name: Quick Look tool check
         run: USDZ_PYTHON="${HOME}/.venv-usdz/bin/python3" apps/viewer-api/tools/check_usdz_tools.sh
       - name: Upload Quick Look tool evidence
