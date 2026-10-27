@@ -21,6 +21,10 @@ device checks under Unverified below. Otherwise pick the next queue item in
 
 ## Ready to merge (grouped)
 
+- `docs/redesign-device-results` (docs only, ride along with the next
+  merge): slice 7's device results in the redesign brief; B-029 (the tilt
+  check) closed as not reproducible; the duplicate B-022 numbers fixed
+  (Quick Look throttling is now B-028, still open).
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
@@ -30,11 +34,11 @@ device checks under Unverified below. Otherwise pick the next queue item in
   [`TODOS.md`](TODOS.md). The fixes from the
   cross-vendor review of slices 2 to 4 and the second round (the brief's
   "Independent verification" rows), with the globe's own colours, landed on
-  `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Next there: slice 7 (cross-device task test and device checks).
-  Open: real wrist drawings for Exit and Recenter; the physical device checks
-  in the brief.
+  `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Slice 7 closed on 2026-10-26: desktop and an iPhone passed; the
+  Android and Quest checks are Unverified by the user's choice (the brief's
+  "Physical-device limits"). Open: real wrist drawings for Exit and Recenter.
 - The production Quick Look rebuild to ql3 is done: both stored previews are
-  ql3, with the ql2 files and the database backup kept (B-022, evidence in
+  ql3, with the ql2 files and the database backup kept (B-028, evidence in
   the brief).
 
 ## Unverified / device-only

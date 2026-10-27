@@ -52,7 +52,10 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** previews at `*.holoim-viewer.pages.dev` load the live feed.
 - **Reproduction:** the curl above; or open any preview deploy of the viewer.
 
-### B-022 — Quick Look conversions fail while production's shared CPU is throttled
+### B-028 — Quick Look conversions fail while production's shared CPU is throttled
+
+(Filed as a second B-022; renumbered 2026-10-26. B-022 is the closed floor bug.)
+
 
 - **Area:** `apps/viewer-api` USDZ worker and `rebuild:usdz` (`glb_to_usdz.py`'s 100 s alarm, the converter's 120 s limit)
 - **Severity:** P2
@@ -68,6 +71,12 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** drain the burst balance (several conversions in a row,
   or the rebuild with both inspections), then request
   `/api/holograms/<id>/usdz` for a long take whose preview is not current.
+- **Still open (2026-10-26):** a converter timeout still marks the record
+  `failed` (`usdz-worker.ts`, the `catch` that sets `usdzStatus: "failed"`),
+  with the same limits (the script's 100 s alarm, `CONVERSION_TIMEOUT_MS`
+  120 s); only the next Quick Look request re-queues a failed record
+  (`routes/holograms.ts`). The user's passing Quick Look check on an iPhone
+  opened previews already `ready`, so it did not exercise this path.
 
 ### B-020 — Capture's height check is not repeatable
 
@@ -100,22 +109,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer npx
   playwright test e2e/ar-bubble.spec.ts:70 --workers=1 --repeat-each=6`
   from `apps/viewer-web`.
-
-### B-022 — The portal tilt check cannot find the pressed tilt toggle
-
-- **Area:** `apps/viewer-web` e2e (`test:portal`, part of `verify:pr`)
-- **Severity:** P2 (fails `verify:pr` on `main` for every branch)
-- **Observed:** 2026-10-25
-- **Evidence:** `e2e/portal.spec.ts:109` ("phone › tilt") clicks "Look
-  around by tilting the phone", then finds no button named "Stop looking
-  around by tilting" within 5 s. It fails every run on `main` (`31c082a`)
-  and on `02d0282`, the redesign commit with "fewer controls", so it
-  arrived with that commit. Unknown whether the toggle itself broke or
-  only the check's expectation is stale.
-- **Expected:** tilting the phone can be turned on and off from the card,
-  and the check passes.
-- **Reproduction:** `VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer npx
-  playwright test e2e/portal.spec.ts -g tilt` from `apps/viewer-web`.
 
 ## Entry template
 
