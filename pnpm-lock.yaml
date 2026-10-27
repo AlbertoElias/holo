@@ -78,6 +78,9 @@ importers:
       '@holoim/avatar-face':
         specifier: workspace:*
         version: link:../../packages/avatar-face
+      '@holoim/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@holoim/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
@@ -266,9 +269,15 @@ importers:
       '@fastify/static':
         specifier: ^8.1.1
         version: 8.3.0
+      '@gltf-transform/core':
+        specifier: 4.3.0
+        version: 4.3.0
       '@holoim/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@holoim/objects':
+        specifier: workspace:*
+        version: link:../../packages/objects
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.3.1

@@ -9,6 +9,7 @@ import { env } from "./lib/env.js";
 import { registerStaticUploads } from "./plugins/static-uploads.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerHologramRoutes } from "./routes/holograms.js";
+import { registerObjectRoutes } from "./routes/objects.js";
 import { createMediaStorage, type MediaStorage } from "./services/media-storage.js";
 
 type BuildAppOptions = {
@@ -46,6 +47,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     async (instance) => {
       await registerAuthRoutes(instance);
       await registerHologramRoutes(instance, { uploadsRoot, storage });
+      await registerObjectRoutes(instance);
     },
     { prefix: API_PREFIX }
   );

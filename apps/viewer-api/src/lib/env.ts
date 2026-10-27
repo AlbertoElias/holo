@@ -34,7 +34,11 @@ const envSchema = z.object({
   USDZ_STALE_CLAIM_MS: z.coerce.number().int().positive().default(600_000),
   AUTH_MAGIC_LINK_TTL_MS: z.coerce.number().int().positive().default(900_000),
   AUTH_SESSION_TTL_MS: z.coerce.number().int().positive().default(2_592_000_000),
-  AUTH_DEV_EXPOSE_MAGIC_LINK: boolFromEnvFalse
+  AUTH_DEV_EXPOSE_MAGIC_LINK: boolFromEnvFalse,
+  // Object search (PRD-060). Downloads are only allowed from the API host
+  // and these comma-separated hosts.
+  POLYHAVEN_API_ORIGIN: z.string().url().default("https://api.polyhaven.com"),
+  POLYHAVEN_ALLOWED_HOSTS: z.string().default("dl.polyhaven.org,cdn.polyhaven.com")
 });
 
 const parsed = envSchema.parse({
@@ -59,7 +63,9 @@ const parsed = envSchema.parse({
   USDZ_STALE_CLAIM_MS: process.env.USDZ_STALE_CLAIM_MS,
   AUTH_MAGIC_LINK_TTL_MS: process.env.AUTH_MAGIC_LINK_TTL_MS,
   AUTH_SESSION_TTL_MS: process.env.AUTH_SESSION_TTL_MS,
-  AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK
+  AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK,
+  POLYHAVEN_API_ORIGIN: process.env.POLYHAVEN_API_ORIGIN,
+  POLYHAVEN_ALLOWED_HOSTS: process.env.POLYHAVEN_ALLOWED_HOSTS
 });
 
 if (parsed.STORAGE_DRIVER === "s3") {
@@ -79,6 +85,9 @@ if (parsed.STORAGE_DRIVER === "s3") {
 
 export const env = {
   ...parsed,
+  POLYHAVEN_ALLOWED_HOST_LIST: parsed.POLYHAVEN_ALLOWED_HOSTS.split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter((host) => host.length > 0),
   WEB_ORIGIN_LIST: parsed.WEB_ORIGINS.split(",")
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0)

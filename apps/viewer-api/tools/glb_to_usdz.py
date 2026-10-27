@@ -1013,6 +1013,32 @@ class Converter:
             root.GetPrim().SetCustomDataByKey("quickLookExtentSamples", len(frames))
 
 
+CREDIT_FIELDS = ("source", "sourceUrl", "title", "author", "licence")
+
+
+def _write_credits(stage, document):
+    # PRD-060: credit for borrowed objects survives into the USDZ's root layer.
+    # "holoim:copyright" is asset.copyright; "holoim:credits" is a JSON string
+    # (a list of credit objects, one per credited node), since USD dictionaries
+    # cannot hold lists of dictionaries. Invalid credits are skipped.
+    data = {}
+    copyright_text = document.get("asset", {}).get("copyright")
+    if isinstance(copyright_text, str) and copyright_text:
+        data["holoim:copyright"] = copyright_text[:2000]
+    credits = []
+    for node in document.get("nodes", []):
+        extras = node.get("extras")
+        credit = extras.get("holoimCredit") if isinstance(extras, dict) else None
+        if isinstance(credit, dict) and all(isinstance(credit.get(f), str) and credit.get(f) for f in CREDIT_FIELDS):
+            credits.append({f: credit[f][:500] for f in CREDIT_FIELDS})
+        if len(credits) >= 100:
+            break
+    if credits:
+        data["holoim:credits"] = json.dumps(credits, ensure_ascii=False, separators=(",", ":"))
+    if data:
+        stage.GetRootLayer().customLayerData = data
+
+
 def _convert_glb_to_usdz(input_path, output_path, seed):
     # pygltflib's Node dataclass omits the standard node.weights override.
     with open(input_path, "rb") as source:
@@ -1066,6 +1092,7 @@ def _convert_glb_to_usdz(input_path, output_path, seed):
         converter.cloche(seed)
         converter.extents()
         converter.audio(scene)
+        _write_credits(stage, document)
         stage.GetRootLayer().Export(layer_path)
         package = Path(directory, "package.usdz")
         # Every dependency was created here under a controlled relative name.
