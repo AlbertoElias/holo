@@ -91,12 +91,15 @@ page is served unchanged and the feed loads from the API as before.
 
 The capture app is a static Vite build with no API wiring, so it deploys
 like the viewer. Pages provides the non-localhost HTTPS origin WebXR
-requires on the Quest browser:
+requires on the Quest browser. Run the deploy from `apps/capture`, not
+through `pnpm --filter @holoim/web exec`: wrangler bundles the `functions/`
+directory of the folder it runs in, and from `apps/viewer-web` that ships the
+viewer's feed function onto capture.
 
 ```sh
-pnpm --filter @holoim/capture run build
+pnpm --filter @holoim/capture... run build
 pnpm --filter @holoim/web exec wrangler pages project create holoim-capture --production-branch main   # once
-pnpm --filter @holoim/web exec wrangler pages deploy "$PWD/apps/capture/dist" --project-name holoim-capture --branch main
+cd apps/capture && ../viewer-web/node_modules/.bin/wrangler pages deploy dist --project-name holoim-capture --branch main
 ```
 
 Live at https://holoim-capture.pages.dev. Limits of the static deploy: the

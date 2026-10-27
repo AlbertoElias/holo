@@ -11,6 +11,7 @@ dist/
 
 # Local runtime artifacts
 output/
+.wrangler/
 progress.md
 .tmp_web_game_playwright_client.js
 .vite-dev.log
