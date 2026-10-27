@@ -1430,13 +1430,18 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   await settledControl(page, (c) => c.foot.timeline.worldStart);
   const timeline = (await gallerySnapshot(page)).controls!.foot.timeline;
   const scrubTo = lerp3(timeline.worldStart, timeline.worldEnd, 0.25);
+  // Its clock held still, so the seek is read where it lands: a playing clock
+  // moves a whole frame's delta per frame, up to a second when frames are slow.
+  const setClock = (clipTime: number, playing: boolean) => page.evaluate(([t, p]) => (window as unknown as { __HOLOIM_XR_VIEWER__: { setClock(t: number, p: boolean): void } }).__HOLOIM_XR_VIEWER__.setClock(t, p), [clipTime, playing] as const);
+  await setClock(readingOf(both, "mock-1")!.duration * 0.75, false);
   await rayClick(page, scrubTo, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2]);
   const sought = await waitForGallery(page, (g) => {
     const h = readingOf(g, "mock-1")!;
-    return Math.abs(h.clipTime / h.duration - 0.25) < 0.08;
+    return Math.abs(h.clipTime / h.duration - 0.25) < 0.02;
   });
   expect(Math.abs(readingOf(sought, "mock-4")!.clipTime - readingOf(paused4, "mock-4")!.clipTime), "others' clocks untouched").toBeLessThan(1e-6);
-  expectAudioFocus(sought, "mock-1");
+  await setClock(readingOf(sought, "mock-1")!.clipTime, true);
+  expectAudioFocus(await waitForGallery(page, (g) => Boolean(readingOf(g, "mock-1")!.audio?.playing)), "mock-1");
   mark("seek-mock-1");
 
   // A double select while one loads: placing is keyed by id, the second is ignored.
