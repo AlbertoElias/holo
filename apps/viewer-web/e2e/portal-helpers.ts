@@ -93,7 +93,8 @@ export async function waitForPortalReady(page: Page, cardId: string, modelPath: 
 export async function waitForFrozenTimes(page: Page, modelPath: string): Promise<number[]> {
   let previous = (await readPortal(page, modelPath)).actionTimes.join(",");
   for (let i = 0; i < 40; i += 1) {
-    await page.waitForTimeout(150);
+    // Unchanged across rendered frames, not across a sleep: the pause lands a frame late.
+    await animationFrames(page, 3);
     const current = (await readPortal(page, modelPath)).actionTimes;
     if (current.join(",") === previous) return current;
     previous = current.join(",");
@@ -139,6 +140,15 @@ export async function scrollFeedToTop(page: Page): Promise<void> {
   expect(await settleScroll(page)).toBe(0);
 }
 
+/** Resolves after the page has run `count` animation frames: input sent before it has been through a frame. */
+export async function animationFrames(page: Page, count = 1): Promise<void> {
+  await page.evaluate((count) => new Promise<void>((resolve) => {
+    let left = count;
+    const tick = () => (--left <= 0 ? resolve() : requestAnimationFrame(tick));
+    requestAnimationFrame(tick);
+  }), count);
+}
+
 // Raw touch events: Linux headless Chrome ignores synthesized scroll and
 // pinch gestures, but scrolls and fires pointer events for these everywhere.
 // Each event waits for a frame, so few steps keep CI runners fast.
@@ -152,7 +162,7 @@ export async function touchSwipe(page: Page, cdp: CDPSession, from: { x: number;
       type: "touchMove",
       touchPoints: [{ x: from.x + xDistance * t, y: from.y + yDistance * t }]
     });
-    await page.waitForTimeout(16);
+    await animationFrames(page);
   }
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 }
@@ -168,7 +178,7 @@ export async function touchPinch(page: Page, cdp: CDPSession, center: { x: numbe
       type: "touchMove",
       touchPoints: points(startGap + ((endGap - startGap) * i) / TOUCH_STEPS)
     });
-    await page.waitForTimeout(16);
+    await animationFrames(page);
   }
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 }

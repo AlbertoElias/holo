@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 import type * as Three from "three";
 import type { Mesh, Object3D } from "three";
 import { tokens } from "@holoim/design-tokens";
-import { freezePageClock, waitForIwerSession } from "@holoim/tooling-testing/xr-env";
+import { freezePageClock, waitForIwerSession, waitForXrFrames } from "@holoim/tooling-testing/xr-env";
 import { clocheCharShare } from "@holoim/xr-ui-core";
 
 import { diagnosticGltf } from "./bubble-fixture";
@@ -78,21 +78,22 @@ async function twoHandShrink(page: Page, factor: number): Promise<void> {
   const squeeze = async (value: 0 | 1) => {
     for (const side of ["left", "right"] as const) {
       await page.evaluate(({ side, value }) => (window as unknown as IwerWindow).IWER_DEVICE.controllers[side].updateButtonValue("squeeze", value), { side, value });
-      await page.waitForTimeout(80);
+      await waitForXrFrames(page, 2);
     }
   };
   const spread = 0.2;
   await pose("head", [x, 1.6, z + 0.9]);
   await pose("left", [x - spread, chest, front]);
   await pose("right", [x + spread, chest, front]);
-  await page.waitForTimeout(250);
+  // Grab pointers pick up what they touch over the next frames.
+  await waitForXrFrames(page, 3);
   await squeeze(1);
   await expect.poll(async () => (await viewerSnapshot(page)).hologram!.grabbed, { timeout: 3_000 }).toBe(true);
   for (let step = 1; step <= 10; step += 1) {
     const half = spread * (1 + (factor - 1) * step / 10);
     await pose("left", [x - half, chest, front]);
     await pose("right", [x + half, chest, front]);
-    await page.waitForTimeout(60);
+    await waitForXrFrames(page, 2);
   }
   await squeeze(0);
   await expect.poll(async () => (await viewerSnapshot(page)).hologram!.grabbed, { timeout: 3_000 }).toBe(false);
@@ -438,7 +439,8 @@ test("the cloche stands over the placed hologram, in the room, from either side"
       device.position.set(center.x, 1.6, center.z + z * (probe.bubble.radius * 2.6));
       device.quaternion.set(0, z > 0 ? 0 : 1, 0, z > 0 ? 1 : 0);
     }, side.z);
-    await page.waitForTimeout(400);
+    // Drawn from the new pose.
+    await waitForXrFrames(page, 3);
     const cloche = await page.evaluate(async (exponent) => {
       const { Vector3 } = await import("/node_modules/.vite/deps/three.js") as typeof Three;
       const { renderer, scene, bubble } = (window as ProbeWindow).__bubbleProbe!;

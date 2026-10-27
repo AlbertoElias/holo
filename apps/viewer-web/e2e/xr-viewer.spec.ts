@@ -3,8 +3,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Page } from "@playwright/test";
-import { resolveSimulationViewport, waitForIwerRuntime, waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
-import { emulatePhone, phoneDrag, phonePinch, phoneScreenPoint, phoneTap } from "@holoim/tooling-testing/iwer-phone";
+import {
+  freezePageClock,
+  installPageClock,
+  isPageClockFrozen,
+  resolveSimulationViewport,
+  resumePageClock,
+  stepXr,
+  stepXrCall,
+  stepXrUntil,
+  waitForIwerRuntime,
+  waitForIwerSession,
+  waitForNoIwerSession,
+  waitForXrRenderLoop,
+  XR_STEP_MS
+} from "@holoim/tooling-testing/xr-env";
+import { emulatePhone, phoneScreenPoint } from "@holoim/tooling-testing/iwer-phone";
 
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
@@ -114,7 +128,18 @@ function createTimeline() {
   const markFirstCommit = (page: Page) => page.once("framenavigated", () => mark("first-commit"));
   return { marks, mark, markFirstCommit };
 }
-const dwell = (page: Page, factor = 1) => (PROOF_DWELL_MS ? page.waitForTimeout(PROOF_DWELL_MS * factor) : Promise.resolve());
+// In a session (frozen clock) the hold is drawn frames, so the recording moves.
+const dwell = async (page: Page, factor = 1) => {
+  if (!PROOF_DWELL_MS) return;
+  if (isPageClockFrozen(page)) await stepXr(page, Math.max(1, Math.round((PROOF_DWELL_MS * factor) / XR_STEP_MS)));
+  else await page.waitForTimeout(PROOF_DWELL_MS * factor);
+};
+
+// Every session here runs on a frozen page clock (enterSession). It is
+// installed before the page loads, so the app reads one continuous clock.
+test.beforeEach(async ({ page }) => {
+  await installPageClock(page);
+});
 
 test.afterAll(async () => {
   await mkdir(path.dirname(reportPath), { recursive: true });
@@ -219,7 +244,19 @@ async function snapshot(page: Page): Promise<ViewerSnapshot> {
   }) as Promise<ViewerSnapshot>;
 }
 
+/**
+ * The first snapshot `accept` takes. In a session the page clock is frozen,
+ * so this steps XR frames until then: `timeout` is page time (frames of
+ * XR_STEP_MS) and, as a floor for loads off the fake clock, real time.
+ */
 async function waitForSnapshot(page: Page, accept: (s: ViewerSnapshot) => boolean, timeout = 15_000): Promise<ViewerSnapshot> {
+  if (isPageClockFrozen(page)) {
+    return stepXrUntil(page, () => snapshot(page), accept, {
+      maxFrames: Math.ceil(timeout / XR_STEP_MS),
+      realMs: timeout,
+      describe: (s) => JSON.stringify(s, (key, value) => (key === "actionTimes" ? undefined : value))
+    });
+  }
   let last: ViewerSnapshot | null = null;
   try {
     await expect.poll(async () => {
@@ -252,9 +289,10 @@ async function measureHologramLuminance(page: Page): Promise<HologramLuminance> 
   const setVisible = (visible: boolean) => page.evaluate((v) => {
     (window as unknown as { __HOLOIM_XR_VIEWER__: { hologram: { object3D: { visible: boolean } } } }).__HOLOIM_XR_VIEWER__.hologram.object3D.visible = v;
   }, visible);
+  await drawnFrames(page, 2);
   const lit = (await page.screenshot()).toString("base64");
   await setVisible(false);
-  await nextFrames(page, 2);
+  await drawnFrames(page, 2);
   const hidden = (await page.screenshot()).toString("base64");
   await setVisible(true);
   return page.evaluate(async ({ lit, hidden }) => {
@@ -298,7 +336,69 @@ async function enterSession(page: Page, label: string, environmentBlendMode: "op
   }
   await waitForIwerSession(page, { environmentBlendMode });
   await expect(container).toHaveAttribute("data-xr-state", "immersive");
+  // From here the page's clock only moves when a step draws a frame: app
+  // time and XR frames advance together, the same on every run.
+  await freezePageClock(page);
+  await waitForXrRenderLoop(page);
+  await thinDraws(page);
 }
+
+/**
+ * Stepped frames draw one in DRAW_EVERY. Software GL spends ~75% of a stepped
+ * frame drawing (measured: ~220 ms a frame drawn, ~55 ms not), and these
+ * checks read scene state, not pixels. A frame that skips the draw still does
+ * everything three's render does for the simulation: the scene's world
+ * matrices and the XR camera from the head pose. Pixels and GPU counts are
+ * read on drawn frames (`drawnFrames`); screenshots and proof videos draw
+ * every frame. XR_DRAW_EVERY=1 draws every frame.
+ */
+const DRAW_EVERY = process.env.E2E_SCREENSHOTS === "1" || PROOF_DWELL_MS ? 1 : Number(process.env.XR_DRAW_EVERY ?? 8);
+async function thinDraws(page: Page): Promise<void> {
+  await page.evaluate((every) => {
+    type Renderer = {
+      render(scene: unknown, camera: unknown): void;
+      xr: { isPresenting: boolean; cameraAutoUpdate: boolean; updateCamera(camera: unknown): void };
+      __drawPolicy?: { every: number; force: boolean; calls: number; drawn: number };
+    };
+    type Node = { matrixWorldAutoUpdate: boolean; parent: unknown; updateMatrixWorld(): void };
+    const renderer = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { renderer: Renderer } } }).__HOLOIM_XR_VIEWER__.world.renderer;
+    if (renderer.__drawPolicy) return;
+    const policy = { every, force: false, calls: 0, drawn: 0 };
+    renderer.__drawPolicy = policy;
+    const draw = renderer.render.bind(renderer);
+    renderer.render = (scene, camera) => {
+      policy.calls += 1;
+      if (policy.force || policy.every <= 1 || policy.calls % policy.every === 0) {
+        policy.drawn += 1;
+        draw(scene, camera);
+        return;
+      }
+      // What WebGLRenderer.render does before it draws.
+      const s = scene as Node;
+      const c = camera as Node;
+      if (s.matrixWorldAutoUpdate) s.updateMatrixWorld();
+      if (c.parent === null && c.matrixWorldAutoUpdate) c.updateMatrixWorld();
+      if (renderer.xr.isPresenting && renderer.xr.cameraAutoUpdate) renderer.xr.updateCamera(camera);
+    };
+  }, DRAW_EVERY);
+}
+
+/** Steps `count` frames that all draw: for pixels, screenshots and GPU upload counts. */
+async function drawnFrames(page: Page, count = 1): Promise<void> {
+  const force = (on: boolean) => page.evaluate((on) => {
+    const policy = (window as unknown as { __HOLOIM_XR_VIEWER__?: { world: { renderer: { __drawPolicy?: { force: boolean } } } } }).__HOLOIM_XR_VIEWER__?.world.renderer.__drawPolicy;
+    if (policy) policy.force = on;
+  }, on);
+  await force(true);
+  try {
+    await nextFrames(page, count);
+  } finally {
+    await force(false);
+  }
+}
+
+/** Page time in ms (the frozen clock's), for durations the app measures. */
+const pageNow = (page: Page) => page.evaluate(() => performance.now());
 
 /** The page size before `simulationViewport`, restored before the feed comes back. */
 const feedViewports = new WeakMap<Page, { width: number; height: number }>();
@@ -325,6 +425,8 @@ async function feedViewport(page: Page): Promise<void> {
 
 async function endSession(page: Page): Promise<void> {
   await feedViewport(page);
+  // The feed needs its own frames and timers again.
+  await resumePageClock(page);
   await page.evaluate(() => {
     const probe = (window as { __HOLOIM_XR_VIEWER__?: { world: { renderer: { xr: { getSession(): XRSession | null } } } } }).__HOLOIM_XR_VIEWER__;
     void probe?.world.renderer.xr.getSession()?.end();
@@ -348,11 +450,14 @@ type Tracked = "head" | "left" | "right";
  * the World's space here (the player rig stays at the origin).
  */
 /**
- * Waits until the viewer has drawn `count` more XR frames. Emulated frames
- * come 0.1 s to 1 s apart, so input is held for frames, not for wall-clock
- * time. Outside a session it waits one animation frame.
+ * Draws `count` more XR frames, XR_STEP_MS of page time each (the session's
+ * clock is frozen). Outside a session it waits one animation frame.
  */
 async function nextFrames(page: Page, count = 1): Promise<void> {
+  if (isPageClockFrozen(page)) {
+    await stepXr(page, count);
+    return;
+  }
   await page.evaluate(async (count) => {
     const probe = (window as unknown as { __HOLOIM_XR_VIEWER__?: { world: { renderer: { xr: { isPresenting: boolean } } }; xrFrames(): number } }).__HOLOIM_XR_VIEWER__;
     if (!probe?.world.renderer.xr.isPresenting) {
@@ -410,14 +515,21 @@ async function setButton(page: Page, side: "left" | "right", button: "trigger" |
  * emulated rays take any press and release on one target as a click. The
  * spec drives the controls, not that long-press rule.
  */
-async function rayClick(page: Page, target: Vec3, from: Vec3 = [0.25, 1.25, -0.2]): Promise<void> {
+async function rayClick(page: Page, target: Vec3, from: Vec3 = [0.25, 1.25, -0.2], { exits = false } = {}): Promise<void> {
   await page.evaluate(() => {
     const multiPointers = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { input: { xr: { multiPointers: Record<"left" | "right", { getPointer(kind: "ray"): { options: { clickThresholdMs?: number } } }> } } } } }).__HOLOIM_XR_VIEWER__.world.input.xr.multiPointers;
     for (const hand of ["left", "right"] as const) multiPointers[hand].getPointer("ray").options.clickThresholdMs = Number.POSITIVE_INFINITY;
   });
   await setPose(page, "right", from, target);
   await setButton(page, "right", "trigger", 1);
-  await setButton(page, "right", "trigger", 0);
+  if (!exits) {
+    await setButton(page, "right", "trigger", 0);
+    return;
+  }
+  // The release ends the session: step until it has gone, then the page runs on its own clock again.
+  await page.evaluate(() => (window as unknown as { IWER_DEVICE: { controllers: Record<string, { updateButtonValue(id: string, v: number): void }> } }).IWER_DEVICE.controllers.right!.updateButtonValue("trigger", 0));
+  await stepXr(page, 60, { untilSessionEnds: true });
+  await resumePageClock(page);
 }
 
 /** World points projected to the page's screen, in CSS px from its top left. */
@@ -434,20 +546,32 @@ const toScreen = (page: Page, points: Vec3[]) =>
 
 /**
  * The phone reach row's projected edges once its per-frame fit has caught up
- * with the last head move (up to 5 s): a fixed wait can read a frame early.
+ * with the last head move: stepped frame by frame for up to 5 s of page
+ * time until both ends are inside the 16 px gutters. A row that never fits
+ * fails here, with its last reading.
  */
 type ReachRowReading = { foot: NonNullable<ViewerSnapshot["controls"]>["foot"]; left: { x: number; y: number }; right: { x: number; y: number } };
 async function settledReachRow(page: Page): Promise<ReachRowReading> {
   const width = page.viewportSize()!.width;
-  let reading: ReachRowReading | null = null;
-  await expect.poll(async () => {
+  return stepXrUntil(page, async (): Promise<ReachRowReading> => {
     const foot = (await snapshot(page)).controls!.foot;
     const [left, right] = await toScreen(page, [foot.reachRow.worldLeft, foot.reachRow.worldRight]);
-    reading = { foot, left: left!, right: right! };
-    return left!.x >= 16 - 0.01 && right!.x <= width - 16 + 0.01;
-  }, { timeout: 5_000 }).toBe(true).catch(() => undefined);
-  return reading!;
+    return { foot, left: left!, right: right! };
+  }, (r) => r.left.x >= 16 - 0.01 && r.right.x <= width - 16 + 0.01, {
+    maxFrames: Math.ceil(5_000 / XR_STEP_MS),
+    realMs: 0,
+    describe: (r) => `reach row ${r.left.x.toFixed(2)}..${r.right.x.toFixed(2)} px on a ${width} px screen (16 px gutters)`
+  });
 }
+
+/** Starts a phone helper in the page without waiting for it (its result is not read). */
+const stepXrCallStart = (page: Page, name: string, args: unknown[]) =>
+  page.evaluate(({ name, args }) => {
+    void (window as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[name]!(...args).catch(() => undefined);
+  }, { name, args });
+
+/** A phone helper's tap, drag or pinch, stepped frame by frame until it has lifted. */
+const stepPhone = (page: Page, name: "__phoneTap" | "__phoneDrag" | "__phonePinch", ...args: unknown[]) => stepXrCall(page, name, args);
 
 /**
  * The VR reach chip's fade-in against its glyphs' (§5.2: 0.3 s; §8.4: 240 ms).
@@ -527,21 +651,22 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
     expect(Math.abs(py), "stands on the floor").toBeLessThan(0.01);
     expect(Math.abs(ahead - 1.5), `horizontal distance ${ahead.toFixed(3)} m`).toBeLessThan(0.05);
 
-    // Sampled every 100 ms so loops of a short clip still add up.
+    // Sampled every 100 ms of page time so loops of a short clip still add up.
     const first = await snapshot(page);
     let previous = first;
     let advanced = 0;
-    const startedAt = Date.now();
+    const startedAt = await pageNow(page);
     for (let i = 0; i < 10; i++) {
-      await page.waitForTimeout(100);
+      await nextFrames(page, 100 / XR_STEP_MS);
       const next = await snapshot(page);
       advanced += (next.hologram.clipTime - previous.hologram.clipTime + next.hologram.duration) % next.hologram.duration;
       previous = next;
     }
-    const wallS = (Date.now() - startedAt) / 1000;
+    // The app's clock is the page's: the clip plays at its recorded speed against it.
+    const wallS = ((await pageNow(page)) - startedAt) / 1000;
     const second = previous;
     expect(second.hologram.playing).toBe(true);
-    expect(advanced / wallS, `clip time ${advanced.toFixed(3)} s over ${wallS.toFixed(3)} s wall`).toBeGreaterThan(0.7);
+    expect(advanced / wallS, `clip time ${advanced.toFixed(3)} s over ${wallS.toFixed(3)} s of page time`).toBeCloseTo(1, 2);
     expect(second.hologram.actionTimes.some((time, i) => time !== first.hologram.actionTimes[i]), "animation actions follow the clock").toBe(true);
 
     const audio = await readAudioSync(page);
@@ -595,6 +720,10 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   // Scripted control from here on (and no DevUI over the view).
   await setPose(page, "head", null, null);
   const placed = await waitForSnapshot(page, (s) => s.placement.stage === "placed" && s.hologram.visible && Boolean(s.controls));
+  // The controls come once their font has loaded, in real time, so the clip
+  // has played a varying number of frames by now: start it from 0, so the
+  // clip times, labels and the row they lay out are the same on every run.
+  await page.evaluate(() => (window as unknown as { __HOLOIM_XR_VIEWER__: { setClock(t: number, p: boolean): void } }).__HOLOIM_XR_VIEWER__.setClock(0, true));
   mark("vr-placed");
   const eye: Vec3 = (await readHeadPose(page)).position;
   const anchor = placed.hologram.worldPosition;
@@ -700,10 +829,10 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   await rayClick(page, await footButton(page, "restart"));
   await waitForSnapshot(page, (s) => s.hologram.clipTime === 0 && !s.hologram.playing, 3_000);
   await dwell(page);
-  const playedAt = Date.now();
+  const playedAt = await pageNow(page);
   await rayClick(page, await footButton(page, "play"));
   const restarted = await waitForSnapshot(page, (s) => s.hologram.playing && Boolean(s.hologram.audio?.playing), 3_000);
-  expect(restarted.hologram.clipTime, "plays from 0").toBeLessThanOrEqual((Date.now() - playedAt) / 1000 + 0.1);
+  expect(restarted.hologram.clipTime, "plays from 0").toBeLessThanOrEqual(((await pageNow(page)) - playedAt) / 1000 + 0.1);
   const restartAudio = await readAudioSync(page);
   expect(Math.abs(restartAudio!.scheduledOffset - restartAudio!.clipTime), "audio restarted with the motion").toBeLessThan(AUDIO_SYNC_TOLERANCE_S);
   await dwell(page);
@@ -848,7 +977,7 @@ test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab
   const dock = (await controls(page)).dock;
   await dwell(page);
   mark("exit");
-  await rayClick(page, dock.buttons.exit!.worldPosition, [0.15, 1.2, -0.15]);
+  await rayClick(page, dock.buttons.exit!.worldPosition, [0.15, 1.2, -0.15], { exits: true });
   await waitForNoIwerSession(page);
   await expectTornDown(page);
   mark("card-back");
@@ -977,8 +1106,13 @@ async function settledRenderer(page: Page): Promise<{ geometries: number; textur
     return { geometries: r.geometries - r.uiGeometries, textures: r.textures, allGeometries: r.geometries, uiGeometries: r.uiGeometries };
   };
   let previous = await read();
-  // Uploads finish on frames and loads on the wall clock: each wait spans both.
-  const wait = () => Promise.all([page.waitForTimeout(250), nextFrames(page, 2)]);
+  // Uploads finish on frames and decodes off the fake clock: each wait steps
+  // two frames and then gives the page a moment of real time, which moves no
+  // app time.
+  const wait = async () => {
+    await drawnFrames(page, 2);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  };
   for (let i = 0; i < 40; i++) {
     await wait();
     const next = await read();
@@ -1429,7 +1563,7 @@ async function teleportBehind(page: Page, eye: Vec3): Promise<{ from: GallerySna
   await setStick(page, "right", 0, 1);
   // IWSDK eases its landing marker a fifth of the way to the arc's hit each
   // frame: 15 frames leave it within 4% of the hit.
-  await Promise.all([page.waitForTimeout(2_500), nextFrames(page, 15)]);
+  await nextFrames(page, 2_500 / XR_STEP_MS);
   const aiming = await gallerySnapshot(page);
   await setStick(page, "right", 0, 0);
   // Landed once the rig has moved, standing on the floor.
@@ -1485,13 +1619,15 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   // Slide: the left stick pushed forward carries the rig the way the head faces, on the floor.
   mark("slide");
   await setStick(page, "left", 0, -1);
-  // Held 0.7 s and at least 6 frames: a long frame's step is clamped to 50 ms, so time alone may slide a few cm.
-  await Promise.all([page.waitForTimeout(700), nextFrames(page, 6)]);
+  // Held 0.3 s of page time (6 frames at the locomotion's 50 ms step clamp):
+  // about a metre, short of the holograms 1.5 m ahead, so the teleport's aim
+  // behind stays on open floor.
+  await nextFrames(page, 300 / XR_STEP_MS);
   const sliding = await gallerySnapshot(page);
   expectVignetteInRange(sliding, "sliding");
   expect(sliding.player.vignetteAlpha, "the comfort vignette closes in while sliding").toBeGreaterThan(0);
   await setStick(page, "left", 0, 0);
-  await Promise.all([page.waitForTimeout(300), nextFrames(page, 2)]);
+  await nextFrames(page, 300 / XR_STEP_MS);
   const slid = await gallerySnapshot(page);
   const slide = [0, 1, 2].map((i) => slid.player.position[i]! - before.player.position[i]!) as Vec3;
   expect(-slide[2], `slid ${slide[2].toFixed(3)} m along the head's forward (−z)`).toBeGreaterThan(0.3);
@@ -1509,9 +1645,9 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   mark("snap-turn");
   const headBeforeTurn = (await readHeadPose(page)).position;
   await setStick(page, "right", 1, 0);
-  await Promise.all([page.waitForTimeout(500), nextFrames(page, 4)]);
+  await nextFrames(page, 500 / XR_STEP_MS);
   await setStick(page, "right", 0, 0);
-  await Promise.all([page.waitForTimeout(200), nextFrames(page, 2)]);
+  await nextFrames(page, 200 / XR_STEP_MS);
   const turned = await gallerySnapshot(page);
   const turnDeg = ((turned.player.yawRad - settled.player.yawRad) * 180) / Math.PI;
   expect(turnDeg, `one snap to the right, ${turnDeg.toFixed(2)}°`).toBeCloseTo(-30, 1);
@@ -1644,7 +1780,7 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   // Turn to the shelf and tap Runner 2.
   await setPose(page, "head", eye, tile.worldPosition);
   await dwell(page);
-  await phoneTap(page, tile.worldPosition);
+  await stepPhone(page, "__phoneTap", tile.worldPosition);
   const second = await waitForGallery(page, (s) => readingOf(s, "mock-2")?.placement.stage === "anchored" && s.focusedId === "mock-2", 15_000);
   mark("ar-second");
   const [a, b] = [readingOf(second, "mock-1")!, readingOf(second, "mock-2")!];
@@ -1661,7 +1797,7 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
   const middle = lerp3(a.worldPosition, b.worldPosition, 0.5);
   await setPose(page, "head", [eye[0], eye[1], eye[2] + 0.6], [middle[0], 0.7, middle[2]]);
   await dwell(page);
-  await phoneTap(page, [a.worldPosition[0], a.worldPosition[1] + a.recordedSize[1] * 0.55, a.worldPosition[2]]);
+  await stepPhone(page, "__phoneTap", [a.worldPosition[0], a.worldPosition[1] + a.recordedSize[1] * 0.55, a.worldPosition[2]]);
   const refocused = await waitForGallery(page, (s) => s.focusedId === "mock-1" && s.controls?.boundTo === "mock-1");
   mark("ar-refocus");
   expect(readingOf(refocused, "mock-1")!.playing, "a tap on an unfocused hologram focuses it, without pausing it").toBe(true);
@@ -1724,6 +1860,8 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   mark("feed-ready");
   await dwell(page, 3);
   mark("view-in-room");
+  // As the gallery entries: a reach before the feed's glide rests is left behind and the controls fold.
+  await settleScroll(page);
   await reachFor(page.locator(".feed-card").first());
   await arTrigger.click();
   await expect(page).toHaveURL(/\/ar\/mock-1$/);
@@ -1758,20 +1896,20 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   // Tap the hologram's chest: pause, then resume.
   const chest: Vec3 = [position[0], position[1] + placed.hologram.recordedSize[1] * 0.6, position[2]];
   mark("tap-pause");
-  await phoneTap(page, chest);
+  await stepPhone(page, "__phoneTap", chest);
   const paused = await waitForSnapshot(page, (s) => !s.hologram.playing, 3_000);
   const pausedAt = paused.hologram.clipTime;
   await nextFrames(page, 4);
   expect((await snapshot(page)).hologram.clipTime, "paused clock holds").toBeCloseTo(pausedAt, 5);
   expect((await snapshot(page)).hologram.audio?.playing ?? false, "paused audio stops").toBe(false);
-  await phoneTap(page, chest);
+  await stepPhone(page, "__phoneTap", chest);
   await waitForSnapshot(page, (s) => s.hologram.playing, 3_000);
 
   // Tap the floor beside it: the hologram moves there.
   const floorTarget: Vec3 = [position[0] + 0.3, position[1], position[2] + 0.3];
   await dwell(page);
   mark("tap-move");
-  await phoneTap(page, floorTarget);
+  await stepPhone(page, "__phoneTap", floorTarget);
   const moved = await waitForSnapshot(page, (s) => s.placement.mode === "tap" && s.placement.sequence > placed.placement.sequence, 3_000);
   const miss = Math.hypot(moved.hologram.worldPosition[0] - floorTarget[0], moved.hologram.worldPosition[2] - floorTarget[2]);
   expect(miss, "moved to the tapped floor point").toBeLessThan(0.05);
@@ -1863,7 +2001,7 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   ({ foot, left: rowLeft, right: rowRight } = await settledReachRow(page));
   await dwell(page);
   mark("tap-play-glyph");
-  await phoneTap(page, foot.buttons.play.worldPosition);
+  await stepPhone(page, "__phoneTap", foot.buttons.play.worldPosition);
   const glyphPaused = await waitForSnapshot(page, (s) => !s.hologram.playing, 3_000);
   expect(glyphPaused.placement.sequence, "a tap on the controls never moves the hologram").toBe(moved.placement.sequence);
   expect(glyphPaused.controls!.foot.text.playback).toMatch(/^Paused · /);
@@ -1887,14 +2025,14 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const { worldStart, worldEnd } = foot.timeline;
   const duration = glyphPaused.hologram.duration;
   mark("drag-timeline");
-  await phoneDrag(page, lerp3(worldStart, worldEnd, 0.15), lerp3(worldStart, worldEnd, 0.8), 30);
+  await stepPhone(page, "__phoneDrag", lerp3(worldStart, worldEnd, 0.15), lerp3(worldStart, worldEnd, 0.8), 30, 100);
   const dragged = await snapshot(page);
   expect(Math.abs(dragged.hologram.clipTime - 0.8 * duration), `dragged to ${dragged.hologram.clipTime.toFixed(2)} of ${duration.toFixed(2)} s`).toBeLessThan(0.05 * duration);
   expect(dragged.placement.sequence, "dragging the timeline never moves the hologram").toBe(moved.placement.sequence);
   await dwell(page);
   mark("tap-play-again");
   // "Paused" widens the row, so the glyph has moved since the first tap.
-  await phoneTap(page, await footButton(page, "play"));
+  await stepPhone(page, "__phoneTap", await footButton(page, "play"));
   await waitForSnapshot(page, (s) => s.hologram.playing, 3_000);
   const dragAudio = await waitForSnapshot(page, (s) => Boolean(s.hologram.audio?.playing), 3_000);
   const dragDrift = Math.abs(dragAudio.hologram.audio!.scheduledOffset - dragAudio.hologram.clipTime);
@@ -1922,11 +2060,11 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const chipFloor: Vec3 = [tilted[0] + (throughChip[0] - tilted[0]) * reach, floorY, tilted[2] + (throughChip[2] - tilted[2]) * reach];
   await dwell(page);
   mark("tap-through-hidden-chip");
-  await phoneTap(page, chipFloor);
+  await stepPhone(page, "__phoneTap", chipFloor);
   const throughHidden = await waitForSnapshot(page, (s) => s.placement.mode === "tap" && s.placement.sequence > beforeChipTap.placement.sequence, 3_000);
   expect(horizontal(throughHidden.hologram.worldPosition, chipFloor), "moved to the floor point behind the hidden chip").toBeLessThan(0.05);
   await setPose(page, "head", stepBack, [throughHidden.hologram.worldPosition[0], throughHidden.hologram.worldPosition[1] + tall * 0.45, throughHidden.hologram.worldPosition[2]]);
-  await page.waitForTimeout(600);
+  await nextFrames(page, 600 / XR_STEP_MS);
 
   // Two fingers rescale it about its feet (Q13): closing them halves it, and
   // neither finger taps (it keeps playing where it stands).
@@ -1934,7 +2072,7 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const [px, py, pz] = beforePinch.hologram.worldPosition;
   const pinchAt: Vec3 = [px, py + beforePinch.hologram.recordedSize[1] * 0.5, pz];
   mark("ar-pinch-in");
-  await phonePinch(page, pinchAt, 240, 120, 12);
+  await stepPhone(page, "__phonePinch", pinchAt, 240, 120, 12);
   const shrunk = await waitForSnapshot(page, (s) => s.hologram.worldScale[0] < 0.75, 3_000);
   expect(shrunk.hologram.worldScale[0], "half the spread, about half the size").toBeGreaterThan(0.4);
   expect(shrunk.hologram.worldScale[0], "half the spread, about half the size").toBeLessThan(0.6);
@@ -1946,7 +2084,7 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   await captureEvidence(page, testInfo, "ar-phone-pinched");
   await dwell(page);
   mark("ar-pinch-out");
-  await phonePinch(page, pinchAt, 120, 240, 12);
+  await stepPhone(page, "__phonePinch", pinchAt, 120, 240, 12);
   const restored = await waitForSnapshot(page, (s) => s.hologram.worldScale[0] > 0.9, 3_000);
   expect(restored.hologram.worldScale[0], "back near the recorded scale, it snaps to life size").toBeCloseTo(1, 6);
   expect(restored.controls!.foot.text.scale).toBe("life size");
@@ -1957,9 +2095,12 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   mark("ar-exit");
   // The dock rides the camera: read where it is now.
   // Exit leaves the page mid-tap, which ends the tap's evaluate.
-  await phoneTap(page, (await controls(page)).dock.buttons.exit!.worldPosition).catch((error: Error) => {
-    if (!/Execution context was destroyed/.test(error.message)) throw error;
-  });
+  // The tap's own frame wait never ends once its press has ended the
+  // session, so it is not awaited: the session's end is the signal.
+  const exitTap = stepXrCallStart(page, "__phoneTap", [(await controls(page)).dock.buttons.exit!.worldPosition]);
+  await exitTap;
+  await stepXr(page, 60, { untilSessionEnds: true });
+  await resumePageClock(page);
   await waitForNoIwerSession(page);
   await expectTornDown(page);
   mark("card-back");
@@ -2051,6 +2192,7 @@ async function phoneStatusChrome(page: Page, controls: Controls) {
 async function phoneChromeShot(page: Page, name: string): Promise<void> {
   const dir = path.resolve(testDir, "../../../output/phone-chrome");
   await mkdir(dir, { recursive: true });
+  await drawnFrames(page, 2);
   await page.screenshot({ path: path.join(dir, `${name}.png`) });
 }
 
@@ -2105,6 +2247,19 @@ function expectOnRecordedFloor(label: string, floor: FloorReading): void {
   expect(floor.terrainReach, `${label}: terrain inside the bubble, so not clipped`).toBeLessThan(1);
 }
 
+/** Steps until the clip bubble is on and has stopped growing: two frames at the same radius. */
+async function bubbleSettled(page: Page): Promise<void> {
+  let previous = -1;
+  await stepXrUntil(page, () => page.evaluate(() => {
+    const bubble = (window as unknown as { __floorProbe?: { bubble: { active: boolean; radius: number } } }).__floorProbe?.bubble;
+    return bubble?.active ? bubble.radius : null;
+  }), (radius) => {
+    const still = radius !== null && radius === previous;
+    previous = radius ?? -1;
+    return still;
+  });
+}
+
 async function observeFloor(page: Page): Promise<void> {
   await page.addInitScript(() => {
     (window as unknown as { __HOLOIM_AR_TEST_OBSERVER__: (value: unknown) => void }).__HOLOIM_AR_TEST_OBSERVER__ = (value) => {
@@ -2114,6 +2269,8 @@ async function observeFloor(page: Page): Promise<void> {
 }
 
 test("B-022: VR stands an author recorded on a ledge on its recorded floor, with the drop below it still in view", async ({ page }, testInfo) => {
+  // Feed, entry and placement run in real time: on a 4-CPU runner that alone can near the 30 s default.
+  test.setTimeout(90_000);
   await observeFloor(page);
   await mockFeed(page, terrainGltf());
   await page.goto("/");
@@ -2125,7 +2282,7 @@ test("B-022: VR stands an author recorded on a ledge on its recorded floor, with
   await enterSession(page, "Step inside", "opaque");
   const placed = await waitForSnapshot(page, (s) => s.placement.stage === "placed" && s.hologram.visible);
   expect(placed.hologram.worldPosition[1], "VR places on the floor").toBeCloseTo(0, 3);
-  await page.waitForFunction(() => Boolean((window as unknown as { __floorProbe?: { bubble: { active: boolean } } }).__floorProbe?.bubble.active));
+  await bubbleSettled(page);
   const floor = await readFloor(page);
   expectOnRecordedFloor("VR", floor);
   await captureEvidence(page, testInfo, "vr-recorded-floor");
@@ -2133,6 +2290,8 @@ test("B-022: VR stands an author recorded on a ledge on its recorded floor, with
 });
 
 test("B-022: phone AR stands an author recorded on a ledge on the room's floor, with the drop below it still in view", async ({ page }, testInfo) => {
+  // Feed, entry and placement run in real time: on a 4-CPU runner that alone can near the 30 s default.
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await observeFloor(page);
   await mockFeed(page, terrainGltf());
@@ -2147,7 +2306,7 @@ test("B-022: phone AR stands an author recorded on a ledge on the room's floor, 
   await enterSession(page, "View in your room", "alpha-blend");
   const placed = await waitForSnapshot(page, (s) => s.placement.stage !== "searching" && s.hologram.visible);
   expect(placed.hologram.worldPosition[1], "AR stands it on a floor, not furniture").toBeLessThan(0.5);
-  await page.waitForFunction(() => Boolean((window as unknown as { __floorProbe?: { bubble: { active: boolean } } }).__floorProbe?.bubble.active));
+  await bubbleSettled(page);
   const floor = await readFloor(page);
   expectOnRecordedFloor("AR", floor);
   await captureEvidence(page, testInfo, "ar-recorded-floor");
