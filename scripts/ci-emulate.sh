@@ -20,6 +20,10 @@ fi
 
 root="$(git rev-parse --show-toplevel)"
 cpus="${CI_EMULATE_CPUS:-0-3}"
+# A hosted runner has 16 GB; Docker Desktop may have less, and two emulations
+# at once then overcommit it (crashed pages, navigation timeouts). Run one at
+# a time, or lower this.
+memory="${CI_EMULATE_MEMORY:-16g}"
 image="${CI_EMULATE_IMAGE:-node:24-bookworm}"
 pnpm_version="$(sed -n 's/^  PNPM_VERSION: //p' "$root/.github/workflows/ci.yml")"
 out="$root/output/ci-emulate"
@@ -28,7 +32,7 @@ mkdir -p "$out"
 printf -v cmd '%q ' "$@"
 
 docker run --rm --init \
-  --cpuset-cpus="$cpus" --memory=16g --shm-size=2g \
+  --cpuset-cpus="$cpus" --memory="$memory" --shm-size=2g \
   -e CI=true -e HOME=/root \
   -v "$root":/src:ro \
   -v "$out":/out \

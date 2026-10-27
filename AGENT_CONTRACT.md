@@ -90,7 +90,10 @@ scripts/ci-emulate.sh pnpm run test:xr:viewer
 scripts/ci-emulate.sh pnpm --filter @holoim/viewer-web exec playwright test e2e/ar.spec.ts --repeat-each=20 --workers=1
 ```
 
-`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`). The container is a
+`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`). `CI_EMULATE_MEMORY` overrides the memory
+limit (default `16g`). Run one emulation at a time: Docker Desktop's VM is
+usually smaller than two runners, and overlapping runs crash pages and time
+out navigations that pass on their own. The container is a
 close emulation, not the runner image: a failure that reproduces only on
 hosted CI is still a defect to explain, not something to rerun.
 - `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
