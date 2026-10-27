@@ -1,0 +1,97 @@
+# Feature brief: Find an object by asking (slice 1)
+
+**Lead:** Claude Code (Opus 5.5)  
+**Status:** Implementing (started 2026-10-27 on `feature/object-search`; the user asked for it to be built overnight without approvals, so every decision marked provisional in PRD-060 is pending their review)  
+**Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
+**PRD:** [PRD-060](../product/prds/PRD-060-find-an-object-by-asking.md) (IDEA-079), "First Slice"
+
+## User outcome
+
+At the desktop capture page, before a take, the author types "chair" into a
+Find field, sees up to six models with a thumbnail, author and licence, and
+picks one. It goes into the tray as an ordinary item and can be summoned
+during the take. The credit travels with it: in the take's GLB, on the viewer,
+and in the USDZ.
+
+## Scope
+
+**Included:** text search on the desktop capture overlay; Poly Haven as the
+only registry (no key, CC0), behind `viewer-api`; server-side packing of Poly
+Haven's 1k glTF into one GLB carrying its credit; the credit on the summoned
+object's node `extras` and in `asset.copyright`; a credit line on the viewer
+card; the credit in the USDZ's `customLayerData`.  
+**Excluded:** voice input, the headset overlay, Poly Pizza and Sketchfab,
+CC-BY-SA/ND/NC licences, re-encoding or decimating models, a library of found
+objects, image search, search during a take (PRD-060 Q1–Q7).
+
+## Acceptance criteria
+
+- [ ] `GET /api/objects/search?q=` returns at most six Poly Haven models,
+      each CC0, at most 8 MB packed at 1k, with title, author, source URL,
+      thumbnail and real dimensions; an empty or over-long query is a 400.
+- [ ] `GET /api/objects/polyhaven/:id.glb` returns one GLB that passes
+      capture's `checkSuppliedGlb` and carries `asset.copyright` and
+      `asset.extras.holoimCredit`; unknown ids are 404, upstream failures 502,
+      and only Poly Haven's own hosts are fetched.
+- [ ] Capture's Find field shows the results; picking one adds it to the tray
+      under its title, with the tray's existing limits and messages; the field
+      is disabled while recording.
+- [ ] A take that summons a found object exports `holoimCredit` on that
+      `RecordedObject` node and the credit in `asset.copyright`;
+      `HOLOIM_objects` stays v0 and valid.
+- [ ] The viewer card shows "Object: “Title” by Author, Poly Haven, CC0",
+      linking to the source; takes without credits show nothing new.
+- [ ] The converted USDZ keeps the credit in its root layer's
+      `customLayerData`.
+
+## Failure cases considered
+
+| Failure case | Prevention or evidence |
+|---|---|
+| Poly Haven is down, slow or rate-limits | Server caches the asset list and packed GLBs; upstream errors become 502 with a message capture shows in the tray state; e2e uses a local fixture registry, never the live one |
+| A result is shown but the tray refuses it (too big, Draco, skins) | Search filters on summed 1k file sizes; the packer uses no compression extensions; the e2e asserts the picked GLB loads |
+| SSRF through a crafted asset id or file URL | Ids match `^[A-Za-z0-9_-]+$`; every download URL must be on the configured Poly Haven hosts |
+| Credit lost on summon (the clone drops metadata) | `SceneObjectRegistry.summon` copies `credit`; export check asserts it on the node |
+| Old readers or v0 files break | Credit is in `extras` and `asset`, outside `HOLOIM_objects`; viewer treats invalid credit as none |
+| A take mixes credited and hand-supplied objects | Only credited objects add to `asset.copyright`; others are unchanged |
+| Wrong scale | Poly Haven models are authored in metres; the e2e compares the packed bounds with the stated dimensions |
+
+## Ownership
+
+| Role | Owner | Files or modules |
+|---|---|---|
+| Lead | Claude Code (Opus) | Brief, `packages/objects/src/credit.ts`, integration |
+| Implementer (API) | Claude subagent | `apps/viewer-api/src/routes/objects.ts`, `src/services/polyhaven*`, `tools/glb_to_usdz.py` credit, tests |
+| Implementer (capture) | Claude subagent | `apps/capture/src/objects/*`, `src/recording/*`, `src/ui/*`, summon check |
+| Implementer (viewer) | Claude subagent | `apps/viewer-web/src/features/feed/*`, `src/features/objects/*` |
+| Independent verifier | Codex (pending) | Read-only verification |
+
+## Design decision
+
+- **Credit outside the contract.** `HOLOIM_objects` v0 is strict and versioned;
+  a credit is glTF metadata, so it rides in node `extras` (three.js
+  `userData`) and `asset.copyright`, validated by `objectCreditSchema` in
+  `@holoim/objects`. No version bump.
+- **The GLB is self-describing.** The API writes the credit into the packed
+  GLB's `asset`, so capture reads it from the file it loads, for search
+  results and for any hand-supplied GLB that carries one. No side channel
+  between the Find field and the tray.
+- **Search on the server.** Poly Haven has about 500 models; the API keeps
+  the list for an hour and ranks name, tags and categories locally, then
+  checks file sizes for the top candidates only.
+- **Capture reaches the API** at `${VITE_API_ORIGIN}/api`, proxied to
+  `127.0.0.1:3001` in dev like viewer-web.
+
+## Test plan and evidence
+
+| Acceptance criterion | Workflow or command | Inspectable artifact/result |
+|---|---|---|
+| Search, pack, errors, host allowlist | `pnpm --filter @holoim/api test` (fixture registry) | pending |
+| Find → tray → summon → export credit | `SUMMON_ONLY=desktop pnpm --filter @holoim/capture run test:xr:summon` | pending |
+| Upload → viewer credit → USDZ credit | `e2e/object-search.pipeline.spec.ts` | pending |
+| Live flow | proof video against live Poly Haven (in `output/`, not committed) | pending |
+
+## Physical-device limits
+
+None for this slice: it is desktop-only. The headset overlay is the next
+slice.
