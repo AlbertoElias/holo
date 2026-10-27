@@ -167,9 +167,21 @@ jobs:
         # dist entry the production bundle resolves.
         run: pnpm --filter @holoim/capture... run build
       - name: Deploy to Pages
-        run: pnpm --filter @holoim/web exec wrangler pages deploy "$GITHUB_WORKSPACE/apps/capture/dist" --project-name holoim-capture --branch main
+        # Wrangler (installed with the viewer) runs from apps/capture: pages
+        # deploy bundles the functions/ directory and reads the wrangler.toml
+        # of the directory it runs in, so running it from apps/viewer-web
+        # shipped the viewer's feed function onto capture, which preloaded a
+        # hologram that media CORS allows only for the viewer.
+        working-directory: apps/capture
+        run: ../viewer-web/node_modules/.bin/wrangler pages deploy dist --project-name holoim-capture --branch main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Health check
-        run: curl -fsS -o /dev/null https://holoim-capture.pages.dev/
+        # Also fails if a viewer Pages Function is serving capture again.
+        run: |
+          html="$(curl -fsS https://holoim-capture.pages.dev/)"
+          if grep -q '__HOLOIM_FEED__' <<<"${html}"; then
+            echo "capture is serving the viewer's feed function" >&2
+            exit 1
+          fi

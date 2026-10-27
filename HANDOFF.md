@@ -24,7 +24,7 @@ device checks under Unverified below. Otherwise pick the next queue item in
 - `docs/redesign-device-results` (docs only, ride along with the next
   merge): slice 7's device results in the redesign brief; B-029 (the tilt
   check) closed as not reproducible; the duplicate B-022 numbers fixed
-  (Quick Look throttling is now B-028, still open).
+  (Quick Look throttling, closed by `349b5e9`, is now B-028).
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

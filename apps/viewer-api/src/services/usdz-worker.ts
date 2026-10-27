@@ -6,7 +6,7 @@ import path from "node:path";
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/prisma.js";
 import type { MediaStorage } from "./media-storage.js";
-import { convertGlbToUsdz, usdzFilenameFor, type ConversionOptions } from "./usdz-converter.js";
+import { convertGlbToUsdz, isUsdzConversionTimeout, usdzFilenameFor, type ConversionOptions } from "./usdz-converter.js";
 
 export type GlbToUsdzConverter = (glbAbsolutePath: string, usdzAbsolutePath: string, options?: ConversionOptions) => Promise<void>;
 
@@ -93,6 +93,20 @@ export async function processNextUsdzConversion(options: UsdzWorkerOptions): Pro
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "USDZ conversion failed";
+    if (isUsdzConversionTimeout(error)) {
+      // A timeout on a throttled shared CPU says nothing about the GLB.
+      // Stay claimed with a fresh claim time, so claimNext reclaims the
+      // record once the stale-claim window passes and retries it then,
+      // instead of marking it failed until someone asks again (BUGS B-022).
+      await prisma.hologram
+        .updateMany({
+          where: { id: claimed.id, usdzStatus: "processing", usdzClaimToken: claimed.claimToken },
+          data: { usdzError: message, usdzClaimedAt: new Date(), usdzClaimToken: null }
+        })
+        .catch(() => undefined);
+      log.info({ error, hologramId: claimed.id }, "USDZ conversion timed out; deferred for retry");
+      return true;
+    }
     await prisma.hologram
       .updateMany({
         where: { id: claimed.id, usdzStatus: "processing", usdzClaimToken: claimed.claimToken },

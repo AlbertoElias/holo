@@ -8,7 +8,7 @@ import {
 export default createWorkspaceTsEslintConfig({
   tseslint,
   jsConfig: jsConfig.configs.recommended,
-  ignores: ['output/**', '*.glb'],
+  ignores: ['output/**', '.wrangler/**', '*.glb'],
   globals: {
     ...globals.browser,
     ...globals.node

@@ -142,6 +142,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   await fs.appendFile(path.join(control, "calls"), "convert\\n");
   await fs.writeFile(path.join(control, "started"), "started");
   while (await exists("hold")) await new Promise((resolve) => setTimeout(resolve, 10));
+  if (await exists("timeout")) { console.error("Quick Look conversion failed: Quick Look conversion exceeded 100 seconds"); process.exit(1); }
   await fs.writeFile(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), source]));
   if (await exists("fail")) process.exitCode = 1;
 })().catch((error) => { console.error(error); process.exitCode = 1; });
@@ -462,6 +463,28 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     expect(ready.statusCode).toBe(302);
     const served = await app.inject({ method: "GET", url: ready.headers.location! });
     expect(served.rawPayload).toEqual(Buffer.concat([Buffer.from("fixture-usdz:"), source]));
+  });
+
+  it("defers timed-out conversions for a later retry instead of failing them", async () => {
+    const source = Buffer.from("throttled-cpu-capture");
+    const created = await uploadHologram(app, { hologramName: "Conversion timeout", file: source, quickLookEnabled: true });
+    const glbFilename = path.basename(created.url);
+    await writeFile(path.join(converterControl, "timeout"), "simulate slow CPU");
+
+    await runWorkerOnce();
+    const deferred = await prisma.hologram.findUnique({ where: { id: created.id } });
+    expect(deferred).toMatchObject({ usdzStatus: "processing", usdzPath: null });
+    expect(deferred?.usdzError).toContain("exceeded 100 seconds");
+    expect(await readFile(path.join(uploadsRoot, glbFilename))).toEqual(source);
+
+    // Once the stale-claim window passes, the worker retries and succeeds.
+    await rm(path.join(converterControl, "timeout"));
+    await prisma.hologram.update({ where: { id: created.id }, data: { usdzClaimedAt: new Date(Date.now() - 601_000) } });
+    await runWorkerOnce();
+    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({
+      usdzStatus: "ready",
+      usdzPath: `uploads/${usdzFilenameFor(glbFilename)}`
+    });
   });
 
   it("deleting during conversion does not resurrect the record or leave objects", async () => {

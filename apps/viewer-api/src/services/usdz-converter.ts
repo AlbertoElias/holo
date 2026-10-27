@@ -73,6 +73,21 @@ export type ConversionOptions = {
   seed?: string;
 };
 
+/**
+ * True when a conversion died only because it ran out of wall-clock time:
+ * the Python converter's 100 s alarm (its message rides on stderr), or the
+ * 120 s process deadline killing it (ETIMEDOUT / SIGTERM). Such failures say
+ * the CPU was slow, not that the GLB is bad, so callers retry them later.
+ */
+export function isUsdzConversionTimeout(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; signal?: unknown; killed?: unknown; message?: unknown; stderr?: unknown };
+  if (candidate.code === "ETIMEDOUT") return true;
+  if (candidate.killed === true && candidate.signal === "SIGTERM") return true;
+  const text = [candidate.message, candidate.stderr].filter((part): part is string => typeof part === "string").join("\n");
+  return /exceeded \d+ seconds|ETIMEDOUT|timed?\s?out/i.test(text);
+}
+
 async function hasConversion(filename: string): Promise<boolean> {
   try {
     const info = await stat(filename);

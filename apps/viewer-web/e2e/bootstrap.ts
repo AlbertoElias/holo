@@ -66,6 +66,14 @@ export async function observeFeedCardRenderer(page: Page): Promise<void> {
   });
 }
 
+// How long to wait for a feed card to reach data-model-state="rendered".
+// Playwright's 5 s default cannot cover software-GL first frames (12-16 s
+// on one CPU, B-018), so under load the card was still "ready" when the
+// wait gave up (B-021). 30 s matches the pipeline specs' waits for the
+// same state; the wait itself polls, so it returns as soon as the card
+// renders — the timeout is only a ceiling, not a delay.
+export const FEED_CARD_RENDERED_TIMEOUT_MS = 30_000;
+
 // Under software GL a feed card's first frames take seconds of GPU time
 // (12-16 s on one CPU). Entering AR before they finish makes the AR page's
 // synchronous GL calls (the card's context loss on unmount, the AR canvas's
@@ -74,7 +82,7 @@ export async function observeFeedCardRenderer(page: Page): Promise<void> {
 // can see, so wait until the card's frames have finished on the GPU. The
 // fence is polled, never waited on, so the page stays responsive.
 export async function waitForFeedCardPresented(page: Page): Promise<void> {
-  await expect(page.locator(".feed-card").first()).toHaveAttribute("data-model-state", "rendered");
+  await expect(page.locator(".feed-card").first()).toHaveAttribute("data-model-state", "rendered", { timeout: FEED_CARD_RENDERED_TIMEOUT_MS });
   await page.evaluate(() => new Promise<void>((resolve, reject) => {
     const gl = (window as FeedCardProbeWindow).__feedCardGl;
     if (!gl) {

@@ -439,6 +439,63 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 - **Fix:** the spec waits on rendered frames (B-026). The four checks keep
   their own CI job, `xr-viewer-vr` (`test:e2e:xr-viewer-vr`), now without
   `continue-on-error` and back in the CI Gate.
+### B-028 — Quick Look conversions fail while production's shared CPU is throttled
+
+(Filed as a second B-022, which `349b5e9` and the comment in
+`usdz-worker.ts` still call it; renumbered 2026-10-26. B-022 is the floor bug above.)
+
+- **Area:** `apps/viewer-api` USDZ worker and `rebuild:usdz` (`glb_to_usdz.py`'s 100 s alarm, the converter's 120 s limit)
+- **Severity:** P2
+- **Observed:** 2026-10-25, during the production ql3 rebuild
+- **Evidence:** after a few minutes of sustained conversion and inspection
+  on `holoim-api` (shared-cpu-2x), the long take `cmvmig68e0000oejsj9pd83rz`
+  converted past 100 s three times (12.6 s on a laptop) and its inspection
+  ran past 900 s (75 s on a laptop): Fly's shared CPU drops to its baseline
+  once the burst balance is spent. The record went to `failed`, so Quick
+  Look returned 202 until a later request re-queued it on a recovered CPU.
+- **Expected:** a conversion that fails only because the CPU is slow is
+  retried later, not marked failed; or the limits follow the work.
+- **Reproduction:** drain the burst balance (several conversions in a row,
+  or the rebuild with both inspections), then request
+  `/api/holograms/<id>/usdz` for a long take whose preview is not current.
+- **Fix:** the worker now tells timeouts apart from real failures
+  (`isUsdzConversionTimeout` in `usdz-converter.ts`: the converter's
+  "exceeded 100 seconds" stderr, `ETIMEDOUT`, or a `SIGTERM` kill). A
+  timed-out record stays `processing` with a fresh claim time and the
+  reason kept in `usdzError`, so the stale-claim path reclaims and retries
+  it after `USDZ_STALE_CLAIM_MS` instead of parking it at `failed`; genuine
+  failures still go to `failed`. Regression test "defers timed-out
+  conversions for a later retry instead of failing them" in
+  `apps/viewer-api/test/hologram-routes.test.ts` failed before (`failed`)
+  and passes after, including the retry succeeding once the claim goes
+  stale. `pnpm --filter @holoim/api run verify:fast` passes (26 tests).
+  The one-off `rebuild:usdz` keeps its journal + `--retry-failed` flow,
+  where a timeout leaves the old preview served.
+
+### B-021 — The AR bubble render check sometimes times out waiting for the card
+
+- **Area:** `apps/viewer-web` e2e (`test:xr:viewer`)
+- **Severity:** P3
+- **Observed:** 2026-10-24
+- **Evidence:** `e2e/ar-bubble.spec.ts:70` fails at
+  `toHaveAttribute("data-model-state", "rendered")` after 5 s with
+  `"ready"`: 1 of 12 repeats on `main` (`eebf013`) and 3 of 18 on the
+  slice 0/1 branch of `docs/features/ui-redesign.md`, with other sessions
+  loading the machine.
+- **Expected:** the card renders within the wait every time, or the wait
+  follows the work it waits on rather than a fixed 5 s.
+- **Reproduction:** `VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer npx
+  playwright test e2e/ar-bubble.spec.ts:70 --workers=1 --repeat-each=6`
+  from `apps/viewer-web`.
+- **Fix:** the failing wait had moved into `waitForFeedCardPresented`
+  (`apps/viewer-web/e2e/bootstrap.ts`) and still used Playwright's 5 s
+  default, which B-018's 12–16 s software-GL first frames cannot meet
+  under load. It now polls with `FEED_CARD_RENDERED_TIMEOUT_MS` (30 s,
+  matching the pipeline specs' waits for the same state), so it returns
+  as soon as the card renders; the same constant covers the identical
+  wait in `hologram-feed.spec.ts`. Verified: `test:e2e:mocked` 19/19,
+  the ar-bubble test 6/6 on `--repeat-each=6`, and viewer-web
+  `verify:fast` (lint, typecheck, 40 unit tests).
 
 ### B-029 — The portal tilt check cannot find the pressed tilt toggle
 
