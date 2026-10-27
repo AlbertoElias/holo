@@ -1472,7 +1472,8 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   }
   // Page past the loaded feed: the next page is fetched with the feed cursor.
   await selectPaging(page, "older", eye);
-  const older = await waitForGallery(page, (g) => g.gallery.page === 1 && pageSettled(g));
+  // Its six previews load and upload over frames: on a slow runner that takes longer than the default 15 s.
+  const older = await waitForGallery(page, (g) => g.gallery.page === 1 && pageSettled(g), 60_000);
   mark("page-older");
   expect(feedRequests.some((r) => r.cursor === "10"), "fetched past the loaded feed with its cursor").toBe(true);
   expect(older.gallery.loadedItems).toBe(GALLERY_FEED_SIZE);
@@ -1482,8 +1483,8 @@ test("VR gallery: pages the feed past its cursor, places four, each keeps its st
   await dwell(page);
   const olderRenderer = await settledRenderer(page);
   await selectPaging(page, "newer", eye);
-  // The first page's previews load again; a slow runner takes longer than the default 15 s.
-  const back = await waitForGallery(page, (g) => g.gallery.page === 0 && pageSettled(g), 30_000);
+  // The first page's previews load again, as slowly.
+  const back = await waitForGallery(page, (g) => g.gallery.page === 0 && pageSettled(g), 60_000);
   mark("page-newer");
   expect(back.holograms.map((h) => h.id)).toEqual(["mock-1"]);
   await warmControls(page, eye);
