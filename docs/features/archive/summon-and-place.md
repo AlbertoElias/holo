@@ -1,13 +1,12 @@
 # Feature brief: Summon and place while speaking
 
 **Lead:** Claude Code (Opus)  
-**Status:** Verified locally 2026-10-24 on branch `feature/summon-and-place`, stacked on PRD-043; lands with it (scope and gestures approved by the user 2026-10-24)  
+**Status:** Complete (merged 2026-10-24 with PRD-043; scope and gestures approved by the user 2026-10-24)
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
-**PRD:** [PRD-045](../product/prds/PRD-045-authoring-while-speaking.md) (IDEA-062)  
+**PRD:** [PRD-045](../../product/prds/PRD-045-authoring-while-speaking.md) (IDEA-062)  
 **Builds on:** [Explain with an object](explain-with-an-object.md) (PRD-043): the object
 registry, grab, the per-object sample store and the `HOLOIM_objects` export.
-Branch `feature/summon-and-place` is stacked on `feature/explain-with-an-object`;
-both land on `main` together.
+Both landed on `main` together on 2026-10-24.
 
 ## User outcome
 

@@ -86,5 +86,5 @@ Approved 2026-10-24: the user asked for PRD-045 to be built after PRD-043.
   [design language](../concepts/design-language.md)
 - Research: [open questions](../research/open-questions.md) (question 13)
 - Mockups: none
-- Feature brief: [summon and place](../../features/summon-and-place.md)
+- Feature brief: [summon and place](../../features/archive/summon-and-place.md)
 - Implementation issue: none
