@@ -654,7 +654,8 @@ async function settledControl(page: Page, read: (c: NonNullable<ViewerSnapshot["
 const footButton = (page: Page, id: keyof FootProbe["buttons"]) => settledControl(page, (c) => c.foot.buttons[id].worldPosition);
 
 test("VR: Step inside shows the hologram at recorded scale on the floor ahead, plays it with its audio, and exit returns to its card", async ({ page }, testInfo) => {
-  test.setTimeout(90_000);
+  // It enters VR twice; input waits for frames, which a loaded 2-CPU machine draws over a second apart.
+  test.setTimeout(180_000);
   const { marks, mark, markFirstCommit } = createTimeline();
   markFirstCommit(page);
   await mockFeed(page);
