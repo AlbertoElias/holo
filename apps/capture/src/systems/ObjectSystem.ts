@@ -1,4 +1,5 @@
 import { createSystem } from '@iwsdk/core';
+import { gravity } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
 /**
@@ -16,6 +17,10 @@ export class ObjectSystem extends createSystem() {
   update(): void {
     const c = this.capture;
     if (c.frame.arSpectator || !c.motor.hasSpawnResolved()) return;
+    if (!c.objects.hasPhysics()) {
+      const trimesh = c.motor.getWorldTrimesh();
+      if (trimesh) c.objects.enablePhysics(trimesh, gravity);
+    }
     const turn = c.input.getObjectTurn();
     c.objects.update({
       vrActive: c.frame.vrActive,

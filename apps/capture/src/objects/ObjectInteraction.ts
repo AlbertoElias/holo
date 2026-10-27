@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
 import type { HandPoseSource, VrHandSide } from '../types/contracts';
+import type { ObjectPhysics } from '../physics/ObjectPhysics';
 import type { XrTracking } from '../xr/XrTracking';
 import type { DesktopCarryPose } from './DesktopCarryPose';
 import type { GrabIntent, ObjectGrabInput } from './ObjectGrabInput';
@@ -54,6 +55,10 @@ export interface ObjectSnapshot {
   heldBy: VrHandSide | null;
   position: [number, number, number];
   quaternion: [number, number, number, number];
+  /** The prop body: kinematic while held or hovering, dynamic once released, asleep at rest. */
+  body: 'none' | 'kinematic' | 'dynamic' | 'asleep';
+  linvel: [number, number, number];
+  angvel: [number, number, number];
   /** World-space bounds of the model. */
   boundsMin: [number, number, number];
   boundsMax: [number, number, number];
@@ -79,6 +84,9 @@ interface Hold {
  */
 export class ObjectInteraction {
   private hold: Hold | null = null;
+  private physics: ObjectPhysics | null = null;
+  /** Accumulated step time, which stamps the poses the release velocity is fitted from. */
+  private clock = 0;
   private readonly wasPressed: Record<VrHandSide, boolean> = { left: false, right: false };
   private readonly box = new THREE.Box3();
   private readonly anchor = new THREE.Matrix4();
@@ -105,20 +113,30 @@ export class ObjectInteraction {
     }
   ) {}
 
+  setPhysics(physics: ObjectPhysics | null): void {
+    this.physics = physics;
+  }
+
+  /** Steps the prop world after the hold update and writes free props' poses back. */
+  stepPhysics(deltaSec: number): void {
+    this.physics?.step(this.deps.registry.eventObjects(), deltaSec, (object, world) => this.writeWorld(object, world));
+  }
+
   update(step: ObjectStep): void {
     const { registry, carry } = this.deps;
     if (!this.deps.avatar.avatar) return;
+    this.clock += step.deltaSec;
     for (const object of registry.eventObjects()) if (!object.placed) this.place(object, step.bodyYaw);
-    if (this.hold && !registry.all().includes(this.hold.object)) this.release();
+    if (this.hold && !registry.all().includes(this.hold.object)) this.release(false);
 
     if (step.vrActive) {
       carry.idle();
-      if (this.hold?.desktop) this.release();
+      if (this.hold?.desktop) this.release(false);
       this.updateVr(step);
     } else {
       this.deps.grabInput.reset();
       this.wasPressed.left = this.wasPressed.right = false;
-      if (this.hold && !this.hold.desktop) this.release();
+      if (this.hold && !this.hold.desktop) this.release(false);
       this.updateDesktop(step);
     }
   }
@@ -142,6 +160,7 @@ export class ObjectInteraction {
       object.wrapper.updateWorldMatrix(true, false);
       object.wrapper.matrixWorld.decompose(this.pos, this.quat, this.scale);
       this.box.setFromObject(object.model);
+      const body = this.physics?.bodyState(object) ?? { state: 'none' as const, linvel: [0, 0, 0] as [number, number, number], angvel: [0, 0, 0] as [number, number, number] };
       return {
         id: object.id,
         name: object.name,
@@ -151,6 +170,9 @@ export class ObjectInteraction {
         heldBy: object.heldBy,
         position: [this.pos.x, this.pos.y, this.pos.z],
         quaternion: [this.quat.x, this.quat.y, this.quat.z, this.quat.w],
+        body: body.state,
+        linvel: body.linvel,
+        angvel: body.angvel,
         boundsMin: [this.box.min.x, this.box.min.y, this.box.min.z],
         boundsMax: [this.box.max.x, this.box.max.y, this.box.max.z]
       };
@@ -175,7 +197,7 @@ export class ObjectInteraction {
       const rising = intent.pressed && !this.wasPressed[side];
       this.wasPressed[side] = intent.pressed;
       if (this.hold?.side === side && !intent.pressed) {
-        this.release();
+        this.release(!intent.switched);
         continue;
       }
       // First hand wins: the other hand's grab is ignored until release.
@@ -200,11 +222,14 @@ export class ObjectInteraction {
     if (!TRACKED_SOURCES.has(tracking.getHandPoseSource(hold.side)) || grabInput.get(hold.side).source === 'none') {
       // The hand falls back to a rest pose: freeze rather than swing with it.
       hold.lostSec += step.deltaSec;
-      if (hold.lostSec >= LOST_RELEASE_SEC) this.release();
+      if (hold.lostSec >= LOST_RELEASE_SEC) this.release(false);
       return;
     }
     hold.lostSec = 0;
-    if (this.readAnchor(hold.side)) this.writeWorld(hold.object, this.world.multiplyMatrices(this.anchor, hold.offset));
+    if (this.readAnchor(hold.side)) {
+      this.writeWorld(hold.object, this.world.multiplyMatrices(this.anchor, hold.offset));
+      this.physics?.sample(hold.object, this.clock);
+    }
   }
 
   private updateDesktop(step: ObjectStep): void {
@@ -221,7 +246,7 @@ export class ObjectInteraction {
       this.hold!.desktop = true;
     } else if (step.desktop.toggle) {
       if (this.hold) {
-        this.release();
+        this.release(true);
       } else {
         const target = registry.eventObjects().find((object) => this.desktopReachable(object, carry));
         if (target && this.readAnchor('right')) this.grab(target, 'right', true);
@@ -258,6 +283,7 @@ export class ObjectInteraction {
       hold.offset.copy(this.anchor).invert().multiply(this.world);
     }
     this.writeWorld(hold.object, this.world);
+    this.physics?.sample(hold.object, this.clock);
   }
 
   private grab(object: SceneObject, side: VrHandSide, desktop: boolean): void {
@@ -266,10 +292,13 @@ export class ObjectInteraction {
     const offset = this.anchor.clone().invert().multiply(this.world);
     this.hold = { object, side, desktop, offset, pickup: desktop ? this.world.clone() : null, lostSec: 0 };
     object.heldBy = side;
+    this.physics?.hold(object);
   }
 
-  private release(): void {
+  /** A deliberate let-go throws with the fitted velocity; every other release drops with none. */
+  private release(throwIt: boolean): void {
     if (!this.hold) return;
+    this.physics?.release(this.hold.object, throwIt);
     this.hold.object.heldBy = null;
     this.hold = null;
   }

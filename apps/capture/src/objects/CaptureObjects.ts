@@ -6,6 +6,7 @@ import type { HandPoseSource } from '../types/contracts';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
+import { ObjectPhysics, type ObjectPhysicsStats } from '../physics/ObjectPhysics';
 import type { UIStateStore } from '../ui/UIStateStore';
 import type { XrTracking } from '../xr/XrTracking';
 import { DesktopCarryPose } from './DesktopCarryPose';
@@ -41,6 +42,7 @@ export class CaptureObjects {
   readonly tray: ObjectTray;
   readonly trayGesture: TrayGestureInput;
   readonly interaction: ObjectInteraction;
+  private physics: ObjectPhysics | null = null;
   private loadSeq = 0;
   private trayLoadSeq = 0;
   private lastAuthoring: AuthoringFrame | null = null;
@@ -63,6 +65,21 @@ export class CaptureObjects {
     });
   }
 
+  hasPhysics(): boolean {
+    return this.physics !== null;
+  }
+
+  /** Once the scene's collision mesh exists: props get their own world over a copy of it. */
+  enablePhysics(trimesh: { vertices: Float32Array; indices: Uint32Array }, gravity: number): void {
+    this.physics = new ObjectPhysics(trimesh, gravity);
+    this.interaction.setPhysics(this.physics);
+    this.registry.onRemove = (object) => this.physics?.remove(object);
+  }
+
+  physicsStats(): ObjectPhysicsStats | null {
+    return this.physics?.stats() ?? null;
+  }
+
   /** Once the avatar is loaded and in its bind pose. */
   attach(): void {
     this.carry.attach();
@@ -83,6 +100,7 @@ export class CaptureObjects {
     this.tray.update(held && !this.interaction.isHolding(holder), { vrActive, bodyYaw: step.bodyYaw, hand: holder });
     const summonsBefore = this.tray.snapshot().summons.length;
     this.interaction.update({ ...step, summoner });
+    this.interaction.stepPhysics(step.deltaSec);
     // A grab by the holding hand closes the tray at once.
     if (this.interaction.isHolding(holder) && this.tray.isOpen()) this.tray.update(false, { vrActive, bodyYaw: step.bodyYaw, hand: holder });
     const palm = vrActive ? this.interaction.palmPosition(summoner, this.palm) : undefined;

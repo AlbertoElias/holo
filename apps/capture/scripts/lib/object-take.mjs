@@ -23,11 +23,12 @@ import { angleDeg, findNode, loadTake, objectNodes, relativePose, rigidPose, wor
 //   - IWER controllers: a squeeze out of reach and a trigger press grab
 //     nothing; a squeeze with the avatar hand on the object grabs it; moving
 //     and turning the controller moves and turns the object rigidly with the
-//     avatar's hand; releasing leaves it in place.
+//     avatar's hand; releasing hands it to physics, which drops it to the
+//     floor and leaves it at rest.
 //   - Desktop: a take with no object exports no object; the overlay picker
 //     refuses an unsupported file and loads the bracket; G picks it up into
-//     the right hand, Q turns it, walking carries it, G puts it down, and G
-//     out of reach does nothing.
+//     the right hand, Q turns it, walking carries it, G puts it down
+//     (it drops to the floor, no throw), and G out of reach does nothing.
 // Each export is checked: one RecordedObject node, as many keys as the
 // avatar, a valid HOLOIM_objects extension with the hold span, and the
 // object's pose relative to the avatar's RightHand matching capture's.
@@ -43,6 +44,9 @@ const RIGID_ANGLE_DEG = 0.5;
 const EXPORT_POSITION_M = 0.01;
 const EXPORT_ANGLE_DEG = 1;
 const SPAN_TOLERANCE_SEC = 0.1;
+// A released prop settles within this long and rests within this far of the surface.
+const REST_TIMEOUT_SEC = 3;
+const FLOOR_TOLERANCE_M = 0.01;
 
 const v3 = (a) => new THREE.Vector3(...a);
 const q4 = (a) => new THREE.Quaternion(...a);
@@ -89,6 +93,20 @@ export async function saveDownload(page, stop, file) {
   await stop();
   await (await download).saveAs(file);
   return file;
+}
+
+/**
+ * Steps (via `step`) until the first object's body sleeps or is nearly still,
+ * up to `timeoutSec`; returns its snapshot then.
+ */
+export async function settle(page, step, timeoutSec = REST_TIMEOUT_SEC) {
+  let item;
+  for (let i = 0; i < Math.round(timeoutSec * 60) + 1; i += 1) {
+    await step(1);
+    item = (await readState(page)).objects.items[0];
+    if (item.body === 'asleep') break;
+  }
+  return { item, atRest: item.body === 'asleep' };
 }
 
 /** Hold relation samples (object in the hand anchor's frame) while an object is held. */
@@ -329,7 +347,7 @@ export async function runIwerObjectTake({ browser, baseUrl, artifactDir, console
     const rigid = relations.length ? spread(relations) : null;
     if (rigid && (rigid.position > RIGID_POSITION_M || rigid.angleDeg > RIGID_ANGLE_DEG)) fail(`the held object slid in the hand: ${JSON.stringify(rigid)}`);
 
-    // Release and move the hand away: the object stays.
+    // Release and move the hand away: the object falls and comes to rest.
     await button('right', 'squeeze', 0);
     const releaseStep = steps;
     await step(2);
@@ -340,11 +358,14 @@ export async function runIwerObjectTake({ browser, baseUrl, artifactDir, console
       await controller('right', [grip[0] + 0.3 - 0.3 * smooth(i / 30), grip[1] + 0.15 - 0.4 * smooth(i / 30), grip[2] + 0.1 * smooth(i / 30)]);
       await step(1);
     }
-    await step(12);
-    state = await readState(page);
-    const settled = poseOf(state.objects.items[0]);
-    const drift = settled.position.distanceTo(releasedAt.position);
-    if (drift > 1e-4) fail(`the released object moved ${round(drift, 5)} m`);
+    const resting = await settle(page, step);
+    const settled = poseOf(resting.item);
+    const fell = releasedAt.position.y - settled.position.y;
+    const floorGapM = resting.item.boundsMin[1];
+    if (!resting.atRest) fail(`the released object had not come to rest after ${REST_TIMEOUT_SEC} s (${resting.item.body}, ${round(Math.hypot(...resting.item.linvel), 3)} m/s)`);
+    if (fell < 0.3) fail(`the released object fell only ${round(fell, 3)} m`);
+    if (floorGapM < -FLOOR_TOLERANCE_M || floorGapM > FLOOR_TOLERANCE_M) fail(`the released object rests ${round(floorGapM, 4)} m from the floor (limit ${FLOOR_TOLERANCE_M} m)`);
+    const drift = Math.hypot(settled.position.x - releasedAt.position.x, settled.position.z - releasedAt.position.z);
     shots.released = await shot('3-released');
 
     const glb = path.join(artifactDir, `${label}.glb`);
@@ -373,7 +394,9 @@ export async function runIwerObjectTake({ browser, baseUrl, artifactDir, console
         turnedDeg: round(turned, 1),
         heldSteps: relations.length,
         rigidHold: rigid,
-        releasedDriftM: round(drift, 5),
+        fellM: round(fell, 3),
+        restHorizontalDriftM: round(drift, 3),
+        restFloorGapM: round(floorGapM, 4),
         handRelation: captureRelation && { position: captureRelation.position.toArray().map((v) => round(v)), quaternion: captureRelation.quaternion.toArray().map((v) => round(v)) }
       },
       export: exportReport
@@ -483,13 +506,35 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       state = await readState(page);
       const after = poseOf(state.objects.items[0]);
       carried = { movedM: round(after.position.distanceTo(before.position), 3), turnedDeg: round(angleDeg(after.quaternion, before.quaternion), 1) };
+      // Stop walking and turning, then put it down: it drops, with no throw.
+      await advance(0.6);
+      holdSeconds += 0.6;
       await page.keyboard.press('KeyG');
-      await advance(0.05);
+      await advance(1 / 60);
       state = await readState(page);
       const released = poseOf(state.objects.items[0]);
-      await keyFor('KeyS', 1);
+      const launch = state.objects.items[0];
+      await keyFor('KeyS', 0.5);
+      const trace = [];
+      for (let i = 0; i < Math.round(REST_TIMEOUT_SEC * 60); i += 1) {
+        await advance(1 / 60);
+        const sample = (await readState(page)).objects.items[0];
+        if (i % 6 === 0) trace.push({ t: round(i / 60, 2), centre: [0, 1, 2].map((a) => round((sample.boundsMin[a] + sample.boundsMax[a]) / 2, 3)), linvel: sample.linvel.map((v) => round(v, 2)), body: sample.body });
+        if (sample.body === 'asleep') break;
+      }
       state = await readState(page);
-      putDown = { heldBy: state.objects.items[0].heldBy, driftM: round(poseOf(state.objects.items[0]).position.distanceTo(released.position), 5) };
+      const item = state.objects.items[0];
+      putDown = {
+        trace,
+        heldBy: item.heldBy,
+        launchSpeedMps: round(Math.hypot(launch.linvel[0], launch.linvel[2]), 3),
+        launchSpinRadps: round(Math.hypot(...launch.angvel), 3),
+        // The bounds centre, not the model origin: a tipping prop swings its origin.
+        driftM: round(Math.hypot((item.boundsMin[0] + item.boundsMax[0] - launch.boundsMin[0] - launch.boundsMax[0]) / 2, (item.boundsMin[2] + item.boundsMax[2] - launch.boundsMin[2] - launch.boundsMax[2]) / 2), 3),
+        originDriftM: round(Math.hypot(item.position[0] - released.position.x, item.position[2] - released.position.z), 3),
+        body: item.body,
+        floorGapM: round(item.boundsMin[1], 4)
+      };
       await advance(0.2);
     });
     await page.getByRole('button', { name: 'Start Recording' }).waitFor();
@@ -500,7 +545,10 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     if (carried.turnedDeg < 30) fail(`Q turned the object only ${carried.turnedDeg}°`);
     if (carried.movedM < 0.5) fail(`walking carried the object only ${carried.movedM} m`);
     if (putDown.heldBy) fail('G did not put the object down');
-    if (putDown.driftM > 1e-4) fail(`the put-down object moved ${putDown.driftM} m while the avatar walked away`);
+    if (putDown.launchSpeedMps > 0.05 || putDown.launchSpinRadps > 0.05) fail(`the put-down object was flung: ${putDown.launchSpeedMps} m/s, ${putDown.launchSpinRadps} rad/s`);
+    if (putDown.driftM > 0.5) fail(`the put-down object drifted ${putDown.driftM} m sideways`);
+    if (putDown.body !== 'asleep') fail(`the put-down object did not come to rest (${putDown.body})`);
+    if (Math.abs(putDown.floorGapM) > FLOOR_TOLERANCE_M) fail(`the put-down object rests ${putDown.floorGapM} m from the floor`);
 
     // Out of reach, G does nothing.
     await page.keyboard.press('KeyG');
@@ -508,6 +556,25 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     state = await readState(page);
     const outOfReach = { heldBy: state.objects.items[0].heldBy };
     if (outOfReach.heldBy) fail('G picked up an object out of reach');
+
+    // Walking through the resting object moves neither it nor the avatar (props have no collision with the body).
+    state = await readState(page);
+    const restAt = state.objects.items[0].position;
+    let nearestM = Infinity;
+    for (let i = 0; i < 240 && nearestM > 0.1; i += 1) {
+      state = await readState(page);
+      nearestM = Math.min(nearestM, Math.hypot(state.avatar.x - restAt[0], state.avatar.z - restAt[2]));
+      if (nearestM <= 0.1) break;
+      const key = restAt[2] < state.avatar.z ? 'KeyW' : 'KeyS';
+      await page.keyboard.down(key);
+      await advance(1 / 30);
+      await page.keyboard.up(key);
+    }
+    await advance(0.3);
+    state = await readState(page);
+    const walkThrough = { nearestAvatarM: round(nearestM, 3), objectMovedM: round(v3(state.objects.items[0].position).distanceTo(v3(restAt)), 5), body: state.objects.items[0].body };
+    if (nearestM > 0.25) fail(`the avatar could not walk to the resting object (nearest ${walkThrough.nearestAvatarM} m)`);
+    if (walkThrough.objectMovedM > 1e-4) fail(`walking through the resting object moved it ${walkThrough.objectMovedM} m`);
 
     const exportReport = checkObjectExport(await readFile(glb), {
       expectHolds: [{ hand: 'right', duration: holdSeconds }],
@@ -520,7 +587,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     await page.evaluate(() => window.__setManualClock(true, true));
     await advance(2 / 60);
     await page.screenshot({ path: shotFile });
-    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, outOfReach, shots: { final: shotFile }, export: exportReport };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, outOfReach, walkThrough, shots: { final: shotFile }, export: exportReport };
   } finally {
     await context.close();
   }

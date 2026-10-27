@@ -57,6 +57,7 @@ export function renderCaptureTextState(c: CaptureContext): string {
       hands: c.objects.interaction.handSnapshot(),
       grab: { left: c.objects.grabInput.get('left'), right: c.objects.grabInput.get('right') },
       carryWeight: c.objects.carry.getWeight(),
+      physics: c.objects.physicsStats(),
       tray: { ...c.objects.tray.snapshot(), gesture: c.objects.trayGesture.snapshot() }
     },
     heightAdaptation: {

@@ -203,6 +203,12 @@ it from the item below instead of duplicating its status here.
   [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md) by its
   design review on 2026-10-25; the idiom is the phone's (press and hold the
   dock's Halo glyph, drag) through the shared screen-input bridge.
+- [ ] Props in AR capture, with real-floor and WebXR `plane-detection`
+  colliders: cut from
+  [`docs/features/object-physics.md`](docs/features/object-physics.md) by its
+  design review on 2026-10-27, because a headset in passthrough and a phone AR
+  camera take are spectators that never handle props. Start once AR recording
+  carries objects.
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
   and success signal are explicit. The lens points to IDEA-045 (portal view)

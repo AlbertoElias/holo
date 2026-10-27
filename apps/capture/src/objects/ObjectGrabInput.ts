@@ -19,6 +19,8 @@ export interface GrabIntent {
   source: GrabInputSource;
   /** Squeeze value (0..1) or pinch distance (m) behind `pressed`. */
   value: number | null;
+  /** The source changed between controller and hand this update: a release now is not a deliberate let-go. */
+  switched: boolean;
 }
 
 interface InputSourceLike {
@@ -34,8 +36,8 @@ interface InputSourceLike {
  */
 export class ObjectGrabInput {
   private readonly state: Record<VrHandSide, GrabIntent> = {
-    left: { pressed: false, source: 'none', value: null },
-    right: { pressed: false, source: 'none', value: null }
+    left: { pressed: false, source: 'none', value: null, switched: false },
+    right: { pressed: false, source: 'none', value: null, switched: false }
   };
   private readonly thumb = new THREE.Vector3();
   private readonly index = new THREE.Vector3();
@@ -53,7 +55,8 @@ export class ObjectGrabInput {
       // A switch between controller and hand mid-hold releases: the two
       // thresholds mean different things.
       const kind: GrabInputSource = source?.hand ? 'pinch' : source?.gamepad?.buttons?.[SQUEEZE_BUTTON] ? 'squeeze' : 'none';
-      if (kind !== 'none' && state.source !== 'none' && kind !== state.source) state.pressed = false;
+      state.switched = kind !== 'none' && state.source !== 'none' && kind !== state.source;
+      if (state.switched) state.pressed = false;
       if (source?.hand) {
         const tracked = this.tracking.getTrackedHandJointPosition(side, 'thumb-tip', this.thumb)
           && this.tracking.getTrackedHandJointPosition(side, 'index-finger-tip', this.index);
@@ -84,6 +87,6 @@ export class ObjectGrabInput {
   }
 
   reset(): void {
-    for (const side of ['left', 'right'] as const) this.state[side] = { pressed: false, source: 'none', value: null };
+    for (const side of ['left', 'right'] as const) this.state[side] = { pressed: false, source: 'none', value: null, switched: false };
   }
 }
