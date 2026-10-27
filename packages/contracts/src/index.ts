@@ -102,3 +102,39 @@ export type UsdzStatusResponse = z.infer<typeof usdzStatusResponseSchema>;
 export type InitiateUploadRequest = z.infer<typeof initiateUploadRequestSchema>;
 export type InitiateUploadResponse = z.infer<typeof initiateUploadResponseSchema>;
 export type CompleteUploadRequest = z.infer<typeof completeUploadRequestSchema>;
+
+// PRD-060: find an object by asking. Results are only models a take may
+// redistribute and the capture tray accepts, so a shown result is never refused.
+export const OBJECT_SEARCH_MAX_RESULTS = 6;
+export const OBJECT_SEARCH_MAX_QUERY_LENGTH = 100;
+
+export const objectSearchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(OBJECT_SEARCH_MAX_QUERY_LENGTH)
+});
+export type ObjectSearchQuery = z.infer<typeof objectSearchQuerySchema>;
+
+export const objectSearchResultSchema = z.object({
+  /** Registry-scoped id, e.g. "ArmChair_01". */
+  id: z.string(),
+  /** Registry display name, e.g. "Poly Haven". */
+  source: z.string(),
+  title: z.string(),
+  author: z.string(),
+  /** SPDX id; matches `objectLicenceSchema` in `@holoim/objects`. */
+  licence: z.enum(["CC0-1.0", "CC-BY-4.0"]),
+  /** The model's public page on the registry. */
+  sourceUrl: z.string().url(),
+  thumbnailUrl: z.string().url(),
+  /** API path of the packed, credited GLB, relative to the API origin (starts with "/api/"). */
+  glbPath: z.string().startsWith("/api/"),
+  /** Real size in metres [x, y, z] as the registry states it; null when unknown. */
+  dimensionsM: z.tuple([z.number(), z.number(), z.number()]).nullable(),
+  /** Estimated packed GLB size in bytes. */
+  bytes: z.number().int().nonnegative()
+});
+export type ObjectSearchResult = z.infer<typeof objectSearchResultSchema>;
+
+export const objectSearchResponseSchema = z.object({
+  results: z.array(objectSearchResultSchema).max(OBJECT_SEARCH_MAX_RESULTS)
+});
+export type ObjectSearchResponse = z.infer<typeof objectSearchResponseSchema>;
