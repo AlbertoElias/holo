@@ -50,11 +50,21 @@ export type PolyhavenCandidate = PolyhavenModel & { bytes: number };
 type FileEntry = { url: string; size: number };
 type GltfFiles = { gltf: FileEntry; include: Record<string, FileEntry> };
 
+// Category shortcuts and spoken queries are plural ("chairs") while titles and
+// tags are mostly singular, so both sides compare by a naive singular form.
+function singular(word: string): string {
+  if (word.length <= 3 || word.endsWith("ss")) return word;
+  if (word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (/(ch|sh|x|z)es$/.test(word)) return word.slice(0, -2);
+  return word.endsWith("s") ? word.slice(0, -1) : word;
+}
+
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((token) => token.length > 0);
+    .filter((token) => token.length > 0)
+    .map(singular);
 }
 
 function asFileEntry(value: unknown): FileEntry | null {
@@ -155,14 +165,13 @@ export function createPolyhaven(config: PolyhavenConfig) {
 
   function score(model: PolyhavenModel, tokens: string[]): number {
     const nameWords = tokenize(model.title);
-    const name = nameWords.join(" ");
     let total = 0;
     for (const token of tokens) {
       if (nameWords.includes(token)) total += 15;
-      else if (name.includes(token)) total += 10;
-      if (model.tags.some((tag) => tag.toLowerCase() === token)) total += 4;
-      else if (model.tags.some((tag) => tag.toLowerCase().includes(token))) total += 1;
-      if (model.categories.some((category) => category.toLowerCase() === token)) total += 3;
+      else if (nameWords.some((word) => word.startsWith(token))) total += 10;
+      if (model.tags.some((tag) => singular(tag.toLowerCase()) === token)) total += 4;
+      else if (model.tags.some((tag) => tag.toLowerCase().startsWith(token))) total += 1;
+      if (model.categories.some((category) => singular(category.toLowerCase()) === token)) total += 3;
     }
     return total;
   }
