@@ -152,6 +152,20 @@ it from the item below instead of duplicating its status here.
 
 ## Later
 
+- [ ] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
+  `tsconfig.app.json` (src, functions, configs) only, so a spec's missing
+  import shows only when Playwright runs it (found in the slice 0 review,
+  2026-10-26, on `feature/xr-shared-screen-input`). A probe
+  `tsconfig.e2e.json` (extending `tsconfig.app.json`, `types: ["node"]`,
+  `allowImportingTsExtensions`, including `e2e` and `playwright.config.ts`)
+  reports 12 errors in seven specs: `exactOptionalPropertyTypes` in
+  `bootstrap.ts`, `portal-helpers.ts`, `xr-viewer.spec.ts`; in-page imports of
+  `/node_modules/.vite/deps/three.js` in `ar-bubble.spec.ts` and
+  `redesign.spec.ts`; `never`/`HTMLElement | SVGElement` narrowing in
+  `xr-viewer.spec.ts` and `portal.spec.ts`; and `import.meta.env` in capture
+  sources the pipeline specs import. Fix those, add the config, and add it to
+  `typecheck`.
+
 - [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered
   ECS systems, keeping Rapier and its algorithms
   ([brief](docs/features/archive/iwsdk-runtime-refactor.md)). Native scene composition
