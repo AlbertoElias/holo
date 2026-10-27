@@ -233,6 +233,29 @@ viewer matched at key times.
 | No regression | `pnpm run verify:pr` | Pending |
 | Proof video | Real-time recording: throw, drop onto a table, replay in the feed | Under `output/`, not committed |
 
+## Independent verification
+
+**Round 1 (Codex `-p standard`, 2026-10-27): FAIL.** Codex's sandbox couldn't
+launch Chromium, so it judged the run evidence from the existing reports plus
+its own audit script over the exported GLBs.
+
+Must-fix:
+
+1. The set-down lowered the prop independently of the hand while `heldBy`
+   stayed set. The desktop GLB recorded 1.04 m of hand-relative motion inside
+   a held span, and the grip check excluded the ease.
+2. Switching from a controller to a hand that is already pinching (or the
+   reverse) kept the hold.
+
+Should-fix: the floor assertion allowed 1 cm of penetration. Heading, CCD at
+the clamp speed, regrabbing from a surface and four-prop timing evidence are
+thin.
+
+Fixes: the prop stays rigid with the hand through the set-down, and it is let
+go at the surface or at the arm's lowest reach. A mode switch always releases
+with zero velocity and needs a fresh press. The floor bound is 3 mm. Results
+are under Test plan and evidence once rerun.
+
 ## Physical-device limits
 
 IWER proves deterministic emulated throws, not their feel. On a device, check:

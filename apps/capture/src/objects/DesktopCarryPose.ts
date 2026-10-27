@@ -11,6 +11,8 @@ const BLEND_OUT_SEC = 0.3;
 const FORWARD = 0.62;
 const DOWN = 0.3;
 const INWARD = 0.18;
+// The lowest the carried hand goes: this fraction of full reach from the shoulder.
+const REACHABLE = 0.95;
 
 interface Driven {
   bone: THREE.Bone;
@@ -55,6 +57,15 @@ export class DesktopCarryPose {
   /** The right arm's full reach from the shoulder joint, once attached. */
   getReach(): number | undefined {
     return this.chain ? this.chain.upperLength + this.chain.lowerLength : undefined;
+  }
+
+  /** How far below the carry pose the hand can still be placed within the arm's reach. */
+  maxLowerM(): number {
+    const reach = this.getReach();
+    if (!reach) return 0;
+    const horizontal = Math.hypot(FORWARD, INWARD);
+    const vertical = Math.sqrt(Math.max(0, REACHABLE ** 2 - horizontal ** 2));
+    return Math.max(0, (vertical - DOWN) * reach);
   }
 
   idle(): void {

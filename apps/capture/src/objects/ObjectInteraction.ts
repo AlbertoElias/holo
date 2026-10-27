@@ -24,12 +24,11 @@ const PLACE_BELOW_EYES_M = 0.45;
 // A desktop release slower than this (fitted from the prop's own poses) sets the
 // prop down; a faster one throws.
 const SET_DOWN_MAX_MPS = 0.3;
-// A set-down lowers the prop over this long, then lets go this far above the surface.
+// A set-down lowers the carrying hand, and the prop rigidly with it, over this
+// long, then lets go this far above the surface.
 const SET_DOWN_SEC = 0.3;
 const SET_DOWN_RELEASE_GAP_M = 0.02;
 const SET_DOWN_SEARCH_M = 3;
-// How much of the drop the carrying hand follows, as a fraction of the arm's reach.
-const SET_DOWN_HAND_FRACTION = 0.3;
 
 export interface ObjectStep {
   vrActive: boolean;
@@ -87,7 +86,7 @@ interface Hold {
   /** Grabbed by a mouse or touch press: lifting it releases. */
   pointer: boolean;
   /** Being lowered onto the surface under it before it is let go. The object stays held meanwhile. */
-  settle: { startSec: number; startGap: number | null } | null;
+  settle: { startSec: number; lowerM: number } | null;
 }
 
 /**
@@ -235,10 +234,12 @@ export class ObjectInteraction {
       const intent: Readonly<GrabIntent> = grabInput.get(side);
       const rising = intent.pressed && !this.wasPressed[side];
       this.wasPressed[side] = intent.pressed;
-      if (this.hold?.side === side && !intent.pressed) {
+      if (this.hold?.side === side && (intent.switched || !intent.pressed)) {
         this.release(!intent.switched);
         continue;
       }
+      // A switch is not a fresh press: the new source has to open and close again.
+      if (intent.switched) continue;
       // First hand wins: the other hand's grab is ignored until release.
       if (!rising || this.hold || !this.readAnchor(side)) continue;
       const palm = this.palmWorld(side, this.pos2);
@@ -307,12 +308,11 @@ export class ObjectInteraction {
     const settle = hold?.settle ?? null;
     const settleT = settle ? Math.min(1, (this.clock - settle.startSec) / SET_DOWN_SEC) : 0;
     const settleEase = settleT * settleT * (3 - 2 * settleT);
-    const reach = carry.getReach() ?? 0;
     carry.update({
       carrying: Boolean(hold) && !step.desktop.pointHeld,
       bodyYaw: step.bodyYaw,
       deltaSec: step.deltaSec,
-      lowerM: settle && settle.startGap !== null ? settleEase * Math.min(Math.max(0, settle.startGap - SET_DOWN_RELEASE_GAP_M), reach * SET_DOWN_HAND_FRACTION) : 0
+      lowerM: settle ? settleEase * settle.lowerM : 0
     });
     if (!hold || !this.readAnchor('right')) return;
 
@@ -343,17 +343,9 @@ export class ObjectInteraction {
       hold.offset.copy(this.anchor).invert().multiply(this.world);
     }
     this.writeWorld(hold.object, this.world);
-    if (settle) {
-      // Lower the prop until it hangs just above what is under it, whatever the hand did meanwhile.
-      const gap = this.physics?.gapBelow(hold.object, SET_DOWN_SEARCH_M) ?? null;
-      if (gap !== null && gap > SET_DOWN_RELEASE_GAP_M) {
-        this.world.decompose(this.pos, this.quat, this.scale);
-        this.pos.y -= settleEase * (gap - SET_DOWN_RELEASE_GAP_M);
-        this.writeWorld(hold.object, this.world.compose(this.pos, this.quat, this.unit));
-      }
-    }
     this.physics?.sample(hold.object, this.clock);
-    if (settle && settleT >= 1) this.release(false);
+    // The prop moved only with the hand. Let go once it hangs just above what is under it, or the hand can go no lower.
+    if (settle && (settleT >= 1 || (this.physics?.gapBelow(hold.object, SET_DOWN_SEARCH_M) ?? Infinity) <= SET_DOWN_RELEASE_GAP_M)) this.release(false);
   }
 
   /** A deliberate desktop let-go: a moving prop is thrown, a still one is set down on what is under it. */
@@ -364,7 +356,10 @@ export class ObjectInteraction {
       this.release(true);
       return;
     }
-    hold.settle = { startSec: this.clock, startGap: this.physics.gapBelow(hold.object, SET_DOWN_SEARCH_M) };
+    // The hand goes down by the prop's gap to the surface, less the release gap, as far as the arm reaches.
+    const gap = this.physics.gapBelow(hold.object, SET_DOWN_SEARCH_M);
+    const lowerM = gap === null ? 0 : Math.min(Math.max(0, gap - SET_DOWN_RELEASE_GAP_M), this.deps.carry.maxLowerM());
+    hold.settle = { startSec: this.clock, lowerM };
   }
 
   /** A new press during a set-down: the prop stays in the hand, where the ease has put it. */

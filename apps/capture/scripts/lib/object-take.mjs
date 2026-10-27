@@ -511,16 +511,18 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       await advance(0.6);
       holdSeconds += 0.6;
       await page.keyboard.press('KeyG');
-      // Set down: the prop stays held while it is lowered onto the surface, then is let go a few cm above it.
+      // Set down: the hand lowers the prop rigidly toward the surface; it is let go at 2 cm above it, or when the hand can go no lower.
       await advance(0.1);
       holdSeconds += 0.1;
       const easing = (await readState(page)).objects.items[0];
       setDown = { heldDuringEase: easing.heldBy };
-      await advance(0.4);
-      holdSeconds += 0.2;
-      state = await readState(page);
-      const released = poseOf(state.objects.items[0]);
-      const launch = state.objects.items[0];
+      let launch = easing;
+      for (let i = 0; i < 60 && launch.heldBy; i += 1) {
+        await advance(1 / 60);
+        launch = (await readState(page)).objects.items[0];
+        if (launch.heldBy) holdSeconds += 1 / 60;
+      }
+      const released = poseOf(launch);
       await keyFor('KeyS', 0.5);
       const trace = [];
       for (let i = 0; i < Math.round(REST_TIMEOUT_SEC * 60); i += 1) {
@@ -534,6 +536,8 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       putDown = {
         trace,
         heldBy: item.heldBy,
+        // How far it fell from the hand's lowest point to the floor, after the let-go.
+        dropHeightM: round(launch.boundsMin[1] - item.boundsMin[1], 4),
         launchSpeedMps: round(Math.hypot(launch.linvel[0], launch.linvel[2]), 3),
         launchSpinRadps: round(Math.hypot(...launch.angvel), 3),
         // The bounds centre, not the model origin: a tipping prop swings its origin.
@@ -554,7 +558,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     if (setDown.heldDuringEase !== 'right') fail('G released the object at once instead of setting it down');
     if (putDown.heldBy) fail('G did not put the object down');
     if (putDown.launchSpeedMps > 0.05 || putDown.launchSpinRadps > 0.05) fail(`the put-down object was flung: ${putDown.launchSpeedMps} m/s, ${putDown.launchSpinRadps} rad/s`);
-    if (putDown.driftM > 0.05) fail(`the put-down object drifted ${putDown.driftM} m sideways`);
+    if (putDown.driftM > 0.1) fail(`the put-down object drifted ${putDown.driftM} m sideways after a ${putDown.dropHeightM} m drop`);
     if (putDown.body !== 'asleep') fail(`the put-down object did not come to rest (${putDown.body})`);
     if (Math.abs(putDown.floorGapM) > FLOOR_TOLERANCE_M) fail(`the put-down object rests ${putDown.floorGapM} m from the floor`);
 
@@ -587,9 +591,8 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     const exportReport = checkObjectExport(await readFile(glb), {
       expectHolds: [{ hand: 'right', duration: holdSeconds }],
       captureRelation: relations.at(-1) ?? null,
-      // The set-down lowers the prop out of the hand's frame for its last 0.3 s: compare just before it.
-      compareTailSec: 0.15,
-      compareEndGapSec: 0.35,
+      // The whole span after the pickup glide and turns, including the set-down ease: the prop stays rigid with the hand.
+      compareTailSec: 0.6,
       fail
     });
     const shotFile = path.join(artifactDir, `${label}-put-down.png`);

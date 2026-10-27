@@ -27,6 +27,8 @@ import { OBJECT_URL, checkObjectExport, clickButton, openCapture, poseOf, readSt
 
 const STEP_MS = 1000 / 60;
 const FLOOR_TOLERANCE_M = 0.01;
+// How far below the floor a prop may sink while it lands.
+const PENETRATION_TOLERANCE_M = 0.003;
 const REST_TIMEOUT_SEC = 3;
 const SPEED_TOLERANCE = 0.2;
 const MAX_LINEAR_MPS = 12;
@@ -218,7 +220,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       // The bracket tips as it lands, so its centre may shift a little; a still drop stays under the hand.
       if (drift > 0.05) fail(`still drop: it drifted ${round(drift, 3)} m sideways (limit 0.05 m)`);
       if (Math.abs(end.boundsMin[1] - FLOOR_Y) > FLOOR_TOLERANCE_M) fail(`still drop: it rests ${round(end.boundsMin[1] - FLOOR_Y, 4)} m from the floor`);
-      if (lowest < -FLOOR_TOLERANCE_M) fail(`still drop: it went ${round(lowest, 4)} m below the floor`);
+      if (lowest < -PENETRATION_TOLERANCE_M) fail(`still drop: it went ${round(lowest, 4)} m below the floor`);
     }
 
     // 2. Throw: swing along +x and let go mid-swing.
@@ -251,7 +253,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       };
       report.scenarios[name] = scenario;
       if (end.body !== 'asleep') fail(`${name}: it had not come to rest after ${REST_TIMEOUT_SEC} s (${end.body})`);
-      if (lowest < -FLOOR_TOLERANCE_M) fail(`${name}: it went ${round(lowest, 4)} m below the floor`);
+      if (lowest < -PENETRATION_TOLERANCE_M) fail(`${name}: it went ${round(lowest, 4)} m below the floor`);
       if (Math.abs(end.boundsMin[1] - FLOOR_Y) > FLOOR_TOLERANCE_M) fail(`${name}: it rests ${round(end.boundsMin[1] - FLOOR_Y, 4)} m from the floor`);
       if (name === 'throw') {
         // Launch speed within 20% of the object's own speed over the last 100 ms held.
@@ -299,7 +301,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
     }
 
     // 4. Non-throw releases drop with zero velocity: a controller-to-hand switch and the tracking-loss freeze.
-    for (const mode of ['switch', 'trackingLoss']) {
+    for (const mode of ['switch', 'switchToPinching', 'trackingLoss']) {
       await rearm(s);
       s.grip = s.restGrip();
       await s.controller('right', s.grip);
@@ -319,7 +321,9 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       if (movedM < 0.1) fail(`non-throw ${mode}: the held object barely moved before the release (${round(movedM, 3)} m)`);
       let released;
       const velocities = [];
-      if (mode === 'switch') {
+      if (mode !== 'trackingLoss') {
+        // switchToPinching: the hand is already pinching (about 5 mm) when it becomes the input source.
+        if (mode === 'switchToPinching') await s.page.evaluate(() => window.IWER_DEVICE.hands.right.updatePinchValue(1));
         await s.page.evaluate(() => { window.IWER_DEVICE.primaryInputMode = 'hand'; });
         for (let i = 0; i < 6; i += 1) {
           s.grip = [s.grip[0] + per, s.grip[1], s.grip[2]];
@@ -346,7 +350,23 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       report.scenarios[`nonThrow_${mode}`] = { movedBeforeM: round(movedM, 3), heldSpeedBeforeMps: round(horizontal(moving.linvel), 3), released: Boolean(released), launchHorizontalMps: released ? round(horizontal(released.linvel), 3) : null, launchSpinRadps: released ? round(Math.hypot(...released.angvel), 3) : null };
       if (!released) fail(`non-throw ${mode}: the object was never released`);
       else if (velocities[0] > 0.05 || velocities[1] > 0.05) fail(`non-throw ${mode}: it was launched at ${round(velocities[0], 3)} m/s, ${round(velocities[1], 3)} rad/s`);
+      if (mode === 'switchToPinching' && released) {
+        // The pinch that was already closed is not a fresh press: no regrab until it opens and closes again.
+        const pinching = (await readState(s.page)).objects.grab.right;
+        let regrabbed = false;
+        for (let i = 0; i < 12; i += 1) {
+          s.grip = [s.grip[0] + per, s.grip[1], s.grip[2]];
+          await s.controller('right', s.grip);
+          await s.step(1);
+          if ((await s.item()).heldBy) regrabbed = true;
+        }
+        report.scenarios.nonThrow_switchToPinching.pinchDistanceM = pinching?.value ?? null;
+        report.scenarios.nonThrow_switchToPinching.regrabbedWhilePinching = regrabbed;
+        if (pinching?.source !== 'pinch' || !(pinching.value < 0.01)) fail(`non-throw ${mode}: the hand was not pinching at about 5 mm (${JSON.stringify(pinching)})`);
+        if (regrabbed) fail(`non-throw ${mode}: the already-pinching hand regrabbed in the same press`);
+      }
       await s.page.evaluate(() => {
+        window.IWER_DEVICE.hands.right.updatePinchValue(0);
         window.IWER_DEVICE.primaryInputMode = 'controller';
         window.IWER_DEVICE.controllers.right.connected = true;
       });
