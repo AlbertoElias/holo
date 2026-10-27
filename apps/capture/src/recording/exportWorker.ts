@@ -16,6 +16,8 @@ interface WorkerInput {
 }
 
 interface BoneKeyframes {
+  /** Position in `boneNames`, which follows the avatar's bone traversal order (names may repeat). */
+  index: number;
   name: string;
   posValues: number[];
   quatValues: number[];
@@ -116,12 +118,13 @@ self.onmessage = (e: MessageEvent<WorkerInput>) => {
 
   const boneKeyframes: BoneKeyframes[] = [];
 
-  for (const name of boneNames) {
+  for (const [index, name] of boneNames.entries()) {
     const posValues: number[] = [];
     const quatValues: number[] = [];
 
     for (const frame of frames) {
-      const boneData = frame.bones.find((b) => b.name === name);
+      // Frames record bones in the same traversal order, so duplicate names keep their own tracks.
+      const boneData = frame.bones.length === boneNames.length ? frame.bones[index] : frame.bones.find((b) => b.name === name);
       if (!boneData) continue;
 
       posValues.push(boneData.position.x, boneData.position.y, boneData.position.z);
@@ -134,7 +137,7 @@ self.onmessage = (e: MessageEvent<WorkerInput>) => {
     }
 
     if (posValues.length / 3 === times.length) {
-      boneKeyframes.push({ name, posValues, quatValues });
+      boneKeyframes.push({ index, name, posValues, quatValues });
     }
   }
 

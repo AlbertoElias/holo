@@ -183,10 +183,9 @@ export class ObjectTray {
 
   /** Between the holding hand's wrist and middle knuckle, on the avatar. */
   private palmAnchor(side: VrHandSide): THREE.Vector3 | null {
-    const prefix = side === 'left' ? 'Left' : 'Right';
-    const wrist = this.avatar.getBoneWorldPosition(`${prefix}Hand`, this.palm);
+    const wrist = this.avatar.getBoneWorldPosition(`${side}Hand`, this.palm);
     if (!wrist) return null;
-    const knuckle = this.avatar.getBoneWorldPosition(`${prefix}HandMiddle1`, this.knuckle);
+    const knuckle = this.avatar.getBoneWorldPosition(`${side}MiddleProximal`, this.knuckle);
     return knuckle ? this.palm.lerp(knuckle, 0.5) : this.palm;
   }
 

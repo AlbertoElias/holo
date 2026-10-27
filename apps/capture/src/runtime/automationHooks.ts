@@ -1,5 +1,6 @@
 import type { XRDevice } from 'iwer';
 
+import type { HumanoidBindingReport } from '../avatar/HumanoidSkeleton';
 import type { FaceSample } from '../face/faceTypes';
 import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, UiViewModel, VrHandSide } from '../types/contracts';
@@ -35,6 +36,8 @@ export interface AutomationHooks {
   // liveness until released with null.
   __setFaceInput: (sample: FaceSample | null) => void;
   __sampleFace: () => FaceSnapshot;
+  /** The avatar's canonical humanoid binding (bones, facing, disabled features), or null before load. */
+  __sampleHumanoid: () => HumanoidBindingReport | null;
   __toggleFaceCamera: () => void;
   /** The chrome as drawn: the overlay's view model, the headset chrome's placement, the touch stick (slice 4 reports). */
   __sampleChrome: () => { ui: UiViewModel; vr: VrChromeSnapshot; touch: { stick: TouchStick | null; looking: number; hold: string } };

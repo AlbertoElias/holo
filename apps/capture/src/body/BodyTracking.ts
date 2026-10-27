@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { AvatarRig } from '../avatar/AvatarRig';
+import type { HumanoidBoneRef } from '../avatar/HumanoidSkeleton';
 import { headYawFromQuaternion, type XrHeadPose } from '../xr/XrTracking';
 import type { BodySample, Vec3Tuple } from '../types/contracts';
 import { type BodyFault, type BodyHeadInput, type GroundSampler, VrBodySolver } from './VrBodySolver';
@@ -8,23 +9,23 @@ import { type BodyFault, type BodyHeadInput, type GroundSampler, VrBodySolver } 
 // tracking recovery); realign the rig instead of walking the body there.
 export const HEAD_TRACKING_JUMP_METERS = 0.5;
 
-// Avatar bones reported by sample(), by sample key.
-const BODY_SAMPLE_BONES: ReadonlyArray<readonly [string, readonly string[]]> = [
-  ['head', ['Head']],
-  ['headTop', ['HeadTop_End']],
-  ['neck', ['Neck']],
-  ['chest', ['Spine2']],
-  ['hips', ['Hips']],
-  ['leftShoulder', ['LeftArm']],
-  ['rightShoulder', ['RightArm']],
-  ['leftHip', ['LeftUpLeg']],
-  ['rightHip', ['RightUpLeg']],
-  ['leftKnee', ['LeftLeg']],
-  ['rightKnee', ['RightLeg']],
-  ['leftAnkle', ['LeftFoot']],
-  ['rightAnkle', ['RightFoot']],
-  ['leftToe', ['LeftToeBase']],
-  ['rightToe', ['RightToeBase']]
+// Avatar bones reported by sample(), by sample key; the first bone the rig has wins.
+const BODY_SAMPLE_BONES: ReadonlyArray<readonly [string, readonly HumanoidBoneRef[]]> = [
+  ['head', ['head']],
+  ['headTop', ['headTip']],
+  ['neck', ['neck']],
+  ['chest', ['upperChest', 'chest']],
+  ['hips', ['hips']],
+  ['leftShoulder', ['leftUpperArm']],
+  ['rightShoulder', ['rightUpperArm']],
+  ['leftHip', ['leftUpperLeg']],
+  ['rightHip', ['rightUpperLeg']],
+  ['leftKnee', ['leftLowerLeg']],
+  ['rightKnee', ['rightLowerLeg']],
+  ['leftAnkle', ['leftFoot']],
+  ['rightAnkle', ['rightFoot']],
+  ['leftToe', ['leftToes']],
+  ['rightToe', ['rightToes']]
 ];
 
 /**
@@ -56,7 +57,7 @@ export class BodyTracking {
   /** Bind pose is measured before any animation writes the skeleton. */
   measureBindPose(): void {
     this.ready = this.solver.measureBindPose();
-    if (!this.ready) console.warn('VR body solver disabled: expected spine, head, eye, or leg bones were not found.');
+    if (!this.ready) this.avatar.humanoid?.disableFeature('body solver', 'needs hips, spine, neck, head, both eyes and both legs');
   }
 
   copyHead(pose: XrHeadPose): void {
@@ -83,8 +84,8 @@ export class BodyTracking {
     const normal = new THREE.Vector3();
     const avatar = this.avatar;
     const bones: BodySample['bones'] = {};
-    for (const [key, names] of BODY_SAMPLE_BONES) {
-      const bone = avatar.findBone(names);
+    for (const [key, refs] of BODY_SAMPLE_BONES) {
+      const bone = refs.map((ref) => avatar.bone(ref)).find((b) => b !== undefined);
       if (bone) bones[key] = tuple(bone.getWorldPosition(scratch));
     }
     const leftEye = avatar.leftEyeAnchor;
