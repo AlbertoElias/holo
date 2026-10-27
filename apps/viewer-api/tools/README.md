@@ -32,11 +32,23 @@ python apps/viewer-api/tools/exercise_usdz.py recording.glb output/quicklook-cha
 ```
 
 The production pipeline records Chromium's actual synthetic microphone through
-MediaRecorder, exports a real GLB, uploads through the viewer, races two preview
-requests, downloads the USDZ, checks it independently, and challenges derived
-complete GLBs with moving facial weights/ancestors, alpha/PBR/UV changes, silence,
-nonloop audio and unsupported/corrupt inputs. It saves the GLB, USDZ and JSON under `output/quicklook/pipeline-<timestamp>/` (also attached to Playwright results). `E2E_SCREENSHOTS=1` adds capture/feed screenshots. CI keeps
-the primary GLB, USDZ and reports for seven days.
+MediaRecorder, exports a real GLB, uploads through the viewer, waits on the
+record's conversion state, races two preview requests, downloads the USDZ and
+checks it independently. It saves the GLB, USDZ and JSON under
+`output/quicklook/pipeline-<timestamp>/` (also attached to Playwright results).
+`E2E_SCREENSHOTS=1` adds capture/feed screenshots. CI keeps the primary GLB,
+USDZ and reports for seven days.
+
+The source-derived challenges (moving facial weights/ancestors, alpha/PBR/UV
+changes, silence, nonloop audio and unsupported/corrupt inputs) are the tool
+check, run on the walking take the pipeline records to
+`output/pipeline-takes/walk.glb` (never committed; pass another GLB as the
+first argument or `USDZ_TOOLS_GLB`). CI runs it when these tools or capture's
+GLB export change.
+
+```sh
+pnpm --filter @holoim/api run test:usdz-tools
+```
 
 ```sh
 USDZ_PYTHON=/path/to/venv/bin/python E2E_SCREENSHOTS=1 pnpm run test:smoke:pipeline

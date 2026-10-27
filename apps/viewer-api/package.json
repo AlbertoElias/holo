@@ -15,7 +15,8 @@
     "prisma:setup": "pnpm run prisma:generate && prisma migrate deploy",
     "prisma:migrate": "prisma migrate dev --name init",
     "worker:usdz": "pnpm --filter @holoim/contracts build && tsx src/worker.ts",
-    "rebuild:usdz": "pnpm --filter @holoim/contracts build && tsx src/rebuild-usdz.ts"
+    "rebuild:usdz": "pnpm --filter @holoim/contracts build && tsx src/rebuild-usdz.ts",
+    "test:usdz-tools": "bash tools/check_usdz_tools.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",
