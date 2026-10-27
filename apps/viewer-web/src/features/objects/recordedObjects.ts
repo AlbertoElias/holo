@@ -1,5 +1,5 @@
-import { HOLOIM_OBJECTS_EXTENSION, RECORDED_OBJECT_NODE_NAME, validateHoloimObjects } from "@holoim/objects";
-import type { RecordedObjectEntry } from "@holoim/objects";
+import { HOLOIM_OBJECTS_EXTENSION, RECORDED_OBJECT_NODE_NAME, readCredit, validateHoloimObjects } from "@holoim/objects";
+import type { ObjectCredit, RecordedObjectEntry } from "@holoim/objects";
 import type { Object3D } from "three";
 
 import { mapNodeIndices, type MeaningGltf } from "../meaning/meaningLinks";
@@ -45,4 +45,18 @@ export function readRecordedObjects(gltf: MeaningGltf, clone: Object3D): Resolve
     const node = nodes.get(entry.node);
     return node ? [{ entry, node }] : [];
   });
+}
+
+/**
+ * The distinct credits carried by a take's recorded objects (PRD-060), once
+ * per source page: summoning the same model twice credits it once. Nodes
+ * without a credit, or with an invalid one, add nothing.
+ */
+export function readObjectCredits(objects: readonly ResolvedObject[]): ObjectCredit[] {
+  const bySource = new Map<string, ObjectCredit>();
+  for (const { node } of objects) {
+    const credit = readCredit(node.userData);
+    if (credit && !bySource.has(credit.sourceUrl)) bySource.set(credit.sourceUrl, credit);
+  }
+  return [...bySource.values()];
 }

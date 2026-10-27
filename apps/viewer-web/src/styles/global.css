@@ -162,6 +162,27 @@ body::before {
   overflow-wrap: anywhere;
 }
 
+/* The credit line sits under the byline; its link is the one thing in the meta that takes the pointer. */
+.feed-card-credit-entry + .feed-card-credit-entry::before {
+  content: " · ";
+}
+
+.feed-card-credit a {
+  color: inherit;
+  text-decoration: underline;
+  pointer-events: auto;
+}
+
+.feed-card-credit a:hover {
+  color: var(--holoim-glyph-states-hover-color);
+}
+
+.feed-card-credit a:focus-visible {
+  outline: var(--holoim-glyph-states-focus-ring-width) solid var(--holoim-glyph-states-focus-ring-color);
+  outline-offset: var(--holoim-glyph-states-focus-ring-offset);
+  border-radius: var(--holoim-chip-radius);
+}
+
 .auth-panel {
   margin-top: 1rem;
   background: rgb(4 10 15 / 86%);
