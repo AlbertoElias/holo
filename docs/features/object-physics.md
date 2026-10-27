@@ -1,7 +1,7 @@
 # Feature brief: Grab, place and throw objects with physics
 
 **Lead:** Claude Code (Opus)  
-**Status:** Reviewed (design review 2026-10-27); slice 1 implementing
+**Status:** Implementing. Slices 1–3 work and pass every check; the squat pose fails the proof video (see "Next"). Not merged.
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
 **Builds on:** [Explain with an object](explain-with-an-object.md) (PRD-043) and
 [Summon and place](summon-and-place.md) (PRD-045), which excluded physics.
@@ -346,7 +346,33 @@ viewer matched at key times.
 | No regression | `pnpm run verify:pr` | Pending |
 | Proof video | Real-time recording: throw, drop onto a table, replay in the feed | Under `output/`, not committed |
 
-## Independent verification
+## Next (2026-10-27)
+
+Branch `feature/object-physics` (pushed) has slices 1–3. Codex's round 4
+passed the round 3 fixes, and its one new finding is fixed: a tray-summoned
+prop now ignores the next-press release. The object (8 takes), summon, marks
+and body checks pass, and the object and summon pipeline specs passed on the
+slice 3 tree.
+
+The proof video (`output/object-physics-proof-v2/`, not committed) shows the
+physics, the rigid hold, the planted feet and the replay working. It also
+shows the flat-screen squat isn't natural yet. To reach a prop 0.45–0.55 m
+ahead with this avatar's 0.53 m arm, the torso pitches nearly horizontal: a
+dive, not a squat. Fix that before merging:
+
+1. **Step in, then squat.** The reach first steps the avatar in, on planted
+   feet, until the prop is about 0.2–0.3 m ahead of the toes. It then squats
+   with a modest lean (at most about 45° of spine pitch) instead of the 2×
+   bend. This also removes the need to step up by hand after a set-down,
+   which leaves the prop about 0.55 m ahead, just out of range. Re-measure
+   shoulder-to-prop with the shorter lean.
+2. **Camera.** Hold the follow camera's height during a reach, because today
+   the floor tilts for about 0.5 s each time.
+3. **Re-record** the proof video side-on, mouse and touch included, plus an
+   IWER controller throw. Then run `verify:pr`, have Codex verify a final
+   time, and merge.
+
+
 
 **Round 1 (Codex `-p standard`, 2026-10-27): FAIL.** Codex's sandbox couldn't
 launch Chromium, so it judged the run evidence from the existing reports plus
