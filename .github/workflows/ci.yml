@@ -40,6 +40,7 @@ jobs:
       e2e: ${{ steps.areas.outputs.e2e }}
       pipeline: ${{ steps.areas.outputs.pipeline }}
       portal: ${{ steps.areas.outputs.portal }}
+      usdz_tools: ${{ steps.areas.outputs.usdz_tools }}
       api: ${{ steps.areas.outputs.api }}
       web: ${{ steps.areas.outputs.web }}
       capture_app: ${{ steps.areas.outputs.capture_app }}
@@ -325,6 +326,15 @@ jobs:
           command -v ffmpeg || scripts/ci-apt.sh 240 sudo sh -c 'apt-get update && apt-get install -y --no-install-recommends ffmpeg'
       - name: Capture to viewer pipeline
         run: pnpm timed pipeline-shard-${{ matrix.shard }} -- pnpm run test:smoke:pipeline --shard=${{ matrix.shard }}/2
+      # The shard that recorded the walk take hands it to the Quick Look
+      # tool check (usdz-tools); nothing else keeps it.
+      - name: Keep the walk take for the Quick Look tool check
+        if: needs.changes.outputs.usdz_tools == 'true' && hashFiles('output/pipeline-takes/walk.glb') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-take-${{ matrix.shard }}-${{ github.run_id }}
+          path: output/pipeline-takes/walk.glb
+          retention-days: 1
       - name: Upload Quick Look fidelity evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -394,6 +404,54 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The source-derived Quick Look conversion challenges (exercise_usdz.py),
+  # run on the walk take this run's pipeline recorded, only when the tools or
+  # capture's recording and export change. A missing take fails the check.
+  usdz-tools:
+    name: Quick Look tool check
+    needs: [changes, pipeline]
+    if: >-
+      !cancelled() && needs.changes.outputs.usdz_tools == 'true' &&
+      needs.pipeline.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ci-usdz-tools-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pipeline-take-*-${{ github.run_id }}
+          path: output/pipeline-takes
+          merge-multiple: true
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.11"
+      - name: Cache Quick Look conversion environment
+        id: usdz-venv
+        uses: actions/cache@v4
+        with:
+          path: ~/.venv-usdz
+          key: usdz-venv-${{ runner.os }}-${{ steps.python.outputs.python-version }}-${{ hashFiles('apps/viewer-api/tools/requirements.txt') }}
+      - name: Install Quick Look conversion dependencies
+        run: |
+          if [ "${{ steps.usdz-venv.outputs.cache-hit }}" != "true" ]; then
+            python3 -m venv ~/.venv-usdz
+            ~/.venv-usdz/bin/pip install -r apps/viewer-api/tools/requirements.txt
+          fi
+      - name: Quick Look tool check
+        run: USDZ_PYTHON="${HOME}/.venv-usdz/bin/python3" apps/viewer-api/tools/check_usdz_tools.sh
+      - name: Upload Quick Look tool evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: usdz-tools-${{ github.run_id }}
+          path: output/quicklook/tools-check
+          if-no-files-found: ignore
+          retention-days: 7
+
   # ---- Deploy -------------------------------------------------------------
   # Each deploy needs every suite that exercises its app (a skipped suite
   # means this push did not touch it) and runs only on main. When one push
@@ -421,7 +479,7 @@ jobs:
 
   deploy-api:
     name: Deploy API (Fly)
-    needs: [changes, api-image, quality, pipeline, portal]
+    needs: [changes, api-image, quality, pipeline, usdz-tools, portal]
     if: >-
       !cancelled() && github.ref == 'refs/heads/main' &&
       needs.changes.outputs.api == 'true' &&
@@ -535,7 +593,7 @@ jobs:
     # occasionally creating two runs for one push) would still start a runner
     # here only to report failure. Failed or skipped jobs still reach the gate.
     if: ${{ !cancelled() }}
-    needs: [changes, quality, capture-xr, e2e, xr-viewer-vr, pipeline, portal, api-image, deploy-api, deploy-web, deploy-capture]
+    needs: [changes, quality, capture-xr, e2e, xr-viewer-vr, pipeline, usdz-tools, portal, api-image, deploy-api, deploy-web, deploy-capture]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
@@ -546,6 +604,7 @@ jobs:
       XR_VIEWER_VR_RESULT: ${{ needs.xr-viewer-vr.result }}
       PIPELINE_RESULT: ${{ needs.pipeline.result }}
       PORTAL_RESULT: ${{ needs.portal.result }}
+      USDZ_TOOLS_RESULT: ${{ needs.usdz-tools.result }}
       API_IMAGE_RESULT: ${{ needs.api-image.result }}
       DEPLOY_API_RESULT: ${{ needs.deploy-api.result }}
       DEPLOY_WEB_RESULT: ${{ needs.deploy-web.result }}
@@ -563,6 +622,7 @@ jobs:
             echo "| Viewer VR gallery, foot controls and locomotion | ${XR_VIEWER_VR_RESULT} |"
             echo "| Capture to viewer pipeline (all shards) | ${PIPELINE_RESULT} |"
             echo "| Portal view end-to-end | ${PORTAL_RESULT} |"
+            echo "| Quick Look tool check | ${USDZ_TOOLS_RESULT} |"
             echo "| Build API image | ${API_IMAGE_RESULT} |"
             echo "| Deploy API (Fly) | ${DEPLOY_API_RESULT} |"
             echo "| Deploy viewer (Pages) | ${DEPLOY_WEB_RESULT} |"
@@ -581,6 +641,7 @@ jobs:
           ok "${XR_VIEWER_VR_RESULT}"
           ok "${PIPELINE_RESULT}"
           ok "${PORTAL_RESULT}"
+          ok "${USDZ_TOOLS_RESULT}"
           ok "${API_IMAGE_RESULT}"
           ok "${DEPLOY_API_RESULT}"
           ok "${DEPLOY_WEB_RESULT}"

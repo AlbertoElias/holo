@@ -23,13 +23,14 @@ capture_xr=false
 e2e=false
 pipeline=false
 portal=false
+usdz_tools=false
 api=false
 web=false
 capture_app=false
 docs_only=false
 
 all() {
-  quality=true; capture_xr=true; e2e=true; pipeline=true; portal=true
+  quality=true; capture_xr=true; e2e=true; pipeline=true; portal=true; usdz_tools=true
   api=true; web=true; capture_app=true
 }
 
@@ -47,6 +48,11 @@ else
   saw_plumbing=false
   while IFS= read -r file; do
     [ -z "${file}" ] && continue
+    # The Quick Look challenge suite runs on this run's capture take, so it
+    # follows the conversion tools and capture's recording and export code.
+    case "${file}" in
+      apps/viewer-api/tools/*|apps/capture/src/recording/*|apps/capture/public/gltf/*) usdz_tools=true ;;
+    esac
     case "${file}" in
       # Knowledge content/code is an app surface, not plain documentation.
       apps/knowledge/*)
@@ -104,6 +110,7 @@ capture_xr=${capture_xr}
 e2e=${e2e}
 pipeline=${pipeline}
 portal=${portal}
+usdz_tools=${usdz_tools}
 api=${api}
 web=${web}
 capture_app=${capture_app}
