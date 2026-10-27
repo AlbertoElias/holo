@@ -226,8 +226,17 @@ export async function emulatePhone(page, options = {}) {
           const lockedAt = screenLocked ? toViewerSpace(path[0]) : null;
           const place = (point) => (lockedAt ? fromViewerSpace(lockedAt) : point);
           screenSources.push(finger.source);
+          const lift = (frame) => {
+            session.dispatchEvent(touchEvent('select', frame, finger.source));
+            session.dispatchEvent(touchEvent('selectend', frame, finger.source));
+          };
+          // A tap is down and up between two frames: one emulated frame can outlast pointer-events' 300 ms click.
+          const tap = path.length === 1 && holdMs === 0;
           await frameOf(session);
-          await frameOf(session, (frame) => session.dispatchEvent(touchEvent('selectstart', frame, finger.source)));
+          await frameOf(session, (frame) => {
+            session.dispatchEvent(touchEvent('selectstart', frame, finger.source));
+            if (tap) lift(frame);
+          });
           for (const point of path.slice(1)) {
             // The finger moves: the source's target ray follows it, frame by frame.
             await frameOf(session, () => finger.move(place(point)));
@@ -235,10 +244,7 @@ export async function emulatePhone(page, options = {}) {
           // The ray keeps tracking the last point while held, so a camera that walks still points the finger at it.
           const until = performance.now() + holdMs;
           while (performance.now() < until) await frameOf(session, () => finger.move(place(path[path.length - 1])));
-          await frameOf(session, (frame) => {
-            session.dispatchEvent(touchEvent('select', frame, finger.source));
-            session.dispatchEvent(touchEvent('selectend', frame, finger.source));
-          });
+          if (!tap) await frameOf(session, lift);
           screenSources.splice(screenSources.indexOf(finger.source), 1);
           finger.remove();
           await frameOf(session);
@@ -339,8 +345,7 @@ export async function emulatePhone(page, options = {}) {
         phone.__phoneFingerDown = fingerDown;
         phone.__phoneFingerMove = fingerMove;
         phone.__phoneFingerUp = fingerUp;
-        // A tap toward a point, released on the next frame: emulated frames take ~150 ms, and
-        // pointer-events counts a press longer than 300 ms as no click.
+        // A tap toward a point, lifted within the frame it lands on.
         phone.__phoneTap = (target) => press([target], 0);
         // A hold toward a point for `holdMs` of wall-clock time, frame by frame (the ray follows the moving head).
         phone.__phoneHold = (target, holdMs, screenLocked) => press([target], holdMs, screenLocked);

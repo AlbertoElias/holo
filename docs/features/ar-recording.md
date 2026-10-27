@@ -420,7 +420,7 @@ slices 3 and 4 wait for viewer XR step 5.
      `@holoim/tooling-testing/iwer-phone`; its `interactionMode` patches
      IWER's private device state) and `scripts/lib/camera-take-glb.ts`. A camera author cannot place objects,
      so an object is in a camera take only if it was placed before AR. Found
-     on the way: B-027 (the bubble clip drops a large floor, in performer
+     on the way: B-028 (the bubble clip drops a large floor, in performer
      takes too); the viewer floor fix on `bug/viewer-floor` grounds on
      `RecordedAvatar`, so 2b needs its own floor rule for camera takes.
    - **2b. Viewer.** Framing and the shared AR anchor

@@ -378,3 +378,60 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   The recorded ground below the author's floor (slopes, water) stays visible
   under the dome and below the room floor, unclipped (user decision, 2026-10-25).
 
+### B-026 — Emulated clicks and taps are now and then lost when frames are slow
+
+- **Area:** `apps/viewer-web/e2e/xr-viewer.spec.ts` (`rayClick`, `phoneTap`), IWER input on IWSDK's pointers
+- **Severity:** P3
+- **Observed:** 2026-10-26, hosted CI run 40406523825 and `scripts/ci-emulate.sh`
+- **Evidence:** a ray click on Play, Recenter or a shelf tile, or a phone
+  tap, changes nothing about 1 time in 10 on a 2-CPU runner or at load 20
+  locally; the same step passes on retry. Timing the press by rendered
+  frames (in a frame callback, by the renderer's counter, or held in the
+  page) lost more clicks than the 80 ms press and sometimes selected a tile
+  twice, so the cause is still unknown. The spec now presses again, keyed on
+  the target state, at most twice (`pressFor`), and reports a
+  `clickRetries` annotation per test.
+- **Cause:** IWSDK's ray stamps a press and its release with the render
+  loop's frame time and counts a press longer than 800 ms as no click (the
+  phone bridge: 500 ms of real time). The spec pressed and released on
+  wall-clock sleeps, so the press lasted at least one frame, and on a
+  loaded 2-CPU machine one emulated frame lasts 0.5–1.3 s. Its other waits
+  had the same flaw: a 700 ms stick hold slid one 50 ms step (CI's `slid
+  0.160 m`), a button aimed before its reach row had opened and laid out
+  was missed (CI: recenter and the gallery's Play), and a fade could finish
+  between two sampled frames. Separately, audio and motion ran on separate
+  clocks: the container's audio clock ran 2% slow, 77 ms behind after 4 s.
+- **Expected:** one emulated press is one click. Unknown whether real
+  devices drop inputs this way too (HANDOFF device checks).
+- **Reproduction:** run the VR gallery or locomotion test with `--repeat-each=3` at load 20 with `pressFor`'s retries removed.
+- **Fix:** branch `claude/xr-viewer-spec-flake-e86824`. The dev probe
+  counts XR frames and the spec waits on them: a click presses on one
+  frame and releases on the next with the emulated rays' long-press rule
+  lifted (the spec drives the controls, not that rule), a phone tap lands
+  within one frame, buttons are aimed once their row has settled, stick
+  holds, the fade and the teleport aim hold for frames, VR runs on a
+  480×270 canvas, and `pressFor`'s retries are gone. Product: the playback
+  system restarts audio from the clip clock once it drifts over 30 ms, and
+  the probe samples the audio offset on the clip clock's frame.
+  The gallery's timeline seek is read on a held clock (a playing clock
+  steps a whole frame's delta past a ±8% window), and the slow steps have
+  time budgets sized for 1.4 s frames. Validation: `xr-viewer.spec.ts` 8/8
+  in six consecutive local runs at load 16–39 (6.5–12.5 min) and the last
+  two `scripts/ci-emulate.sh` runs (15.4, 15.2 min; amd64 on arm64, about
+  1.4 s a frame). Earlier container runs failed only on what was then
+  fixed: the seek window, preview loads past 15 s, and two test budgets.
+  `verify:fast` for `@holoim/web`. Still a device question: a
+  press spanning a frame hitch over 800 ms is no click (HANDOFF).
+
+### B-027 — Three immersive viewer checks fail on hosted runners
+
+- **Area:** `apps/viewer-web/e2e/xr-viewer.spec.ts` "VR gallery:", "VR foot controls:", "VR locomotion:" (and, once split from locomotion, "VR recenter after moving:")
+- **Severity:** P2
+- **Observed:** 2026-10-26, CI runs 40406523825 and 40436776761 on `main`
+- **Closed:** 2026-10-26, with B-026 on branch `claude/xr-viewer-spec-flake-e86824`
+- **Cause:** B-026: the spec held its input for wall-clock time while IWSDK
+  reads it on frame time, so a slow runner lost clicks and long frames
+  stretched the locomotion slide past its window.
+- **Fix:** the spec waits on rendered frames (B-026). The four checks keep
+  their own CI job, `xr-viewer-vr` (`test:e2e:xr-viewer-vr`), now without
+  `continue-on-error` and back in the CI Gate.

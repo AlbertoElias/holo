@@ -38,7 +38,7 @@ green, then merges with slice 0's branch. Its device checks stay unverified
   `14b5738` after merging `origin/main`, and the verifier's re-check of the
   last fix is again "ship behind the flag". Slice 0 is also on
   `feature/xr-shared-screen-input`, approved by the viewer XR lead, and
-  merges with this branch. Evidence is in the brief; B-027 is open.
+  merges with this branch. Evidence is in the brief; B-028 is open.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
@@ -66,14 +66,14 @@ green, then merges with slice 0's branch. Its device checks stay unverified
   holograms placed. Check audio by ear, Quest passthrough AR, Android phone
   AR tap and two-finger pinch, and the feel of capture's chrome (hand-dock
   Record, status line). Check that a single trigger press or phone tap
-  always acts once, including while the frame rate drops (B-026: emulated
-  presses are sometimes lost under IWER).
+  always acts once, including while the frame rate drops (B-026: IWSDK
+  drops a press that spans more than 800 ms of frame time).
 
-- CI emulation is not a gate for the XR viewer shards: `scripts/ci-emulate.sh`
-  runs amd64 on this arm64 Mac and rendered about 1 frame a second under
-  load (2026-10-26), so its XR viewer failures are timing, not behaviour. The
-  viewer specs retry a lost emulated click or tap, keyed on the target state
-  and reported as `clickRetries` per test (B-026).
+- `scripts/ci-emulate.sh` runs amd64 on this arm64 Mac, about 1.4 s an XR
+  frame: the immersive viewer spec passes there in about 17 minutes, since
+  its input waits on frames, not wall time (B-026, closed). Its web
+  Chromium needs `pnpm --filter @holoim/web exec playwright install
+  chromium-headless-shell` inside the container.
 
 - Self-resolving pointing on a Quest and a phone: score at least three new
   headset takes with 20 or more author-labelled points against PRD-022's

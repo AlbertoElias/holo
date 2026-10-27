@@ -11,7 +11,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |
 | Shared XR interface and viewer VR/AR | Complete | [viewer-xr-interface.md](archive/viewer-xr-interface.md) |
 | Creator accounts (IDEA-052) | Complete | [creator-accounts.md](archive/creator-accounts.md) |
-| Snappy feed first load | Implementing | [snappy-feed-first-load.md](snappy-feed-first-load.md) |
+| Snappy feed first load | Shipped | [snappy-feed-first-load.md](snappy-feed-first-load.md) |
 | Redesign UI and interaction across capture and viewer | Implementing | [ui-redesign.md](ui-redesign.md) |
 | AR recording (the phone as a camera-only author) | Approved; not started | [ar-recording.md](ar-recording.md) |
 | Summon and place while speaking | Verified; lands with PRD-043 | [summon-and-place.md](summon-and-place.md) |
