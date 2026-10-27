@@ -242,7 +242,7 @@ jobs:
         run: |
           python3 -m pip install -r apps/viewer-api/tools/requirements.txt
           # Playwright's install-deps step already refreshed the apt index.
-          command -v ffmpeg || sudo apt-get install -y --no-install-recommends ffmpeg
+          command -v ffmpeg || scripts/ci-apt.sh 240 sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Capture to viewer pipeline
         run: pnpm timed pipeline-shard-${{ matrix.shard }} -- pnpm run test:smoke:pipeline --shard=${{ matrix.shard }}/2
       - name: Upload Quick Look fidelity evidence
