@@ -138,3 +138,17 @@ export const objectSearchResponseSchema = z.object({
   results: z.array(objectSearchResultSchema).max(OBJECT_SEARCH_MAX_RESULTS)
 });
 export type ObjectSearchResponse = z.infer<typeof objectSearchResponseSchema>;
+
+/**
+ * Voice search: capture posts one spoken query (push to talk) as the raw
+ * request body to `POST /api/objects/transcribe`, with the recording's MIME
+ * type (e.g. `audio/webm;codecs=opus`) as Content-Type, and searches the text.
+ */
+export const OBJECT_TRANSCRIBE_MAX_SECONDS = 10;
+export const OBJECT_TRANSCRIBE_MAX_BYTES = 1024 * 1024;
+
+export const objectTranscribeResponseSchema = z.object({
+  /** The spoken query, trimmed; empty when nothing was heard. */
+  text: z.string().max(OBJECT_SEARCH_MAX_QUERY_LENGTH)
+});
+export type ObjectTranscribeResponse = z.infer<typeof objectTranscribeResponseSchema>;
