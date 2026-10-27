@@ -570,8 +570,20 @@ describe("voice search transcription", () => {
     await unreachable.close();
   });
 
+  it("limits each client to a few searches a minute", async () => {
+    const app = await objectApp({ polyhaven: (await import("../src/services/polyhaven.js")).createPolyhaven({ apiOrigin: await closedOrigin(), allowedHosts: [] }), polypizza: null, transcriber: null, searchLimit: 1 });
+    expect((await app.inject({ method: "GET", url: "/api/objects/search?q=chair" })).statusCode).toBe(502);
+    const limited = await app.inject({ method: "GET", url: "/api/objects/search?q=chair" });
+    expect(limited.statusCode).toBe(429);
+    expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+    await app.close();
+  });
+
   it("limits each client to a few transcriptions a minute", async () => {
+    // Fly-Client-IP is trusted only on Fly.
+    process.env.FLY_APP_NAME = "holoim-api-test";
     const app = await transcribeApp(2);
+    delete process.env.FLY_APP_NAME;
     answer = ok("chair");
     expect((await post(app, audio)).statusCode).toBe(200);
     expect((await post(app, audio)).statusCode).toBe(200);
@@ -581,5 +593,11 @@ describe("voice search transcription", () => {
     // Another client still gets through.
     expect((await post(app, audio, "audio/webm", "198.51.100.7")).statusCode).toBe(200);
     await app.close();
+
+    // Off Fly a client cannot pick its own key with the header.
+    const local = await transcribeApp(1);
+    expect((await post(local, audio, "audio/webm", "192.0.2.1")).statusCode).toBe(200);
+    expect((await post(local, audio, "audio/webm", "192.0.2.2")).statusCode).toBe(429);
+    await local.close();
   });
 });

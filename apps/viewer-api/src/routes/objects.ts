@@ -34,6 +34,11 @@ const AUDIO_TYPES = new Set(["audio/webm", "audio/ogg", "audio/wav", "audio/x-wa
 // the whole daily Workers AI allowance.
 const TRANSCRIBE_WINDOW_MS = 60_000;
 const TRANSCRIBE_PER_WINDOW = 10;
+// All clients together, so rotating addresses cannot drain the allowance in minutes.
+const TRANSCRIBE_ALL_PER_WINDOW = 60;
+// A search may download and vet several Poly Pizza GLBs; a person types a few a minute.
+const SEARCH_WINDOW_MS = 60_000;
+const SEARCH_PER_WINDOW = 30;
 
 export type ObjectRouteOptions = {
   polyhaven?: Polyhaven;
@@ -43,6 +48,8 @@ export type ObjectRouteOptions = {
   transcriber?: Transcriber | null;
   /** Transcriptions per client per minute. */
   transcribeLimit?: number;
+  /** Searches per client per minute. */
+  searchLimit?: number;
 };
 
 /** Takes the registries' results in turn, best first, so each source's top picks are shown. */
@@ -56,10 +63,14 @@ function interleave<T>(lists: T[][], max: number): T[] {
   return merged;
 }
 
-/** Fly's proxy sets Fly-Client-IP; elsewhere the socket address is the client. */
-function clientKey(request: FastifyRequest): string {
+/**
+ * Fly's proxy overwrites Fly-Client-IP with the real client, so it is trusted
+ * only on Fly (FLY_APP_NAME is set on every Fly machine); elsewhere a client
+ * could send any value, so the socket address is the client.
+ */
+function clientKey(request: FastifyRequest, behindFly: boolean): string {
   const forwarded = request.headers["fly-client-ip"];
-  return typeof forwarded === "string" && forwarded.length > 0 ? forwarded : request.ip;
+  return behindFly && typeof forwarded === "string" && forwarded.length > 0 ? forwarded : request.ip;
 }
 
 function createRateLimit(perWindow: number, windowMs: number) {
@@ -103,7 +114,10 @@ export async function registerObjectRoutes(app: FastifyInstance, options: Object
             apiToken: env.WORKERS_AI_API_TOKEN
           })
         : null;
+  const behindFly = Boolean(process.env.FLY_APP_NAME);
   const transcribeLimit = createRateLimit(options.transcribeLimit ?? TRANSCRIBE_PER_WINDOW, TRANSCRIBE_WINDOW_MS);
+  const transcribeAllLimit = createRateLimit(TRANSCRIBE_ALL_PER_WINDOW, TRANSCRIBE_WINDOW_MS);
+  const searchLimit = createRateLimit(options.searchLimit ?? SEARCH_PER_WINDOW, SEARCH_WINDOW_MS);
 
   function fail(reply: FastifyReply, error: unknown) {
     if (error instanceof UnknownObjectError) return reply.status(404).send({ error: "No such object." });
@@ -118,6 +132,10 @@ export async function registerObjectRoutes(app: FastifyInstance, options: Object
     const parsed = objectSearchQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.status(400).send({ error: "A search of 1 to 100 characters is required." });
+    }
+    const retryAfter = searchLimit(clientKey(request, behindFly));
+    if (retryAfter !== null) {
+      return reply.status(429).header("retry-after", String(retryAfter)).send({ error: "Too many searches; try again in a minute." });
     }
     const query = parsed.data.q;
     const [haven, pizza] = await Promise.allSettled([
@@ -205,7 +223,7 @@ export async function registerObjectRoutes(app: FastifyInstance, options: Object
       }
       if (request.body.byteLength === 0) return reply.status(400).send({ error: "The recording is empty." });
       if (!transcriber) return reply.status(503).send({ error: "Voice search is not set up; type the search instead." });
-      const retryAfter = transcribeLimit(clientKey(request));
+      const retryAfter = transcribeLimit(clientKey(request, behindFly)) ?? transcribeAllLimit("all");
       if (retryAfter !== null) {
         return reply
           .status(429)

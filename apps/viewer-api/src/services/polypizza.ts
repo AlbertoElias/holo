@@ -33,6 +33,8 @@ const MODEL_TTL_MS = 60 * 60 * 1000;
 /** Results asked of the API; the first ones that pass vetting are offered. */
 const API_RESULTS = 16;
 const VET_CONCURRENCY = 4;
+/** GLB downloads in flight across all searches and picks, so concurrent searches cannot multiply them. */
+const DOWNLOADS_IN_FLIGHT = 4;
 const SEARCH_CACHE_ENTRIES = 100;
 const PACKED_CACHE_ENTRIES = 20;
 const GLB_MAGIC = 0x46546c67;
@@ -122,6 +124,19 @@ export function createPolypizza(config: PolypizzaConfig) {
   const vetted = new Map<string, { at: number; bytes: number } | { at: number; refused: true }>();
   const packed = new Map<string, Uint8Array>();
   const packFlight = new Map<string, Promise<Uint8Array>>();
+  let downloading = 0;
+  const waiting: Array<() => void> = [];
+
+  async function download(url: string): Promise<Uint8Array<ArrayBuffer>> {
+    if (downloading >= DOWNLOADS_IN_FLIGHT) await new Promise<void>((resolve) => waiting.push(resolve));
+    downloading += 1;
+    try {
+      return await request(url, MAX_DOWNLOAD_BYTES);
+    } finally {
+      downloading -= 1;
+      waiting.shift()?.();
+    }
+  }
 
   function parseModel(value: unknown): PolypizzaModel | null {
     const record = asRecord(value);
@@ -186,7 +201,7 @@ export function createPolypizza(config: PolypizzaConfig) {
   }
 
   async function buildGlb(model: PolypizzaModel): Promise<Uint8Array> {
-    const source = await request(model.downloadUrl, MAX_DOWNLOAD_BYTES);
+    const source = await download(model.downloadUrl);
     const json = glbJson(source);
     if (!json) throw new RefusedModelError("Poly Pizza returned a file that is not a GLB.");
     const reason = unsupportedReason(json);

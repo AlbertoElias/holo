@@ -126,8 +126,10 @@ fly secrets set -a holoim-api WORKERS_AI_ACCOUNT_ID="<account id>" WORKERS_AI_AP
 Without the Poly Pizza key, search shows Poly Haven alone. Without the
 Workers AI pair, or once the account's free daily allowance (10,000 neurons,
 about 200 audio minutes) is used up, `POST /api/objects/transcribe` answers
-503 and capture falls back to typing; each client may transcribe 10
-recordings a minute.
+503 and capture falls back to typing. Each client may search 30 times and
+transcribe 10 recordings a minute (60 transcriptions a minute in all);
+clients are told apart by Fly's `Fly-Client-IP`, trusted only when
+`FLY_APP_NAME` is set.
 
 ## 3. Media on R2 (Phase 2)
 
