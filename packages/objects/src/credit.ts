@@ -10,6 +10,13 @@ import { z } from "zod";
 export const HOLOIM_CREDIT_EXTRAS_KEY = "holoimCredit";
 
 /** Licences a take may redistribute; everything else is filtered at search time. */
+/** Only https links: the credit comes from an uploaded GLB and is rendered as a link. */
+const httpsUrl = z
+  .string()
+  .max(500)
+  .url()
+  .refine((value) => new URL(value).protocol === "https:", { message: "must be an https URL" });
+
 export const objectLicenceSchema = z.enum(["CC0-1.0", "CC-BY-4.0"]);
 
 export const objectCreditSchema = z
@@ -17,7 +24,7 @@ export const objectCreditSchema = z
     /** Registry the model came from, e.g. "Poly Haven". */
     source: z.string().min(1).max(100),
     /** The model's public page on that registry. */
-    sourceUrl: z.string().url().max(500),
+    sourceUrl: httpsUrl,
     title: z.string().min(1).max(200),
     author: z.string().min(1).max(200),
     licence: objectLicenceSchema
