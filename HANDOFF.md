@@ -21,6 +21,8 @@ device checks under Unverified below. Otherwise pick the next queue item in
 
 ## Ready to merge (grouped)
 
+- `docs/snappy-feed-evidence` (docs only): the snappy feed brief's production
+  check and its Shipped status. Ride along with the next merge.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
