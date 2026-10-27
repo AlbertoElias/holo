@@ -88,6 +88,8 @@ interface Hold {
   lostSec: number;
   /** Grabbed by a mouse or touch press: lifting it releases. */
   pointer: boolean;
+  /** Taken by a flat-screen reach: the next press lets it go, like `G`. A tray summon is not. */
+  reached: boolean;
   /**
    * Being lowered onto the surface under it before it is let go. The object stays held meanwhile.
    * `squat`: nothing is within the arm's standing reach below, so the body squats (the reach demand) instead of only the arm lowering;
@@ -189,7 +191,7 @@ export class ObjectInteraction {
     // A second press (mouse or touch) during a reach cancels it, wherever it falls.
     if (this.reach.isReaching()) return this.reach.object;
     // The next press lets a prop held from a reach go, like G.
-    if (this.hold && !this.hold.settle) return this.hold.desktop ? this.hold.object : null;
+    if (this.hold && !this.hold.settle) return this.hold.reached ? this.hold.object : null;
     let best: SceneObject | null = null;
     let bestDistance = Infinity;
     for (const object of registry.eventObjects()) {
@@ -328,7 +330,7 @@ export class ObjectInteraction {
     if (press && registry.all().includes(press)) {
       if (reach.isReaching()) this.cancelReach();
       else if (this.hold?.settle) this.cancelSettle(true);
-      else if (this.hold?.desktop && !reach.isLifting()) this.releaseDesktop();
+      else if (this.hold?.reached && !reach.isLifting()) this.releaseDesktop();
       else if (!this.hold && reach.phase === 'idle') this.beginReach(press, true);
     }
     if (release) {
@@ -376,6 +378,7 @@ export class ObjectInteraction {
         const object = reach.object;
         this.grab(object, 'right', true);
         this.hold!.pointer = reach.pointerDown;
+        this.hold!.reached = true;
         reach.beginLift(true);
       }
     }
@@ -483,7 +486,7 @@ export class ObjectInteraction {
     object.wrapper.updateWorldMatrix(true, false);
     this.world.copy(object.wrapper.matrixWorld);
     const offset = this.anchor.clone().invert().multiply(this.world);
-    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, settle: null };
+    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null };
     object.heldBy = side;
     this.physics?.hold(object);
   }
