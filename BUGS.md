@@ -38,20 +38,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   failure names the install rather than the job.
 - **Reproduction:** intermittent on hosted runners; see the two runs above.
 
-### B-023 — The live API rejects Pages preview origins
-
-- **Area:** `holoim-api` CORS (`WEB_ORIGINS` secret, `apps/viewer-api/src/lib/cors.ts`)
-- **Severity:** P3
-- **Observed:** 2026-10-26, verifying the GLB probe fix on a Pages preview
-- **Evidence:** `curl -H "Origin: https://bug-glb-probe-cache.holoim-viewer.pages.dev"
-  "https://holoim-api.fly.dev/api/holograms?limit=1"` returns no
-  `access-control-allow-origin`, so a preview's feed fails with a CORS
-  error. `isAllowedWebOrigin` does match wildcards, so the secret most
-  likely lacks the `https://*.holoim-viewer.pages.dev` entry that
-  `docs/DEPLOYMENT.md` sets (not checked: secret values are not readable).
-- **Expected:** previews at `*.holoim-viewer.pages.dev` load the live feed.
-- **Reproduction:** the curl above; or open any preview deploy of the viewer.
-
 ### B-020 — Capture's height check is not repeatable
 
 - **Area:** `apps/capture` XR checks (`test:xr:height`)

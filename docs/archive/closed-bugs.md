@@ -489,3 +489,25 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   wait in `hologram-feed.spec.ts`. Verified: `test:e2e:mocked` 19/19,
   the ar-bubble test 6/6 on `--repeat-each=6`, and viewer-web
   `verify:fast` (lint, typecheck, 40 unit tests).
+
+### B-023 — The live API rejects Pages preview origins
+
+- **Area:** `holoim-api` CORS (`WEB_ORIGINS` secret, `apps/viewer-api/src/lib/cors.ts`)
+- **Severity:** P3
+- **Observed:** 2026-10-26, verifying the GLB probe fix on a Pages preview
+- **Evidence:** `curl -H "Origin: https://bug-glb-probe-cache.holoim-viewer.pages.dev"
+  "https://holoim-api.fly.dev/api/holograms?limit=1"` returns no
+  `access-control-allow-origin`, so a preview's feed fails with a CORS
+  error. `isAllowedWebOrigin` does match wildcards, so the secret most
+  likely lacks the `https://*.holoim-viewer.pages.dev` entry that
+  `docs/DEPLOYMENT.md` sets (not checked: secret values are not readable).
+- **Expected:** previews at `*.holoim-viewer.pages.dev` load the live feed.
+- **Reproduction:** the curl above; or open any preview deploy of the viewer.
+- **Fix:** the API now allows this project's Pages preview hosts itself,
+  without the secret: `isAllowedWebOrigin` accepts exactly one label under
+  `holoim-viewer.pages.dev` or `holoim-capture.pages.dev` over HTTPS
+  (`apps/viewer-api/src/lib/cors.ts`). `test/cors.test.ts` drives the built
+  app with simple and preflight requests: preview deploy and branch origins
+  get `access-control-allow-origin`, while `evil.pages.dev`,
+  `holoim-viewer.pages.dev.evil.com`, nested labels, `http:` and ports get
+  none. The secrets are unchanged.
