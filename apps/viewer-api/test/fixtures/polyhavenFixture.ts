@@ -81,7 +81,7 @@ export const FIXTURE_MODELS: FixtureModel[] = [
   { id: "NoFiles_01", name: "Missing Barrel", author: "Nobody", tags: ["barrel"], categories: ["props"], dimensions: [500, 500, 700], downloads: 1 }
 ];
 
-export async function startPolyhavenFixture(extra: FixtureModel[] = []): Promise<PolyhavenFixture> {
+export async function startPolyhavenFixture(extra: FixtureModel[] = [], options: { port?: number } = {}): Promise<PolyhavenFixture> {
   const models = [...FIXTURE_MODELS, ...extra];
   const requests: string[] = [];
   let origin = "";
@@ -149,7 +149,7 @@ export async function startPolyhavenFixture(extra: FixtureModel[] = []): Promise
   }
 
   const server = createServer(handle);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => server.listen(options.port ?? 0, "127.0.0.1", resolve));
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   return {

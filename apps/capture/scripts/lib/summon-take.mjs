@@ -734,3 +734,62 @@ export async function runDesktopFindTake({ browser, baseUrl, captureRoot, artifa
     await context.close();
   }
 }
+
+/**
+ * Find an object by asking against the real API (PRD-060 e2e): no routes of
+ * our own are faked. Capture's same-origin /api reaches viewer-api, which
+ * searches a fixture registry. Only Poly Haven's thumbnail CDN is stubbed so
+ * nothing leaves the machine. Picks the first result for `query`, adds the
+ * uncredited bracket, summons the found model twice and the bracket once.
+ */
+export async function runDesktopFindApiTake({ browser, baseUrl, captureRoot, artifactDir, consoleErrors, query }) {
+  const label = 'desktop-find-api';
+  const failures = [];
+  const fail = (message) => failures.push(message);
+  await mkdir(artifactDir, { recursive: true });
+  const { context, page } = await setupPage(browser, { iwer: false, consoleErrors, label });
+  try {
+    const searches = [];
+    page.on('response', (response) => {
+      if (response.url().includes('/api/objects/search')) searches.push({ url: response.url(), status: response.status() });
+    });
+    await page.route('https://cdn.polyhaven.com/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(PIXEL_PNG.split(',')[1], 'base64') }));
+    await openCapture(page, baseUrl, {});
+    const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
+    await advance(1);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByLabel('Find an object').fill(query);
+    await page.keyboard.press('Enter');
+    const picks = page.getByRole('button', { name: /^Add .* to the tray$/ });
+    await picks.first().waitFor({ timeout: 15_000 });
+    const resultNames = await picks.evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
+    const pick = picks.first();
+    const shown = (await pick.innerText()).replace(/\s+/g, ' ');
+    await pick.click();
+    await page.getByText('Tray: 1').waitFor({ timeout: 20_000 });
+    await page.getByLabel('Add tray items (.glb, .png, .jpg)').setInputFiles([path.join(captureRoot, 'fixtures/objects/bracket.glb')]);
+    await page.getByText('Tray: 2').waitFor({ timeout: 10_000 });
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+
+    await page.locator('canvas').first().focus();
+    await page.getByRole('button', { name: 'Start Recording' }).click();
+    await page.getByRole('button', { name: 'Stop Recording' }).waitFor();
+    await advance(0.2);
+    for (const digit of ['Digit1', 'Digit1', 'Digit2']) {
+      await page.keyboard.down('KeyT');
+      await advance(0.1);
+      await page.keyboard.press(digit);
+      await advance(0.4);
+      await page.keyboard.up('KeyT');
+      await page.keyboard.press('KeyG');
+      await advance(0.3);
+    }
+    const state = await readState(page);
+    const summoned = summonedItems(state).map((item) => item.name);
+    const glb = await saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), path.join(artifactDir, `${label}.glb`));
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, searches, resultNames, shown, summoned };
+  } finally {
+    await context.close();
+  }
+}
