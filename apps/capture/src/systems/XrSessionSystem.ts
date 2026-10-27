@@ -9,7 +9,7 @@ import { type CaptureContext, captureContext } from './captureContext';
 export class XrSessionSystem extends createSystem() {
   private capture!: CaptureContext;
   private inArSession = false;
-  // Decided once per AR session on entry: the flag and a strictly handheld
+  // Decided once per AR session on entry: a strictly handheld
   // session. A headset in passthrough, or a browser that does not say, is a spectator.
   private cameraAuthor = false;
   private session: XRSession | null = null;
@@ -82,12 +82,12 @@ export class XrSessionSystem extends createSystem() {
     this.bindSession();
     if (isAr) {
       c.ar.onEntered();
-      this.cameraAuthor = c.config.arCameraAuthor && isHandheldSession(this.session, { strict: true });
+      this.cameraAuthor = isHandheldSession(this.session, { strict: true });
       // The idle performer is not in a camera take; it comes back on exit.
       if (this.cameraAuthor) {
         c.avatar.avatarRoot.visible = false;
         c.phoneChrome.show();
-      } else if (c.config.arCameraAuthor) c.recording.releaseHeldMic();
+      } else c.recording.releaseHeldMic();
     } else {
       c.vrChrome.show();
       c.hands.resetRuntimeState();

@@ -21,12 +21,6 @@ export interface RuntimeConfig {
   controllerTrackYawDeg: number;
   controllerTrackRollDeg: number;
   mockVrEnabledFromQuery: boolean;
-  /**
-   * `?arCamera=1`: a handheld AR session authors a camera take (docs/features/
-   * ar-recording.md). Off by default until slice 4 is verified; with it off
-   * phone AR is the spectator it always was.
-   */
-  arCameraAuthor: boolean;
 }
 
 export function loadRuntimeConfig(search = window.location.search): RuntimeConfig {
@@ -56,7 +50,6 @@ export function loadRuntimeConfig(search = window.location.search): RuntimeConfi
     controllerTrackPitchDeg: Number(query.get('controllerTrackPitchDeg') ?? '0'),
     controllerTrackYawDeg: Number(query.get('controllerTrackYawDeg') ?? '180'),
     controllerTrackRollDeg: Number(query.get('controllerTrackRollDeg') ?? '0'),
-    mockVrEnabledFromQuery: query.get('mockVr') === '1',
-    arCameraAuthor: query.get('arCamera') === '1'
+    mockVrEnabledFromQuery: query.get('mockVr') === '1'
   };
 }

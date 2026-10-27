@@ -16,8 +16,8 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 The shared XR interface and viewer VR/AR is complete and on `main` (brief
 [`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md)).
 Next: AR recording (camera-only takes, meaning v1) is built and verified on
-`feature/ar-recording`; it waits for the user's call on the `?arCamera=1` flag
-and for `main` to be green before it merges with slice 0's branch. Its device
+`feature/ar-recording`; the `?arCamera=1` flag is removed by the user's decision (phone AR
+records camera takes by default); it waits for `main` to be green before it merges with slice 0's branch. Its device
 checks stay unverified (no Android phone). Otherwise pick the next queue item in
 [`TODOS.md`](TODOS.md).
 
@@ -28,7 +28,8 @@ checks stay unverified (no Android phone). Otherwise pick the next queue item in
   no-performer decision in `what-a-hologram-is.md`, its `TODOS.md` entries,
   and slices 1 and 2a, verified: `HOLOIM_meaning` v1 (camera `from`, version
   as a feature level; performer takes still write v0) and phone camera takes
-  in capture behind `?arCamera=1`, off by default. `verify:pr` and
+  in capture (the `?arCamera=1` flag was removed by the user's decision,
+  2026-10-26: phone AR records camera takes by default). `verify:pr` and
   `test:xr:ar-record` (12 phases) pass; the cross-vendor verifier's verdict is
   "ship behind the flag". Slices 0, 2b, 3 and 4 followed (shared screen
   input, viewer framing of camera takes, the phone dock, hold to mark from

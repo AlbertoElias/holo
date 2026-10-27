@@ -19,7 +19,7 @@ import { assertCameraTake, inspectCameraTake, type CameraTakeReport } from './ca
 
 // One phone camera take, recorded in the running capture app (docs/features/
 // ar-recording.md, slice 2a): phone AR in IWER (screen-space, mono, alpha
-// blend) with the camera-author flag on, the pointing-targets set and the
+// blend), the pointing-targets set and the
 // bracket placed on the desktop first. Enter AR, wait for the set to settle,
 // Record, a scripted head walk (set frame, converted to the room with the live
 // world frame), Stop, save the download. The same setup and walk as
@@ -128,7 +128,6 @@ async function openPage(run: CameraTakeRun): Promise<Page> {
   await attachXrEnvironment(page, { mode: 'iwer' });
   const url = new URL(run.baseUrl);
   url.searchParams.set('manualClock', '1');
-  url.searchParams.set('arCamera', '1');
   url.searchParams.set('scene', SCENE);
   url.searchParams.set('sceneScale', '1');
   url.searchParams.set('object', OBJECT_URL);
@@ -184,7 +183,7 @@ export async function recordCameraTake(run: CameraTakeRun): Promise<CameraTakeRe
     }
     const entered = await arOf(page);
     if (!entered.placementSettled) throw new Error('placement never settled');
-    if (!entered.cameraAuthor) failures.push('camera author mode is off in a phone AR session with the flag on');
+    if (!entered.cameraAuthor) failures.push('camera author mode is off in a phone AR session');
     if (!entered.performerHidden) failures.push('performer visible in camera mode');
 
     const frame = new THREE.Matrix4().fromArray(await page.evaluate(() => window.__arWorldFrame()));

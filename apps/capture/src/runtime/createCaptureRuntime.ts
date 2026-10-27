@@ -118,8 +118,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     onSizeLocked: () => heightFit.calibration.interrupt(),
     onTakeStart: () => objects.startTake(),
     isCameraAuthor: () => capture.frame.arCameraAuthor,
-    // With the flag off, AR keeps main's behaviour.
-    recordRefusal: () => (config.arCameraAuthor && capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
+    recordRefusal: () => (capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
     isPlacementSettled: () => capture.ar.isSettled(),
     setFrame: stage.worldGroup
   });
@@ -323,7 +322,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         // Camera takes need the microphone, and a prompt needs this tap's user
         // activation. It is asked for after launchXR, which has already called
         // requestSession synchronously, and never awaited before it.
-        if (entering && mode === 'ar' && config.arCameraAuthor) recording.holdMicForArTake();
+        if (entering && mode === 'ar') recording.holdMicForArTake();
       },
       recenterAr
     },

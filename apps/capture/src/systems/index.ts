@@ -40,17 +40,16 @@ export function registerCaptureSystems(world: World): void {
     .registerSystem(DiagnosticsSystem, { priority: 100 });
   // A phone camera author's taps arrive as screen input sources, which IWSDK's
   // own input never drives; this turns them into the pointer events the dock
-  // listens to. Without the flag, phone AR is as it was.
-  if (captureContext(world).config.arCameraAuthor) {
-    world.registerSystem(ScreenInputSystem, { priority: 12 });
-    // Fingers held on the screen mark "this" in a camera take; any other session ignores them.
-    const c = captureContext(world);
-    const screen = world.getSystem(ScreenInputSystem)!;
-    screen.onTouchStart = (touch) => {
-      if (c.frame.arCameraAuthor) c.screenHolds.touchStart(touch, c.frame.elapsedSec);
-    };
-    screen.onTouchEnd = (touch, end) => c.screenHolds.touchEnd(touch, end, c.frame.elapsedSec);
-  }
+  // listens to. It reacts to screen input sources only, so it idles in every
+  // other session.
+  world.registerSystem(ScreenInputSystem, { priority: 12 });
+  // Fingers held on the screen mark "this" in a camera take; any other session ignores them.
+  const c = captureContext(world);
+  const screen = world.getSystem(ScreenInputSystem)!;
+  screen.onTouchStart = (touch) => {
+    if (c.frame.arCameraAuthor) c.screenHolds.touchStart(touch, c.frame.elapsedSec);
+  };
+  screen.onTouchEnd = (touch, end) => c.screenHolds.touchEnd(touch, end, c.frame.elapsedSec);
   // Native state and controls serve IWSDK's ECS tools, which (like World's
   // MCP runtime) exist only in development builds.
   if (import.meta.env.DEV) registerNativeStateAndControls(world);

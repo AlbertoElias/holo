@@ -34,7 +34,7 @@ import {
 // IWER with the phone helper records a scripted camera walk and exports a
 // camera take. Phases (each a fresh page; every phase also counts its
 // downloads and fails on a stray or missing one):
-//   phone-a           flag on, pointing-targets set and a bracket object placed on the desktop first.
+//   phone-a           no query parameter beyond the scene (phone AR records camera takes by default: camera author, performer hidden, dock built), pointing-targets set and a bracket object placed on the desktop first.
 //                     Record pressed while the set is still settling is refused. Then Record, a scripted
 //                     walk, Recenter pressed mid-take (refused, the frame unchanged), Stop. Every scripted
 //                     step must be covered by an exported sample within 1 cm and 1 degree.
@@ -50,10 +50,8 @@ import {
 //                     positive control: Recenter works again once nothing is busy.
 //   ended-at-start    the XR session ends while Record waits on the microphone: no take, no live tracks.
 //   empty-set         the default (empty) scene: Record is refused, nothing downloads.
-//   quest-passthrough flag on, Quest 3 (world-space) AR: spectator; Record refused (twice), no take.
-//   interaction-undefined  flag on, a phone whose interactionMode is undefined: treated like a headset.
-//   phone-flag-off    phone AR without the flag: spectator, no camera take. Record only: Stop in a
-//                     spectator session is main's behaviour and out of scope here.
+//   quest-passthrough Quest 3 (world-space) AR: spectator; Record refused (twice), no take.
+//   interaction-undefined  a phone whose interactionMode is undefined: treated like a headset.
 //   marks-a/marks-b   slice 4, at a 412x915 portrait phone, the same prepared set and bracket, under two
 //                     placements: Record by the dock, then with the head still: a one-frame tap on the bracket
 //                     (no hold), a 1 s hold on the bracket, a 1 s hold on empty floor (a hold, no referent), a 1 s
@@ -74,8 +72,7 @@ import {
 //   dock-exit-idle    Exit by tap with no take ends the session; nothing downloads.
 // The dock is driven by taps (phoneTap) at the buttons' world positions, read from the page's
 // __samplePhoneChrome probe, in phone-a, phone-b, phone-dock and dock-exit-idle. The other phases press
-// Record through __toggleRecording. Quest passthrough, a device with no interactionMode and a phone with the
-// flag off must have no dock at all.
+// Record through __toggleRecording. Quest passthrough and a device with no interactionMode must have no dock at all.
 // How the path is compared: each walk step sets the head pose (in the set frame, converted to the room
 // with the live world frame), waits for one real XR frame, then advances the simulation by STEP_MS. The
 // recorder samples the camera each simulated frame, so one pose is held for several samples. The script
@@ -123,7 +120,6 @@ const PHASES = [
   'empty-set',
   'quest-passthrough',
   'interaction-undefined',
-  'phone-flag-off',
   'phone-dock',
   'dock-exit-idle'
 ] as const;
@@ -248,7 +244,6 @@ function setToRoom(frame: THREE.Matrix4, pose: Pose): Pose {
 
 type OpenOptions = {
   phone?: boolean | 'interaction-unset';
-  flag?: boolean;
   scene?: boolean;
   object?: boolean;
   micDenied?: boolean;
@@ -307,7 +302,6 @@ async function openPage(run: Run, options: OpenOptions): Promise<Page> {
   await attachXrEnvironment(page, { mode: 'iwer' });
   const url = new URL(baseUrl);
   url.searchParams.set('manualClock', '1');
-  if (options.flag) url.searchParams.set('arCamera', '1');
   if (options.scene) {
     url.searchParams.set('scene', SCENE);
     url.searchParams.set('sceneScale', '1');
@@ -582,7 +576,7 @@ type Walked = { report: PhaseReport; take: CameraTakeReport | null; frame: numbe
 /** phone-a and phone-b: enter, Record, the scripted walk, Stop, read the GLB. */
 async function walkPhase(run: Run, phase: 'phone-a' | 'phone-b', start: { position: Vec3; yaw: number }): Promise<Walked> {
   const report: PhaseReport = { phase, failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, flag: true, scene: true, object: true, video: phase === 'phone-a' });
+  const page = await openPage(run, { phone: true, scene: true, object: true, video: phase === 'phone-a' });
   const pace = phase === 'phone-a' && videoDir ? 500 : 0;
   try {
     const placement = await placeObjectOnDesktop(page);
@@ -619,7 +613,7 @@ async function walkPhase(run: Run, phase: 'phone-a' | 'phone-b', start: { positi
     const frame = toMatrix(frameValues);
     report.ar.entered = await arOf(page);
     const ar = report.ar.entered;
-    if (!ar.cameraAuthor) report.failures.push('camera author mode is off in a phone AR session with the flag on');
+    if (!ar.cameraAuthor) report.failures.push('camera author mode is off in a phone AR session');
     if (!ar.performerHidden) report.failures.push('performer visible in camera mode');
     if (ar.interactionMode !== 'screen-space') report.failures.push(`interactionMode ${ar.interactionMode}, expected screen-space`);
     if (!(await captureRecenter(page))) report.failures.push('the Recenter control is not drawn in phone AR');
@@ -782,7 +776,7 @@ const micCount = (page: Page): Promise<MicCount> =>
 /** Takes that end mid-take: mic-denied (Stop), session-end and page-hidden. */
 async function interruptPhase(run: Run, phase: 'mic-denied' | 'session-end' | 'page-hidden'): Promise<PhaseReport> {
   const report: PhaseReport = { phase, failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, flag: true, scene: true, micDenied: phase === 'mic-denied', ...(phase === 'session-end' ? { mic: 'track' as const } : {}) });
+  const page = await openPage(run, { phone: true, scene: true, micDenied: phase === 'mic-denied', ...(phase === 'session-end' ? { mic: 'track' as const } : {}) });
   try {
     await enterAr(page);
     const frame = toMatrix(await worldFrame(page));
@@ -857,7 +851,7 @@ async function interruptPhase(run: Run, phase: 'mic-denied' | 'session-end' | 'p
  */
 async function abortAtStartPhase(run: Run, phase: 'hidden-at-start' | 'restored-at-start' | 'ended-at-start'): Promise<PhaseReport> {
   const report: PhaseReport = { phase, failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, flag: true, scene: true, mic: 'gate' });
+  const page = await openPage(run, { phone: true, scene: true, mic: 'gate' });
   try {
     // The AR entry holds the microphone; its request stays pending behind the gate, so Record's start waits on it.
     await enterAr(page);
@@ -951,11 +945,11 @@ async function abortAtStartPhase(run: Run, phase: 'hidden-at-start' | 'restored-
 
 async function emptySetPhase(run: Run): Promise<PhaseReport> {
   const report: PhaseReport = { phase: 'empty-set', failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, flag: true, scene: false });
+  const page = await openPage(run, { phone: true, scene: false });
   try {
     await enterAr(page, undefined, false);
     report.ar.entered = await arOf(page);
-    if (!report.ar.entered.cameraAuthor) report.failures.push('camera author mode is off in a phone AR session with the flag on');
+    if (!report.ar.entered.cameraAuthor) report.failures.push('camera author mode is off in a phone AR session');
     await toggle(page);
     // The notice shows for 4 s of wall-clock time: read it as soon as it is up, not after a fixed wait that a slow machine outlasts.
     for (let i = 0; i < 12; i += 1) {
@@ -974,10 +968,10 @@ async function emptySetPhase(run: Run): Promise<PhaseReport> {
   }
 }
 
-/** A non-phone AR session with the flag on (Quest passthrough, or a device with no interactionMode): Record is refused. */
+/** A non-phone AR session (Quest passthrough, or a device with no interactionMode): Record is refused. */
 async function headsetPhase(run: Run, phase: 'quest-passthrough' | 'interaction-undefined'): Promise<PhaseReport> {
   const report: PhaseReport = { phase, failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: phase === 'interaction-undefined' ? 'interaction-unset' : false, flag: true, scene: true });
+  const page = await openPage(run, { phone: phase === 'interaction-undefined' ? 'interaction-unset' : false, scene: true });
   try {
     await enterAr(page);
     const ar = await arOf(page);
@@ -1009,45 +1003,13 @@ async function headsetPhase(run: Run, phase: 'quest-passthrough' | 'interaction-
 }
 
 /**
- * A phone with the flag off: AR is main's spectator. Record only (no Stop): stopping a spectator take
- * (no samples) is main's behaviour and logs a KeyframeTrack error unrelated to camera mode.
- */
-async function flagOffPhase(run: Run): Promise<PhaseReport> {
-  const report: PhaseReport = { phase: 'phone-flag-off', failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, flag: false, scene: true });
-  try {
-    await enterAr(page);
-    const ar = await arOf(page);
-    report.ar.entered = ar;
-    if (ar.cameraAuthor) report.failures.push('camera author mode on');
-    if (!ar.spectator) report.failures.push('not a spectator in AR');
-    if (ar.performerHidden) report.failures.push('performer hidden in a spectator session');
-    if (ar.micHeld) report.failures.push('microphone held open in a spectator session');
-    if (ar.interactionMode !== 'screen-space') report.failures.push(`interactionMode ${ar.interactionMode}, expected screen-space`);
-    report.failures.push(...(await noDockFailures(page)));
-    await toggle(page);
-    for (let i = 0; i < 20; i += 1) {
-      await advance(page, STEP_MS);
-      await page.waitForTimeout(150);
-    }
-    report.ar.afterRecord = await arOf(page);
-    report.notes.afterToggleRecording = { recordingState: report.ar.afterRecord.recordingState, notice: report.ar.afterRecord.notice };
-    if (report.ar.afterRecord.takeKind === 'camera') report.failures.push('take kind camera in a spectator session');
-    await expectDownloadCount(page, report, 0);
-    return report;
-  } finally {
-    await page.context().close();
-  }
-}
-
-/**
  * The phone dock at a 412x915 portrait phone (slice 3): its layout on the screen, Recenter between
  * takes, only Stop while recording (Recenter and Exit hidden and inert), Record and Stop by tap, and
  * two screenshots of the view: between takes and while recording.
  */
 async function dockPhase(run: Run): Promise<PhaseReport> {
   const report: PhaseReport = { phase: 'phone-dock', failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, flag: true, scene: true, viewport: PHONE_VIEWPORT });
+  const page = await openPage(run, { phone: true, scene: true, viewport: PHONE_VIEWPORT });
   try {
     await enterAr(page);
     report.ar.entered = await arOf(page);
@@ -1138,7 +1100,7 @@ async function dockPhase(run: Run): Promise<PhaseReport> {
 /** Exit by tap with no take running: the session ends, nothing downloads. */
 async function dockExitIdlePhase(run: Run): Promise<PhaseReport> {
   const report: PhaseReport = { phase: 'dock-exit-idle', failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, flag: true, scene: true });
+  const page = await openPage(run, { phone: true, scene: true });
   try {
     await enterAr(page);
     report.ar.entered = await arOf(page);
@@ -1479,7 +1441,7 @@ type Marked = { report: PhaseReport; take: CameraTakeReport | null; links: Meani
  */
 async function marksPhase(run: Run, phase: 'marks-a' | 'marks-b', start: { position: Vec3; yaw: number }): Promise<Marked> {
   const report: PhaseReport = { phase, failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, flag: true, scene: true, object: true, viewport: PHONE_VIEWPORT });
+  const page = await openPage(run, { phone: true, scene: true, object: true, viewport: PHONE_VIEWPORT });
   const scenarios: MarkScenario[] = [];
   try {
     const placement = await placeObjectOnDesktop(page);
@@ -1709,8 +1671,6 @@ try {
       finish(await emptySetPhase(run));
     } else if (phase === 'quest-passthrough' || phase === 'interaction-undefined') {
       finish(await headsetPhase(run, phase));
-    } else if (phase === 'phone-flag-off') {
-      finish(await flagOffPhase(run));
     } else if (phase === 'phone-dock') {
       finish(await dockPhase(run));
     } else {
