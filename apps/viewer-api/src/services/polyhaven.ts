@@ -138,9 +138,7 @@ export function createPolyhaven(config: PolyhavenConfig) {
       const declared = Number(response.headers.get("content-length") ?? 0);
       if (declared > maxBytes) throw new UpstreamError("A Poly Haven file is larger than allowed.");
       try {
-        const body = new Uint8Array(await response.arrayBuffer());
-        if (body.byteLength > maxBytes) throw new UpstreamError("A Poly Haven file is larger than allowed.");
-        return body;
+        return await readCapped(response, maxBytes);
       } catch (error) {
         if (error instanceof UpstreamError) throw error;
         throw new UpstreamError("Poly Haven could not be reached.");
@@ -350,3 +348,28 @@ export function thumbnailUrl(id: string): string {
 }
 
 export type Polyhaven = ReturnType<typeof createPolyhaven>;
+
+/** Reads a body, cancelling it as soon as it passes `maxBytes` (a missing or false Content-Length cannot run it past the cap). */
+async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array<ArrayBuffer>> {
+  if (!response.body) return new Uint8Array(0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new UpstreamError("A Poly Haven file is larger than allowed.");
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
