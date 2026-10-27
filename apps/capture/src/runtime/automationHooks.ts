@@ -6,7 +6,10 @@ import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, UiViewModel, VrHandSide } from '../types/contracts';
 import type { TouchStick } from '../input/TouchInput';
 import type { FlatHaloView } from '../ui/flatHalo';
-import type { VrChromeSnapshot } from '../ui/VrChrome';
+import type { ChromeTarget, VrChromeSnapshot } from '../ui/VrChrome';
+import type { prefetchStats } from '../objects/objectSearch';
+import type { ObjectSearchState } from '../objects/objectSearchSession';
+import type { voiceLog } from '../objects/voiceInput';
 import type { HeadsetHolds } from '../xr/HeadsetHolds';
 import type { HaloActionRecord } from './haloActions';
 
@@ -42,7 +45,9 @@ export interface AutomationHooks {
   /** The chrome as drawn: the overlay's view model, the headset chrome's placement, the touch stick (slice 4 reports). */
   __sampleChrome: () => { ui: UiViewModel; vr: VrChromeSnapshot; touch: { stick: TouchStick | null; looking: number; hold: string } };
   /** World position of the wrist's record glyph or a world-panel row, for checks that aim at it. */
-  __chromeTarget: (target: 'record' | 'refit' | 'hand') => number[] | null;
+  __chromeTarget: (target: ChromeTarget) => number[] | null;
+  /** Find (PRD-060): the headset panel's search state, voice paths taken, and GLB prefetches. */
+  __sampleObjectSearch: () => { headset: ObjectSearchState; voiceLog: typeof voiceLog; prefetch: typeof prefetchStats };
   /** Keep the last take's samples after export so `__reexportLastTake` can export them again. */
   __setRetainLastTake: (retain: boolean) => void;
   /** The last take exported again against the scene as it is now: the GLB's bytes (base64) and size. */

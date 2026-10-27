@@ -8,3 +8,4 @@ export * from "./focusRing.js";
 export * from "./worldPanel.js";
 export * from "./aimRays.js";
 export * from "./pointers.js";
+export * from "./fonts.js";

@@ -439,6 +439,21 @@ export class XrTracking {
    * mapping puts the stick at axes[2,3]; two-axis (touchpad) devices fall
    * back to axes[0,1]. Undefined when no gamepad reports for the side.
    */
+  /**
+   * Passthrough AR embodies no avatar, so hand joints are read where they
+   * are, with no head-to-eye offset, for chrome on the wrist (Find).
+   */
+  updateSpectatorHandJoints(): void {
+    if (!this.renderer.xr.isPresenting || this.mock.enabled) return;
+    this.refreshInputSourcesFromSession();
+    this.tmpVecB.set(0, 0, 0);
+    for (const side of SIDES) {
+      this.clearTrackedHandJoints(side);
+      const hand = this.resolveSlot('hand', side, { ownSideOnly: true });
+      if (hand?.inputSource?.hand) this.captureHandJoints(side, hand.object, this.tmpVecB, this.tmpVecB);
+    }
+  }
+
   getThumbstickAxes(side: VrHandSide): { x: number; y: number } | undefined {
     if (!this.renderer.xr.isPresenting) return undefined;
     this.refreshInputSourcesFromSession();

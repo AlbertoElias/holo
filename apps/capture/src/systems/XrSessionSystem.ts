@@ -70,6 +70,7 @@ export class XrSessionSystem extends createSystem() {
     this.bindSession();
     if (isAr) {
       c.ar.onEntered();
+      c.vrChrome.show('ar');
     } else {
       c.vrChrome.show();
       c.hands.resetRuntimeState();
@@ -88,6 +89,7 @@ export class XrSessionSystem extends createSystem() {
     this.unbindSession();
     if (exitingAr) {
       c.ar.onExited();
+      c.vrChrome.hide();
     } else {
       c.vrChrome.hide();
       c.hands.resetRuntimeState();

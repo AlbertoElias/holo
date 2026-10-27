@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { tokens } from '@holoim/design-tokens';
+import { useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 
 import type { ObjectSearchResult } from '@holoim/contracts';
 import { licenceLabel } from '@holoim/objects';
 import { GlyphControl, Type } from '@holoim/ui-dom';
 import { glyphAppearance, glyphMetrics, hitAreaApx, type HitInput } from '@holoim/xr-ui-core';
 
-import { objectGlbUrl, searchObjects } from '../objects/objectSearch';
-
-type Finding = { status: 'idle' } | { status: 'loading' } | { status: 'error'; message: string } | { status: 'done'; results: ObjectSearchResult[] };
+import { objectGlbUrl } from '../objects/objectSearch';
+import { ObjectSearchSession } from '../objects/objectSearchSession';
+import { SHOW_CAPABILITIES, capabilityLine } from '../objects/findCapabilities';
 
 const THUMBNAIL_APX = 48;
 
@@ -63,17 +64,19 @@ function ResultButton({ label, disabled, hit, gap, onPress, children }: { label:
   );
 }
 
-// Find an object by asking (PRD-060): a text query, up to six registry
-// results, one click to put a result in the tray. Picking goes through the
-// tray's loader, so its limits and messages apply unchanged.
+// Find an object by asking (PRD-060): a text or spoken query, up to six
+// registry results, one click to put a result in the tray. Picking goes
+// through the tray's loader, so its limits and messages apply unchanged.
 export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; input: HitInput; onPick: (url: string) => void }) {
-  const [query, setQuery] = useState('');
-  const [finding, setFinding] = useState<Finding>({ status: 'idle' });
-  const abort = useRef<AbortController | null>(null);
+  const [session] = useState(() => new ObjectSearchSession());
+  const { query, finding, voice, notice } = useSyncExternalStore(session.subscribe, session.getState);
   const hit = hitAreaApx(input, 0);
   const gap = glyphMetrics({ headset: false }).gapApx;
 
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => () => session.cancel(), [session]);
+  useEffect(() => {
+    if (disabled) session.cancel();
+  }, [disabled, session]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -81,23 +84,18 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
   };
 
   const run = () => {
-    const q = query.trim();
-    if (!q || disabled) return;
-    abort.current?.abort();
-    const controller = new AbortController();
-    abort.current = controller;
-    setFinding({ status: 'loading' });
-    searchObjects(q, controller.signal).then(
-      (results) => setFinding({ status: 'done', results }),
-      (error: Error) => {
-        if (!controller.signal.aborted) setFinding({ status: 'error', message: error.message });
-      }
-    );
+    if (!disabled) session.search();
+  };
+
+  // Tap to speak, tap again (or pause, with speech recognition) to search.
+  const toggleVoice = () => {
+    if (voice === 'listening') session.stopVoice();
+    else if (voice === 'idle' && !disabled) session.startVoice();
   };
 
   return (
     <div style={{ display: 'grid', gap: gap / 2 }}>
-      <form onSubmit={submit} style={{ display: 'flex', alignItems: 'center', gap, opacity: disabled ? 0.5 : 1 }}>
+      <form onSubmit={submit} style={{ display: 'flex', alignItems: 'center', gap }}>
         <input
           type="search"
           aria-label="Find an object"
@@ -105,11 +103,38 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
           maxLength={100}
           value={query}
           disabled={disabled}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          style={{ flex: 1, minWidth: 0, minHeight: hit, background: 'transparent', border: 0, borderBottom: '1px solid var(--holoim-color-gold)', color: 'var(--holoim-color-text)', font: 'inherit' }}
+          onChange={(event) => session.setQuery(event.currentTarget.value)}
+          style={{
+            // The controls beside it dim themselves; only the field takes the disabled 55% here, so nothing dims twice.
+            flex: 1, minWidth: 0, minHeight: hit, background: 'transparent', border: 0, borderBottom: '1px solid var(--holoim-color-gold)', color: 'var(--holoim-color-text)', font: 'inherit', opacity: disabled ? tokens.glyph.states.pressedOpacity : 1
+          }}
         />
-        <GlyphControl glyph={null} label="Find" input={input} disabled={disabled || query.trim() === ''} onPress={() => run()} />
+        <GlyphControl glyph={null} label="Find" input={input} disabled={disabled || query.trim() === '' || voice !== 'idle'} onPress={() => run()} />
+        <GlyphControl
+          glyph={null}
+          label={voice === 'listening' ? 'Stop listening' : 'Speak to find'}
+          word={voice === 'listening' ? 'Done' : voice === 'transcribing' ? 'Hearing…' : 'Speak'}
+          input={input}
+          aria-pressed={voice === 'listening'}
+          disabled={disabled || voice === 'transcribing'}
+          onPress={toggleVoice}
+        />
       </form>
+      {voice === 'listening' ? (
+        <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
+          Listening…
+        </Type>
+      ) : null}
+      {notice ? (
+        <Type variant="captionUnderCard" as="p" role="status" style={{ margin: 0 }}>
+          {notice}
+        </Type>
+      ) : null}
+      {SHOW_CAPABILITIES ? (
+        <Type variant="byline" as="p" data-testid="find-capabilities" style={{ margin: 0 }}>
+          {capabilityLine(null)}
+        </Type>
+      ) : null}
       {finding.status === 'loading' ? (
         <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
           Searching…
@@ -134,7 +159,9 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
                 <ResultButton label={`Add ${result.title} to the tray`} disabled={disabled} hit={hit} gap={gap} onPress={() => onPick(objectGlbUrl(result))}>
                   <img src={result.thumbnailUrl} alt="" loading="lazy" width={THUMBNAIL_APX} height={THUMBNAIL_APX} style={{ objectFit: 'cover', flex: 'none' }} />
                   <span style={{ display: 'grid', minWidth: 0 }}>
-                    <Type variant="controlLabel">{result.title}</Type>
+                    <Type variant="controlLabel" style={{ color: 'inherit' }}>
+                      {result.title}
+                    </Type>
                     <Type variant="byline">
                       {result.author} · {result.source} · {licenceLabel(result.licence)}
                       {size ? ` · ${size}` : ''}
