@@ -9,6 +9,7 @@ import {
   PITCH_MIN,
   cardCenter,
   dispatchOrientation,
+  animationFrames,
   feedScrollTop,
   installProbe,
   readPortal,
@@ -124,7 +125,7 @@ test.describe("phone", () => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [below] });
     for (const [dx, dy] of path) {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: below.x + dx, y: below.y + dy }] });
-      await page.waitForTimeout(16);
+      await animationFrames(page);
     }
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     expect(await settleScroll(page), "the drifting swipe browses to the next card").toBe(PHONE.height);
@@ -141,7 +142,7 @@ test.describe("phone", () => {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
       for (const [dx, dy] of steps) {
         await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: from.x + dx, y: from.y + dy }] });
-        await page.waitForTimeout(16);
+        await animationFrames(page);
       }
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     };
@@ -165,7 +166,7 @@ test.describe("phone", () => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pinchAt(40, 0) });
     for (let i = 1; i <= 6; i += 1) {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pinchAt(40 + 30 * i, 20 * i) });
-      await page.waitForTimeout(16);
+      await animationFrames(page);
     }
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     expect(await settleScroll(page), "a pinch does not scroll").toBe(0);
@@ -181,6 +182,7 @@ test.describe("phone", () => {
     await feed.evaluate((element) => element.scrollTo({ top: 300, behavior: "smooth" }));
     await expect.poll(() => feedScrollTop(page), { timeout: 2000, intervals: [10] }).toBeGreaterThan(20);
     await page.touchscreen.tap(below.x, below.y);
+    // A negative (no pause follows) over the app's tap window: a real-time hold.
     await page.waitForTimeout(400);
     await expect(firstCard).toHaveAttribute("data-card-focus", "true");
     expect((await readPortal(page, first.url)).paused, "the card it stopped on did not pause").toBe(false);
@@ -307,7 +309,8 @@ test("desktop: the wheel scrolls the feed unless it begins on the hologram itsel
     await expect(card).toHaveAttribute("data-portal-paused", "true");
   }
   await page.mouse.move(on.x, on.y);
-  await page.waitForTimeout(400); // a new gesture
+  // A new gesture: the app groups wheel events by a real-time gap.
+  await page.waitForTimeout(400);
   await page.mouse.wheel(0, -300);
   await expect.poll(async () => (await readPortal(page, first.url)).zoom, { message: "the wheel on the hologram zooms" }).toBeLessThan(1);
   expect(await feedScrollTop(page)).toBe(0);

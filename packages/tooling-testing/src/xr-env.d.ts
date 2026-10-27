@@ -30,6 +30,21 @@ export function resolveSimulationViewport(value?: string): { width: number; heig
 export function freezePageClock(page: unknown): Promise<void>;
 export function waitForXrRenderLoop(page: unknown, options?: { stepMs?: number; maxSteps?: number; steadySteps?: number }): Promise<void>;
 export function alignFrameClock(page: unknown): Promise<void>;
+export function waitForXrFrames(page: unknown, count?: number, options?: { timeout?: number; ended?: boolean }): Promise<void>;
+export function installPageClock(page: unknown): Promise<void>;
+export function isPageClockFrozen(page: unknown): boolean;
+export function resumePageClock(page: unknown): Promise<void>;
+export const XR_STEP_MS: number;
+export function xrStepTotals(): { frames: number; ms: number; late: number };
+export type XrStepStats = { frames?: number; late?: number };
+export function stepXr(page: unknown, frames?: number, options?: { dtMs?: number; stats?: XrStepStats; untilSessionEnds?: boolean }): Promise<void>;
+export function stepXrUntil<T>(
+  page: unknown,
+  read: () => Promise<T>,
+  accept: (value: T) => boolean,
+  options?: { maxFrames?: number; realMs?: number; dtMs?: number; stats?: XrStepStats; describe?: (value: T) => string }
+): Promise<T>;
+export function stepXrCall<T = unknown>(page: unknown, name: string, args?: unknown[], options?: { maxFrames?: number; dtMs?: number; stats?: XrStepStats }): Promise<T>;
 export function captureXrScreenshot(page: unknown, screenshotPath: string, options?: { timeout?: number }): Promise<void>;
 
 export function resolveXrTestMode(rawMode?: string): XrTestMode;

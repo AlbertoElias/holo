@@ -4,13 +4,13 @@ import { fileURLToPath } from "node:url";
 
 import { test as plainTest, type Page } from "@playwright/test";
 import type * as Three from "three";
-import { waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
+import { waitForIwerSession, waitForNoIwerSession, waitForXrFrames } from "@holoim/tooling-testing/xr-env";
 import { tokens } from "@holoim/design-tokens";
 import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, PHONE_EDGES, VIEW_TARGETS } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 import { pinch } from "./ar-gestures";
-import { installProbe, readPortal, scrollFeedToTop, touchPinch, waitForPortalReady } from "./portal-helpers";
+import { animationFrames, installProbe, readPortal, scrollFeedToTop, touchPinch, waitForPortalReady } from "./portal-helpers";
 
 // The viewer's pages in the redesigned look (docs/features/ui-redesign.md,
 // slice 3), on a mocked feed at desktop size and at 390 × 844, and the WebXR
@@ -36,6 +36,18 @@ const items = ["a", "b", "c"].map((key, index) => ({
 const [first] = items as [typeof items[number]];
 
 test.describe.configure({ timeout: 90_000 });
+
+/**
+ * Waits for the page's finite CSS animations and transitions (a fold, a
+ * sheet sliding up) to finish, then for a frame to draw them: a completion
+ * signal for a screenshot, in place of a guessed sleep.
+ */
+async function settleTransitions(page: Page): Promise<void> {
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Infinity))
+    .map((animation) => animation.finished.catch(() => undefined))));
+  await animationFrames(page, 2);
+}
 
 async function shot(page: Page, name: string): Promise<void> {
   await mkdir(shotsDir, { recursive: true });
@@ -97,7 +109,9 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     await page.setViewportSize(viewport);
     await openFeed(page);
     await page.mouse.move(2, 2);
-    await page.waitForTimeout(600);
+    // Away from the card its reach controls fold.
+    await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .portal-controls`)).not.toHaveAttribute("data-reach", "shown");
+    await settleTransitions(page);
     await shot(page, `${label}-feed`);
     const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
 
@@ -149,7 +163,8 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     await expect(card).toHaveAttribute("data-card-focus", "true");
 
     await page.getByRole("button", { name: "Upload a hologram" }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByRole("dialog", { name: "Upload a hologram" })).toBeVisible();
+    await settleTransitions(page);
     await shot(page, `${label}-upload-sheet`);
     const sheet = page.getByRole("dialog", { name: "Upload a hologram" });
     await expect(sheet).toBeVisible();
@@ -202,15 +217,19 @@ test("phone: reduced motion holds the cloche still and keeps the controls", asyn
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize(PHONE);
   await openFeed(page);
+  const startedAt = await page.evaluate(() => performance.now());
   const before = await readCloche(page, first.url);
-  await page.waitForTimeout(500);
+  // 30 drawn frames (about half a second): a flicker would move the core between them.
+  await animationFrames(page, 30);
   const after = await readCloche(page, first.url);
+  const elapsedMs = (await page.evaluate(() => performance.now())) - startedAt;
   expect(before.drawn).toBe(true);
   expect(after.core, "no flicker under reduced motion").toBeCloseTo(before.core, 5);
   expect(after.sparks, "no sparks under reduced motion").toBe(0);
   expect(after.time, "no drift, flicker or breath").toBe(0);
   // Reduced motion keeps only the slow resting fade (8.3), never the flicker's swing.
-  expect(Math.abs(after.glow - before.glow), "no flicker in the glow").toBeLessThan(0.02);
+  // The fade's rate, not a fixed sleep: under 0.02 per half second however long the frames took.
+  expect(Math.abs(after.glow - before.glow), `no flicker in the glow over ${elapsedMs.toFixed(0)} ms`).toBeLessThan(0.02 * Math.max(1, elapsedMs / 500));
   await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .portal-controls`).getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();
 });
 
@@ -330,7 +349,7 @@ test.describe("phone by touch", () => {
     await card.locator(".feed-card-portal").tap({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
     await expect(controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }), "a take with a voice has its sound control").toHaveCount(1);
-    await page.waitForTimeout(400);
+    await settleTransitions(page);
     await shot(page, "phone-touch-feed-reached");
     const boxes = await controls.evaluate((row) =>
       [...row.querySelectorAll("button")].map((button) => ({ name: button.getAttribute("aria-label"), ...button.getBoundingClientRect().toJSON() as DOMRect }))
@@ -377,7 +396,7 @@ test.describe("phone by touch", () => {
     await card.locator(".feed-card-portal").tap({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
     await expect(controls.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView })).toBeVisible();
-    await page.waitForTimeout(400);
+    await settleTransitions(page);
     await shot(page, "phone-touch-free-reached");
     const overPicture = await controls.locator(".portal-controls-after").evaluate((node) => getComputedStyle(node).backgroundColor);
     expect(overPicture, "over the picture the reach line takes the same chip").toBe(await chip.evaluate((node) => getComputedStyle(node).backgroundColor));
@@ -480,11 +499,12 @@ async function selectInRoom(page: Page, label: string): Promise<void> {
     controller.position.set(device.position.x, device.position.y, device.position.z);
     controller.quaternion.set(turn.x, turn.y, turn.z, turn.w);
   }, label);
-  await page.waitForTimeout(150);
+  // Each change is read by a whole XR frame before the next.
+  await waitForXrFrames(page, 2);
   await page.evaluate(() => (window as unknown as { IWER_DEVICE: IwerDevice }).IWER_DEVICE.controllers.right.updateButtonValue("trigger", 1));
-  await page.waitForTimeout(150);
+  await waitForXrFrames(page, 2);
   await page.evaluate(() => (window as unknown as { IWER_DEVICE: IwerDevice }).IWER_DEVICE.controllers.right.updateButtonValue("trigger", 0));
-  await page.waitForTimeout(150);
+  await waitForXrFrames(page, 2);
 }
 
 test("left-handed, set in the feed's settings: kept on this device, and AR puts Exit on the right wrist", async ({ page }) => {
@@ -542,7 +562,8 @@ test("AR (R3F fallback): controls at the hologram's foot on the chip, Exit alway
   await expect(page.getByRole("button", { name: "Exit AR" })).toBeAttached();
   await page.waitForFunction(() => Boolean((window as ArWindow).__arProbe));
   await expect.poll(() => view.getAttribute("data-placement-stage")).toMatch(/placed|anchored|locked/);
-  await page.waitForTimeout(500);
+  // The foot row and the wrist lay out over the frames after placement.
+  await waitForXrFrames(page, 5);
 
   const room = await page.evaluate(() => {
     const probe = (window as ArWindow).__arProbe!;
@@ -581,7 +602,8 @@ test("AR (R3F fallback): controls at the hologram's foot on the chip, Exit alway
   for (const opacity of room.chips) expect(opacity, "every row is on the chip at the target's opacity").toBeCloseTo(expectedChip, 2);
   expect(room.wristVisible, "Exit is on the non-dominant wrist").toBe(true);
   expect(room.stageLight, "the stage light rests steady in a room").toBeCloseTo(tokens.motion.flicker.stageLightRest, 5);
-  await page.waitForTimeout(700);
+  // Still the same after more frames: it does not flicker.
+  await waitForXrFrames(page, 10);
   expect(await page.evaluate(() => ((window as ArWindow).__arProbe!.scene.getObjectByName("ar-stage-light") as Three.PointLight).intensity)).toBe(room.stageLight);
   await shot(page, "ar-headset-foot");
 
@@ -596,7 +618,7 @@ test("AR (R3F fallback): controls at the hologram's foot on the chip, Exit alway
   await expect(view).not.toHaveAttribute("data-ar-scale", "1");
   await expect(view).toHaveAttribute("data-ar-scale-label", /^1:/);
   expect(await page.evaluate(() => (window as ArWindow).__arProbe!.model.parent!.scale.x)).toBeLessThan(1);
-  await page.waitForTimeout(300);
+  await waitForXrFrames(page, 3);
   await shot(page, "ar-headset-rescaled");
   await selectInRoom(page, "Return to true size");
   await expect(view).toHaveAttribute("data-ar-scale", "1");
@@ -608,7 +630,7 @@ test("AR (R3F fallback): controls at the hologram's foot on the chip, Exit alway
     device.controlMode = "programmatic";
     device.quaternion.set(0, 1, 0, 0);
   });
-  await page.waitForTimeout(300);
+  await waitForXrFrames(page, 3);
   expect(await page.evaluate(() => (window as ArWindow).__arProbe!.scene.getObjectByName("wrist-glyphs-left")?.visible)).toBe(true);
   await page.evaluate(() => (document.querySelector('button[aria-label="Exit AR"]') as HTMLButtonElement).click());
   await waitForNoIwerSession(page);

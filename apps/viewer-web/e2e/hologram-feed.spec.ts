@@ -7,7 +7,8 @@ import {
   waitForIwerEnvironment,
   waitForIwerRuntime,
   waitForIwerSession,
-  waitForNoIwerSession
+  waitForNoIwerSession,
+  waitForXrFrames
 } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, captureEvidence, expect, FEED_CARD_RENDERED_TIMEOUT_MS, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
@@ -356,18 +357,20 @@ async function setPose(page: Page, who: "head" | "left" | "right", position: Vec
       tracked.quaternion.set(cy * sp, sy * cp, -sy * sp, cy * cp);
     }
   }, { who, position, lookAt });
-  await page.waitForTimeout(60);
+  // Read by a whole frame.
+  await waitForXrFrames(page, 2);
 }
 
 /** Aims the right controller's ray at a world point and pulls the trigger. */
 async function rayClick(page: Page, target: Vec3, from: Vec3): Promise<void> {
   await setPose(page, "right", from, target);
-  await page.waitForTimeout(80);
   for (const value of [1, 0]) {
     await page.evaluate((v) => {
       (window as unknown as { IWER_DEVICE: { controllers: Record<string, { updateButtonValue(id: string, v: number): void }> } }).IWER_DEVICE.controllers.right!.updateButtonValue("trigger", v);
     }, value);
-    await page.waitForTimeout(80);
+    // One frame reads each: IWSDK counts a press held past 800 ms of frame time as no click.
+    // An Exit press ends the session.
+    await waitForXrFrames(page, 1, { ended: true });
   }
 }
 
@@ -386,7 +389,8 @@ async function recenterFromFoot(page: Page): Promise<void> {
   await page.evaluate((q) => {
     (window as unknown as { IWER_DEVICE: { quaternion: { set(x: number, y: number, z: number, w: number): void } } }).IWER_DEVICE.quaternion.set(...q);
   }, head.quaternion);
-  await page.waitForTimeout(150);
+  // The ray takes hold of the row (hover) over the next frames.
+  await waitForXrFrames(page, 3);
   await rayClick(page, recenter, [head.position[0] + 0.25, head.position[1] - 0.35, head.position[2] - 0.2]);
 }
 
@@ -395,7 +399,8 @@ async function exitFromDock(page: Page): Promise<void> {
   const [x, y, z] = (await readViewerPose(page)).position;
   await setPose(page, "head", null, [x - 0.15, y - 0.4, z - 0.4]);
   await setPose(page, "left", [x - 0.15, y - 0.45, z - 0.35], [x - 0.15, y - 0.45, z - 1.35]);
-  await page.waitForTimeout(250);
+  // The dock lays out on the frames after its hand comes up.
+  await waitForXrFrames(page, 3);
   const exit = (await viewerSnapshot(page)).controls!.dock.buttons.exit.worldPosition;
   await rayClick(page, exit, [x + 0.15, y - 0.4, z - 0.15]);
 }
@@ -583,7 +588,9 @@ test("feed downloads holograms in feed order, one at a time", async ({ page }, t
   await assertViewerShell(page);
   const cards = page.locator(".feed-card");
   await expect(cards.nth(2)).toHaveAttribute("data-model-state", "rendered", { timeout: 30_000 });
-  // Nothing else is near the top of the feed: the fourth and fifth wait.
+  // Nothing else is near the top of the feed: the fourth and fifth wait. A
+  // negative over time, so this stays a real-time hold: a fourth download
+  // starting late would show inside it.
   await page.waitForTimeout(1_500);
   await expect(cards.nth(3)).toHaveAttribute("data-model-state", "queued");
   expect(downloads.map((download) => download.url)).toEqual(["/uploads/mock-1.glb", "/uploads/mock-2.glb", "/uploads/mock-3.glb"]);

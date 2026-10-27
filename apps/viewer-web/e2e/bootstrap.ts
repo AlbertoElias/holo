@@ -1,6 +1,6 @@
 import { expect, test as base, type Locator, type Page, type TestInfo } from "@playwright/test";
 
-import { attachXrEnvironment } from "@holoim/tooling-testing/xr-env";
+import { attachXrEnvironment, xrStepTotals } from "@holoim/tooling-testing/xr-env";
 
 const viewerTitlePattern = /HoloIM Viewer/i;
 const nonViewerBodyPattern = /Loading scene\.\.\./i;
@@ -20,6 +20,7 @@ export function expectConsoleErrors(page: Page, pattern: RegExp): void {
 export const test = base.extend({
   page: async ({ page }, consumePage) => {
     await attachXrEnvironment(page, { mode: process.env.XR_TEST_MODE });
+    const stepsBefore = xrStepTotals();
     const runtimeErrors: string[] = [];
     page.on("pageerror", (error) => {
       runtimeErrors.push(`pageerror: ${error.message}`);
@@ -33,6 +34,11 @@ export const test = base.extend({
       }
     });
     await consumePage(page);
+    // XR_STEP_STATS=1 prints what stepping the XR clock cost this test.
+    if (process.env.XR_STEP_STATS === "1") {
+      const after = xrStepTotals();
+      console.log(`XR_STEPS ${JSON.stringify({ test: base.info().title.slice(0, 48), frames: after.frames - stepsBefore.frames, stepMs: after.ms - stepsBefore.ms, late: after.late - stepsBefore.late })}`);
+    }
     // Runtime errors fail the test even when the visible flow completed.
     expect(runtimeErrors, "viewer runtime errors").toEqual([]);
   }
