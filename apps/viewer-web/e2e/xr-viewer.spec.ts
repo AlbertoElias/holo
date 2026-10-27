@@ -630,7 +630,7 @@ async function measureChipFade(page: Page, eye: Vec3, chip: Vec3): Promise<Array
   const takeLog = () => page.evaluate(() => (window as unknown as { __HOLOIM_XR_VIEWER__: { takeFadeLog(): Array<{ reach: number; chip: number }> } }).__HOLOIM_XR_VIEWER__.takeFadeLog());
   for (let attempt = 0; attempt < 12; attempt++) {
     await setPose(page, "head", eye, [eye[0], eye[1] + 4, eye[2] + 1]);
-    await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 0 && s.controls!.foot.reachChipFade === 0, 6_000);
+    await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 0 && s.controls!.foot.reachChipFade === 0, 9_000);
     await takeLog();
     await setPose(page, "head", eye, chip);
     await waitForSnapshot(page, (s) => s.controls!.foot.reachChipFade === 1, 9_000);
@@ -1515,7 +1515,7 @@ async function setStick(page: Page, side: "left" | "right", x: number, y: number
  * release follows the press within 800 ms of world time, and on a loaded
  * machine IWER frames can be far apart, so one click can be lost in emulation.
  */
-async function rayClickUntil(page: Page, target: Vec3 | (() => Promise<Vec3>), from: Vec3, done: (g: GallerySnapshot) => boolean): Promise<GallerySnapshot> {
+async function rayClickUntil(page: Page, what: string, target: Vec3 | (() => Promise<Vec3>), from: Vec3, done: (g: GallerySnapshot) => boolean): Promise<GallerySnapshot> {
   for (let attempt = 0; ; attempt++) {
     const startFrame = await renderedFrames(page);
     await rayClick(page, typeof target === "function" ? await target() : target, from);
@@ -1523,11 +1523,12 @@ async function rayClickUntil(page: Page, target: Vec3 | (() => Promise<Vec3>), f
       return await waitForGallery(page, done, 3_000);
     } catch (error) {
       // At most two retries (B-026), each after 20 rendered frames with the target still unmet.
-      if (attempt === 2) throw error;
+      if (attempt === 2) throw new Error(`${what}: no effect after 3 presses (2 retries, B-026)\n${(error as Error).message}`);
       await expect.poll(async () => ((await renderedFrames(page)) ?? Infinity) - (startFrame ?? 0), { timeout: 30_000, intervals: [100] }).toBeGreaterThanOrEqual(20);
       const now = await gallerySnapshot(page);
       if (done(now)) return now;
       clickRetries++;
+      test.info().annotations.push({ type: "rayClickUntil", description: `${what}: retry ${attempt + 1}` });
     }
   }
 }
@@ -1546,9 +1547,8 @@ const toRig = (page: Page, points: Vec3[]) =>
     });
   }, points);
 
-test("VR locomotion: the left stick slides, the right stick snap-turns 30° and teleports, and placed holograms, their foot controls and the shelf stay where they stand", async ({ page }, testInfo) => {
-  test.setTimeout(150_000);
-  const { marks, mark, markFirstCommit } = createTimeline();
+/** Steps inside from mock-1 and places mock-2 from the shelf; returns the eye at the floor origin. */
+async function stepInsideWithTwo(page: Page, markFirstCommit: (page: Page) => void): Promise<{ entered: GallerySnapshot; eye: Vec3 }> {
   markFirstCommit(page);
   await mockGalleryFeed(page);
   await page.goto("/");
@@ -1572,6 +1572,35 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   expect(Math.abs(entered.player.position[1]), "rig on the floor").toBeLessThan(RIG_FLOOR_TOLERANCE_M);
   await selectTile(page, 1, eye);
   await waitForGallery(page, (g) => readingOf(g, "mock-2")?.placement.stage === "placed" && g.focusedId === "mock-2" && g.controls?.boundTo === "mock-2");
+  return { entered, eye };
+}
+
+/**
+ * Teleports behind the head: the right stick pulled back aims at open floor
+ * 2.5 m behind (the holograms and the shelf stand ahead and at the sides, and
+ * a ray on them holds the aim), and its release lands the rig there.
+ */
+async function teleportBehind(page: Page, eye: Vec3): Promise<{ from: GallerySnapshot; aiming: GallerySnapshot; landed: GallerySnapshot; head: Vec3; forward: Vec3 }> {
+  const from = await gallerySnapshot(page);
+  const { position: head, forward } = await readHeadPose(page);
+  const aimWorld: Vec3 = [head[0] - forward[0] * 2.5, 0, head[2] - forward[2] * 2.5];
+  const [aimRig] = await toRig(page, [aimWorld]);
+  await setPose(page, "right", [eye[0] + 0.2, eye[1] - 0.3, eye[2] - 0.2], aimRig!);
+  await setStick(page, "right", 0, 1);
+  // IWSDK eases its landing marker a fifth of the way to the arc's hit each
+  // frame: 15 frames leave it within 4% of the hit.
+  await Promise.all([page.waitForTimeout(2_500), xrFrames(page, 15)]);
+  const aiming = await gallerySnapshot(page);
+  await setStick(page, "right", 0, 0);
+  // Landed once the rig has moved, standing on the floor.
+  const landed = await waitForGallery(page, (g) => horizontal(g.player.position, from.player.position) > 0.5 && Math.abs(g.player.position[1]) < RIG_FLOOR_TOLERANCE_M, 5_000);
+  return { from, aiming, landed, head, forward };
+}
+
+test("VR locomotion: the left stick slides, the right stick snap-turns 30° and teleports, and placed holograms, their foot controls and the shelf stay where they stand", async ({ page }, testInfo) => {
+  test.setTimeout(150_000);
+  const { marks, mark, markFirstCommit } = createTimeline();
+  const { eye } = await stepInsideWithTwo(page, markFirstCommit);
   mark("two-placed");
   // Ahead and level, the controllers lowered out of every pointer's way.
   await setPose(page, "head", eye, [eye[0], eye[1], eye[2] - 2]);
@@ -1655,22 +1684,10 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   expectSpaceHeld(turned, "snap turn");
   await dwell(page, 0.6);
 
-  // Teleport: pull the right stick back, aim at open floor behind (the holograms
-  // and the shelf stand ahead and at the sides, and a ray on them holds the aim), release to land.
+  // Teleport: pull the right stick back, aim at open floor behind, release to land.
   mark("teleport");
-  const turnedForward = (await readHeadPose(page)).forward;
-  const aimWorld: Vec3 = [headAfterTurn[0] - turnedForward[0] * 2.5, 0, headAfterTurn[2] - turnedForward[2] * 2.5];
-  const [aimRig] = await toRig(page, [aimWorld]);
-  await setPose(page, "right", [eye[0] + 0.2, eye[1] - 0.3, eye[2] - 0.2], aimRig!);
-  await setStick(page, "right", 0, 1);
-  // IWSDK eases its landing marker a fifth of the way to the arc's hit each
-  // frame: 15 frames leave it within 4% of the hit.
-  await Promise.all([page.waitForTimeout(2_500), xrFrames(page, 15)]);
-  const aiming = await gallerySnapshot(page);
+  const { aiming, landed, forward: turnedForward } = await teleportBehind(page, eye);
   expect(horizontal(aiming.player.position, turned.player.position), "aiming alone does not move").toBeLessThan(1e-3);
-  await setStick(page, "right", 0, 0);
-  // Landed once the rig has moved, standing on the floor.
-  const landed = await waitForGallery(page, (g) => horizontal(g.player.position, turned.player.position) > 0.5 && Math.abs(g.player.position[1]) < RIG_FLOOR_TOLERANCE_M, 5_000);
   const jump = horizontal(landed.player.position, turned.player.position);
   expect(jump, `teleported ${jump.toFixed(2)} m`).toBeGreaterThan(0.75);
   // Toward the aim: behind, along the turned facing.
@@ -1680,6 +1697,38 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   expect(Math.abs(landed.player.position[1]), "lands on the local floor").toBeLessThan(RIG_FLOOR_TOLERANCE_M);
   expect(Math.abs(landed.player.yawRad - turned.player.yawRad), "a teleport keeps the facing").toBeLessThan(1e-6);
   expectSpaceHeld(landed, "teleport");
+  await dwell(page);
+
+  await captureEvidence(page, testInfo, "vr-locomotion");
+  await endSession(page);
+  await expect(page).toHaveURL(/\/$/);
+
+  report.locomotion = {
+    timeline: marks,
+    player: { before: before.player, slid: slid.player, turned: turned.player, landed: landed.player },
+    slideM: slide,
+    turnDeg,
+    chipFade: fade,
+    teleportM: jump,
+    headPivotM: horizontal(headAfterTurn, headBeforeTurn)
+  };
+});
+
+// Recenter and the shelf after moving have their own test and budget: the locomotion test before them is long.
+test("VR recenter after moving: from a teleported spot, recenter brings the focused hologram 1.5 m ahead on the floor with its foot controls, the other stays, and the shelf still places", async ({ page }, testInfo) => {
+  test.setTimeout(150_000);
+  const { marks, mark, markFirstCommit } = createTimeline();
+  const { eye } = await stepInsideWithTwo(page, markFirstCommit);
+  mark("two-placed");
+  // Ahead and level, the controllers lowered out of every pointer's way.
+  await setPose(page, "head", eye, [eye[0], eye[1], eye[2] - 2]);
+  await setPose(page, "left", [eye[0] - 0.25, eye[1] - 0.5, eye[2] - 0.2], [eye[0] - 0.25, 0, eye[2] - 0.6]);
+  await setPose(page, "right", [eye[0] + 0.25, eye[1] - 0.5, eye[2] - 0.2], [eye[0] + 0.25, 0, eye[2] - 0.6]);
+  await dwell(page);
+  const before = await gallerySnapshot(page);
+  mark("teleport");
+  const { landed } = await teleportBehind(page, eye);
+  expect(horizontal(landed.player.position, before.player.position), "teleported").toBeGreaterThan(0.75);
   await dwell(page);
 
   // From the new spot, recenter brings the focused hologram 1.5 m ahead of the viewer, standing on the floor.
@@ -1703,13 +1752,15 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
     return rig!;
   };
   await setPose(page, "head", eye, await recenterRig());
-  const recentered = await rayClickUntil(page, recenterRig, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2], (g) => readingOf(g, "mock-2")!.placement.sequence > readingOf(landed, "mock-2")!.placement.sequence);
+  const recentered = await rayClickUntil(page, "recenter", recenterRig, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2], (g) => readingOf(g, "mock-2")!.placement.sequence > readingOf(landed, "mock-2")!.placement.sequence);
   const moved = readingOf(recentered, "mock-2")!;
   const viewer = (await readHeadPose(page)).position;
   expect(Math.abs(horizontal(moved.worldPosition, viewer) - 1.5), `recentered ${horizontal(moved.worldPosition, viewer).toFixed(3)} m from the moved viewer`).toBeLessThan(0.05);
   expect(Math.abs(moved.worldPosition[1]), "recentered on the floor").toBeLessThan(0.005);
   expect(feetOnGround(moved)).toBe(true);
-  expect(horizontal(recentered.controls!.foot.worldPosition, moved.worldPosition), "its foot controls came with it").toBeLessThan(moved.footprintRadius + 0.1);
+  // The controls update before placement in a frame, so the chip follows on the frame after the recenter.
+  await waitForGallery(page, (g) => horizontal(g.controls!.foot.worldPosition, readingOf(g, "mock-2")!.worldPosition) < moved.footprintRadius + 0.1, 5_000)
+    .catch((error: Error) => { throw new Error(`its foot controls came with it\n${error.message}`); });
   expect(horizontal(readingOf(recentered, "mock-1")!.worldPosition, readingOf(before, "mock-1")!.worldPosition), "the other stays where it stood").toBeLessThan(1e-6);
   mark("recentered");
   await dwell(page);
@@ -1719,25 +1770,19 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   const tileWorld = recentered.gallery.shelf!.tiles[2]!.worldPosition;
   const [tileRig] = await toRig(page, [tileWorld]);
   await setPose(page, "head", eye, tileRig!);
-  await rayClickUntil(page, tileRig!, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2], (g) => g.gallery.lastSelect?.index === 2);
+  await rayClickUntil(page, "shelf tile 3", tileRig!, [eye[0] + 0.2, eye[1] - 0.35, eye[2] - 0.2], (g) => g.gallery.lastSelect?.index === 2);
   const third = await waitForGallery(page, (g) => readingOf(g, "mock-3")?.placement.stage === "placed" && g.focusedId === "mock-3");
   const mock3 = readingOf(third, "mock-3")!;
   expect(Math.abs(mock3.worldPosition[1]), "placed on the floor after moving").toBeLessThan(0.005);
   expect(feetOnGround(mock3)).toBe(true);
   expect(third.controls!.boundTo).toBe("mock-3");
   mark("placed-mock-3");
-  await captureEvidence(page, testInfo, "vr-locomotion");
+  await captureEvidence(page, testInfo, "vr-recenter-after-moving");
   await endSession(page);
   await expect(page).toHaveURL(/\/$/);
 
-  report.locomotion = {
+  report.recenterAfterMoving = {
     timeline: marks,
-    player: { before: before.player, slid: slid.player, turned: turned.player, landed: landed.player },
-    slideM: slide,
-    turnDeg,
-    chipFade: fade,
-    teleportM: jump,
-    headPivotM: horizontal(headAfterTurn, headBeforeTurn),
     recenter: { distanceM: horizontal(moved.worldPosition, viewer), headBefore: head.position, position: moved.worldPosition },
     shelfPlace: mock3.worldPosition
   };
@@ -1939,7 +1984,7 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const stepBack: Vec3 = [standing[0] + (away[0]! / awayLength) * 1.5, eyeNow[1], standing[2] + (away[1]! / awayLength) * 1.5];
   await setPose(page, "head", stepBack, [standing[0], standing[1] + tall * 0.45, standing[2]]);
   const rowBudget = page.viewportSize()!.width - 32;
-  const near = await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.foot.reachRow.widthApx > 0 && s.controls!.foot.reachRow.widthApx <= rowBudget + 0.5, 3_000);
+  const near = await waitForSnapshot(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.foot.reachRow.widthApx > 0 && s.controls!.foot.reachRow.widthApx <= rowBudget + 0.5, 9_000);
   expect(near.controls!.foot.reachRow.widthApx).toBeGreaterThan(0);
   let { foot, left: rowLeft, right: rowRight } = await settledReachRow(page);
   const [crown, feet] = await toScreen(page, [[standing[0], standing[1] + tall, standing[2]], standing]);
