@@ -87,6 +87,7 @@ export class InputController {
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('keyup', this.onKeyUp, true);
     window.addEventListener('blur', this.onWindowBlur);
+    document.addEventListener('focusin', this.onFocusIn);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     document.addEventListener('mousemove', this.onMouseMove);
     document.addEventListener('mousedown', this.onMouseDown, true);
@@ -344,7 +345,8 @@ export class InputController {
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
-    if (isTextEntry(event.target)) return;
+    // Releases are always processed: a key held before focus moved into a text
+    // field must still end when it is let go.
     if (this.setMoveStateFromKeyboardEvent(event, false)) {
       event.preventDefault();
     }
@@ -378,6 +380,12 @@ export class InputController {
 
   private readonly onWindowBlur = (): void => {
     this.clearMovementState();
+  };
+
+  private readonly onFocusIn = (event: FocusEvent): void => {
+    // Focus entering a text field drops every held key, since their releases
+    // would otherwise be lost to the field.
+    if (isTextEntry(event.target)) this.clearMovementState();
   };
 
   private readonly onVisibilityChange = (): void => {

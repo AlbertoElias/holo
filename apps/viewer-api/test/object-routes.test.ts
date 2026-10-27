@@ -218,3 +218,44 @@ describe("object search when Poly Haven is down", () => {
     await app.close();
   });
 });
+
+describe("object search vetting", () => {
+  it("never offers a Draco or skinned model, since capture or the packer would refuse it", async () => {
+    const gltfs: Record<string, object> = {
+      Plain_01: { asset: { version: "2.0" } },
+      Draco_02: { asset: { version: "2.0" }, extensionsUsed: ["KHR_draco_mesh_compression"], extensionsRequired: ["KHR_draco_mesh_compression"] },
+      Meshopt_01: { asset: { version: "2.0" }, extensionsUsed: ["EXT_meshopt_compression"] },
+      Skinned_01: { asset: { version: "2.0" }, skins: [{ joints: [0] }] }
+    };
+    let origin = "";
+    const server = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", origin);
+      const send = (body: unknown) => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(body));
+      };
+      if (url.pathname === "/assets") {
+        return send(
+          Object.fromEntries(
+            Object.keys(gltfs).map((id) => [id, { name: `Barrel ${id}`, authors: { A: "All" }, tags: ["barrel"], categories: [], dimensions: [500, 500, 500], download_count: 1 }])
+          )
+        );
+      }
+      const files = /^\/files\/([^/]+)$/.exec(url.pathname);
+      if (files) return send({ gltf: { "1k": { gltf: { url: `${origin}/dl/${files[1]}/model.gltf`, size: 100, include: {} } } } });
+      const dl = /^\/dl\/([^/]+)\/model\.gltf$/.exec(url.pathname);
+      if (dl && gltfs[dl[1]!]) return send(gltfs[dl[1]!]);
+      response.writeHead(404).end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const { createPolyhaven } = await import("../src/services/polyhaven.js");
+      const results = await createPolyhaven({ apiOrigin: origin, allowedHosts: [] }).search("barrel", 6);
+      expect(results.map((result) => result.id)).toEqual(["Plain_01"]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});

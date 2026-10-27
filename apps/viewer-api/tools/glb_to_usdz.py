@@ -1019,7 +1019,7 @@ CREDIT_FIELDS = ("source", "sourceUrl", "title", "author", "licence")
 def _write_credits(stage, document):
     # PRD-060: credit for borrowed objects survives into the USDZ's root layer.
     # "holoim:copyright" is asset.copyright; "holoim:credits" is a JSON string
-    # (a list of credit objects, one per credited node), since USD dictionaries
+    # (a list of credit objects, one per source), since USD dictionaries
     # cannot hold lists of dictionaries. Invalid credits are skipped.
     data = {}
     copyright_text = document.get("asset", {}).get("copyright")
@@ -1030,7 +1030,10 @@ def _write_credits(stage, document):
         extras = node.get("extras")
         credit = extras.get("holoimCredit") if isinstance(extras, dict) else None
         if isinstance(credit, dict) and all(isinstance(credit.get(f), str) and credit.get(f) for f in CREDIT_FIELDS):
-            credits.append({f: credit[f][:500] for f in CREDIT_FIELDS})
+            entry = {f: credit[f][:500] for f in CREDIT_FIELDS}
+            # One entry per source, like the viewer card: a model summoned twice is credited once.
+            if all(entry["sourceUrl"] != seen["sourceUrl"] for seen in credits):
+                credits.append(entry)
         if len(credits) >= 100:
             break
     if credits:

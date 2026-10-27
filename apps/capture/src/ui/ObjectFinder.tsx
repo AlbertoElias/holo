@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 import type { ObjectSearchResult } from '@holoim/contracts';
 import { licenceLabel } from '@holoim/objects';
-import { Type } from '@holoim/ui-dom';
-import { glyphMetrics, hitAreaApx, type HitInput } from '@holoim/xr-ui-core';
+import { GlyphControl, Type } from '@holoim/ui-dom';
+import { glyphAppearance, glyphMetrics, hitAreaApx, type HitInput } from '@holoim/xr-ui-core';
 
 import { objectGlbUrl, searchObjects } from '../objects/objectSearch';
 
@@ -14,6 +14,53 @@ const THUMBNAIL_APX = 48;
 function sizeLabel(dimensionsM: ObjectSearchResult['dimensionsM']): string | null {
   if (!dimensionsM) return null;
   return `${dimensionsM.map((m) => Math.round(m * 100)).join(' × ')} cm`;
+}
+
+// A result row as a control with the styleguide's section 6 states: cream on
+// hover, 55% pressed, the token gold ring on keyboard focus (the same
+// appearance GlyphControl draws, which cannot hold a thumbnail and a byline).
+function ResultButton({ label, disabled, hit, gap, onPress, children }: { label: string; disabled: boolean; hit: number; gap: number; onPress: () => void; children: ReactNode }) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const [focusVisible, setFocusVisible] = useState(false);
+  const appearance = glyphAppearance(disabled ? { dimmed: true } : { hovered, focusVisible, pressed, dimmed: false }, { headset: false });
+  const ring = appearance.focusRing;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onPress}
+      onPointerEnter={(event) => { if (event.pointerType !== 'touch') setHovered(true); }}
+      onPointerLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setPressed(true); }}
+      onKeyUp={() => setPressed(false)}
+      onFocus={(event) => setFocusVisible(event.currentTarget.matches(':focus-visible'))}
+      onBlur={() => { setFocusVisible(false); setPressed(false); }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap,
+        width: '100%',
+        minHeight: hit,
+        padding: 0,
+        background: 'transparent',
+        border: 0,
+        color: appearance.color,
+        opacity: appearance.opacity,
+        textAlign: 'left',
+        cursor: disabled ? 'default' : 'pointer',
+        outline: ring ? `${ring.width}px solid ${ring.color}` : 'none',
+        outlineOffset: ring ? `${ring.offset}px` : undefined,
+        WebkitTapHighlightColor: 'transparent'
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
 // Find an object by asking (PRD-060): a text query, up to six registry
@@ -30,6 +77,10 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    run();
+  };
+
+  const run = () => {
     const q = query.trim();
     if (!q || disabled) return;
     abort.current?.abort();
@@ -57,11 +108,7 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
           onChange={(event) => setQuery(event.currentTarget.value)}
           style={{ flex: 1, minWidth: 0, minHeight: hit, background: 'transparent', border: 0, borderBottom: '1px solid var(--holoim-color-gold)', color: 'var(--holoim-color-text)', font: 'inherit' }}
         />
-        <button type="submit" disabled={disabled || query.trim() === ''} style={{ minHeight: hit, minWidth: hit, background: 'transparent', border: 0, cursor: 'pointer' }}>
-          <Type variant="controlLabel" style={{ whiteSpace: 'nowrap' }}>
-            Find
-          </Type>
-        </button>
+        <GlyphControl glyph={null} label="Find" input={input} disabled={disabled || query.trim() === ''} onPress={() => run()} />
       </form>
       {finding.status === 'loading' ? (
         <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
@@ -84,13 +131,7 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
             const size = sizeLabel(result.dimensionsM);
             return (
               <li key={result.id}>
-                <button
-                  type="button"
-                  aria-label={`Add ${result.title} to the tray`}
-                  disabled={disabled}
-                  onClick={() => onPick(objectGlbUrl(result))}
-                  style={{ display: 'flex', alignItems: 'center', gap, width: '100%', minHeight: hit, padding: 0, background: 'transparent', border: 0, color: 'inherit', textAlign: 'left', cursor: disabled ? 'default' : 'pointer' }}
-                >
+                <ResultButton label={`Add ${result.title} to the tray`} disabled={disabled} hit={hit} gap={gap} onPress={() => onPick(objectGlbUrl(result))}>
                   <img src={result.thumbnailUrl} alt="" loading="lazy" width={THUMBNAIL_APX} height={THUMBNAIL_APX} style={{ objectFit: 'cover', flex: 'none' }} />
                   <span style={{ display: 'grid', minWidth: 0 }}>
                     <Type variant="controlLabel">{result.title}</Type>
@@ -99,7 +140,7 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
                       {size ? ` · ${size}` : ''}
                     </Type>
                   </span>
-                </button>
+                </ResultButton>
               </li>
             );
           })}

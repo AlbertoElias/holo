@@ -745,7 +745,6 @@ export async function runDesktopFindTake({ browser, baseUrl, captureRoot, artifa
 export async function runDesktopFindApiTake({ browser, baseUrl, captureRoot, artifactDir, consoleErrors, query }) {
   const label = 'desktop-find-api';
   const failures = [];
-  const fail = (message) => failures.push(message);
   await mkdir(artifactDir, { recursive: true });
   const { context, page } = await setupPage(browser, { iwer: false, consoleErrors, label });
   try {

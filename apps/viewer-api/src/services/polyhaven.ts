@@ -21,8 +21,20 @@ const USER_AGENT = "HoloIM object search (+https://github.com/holoim; contact vi
 const COMPRESSION_EXTENSIONS = new Set([
   "KHR_draco_mesh_compression",
   "EXT_meshopt_compression",
+  "KHR_mesh_quantization",
   "KHR_texture_basisu"
 ]);
+
+/** Why capture would refuse this glTF as an object, or null; mirrors checkSuppliedGlb. */
+function unsupportedReason(json: Record<string, unknown>): string | null {
+  const used = Array.isArray(json.extensionsUsed) ? (json.extensionsUsed as string[]) : [];
+  const required = Array.isArray(json.extensionsRequired) ? (json.extensionsRequired as string[]) : [];
+  if (required.length > 0 || used.some((name) => COMPRESSION_EXTENSIONS.has(name))) {
+    return "This model uses compression the tray cannot read.";
+  }
+  if (Array.isArray(json.skins) && json.skins.length > 0) return "Skinned (rigged) models are not supported as objects.";
+  return null;
+}
 
 export const POLYHAVEN_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
@@ -95,6 +107,7 @@ export function createPolyhaven(config: PolyhavenConfig) {
   let list: { at: number; models: Map<string, PolyhavenModel> } | null = null;
   const listFlight = new Map<string, Promise<Map<string, PolyhavenModel>>>();
   const filesCache = new Map<string, { at: number; files: GltfFiles | null }>();
+  const jsonCache = new Map<string, { at: number; json: Record<string, unknown> }>();
   const filesFlight = new Map<string, Promise<GltfFiles | null>>();
   const packed = new Map<string, Uint8Array>();
   const packFlight = new Map<string, Promise<Uint8Array>>();
@@ -212,6 +225,21 @@ export function createPolyhaven(config: PolyhavenConfig) {
     });
   }
 
+  /** The 1k glTF JSON, fetched once per TTL alongside the files entry. */
+  async function loadGltfJson(id: string, files: GltfFiles): Promise<Record<string, unknown>> {
+    const cached = jsonCache.get(id);
+    if (cached && now() - cached.at < LIST_TTL_MS) return cached.json;
+    let json: Record<string, unknown>;
+    try {
+      json = asRecord(JSON.parse(new TextDecoder().decode(await request(files.gltf.url, MAX_DOWNLOAD_BYTES))));
+    } catch (error) {
+      if (error instanceof UpstreamError) throw error;
+      throw new UpstreamError("Poly Haven returned an unreadable glTF.");
+    }
+    jsonCache.set(id, { at: now(), json });
+    return json;
+  }
+
   function score(model: PolyhavenModel, tokens: string[]): number {
     const nameWords = tokenize(model.title);
     const name = nameWords.join(" ");
@@ -248,7 +276,10 @@ export function createPolyhaven(config: PolyhavenConfig) {
           const files = await loadFiles(model.id);
           if (!files) continue;
           const bytes = files.gltf.size + Object.values(files.include).reduce((sum, file) => sum + file.size, 0);
-          if (bytes <= MAX_PACKED_OBJECT_BYTES) sized[index] = { ...model, bytes };
+          if (bytes > MAX_PACKED_OBJECT_BYTES) continue;
+          // Drop what capture or the packer would refuse after the user picked it.
+          if (unsupportedReason(await loadGltfJson(model.id, files)) !== null) continue;
+          sized[index] = { ...model, bytes };
         } catch {
           failures += 1;
         }
@@ -279,21 +310,9 @@ export function createPolyhaven(config: PolyhavenConfig) {
     const total = files.gltf.size + Object.values(files.include).reduce((sum, file) => sum + file.size, 0);
     if (total > MAX_PACKED_OBJECT_BYTES) throw new ObjectTooLargeError("This model is too large to use.");
 
-    let json: Record<string, unknown>;
-    try {
-      json = JSON.parse(new TextDecoder().decode(await request(files.gltf.url, MAX_DOWNLOAD_BYTES))) as Record<
-        string,
-        unknown
-      >;
-    } catch (error) {
-      if (error instanceof UpstreamError) throw error;
-      throw new UpstreamError("Poly Haven returned an unreadable glTF.");
-    }
-    const used = Array.isArray(json.extensionsUsed) ? (json.extensionsUsed as string[]) : [];
-    const required = Array.isArray(json.extensionsRequired) ? (json.extensionsRequired as string[]) : [];
-    if (required.length > 0 || used.some((name) => COMPRESSION_EXTENSIONS.has(name))) {
-      throw new UpstreamError("This model uses compression the tray cannot read.");
-    }
+    const json = await loadGltfJson(id, files);
+    const reason = unsupportedReason(json);
+    if (reason) throw new UpstreamError(reason);
 
     const resources: Record<string, Uint8Array<ArrayBuffer>> = {};
     let downloaded = 0;

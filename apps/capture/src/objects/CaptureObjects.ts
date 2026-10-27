@@ -183,7 +183,7 @@ export class CaptureObjects {
       if (seq !== this.loadSeq) return false;
       if (this.deps.isTakeActive()) throw new SuppliedObjectError('Choose the object before recording.');
       this.registry.clearPrepared();
-      this.registry.add(loaded.model, { name: loaded.source.name, source: loaded.source, origin: 'prepared', layer: 'event' });
+      this.registry.add(loaded.model, { name: loaded.source.name, source: loaded.source, credit: loaded.credit, origin: 'prepared', layer: 'event' });
       ui.setObjectState({ status: 'ready', name: loaded.source.name, message: null });
       return true;
     } catch (error) {
