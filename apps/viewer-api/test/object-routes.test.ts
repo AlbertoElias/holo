@@ -579,6 +579,15 @@ describe("voice search transcription", () => {
     await app.close();
   });
 
+  it("limits each client's GLB downloads, so random ids cannot spend the registries' quota", async () => {
+    const app = await objectApp({ polyhaven: (await import("../src/services/polyhaven.js")).createPolyhaven({ apiOrigin: await closedOrigin(), allowedHosts: [] }), polypizza: null, transcriber: null, glbLimit: 1 });
+    expect((await app.inject({ method: "GET", url: "/api/objects/polyhaven/any_chair.glb" })).statusCode).toBe(502);
+    const limited = await app.inject({ method: "GET", url: "/api/objects/polyhaven/other_chair.glb" });
+    expect(limited.statusCode).toBe(429);
+    expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+    await app.close();
+  });
+
   it("limits each client to a few transcriptions a minute", async () => {
     // Fly-Client-IP is trusted only on Fly.
     process.env.FLY_APP_NAME = "holoim-api-test";

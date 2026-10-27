@@ -39,6 +39,9 @@ const TRANSCRIBE_ALL_PER_WINDOW = 60;
 // A search may download and vet several Poly Pizza GLBs; a person types a few a minute.
 const SEARCH_WINDOW_MS = 60_000;
 const SEARCH_PER_WINDOW = 30;
+// Capture prefetches one GLB per search and fetches each pick, so twice the
+// search allowance; each new Poly Pizza id costs a request on our API key.
+const GLB_PER_WINDOW = 60;
 
 export type ObjectRouteOptions = {
   polyhaven?: Polyhaven;
@@ -50,6 +53,8 @@ export type ObjectRouteOptions = {
   transcribeLimit?: number;
   /** Searches per client per minute. */
   searchLimit?: number;
+  /** GLB downloads per client per minute, both registries together. */
+  glbLimit?: number;
 };
 
 /** Takes the registries' results in turn, best first, so each source's top picks are shown. */
@@ -118,6 +123,13 @@ export async function registerObjectRoutes(app: FastifyInstance, options: Object
   const transcribeLimit = createRateLimit(options.transcribeLimit ?? TRANSCRIBE_PER_WINDOW, TRANSCRIBE_WINDOW_MS);
   const transcribeAllLimit = createRateLimit(TRANSCRIBE_ALL_PER_WINDOW, TRANSCRIBE_WINDOW_MS);
   const searchLimit = createRateLimit(options.searchLimit ?? SEARCH_PER_WINDOW, SEARCH_WINDOW_MS);
+  const glbLimit = createRateLimit(options.glbLimit ?? GLB_PER_WINDOW, SEARCH_WINDOW_MS);
+
+  function limitGlb(request: FastifyRequest, reply: FastifyReply) {
+    const retryAfter = glbLimit(clientKey(request, behindFly));
+    if (retryAfter === null) return null;
+    return reply.status(429).header("retry-after", String(retryAfter)).send({ error: "Too many downloads; try again in a minute." });
+  }
 
   function fail(reply: FastifyReply, error: unknown) {
     if (error instanceof UnknownObjectError) return reply.status(404).send({ error: "No such object." });
@@ -189,13 +201,13 @@ export async function registerObjectRoutes(app: FastifyInstance, options: Object
   app.get<{ Params: { file: string } }>("/objects/polyhaven/:file", async (request, reply) => {
     const id = GLB_FILE_PATTERN.exec(request.params.file)?.[1];
     if (!id || !POLYHAVEN_ID_PATTERN.test(id)) return reply.status(404).send({ error: "No such object." });
-    return sendGlb(reply, () => polyhaven.packGlb(id));
+    return limitGlb(request, reply) ?? sendGlb(reply, () => polyhaven.packGlb(id));
   });
 
   app.get<{ Params: { file: string } }>("/objects/polypizza/:file", async (request, reply) => {
     const id = GLB_FILE_PATTERN.exec(request.params.file)?.[1];
     if (!polypizza || !id || !POLYPIZZA_ID_PATTERN.test(id)) return reply.status(404).send({ error: "No such object." });
-    return sendGlb(reply, () => polypizza.packGlb(id));
+    return limitGlb(request, reply) ?? sendGlb(reply, () => polypizza.packGlb(id));
   });
 
   // Its own scope, so the raw audio parser and error mapping touch no other route.
