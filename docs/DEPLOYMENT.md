@@ -37,8 +37,7 @@ From the workspace root (the Docker build context is the monorepo root):
 fly apps create holoim-api            # skip if it already exists
 fly volumes create holoim_data --size 3 --region iad -a holoim-api
 fly secrets set -a holoim-api \
-  WEB_ORIGIN="https://holoim-viewer.pages.dev" \
-  WEB_ORIGINS="https://holoim-viewer.pages.dev,https://*.holoim-viewer.pages.dev"
+  WEB_ORIGIN="https://holoim-viewer.pages.dev"
 fly deploy -c fly.toml
 fly open -a holoim-api                # opens https://holoim-api.fly.dev/healthz path manually
 curl https://holoim-api.fly.dev/healthz   # {"status":"ok"}
@@ -76,8 +75,11 @@ pnpm --filter @holoim/web exec wrangler pages deploy dist --project-name holoim-
 Or connect the GitHub repo in the Pages dashboard with build command
 `pnpm --filter @holoim/web build`, output `apps/viewer-web/dist`, and
 `VITE_API_ORIGIN` set in the project environment. Preview deployments get
-`https://<branch>.holoim-viewer.pages.dev` URLs, which the API allows via
-the `WEB_ORIGINS` wildcard above.
+`https://<branch>.holoim-viewer.pages.dev` and
+`https://<hash>.holoim-viewer.pages.dev` URLs. The API allows those, and the
+same hosts under `holoim-capture.pages.dev`, itself
+(`apps/viewer-api/src/lib/cors.ts`); `WEB_ORIGINS` is only for other
+origins.
 
 The Pages Function `apps/viewer-web/functions/index.ts` serves `/` with
 the feed's first page inlined, plus a preload for the newest GLB, so a
@@ -106,7 +108,8 @@ Live at https://holoim-capture.pages.dev. Limits of the static deploy: the
 dev-only input-recording sink (`/__holoim/input-recordings`, served by the
 local Vite server) does not exist there, so recording headset input as a
 replay fixture still happens against the local dev server. Capture calls
-no API, so no `WEB_ORIGINS` change is needed unless that changes.
+no API today; its preview hosts are already allowed, but its production
+origin would need adding to `WEB_ORIGINS` if it ever does.
 
 ## 3. Media on R2 (Phase 2)
 

@@ -26,23 +26,36 @@ export function boundsWithoutObjects(root: Object3D): Box3 {
 }
 
 /**
+ * A take the author's phone camera made (a handheld AR capture): nobody
+ * performed, so there is no `RecordedAvatar`, and the author is a camera node
+ * animated by the take's clip. The set stands in the take's own frame, whose
+ * origin is the recorded floor.
+ */
+export function isCameraTake(root: Object3D): boolean {
+  return !root.getObjectByName("RecordedAvatar") && Boolean(root.getObjectByName("RecordedAuthorCamera"));
+}
+
+/**
  * Puts the recorded floor at the origin, under the author. A capture's
  * avatar origin is on its floor (B-022): the scene around it (terrain
  * flanks, water, the bubble sphere) reaches far below and must not lift it.
- * Other files stand on their lowest drawn point, under their hips when
- * they are a humanoid. Resolving the humanoid (any format; `gltf` lets the
- * file's own declaration count) also tags its bones for every view.
+ * A camera take has no avatar; its set's origin is the floor, so it stays
+ * where it is, whatever bones or props the set holds. Other files stand on
+ * their lowest drawn point, under their hips when they are a humanoid.
+ * Resolving the humanoid (any format; `gltf` lets the file's own declaration
+ * count) also tags its bones for every view.
  */
 export function normalizeSceneAtOrigin(root: Object3D, gltf?: HumanoidGltf): void {
   const recordedAvatar = root.getObjectByName("RecordedAvatar");
+  const cameraTake = isCameraTake(root);
   const { hips } = resolveHumanoidAnchors(root, gltf);
-  const anchor = recordedAvatar ?? hips ?? root;
+  const anchor = recordedAvatar ?? (cameraTake ? root : null) ?? hips ?? root;
 
   const anchorPos = anchor.getWorldPosition(new Vector3());
   if (!Number.isFinite(anchorPos.x) || !Number.isFinite(anchorPos.y) || !Number.isFinite(anchorPos.z)) return;
 
   root.position.sub(anchorPos);
-  if (recordedAvatar) return;
+  if (recordedAvatar || cameraTake) return;
 
   const bounds = boundsWithoutObjects(root);
   if (!bounds.isEmpty() && Number.isFinite(bounds.min.y)) {

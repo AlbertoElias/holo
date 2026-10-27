@@ -1,14 +1,19 @@
 # Feature brief: Redesign UI and interaction across capture and viewer
 
 **Lead:** Claude Code (Opus)  
-**Status:** Implementing (approved by the user 2026-10-24). Slices 0 to 4
+**Status:** Shipped 2026-10-26, with the Android and Quest device checks
+Unverified (approved by the user 2026-10-24). It stays at this path because
+the code cites it. Slices 0 to 4
 are on `main` (3 and 4 merged together after `verify:pr` on the combined
 tree); the user's second round (dock, controls, upload sheet, soot, the 3D
 cloche) is on `main` at `02d0282` and deployed. The halo's third pass (the
 burnt globe) replaces the cloche's rim-lit glass; slices 5 and 6 are on
 `main` at `b3b4365`. The cross-vendor review of slices 2 to 4 and the second
 round ran on 2026-10-25 and its fixes are in the verification rows below.
-Next: slice 7
+Slice 7 closed on 2026-10-26 on the user's device checks: desktop and an
+iPhone passed. Every Android and Quest check is Unverified, skipped by the
+user's choice (no Android device; the Quest is away for a while). See
+"Physical-device limits".
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -963,7 +968,10 @@ the slice is verified locally against the three local files.
 
 ### Slice 7: cross-device task test and device checks
 
-See "Test plan and evidence" and "Physical-device limits".
+See "Test plan and evidence" and "Physical-device limits". Closed
+2026-10-26: the user checked desktop and an iPhone and everything passed.
+The Android and Quest checks, and with them the cross-device task test, are
+Unverified by the user's choice.
 
 ## Acceptance criteria
 
@@ -983,7 +991,7 @@ See "Test plan and evidence" and "Physical-device limits".
   contract tests and no `--passWithNoTests`.
 - [ ] Every page of both apps is in the new look on each device it runs on;
   no page mixes old and new UI.
-- [ ] Viewer, phone and desktop: each card shows one burnt edge, the shade,
+- [x] Viewer, phone and desktop: each card shows one burnt edge, the shade,
   and Play, Free and Return in it; nothing bare from 75% down; notices on the
   chip; only the card nearest the middle sparks.
 - [ ] Follow and Free behave as the portal brief requires in all three
@@ -1013,12 +1021,14 @@ See "Test plan and evidence" and "Physical-device limits".
 - [ ] The export → upload → render pipeline e2e passes; a take without marks
   exports byte-identical to before, with all chrome visible during the
   take; v0 files still load after the meaning change.
-- [ ] New USDZ files carry the baked burnt globe, its fronts and embers the viewer's
+- [x] New USDZ files carry the baked burnt globe, its fronts and embers the viewer's
   the same hologram; the rebuild script has updated the three most recent
   local holograms and then every production hologram, with no preview lost.
 - [ ] The cross-device task test has run and its results are recorded here.
-- [ ] Every device check below has a recorded physical result, or is listed
-  under remaining limits with the reason.
+  (Unverified: it starts with a mark in a headset, and the Quest is away.)
+- [x] Every device check below has a recorded physical result, or is listed
+  under remaining limits with the reason. (2026-10-26: desktop and iPhone
+  passed; every Android and Quest check is Unverified by the user's choice.)
 
 ## Failure cases considered
 
@@ -1155,10 +1165,11 @@ share no files.
 | USDZ rebuild, local | `pnpm --filter @holoim/api rebuild:usdz` against a copy of production's database and files (the three most recent holograms) | Emulation | 2026-10-25, final design: the dry run lists three; a run stopped by SIGINT switched two and left the third on ql2; the resume switched the third; a further run had nothing to do. Earlier, a truncated GLB failed validation, stayed on ql2, was journaled, skipped on rerun and switched with `--retry-failed` once restored. Production not run: it waits for the user's go-ahead |
 | Slice 6, `verify:pr` | `pnpm run verify:pr` on the slice 6 branch rebased onto `31c082a`, ports 3574/3501/5575 | Emulation | 2026-10-25: doctor, lint and typecheck, every unit suite, build, `test:knowledge` 7/7, pipeline 8/8 (capture → viewer asserts the preview's cloche is seeded by the uploaded id and has its fronts), portal 6/6, XR smoke 15/15. Two retries were environmental, not the change: `test:knowledge` reused a stale atlas server on port 4176 started from the main checkout (main fails the same way against it; both pass 7/7 on their own server), and one portal run lost a CDN fetch of an environment map |
 | `verify:pr`, slices 5 and 6 combined | Every `verify:pr` step on the merged tree (slice 6 rebased onto `7462051`, slice 5 at `2896c97` merged in); `test:knowledge` against its own server (port 4176 held by a stale atlas server from the main checkout) | Emulation and tooling | 2026-10-25 before the merge to `main`: doctor, lint, typecheck, every unit suite, build, `check:docs`, knowledge 7/7, pipeline 10/10, portal 6/6, XR smoke 15/15 on its second run (the first lost a CDN fetch of the `office_small` environment map, as one portal run did earlier) |
-| USDZ rebuild, production | Database backed up to `/data/dev.db.pre-ql3-20261025` (integrity ok), `rebuild-usdz.js --dry-run`, then the rebuild with old files kept | Production | 2026-10-25 after the deploy of `5f9d376`: two stored previews, both now ql3. `cmvo1tcvc0000oejtzuhpu726` switched in 50 s. `cmvmig68e0000oejsj9pd83rz` (the long take) failed twice in the inspector (past 180 s, then past 900 s; it takes 75 s on a laptop), and the worker its Quick Look request re-queued failed three conversions past the converter's 100 s (12.6 s on a laptop): the shared CPU was throttled, about ten times slower, after its burst balance ran out (B-022). Once the CPU recovered, one Quick Look request had the worker publish it in about 30 s; the published file passes every inspector check (the old ql2 failed one) with the hologram's seeded globe (15 fronts, 800 embers). Both ql2 files are kept on the volume. The rebuild's inspection timeout is now 900 s |
+| USDZ rebuild, production | Database backed up to `/data/dev.db.pre-ql3-20261025` (integrity ok), `rebuild-usdz.js --dry-run`, then the rebuild with old files kept | Production | 2026-10-25 after the deploy of `5f9d376`: two stored previews, both now ql3. `cmvo1tcvc0000oejtzuhpu726` switched in 50 s. `cmvmig68e0000oejsj9pd83rz` (the long take) failed twice in the inspector (past 180 s, then past 900 s; it takes 75 s on a laptop), and the worker its Quick Look request re-queued failed three conversions past the converter's 100 s (12.6 s on a laptop): the shared CPU was throttled, about ten times slower, after its burst balance ran out (B-030). Once the CPU recovered, one Quick Look request had the worker publish it in about 30 s; the published file passes every inspector check (the old ql2 failed one) with the hologram's seeded globe (15 fronts, 800 embers). Both ql2 files are kept on the volume. The rebuild's inspection timeout is now 900 s |
 | Feed scroll and the lantern dock | The user's report ("the upload button doesnt look right"; the wheel zoomed instead of scrolling unless literally on the hologram). Codex (`-p deep`, read-only) reviewed the diff and screenshots; every `verify:pr` step on private ports (3675/3676/5675), knowledge on its own server (4276) | Emulation and tooling | 2026-10-25 on `bug/feed-scroll-and-upload` rebased onto `89f87df`. The wheel scrolls unless the gesture begins on the hologram (a raycast of its drawn meshes inside the bubble); one gesture spans the feed, so a scroll back up past the card above stays a scroll; a pinch still zooms anywhere. The feed's dock stands on the amber horizon as lanterns (5.2), Settings' word in a lantern capsule. Codex: ship with fixes; its two hit-test must-fixes (posed skinned bounds, recorded objects exempt from the bubble) and its per-card gesture concern are fixed, the last with a new e2e that fails on the old code. Doctor, `check:all`, every unit suite (`ui-dom` 99, `xr-ui-core` 107, viewer-web 40) and builds pass; knowledge 7/7, pipeline 10/10, portal 8/8, XR smoke 18/18 |
 | Touch scroll, the Settings corner and the control chip | The user's reports ("the problem scrolling was in touch devices"; Upload and Settings alike in one place; "the pill has too much spacing to the left"). Codex (`-p deep`, read-only) reviewed diffs and screenshots; every `verify:pr` step on private ports (3675/3676/5675), knowledge on its own server (4276) | Emulation and tooling | 2026-10-25 on `bug/feed-scroll-and-upload`. A touch looks around only when it starts on the hologram or inside its cloche glass; any other swipe scrolls, including one that begins sideways (which the browser will not scroll under `pan-y`, so the card scrolls it and settles on a card); a touch while the feed glides goes to the feed; a pinch zooms anywhere. Settings waits in the top corner its sheet unfolds from; Upload alone in the dock. Over the picture the control chip hugs its controls, its ends alike (18/18 apx desktop, 28/28 phone), Play at the middle in every state. Codex: ship with fixes; its six touch must-fixes (a gesture outliving card focus, flick speed from one event, a settle between cards, a stale settle restoring snapping, a pinch off the hologram taken for a pan, a glide-stopping touch read as a tap) are fixed; it kept the chip dark over the picture (2.3, 5.2: lanterns are the dock's alone). New phone e2e: a drifting swipe off the hologram browses without turning it, a swipe on it looks around, a two-pixel drift is no flick and a touch that stops the glide pauses nothing (both fail on the old code); the chip's ends match reached and folded. Not yet tried on a physical iPhone or Android phone |
-| Cross-device task test | The PRD-021 trial (below) | Physical | Recorded results; pending |
+| Device checks, slice 7 | The user on desktop and an iPhone at https://holoim-viewer.pages.dev (main `a2aae3f`): the six phone steps (scroll from off the hologram, look around from on it, pinch, stop a glide, the chip, Settings), the desktop feed, and a hologram in AR Quick Look | Physical | 2026-10-26, the user: "everything else checked". Passed: touch scroll and look, pinch, the stopped glide, the control chip's even ends with Play at the middle, Settings in the top corner, the desktop feed, and the baked globe in iPhone Quick Look (check 8). Not checked, by the user's choice: every Android and Quest check ("i cant check on android because i dont have one. and i wont have my quest with me for a while, so well skip that"); they are listed under "Physical-device limits" as Unverified |
+| Cross-device task test | The PRD-021 trial (below) | Physical | Unverified: the trial starts with a mark in a headset, and the Quest is away (user's choice, 2026-10-26) |
 
 ### Cross-device task test
 
@@ -1182,17 +1193,24 @@ blending and type checks.
 
 | # | Check | Device | Steps | Passes when | Emulation can show | Physical result |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Blending in AR | Quest 3 passthrough; Android Chrome (ARCore); iPhone AR Quick Look | Run the probe's blend pairs on each | The blend mode is measured on each; the chip keeps its value, or takes round 3's value for the measured mode (88% sRGB, 92% linear) | Nothing: IWER composites in desktop Chromium | Pending |
-| 2 | Soot in bright AR rooms, and its threshold | Android phone | Place a hologram against a white and a beige wall in daylight and in a dim room; log the estimate's ambient luminance; screenshot | Soot is on in daylight and off in the dim room, with contrast near 3.3:1 and 4.3:1; the logged values confirm or replace 0.16 and 0.095 | That the code path switches on a mocked estimate | Pending |
-| 3 | Headset flicker | Quest 3, VR and AR | One-minute look at a hologram on a table in AR, and in VR | The rating is recorded for the user to judge (the 4 to 8 s looks gave "noticeable") | Nothing | Pending |
-| 4 | Sparks on Android phones | A mid-range Android phone | Scroll the feed for a minute; record the long-frame share | Recorded beside the Quest 2D page's 0.04% (focus only), for the user to judge | That one card animates | Pending |
-| 5 | sRGB blending in Quest VR | Quest 3 | Probe blend pairs in VR | Measured; 72% kept or replaced | Nothing | Pending |
-| 6 | Glyph stroke in a headset | Quest 3 | Look at the glyph row at 1.75 m and at 1 m | 3.75 apx strokes do not shimmer | Nothing | Pending |
-| 7 | Legibility from 1 m to 1.75 m, and the 25 apx initial | Quest 3 | Probe type ratings at 1 m, 1.25 m and 1.5 m, and an author initial | The ratings are recorded; "easy" at each distance keeps the 2.5× rule | Nothing | Pending |
-| 8 | Baked halo in Quick Look | iPhone | Open a hologram's USDZ in Quick Look on a table; screenshot | The halo reads as a halo, not washed out | Nothing | Pending |
-| 9 | Soot always on in Quest AR | Quest 3 passthrough | Look at a hologram in a dim room and against a bright wall | The edge reads against the wall, and the user judges the dim-room look | That soot is on without an estimate | Pending |
+| 1 | Blending in AR | Quest 3 passthrough; Android Chrome (ARCore); iPhone AR Quick Look | Run the probe's blend pairs on each | The blend mode is measured on each; the chip keeps its value, or takes round 3's value for the measured mode (88% sRGB, 92% linear) | Nothing: IWER composites in desktop Chromium | Unverified (user's choice, 2026-10-26: no Android, the Quest away), so round 3's 88% sRGB and 92% linear chip values stay unmeasured. On iPhone the user saw the hologram in Quick Look and passed it (check 8), but the probe's blend pairs were not run there |
+| 2 | Soot in bright AR rooms, and its threshold | Android phone | Place a hologram against a white and a beige wall in daylight and in a dim room; log the estimate's ambient luminance; screenshot | Soot is on in daylight and off in the dim room, with contrast near 3.3:1 and 4.3:1; the logged values confirm or replace 0.16 and 0.095 | That the code path switches on a mocked estimate | Unverified: no Android device (user's choice, 2026-10-26); 0.16 and 0.095 stand unmeasured |
+| 3 | Headset flicker | Quest 3, VR and AR | One-minute look at a hologram on a table in AR, and in VR | The rating is recorded for the user to judge (the 4 to 8 s looks gave "noticeable") | Nothing | Unverified, including the AR table flicker: the Quest is away (user's choice, 2026-10-26) |
+| 4 | Sparks on Android phones | A mid-range Android phone | Scroll the feed for a minute; record the long-frame share | Recorded beside the Quest 2D page's 0.04% (focus only), for the user to judge | That one card animates | Unverified: no Android device, so Android frame time is unmeasured (user's choice, 2026-10-26) |
+| 5 | sRGB blending in Quest VR | Quest 3 | Probe blend pairs in VR | Measured; 72% kept or replaced | Nothing | Unverified: the Quest is away (user's choice, 2026-10-26) |
+| 6 | Glyph stroke in a headset | Quest 3 | Look at the glyph row at 1.75 m and at 1 m | 3.75 apx strokes do not shimmer | Nothing | Unverified: the Quest is away (user's choice, 2026-10-26) |
+| 7 | Legibility from 1 m to 1.75 m, and the 25 apx initial | Quest 3 | Probe type ratings at 1 m, 1.25 m and 1.5 m, and an author initial | The ratings are recorded; "easy" at each distance keeps the 2.5× rule | Nothing | Unverified: the Quest is away (user's choice, 2026-10-26) |
+| 8 | Baked halo in Quick Look | iPhone | Open a hologram's USDZ in Quick Look on a table; screenshot | The halo reads as a halo, not washed out | Nothing | Passed, 2026-10-26: the user opened a hologram in Quick Look on an iPhone and checked it |
+| 9 | Soot always on in Quest AR | Quest 3 passthrough | Look at a hologram in a dim room and against a bright wall | The edge reads against the wall, and the user judges the dim-room look | That soot is on without an estimate | Unverified: the Quest is away (user's choice, 2026-10-26) |
 | 10 | Gaze-and-pinch hit size | Apple Vision Pro | Hit each glyph by gaze and pinch at 1.75 m | Hits land at 72 apx without wrong targets | Only if IWER emulates `transient-pointer` | No device: remaining limit |
-| 11 | VR soot | Quest 3 | Look at an edge against a bright part of the VR room | Soot replaces the glow there and nowhere else | That `t(L)` follows the room's luminance | Pending |
+| 11 | VR soot | Quest 3 | Look at an edge against a bright part of the VR room | Soot replaces the glow there and nowhere else | That `t(L)` follows the room's luminance | Unverified: the Quest is away (user's choice, 2026-10-26) |
+
+On 2026-10-26 the user checked desktop and an iPhone and passed them
+(check 8 and the "Device checks, slice 7" row). Every Android and Quest
+check here, and every Quest and Android item in the lists below, is
+Unverified by the user's choice: there is no Android device, and the Quest
+is away for a while. The iPhone items below the table, other than the
+feed's touch and Quick Look, were not named in that check and stay open.
 
 Also physical, from PRD-021's technical signal: hold to mark on Quest hands
 and controllers (feel, false starts, stuck modes), the Halo flick on each

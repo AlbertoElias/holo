@@ -2,6 +2,7 @@ import { tokens } from "@holoim/design-tokens";
 import { RayInteractable, UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
 import { Euler, Quaternion, Vector3, type Object3D } from "three";
 
+import { markChrome } from "@holoim/xr-ui-core";
 import { FONT_FAMILIES, FONT_FAMILY } from "./fonts.js";
 import { CHIP, CHIP_OPACITY, COLOR, GLYPH, HEADSET_SCALE, HIT, LABEL_MIN_DISTANCE_M, TYPE, metresPerApx, withAlpha } from "./tokens.js";
 
@@ -99,6 +100,7 @@ export class WorldPanel {
     this.document = new UIKitDocument(root);
     this.entity = world.createTransformEntity(undefined, { parent: world.activeLevel.value });
     this.entity.object3D!.name = "WorldPanel";
+    markChrome(this.entity.object3D!);
     this.entity.object3D!.add(this.document);
     this.entity.addComponent(RayInteractable);
   }

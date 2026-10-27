@@ -4,6 +4,8 @@ import {
   MIXAMO_TO_VRM,
   VRM_HUMANOID_BONES,
   resolveHumanoidBone,
+  encodeHoloimMeaning,
+  isCameraFrom,
   validateHoloimMeaning
 } from "./index.js";
 
@@ -16,6 +18,14 @@ import {
 //  8. empty motion bones              9. non-object input (null, array, string)
 // 10. alias table: prefix variants, fingertip 4, every target a real VRM bone,
 //     prototype keys ("constructor") resolving, all 55 VRM bones reachable.
+// v1 (camera `from`) adds, each a way the shared contract could break:
+// 11. a v0 bone file stops validating     12. a v0 file with a `camera` key validates
+// 13. a v1 camera `from` is rejected      14. `camera: false`, or `camera` beside `bone`, validates
+// 15. version 2 or a missing version validates
+// 16. a camera link with `inferred` provenance validates
+// 17. the reader changes a v0 record's content
+// 18. the writer writes v1 for a record the v0 schema accepts, or v0 for one with a camera `from`
+// 19. v1 stops accepting a bone `from` (or its inferred provenance)
 const example = {
   version: 0,
   marks: [
@@ -65,7 +75,8 @@ describe("validateHoloimMeaning", () => {
     ["null", null],
     ["array", []],
     ["string", "x"],
-    ["version 1", { ...example, version: 1 }],
+    ["version 2", { ...example, version: 2 }],
+    ["string version", { ...example, version: "0" }],
     ["missing version", { marks: [], spans: [] }],
     ["unknown top-level key", { ...example, extra: 1 }]
   ])("rejects %s", (_n, input) => {
@@ -101,6 +112,81 @@ describe("validateHoloimMeaning", () => {
     const result = validateHoloimMeaning(bad);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.length).toBeGreaterThan(0);
+  });
+});
+
+const cameraLink = {
+  kind: "link",
+  anchor: { from: { camera: true, node: 31 }, to: { node: 7, point: [0, 0.5, 0] } },
+  span: { start: 1, end: 2 },
+  provenance: { value: "recorded" }
+};
+const v1Camera = { version: 1, marks: [cameraLink], spans: [] };
+
+describe("HOLOIM_meaning v1", () => {
+  it("still validates a v0 bone file, returning it deep-equal", () => {
+    const result = validateHoloimMeaning(example);
+    expect(result).toEqual({ ok: true, value: example });
+  });
+
+  it("rejects a v0 file with a camera from", () => {
+    expect(validateHoloimMeaning({ ...v1Camera, version: 0 }).ok).toBe(false);
+  });
+
+  it("validates a v1 camera from and narrows it with isCameraFrom", () => {
+    const result = validateHoloimMeaning(v1Camera);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const from = result.value.marks[0]!.anchor.from;
+    expect(isCameraFrom(from)).toBe(true);
+    expect(from).toEqual({ camera: true, node: 31 });
+  });
+
+  it("validates a v1 file with a bone from and inferred provenance", () => {
+    expect(validateHoloimMeaning({ ...example, version: 1 }).ok).toBe(true);
+  });
+
+  it.each([
+    ["camera false", { camera: false, node: 31 }],
+    ["camera beside bone", { camera: true, bone: "rightHand", node: 31 }],
+    ["camera without node", { camera: true }],
+    ["unknown from key", { camera: true, node: 31, lens: 1 }]
+  ])("rejects %s", (_n, from) => {
+    const bad = clone(v1Camera) as Loose;
+    bad.marks[0].anchor.from = from;
+    expect(validateHoloimMeaning(bad).ok).toBe(false);
+  });
+
+  it("rejects a camera link with inferred provenance", () => {
+    const bad = clone(v1Camera) as Loose;
+    bad.marks[0].provenance = { value: "inferred", confidence: 0.9 };
+    const result = validateHoloimMeaning(bad);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(" ")).toContain("recorded provenance");
+  });
+
+  it.each([
+    ["version 2", { ...v1Camera, version: 2 }],
+    ["missing version", { marks: [cameraLink], spans: [] }]
+  ])("rejects %s, naming the unsupported version", (_n, input) => {
+    const result = validateHoloimMeaning(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]).toContain("unsupported");
+  });
+
+  it("writes v0 for a bone-only record and v1 for one with a camera from", () => {
+    const bone = encodeHoloimMeaning({ marks: example.marks as never, spans: example.spans as never });
+    expect(bone.version).toBe(0);
+    expect(bone).toEqual(example);
+    const camera = encodeHoloimMeaning({ marks: [cameraLink] as never, spans: [] });
+    expect(camera.version).toBe(1);
+    expect(camera).toEqual(v1Camera);
+  });
+
+  it("throws when no version accepts the record", () => {
+    const bad = clone(cameraLink) as Loose;
+    bad.provenance = { value: "inferred", confidence: 0.5 };
+    expect(() => encodeHoloimMeaning({ marks: [bad as never], spans: [] })).toThrow(/recorded provenance/);
   });
 });
 

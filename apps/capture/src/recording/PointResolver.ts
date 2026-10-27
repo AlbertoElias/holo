@@ -5,14 +5,15 @@ import { type MeaningMotionSpan, type MeaningLinkProvenance, type MeaningSpan, r
 import { HOLD_DELAY_MS } from '@holoim/xr-ui-core';
 
 import { humanoidTagOf } from '../avatar/HumanoidSkeleton';
-import { isThreeBone } from '../shared/threeTypeGuards';
+import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
 import type { RecordingFrame, VrHandSide } from '../types/contracts';
-import type { AimHold, AimInput, HandPointSample, PointSampleStore } from './PointSampleStore';
+import type { AimHold, AimInput, AimPointSample, HandPointSample, PointSampleStore } from './PointSampleStore';
 import { POINT_DWELL_SEC, type PoseSegment, type ReferentRun, type ReferentSample, segmentPoses, splitByReferent } from './pointSegments';
 
 /** A link whose nodes are still objects; `GLTFMeaningPlugin` swaps them for node indices. */
 export interface MeaningLinkDraft {
-  from: { bone: VrmHumanoidBone; object: THREE.Object3D };
+  /** A performer's bone, or the author's camera node (a camera take). */
+  from: { bone: VrmHumanoidBone; object: THREE.Object3D } | { camera: true; object: THREE.Object3D };
   to: { object: THREE.Object3D; bone?: VrmHumanoidBone; point: [number, number, number]; radius?: number };
   span: MeaningSpan;
   provenance: MeaningLinkProvenance;
@@ -51,6 +52,20 @@ export interface PointResolutionInput {
   exportAvatar: THREE.Object3D;
   /** Clipped bubble meshes as exported, in world space; empty when the take has no world model. */
   sceneMeshes: readonly THREE.Mesh[];
+}
+
+/** What a camera take's holds resolve against (docs/features/archive/ar-recording.md), all in the take's exported scene. */
+export interface CameraResolutionInput {
+  store: PointSampleStore;
+  /** The take's first and last camera sample, in the store's seconds. */
+  startSec: number;
+  endSec: number;
+  /** `RecordedAuthorCamera`: the `from` of every link. */
+  camera: THREE.Object3D;
+  /** The clipped set's meshes as exported. */
+  sceneMeshes: readonly THREE.Mesh[];
+  /** The exported `RecordedObject` wrappers; a hit on any mesh below one names the wrapper. */
+  objects: readonly THREE.Object3D[];
 }
 
 /** Links at or above this confidence are written; below it nothing lights up. */
@@ -166,12 +181,7 @@ export class PointResolver {
     if (frames.length === 0 || !store.hasSamples()) return { draft, report };
 
     const t0 = frames[0]!.timeSec;
-    const tEnd = frames.at(-1)!.timeSec;
-    const toSpan = (start: number, end: number): MeaningSpan => {
-      const s = clamp(start - t0, 0, tEnd - t0);
-      const e = clamp(end - t0, s, tEnd - t0);
-      return { start: round(s), end: round(e) };
-    };
+    const toSpan = spanWithin(t0, frames.at(-1)!.timeSec);
 
     collectHumanoidBones(input.exportAvatar, this.exportBones);
     // Chrome is never a referent: the scene sampler leaves it out, and these
@@ -215,6 +225,43 @@ export class PointResolver {
 
     draft.marks.sort((a, b) => a.span.start - b.span.start);
     draft.spans.sort((a, b) => a.span.start - b.span.start);
+    return { draft, report };
+  }
+
+  /**
+   * Resolves a camera take's holds: each `screen` hold is cast against the
+   * set's meshes and the event objects, never the bubble sphere, the hidden
+   * avatar or chrome (none is a target), and becomes a `recorded` link from
+   * the camera node. A hold that hits nothing makes no link and the report
+   * says "no referent". Times are take seconds from the first camera sample.
+   */
+  resolveCamera(input: CameraResolutionInput): { draft: MeaningDraft; report: PointResolutionReport } {
+    const report: PointResolutionReport = { poseSegments: [], aimHolds: [], runs: [] };
+    const draft: MeaningDraft = { marks: [], spans: [] };
+    const toSpan = spanWithin(input.startSec, input.endSec);
+    const t0 = input.startSec;
+    const screenHolds = input.store.getAimHolds().filter((hold) => hold.input === 'screen');
+    if (screenHolds.length === 0) return { draft, report };
+
+    this.sceneTargets = new Map(input.sceneMeshes.map((mesh) => [mesh, sceneTarget(mesh)]));
+    for (const wrapper of input.objects) {
+      const target = objectTarget(wrapper);
+      wrapper.traverse((obj) => {
+        if (isThreeMesh(obj)) this.sceneTargets.set(obj, target);
+      });
+    }
+    this.raycaster.near = RAY_NEAR;
+    this.raycaster.far = MAX_RAY_DISTANCE;
+    const from = { camera: true as const, object: input.camera };
+    for (const hold of screenHolds) {
+      const start = holdStart(hold);
+      const end = hold.endSec ?? hold.samples.at(-1)!.timeSec;
+      report.aimHolds.push({ side: hold.side, input: hold.input, start: round(start - t0), end: round(end - t0), samples: hold.samples.length });
+      if (end - start < MIN_HOLD_SEC) continue;
+      this.resolveHeld(hold, start, end, from, () => [], toSpan, draft, report);
+    }
+    this.sceneTargets = new Map();
+    draft.marks.sort((a, b) => a.span.start - b.span.start);
     return { draft, report };
   }
 
@@ -272,12 +319,22 @@ export class PointResolver {
     draft: MeaningDraft,
     report: PointResolutionReport
   ): void {
-    const from = this.fromAnchor(hold.side);
     const body = BODY_HOLD_INPUTS.has(hold.input);
-    const resolved: Resolved[] = throttle(hold.samples).map((sample) => {
-      const capsules = body ? this.poseCapsules(input, nearestFrameIndex(input.frames, sample.timeSec), hold.side) : [];
-      return { ...this.cast(sample, capsules), score: 1 };
-    });
+    const capsulesAt = (sample: AimPointSample): Capsule[] => (body ? this.poseCapsules(input, nearestFrameIndex(input.frames, sample.timeSec), hold.side) : []);
+    this.resolveHeld(hold, start, end, this.fromAnchor(hold.side), capsulesAt, toSpan, draft, report);
+  }
+
+  private resolveHeld(
+    hold: AimHold,
+    start: number,
+    end: number,
+    from: MeaningLinkDraft['from'] | undefined,
+    capsulesAt: (sample: AimPointSample) => readonly Capsule[],
+    toSpan: (start: number, end: number) => MeaningSpan,
+    draft: MeaningDraft,
+    report: PointResolutionReport
+  ): void {
+    const resolved: Resolved[] = throttle(hold.samples).map((sample) => ({ ...this.cast(sample, capsulesAt(sample)), score: 1 }));
     const runs = splitByReferent(resolved);
     runs.forEach((run, i) => {
       const runStart = i === 0 ? start : resolved[run.first]!.timeSec;
@@ -435,6 +492,20 @@ function sceneTarget(mesh: THREE.Mesh): Target {
   const radius = (geometry.boundingSphere?.radius ?? 0) * Math.max(Math.abs(scale.x), Math.abs(scale.y), Math.abs(scale.z));
   // Readable in reports, unique by uuid.
   return { key: `mesh:${mesh.name || 'unnamed'}#${mesh.uuid.slice(0, 8)}`, object: mesh, large: radius > LARGE_SURFACE_RADIUS };
+}
+
+/** A `RecordedObject` wrapper is one referent whatever mesh of it a ray meets; hits are local to the wrapper node. */
+function objectTarget(wrapper: THREE.Object3D): Target {
+  return { key: `object:${wrapper.children[0]?.name || wrapper.name}#${wrapper.uuid.slice(0, 8)}`, object: wrapper, large: false };
+}
+
+/** Seconds since `t0`, clamped to the take (`t0` to `tEnd`) and rounded: a link's span. */
+function spanWithin(t0: number, tEnd: number): (start: number, end: number) => MeaningSpan {
+  return (start, end) => {
+    const s = clamp(start - t0, 0, tEnd - t0);
+    const e = clamp(end - t0, s, tEnd - t0);
+    return { start: round(s), end: round(e) };
+  };
 }
 
 /**

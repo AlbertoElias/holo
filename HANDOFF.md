@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-26
+**Updated:** 2026-10-27
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -13,10 +13,10 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-The shared XR interface and viewer VR/AR is complete and on `main` (brief
-[`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md)).
-Next: AR recording (camera-only takes, meaning v1) starts its slice 0, and the
-device checks under Unverified below. Otherwise pick the next queue item in
+AR recording (camera-only takes from a phone, meaning v1) is complete and on
+`main` (brief
+[`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md)),
+with the shared XR interface before it. Pick the next queue item in
 [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
@@ -30,14 +30,23 @@ device checks under Unverified below. Otherwise pick the next queue item in
   [`TODOS.md`](TODOS.md). The fixes from the
   cross-vendor review of slices 2 to 4 and the second round (the brief's
   "Independent verification" rows), with the globe's own colours, landed on
-  `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Next there: slice 7 (cross-device task test and device checks).
-  Open: real wrist drawings for Exit and Recenter; the physical device checks
-  in the brief.
+  `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Slice 7 closed on 2026-10-26: desktop and an iPhone passed; the
+  Android and Quest checks are Unverified by the user's choice (the brief's
+  "Physical-device limits"). Open: real wrist drawings for Exit and Recenter.
 - The production Quick Look rebuild to ql3 is done: both stored previews are
-  ql3, with the ql2 files and the database backup kept (B-022, evidence in
+  ql3, with the ql2 files and the database backup kept (B-030, evidence in
   the brief).
 
 ## Unverified / device-only
+
+- AR recording (brief
+  [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md)):
+  IWER phone emulation only, no Android phone. On a phone, check that Chrome
+  reports `interactionMode` "screen-space", sends `screen` input sources
+  without dom-overlay, and that the 300 ms / 22 px hold boundary feels right.
+  Also check the microphone prompt at AR entry (a Quest in passthrough is
+  asked too, then released), local-floor, the frame rate while recording, and
+  the world-space phone case. B-028 is open.
 
 - Shared XR interface and viewer VR/AR (brief
   [`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md),

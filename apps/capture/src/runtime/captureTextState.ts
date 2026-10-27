@@ -74,7 +74,24 @@ export function renderCaptureTextState(c: CaptureContext): string {
     mockVr: tracking.mock.snapshot(),
     ar: {
       sessionMode: c.xrEntry.sessionMode,
-      worldPosition: { x: stage.worldGroup.position.x, y: stage.worldGroup.position.y, z: stage.worldGroup.position.z }
+      worldPosition: { x: stage.worldGroup.position.x, y: stage.worldGroup.position.y, z: stage.worldGroup.position.z },
+      // Camera author mode (docs/features/archive/ar-recording.md), for the AR recording check.
+      cameraAuthor: c.frame.arCameraAuthor,
+      spectator: c.frame.arSpectator,
+      performerHidden: !avatar.avatarRoot.visible,
+      placementSettled: c.ar.isSettled(),
+      interactionMode: (stage.renderer.xr.getSession() as (XRSession & { interactionMode?: string }) | null)?.interactionMode ?? null,
+      recordingState: c.ui.getState().recordingState,
+      recordingMessage: c.ui.getState().recordingMessage,
+      notice: c.ui.getState().notice,
+      takeKind: c.recording.kind,
+      cameraSamples: c.recording.cameraRecorder.sampleCount,
+      // The camera take's running time (first to latest camera sample), and its screen holds (slice 4).
+      takeSec: c.recording.cameraRecorder.elapsedSec,
+      screenHold: c.screenHolds.snapshot(),
+      screenHolds: c.recording.cameraRecorder.pointSamples.holdCounts(),
+      micPermission: c.ui.getState().micPermission,
+      micHeld: c.recording.isMicHeld()
     }
   });
 }

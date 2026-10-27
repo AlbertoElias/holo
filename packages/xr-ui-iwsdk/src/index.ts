@@ -8,3 +8,6 @@ export * from "./focusRing.js";
 export * from "./worldPanel.js";
 export * from "./aimRays.js";
 export * from "./pointers.js";
+export * from "./screenInput.js";
+export * from "./handheldSession.js";
+export * from "./safeArea.js";

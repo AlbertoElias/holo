@@ -20,11 +20,13 @@ import type { ClockMode } from '../runtime/FrameLoop';
 import type { XrEntry } from '../runtime/xrEntry';
 import type { AppMode, CharacterSnapshot } from '../types/contracts';
 import type { UIStateStore } from '../ui/UIStateStore';
+import type { PhoneArChrome } from '../ui/PhoneArChrome';
 import type { VrChrome } from '../ui/VrChrome';
 import type { ArSpectator } from '../xr/ArSpectator';
 import type { HandEmbodiment } from '../xr/HandEmbodiment';
 import type { HeadsetHolds } from '../xr/HeadsetHolds';
 import type { HeightFit } from '../xr/HeightFit';
+import type { ScreenHolds } from '../xr/ScreenHolds';
 import type { XrTracking } from '../xr/XrTracking';
 
 /** Facts about the current simulation step, written once by their owner. */
@@ -37,6 +39,10 @@ export interface CaptureFrame {
   xrPresenting: boolean;
   // An AR session presents: only the spectator runs; later systems skip.
   arSpectator: boolean;
+  // The AR session is a handheld camera author (strict handheld
+  // check, decided once on entry). Still `arSpectator` for every
+  // system that returns early; only recording and diagnostics look past it.
+  arCameraAuthor: boolean;
   // VR embodiment, from a real session or the mock pose hook.
   vrActive: boolean;
   // Real-XR body solver active with a valid head this step.
@@ -68,8 +74,12 @@ export interface CaptureContext {
   ar: ArSpectator;
   ui: UIStateStore;
   vrChrome: VrChrome;
+  /** The bottom dock and status line of a phone camera author (slice 3). */
+  phoneChrome: PhoneArChrome;
   /** The headset's mark "this" and Halo (slice 5). */
   headsetHolds: HeadsetHolds;
+  /** A finger held on the phone's screen marks "this" from the camera (ar-recording slice 4). */
+  screenHolds: ScreenHolds;
   recording: RecordingSession;
   diagnostics: DiagnosticViews;
   frame: CaptureFrame;

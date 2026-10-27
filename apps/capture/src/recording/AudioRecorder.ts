@@ -8,6 +8,11 @@ export class AudioRecorder {
   private recording = false;
   private permissionState: 'pending' | 'granted' | 'denied' = 'pending';
   private resolvedMimeType = '';
+  // A camera take's microphone, asked for in the AR entry tap and kept open
+  // until the session ends (docs/features/archive/ar-recording.md): the stream
+  // survives a take's stop, and a late grant after a release is dropped.
+  private holdingStream = false;
+  private pendingStream: Promise<MediaStream | null> | null = null;
 
   async requestMicPermission(): Promise<boolean> {
     try {
@@ -21,6 +26,36 @@ export class AudioRecorder {
       this.permissionState = 'denied';
       return false;
     }
+  }
+
+  /**
+   * Asks for the microphone and keeps the stream open past a take's stop, until
+   * `releaseHeldStream`. Call it synchronously inside the tap that needs the
+   * user activation; it never throws. Resolves whether a stream is held.
+   */
+  async holdStream(): Promise<boolean> {
+    this.holdingStream = true;
+    const stream = await this.getOrCreateStream();
+    if (!this.holdingStream) {
+      // Released while the permission prompt was open: this late stream is not wanted.
+      if (stream && !this.recording) {
+        this.releaseStream(stream);
+        if (this.stream === stream) this.stream = null;
+      }
+      return false;
+    }
+    return stream !== null;
+  }
+
+  isHoldingStream(): boolean {
+    return this.holdingStream;
+  }
+
+  releaseHeldStream(): void {
+    this.holdingStream = false;
+    if (this.recording) return;
+    this.releaseStream(this.stream);
+    this.stream = null;
   }
 
   async start(): Promise<boolean> {
@@ -64,8 +99,10 @@ export class AudioRecorder {
           this.chunks = [];
           this.recording = false;
           this.recorder = null;
-          this.releaseStream(this.stream);
-          this.stream = null;
+          if (!this.holdingStream) {
+            this.releaseStream(this.stream);
+            this.stream = null;
+          }
           resolve({ buffer, mimeType });
         } catch (err) {
           reject(err);
@@ -83,26 +120,31 @@ export class AudioRecorder {
     return this.permissionState;
   }
 
-  private async getOrCreateStream(): Promise<MediaStream | null> {
+  private getOrCreateStream(): Promise<MediaStream | null> {
     if (this.stream) {
       const hasLiveTrack = this.stream.getAudioTracks().some((track) => track.readyState === 'live');
       if (hasLiveTrack) {
-        return this.stream;
+        return Promise.resolve(this.stream);
       }
       this.releaseStream(this.stream);
       this.stream = null;
     }
-
-    try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1 }
-      });
-      this.permissionState = 'granted';
-      return this.stream;
-    } catch {
-      this.permissionState = 'denied';
-      return null;
-    }
+    // Overlapping callers (the AR tap's hold, then Record while the prompt is
+    // open) share one request, so no second stream is left live unowned.
+    this.pendingStream ??= navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } }).then(
+      (stream) => {
+        this.stream = stream;
+        this.permissionState = 'granted';
+        return stream;
+      },
+      () => {
+        this.permissionState = 'denied';
+        return null;
+      }
+    ).finally(() => {
+      this.pendingStream = null;
+    });
+    return this.pendingStream;
   }
 
   private releaseStream(stream: MediaStream | null): void {

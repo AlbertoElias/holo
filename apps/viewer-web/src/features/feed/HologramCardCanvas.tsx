@@ -21,13 +21,16 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
-import { drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
+import { drawnBounds, drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
+import { isCameraTake } from "../hologram/hologramScene";
 import { type HumanoidGltf, resolveHumanoidAnchors } from "../hologram/humanoidAnchors";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
 import { readMeaningLinks } from "../meaning/meaningLinks";
 import type { MeaningGltf } from "../meaning/meaningLinks";
+import { AuthorCameraMark, createPresenceProbe } from "../presence/AuthorCameraMark";
+import { identityOf } from "../presence/identityHue";
 import { isInsideRecordedObject, readRecordedObjects } from "../objects/recordedObjects";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
 import { INSIDE_DISTANCE, anglesFromPose, freeCameraPose } from "../portal/portalStore";
@@ -62,6 +65,8 @@ type HologramCardCanvasProps = {
   frameRect?: FrameRect | null | undefined;
   /** What the cloche's char reads (3.2, 3.4): the ground behind its foot. */
   soot: SootInput;
+  /** Who made the take: a camera take's mark is in their identity hue, with their initial (2.4). */
+  author: string;
 };
 
 export type FrameRect = { left: number; top: number; width: number; height: number };
@@ -162,8 +167,9 @@ function easeInOut(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, target, reducedMotion, seed, frameRect, soot }: {
+function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author }: {
   url: string;
+  author: string;
   seed: string;
   frameRect?: FrameRect | null | undefined;
   soot: SootInput;
@@ -207,6 +213,8 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   const meaningLinks = useMemo(() => readMeaningLinks(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
   const recordedObjects = useMemo(() => readRecordedObjects(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
   const pointingProbe = useRef<PointingProbe>({ links: [] }).current;
+  const presenceProbe = useRef(createPresenceProbe()).current;
+  const authorHex = useMemo(() => identityOf(author).hex, [author]);
   useEffect(() => {
     portal.setHasHighlights(meaningLinks.length > 0);
     return () => portal.setHasHighlights(false);
@@ -216,6 +224,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   const scratchBoundsRef = useRef(new Box3());
   const framingTargetsRef = useRef<Object3D[]>([]);
   const avatarRootRef = useRef<Object3D | null>(null);
+  // A camera take has no avatar: the set is what is framed, and no node named Hips or Head is the author.
+  const cameraTakeRef = useRef(false);
+  const setBoundsRef = useRef<Box3 | null>(null);
   const avatarAnchorRef = useRef<{ hips: Object3D; head: Object3D | null } | null>(null);
   const { actions, mixer } = useAnimations(animations, clonedScene);
   // The cloche (3.4), fitted once on the first drawn frame, when the bubble's
@@ -248,9 +259,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   useEffect(() => {
     if (import.meta.env.DEV) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, objects: recordedObjects, cloche: { shape: clocheRef, fitted: fittedCentre } });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, presence: presenceProbe, objects: recordedObjects, cloche: { shape: clocheRef, fitted: fittedCentre } });
     }
-  }, [actions, camera, clonedScene, mixer, pointingProbe, portal, recordedObjects, renderScene, renderer, sphereClip, url]);
+  }, [actions, camera, clonedScene, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, sphereClip, url]);
 
   // The wheel zooms only over the hologram itself (usePortalTriggers): a
   // visible mesh of the recording, not chrome, not clipped away by its
@@ -323,6 +334,21 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     lookAtOffset?: Vector3;
   } | null => {
     clonedScene.updateWorldMatrix(true, true);
+
+    if (cameraTakeRef.current) {
+      // The set and its objects as drawn: not the author's camera, the bubble's sphere or chrome.
+      // Read once, as it first stands: the set is still and every frame asks.
+      const setBounds = setBoundsRef.current ??= drawnBounds(clonedScene);
+      if (setBounds.isEmpty()) return null;
+      const target = computeDesiredFraming(setBounds, perspectiveCamera, DEFAULT_CAMERA_FRAMING_CONFIG);
+      const distance = MathUtils.clamp(target.distance * CARD_CAMERA_DISTANCE_SCALE, 1.4, 14);
+      return {
+        focus: target.focus,
+        distance,
+        near: Math.max(distance / 500, DEFAULT_CAMERA_FRAMING_CONFIG.minNear),
+        far: Math.max(distance * 20, 100)
+      };
+    }
 
     const avatarAnchors = avatarAnchorRef.current;
     if (avatarAnchors?.hips) {
@@ -405,12 +431,16 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     prepareAnimatedScene(clonedScene);
     framingTargetsRef.current = getFramingTargets(clonedScene);
     const avatarRootByName = findObjectByName(clonedScene, ["RecordedAvatar"]);
+    const cameraTake = isCameraTake(clonedScene);
+    cameraTakeRef.current = cameraTake;
+    setBoundsRef.current = null;
     // Any avatar format, within the avatar when the export names it, so a
-    // recorded object's own bone names (a prop with a "Head") never take over the framing.
-    const { hips, head } = resolveHumanoidAnchors(clonedScene, gltf as unknown as HumanoidGltf);
+    // recorded object's own bone names (a prop with a "Head") never take over
+    // the framing. A camera take has no avatar, so no bone is the author.
+    const { hips, head } = cameraTake ? { hips: null, head: null } : resolveHumanoidAnchors(clonedScene, gltf as unknown as HumanoidGltf);
 
     avatarRootRef.current = avatarRootByName ?? (hips ? getTopLevelAncestor(hips, clonedScene) : null);
-    if (!avatarRootRef.current && framingTargetsRef.current.length > 0) {
+    if (!cameraTake && !avatarRootRef.current && framingTargetsRef.current.length > 0) {
       avatarRootRef.current = framingTargetsRef.current[0] ?? null;
     }
 
@@ -636,8 +666,10 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
           falloffWidth={SPHERE_CLIP_FALLOFF}
           getPlaybackTime={getPlaybackTime}
           probe={pointingProbe}
+          authorHex={authorHex}
         />
       )}
+      <AuthorCameraMark scene={clonedScene} author={author} probe={presenceProbe} />
     </>
   );
 }
@@ -654,7 +686,8 @@ export function HologramCardCanvas({
   reducedMotion,
   seed,
   frameRect,
-  soot
+  soot,
+  author
 }: HologramCardCanvasProps) {
   return (
     <Canvas
@@ -669,7 +702,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} />
+      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} />
     </Canvas>
   );
 }

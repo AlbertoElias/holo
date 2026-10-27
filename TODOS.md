@@ -93,7 +93,7 @@ it from the item below instead of duplicating its status here.
   a UI/interaction redesign. Run them in the appropriate `verify:agent` or
   `verify:pr` tier. Tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` are
   deferred to the redesign item below, which owns their new contracts.
-- [ ] Redesign all UI (2D and 3D) and interaction systems (2D and XR) in a
+- [x] Redesign all UI (2D and 3D) and interaction systems (2D and XR) in a
   dedicated session with its own feature brief. That brief owns: the new
   contract tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` (currently
   `--passWithNoTests`), written against the redesigned contracts rather than
@@ -105,6 +105,8 @@ it from the item below instead of duplicating its status here.
   `docs/product/concepts/what-a-hologram-is.md`: include the portal viewer
   and Follow/Free, and start marks with "this/here" links read from pointing.
   Brief: [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md).
+  Shipped 2026-10-26; its Android and Quest device checks are Unverified
+  (the brief's "Physical-device limits").
 - [ ] Add a VR viewing mode to `apps/viewer-web`: holograms on their stages
   in the blue-hour room, lit by their own gold light (styleguide 9.1), using
   the redesign's components. Split out of the UI redesign brief on
@@ -152,6 +154,20 @@ it from the item below instead of duplicating its status here.
 
 ## Later
 
+- [ ] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
+  `tsconfig.app.json` (src, functions, configs) only, so a spec's missing
+  import shows only when Playwright runs it (found in the slice 0 review,
+  2026-10-26, on `feature/xr-shared-screen-input`). A probe
+  `tsconfig.e2e.json` (extending `tsconfig.app.json`, `types: ["node"]`,
+  `allowImportingTsExtensions`, including `e2e` and `playwright.config.ts`)
+  reports 12 errors in seven specs: `exactOptionalPropertyTypes` in
+  `bootstrap.ts`, `portal-helpers.ts`, `xr-viewer.spec.ts`; in-page imports of
+  `/node_modules/.vite/deps/three.js` in `ar-bubble.spec.ts` and
+  `redesign.spec.ts`; `never`/`HTMLElement | SVGElement` narrowing in
+  `xr-viewer.spec.ts` and `portal.spec.ts`; and `import.meta.env` in capture
+  sources the pipeline specs import. Fix those, add the config, and add it to
+  `typecheck`.
+
 - [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered
   ECS systems, keeping Rapier and its algorithms
   ([brief](docs/features/archive/iwsdk-runtime-refactor.md)). Native scene composition
@@ -173,17 +189,20 @@ it from the item below instead of duplicating its status here.
   device-specific placement recovery. Delivered as a "Recenter AR" overlay
   button shown only in AR mode in
   [`docs/features/archive/ar-recenter-control.md`](docs/features/archive/ar-recenter-control.md).
-- [ ] AR recording (phone as a camera-only author): record a take in WebXR
-  AR on a phone, and hold to mark "this" there with a camera ray. Split out of
-  slice 5 of [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)
-  (2026-10-25). Notes: every capture system returns early in AR
-  (`frame.arSpectator`), so no AR take exists yet; a mark's ray would come
-  from the camera through the touch, so its link's `from` is the camera, which
-  `HOLOIM_meaning` v0 cannot say (a v1 change through its owner, v0 files still
-  loading); and IWSDK's `launchXR` has no `dom-overlay` option, so touch over
-  the scene needs a `requestSession` shim. Open product question for the
-  user, not decided: is a take with no performer a hologram
-  ([`what-a-hologram-is.md`](docs/product/concepts/what-a-hologram-is.md))?
+- [x] AR recording (phone as a camera-only author): on `main` since
+  2026-10-27, brief
+  [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md);
+  its device checks are listed in `HANDOFF.md` under "Unverified / device-only".
+- [ ] AR recording follow-ups, waiting on the user: whether capture should
+  skip the microphone request at AR entry on a headset (today every AR entry
+  asks, and a Quest in passthrough releases it once the session is not
+  handheld), and whether the phone's ink line should be wider (the
+  cross-vendor review suggested a 1.5 px stroke; it is faint in the proof video).
+- [ ] The Halo in phone AR capture (stop, undo and redo of a held mark there),
+  after AR recording lands: cut from
+  [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md) by its
+  design review on 2026-10-25; the idiom is the phone's (press and hold the
+  dock's Halo glyph, drag) through the shared screen-input bridge.
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
   and success signal are explicit. The lens points to IDEA-045 (portal view)

@@ -20,7 +20,7 @@ A video can be moved through in time. A hologram can be moved through in time
 
 | Layer | What it holds | Who shapes it |
 | --- | --- | --- |
-| **Event** | Body, hands, face, voice, scene, objects, and time, at true scale | The author by performing; editing tools repair it (trim, retake) |
+| **Event** | Body, hands, face, voice, scene, objects, and time, at true scale; with no performer, the author's camera stands in for the body | The author by performing, or by recording with a camera; editing tools repair it (trim, retake) |
 | **Meaning** | What matters: references ("this" is the rock), emphasis, suggested viewpoints, notes, symbols | Read from the body first; the author confirms or adds |
 | **View** | Camera, scale, placement, playback, controls | The viewer and their device, at playback |
 
@@ -80,6 +80,25 @@ Anything that has a place and a moment in the event: people, voices,
 objects, places, paths, marks. Things without a place (a chart, a document, a
 link) must be given one before they belong: held in a hand, set on a surface,
 pinned to a moment. This also limits clutter.
+
+## A take with no performer (decided 2026-10-25)
+
+**Decision (the user, 2026-10-25):** a take with no performer, recorded by a
+phone camera in AR, is a hologram.
+
+The author is present as their camera: where they stood, where they looked,
+their voice, and what they marked, over time and at true scale, in the scene
+they recorded. The camera belongs to the event layer, not to the view layer's
+camera. Nothing invents a body for them, and the camera's path is the
+author's presence, never the viewer's view: the viewer still moves through
+it freely (principle 3), and Follow may at most suggest it. A "this" the
+author marks is cast from the camera through their finger, so a link's
+source can be the camera instead of a hand. The feature is
+[AR recording](../../features/archive/ar-recording.md).
+
+It passes the test below because the view is not fixed at recording: the
+event (the scene, the voice, the author's camera and marks) is stored, and
+every view of it is made at playback.
 
 ## The test
 

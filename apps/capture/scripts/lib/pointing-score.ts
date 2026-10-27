@@ -1,4 +1,4 @@
-import { HOLOIM_MEANING_EXTENSION, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
+import { HOLOIM_MEANING_EXTENSION, isCameraFrom, meaningFromLabel, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
 import type { MeaningLinkFrom, MeaningLinkProvenance, MeaningLinkTo } from '../../../../packages/meaning/src/index.ts';
 
 // Scores the HOLOIM_meaning record of an exported GLB against a labels file
@@ -120,7 +120,7 @@ export function scorePointing({ labels, gltf }: { labels: PointingLabels; gltf: 
   }
   const validation = validateHoloimMeaning(raw);
   if (!validation.ok) {
-    return { status: 'invalid', failures: [`${HOLOIM_MEANING_EXTENSION} fails the v0 schema: ${validation.errors.join('; ')}`], links: [], matches: [], silence: [] };
+    return { status: 'invalid', failures: [`${HOLOIM_MEANING_EXTENSION} fails the schema: ${validation.errors.join('; ')}`], links: [], matches: [], silence: [] };
   }
   if (!(gltf.extensionsUsed ?? []).includes(HOLOIM_MEANING_EXTENSION)) failures.push(`${HOLOIM_MEANING_EXTENSION} is not listed in extensionsUsed`);
   if ((gltf.extensionsRequired ?? []).includes(HOLOIM_MEANING_EXTENSION)) failures.push(`${HOLOIM_MEANING_EXTENSION} must never be in extensionsRequired`);
@@ -131,7 +131,7 @@ export function scorePointing({ labels, gltf }: { labels: PointingLabels; gltf: 
     start: mark.span.start,
     end: mark.span.end,
     provenance: mark.provenance,
-    hand: handOf(mark.anchor.from.bone),
+    hand: isCameraFrom(mark.anchor.from) ? null : handOf(mark.anchor.from.bone),
     fromNodeName: gltf.nodes?.[mark.anchor.from.node]?.name ?? null,
     toNodeName: gltf.nodes?.[mark.anchor.to.node]?.name ?? null
   }));
@@ -153,7 +153,7 @@ export function scorePointing({ labels, gltf }: { labels: PointingLabels; gltf: 
       }
       matched.add(link);
       const problems = [];
-      if (link.from.bone !== `${hand}IndexDistal`) problems.push(`from is ${link.from.bone}, not ${hand}IndexDistal`);
+      if (meaningFromLabel(link.from) !== `${hand}IndexDistal`) problems.push(`from is ${meaningFromLabel(link.from)}, not ${hand}IndexDistal`);
       if (link.provenance.value !== 'inferred') problems.push(`provenance ${link.provenance.value}, expected inferred`);
       else if (!(link.provenance.confidence > 0 && link.provenance.confidence <= 1)) problems.push(`confidence ${link.provenance.confidence} not in (0, 1]`);
       const startError = link.start - point.start;
@@ -171,14 +171,14 @@ export function scorePointing({ labels, gltf }: { labels: PointingLabels; gltf: 
         point: point.name,
         referent: point.referent ?? null,
         label: { start: point.start, end: point.end },
-        link: { start: round(link.start), end: round(link.end), startError: round(startError), endError: round(endError), from: link.from.bone, to: describeTo(gltf, link.to), provenance: link.provenance },
+        link: { start: round(link.start), end: round(link.end), startError: round(startError), endError: round(endError), from: meaningFromLabel(link.from), to: describeTo(gltf, link.to), provenance: link.provenance },
         ok: problems.length === 0
       });
     });
   }
   for (const link of links) {
     if (!matched.has(link) && !points.some((point) => point.hand === link.hand)) {
-      failures.push(`link ${round(link.start)}–${round(link.end)} s from ${link.from.bone} matches no labelled point`);
+      failures.push(`link ${round(link.start)}–${round(link.end)} s from ${meaningFromLabel(link.from)} matches no labelled point`);
     }
   }
 

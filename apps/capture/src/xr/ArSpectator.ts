@@ -45,6 +45,11 @@ export class ArSpectator {
     this.recenterFramesRemaining -= 1;
   }
 
+  /** The set stays where it is: the repeated entry placement has finished. */
+  isSettled(): boolean {
+    return this.recenterFramesRemaining <= 0;
+  }
+
   recenter(): void {
     this.recenterFramesRemaining = 0;
     this.placeInFrontOfViewer();
