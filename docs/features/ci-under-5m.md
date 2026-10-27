@@ -1,7 +1,7 @@
 # Feature brief: Commit to deploy in under five minutes
 
 **Lead:** Claude (Opus)  
-**Status:** Implementing
+**Status:** Verifying on CI
 **Layer:** none (delivery infrastructure)
 
 ## User outcome
@@ -147,10 +147,16 @@ after step 2 about 6–7 min; after step 3 about 5 min, with little margin.
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Under 5 minutes | Two pushes to `main`, `gh run view` timings | Step 1 alone, run 40519789735 (capture area): 13 m 16 s green; capture deploy 43 s from the prebuilt bundle; pipeline shard 1 (726 s) still the long pole; a slow apt mirror still cost one job 228 s for 7 missing font packages, fixed by the `.deb` cache (`46ed1eb637b1`, offline warm install checked in an `ubuntu:24.04` container) |
-| Suites still gate | `ci.yml` / `deploy.yml` review, gate summary | pending |
-| No wall-clock waits | grep audit plus 5× `ci-emulate.sh` runs | pending |
-| Tests run alone | each spec file run per test with `--grep` | pending |
-| Production build in checks | Playwright config, network log of a check | pending |
+| Suites still gate | `ci.yml` / `deploy.yml` review, gate summary | Gate matrix as designed, plus `usdz-tools` gating capture and API; web needs a successful `deploy-api` when the API changed (ci.yml and manual deploy.yml). Independent Codex review (`-p standard`) found two gate gaps, both fixed in `0d6e4c40164d`; it found none in area selection or concurrency |
+| No wall-clock waits | grep audit plus 5× `ci-emulate.sh` runs | Viewer XR checks step the page clock (`stepXr*` in `xr-env.mjs`); VR script 3× identical distances and angles (clip-derived gallery values still vary). Remaining real-time holds assert a negative over time and say so (no fourth download, portal 400/800 ms, held-mark delay); feed entry and session start stay real time. Not yet 5 runs per suite |
+| Tests run alone | each spec file run per test with `--grep` | camera-take tests independent (`referenceTake`); Hips and Head 3/3 with `--repeat-each=3` in emulation; slow viewer tests each run alone; `settledReachRow` and the capture export/hold waits now fail instead of swallowing timeouts |
+| Production build in checks | Playwright config, network log of a check | All browser suites serve `vite preview` test builds (`test-build.mjs`); `check-prod-bundle.mjs` fails quality if the production viewer carries test hooks or IWER at startup (it caught a leaked `__HOLOIM_XR_VIEWER__`). Final emulation on the merged tip (4 CPU): mocked 30/30 (10.5 m), portal 9/9 (3.5 m), pipeline 9/9 (5.6 m) and 8/8 (5.8 m), capture XR shards PASS (149 s, 283 s) |
+
+Known weakenings: audio drift checks pass partly through the app's resync
+under stepped time; the locomotion slide is held 0.3 s (was 0.7 s); GL
+warnings are caught on drawn frames only (stepped frames draw 1 in 8);
+production React drops StrictMode double effects and dev warnings. Two
+Playwright workers were measured and rejected (software GL contention).
 
 ## Physical-device limits
 
