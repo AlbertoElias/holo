@@ -162,6 +162,35 @@ body::before {
   overflow-wrap: anywhere;
 }
 
+/* The credit line sits under the byline; its link is the one thing in the meta that takes the pointer. */
+.feed-card-credit-entry + .feed-card-credit-entry::before {
+  content: " · ";
+}
+
+.feed-card-credit a {
+  position: relative;
+  color: inherit;
+  text-decoration: underline;
+  pointer-events: auto;
+}
+
+/* Hit area: the touch minimum (styleguide 6.1), reached by an inset pseudo-element so the line does not shift. */
+.feed-card-credit a::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--holoim-hit-touch) - 1lh) / -2) calc(var(--holoim-glyph-gap) / -2);
+}
+
+.feed-card-credit a:hover {
+  color: var(--holoim-glyph-states-hover-color);
+}
+
+.feed-card-credit a:focus-visible {
+  outline: var(--holoim-glyph-states-focus-ring-width) solid var(--holoim-glyph-states-focus-ring-color);
+  outline-offset: var(--holoim-glyph-states-focus-ring-offset);
+  border-radius: var(--holoim-chip-radius);
+}
+
 .auth-panel {
   margin-top: 1rem;
   background: rgb(4 10 15 / 86%);

@@ -1,10 +1,10 @@
 # Feature brief: Explain with an object
 
 **Lead:** Claude Code (Opus)  
-**Status:** Verifying (emulation complete 2026-10-24; physical-device evidence pending). Branch `feature/explain-with-an-object` is pushed and ready but not merged: it lands together with PRD-045.
+**Status:** Complete (merged 2026-10-24 with PRD-045; physical-device evidence still pending, tracked in `TODOS.md`)
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
-**PRD:** [PRD-043](../product/prds/PRD-043-explain-with-an-object.md) (IDEA-059)  
-**Next:** [PRD-045](../product/prds/PRD-045-authoring-while-speaking.md) builds on the object API below.
+**PRD:** [PRD-043](../../product/prds/PRD-043-explain-with-an-object.md) (IDEA-059)  
+**Next:** [PRD-045](../../product/prds/PRD-045-authoring-while-speaking.md) builds on the object API below.
 
 ## User outcome
 

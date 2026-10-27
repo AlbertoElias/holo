@@ -60,6 +60,12 @@ with the shared XR interface before it. Pick the next queue item in
   always acts once, including while the frame rate drops (B-026: IWSDK
   drops a press that spans more than 800 ms of frame time).
 
+- Object search (PRD-060, brief
+  [`docs/features/object-search.md`](docs/features/object-search.md)): IWER
+  only. On a Quest, check the system keyboard, speech recognition and the mic
+  prompt, voice recording format, hand-ray Speak holds and passthrough AR
+  hands (`?debug` on the capture URL lists what the browser supports).
+
 - `scripts/ci-emulate.sh` runs amd64 on this arm64 Mac, about 1.4 s an XR
   frame: the immersive viewer spec passes there in about 17 minutes, since
   its input waits on frames, not wall time (B-026, closed). Its web

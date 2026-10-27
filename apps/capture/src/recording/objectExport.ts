@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 
-import { type ObjectHold, type ObjectSpan, RECORDED_OBJECT_NODE_NAME, type RecordedObjectEntry } from '@holoim/objects';
+import { HOLOIM_CREDIT_EXTRAS_KEY, type ObjectCredit, type ObjectHold, type ObjectSpan, RECORDED_OBJECT_NODE_NAME, type RecordedObjectEntry } from '@holoim/objects';
 
 import type { ObjectTrackSamples } from './ObjectSampleStore';
 
 /** One exported object before node indices exist; `GLTFObjectsPlugin` maps `node`. */
 export interface ObjectExportDraft extends Omit<RecordedObjectEntry, 'node'> {
   node: THREE.Object3D;
+  /** Not part of `HOLOIM_objects`: written to the node's extras and `asset.copyright`. */
+  credit?: ObjectCredit | undefined;
 }
 
 export interface ObjectExport {
@@ -88,6 +90,7 @@ export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportF
 
     const node = new THREE.Group();
     node.name = RECORDED_OBJECT_NODE_NAME;
+    if (track.object.credit) node.userData[HOLOIM_CREDIT_EXTRAS_KEY] = track.object.credit;
     const model = track.object.model.clone(true);
     node.add(model);
     const rest = track.object.origin === 'summoned' ? present.at(-1)!.last : present[0]!.first;
@@ -117,6 +120,7 @@ export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportF
     out.nodes.push(node);
     out.drafts.push({
       node,
+      credit: track.object.credit,
       name: track.object.name,
       origin: track.object.origin,
       source: track.object.source,

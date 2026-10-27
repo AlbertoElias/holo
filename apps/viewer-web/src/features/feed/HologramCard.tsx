@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import type { HologramDTO } from "@holoim/contracts";
 import { tokens } from "@holoim/design-tokens";
+import { licenceLabel, type ObjectCredit } from "@holoim/objects";
 import { Chip, GlyphControl, Type, useReducedMotion } from "@holoim/ui-dom";
 import { controlRowPaddingApx, flatGroundColorAt, relativeLuminance, type ViewTarget } from "@holoim/xr-ui-core";
 import { readXrCapabilities } from "@holoim/xr-runtime";
@@ -234,6 +235,8 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
   const [renderInfo, setRenderInfo] = useState<HologramRenderInfo | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
   const onHasAudio = useCallback((value: boolean) => setHasAudio(value), []);
+  const [credits, setCredits] = useState<ObjectCredit[]>([]);
+  const onCredits = useCallback((value: ObjectCredit[]) => setCredits(value), []);
   const cardRef = useRef<HTMLElement>(null);
   const portalRef = useRef<HTMLDivElement>(null);
   const portalBox = useElementBox(portalRef);
@@ -429,6 +432,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
                 active={active}
                 muted={muted}
                 onHasAudio={onHasAudio}
+                onCredits={onCredits}
                 onRendered={setRenderInfo}
                 colorAccurateMode={colorAccurateMode}
                 portal={portal}
@@ -456,6 +460,17 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
           {formatByline(item)}
           {item.submittedByVerified ? <span className="verified-badge">Verified creator</span> : null}
         </Type>
+        {credits.length > 0 ? (
+          // Models the author brought in from a registry keep their credit beside the byline (PRD-060).
+          <Type variant="byline" as="p" className="feed-card-credit" data-testid="object-credit">
+            {credits.map((credit, index) => (
+              <span key={credit.sourceUrl} className="feed-card-credit-entry">
+                {index === 0 ? "Object: " : null}
+                “<a href={credit.sourceUrl} target="_blank" rel="noopener noreferrer">{credit.title}</a>” by {credit.author}, {credit.source}, {licenceLabel(credit.licence)}
+              </span>
+            ))}
+          </Type>
+        ) : null}
         {item.ownedByViewer && onDelete ? (
           <button
             className="feed-card-delete"

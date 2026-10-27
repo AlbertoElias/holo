@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import type { ObjectSource } from '@holoim/objects';
+import type { ObjectCredit, ObjectSource } from '@holoim/objects';
 
 import type { VrHandSide } from '../types/contracts';
 
@@ -20,6 +20,8 @@ export interface SceneObject {
   readonly id: string;
   readonly name: string;
   readonly source: ObjectSource;
+  /** Who made a found model (PRD-060); exported on its node's extras, not in `HOLOIM_objects`. */
+  readonly credit?: ObjectCredit | undefined;
   readonly origin: SceneObjectOrigin;
   readonly layer: SceneObjectLayer;
   /** Unit-scale wrapper the object system moves; the model keeps its own transform under it. */
@@ -43,7 +45,7 @@ export class SceneObjectRegistry {
 
   constructor(private readonly parent: THREE.Object3D) {}
 
-  add(model: THREE.Object3D, options: { name: string; source: ObjectSource; origin: SceneObjectOrigin; layer: SceneObjectLayer }): SceneObject {
+  add(model: THREE.Object3D, options: { name: string; source: ObjectSource; credit?: ObjectCredit | undefined; origin: SceneObjectOrigin; layer: SceneObjectLayer }): SceneObject {
     const wrapper = new THREE.Group();
     wrapper.name = `SceneObject_${options.name}`;
     wrapper.add(model);
@@ -77,7 +79,7 @@ export class SceneObjectRegistry {
   summon(item: SceneObject): SceneObject {
     const model = item.model.clone(true);
     model.position.copy(item.model.position);
-    const object = this.add(model, { name: item.name, source: item.source, origin: 'summoned', layer: 'event' });
+    const object = this.add(model, { name: item.name, source: item.source, credit: item.credit, origin: 'summoned', layer: 'event' });
     object.wrapper.visible = true;
     return object;
   }

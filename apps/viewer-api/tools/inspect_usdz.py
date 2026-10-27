@@ -688,6 +688,7 @@ class Inspection:
         layer_text = self.stage.GetRootLayer().ExportToString()
         self.check(bool(re.search(r"^    autoPlay = true$", layer_text, re.M)) and bool(re.search(r'^    playbackMode = "loop"$', layer_text, re.M)), "Missing Apple top-level autoplay/loop presentation metadata")
         self.check(UsdGeom.GetStageUpAxis(self.stage) == "Y" and UsdGeom.GetStageMetersPerUnit(self.stage) == 1, "Unexpected stage units or up axis")
+        self.report["customLayerData"] = dict(self.stage.GetRootLayer().customLayerData)
         self.geometry()
         self.cloche()
         self.framing()

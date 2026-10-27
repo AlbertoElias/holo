@@ -21,6 +21,7 @@ RUN python3 -m venv /opt/usdz-venv \
 
 RUN pnpm install --frozen-lockfile --filter @holoim/api...
 RUN pnpm --filter @holoim/contracts build \
+  && pnpm --filter @holoim/objects build \
   && pnpm --filter @holoim/api build
 
 ENV NODE_ENV=production \

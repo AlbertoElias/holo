@@ -153,7 +153,7 @@ export class CaptureObjects {
       if (seq !== this.trayLoadSeq) return false;
       if (this.deps.isTakeActive()) throw new SuppliedObjectError('Prepare the tray before recording.');
       if (this.tray.getItems().length + loaded.length > MAX_TRAY_ITEMS) throw new SuppliedObjectError(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
-      for (const { input, item } of loaded) this.tray.add(item.model, { name: item.source.name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength });
+      for (const { input, item } of loaded) this.tray.add(item.model, { name: item.credit?.title ?? item.source.name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });
       ui.setTrayState({ ...this.trayState(), message: null });
       return true;
     } catch (error) {
@@ -183,7 +183,7 @@ export class CaptureObjects {
       if (seq !== this.loadSeq) return false;
       if (this.deps.isTakeActive()) throw new SuppliedObjectError('Choose the object before recording.');
       this.registry.clearPrepared();
-      this.registry.add(loaded.model, { name: loaded.source.name, source: loaded.source, origin: 'prepared', layer: 'event' });
+      this.registry.add(loaded.model, { name: loaded.source.name, source: loaded.source, credit: loaded.credit, origin: 'prepared', layer: 'event' });
       ui.setObjectState({ status: 'ready', name: loaded.source.name, message: null });
       return true;
     } catch (error) {

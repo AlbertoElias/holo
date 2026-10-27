@@ -87,7 +87,11 @@ export class XrSessionSystem extends createSystem() {
       if (this.cameraAuthor) {
         c.avatar.avatarRoot.visible = false;
         c.phoneChrome.show();
-      } else c.recording.releaseHeldMic();
+      } else {
+        c.recording.releaseHeldMic();
+        // A headset in passthrough AR gets Find on the wrist.
+        c.vrChrome.show('ar');
+      }
     } else {
       c.vrChrome.show();
       c.hands.resetRuntimeState();
@@ -111,6 +115,7 @@ export class XrSessionSystem extends createSystem() {
       c.avatar.avatarRoot.visible = true;
       c.recording.releaseHeldMic();
       c.ar.onExited();
+      c.vrChrome.hide();
     } else {
       c.vrChrome.hide();
       c.hands.resetRuntimeState();

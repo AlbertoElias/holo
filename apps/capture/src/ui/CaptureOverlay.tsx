@@ -17,6 +17,7 @@ import {
   type HitInput
 } from '@holoim/xr-ui-core';
 
+import { ObjectFinder } from './ObjectFinder';
 import type { UiViewModel, XrEntryOffer } from '../types/contracts';
 import type { CaptureUiBridge } from './captureUiBridge';
 import { captureHelp, isTouchDevice } from './captureHelp';
@@ -257,6 +258,7 @@ function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge
           <ObjectPicker bridge={bridge} object={state.object} disabled={state.recordingState !== 'idle'} input={input} />
           <TrayPicker bridge={bridge} tray={state.tray} disabled={state.recordingState !== 'idle'} input={input} />
         </div>
+        <ObjectFinder disabled={state.recordingState !== 'idle' || state.tray.loading} input={input} onPick={(url) => bridge.loadTrayUrls([url])} />
       </Section>
 
       <Section title="Microphone">

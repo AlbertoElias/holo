@@ -18,6 +18,14 @@ describe("isAllowedWebOrigin", () => {
   it("rejects unknown non-localhost origins", () => {
     expect(isAllowedWebOrigin("https://example.com", configuredOrigin)).toBe(false);
   });
+
+  it("accepts one subdomain level for a wildcard entry and nothing else", () => {
+    const extra = ["https://*.holoim-capture.pages.dev"];
+    expect(isAllowedWebOrigin("https://feature-x.holoim-capture.pages.dev", configuredOrigin, extra)).toBe(true);
+    expect(isAllowedWebOrigin("https://a.b.holoim-capture.pages.dev", configuredOrigin, extra)).toBe(false);
+    expect(isAllowedWebOrigin("https://xholoim-capture.pages.dev", configuredOrigin, extra)).toBe(false);
+    expect(isAllowedWebOrigin("https://feature-x.holoim-capture.pages.dev.evil.com", configuredOrigin, extra)).toBe(false);
+  });
 });
 
 describe("CORS on the built app", () => {

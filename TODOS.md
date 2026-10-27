@@ -27,6 +27,11 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Find an object by asking (PRD-060, built overnight 2026-10-27 on the
+  user's request; its provisional decisions await their approval): search
+  Poly Haven from capture's tray and carry the credit into the take. Owned by
+  [`docs/features/object-search.md`](docs/features/object-search.md). Next
+  slices: voice input, Poly Pizza (needs its API key), the headset overlay.
 - [ ] Self-resolving pointing (PRD-022, approved 2026-10-22): highlight what
   the author points at in the feed portal, from headset hands and a desktop
   point action. Owned by
