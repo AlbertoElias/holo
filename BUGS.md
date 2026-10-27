@@ -7,6 +7,23 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-027 — Three immersive viewer checks fail on hosted runners
+
+- **Area:** `apps/viewer-web/e2e/xr-viewer.spec.ts` "VR gallery:" (`:1259`), "VR foot controls:" (`:733`), "VR locomotion:" (`:1549`)
+- **Severity:** P2
+- **Owner:** vr-spec-flake session, branch `bug/xr-viewer-spec-flake`
+- **Observed:** 2026-10-26, CI runs on `main` at `2610b0ad` and `c6a3b59f`
+- **Evidence:** in run 40406523825 gallery and foot controls failed a state
+  wait and locomotion failed "slid -0.160 m" along forward (needs > 0.3). In
+  run 40436776761 (`c6a3b59`, longer waits, B-026 retries) locomotion still
+  failed and shard 3 took 7.4 of its 10 minutes.
+  Locally at load 30–50, locomotion missed its mid-fade frame 2 of 3 runs and
+  gallery failed once, then passed.
+- **Workaround:** CI runs these three in the `xr-viewer-unsteady` job with
+  `continue-on-error`, outside the CI Gate. Move them back into the e2e shards
+  and the gate when the fix lands.
+- **Reproduction:** `pnpm --filter @holoim/web run test:e2e:xr-viewer-unsteady` (with `E2E_BASE_URL`/`E2E_API_PORT` on free ports)
+
 ### B-026 — Emulated clicks and taps are now and then lost when frames are slow
 
 - **Area:** `apps/viewer-web/e2e/xr-viewer.spec.ts` (`rayClick`, `phoneTap`), IWER input on IWSDK's pointers

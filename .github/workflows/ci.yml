@@ -209,6 +209,36 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The three VR checks that fail on hosted runners (B-027) run here, outside
+  # the CI Gate. Move them back into the e2e shards and the gate once
+  # bug/xr-viewer-spec-flake lands.
+  xr-viewer-unsteady:
+    name: Viewer VR checks (not required, B-027)
+    needs: [changes]
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          playwright: "true"
+      - name: Viewer VR gallery, foot controls and locomotion
+        run: pnpm timed xr-viewer-unsteady -- pnpm --filter @holoim/web run test:e2e:xr-viewer-unsteady
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-viewer-unsteady-failure-${{ github.run_id }}
+          path: |
+            apps/viewer-web/test-results
+            apps/viewer-web/playwright-report
+            output/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   pipeline:
     name: Capture to viewer pipeline (shard ${{ matrix.shard }}/2)
     needs: [changes]
