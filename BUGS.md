@@ -59,7 +59,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 - **Area:** `apps/capture/src/recording/SceneBubbleSampler.ts` (`triangleInsideBubble`)
 - **Severity:** P2
-- **Observed:** 2026-10-25, while building AR recording (`docs/features/ar-recording.md`)
+- **Observed:** 2026-10-25, while building AR recording (`docs/features/archive/ar-recording.md`)
 - **Evidence:** the bubble clip keeps a triangle only when two of its
   vertices lie within 6 m of a sample. `fixtures/scenes/pointing-targets.gltf`'s
   `PointingFloor` is a 14 m box with 12 vertices, so no triangle qualifies:

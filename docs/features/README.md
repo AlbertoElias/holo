@@ -13,7 +13,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Creator accounts (IDEA-052) | Complete | [creator-accounts.md](archive/creator-accounts.md) |
 | Snappy feed first load | Shipped | [snappy-feed-first-load.md](snappy-feed-first-load.md) |
 | Redesign UI and interaction across capture and viewer | Shipped; Android and Quest checks Unverified | [ui-redesign.md](ui-redesign.md) |
-| AR recording (the phone as a camera-only author) | Approved; not started | [ar-recording.md](ar-recording.md) |
+| AR recording (the phone as a camera-only author) | Complete | [ar-recording.md](archive/ar-recording.md) |
 | Summon and place while speaking | Verified; lands with PRD-043 | [summon-and-place.md](summon-and-place.md) |
 | Explain with an object | Verifying | [explain-with-an-object.md](explain-with-an-object.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |

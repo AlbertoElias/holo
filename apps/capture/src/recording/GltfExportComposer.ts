@@ -234,7 +234,7 @@ export class GltfExportComposer {
   }
 
   /**
-   * A camera take (docs/features/ar-recording.md): no skin and no
+   * A camera take (docs/features/archive/ar-recording.md): no skin and no
    * `RecordedAvatar`. The scene is the set clipped in the set's frame, a
    * `RecordedBubbleSphere` pinned at the set's origin (static, so motion read
    * relative to it keeps the camera's path), the event objects, and

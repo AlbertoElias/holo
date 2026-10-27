@@ -30,7 +30,7 @@ import {
   type PathComparison
 } from './lib/camera-take-glb.ts';
 
-// Camera author mode (docs/features/ar-recording.md, slice 2a): phone AR in
+// Camera author mode (docs/features/archive/ar-recording.md, slice 2a): phone AR in
 // IWER with the phone helper records a scripted camera walk and exports a
 // camera take. Phases (each a fresh page; every phase also counts its
 // downloads and fails on a stray or missing one):

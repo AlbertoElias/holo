@@ -21,7 +21,7 @@ export interface HandPointSample {
  * What held the mark "this" (docs/features/ui-redesign.md, slice 5): the
  * desktop point action, a phone's touch and hold, the non-dominant
  * thumb–middle pinch, or the non-dominant trigger; and, in a camera take
- * (docs/features/ar-recording.md), a finger held on the screen in phone AR.
+ * (docs/features/archive/ar-recording.md), a finger held on the screen in phone AR.
  */
 export type AimInput = 'desktop' | 'touch' | 'hands' | 'controllers' | 'screen';
 

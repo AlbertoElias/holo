@@ -9,7 +9,7 @@ export class AudioRecorder {
   private permissionState: 'pending' | 'granted' | 'denied' = 'pending';
   private resolvedMimeType = '';
   // A camera take's microphone, asked for in the AR entry tap and kept open
-  // until the session ends (docs/features/ar-recording.md): the stream
+  // until the session ends (docs/features/archive/ar-recording.md): the stream
   // survives a take's stop, and a late grant after a release is dropped.
   private holdingStream = false;
   private pendingStream: Promise<MediaStream | null> | null = null;
