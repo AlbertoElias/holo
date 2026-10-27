@@ -40,7 +40,7 @@ interface Tracked {
 }
 
 /**
- * Hold to mark "this" from the phone's camera (docs/features/ar-recording.md,
+ * Hold to mark "this" from the phone's camera (docs/features/archive/ar-recording.md,
  * slice 4). Only in a camera take. A finger that did not begin on chrome, is
  * not part of a pinch, stays down `HOLD_DELAY_MS` of wall-clock time
  * (`performance.now()`, as the phone's hold everywhere) and stays within

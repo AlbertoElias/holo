@@ -18,7 +18,7 @@ import type {} from '../../src/runtime/automationHooks';
 import { assertCameraTake, inspectCameraTake, type CameraTakeReport } from './camera-take-glb.ts';
 
 // One phone camera take, recorded in the running capture app (docs/features/
-// ar-recording.md, slice 2a): phone AR in IWER (screen-space, mono, alpha
+// archive/ar-recording.md, slice 2a): phone AR in IWER (screen-space, mono, alpha
 // blend), the pointing-targets set and the
 // bracket placed on the desktop first. Enter AR, wait for the set to settle,
 // Record, a scripted head walk (set frame, converted to the room with the live

@@ -9,7 +9,7 @@ import type { PointResolutionReport } from './PointResolver';
 import { SceneBubbleSampler } from './SceneBubbleSampler';
 
 /**
- * The recorder of a camera take (docs/features/ar-recording.md): the author
+ * The recorder of a camera take (docs/features/archive/ar-recording.md): the author
  * is a camera, not a performer, so a take is the camera's path, the event
  * objects and the clipped set, all in the set's frame (`setFrame`'s local
  * frame, the AR world group). Where the set was placed in the room never

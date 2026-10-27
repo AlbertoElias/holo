@@ -14,7 +14,7 @@ interface RecordingSessionDeps {
   onSizeLocked: () => void;
   /** Before the first frame of a take: summoned objects from the last take leave (PRD-045). */
   onTakeStart: () => void;
-  /** The AR session authors a camera take (docs/features/ar-recording.md): decided once per session. */
+  /** The AR session authors a camera take (docs/features/archive/ar-recording.md): decided once per session. */
   isCameraAuthor: () => boolean;
   /**
    * Why Record is refused in this session, or null: with camera takes on, an

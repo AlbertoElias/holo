@@ -34,7 +34,7 @@ export interface PhoneArChromeProbe {
 }
 
 /**
- * Capture's chrome in phone AR as a camera author (docs/features/ar-recording.md,
+ * Capture's chrome in phone AR as a camera author (docs/features/archive/ar-recording.md,
  * slice 3; styleguide 6, 8.5, 9.2, 9.3): Record/Stop, Recenter and Exit in the
  * bottom dock, and "Recording 0:12" on the periphery status line, from
  * @holoim/xr-ui-iwsdk as the viewer's phone chrome is. Taps arrive as screen

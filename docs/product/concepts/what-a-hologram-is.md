@@ -94,7 +94,7 @@ author's presence, never the viewer's view: the viewer still moves through
 it freely (principle 3), and Follow may at most suggest it. A "this" the
 author marks is cast from the camera through their finger, so a link's
 source can be the camera instead of a hand. The feature is
-[AR recording](../../features/ar-recording.md).
+[AR recording](../../features/archive/ar-recording.md).
 
 It passes the test below because the view is not fixed at recording: the
 event (the scene, the voice, the author's camera and marks) is stored, and

@@ -1,6 +1,6 @@
 import { readGlbJson } from './pointing-score.ts';
 
-// A pure inspector for camera takes (docs/features/ar-recording.md, slice 2a):
+// A pure inspector for camera takes (docs/features/archive/ar-recording.md, slice 2a):
 // Node only, no browser. `inspectCameraTake(glb)` returns a JSON-serialisable
 // report of what the export contains (skins, names, the author camera and its
 // sampled path, the bubble, extensions, event objects, the set's nodes), and

@@ -187,12 +187,18 @@ it from the item below instead of duplicating its status here.
   device-specific placement recovery. Delivered as a "Recenter AR" overlay
   button shown only in AR mode in
   [`docs/features/archive/ar-recenter-control.md`](docs/features/archive/ar-recenter-control.md).
-- [ ] AR recording (phone as a camera-only author): in flight in
-  [`docs/features/ar-recording.md`](docs/features/ar-recording.md), which
-  holds the notes that were here.
+- [x] AR recording (phone as a camera-only author): on `main` since
+  2026-10-27, brief
+  [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md);
+  its device checks are listed in `HANDOFF.md` under "Unverified / device-only".
+- [ ] AR recording follow-ups, waiting on the user: whether capture should
+  skip the microphone request at AR entry on a headset (today every AR entry
+  asks, and a Quest in passthrough releases it once the session is not
+  handheld), and whether the phone's ink line should be wider (the
+  cross-vendor review suggested a 1.5 px stroke; it is faint in the proof video).
 - [ ] The Halo in phone AR capture (stop, undo and redo of a held mark there),
   after AR recording lands: cut from
-  [`docs/features/ar-recording.md`](docs/features/ar-recording.md) by its
+  [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md) by its
   design review on 2026-10-25; the idiom is the phone's (press and hold the
   dock's Halo glyph, drag) through the shared screen-input bridge.
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;

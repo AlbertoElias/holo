@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-26
+**Updated:** 2026-10-27
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -13,32 +13,14 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-The shared XR interface and viewer VR/AR is complete and on `main` (brief
-[`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md)).
-Next: AR recording (camera-only takes, meaning v1) is built and verified on
-`feature/ar-recording`. The `?arCamera=1` flag is removed by the user's
-decision: phone AR records camera takes by default. It waits for `main` to be
-green, then merges with slice 0's branch. Its device checks stay unverified
-(no Android phone). Otherwise pick the next queue item in
+AR recording (camera-only takes from a phone, meaning v1) is complete and on
+`main` (brief
+[`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md)),
+with the shared XR interface before it. Pick the next queue item in
 [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- `feature/ar-recording` (rides along with the next merge): the approved
-  brief [`docs/features/ar-recording.md`](docs/features/ar-recording.md), the
-  no-performer decision in `what-a-hologram-is.md`, its `TODOS.md` entries,
-  and slices 1 and 2a, verified: `HOLOIM_meaning` v1 (camera `from`, version
-  as a feature level; performer takes still write v0) and phone camera takes
-  in capture (the `?arCamera=1` flag was removed by the user's decision,
-  2026-10-26: phone AR records camera takes by default). `verify:pr` and
-  `test:xr:ar-record` (12 phases) pass; the cross-vendor verifier's verdict is
-  "ship behind the flag". Slices 0, 2b, 3 and 4 followed (shared screen
-  input, viewer framing of camera takes, the phone dock, hold to mark from
-  the camera with the identity-hue presence mark): `verify:pr` passed on
-  `14b5738` after merging `origin/main`, and the verifier's re-check of the
-  last fix is again "ship behind the flag". Slice 0 is also on
-  `feature/xr-shared-screen-input`, approved by the viewer XR lead, and
-  merges with this branch. Evidence is in the brief; B-028 is open.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
@@ -56,6 +38,15 @@ green, then merges with slice 0's branch. Its device checks stay unverified
   the brief).
 
 ## Unverified / device-only
+
+- AR recording (brief
+  [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md)):
+  IWER phone emulation only, no Android phone. On a phone, check that Chrome
+  reports `interactionMode` "screen-space", sends `screen` input sources
+  without dom-overlay, and that the 300 ms / 22 px hold boundary feels right.
+  Also check the microphone prompt at AR entry (a Quest in passthrough is
+  asked too, then released), local-floor, the frame rate while recording, and
+  the world-space phone case. B-028 is open.
 
 - Shared XR interface and viewer VR/AR (brief
   [`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md),

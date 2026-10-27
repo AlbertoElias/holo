@@ -1,4 +1,4 @@
-// A phone for IWER (docs/features/ar-recording.md, slice 0). IWER 2.x has no
+// A phone for IWER (docs/features/archive/ar-recording.md, slice 0). IWER 2.x has no
 // phone profile, so a Playwright page that wants a handheld AR session calls
 // `emulatePhone(page)` before navigation:
 //   - mono view (`stereoEnabled = false`);

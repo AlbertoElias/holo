@@ -54,7 +54,7 @@ export interface PointResolutionInput {
   sceneMeshes: readonly THREE.Mesh[];
 }
 
-/** What a camera take's holds resolve against (docs/features/ar-recording.md), all in the take's exported scene. */
+/** What a camera take's holds resolve against (docs/features/archive/ar-recording.md), all in the take's exported scene. */
 export interface CameraResolutionInput {
   store: PointSampleStore;
   /** The take's first and last camera sample, in the store's seconds. */

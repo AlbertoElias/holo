@@ -13,7 +13,7 @@ import { Matrix4, Object3D, Quaternion, Ray, Vector3, type Camera } from "three"
 // spread between their rays reports a scale factor (viewer brief Q13).
 //
 // Every finger also has its own `ScreenTouch` record, for consumers that read
-// holds (docs/features/ar-recording.md): it follows its own source whatever
+// holds (docs/features/archive/ar-recording.md): it follows its own source whatever
 // the other fingers do, and the pointer above is not involved.
 
 // pointer-events treats a press longer than its click threshold as no click;
