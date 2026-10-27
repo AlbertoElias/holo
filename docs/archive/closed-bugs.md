@@ -655,3 +655,24 @@ bug above.)
   `e2e/bubble-capture.pipeline.spec.ts` now requires the feed's foot on the
   lowest drawn ground, never above the recorded floor, and every drawn point
   of the recorded scene under the glass; AR's foot stays on the recorded floor.
+
+### B-034 — A fresh visit lands on the last hologram instead of the newest
+
+- **Area:** `apps/viewer-web` feed (`FeedPage.tsx`), edge first page (`functions/index.ts`)
+- **Severity:** P1 — the feed opens on the wrong hologram
+- **Observed:** 2026-10-27, on the deployed viewer (desktop browser, fresh load)
+- **Evidence:** With an edge snapshot that holds only the oldest hologram and
+  the live API holding five, the deployed feed ends at `scrollTop` 2880 of a
+  720 px card (card 5 of 5); a snapshot missing the newest one or two lands
+  one or two cards down. Scroll snapping holds the card that was snapped when
+  the live list inserts newer cards above it; `overflow-anchor: none` does not
+  change it.
+- **Expected:** A reader who has not scrolled stays on the newest hologram when
+  the API's list replaces the edge snapshot.
+- **Reproduction:** Serve `/` with a `__HOLOIM_FEED__` older than the API's
+  first page and load it.
+- **Fix:** The feed returns to the top when a new first card arrives while the
+  reader is still at the top (`useStayOnNewest`); a reader who has scrolled
+  keeps their card. The edge-snapshot test in `e2e/hologram-feed.spec.ts` now
+  requires the newer card in the viewport and the feed at the top; it fails
+  without the fix.

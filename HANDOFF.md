@@ -21,6 +21,11 @@ with the shared XR interface before it. Pick the next queue item in
 
 ## Ready to merge (grouped)
 
+- `bug/feed-initial-scroll` (B-034, in
+  [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md)): a fresh visit
+  stays on the newest hologram when the API's list replaces an older edge
+  snapshot. `verify:agent`, `test:e2e:mocked` (30) and `portal.spec.ts` (8)
+  passed on 2026-10-27; pushed, not yet merged.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

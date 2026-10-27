@@ -633,7 +633,11 @@ test("feed renders the edge snapshot while the API sleeps, then takes the API's 
 
   wake();
   await expect(page.locator(".feed-card")).toHaveCount(2);
-  await expect(page.getByRole("heading", { name: "Uploaded since" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Uploaded since" })).toBeInViewport();
   await expect(page.getByRole("heading", { name: "From the API" })).toBeAttached();
+  // The newer hologram lands above the card on screen; the feed stays on the newest.
+  await page.waitForTimeout(500);
+  expect(await page.locator(".feed-scroll").evaluate((feed) => feed.scrollTop)).toBe(0);
+  await expect(page.getByRole("heading", { name: "Uploaded since" })).toBeInViewport();
   await expect(page.getByRole("heading", { name: "From the edge" })).toHaveCount(0);
 });
