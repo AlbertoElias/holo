@@ -579,3 +579,52 @@ bug above.)
   error 3.5 ms, rate 1.00015). Native: worst 0.2 ms, rate 1.00002. A
   mutation run with the mixer at 1.05× passed the per-step check and failed
   the rate check (1.0500×).
+
+### B-032 — A 1 s phone hold on TargetA came out "too brief" on CI
+
+- **Area:** `apps/capture` AR recording (`ar-record` XR check, `marks-a`;
+  `PointResolver.ts` `rejectReason`, `POINT_DWELL_SEC` 0.4 s)
+- **Severity:** P1 (failed `main`'s Capture XR shard 1, so nothing deploys)
+- **Observed:** 2026-10-27, CI run 40460444582 on `2f3067a`
+- **Evidence:** `hold-on-target-a` (`phoneHold`, 1000 ms of wall time) made no
+  link: the resolver's unlinked runs end with `"too brief"`, so the take had 2
+  links, and the check paired the walking hold (12.083–12.683 s) with the
+  stationary one's touch (11.233–11.533 s). The run recorded 789 camera keys;
+  three emulated shard runs (`scripts/ci-emulate.sh`, `XR_SHARD=1/2 pnpm run
+  test:xr:capture`) recorded 942–978 and passed, so the hosted runner was
+  slower than the emulation and the failure did not reproduce. The same job
+  passed on `a8dc19b`.
+- **Expected:** a 1 s hold on a target makes its link whatever the frame rate,
+  or the check says why it cannot; if a slow phone can lose a deliberate mark,
+  that is a capture defect, not only a check's.
+- **Reproduction:** two causes, each reproduced on demand. (1) The check: under
+  the manual clock it advanced the take 150 ms per touch step, so a slow host
+  fit fewer steps into the 1 s wall-clock hold; with every step slowed 350 ms,
+  `marks-a` lost all three holds as "too brief". A 6x CPU throttle did not
+  reproduce it: it slows the page, not the steps. (2) Capture: at about 4 fps
+  on the realtime clock, with the lift delivered before the frame's callbacks
+  (as Chromium fires XR input events), a 507 ms hold left no hold at all (no
+  step came between the 300 ms delay ending and the lift), and a 1 s hold's
+  span ended a frame early (0.77 s), stamped with the previous step's time.
+- **Fix:** `ScreenHolds` judges a lift as a step would: a finger down past the
+  hold delay and inside the slop at the lift holds then, even when no step saw
+  the delay end (so a Stop before the next step still closes it), and the next
+  step, the lift's own frame, ends the hold; a cancelled touch (pinch, session
+  end) still closes at once. The slop at the lift compares the touchdown and
+  lift directions in the viewer's own frame (`ScreenTouchEnd.viewDirection`,
+  new, read from the lift event's frame), because that frame has no viewer
+  pose of its own. The independent verifier (Codex) found three faults in
+  earlier versions, each now covered by a scenario that failed on that
+  version: a finger that slid past the slop as it lifted became a hold, a Stop
+  before the next step lost the hold, and a phone turned in the lift's frame
+  read as finger movement. The check advances the take by at least the wall
+  time since its last step while a finger is down, as a phone's clock runs. A
+  new `marks-low-fps` phase holds on TargetA at about 4 fps on the realtime
+  clock with browser-order lifts (`phoneFingerUp(page, { aheadOfApp: true })`,
+  new in the shared phone harness, with `at` and `headPose`): 0.5 s and 1 s
+  holds and one whose phone turns 4 degrees as it lifts each link, spanning
+  the touch within a frame, and a finger that slides 100 apx as it lifts makes
+  none. The half-second hold failed before the fix; the slowed `marks-a`
+  passes with the new stepping; all 16 `ar-record` phases pass. Inferred
+  pointing's dwell is unchanged: it runs in a headset at 72 Hz or more, where
+  a frame is under 14 ms.

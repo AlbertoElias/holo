@@ -64,7 +64,13 @@ import {
 //                     screen; Stop by the dock. Exactly three recorded links from RecordedAuthorCamera
 //                     (RecordedObject, TargetA, TargetA), spans starting at the touch, HOLOIM_meaning version 1,
 //                     "no referent" in the resolver's report; to.point of the still holds agrees across the two
-//                     placements within 1 cm.
+//                     placements within 1 cm. While a finger is down the simulation advances by at least the
+//                     wall time since its last step, as a phone's clock does, so a slow host cannot shorten a hold.
+//   marks-low-fps     B-032: the page draws about 4 frames a second on the realtime clock (take time is wall
+//                     time), and each lift lands before the app's callback for its frame, as a browser delivers
+//                     it. A 0.5 s and a 1 s hold on TargetA each make a link spanning the touch within a frame; a
+//                     finger still past the delay that slides 100 apx in the frame it lifts in makes no hold, and
+//                     one that stays on the glass while the phone turns 4 degrees in that frame still holds.
 //   phone-dock        slice 3, at a 412x915 portrait phone: the bottom dock (Recenter, Record, Exit) laid
 //                     out on the screen; Recenter between takes moves the set; Record and Stop by tap export
 //                     a take; Exit by tap mid-take exports the second. Screenshots of the view between
@@ -81,7 +87,7 @@ import {
 // A step is covered when a translation key inside its window matches within 1 cm AND a rotation key
 // (rotation has its own times) inside its window matches within 1 degree.
 // AR_RECORD_ONLY=<substring[,substring]> keeps matching phases; AR_RECORD_VIDEO_DIR=<dir> records phone-a
-// on video at a watchable pace. Writes output/ci-ar-record/<phase>.glb and ar-record-report.json.
+// on video at a watchable pace, and marks-low-fps as it runs. Writes output/ci-ar-record/<phase>.glb and ar-record-report.json.
 
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
 const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-ar-record';
@@ -111,6 +117,7 @@ const PHASES = [
   'phone-b',
   'marks-a',
   'marks-b',
+  'marks-low-fps',
   'mic-denied',
   'session-end',
   'page-hidden',
@@ -263,7 +270,7 @@ async function openPage(run: Run, options: OpenOptions): Promise<Page> {
   const context = await createXrContext(run.browser, {
     viewport: options.viewport ?? VIEWPORT,
     acceptDownloads: true,
-    ...(options.video && videoDir ? { recordVideo: { dir: videoDir, size: VIEWPORT } } : {})
+    ...(options.video && videoDir ? { recordVideo: { dir: videoDir, size: options.viewport ?? VIEWPORT } } : {})
   });
   await context.grantPermissions(['microphone']).catch(() => undefined);
   const page = await context.newPage();
@@ -1170,10 +1177,15 @@ async function stepWhile(page: Page, touch: Promise<void>, move?: (progress: num
     }
   );
   const started = Date.now();
+  let stepped = started;
   while (!done) {
     if (move) await move(Math.min(1, (Date.now() - started) / MARK_HOLD_MS));
     await nextXrFrame(page);
-    await advance(page, 150);
+    // At least the wall time since the last step, as a phone's clock runs: a slow host takes fewer, longer steps, so a
+    // hold of a second of wall time never comes out shorter in take time (B-032).
+    const now = Date.now();
+    await advance(page, Math.max(150, now - stepped));
+    stepped = now;
   }
   await finished;
   if (failure) throw failure;
@@ -1580,6 +1592,184 @@ async function marksPhase(run: Run, phase: 'marks-a' | 'marks-b', start: { posit
   }
 }
 
+/** The low-frame-rate phase's frame interval: about 4 fps, so the frame after a touchdown comes before the 300 ms hold delay ends. */
+const LOW_FPS_FRAME_MS = 250;
+/** Frames this far apart, or more, show the phase ran at a low frame rate; faster frames prove nothing. */
+const LOW_FPS_MIN_GAP_MS = 200;
+/** Holds of the low-frame-rate phase, by the wall time the finger waits before it lifts on the next frame. */
+const LOW_FPS_HOLDS = [
+  // Lifts on the second frame after the touch: the first came before the hold delay ended, and the lift lands with the next.
+  { name: 'hold-half-second', waitMs: 450 },
+  { name: 'hold-one-second', waitMs: 950 },
+  // The phone turns TURN_AT_TOUCHDOWN_DEG in the frame the finger lifts in, the finger still on the glass: still a hold.
+  // It waits less: the turn takes the frame before the lift (the second after the touch), after the app drew it.
+  { name: 'turn-at-lift', waitMs: 150, turn: true },
+  // Down at the screen centre and still past the delay, then slides EARLY_DRAG_APX in the frame it lifts in: a drag, never a hold.
+  { name: 'slide-at-lift', waitMs: 450, slide: true }
+] as const;
+const LOW_FPS_LINKED = LOW_FPS_HOLDS.filter((hold) => !('slide' in hold));
+
+/** Every animation frame of the page waits `ms` first (0 restores the browser's), so a phone draws a few frames a second. */
+const slowFrames = (page: Page, ms: number) =>
+  page.evaluate((interval) => {
+    const w = window as unknown as { __rafs?: { raf: typeof requestAnimationFrame; caf: typeof cancelAnimationFrame } };
+    w.__rafs ??= { raf: window.requestAnimationFrame.bind(window), caf: window.cancelAnimationFrame.bind(window) };
+    const { raf, caf } = w.__rafs;
+    if (interval <= 0) {
+      window.requestAnimationFrame = raf;
+      window.cancelAnimationFrame = caf;
+      return;
+    }
+    // Ids far above the browser's, so a frame requested before the switch is still cancelled by its own id.
+    const waiting = new Map<number, { timer: number; frame?: number }>();
+    let next = 1e9;
+    window.requestAnimationFrame = (callback) => {
+      const id = (next += 1);
+      const entry: { timer: number; frame?: number } = {
+        timer: window.setTimeout(() => {
+          entry.frame = raf((time) => {
+            waiting.delete(id);
+            callback(time);
+          });
+        }, interval)
+      };
+      waiting.set(id, entry);
+      return id;
+    };
+    window.cancelAnimationFrame = (id) => {
+      const entry = waiting.get(id);
+      if (!entry) return caf(id);
+      window.clearTimeout(entry.timer);
+      if (entry.frame !== undefined) caf(entry.frame);
+      waiting.delete(id);
+    };
+  }, ms);
+
+/** Wall-clock times of the XR session's frames from now on, read back by `xrFrameTimes`. */
+const watchXrFrames = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __xrFrameTimes: number[] };
+    w.__xrFrameTimes = [];
+    const session = window.IWER_DEVICE!.activeSession!;
+    const tick = () => {
+      w.__xrFrameTimes.push(performance.now());
+      if (window.IWER_DEVICE!.activeSession === session) session.requestAnimationFrame(tick);
+    };
+    session.requestAnimationFrame(tick);
+  });
+const xrFrameTimes = (page: Page) => page.evaluate(() => (window as unknown as { __xrFrameTimes: number[] }).__xrFrameTimes.slice());
+
+/**
+ * Holds on a phone that draws about 4 frames a second (B-032), on the realtime clock a phone runs: each frame steps
+ * once by its whole interval, so take time is wall time. A finger held past the 300 ms hold delay and the 0.4 s
+ * dwell marks whatever the frame rate, even when it lifts on the frame after the one that came too early to see
+ * the delay end; its link spans the touch to within a frame.
+ */
+async function lowFpsMarksPhase(run: Run): Promise<PhaseReport> {
+  const report: PhaseReport = { phase: 'marks-low-fps', failures: [], notes: {}, ar: {}, takes: [] };
+  const page = await openPage(run, { phone: true, scene: true, viewport: PHONE_VIEWPORT, video: true });
+  const scenarios: MarkScenario[] = [];
+  try {
+    await enterAr(page, { position: [0, 1.6, 0], yaw: 0 });
+    const frame = toMatrix(await worldFrame(page));
+    const targetA = new THREE.Vector3(...TARGETS.TargetA!.center).applyMatrix4(frame).toArray() as Vec3;
+    const eye: Vec3 = [0, 1.5, 0.6];
+    const standing = setToRoom(frame, { position: eye, quaternion: lookQuat(eye, [0, 1.5, -1.5]) });
+    await setHeadPose(page, standing.position, standing.quaternion);
+    await nextXrFrame(page);
+    await advance(page, STEP_MS);
+    await startRecordingByDock(page);
+    await watchTouches(page);
+    for (let i = 0; i < 3; i += 1) {
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
+    }
+
+    await slowFrames(page, LOW_FPS_FRAME_MS);
+    await page.evaluate(() => window.__setManualClock(false));
+    const centre = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2, PHONE_VIEWPORT.height / 2, 1.5);
+    const slid = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2 + EARLY_DRAG_APX, PHONE_VIEWPORT.height / 2, 1.5);
+    await watchXrFrames(page);
+    for (const hold of LOW_FPS_HOLDS) {
+      const slide = 'slide' in hold;
+      const before = await arOf(page);
+      const logFrom = (await touchLog(page)).length;
+      await phoneFingerDown(page, slide ? centre : targetA);
+      await page.waitForTimeout(hold.waitMs);
+      // The lift reaches the app before its frame's step, as a phone's browser delivers it.
+      if ('turn' in hold) {
+        // The head turns about its own up axis and the finger keeps its place on the screen: it turns with the head.
+        const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (TURN_AT_TOUCHDOWN_DEG * Math.PI) / 180);
+        const head = new THREE.Quaternion(...standing.quaternion);
+        const eyeAt = new THREE.Vector3(...standing.position);
+        const local = new THREE.Vector3(...targetA).sub(eyeAt).applyQuaternion(head.clone().invert());
+        const turned = head.clone().multiply(turn);
+        const at = local.applyQuaternion(turned).add(eyeAt).toArray() as Vec3;
+        await phoneFingerUp(page, { aheadOfApp: true, at, headPose: { position: standing.position, quaternion: [turned.x, turned.y, turned.z, turned.w] } });
+        await setHeadPose(page, standing.position, standing.quaternion);
+      } else {
+        await phoneFingerUp(page, { aheadOfApp: true, ...(slide ? { at: slid } : {}) });
+      }
+      await nextXrFrame(page);
+      const after = await arOf(page);
+      const log = (await touchLog(page)).slice(logFrom);
+      const down = log.find((entry) => entry.type === 'selectstart');
+      const up = log.find((entry) => entry.type === 'selectend');
+      scenarios.push({
+        name: hold.name,
+        ...(down ? { downSec: round(down.takeSec, 3) } : {}),
+        ...(up ? { upSec: round(up.takeSec, 3) } : {}),
+        ...(down && up ? { touchMs: Math.round(up.wall - down.wall) } : {}),
+        holdsBefore: before.screenHolds.kept,
+        holdsAfter: after.screenHolds.kept,
+        trackedAfter: after.screenHold.phase
+      });
+      if (!down || !up) report.failures.push(`${hold.name}: the touch left no selectstart/selectend in the page`);
+      const expected = slide ? 0 : 1;
+      if (after.screenHolds.kept !== before.screenHolds.kept + expected) report.failures.push(`${hold.name}: the take kept ${after.screenHolds.kept - before.screenHolds.kept} new hold(s), expected ${expected}`);
+    }
+    const times = await xrFrameTimes(page);
+    await page.evaluate(() => window.__setManualClock(true));
+    await slowFrames(page, 0);
+    const gaps = times.slice(1).map((time, i) => time - times[i]!).sort((a, b) => a - b);
+    const medianGapMs = gaps.length > 0 ? Math.round(gaps[Math.floor(gaps.length / 2)]!) : 0;
+    report.notes.lowFps = { frames: times.length, medianGapMs, fps: medianGapMs > 0 ? round(1000 / medianGapMs, 1) : 0 };
+    if (medianGapMs < LOW_FPS_MIN_GAP_MS) report.failures.push(`frames came every ${medianGapMs} ms during the holds, under ${LOW_FPS_MIN_GAP_MS} ms; the phase did not run at a low frame rate`);
+
+    const download = expectDownload(page, 30000);
+    await tapDock(page, 'record');
+    const saved = await advanceUntilDownload(page, download);
+    if (!saved) {
+      report.failures.push('no GLB downloaded after Stop');
+      report.marks = { scenarios, links: [], resolution: null };
+      return report;
+    }
+    const take = checkTake(report, await readFile(await saveDownload(saved, report.phase, report)), { audio: true });
+    const resolution = (await page.evaluate(() => window.__lastPointReport())) as PointResolutionReport | null;
+    const links = [...take.meaningLinks].sort((a, b) => a.span.start - b.span.start);
+    report.marks = { scenarios, links, resolution };
+    const unlinked = resolution?.runs.filter((resolved) => !resolved.linked) ?? [];
+    if (unlinked.length > 0) report.failures.push(`resolution: unlinked runs ${JSON.stringify(unlinked.map((resolved) => `${resolved.start}..${resolved.end} ${resolved.reason}`))}, expected none`);
+    if (links.length !== LOW_FPS_LINKED.length) report.failures.push(`${links.length} link(s) in the take, expected ${LOW_FPS_LINKED.length} (one per hold on TargetA)`);
+    // Input lands on the step after the frame it came in, so a span may trail its touch by a frame at either end.
+    const frameSec = Math.max(medianGapMs, LOW_FPS_FRAME_MS) / 1000;
+    if (links.length !== LOW_FPS_LINKED.length) return report;
+    links.forEach((link, i) => {
+      const touch = scenarios.find((scenario) => scenario.name === LOW_FPS_LINKED[i]!.name);
+      if (!link.to.nodeName.startsWith('TargetA')) report.failures.push(`link ${i}: to node ${JSON.stringify(link.to.nodeName)}, expected TargetA`);
+      if (touch?.downSec === undefined || touch.upSec === undefined || touch.touchMs === undefined) return;
+      if (Math.abs(link.span.start - touch.downSec) > frameSec + MARK_START_TOLERANCE_SEC) report.failures.push(`link ${i} (${touch.name}): span starts at ${link.span.start} s, the touch at ${touch.downSec} s (limit one frame, ${round(frameSec, 3)} s)`);
+      if (Math.abs(link.span.end - touch.upSec) > frameSec + MARK_START_TOLERANCE_SEC) report.failures.push(`link ${i} (${touch.name}): span ends at ${link.span.end} s, the finger lifted at ${touch.upSec} s (limit one frame, ${round(frameSec, 3)} s)`);
+      // Take time is wall time: the span is as long as the finger was down.
+      const lengthSec = link.span.end - link.span.start;
+      if (Math.abs(lengthSec - touch.touchMs / 1000) > frameSec) report.failures.push(`link ${i} (${touch.name}): span lasts ${round(lengthSec, 3)} s, the finger was down ${touch.touchMs} ms (limit one frame)`);
+    });
+    return report;
+  } finally {
+    await page.context().close();
+  }
+}
+
 /** The facts of the take's links against the touches that made them. */
 function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: MeaningLinkReport[], scenarios: MarkScenario[], resolution: PointResolutionReport | null): void {
   if (take.meaningVersion !== 1) report.failures.push(`HOLOIM_meaning version ${take.meaningVersion}, expected 1 (a camera link)`);
@@ -1663,6 +1853,8 @@ try {
       // A quarter turn: the room-axis bounds of the bracket then still centre on the bracket, so both placements aim at the same point of it.
       marked[phase] = await marksPhase(run, phase, { position: [1.2, 1.6, -0.8], yaw: Math.PI / 2 });
       finish(marked[phase]!.report);
+    } else if (phase === 'marks-low-fps') {
+      finish(await lowFpsMarksPhase(run));
     } else if (phase === 'mic-denied' || phase === 'session-end' || phase === 'page-hidden') {
       finish(await interruptPhase(run, phase));
     } else if (phase === 'hidden-at-start' || phase === 'restored-at-start' || phase === 'ended-at-start') {

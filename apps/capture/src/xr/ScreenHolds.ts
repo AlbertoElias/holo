@@ -37,6 +37,8 @@ interface Tracked {
   /** Moved past the slop before the delay: a drag, never a hold. */
   dead: boolean;
   slopApx: number;
+  /** Wall-clock time (`performance.now()`) the finger lifted; the next step closes the touch, at that frame's time. */
+  liftedAt: number | null;
 }
 
 /**
@@ -45,7 +47,11 @@ interface Tracked {
  * not part of a pinch, stays down `HOLD_DELAY_MS` of wall-clock time
  * (`performance.now()`, as the phone's hold everywhere) and stays within
  * `TOUCH_HOLD_SLOP_APX` of where it began on the screen becomes a hold, and
- * the hold is backdated to the touch. The slop is measured on the screen:
+ * the hold is backdated to the touch. The lift closes it on the next step:
+ * a browser delivers a frame's input before its callbacks, so that step is
+ * the lift's own frame. A finger down past the delay and still inside the
+ * slop at the lift holds even when no step came between the delay ending and
+ * the lift (a phone drawing a few frames a second, B-032). The slop is measured on the screen:
  * the finger's ray direction in the viewer's own frame at the start (turned
  * back to world with the viewer's pose now) against the same finger's now,
  * projected through the XR camera, so walking or
@@ -65,6 +71,7 @@ export class ScreenHolds {
   private readonly setInverse = new THREE.Matrix4();
   private readonly localDirection = new THREE.Vector3();
   private readonly worldRay = new THREE.Ray();
+  private readonly liftRay = new THREE.Ray();
 
   constructor(private readonly deps: ScreenHoldsDeps) {}
 
@@ -76,19 +83,34 @@ export class ScreenHolds {
 
   /** A finger went down (`ScreenInputSystem.onTouchStart`), at simulation time `timeSec`. */
   touchStart(touch: ScreenTouch, timeSec: number): void {
+    // The last finger lifted since the last step: it closes now, so this one is tracked.
+    if (this.tracked?.liftedAt != null) this.close(this.tracked, timeSec);
     if (this.tracked) return;
     if (touch.beganOnChrome || touch.pinched || !this.deps.isTakeOpen()) return;
     const first = this.sample(touch.downRay, timeSec);
     // Where the finger is on the screen, read from the touch event's own frame, whatever the camera did since it was last updated.
     // Null when the viewer space was not ready: no other pose pairs with the touchdown ray, so `step` falls back to the world rays.
     const baseline = touch.downViewDirection && isFiniteVector3Like(touch.downViewDirection) ? touch.downViewDirection.clone() : null;
-    this.tracked = { touch, baseline, pending: first ? [first] : [], held: false, dead: false, slopApx: 0 };
+    this.tracked = { touch, baseline, pending: first ? [first] : [], held: false, dead: false, slopApx: 0, liftedAt: null };
   }
 
-  /** The finger lifted, or the session ended with it down: a hold is closed here, a pending one forgotten. */
-  touchEnd(touch: ScreenTouch, _end: ScreenTouchEnd, timeSec: number): void {
+  /**
+   * The finger lifted: the next step closes the touch. A cancelled one (part of a pinch, or the session ended with it
+   * down) closes here: a hold ends where it stood, a pending one is forgotten.
+   */
+  touchEnd(touch: ScreenTouch, end: ScreenTouchEnd, timeSec: number): void {
     const t = this.tracked;
     if (!t || t.touch !== touch) return;
+    if (!end.cancelled) {
+      // Judged at the lift as a step would judge it: a finger still inside the slop past the delay held, though no step
+      // saw the delay end. It holds now, so a take that stops before the next step still closes it.
+      if (!t.held && !t.dead && this.deps.isTakeOpen() && this.now() - t.touch.downAt >= HOLD_DELAY_MS) {
+        const slop = this.liftSlopOf(t, end);
+        if (slop !== null && slop <= TOUCH_HOLD_SLOP_APX) this.hold(t);
+      }
+      t.liftedAt = this.now();
+      return;
+    }
     this.tracked = null;
     if (t.held) this.deps.samples().endAim(timeSec);
   }
@@ -100,6 +122,10 @@ export class ScreenHolds {
     if (!this.deps.isTakeOpen()) {
       // The take stopped under the finger; the store closed its hold when it closed.
       this.tracked = null;
+      return;
+    }
+    if (t.liftedAt !== null) {
+      this.close(t, timeSec);
       return;
     }
     if (t.touch.pinched) {
@@ -121,20 +147,10 @@ export class ScreenHolds {
       return;
     }
     if (t.dead) return;
-    // The touchdown ray as it points now: turned with the viewer from its viewer-frame direction. The viewer, not the
-    // render camera: the spec lets a view sit rotated against the viewer, and the baseline is viewer-local.
-    // Without a viewer-frame baseline nothing turns with the viewer, so the touchdown world ray stands in and a turn
-    // reads as movement: failing closed (a cancelled hold), never a hold from a mixed pair of poses.
-    let from = t.touch.downRay;
-    if (t.baseline) {
-      const viewer = t.touch.viewerQuaternion;
-      // The viewer has no finite pose this step: no sample, as tracking lost.
-      if (!viewer || !isFiniteQuaternionLike(viewer)) return;
-      this.worldRay.set(ray.origin, this.localDirection.copy(t.baseline).applyQuaternion(viewer));
-      from = this.worldRay;
-    }
-    t.slopApx = screenDistancePx(from, ray, camera, this.deps.viewport());
-    if (!Number.isFinite(t.slopApx)) return;
+    const slop = this.slopOf(t);
+    // This frame cannot place the finger on the screen (no finite viewer pose): no sample, as tracking lost.
+    if (slop === null) return;
+    t.slopApx = slop;
     if (t.slopApx > TOUCH_HOLD_SLOP_APX) {
       t.dead = true;
       t.pending.length = 0;
@@ -142,12 +158,68 @@ export class ScreenHolds {
     }
     const sample = this.sample(ray, timeSec);
     if (sample) t.pending.push(sample);
-    if ((this.deps.now ?? performance.now.bind(performance))() - t.touch.downAt < HOLD_DELAY_MS) return;
+    if (this.now() - t.touch.downAt < HOLD_DELAY_MS) return;
     // The delay passed with the finger inside the slop: a hold since the touch.
+    this.hold(t);
+  }
+
+  /** The finger's distance on the screen from where it went down (apx), or null when this frame cannot place it. */
+  private slopOf(t: Tracked): number | null {
+    const camera = this.deps.xrCamera();
+    camera.updateMatrixWorld(true);
+    if (!camera.matrixWorld.elements.every(Number.isFinite)) return null;
+    const ray = t.touch.ray;
+    if (!t.touch.rayCurrent || !isFiniteVector3Like(ray.origin) || !isFiniteVector3Like(ray.direction)) return null;
+    // The touchdown ray as it points now: turned with the viewer from its viewer-frame direction. The viewer, not the
+    // render camera: the spec lets a view sit rotated against the viewer, and the baseline is viewer-local.
+    // Without a viewer-frame baseline nothing turns with the viewer, so the touchdown world ray stands in and a turn
+    // reads as movement: failing closed (a cancelled hold), never a hold from a mixed pair of poses.
+    let from = t.touch.downRay;
+    if (t.baseline) {
+      const viewer = t.touch.viewerQuaternion;
+      if (!viewer || !isFiniteQuaternionLike(viewer)) return null;
+      this.worldRay.set(ray.origin, this.localDirection.copy(t.baseline).applyQuaternion(viewer));
+      from = this.worldRay;
+    }
+    const slop = screenDistancePx(from, ray, camera, this.deps.viewport());
+    return Number.isFinite(slop) ? slop : null;
+  }
+
+  /**
+   * The slop at the lift (apx), or null when the lift cannot be placed. The lift's event frame has no viewer pose
+   * (`getViewerPose` is illegal there), so the touchdown and lift directions, both in the viewer's own frame, are
+   * turned to world by the same last viewer pose and seen through the camera of that frame: only the finger's
+   * movement on the screen counts, not a turn of the phone since then. Without a viewer-frame baseline, the world
+   * rays stand in, failing closed as in a step.
+   */
+  private liftSlopOf(t: Tracked, end: ScreenTouchEnd): number | null {
+    if (!t.baseline) return this.slopOf(t);
+    const viewer = t.touch.viewerQuaternion;
+    if (!end.viewDirection || !isFiniteVector3Like(end.viewDirection) || !viewer || !isFiniteQuaternionLike(viewer)) return null;
+    const camera = this.deps.xrCamera();
+    camera.updateMatrixWorld(true);
+    if (!camera.matrixWorld.elements.every(Number.isFinite)) return null;
+    this.worldRay.direction.copy(t.baseline).applyQuaternion(viewer);
+    this.liftRay.direction.copy(end.viewDirection).applyQuaternion(viewer);
+    const slop = screenDistancePx(this.worldRay, this.liftRay, camera, this.deps.viewport());
+    return Number.isFinite(slop) ? slop : null;
+  }
+
+  private now(): number {
+    return (this.deps.now ?? performance.now.bind(performance))();
+  }
+
+  private hold(t: Tracked): void {
     t.held = true;
     const store = this.deps.samples();
     for (const backdated of t.pending) store.recordAim(backdated);
     t.pending = [];
+  }
+
+  /** A lifted finger, at the step after its lift (the lift's own frame): its hold ends here. */
+  private close(t: Tracked, timeSec: number): void {
+    this.tracked = null;
+    if (t.held) this.deps.samples().endAim(timeSec);
   }
 
   private write(ray: THREE.Ray, timeSec: number): void {

@@ -75,6 +75,13 @@ export interface ScreenTouch {
 export interface ScreenTouchEnd {
   /** The finger was part of a pinch, or the session ended while it was down. */
   cancelled: boolean;
+  /**
+   * The finger's direction in the viewer's own frame at the lift, read from
+   * the lift event's frame as `downViewDirection` is: where it left the
+   * screen, whatever the viewer did since the last animation frame. Null when
+   * the session ended (no frame) or the pose was not finite.
+   */
+  viewDirection: Vector3 | null;
 }
 
 function isScreenSource(source: XRInputSource): boolean {
@@ -208,7 +215,7 @@ export class ScreenInputSystem extends createSystem() {
     );
     session?.addEventListener("selectstart", this.onSelectStart as EventListener);
     session?.addEventListener("selectend", this.onSelectEnd as EventListener);
-    for (const touch of ended) this.onTouchEnd?.(touch, { cancelled: true });
+    for (const touch of ended) this.onTouchEnd?.(touch, { cancelled: true, viewDirection: null });
   }
 
   private aim(frame: XRFrame, source: XRInputSource): boolean {
@@ -328,7 +335,7 @@ export class ScreenInputSystem extends createSystem() {
     this.touches.delete(event.inputSource);
     if (touch) {
       this.followTouch(event.frame, touch);
-      this.onTouchEnd?.(touch, { cancelled: touch.pinched });
+      this.onTouchEnd?.(touch, { cancelled: touch.pinched, viewDirection: this.viewDirection(event.frame, event.inputSource) });
     }
     if (this.pinched) {
       // The pinch ends with its first lifted finger; no finger taps until all are up.

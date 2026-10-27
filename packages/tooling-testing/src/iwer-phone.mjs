@@ -130,11 +130,27 @@ export async function emulatePhone(page, options = {}) {
               resolve();
             })
           );
+        // Input a frame delivers ahead of the session's animation-frame callbacks, as a browser fires a frame's input
+        // events before running them: the first callback of the next frame lands it, then runs. Wired on a session the
+        // first time the phone sees it, so the app's callbacks pass through it from the next frame on.
+        const aheadOfFrame = new WeakMap();
         const sessionOf = () => {
           const session = device.activeSession;
           if (!session) throw new Error('phone: no XR session');
+          if (!aheadOfFrame.has(session)) {
+            const queue = [];
+            aheadOfFrame.set(session, queue);
+            const original = session.requestAnimationFrame;
+            session.requestAnimationFrame = function (callback) {
+              return original.call(this, (time, frame) => {
+                for (const land of queue.splice(0)) land(frame);
+                callback(time, frame);
+              });
+            };
+          }
           return session;
         };
+        const landAhead = (session, land) => new Promise((resolve) => aheadOfFrame.get(session).push((frame) => (land(frame), resolve())));
         // A point in viewer space: conjugate(head rotation) applied to (point - head position).
         const toViewerSpace = (target) => {
           const dx = target[0] - device.position.x;
@@ -328,15 +344,27 @@ export async function emulatePhone(page, options = {}) {
           const finger = held;
           await frameOf(sessionOf(), () => finger.move(point));
         };
-        const fingerUp = async () => {
+        const fingerUp = async (aheadOfApp = false, at = null, headPose = null) => {
           if (!held) throw new Error('phone: no finger is down');
           const session = sessionOf();
           const finger = held;
           held = null;
-          await frameOf(session, (frame) => {
+          if (headPose) {
+            // The head moves once a frame has been drawn, after all its callbacks: the frame the finger lifts in has
+            // the new pose, and the app's last animation frame still had the old one.
+            await frameOf(session);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            device.position.set(...headPose.position);
+            device.quaternion.set(...headPose.quaternion);
+          }
+          const lift = (frame) => {
+            // The finger slides to `at` in the frame it lifts in.
+            if (at) finger.move(at);
             session.dispatchEvent(touchEvent('select', frame, finger.source));
             session.dispatchEvent(touchEvent('selectend', frame, finger.source));
-          });
+          };
+          // Ahead of the app: the lift lands before the app's callback for its frame, so that frame's step already has the finger up.
+          await (aheadOfApp ? landAhead(session, lift) : frameOf(session, lift));
           screenSources.splice(screenSources.indexOf(finger.source), 1);
           finger.remove();
           await frameOf(session);
@@ -395,8 +423,13 @@ export function phoneFingerDown(page, point, options = {}) {
 export function phoneFingerMove(page, point) {
   return page.evaluate((target) => window.__phoneFingerMove(target), point);
 }
-export function phoneFingerUp(page) {
-  return page.evaluate(() => window.__phoneFingerUp());
+/**
+ * Lifts the finger. With `aheadOfApp` the lift lands before the app's callback for its frame, as a browser delivers
+ * it; with `at` the finger slides to that point in the frame it lifts in, and with `headPose` the head is there in
+ * that frame, after the app's last animation frame had it where it was.
+ */
+export function phoneFingerUp(page, options = {}) {
+  return page.evaluate(([aheadOfApp, at, headPose]) => window.__phoneFingerUp(aheadOfApp, at, headPose), [options.aheadOfApp === true, options.at ?? null, options.headPose ?? null]);
 }
 
 /**

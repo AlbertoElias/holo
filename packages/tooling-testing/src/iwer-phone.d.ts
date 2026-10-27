@@ -8,7 +8,11 @@ export function phoneTap(page: Page, point: PhoneVec3): Promise<void>;
 export function phoneHold(page: Page, point: PhoneVec3, ms: number, options?: { screenLocked?: boolean }): Promise<void>;
 export function phoneFingerDown(page: Page, point: PhoneVec3, options?: { headPose?: { position: PhoneVec3; quaternion: PhoneQuat } }): Promise<void>;
 export function phoneFingerMove(page: Page, point: PhoneVec3): Promise<void>;
-export function phoneFingerUp(page: Page): Promise<void>;
+/** With `aheadOfApp` the lift lands before the app's callback for its frame, as a browser delivers it; `at` slides the finger, and `headPose` moves the head, as it lifts. */
+export function phoneFingerUp(
+  page: Page,
+  options?: { aheadOfApp?: boolean; at?: PhoneVec3; headPose?: { position: PhoneVec3; quaternion: PhoneQuat } }
+): Promise<void>;
 export function phoneScreenPoint(page: Page, x: number, y: number, distance?: number): Promise<PhoneVec3>;
 export function phoneDrag(page: Page, from: PhoneVec3, to: PhoneVec3, frames: number, holdMs?: number): Promise<void>;
 export function phonePinch(page: Page, centre: PhoneVec3, fromPx: number, toPx: number, frames: number): Promise<void>;
