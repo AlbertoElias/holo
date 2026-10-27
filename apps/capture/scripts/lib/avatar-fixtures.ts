@@ -29,7 +29,7 @@ import {
   type HumanoidNodeCandidate,
   type HumanoidStandard,
   type VrmHumanoidBone
-} from '@holoim/meaning';
+} from '../../../../packages/meaning/src/index.ts';
 
 export const SHIPPED_AVATAR = fileURLToPath(new URL('../../public/gltf/models/avatar.glb', import.meta.url));
 

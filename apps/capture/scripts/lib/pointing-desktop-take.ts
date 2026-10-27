@@ -51,6 +51,8 @@ export type DesktopPointingOptions = {
   baseUrl: string;
   artifactDir: string;
   consoleErrors: string[];
+  /** `?avatar=`: records the take on another avatar (the viewer's avatar-formats pipeline spec). */
+  avatarUrl?: string;
 };
 
 /** The slice of render_game_to_text() this check reads. */
@@ -95,7 +97,7 @@ export type DesktopPointingReport = {
   spans: DesktopSpan[];
 };
 
-export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, consoleErrors }: DesktopPointingOptions): Promise<DesktopPointingReport> {
+export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, consoleErrors, avatarUrl }: DesktopPointingOptions): Promise<DesktopPointingReport> {
   const label = 'desktop-pointing-targets';
   const failures: string[] = [];
   const fail = (message: string) => failures.push(message);
@@ -110,6 +112,7 @@ export async function runDesktopPointingCheck({ browser, baseUrl, artifactDir, c
   url.searchParams.set('scene', SCENE);
   url.searchParams.set('sceneScale', '1');
   url.searchParams.set('manualClock', '1');
+  if (avatarUrl) url.searchParams.set('avatar', avatarUrl);
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['advanceTime', 'render_game_to_text', '__setMockInput', '__sampleHands', '__setManualClock']);
   await waitForTextContentPrefix(page, '#status', 'loaded');

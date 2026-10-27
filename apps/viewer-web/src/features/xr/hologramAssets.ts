@@ -94,7 +94,7 @@ export function cloneHologram(loaded: LoadedHologram): Object3D {
   // Recorded scale, never normalised: true scale is fact.
   const root = cloneSkeleton(loaded.gltf.scene);
   prepareAnimatedScene(root);
-  normalizeSceneAtOrigin(root);
+  normalizeSceneAtOrigin(root, loaded.gltf);
   standOnFeet(root);
   return root;
 }
@@ -117,7 +117,7 @@ export function clonePreview(loaded: LoadedHologram, heightM: number): Object3D 
     mixer.stopAllAction();
     mixer.uncacheRoot(root);
   }
-  normalizeSceneAtOrigin(root);
+  normalizeSceneAtOrigin(root, loaded.gltf);
   // A tile fits the whole recording, terrain included, so it stands on its lowest point.
   standOnLowestPoint(root);
   const size = new Box3().setFromObject(root, true).getSize(new Vector3());
