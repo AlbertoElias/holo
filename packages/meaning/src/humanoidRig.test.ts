@@ -93,6 +93,11 @@ describe("readHumanoidDeclaration", () => {
     })).toEqual({ format: "vrm0", bones: { leftThumbMetacarpal: 4, leftThumbProximal: 5 } });
     expect(readHumanoidDeclaration({ extensions: { VRMC_vrm: { humanoid: { humanBones: { hips: { node: "3" } } } } } }))
       .toEqual({ format: "vrm1", bones: {} });
+    // Negative ids name objects without a node in the apps' adapters; a declaration must never reach them.
+    expect(readHumanoidDeclaration({ extensions: { HOLOIM_humanoid: { humanBones: { hips: { node: -1 }, head: { node: 0 } } } } }))
+      .toEqual({ format: "holoim", bones: { head: 0 } });
+    expect(readHumanoidDeclaration({ extensions: { VRM: { humanoid: { humanBones: [{ bone: "hips", node: -2 }] } } } }))
+      .toEqual({ format: "vrm0", bones: {} });
     expect(readHumanoidDeclaration({ extensions: { HOLOIM_humanoid: { humanBones: [] }, VRMC_vrm: { humanoid: { humanBones: { hips: { node: 2 } } } } } }))
       .toEqual({ format: "vrm1", bones: { hips: 2 } });
     expect(readHumanoidDeclaration({})).toBeUndefined();

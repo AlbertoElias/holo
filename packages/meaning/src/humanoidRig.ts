@@ -274,6 +274,11 @@ const VRM0_THUMB: Readonly<Record<string, VrmHumanoidBone>> = {
   rightThumbIntermediate: "rightThumbProximal", rightThumbDistal: "rightThumbDistal"
 };
 
+/** A glTF node index; callers use negative ids for objects with no node, so a declaration never may. */
+function isNodeIndex(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 0;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -290,7 +295,7 @@ export function readHumanoidDeclaration(gltfJson: unknown): HumanoidDeclaration 
     if (!isRecord(raw)) return undefined;
     const bones: Partial<Record<VrmHumanoidBone, number>> = {};
     for (const [bone, value] of Object.entries(raw)) {
-      if (isVrmHumanoidBone(bone) && isRecord(value) && Number.isInteger(value.node)) bones[bone] = value.node as number;
+      if (isVrmHumanoidBone(bone) && isRecord(value) && isNodeIndex(value.node)) bones[bone] = value.node;
     }
     return { format, bones };
   };
@@ -305,9 +310,9 @@ export function readHumanoidDeclaration(gltfJson: unknown): HumanoidDeclaration 
   if (isRecord(vrm0) && isRecord(vrm0.humanoid) && Array.isArray(vrm0.humanoid.humanBones)) {
     const bones: Partial<Record<VrmHumanoidBone, number>> = {};
     for (const entry of vrm0.humanoid.humanBones as unknown[]) {
-      if (!isRecord(entry) || typeof entry.bone !== "string" || !Number.isInteger(entry.node)) continue;
+      if (!isRecord(entry) || typeof entry.bone !== "string" || !isNodeIndex(entry.node)) continue;
       const bone = Object.hasOwn(VRM0_THUMB, entry.bone) ? VRM0_THUMB[entry.bone] : entry.bone;
-      if (isVrmHumanoidBone(bone)) bones[bone] = entry.node as number;
+      if (isVrmHumanoidBone(bone)) bones[bone] = entry.node;
     }
     return { format: "vrm0", bones };
   }

@@ -57,7 +57,9 @@ export function resolveHumanoidAnchors(root: Object3D, gltf?: HumanoidGltf): Hum
   // Candidates in preference order, as capture binds them: joints of the
   // largest skin, then other bones, then everything else.
   const skins: Object3D[][] = [];
+  const inScope = new Set<Object3D>();
   scope.traverse((object) => {
+    inScope.add(object);
     const mesh = object as SkinnedLike;
     if (mesh.isSkinnedMesh && mesh.skeleton) skins.push(mesh.skeleton.bones);
   });
@@ -65,7 +67,7 @@ export function resolveHumanoidAnchors(root: Object3D, gltf?: HumanoidGltf): Hum
   const ordered: Object3D[] = [];
   const seen = new Set<Object3D>();
   const push = (object: Object3D) => {
-    if (seen.has(object) || !isInside(object, scope)) return;
+    if (seen.has(object) || !inScope.has(object)) return;
     seen.add(object);
     ordered.push(object);
   };
@@ -102,11 +104,6 @@ export function resolveHumanoidAnchors(root: Object3D, gltf?: HumanoidGltf): Hum
   for (const [bone, object] of bones) object.userData[HUMANOID_BONE_TAG] = bone;
   root.userData[HUMANOID_SOURCE_TAG] = source;
   return { scope, hips: bones.get("hips") ?? null, head: bones.get("head") ?? null, bones, source };
-}
-
-function isInside(object: Object3D, scope: Object3D): boolean {
-  for (let node: Object3D | null = object; node; node = node.parent) if (node === scope) return true;
-  return false;
 }
 
 function findByName(root: Object3D, names: readonly string[]): Object3D | null {
