@@ -7,10 +7,12 @@ import {
   attachXrEnvironment,
   createXrContext,
   enterIwerSessionFromButton,
+  freezePageClock,
   launchXrBrowser,
   waitForIwerRuntime,
   waitForPageFunctions,
   waitForTextContentPrefix,
+  waitForXrRenderLoop,
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
 import { emulatePhone, phoneFingerDown, phoneFingerMove, phoneFingerUp, phoneHold, phoneScreenPoint, phoneTap, phoneTargetRayLost, phoneViewOffset, phoneViewerSpaceUnavailable, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
@@ -64,8 +66,8 @@ import {
 //                     screen; Stop by the dock. Exactly three recorded links from RecordedAuthorCamera
 //                     (RecordedObject, TargetA, TargetA), spans starting at the touch, HOLOIM_meaning version 1,
 //                     "no referent" in the resolver's report; to.point of the still holds agrees across the two
-//                     placements within 1 cm. While a finger is down the simulation advances by at least the
-//                     wall time since its last step, as a phone's clock does, so a slow host cannot shorten a hold.
+//                     placements within 1 cm. While a finger is down each XR frame is 100 ms of page time and the
+//                     simulation steps by the same, as a phone's clock does, so the take is the same on any host.
 //   marks-low-fps     B-032: the page draws about 4 frames a second on the realtime clock (take time is wall
 //                     time), and each lift lands before the app's callback for its frame, as a browser delivers
 //                     it. A 0.5 s and a 1 s hold on TargetA each make a link spanning the touch within a frame; a
@@ -79,8 +81,12 @@ import {
 // The dock is driven by taps (phoneTap) at the buttons' world positions, read from the page's
 // __samplePhoneChrome probe, in phone-a, phone-b, phone-dock and dock-exit-idle. The other phases press
 // Record through __toggleRecording. Quest passthrough and a device with no interactionMode must have no dock at all.
+// Clocks: after session entry every phase but marks-low-fps freezes the page clock (timers, animation frames,
+// performance.now) and releases XR frames one at a time (FRAME_MS of page time each); the app runs its manual
+// clock and steps only on advanceTime, without drawing (screenshots draw). Waits on real work (the microphone,
+// the export, a download, a track ending) wait on that event, never a fixed sleep.
 // How the path is compared: each walk step sets the head pose (in the set frame, converted to the room
-// with the live world frame), waits for one real XR frame, then advances the simulation by STEP_MS. The
+// with the live world frame), waits for one XR frame, then advances the simulation by STEP_MS. The
 // recorder samples the camera each simulated frame, so one pose is held for several samples. The script
 // is a staircase (pose i holds from START + i * STEP to START + (i + 1) * STEP); START, the take time of
 // the first step, is the offset with the most covered steps and then the smallest error (`alignmentSec`).
@@ -214,6 +220,8 @@ type PhaseReport = {
   scriptVsExport?: StepCoverage;
   worldFrame?: number[];
   marks?: MarkFacts;
+  /** Wall time the phase took (diagnostics only, never asserted). */
+  seconds?: number;
 };
 
 type Run = { browser: Browser; consoleErrors: string[] };
@@ -327,17 +335,79 @@ const advance = (page: Page, ms: number) => page.evaluate((value) => window.adva
 const worldFrame = (page: Page) => page.evaluate(() => window.__arWorldFrame());
 const toggle = (page: Page) => page.evaluate(() => window.__toggleRecording());
 
-/** One real XR frame (emulated frames take about 150 ms); the simulation moves only on advanceTime. */
-const nextXrFrame = (page: Page) =>
-  page.evaluate(() => new Promise<void>((resolve) => window.IWER_DEVICE!.activeSession!.requestAnimationFrame(() => resolve())));
+/**
+ * Page time each released XR frame takes on a frozen page clock. The page's timers, animation frames and
+ * `performance.now` (the hold delay, the touch log) run on that clock, so a phase's facts do not depend
+ * on how fast the host composites the emulated frames.
+ */
+const FRAME_MS = 100;
+/** Pages whose clock is frozen after session entry: every phase but marks-low-fps (B-032 runs in real time). */
+const frozenPages = new WeakSet<Page>();
 
-/** Starts the AR session from the page's button with the head at `start` (the set is placed over the next frames). */
-async function enterSession(page: Page, start?: { position: Vec3; yaw: number }): Promise<void> {
+/** Releases one XR frame on a frozen page, or lets `ms` of page time pass (one frame, then timers due by then). */
+async function releaseFrame(page: Page, ms = FRAME_MS): Promise<void> {
+  await page.clock.fastForward(ms);
+  // A round trip after the jump: page promises settled in the frame have reached this side.
+  await page.evaluate(() => 0);
+}
+
+/**
+ * Waits for a page promise that needs XR frames (a touch, a tap, a frame wait). On a frozen page this
+ * releases frames one at a time until it settles, at most `maxFrames` (an Exit tap ends the session
+ * mid-touch, and no further frame comes to finish it); otherwise it waits in real time.
+ */
+async function drive<T>(page: Page, pending: Promise<T>, maxFrames = 200): Promise<{ settled: boolean; frames: number }> {
+  let settled = false;
+  let failure: unknown;
+  const watched = pending.then(
+    () => {
+      settled = true;
+    },
+    (error: unknown) => {
+      settled = true;
+      failure = error;
+    }
+  );
+  if (!frozenPages.has(page)) {
+    await watched;
+    if (failure) throw failure;
+    return { settled: true, frames: 0 };
+  }
+  let frames = 0;
+  while (!settled && frames < maxFrames) {
+    await releaseFrame(page);
+    frames += 1;
+  }
+  if (failure) throw failure;
+  return { settled, frames };
+}
+
+/** One XR frame; the simulation moves only on advanceTime. Real frames on a page in real time (emulated frames take about 150 ms). */
+const nextXrFrame = async (page: Page): Promise<void> => {
+  const frame = page.evaluate(() => new Promise<void>((resolve) => window.IWER_DEVICE!.activeSession!.requestAnimationFrame(() => resolve())));
+  const { settled } = await drive(page, frame, 5);
+  if (!settled) throw new Error('no XR frame came on the frozen page clock');
+};
+
+/** Page time passes with the simulation still: one frame on a frozen page clock, real time otherwise. */
+const pageTimePasses = (page: Page, ms: number) => (frozenPages.has(page) ? releaseFrame(page, ms) : page.waitForTimeout(ms));
+
+/**
+ * Starts the AR session from the page's button with the head at `start` (the set is placed over the next frames).
+ * Unless `realtime`, the page clock is then frozen and the app draws nothing on its frames (screenshots draw).
+ */
+async function enterSession(page: Page, start?: { position: Vec3; yaw: number }, realtime = false): Promise<void> {
   await page.evaluate(() => {
     window.IWER_DEVICE!.controlMode = 'programmatic';
   });
   await setHeadPose(page, start?.position ?? [0, 1.6, 0], quat(start?.yaw ?? 0, 0));
   await enterIwerSessionFromButton(page, '#ARButton', { readyCheck: "JSON.parse(window.render_game_to_text()).ar.sessionMode === 'ar'" });
+  if (realtime) return;
+  // Drawing every frame costs the most on a software-GL runner; only the video draws.
+  await page.evaluate((draw) => window.__setManualClock(true, draw), Boolean(videoDir));
+  await freezePageClock(page);
+  await waitForXrRenderLoop(page);
+  frozenPages.add(page);
 }
 
 /** Advances until the set's placement settles. */
@@ -350,8 +420,8 @@ async function settle(page: Page, expectSettled = true): Promise<void> {
   if (expectSettled && !(await arOf(page)).placementSettled) throw new Error('placement never settled');
 }
 
-async function enterAr(page: Page, start?: { position: Vec3; yaw: number }, expectSettled = true): Promise<void> {
-  await enterSession(page, start);
+async function enterAr(page: Page, start?: { position: Vec3; yaw: number }, expectSettled = true, realtime = false): Promise<void> {
+  await enterSession(page, start, realtime);
   await settle(page, expectSettled);
 }
 
@@ -410,8 +480,9 @@ async function tapDock(page: Page, id: DockId, options: { hidden?: boolean; ends
   if (!dock) throw new Error(`the ${id} dock is not built`);
   if (!dock.visible && !options.hidden) throw new Error(`the ${id} dock is not shown`);
   const tap = phoneTap(page, dock.buttons[id]!.worldPosition);
-  if (options.endsSession) await Promise.race([tap.catch(() => undefined), page.waitForTimeout(4000)]);
-  else await tap;
+  if (options.endsSession && !frozenPages.has(page)) await Promise.race([tap.catch(() => undefined), page.waitForTimeout(4000)]);
+  else if (options.endsSession) await drive(page, tap.catch(() => undefined), 6);
+  else await drive(page, tap);
 }
 
 /** Where each dock button's centre lands on the screen (CSS px), from the head pose last set and the XR view's fov. */
@@ -443,13 +514,15 @@ async function showCanvasOnly(page: Page): Promise<void> {
 }
 
 async function screenshot(page: Page, name: string, report: PhaseReport): Promise<void> {
-  // Two real frames and a step: the latest pose and chrome state have been drawn.
+  // Two frames and a step, drawn: the latest pose and chrome state are on the canvas.
+  await page.evaluate(() => window.__setManualClock(true, true));
   await nextXrFrame(page);
   await advance(page, STEP_MS);
   await nextXrFrame(page);
   await nextXrFrame(page);
   const file = path.join(artifactDir, name);
   await page.screenshot({ path: file });
+  if (frozenPages.has(page)) await page.evaluate((draw) => window.__setManualClock(true, draw), Boolean(videoDir));
   const shots = (report.notes.screenshots ??= []) as string[];
   shots.push(file);
 }
@@ -480,16 +553,25 @@ async function saveDownload(download: Download, phase: string, report: PhaseRepo
   return glb;
 }
 
-/** Waits for a download while advancing the simulation, so the async export can finish. */
+/**
+ * Waits for a download while advancing the simulation and the page clock, so the async export can finish:
+ * it also waits on real work (the microphone's recorder, the GLB encode), so each step ends when the download
+ * arrives or after a short real wait. On a frozen page the export's own 60 s timeout stays far off (at most
+ * 20 s of page time).
+ */
 async function advanceUntilDownload(page: Page, download: Promise<Download | null>, seconds = 20): Promise<Download | null> {
   let result: Download | null | undefined;
   void download.then((value) => {
     result = value;
   });
+  const realWaitMs = frozenPages.has(page) ? 50 : 200;
   for (let i = 0; i < seconds * 5 && result === undefined; i += 1) {
-    await advance(page, STEP_MS);
-    await page.waitForTimeout(200);
+    await advance(page, STEP_MS).catch(() => undefined);
+    if (frozenPages.has(page)) await releaseFrame(page, 200);
+    await Promise.race([download, new Promise((resolve) => setTimeout(resolve, realWaitMs))]);
   }
+  // On a frozen page a slow export takes more real time, not more page time.
+  if (result === undefined && frozenPages.has(page)) result = await download;
   return result ?? null;
 }
 
@@ -497,9 +579,16 @@ const expectDownload = (page: Page, timeout: number) => page.waitForEvent('downl
 
 /** Lets any stray second download arrive, then checks the phase made exactly `expected`. */
 async function expectDownloadCount(page: Page, report: PhaseReport, expected: number): Promise<void> {
+  const frozen = frozenPages.has(page);
   for (let i = 0; i < 10; i += 1) {
     await advance(page, STEP_MS).catch(() => undefined);
-    await page.waitForTimeout(150);
+    if (frozen) await releaseFrame(page).catch(() => undefined);
+    else await page.waitForTimeout(150);
+  }
+  if (frozen) {
+    // An export still running finishes on real work; then a download it starts reaches this side within a moment.
+    await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).ar.recordingState !== 'exporting', null, { timeout: 30000, polling: 50 }).catch(() => undefined);
+    await page.waitForEvent('download', { timeout: 300 }).catch(() => undefined);
   }
   const names = downloadLog.get(page) ?? [];
   report.notes.downloads = names;
@@ -600,7 +689,7 @@ async function walkPhase(run: Run, phase: 'phone-a' | 'phone-b', start: { positi
       report.failures.push('the set was already settled on entry; the settling refusal could not be checked');
     } else {
       await toggle(page);
-      await page.waitForTimeout(150);
+      await pageTimePasses(page, 150);
       const refused = await arOf(page);
       report.ar.settlingRefused = refused;
       if (refused.notice !== SETTLE_NOTICE) report.failures.push(`Record while settling: notice ${JSON.stringify(refused.notice)}, expected ${JSON.stringify(SETTLE_NOTICE)}`);
@@ -780,6 +869,22 @@ const micCount = (page: Page): Promise<MicCount> =>
     return { calls: mics.calls, streams: mics.streams.length, tracks: tracks.length, liveTracks: tracks.filter((track) => track.readyState === 'live').length };
   });
 
+/**
+ * Opens the gate the held microphone request waits behind, then waits (in real time, without frames) until every
+ * pending request has its stream: getUserMedia resolves on real work, not on the page clock.
+ */
+async function openMicGate(page: Page, report: PhaseReport): Promise<void> {
+  await page.evaluate(() => (window as unknown as { __openMicGate: () => void }).__openMicGate());
+  try {
+    await page.waitForFunction(() => {
+      const mics = (window as unknown as { __mics: { calls: number; streams: MediaStream[] } }).__mics;
+      return mics.streams.length >= mics.calls;
+    }, null, { timeout: 10000, polling: 20 });
+  } catch {
+    report.failures.push(`the microphone never arrived after its gate opened (${JSON.stringify(await micCount(page))})`);
+  }
+}
+
 /** Takes that end mid-take: mic-denied (Stop), session-end and page-hidden. */
 async function interruptPhase(run: Run, phase: 'mic-denied' | 'session-end' | 'page-hidden'): Promise<PhaseReport> {
   const report: PhaseReport = { phase, failures: [], notes: {}, ar: {}, takes: [] };
@@ -811,13 +916,14 @@ async function interruptPhase(run: Run, phase: 'mic-denied' | 'session-end' | 'p
     const download = expectDownload(page, 30000);
     if (phase === 'session-end') {
       await page.evaluate(() => window.IWER_DEVICE!.activeSession!.end());
-      // No frame arrives after the session ends: the held microphone must be released by the event itself.
+      // No frame arrives after the session ends (the page clock stands still): the held microphone must be released
+      // by the event itself. Track ends are real events, so this polls in real time for up to 4 s.
       let ended = false;
-      for (let i = 0; i < 40 && !ended; i += 1) {
-        await page.waitForTimeout(100);
+      for (const deadline = Date.now() + 4000; !ended && Date.now() < deadline; ) {
         const mics = await micCount(page);
         ended = mics.tracks > 0 && mics.liveTracks === 0 && !(await arOf(page)).micHeld;
         report.notes.micAfterEnd = mics;
+        if (!ended) await new Promise((resolve) => setTimeout(resolve, 20));
       }
       if (!ended) report.failures.push('the held microphone was still live after the session ended, with no frame advancing');
     } else if (phase === 'page-hidden') {
@@ -872,7 +978,7 @@ async function abortAtStartPhase(run: Run, phase: 'hidden-at-start' | 'restored-
     const states = new Set<string>();
     const watch = async () => states.add((await arOf(page)).recordingState);
     await toggle(page);
-    await page.waitForTimeout(300);
+    await pageTimePasses(page, 300);
     report.ar.pending = await arOf(page);
     states.add(report.ar.pending.recordingState);
     if (report.ar.pending.recordingState !== 'idle') report.failures.push(`recordingState ${report.ar.pending.recordingState} while the microphone was still pending, expected idle`);
@@ -883,18 +989,18 @@ async function abortAtStartPhase(run: Run, phase: 'hidden-at-start' | 'restored-
     if (recentered.notice !== RECENTER_NOTICE) report.failures.push(`Recenter while a start was pending: notice ${JSON.stringify(recentered.notice)}, expected ${JSON.stringify(RECENTER_NOTICE)}`);
     for (let i = 0; i < 4; i += 1) {
       await advance(page, STEP_MS);
-      await page.waitForTimeout(100);
+      await pageTimePasses(page, 100);
     }
     if (!same(await worldFrame(page), frameValues)) report.failures.push('the set moved when Recenter was pressed while a start was pending');
 
     if (phase === 'hidden-at-start') {
       // The page hides, the microphone arrives while hidden, then the page shows again.
       await hide(page);
-      await page.waitForTimeout(1500);
-      await page.evaluate(() => (window as unknown as { __openMicGate: () => void }).__openMicGate());
+      await pageTimePasses(page, 1500);
+      await openMicGate(page, report);
       for (let i = 0; i < 10; i += 1) {
         await advance(page, STEP_MS);
-        await page.waitForTimeout(150);
+        await pageTimePasses(page, 150);
         await watch();
       }
       report.ar.hiddenAfterGrant = await arOf(page);
@@ -902,18 +1008,18 @@ async function abortAtStartPhase(run: Run, phase: 'hidden-at-start' | 'restored-
     } else if (phase === 'restored-at-start') {
       // The page hides and shows again before the microphone arrives: the start is still cancelled.
       await hide(page);
-      await page.waitForTimeout(500);
+      await pageTimePasses(page, 500);
       await show(page);
-      await page.waitForTimeout(500);
-      await page.evaluate(() => (window as unknown as { __openMicGate: () => void }).__openMicGate());
+      await pageTimePasses(page, 500);
+      await openMicGate(page, report);
     } else {
       await page.evaluate(() => window.IWER_DEVICE!.activeSession!.end());
-      await page.waitForTimeout(500);
-      await page.evaluate(() => (window as unknown as { __openMicGate: () => void }).__openMicGate());
+      await pageTimePasses(page, 500);
+      await openMicGate(page, report);
     }
     for (let i = 0; i < 20; i += 1) {
       await advance(page, STEP_MS);
-      await page.waitForTimeout(150);
+      await pageTimePasses(page, 150);
       await watch();
     }
     report.ar.after = await arOf(page);
@@ -961,7 +1067,7 @@ async function emptySetPhase(run: Run): Promise<PhaseReport> {
     // The notice shows for 4 s of wall-clock time: read it as soon as it is up, not after a fixed wait that a slow machine outlasts.
     for (let i = 0; i < 12; i += 1) {
       await advance(page, STEP_MS);
-      await page.waitForTimeout(100);
+      await pageTimePasses(page, 100);
       report.ar.after = await arOf(page);
       if (report.ar.after.notice) break;
     }
@@ -994,7 +1100,7 @@ async function headsetPhase(run: Run, phase: 'quest-passthrough' | 'interaction-
       await toggle(page);
       for (let i = 0; i < 8; i += 1) {
         await advance(page, STEP_MS);
-        await page.waitForTimeout(150);
+        await pageTimePasses(page, 150);
       }
       const after = await arOf(page);
       report.ar[`${press}Record`] = after;
@@ -1162,9 +1268,12 @@ function lookQuat(eye: Vec3, target: Vec3): Quat {
 /**
  * Runs `touch` while the simulation advances beside it (the manual clock steps only when asked, and a
  * hold is judged at steps), optionally moving the head as the touch proceeds (`progress` in [0, 1] over
- * the hold's length).
+ * the hold's length). On the frozen page clock each XR frame is {@link FRAME_MS} of page time and the
+ * simulation steps by the same, as a phone's clock runs: take time is page time, the hold delay and the
+ * touch's length are counted on it, and the number of frames and steps is the same on every host.
  */
 async function stepWhile(page: Page, touch: Promise<void>, move?: (progress: number) => Promise<void>): Promise<void> {
+  if (!frozenPages.has(page)) throw new Error('stepWhile needs the frozen page clock');
   let done = false;
   let failure: unknown;
   const finished = touch.then(
@@ -1176,16 +1285,14 @@ async function stepWhile(page: Page, touch: Promise<void>, move?: (progress: num
       failure = error;
     }
   );
-  const started = Date.now();
-  let stepped = started;
-  while (!done) {
-    if (move) await move(Math.min(1, (Date.now() - started) / MARK_HOLD_MS));
-    await nextXrFrame(page);
-    // At least the wall time since the last step, as a phone's clock runs: a slow host takes fewer, longer steps, so a
-    // hold of a second of wall time never comes out shorter in take time (B-032).
-    const now = Date.now();
-    await advance(page, Math.max(150, now - stepped));
-    stepped = now;
+  let elapsedMs = 0;
+  for (let frames = 0; !done; frames += 1) {
+    if (frames > 200) throw new Error('a touch did not finish within 200 frames');
+    if (move) await move(Math.min(1, elapsedMs / MARK_HOLD_MS));
+    await releaseFrame(page);
+    // The step runs after the frame (a round trip), so a touch that ended in this frame is seen as done below.
+    await advance(page, FRAME_MS);
+    elapsedMs += FRAME_MS;
   }
   await finished;
   if (failure) throw failure;
@@ -1240,10 +1347,10 @@ const EARLY_DRAG_APX = 100;
 async function earlyDragScenario(page: Page, report: PhaseReport, scenarios: MarkScenario[], from: Vec3, to: Vec3): Promise<void> {
   const name = 'early-drag';
   const before = await arOf(page);
-  await phoneFingerDown(page, from);
-  await phoneFingerMove(page, to);
-  await phoneFingerMove(page, to);
-  await page.waitForTimeout(400);
+  await drive(page, phoneFingerDown(page, from));
+  await drive(page, phoneFingerMove(page, to));
+  await drive(page, phoneFingerMove(page, to));
+  await pageTimePasses(page, 400);
   const stepped: ArState[] = [];
   for (let i = 0; i < 3; i += 1) {
     await nextXrFrame(page);
@@ -1251,7 +1358,7 @@ async function earlyDragScenario(page: Page, report: PhaseReport, scenarios: Mar
     stepped.push(await arOf(page));
   }
   const during = stepped[stepped.length - 1]!;
-  await phoneFingerUp(page);
+  await drive(page, phoneFingerUp(page));
   for (let i = 0; i < 3; i += 1) await advance(page, STEP_MS);
   const after = await arOf(page);
   scenarios.push({
@@ -1281,8 +1388,8 @@ async function turnAtTouchdownScenario(page: Page, report: PhaseReport, scenario
   const before = await arOf(page);
   const centre = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2, PHONE_VIEWPORT.height / 2, 1.5);
   const turned = new THREE.Quaternion(...head.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (TURN_AT_TOUCHDOWN_DEG * Math.PI) / 180));
-  await phoneFingerDown(page, centre, { headPose: { position: head.position, quaternion: [turned.x, turned.y, turned.z, turned.w] } });
-  await page.waitForTimeout(400);
+  await drive(page, phoneFingerDown(page, centre, { headPose: { position: head.position, quaternion: [turned.x, turned.y, turned.z, turned.w] } }));
+  await pageTimePasses(page, 400);
   const stepped: ArState[] = [];
   for (let i = 0; i < 3; i += 1) {
     await nextXrFrame(page);
@@ -1290,7 +1397,7 @@ async function turnAtTouchdownScenario(page: Page, report: PhaseReport, scenario
     stepped.push(await arOf(page));
   }
   const during = stepped[stepped.length - 1]!;
-  await phoneFingerUp(page);
+  await drive(page, phoneFingerUp(page));
   for (let i = 0; i < 3; i += 1) await advance(page, STEP_MS);
   const after = await arOf(page);
   scenarios.push({
@@ -1318,7 +1425,7 @@ async function targetRayLostScenario(page: Page, report: PhaseReport, scenarios:
   const name = 'target-ray-lost-while-turning';
   const before = await arOf(page);
   const centre = await phoneScreenPoint(page, PHONE_VIEWPORT.width / 2, PHONE_VIEWPORT.height / 2, 1.5);
-  await phoneFingerDown(page, centre);
+  await drive(page, phoneFingerDown(page, centre));
   // The hold delay is wall time, and a slow machine could latch the hold before the ray is lost and make the
   // check vacuous: the first step after the touchdown is therefore a lost one.
   const turned = new THREE.Quaternion(...head.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (TURN_AT_TOUCHDOWN_DEG * Math.PI) / 180));
@@ -1331,7 +1438,7 @@ async function targetRayLostScenario(page: Page, report: PhaseReport, scenarios:
     lostSteps.push(await arOf(page));
   }
   await phoneTargetRayLost(page, false);
-  await page.waitForTimeout(400);
+  await pageTimePasses(page, 400);
   const stepped: ArState[] = [];
   for (let i = 0; i < 3; i += 1) {
     await nextXrFrame(page);
@@ -1339,7 +1446,7 @@ async function targetRayLostScenario(page: Page, report: PhaseReport, scenarios:
     stepped.push(await arOf(page));
   }
   const during = stepped[stepped.length - 1]!;
-  await phoneFingerUp(page);
+  await drive(page, phoneFingerUp(page));
   for (let i = 0; i < 3; i += 1) await advance(page, STEP_MS);
   const after = await arOf(page);
   scenarios.push({
@@ -1366,12 +1473,12 @@ const VIEW_OFFSET_DEG = 3;
 /** One finger put down at `from`, moved to `to` if given, left still past the hold delay, stepped three times, lifted. */
 async function fingerThroughSteps(page: Page, from: Vec3, to?: Vec3): Promise<{ before: ArState; during: ArState; stepped: ArState[]; after: ArState }> {
   const before = await arOf(page);
-  await phoneFingerDown(page, from);
+  await drive(page, phoneFingerDown(page, from));
   if (to) {
-    await phoneFingerMove(page, to);
-    await phoneFingerMove(page, to);
+    await drive(page, phoneFingerMove(page, to));
+    await drive(page, phoneFingerMove(page, to));
   }
-  await page.waitForTimeout(400);
+  await pageTimePasses(page, 400);
   const stepped: ArState[] = [];
   for (let i = 0; i < 3; i += 1) {
     await nextXrFrame(page);
@@ -1379,7 +1486,7 @@ async function fingerThroughSteps(page: Page, from: Vec3, to?: Vec3): Promise<{ 
     stepped.push(await arOf(page));
   }
   const during = stepped[stepped.length - 1]!;
-  await phoneFingerUp(page);
+  await drive(page, phoneFingerUp(page));
   for (let i = 0; i < 3; i += 1) await advance(page, STEP_MS);
   return { before, during, stepped, after: await arOf(page) };
 }
@@ -1670,7 +1777,8 @@ async function lowFpsMarksPhase(run: Run): Promise<PhaseReport> {
   const page = await openPage(run, { phone: true, scene: true, viewport: PHONE_VIEWPORT, video: true });
   const scenarios: MarkScenario[] = [];
   try {
-    await enterAr(page, { position: [0, 1.6, 0], yaw: 0 });
+    // B-032's point is the realtime clock at a low frame rate, so this phase alone keeps the page clock real.
+    await enterAr(page, { position: [0, 1.6, 0], yaw: 0 }, true, true);
     const frame = toMatrix(await worldFrame(page));
     const targetA = new THREE.Vector3(...TARGETS.TargetA!.center).applyMatrix4(frame).toArray() as Vec3;
     const eye: Vec3 = [0, 1.5, 0.6];
@@ -1694,7 +1802,7 @@ async function lowFpsMarksPhase(run: Run): Promise<PhaseReport> {
       const slide = 'slide' in hold;
       const before = await arOf(page);
       const logFrom = (await touchLog(page)).length;
-      await phoneFingerDown(page, slide ? centre : targetA);
+      await drive(page, phoneFingerDown(page, slide ? centre : targetA));
       await page.waitForTimeout(hold.waitMs);
       // The lift reaches the app before its frame's step, as a phone's browser delivers it.
       if ('turn' in hold) {
@@ -1705,10 +1813,10 @@ async function lowFpsMarksPhase(run: Run): Promise<PhaseReport> {
         const local = new THREE.Vector3(...targetA).sub(eyeAt).applyQuaternion(head.clone().invert());
         const turned = head.clone().multiply(turn);
         const at = local.applyQuaternion(turned).add(eyeAt).toArray() as Vec3;
-        await phoneFingerUp(page, { aheadOfApp: true, at, headPose: { position: standing.position, quaternion: [turned.x, turned.y, turned.z, turned.w] } });
+        await drive(page, phoneFingerUp(page, { aheadOfApp: true, at, headPose: { position: standing.position, quaternion: [turned.x, turned.y, turned.z, turned.w] } }));
         await setHeadPose(page, standing.position, standing.quaternion);
       } else {
-        await phoneFingerUp(page, { aheadOfApp: true, ...(slide ? { at: slid } : {}) });
+        await drive(page, phoneFingerUp(page, { aheadOfApp: true, ...(slide ? { at: slid } : {}) }));
       }
       await nextXrFrame(page);
       const after = await arOf(page);
@@ -1832,14 +1940,17 @@ let marksComparison: unknown;
 try {
   const walked: Partial<Record<'phone-a' | 'phone-b', Walked>> = {};
   const marked: Partial<Record<'marks-a' | 'marks-b', Marked>> = {};
+  let phaseStartedAt = Date.now();
   const finish = (report: PhaseReport) => {
+    report.seconds = round((Date.now() - phaseStartedAt) / 1000, 1);
     reports.push(report);
     const s = report.scriptVsExport;
-    console.log(`[ar-record] ${report.phase}: ${report.failures.length === 0 ? 'passed' : 'FAILED'}${s ? `; script error ${s.maxPositionCm} cm, ${s.maxRotationDeg} deg, ${s.stepsCovered}/${WALK_STEPS} steps` : ''}${report.take?.camera ? `; camera keys ${report.take.camera.translationKeys}` : ''}`);
+    console.log(`[ar-record] ${report.phase}: ${report.failures.length === 0 ? 'passed' : 'FAILED'} in ${report.seconds} s${s ? `; script error ${s.maxPositionCm} cm, ${s.maxRotationDeg} deg, ${s.stepsCovered}/${WALK_STEPS} steps` : ''}${report.take?.camera ? `; camera keys ${report.take.camera.translationKeys}` : ''}`);
   };
   for (const phase of PHASES) {
     if (!selected(phase)) continue;
     console.log(`[ar-record] ${phase}`);
+    phaseStartedAt = Date.now();
     if (phase === 'phone-a') {
       walked[phase] = await walkPhase(run, phase, { position: [0, 1.6, 0], yaw: 0 });
       finish(walked[phase]!.report);
