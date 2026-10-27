@@ -30,6 +30,8 @@ const BELOW_FLOOR_M = 1;
 const ABOVE_CEILING_M = 100;
 const STEP_TIME_SAMPLES = 600;
 
+const DOWN = { x: 0, y: -1, z: 0 };
+
 interface PoseSample {
   t: number;
   position: THREE.Vector3;
@@ -158,6 +160,25 @@ export class ObjectPhysics {
     prop.history.length = 0;
     prop.dynamic = true;
     prop.sleepWritten = false;
+  }
+
+  /** The fitted speed (m/s) a release now would throw with; 0 when too few poses are known. */
+  releaseSpeed(object: SceneObject): number {
+    const prop = this.props.get(object);
+    return prop ? (this.fitVelocity(prop.history)?.linear.length() ?? 0) : 0;
+  }
+
+  /**
+   * How far the prop, at its wrapper's current pose, can fall straight down
+   * before its collider touches the scene, the ground or another prop; null
+   * when nothing is within `maxM`. Its own body is ignored.
+   */
+  gapBelow(object: SceneObject, maxM: number): number | null {
+    const prop = this.props.get(object);
+    if (!prop) return null;
+    this.rigidPose(object, this.p, this.q);
+    const hit = this.world.castShape(this.p, this.q, DOWN, prop.body.collider(0).shape, 0, maxM, true, undefined, undefined, undefined, prop.body);
+    return hit ? hit.time_of_impact : null;
   }
 
   remove(object: SceneObject): void {

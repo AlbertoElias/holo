@@ -135,7 +135,7 @@ function spread(relations) {
  * `compareTailSec` limits that to the hold's last seconds, for a hold whose
  * relation changes early (the desktop pickup glide and turn).
  */
-export function checkObjectExport(buffer, { expectHolds, captureRelation, compareTailSec, fail }) {
+export function checkObjectExport(buffer, { expectHolds, captureRelation, compareTailSec, compareEndGapSec = 0.02, fail }) {
   const take = loadTake(buffer);
   const nodes = objectNodes(take);
   const report = { objectNodes: nodes.length, keys: take.times.length, duration: round(take.times.at(-1) ?? 0, 3) };
@@ -183,8 +183,8 @@ export function checkObjectExport(buffer, { expectHolds, captureRelation, compar
     let checked = 0;
     take.times.forEach((time, i) => {
       // Inside the span, away from the grab and release keys.
-      const from = compareTailSec ? held.end - compareTailSec : held.start + 0.05;
-      if (time < from || time > held.end - 0.02) return;
+      const from = compareTailSec ? held.end - compareEndGapSec - compareTailSec : held.start + 0.05;
+      if (time < from || time > held.end - compareEndGapSec) return;
       const relation = relativePose(rigidPose(worldAt(take, hand, i)), rigidPose(worldAt(take, node, i)));
       position = Math.max(position, relation.position.distanceTo(captureRelation.position));
       angle = Math.max(angle, angleDeg(relation.quaternion, captureRelation.quaternion));
@@ -483,6 +483,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     let pickedUp;
     let carried;
     let putDown;
+    let setDown;
     const relations = [];
     let holdSeconds = 0;
     const glb = await record(0, path.join(artifactDir, `${label}.glb`), async () => {
@@ -510,7 +511,13 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       await advance(0.6);
       holdSeconds += 0.6;
       await page.keyboard.press('KeyG');
-      await advance(1 / 60);
+      // Set down: the prop stays held while it is lowered onto the surface, then is let go a few cm above it.
+      await advance(0.1);
+      holdSeconds += 0.1;
+      const easing = (await readState(page)).objects.items[0];
+      setDown = { heldDuringEase: easing.heldBy };
+      await advance(0.4);
+      holdSeconds += 0.2;
       state = await readState(page);
       const released = poseOf(state.objects.items[0]);
       const launch = state.objects.items[0];
@@ -544,9 +551,10 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     if (pickedUp.toHandM > 0.15) fail(`the carried object is ${pickedUp.toHandM} m from the hand`);
     if (carried.turnedDeg < 30) fail(`Q turned the object only ${carried.turnedDeg}°`);
     if (carried.movedM < 0.5) fail(`walking carried the object only ${carried.movedM} m`);
+    if (setDown.heldDuringEase !== 'right') fail('G released the object at once instead of setting it down');
     if (putDown.heldBy) fail('G did not put the object down');
     if (putDown.launchSpeedMps > 0.05 || putDown.launchSpinRadps > 0.05) fail(`the put-down object was flung: ${putDown.launchSpeedMps} m/s, ${putDown.launchSpinRadps} rad/s`);
-    if (putDown.driftM > 0.5) fail(`the put-down object drifted ${putDown.driftM} m sideways`);
+    if (putDown.driftM > 0.05) fail(`the put-down object drifted ${putDown.driftM} m sideways`);
     if (putDown.body !== 'asleep') fail(`the put-down object did not come to rest (${putDown.body})`);
     if (Math.abs(putDown.floorGapM) > FLOOR_TOLERANCE_M) fail(`the put-down object rests ${putDown.floorGapM} m from the floor`);
 
@@ -579,7 +587,9 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     const exportReport = checkObjectExport(await readFile(glb), {
       expectHolds: [{ hand: 'right', duration: holdSeconds }],
       captureRelation: relations.at(-1) ?? null,
+      // The set-down lowers the prop out of the hand's frame for its last 0.3 s: compare just before it.
       compareTailSec: 0.15,
+      compareEndGapSec: 0.35,
       fail
     });
     const shotFile = path.join(artifactDir, `${label}-put-down.png`);
@@ -587,7 +597,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     await page.evaluate(() => window.__setManualClock(true, true));
     await advance(2 / 60);
     await page.screenshot({ path: shotFile });
-    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, outOfReach, walkThrough, shots: { final: shotFile }, export: exportReport };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, setDown, outOfReach, walkThrough, shots: { final: shotFile }, export: exportReport };
   } finally {
     await context.close();
   }

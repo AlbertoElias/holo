@@ -7,6 +7,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import { runDesktopObjectTake, runIwerObjectTake } from './lib/object-take.mjs';
 import { runIwerObjectPhysics } from './lib/object-physics.mjs';
+import { runDesktopMouseObject, runPhoneTouchObject } from './lib/object-pointer.mjs';
 
 // Explain with an object (PRD-043): an IWER controller take and a desktop
 // take load the bracket fixture, grab it, move and turn it, put it down, and
@@ -25,7 +26,9 @@ try {
   const iwer = await runIwerObjectTake({ browser, baseUrl, artifactDir, consoleErrors });
   const desktop = await runDesktopObjectTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors });
   const physics = await runIwerObjectPhysics({ browser, baseUrl, artifactDir, consoleErrors });
-  const takes = [iwer, desktop, physics];
+  const mouse = await runDesktopMouseObject({ browser, baseUrl, consoleErrors });
+  const phone = await runPhoneTouchObject({ browser, baseUrl, consoleErrors });
+  const takes = [iwer, desktop, physics, mouse, phone];
   const sheet = writeContactSheet(artifactDir, path.join(artifactDir, 'object-sheet.jpg'));
   const failures = [...takes.flatMap((take) => take.failures.map((message) => `${take.label}: ${message}`)), ...consoleErrors.map((error) => `console: ${error}`)];
   const report = { status: failures.length ? 'fail' : 'pass', failures, takes, sheet: sheet ?? null };

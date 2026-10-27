@@ -62,7 +62,7 @@ export class DesktopCarryPose {
     for (const driven of this.driven) driven.hasWritten = false;
   }
 
-  update(step: { carrying: boolean; bodyYaw: number; deltaSec: number }): void {
+  update(step: { carrying: boolean; bodyYaw: number; deltaSec: number; lowerM?: number }): void {
     const chain = this.chain;
     if (!chain) return;
     const rate = step.carrying ? 1 / BLEND_IN_SEC : -1 / BLEND_OUT_SEC;
@@ -84,6 +84,7 @@ export class DesktopCarryPose {
     const forward = this.tmp.set(-Math.sin(step.bodyYaw), 0, -Math.cos(step.bodyYaw));
     chain.upperArm.getWorldPosition(this.target);
     this.target.addScaledVector(forward, reach * FORWARD).addScaledVector(this.up, -reach * DOWN);
+    this.target.y -= step.lowerM ?? 0;
     // Toward the midline: the body's left, for the right hand.
     this.target.x += -Math.cos(step.bodyYaw) * reach * INWARD;
     this.target.z += Math.sin(step.bodyYaw) * reach * INWARD;

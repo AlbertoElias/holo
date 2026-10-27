@@ -17,6 +17,10 @@ export interface TouchInputOptions {
   /** The stick appeared, moved or left (null). */
   onStick: (stick: TouchStick | null) => void;
   /** Touch and hold on the scene (slice 5): the mark "this" starts, its finger moves, or it ends. CSS px. */
+  /** A look-side touch went down at this point (CSS px): true when it grabbed a prop, so it does not start a point hold. */
+  onObjectPress?: (point: { x: number; y: number }) => boolean;
+  /** The touch that grabbed a prop lifted or was cancelled. */
+  onObjectRelease?: () => void;
   onHold?: (phase: 'start' | 'move' | 'end', point: { x: number; y: number }) => void;
 }
 
@@ -44,6 +48,8 @@ export class TouchInput {
   private held: HeldModeState = HELD_IDLE;
   private holdDown: { id: number; x: number; y: number } | null = null;
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The look touch that holds a prop: it still looks when dragged, never points. */
+  private grabId: number | null = null;
 
   constructor(private readonly options: TouchInputOptions) {}
 
@@ -61,12 +67,19 @@ export class TouchInput {
     if (this.stickId !== null) this.options.onMove(0, 0);
     this.stickId = null;
     this.stick = null;
+    this.endGrab();
     this.lookPointers.clear();
     this.options.onStick(null);
   }
 
   snapshot(): { stick: TouchStick | null; looking: number; hold: HeldModeState['phase'] } {
     return { stick: this.stick, looking: this.lookPointers.size, hold: this.held.phase };
+  }
+
+  private endGrab(): void {
+    if (this.grabId === null) return;
+    this.grabId = null;
+    this.options.onObjectRelease?.();
   }
 
   private feedHold(event: HeldModeEvent, point?: { x: number; y: number }): void {
@@ -105,8 +118,11 @@ export class TouchInput {
       this.options.onStick(this.stick);
       return;
     }
+    // A look touch that lands on a reachable prop picks it up; it never becomes a point hold.
+    const grabbed = this.grabId === null && (this.options.onObjectPress?.(point) ?? false);
+    if (grabbed) this.grabId = event.pointerId;
     this.lookPointers.set(event.pointerId, point);
-    if (this.held.phase === 'idle' && this.lookPointers.size === 1) {
+    if (!grabbed && this.held.phase === 'idle' && this.lookPointers.size === 1) {
       this.holdDown = { id: event.pointerId, ...point };
       this.feedHold({ type: 'press', source: `touch:${event.pointerId}`, atMs: event.timeStamp, delayMs: HOLD_DELAY_MS });
       this.holdTimer = setTimeout(() => {
@@ -155,6 +171,7 @@ export class TouchInput {
       this.options.onMove(0, 0);
       this.options.onStick(null);
     }
+    if (event.pointerId === this.grabId) this.endGrab();
     const point = this.lookPointers.get(event.pointerId);
     this.lookPointers.delete(event.pointerId);
     this.feedHold(event.type === 'pointercancel' ? { type: 'trackingLost', source: `touch:${event.pointerId}` } : { type: 'release', source: `touch:${event.pointerId}`, atMs: event.timeStamp }, point);

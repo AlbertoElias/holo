@@ -646,7 +646,8 @@ export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, arti
     if (summoned.name !== 'diagram.png' || summoned.heldBy !== 'right') fail(`T + 2 did not summon the image into the right hand (${JSON.stringify(summoned)})`);
     if (summoned.firstToHandM === null || summoned.firstToHandM > 0.25 || summoned.toHandM > 0.25) fail(`the summoned object is not in the hand (${JSON.stringify(summoned)})`);
     await page.keyboard.press('KeyG');
-    await advance(0.2);
+    // G sets it down: held through the 0.3 s ease, then let go.
+    await advance(0.5);
     state = await readState(page);
     placed = { heldBy: summonedItems(state)[0]?.heldBy ?? null };
     if (placed.heldBy) fail('G did not put the summoned object down');

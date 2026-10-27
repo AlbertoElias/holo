@@ -34,7 +34,8 @@ export class ObjectSystem extends createSystem() {
         turnYaw: turn.yaw,
         turnPitch: turn.pitch,
         pointHeld: c.input.isPointHeld(),
-        summonSlot: c.input.consumeSummonSlot()
+        summonSlot: c.input.consumeSummonSlot(),
+        grab: c.input.consumeObjectGrab()
       }
     });
   }

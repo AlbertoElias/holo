@@ -13,7 +13,7 @@ import { DesktopCarryPose } from './DesktopCarryPose';
 import { ObjectGrabInput } from './ObjectGrabInput';
 import { ObjectInteraction, type ObjectStep } from './ObjectInteraction';
 import { MAX_TRAY_BYTES, MAX_TRAY_ITEMS, ObjectTray } from './ObjectTray';
-import { SceneObjectRegistry } from './SceneObjectRegistry';
+import { SceneObjectRegistry, type SceneObject } from './SceneObjectRegistry';
 import { fetchSuppliedObject, parseSuppliedObject, readSuppliedObjectFile, type SuppliedObjectInput, SuppliedObjectError } from './suppliedObject';
 import { TrayGestureInput } from './TrayGestureInput';
 import { parseTrayItem } from './trayItem';
@@ -47,6 +47,8 @@ export class CaptureObjects {
   private trayLoadSeq = 0;
   private lastAuthoring: AuthoringFrame | null = null;
   private readonly palm = new THREE.Vector3();
+  private readonly pickRay = new THREE.Raycaster();
+  private readonly pickNdc = new THREE.Vector2();
 
   constructor(private readonly deps: CaptureObjectsDeps) {
     this.registry = new SceneObjectRegistry(deps.worldGroup);
@@ -74,6 +76,16 @@ export class CaptureObjects {
     this.physics = new ObjectPhysics(trimesh, gravity);
     this.interaction.setPhysics(this.physics);
     this.registry.onRemove = (object) => this.physics?.remove(object);
+  }
+
+  /**
+   * The reachable prop under a screen point (normalized device coordinates) of
+   * the desktop camera, for a mouse or touch press; null when none is hit or
+   * in reach.
+   */
+  pickAt(camera: THREE.Camera, ndcX: number, ndcY: number, anywhere: boolean): SceneObject | null {
+    this.pickRay.setFromCamera(this.pickNdc.set(ndcX, ndcY), camera);
+    return this.interaction.pick(this.pickRay, anywhere);
   }
 
   physicsStats(): ObjectPhysicsStats | null {

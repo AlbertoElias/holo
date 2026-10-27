@@ -21,6 +21,15 @@ const TURN_RAD_PER_SEC = Math.PI / 2;
 // Where a prepared object first appears: in front of the avatar's chest.
 const PLACE_FORWARD_M = 0.45;
 const PLACE_BELOW_EYES_M = 0.45;
+// A desktop release slower than this (fitted from the prop's own poses) sets the
+// prop down; a faster one throws.
+const SET_DOWN_MAX_MPS = 0.3;
+// A set-down lowers the prop over this long, then lets go this far above the surface.
+const SET_DOWN_SEC = 0.3;
+const SET_DOWN_RELEASE_GAP_M = 0.02;
+const SET_DOWN_SEARCH_M = 3;
+// How much of the drop the carrying hand follows, as a fraction of the arm's reach.
+const SET_DOWN_HAND_FRACTION = 0.3;
 
 export interface ObjectStep {
   vrActive: boolean;
@@ -43,6 +52,8 @@ export interface ObjectStep {
     pointHeld: boolean;
     /** 1–5 pressed this step while T holds the tray open, else null. */
     summonSlot: number | null;
+    /** A mouse or touch press that landed on a reachable prop this step, and whether that pointer lifted. */
+    grab: { press: SceneObject | null; release: boolean };
   };
 }
 
@@ -73,6 +84,10 @@ interface Hold {
   /** Desktop: the object's pose when picked up, which it glides from into the hand. */
   pickup: THREE.Matrix4 | null;
   lostSec: number;
+  /** Grabbed by a mouse or touch press: lifting it releases. */
+  pointer: boolean;
+  /** Being lowered onto the surface under it before it is let go. The object stays held meanwhile. */
+  settle: { startSec: number; startGap: number | null } | null;
 }
 
 /**
@@ -139,6 +154,30 @@ export class ObjectInteraction {
       if (this.hold && !this.hold.desktop) this.release(false);
       this.updateDesktop(step);
     }
+  }
+
+  /**
+   * The nearest reachable event prop the ray hits, for a mouse or touch press;
+   * null while something is held, or when the nearest hit is out of reach.
+   * While a prop is being set down, `anywhere` (a mouse press, whose ray is the
+   * view's centre) takes it back wherever the ray falls.
+   */
+  pick(ray: THREE.Raycaster, anywhere: boolean): SceneObject | null {
+    const { registry, carry } = this.deps;
+    if (this.hold?.settle && anywhere) return this.hold.object;
+    if (this.hold && !this.hold.settle) return null;
+    let best: SceneObject | null = null;
+    let bestDistance = Infinity;
+    for (const object of registry.eventObjects()) {
+      if (!object.placed) continue;
+      object.model.updateWorldMatrix(true, true);
+      const hit = ray.intersectObject(object.model, true)[0];
+      if (hit && hit.distance < bestDistance) {
+        best = object;
+        bestDistance = hit.distance;
+      }
+    }
+    return best && this.desktopReachable(best, carry) ? best : null;
   }
 
   isHeld(object: SceneObject): VrHandSide | null {
@@ -245,15 +284,36 @@ export class ObjectInteraction {
       this.grab(summoned, 'right', false);
       this.hold!.desktop = true;
     } else if (step.desktop.toggle) {
-      if (this.hold) {
-        this.release(true);
+      if (this.hold?.settle) {
+        // G again while setting down: let go now, where it is.
+        this.release(false);
+      } else if (this.hold) {
+        this.releaseDesktop();
       } else {
         const target = registry.eventObjects().find((object) => this.desktopReachable(object, carry));
         if (target && this.readAnchor('right')) this.grab(target, 'right', true);
       }
     }
+    const { press, release } = step.desktop.grab;
+    if (press && registry.all().includes(press) && (!this.hold || this.hold.settle) && this.readAnchor('right')) {
+      if (this.hold) this.cancelSettle();
+      else {
+        this.grab(press, 'right', true);
+        this.hold!.pointer = true;
+      }
+    }
+    if (release && this.hold?.pointer && !this.hold.settle) this.releaseDesktop();
     const hold = this.hold;
-    carry.update({ carrying: Boolean(hold) && !step.desktop.pointHeld, bodyYaw: step.bodyYaw, deltaSec: step.deltaSec });
+    const settle = hold?.settle ?? null;
+    const settleT = settle ? Math.min(1, (this.clock - settle.startSec) / SET_DOWN_SEC) : 0;
+    const settleEase = settleT * settleT * (3 - 2 * settleT);
+    const reach = carry.getReach() ?? 0;
+    carry.update({
+      carrying: Boolean(hold) && !step.desktop.pointHeld,
+      bodyYaw: step.bodyYaw,
+      deltaSec: step.deltaSec,
+      lowerM: settle && settle.startGap !== null ? settleEase * Math.min(Math.max(0, settle.startGap - SET_DOWN_RELEASE_GAP_M), reach * SET_DOWN_HAND_FRACTION) : 0
+    });
     if (!hold || !this.readAnchor('right')) return;
 
     if (hold.pickup) {
@@ -283,14 +343,47 @@ export class ObjectInteraction {
       hold.offset.copy(this.anchor).invert().multiply(this.world);
     }
     this.writeWorld(hold.object, this.world);
+    if (settle) {
+      // Lower the prop until it hangs just above what is under it, whatever the hand did meanwhile.
+      const gap = this.physics?.gapBelow(hold.object, SET_DOWN_SEARCH_M) ?? null;
+      if (gap !== null && gap > SET_DOWN_RELEASE_GAP_M) {
+        this.world.decompose(this.pos, this.quat, this.scale);
+        this.pos.y -= settleEase * (gap - SET_DOWN_RELEASE_GAP_M);
+        this.writeWorld(hold.object, this.world.compose(this.pos, this.quat, this.unit));
+      }
+    }
     this.physics?.sample(hold.object, this.clock);
+    if (settle && settleT >= 1) this.release(false);
+  }
+
+  /** A deliberate desktop let-go: a moving prop is thrown, a still one is set down on what is under it. */
+  private releaseDesktop(): void {
+    const hold = this.hold;
+    if (!hold) return;
+    if (!this.physics || this.physics.releaseSpeed(hold.object) > SET_DOWN_MAX_MPS) {
+      this.release(true);
+      return;
+    }
+    hold.settle = { startSec: this.clock, startGap: this.physics.gapBelow(hold.object, SET_DOWN_SEARCH_M) };
+  }
+
+  /** A new press during a set-down: the prop stays in the hand, where the ease has put it. */
+  private cancelSettle(): void {
+    const hold = this.hold;
+    if (!hold?.settle || !this.readAnchor(hold.side)) return;
+    hold.object.wrapper.updateWorldMatrix(true, false);
+    hold.offset.copy(this.anchor).invert().multiply(hold.object.wrapper.matrixWorld);
+    hold.pickup = null;
+    hold.settle = null;
+    hold.pointer = true;
+    this.physics?.hold(hold.object);
   }
 
   private grab(object: SceneObject, side: VrHandSide, desktop: boolean): void {
     object.wrapper.updateWorldMatrix(true, false);
     this.world.copy(object.wrapper.matrixWorld);
     const offset = this.anchor.clone().invert().multiply(this.world);
-    this.hold = { object, side, desktop, offset, pickup: desktop ? this.world.clone() : null, lostSec: 0 };
+    this.hold = { object, side, desktop, offset, pickup: desktop ? this.world.clone() : null, lostSec: 0, pointer: false, settle: null };
     object.heldBy = side;
     this.physics?.hold(object);
   }
