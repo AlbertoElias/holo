@@ -41,8 +41,15 @@ runs:
       shell: bash
       # A slow apt mirror falls back to archive.ubuntu.com rather than eating the job's timeout (B-024).
       run: scripts/ci-apt.sh 240 pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+    - name: Cache Playwright system packages
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/playwright-debs
+        key: playwright-debs-${{ runner.os }}-${{ env.ImageOS }}-${{ hashFiles('pnpm-lock.yaml') }}
     - name: Install Playwright system dependencies
       if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
       shell: bash
-      # Only the libraries the runner image lacks, usually none (B-024).
-      run: scripts/ci-playwright-deps.sh
+      # Only the packages the runner image lacks, from cached .deb files
+      # when warm, so no apt mirror is on the path (B-024).
+      run: DEB_CACHE="${HOME}/.cache/playwright-debs" scripts/ci-playwright-deps.sh

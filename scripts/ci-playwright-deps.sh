@@ -33,5 +33,25 @@ if [ "${#missing[@]}" -eq 0 ]; then
   exit 0
 fi
 
-echo "ci-playwright-deps: installing ${#missing[@]} missing package(s): ${missing[*]}"
-"$root/scripts/ci-apt.sh" 180 sudo sh -c "apt-get update && apt-get install -y --no-install-recommends ${missing[*]}"
+# The runner image lacks a few fonts (7 packages on ubuntu-24.04). Their
+# .deb files are kept in DEB_CACHE (an actions/cache path), so a warm runner
+# installs them with dpkg and never touches an apt mirror.
+cache="${DEB_CACHE:-}"
+if [ -n "${cache}" ] && compgen -G "${cache}/*.deb" >/dev/null; then
+  echo "ci-playwright-deps: installing ${#missing[@]} missing package(s) from ${cache}: ${missing[*]}"
+  if sudo dpkg -i "${cache}"/*.deb >/dev/null; then
+    exit 0
+  fi
+  echo "::warning::cached .deb install failed; falling back to apt"
+  sudo dpkg --configure -a || true
+fi
+
+echo "ci-playwright-deps: installing ${#missing[@]} missing package(s) with apt: ${missing[*]}"
+archives=""
+if [ -n "${cache}" ]; then
+  # apt downloads straight into the cache, so it holds exactly this install.
+  mkdir -p "${cache}/partial"
+  archives="-o Dir::Cache::archives=${cache}"
+fi
+"$root/scripts/ci-apt.sh" 180 sudo sh -c "apt-get update && apt-get install -y --no-install-recommends ${archives} ${missing[*]}"
+[ -z "${cache}" ] || sudo chown -R "$(id -u):$(id -g)" "${cache}"
