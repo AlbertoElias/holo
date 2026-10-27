@@ -216,20 +216,19 @@ test("desktop: the globe burns in its own deeper colours, not the chrome's, and 
 test("phone: reduced motion holds the cloche still and keeps the controls", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize(PHONE);
+  // The page clock, so the elapsed time is exactly 30 frames of 1000/60 ms however slow the host is.
+  await page.clock.install();
   await openFeed(page);
-  const startedAt = await page.evaluate(() => performance.now());
+  await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 100));
   const before = await readCloche(page, first.url);
-  // 30 drawn frames (about half a second): a flicker would move the core between them.
-  await animationFrames(page, 30);
+  await page.clock.runFor(500);
   const after = await readCloche(page, first.url);
-  const elapsedMs = (await page.evaluate(() => performance.now())) - startedAt;
   expect(before.drawn).toBe(true);
   expect(after.core, "no flicker under reduced motion").toBeCloseTo(before.core, 5);
   expect(after.sparks, "no sparks under reduced motion").toBe(0);
   expect(after.time, "no drift, flicker or breath").toBe(0);
-  // Reduced motion keeps only the slow resting fade (8.3), never the flicker's swing.
-  // The fade's rate, not a fixed sleep: under 0.02 per half second however long the frames took.
-  expect(Math.abs(after.glow - before.glow), `no flicker in the glow over ${elapsedMs.toFixed(0)} ms`).toBeLessThan(0.02 * Math.max(1, elapsedMs / 500));
+  // Reduced motion keeps only the slow resting fade (8.3): 0.50 to 0.489 over 4 s, so under 0.02 of the glow level in half a second.
+  expect(Math.abs(after.glow - before.glow), "no flicker in the glow").toBeLessThan(0.02);
   await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .portal-controls`).getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) })).toBeVisible();
 });
 
