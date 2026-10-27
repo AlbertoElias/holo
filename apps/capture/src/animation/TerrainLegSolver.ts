@@ -1,10 +1,7 @@
 import * as THREE from 'three';
 import type { AvatarRig } from '../avatar/AvatarRig';
 
-// While a reach squat lowers the hips, the feet may be raised this much more (a fraction of height) to stay planted.
-const SQUAT_EXTRA_LIFT_RATIO = 0.25;
-
-type Leg = { upper: THREE.Bone; lower: THREE.Bone; foot: THREE.Bone; upInFoot: THREE.Vector3; correction: number };
+type Leg = { upper: THREE.Bone; lower: THREE.Bone; foot: THREE.Bone; upInFoot: THREE.Vector3; correction: number; planted: boolean; plantCorrection: number };
 type LegSample = {
   side: string;
   foot: { x: number; y: number; z: number };
@@ -38,11 +35,12 @@ export class TerrainLegSolver {
     this.legs = [];
     for (const side of ['left', 'right'] as const) {
       const upper = rig.bone(`${side}UpperLeg`), lower = rig.bone(`${side}LowerLeg`), foot = rig.bone(`${side}Foot`);
-      if (upper && lower && foot) this.legs.push({ upper, lower, foot, upInFoot: this.up.clone().applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()).invert()), correction: 0 });
+      if (upper && lower && foot) this.legs.push({ upper, lower, foot, upInFoot: this.up.clone().applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()).invert()), correction: 0, planted: false, plantCorrection: 0 });
     }
   }
 
-  update(rig: AvatarRig, grounded: boolean, deltaSec: number, squat = 0): void {
+  /** `plant`: a reach is driving the pose; each foot stays where it stood when the reach began. */
+  update(rig: AvatarRig, grounded: boolean, deltaSec: number, plant = false): void {
     if (this.avatar !== rig.avatar) this.attach(rig);
     this.samples = [];
     if (!rig.worldModel || !rig.avatar) return;
@@ -59,16 +57,22 @@ export class TerrainLegSolver {
         for (const bone of [leg.upper, leg.lower, leg.foot]) this.originals.set(bone, bone.quaternion.clone());
         const sole = height * 0.035;
         // Preserve the authored swing arc, shifting it by local terrain elevation.
-        const normal = Math.max(surface.point.y - center.point.y, surface.point.y + sole - foot.y);
-        const planted = surface.point.y + sole - foot.y;
-        const desired = THREE.MathUtils.clamp(THREE.MathUtils.lerp(normal, planted, squat), -height * 0.18, height * (0.22 + SQUAT_EXTRA_LIFT_RATIO * squat));
-        leg.correction = THREE.MathUtils.lerp(leg.correction, desired, 1 - Math.exp(-18 * Math.max(0, deltaSec)));
-        const target = foot.clone();
-        target.y += leg.correction;
-        if (squat > 0) {
-          const stand = rig.squatFeet[index === 0 ? 'left' : 'right'];
-          target.x = THREE.MathUtils.lerp(target.x, stand.x, squat);
-          target.z = THREE.MathUtils.lerp(target.z, stand.z, squat);
+        let target: THREE.Vector3;
+        if (plant) {
+          // Planted at the start of the reach, at the height the foot stood at then.
+          if (!leg.planted) {
+            leg.planted = true;
+            leg.plantCorrection = leg.correction;
+          }
+          const stand = rig.plantFeet[index === 0 ? 'left' : 'right'];
+          target = new THREE.Vector3(stand.x, stand.y + leg.plantCorrection, stand.z);
+          leg.correction = target.y - foot.y;
+        } else {
+          leg.planted = false;
+          const desired = THREE.MathUtils.clamp(Math.max(surface.point.y - center.point.y, surface.point.y + sole - foot.y), -height * 0.18, height * 0.22);
+          leg.correction = THREE.MathUtils.lerp(leg.correction, desired, 1 - Math.exp(-18 * Math.max(0, deltaSec)));
+          target = foot.clone();
+          target.y += leg.correction;
         }
         this.solve(leg, target, rig.avatarRoot);
         // Rotate the ankle toward the support normal while near contact.
@@ -83,6 +87,7 @@ export class TerrainLegSolver {
       } else {
         // No inferred contact during flight or over a ledge.
         leg.correction = 0;
+        leg.planted = false;
       }
       const resolved = leg.foot.getWorldPosition(new THREE.Vector3());
       this.samples.push({ side: index === 0 ? 'left' : 'right', foot: { x: resolved.x, y: resolved.y, z: resolved.z }, groundY: surface?.point.y ?? null, correction: leg.correction, upper: leg.upper.quaternion.toArray(), lower: leg.lower.quaternion.toArray() });

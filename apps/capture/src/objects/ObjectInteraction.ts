@@ -54,7 +54,7 @@ export interface ObjectStep {
     pointHeld: boolean;
     /** 1–5 pressed this step while T holds the tray open, else null. */
     summonSlot: number | null;
-    /** The avatar is walking: it cancels a reach or a low set-down. */
+    /** The avatar is walking: it cancels a reach or a set-down. */
     walking: boolean;
     /** A mouse or touch press that landed on a reachable prop this step, and whether that pointer lifted. */
     grab: { press: SceneObject | null; release: boolean };
@@ -178,17 +178,18 @@ export class ObjectInteraction {
 
   /**
    * The nearest reachable event prop the ray hits, for a mouse or touch press;
-   * null while something is held, or when the nearest hit is out of reach.
-   * While a prop is being set down, `anywhere` (a mouse press, whose ray is the
-   * view's centre) takes it back wherever the ray falls.
+   * null when the nearest hit is out of reach. A press while a prop is being
+   * reached for or carried from a reach is for that prop, wherever the ray falls
+   * (it cancels the reach, or lets go like `G`). While a prop is being set down,
+   * `anywhere` (a mouse press, whose ray is the view's centre) takes it back.
    */
   pick(ray: THREE.Raycaster, anywhere: boolean): SceneObject | null {
     const { registry, carry } = this.deps;
     if (this.hold?.settle && anywhere) return this.hold.object;
-    // A second press during a reach cancels it, wherever it falls.
-    if (this.reach.isReaching() && anywhere) return this.reach.object;
-    if (this.reach.isReaching()) return null;
-    if (this.hold && !this.hold.settle) return null;
+    // A second press (mouse or touch) during a reach cancels it, wherever it falls.
+    if (this.reach.isReaching()) return this.reach.object;
+    // The next press lets a prop held from a reach go, like G.
+    if (this.hold && !this.hold.settle) return this.hold.desktop ? this.hold.object : null;
     let best: SceneObject | null = null;
     let bestDistance = Infinity;
     for (const object of registry.eventObjects()) {
@@ -327,6 +328,7 @@ export class ObjectInteraction {
     if (press && registry.all().includes(press)) {
       if (reach.isReaching()) this.cancelReach();
       else if (this.hold?.settle) this.cancelSettle(true);
+      else if (this.hold?.desktop && !reach.isLifting()) this.releaseDesktop();
       else if (!this.hold && reach.phase === 'idle') this.beginReach(press, true);
     }
     if (release) {
@@ -337,7 +339,7 @@ export class ObjectInteraction {
       } else if (this.hold?.pointer && !this.hold.settle) this.releaseDesktop();
     }
     if (reach.isReaching() && !this.stillReaching(step)) this.cancelReach();
-    if (this.hold?.settle?.squat && step.desktop.walking) this.cancelSettle(false);
+    if (this.hold?.settle && step.desktop.walking) this.cancelSettle(false);
 
     const hold = this.hold;
     const settle = hold?.settle ?? null;

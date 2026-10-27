@@ -221,8 +221,9 @@ export class AvatarRig {
   private crouchWarningLogged = false;
   private lastCrouchAmount = -1;
   private lastSquatAmount = 0;
-  /** Where each foot stood before a squat bent the body. */
-  readonly squatFeet = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+  /** Where each foot stood when the current reach began, before it bent the body. */
+  readonly plantFeet = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+  private feetPlanted = false;
   private readonly preCrouchPose = new Map<THREE.Bone, { quaternion: THREE.Quaternion; position: THREE.Vector3 }>();
   private crouchHips: CrouchHipsBinding | undefined;
   private readonly crouchSpine: CrouchBoneBinding[] = [];
@@ -327,9 +328,19 @@ export class AvatarRig {
     this.preCrouchPose.clear();
   }
 
-  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0): void {
+  /** `plant`: a reach is driving the pose, so the feet stay where they stood when it began. */
+  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0, plant = false): void {
     const clampedAmount = clamp(amount, 0, CROUCH_MAX_POSE_AMOUNT);
     if (!this.crouchRigReady || !this.crouchHips) return;
+    if (!plant) this.feetPlanted = false;
+    else if (!this.feetPlanted) {
+      // Once, at the start of the reach, before any bend: planting keeps them there however the hips move.
+      this.feetPlanted = true;
+      this.crouchHips.bone.updateWorldMatrix(true, true);
+      for (const [side, foot] of [['left', this.crouchLeftFoot], ['right', this.crouchRightFoot]] as const) {
+        if (foot) foot.getWorldPosition(this.plantFeet[side]);
+      }
+    }
     const squatAmount = clamp(squat, 0, 1);
     const amountChanged = Math.abs(clampedAmount - this.lastCrouchAmount) > CROUCH_POSE_EPSILON || Math.abs(squatAmount - this.lastSquatAmount) > CROUCH_POSE_EPSILON;
     this.lastSquatAmount = squatAmount;
@@ -351,13 +362,6 @@ export class AvatarRig {
     const spineAmount = Math.pow(clampedAmount, 0.78) * lean;
     const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight * (1 - squatAmount);
 
-    if (squatAmount > 0) {
-      // Where the feet stand before the bend: a squat plants them there, however the hips lean.
-      this.crouchHips.bone.updateWorldMatrix(true, true);
-      for (const [side, foot] of [['left', this.crouchLeftFoot], ['right', this.crouchRightFoot]] as const) {
-        if (foot) foot.getWorldPosition(this.squatFeet[side]);
-      }
-    }
     for (const binding of [this.crouchHips, ...this.crouchSpine, ...this.crouchUpperLegs, ...this.crouchLowerLegs, ...this.crouchFeet]) {
       this.preCrouchPose.set(binding.bone, {
         quaternion: binding.bone.quaternion.clone(), position: binding.bone.position.clone()

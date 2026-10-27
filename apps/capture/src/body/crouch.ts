@@ -135,6 +135,8 @@ export class CrouchState {
   poseAmount = 0;
   /** 0 to 1 beyond the crouch: how far the hips drop below the full crouch for a floor reach. */
   squat = 0;
+  /** A desktop reach's demand (0 to 1; 0 in VR): above 0 the body is bent by a reach, and the feet stay planted. */
+  reach = 0;
   private keyAmount = 0;
   target = 0;
   source: CrouchSource = "none";
@@ -151,6 +153,7 @@ export class CrouchState {
     this.poseAmount = computeCrouchPoseAmount(this.amount, isVrActive);
     // A reach is already smoothed by its own rate: it bends the body as far as it asks, past the key's crouch.
     const reach = clamp(isVrActive ? 0 : reachDemand, 0, 1);
+    this.reach = reach;
     const crouchShare = clamp(reach / REACH_CROUCH_SHARE, 0, 1);
     this.squat = clamp((reach - REACH_CROUCH_SHARE) / (1 - REACH_CROUCH_SHARE), 0, 1);
     this.amount = Math.max(this.amount, crouchShare);
@@ -169,6 +172,7 @@ export class CrouchState {
   release(): void {
     this.keyAmount = 0;
     this.squat = 0;
+    this.reach = 0;
     this.amount = 0;
     this.poseAmount = 0;
     this.target = 0;

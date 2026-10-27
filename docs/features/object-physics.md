@@ -372,6 +372,19 @@ hand-relative change while held, down from 1.04 m. Codex found:
 - The flat-screen drift bound was loosened from 5 to 10 cm without being
   recorded here. It is now the "Flat-screen set-down" criterion above.
 
+**Round 3 (Codex, 2026-10-27): FAIL.** The round 2 switch cases pass.
+Slice 3 passes on its rigid hold (4e-7 m over every exported held span), its
+floor set-down (let go 10 mm up, 0.2 mm drift) and the point-aim clamp. The
+pipeline rerun on the committed tree passes, and the thrown take matches the
+viewer at every sampled key with 0 error. Must-fix:
+
+1. The feet aren't planted during the reach's crouch phase. The ankles rise
+   to 0.51 m, dip 2 cm below the floor and slide 13 cm.
+2. After a pickup whose pointer lifted early, the next mouse press or touch
+   can't release the prop (`G` can).
+3. A second touch can't cancel a reach.
+4. Walking cancels a squat set-down, but not a standing one.
+
 Fixes after round 1: the prop stays rigid with the hand through the set-down, and it is let
 go at the surface or at the arm's lowest reach. A mode switch always releases
 with zero velocity and needs a fresh press. The floor bound is 3 mm. Results
