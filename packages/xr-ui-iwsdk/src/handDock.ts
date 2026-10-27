@@ -54,7 +54,7 @@ export interface HandDockProbe {
   /** Drawn and hit sizes in metres (ring or icon; hit area per input). */
   drawnSizeM: number;
   hitSizeM: number;
-  buttons: Record<string, { worldPosition: [number, number, number]; hovered: boolean; recording: boolean }>;
+  buttons: Record<string, { worldPosition: [number, number, number]; hovered: boolean; recording: boolean; visible: boolean }>;
 }
 
 interface DockButton {
@@ -67,6 +67,7 @@ interface DockButton {
   near: Set<number>;
   pressed: boolean;
   recording: boolean;
+  hidden: boolean;
 }
 
 /** Out of the palm in WebXR grip space: the back of the right hand is +X, of the left −X. */
@@ -139,7 +140,8 @@ export class HandDock {
       const hit = new UIKit.Container({ width: this.hitApx, height: this.hitApx, alignItems: "center", justifyContent: "center" });
       const record = action.glyph === "record";
       const glyph = createGlyph(record ? "recordIdle" : (action.glyph as GlyphName), {
-        size: this.glyphApx,
+        // Beside Record's ring a line glyph keeps the icon size (§6), so it reads at the record shape's weight.
+        size: record || !ringed ? this.glyphApx : (this.glyphApx * GLYPH.icon) / GLYPH.ring,
         color: COLOR.gold,
         // Record: rose shapes inside the gold ring, at the ring's full 16-unit box (§6).
         ...(record ? { ring: { innerSize: GLYPH.icon }, fill: COLOR.record } : {})
@@ -147,7 +149,7 @@ export class HandDock {
       glyph.element.setProperties({ pointerEvents: "none" });
       hit.add(glyph.element);
       root.add(hit);
-      const button: DockButton = { action, hit, glyph, hovering: new Set(), near: new Set(), pressed: false, recording: false };
+      const button: DockButton = { action, hit, glyph, hovering: new Set(), near: new Set(), pressed: false, recording: false, hidden: false };
       this.bindPointer(button);
       this.buttons.push(button);
     }
@@ -221,7 +223,7 @@ export class HandDock {
   }
 
   private commit(button: DockButton, pointerId: number, kind: "poke" | "ray"): void {
-    if (!this.isShown() || this.options.canCommit?.(button.action, pointerId) === false) return;
+    if (!this.isShown() || button.hidden || this.options.canCommit?.(button.action, pointerId) === false) return;
     this.pressedUntilMs = performance.now() + PRESSED_SHOW_MS;
     button.action.onSelect();
     this.options.onCommit?.(button.action, pointerId, kind);
@@ -251,6 +253,19 @@ export class HandDock {
 
   setVisible(visible: boolean): void {
     this.entity.object3D!.visible = visible;
+  }
+
+  /** Shows or hides one action's glyph; a hidden one takes no hits and the row closes up. */
+  setActionVisible(actionId: string, visible: boolean): void {
+    const button = this.buttons.find((candidate) => candidate.action.id === actionId);
+    if (!button || button.hidden === !visible) return;
+    button.hidden = !visible;
+    button.hit.setProperties({ display: visible ? "flex" : "none" });
+    if (!visible) {
+      button.hovering.clear();
+      button.near.clear();
+      button.pressed = false;
+    }
   }
 
   /** Record turns into Stop: the rose shape alone carries the state (§8.5). */
@@ -312,7 +327,8 @@ export class HandDock {
       buttons[button.action.id] = {
         worldPosition: button.hit.getWorldPosition(new Vector3()).toArray() as [number, number, number],
         hovered: button.hovering.size > 0,
-        recording: button.recording
+        recording: button.recording,
+        visible: !button.hidden
       };
     }
     return {

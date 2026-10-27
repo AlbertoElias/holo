@@ -3,6 +3,8 @@ import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import { type ObjectCredit, type ObjectSource, readCredit } from '@holoim/objects';
 
+import { takePrefetchedGlb } from './objectSearch';
+
 /**
  * Refusal limits for a supplied model. Exported textures are re-encoded as
  * PNG, so a heavy model can push a take past the 25 MB upload limit; capture
@@ -45,6 +47,8 @@ export function nameFromUrl(url: string): string {
 }
 
 export async function fetchSuppliedObject(url: string): Promise<SuppliedObjectInput> {
+  const cached = await takePrefetchedGlb(url);
+  if (cached) return { name: nameFromUrl(url), bytes: cached };
   const response = await fetch(url);
   if (!response.ok) throw new SuppliedObjectError(`Could not load the object (${response.status}).`);
   return { name: nameFromUrl(url), bytes: await response.arrayBuffer() };

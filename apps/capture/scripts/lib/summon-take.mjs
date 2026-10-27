@@ -31,7 +31,7 @@ import { clickButton, openCapture, OBJECT_URL, poseOf, readState, saveDownload, 
 export const TRAY_URLS = [OBJECT_URL, '/fixtures/objects/diagram.png'];
 // Meshes in each tray item's model: the bracket's three parts, the image card.
 const ITEM_MESHES = { 'bracket.glb': 3, 'diagram.png': 1 };
-const STEP_MS = 1000 / 60;
+export const STEP_MS = 1000 / 60;
 const EXPORT_POSITION_M = 0.01;
 const EXPORT_ANGLE_DEG = 1;
 const INTERPOLATION_DEG = 0.5;
@@ -198,7 +198,7 @@ export function checkSummonExport(buffer, { summons, fail }) {
   return report;
 }
 
-async function enterIwer(page, mode) {
+export async function enterIwer(page, mode) {
   await page.evaluate((m) => {
     window.__setManualClock(true, false);
     window.IWER_DEVICE.primaryInputMode = m;
@@ -213,7 +213,7 @@ async function enterIwer(page, mode) {
   await page.evaluate(() => window.__setFrameStepping(true, false));
 }
 
-function stepper(page) {
+export function stepper(page) {
   const state = { steps: 0 };
   state.step = async (count = 1) => {
     for (let i = 0; i < count; i += 1) await page.clock.runFor(STEP_MS);
@@ -222,7 +222,7 @@ function stepper(page) {
   return state;
 }
 
-function shooter(page, step, artifactDir, label) {
+export function shooter(page, step, artifactDir, label) {
   return async (name) => {
     await page.evaluate(() => {
       window.__setSpectatorView('body');
@@ -242,7 +242,7 @@ function shooter(page, step, artifactDir, label) {
 }
 
 /** Closes the loop on the avatar's right hand bone, moving `input` until the bone reaches `target()`. */
-async function reach(page, step, { move, start, target, rigYaw, tolerance = 0.02 }) {
+export async function reach(page, step, { move, start, target, rigYaw, tolerance = 0.02 }) {
   const toTracking = (delta) => {
     const c = Math.cos(-rigYaw);
     const s = Math.sin(-rigYaw);
@@ -265,7 +265,7 @@ async function reach(page, step, { move, start, target, rigYaw, tolerance = 0.02
   return { at, error };
 }
 
-const summonedItems = (state) => state.objects.items.filter((item) => item.origin === 'summoned');
+export const summonedItems = (state) => state.objects.items.filter((item) => item.origin === 'summoned');
 
 function handRelationOf(state, id) {
   const item = state.objects.items.find((candidate) => candidate.id === id);
@@ -659,7 +659,7 @@ export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, arti
   }
 }
 
-const PIXEL_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+export const PIXEL_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 /**
  * Find an object by asking (PRD-060), desktop, without the live registry:

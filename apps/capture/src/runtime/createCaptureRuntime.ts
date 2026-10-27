@@ -27,6 +27,8 @@ import { saveHandedness } from '@holoim/ui-dom';
 import { TouchStickView } from '../ui/TouchStickView';
 import { FlatHalo } from '../ui/flatHalo';
 import { VrChrome } from '../ui/VrChrome';
+import { prefetchStats } from '../objects/objectSearch';
+import { voiceLog } from '../objects/voiceInput';
 import { HeadsetHolds } from '../xr/HeadsetHolds';
 import { ArSpectator } from '../xr/ArSpectator';
 import { HandEmbodiment } from '../xr/HandEmbodiment';
@@ -137,7 +139,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     refitHeight: () => heightFit.requestRefit(),
     toggleRecording: () => recording.toggle(),
     setHandedness,
-    ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec)
+    ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec),
+    pickObject: (url) => void objects.loadTrayUrls([url])
   });
   const headsetHolds = new HeadsetHolds({
     tracking,
@@ -325,6 +328,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __toggleFaceCamera: () => capture.face.toggleCamera(),
         __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),
         __chromeTarget: (target) => vrChrome.targetPosition(target),
+        __sampleObjectSearch: () => ({ headset: vrChrome.findSession.getState(), voiceLog: [...voiceLog], prefetch: { ...prefetchStats } }),
         __setRetainLastTake: (retain) => recording.setRetainLastTake(retain),
         __reexportLastTake: async () => {
           const bytes = await recording.reexportLastTake();

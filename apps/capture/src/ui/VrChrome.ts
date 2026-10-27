@@ -13,10 +13,14 @@ import {
   type Hand,
   type Handedness
 } from '@holoim/xr-ui-core';
-import { AimRays, HandDock, POKE, StatusLine, WorldPanel, configureXrPointers, handPointerIds, multiPointer, pointerHand } from '@holoim/xr-ui-iwsdk';
+import { AimRays, CHIP_OPACITY, HandDock, POKE, StatusLine, WorldPanel, configureXrPointers, handPointerIds, multiPointer, pointerHand } from '@holoim/xr-ui-iwsdk';
+import { SHOW_CAPABILITIES, capabilityLine } from '../objects/findCapabilities';
+import { ObjectSearchSession } from '../objects/objectSearchSession';
 import type { UiViewModel } from '../types/contracts';
 import type { XrTracking } from '../xr/XrTracking';
 import { SpatialTick } from './SpatialTick';
+import { SystemKeyboard } from './systemKeyboard';
+import { VrFindPanel, type FindTargetId, type VrFindPanelProbe } from './VrFindPanel';
 import type { UIStateStore } from './UIStateStore';
 
 interface VrChromeDeps {
@@ -32,7 +36,12 @@ interface VrChromeDeps {
   setHandedness: (handedness: Handedness) => void;
   /** True when a held select on this source is already something else's (a Halo, a mark). */
   ownsSelect?: (source: XRInputSource | undefined) => boolean;
+  /** A Find pick: the result's GLB goes to the tray through its loader (PRD-060). */
+  pickObject: (url: string) => void;
 }
+
+/** VR carries the whole chrome; passthrough AR (the spectator) carries Find only. */
+export type ChromeMode = 'vr' | 'ar';
 
 /** After a commit the finger is still pulling back from chrome, not pointing. */
 const POKE_RELEASE_SEC = 0.5;
@@ -45,6 +54,8 @@ const GRIP_TO_JOINT_RIGHT = new THREE.Quaternion().setFromAxisAngle(new THREE.Ve
 const SHADE_SEGMENTS = 32;
 
 type RowId = 'refit' | 'hand';
+/** What a check can aim at: the dock's glyphs, a settings row, or a Find panel target (`find:category:chairs`). */
+export type ChromeTarget = 'record' | 'find' | RowId | `find:${FindTargetId}`;
 
 /** What the placement, label-distance and handedness reports read (`__sampleChrome`). */
 export interface VrChromeSnapshot {
@@ -54,6 +65,8 @@ export interface VrChromeSnapshot {
   wrist: { hand: Hand; input: 'poke' | 'ray'; visible: boolean; position: number[]; anchor: number[] | null; hitSizeM: number; drawnSizeM: number; recording: boolean; occludedBy: string | null; drawnOverBody: boolean } | null;
   statusLine: { visible: boolean; text: string; position: number[]; distanceFromHeadM: number } | null;
   panel: { visible: boolean; position: number[]; distanceFromHeadM: number; rows: Array<{ id: RowId; text: string; visible: boolean; enabled: boolean; distanceFromHeadM: number; hitHeightM: number }> } | null;
+  /** The Find panel (PRD-060 slice 2) and the dock's Find glyph. */
+  find: (VrFindPanelProbe & { mode: ChromeMode; dockGlyph: boolean; distanceFromHeadM: number }) | null;
   rays: Array<{ side: Hand; visible: boolean; hit: string | null; origin: number[] }>;
   /** The dominant index fingertip against the wrist glyph: world tip, the glyph's face normal, height above it. */
   poke: { tip: number[] | null; glyphNormal: number[] | null; depthM: number | null };
@@ -105,6 +118,22 @@ export class VrChrome {
   private readonly tick = new SpatialTick();
   private readonly feedback = { ticks: 0, pulses: 0, commits: 0 };
   private shown = false;
+  private mode: ChromeMode = 'vr';
+  private find: VrFindPanel | null = null;
+  private findOpen = false;
+  private placeFind = false;
+  /** The select holding Speak: its release, tracking loss or blur ends the hold. */
+  private speakHold: { hand: Hand; source: XRInputSource; session: XRSession; end: () => void } | null = null;
+  /** The tray's item count when a pick was made, so the panel can say it landed. */
+  private pickedAt: number | null = null;
+  readonly findSession = new ObjectSearchSession();
+  private readonly keyboard = new SystemKeyboard({
+    onInput: (value) => this.findSession.setQuery(value),
+    onSubmit: (value) => {
+      this.find?.systemKeyboardClosed();
+      if (value.trim()) this.findSession.search(value);
+    }
+  });
 
   constructor(private readonly deps: VrChromeDeps) {
     this.root.name = 'capture-chrome';
@@ -126,11 +155,15 @@ export class VrChrome {
     markChromeTree(this.root);
   }
 
-  show(): void {
+  show(mode: ChromeMode = 'vr'): void {
     if (!this.root.parent) this.deps.scene.add(this.root);
     this.root.visible = true;
     this.shown = true;
-    this.placePanel = true;
+    if (mode !== this.mode) this.dockKey = '';
+    this.mode = mode;
+    this.find?.setChipOpacity(this.chipOpacity());
+    this.placePanel = mode === 'vr';
+    this.closeFind();
     this.presentedFrames = 0;
     this.build();
     this.status?.reset();
@@ -145,10 +178,11 @@ export class VrChrome {
     this.status?.set(null);
     this.panel?.setVisible(false);
     this.dock?.setVisible(false);
+    this.closeFind();
   }
 
   private sdkRoots(): THREE.Object3D[] {
-    return [this.status, this.panel, this.dock].flatMap((part) => (part ? [part.entity.object3D!] : []));
+    return [this.status, this.panel, this.dock, this.find].flatMap((part) => (part ? [part.entity.object3D!] : []));
   }
 
   /** The status line, the world panel and the rays, once: the wrist is rebuilt per handedness and input. */
@@ -176,6 +210,95 @@ export class VrChrome {
     this.root.add(this.rays.group);
   }
 
+  /** The Find panel, built on first open: its chip is the session's (VR 72%, passthrough 97%). */
+  private buildFind(): VrFindPanel {
+    if (this.find) return this.find;
+    this.find = new VrFindPanel(this.deps.world, this.findSession, {
+      chipOpacity: this.chipOpacity(),
+      onPick: (url) => {
+        this.pickedAt = this.deps.store.getState().tray.names.length;
+        this.deps.pickObject(url);
+      },
+      onClose: () => this.closeFind(),
+      openSystemKeyboard: () => {
+        if (!SystemKeyboard.supported(this.deps.renderer.xr.getSession())) return false;
+        this.keyboard.open();
+        return true;
+      },
+      closeSystemKeyboard: () => this.keyboard.close(),
+      canCommit: (pointerId) => !this.ownedElsewhere(pointerId),
+      onCommit: (pointerId) => this.committed(pointerId, 'ray'),
+      onHover: (pointerId, hovered) => hovered && this.pulsePointer(pointerId, PULSE_HOVER),
+      onHoldStart: (pointerId) => this.holdSpeak(pointerId)
+    });
+    return this.find;
+  }
+
+  private chipOpacity(): number {
+    return this.mode === 'ar' ? CHIP_OPACITY.arQuestPassthrough : CHIP_OPACITY.vr;
+  }
+
+  private holdSpeak(pointerId: number): void {
+    this.endSpeakHold();
+    const hand = pointerHand(this.deps.world, pointerId);
+    const source = hand ? this.deps.tracking.getChromeInput(hand).inputSource : undefined;
+    const session = this.deps.renderer.xr.getSession();
+    if (!hand || !source || !session) {
+      this.findSession.stopVoice();
+      return;
+    }
+    const onSelectEnd = (event: XRInputSourceEvent) => {
+      if (event.inputSource === source) this.endSpeakHold();
+    };
+    const onSourcesChange = (event: XRInputSourcesChangeEvent) => {
+      if (event.removed.includes(source)) this.endSpeakHold();
+    };
+    const onBlur = () => {
+      if (session.visibilityState !== 'visible') this.endSpeakHold();
+    };
+    session.addEventListener('selectend', onSelectEnd);
+    session.addEventListener('inputsourceschange', onSourcesChange);
+    session.addEventListener('visibilitychange', onBlur);
+    this.speakHold = {
+      hand,
+      source,
+      session,
+      end: () => {
+        session.removeEventListener('selectend', onSelectEnd);
+        session.removeEventListener('inputsourceschange', onSourcesChange);
+        session.removeEventListener('visibilitychange', onBlur);
+      }
+    };
+  }
+
+  private endSpeakHold(): void {
+    if (!this.speakHold) return;
+    this.speakHold.end();
+    this.speakHold = null;
+    this.findSession.stopVoice();
+  }
+
+  /** Find on the dock: the panel opens ahead and the settings panel steps aside (one world panel at a time). */
+  private openFind(): void {
+    if (this.findOpen) {
+      this.closeFind();
+      return;
+    }
+    this.buildFind();
+    this.findOpen = true;
+    this.placeFind = true;
+    this.pickedAt = null;
+  }
+
+  private closeFind(): void {
+    this.speakHold?.end();
+    this.speakHold = null;
+    this.findOpen = false;
+    this.keyboard.close();
+    this.findSession.cancel();
+    this.find?.setVisible(false);
+  }
+
   update(camera: THREE.Camera, deltaSec: number, elapsedSec: number): void {
     if (!this.shown) return;
     this.elapsedSec = elapsedSec;
@@ -187,6 +310,7 @@ export class VrChrome {
     this.updateWrist(state.handedness, recording);
     this.updateStatus(deltaSec, state, recording);
     this.updatePanel(camera, state, recording);
+    this.updateFind(camera, state, recording);
     this.updatePoke(state.handedness);
     // While a take runs, a ray shows only on the stop control it rests on.
     this.rays?.update((hand) => this.deps.renderer.xr.isPresenting && Boolean(this.deps.tracking.getChromeInput(hand).targetRay) && (!recording || this.rayHit(hand) === 'record'));
@@ -202,6 +326,7 @@ export class VrChrome {
     const status = this.status?.probe();
     if (status?.visible && status.text) labels.push({ name: 'status-line', text: status.text, distanceFromHeadM: new THREE.Vector3(...status.worldPosition).distanceTo(head) });
     for (const row of this.panel?.readableRows() ?? []) labels.push({ name: `panel-row-${row.id}`, text: row.text, distanceFromHeadM: world(row.object).distanceTo(head) });
+    for (const label of this.find?.readableLabels() ?? []) labels.push({ name: `find-${label.id}`, text: label.text, distanceFromHeadM: world(label.object).distanceTo(head) });
     const panel = this.panel?.probe();
     const recordHit = this.dock?.hitTarget('record');
     const dock = this.dock?.probe();
@@ -240,6 +365,16 @@ export class VrChrome {
             }))
           }
         : null,
+      find: this.find
+        ? {
+            ...this.find.probe(),
+            mode: this.mode,
+            dockGlyph: Boolean(this.dock?.probe().buttons.find?.visible && this.dock.probe().visible),
+            distanceFromHeadM: this.find.entity.object3D!.getWorldPosition(new THREE.Vector3()).distanceTo(head)
+          }
+        : this.dock
+          ? { visible: false, worldPosition: [], query: '', status: '', keyboard: 'none', results: [], targets: [], mode: this.mode, dockGlyph: Boolean(this.dock.probe().buttons.find?.visible && this.dock.probe().visible), distanceFromHeadM: 0 }
+          : null,
       rays: (this.rays?.probe() ?? []).map((ray) => ({ side: ray.hand, visible: ray.visible, hit: ray.visible ? this.rayHit(ray.hand) : null, origin: ray.origin })),
       poke: this.pokeSnapshot(state.handedness),
       fingertipShade: { visible: this.shade.visible, radiusM: this.shade.scale.x, opacity: this.shadeMaterial.opacity },
@@ -266,8 +401,8 @@ export class VrChrome {
   }
 
   /** The world-space point at the centre of a panel row or the wrist glyph, for checks that aim at it. */
-  targetPosition(target: 'record' | RowId): number[] | null {
-    const object = target === 'record' ? this.dock?.hitTarget('record') : this.panel?.hitTarget(target);
+  targetPosition(target: ChromeTarget): number[] | null {
+    const object = target === 'record' || target === 'find' ? this.dock?.hitTarget(target) : target === 'refit' || target === 'hand' ? this.panel?.hitTarget(target) : this.find?.hitTarget(target.slice('find:'.length) as FindTargetId);
     return object ? object.getWorldPosition(new THREE.Vector3()).toArray() : null;
   }
 
@@ -281,21 +416,24 @@ export class VrChrome {
     const carrier = nonDominantHand(handedness);
     // The pressing hand sets every hit area: a poke for a tracked hand, a ray for a controller.
     const input = this.deps.tracking.getChromeInput(dominantHand(handedness)).hand ? 'poke' : 'ray';
-    const key = `${handedness}:${input}`;
+    const key = `${this.mode}:${handedness}:${input}`;
     if (key !== this.dockKey) {
       this.dock?.dispose();
       const record: DockAction = { id: 'record', glyph: 'record', label: 'Record', onSelect: () => this.deps.toggleRecording() };
-      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier), palm: [0, -1, 0] }, [record], {
+      const find: DockAction = { id: 'find', glyph: 'find', label: 'Find an object', onSelect: () => this.openFind() };
+      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier), palm: [0, -1, 0] }, this.mode === 'vr' ? [record, find] : [find], {
         input,
         drawOverBody: true,
-        canCommit: (_action, pointerId) => this.canRecord(pointerId),
+        canCommit: (action, pointerId) => (action.id === 'find' ? this.canFind(pointerId) : this.canRecord(pointerId)),
         onCommit: (_action, pointerId, kind) => this.committed(pointerId, kind),
         onHover: (_action, pointerId, hovered) => hovered && this.pulsePointer(pointerId, PULSE_HOVER)
       });
       this.dockKey = key;
     }
     this.wristTracked = this.placeWristAnchor(carrier);
-    this.dock!.setVisible(this.wristTracked && chromeVisible('record', recording));
+    this.dock!.setVisible(this.wristTracked && (this.mode === 'ar' || chromeVisible('record', recording)));
+    // Find is for before the take (PRD-060): it leaves the wrist while one runs.
+    this.dock!.setActionVisible('find', chromeVisible('settings', recording));
     this.dock!.setRecording(recording);
     this.dock!.update();
   }
@@ -304,6 +442,14 @@ export class VrChrome {
   private canRecord(pointerId: number): boolean {
     const state = this.deps.store.getState();
     if (!createRecordingUiState(state.recordingState, state.recordingMessage).canToggle || this.ownedElsewhere(pointerId)) return false;
+    const hand = pointerHand(this.deps.world, pointerId);
+    const viaRay = hand !== null && multiPointer(this.deps.world, hand).ray.pointer.id === pointerId;
+    return !(viaRay && hand && this.deps.tracking.getChromeInput(hand).hand);
+  }
+
+  /** Find opens before a take, from a poke (hands) or a controller ray, like Record. */
+  private canFind(pointerId: number): boolean {
+    if (this.deps.store.getState().recordingState !== 'idle' || this.ownedElsewhere(pointerId)) return false;
     const hand = pointerHand(this.deps.world, pointerId);
     const viaRay = hand !== null && multiPointer(this.deps.world, hand).ray.pointer.id === pointerId;
     return !(viaRay && hand && this.deps.tracking.getChromeInput(hand).hand);
@@ -355,7 +501,7 @@ export class VrChrome {
       panel.place(camera);
       this.placePanel = false;
     }
-    panel.setVisible(!this.placePanel && chromeVisible('settings', recording));
+    panel.setVisible(this.mode === 'vr' && !this.placePanel && !this.findOpen && chromeVisible('settings', recording));
     panel.setRow('refit', {
       text: state.heightFit.pending ? 'Hold still…' : state.heightFit.enabled ? 'Refit height' : 'Refit after the take',
       enabled: state.heightFit.enabled && !state.heightFit.pending
@@ -365,34 +511,66 @@ export class VrChrome {
     panel.update(camera);
   }
 
+  private updateFind(camera: THREE.Camera, state: UiViewModel, recording: boolean): void {
+    if (!this.find) return;
+    // A take closes Find, as the desktop field disables.
+    if (this.findOpen && recording) this.closeFind();
+    const posed = this.presentedFrames > 1 || !this.deps.renderer.xr.isPresenting;
+    if (this.findOpen && this.placeFind && posed) {
+      this.find.place(camera);
+      this.placeFind = false;
+    }
+    this.find.setVisible(this.findOpen && !this.placeFind);
+    if (!this.findOpen) return;
+    // A hold also ends when its hand or controller stops tracking (6.1, holds).
+    const hold = this.speakHold;
+    if (hold) {
+      const input = this.deps.tracking.getChromeInput(hold.hand);
+      if (input.inputSource !== hold.source || !input.targetRay) this.endSpeakHold();
+    }
+    const { tray } = state;
+    const trayLine = tray.loading
+      ? 'Adding to the tray…'
+      : tray.message ?? (this.pickedAt !== null && tray.names.length > this.pickedAt ? `In the tray: ${tray.names[tray.names.length - 1]}` : null);
+    this.find.update(camera, {
+      disabled: state.recordingState !== 'idle' || tray.loading,
+      trayLine,
+      debugLine: SHOW_CAPABILITIES ? capabilityLine(this.deps.renderer.xr.getSession()) : null
+    });
+  }
+
   // --- Poke feedback: the fingertip shade before contact ---
 
   private updatePoke(handedness: Handedness): void {
     const tracking = this.deps.tracking;
     const presser = dominantHand(handedness);
-    const hit = this.dock?.hitTarget('record');
     this.shade.visible = false;
     this.pokeNear = false;
-    if (!hit || !this.dock || this.dockInput() !== 'poke' || !this.dock.probe().visible || !tracking.getTrackedHandJointPosition(presser, 'index-finger-tip', tmpA)) return;
+    if (!this.dock || this.dockInput() !== 'poke' || !this.dock.probe().visible || !tracking.getTrackedHandJointPosition(presser, 'index-finger-tip', tmpA)) return;
     const { drawnSizeM, hitSizeM } = this.dock.sizes;
-    const face = faceFrame(hit);
-    const offset = tmpB.copy(tmpA).sub(face.centre);
-    const x = offset.dot(axisX);
-    const y = offset.dot(axisY);
-    const depth = offset.dot(normal);
-    const half = hitSizeM / 2;
-    const near = Math.abs(x) <= half && Math.abs(y) <= half && depth <= POKE.proximityM && depth >= -POKE.throughM;
-    this.pokeNear = near;
-    if (!near) return;
-    // Blurred and wide while far, sharpening onto the glyph at contact.
-    const t = THREE.MathUtils.clamp(Math.max(0, depth) / POKE.proximityM, 0, 1);
-    this.shade.quaternion.copy(face.rotation);
-    this.shade.position.copy(face.centre).addScaledVector(axisX, x).addScaledVector(axisY, y).addScaledVector(normal, 0.001);
-    this.root.updateWorldMatrix(true, false);
-    this.root.worldToLocal(this.shade.position);
-    this.shade.scale.setScalar((drawnSizeM / 2) * (1 + 2 * t));
-    this.shadeMaterial.opacity = tokens.shade.mid.alpha + (tokens.shade.inner.alpha - tokens.shade.mid.alpha) * (1 - t);
-    this.shade.visible = true;
+    const buttons = this.dock.probe().buttons;
+    for (const id of ['record', 'find']) {
+      const hit = this.dock.hitTarget(id);
+      if (!hit || !buttons[id]?.visible) continue;
+      const face = faceFrame(hit);
+      const offset = tmpB.copy(tmpA).sub(face.centre);
+      const x = offset.dot(axisX);
+      const y = offset.dot(axisY);
+      const depth = offset.dot(normal);
+      const half = hitSizeM / 2;
+      if (!(Math.abs(x) <= half && Math.abs(y) <= half && depth <= POKE.proximityM && depth >= -POKE.throughM)) continue;
+      this.pokeNear = true;
+      // Blurred and wide while far, sharpening onto the glyph at contact.
+      const t = THREE.MathUtils.clamp(Math.max(0, depth) / POKE.proximityM, 0, 1);
+      this.shade.quaternion.copy(face.rotation);
+      this.shade.position.copy(face.centre).addScaledVector(axisX, x).addScaledVector(axisY, y).addScaledVector(normal, 0.001);
+      this.root.updateWorldMatrix(true, false);
+      this.root.worldToLocal(this.shade.position);
+      this.shade.scale.setScalar((drawnSizeM / 2) * (1 + 2 * t));
+      this.shadeMaterial.opacity = tokens.shade.mid.alpha + (tokens.shade.inner.alpha - tokens.shade.mid.alpha) * (1 - t);
+      this.shade.visible = true;
+      return;
+    }
   }
 
   private pokeSnapshot(handedness: Handedness): VrChromeSnapshot['poke'] {
@@ -410,8 +588,10 @@ export class VrChrome {
   private rayHit(hand: Hand): string | null {
     const id = multiPointer(this.deps.world, hand).ray.pointer.id;
     if (this.dock?.isHoveredBy('record', id)) return 'record';
+    if (this.dock?.isHoveredBy('find', id)) return 'find';
     for (const row of ['refit', 'hand'] as const) if (this.panel?.isHoveredBy(row, id)) return `row:${row}`;
-    return null;
+    const found = this.find?.isShown() ? this.find.hoveredBy(id) : null;
+    return found ? `find:${found}` : null;
   }
 
   private ownedElsewhere(pointerId: number): boolean {
