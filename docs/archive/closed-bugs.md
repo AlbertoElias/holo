@@ -377,6 +377,10 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   scene and needs the same rule when that branch merges.
   The recorded ground below the author's floor (slopes, water) stays visible
   under the dome and below the room floor, unclipped (user decision, 2026-10-25).
+- **Physical:** 2026-10-26, after checking desktop and an iPhone (the feed
+  and Quick Look), the user: "i think we fixed b022". AR placement on a
+  Quest or an Android phone is Unverified, skipped by the user's choice (no
+  Android device; the Quest is away).
 
 ### B-026 — Emulated clicks and taps are now and then lost when frames are slow
 
@@ -435,7 +439,12 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 - **Fix:** the spec waits on rendered frames (B-026). The four checks keep
   their own CI job, `xr-viewer-vr` (`test:e2e:xr-viewer-vr`), now without
   `continue-on-error` and back in the CI Gate.
-### B-022 — Quick Look conversions fail while production's shared CPU is throttled
+### B-030 — Quick Look conversions fail while production's shared CPU is throttled
+
+(Filed as a second B-022, which `349b5e9` and the comment in
+`usdz-worker.ts` still call it; renumbered 2026-10-26, and again to B-030 on
+2026-10-27 because AR recording had filed B-028 meanwhile. B-022 is the floor
+bug above.)
 
 - **Area:** `apps/viewer-api` USDZ worker and `rebuild:usdz` (`glb_to_usdz.py`'s 100 s alarm, the converter's 120 s limit)
 - **Severity:** P2
@@ -511,3 +520,29 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   get `access-control-allow-origin`, while `evil.pages.dev`,
   `holoim-viewer.pages.dev.evil.com`, nested labels, `http:` and ports get
   none. The secrets are unchanged.
+
+### B-029 — The portal tilt check cannot find the pressed tilt toggle
+
+(Filed as a second B-022; renumbered 2026-10-26. B-022 is the floor bug above.)
+
+- **Area:** `apps/viewer-web` e2e (`test:portal`, part of `verify:pr`)
+- **Severity:** P2 (fails `verify:pr` on `main` for every branch)
+- **Observed:** 2026-10-25
+- **Evidence:** `e2e/portal.spec.ts:109` ("phone › tilt") clicks "Look
+  around by tilting the phone", then finds no button named "Stop looking
+  around by tilting" within 5 s. It fails every run on `main` (`31c082a`)
+  and on `02d0282`, the redesign commit with "fewer controls", so it
+  arrived with that commit. Unknown whether the toggle itself broke or
+  only the check's expectation is stale.
+- **Expected:** tilting the phone can be turned on and off from the card,
+  and the check passes.
+- **Reproduction:** `VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer npx
+  playwright test e2e/portal.spec.ts -g tilt` from `apps/viewer-web`.
+- **Closed:** 2026-10-26, not reproducible
+- **Validation:** the check passes alone at every commit it was said to fail
+  on and around them: `02d0282`, `31c082a`, `e413c26` and its parent (1 of 1
+  each), and `main` at `b4de940` (3 of 3, `--repeat-each=3`), all on private
+  ports (3675/3676/5675). CI's "Portal view end-to-end" job, which runs it,
+  passed on `main` (run 40282648462). The toggle's names in
+  `controlNames.ts` are unchanged since slice 3. Unconfirmed explanation: the
+  failing runs reached another agent's dev server on the shared default ports.

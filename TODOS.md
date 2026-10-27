@@ -93,7 +93,7 @@ it from the item below instead of duplicating its status here.
   a UI/interaction redesign. Run them in the appropriate `verify:agent` or
   `verify:pr` tier. Tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` are
   deferred to the redesign item below, which owns their new contracts.
-- [ ] Redesign all UI (2D and 3D) and interaction systems (2D and XR) in a
+- [x] Redesign all UI (2D and 3D) and interaction systems (2D and XR) in a
   dedicated session with its own feature brief. That brief owns: the new
   contract tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` (currently
   `--passWithNoTests`), written against the redesigned contracts rather than
@@ -105,6 +105,8 @@ it from the item below instead of duplicating its status here.
   `docs/product/concepts/what-a-hologram-is.md`: include the portal viewer
   and Follow/Free, and start marks with "this/here" links read from pointing.
   Brief: [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md).
+  Shipped 2026-10-26; its Android and Quest device checks are Unverified
+  (the brief's "Physical-device limits").
 - [ ] Add a VR viewing mode to `apps/viewer-web`: holograms on their stages
   in the blue-hour room, lit by their own gold light (styleguide 9.1), using
   the redesign's components. Split out of the UI redesign brief on

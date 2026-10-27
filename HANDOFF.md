@@ -48,11 +48,11 @@ green, then merges with slice 0's branch. Its device checks stay unverified
   [`TODOS.md`](TODOS.md). The fixes from the
   cross-vendor review of slices 2 to 4 and the second round (the brief's
   "Independent verification" rows), with the globe's own colours, landed on
-  `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Next there: slice 7 (cross-device task test and device checks).
-  Open: real wrist drawings for Exit and Recenter; the physical device checks
-  in the brief.
+  `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Slice 7 closed on 2026-10-26: desktop and an iPhone passed; the
+  Android and Quest checks are Unverified by the user's choice (the brief's
+  "Physical-device limits"). Open: real wrist drawings for Exit and Recenter.
 - The production Quick Look rebuild to ql3 is done: both stored previews are
-  ql3, with the ql2 files and the database backup kept (B-022, evidence in
+  ql3, with the ql2 files and the database backup kept (B-030, evidence in
   the brief).
 
 ## Unverified / device-only

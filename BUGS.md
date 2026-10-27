@@ -54,21 +54,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   twice and compare the two output folders with
   `node --import tsx scripts/compare-xr-reports.ts`.
 
-### B-022 — The portal tilt check cannot find the pressed tilt toggle
-
-- **Area:** `apps/viewer-web` e2e (`test:portal`, part of `verify:pr`)
-- **Severity:** P2 (fails `verify:pr` on `main` for every branch)
-- **Observed:** 2026-10-25
-- **Evidence:** `e2e/portal.spec.ts:109` ("phone › tilt") clicks "Look
-  around by tilting the phone", then finds no button named "Stop looking
-  around by tilting" within 5 s. It fails every run on `main` (`31c082a`)
-  and on `02d0282`, the redesign commit with "fewer controls", so it
-  arrived with that commit. Unknown whether the toggle itself broke or
-  only the check's expectation is stale.
-- **Expected:** tilting the phone can be turned on and off from the card,
-  and the check passes.
-- **Reproduction:** `VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer npx
-  playwright test e2e/portal.spec.ts -g tilt` from `apps/viewer-web`.
 
 ### B-028 — A take drops set geometry whose vertices are far apart, such as a large floor
 
