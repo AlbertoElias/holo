@@ -11,13 +11,15 @@ repo.
 
 ## Automated deploys (CI-gated)
 
-`.github/workflows/deploy.yml` deploys all three surfaces automatically
-whenever the CI workflow completes successfully for a push to `main`:
-Fly API, Pages viewer, Pages capture. Each job health-checks its URL
+The CI workflow (`.github/workflows/ci.yml`) deploys each changed surface
+on a push to `main` as soon as the suites that exercise it pass: Fly API
+(an image built while the tests run, released by tag), Pages viewer and
+Pages capture (the bundles CI built). Each job health-checks its URL
 afterwards. Required repository secrets: `FLY_API_TOKEN` (a Fly deploy
 token scoped to `holoim-api`), `CLOUDFLARE_API_TOKEN` (scoped token with
 Cloudflare Pages edit permission), and `CLOUDFLARE_ACCOUNT_ID`. Manual
-redeploys: Actions → Deploy → Run workflow. The manual steps below remain
+redeploys and rollbacks: Actions → Deploy → Run workflow
+(`.github/workflows/deploy.yml`). The manual steps below remain
 the fallback and the way the accounts/projects were first created.
 
 ## 0. Accounts and CLIs (one-time, operator)

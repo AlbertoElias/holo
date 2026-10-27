@@ -72,9 +72,11 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
   avatars: 900000
 };
 
-// Serial wall time in seconds on a 2-vCPU CI runner (CI run 39499697917);
-// parallel runs start the longest first and XR_SHARD balances on it.
-const CHECK_COST: Partial<Record<CheckName, number>> = { face: 40, marks: 19, body: 83, height: 45, terrain: 38, hands: 31, avatars: 120, locomotion: 21, 'mock-vr': 18, recording: 11, 'ar-record': 110 };
+// Wall time in seconds per check on a 4-vCPU CI runner, two checks at a time
+// (CI run 40472119472; avatars is not in CI and keeps its older estimate).
+// Parallel runs start the longest first and XR_SHARD balances on it. Refresh
+// it on purpose from the xr-checks-shard-*.json timing artifacts.
+const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, recording: 5, 'mock-vr': 4, avatars: 120 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);
@@ -223,7 +225,7 @@ try {
     await mkdir(logDir, { recursive: true });
     const ordered = [...requested].sort((left, right) => (CHECK_COST[right] ?? 0) - (CHECK_COST[left] ?? 0));
     // The cheapest check runs alone first so Vite transforms the app once;
-    // concurrent cold page loads on a 2-vCPU CI runner pass the 30 s goto limit.
+    // concurrent cold page loads on a CI runner pass the 30 s goto limit.
     const warmup = ordered.pop();
     const warmupName = warmup!;
     const settle = (name: CheckName) => runCheck(name).then((): Error | null => null, (caught: unknown) => (caught instanceof Error ? caught : new Error(String(caught))));

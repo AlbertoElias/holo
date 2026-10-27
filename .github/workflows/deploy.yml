@@ -1,14 +1,11 @@
 name: Deploy
 
-# Deploys production whenever CI passes on main, but only the apps changed
-# since the last successful deploy (docs- or tooling-only merges deploy
-# nothing; see scripts/ci-changed-areas.sh). Manual runs from the Actions tab
-# (workflow_dispatch) redeploy or roll back the chosen targets (default all).
+# Manual redeploy or rollback of the chosen targets (default all) from the
+# Actions tab. Pushes to main deploy from ci.yml as soon as each app's suites
+# pass (docs/features/ci-under-5m.md); this workflow builds from source and
+# shares ci.yml's per-app deploy groups, so the two never deploy one app at
+# the same time.
 on:
-  workflow_run:
-    workflows: [CI]
-    branches: [main]
-    types: [completed]
   workflow_dispatch:
     inputs:
       targets:
@@ -20,76 +17,47 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
-
 env:
   PNPM_VERSION: 10.29.3
 
 jobs:
   changes:
     name: Select deploy targets
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    permissions:
-      contents: read
-      actions: read
     outputs:
       api: ${{ steps.areas.outputs.api }}
       web: ${{ steps.areas.outputs.web }}
       capture_app: ${{ steps.areas.outputs.capture_app }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 0
       - name: Select areas
         id: areas
         env:
-          GH_TOKEN: ${{ github.token }}
           TARGETS: ${{ inputs.targets }}
-        # Diff from the last successful CI-triggered deploy so merge commits,
-        # multi-commit pushes and pushes whose CI was cancelled or failed are
-        # all covered; manual (possibly partial) redeploys never count. With
-        # no usable previous deploy, the empty base deploys everything.
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            base="dispatch: ${TARGETS:-all}"
-            case "${TARGETS:-all}" in
-              all) echo "api=true"; echo "web=true"; echo "capture_app=true" ;;
-              api) echo "api=true"; echo "web=false"; echo "capture_app=false" ;;
-              web) echo "api=false"; echo "web=true"; echo "capture_app=false" ;;
-              capture) echo "api=false"; echo "web=false"; echo "capture_app=true" ;;
-              *) echo "Unknown targets '${TARGETS}'" >&2; exit 1 ;;
-            esac >> "${GITHUB_OUTPUT}"
-          else
-            base="$(scripts/ci-push-base.sh deploy.yml HEAD "" workflow_run)"
-            scripts/ci-changed-areas.sh "${base}" HEAD >> "${GITHUB_OUTPUT}"
-          fi
+          case "${TARGETS:-all}" in
+            all) echo "api=true"; echo "web=true"; echo "capture_app=true" ;;
+            api) echo "api=true"; echo "web=false"; echo "capture_app=false" ;;
+            web) echo "api=false"; echo "web=true"; echo "capture_app=false" ;;
+            capture) echo "api=false"; echo "web=false"; echo "capture_app=true" ;;
+            *) echo "Unknown targets '${TARGETS}'" >&2; exit 1 ;;
+          esac >> "${GITHUB_OUTPUT}"
           {
-            echo "## Deploy targets (base: ${base:-none})"
+            echo "## Deploy targets (dispatch: ${TARGETS:-all})"
             cat "${GITHUB_OUTPUT}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   deploy-api:
     name: Deploy API (Fly)
     needs: [changes]
-    if: >-
-      needs.changes.outputs.api == 'true' &&
-      (github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push'))
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: deploy-production-api
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: superfly/flyctl-actions/setup-flyctl@v1
       - name: Deploy
         run: flyctl deploy -c fly.toml --remote-only
@@ -107,17 +75,14 @@ jobs:
   deploy-web:
     name: Deploy viewer (Pages)
     needs: [changes]
-    if: >-
-      needs.changes.outputs.web == 'true' &&
-      (github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push'))
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: deploy-production-web
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -143,17 +108,14 @@ jobs:
   deploy-capture:
     name: Deploy capture (Pages)
     needs: [changes]
-    if: >-
-      needs.changes.outputs.capture_app == 'true' &&
-      (github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push'))
+    if: needs.changes.outputs.capture_app == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: deploy-production-capture
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}

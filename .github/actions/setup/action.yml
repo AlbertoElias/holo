@@ -35,7 +35,7 @@ runs:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
     # A cache hit restores the browser binaries; the system libraries they
-    # need still come from apt on every fresh runner.
+    # need come from apt only where the runner image lacks them.
     - name: Install Playwright Chromium
       if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
       shell: bash
@@ -44,4 +44,5 @@ runs:
     - name: Install Playwright system dependencies
       if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
       shell: bash
-      run: scripts/ci-apt.sh 180 pnpm --filter @holoim/capture exec playwright install-deps chromium
+      # Only the libraries the runner image lacks, usually none (B-024).
+      run: scripts/ci-playwright-deps.sh
