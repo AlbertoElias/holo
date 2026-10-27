@@ -21,11 +21,6 @@ device checks under Unverified below. Otherwise pick the next queue item in
 
 ## Ready to merge (grouped)
 
-- `feature/object-search` (PRD-060 slices 1 and 2, brief
-  [`docs/features/object-search.md`](docs/features/object-search.md)) is
-  pushed and verified (see the brief's evidence) but **not merged**: PRD-060
-  Q2 and Q4–Q7 are still provisional until the user approves them. It also carries the closing of
-  the PRD-043 and PRD-045 briefs and PRD-060 itself.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
@@ -55,6 +50,12 @@ device checks under Unverified below. Otherwise pick the next queue item in
   Record, status line). Check that a single trigger press or phone tap
   always acts once, including while the frame rate drops (B-026: IWSDK
   drops a press that spans more than 800 ms of frame time).
+
+- Object search (PRD-060, brief
+  [`docs/features/object-search.md`](docs/features/object-search.md)): IWER
+  only. On a Quest, check the system keyboard, speech recognition and the mic
+  prompt, voice recording format, hand-ray Speak holds and passthrough AR
+  hands (`?debug` on the capture URL lists what the browser supports).
 
 - `scripts/ci-emulate.sh` runs amd64 on this arm64 Mac, about 1.4 s an XR
   frame: the immersive viewer spec passes there in about 17 minutes, since

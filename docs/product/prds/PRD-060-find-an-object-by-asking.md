@@ -1,11 +1,11 @@
 # PRD: Find an object by asking
 
-**Status:** Draft  
+**Status:** Approved  
 **Source ideas:** IDEA-079  
 **Layer:** Event  
 **Depends on:** PRD-043 (explain with an object, delivered), PRD-045 (summon and place, delivered)  
 **Owner:** Unassigned  
-**Last updated:** 2026-10-27 (Q1 and Q3 decided by the user)
+**Last updated:** 2026-10-27 (Q1–Q7 decided by the user)
 
 ## User Outcome
 
@@ -233,11 +233,11 @@ Product decisions for the user:
       with the user's free API key as a server secret). Smithsonian is out.
       Sketchfab waits. A self-hosted starter set stays a candidate, limited
       by current storage.
-- [ ] **Q2. Which licences may a take redistribute?** CC0 and CC-BY only, or
+- [x] **Q2. Which licences may a take redistribute?** CC0 and CC-BY only, or
       also BY-SA? Is HoloIM commercial, which rules out every NC licence? Is
       ND acceptable given that a take scales and animates the model? This
       likely needs a legal reading.
-      **Provisional — pending user approval:** CC0 and CC-BY only. Everything else is filtered out at
+      **Decided 2026-10-27 (user, as provisionally proposed):** CC0 and CC-BY only. Everything else is filtered out at
       search time.
 - [x] **Q3. Where search lives first:** only before the take (this draft), or
       is a spoken search during the take part of the first version?
@@ -249,22 +249,22 @@ Product decisions for the user:
       later extra. Direction: during a take, a word plus a gesture or button
       summons the object instantly; each slice should move toward that
       latency (cache, prefetch, streaming transcription).
-- [ ] **Q4. Re-encode or filter?** Should the server convert Draco, meshopt,
+- [x] **Q4. Re-encode or filter?** Should the server convert Draco, meshopt,
       KTX2 and oversized models into tray-legal GLBs (more results, a
       conversion service to run), or only show models that already pass?
-      **Provisional — pending user approval:** filter only. The server packs a glTF with separate
+      **Decided 2026-10-27 (user, as provisionally proposed):** filter only. The server packs a glTF with separate
       textures into one GLB (Poly Haven needs this) at 1k textures, but does
       not decimate or re-encode.
-- [ ] **Q5. Keep found objects?** Do found objects stay in a personal library
+- [x] **Q5. Keep found objects?** Do found objects stay in a personal library
       across sessions, or does each session start with an empty tray?
-      **Provisional — pending user approval:** no library; each session starts with an empty tray.
-- [ ] **Q6. Images too?** Should the same search also find images (for
+      **Decided 2026-10-27 (user, as provisionally proposed):** no library; each session starts with an empty tray.
+- [x] **Q6. Images too?** Should the same search also find images (for
       example Wikimedia Commons) for the tray's image cards?
-      **Provisional — pending user approval:** no; models only.
-- [ ] **Q7. Credit display:** is a small credit line on the viewer when the
+      **Decided 2026-10-27 (user, as provisionally proposed):** no; models only.
+- [x] **Q7. Credit display:** is a small credit line on the viewer when the
       object is visible acceptable within the styleguide, or should credits
       live only behind an info control?
-      **Provisional — pending user approval:** store the credit in the take's GLB and show it in the
+      **Decided 2026-10-27 (user, as provisionally proposed):** store the credit in the take's GLB and show it in the
       viewer's existing details for the hologram; an on-screen credit line
       waits for a styleguide review.
 

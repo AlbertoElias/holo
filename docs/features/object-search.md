@@ -1,7 +1,7 @@
 # Feature brief: Find an object by asking (slice 1)
 
 **Lead:** Claude Code (Opus 5.5)  
-**Status:** Verifying (slices 1 and 2 integrated on `feature/object-search` 2026-10-27; started 2026-10-27 on `feature/object-search`; the user asked for it to be built overnight without approvals, so every decision marked provisional in PRD-060 is pending their review)  
+**Status:** Delivered (slices 1 and 2 merged to `main` 2026-10-27 after the user approved PRD-060 Q1–Q7); physical-Quest checks open  
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
 **PRD:** [PRD-060](../product/prds/PRD-060-find-an-object-by-asking.md) (IDEA-079), "First Slice"
 
@@ -114,12 +114,9 @@ enforced while streaming).
 
 ## Open for the user
 
-Every PRD-060 decision this slice rests on is provisional (Q1 Poly Haven only,
-Q2 CC0 and CC-BY only, Q3 desktop text before the take, Q4 filter without
-re-encoding, Q5 no library, Q6 no images, Q7 credit line on the card). The
-card credit line answers Q7 provisionally in place of a details view, which
-the viewer does not have. A deployed capture needs `VITE_API_ORIGIN` (or an
-`/api` route) to reach the API; the dev and e2e setups use a proxy.
+The user approved every PRD-060 decision on 2026-10-27 (Q1 and Q3 as
+they revised them, Q2 and Q4–Q7 as provisionally proposed). The card credit
+line answers Q7 in place of a details view, which the viewer does not have.
 
 The deploy gap is closed in `a834027`: capture's build gets
 `VITE_API_ORIGIN=https://holoim-api.fly.dev`, and the two public object
