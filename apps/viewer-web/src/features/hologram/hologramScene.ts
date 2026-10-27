@@ -2,6 +2,7 @@ import { Box3, Vector3 } from "three";
 import type { AnimationClip, Object3D } from "three";
 
 import { isInsideRecordedObject } from "../objects/recordedObjects";
+import { type HumanoidGltf, resolveHumanoidAnchors } from "./humanoidAnchors";
 import { compareTakeClips } from "./takePlayback";
 
 // Recorded holograms are already at true scale; these helpers only place the
@@ -40,16 +41,15 @@ export function isCameraTake(root: Object3D): boolean {
  * flanks, water, the bubble sphere) reaches far below and must not lift it.
  * A camera take has no avatar; its set's origin is the floor, so it stays
  * where it is, whatever bones or props the set holds. Other files stand on
- * their lowest drawn point.
+ * their lowest drawn point, under their hips when they are a humanoid.
+ * Resolving the humanoid (any format; `gltf` lets the file's own declaration
+ * count) also tags its bones for every view.
  */
-export function normalizeSceneAtOrigin(root: Object3D): void {
+export function normalizeSceneAtOrigin(root: Object3D, gltf?: HumanoidGltf): void {
   const recordedAvatar = root.getObjectByName("RecordedAvatar");
   const cameraTake = isCameraTake(root);
-  const anchor = recordedAvatar
-    ?? (cameraTake ? root : null)
-    ?? root.getObjectByName("Hips")
-    ?? root.getObjectByName("mixamorigHips")
-    ?? root;
+  const { hips } = resolveHumanoidAnchors(root, gltf);
+  const anchor = recordedAvatar ?? (cameraTake ? root : null) ?? hips ?? root;
 
   const anchorPos = anchor.getWorldPosition(new Vector3());
   if (!Number.isFinite(anchorPos.x) || !Number.isFinite(anchorPos.y) || !Number.isFinite(anchorPos.z)) return;

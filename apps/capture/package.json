@@ -32,6 +32,8 @@
     "test:xr:summon": "node --import tsx scripts/run-xr-checks.ts summon",
     "test:xr:face": "node --import tsx scripts/run-xr-checks.ts face",
     "test:xr:ui": "node --import tsx scripts/run-xr-checks.ts ui",
+    "test:xr:avatars": "node --import tsx scripts/run-xr-checks.ts avatars",
+    "test:avatars:bind": "node --conditions=development --import tsx scripts/check-avatar-bindings.ts",
     "fixtures:hands": "node --import tsx scripts/run-xr-checks.ts pose-fixture",
     "fixtures:body": "node --import tsx scripts/run-xr-checks.ts body-fixtures",
     "fixtures:pointing": "node --import tsx scripts/generate-pointing-test-scene.ts && node --import tsx scripts/run-xr-checks.ts pointing-fixture",

@@ -485,7 +485,11 @@ test("AR placement falls back when hit-test is unavailable", async ({ page }, te
     }
   );
 
-  expect(placement.anchored).toBe(false);
+  // The floor fallback is placed unanchored and then asks for an anchor where
+  // it stands (placementSystems.ts), so a slow runner's first reading can
+  // already be anchored. Placed by the model either way: the mode and reason
+  // say it fell back.
+  expect(["placed", "anchored"]).toContain(placement.stage);
   expect(placement.mode).toBe("floor");
   expect(["hit-test-unavailable", "hit-test-timeout"]).toContain(placement.reason);
   await captureEvidence(page, testInfo, "ar-fallback-placement");

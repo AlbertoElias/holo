@@ -39,8 +39,9 @@ runs:
     - name: Install Playwright Chromium
       if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+      # A slow apt mirror falls back to archive.ubuntu.com rather than eating the job's timeout (B-024).
+      run: scripts/ci-apt.sh 240 pnpm --filter @holoim/capture exec playwright install --with-deps chromium
     - name: Install Playwright system dependencies
       if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
       shell: bash
-      run: pnpm --filter @holoim/capture exec playwright install-deps chromium
+      run: scripts/ci-apt.sh 180 pnpm --filter @holoim/capture exec playwright install-deps chromium

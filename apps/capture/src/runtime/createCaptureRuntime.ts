@@ -278,7 +278,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     const load = (url: string): Promise<GLTF> => new Promise((resolve, reject) => stage.loader.load(url, resolve, undefined, reject));
     try {
       const [sceneGltf, avatarGltf] = await Promise.all([load(config.sceneUrl), load(config.avatarUrl)]);
-      avatar.applyLoadedModels(sceneGltf.scene, avatarGltf.scene, config);
+      avatar.applyLoadedModels(sceneGltf.scene, avatarGltf.scene, config, {
+        json: avatarGltf.parser.json,
+        associations: avatarGltf.parser.associations
+      });
       capture.terrainLegs.attach(avatar);
       hands.attach();
       capture.point.attach();
@@ -287,9 +290,14 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       body.measureBindPose();
       const spawned = await motor.init(avatar);
       hands.ensureSensors();
-      if (avatar.avatar) capture.animator.attachClips(avatar.avatar, avatarGltf.animations);
+      if (avatar.avatar) capture.animator.attachClips(avatar.avatar, avatarGltf.animations, avatar.humanoid);
       // Bound at bind pose, like the body, before any system writes the eyes.
-      if (avatar.avatar) capture.face.attach(avatar.avatar);
+      if (avatar.avatar && avatar.humanoid) {
+        capture.face.attach(avatar.avatar, {
+          head: avatar.bone('head'), leftEye: avatar.bone('leftEye'), rightEye: avatar.bone('rightEye')
+        });
+        avatar.humanoid.warnOnce();
+      }
       // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
       if (config.objectUrl) await objects.loadUrl(config.objectUrl);
       if (config.trayUrls.length > 0) await objects.loadTrayUrls(config.trayUrls);
@@ -358,6 +366,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __loadTrayUrls: (urls) => objects.loadTrayUrls(urls),
         __setFaceInput: (sample) => capture.face.setAutomationInput(sample),
         __sampleFace: () => capture.face.snapshot(),
+        __sampleHumanoid: () => avatar.humanoid?.report() ?? null,
         __toggleFaceCamera: () => capture.face.toggleCamera(),
         __samplePhoneChrome: () => phoneChrome.probe(),
         __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),

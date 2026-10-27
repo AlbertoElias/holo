@@ -276,7 +276,7 @@ export class ObjectInteraction {
 
   /** The avatar hand bone's world pose with its scale removed, into `anchor`. */
   private readAnchor(side: VrHandSide): boolean {
-    const hand = this.deps.avatar.avatar?.getObjectByName(side === 'left' ? 'LeftHand' : 'RightHand');
+    const hand = this.deps.avatar.bone(`${side}Hand`);
     if (!hand) return false;
     hand.updateWorldMatrix(true, false);
     hand.matrixWorld.decompose(this.pos, this.quat, this.scale);
@@ -286,10 +286,9 @@ export class ObjectInteraction {
 
   /** Between the wrist and the middle knuckle. */
   private palmWorld(side: VrHandSide, out: THREE.Vector3): THREE.Vector3 | undefined {
-    const prefix = side === 'left' ? 'Left' : 'Right';
     const { avatar } = this.deps;
-    const wrist = avatar.getBoneWorldPosition(`${prefix}Hand`, out);
-    const knuckle = avatar.getBoneWorldPosition(`${prefix}HandMiddle1`, this.pos);
+    const wrist = avatar.getBoneWorldPosition(`${side}Hand`, out);
+    const knuckle = avatar.getBoneWorldPosition(`${side}MiddleProximal`, this.pos);
     if (!wrist) return undefined;
     return knuckle ? out.lerp(knuckle, 0.5) : out;
   }
@@ -300,7 +299,7 @@ export class ObjectInteraction {
   }
 
   private desktopReachable(object: SceneObject, carry: DesktopCarryPose): boolean {
-    const shoulder = this.deps.avatar.getBoneWorldPosition('RightArm', this.pos2);
+    const shoulder = this.deps.avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
     const reach = carry.getReach();
     return Boolean(shoulder && reach && this.distanceToObject(object, shoulder) <= reach * DESKTOP_REACH_FRACTION);
   }

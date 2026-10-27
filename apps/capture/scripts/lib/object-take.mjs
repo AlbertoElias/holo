@@ -67,6 +67,8 @@ export async function openCapture(page, baseUrl, query) {
   url.searchParams.set('scene', SCENE);
   url.searchParams.set('sceneScale', '1');
   url.searchParams.set('manualClock', '1');
+  // XR_AVATAR_URL: run the same take on another avatar (the avatars check sets it per fixture).
+  if (process.env.XR_AVATAR_URL) url.searchParams.set('avatar', process.env.XR_AVATAR_URL);
   for (const [key, value] of Object.entries(query)) {
     if (Array.isArray(value)) for (const item of value) url.searchParams.append(key, item);
     else url.searchParams.set(key, value);
@@ -151,10 +153,12 @@ export function checkObjectExport(buffer, { expectHolds, captureRelation, compar
     }
   }
 
-  // The object relative to the avatar's RightHand, at every held key, against capture's relation.
-  const hand = findNode(take, 'RightHand');
+  // The object relative to the avatar's right hand, at every held key, against
+  // capture's relation: the bone HOLOIM_humanoid declares, else the RPM name.
+  const declaredHand = take.json.extensions?.HOLOIM_humanoid?.humanBones?.rightHand?.node;
+  const hand = Number.isInteger(declaredHand) ? declaredHand : findNode(take, 'RightHand');
   const held = entry?.holds.find((hold) => hold.hand === 'right');
-  if (hand < 0) fail('export: no RightHand bone');
+  if (hand < 0) fail('export: no right hand bone');
   if (hand >= 0 && held && captureRelation) {
     let position = 0;
     let angle = 0;

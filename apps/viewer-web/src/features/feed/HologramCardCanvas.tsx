@@ -23,6 +23,7 @@ import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
 import { drawnBounds, drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
 import { isCameraTake } from "../hologram/hologramScene";
+import { type HumanoidGltf, resolveHumanoidAnchors } from "../hologram/humanoidAnchors";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
@@ -433,12 +434,10 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     const cameraTake = isCameraTake(clonedScene);
     cameraTakeRef.current = cameraTake;
     setBoundsRef.current = null;
-    // Within the avatar when the export names it, so a recorded object's own
-    // bone names (a prop with a "Head") never take over the framing. A camera
-    // take has no avatar, so no node's name is the author.
-    const avatarScope = avatarRootByName ?? clonedScene;
-    const hips = cameraTake ? null : findObjectByName(avatarScope, ["Hips", "mixamorigHips"]);
-    const head = cameraTake ? null : findObjectByName(avatarScope, ["Head", "mixamorigHead"]);
+    // Any avatar format, within the avatar when the export names it, so a
+    // recorded object's own bone names (a prop with a "Head") never take over
+    // the framing. A camera take has no avatar, so no bone is the author.
+    const { hips, head } = cameraTake ? { hips: null, head: null } : resolveHumanoidAnchors(clonedScene, gltf as unknown as HumanoidGltf);
 
     avatarRootRef.current = avatarRootByName ?? (hips ? getTopLevelAncestor(hips, clonedScene) : null);
     if (!cameraTake && !avatarRootRef.current && framingTargetsRef.current.length > 0) {
@@ -466,7 +465,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
       );
       invalidate();
     }
-  }, [camera, clonedScene, computePreferredFraming, invalidate, sphereClip]);
+  }, [camera, clonedScene, computePreferredFraming, gltf, invalidate, sphereClip]);
 
   useEffect(() => {
     const allActions = Object.values(actions).filter(Boolean) as AnimationAction[];

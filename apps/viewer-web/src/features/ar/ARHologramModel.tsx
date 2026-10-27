@@ -146,15 +146,16 @@ export function ARHologramModel({
   children,
   clocheChrome
 }: ARHologramModelProps) {
-  const { scene, animations } = useGLTF(url);
+  const gltf = useGLTF(url);
+  const { scene, animations } = gltf;
   const renderer = useThree((state) => state.gl);
   const renderScene = useThree((state) => state.scene);
   const clonedScene = useMemo(() => {
     const cloned = cloneSkeleton(scene);
     prepareAnimatedScene(cloned);
-    normalizeSceneAtOrigin(cloned);
+    normalizeSceneAtOrigin(cloned, gltf);
     return cloned;
-  }, [scene]);
+  }, [gltf, scene]);
   // True scale is a fact (principle 6): the recording opens at its own size,
   // and only the viewer's own, labelled rescale changes it.
   const modelScale = scaleFactor;
