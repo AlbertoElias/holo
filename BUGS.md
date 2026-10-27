@@ -7,6 +7,26 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-032 — A 1 s phone hold on TargetA came out "too brief" on CI
+
+- **Area:** `apps/capture` AR recording (`ar-record` XR check, `marks-a`;
+  `PointResolver.ts` `rejectReason`, `POINT_DWELL_SEC` 0.4 s)
+- **Severity:** P1 (failed `main`'s Capture XR shard 1, so nothing deploys)
+- **Observed:** 2026-10-27, CI run 40460444582 on `2f3067a`
+- **Evidence:** `hold-on-target-a` (`phoneHold`, 1000 ms of wall time) made no
+  link: the resolver's unlinked runs end with `"too brief"`, so the take had 2
+  links, and the check paired the walking hold (12.083–12.683 s) with the
+  stationary one's touch (11.233–11.533 s). The run recorded 789 camera keys;
+  three emulated shard runs (`scripts/ci-emulate.sh`, `XR_SHARD=1/2 pnpm run
+  test:xr:capture`) recorded 942–978 and passed, so the hosted runner was
+  slower than the emulation and the failure did not reproduce. The same job
+  passed on `a8dc19b`.
+- **Expected:** a 1 s hold on a target makes its link whatever the frame rate,
+  or the check says why it cannot; if a slow phone can lose a deliberate mark,
+  that is a capture defect, not only a check's.
+- **Reproduction:** not yet reproduced; try the emulator with fewer CPUs
+  (`CI_EMULATE_CPUS=0`) or a throttled frame rate.
+
 ### B-025 — Portal "desktop freeze" check finds the feed back at the top
 
 - **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("desktop freeze: … scrolling away resets"), portal scroll capture
