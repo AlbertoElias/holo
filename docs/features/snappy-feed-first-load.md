@@ -1,7 +1,7 @@
 # Feature brief: Snappy feed first load
 
 **Lead:** Claude Code (session started from the perf lead)  
-**Status:** Implementing
+**Status:** Shipped
 **Layer:** view; see `docs/product/concepts/what-a-hologram-is.md`
 
 ## User outcome
@@ -88,7 +88,7 @@ bounded only by the TTL unless the API purges with a new token.
 | Cold visit | Preview deploy with the R2 binding; API unreachable (`--host-resolver-rules` blackholes holoim-api.fly.dev, so the HTTP cache stays on) | Newest GLB starts at 0.5 s from the preload, rendered at 3.5–3.7 s with no API at all. Production, with the list delayed 14 s: rendered at 23.9 s. The loader's own fetch is an HTTP-cache hit (about 20 ms, no wire bytes): no double download |
 | Snapshot replaced by the live list | `e2e/hologram-feed.spec.ts` "feed renders the edge snapshot while the API sleeps, then takes the API's list" | Passes |
 | Upload and delete rewrite the snapshot | `apps/viewer-api/test/hologram-routes.test.ts` "deletes the database record…" (snapshot after upload and after delete) | Passes |
-| Production snapshot | After deploy: `feed/latest.json` rewritten at API boot | pending |
+| Production snapshot | After the deploy of `a3f8f1b` (2026-10-27): `curl https://holoim-viewer.pages.dev/` | `index.html` inlines `window.__HOLOIM_FEED__` (5 items with `ownedByViewer` and `submittedByVerified`, so rewritten at API boot) and a `preload` for the newest GLB; `cache-control: no-cache`, no ETag. First-load JS 436 KB on the wire |
 
 ## Physical-device limits
 
