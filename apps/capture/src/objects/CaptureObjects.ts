@@ -153,7 +153,7 @@ export class CaptureObjects {
       if (seq !== this.trayLoadSeq) return false;
       if (this.deps.isTakeActive()) throw new SuppliedObjectError('Prepare the tray before recording.');
       if (this.tray.getItems().length + loaded.length > MAX_TRAY_ITEMS) throw new SuppliedObjectError(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
-      for (const { input, item } of loaded) this.tray.add(item.model, { name: item.source.name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength });
+      for (const { input, item } of loaded) this.tray.add(item.model, { name: item.credit?.title ?? item.source.name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });
       ui.setTrayState({ ...this.trayState(), message: null });
       return true;
     } catch (error) {

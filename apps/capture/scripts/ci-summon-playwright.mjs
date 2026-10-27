@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 import { launchXrBrowser } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
-import { runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
+import { runDesktopFindTake, runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
 
 // Summon and place while speaking (PRD-045): IWER controller, IWER hands and
 // desktop takes open the tray with its held gesture, summon and place items,
@@ -24,7 +24,8 @@ try {
   const phases = [
     ['controllers', () => runIwerSummonTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['hands', () => runIwerHandsSummonTake({ browser, baseUrl, artifactDir, consoleErrors })],
-    ['desktop', () => runDesktopSummonTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })]
+    ['desktop', () => runDesktopSummonTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
+    ['find', () => runDesktopFindTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })]
   ];
   const takes = [];
   for (const [name, run] of phases) if (!only || only === name) takes.push(await run());

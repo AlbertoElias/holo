@@ -276,6 +276,8 @@ export class InputController {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    // Typing in a text field (the Find field) never moves, records or summons.
+    if (isTextEntry(event.target)) return;
     // A focused control (a button in the dock or the side sheet, a file
     // picker) takes Space and Enter as its press; the scene never jumps on them.
     if ((event.code === 'Space' || event.key === 'Enter') && isControl(event.target)) return;
@@ -342,6 +344,7 @@ export class InputController {
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
+    if (isTextEntry(event.target)) return;
     if (this.setMoveStateFromKeyboardEvent(event, false)) {
       event.preventDefault();
     }
@@ -457,6 +460,10 @@ function summonSlot(code: string): number | null {
 
 function isObjectTurnKey(code: string): code is 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX' {
   return code === 'KeyQ' || code === 'KeyE' || code === 'KeyZ' || code === 'KeyX';
+}
+
+function isTextEntry(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('input[type="search"], input[type="text"], textarea, [contenteditable="true"]') !== null;
 }
 
 function isControl(target: EventTarget | null): boolean {

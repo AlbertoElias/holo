@@ -53,6 +53,7 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
     "@holoim/avatar-face": "workspace:*",
+    "@holoim/contracts": "workspace:*",
     "@holoim/design-tokens": "workspace:*",
     "@holoim/meaning": "workspace:*",
     "@holoim/objects": "workspace:*",

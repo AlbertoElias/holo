@@ -15,6 +15,7 @@ export interface CaptureUiBridge {
   recenterAr: () => void;
   loadObjectFile: (file: File) => void;
   loadTrayFiles: (files: File[]) => void;
+  loadTrayUrls: (urls: string[]) => void;
   toggleFaceCamera: () => void;
   setHandedness: (handedness: Handedness) => void;
   toggleXr: (mode: "vr" | "ar") => void;
