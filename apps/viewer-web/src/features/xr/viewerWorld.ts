@@ -349,7 +349,8 @@ function hologramReading(world: World, record: PlacedHologram) {
     duration: hologram.getValue(HologramPlayback, "duration"),
     actionTimes: runtime?.actions.map((action) => action.time) ?? [],
     audio: runtime?.audio
-      ? { playing: runtime.audio.playing, scheduledOffset: runtime.audio.scheduledOffset(), duration: runtime.audio.duration }
+      ? // Sampled on the frame, with the clip clock: a later read would count the time since as drift.
+        { playing: runtime.audio.playing, scheduledOffset: runtime.audioOffset, duration: runtime.audio.duration }
       : null
   };
 }
@@ -377,6 +378,8 @@ function uiGeometries(world: World): number {
 /** Development-only window probe the e2e spec reads (`xr-viewer-report.json`). */
 function installXrViewerProbe(world: World, cache: HologramAssetCache, space: HologramSpace): void {
   const gallery = world.getSystem(GallerySystem)!;
+  let xrFrames = 0;
+  world.onXRFrame(() => xrFrames++);
   (window as { __HOLOIM_XR_VIEWER__?: unknown }).__HOLOIM_XR_VIEWER__ = {
     world,
     gallery,
@@ -392,6 +395,8 @@ function installXrViewerProbe(world: World, cache: HologramAssetCache, space: Ho
       seekHologram(focused, clipTime);
     },
     takeFadeLog: () => world.getSystem(HologramControlsSystem)?.takeFadeLog() ?? [],
+    /** XR frames drawn so far: emulated input is held for frames, not for wall-clock time. */
+    xrFrames: () => xrFrames,
     snapshot: () => {
       const c = viewerContext(world);
       const session = world.renderer.xr.getSession();

@@ -81,6 +81,10 @@ export class ScheduledGltfAudio {
     return this.audio.buffer.duration;
   }
 
+  get loop(): boolean {
+    return this.audio.loop;
+  }
+
   setMuted(muted: boolean): void {
     this.gain.gain.value = muted ? 0 : 1;
   }

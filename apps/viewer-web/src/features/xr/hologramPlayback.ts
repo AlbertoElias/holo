@@ -8,14 +8,19 @@ import { rankClipsForPlayback } from "../hologram/hologramScene";
 // IWSDK has no animation system and its AudioSystem cannot seek, so each
 // hologram's clip clock, mixer and audio live here. The clock is the single
 // source of truth: every frame the actions are set to it, and audio is
-// (re)started from it whenever play, seek, restart or a loop wrap happens.
+// (re)started from it whenever play, seek, restart or a loop wrap happens,
+// or when the audio's own clock has drifted from it.
 
 const SECONDARY_CLIP_WEIGHT = 0.35;
+/** Audio further than this from the clip clock is restarted from it (its clock ran slow or fast; well under lip-sync's ~45 ms). */
+const AUDIO_DRIFT_RESYNC_S = 0.03;
 
 export interface HologramRuntime {
   mixer: AnimationMixer;
   actions: AnimationAction[];
   audio: ScheduledGltfAudio | null;
+  /** Where the audio was, sampled on the last frame with the clip clock; null when silent. */
+  audioOffset: number | null;
 }
 
 export const HologramPlayback = createComponent("HologramPlayback", {
@@ -46,7 +51,7 @@ export function createHologramRuntime(
     return action;
   });
   const duration = ranked[0]?.duration ?? 0;
-  return { runtime: { mixer, actions, audio: audio ? new ScheduledGltfAudio(audio) : null }, duration };
+  return { runtime: { mixer, actions, audio: audio ? new ScheduledGltfAudio(audio) : null, audioOffset: null }, duration };
 }
 
 export function disposeHologramRuntime(runtime: HologramRuntime): void {
@@ -112,11 +117,21 @@ export class HologramPlaybackSystem extends createSystem({
         const shouldPlay = Boolean(entity.getValue(HologramPlayback, "playing")) && audible;
         if (!shouldPlay) {
           audio.stop();
-        } else if (resync || !audio.playing) {
+        } else if (resync || !audio.playing || audioDrift(audio, clipTime) > AUDIO_DRIFT_RESYNC_S) {
           audio.start(clipTime);
         }
+        runtime.audioOffset = audio.scheduledOffset();
       }
       if (resync) entity.setValue(HologramPlayback, "resync", false);
     }
   }
+}
+
+/** How far the playing audio is from the clip clock, in seconds (0 once a non-looping track has ended). */
+function audioDrift(audio: ScheduledGltfAudio, clipTime: number): number {
+  const heard = audio.scheduledOffset();
+  if (heard === null) return 0;
+  if (!audio.loop) return clipTime < audio.duration ? Math.abs(heard - clipTime) : 0;
+  const drift = Math.abs(heard - (clipTime % audio.duration));
+  return Math.min(drift, audio.duration - drift);
 }
