@@ -13,10 +13,45 @@ set -uo pipefail
 limit="$1"
 shift
 
-if timeout --kill-after=10 "$limit" "$@"; then
+# Runs the command in its own process group and, past the limit, kills the
+# whole group: a wrapper (pnpm, playwright) killed alone leaves its sudo
+# apt-get running and holding the dpkg lock, and the retry then fails on it.
+run_limited() {
+  local seconds="$1"
+  shift
+  setsid "$@" &
+  local group=$!
+  # The watchdog ticks rather than sleeping once, so it ends within a second
+  # of the command and leaves nothing behind holding the step's output open.
+  (
+    for ((tick = 0; tick < seconds; tick++)); do
+      sleep 1
+      kill -0 "$group" 2>/dev/null || exit 0
+    done
+    echo "::warning::'$*' passed ${seconds}s; stopping its process group"
+    sudo kill -TERM -- "-$group" 2>/dev/null
+    sleep 10
+    sudo kill -KILL -- "-$group" 2>/dev/null
+  ) &
+  local watchdog=$!
+  wait "$group"
+  local status=$?
+  wait "$watchdog" 2>/dev/null
+  return "$status"
+}
+
+if run_limited "$limit" "$@"; then
   exit 0
 fi
 echo "::warning::'$*' failed or took over ${limit}s; retrying against archive.ubuntu.com"
+
+# Wait out anything still holding the dpkg lock, and have the retry's apt-get
+# wait for it too rather than failing at once.
+for _ in $(seq 1 90); do
+  sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 || break
+  sleep 2
+done
+echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99ci-lock-timeout >/dev/null
 
 for file in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*; do
   [ -f "$file" ] || continue
@@ -29,4 +64,4 @@ done
 # A killed install can leave dpkg mid-way; finish it before trying again.
 sudo dpkg --configure -a || true
 sudo apt-get update -o Acquire::Retries=3
-timeout --kill-after=10 "$((limit * 2))" "$@"
+run_limited "$((limit * 2))" "$@"

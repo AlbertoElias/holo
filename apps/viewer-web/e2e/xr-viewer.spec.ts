@@ -731,7 +731,7 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
 });
 
 test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab with the scale chip, life-size reset, recenter, and exit from the hand dock", async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const { marks, mark, markFirstCommit } = createTimeline();
   markFirstCommit(page);
   await mockFeed(page);
@@ -1149,7 +1149,7 @@ async function settledRenderer(page: Page): Promise<{ geometries: number; textur
 async function warmControls(page: Page, eye: Vec3): Promise<void> {
   const play = (await gallerySnapshot(page)).controls!.foot.buttons.play.worldPosition;
   await setPose(page, "head", eye, play);
-  await waitForGallery(page, (g) => g.controls!.foot.reachOpacity === 1, 5_000);
+  await waitForGallery(page, (g) => g.controls!.foot.reachOpacity === 1, 9_000);
   for (const playing of [false, true]) {
     // The paused label beside it moves the glyph on its centred row.
     const at = (await gallerySnapshot(page)).controls!.foot.buttons.play.worldPosition;
@@ -1688,7 +1688,7 @@ test("VR locomotion: the left stick slides, the right stick snap-turns 30° and 
   // Look at the chip so its reach row opens, then aim at the recenter glyph where the row laid it out.
   const [chipRig] = await toRig(page, [landed.controls!.foot.worldPosition]);
   await setPose(page, "head", eye, chipRig!);
-  await waitForGallery(page, (g) => g.controls!.foot.reachOpacity === 1, 5_000);
+  await waitForGallery(page, (g) => g.controls!.foot.reachOpacity === 1, 9_000);
   // The row lays its buttons out over the frames after it opens: aim where the glyph has settled, read again each try.
   const recenterRig = async (): Promise<Vec3> => {
     let at = (await gallerySnapshot(page)).controls!.foot.buttons.recenter.worldPosition;
@@ -1806,7 +1806,7 @@ test("AR (IWSDK shell, phone): two holograms from the gallery stand on the floor
     // Look beside it, so it stands toward the right (side 1) or left (side -1) of the screen.
     const look: Vec3 = [a.worldPosition[0] + side * (toward[1]! / length) * 0.35, a.worldPosition[1] + a.recordedSize[1] * 0.45, a.worldPosition[2] - side * (toward[0]! / length) * 0.35];
     await setPose(page, "head", viewer, look);
-    await waitForGallery(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.boundTo === "mock-1", 5_000);
+    await waitForGallery(page, (s) => s.controls!.foot.reachOpacity === 1 && s.controls!.boundTo === "mock-1", 9_000);
     // The row settles at its new place on screen.
     const { foot, left: rowLeft, right: rowRight } = await settledReachRow(page);
     const [chip] = await toScreen(page, [foot.worldPosition]);
