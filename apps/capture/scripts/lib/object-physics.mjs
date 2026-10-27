@@ -301,7 +301,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
     }
 
     // 4. Non-throw releases drop with zero velocity: a controller-to-hand switch and the tracking-loss freeze.
-    for (const mode of ['switch', 'switchToPinching', 'trackingLoss']) {
+    for (const mode of ['switch', 'switchToPinching', 'switchAfterGap', 'switchJointsUnavailable', 'trackingLoss']) {
       await rearm(s);
       s.grip = s.restGrip();
       await s.controller('right', s.grip);
@@ -323,12 +323,27 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       const velocities = [];
       if (mode !== 'trackingLoss') {
         // switchToPinching: the hand is already pinching (about 5 mm) when it becomes the input source.
-        if (mode === 'switchToPinching') await s.page.evaluate(() => window.IWER_DEVICE.hands.right.updatePinchValue(1));
+        // switchAfterGap: one frame with no input source sits between the controller and the already-pinching hand.
+        // switchJointsUnavailable: the hand's joints are unavailable on the switch frame and closed the frame after.
+        if (mode !== 'switch') await s.page.evaluate(() => window.IWER_DEVICE.hands.right.updatePinchValue(1));
+        if (mode === 'switchAfterGap') {
+          await s.page.evaluate(() => { window.IWER_DEVICE.controllers.right.connected = false; });
+          await s.step(1);
+          if ((await s.item()).heldBy !== 'right') fail(`non-throw ${mode}: one frame without an input source dropped the object`);
+        }
+        if (mode === 'switchJointsUnavailable') {
+          await s.page.evaluate(() => {
+            const proto = window.XRFrame.prototype;
+            window.__getJointPose = proto.getJointPose;
+            proto.getJointPose = () => null;
+          });
+        }
         await s.page.evaluate(() => { window.IWER_DEVICE.primaryInputMode = 'hand'; });
         for (let i = 0; i < 6; i += 1) {
           s.grip = [s.grip[0] + per, s.grip[1], s.grip[2]];
           await s.controller('right', s.grip);
           await s.step(1);
+          if (mode === 'switchJointsUnavailable' && i === 0) await s.page.evaluate(() => { window.XRFrame.prototype.getJointPose = window.__getJointPose; });
           const item = await s.item();
           if (!item.heldBy) {
             released = item;
@@ -350,7 +365,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       report.scenarios[`nonThrow_${mode}`] = { movedBeforeM: round(movedM, 3), heldSpeedBeforeMps: round(horizontal(moving.linvel), 3), released: Boolean(released), launchHorizontalMps: released ? round(horizontal(released.linvel), 3) : null, launchSpinRadps: released ? round(Math.hypot(...released.angvel), 3) : null };
       if (!released) fail(`non-throw ${mode}: the object was never released`);
       else if (velocities[0] > 0.05 || velocities[1] > 0.05) fail(`non-throw ${mode}: it was launched at ${round(velocities[0], 3)} m/s, ${round(velocities[1], 3)} rad/s`);
-      if (mode === 'switchToPinching' && released) {
+      if (mode !== 'switch' && mode !== 'trackingLoss' && released) {
         // The pinch that was already closed is not a fresh press: no regrab until it opens and closes again.
         const pinching = (await readState(s.page)).objects.grab.right;
         let regrabbed = false;
@@ -360,9 +375,21 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
           await s.step(1);
           if ((await s.item()).heldBy) regrabbed = true;
         }
-        report.scenarios.nonThrow_switchToPinching.pinchDistanceM = pinching?.value ?? null;
-        report.scenarios.nonThrow_switchToPinching.regrabbedWhilePinching = regrabbed;
-        if (pinching?.source !== 'pinch' || !(pinching.value < 0.01)) fail(`non-throw ${mode}: the hand was not pinching at about 5 mm (${JSON.stringify(pinching)})`);
+        report.scenarios[`nonThrow_${mode}`].pinchDistanceM = pinching?.value ?? null;
+        report.scenarios[`nonThrow_${mode}`].regrabbedWhilePinching = regrabbed;
+        const closedPressed = (await readState(s.page)).objects.grab.right.pressed;
+        // Only a later open, then close, is a press.
+        await s.page.evaluate(() => window.IWER_DEVICE.hands.right.updatePinchValue(0));
+        await s.step(4);
+        const openPressed = (await readState(s.page)).objects.grab.right.pressed;
+        await s.page.evaluate(() => window.IWER_DEVICE.hands.right.updatePinchValue(1));
+        await s.step(4);
+        const reclosedPressed = (await readState(s.page)).objects.grab.right.pressed;
+        report.scenarios[`nonThrow_${mode}`].pressedWhileClosed = closedPressed;
+        report.scenarios[`nonThrow_${mode}`].pressedAfterOpenClose = reclosedPressed;
+        if (closedPressed || openPressed) fail(`non-throw ${mode}: the pinch counted as pressed before it opened and closed again`);
+        if (!reclosedPressed) fail(`non-throw ${mode}: opening and closing the pinch did not count as a press`);
+        if (mode !== 'switchJointsUnavailable' && (pinching?.source !== 'pinch' || !(pinching.value < 0.01))) fail(`non-throw ${mode}: the hand was not pinching at about 5 mm (${JSON.stringify(pinching)})`);
         if (regrabbed) fail(`non-throw ${mode}: the already-pinching hand regrabbed in the same press`);
       }
       await s.page.evaluate(() => {
