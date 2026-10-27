@@ -21,10 +21,10 @@ device checks under Unverified below. Otherwise pick the next queue item in
 
 ## Ready to merge (grouped)
 
-- `feature/object-search` (PRD-060 slice 1, brief
+- `feature/object-search` (PRD-060 slices 1 and 2, brief
   [`docs/features/object-search.md`](docs/features/object-search.md)) is
-  pushed and `verify:pr`-green but **not merged**: its product decisions are
-  provisional until the user approves them. It also carries the closing of
+  pushed and verified (see the brief's evidence) but **not merged**: PRD-060
+  Q2 and Q4–Q7 are still provisional until the user approves them. It also carries the closing of
   the PRD-043 and PRD-045 briefs and PRD-060 itself.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on

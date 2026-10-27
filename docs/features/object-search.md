@@ -1,7 +1,7 @@
 # Feature brief: Find an object by asking (slice 1)
 
 **Lead:** Claude Code (Opus 5.5)  
-**Status:** Verifying (emulation and pipeline evidence complete 2026-10-27; started 2026-10-27 on `feature/object-search`; the user asked for it to be built overnight without approvals, so every decision marked provisional in PRD-060 is pending their review)  
+**Status:** Verifying (slices 1 and 2 integrated on `feature/object-search` 2026-10-27; started 2026-10-27 on `feature/object-search`; the user asked for it to be built overnight without approvals, so every decision marked provisional in PRD-060 is pending their review)  
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
 **PRD:** [PRD-060](../product/prds/PRD-060-find-an-object-by-asking.md) (IDEA-079), "First Slice"
 
@@ -162,10 +162,44 @@ approved, so slice 2 builds on `feature/object-search`.
   (push to talk on the panel) and transcribed on the server, then searched.
   Recommended provider: Cloudflare Workers AI `whisper-large-v3-turbo`
   ($0.0005 per audio minute; a free daily allowance covers roughly 200
-  minutes). Choosing a provider is the user's billing decision.
+  minutes). The user approved this provider on 2026-10-27; the account is on
+  Workers Free, a hard daily cap with no charges.
 - **Toward instant.** Prefetch the top result's GLB as soon as results
   arrive, so a pick loads from cache.
 
+### Slice 2 evidence (integrated 2026-10-27)
+
+Built in two sessions (API: `feature/object-search-api`; capture:
+`feature/object-search-headset`) and merged here.
+
+| Check | Result |
+|---|---|
+| `test/object-routes.test.ts` (Poly Haven, Poly Pizza, transcription, origin allowlist, plural queries; fixtures, no network) | 23 pass |
+| `test:xr:summon` (`FIND_VIEWPORT=1920x1080`): iwer-summon, iwer-hands-summon, desktop-summon, desktop-find, headset-find, headset-voice, desktop-voice | 7 of 7 pass |
+| `test:smoke:pipeline`, including the Poly Haven and Poly Pizza CC-BY object-search specs | 15 of 15 pass |
+| `test:portal` | 9 of 9 pass |
+| `test:xr:smoke` | 29 of 30; the VR locomotion test failed once and passed 2 of 2 on rerun (flaky, untouched by this slice) |
+| `verify:pr` stages up to the pipeline | pass |
+| Live proof: headset Find against live Poly Haven, Chairs → six results with thumbnails → pick → summon | in `output/`, not committed |
+
+Codex (`-p standard`) reviewed the capture half; all 10 findings were fixed
+before integration. The live proof found a defect the fixtures hid:
+category shortcuts send plurals ("chairs") that matched nothing on Poly
+Haven. Fixed in `1d65466` (singular matching, and partial matches only at a
+word's start so "tools" no longer returns stools), with a plural-query test.
+
 ## Physical-device limits
 
-None for this slice: it is desktop-only.
+Slice 1 is desktop-only. Slice 2 still needs a physical Quest for:
+the system keyboard (value mirroring, first key replaces, Enter or blur
+submits); whether Quest Browser exposes `webkitSpeechRecognition` and how
+the mic prompt appears in an immersive session; the `MediaRecorder` audio
+format; hand-ray Speak holds ending on release and on real tracking loss;
+passthrough AR chrome with real hands. `?debug` shows a capability line.
+Poly Pizza results and live transcription were not exercised end to end
+locally, because their keys exist only as Fly secrets.
+
+## Follow-ups
+
+- The Find glyph is provisional; add it to `tokens.json` and the styleguide.
+- True-scale objects summoned into the hand can be very large (an armchair).
