@@ -78,9 +78,9 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 When running a check directly does not reproduce a problem, and especially a
 failure seen only on CI, run it with `scripts/ci-emulate.sh <command>` (Docker
 must be running). It copies the working tree, including uncommitted edits,
-into a `node:24-bookworm` container pinned to 2 CPUs (`--cpuset-cpus`, so
-`availableParallelism()` is 2 and the harness chooses CI's concurrency) and
-7 GB, sets `CI=true`, and repeats the CI setup (frozen install, `.env`, Prisma,
+into a `node:24-bookworm` container pinned to 4 CPUs (`--cpuset-cpus`, so
+`availableParallelism()` is 4 and the harness chooses CI's concurrency) and
+16 GB, the size of a public repository's hosted runner, sets `CI=true`, and repeats the CI setup (frozen install, `.env`, Prisma,
 Chromium with `--with-deps`) before running the command. The pnpm store and
 browsers persist in Docker volumes, so only the first run downloads them.
 Outputs and Playwright reports are copied to `output/ci-emulate/`.
@@ -90,7 +90,7 @@ scripts/ci-emulate.sh pnpm run test:xr:viewer
 scripts/ci-emulate.sh pnpm --filter @holoim/viewer-web exec playwright test e2e/ar.spec.ts --repeat-each=20 --workers=1
 ```
 
-`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0,1`). The container is a
+`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`). The container is a
 close emulation, not the runner image: a failure that reproduces only on
 hosted CI is still a defect to explain, not something to rerun.
 - `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
@@ -242,15 +242,20 @@ Supported env vars for smoke and XR scripts:
   Chromium). Wall time follows the slowest selected job, not their sum.
   There is no separate heavy tier and no weekly schedule; dispatch CI
   manually to check runner-image or dependency drift on unchanged code.
-- `.github/workflows/deploy.yml` deploys production only after a successful
-  CI run from a `main` push, and only the apps changed since the last
-  successful CI-triggered deploy (the same scripts; with no usable previous
-  deploy it deploys everything). Never diff a merge commit against `HEAD^`:
-  that misses the merged branch. API (Fly), viewer (Pages), and capture
-  (Pages) deploy independently, and a docs- or tooling-only merge deploys
-  nothing. Manual dispatch deploys the chosen `targets` (`all`, `api`,
-  `web`, `capture`; default `all`) and never counts as a later deploy's
-  base. It never gates PRs.
+- Deploy runs inside `ci.yml` on `main`: each app deploys as soon as every
+  suite that exercises it has passed (API ← quality, pipeline, portal;
+  viewer ← quality, viewer e2e and VR, pipeline, portal; capture ← quality,
+  capture XR, pipeline, portal), and only apps changed since the last fully
+  green CI run deploy (the same scripts; with no usable previous run it
+  deploys everything). The viewer and capture deploy the bundles `quality`
+  built; the API image builds and pushes while the tests run and is then
+  released by tag. When one push changes the API and the viewer, the viewer
+  deploys after the API. Never diff a merge commit against `HEAD^`: that
+  misses the merged branch. A docs- or tooling-only merge deploys nothing.
+  Test jobs cancel superseded copies through job-level concurrency groups;
+  deploy jobs never cancel. `.github/workflows/deploy.yml` is manual only:
+  it rebuilds and deploys the chosen `targets` (`all`, `api`, `web`,
+  `capture`; default `all`) in the same per-app groups.
 - Capture XR checks are deterministic: they take capture's manual clock
   (`__setManualClock`), advance simulation only through `advanceTime`, and freeze
   the page's timers after XR session entry so IWER's per-frame compositing cannot

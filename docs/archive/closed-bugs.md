@@ -377,6 +377,13 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   scene and needs the same rule when that branch merges.
   The recorded ground below the author's floor (slopes, water) stays visible
   under the dome and below the room floor, unclipped (user decision, 2026-10-25).
+  Superseded in the feed by B-033 (user decision, 2026-10-27): there the dome
+  wraps that ground too, its foot on the lowest drawn ground; AR keeps the
+  recorded floor on the room floor.
+- **Physical:** 2026-10-26, after checking desktop and an iPhone (the feed
+  and Quick Look), the user: "i think we fixed b022". AR placement on a
+  Quest or an Android phone is Unverified, skipped by the user's choice (no
+  Android device; the Quest is away).
 
 ### B-026 — Emulated clicks and taps are now and then lost when frames are slow
 
@@ -435,7 +442,12 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 - **Fix:** the spec waits on rendered frames (B-026). The four checks keep
   their own CI job, `xr-viewer-vr` (`test:e2e:xr-viewer-vr`), now without
   `continue-on-error` and back in the CI Gate.
-### B-022 — Quick Look conversions fail while production's shared CPU is throttled
+### B-030 — Quick Look conversions fail while production's shared CPU is throttled
+
+(Filed as a second B-022, which `349b5e9` and the comment in
+`usdz-worker.ts` still call it; renumbered 2026-10-26, and again to B-030 on
+2026-10-27 because AR recording had filed B-028 meanwhile. B-022 is the floor
+bug above.)
 
 - **Area:** `apps/viewer-api` USDZ worker and `rebuild:usdz` (`glb_to_usdz.py`'s 100 s alarm, the converter's 120 s limit)
 - **Severity:** P2
@@ -489,3 +501,157 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   wait in `hologram-feed.spec.ts`. Verified: `test:e2e:mocked` 19/19,
   the ar-bubble test 6/6 on `--repeat-each=6`, and viewer-web
   `verify:fast` (lint, typecheck, 40 unit tests).
+
+### B-023 — The live API rejects Pages preview origins
+
+- **Area:** `holoim-api` CORS (`WEB_ORIGINS` secret, `apps/viewer-api/src/lib/cors.ts`)
+- **Severity:** P3
+- **Observed:** 2026-10-26, verifying the GLB probe fix on a Pages preview
+- **Evidence:** `curl -H "Origin: https://bug-glb-probe-cache.holoim-viewer.pages.dev"
+  "https://holoim-api.fly.dev/api/holograms?limit=1"` returns no
+  `access-control-allow-origin`, so a preview's feed fails with a CORS
+  error. `isAllowedWebOrigin` does match wildcards, so the secret most
+  likely lacks the `https://*.holoim-viewer.pages.dev` entry that
+  `docs/DEPLOYMENT.md` sets (not checked: secret values are not readable).
+- **Expected:** previews at `*.holoim-viewer.pages.dev` load the live feed.
+- **Reproduction:** the curl above; or open any preview deploy of the viewer.
+- **Fix:** the API now allows this project's Pages preview hosts itself,
+  without the secret: `isAllowedWebOrigin` accepts exactly one label under
+  `holoim-viewer.pages.dev` or `holoim-capture.pages.dev` over HTTPS
+  (`apps/viewer-api/src/lib/cors.ts`). `test/cors.test.ts` drives the built
+  app with simple and preflight requests: preview deploy and branch origins
+  get `access-control-allow-origin`, while `evil.pages.dev`,
+  `holoim-viewer.pages.dev.evil.com`, nested labels, `http:` and ports get
+  none. The secrets are unchanged.
+
+### B-029 — The portal tilt check cannot find the pressed tilt toggle
+
+(Filed as a second B-022; renumbered 2026-10-26. B-022 is the floor bug above.)
+
+- **Area:** `apps/viewer-web` e2e (`test:portal`, part of `verify:pr`)
+- **Severity:** P2 (fails `verify:pr` on `main` for every branch)
+- **Observed:** 2026-10-25
+- **Evidence:** `e2e/portal.spec.ts:109` ("phone › tilt") clicks "Look
+  around by tilting the phone", then finds no button named "Stop looking
+  around by tilting" within 5 s. It fails every run on `main` (`31c082a`)
+  and on `02d0282`, the redesign commit with "fewer controls", so it
+  arrived with that commit. Unknown whether the toggle itself broke or
+  only the check's expectation is stale.
+- **Expected:** tilting the phone can be turned on and off from the card,
+  and the check passes.
+- **Reproduction:** `VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer npx
+  playwright test e2e/portal.spec.ts -g tilt` from `apps/viewer-web`.
+- **Closed:** 2026-10-26, not reproducible
+- **Validation:** the check passes alone at every commit it was said to fail
+  on and around them: `02d0282`, `31c082a`, `e413c26` and its parent (1 of 1
+  each), and `main` at `b4de940` (3 of 3, `--repeat-each=3`), all on private
+  ports (3675/3676/5675). CI's "Portal view end-to-end" job, which runs it,
+  passed on `main` (run 40282648462). The toggle's names in
+  `controlNames.ts` are unchanged since slice 3. Unconfirmed explanation: the
+  failing runs reached another agent's dev server on the shared default ports.
+
+### B-031 — The camera-take loop check times render jitter, not playback
+
+- **Area:** `apps/viewer-web` e2e (`camera-take.pipeline.spec.ts:453`, the
+  pipeline shard of CI)
+- **Severity:** P1 (fails `main`'s CI, so nothing deploys)
+- **Observed:** 2026-10-27, CI run 40455936695 on `a8dc19b`
+- **Evidence:** "time passes as the wall clock does across each wrap"
+  received 0.085 s against `CLOCK_TOLERANCE_S` 0.08; the two later tests in
+  the file fail only because this one left no take. `sampleLoop` compares,
+  frame by frame, the mixer's advance with `performance.now()` read in its
+  own `requestAnimationFrame` callback. The mixer advances by the R3F
+  clock's delta, read in R3F's callback before it renders, so each sampled
+  interval also carries the change in that frame's render time: on a 2-CPU
+  runner one slow frame next to a fast one exceeds 80 ms while playback
+  runs at real speed.
+- **Expected:** the check fails when playback runs at the wrong speed or
+  wraps at the wrong length, and not when frames take uneven time.
+- **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web exec
+  playwright test e2e/camera-take.pipeline.spec.ts --workers=1` with
+  `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer`.
+- **Fix:** `sampleLoop` samples inside the card's `mixer.update` for the
+  watch (an own-property wrapper, removed when it ends), so each step pairs
+  the mixer's advance with the wall clock read at that update, free of the
+  frame's other renders. The per-step bound stays 80 ms: it still shows a
+  hold, pause or jump at a wrap. A new rate check (the clip's unwrapped
+  advance against the wall clock over the whole watch, within 2%) catches a
+  wrong playback speed, which no per-step bound at real frame rates could.
+- **Validation:** in `scripts/ci-emulate.sh` the unchanged check failed
+  (0.240 s); the fixed spec passed 20 of 20 (`--repeat-each=5`, worst step
+  error 3.5 ms, rate 1.00015). Native: worst 0.2 ms, rate 1.00002. A
+  mutation run with the mixer at 1.05× passed the per-step check and failed
+  the rate check (1.0500×).
+
+### B-032 — A 1 s phone hold on TargetA came out "too brief" on CI
+
+- **Area:** `apps/capture` AR recording (`ar-record` XR check, `marks-a`;
+  `PointResolver.ts` `rejectReason`, `POINT_DWELL_SEC` 0.4 s)
+- **Severity:** P1 (failed `main`'s Capture XR shard 1, so nothing deploys)
+- **Observed:** 2026-10-27, CI run 40460444582 on `2f3067a`
+- **Evidence:** `hold-on-target-a` (`phoneHold`, 1000 ms of wall time) made no
+  link: the resolver's unlinked runs end with `"too brief"`, so the take had 2
+  links, and the check paired the walking hold (12.083–12.683 s) with the
+  stationary one's touch (11.233–11.533 s). The run recorded 789 camera keys;
+  three emulated shard runs (`scripts/ci-emulate.sh`, `XR_SHARD=1/2 pnpm run
+  test:xr:capture`) recorded 942–978 and passed, so the hosted runner was
+  slower than the emulation and the failure did not reproduce. The same job
+  passed on `a8dc19b`.
+- **Expected:** a 1 s hold on a target makes its link whatever the frame rate,
+  or the check says why it cannot; if a slow phone can lose a deliberate mark,
+  that is a capture defect, not only a check's.
+- **Reproduction:** two causes, each reproduced on demand. (1) The check: under
+  the manual clock it advanced the take 150 ms per touch step, so a slow host
+  fit fewer steps into the 1 s wall-clock hold; with every step slowed 350 ms,
+  `marks-a` lost all three holds as "too brief". A 6x CPU throttle did not
+  reproduce it: it slows the page, not the steps. (2) Capture: at about 4 fps
+  on the realtime clock, with the lift delivered before the frame's callbacks
+  (as Chromium fires XR input events), a 507 ms hold left no hold at all (no
+  step came between the 300 ms delay ending and the lift), and a 1 s hold's
+  span ended a frame early (0.77 s), stamped with the previous step's time.
+- **Fix:** `ScreenHolds` judges a lift as a step would: a finger down past the
+  hold delay and inside the slop at the lift holds then, even when no step saw
+  the delay end (so a Stop before the next step still closes it), and the next
+  step, the lift's own frame, ends the hold; a cancelled touch (pinch, session
+  end) still closes at once. The slop at the lift compares the touchdown and
+  lift directions in the viewer's own frame (`ScreenTouchEnd.viewDirection`,
+  new, read from the lift event's frame), because that frame has no viewer
+  pose of its own. The independent verifier (Codex) found three faults in
+  earlier versions, each now covered by a scenario that failed on that
+  version: a finger that slid past the slop as it lifted became a hold, a Stop
+  before the next step lost the hold, and a phone turned in the lift's frame
+  read as finger movement. The check advances the take by at least the wall
+  time since its last step while a finger is down, as a phone's clock runs. A
+  new `marks-low-fps` phase holds on TargetA at about 4 fps on the realtime
+  clock with browser-order lifts (`phoneFingerUp(page, { aheadOfApp: true })`,
+  new in the shared phone harness, with `at` and `headPose`): 0.5 s and 1 s
+  holds and one whose phone turns 4 degrees as it lifts each link, spanning
+  the touch within a frame, and a finger that slides 100 apx as it lifts makes
+  none. The half-second hold failed before the fix; the slowed `marks-a`
+  passes with the new stepping; all 16 `ar-record` phases pass. Inferred
+  pointing's dwell is unchanged: it runs in a headset at 72 Hz or more, where
+  a frame is under 14 ms.
+
+### B-033 — The feed cloche wraps only the avatar on a take that starts on a hilltop
+
+- **Area:** `apps/viewer-web` feed cloche (`HologramCardCanvas.tsx`),
+  `packages/xr-ui-core` `fitCloche`
+- **Severity:** P1 (every take whose ground falls away from the author)
+- **Observed:** 2026-10-26, reported by the user on
+  https://holoim-viewer.pages.dev (`cmvmm7i6q0000oeju1y8pu7eo`,
+  "avatar-recording-1792859402009")
+- **Evidence:** the take starts on a hilltop (recorded floor y 21.33) and walks
+  3.6 m downhill in a 6 m bubble. B-022's fit kept only the points at or above
+  the recorded floor: 562 of 1262, which left the author's own points, so the
+  dome was 2.0 × 2.0 m inside a 12 m bubble of scenery. A take on flatter
+  ground (`cmvo1tcvc0000oejtzuhpu726`) lost less and still looked whole.
+- **Expected:** the halo wraps the whole scene the bubble draws, not the avatar.
+- **Fix:** the feed fits the cloche to everything drawn, its foot on the
+  lowest drawn ground (user's choice, 2026-10-27, from both renders of this
+  take). With a floor (AR and the XR viewer, the room floor), `fitCloche` lifts
+  points below it onto the floor instead of dropping them, so they still widen
+  the foot. A camera take keeps its set's origin as the feed's floor, as
+  `e2e/camera-take.pipeline.spec.ts` requires. The take's dome is now 11.7 × 10.6 m. Validation: the floor check in
+  `e2e/bubble-capture.pipeline.spec.ts` now requires the feed's foot on the
+  lowest drawn ground, never above the recorded floor, and every drawn point
+  of the recorded scene under the glass; AR's foot stays on the recorded floor.

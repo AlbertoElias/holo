@@ -320,8 +320,12 @@ enter.
 - **Shape.** A superellipsoid dome (exponent 2.6) whose foot rests on the
   hologram's floor. It is fitted once to what the hologram draws (the bubble's
   content, never the bubble's mesh; the author's bones through the take when
-  there is no bubble), plus a 4% margin, and never refitted as the take plays,
-  so it never breathes. Its height is at least 40% of its wider radius, so
+  there is no bubble), plus a 4% margin. On a flat screen it wraps all of it,
+  so where the ground falls away from the author (a hilltop, a slope) its foot
+  is the lowest drawn ground. A camera take's dome stands on its set's
+  origin, the recorded floor, on a flat screen too. In a room it stands on the room floor, and what
+  lies below that only widens its foot. It is never refitted as the take
+  plays, so it never breathes. Its height is at least 40% of its wider radius, so
   every dome has the same shoulders. A bubble that follows its author carries
   its dome along.
 - **Anchored in the hologram's world.** It orbits, zooms and walks with the
@@ -515,15 +519,19 @@ One radial menu with eight directions that never change, on every device:
 - A press held 300 ms draws the ring. Moving out of the centre (half a glyph
   ring, 18 apx) points at the nearest direction; releasing there commits it.
   Released before the ring draws, it is a flick: it commits and nothing is
-  drawn. Released in the centre, or cancelled, it commits nothing.
+  drawn. Cancelled, it commits nothing.
+- On a flat screen, a press of the dock's Halo glyph released in the centre
+  (a click or a tap) leaves the ring open; a click on a direction commits
+  it, and a press anywhere else, the glyph again, or Escape closes it.
 - Each direction is a glyph ring (36 apx). Neighbours sit one glyph gap
   (12 apx) apart, so the ring's radius is about 63 apx. Headset values are
   2.5× these.
 - A direction with no action draws nothing, and its place stays reserved.
-  Capture's Halo carries S, W (undo the last held mark) and E (redo it).
-- Summoned, per input: on desktop hold **B** and move the mouse, or press
-  and hold the dock's Halo glyph; on a phone press and hold the dock's Halo
-  glyph and drag; with Quest hands the dominant thumb–middle pinch and a
+  Capture's Halo carries S, W (undo the last held mark) and E (redo it). On
+  a flat screen S stays empty, since the dock carries Record.
+- Summoned, per input: on desktop hold **B** and move the mouse, or click
+  the dock's Halo glyph (or press, hold and drag it); on a phone tap the
+  dock's Halo glyph, or press and hold it and drag; with Quest hands the dominant thumb–middle pinch and a
   drag of that hand; with Quest controllers press and hold the
   non-dominant thumbstick and tilt it. In a headset the ring opens where
   the summoning hand is, facing the head.

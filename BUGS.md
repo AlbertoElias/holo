@@ -38,20 +38,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   failure names the install rather than the job.
 - **Reproduction:** intermittent on hosted runners; see the two runs above.
 
-### B-023 — The live API rejects Pages preview origins
-
-- **Area:** `holoim-api` CORS (`WEB_ORIGINS` secret, `apps/viewer-api/src/lib/cors.ts`)
-- **Severity:** P3
-- **Observed:** 2026-10-26, verifying the GLB probe fix on a Pages preview
-- **Evidence:** `curl -H "Origin: https://bug-glb-probe-cache.holoim-viewer.pages.dev"
-  "https://holoim-api.fly.dev/api/holograms?limit=1"` returns no
-  `access-control-allow-origin`, so a preview's feed fails with a CORS
-  error. `isAllowedWebOrigin` does match wildcards, so the secret most
-  likely lacks the `https://*.holoim-viewer.pages.dev` entry that
-  `docs/DEPLOYMENT.md` sets (not checked: secret values are not readable).
-- **Expected:** previews at `*.holoim-viewer.pages.dev` load the live feed.
-- **Reproduction:** the curl above; or open any preview deploy of the viewer.
-
 ### B-020 — Capture's height check is not repeatable
 
 - **Area:** `apps/capture` XR checks (`test:xr:height`)
@@ -68,21 +54,25 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   twice and compare the two output folders with
   `node --import tsx scripts/compare-xr-reports.ts`.
 
-### B-022 — The portal tilt check cannot find the pressed tilt toggle
 
-- **Area:** `apps/viewer-web` e2e (`test:portal`, part of `verify:pr`)
-- **Severity:** P2 (fails `verify:pr` on `main` for every branch)
-- **Observed:** 2026-10-25
-- **Evidence:** `e2e/portal.spec.ts:109` ("phone › tilt") clicks "Look
-  around by tilting the phone", then finds no button named "Stop looking
-  around by tilting" within 5 s. It fails every run on `main` (`31c082a`)
-  and on `02d0282`, the redesign commit with "fewer controls", so it
-  arrived with that commit. Unknown whether the toggle itself broke or
-  only the check's expectation is stale.
-- **Expected:** tilting the phone can be turned on and off from the card,
-  and the check passes.
-- **Reproduction:** `VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer npx
-  playwright test e2e/portal.spec.ts -g tilt` from `apps/viewer-web`.
+### B-028 — A take drops set geometry whose vertices are far apart, such as a large floor
+
+- **Area:** `apps/capture/src/recording/SceneBubbleSampler.ts` (`triangleInsideBubble`)
+- **Severity:** P2
+- **Observed:** 2026-10-25, while building AR recording (`docs/features/archive/ar-recording.md`)
+- **Evidence:** the bubble clip keeps a triangle only when two of its
+  vertices lie within 6 m of a sample. `fixtures/scenes/pointing-targets.gltf`'s
+  `PointingFloor` is a 14 m box with 12 vertices, so no triangle qualifies:
+  `output/ci-marks/desktop.glb` and `controllers.glb` (performer takes, the
+  same code as `main`) and the camera take `output/ci-ar-record/phone-a.glb`
+  hold `TargetA` and `TargetB` but no floor. The capture view shows the floor
+  under the author.
+- **Expected:** set geometry the take stood on or near is kept whatever its
+  tessellation (for example, a triangle is kept when it comes within the
+  radius of a sample, not only its vertices).
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:marks`, then
+  list the node names of `apps/capture/output/ci-marks/desktop.glb`: there is
+  no `PointingFloor_RecordedBubble`.
 
 ## Entry template
 

@@ -2,6 +2,7 @@ import { PokeInteractable, RayInteractable, UIKit, UIKitDocument, type Entity, t
 import {
   createAttentionState,
   elapsedTotalLabel,
+  markChrome,
   playbackLabel,
   scaleChipLabel,
   updateAttention,
@@ -251,6 +252,7 @@ export class FootControls {
     this.document = new UIKitDocument(this.root);
     this.entity = world.createTransformEntity(undefined, { parent: world.activeLevel.value });
     this.entity.object3D!.name = "FootControls";
+    markChrome(this.entity.object3D!);
     this.entity.object3D!.add(this.document);
     this.entity.addComponent(RayInteractable);
     this.entity.addComponent(PokeInteractable);

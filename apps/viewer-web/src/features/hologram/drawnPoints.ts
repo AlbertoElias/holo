@@ -3,13 +3,13 @@
 // chrome, kept to the bubble when the take has one, and the author's bones
 // through the take, so a walk stays under the dome.
 import { isInChrome } from "@holoim/xr-ui-core";
-import { AnimationMixer, LoopRepeat, Matrix4, Sphere, Vector3 } from "three";
+import { AnimationMixer, Box3, LoopRepeat, Matrix4, Sphere, Vector3 } from "three";
 
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "./takePlayback";
 import type { AnimationClip, Bone, Mesh, Object3D, SkinnedMesh } from "three";
 
 const BUBBLE_MESH_NAME = "RecordedBubbleSphere";
-const AVATAR_NAME = "RecordedAvatar";
+const AUTHOR_CAMERA_NAME = "RecordedAuthorCamera";
 /** Enough points per mesh to find its extent, without walking every vertex of a dense scene. */
 const POINTS_PER_MESH = 3000;
 /** Times through the take at which the bones are read. */
@@ -21,7 +21,8 @@ export type DrawnBubble = { center: Vector3; radius: number } | null;
 
 function isHidden(object: Object3D, root: Object3D): boolean {
   for (let node: Object3D | null = object; node && node !== root.parent; node = node.parent) {
-    if (!node.visible || node.name === BUBBLE_MESH_NAME) return true;
+    // The author's camera is the author, not part of what is drawn.
+    if (!node.visible || node.name === BUBBLE_MESH_NAME || node.name === AUTHOR_CAMERA_NAME) return true;
   }
   return false;
 }
@@ -43,20 +44,9 @@ export function recordedBubble(root: Object3D, into?: Object3D): DrawnBubble {
   return sphere.radius > 0 ? { center: sphere.center, radius: sphere.radius } : null;
 }
 
-/**
- * The recorded floor's height, in `into`'s space (or world): capture stands
- * the exported avatar's origin on the ground under the author, so its height
- * is the floor, whatever else the scene holds above or below. Null for a file
- * without a recorded avatar.
- */
-export function recordedFloorY(root: Object3D, into?: Object3D): number | null {
-  const avatar = root.getObjectByName(AVATAR_NAME);
-  if (!avatar) return null;
-  root.updateWorldMatrix(true, true);
-  const origin = avatar.getWorldPosition(new Vector3());
-  const space = toSpace(into);
-  if (space) origin.applyMatrix4(space);
-  return Number.isFinite(origin.y) ? origin.y : null;
+/** Bounds of what the hologram draws, as `drawnPoints` finds it: the set and its objects, never the bubble's sphere, the author's camera or chrome. */
+export function drawnBounds(root: Object3D): Box3 {
+  return new Box3().setFromPoints(drawnPoints(root, null));
 }
 
 /** `bubble` is in the same space as the points: world, or `into`'s. */

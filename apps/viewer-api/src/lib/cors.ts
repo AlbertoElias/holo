@@ -1,5 +1,8 @@
 const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
 const localNetworkOriginPattern = /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/i;
+// Cloudflare Pages preview deploys of this project's two Pages apps: one
+// label (a deploy hash or branch alias) under holoim-viewer or holoim-capture.
+const pagesPreviewOriginPattern = /^https:\/\/[a-z0-9-]+\.holoim-(viewer|capture)\.pages\.dev$/i;
 
 function matchesWildcardOrigin(requestOrigin: string, pattern: string): boolean {
   if (!pattern.includes("*.")) {
@@ -28,6 +31,10 @@ export function isAllowedWebOrigin(
     if (requestOrigin === allowed || matchesWildcardOrigin(requestOrigin, allowed)) {
       return true;
     }
+  }
+
+  if (pagesPreviewOriginPattern.test(requestOrigin)) {
+    return true;
   }
 
   if (localhostOriginPattern.test(requestOrigin)) {

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Page } from "@playwright/test";
 import { resolveSimulationViewport, waitForIwerRuntime, waitForIwerSession, waitForNoIwerSession } from "@holoim/tooling-testing/xr-env";
+import { emulatePhone, phoneDrag, phonePinch, phoneScreenPoint, phoneTap } from "@holoim/tooling-testing/iwer-phone";
 
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
@@ -84,9 +85,21 @@ type FootProbe = {
 type Controls = {
   target: "vr" | "ar-quest" | "ar-phone";
   foot: FootProbe;
-  status: { visible: boolean; text: string; worldPosition: Vec3; interactive: boolean };
-  dock: { mount: "hand" | "phone"; hand: "left" | "right" | null; visible: boolean; metresPerApx: number; hitApx: number; glyphApx: number; buttons: Record<string, { worldPosition: Vec3 }> };
+  status: { visible: boolean; text: string; worldPosition: Vec3; interactive: boolean; chip: ScreenRect | null };
+  dock: {
+    mount: "hand" | "phone";
+    hand: "left" | "right" | null;
+    visible: boolean;
+    metresPerApx: number;
+    hitApx: number;
+    glyphApx: number;
+    buttons: Record<string, { worldPosition: Vec3; shown: boolean; hitApx: number; glyphApx: number }>;
+    chip: ScreenRect | null;
+    safeArea: { insets: { top: number; right: number; bottom: number; left: number }; bottomClearApx: number } | null;
+  };
 };
+/** CSS px from the screen's top left. */
+type ScreenRect = { left: number; top: number; width: number; height: number };
 
 const report: Record<string, unknown> = {};
 // XR_PROOF_VIDEO=1 holds key moments a little longer for the proof recording.
@@ -196,177 +209,6 @@ async function mockFeed(page: Page, glb?: Buffer): Promise<void> {
     body: JSON.stringify(mockHologram)
   }));
   await page.route("**/uploads/**", (route) => route.fulfill({ status: 200, body: glb, contentType: "model/gltf-binary" }));
-}
-
-/**
- * IWER has no phone profile; emulate one as the step 1 spike did: mono view,
- * no controllers or hands, and screen taps delivered as transient
- * `screen` input sources (`window.__phoneTap`).
- */
-async function emulatePhone(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    type Device = {
-      stereoEnabled: boolean;
-      fovy: number;
-      viewerSpace: unknown;
-      controllers: Record<"left" | "right", { connected: boolean; inputSource: { targetRaySpace: object } & object }>;
-      hands?: Record<"left" | "right", { connected: boolean }>;
-      inputSources: unknown[];
-    };
-    let deviceValue: Device | undefined;
-    Object.defineProperty(window, "IWER_DEVICE", {
-      configurable: true,
-      get: () => deviceValue,
-      set: (device: Device) => {
-        deviceValue = device;
-        device.stereoEnabled = false;
-        // A phone reports screen-space interaction (WebXR DOM Overlays); IWER keeps it in its private device state.
-        for (const key of Object.getOwnPropertySymbols(device)) {
-          const state = (device as unknown as Record<symbol, { interactionMode?: string }>)[key];
-          if (state && typeof state === "object" && "interactionMode" in state) state.interactionMode = "screen-space";
-        }
-        const InputSource = device.controllers.right.inputSource.constructor as new (...args: unknown[]) => object;
-        const Space = device.controllers.right.inputSource.targetRaySpace.constructor as new (...args: unknown[]) => object;
-        for (const side of ["left", "right"] as const) {
-          device.controllers[side].connected = false;
-          if (device.hands?.[side]) device.hands[side].connected = false;
-        }
-        const screenSources: object[] = [];
-        const baseGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(device), "inputSources")!.get!;
-        Object.defineProperty(device, "inputSources", { get: () => [...(baseGetter.call(device) as unknown[]), ...screenSources] });
-
-        const frameOf = (session: XRSession, inFrame?: (frame: XRFrame) => void) =>
-          new Promise<void>((resolve) => session.requestAnimationFrame((_t, frame) => {
-            inFrame?.(frame);
-            resolve();
-          }));
-        const viewer = () => {
-          const probe = (window as { __HOLOIM_XR_VIEWER__?: { world: { camera: { worldToLocal(v: unknown): { x: number; y: number; z: number }; position: { constructor: new (x: number, y: number, z: number) => object } }; renderer: { xr: { getSession(): XRSession | null } } } } }).__HOLOIM_XR_VIEWER__;
-          const session = probe?.world.renderer.xr.getSession();
-          if (!probe || !session) throw new Error("no XR session");
-          return { camera: probe.world.camera, session };
-        };
-        // The ray from the viewer through a world point, as a column-major viewer-space matrix.
-        const aimAt = (target: [number, number, number]): Float32Array => {
-          const { camera } = viewer();
-          const Vector = camera.position.constructor;
-          const local = camera.worldToLocal(new Vector(...target));
-          const length = Math.hypot(local.x, local.y, local.z);
-          const [x, y, z] = [local.x / length, local.y / length, local.z / length];
-          // Rotation taking -Z onto (x, y, z).
-          const axis = [y, -x, 0];
-          const axisLength = Math.hypot(axis[0]!, axis[1]!);
-          const angle = Math.acos(Math.min(1, Math.max(-1, -z)));
-          const [ax, ay] = axisLength > 1e-6 ? [axis[0]! / axisLength, axis[1]! / axisLength] : [1, 0];
-          const c = Math.cos(angle);
-          const s = Math.sin(angle);
-          const t = 1 - c;
-          return new Float32Array([
-            t * ax * ax + c, t * ax * ay, -s * ay, 0,
-            t * ax * ay, t * ay * ay + c, s * ax, 0,
-            s * ay, -s * ax, c, 0,
-            0, 0, 0, 1
-          ]);
-        };
-        // A finger mark where the finger is, for recordings.
-        const fingerMark = (): ((target: [number, number, number]) => void) & { remove(): void } => {
-          const mark = document.createElement("div");
-          mark.dataset.phoneTap = "";
-          mark.style.cssText = "position:fixed;z-index:99999;pointer-events:none;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:3px solid #ffffff;background:rgb(255 255 255 / 40%)";
-          document.body.append(mark);
-          const move = (target: [number, number, number]) => {
-            const { camera } = viewer();
-            const Vector = camera.position.constructor;
-            const screen = (new Vector(...target) as unknown as { project(c: unknown): { x: number; y: number } }).project(camera);
-            mark.style.left = `${(screen.x + 1) / 2 * innerWidth}px`;
-            mark.style.top = `${(1 - screen.y) / 2 * innerHeight}px`;
-          };
-          return Object.assign(move, { remove: () => setTimeout(() => mark.remove(), 600) });
-        };
-        const EventCtor = (globalThis as { XRInputSourceEvent?: new (type: string, init: object) => Event }).XRInputSourceEvent;
-        /** A finger down toward `path[0]`, held while it moves along `path` (one point per frame), then lifted. */
-        const press = async (path: Array<[number, number, number]>, holdMs: number) => {
-          const { session } = viewer();
-          if (!EventCtor) throw new Error("XRInputSourceEvent unavailable");
-          const mark = fingerMark();
-          mark(path[0]!);
-          const space = new Space(device.viewerSpace, aimAt(path[0]!));
-          const state = Object.getOwnPropertySymbols(space).map((key) => (space as Record<symbol, { offsetMatrix?: Float32Array }>)[key]).find((value) => value?.offsetMatrix)!;
-          const source = new InputSource("none", "screen", ["generic-touchscreen", "generic-button"], space);
-          screenSources.push(source);
-          await frameOf(session);
-          const lift = (frame: XRFrame) => {
-            session.dispatchEvent(new EventCtor("select", { frame, inputSource: source }));
-            session.dispatchEvent(new EventCtor("selectend", { frame, inputSource: source }));
-          };
-          // A tap is down and up between two frames: one emulated frame can outlast pointer-events' 300 ms click.
-          const tap = path.length === 1 && holdMs === 0;
-          await frameOf(session, (frame) => {
-            session.dispatchEvent(new EventCtor("selectstart", { frame, inputSource: source }));
-            if (tap) lift(frame);
-          });
-          for (const point of path.slice(1)) {
-            // The finger moves: the source's target ray follows it, frame by frame.
-            await frameOf(session, () => {
-              state.offsetMatrix!.set(aimAt(point));
-              mark(point);
-            });
-          }
-          if (holdMs > 0) await new Promise((resolve) => setTimeout(resolve, holdMs));
-          if (!tap) await frameOf(session, lift);
-          screenSources.splice(screenSources.indexOf(source), 1);
-          mark.remove();
-          await frameOf(session);
-        };
-        // Two fingers either side of a world point, `fromPx` then `toPx` apart on the screen over `frames` frames.
-        const pinch = async (centre: [number, number, number], fromPx: number, toPx: number, frames: number) => {
-          const { session, camera } = viewer();
-          if (!EventCtor) throw new Error("XRInputSourceEvent unavailable");
-          type V = { x: number; y: number; z: number; project(c: unknown): V; unproject(c: unknown): V; toArray(): [number, number, number] };
-          const Vector = camera.position.constructor as unknown as new (x: number, y: number, z: number) => V;
-          const at = (spreadPx: number, side: 1 | -1): [number, number, number] => {
-            const screen = new Vector(...centre).project(camera);
-            screen.x += side * spreadPx / innerWidth;
-            return screen.unproject(camera).toArray();
-          };
-          const fingers = ([1, -1] as const).map((side) => {
-            const space = new Space(device.viewerSpace, aimAt(at(fromPx, side)));
-            const state = Object.getOwnPropertySymbols(space).map((key) => (space as Record<symbol, { offsetMatrix?: Float32Array }>)[key]).find((value) => value?.offsetMatrix)!;
-            const source = new InputSource("none", "screen", ["generic-touchscreen", "generic-button"], space);
-            const mark = fingerMark();
-            mark(at(fromPx, side));
-            return { side, state, source, mark };
-          });
-          for (const finger of fingers) {
-            screenSources.push(finger.source);
-            await frameOf(session);
-            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor("selectstart", { frame, inputSource: finger.source })));
-          }
-          for (let i = 1; i <= frames; i++) {
-            const spread = fromPx + (toPx - fromPx) * (i / frames);
-            await frameOf(session, () => {
-              for (const finger of fingers) {
-                finger.state.offsetMatrix!.set(aimAt(at(spread, finger.side)));
-                finger.mark(at(spread, finger.side));
-              }
-            });
-          }
-          for (const finger of fingers) {
-            await frameOf(session, (frame) => session.dispatchEvent(new EventCtor("selectend", { frame, inputSource: finger.source })));
-            screenSources.splice(screenSources.indexOf(finger.source), 1);
-            finger.mark.remove();
-          }
-          await frameOf(session);
-        };
-        (window as { __phonePinch?: unknown }).__phonePinch = pinch;
-        // A tap toward a world point, lifted within the frame it lands on.
-        (window as { __phoneTap?: unknown }).__phoneTap = (target: [number, number, number]) => press([target], 0);
-        // A held drag from one world point to another over `frames` frames.
-        (window as { __phoneDrag?: unknown }).__phoneDrag = (from: [number, number, number], to: [number, number, number], frames: number) =>
-          press(Array.from({ length: frames + 1 }, (_, i) => from.map((v, k) => v + (to[k]! - v) * (i / frames)) as [number, number, number]), 100);
-      }
-    });
-  });
 }
 
 async function snapshot(page: Page): Promise<ViewerSnapshot> {
@@ -497,12 +339,6 @@ async function expectTornDown(page: Page): Promise<void> {
   await expect(page.locator('[data-card-id="mock-1"]'), "back on the opened hologram's card").toBeInViewport({ timeout: 10_000 });
 }
 
-const phoneTap = (page: Page, target: Vec3) =>
-  page.evaluate((t) => (window as unknown as { __phoneTap(t: Vec3): Promise<void> }).__phoneTap(t), target);
-const phonePinch = (page: Page, centre: Vec3, fromPx: number, toPx: number, frames: number) =>
-  page.evaluate(([c, f, t, n]) => (window as unknown as { __phonePinch(c: Vec3, f: number, t: number, n: number): Promise<void> }).__phonePinch(c, f, t, n), [centre, fromPx, toPx, frames] as const);
-const phoneDrag = (page: Page, from: Vec3, to: Vec3, frames: number) =>
-  page.evaluate(([f, t, n]) => (window as unknown as { __phoneDrag(f: Vec3, t: Vec3, n: number): Promise<void> }).__phoneDrag(f, t, n), [from, to, frames] as const);
 
 type Tracked = "head" | "left" | "right";
 
@@ -1961,8 +1797,24 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
     return { widthPx: Math.abs(b.x - a.x) / 2 * innerWidth, x: (a.x + 1) / 2 * innerWidth, y: (1 - a.y) / 2 * innerHeight, innerWidth, innerHeight };
   }, { at: phone.dock.buttons.exit!.worldPosition, glyphM: phone.dock.glyphApx * phone.dock.metresPerApx });
   expect(dockOnScreen.widthPx, "Exit glyph in CSS px").toBeCloseTo(phone.dock.glyphApx, 0);
-  expect(dockOnScreen.x, "dock centred").toBeCloseTo(dockOnScreen.innerWidth / 2, 0);
+  expect(dockOnScreen.x, "a lone action is centred").toBeCloseTo(dockOnScreen.innerWidth / 2, 0);
   expect(dockOnScreen.y, "dock in the thumb zone").toBeGreaterThan(dockOnScreen.innerHeight * 0.85);
+  // The row sits on a chip fitted to what shows (Exit alone: 3 + 44 + 14 wide, 3 + 44 + 3 high), above the
+  // home bar and the system's inset, clear of the back-swipe edges; no shade spreads along the screen (§5.1, §5.2, §6.1).
+  const dockChrome = await phoneDockChrome(page, phone.dock);
+  report.phoneDockChrome = dockChrome;
+  expect(dockChrome.shades, "no screen-wide shade: only a hologram casts one").toEqual([]);
+  expect(dockChrome.chromeFlagged, "the dock and everything on it carry the chrome flag").toBe(true);
+  expect(dockChrome.chip, "the chip is on screen").not.toBeNull();
+  const chip = dockChrome.chip!;
+  expect(chip.width, "chip fits Exit alone: 3 + 44 start + 14 end").toBeCloseTo(61, 3);
+  expect(chip.height, "chip fits the 44 apx target with 3 top and bottom").toBeCloseTo(50, 3);
+  const clearBottom = Math.max(phone.dock.safeArea!.insets.bottom, 34) + 12;
+  expect(dockOnScreen.innerHeight - (chip.top + chip.height), "chip bottom edge above the home bar and safe area, plus the 12 apx gap").toBeGreaterThanOrEqual(clearBottom - 0.01);
+  expect(chip.left, "chip clear of the back-swipe edge").toBeGreaterThanOrEqual(Math.max(phone.dock.safeArea!.insets.left, 20));
+  expect(dockOnScreen.innerWidth - (chip.left + chip.width), "chip clear of the back-swipe edge").toBeGreaterThanOrEqual(Math.max(phone.dock.safeArea!.insets.right, 20));
+  expect(dockOnScreen.y + phone.dock.hitApx / 2, "the whole 44 apx target above the home bar and safe area").toBeLessThanOrEqual(dockOnScreen.innerHeight - clearBottom + 0.5);
+  expect(dockOnScreen.x, "Exit stands on the chip, 3 apx in from its start").toBeCloseTo(chip.left + 3 + phone.dock.hitApx / 2, 0);
   // Frame the whole hologram, its foot in the lower half of the screen: the controls come
   // (on a phone the screen is the hand), and the reach row fits the screen's 16 px gutters.
   const standing = moved.hologram.worldPosition;
@@ -2015,6 +1867,20 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const glyphPaused = await waitForSnapshot(page, (s) => !s.hologram.playing, 3_000);
   expect(glyphPaused.placement.sequence, "a tap on the controls never moves the hologram").toBe(moved.placement.sequence);
   expect(glyphPaused.controls!.foot.text.playback).toMatch(/^Paused · /);
+  // The status line is the phone's top status line: top centre inside the top safe area, on the chip, in flat sizes (§1.2, §7.2, §9.2).
+  const statusChrome = await phoneStatusChrome(page, glyphPaused.controls!);
+  report.phoneStatusChrome = statusChrome;
+  expect(statusChrome.text).toMatch(/^Paused · /);
+  expect(statusChrome.chip, "the status chip is laid out").not.toBeNull();
+  const statusChip = statusChrome.chip!;
+  expect(statusChip.left + statusChip.width / 2, "centred on the screen").toBeCloseTo(statusChrome.innerWidth / 2, 0);
+  expect(statusChip.top, "inside the top safe area").toBeGreaterThanOrEqual(statusChrome.insets.top);
+  expect(statusChip.top + statusChip.height, "at the top of the screen, not 31% down").toBeLessThan(statusChrome.innerHeight * 0.15);
+  expect(statusChip.height, "5 apx block padding round the 14.4 px line").toBeGreaterThanOrEqual(10 + 14.4);
+  expect(statusChrome.projectedCentre.x, "drawn where the probe says").toBeCloseTo(statusChrome.innerWidth / 2, 0);
+  expect(statusChrome.projectedTop, "its top edge is where the chip rectangle says").toBeCloseTo(statusChip.top, 0);
+  expect(statusChrome.chromeFlagged).toBe(true);
+  await phoneChromeShot(page, "viewer-phone-dock-and-status");
   await dwell(page);
 
   // A held finger dragged along the timeline scrubs it (the bridge moves the pointer every frame).
@@ -2034,6 +1900,33 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
   const dragDrift = Math.abs(dragAudio.hologram.audio!.scheduledOffset - dragAudio.hologram.clipTime);
   expect(dragDrift, "audio resumes at the dragged time").toBeLessThan(AUDIO_SYNC_TOLERANCE_S);
   await captureEvidence(page, testInfo, "ar-phone-controls");
+
+  // The status chip shields the scene behind it only while it shows: playing again hid it, so a tap on empty
+  // floor at the chip's former rectangle places the hologram there, as a floor tap does anywhere.
+  const hiddenStatus = (await snapshot(page)).controls!.status;
+  expect(hiddenStatus.visible, "playing again hides the status chip").toBe(false);
+  expect(hiddenStatus.chip, "the hidden chip still has its rectangle").not.toBeNull();
+  const chipCentre = { x: hiddenStatus.chip!.left + hiddenStatus.chip!.width / 2, y: hiddenStatus.chip!.top + hiddenStatus.chip!.height / 2 };
+  const beforeChipTap = await snapshot(page);
+  const lookedFrom = (await readHeadPose(page)).position;
+  // Turn a quarter away from the hologram and tilt the phone down 70 degrees, so the ray through the top of the screen reaches the bare floor, then find the floor point on it.
+  const level = Math.hypot(beforeChipTap.hologram.worldPosition[0] - lookedFrom[0], beforeChipTap.hologram.worldPosition[2] - lookedFrom[2]) || 1;
+  const ahead = [-(beforeChipTap.hologram.worldPosition[2] - lookedFrom[2]) / level, (beforeChipTap.hologram.worldPosition[0] - lookedFrom[0]) / level];
+  const tilt = (70 * Math.PI) / 180;
+  await setPose(page, "head", null, [lookedFrom[0] + ahead[0]! * Math.cos(tilt) * 2, lookedFrom[1] - Math.sin(tilt) * 2, lookedFrom[2] + ahead[1]! * Math.cos(tilt) * 2]);
+  const throughChip = await phoneScreenPoint(page, chipCentre.x, chipCentre.y, 1);
+  const tilted = (await readHeadPose(page)).position;
+  const floorY = beforeChipTap.hologram.worldPosition[1];
+  expect(throughChip[1], "the ray through the chip points down at the floor").toBeLessThan(tilted[1]);
+  const reach = (floorY - tilted[1]) / (throughChip[1] - tilted[1]);
+  const chipFloor: Vec3 = [tilted[0] + (throughChip[0] - tilted[0]) * reach, floorY, tilted[2] + (throughChip[2] - tilted[2]) * reach];
+  await dwell(page);
+  mark("tap-through-hidden-chip");
+  await phoneTap(page, chipFloor);
+  const throughHidden = await waitForSnapshot(page, (s) => s.placement.mode === "tap" && s.placement.sequence > beforeChipTap.placement.sequence, 3_000);
+  expect(horizontal(throughHidden.hologram.worldPosition, chipFloor), "moved to the floor point behind the hidden chip").toBeLessThan(0.05);
+  await setPose(page, "head", stepBack, [throughHidden.hologram.worldPosition[0], throughHidden.hologram.worldPosition[1] + tall * 0.45, throughHidden.hologram.worldPosition[2]]);
+  await page.waitForTimeout(600);
 
   // Two fingers rescale it about its feet (Q13): closing them halves it, and
   // neither finger taps (it keeps playing where it stands).
@@ -2095,6 +1988,71 @@ test("AR (IWSDK shell, phone): places on the floor ahead, a tap on the hologram 
     }
   };
 });
+
+/** What a phone's dock is made of, read off the live scene: shades by name, the chrome flag, the chip's rectangle. */
+async function phoneDockChrome(page: Page, dock: Controls["dock"]) {
+  const inScene = await page.evaluate(() => {
+    type O = { name: string; userData: Record<string, unknown>; children: O[]; parent: O | null };
+    const world = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { scene: O } } }).__HOLOIM_XR_VIEWER__.world;
+    const shades: string[] = [];
+    let dockObject: O | null = null;
+    const inDockOrCamera = (object: O): boolean => {
+      for (let node: O | null = object; node; node = node.parent) if (node.name === "HandDock" || (node as unknown as { isCamera?: boolean }).isCamera) return true;
+      return false;
+    };
+    const visit = (object: O) => {
+      // The hologram's own floor shade ("cloche-shade") is the only one allowed; none hangs on the dock or the camera.
+      if (/shade/i.test(object.name) && (object.name === "PhoneDockShade" || inDockOrCamera(object))) shades.push(object.name);
+      if (object.name === "HandDock") dockObject = object;
+      object.children.forEach(visit);
+    };
+    visit(world.scene);
+    const flagged = (object: O | null): boolean => {
+      for (let node = object; node; node = node.parent) if (node.userData.holoimChrome === true) return true;
+      return false;
+    };
+    return { shades, chromeFlagged: dockObject !== null && flagged(dockObject) };
+  });
+  return { ...inScene, chip: dock.chip, safeArea: dock.safeArea, buttons: dock.buttons };
+}
+
+/** The phone status line as drawn: its probe, and where its chip's top edge and centre project to on the screen. */
+async function phoneStatusChrome(page: Page, controls: Controls) {
+  const { status } = controls;
+  const view = await page.evaluate((at) => {
+    type V = { x: number; y: number; project(c: unknown): V };
+    type O = { name: string; userData: Record<string, unknown>; children: O[]; parent: O | null };
+    const world = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { camera: { position: { constructor: new (x: number, y: number, z: number) => V } }; scene: O } } }).__HOLOIM_XR_VIEWER__.world;
+    const Vector = world.camera.position.constructor;
+    const centre = new Vector(...at).project(world.camera);
+    let line: O | null = null;
+    const visit = (object: O) => {
+      if (object.name === "StatusLine") line = object;
+      object.children.forEach(visit);
+    };
+    visit(world.scene);
+    let flagged = false;
+    for (let node: O | null = line; node; node = node.parent) if (node.userData.holoimChrome === true) flagged = true;
+    return { x: (centre.x + 1) / 2 * innerWidth, y: (1 - centre.y) / 2 * innerHeight, flagged, innerWidth, innerHeight };
+  }, status.worldPosition);
+  const insets = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px)";
+    document.body.append(probe);
+    const top = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    probe.remove();
+    return { top };
+  });
+  // The object's origin is the chip's top centre (anchored top), so its projection is the chip's top edge.
+  return { text: status.text, visible: status.visible, chip: status.chip, insets, innerWidth: view.innerWidth, innerHeight: view.innerHeight, projectedCentre: { x: view.x, y: view.y }, projectedTop: view.y, chromeFlagged: view.flagged };
+}
+
+/** An honest screenshot of the phone view (the emulated room behind the chrome) for review, under output/phone-chrome/. */
+async function phoneChromeShot(page: Page, name: string): Promise<void> {
+  const dir = path.resolve(testDir, "../../../output/phone-chrome");
+  await mkdir(dir, { recursive: true });
+  await page.screenshot({ path: path.join(dir, `${name}.png`) });
+}
 
 type FloorReading = {
   placementY: number;

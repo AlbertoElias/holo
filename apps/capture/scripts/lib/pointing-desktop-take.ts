@@ -6,7 +6,7 @@ import { CONTROL_NAMES } from '@holoim/xr-ui-core';
 import { waitForPageFunctions, waitForTextContentPrefix, wireXrConsoleErrors, createXrContext } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
-import { HOLOIM_MEANING_EXTENSION, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
+import { HOLOIM_MEANING_EXTENSION, meaningFromLabel, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
 import type { MeaningLinkProvenance, MeaningProvenance } from '../../../../packages/meaning/src/index.ts';
 import type {} from '../../src/runtime/automationHooks';
 import type { MockInputState } from '../../src/types/contracts';
@@ -424,14 +424,14 @@ function scoreDesktop({ gltf, holds }: { gltf: GltfJson; holds: HoldEntry[] }): 
   const raw = gltf.extensions?.[HOLOIM_MEANING_EXTENSION];
   if (raw === undefined) return { failures: [`no ${HOLOIM_MEANING_EXTENSION} in the desktop take's GLB`], links: [], spans: [] };
   const validation = validateHoloimMeaning(raw);
-  if (!validation.ok) return { failures: [`${HOLOIM_MEANING_EXTENSION} fails the v0 schema: ${validation.errors.join('; ')}`], links: [], spans: [] };
+  if (!validation.ok) return { failures: [`${HOLOIM_MEANING_EXTENSION} fails the schema: ${validation.errors.join('; ')}`], links: [], spans: [] };
   if (!(gltf.extensionsUsed ?? []).includes(HOLOIM_MEANING_EXTENSION)) failures.push('extension missing from extensionsUsed');
   if ((gltf.extensionsRequired ?? []).includes(HOLOIM_MEANING_EXTENSION)) failures.push('extension listed in extensionsRequired');
   const nodeNames = (gltf.nodes ?? []).map((node) => node.name ?? '');
   if (nodeNames.some((name) => /crosshair/i.test(name))) failures.push('the crosshair appears in the export');
 
   const links: DesktopLink[] = validation.value.marks.map((mark) => ({
-    from: mark.anchor.from.bone,
+    from: meaningFromLabel(mark.anchor.from),
     to: mark.anchor.to.bone ?? gltf.nodes?.[mark.anchor.to.node]?.name ?? `node ${mark.anchor.to.node}`,
     start: round(mark.span.start),
     end: round(mark.span.end),

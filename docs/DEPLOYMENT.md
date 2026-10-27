@@ -11,13 +11,15 @@ repo.
 
 ## Automated deploys (CI-gated)
 
-`.github/workflows/deploy.yml` deploys all three surfaces automatically
-whenever the CI workflow completes successfully for a push to `main`:
-Fly API, Pages viewer, Pages capture. Each job health-checks its URL
+The CI workflow (`.github/workflows/ci.yml`) deploys each changed surface
+on a push to `main` as soon as the suites that exercise it pass: Fly API
+(an image built while the tests run, released by tag), Pages viewer and
+Pages capture (the bundles CI built). Each job health-checks its URL
 afterwards. Required repository secrets: `FLY_API_TOKEN` (a Fly deploy
 token scoped to `holoim-api`), `CLOUDFLARE_API_TOKEN` (scoped token with
 Cloudflare Pages edit permission), and `CLOUDFLARE_ACCOUNT_ID`. Manual
-redeploys: Actions → Deploy → Run workflow. The manual steps below remain
+redeploys and rollbacks: Actions → Deploy → Run workflow
+(`.github/workflows/deploy.yml`). The manual steps below remain
 the fallback and the way the accounts/projects were first created.
 
 ## 0. Accounts and CLIs (one-time, operator)
@@ -37,8 +39,7 @@ From the workspace root (the Docker build context is the monorepo root):
 fly apps create holoim-api            # skip if it already exists
 fly volumes create holoim_data --size 3 --region iad -a holoim-api
 fly secrets set -a holoim-api \
-  WEB_ORIGIN="https://holoim-viewer.pages.dev" \
-  WEB_ORIGINS="https://holoim-viewer.pages.dev,https://*.holoim-viewer.pages.dev"
+  WEB_ORIGIN="https://holoim-viewer.pages.dev"
 fly deploy -c fly.toml
 fly open -a holoim-api                # opens https://holoim-api.fly.dev/healthz path manually
 curl https://holoim-api.fly.dev/healthz   # {"status":"ok"}
@@ -76,8 +77,11 @@ pnpm --filter @holoim/web exec wrangler pages deploy dist --project-name holoim-
 Or connect the GitHub repo in the Pages dashboard with build command
 `pnpm --filter @holoim/web build`, output `apps/viewer-web/dist`, and
 `VITE_API_ORIGIN` set in the project environment. Preview deployments get
-`https://<branch>.holoim-viewer.pages.dev` URLs, which the API allows via
-the `WEB_ORIGINS` wildcard above.
+`https://<branch>.holoim-viewer.pages.dev` and
+`https://<hash>.holoim-viewer.pages.dev` URLs. The API allows those, and the
+same hosts under `holoim-capture.pages.dev`, itself
+(`apps/viewer-api/src/lib/cors.ts`); `WEB_ORIGINS` is only for other
+origins.
 
 The Pages Function `apps/viewer-web/functions/index.ts` serves `/` with
 the feed's first page inlined, plus a preload for the newest GLB, so a

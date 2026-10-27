@@ -53,10 +53,18 @@ function animationDurationSeconds(gltf: GltfJson): number {
 const FLOOR_TOLERANCE_METERS = 0.05;
 const ANKLE_HEIGHT_METERS = 0.2;
 
-// B-022: the recorded floor is the floor the viewer uses, in the feed and in AR.
+// B-022: the recorded floor is the floor AR stands on the room floor. B-033:
+// in the feed the cloche wraps all the bubble draws, its foot on the lowest
+// drawn ground, never above the author's floor.
 function expectOnRecordedFloor(report: FloorReport) {
-  const { mode, recordedFloorY, footBoneY, clocheBaseY, placementY } = report;
-  expect(Math.abs(clocheBaseY - recordedFloorY), `${mode}: cloche foot on the recorded floor`).toBeLessThanOrEqual(FLOOR_TOLERANCE_METERS);
+  const { mode, recordedFloorY, footBoneY, clocheBaseY, placementY, lowestDrawnY, outsideGlass } = report;
+  if (mode === "ar") {
+    expect(Math.abs(clocheBaseY - recordedFloorY), `${mode}: cloche foot on the recorded floor`).toBeLessThanOrEqual(FLOOR_TOLERANCE_METERS);
+  } else {
+    expect(clocheBaseY - recordedFloorY, `${mode}: cloche foot not above the recorded floor`).toBeLessThanOrEqual(FLOOR_TOLERANCE_METERS);
+    expect(Math.abs(clocheBaseY - lowestDrawnY!), `${mode}: cloche foot on the lowest drawn ground`).toBeLessThanOrEqual(FLOOR_TOLERANCE_METERS);
+    expect(outsideGlass, `${mode}: every drawn point of the recorded scene under the glass`).toBe(0);
+  }
   expect(footBoneY - recordedFloorY, `${mode}: feet not under the recorded floor`).toBeGreaterThanOrEqual(-FLOOR_TOLERANCE_METERS);
   expect(footBoneY - recordedFloorY, `${mode}: feet on the recorded floor`).toBeLessThanOrEqual(ANKLE_HEIGHT_METERS);
   if (placementY !== null) {

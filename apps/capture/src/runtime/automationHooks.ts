@@ -6,6 +6,8 @@ import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, UiViewModel, VrHandSide } from '../types/contracts';
 import type { TouchStick } from '../input/TouchInput';
 import type { FlatHaloView } from '../ui/flatHalo';
+import type { PointResolutionReport } from '../recording/PointResolver';
+import type { PhoneArChromeProbe } from '../ui/PhoneArChrome';
 import type { ChromeTarget, VrChromeSnapshot } from '../ui/VrChrome';
 import type { prefetchStats } from '../objects/objectSearch';
 import type { ObjectSearchState } from '../objects/objectSearchSession';
@@ -44,6 +46,8 @@ export interface AutomationHooks {
   __toggleFaceCamera: () => void;
   /** The chrome as drawn: the overlay's view model, the headset chrome's placement, the touch stick (slice 4 reports). */
   __sampleChrome: () => { ui: UiViewModel; vr: VrChromeSnapshot; touch: { stick: TouchStick | null; looking: number; hold: string } };
+  /** The phone camera author's bottom dock (button positions and visibility) and status line, or built: false. */
+  __samplePhoneChrome: () => PhoneArChromeProbe;
   /** World position of the wrist's record glyph or a world-panel row, for checks that aim at it. */
   __chromeTarget: (target: ChromeTarget) => number[] | null;
   /** Find (PRD-060): the headset panel's search state, voice paths taken, and GLB prefetches. */
@@ -58,6 +62,12 @@ export interface AutomationHooks {
   __setChromeVisible: (visible: boolean) => void;
   /** Held marks and the Halo (slice 5): the headset modes, the take's holds, the touch hold and every committed Halo action. */
   __sampleHolds: () => HoldsSnapshot;
+  /** Record or Stop, through the same `recording.toggle()` the dock, the key and the wrist glyph reach. */
+  __toggleRecording: () => void;
+  /** What point resolution decided at the latest camera take's export (holds, referents, "no referent"), or null. */
+  __lastPointReport: () => PointResolutionReport | null;
+  /** `worldGroup.matrixWorld` (column-major, 16 numbers): the set's frame in the room, for scripting a camera walk in the set's frame. */
+  __arWorldFrame: () => number[];
   /** CSS px of a world point in the flat-screen view, or null behind the camera: where a check touches to aim at it. */
   __projectToScreen: (point: readonly number[]) => { x: number; y: number } | null;
 }

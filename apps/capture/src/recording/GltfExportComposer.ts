@@ -9,6 +9,7 @@ import { GLTFHumanoidPlugin } from './GLTFHumanoidPlugin';
 import { GLTFMeaningPlugin } from './GLTFMeaningPlugin';
 import { GLTFObjectsPlugin } from './GLTFObjectsPlugin';
 import { type AuthoringSampleStore, findAuthoringSpans, neutralizeAuthoringSpans, toAuthoringSpans } from './authoringSpans';
+import { AUTHOR_CAMERA_NODE_NAME, type CameraTrackStore } from './CameraTrackStore';
 import { buildObjectExports, type ObjectExport } from './objectExport';
 import type { ObjectSampleStore } from './ObjectSampleStore';
 import { FrameCaptureStore } from './FrameCaptureStore';
@@ -225,6 +226,118 @@ export class GltfExportComposer {
           } else {
             resolve(new Blob([JSON.stringify(result)], { type: 'application/json' }));
           }
+        },
+        reject,
+        { animations: [clip], binary: true, trs: true }
+      );
+    });
+  }
+
+  /**
+   * A camera take (docs/features/archive/ar-recording.md): no skin and no
+   * `RecordedAvatar`. The scene is the set clipped in the set's frame, a
+   * `RecordedBubbleSphere` pinned at the set's origin (static, so motion read
+   * relative to it keeps the camera's path), the event objects, and
+   * `RecordedAuthorCamera`, a plain node (not a glTF camera) whose `yfov`
+   * rides in `extras`. One clip, `RecordedMotion`, animates the camera and
+   * the objects; its times are take seconds from the first sample.
+   * `HOLOIM_meaning` is written only when a hold landed on something, and then
+   * as v1 (its links come from the camera node).
+   */
+  async exportCameraTakeToGlbBlob(input: {
+    track: CameraTrackStore;
+    bubbleSampler: SceneBubbleSampler;
+    objectStore: ObjectSampleStore;
+    /** The take's held marks (finger holds on the screen), in the set's frame. */
+    pointStore: PointSampleStore;
+    sceneRoot: THREE.Object3D;
+    /** `inverse(worldGroup.matrixWorld)`: world to the set's frame. */
+    setInverse: THREE.Matrix4;
+    audioData?: { buffer: ArrayBuffer; mimeType: string } | undefined;
+  }): Promise<Blob> {
+    this.lastPointReport = undefined;
+    const samples = input.track.getSamples();
+    if (samples.length < 2) throw new Error('Not enough camera motion to export: a take needs at least two camera samples.');
+    const yfov = input.track.getYfov();
+    if (yfov === null) throw new Error('No camera projection was recorded, so the take has no field of view.');
+
+    const t0 = samples[0]!.timeSec;
+    const times = samples.map((sample) => sample.timeSec - t0);
+    const posValues: number[] = [];
+    const quatValues: number[] = [];
+    for (const sample of samples) {
+      posValues.push(sample.position.x, sample.position.y, sample.position.z);
+      quatValues.push(sample.quaternion.x, sample.quaternion.y, sample.quaternion.z, sample.quaternion.w);
+    }
+
+    const camera = new THREE.Object3D();
+    camera.name = AUTHOR_CAMERA_NODE_NAME;
+    camera.userData = { yfov };
+    camera.position.fromArray(posValues, 0);
+    camera.quaternion.fromArray(quatValues, 0);
+    const tracks: THREE.KeyframeTrack[] = [
+      new THREE.VectorKeyframeTrack(`${camera.uuid}.position`, times, posValues),
+      new THREE.QuaternionKeyframeTrack(`${camera.uuid}.quaternion`, times, quatValues)
+    ];
+
+    // Objects were sampled against the set's frame, one sample per camera
+    // sample: the root is the identity at every frame.
+    let objects: ObjectExport | undefined;
+    if (input.objectStore.hasSamples()) {
+      const rootPosValues = new Array<number>(times.length * 3).fill(0);
+      const rootQuatValues: number[] = [];
+      for (let i = 0; i < times.length; i += 1) rootQuatValues.push(0, 0, 0, 1);
+      objects = buildObjectExports(input.objectStore.getTracks(), { times, rootPosValues, rootQuatValues, avatarScale: new THREE.Vector3(1, 1, 1) });
+      tracks.push(...objects.tracks);
+    }
+
+    const sceneBubble = input.bubbleSampler.collectSceneBubbleGroup(input.sceneRoot, input.setInverse);
+    if (!sceneBubble) throw new Error('Nothing in the set to export: no part of it came within reach of the camera.');
+
+    const scene = new THREE.Scene();
+    scene.add(camera);
+    scene.add(input.bubbleSampler.createBubbleSphere());
+    scene.add(sceneBubble.group);
+    for (const node of objects?.nodes ?? []) scene.add(node);
+    this.addRecordedSceneLights(scene);
+    const clip = new THREE.AnimationClip('RecordedMotion', -1, tracks);
+
+    // Held marks: cast against the set and the objects as exported, in the set's frame. The
+    // objects stand still in a camera take (a camera author cannot grab one), so their rest pose is theirs throughout.
+    let meaning: MeaningDraft | undefined;
+    if (input.pointStore.hasSamples()) {
+      scene.updateMatrixWorld(true);
+      const { draft, report } = this.pointResolver.resolveCamera({
+        store: input.pointStore,
+        startSec: t0,
+        endSec: samples.at(-1)!.timeSec,
+        camera,
+        sceneMeshes: [...sceneBubble.clippedBySource.values()],
+        objects: objects?.nodes ?? []
+      });
+      this.lastPointReport = report;
+      if (draft.marks.length > 0) meaning = draft;
+    }
+
+    return new Promise<Blob>((resolve, reject) => {
+      const exporter = new GLTFExporter();
+      const audioData = input.audioData;
+      if (audioData && audioData.buffer.byteLength > 0) {
+        exporter.register((writer) => new GLTFAudioPlugin(writer, audioData.buffer, audioData.mimeType));
+      }
+      if (meaning) {
+        const draft = meaning;
+        exporter.register((writer) => new GLTFMeaningPlugin(writer, draft));
+      }
+      if (objects && objects.drafts.length > 0) {
+        const drafts = objects.drafts;
+        exporter.register((writer) => new GLTFObjectsPlugin(writer, drafts));
+      }
+      exporter.parse(
+        scene,
+        (result) => {
+          if (result instanceof ArrayBuffer) resolve(new Blob([result], { type: 'model/gltf-binary' }));
+          else resolve(new Blob([JSON.stringify(result)], { type: 'application/json' }));
         },
         reject,
         { animations: [clip], binary: true, trs: true }

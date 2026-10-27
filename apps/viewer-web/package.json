@@ -17,7 +17,7 @@
     "test:e2e:mocked:shard2": "VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer playwright test e2e/hologram-feed.spec.ts e2e/ar-bubble.spec.ts e2e/redesign.spec.ts e2e/xr-viewer.spec.ts --workers=1 --grep \"redesign\\.spec\"",
     "test:e2e:mocked:shard3": "VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer playwright test e2e/hologram-feed.spec.ts e2e/ar-bubble.spec.ts e2e/redesign.spec.ts e2e/xr-viewer.spec.ts --workers=1 --grep \"VR: Step inside|AR \\(IWSDK shell, phone\\): places\"",
     "test:e2e:xr-viewer-vr": "VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer playwright test e2e/xr-viewer.spec.ts --workers=1 --grep \"VR gallery:|VR foot controls:|VR locomotion:|VR recenter after moving:\"",
-    "test:e2e:pipeline": "RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer playwright test e2e/capture-to-viewer.pipeline.spec.ts e2e/bubble-capture.pipeline.spec.ts e2e/avatar-formats.pipeline.spec.ts e2e/pointing.pipeline.spec.ts e2e/object.pipeline.spec.ts e2e/summon.pipeline.spec.ts e2e/object-search.pipeline.spec.ts --workers=1",
+    "test:e2e:pipeline": "RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer playwright test e2e/capture-to-viewer.pipeline.spec.ts e2e/bubble-capture.pipeline.spec.ts e2e/avatar-formats.pipeline.spec.ts e2e/pointing.pipeline.spec.ts e2e/object.pipeline.spec.ts e2e/summon.pipeline.spec.ts e2e/camera-take.pipeline.spec.ts e2e/object-search.pipeline.spec.ts --workers=1",
     "test:e2e:portal": "VITE_IWER_SEM_SCENE=office_small RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer playwright test e2e/portal.spec.ts e2e/portal.pipeline.spec.ts --workers=1"
   },
   "dependencies": {

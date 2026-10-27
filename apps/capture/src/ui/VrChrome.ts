@@ -369,11 +369,11 @@ export class VrChrome {
         ? {
             ...this.find.probe(),
             mode: this.mode,
-            dockGlyph: Boolean(this.dock?.probe().buttons.find?.visible && this.dock.probe().visible),
+            dockGlyph: Boolean(this.dock?.probe().buttons.find?.shown && this.dock.probe().visible),
             distanceFromHeadM: this.find.entity.object3D!.getWorldPosition(new THREE.Vector3()).distanceTo(head)
           }
         : this.dock
-          ? { visible: false, worldPosition: [], query: '', status: '', keyboard: 'none', results: [], targets: [], mode: this.mode, dockGlyph: Boolean(this.dock.probe().buttons.find?.visible && this.dock.probe().visible), distanceFromHeadM: 0 }
+          ? { visible: false, worldPosition: [], query: '', status: '', keyboard: 'none', results: [], targets: [], mode: this.mode, dockGlyph: Boolean(this.dock.probe().buttons.find?.shown && this.dock.probe().visible), distanceFromHeadM: 0 }
           : null,
       rays: (this.rays?.probe() ?? []).map((ray) => ({ side: ray.hand, visible: ray.visible, hit: ray.visible ? this.rayHit(ray.hand) : null, origin: ray.origin })),
       poke: this.pokeSnapshot(state.handedness),
@@ -551,7 +551,7 @@ export class VrChrome {
     const buttons = this.dock.probe().buttons;
     for (const id of ['record', 'find']) {
       const hit = this.dock.hitTarget(id);
-      if (!hit || !buttons[id]?.visible) continue;
+      if (!hit || !buttons[id]?.shown) continue;
       const face = faceFrame(hit);
       const offset = tmpB.copy(tmpA).sub(face.centre);
       const x = offset.dot(axisX);

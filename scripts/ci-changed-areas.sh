@@ -12,7 +12,7 @@
 # runs the selection scripts on every push; dispatch CI to exercise an edited
 # job). Lockfile changes alter every app's dependencies and select every
 # area; unclassified files fail closed the same way. Keep this mapping in sync
-# with the jobs in .github/workflows/ci.yml and deploy.yml.
+# with the test and deploy jobs in .github/workflows/ci.yml.
 set -euo pipefail
 
 base="${1:-}"

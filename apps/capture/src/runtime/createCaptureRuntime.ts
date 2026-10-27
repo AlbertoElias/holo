@@ -1,4 +1,5 @@
 import { nonDominantHand, type Handedness } from '@holoim/xr-ui-core';
+import { ScreenInputSystem } from '@holoim/xr-ui-iwsdk';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Vector3 } from 'three';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
@@ -26,6 +27,7 @@ import { UIStateStore } from '../ui/UIStateStore';
 import { saveHandedness } from '@holoim/ui-dom';
 import { TouchStickView } from '../ui/TouchStickView';
 import { FlatHalo } from '../ui/flatHalo';
+import { PhoneArChrome } from '../ui/PhoneArChrome';
 import { VrChrome } from '../ui/VrChrome';
 import { prefetchStats } from '../objects/objectSearch';
 import { voiceLog } from '../objects/voiceInput';
@@ -33,6 +35,7 @@ import { HeadsetHolds } from '../xr/HeadsetHolds';
 import { ArSpectator } from '../xr/ArSpectator';
 import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
+import { ScreenHolds } from '../xr/ScreenHolds';
 import { XrTracking } from '../xr/XrTracking';
 import { installAutomationHooks } from './automationHooks';
 import { createHaloActions } from './haloActions';
@@ -115,7 +118,11 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     renderer,
     getAvatar: () => ({ avatar: avatar.avatar, worldModel: avatar.worldModel }),
     onSizeLocked: () => heightFit.calibration.interrupt(),
-    onTakeStart: () => objects.startTake()
+    onTakeStart: () => objects.startTake(),
+    isCameraAuthor: () => capture.frame.arCameraAuthor,
+    recordRefusal: () => (capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
+    isPlacementSettled: () => capture.ar.isSettled(),
+    setFrame: stage.worldGroup
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
   const objects = new CaptureObjects({
@@ -141,6 +148,27 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     setHandedness,
     ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec),
     pickObject: (url) => void objects.loadTrayUrls([url])
+  });
+  // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.
+  const recenterAr = (): void => {
+    if (xrEntry.sessionMode !== 'ar' || !tracking.isXrPresenting()) return;
+    if (recording.isTakeBusy()) {
+      ui.flashNotice('Stop recording to recenter.');
+      return;
+    }
+    capture.ar.recenter();
+  };
+  const phoneChrome = new PhoneArChrome({
+    world,
+    store: ui,
+    renderer,
+    xrCamera: stage.xrCamera,
+    isSettled: () => capture.ar.isSettled(),
+    isTakeBusy: () => recording.isTakeBusy(),
+    toggleRecording: () => recording.toggle(),
+    recenter: recenterAr,
+    // The session ends as Android's back ends it: a take in progress stops and exports on the session's end.
+    exit: () => xrEntry.toggle('ar')
   });
   const headsetHolds = new HeadsetHolds({
     tracking,
@@ -185,7 +213,15 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
     ui,
     vrChrome,
+    phoneChrome,
     headsetHolds,
+    screenHolds: new ScreenHolds({
+      samples: () => recording.cameraRecorder.pointSamples,
+      isTakeOpen: () => recording.cameraRecorder.isEnabled(),
+      setFrame: stage.worldGroup,
+      xrCamera: () => renderer.xr.getCamera(),
+      viewport: () => ({ width: window.innerWidth, height: window.innerHeight })
+    }),
     recording,
     diagnostics: new DiagnosticViews({
       scene,
@@ -197,16 +233,21 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       getBodyYaw: () => body.solver.bodyYaw,
       getHud: () => vrChrome.root
     }),
-    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arSpectator: false, vrActive: false, bodyTracking: false, character: null },
+    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arSpectator: false, arCameraAuthor: false, vrActive: false, bodyTracking: false, character: null },
     clockMode: () => loop.clockMode
   };
   world.globals.capture = capture;
 
   let started = false;
-  const sampleXrInput = holdXrInputBetweenFrames(world);
+  const holdXrInput = holdXrInputBetweenFrames(world);
   const loop = new FrameLoop({
     world,
-    sampleInput: sampleXrInput,
+    sampleInput: (deltaSec, timeSec) => {
+      holdXrInput(deltaSec, timeSec);
+      // Fingers held on the screen: under the manual clock the steps run outside XR frames, so their rays refresh here.
+      const xrFrame = renderer.xr.getFrame();
+      if (xrFrame) world.getSystem(ScreenInputSystem)?.refreshTouches(xrFrame);
+    },
     acquire: (frame) => {
       // IWSDK's pointers live under world.player; capture moves its own rig.
       syncPlayerToRig(world, cameraRig);
@@ -287,10 +328,15 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       loadTrayUrls: (urls) => void objects.loadTrayUrls(urls),
       toggleFaceCamera: () => capture.face.toggleCamera(),
       setHandedness,
-      toggleXr: (mode) => xrEntry.toggle(mode),
-      recenterAr: () => {
-        if (xrEntry.sessionMode === 'ar' && tracking.isXrPresenting()) capture.ar.recenter();
-      }
+      toggleXr: (mode) => {
+        const entering = !world.session;
+        xrEntry.toggle(mode);
+        // Camera takes need the microphone, and a prompt needs this tap's user
+        // activation. It is asked for after launchXR, which has already called
+        // requestSession synchronously, and never awaited before it.
+        if (entering && mode === 'ar') recording.holdMicForArTake();
+      },
+      recenterAr
     },
     start: async () => {
       installAutomationHooks({
@@ -326,6 +372,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __sampleFace: () => capture.face.snapshot(),
         __sampleHumanoid: () => avatar.humanoid?.report() ?? null,
         __toggleFaceCamera: () => capture.face.toggleCamera(),
+        __samplePhoneChrome: () => phoneChrome.probe(),
         __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),
         __chromeTarget: (target) => vrChrome.targetPosition(target),
         __sampleObjectSearch: () => ({ headset: vrChrome.findSession.getState(), voiceLog: [...voiceLog], prefetch: { ...prefetchStats } }),
@@ -349,6 +396,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           flatHalo: flatHalo.getSnapshot(),
           actions: haloActions.log
         }),
+        __toggleRecording: () => recording.toggle(),
+        __lastPointReport: () => recording.cameraRecorder.getLastPointReport() ?? null,
+        __arWorldFrame: () => stage.worldGroup.matrixWorld.toArray(),
         __projectToScreen: (point) => {
           const ndc = new Vector3(point[0], point[1], point[2]).project(stage.desktopCamera);
           if (ndc.z > 1) return null;

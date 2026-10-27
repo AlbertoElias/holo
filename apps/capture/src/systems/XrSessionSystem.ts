@@ -1,4 +1,5 @@
 import { createSystem } from '@iwsdk/core';
+import { isHandheldSession } from '@holoim/xr-ui-iwsdk';
 import { type CaptureContext, captureContext } from './captureContext';
 
 /**
@@ -8,11 +9,18 @@ import { type CaptureContext, captureContext } from './captureContext';
 export class XrSessionSystem extends createSystem() {
   private capture!: CaptureContext;
   private inArSession = false;
+  // Decided once per AR session on entry: a strictly handheld
+  // session. A headset in passthrough, or a browser that does not say, is a spectator.
+  private cameraAuthor = false;
   private session: XRSession | null = null;
   private referenceSpace: XRReferenceSpace | null = null;
 
   private readonly onSessionEnd = (): void => {
     this.capture.input.onXrSessionEnded();
+    // A take in progress stops and exports now, as Stop does, and the held
+    // microphone goes now: no further frame may come to run onExited.
+    if (this.cameraAuthor) this.capture.recording.endCameraTake();
+    this.capture.recording.releaseHeldMic();
   };
 
   // A recenter re-origins tracking space; the body realigns rather than
@@ -35,6 +43,10 @@ export class XrSessionSystem extends createSystem() {
 
     frame.xrPresenting = c.tracking.isXrPresenting();
     frame.arSpectator = isAr && frame.xrPresenting;
+    frame.arCameraAuthor = frame.arSpectator && this.cameraAuthor;
+    // The AR tap asked for the microphone before it knew whether a session
+    // would start; a refused request leaves it open with nothing to use it.
+    if (!frame.xrPresenting && c.recording.isMicHeld() && !this.world.sessionRequestPending) c.recording.releaseHeldMic();
     if (frame.arSpectator) {
       c.ui.publishMode('ar');
       c.camera.update(false, true, deltaSec, true);
@@ -70,7 +82,16 @@ export class XrSessionSystem extends createSystem() {
     this.bindSession();
     if (isAr) {
       c.ar.onEntered();
-      c.vrChrome.show('ar');
+      this.cameraAuthor = isHandheldSession(this.session, { strict: true });
+      // The idle performer is not in a camera take; it comes back on exit.
+      if (this.cameraAuthor) {
+        c.avatar.avatarRoot.visible = false;
+        c.phoneChrome.show();
+      } else {
+        c.recording.releaseHeldMic();
+        // A headset in passthrough AR gets Find on the wrist.
+        c.vrChrome.show('ar');
+      }
     } else {
       c.vrChrome.show();
       c.hands.resetRuntimeState();
@@ -88,6 +109,11 @@ export class XrSessionSystem extends createSystem() {
     this.inArSession = false;
     this.unbindSession();
     if (exitingAr) {
+      if (this.cameraAuthor) c.recording.endCameraTake();
+      c.phoneChrome.hide();
+      this.cameraAuthor = false;
+      c.avatar.avatarRoot.visible = true;
+      c.recording.releaseHeldMic();
       c.ar.onExited();
       c.vrChrome.hide();
     } else {

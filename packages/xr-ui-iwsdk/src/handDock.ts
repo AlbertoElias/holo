@@ -1,24 +1,27 @@
 import { apxToMeters, hitAreaMeters, tokens } from "@holoim/design-tokens";
 import { PokeInteractable, RayInteractable, UIKit, UIKitDocument, type Entity, type World } from "@iwsdk/core";
-import { glyphGapApx, type DockAction } from "@holoim/xr-ui-core";
-import { CanvasTexture, Matrix4, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace, Vector3, type Material, type Object3D } from "three";
+import { glyphGapApx, markChrome, type DockAction } from "@holoim/xr-ui-core";
+import { Matrix4, Quaternion, Vector3, type Material, type Mesh, type Object3D } from "three";
 
 import { createGlyph, type GlyphElement, type GlyphName } from "./glyphs.js";
 import { POKE } from "./pointers.js";
-import { COLOR, GLYPH, HIT, SHADE } from "./tokens.js";
+import { phoneClearance, readSafeAreaInsets, type SafeAreaInsets } from "./safeArea.js";
+import { CHIP, CHIP_OPACITY, COLOR, GLYPH, HIT, withAlpha } from "./tokens.js";
 
 // The hand dock (styleguide §1.2, §9.1): glyphs on the non-dominant wrist or
 // controller in a headset, within reach and so without text; on a phone, the
 // bottom dock in the thumb zone. IWSDK has no DOM overlay in phone AR, so the
 // phone dock is a strip attached to the camera, the one exemption from "no
-// interactive UI follows the head": on a phone the screen is the hand.
+// interactive UI follows the head": on a phone the screen is the hand. Over the
+// camera image its row sits on a chip fitted to the controls showing (§5.2,
+// §9.2): the Android AR chip, padded as a control row (§2.3), with no shade.
 //
 // Commits come from IWSDK's pointers only: a ray (or a phone tap) on click,
 // a poke on contact (pointerdown), and only for a fingertip that arrived from
 // in front of the glyph's face. Each poke approach commits once.
 
 /** Phone dock depth in front of the camera: inside the near view, clear of the scene. */
-const PHONE_DOCK_DEPTH_M = 0.3;
+export const PHONE_DOCK_DEPTH_M = 0.3;
 
 /** In a headset the row is read at arm's reach (§6.1: 45 cm). */
 const ARM_REACH_M = tokens.placement.armReachM;
@@ -44,22 +47,38 @@ export interface HandDockOptions {
   onHover?(action: DockAction, pointerId: number, hovered: boolean): void;
 }
 
+/** A rectangle in CSS px from the screen's top left (a phone dock's chip). */
+export interface ScreenRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface HandDockProbe {
   mount: HandDockMount["kind"];
   input: "poke" | "ray" | "touch";
   visible: boolean;
   metresPerApx: number;
+  /** The dock's largest hit area and glyph (its ring when it has one). */
   hitApx: number;
   glyphApx: number;
   /** Drawn and hit sizes in metres (ring or icon; hit area per input). */
   drawnSizeM: number;
   hitSizeM: number;
-  buttons: Record<string, { worldPosition: [number, number, number]; hovered: boolean; recording: boolean; visible: boolean }>;
+  buttons: Record<string, { worldPosition: [number, number, number]; hovered: boolean; recording: boolean; shown: boolean; glyphApx: number; hitApx: number }>;
+  /** Phone only: the chip's rectangle on the screen (null while no control shows), and the clearances it keeps. */
+  chip: ScreenRect | null;
+  safeArea: { insets: SafeAreaInsets; bottomClearApx: number } | null;
 }
 
 interface DockButton {
   action: DockAction;
   hit: InstanceType<typeof UIKit.Container>;
+  /** This action's own sizes: the Record ring is bigger than the icons beside it. */
+  size: DockSize;
+  /** False while its action is hidden; the chip refits around the rest. */
+  shown: boolean;
   glyph: GlyphElement;
   /** Rays (or taps) resting on it. */
   hovering: Set<number>;
@@ -67,7 +86,13 @@ interface DockButton {
   near: Set<number>;
   pressed: boolean;
   recording: boolean;
-  hidden: boolean;
+}
+
+interface DockSize {
+  glyphApx: number;
+  hitApx: number;
+  drawnSizeM: number;
+  hitSizeM: number;
 }
 
 /** Out of the palm in WebXR grip space: the back of the right hand is +X, of the left −X. */
@@ -92,14 +117,16 @@ export class HandDock {
   private readonly mount: HandDockMount;
   private readonly options: HandDockOptions;
   private readonly metresPerApx: number;
-  private readonly hitApx: number;
-  private readonly glyphApx: number;
-  private readonly drawnSizeM: number;
-  private readonly hitSizeM: number;
+  /** The largest button's sizes: what the probe and `sizes` report. */
+  private readonly largest: DockSize;
   /** Touch pointers seen in front of a glyph's face since their last commit. */
   private readonly armed = new Set<number>();
   private pressedUntilMs = 0;
-  private shade: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null;
+  /** Phone only: the chip the row sits on, and where it stands. */
+  private chip: InstanceType<typeof UIKit.Container> | null = null;
+  private chipRect: ScreenRect | null = null;
+  private readonly insets: SafeAreaInsets;
+  private readonly bottomClearApx: number;
   /** A wrist space outside IWSDK's entity tree, whose pose the dock copies each frame. */
   private follows: Object3D | null = null;
   private readonly wristOffset: Matrix4 | null;
@@ -109,47 +136,67 @@ export class HandDock {
     this.options = options;
     const phone = mount.kind === "phone";
     const input = options.input ?? "poke";
-    const ringed = actions.some((action) => action.glyph === "record");
-    // Record sits in the 36 apx ring; Exit is a 16 apx icon.
-    const drawnApx = ringed ? GLYPH.ring : GLYPH.icon;
     if (phone) {
       // A phone draws flat sizes in CSS pixels at the dock's depth.
       this.metresPerApx = (2 * PHONE_DOCK_DEPTH_M * Math.tan(mount.verticalFovRad / 2)) / mount.viewportHeightCss;
-      this.glyphApx = drawnApx;
-      this.hitApx = Math.max(HIT.touch, drawnApx);
-      this.drawnSizeM = drawnApx * this.metresPerApx;
-      this.hitSizeM = this.hitApx * this.metresPerApx;
     } else {
       // A headset dock is read at arm's reach, drawn at 2.5×; hit areas are per input and never scaled.
       this.metresPerApx = apxToMeters(1, ARM_REACH_M, { headset: false });
-      this.drawnSizeM = apxToMeters(drawnApx, ARM_REACH_M, { headset: true });
-      this.hitSizeM = hitAreaMeters(input, drawnApx * tokens.size.headsetScale, ARM_REACH_M, { headset: false });
-      this.glyphApx = this.drawnSizeM / this.metresPerApx;
-      this.hitApx = this.hitSizeM / this.metresPerApx;
     }
+    // Record sits in the 36 apx ring; the other actions are 16 apx icons, each with its own hit area.
+    const sizeOf = (drawnApx: number): DockSize => {
+      if (phone) {
+        const hitApx = Math.max(HIT.touch, drawnApx);
+        return { glyphApx: drawnApx, hitApx, drawnSizeM: drawnApx * this.metresPerApx, hitSizeM: hitApx * this.metresPerApx };
+      }
+      const drawnSizeM = apxToMeters(drawnApx, ARM_REACH_M, { headset: true });
+      const hitSizeM = hitAreaMeters(input, drawnApx * tokens.size.headsetScale, ARM_REACH_M, { headset: false });
+      return { glyphApx: drawnSizeM / this.metresPerApx, hitApx: hitSizeM / this.metresPerApx, drawnSizeM, hitSizeM };
+    };
+    const ringed = actions.some((action) => action.glyph === "record");
+    this.largest = sizeOf(ringed ? GLYPH.ring : GLYPH.icon);
+    this.insets = phone ? readSafeAreaInsets() : { top: 0, right: 0, bottom: 0, left: 0 };
+    // The row's bottom edge (the chip's) clears the home bar and the system's inset, plus a glyph gap (§6.1, §9.3).
+    this.bottomClearApx = phoneClearance(this.insets).bottom + GLYPH.gap;
 
     const root = new UIKit.Container({
       pixelSize: this.metresPerApx,
       flexDirection: "row",
       alignItems: "center",
       gap: phone ? GLYPH.gap : glyphGapApx(input, { headset: true }),
+      anchorX: "center",
       anchorY: phone ? "bottom" : "center",
       pointerEventsType: this.pointerFilter()
     });
+    // A phone's row sits on its chip (§9.2): the Android AR chip, padded as a control row (§2.3).
+    if (phone) {
+      this.chip = new UIKit.Container({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: GLYPH.gap,
+        paddingTop: CHIP.controlRowPaddingStart,
+        paddingBottom: CHIP.controlRowPaddingStart,
+        paddingLeft: CHIP.controlRowPaddingStart,
+        paddingRight: CHIP.paddingInline,
+        borderRadius: CHIP.radius,
+        backgroundColor: withAlpha(COLOR.deepSea, CHIP_OPACITY.arAndroidChrome)
+      });
+      root.add(this.chip);
+    }
     for (const action of actions) {
-      const hit = new UIKit.Container({ width: this.hitApx, height: this.hitApx, alignItems: "center", justifyContent: "center" });
       const record = action.glyph === "record";
+      const size = sizeOf(record ? GLYPH.ring : GLYPH.icon);
+      const hit = new UIKit.Container({ width: size.hitApx, height: size.hitApx, alignItems: "center", justifyContent: "center" });
       const glyph = createGlyph(record ? "recordIdle" : (action.glyph as GlyphName), {
-        // Beside Record's ring a line glyph keeps the icon size (§6), so it reads at the record shape's weight.
-        size: record || !ringed ? this.glyphApx : (this.glyphApx * GLYPH.icon) / GLYPH.ring,
+        size: size.glyphApx,
         color: COLOR.gold,
         // Record: rose shapes inside the gold ring, at the ring's full 16-unit box (§6).
         ...(record ? { ring: { innerSize: GLYPH.icon }, fill: COLOR.record } : {})
       });
       glyph.element.setProperties({ pointerEvents: "none" });
       hit.add(glyph.element);
-      root.add(hit);
-      const button: DockButton = { action, hit, glyph, hovering: new Set(), near: new Set(), pressed: false, recording: false, hidden: false };
+      (this.chip ?? root).add(hit);
+      const button: DockButton = { action, hit, size, shown: true, glyph, hovering: new Set(), near: new Set(), pressed: false, recording: false };
       this.bindPointer(button);
       this.buttons.push(button);
     }
@@ -158,6 +205,8 @@ export class HandDock {
     this.entity = world.createTransformEntity(undefined, { parent: world.activeLevel.value });
     const object = this.entity.object3D!;
     object.name = "HandDock";
+    // The dock and its chip are chrome (touches that begin on it never become marks), not the recorded scene.
+    markChrome(object);
     object.add(this.document);
     this.entity.addComponent(RayInteractable);
     if (!phone) this.entity.addComponent(PokeInteractable);
@@ -176,13 +225,10 @@ export class HandDock {
       }
     } else {
       mount.camera.add(object);
-      // Bottom centre, above the home bar and safe area (§6.1, §9.3).
+      // Bottom centre, the chip's bottom edge above the home bar and safe area (§6.1, §9.3).
       const halfHeight = PHONE_DOCK_DEPTH_M * Math.tan(mount.verticalFovRad / 2);
-      object.position.set(0, -halfHeight + (HIT.phoneHomeBar + GLYPH.gap) * this.metresPerApx, -PHONE_DOCK_DEPTH_M);
-      // The dock sits on the soft shade a hologram casts, spread along the bottom of the screen (§5.2).
-      this.shade = phoneShade(mount.viewportWidthCss * this.metresPerApx, SHADE.phoneHeight * mount.viewportHeightCss * this.metresPerApx);
-      this.shade.position.set(0, (this.hitApx / 2) * this.metresPerApx, -0.001);
-      object.add(this.shade);
+      object.position.set(0, -halfHeight + this.bottomClearApx * this.metresPerApx, -PHONE_DOCK_DEPTH_M);
+      this.fitChip();
     }
   }
 
@@ -223,7 +269,7 @@ export class HandDock {
   }
 
   private commit(button: DockButton, pointerId: number, kind: "poke" | "ray"): void {
-    if (!this.isShown() || button.hidden || this.options.canCommit?.(button.action, pointerId) === false) return;
+    if (!button.shown || !this.isShown() || this.options.canCommit?.(button.action, pointerId) === false) return;
     this.pressedUntilMs = performance.now() + PRESSED_SHOW_MS;
     button.action.onSelect();
     this.options.onCommit?.(button.action, pointerId, kind);
@@ -255,17 +301,52 @@ export class HandDock {
     this.entity.object3D!.visible = visible;
   }
 
-  /** Shows or hides one action's glyph; a hidden one takes no hits and the row closes up. */
+  /**
+   * Shows or hides one action. On a phone the chip refits around the actions
+   * showing, and the ring (Record) stays at the middle of the screen whatever
+   * else shows, Recenter and Exit standing a glyph pitch either side of it (a
+   * lone action is centred too).
+   */
   setActionVisible(actionId: string, visible: boolean): void {
     const button = this.buttons.find((candidate) => candidate.action.id === actionId);
-    if (!button || button.hidden === !visible) return;
-    button.hidden = !visible;
+    if (!button || button.shown === visible) return;
+    button.shown = visible;
     button.hit.setProperties({ display: visible ? "flex" : "none" });
     if (!visible) {
       button.hovering.clear();
       button.near.clear();
       button.pressed = false;
     }
+    this.fitChip();
+  }
+
+  /** Phone only: the chip's width and the row's x on the screen, from the actions showing (all in apx; fixed sizes, so exact). */
+  private fitChip(): void {
+    if (this.mount.kind !== "phone" || !this.chip) return;
+    const { viewportWidthCss: screenWidth, viewportHeightCss: screenHeight } = this.mount;
+    const shown = this.buttons.filter((button) => button.shown);
+    this.chip.setProperties({ display: shown.length > 0 ? "flex" : "none" });
+    if (shown.length === 0) {
+      this.chipRect = null;
+      return;
+    }
+    const start = CHIP.controlRowPaddingStart;
+    const height = Math.max(...shown.map((button) => button.size.hitApx)) + 2 * CHIP.controlRowPaddingStart;
+    const width = start + shown.reduce((sum, button) => sum + button.size.hitApx, 0) + GLYPH.gap * (shown.length - 1) + CHIP.paddingInline;
+    // Where the primary's centre falls along the chip: the ring (Record), else a lone action; with neither, the chip itself is centred.
+    let offset = width / 2;
+    let along = start;
+    for (const button of shown) {
+      if (button.action.glyph === "record" || shown.length === 1) offset = along + button.size.hitApx / 2;
+      along += button.size.hitApx + GLYPH.gap;
+    }
+    // The root is centred on the dock's origin, so shifting it puts the ring on the screen's middle line.
+    let shift = width / 2 - offset;
+    // Never into a gesture zone or an inset at either side (§6.1); only a very narrow screen moves the ring.
+    const clear = phoneClearance(this.insets).side;
+    shift = Math.min(Math.max(shift, -(screenWidth / 2 - clear.left - width / 2)), screenWidth / 2 - clear.right - width / 2);
+    this.entity.object3D!.position.x = shift * this.metresPerApx;
+    this.chipRect = { left: screenWidth / 2 + shift - width / 2, top: screenHeight - this.bottomClearApx - height, width, height };
   }
 
   /** Record turns into Stop: the rose shape alone carries the state (§8.5). */
@@ -318,7 +399,7 @@ export class HandDock {
   }
 
   get sizes(): { drawnSizeM: number; hitSizeM: number } {
-    return { drawnSizeM: this.drawnSizeM, hitSizeM: this.hitSizeM };
+    return { drawnSizeM: this.largest.drawnSizeM, hitSizeM: this.largest.hitSizeM };
   }
 
   probe(): HandDockProbe {
@@ -328,7 +409,9 @@ export class HandDock {
         worldPosition: button.hit.getWorldPosition(new Vector3()).toArray() as [number, number, number],
         hovered: button.hovering.size > 0,
         recording: button.recording,
-        visible: !button.hidden
+        shown: button.shown,
+        glyphApx: button.size.glyphApx,
+        hitApx: button.size.hitApx
       };
     }
     return {
@@ -336,19 +419,18 @@ export class HandDock {
       input: this.mount.kind === "phone" ? "touch" : (this.options.input ?? "poke"),
       visible: this.isShown(),
       metresPerApx: this.metresPerApx,
-      hitApx: this.hitApx,
-      glyphApx: this.glyphApx,
-      drawnSizeM: this.drawnSizeM,
-      hitSizeM: this.hitSizeM,
-      buttons
+      hitApx: this.largest.hitApx,
+      glyphApx: this.largest.glyphApx,
+      drawnSizeM: this.largest.drawnSizeM,
+      hitSizeM: this.largest.hitSizeM,
+      buttons,
+      chip: this.chipRect && { ...this.chipRect },
+      safeArea: this.mount.kind === "phone" ? { insets: this.insets, bottomClearApx: this.bottomClearApx } : null
     };
   }
 
   dispose(): void {
     for (const button of this.buttons) button.glyph.dispose();
-    this.shade?.geometry.dispose();
-    this.shade?.material.map?.dispose();
-    this.shade?.material.dispose();
     this.entity.object3D!.removeFromParent();
     this.document.dispose();
     this.entity.destroy();
@@ -378,33 +460,4 @@ function drawOverBody(root: Object3D): void {
       material.depthWrite = false;
     }
   });
-}
-
-/**
- * The shade (§5.1) as a `width` × `height` m plane: radial-gradient(closest-side,
- * deepSea .7, deepSea .5 at 60%, transparent). It takes no pointer, so taps
- * through it still reach the scene.
- */
-function phoneShade(width: number, height: number): Mesh<PlaneGeometry, MeshBasicMaterial> {
-  // A square gradient; the plane stretches it into the closest-side ellipse.
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 256;
-  const context = canvas.getContext("2d")!;
-  const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
-  const rgb = [1, 3, 5].map((i) => parseInt(COLOR.deepSea.slice(i, i + 2), 16)).join(",");
-  gradient.addColorStop(0, `rgba(${rgb},${SHADE.inner})`);
-  gradient.addColorStop(SHADE.midStop, `rgba(${rgb},${SHADE.mid})`);
-  gradient.addColorStop(1, `rgba(${rgb},0)`);
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, 256, 256);
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
-  const mesh = new Mesh(
-    new PlaneGeometry(width, height),
-    new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false })
-  );
-  mesh.name = "PhoneDockShade";
-  mesh.renderOrder = -1;
-  mesh.raycast = () => undefined;
-  return mesh;
 }
