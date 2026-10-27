@@ -6,7 +6,7 @@ import { chromium, type Page } from "@playwright/test";
 import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, expect, reachFor, test } from "./bootstrap";
-import { cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
+import { animationFrames, cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
 import { MARKS, MIDPOINTS, OUTSIDE_TIMES, buildPointingGlb } from "./pointing-fixture";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
@@ -312,7 +312,7 @@ test("a recording without the extension renders unchanged, with no pointing cont
   await expect(card.getByRole("button", { name: CONTROL_NAMES.pause })).toBeVisible();
   await expect(card.getByRole("button", { name: "Highlight what the author points at" })).toHaveCount(0);
   await seek(page, uploaded.url, MIDPOINTS[0]!);
-  await page.waitForTimeout(400);
+  await animationFrames(page, 24);
   expect(await links(page, uploaded.url)).toEqual([]);
   await shot(page, uploaded.id, "7-no-extension");
 });

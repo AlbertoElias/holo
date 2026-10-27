@@ -91,6 +91,7 @@ test("portal view on a real capture: freeze, orbit, zoom inside the bubble, Retu
   await page.mouse.click(center.x, center.y);
   await expect(card).toHaveAttribute("data-portal-paused", "true");
   const frozenTimes = await waitForFrozenTimes(page, uploaded.url);
+  // Negative over time: the pause must hold across real elapsed time, which no page clock can stand in for.
   await page.waitForTimeout(800);
   const pausedB = await readPortal(page, uploaded.url);
   expect(pausedB.actionTimes, "animation time stays frozen while paused").toEqual(frozenTimes);

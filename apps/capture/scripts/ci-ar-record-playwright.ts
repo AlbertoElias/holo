@@ -589,7 +589,9 @@ async function expectDownloadCount(page: Page, report: PhaseReport, expected: nu
   }
   if (frozen) {
     // An export still running finishes on real work; then a download it starts reaches this side within a moment.
-    await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).ar.recordingState !== 'exporting', null, { timeout: 30000, polling: 50 }).catch(() => undefined);
+    await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).ar.recordingState !== 'exporting', null, { timeout: 30000, polling: 50 }).catch(() => {
+      report.failures.push('the export did not leave "exporting" within 30 s, so the download count below is not final');
+    });
     await page.waitForEvent('download', { timeout: 300 }).catch(() => undefined);
   }
   const names = downloadLog.get(page) ?? [];

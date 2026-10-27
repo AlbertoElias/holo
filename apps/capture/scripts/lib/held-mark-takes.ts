@@ -156,8 +156,8 @@ async function desktopPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   let ringBox: Box | null = null;
   const keyHalo = async (dx: number, dy: number, held: boolean) => {
     await page.keyboard.down('KeyB');
-    // Held past the hold delay: the ring is drawn once the delay ends (a wall-clock timer in the page).
-    if (held) await page.locator('[data-capture-key-halo]').waitFor({ timeout: 5000 }).catch(() => undefined);
+    // Held past the hold delay: the ring is attached once the delay ends (a wall-clock timer in the page); its zero-size anchor is never "visible".
+    if (held) await page.locator('[data-capture-key-halo]').waitFor({ state: 'attached', timeout: 5000 }).catch(() => { throw new Error('key Halo: B held past the hold delay but the ring never appeared within 5 s'); });
     const box = await page.evaluate(() => {
       const ring = document.querySelector('[data-capture-key-halo]');
       if (!ring) return null;
@@ -255,7 +255,7 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   // Moving out of the slop before the hold delay makes it a look drag.
   await touch(cdp, 'touchStart', [{ x: at.x, y: at.y + 60 }]);
   await touch(cdp, 'touchMove', [{ x: at.x + 40, y: at.y + 60 }]);
-  // Past the hold delay with nothing to wait for: it must not become a hold (a slow host only makes this vacuous).
+  // Negative over time: the hold delay is a real wall-clock timer in the page, outside the page clock, so this real sleep is required (a slow host only makes it vacuous).
   await page.waitForTimeout(450);
   const dragPhase = (await holdsOf(page)).touch;
   await touch(cdp, 'touchEnd', []);
@@ -264,7 +264,7 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   await advance(0.4);
   await touch(cdp, 'touchStart', [at]);
   // Resting past the hold delay (a wall-clock timer in the page) holds; wait for that rather than a fixed time.
-  await page.waitForFunction(() => window.__sampleHolds().touch === 'held', null, { timeout: 5000, polling: 25 }).catch(() => undefined);
+  await page.waitForFunction(() => window.__sampleHolds().touch === 'held', null, { timeout: 5000, polling: 25 }).catch(() => { throw new Error('phone: a touch resting on the target never became a hold within 5 s'); });
   await advance(0.1);
   const holdPhase = (await holdsOf(page)).touch;
   if (holdPhase !== 'held') failures.push(`a touch resting past the hold delay is ${holdPhase}, not held`);
@@ -278,7 +278,7 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   if (!glyph) throw new Error('phone: no Halo glyph in the dock while recording');
   const start = { x: glyph.x + glyph.width / 2, y: glyph.y + glyph.height / 2 };
   await touch(cdp, 'touchStart', [start]);
-  // Held past the hold delay (a wall-clock timer in the page; the glyph's ring has no marker apart from the glyph).
+  // Real sleep required: the hold delay is a wall-clock timer outside the page clock, and the glyph's ring has no marker to wait on apart from the glyph.
   await page.waitForTimeout(450);
   const ringShown = await page.locator('[data-capture-halo] [data-halo-ring], [data-capture-halo] svg circle').count();
   for (const step of [20, 40, 60, 80]) await touch(cdp, 'touchMove', [{ x: start.x - step, y: start.y }]);
