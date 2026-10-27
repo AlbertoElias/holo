@@ -6,7 +6,7 @@ function matchesWildcardOrigin(requestOrigin: string, pattern: string): boolean 
     return false;
   }
   const escaped = pattern
-    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     .replace("\\*\\.", "[a-z0-9-]+\\.");
   return new RegExp(`^${escaped}$`, "i").test(requestOrigin);
 }
