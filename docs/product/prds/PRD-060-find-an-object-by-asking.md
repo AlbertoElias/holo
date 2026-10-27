@@ -5,7 +5,7 @@
 **Layer:** Event  
 **Depends on:** PRD-043 (explain with an object, delivered), PRD-045 (summon and place, delivered)  
 **Owner:** Unassigned  
-**Last updated:** 2026-10-27
+**Last updated:** 2026-10-27 (Q1 and Q3 decided by the user)
 
 ## User Outcome
 
@@ -224,24 +224,31 @@ current flow: a hand-found GLB passed by URL or picker.
 
 Product decisions for the user:
 
-- [ ] **Q1. Which registries?** Sketchfab has the most models but needs each
+- [x] **Q1. Which registries?** Sketchfab has the most models but needs each
       author to sign in to a Sketchfab account (or a partnership with
       Sketchfab), and its developer terms are unreviewed. Poly Pizza and Poly
       Haven are simpler and all CC0/CC-BY but smaller. Smithsonian is CC0 and
       accurate but narrow. Start with one, two, or all?
-      **Provisional — pending user approval:** Poly Haven first (no key, no account, CC0). Poly Pizza
-      second, once the user supplies its free API key as a server secret.
-      Sketchfab and Smithsonian wait for this PRD's evidence and a terms review.
+      **Decided 2026-10-27 (user):** Poly Haven and Poly Pizza (Poly Pizza
+      with the user's free API key as a server secret). Smithsonian is out.
+      Sketchfab waits. A self-hosted starter set stays a candidate, limited
+      by current storage.
 - [ ] **Q2. Which licences may a take redistribute?** CC0 and CC-BY only, or
       also BY-SA? Is HoloIM commercial, which rules out every NC licence? Is
       ND acceptable given that a take scales and animates the model? This
       likely needs a legal reading.
       **Provisional — pending user approval:** CC0 and CC-BY only. Everything else is filtered out at
       search time.
-- [ ] **Q3. Where search lives first:** only before the take (this draft), or
+- [x] **Q3. Where search lives first:** only before the take (this draft), or
       is a spoken search during the take part of the first version?
-      **Provisional — pending user approval:** before the take only. Text search on the desktop capture
-      page first; voice input (transcribed to editable text) second.
+      **Decided 2026-10-27 (user):** before the take for now, on desktop and
+      in the headset's 3D interface (VR and passthrough AR) alike. The
+      headset gets category shortcuts, a keyboard (the Quest system keyboard
+      where the browser supports it, an in-world one otherwise) and voice:
+      speak, see the transcript and results, pick. Voice is required, not a
+      later extra. Direction: during a take, a word plus a gesture or button
+      summons the object instantly; each slice should move toward that
+      latency (cache, prefetch, streaming transcription).
 - [ ] **Q4. Re-encode or filter?** Should the server convert Draco, meshopt,
       KTX2 and oversized models into tray-legal GLBs (more results, a
       conversion service to run), or only show models that already pass?

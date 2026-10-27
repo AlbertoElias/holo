@@ -136,15 +136,35 @@ routes answer any origin, so capture's origin stays out of `WEB_ORIGINS`.
 | Objaverse (Hugging Face) | Per-object CC | Static dataset, no search API | Only behind our own index |
 | Kenney, Quaternius, Khronos samples | CC0 | No API | Could seed a curated starter set we host |
 
-## Headset (VR and AR) slice: open design
+## Slice 2: Poly Pizza, headset search and voice (decided 2026-10-27)
 
-Capture's VR and passthrough AR sessions have no DOM, so the Find field
-cannot be reused. Quest Browser does not expose the Web Speech API, so
-voice means recording the mic and transcribing on the server (an STT
-provider: a billing decision). A text-free path needs no decisions:
-a Find action on the hand dock opens a `WorldPanel` with category
-shortcuts (chairs, plants, lamps, food, tools) and an in-world keyboard,
-results as thumbnail tiles, and a pick lands in the tray as on the desktop.
+The user decided PRD-060 Q1 and Q3: add Poly Pizza, drop Smithsonian, and
+make search work in the headset's 3D interface (VR and passthrough AR) with
+voice, before the take. Slice 1 stays unmerged until Q2 and Q4–Q7 are
+approved, so slice 2 builds on `feature/object-search`.
+
+- **Poly Pizza.** `api.poly.pizza/v1/search/{q}` with an `X-Auth-Token`
+  header; results carry a GLB `Download` URL, `Creator` and `Licence`
+  (CC0 or CC-BY 4.0). Same server-side vetting, size cap, host allowlist
+  and credit as Poly Haven; search merges both sources. Develop against a
+  fixture; the live key is a Fly secret the user sets
+  (`POLYPIZZA_API_KEY`), and search silently uses Poly Haven alone without it.
+- **Headset panel.** Capture's VR and AR sessions have no DOM. A Find
+  action on the hand dock opens a `WorldPanel` (`@holoim/xr-ui-iwsdk`)
+  with category shortcuts (chairs, plants, lamps, food, tools), a query
+  line, thumbnail result tiles, and a pick that lands in the tray.
+- **Keyboard.** Quest Browser 26.1+ shows the system keyboard for a
+  focused DOM input during an immersive session
+  (`XRSession.isSystemKeyboardSupported`); the panel mirrors that input's
+  value, since there are no key events. Meta reports crashes and frozen
+  hands with it on some builds, so an in-world keyboard is the fallback.
+- **Voice.** Quest Browser has no Web Speech API, so the mic is recorded
+  (push to talk on the panel) and transcribed on the server, then searched.
+  Recommended provider: Cloudflare Workers AI `whisper-large-v3-turbo`
+  ($0.0005 per audio minute; a free daily allowance covers roughly 200
+  minutes). Choosing a provider is the user's billing decision.
+- **Toward instant.** Prefetch the top result's GLB as soon as results
+  arrive, so a pick loads from cache.
 
 ## Physical-device limits
 
