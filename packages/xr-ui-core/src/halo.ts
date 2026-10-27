@@ -24,6 +24,9 @@ export type HaloAction = (typeof HALO_ACTIONS)[HaloDirection];
 /** Capture's first Halo (Q20): S record/stop, W undo the last held mark, E redo it. */
 export const CAPTURE_HALO_ACTIONS: readonly HaloAction[] = ["record", "undo", "redo"];
 
+/** Capture's Halo on a flat screen: the dock already carries Record, so S stays empty there. */
+export const FLAT_CAPTURE_HALO_ACTIONS: readonly HaloAction[] = ["undo", "redo"];
+
 /** The line glyph drawn in an action's ring; null where the ring is drawn empty (Record draws its own shape). */
 export function haloSlotGlyph(action: HaloAction): DrawnGlyph | null {
   return action === "undo" || action === "redo" ? action : null;

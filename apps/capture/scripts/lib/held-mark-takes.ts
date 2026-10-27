@@ -28,11 +28,15 @@ import { readGlbJson } from './pointing-score.ts';
 // capture's own recorder and reads HOLOIM_meaning from the GLB:
 //   desktop: F held on A and on B (mock aim), then the B key's Halo: W held
 //     with the mouse at the bottom edge (undo B), E flicked (redo), W flicked
-//     (undo), S held (stop). Expects one recorded link, on A, and the ring
-//     drawn whole inside the window while the key holds.
+//     (undo); then the dock's Halo glyph clicked, which leaves the ring
+//     open with S empty (the dock carries Record), Escape closing it, and a
+//     click on E (redo B) and on W (undo B); the dock's Stop ends the take.
+//     Expects one recorded link, on A, and the ring drawn whole inside the
+//     window while the key holds.
 //   phone (390 × 844, touch): a touch moved before the hold delay looks and
 //     never holds; a look-side touch held on A (CDP touch at A's
-//     projection), then the dock's Halo glyph held and dragged down (S stops).
+//     projection), then the dock's Halo glyph held and dragged left (W undoes
+//     A), and tapped, with a tap on E (redo A); the dock's Stop ends the take.
 //     Expects one recorded link on A, from touch.
 //   IWER hands: the right index points at A while the left hand holds a
 //     thumb–middle pinch; it points at B the same way; the right hand's own
@@ -191,19 +195,38 @@ async function desktopPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   const flickDrawn = await keyHalo(90, 0, false);
   if (flickDrawn) failures.push('a flick drew the ring');
   await keyHalo(-90, 0, false);
+  // The dock's Halo glyph clicked: the ring stays open until a direction is clicked.
+  const haloGlyph = page.getByRole('img', { name: /^Halo/ });
+  const pinnedPlaces = async () => page.evaluate(() => [...document.querySelectorAll('[data-capture-halo] [data-halo-slot]')].map((slot) => slot.getAttribute('data-halo-slot')));
+  await haloGlyph.click();
+  await advance(0.5);
+  const clickedOpen = await pinnedPlaces();
+  if (clickedOpen.join(',') !== 'e,w') failures.push(`a click on the Halo glyph shows ${JSON.stringify(clickedOpen)}, expected the ring open with E and W only`);
+  await page.keyboard.press('Escape');
+  const afterEscape = await pinnedPlaces();
+  if (afterEscape.length !== 0) failures.push(`Escape left the clicked ring open: ${JSON.stringify(afterEscape)}`);
+  for (const label of ['Redo mark', 'Undo mark']) {
+    await haloGlyph.click();
+    await page.getByRole('button', { name: label }).click();
+    await advance(0.2);
+  }
+  const afterPicks = await pinnedPlaces();
+  if (afterPicks.length !== 0) failures.push(`the ring stayed open after a direction was clicked: ${JSON.stringify(afterPicks)}`);
   const download = page.waitForEvent('download', { timeout: 120_000 });
-  await keyHalo(0, 90, true);
+  await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).evaluate((el) => (el as HTMLElement).click());
+  for (let i = 0; i < 20; i += 1) await advance(0.05);
   const { glb, links } = await readLinks(run, 'desktop', await download, failures);
   const holds = await holdsOf(page);
   expectActions(holds, [
     { input: 'key', action: 'undo', done: true },
     { input: 'key', action: 'redo', done: true },
     { input: 'key', action: 'undo', done: true },
-    { input: 'key', action: 'record', done: true }
+    { input: 'mouse', action: 'redo', done: true },
+    { input: 'mouse', action: 'undo', done: true }
   ], failures);
   if (links.length !== 1 || !onTarget(links[0]!, 'TargetA') || links[0]!.provenance !== 'recorded') failures.push(`links ${JSON.stringify(links)}, expected one recorded link on TargetA`);
   await page.context().close();
-  return { phase: 'desktop', glb, links, holds, failures, notes: { ringDrawnWhileHeld: ringDrawn, flickDrewRing: flickDrawn, ringBoxAtBottomEdge: ringBox, statusAfterUndo: said } };
+  return { phase: 'desktop', glb, links, holds, failures, notes: { ringDrawnWhileHeld: ringDrawn, flickDrewRing: flickDrawn, ringBoxAtBottomEdge: ringBox, statusAfterUndo: said, clickedOpen } };
 }
 
 // --- Phone ---
@@ -247,20 +270,27 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   await advance(1.2);
   await touch(cdp, 'touchEnd', []);
   await advance(0.6);
-  // The dock's Halo glyph: held, then dragged down to S.
+  // The dock's Halo glyph: held, then dragged left to W; then tapped, and E tapped.
   const glyph = await page.getByRole('img', { name: /^Halo/ }).boundingBox();
   if (!glyph) throw new Error('phone: no Halo glyph in the dock while recording');
   const start = { x: glyph.x + glyph.width / 2, y: glyph.y + glyph.height / 2 };
   await touch(cdp, 'touchStart', [start]);
   await page.waitForTimeout(450);
   const ringShown = await page.locator('[data-capture-halo] [data-halo-ring], [data-capture-halo] svg circle').count();
-  const download = page.waitForEvent('download', { timeout: 120_000 });
-  for (const step of [20, 40, 60, 80]) await touch(cdp, 'touchMove', [{ x: start.x, y: start.y + step }]);
+  for (const step of [20, 40, 60, 80]) await touch(cdp, 'touchMove', [{ x: start.x - step, y: start.y }]);
   await touch(cdp, 'touchEnd', []);
+  await advance(0.2);
+  await touch(cdp, 'touchStart', [start]);
+  await touch(cdp, 'touchEnd', []);
+  await advance(0.2);
+  await page.getByRole('button', { name: 'Redo mark' }).tap();
+  await advance(0.2);
+  const download = page.waitForEvent('download', { timeout: 120_000 });
+  await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).tap();
   for (let i = 0; i < 20; i += 1) await advance(0.05);
   const { glb, links } = await readLinks(run, 'phone', await download, failures);
   const holds = await holdsOf(page);
-  expectActions(holds, [{ input: 'touch', action: 'record', done: true }], failures);
+  expectActions(holds, [{ input: 'touch', action: 'undo', done: true }, { input: 'touch', action: 'redo', done: true }], failures);
   if (links.length !== 1 || !onTarget(links[0]!, 'TargetA') || links[0]!.provenance !== 'recorded') failures.push(`links ${JSON.stringify(links)}, expected one recorded link on TargetA`);
   await page.context().close();
   return { phase: 'phone', glb, links, holds, failures, notes: { touchAt: at, haloGlyph: start, ringElements: ringShown } };

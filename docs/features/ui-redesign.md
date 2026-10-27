@@ -213,7 +213,9 @@ Nothing in this brief is still open.
   retake, W undo, NW ink), but most of those actions do not exist yet.
   *Decided:* capture's Halo carries S record/stop, W undo the last held
   mark and E redo it; empty directions draw nothing, and their places stay
-  reserved. The viewer's Halo waits for viewing actions beyond Play, Free and
+  reserved. On a flat screen S stays empty, since the dock carries Record,
+  and a click on the dock's Halo glyph leaves the ring open for a click on
+  a direction (decided 2026-10-26). The viewer's Halo waits for viewing actions beyond Play, Free and
   Return.
 - **Q21. Input collisions.** The concept summons the Halo with a
   right-button hold on desktop and a long-press on a phone, but the held

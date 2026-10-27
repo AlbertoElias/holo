@@ -1,7 +1,8 @@
 // The Halo (styleguide 6.2): one radial menu with eight fixed directions. A
-// hold draws it after 300 ms; a flick commits without ever drawing it. The
-// state machine is the core's `stepHalo`; this maps pointer events to it and
-// its result to elements.
+// hold draws it after 300 ms; a flick commits without ever drawing it. A
+// press released in the centre (a click) leaves the ring open, and a click
+// on a direction commits it. The state machine is the core's `stepHalo`;
+// this maps pointer events to it and its result to elements.
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { tokens } from "@holoim/design-tokens";
@@ -28,6 +29,8 @@ export interface HaloViewState {
   ringDrawn: boolean;
   /** The direction the movement points at. */
   highlighted: HaloDirection | null;
+  /** Opened by a click: the ring stays until a direction is clicked or the press lands elsewhere. */
+  pinned: boolean;
 }
 
 export interface HaloProps {
@@ -41,7 +44,9 @@ export interface HaloProps {
   ringLiftApx?: number;
 }
 
-const CLOSED_VIEW: HaloViewState = { ringDrawn: false, highlighted: null };
+const CLOSED_VIEW: HaloViewState = { ringDrawn: false, highlighted: null, pinned: false };
+
+const SLOT_LABELS: Partial<Record<HaloAction, string>> = { record: "Record", undo: "Undo mark", redo: "Redo mark" };
 
 export function Halo({ actions, onCommit, trigger, ringLiftApx = 0 }: HaloProps) {
   const layout = useMemo(() => haloLayout(actions, { headset: false }), [actions]);
@@ -49,6 +54,7 @@ export function Halo({ actions, onCommit, trigger, ringLiftApx = 0 }: HaloProps)
   const machine = useRef<HaloState>(HALO_CLOSED);
   const origin = useRef({ x: 0, y: 0 });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const root = useRef<HTMLDivElement>(null);
   const latest = useRef({ layout, onCommit });
   latest.current = { layout, onCommit };
 
@@ -60,12 +66,21 @@ export function Halo({ actions, onCommit, trigger, ringLiftApx = 0 }: HaloProps)
   const feed = useCallback((event: HaloEvent) => {
     const step: HaloStep = stepHalo(machine.current, event, latest.current.layout);
     machine.current = step.state;
+    // Released in the centre: the ring stays open for a click.
+    const pinned = event.type === "release" && step.commit === null;
     setView((previous) =>
-      previous.ringDrawn === step.ringDrawn && previous.highlighted === step.highlighted
+      previous.ringDrawn === (step.ringDrawn || pinned) && previous.highlighted === step.highlighted && previous.pinned === pinned
         ? previous
-        : { ringDrawn: step.ringDrawn, highlighted: step.highlighted }
+        : { ringDrawn: step.ringDrawn || pinned, highlighted: step.highlighted, pinned }
     );
     if (step.commit?.action) latest.current.onCommit(step.commit);
+  }, []);
+
+  const unpin = useCallback(() => setView((previous) => (previous.pinned ? CLOSED_VIEW : previous)), []);
+
+  const pick = useCallback((direction: HaloDirection, action: HaloAction) => {
+    setView(CLOSED_VIEW);
+    latest.current.onCommit({ direction, action, flick: false });
   }, []);
 
   const cancel = useCallback(() => {
@@ -74,16 +89,42 @@ export function Halo({ actions, onCommit, trigger, ringLiftApx = 0 }: HaloProps)
   }, [clearTimer, feed]);
 
   useEffect(() => {
-    // A held mode ends on blur (6.1).
-    window.addEventListener("blur", cancel);
+    if (!view.pinned) return undefined;
+    // A press anywhere but the ring, or Escape, closes a pinned ring.
+    const outside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) unpin();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") unpin();
+    };
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("keydown", escape);
     return () => {
-      window.removeEventListener("blur", cancel);
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [view.pinned, unpin]);
+
+  useEffect(() => {
+    // A held mode ends on blur (6.1).
+    const blur = () => {
+      cancel();
+      unpin();
+    };
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("blur", blur);
       clearTimer();
     };
-  }, [cancel, clearTimer]);
+  }, [cancel, clearTimer, unpin]);
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || machine.current.phase !== "closed") return;
+    // The trigger pressed again closes a pinned ring.
+    if (view.pinned) {
+      unpin();
+      return;
+    }
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId);
     } catch {
@@ -119,7 +160,9 @@ export function Halo({ actions, onCommit, trigger, ringLiftApx = 0 }: HaloProps)
 
   return (
     <div
+      ref={root}
       data-halo=""
+      data-halo-pinned={view.pinned ? "" : undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -127,7 +170,7 @@ export function Halo({ actions, onCommit, trigger, ringLiftApx = 0 }: HaloProps)
       style={{ position: "relative", display: "inline-flex", touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
     >
       {triggerNode}
-      {view.ringDrawn ? <HaloRing layout={layout} highlighted={view.highlighted} liftApx={ringLiftApx} /> : null}
+      {view.ringDrawn ? <HaloRing layout={layout} highlighted={view.highlighted} liftApx={ringLiftApx} onPick={view.pinned ? pick : undefined} /> : null}
     </div>
   );
 }
@@ -138,6 +181,8 @@ export interface HaloRingProps {
   highlighted: HaloDirection | null;
   /** Moves the drawing up from its parent's centre, apx. */
   liftApx?: number;
+  /** Makes each direction with an action a button that commits it (a ring opened by a click). */
+  onPick?: ((direction: HaloDirection, action: HaloAction) => void) | undefined;
 }
 
 /**
@@ -146,7 +191,8 @@ export interface HaloRingProps {
  * a pointer; an app draws it for any other summon (a held key) from the
  * same `stepHalo` state.
  */
-export function HaloRing({ layout, highlighted, liftApx = 0 }: HaloRingProps) {
+export function HaloRing({ layout, highlighted, liftApx = 0, onPick }: HaloRingProps) {
+  const [hovered, setHovered] = useState<HaloDirection | null>(null);
   return (
     <div data-halo-ring="" style={{ position: "absolute", left: "50%", top: liftApx ? `calc(50% - ${liftApx}px)` : "50%", width: 0, height: 0, pointerEvents: "none" }}>
       {layout.slots.map((slot) => (
@@ -162,7 +208,23 @@ export function HaloRing({ layout, highlighted, liftApx = 0 }: HaloRingProps) {
             transform: "translate(-50%, -50%)"
           }}
         >
-          {slot.action === null ? null : (
+          {slot.action === null ? null : onPick ? (
+            <button
+              type="button"
+              data-halo-slot={slot.direction}
+              data-action={slot.action}
+              data-highlighted={hovered === slot.direction ? "" : undefined}
+              aria-label={SLOT_LABELS[slot.action] ?? slot.action}
+              // Kept from the trigger's press handler, which would close the ring first.
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerEnter={() => setHovered(slot.direction)}
+              onPointerLeave={() => setHovered((current) => (current === slot.direction ? null : current))}
+              onClick={() => onPick(slot.direction, slot.action!)}
+              style={{ all: "unset", display: "block", cursor: "pointer", pointerEvents: "auto" }}
+            >
+              <HaloSlotDrawing action={slot.action} highlighted={hovered === slot.direction} slotApx={layout.slotApx} />
+            </button>
+          ) : (
             <div data-halo-slot={slot.direction} data-action={slot.action} data-highlighted={highlighted === slot.direction ? "" : undefined}>
               <HaloSlotDrawing action={slot.action} highlighted={highlighted === slot.direction} slotApx={layout.slotApx} />
             </div>

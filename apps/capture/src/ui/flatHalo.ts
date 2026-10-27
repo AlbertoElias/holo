@@ -1,5 +1,5 @@
 import { tokens } from '@holoim/design-tokens';
-import { CAPTURE_HALO_ACTIONS, HALO_CLOSED, haloLayout, stepHalo, type HaloCommit, type HaloDirection, type HaloEvent, type HaloLayout, type HaloState } from '@holoim/xr-ui-core';
+import { FLAT_CAPTURE_HALO_ACTIONS, HALO_CLOSED, haloLayout, stepHalo, type HaloCommit, type HaloDirection, type HaloEvent, type HaloLayout, type HaloState } from '@holoim/xr-ui-core';
 
 /** What the overlay draws for a held key: where the ring opens and what it shows. */
 export interface FlatHaloView {
@@ -19,7 +19,7 @@ const CLOSED_VIEW: FlatHaloView = { open: false, ringDrawn: false, highlighted: 
  * glyph is that component; this is the same machine for the keyboard.
  */
 export class FlatHalo {
-  readonly layout: HaloLayout = haloLayout(CAPTURE_HALO_ACTIONS, { headset: false });
+  readonly layout: HaloLayout = haloLayout(FLAT_CAPTURE_HALO_ACTIONS, { headset: false });
   private state: HaloState = HALO_CLOSED;
   private view: FlatHaloView = CLOSED_VIEW;
   private dx = 0;

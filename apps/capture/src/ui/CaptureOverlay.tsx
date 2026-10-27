@@ -3,7 +3,7 @@ import { useEffect, useState, useSyncExternalStore, type MouseEvent as ReactMous
 import { tokens } from '@holoim/design-tokens';
 import { Chip, defaultHitInput, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, HandednessPicker, SideSheet, Type } from '@holoim/ui-dom';
 import {
-  CAPTURE_HALO_ACTIONS,
+  FLAT_CAPTURE_HALO_ACTIONS,
   PHONE_EDGES,
   VIEW_TARGETS,
   chromeVisible,
@@ -192,13 +192,13 @@ function DockHalo({ bridge, input, touch }: { bridge: CaptureUiBridge; input: Hi
   return (
     <span data-capture-halo="" style={{ pointerEvents: 'auto', display: 'inline-flex' }}>
       <Halo
-        actions={CAPTURE_HALO_ACTIONS}
+        actions={FLAT_CAPTURE_HALO_ACTIONS}
         ringLiftApx={layout.radiusApx + layout.slotApx / 2 + glyphMetrics({ headset: false }).gapApx}
         onCommit={(commit) => {
           if (commit.action) bridge.runHaloAction(commit.action, touch ? 'touch' : 'mouse');
         }}
         trigger={(view) => (
-          <span role="img" aria-label="Halo: hold and move to a direction" style={{ display: 'inline-grid', placeItems: 'center', width: hit, height: hit, cursor: 'pointer' }}>
+          <span role="img" aria-label="Halo: click, or hold and move to a direction" style={{ display: 'inline-grid', placeItems: 'center', width: hit, height: hit, cursor: 'pointer' }}>
             <GlyphSvg drawing={glyphDrawing('halo')} appearance={glyphAppearance({ hovered: view.ringDrawn }, { headset: false })} />
           </span>
         )}

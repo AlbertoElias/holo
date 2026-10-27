@@ -21,6 +21,10 @@ device checks under Unverified below. Otherwise pick the next queue item in
 
 ## Ready to merge (grouped)
 
+- `bug/halo-click` (pushed, verified with the `marks` XR check and
+  `verify:agent`): a click on the dock's Halo glyph leaves the ring open for
+  a click on a direction, and the flat-screen Halo drops S (Record), which
+  the dock already carries. Merge with the next finished change.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
