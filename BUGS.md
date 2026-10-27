@@ -7,23 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-026 — Emulated clicks and taps are now and then lost when frames are slow
-
-- **Area:** `apps/viewer-web/e2e/xr-viewer.spec.ts` (`rayClick`, `phoneTap`), IWER input on IWSDK's pointers
-- **Severity:** P3
-- **Observed:** 2026-10-26, hosted CI run 40406523825 and `scripts/ci-emulate.sh`
-- **Evidence:** a ray click on Play, Recenter or a shelf tile, or a phone
-  tap, changes nothing about 1 time in 10 on a 2-CPU runner or at load 20
-  locally; the same step passes on retry. Timing the press by rendered
-  frames (in a frame callback, by the renderer's counter, or held in the
-  page) lost more clicks than the 80 ms press and sometimes selected a tile
-  twice, so the cause is still unknown. The spec now presses again, keyed on
-  the target state, at most twice (`pressFor`), and reports a
-  `clickRetries` annotation per test.
-- **Expected:** one emulated press is one click. Unknown whether real
-  devices drop inputs this way too (HANDOFF device checks).
-- **Reproduction:** run the VR gallery or locomotion test with `--repeat-each=3` at load 20 with `pressFor`'s retries removed.
-
 ### B-025 — Portal "desktop freeze" check finds the feed back at the top
 
 - **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("desktop freeze: … scrolling away resets"), portal scroll capture
