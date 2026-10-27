@@ -37,6 +37,8 @@ const DESKTOP = { width: 1280, height: 720 };
 /** The least time to watch the loop; a longer take is watched for 2.3 of its lengths. */
 const LOOP_SAMPLE_MS = 9_000;
 const CLOCK_TOLERANCE_S = 0.08;
+/** Over the whole watch, the clip's unwrapped advance against the wall clock's: a wrong playback rate. */
+const PLAYBACK_RATE_TOLERANCE = 0.02;
 /** After a wrap the voice restarts on the next frame: samples this early in the loop are not judged. */
 const VOICE_RESTART_GRACE_S = 0.5;
 /** How far the voice's place may differ from the clip's time: a frame of a loaded machine and the output's latency. */
@@ -195,19 +197,26 @@ async function readAudio(page: Page) {
 }
 
 /**
- * The primary action's time, sampled on every frame for `ms`, with the wall clock beside it and, third, where
- * in its buffer the voice is (null while none plays): the playing source's start offset plus the audio
- * context's time since it began, wrapped by the buffer if it loops.
+ * The primary action's time, sampled at every update of the card's mixer for `ms`, with the wall clock at that
+ * update beside it and, third, where in its buffer the voice is (null while none plays): the playing source's
+ * start offset plus the audio context's time since it began, wrapped by the buffer if it loops.
+ *
+ * The samples are taken inside `mixer.update`, not in a frame callback of the test's own: R3F renders every
+ * card's canvas in one frame loop and reads each root's clock just before that root, so a callback's wall time
+ * also carries how long the frame's renders took, and on a loaded 2-CPU runner one slow frame beside a fast one
+ * differs by more than the playback check allows while playback runs at real speed (B-031).
  */
 async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ clip: number; samples: Array<[number, number, number | null]> }> {
   return page.evaluate(([target, span]) => new Promise<{ clip: number; samples: Array<[number, number, number | null]> }>((resolve) => {
     type Action = { time: number; getClip: () => { duration: number } };
+    type Mixer = { update: (delta: number) => unknown };
     type Source = { duration: number; loop: boolean; started: boolean; stopped: boolean; offset: number; contextStart: number };
-    const probes = (window as unknown as { __portalProbes: Record<string, { actions: Record<string, Action | null> }> }).__portalProbes;
+    const probes = (window as unknown as { __portalProbes: Record<string, { actions: Record<string, Action | null>; mixer: Mixer }> }).__portalProbes;
     const audio = (window as unknown as { __audio: { sources: Source[]; contexts: AudioContext[] } }).__audio;
     const probe = Object.entries(probes).find(([url]) => url.endsWith(target as string))![1];
     const actions = Object.values(probe.actions).filter(Boolean) as Action[];
     const action = actions[0]!;
+    const mixer = probe.mixer;
     const samples: Array<[number, number, number | null]> = [];
     const begin = performance.now();
     const voiceAt = (): number | null => {
@@ -217,13 +226,19 @@ async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ 
       const at = source.offset + (context.currentTime - source.contextStart);
       return source.loop ? at % source.duration : at;
     };
-    const step = () => {
+    // An own property shadows the prototype's update for the sampling only; drei's frame callback looks it up
+    // on every frame, so the next update is the first sample.
+    const update = mixer.update;
+    mixer.update = (delta: number) => {
       const now = performance.now();
+      const result = update.call(mixer, delta);
       samples.push([now - begin, action.time, voiceAt()]);
-      if (now - begin < (span as number)) requestAnimationFrame(step);
-      else resolve({ clip: action.getClip().duration, samples });
+      if (now - begin >= (span as number)) {
+        delete (mixer as Partial<Mixer>).update;
+        resolve({ clip: action.getClip().duration, samples });
+      }
+      return result;
     };
-    requestAnimationFrame(step);
   }), [modelPath, ms] as const);
 }
 
@@ -479,7 +494,9 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   expect(audio.playing, "one voice plays, once").toHaveLength(1);
   expect(audio.playing[0]!.duration, "the voice has length").toBeGreaterThan(0.5);
 
-  // Playback: the clip's time advances as the wall clock does and wraps at the take's duration.
+  // Playback: the clip's time advances as the wall clock does and wraps at the take's duration. Each step is one
+  // update of the mixer against the wall clock read at that update, so a stall, a skip, a wrong speed or a wrap
+  // that loses or adds time shows here, and uneven frames do not (sampleLoop).
   // Long enough for two wraps whatever the take's length: capture's take is longer on a loaded machine.
   const sampleMs = Math.max(LOOP_SAMPLE_MS, Math.ceil(duration * 2.3 * 1000));
   const { clip, samples } = await sampleLoop(page, uploaded.url, sampleMs);
@@ -487,17 +504,22 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   let wraps = 0;
   let worstClockError = 0;
   let highest = 0;
+  let totalAdvanced = 0;
   for (let i = 1; i < samples.length; i += 1) {
     const [wall, time] = samples[i]!;
     const [previousWall, previousTime] = samples[i - 1]!;
     const wrapped = time < previousTime;
     if (wrapped) wraps += 1;
     const advanced = time - previousTime + (wrapped ? duration : 0);
+    totalAdvanced += advanced;
     worstClockError = Math.max(worstClockError, Math.abs(advanced - (wall - previousWall) / 1000));
     highest = Math.max(highest, time);
   }
+  const totalWall = (samples.at(-1)![0] - samples[0]![0]) / 1000;
+  const playbackRate = totalAdvanced / totalWall;
   expect(wraps, `the take loops in ${sampleMs / 1000} s`).toBeGreaterThanOrEqual(2);
   expect(worstClockError, "time passes as the wall clock does across each wrap, so the loop is the take's duration").toBeLessThan(CLOCK_TOLERANCE_S);
+  expect(Math.abs(playbackRate - 1), `the take plays at real speed (${playbackRate.toFixed(4)}× over ${totalWall.toFixed(1)} s)`).toBeLessThan(PLAYBACK_RATE_TOLERANCE);
   expect(highest, "playback reaches the end of the take").toBeGreaterThan(duration - 0.5);
   expect(highest, "and never passes it").toBeLessThanOrEqual(duration + 1e-3);
 
@@ -561,7 +583,7 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   await writeFile(path.join(evidenceDir, "report.json"), JSON.stringify({
     take: takeFile,
     durationS: duration,
-    loop: { clipS: clip, wraps, worstClockErrorS: worstClockError, highestS: highest, samples: samples.length },
+    loop: { clipS: clip, wraps, worstClockErrorS: worstClockError, playbackRate, highestS: highest, samples: samples.length },
     audio,
     feed: { setRect: rect, box, offset: [offsetX, offsetY], clocheBaseY: feed.clocheBaseY, set: { min: feed.min, max: feed.max } },
     usdz: { status: "ready", bytes: usdzBytes.length },

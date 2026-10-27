@@ -546,3 +546,36 @@ bug above.)
   passed on `main` (run 40282648462). The toggle's names in
   `controlNames.ts` are unchanged since slice 3. Unconfirmed explanation: the
   failing runs reached another agent's dev server on the shared default ports.
+
+### B-031 — The camera-take loop check times render jitter, not playback
+
+- **Area:** `apps/viewer-web` e2e (`camera-take.pipeline.spec.ts:453`, the
+  pipeline shard of CI)
+- **Severity:** P1 (fails `main`'s CI, so nothing deploys)
+- **Observed:** 2026-10-27, CI run 40455936695 on `a8dc19b`
+- **Evidence:** "time passes as the wall clock does across each wrap"
+  received 0.085 s against `CLOCK_TOLERANCE_S` 0.08; the two later tests in
+  the file fail only because this one left no take. `sampleLoop` compares,
+  frame by frame, the mixer's advance with `performance.now()` read in its
+  own `requestAnimationFrame` callback. The mixer advances by the R3F
+  clock's delta, read in R3F's callback before it renders, so each sampled
+  interval also carries the change in that frame's render time: on a 2-CPU
+  runner one slow frame next to a fast one exceeds 80 ms while playback
+  runs at real speed.
+- **Expected:** the check fails when playback runs at the wrong speed or
+  wraps at the wrong length, and not when frames take uneven time.
+- **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web exec
+  playwright test e2e/camera-take.pipeline.spec.ts --workers=1` with
+  `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer`.
+- **Fix:** `sampleLoop` samples inside the card's `mixer.update` for the
+  watch (an own-property wrapper, removed when it ends), so each step pairs
+  the mixer's advance with the wall clock read at that update, free of the
+  frame's other renders. The per-step bound stays 80 ms: it still shows a
+  hold, pause or jump at a wrap. A new rate check (the clip's unwrapped
+  advance against the wall clock over the whole watch, within 2%) catches a
+  wrong playback speed, which no per-step bound at real frame rates could.
+- **Validation:** in `scripts/ci-emulate.sh` the unchanged check failed
+  (0.240 s); the fixed spec passed 20 of 20 (`--repeat-each=5`, worst step
+  error 3.5 ms, rate 1.00015). Native: worst 0.2 ms, rate 1.00002. A
+  mutation run with the mixer at 1.05× passed the per-step check and failed
+  the rate check (1.0500×).
