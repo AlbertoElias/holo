@@ -35,8 +35,7 @@ type FloorProbe = Probe & {
 
 export async function measureFloor(page: Page, mode: "feed" | "ar"): Promise<FloorReport> {
   return page.evaluate(async (mode) => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { Raycaster, Vector3 } = await import(moduleUrl) as typeof Three;
+    const { Raycaster, Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const hooks = window as unknown as { __feedProbe: FloorProbe; __bubbleProbe: FloorProbe };
     const probe = mode === "feed" ? hooks.__feedProbe : hooks.__bubbleProbe;
     const { model, mixer } = probe;

@@ -121,6 +121,17 @@ Design review (Opus `design-reviewer`, 2026-10-27) changed the plan as follows.
   double effects and dev warnings, which weakens the console-error net.
   Capture installs automation hooks unconditionally, so the "no hooks in
   production" check covers the viewer only.
+  *Deviation (implementation):* each browser job builds its own test bundle
+  (`test-build.mjs`, about 15–20 s for the viewer locally) instead of
+  downloading one from `quality`: a download needs `needs: quality`, which
+  puts quality's ~2 min (lint, unit, build) in front of every browser job,
+  and a separate build job adds a runner queue plus setup. Builds are keyed
+  by variant (SEM scene, IWER device), since the pipeline suite runs without
+  SEM and the face check on a Quest Pro. KTX moved into the setup action so
+  test builds compress textures as production does. Specs reach three and
+  the fit code through `window.__HOLOIM_TEST_MODULES__` (test builds only)
+  instead of dev-server module URLs; capture's preview serves `fixtures/`
+  and the input-recording sink as its dev server did.
 - **Exemptions from "no wall-clock waits":** the one real-clock capture →
   viewer pipeline test and B-032's deliberate `marks-low-fps` realtime phase.
 - **Shared recording** happens per shard in a Playwright setup project and is

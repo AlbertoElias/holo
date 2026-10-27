@@ -7,8 +7,7 @@ import { expect } from "./bootstrap";
 
 export async function captureBubblePixels(page: Page, mode: "feed" | "ar", artifactDir: string, tag: string = mode, includeAura = false) {
   const evidence = await page.evaluate(async ({ mode, includeAura }) => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { WebGLRenderTarget, Vector3, Color } = await import(moduleUrl) as typeof Three;
+    const { WebGLRenderTarget, Vector3, Color } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const hooks = window as unknown as { __feedProbe: Probe; __bubbleProbe: Probe };
     const { renderer, scene, model, bubble, actions, camera } = mode === "feed" ? hooks.__feedProbe : hooks.__bubbleProbe;
     const cameras = mode === "feed" ? [camera!] : renderer.xr.getCamera().cameras.map((eye) => eye.clone());

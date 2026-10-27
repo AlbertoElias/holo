@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, type Connect, type Plugin } from 'vite';
 import { iwsdkDev, type AiMode } from '@iwsdk/vite-plugin-dev';
 import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
 
@@ -16,44 +16,77 @@ function getAiMode(): AiMode | undefined {
 const INPUT_RECORDING_LIMIT_BYTES = 50 * 1024 * 1024;
 
 function inputRecordingSinkPlugin(outputDir: string): Plugin {
+  // The dev server and `vite preview` of the e2e test build both take them.
+  const install = (server: { middlewares: Connect.Server }): void => {
+    server.middlewares.use('/__holoim/input-recordings', (req, res) => {
+      const fail = (status: number, message: string): void => {
+        res.statusCode = status;
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ error: message }));
+      };
+      if (req.method !== 'POST') return fail(405, 'POST only');
+      const chunks: Buffer[] = [];
+      let size = 0;
+      req.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > INPUT_RECORDING_LIMIT_BYTES) req.destroy();
+        else chunks.push(chunk);
+      });
+      req.on('end', () => {
+        void (async () => {
+          let recording: { schema?: unknown; frames?: unknown };
+          try {
+            recording = JSON.parse(Buffer.concat(chunks).toString('utf8')) as typeof recording;
+          } catch {
+            return fail(400, 'Body is not JSON');
+          }
+          if (!Array.isArray(recording.schema) || !Array.isArray(recording.frames)) {
+            return fail(400, 'Expected an ActionRecorder recording with schema and frames');
+          }
+          const requested = new URL(req.url ?? '', 'http://localhost').searchParams.get('name') ?? 'recording';
+          const safeName = requested.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'recording';
+          await fs.mkdir(outputDir, { recursive: true });
+          const filePath = path.join(outputDir, `${safeName}.json`);
+          await fs.writeFile(filePath, JSON.stringify(recording));
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ path: path.relative(process.cwd(), filePath) }));
+        })().catch((error: unknown) => fail(500, error instanceof Error ? error.message : String(error)));
+      });
+    });
+  };
   return {
     name: 'holoim-input-recording-sink',
     apply: 'serve',
-    configureServer(server) {
-      server.middlewares.use('/__holoim/input-recordings', (req, res) => {
-        const fail = (status: number, message: string): void => {
-          res.statusCode = status;
-          res.setHeader('content-type', 'application/json');
-          res.end(JSON.stringify({ error: message }));
-        };
-        if (req.method !== 'POST') return fail(405, 'POST only');
-        const chunks: Buffer[] = [];
-        let size = 0;
-        req.on('data', (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > INPUT_RECORDING_LIMIT_BYTES) req.destroy();
-          else chunks.push(chunk);
-        });
-        req.on('end', () => {
-          void (async () => {
-            let recording: { schema?: unknown; frames?: unknown };
-            try {
-              recording = JSON.parse(Buffer.concat(chunks).toString('utf8')) as typeof recording;
-            } catch {
-              return fail(400, 'Body is not JSON');
-            }
-            if (!Array.isArray(recording.schema) || !Array.isArray(recording.frames)) {
-              return fail(400, 'Expected an ActionRecorder recording with schema and frames');
-            }
-            const requested = new URL(req.url ?? '', 'http://localhost').searchParams.get('name') ?? 'recording';
-            const safeName = requested.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'recording';
-            await fs.mkdir(outputDir, { recursive: true });
-            const filePath = path.join(outputDir, `${safeName}.json`);
-            await fs.writeFile(filePath, JSON.stringify(recording));
-            res.setHeader('content-type', 'application/json');
-            res.end(JSON.stringify({ path: path.relative(process.cwd(), filePath) }));
-          })().catch((error: unknown) => fail(500, error instanceof Error ? error.message : String(error)));
-        });
+    configureServer: install,
+    configurePreviewServer: install
+  };
+}
+
+// `vite preview` serves only the build, but the browser checks load scenes
+// and objects from fixtures/ by URL (?scene=/fixtures/...), which the dev
+// server served from the app root. Preview of the e2e test build serves them
+// too; the deployed app never runs under preview.
+const FIXTURE_TYPES: Record<string, string> = {
+  '.gltf': 'model/gltf+json',
+  '.glb': 'model/gltf-binary',
+  '.bin': 'application/octet-stream',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ktx2': 'image/ktx2'
+};
+
+function previewFixturesPlugin(fixturesDir: string): Plugin {
+  return {
+    name: 'holoim-preview-fixtures',
+    configurePreviewServer(server) {
+      server.middlewares.use('/fixtures', (req, res, next) => {
+        const file = path.join(fixturesDir, decodeURIComponent(new URL(req.url ?? '/', 'http://fixtures').pathname));
+        if (!file.startsWith(fixturesDir + path.sep)) return next();
+        fs.readFile(file).then((body) => {
+          res.setHeader('content-type', FIXTURE_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream');
+          res.end(body);
+        }, () => next());
       });
     }
   };
@@ -127,8 +160,12 @@ function stripUikitmlSourcemapsPlugin(): Plugin {
 const PRESERVED_MODEL_ASSETS = ['gltf/models/avatar.glb', 'gltf/models/scene.glb'] as const;
 
 function preserveModelAssetsPlugin(sourcePublicDir: string, tempPublicDir: string): Plugin {
+  let outDir = path.resolve('dist');
   return {
     name: 'capture-preserve-model-assets',
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
     async buildEnd(error) {
       if (error && tempPublicDir !== sourcePublicDir) {
         await fs.rm(tempPublicDir, { recursive: true, force: true });
@@ -136,7 +173,7 @@ function preserveModelAssetsPlugin(sourcePublicDir: string, tempPublicDir: strin
     },
     async closeBundle() {
       for (const asset of PRESERVED_MODEL_ASSETS) {
-        const distPath = path.resolve('dist', asset);
+        const distPath = path.resolve(outDir, asset);
         await fs.mkdir(path.dirname(distPath), { recursive: true });
         await fs.copyFile(path.resolve(sourcePublicDir, asset), distPath);
       }
@@ -161,12 +198,16 @@ export default defineConfig(async ({ command }) => {
         })()
       : sourcePublicDir;
   const aiMode = getAiMode();
+  // The e2e test build (packages/tooling-testing/src/test-build.mjs): the
+  // production build plus the IWER emulator and dev-only test features.
+  const testBuild = process.env.HOLOIM_TEST_BUILD === '1';
   const buildPlugins = [
     iwsdkDev({
       emulator: {
         activation: 'localhost',
         // The face check emulates a Quest Pro, the profile with eye gaze.
-        device: process.env.CAPTURE_IWER_DEVICE === 'metaQuestPro' ? 'metaQuestPro' : 'metaQuest3'
+        device: process.env.CAPTURE_IWER_DEVICE === 'metaQuestPro' ? 'metaQuestPro' : 'metaQuest3',
+        injectOnBuild: testBuild
       },
       ...(aiMode
         ? {
@@ -181,6 +222,7 @@ export default defineConfig(async ({ command }) => {
     stripUikitmlSourcemapsPlugin(),
     preserveModelAssetsPlugin(sourcePublicDir, tempPublicDir),
     inputRecordingSinkPlugin(path.resolve('fixtures/input-recordings')),
+    previewFixturesPlugin(path.resolve('fixtures')),
     optimizeGLTF({
       level: 'medium'
     })
@@ -194,6 +236,9 @@ export default defineConfig(async ({ command }) => {
     },
     plugins: buildPlugins,
     publicDir: tempPublicDir,
+    define: {
+      __HOLOIM_TEST_HOOKS__: JSON.stringify(command === 'serve' || testBuild)
+    },
     server: {
       host: '0.0.0.0'
     },

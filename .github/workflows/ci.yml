@@ -87,34 +87,23 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
+          ktx: "true"
       - name: Lint and typecheck
         run: pnpm timed quality-checks -- pnpm run check:all
       - name: Unit tests
         if: ${{ !cancelled() }}
         run: pnpm timed unit-tests -- pnpm run test:unit:all
-      - name: Cache KTX-Software
-        if: ${{ !cancelled() }}
-        uses: actions/cache@v4
-        with:
-          path: /tmp/ktx.tar.bz2
-          key: ktx-4.4.2-linux-x86_64
-      - name: Install KTX-Software
-        if: ${{ !cancelled() }}
-        env:
-          KTX_VERSION: 4.4.2
-        run: |
-          if [ ! -f /tmp/ktx.tar.bz2 ]; then curl -fsSL -o /tmp/ktx.tar.bz2 "https://github.com/KhronosGroup/KTX-Software/releases/download/v${KTX_VERSION}/KTX-Software-${KTX_VERSION}-Linux-x86_64.tar.bz2"; fi
-          tar -xjf /tmp/ktx.tar.bz2 -C "${RUNNER_TEMP}"
-          KTX_ROOT="$(find "${RUNNER_TEMP}" -maxdepth 1 -type d -name 'KTX-Software-*' | head -n 1)"
-          test -n "${KTX_ROOT}"
-          echo "${KTX_ROOT}/bin" >> "${GITHUB_PATH}"
-          "${KTX_ROOT}/bin/ktx" --version
       - name: Build
         if: ${{ !cancelled() }}
         # The viewer and capture bundles built here are the ones deployed.
         env:
           VITE_API_ORIGIN: https://holoim-api.fly.dev
         run: pnpm timed build -- pnpm run build:all
+      # The e2e test build differs from this one only by HOLOIM_TEST_BUILD;
+      # the deployed viewer must carry neither its test hooks nor IWER.
+      - name: Check the production viewer bundle
+        if: ${{ !cancelled() }}
+        run: node scripts/check-prod-bundle.mjs apps/viewer-web/dist
       - name: Keep the viewer bundle for deploy
         if: needs.changes.outputs.web == 'true'
         uses: actions/upload-artifact@v4
@@ -167,6 +156,12 @@ jobs:
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
           playwright: "true"
+          ktx: "true"
+      # Browser checks load test builds under `vite preview`
+      # (packages/tooling-testing/src/test-build.mjs); built here so their
+      # time shows on its own, then reused by the suite's server.
+      - name: Build the capture test bundle
+        run: pnpm timed test-build-capture -- node packages/tooling-testing/src/test-build.mjs build capture
       - name: Capture XR checks
         run: pnpm timed xr-capture-shard-${{ matrix.shard }} -- pnpm run test:xr:capture
       - name: Upload failure diagnostics
@@ -218,6 +213,11 @@ jobs:
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
           playwright: "true"
+      # Browser checks load test builds under `vite preview`
+      # (packages/tooling-testing/src/test-build.mjs); built here so their
+      # time shows on its own, then reused by the suite's server.
+      - name: Build the viewer test bundle
+        run: VITE_IWER_SEM_SCENE=office_small pnpm timed test-build-web -- node packages/tooling-testing/src/test-build.mjs build web
       - name: Knowledge Atlas browser checks
         if: matrix.shard == 1
         run: pnpm timed knowledge -- pnpm run test:knowledge
@@ -263,6 +263,11 @@ jobs:
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
           playwright: "true"
+      # Browser checks load test builds under `vite preview`
+      # (packages/tooling-testing/src/test-build.mjs); built here so their
+      # time shows on its own, then reused by the suite's server.
+      - name: Build the viewer test bundle
+        run: VITE_IWER_SEM_SCENE=office_small pnpm timed test-build-web -- node packages/tooling-testing/src/test-build.mjs build web
       - name: Viewer VR gallery, foot controls and locomotion
         run: pnpm timed xr-viewer-vr -- pnpm --filter @holoim/web run test:e2e:xr-viewer-vr
       - name: Upload failure diagnostics
@@ -304,6 +309,12 @@ jobs:
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
           playwright: "true"
+          ktx: "true"
+      # Browser checks load test builds under `vite preview`
+      # (packages/tooling-testing/src/test-build.mjs); built here so their
+      # time shows on its own, then reused by the suite's server.
+      - name: Build the viewer and capture test bundles
+        run: pnpm timed test-build -- sh -c "node packages/tooling-testing/src/test-build.mjs build web && node packages/tooling-testing/src/test-build.mjs build capture"
       - uses: actions/setup-python@v5
         id: python
         with:
@@ -383,6 +394,12 @@ jobs:
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
           playwright: "true"
+          ktx: "true"
+      # Browser checks load test builds under `vite preview`
+      # (packages/tooling-testing/src/test-build.mjs); built here so their
+      # time shows on its own, then reused by the suite's server.
+      - name: Build the viewer and capture test bundles
+        run: pnpm timed test-build -- sh -c "VITE_IWER_SEM_SCENE=office_small node packages/tooling-testing/src/test-build.mjs build web && node packages/tooling-testing/src/test-build.mjs build capture"
       - name: Portal gestures and real capture
         run: pnpm timed portal -- pnpm run test:portal
       - name: Upload failure diagnostics

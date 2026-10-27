@@ -16,11 +16,17 @@ const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 const reuseExistingServer = process.env.REUSE_DEV_SERVER === "1";
 const runPipeline = process.env.RUN_E2E_PIPELINE === "1";
 const captureUrl = new URL(process.env.E2E_CAPTURE_URL ?? "https://127.0.0.1:5175/");
+// The viewer and capture are served as test builds by `vite preview`
+// (packages/tooling-testing/src/test-build.mjs): built once per change to
+// their sources, reused while they stay the same. HOLOIM_VITE_DEV=1 serves
+// the Vite dev servers instead, for debugging.
+const testBuild = "node ../../packages/tooling-testing/src/test-build.mjs serve";
 const webServers = [
   {
-    command: `VITE_HMR_CLIENT_PORT=${e2ePort} VITE_API_PROXY_TARGET=${apiBaseUrl} pnpm exec vite --host 0.0.0.0 --port ${e2ePort} --strictPort`,
+    command: `VITE_HMR_CLIENT_PORT=${e2ePort} VITE_API_PROXY_TARGET=${apiBaseUrl} ${testBuild} web -- --host 0.0.0.0 --port ${e2ePort} --strictPort`,
     ignoreHTTPSErrors: true,
-    timeout: 120000,
+    // Includes a build when the sources changed (about 20 s locally).
+    timeout: 180000,
     reuseExistingServer,
     url: e2eBaseUrl
   },
@@ -32,9 +38,9 @@ const webServers = [
         reuseExistingServer,
         url: `${apiBaseUrl}/api/holograms?limit=1`
       }, {
-        command: `pnpm --filter @holoim/capture exec vite --host ${captureUrl.hostname} --port ${captureUrl.port} --strictPort`,
+        command: `${testBuild} capture -- --host ${captureUrl.hostname} --port ${captureUrl.port} --strictPort`,
         ignoreHTTPSErrors: true,
-        timeout: 120000,
+        timeout: 180000,
         reuseExistingServer,
         url: captureUrl.href
       }]

@@ -7,14 +7,17 @@ import "@holoim/design-tokens/fonts.css";
 
 import { router } from "./app/router";
 import "./styles/global.css";
+import { installTestModules, testHooks } from "./testHooks";
 
 // Debug logging for development
 console.log("HoloIM Viewer starting...");
 console.log("API Origin:", import.meta.env.VITE_API_ORIGIN);
 console.log("WebXR available:", "xr" in navigator);
 
-// Only show alerts in development, and only for critical errors
-if (import.meta.env.DEV) {
+installTestModules();
+
+// Only show alerts in development and test builds, and only for critical errors
+if (testHooks) {
   window.addEventListener("error", (event) => {
     console.error("Global error:", event.error);
   });

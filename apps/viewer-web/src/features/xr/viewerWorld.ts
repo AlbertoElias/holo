@@ -29,6 +29,7 @@ import { GallerySystem, type GalleryFeed } from "./gallerySystem";
 import { ArPlacementSystem, VrPlacementSystem } from "./placementSystems";
 import { GRAB_SCALE_MAX, GRAB_SCALE_MIN } from "./twoHandGrab";
 import { createViewerContext, focusedRecord, viewerContext, type PlacedHologram, type XrViewMode } from "./viewerContext";
+import { testHooks } from "../../testHooks";
 
 // Design tokens (docs/product/design/tokens.json): the VR room is the
 // blue-hour gradient, and the hologram is lit warm by its own stage light.
@@ -94,7 +95,7 @@ function pinchScale(scale: number): number {
  */
 function wantsDepthOcclusion(): boolean {
   if (!readIwerRuntime().available) return true;
-  return import.meta.env.DEV && new URLSearchParams(window.location.search).get("depth") === "on";
+  return testHooks && new URLSearchParams(window.location.search).get("depth") === "on";
 }
 
 /**
@@ -230,7 +231,7 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
     tapTogglesPlay: () => viewerContext(world).target === "ar-phone",
     onRemove: (entity) => world.getSystem(ArPlacementSystem)?.forget(entity),
     occludable: depthOcclusion,
-    ...(import.meta.env.DEV ? { onPlaced: (record: PlacedHologram) => observePlaced(world, record) } : {})
+    ...(testHooks ? { onPlaced: (record: PlacedHologram) => observePlaced(world, record) } : {})
   });
   const gallery = world.getSystem(GallerySystem)!;
   gallery.configure({ feed: options.feed, space, cache, loadMore: options.loadMore });
@@ -265,7 +266,7 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
   };
   xr.addEventListener("sessionstart", onSessionStart);
   xr.addEventListener("sessionend", onSessionEnd);
-  if (import.meta.env.DEV) installXrViewerProbe(world, cache, space);
+  if (testHooks) installXrViewerProbe(world, cache, space);
 
   let destroyed = false;
   return {
@@ -282,7 +283,7 @@ export async function createViewerWorld(container: HTMLDivElement, options: View
       xr.removeEventListener("sessionstart", onSessionStart);
       xr.removeEventListener("sessionend", onSessionEnd);
       space.dispose();
-      delete (window as { __HOLOIM_XR_VIEWER__?: unknown }).__HOLOIM_XR_VIEWER__;
+      if (testHooks) delete (window as { __HOLOIM_XR_VIEWER__?: unknown }).__HOLOIM_XR_VIEWER__;
       if (xr.getSession()) world.exitXR();
       world.destroy();
       cache.dispose();

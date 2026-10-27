@@ -135,8 +135,7 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   // The room chooses placement, but the pixel oracle needs a controlled view
   // in which its positive outside marker is on screen in every SEM scene.
   await page.evaluate(async () => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { Vector3 } = await import(moduleUrl) as typeof Three;
+    const { Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const probe = (window as ProbeWindow).__bubbleProbe!;
     const center = probe.model.getObjectByName("RecordedBubbleSphere")!.getWorldPosition(new Vector3());
     const device = (window as unknown as { IWER_DEVICE: { controlMode: string; position: { set: (...v: number[]) => void }; quaternion: { set: (...v: number[]) => void } } }).IWER_DEVICE;
@@ -158,8 +157,7 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   expect(sphereAfter, "AR sphere remains pinned while recording plays").toEqual(sphereBefore);
 
   const evidence = await page.evaluate(async () => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { WebGLRenderTarget, Vector3, Quaternion, Color, MeshBasicMaterial } = await import(moduleUrl) as typeof Three;
+    const { WebGLRenderTarget, Vector3, Quaternion, Color, MeshBasicMaterial } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const { renderer, scene, model, bubble } = (window as ProbeWindow).__bubbleProbe!;
     const root = model.parent!;
     const shell = model.getObjectByName("RecordedBubbleSphere") as Mesh;
@@ -302,8 +300,7 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   const headSamples = [];
   for (let frame = 0; frame < 24; frame++) {
     const requested = await page.evaluate(async (frame) => {
-      const moduleUrl = "/node_modules/.vite/deps/three.js";
-      const { Vector3, Matrix4, Quaternion } = await import(moduleUrl) as typeof Three;
+      const { Vector3, Matrix4, Quaternion } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
       const probe = (window as ProbeWindow).__bubbleProbe!;
       const center = probe.model.getObjectByName("RecordedBubbleSphere")!.getWorldPosition(new Vector3());
       const yaw = -0.65 + frame / 23 * 1.3;
@@ -367,8 +364,7 @@ test("clipping uses deformed vertices and the latest sphere transform at draw ti
   await page.waitForFunction(() => Boolean((window as unknown as { __bubbleLifecycle?: { renderer: unknown } }).__bubbleLifecycle?.renderer));
   await freezePageClock(page);
   const evidence = await page.evaluate(async () => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { WebGLRenderTarget, Vector3 } = await import(moduleUrl) as typeof Three;
+    const { WebGLRenderTarget, Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const state = (window as unknown as { __bubbleLifecycle: {
       renderer: Three.WebGLRenderer; renderScene: Three.Scene; camera: Three.Camera;
       shell: Mesh; grouped: Mesh; scene: Object3D; result: { center: Three.Vector3 };
@@ -430,7 +426,7 @@ test("the cloche stands over the placed hologram, in the room, from either side"
   const placed: number[][] = [];
   for (const side of [{ name: "front", z: 1 }, { name: "back", z: -1 }]) {
     await page.evaluate(async (z) => {
-      const { Vector3 } = await import("/node_modules/.vite/deps/three.js") as typeof Three;
+      const { Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
       const probe = (window as ProbeWindow).__bubbleProbe!;
       const center = new Vector3(probe.bubble.center.x, probe.bubble.center.y, probe.bubble.center.z);
       const device = (window as unknown as { IWER_DEVICE: { controlMode: string; position: { set: (...v: number[]) => void }; quaternion: { set: (...v: number[]) => void } } }).IWER_DEVICE;
@@ -442,7 +438,7 @@ test("the cloche stands over the placed hologram, in the room, from either side"
     // Drawn from the new pose.
     await waitForXrFrames(page, 3);
     const cloche = await page.evaluate(async (exponent) => {
-      const { Vector3 } = await import("/node_modules/.vite/deps/three.js") as typeof Three;
+      const { Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
       const { renderer, scene, bubble } = (window as ProbeWindow).__bubbleProbe!;
       const group = scene.getObjectByName("cloche");
       if (!group) return null;

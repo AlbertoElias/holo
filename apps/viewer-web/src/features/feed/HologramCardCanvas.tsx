@@ -38,6 +38,7 @@ import type { PortalStore } from "../portal/portalStore";
 import { usePortalValue } from "../portal/usePortalValue";
 import { DEFAULT_CAMERA_FRAMING_CONFIG, computeDesiredFraming } from "./cameraFraming";
 import { HologramLighting } from "./HologramLighting";
+import { testHooks } from "../../testHooks";
 
 export type HologramRenderInfo = {
   animationCount: number;
@@ -258,7 +259,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
   }, [animations, clonedScene, sphereClip]);
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
       observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, presence: presenceProbe, objects: recordedObjects, cloche: { shape: clocheRef, fitted: fittedCentre } });
     }

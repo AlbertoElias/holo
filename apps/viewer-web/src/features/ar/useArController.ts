@@ -19,6 +19,7 @@ import {
   stripProblematicInputSources
 } from "./arController";
 import { isIOSDevice } from "./isIOSDevice";
+import { testHooks } from "../../testHooks";
 
 const AR_SESSION_CONNECTIVITY_RETRY_DELAY_MS = 100;
 // IWSDK's larger development bundle can keep the R3F canvas disconnected while
@@ -111,7 +112,7 @@ export function useArController(): UseArControllerResult {
         if (filtered.length !== xrStore.getState().inputSourceStates.length) {
           xrStore.setState({ inputSourceStates: filtered });
         }
-        if (import.meta.env.DEV) {
+        if (testHooks) {
           console.warn("[AR] XR frame update threw; stripped simulator controller/hand input sources.", error);
         }
       }
@@ -154,7 +155,7 @@ export function useArController(): UseArControllerResult {
       const filteredInputSourceStates = stripProblematicInputSources(state.inputSourceStates);
       if (filteredInputSourceStates.length !== state.inputSourceStates.length) {
         store.setState({ inputSourceStates: filteredInputSourceStates });
-        if (import.meta.env.DEV && !inputSanitizationLoggedRef.current) {
+        if (testHooks && !inputSanitizationLoggedRef.current) {
           inputSanitizationLoggedRef.current = true;
           console.warn("[AR] Stripped simulator controller/hand input sources to avoid XR emulation pose errors.");
         }

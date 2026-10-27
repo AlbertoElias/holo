@@ -23,6 +23,13 @@ export function startViteDevServer(options: {
   env?: NodeJS.ProcessEnv;
   viteArgs?: string[];
 }): ChildProcess;
+export function startTestBuildServer(options: {
+  app: "web" | "capture";
+  host: string;
+  port: number;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+}): ChildProcess;
 export function waitForServer(url: string, timeoutMs?: number, processHandle?: ChildProcess | null): Promise<void>;
 export function fetchWithRetry(url: string, init?: RequestInit, options?: WaitForServerOptions): Promise<Response>;
 export function stopProcess(processHandle?: ChildProcess | null): Promise<void>;

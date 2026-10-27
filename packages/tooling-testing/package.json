@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test src/dev-server.test.mjs",
-    "verify:fast": "node --check src/dev-server.mjs && node --check src/xr-env.mjs && node --check src/iwer-phone.mjs && node --check src/preview.mjs && pnpm run test"
+    "verify:fast": "node --check src/dev-server.mjs && node --check src/xr-env.mjs && node --check src/iwer-phone.mjs && node --check src/preview.mjs && node --check src/test-build.mjs && pnpm run test"
   },
   "exports": {
     "./dev-server": {
@@ -19,6 +19,10 @@
     "./iwer-phone": {
       "types": "./src/iwer-phone.d.ts",
       "default": "./src/iwer-phone.mjs"
+    },
+    "./test-build": {
+      "types": "./src/test-build.d.ts",
+      "default": "./src/test-build.mjs"
     },
     "./preview": {
       "types": "./src/preview.d.ts",

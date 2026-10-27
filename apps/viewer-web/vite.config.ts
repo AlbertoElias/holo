@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { iwsdkDev } from "@iwsdk/vite-plugin-dev";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -5,6 +7,9 @@ import { defineConfig } from "vite";
 const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT ?? "3174");
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:3001";
 const semScene = process.env.VITE_IWER_SEM_SCENE;
+// The e2e test build (packages/tooling-testing/src/test-build.mjs): the
+// production build plus the IWER emulator and the test hooks (src/testHooks.ts).
+const testBuild = process.env.HOLOIM_TEST_BUILD === "1";
 const validSemScenes = [
   "living_room",
   "meeting_room",
@@ -33,7 +38,7 @@ function packageName(id: string): string | undefined {
   return match?.[1];
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   resolve: {
     // @holoim/xr-ui-iwsdk resolves its own pnpm copy of @iwsdk/core (no React
     // peer); one World needs one copy of IWSDK, UIKit and three.
@@ -45,12 +50,18 @@ export default defineConfig({
       emulator: {
         activation: "localhost",
         device: "metaQuest3",
+        injectOnBuild: testBuild,
         ...(semConfig ? { environment: semConfig.defaultScene } : {})
       }
     })
   ],
   build: {
     rollupOptions: {
+      // The test build also carries the AR bubble spec's material harness,
+      // a page the dev server compiled on request.
+      ...(testBuild
+        ? { input: { index: path.resolve(import.meta.dirname, "index.html"), bubbleHarness: path.resolve(import.meta.dirname, "e2e/bubble-harness.html") } }
+        : {}),
       output: {
         // Group by exact package name, never by path substring: pnpm paths
         // carry peer names (".../iwer@x_super-three@y/..."), so a substring
@@ -96,7 +107,10 @@ export default defineConfig({
       "Access-Control-Allow-Origin": "*"
     }
   },
+  // `vite preview` (the test build's server) inherits server.https from the
+  // IWSDK plugin's certificate and the /api and /uploads proxy below.
   define: {
-    __VITE_IS_MODERN_BROWSER__: true
+    __VITE_IS_MODERN_BROWSER__: true,
+    __HOLOIM_TEST_HOOKS__: JSON.stringify(command === "serve" || testBuild)
   }
-});
+}));

@@ -251,8 +251,7 @@ async function sampleLoop(page: Page, modelPath: string, ms: number): Promise<{ 
 /** The set's bounds and where its origin stands, at the take's first frame, in the placed frame. */
 async function readSet(page: Page, mode: "feed" | "ar"): Promise<SetReading & { sceneGroundMin: number }> {
   return page.evaluate(async (mode) => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { Box3, Matrix4, Vector3 } = await import(moduleUrl) as typeof Three;
+    const { Box3, Matrix4, Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const hooks = window as unknown as {
       __portalProbes: Record<string, { model: Three.Object3D; mixer: Three.AnimationMixer; cloche: { shape: { current: { base: { y: number } } | null }; fitted: { current: Three.Vector3 | null } } }>;
       __arProbe: { model: Three.Object3D; mixer: Three.AnimationMixer; group: { current: Three.Object3D }; cloche: { current: { base: { x: number; y: number; z: number } } | null } };
@@ -312,8 +311,7 @@ async function readFeed(page: Page, cardId: string): Promise<FeedReading> {
 
 async function projectSet(page: Page, cardId: string, set: SetReading): Promise<Pick<FeedReading, "setRect" | "box" | "camera">> {
   return page.evaluate(async ([id, min, max]) => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { Vector3 } = await import(moduleUrl) as typeof Three;
+    const { Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const { camera, renderer } = Object.values((window as unknown as { __portalProbes: Record<string, { camera: Three.PerspectiveCamera; renderer: Three.WebGLRenderer }> }).__portalProbes)[0]!;
     camera.updateMatrixWorld();
     const canvas = renderer.domElement.getBoundingClientRect();
@@ -371,8 +369,7 @@ async function readGalleryPreview(page: Page, id: string): Promise<PreviewReadin
     return gallery.slots.some((slot) => slot?.id === target && slot.preview);
   }, id), { message: "the tile shows a preview of the take", timeout: 30_000 }).toBe(true);
   return page.evaluate(async (target) => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { Box3, Matrix4, Vector3 } = await import(moduleUrl) as typeof Three;
+    const { Box3, Matrix4, Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const gallery = (window as unknown as { __HOLOIM_XR_VIEWER__: { gallery: { slots: Array<{ id: string; preview: Three.Object3D } | null> } } }).__HOLOIM_XR_VIEWER__.gallery;
     const preview = gallery.slots.find((slot) => slot?.id === target)!.preview;
     preview.parent!.updateWorldMatrix(true, false);
@@ -762,8 +759,7 @@ type MarkReading = {
 
 async function readMark(page: Page, modelPath: string): Promise<MarkReading> {
   return page.evaluate(async ([target, referentName, referentPoint]) => {
-    const moduleUrl = "/node_modules/.vite/deps/three.js";
-    const { Vector3 } = await import(moduleUrl) as typeof Three;
+    const { Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const probes = (window as unknown as { __portalProbes: Record<string, {
       model: Three.Object3D;
       camera: Three.PerspectiveCamera;
@@ -842,8 +838,8 @@ async function settleInk(page: Page, modelPath: string, seconds: number, expecte
  */
 async function readFitWithAndWithoutMark(page: Page, modelPath: string): Promise<{ with: FitReading; without: FitReading }> {
   return page.evaluate(async (target) => {
-    const sourceUrl = "/src/features/hologram/drawnPoints.ts";
-    const points = await import(/* @vite-ignore */ sourceUrl) as typeof DrawnPoints;
+    // The app's own fit code (src/testHooks.ts): a built bundle has no source module URLs.
+    const points = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ drawnPoints: typeof DrawnPoints }> }).__HOLOIM_TEST_MODULES__).drawnPoints;
     const probes = (window as unknown as { __portalProbes: Record<string, {
       model: Three.Object3D;
       actions: Record<string, { getClip: () => Three.AnimationClip } | null>;

@@ -10,6 +10,11 @@ inputs:
   playwright:
     description: Install Playwright Chromium ("true" or "false")
     default: "false"
+  ktx:
+    description: >-
+      Install KTX-Software ("true" or "false"), which capture's build uses to
+      compress textures (the production build and the e2e test build)
+    default: "false"
 
 runs:
   using: composite
@@ -53,3 +58,21 @@ runs:
       # Only the packages the runner image lacks, from cached .deb files
       # when warm, so no apt mirror is on the path (B-024).
       run: DEB_CACHE="${HOME}/.cache/playwright-debs" scripts/ci-playwright-deps.sh
+    - name: Cache KTX-Software
+      if: inputs.ktx == 'true'
+      uses: actions/cache@v4
+      with:
+        path: /tmp/ktx.tar.bz2
+        key: ktx-4.4.2-linux-x86_64
+    - name: Install KTX-Software
+      if: inputs.ktx == 'true'
+      shell: bash
+      env:
+        KTX_VERSION: 4.4.2
+      run: |
+        if [ ! -f /tmp/ktx.tar.bz2 ]; then curl -fsSL -o /tmp/ktx.tar.bz2 "https://github.com/KhronosGroup/KTX-Software/releases/download/v${KTX_VERSION}/KTX-Software-${KTX_VERSION}-Linux-x86_64.tar.bz2"; fi
+        tar -xjf /tmp/ktx.tar.bz2 -C "${RUNNER_TEMP}"
+        KTX_ROOT="$(find "${RUNNER_TEMP}" -maxdepth 1 -type d -name 'KTX-Software-*' | head -n 1)"
+        test -n "${KTX_ROOT}"
+        echo "${KTX_ROOT}/bin" >> "${GITHUB_PATH}"
+        "${KTX_ROOT}/bin/ktx" --version

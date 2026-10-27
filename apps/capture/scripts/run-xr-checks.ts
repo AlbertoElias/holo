@@ -9,12 +9,16 @@ import {
   createHttpsBaseUrl,
   findAvailablePort,
   runCommand,
-  startViteDevServer,
+  startTestBuildServer,
   stopProcess,
   waitForServer
 } from '@holoim/tooling-testing/dev-server';
+import { ensureTestBuild } from '@holoim/tooling-testing/test-build';
 
-// Runs capture's browser XR checks against one shared dev server.
+// Runs capture's browser XR checks against one shared server: capture's test
+// build (production build plus IWER and test features) under `vite preview`,
+// rebuilt only when capture's sources change. HOLOIM_VITE_DEV=1 serves the
+// Vite dev server instead, for debugging.
 // Usage: node --import tsx scripts/run-xr-checks.ts mock-vr locomotion
 // XR_SHARD=<index>/<total> (1-based) runs one deterministic slice of the
 // requested checks, balanced by CHECK_COST, so CI runners split the suite
@@ -59,7 +63,7 @@ const USES_SOURCE_CONDITION: ReadonlySet<CheckName> = new Set(['avatars']);
 // Extra environment for entries that share a script.
 const CHECK_ENV: Partial<Record<CheckName, Record<string, string>>> = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };
 
-// Checks that need their own dev server: the face check emulates a Quest
+// Checks that need their own server (and test build): the face check emulates a Quest
 // Pro (eye gaze) while the others keep the Quest 3 their fixtures came from.
 const CHECK_SERVER_ENV: Partial<Record<CheckName, Record<string, string>>> = { face: { CAPTURE_IWER_DEVICE: 'metaQuestPro' } };
 
@@ -159,8 +163,15 @@ try {
   if (requested.length === 0) throw new Error(`shard ${process.env.XR_SHARD} selected no checks`);
   console.log(`[xr-checks] Running ${requested.join(', ')}${shard ? ` (shard ${shard.index}/${shard.total})` : ''} against ${baseUrl}${parallel ? `, ${concurrency} at a time` : ''}`);
 
+  if (!reuseDevServer && process.env.HOLOIM_VITE_DEV !== '1') {
+    // Build before serving, so the readiness wait bounds startup only.
+    // The avatars check also drives the face check's server.
+    const serverEnvs = new Set(['{}', ...requested.map((name) => JSON.stringify(CHECK_SERVER_ENV[name === 'avatars' ? 'face' : name] ?? {}))]);
+    for (const serverEnv of serverEnvs) ensureTestBuild('capture', { ...process.env, ...(JSON.parse(serverEnv) as Record<string, string>) });
+  }
   if (!reuseDevServer) {
-    devServer = startViteDevServer({
+    devServer = startTestBuildServer({
+      app: 'capture',
       host,
       port,
       cwd: process.cwd(),
@@ -178,7 +189,7 @@ try {
     if (!extraBaseUrls.has(key)) {
       extraBaseUrls.set(key, (async () => {
         const extraPort = await findAvailablePort(host, port + 1 + extraBaseUrls.size, 20);
-        const server = startViteDevServer({ host, port: extraPort, cwd: process.cwd(), env: { ...process.env, ...extraEnv, NODE_TLS_REJECT_UNAUTHORIZED: '0' } });
+        const server = startTestBuildServer({ app: 'capture', host, port: extraPort, cwd: process.cwd(), env: { ...process.env, ...extraEnv, NODE_TLS_REJECT_UNAUTHORIZED: '0' } });
         extraServers.push(server);
         const url = createHttpsBaseUrl(host, extraPort);
         await waitForServer(url, startupTimeoutMs, server);

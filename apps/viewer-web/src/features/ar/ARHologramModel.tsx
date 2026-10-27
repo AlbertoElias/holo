@@ -23,6 +23,7 @@ import {
   evaluatePlacementVisibility,
   type ArPlacementMode
 } from "./arPlacement";
+import { testHooks } from "../../testHooks";
 
 const HOLOGRAM_ANIMATION_SPEED = 1;
 // Only for the first viewing distance when a recording has no measurable height.
@@ -178,7 +179,7 @@ export function ARHologramModel({
     safeMode: true,
     onStatus: onBubbleStatusChange,
     onError: (error) => {
-      if (import.meta.env.DEV) {
+      if (testHooks) {
         console.warn("[AR] Bubble clipping fallback triggered.", error);
       }
     }
@@ -211,7 +212,7 @@ export function ARHologramModel({
   useEffect(() => {
     // Opt-in local E2E observer: tests inspect real XR cameras and pixels.
     // This branch is removed from production builds.
-    if (import.meta.env.DEV) {
+    if (testHooks) {
       const observer = (window as Window & {
         __HOLOIM_AR_TEST_OBSERVER__?: (value: unknown) => void;
       }).__HOLOIM_AR_TEST_OBSERVER__;
@@ -239,7 +240,7 @@ export function ARHologramModel({
   }, [modelHeightMeters, sphereClip.active, sphereClip.radius]);
 
   const logPlacement = useCallback((message: string, details: Record<string, unknown>): void => {
-    if (!import.meta.env.DEV) {
+    if (!testHooks) {
       return;
     }
 
@@ -336,7 +337,7 @@ export function ARHologramModel({
       })
       .catch((error: unknown) => {
         anchorRequestPendingRef.current = false;
-        if (import.meta.env.DEV) {
+        if (testHooks) {
           console.warn("[AR] Anchor placement unavailable; continuing without anchor.", error);
         }
       });
@@ -456,7 +457,7 @@ export function ARHologramModel({
         if (!cancelled) {
           applyFallbackPlacement("hit-test-unavailable");
         }
-        if (import.meta.env.DEV) {
+        if (testHooks) {
           console.warn("[AR] Hit-test placement unavailable; using fallback.", error);
         }
         return;

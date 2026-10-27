@@ -1,6 +1,7 @@
 import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const managedProcessGroups = new WeakMap();
 const stoppingProcesses = new WeakMap();
@@ -157,6 +158,22 @@ export function startViteDevServer({
       stdio: 'inherit',
       env
     }
+  );
+}
+
+const testBuildScript = fileURLToPath(new URL('./test-build.mjs', import.meta.url));
+
+/**
+ * Serves an app's e2e test build with `vite preview` (test-build.mjs `serve`),
+ * or its dev server when HOLOIM_VITE_DEV=1. Call ensureTestBuild first so the
+ * server's readiness wait does not include the build.
+ */
+export function startTestBuildServer({ app, host, port, cwd, env }) {
+  return spawnManaged(
+    process.execPath,
+    [testBuildScript, 'serve', app, '--', '--host', host, '--port', String(port), '--strictPort'],
+    // The caller built already; a forced rebuild must not repeat here.
+    { cwd, stdio: 'inherit', env: { ...(env ?? process.env), HOLOIM_TEST_BUILD_FORCE: '' } }
   );
 }
 

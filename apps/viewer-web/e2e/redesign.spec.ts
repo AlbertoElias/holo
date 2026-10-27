@@ -481,7 +481,7 @@ type IwerDevice = IwerPosed & { controlMode: string; controllers: Record<"left" 
 /** Aims the right controller from the head at a chrome glyph (by its accessible name) and pulls the trigger. */
 async function selectInRoom(page: Page, label: string): Promise<void> {
   await page.evaluate(async (name) => {
-    const { Vector3, Quaternion, Matrix4 } = await import("/node_modules/.vite/deps/three.js") as typeof Three;
+    const { Vector3, Quaternion, Matrix4 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
     const probe = (window as ArWindow).__arProbe!;
     let hit: Three.Object3D | undefined;
     probe.scene.traverse((object) => {

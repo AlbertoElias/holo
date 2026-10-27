@@ -7,6 +7,7 @@ import { Vector3, type Object3D } from "three";
 import { HologramPlayback, restartHologram, seekHologram, setHologramPlaying } from "./hologramPlayback";
 import { addTwoHandGrab, grabPointerIds, keepGrounded } from "./twoHandGrab";
 import { focusedRecord, viewerContext, type PlacedHologram } from "./viewerContext";
+import { testHooks } from "../../testHooks";
 
 // The viewer's XR interface (docs/features/archive/viewer-xr-interface.md, steps 3
 // and 4): foot controls at the focused hologram's foot, with the focus ring
@@ -150,7 +151,7 @@ export class HologramControlsSystem extends createSystem() {
       hands: this.trackedHands(),
       hologramDistanceM: Math.hypot(headPosition.x - anchor.x, headPosition.z - anchor.z)
     });
-    if (import.meta.env.DEV) {
+    if (testHooks) {
       this.fadeLog.push(foot.fades());
       if (this.fadeLog.length > 64) this.fadeLog.shift();
     }

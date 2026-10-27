@@ -5,6 +5,7 @@ import type { UIStateStore } from '../ui/UIStateStore';
 import { AudioRecorder } from './AudioRecorder';
 import { AvatarRecorder } from './AvatarRecorder';
 import { CameraRecorder } from './CameraRecorder';
+import { testHooks } from '../testHooks';
 
 interface RecordingSessionDeps {
   ui: UIStateStore;
@@ -293,13 +294,13 @@ export class RecordingSession {
     }
   }
 
-  // Development builds also keep the raw headset input behind each capture
+  // Development and test builds also keep the raw headset input behind each capture
   // recording so it can be replayed as a test fixture.
   private async startInputRecording(): Promise<void> {
     this.inputRecording = null;
     const session = this.deps.renderer.xr.getSession();
     const refSpace = this.deps.renderer.xr.getReferenceSpace();
-    if (!import.meta.env.DEV || !session || !refSpace) return;
+    if (!testHooks || !session || !refSpace) return;
     try {
       const { InputRecordingSession } = await import('../debug/inputRecording');
       this.inputRecording = await InputRecordingSession.start(session, refSpace);

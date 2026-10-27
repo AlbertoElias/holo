@@ -125,7 +125,18 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
   CI) in the background and wait for its completion notice. To wait on CI, run
   `gh run watch <id> --exit-status` in the background; do not poll with
   `until grep` or `sleep` loops.
-- `test:xr*` starts its own Vite server on the first free port from `5174`,
+- Browser checks (`test:xr*`, the viewer's Playwright suites) load a test
+  build under `vite preview`: the production build plus
+  `HOLOIM_TEST_BUILD=1` (IWER injected, test hooks kept, relative `/api`),
+  in `output/test-builds/<app>/<variant>`. It rebuilds only when the app's
+  sources or the workspace packages change (about 20 s for the viewer,
+  10 s for capture); `node packages/tooling-testing/src/test-build.mjs
+  build <web|capture>` builds one ahead of time. `HOLOIM_VITE_DEV=1` serves
+  the Vite dev server instead, for debugging. Test hooks gate on
+  `testHooks` (`src/testHooks.ts`), never `import.meta.env.DEV`;
+  `node scripts/check-prod-bundle.mjs` fails a production viewer `dist`
+  that carries them or IWER.
+- `test:xr*` starts its own server on the first free port from `5174`,
   so a stale server does not block it. Reuse one you started from the same
   worktree with `REUSE_DEV_SERVER=1 BASE_URL=https://127.0.0.1:<port>/`; never
   reuse a server from another checkout, which serves other code.
@@ -187,6 +198,8 @@ Supported env vars for smoke and XR scripts:
 - `E2E_BASE_URL` (default `https://localhost:3174`)
 - `E2E_API_PORT` (default `3001`; use a free port for isolated local integration)
 - `REUSE_DEV_SERVER` (`1` to reuse existing server)
+- `HOLOIM_VITE_DEV` (`1` serves browser checks from the Vite dev server instead of the test build)
+- `HOLOIM_TEST_BUILD_FORCE` (`1` rebuilds the test build even when its sources are unchanged)
 - `STARTUP_TIMEOUT_MS` (default `30000`)
 - `XR_CHECK_TIMEOUT_MS` (default `120000` per capture XR check, `360000` for `body` and `face`; this only stops hangs, and setting it applies to every check)
 - `XR_TEST_VIEWPORT` (default `320x180` for capture XR checks; set `1280x720` when inspecting the page live)
@@ -198,7 +211,7 @@ Supported env vars for smoke and XR scripts:
 - `BODY_REPLAY_FAULTS` (`1` breaks each body behavior in turn and requires its metric to fail; `BODY_REPLAY_FAULT=<name>` runs one)
 - `BODY_REPLAY_CONCURRENCY` (default `2` body replays at once; results do not depend on it)
 - `FACE_VIDEO` (`1` renders the face check's close-up video and contact sheet to `output/ci-face/`; needs `ffmpeg`)
-- `CAPTURE_IWER_DEVICE` (`metaQuestPro` emulates the Quest Pro, the one IWER device with eye gaze; the runner starts a second dev server with it for the `face` check)
+- `CAPTURE_IWER_DEVICE` (`metaQuestPro` emulates the Quest Pro, the one IWER device with eye gaze; the runner builds and serves a second test build with it for the `face` check)
 - `HAND_REPLAY_CONCURRENCY` (default `2` hand replays at once; results do not depend on it)
 - `XR_REPLAY_ONLY` (substring, comma-separated for several: replay only matching hand or body fixtures; with `BODY_REPLAY_FAULTS=1`, only faults on those fixtures)
 - `XR_SHARD` (`<index>/<total>`, 1-based: `test:xr*` runs one cost-balanced slice of the listed checks; CI uses 2 slices)
