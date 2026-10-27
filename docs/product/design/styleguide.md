@@ -320,8 +320,12 @@ enter.
 - **Shape.** A superellipsoid dome (exponent 2.6) whose foot rests on the
   hologram's floor. It is fitted once to what the hologram draws (the bubble's
   content, never the bubble's mesh; the author's bones through the take when
-  there is no bubble), plus a 4% margin, and never refitted as the take plays,
-  so it never breathes. Its height is at least 40% of its wider radius, so
+  there is no bubble), plus a 4% margin. On a flat screen it wraps all of it,
+  so where the ground falls away from the author (a hilltop, a slope) its foot
+  is the lowest drawn ground. A camera take's dome stands on its set's
+  origin, the recorded floor, on a flat screen too. In a room it stands on the room floor, and what
+  lies below that only widens its foot. It is never refitted as the take
+  plays, so it never breathes. Its height is at least 40% of its wider radius, so
   every dome has the same shoulders. A bubble that follows its author carries
   its dome along.
 - **Anchored in the hologram's world.** It orbits, zooms and walks with the

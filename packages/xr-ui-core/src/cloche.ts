@@ -47,10 +47,12 @@ export function clocheValue(shape: Pick<ClocheShape, "base" | "radii" | "exponen
  * flanks, water below) is not what the dome is fitted to.
  */
 export function fitCloche(allPoints: readonly Vector3Like[], { floorY }: { floorY?: number | undefined } = {}): ClocheShape | null {
+  if (allPoints.length === 0) return null;
   const hasFloor = floorY !== undefined && Number.isFinite(floorY);
-  const above = hasFloor ? allPoints.filter((point) => point.y >= floorY) : allPoints;
-  const points = above.length > 0 ? above : allPoints;
-  if (points.length === 0) return null;
+  // What lies below the floor (ground falling away from a hilltop, the
+  // valley a walk goes down into) still belongs under the dome: it is lifted
+  // onto the floor, so it widens the foot instead of being dropped.
+  const points = hasFloor ? allPoints.map((point) => (point.y >= floorY ? point : { x: point.x, y: floorY, z: point.z })) : allPoints;
   const min = { x: Infinity, y: Infinity, z: Infinity };
   const max = { x: -Infinity, y: -Infinity, z: -Infinity };
   for (const point of points) {
@@ -61,7 +63,7 @@ export function fitCloche(allPoints: readonly Vector3Like[], { floorY }: { floor
     max.y = Math.max(max.y, point.y);
     max.z = Math.max(max.z, point.z);
   }
-  if (hasFloor && above.length > 0) min.y = floorY;
+  if (hasFloor) min.y = floorY;
   const height = Math.max(max.y - min.y, 0.05);
   const halfX = (max.x - min.x) / 2;
   const halfZ = (max.z - min.z) / 2;

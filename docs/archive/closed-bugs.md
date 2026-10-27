@@ -377,6 +377,9 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   scene and needs the same rule when that branch merges.
   The recorded ground below the author's floor (slopes, water) stays visible
   under the dome and below the room floor, unclipped (user decision, 2026-10-25).
+  Superseded in the feed by B-033 (user decision, 2026-10-27): there the dome
+  wraps that ground too, its foot on the lowest drawn ground; AR keeps the
+  recorded floor on the room floor.
 - **Physical:** 2026-10-26, after checking desktop and an iPhone (the feed
   and Quick Look), the user: "i think we fixed b022". AR placement on a
   Quest or an Android phone is Unverified, skipped by the user's choice (no
@@ -628,3 +631,27 @@ bug above.)
   passes with the new stepping; all 16 `ar-record` phases pass. Inferred
   pointing's dwell is unchanged: it runs in a headset at 72 Hz or more, where
   a frame is under 14 ms.
+
+### B-033 — The feed cloche wraps only the avatar on a take that starts on a hilltop
+
+- **Area:** `apps/viewer-web` feed cloche (`HologramCardCanvas.tsx`),
+  `packages/xr-ui-core` `fitCloche`
+- **Severity:** P1 (every take whose ground falls away from the author)
+- **Observed:** 2026-10-26, reported by the user on
+  https://holoim-viewer.pages.dev (`cmvmm7i6q0000oeju1y8pu7eo`,
+  "avatar-recording-1792859402009")
+- **Evidence:** the take starts on a hilltop (recorded floor y 21.33) and walks
+  3.6 m downhill in a 6 m bubble. B-022's fit kept only the points at or above
+  the recorded floor: 562 of 1262, which left the author's own points, so the
+  dome was 2.0 × 2.0 m inside a 12 m bubble of scenery. A take on flatter
+  ground (`cmvo1tcvc0000oejtzuhpu726`) lost less and still looked whole.
+- **Expected:** the halo wraps the whole scene the bubble draws, not the avatar.
+- **Fix:** the feed fits the cloche to everything drawn, its foot on the
+  lowest drawn ground (user's choice, 2026-10-27, from both renders of this
+  take). With a floor (AR and the XR viewer, the room floor), `fitCloche` lifts
+  points below it onto the floor instead of dropping them, so they still widen
+  the foot. A camera take keeps its set's origin as the feed's floor, as
+  `e2e/camera-take.pipeline.spec.ts` requires. The take's dome is now 11.7 × 10.6 m. Validation: the floor check in
+  `e2e/bubble-capture.pipeline.spec.ts` now requires the feed's foot on the
+  lowest drawn ground, never above the recorded floor, and every drawn point
+  of the recorded scene under the glass; AR's foot stays on the recorded floor.

@@ -21,7 +21,7 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
-import { drawnBounds, drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
+import { drawnBounds, drawnPoints, motionPoints } from "../hologram/drawnPoints";
 import { isCameraTake } from "../hologram/hologramScene";
 import { type HumanoidGltf, resolveHumanoidAnchors } from "../hologram/humanoidAnchors";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
@@ -244,8 +244,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     // A bubble follows its author, so the walk is read relative to it: the author's full reach, not their path.
     const anchor = bubble ? clonedScene.getObjectByName("RecordedBubbleSphere") ?? undefined : undefined;
     const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble })];
-    // The dome stands on the recorded floor, not on the lowest ground in the bubble (B-022).
-    const shape = fitCloche(points, { floorY: recordedFloorY(clonedScene) ?? undefined });
+    // The dome wraps everything the bubble draws, ground falling away from the author included (B-033).
+    // A camera take's set stands on its origin, the recorded floor; what lies below only widens the foot.
+    const shape = fitCloche(points, { floorY: isCameraTake(clonedScene) ? clonedScene.getWorldPosition(new Vector3()).y : undefined });
     if (!shape) return;
     fittedCentre.current = bubble ? bubble.center : null;
     clocheRef.current = shape;

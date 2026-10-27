@@ -5,12 +5,10 @@
 import { isInChrome } from "@holoim/xr-ui-core";
 import { AnimationMixer, Box3, LoopRepeat, Matrix4, Sphere, Vector3 } from "three";
 
-import { isCameraTake } from "./hologramScene";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "./takePlayback";
 import type { AnimationClip, Bone, Mesh, Object3D, SkinnedMesh } from "three";
 
 const BUBBLE_MESH_NAME = "RecordedBubbleSphere";
-const AVATAR_NAME = "RecordedAvatar";
 const AUTHOR_CAMERA_NAME = "RecordedAuthorCamera";
 /** Enough points per mesh to find its extent, without walking every vertex of a dense scene. */
 const POINTS_PER_MESH = 3000;
@@ -44,22 +42,6 @@ export function recordedBubble(root: Object3D, into?: Object3D): DrawnBubble {
   const space = toSpace(into);
   if (space) sphere.applyMatrix4(space);
   return sphere.radius > 0 ? { center: sphere.center, radius: sphere.radius } : null;
-}
-
-/**
- * The recorded floor's height, in `into`'s space (or world): capture stands
- * the exported avatar's origin on the ground under the author, so its height
- * is the floor, whatever else the scene holds above or below. A camera take's
- * floor is its set's origin, the root's. Null for any other file.
- */
-export function recordedFloorY(root: Object3D, into?: Object3D): number | null {
-  const floorNode = root.getObjectByName(AVATAR_NAME) ?? (isCameraTake(root) ? root : null);
-  if (!floorNode) return null;
-  root.updateWorldMatrix(true, true);
-  const origin = floorNode.getWorldPosition(new Vector3());
-  const space = toSpace(into);
-  if (space) origin.applyMatrix4(space);
-  return Number.isFinite(origin.y) ? origin.y : null;
 }
 
 /** Bounds of what the hologram draws, as `drawnPoints` finds it: the set and its objects, never the bubble's sphere, the author's camera or chrome. */
