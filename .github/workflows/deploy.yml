@@ -166,6 +166,9 @@ jobs:
         # Like the viewer: `...` builds the workspace packages (meaning) whose
         # dist entry the production bundle resolves.
         run: pnpm --filter @holoim/capture... run build
+        env:
+          # Object search (Find an object) calls the API's public /api/objects routes.
+          VITE_API_ORIGIN: https://holoim-api.fly.dev
       - name: Deploy to Pages
         # Wrangler (installed with the viewer) runs from apps/capture: pages
         # deploy bundles the functions/ directory and reads the wrangler.toml

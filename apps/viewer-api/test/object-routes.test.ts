@@ -73,6 +73,16 @@ describe("object search routes", () => {
     return objectSearchResponseSchema.parse(response.json());
   }
 
+  it("lets the deployed capture origin read object routes without opening the authenticated ones", async () => {
+    const origin = "https://holoim-capture.pages.dev";
+    const found = await app.inject({ method: "GET", url: "/api/objects/search?q=chair", headers: { origin } });
+    expect(found.headers["access-control-allow-origin"]).toBe("*");
+    const glb = await app.inject({ method: "GET", url: "/api/objects/polyhaven/Chair_01.glb", headers: { origin } });
+    expect(glb.headers["access-control-allow-origin"]).toBe("*");
+    const feed = await app.inject({ method: "GET", url: "/api/holograms", headers: { origin } });
+    expect(feed.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
   it("returns at most six results, drops oversize models and ranks name over tags", async () => {
     const body = await search("chair");
     expect(body.results).toHaveLength(6);

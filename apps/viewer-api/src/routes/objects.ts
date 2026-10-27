@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, onSendHookHandler } from "fastify";
 
 import {
   OBJECT_SEARCH_MAX_RESULTS,
@@ -22,6 +22,15 @@ const GLB_FILE_PATTERN = /^(.+)\.glb$/;
 // A model's files change rarely and the server caches the packed GLB; a day is safe.
 const GLB_CACHE_CONTROL = "public, max-age=86400";
 
+// Search results and packed GLBs are public CC0 data fetched without
+// credentials, so any page may read them. This lets the deployed capture app
+// (its own Pages origin) call these two routes without joining WEB_ORIGINS,
+// which also governs the authenticated routes.
+const allowAnyOrigin: onSendHookHandler = async (_request, reply, payload) => {
+  reply.header("access-control-allow-origin", "*");
+  return payload;
+};
+
 export async function registerObjectRoutes(
   app: FastifyInstance,
   options: { polyhaven?: Polyhaven } = {}
@@ -39,7 +48,7 @@ export async function registerObjectRoutes(
     throw error;
   }
 
-  app.get("/objects/search", async (request, reply) => {
+  app.get("/objects/search", { onSend: allowAnyOrigin }, async (request, reply) => {
     const parsed = objectSearchQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.status(400).send({ error: "A search of 1 to 100 characters is required." });
@@ -65,7 +74,7 @@ export async function registerObjectRoutes(
     }
   });
 
-  app.get<{ Params: { file: string } }>("/objects/polyhaven/:file", async (request, reply) => {
+  app.get<{ Params: { file: string } }>("/objects/polyhaven/:file", { onSend: allowAnyOrigin }, async (request, reply) => {
     const id = GLB_FILE_PATTERN.exec(request.params.file)?.[1];
     if (!id || !POLYHAVEN_ID_PATTERN.test(id)) return reply.status(404).send({ error: "No such object." });
     try {

@@ -106,7 +106,9 @@ Live at https://holoim-capture.pages.dev. Limits of the static deploy: the
 dev-only input-recording sink (`/__holoim/input-recordings`, served by the
 local Vite server) does not exist there, so recording headset input as a
 replay fixture still happens against the local dev server. Capture calls
-no API, so no `WEB_ORIGINS` change is needed unless that changes.
+only the API's public object-search routes (`/api/objects/*`), built with
+`VITE_API_ORIGIN=https://holoim-api.fly.dev`; those routes answer any origin,
+so capture's origin stays out of `WEB_ORIGINS`.
 
 ## 3. Media on R2 (Phase 2)
 
