@@ -1,7 +1,7 @@
 # Feature brief: Standard avatar formats
 
 **Lead:** Claude Code (session 2026-10-25)
-**Status:** Implementing
+**Status:** Complete (slice 1, 2026-10-27); slice 2 queued in `TODOS.md`
 **Layer:** Event (the recorded body; see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -19,7 +19,7 @@ instead of silently losing its arms.
 
 | Slice | Delivers | Status |
 |---|---|---|
-| 1 | Resolver, every capture lookup routed through it, binding report, the four axis-assumption fixes, skeleton-derived facing, `HOLOIM_humanoid` export, viewer-web anchors via the resolver, fixtures and the `avatars` check | Implementing |
+| 1 | Resolver, every capture lookup routed through it, binding report, the four axis-assumption fixes, skeleton-derived facing, `HOLOIM_humanoid` export, viewer-web anchors via the resolver, fixtures and the `avatars` check | Complete (2026-10-27) |
 | 2 | Locomotion clips retargeted onto avatars without their own Idle, Walk, Jump or Fall, with the per-bone T-pose correction that needs | Not started |
 
 The design review found that arm IK, finger retargeting and the body solver
@@ -199,13 +199,20 @@ That is honest degradation and keeps the XR recording outcome intact.
   face check runs on the VRM 0.x −Z fixture instead (non-RPM, with eyes, and
   through the facing correction). The object grip runs on the re-oriented and
   the Unreal fixtures.
-- [ ] **Export → upload → render:** an export from a non-RPM fixture keeps
+- [x] **Export → upload → render:** an export from a non-RPM fixture keeps
   its source names and carries `HOLOIM_humanoid`. Through the real pipeline,
   the feed card and AR viewer find its hips and head, and `HOLOIM_meaning`
   bone anchors still resolve. An upload without the extension renders as
-  today.
-- [ ] **Facing:** an exported −Z fixture renders facing the same way as its
+  today. Evidence: `avatar-formats.pipeline.spec.ts` (below). The Unreal
+  export without its extension renders and finds the same bones through the
+  name tables; old Ready Player Me uploads keep the unchanged
+  `capture-to-viewer` spec, and the verifier found their anchors identical
+  to the old lookups.
+- [x] **Facing:** an exported −Z fixture renders facing the same way as its
   recording in the feed and AR, judged from a numeric yaw in the report.
+  Evidence: the same spec; recorded −180.0°, feed and AR −180.0°. With the
+  facing correction removed from the export, it fails with
+  "feed: faces as recorded (0.0° vs -180.0°)".
 - [x] **Duplicate names:** a fixture with duplicate bone names exports
   without losing tracks.
 - [x] **Unmappable rig:** the unmappable fixture loads without throwing. Its
@@ -298,8 +305,8 @@ which moves the viewer's anchor lookup. The viewer step is sequenced after it.
 | `HOLOIM_humanoid` export; duplicate names | Same check: export from `vrm0-minus-z`, `unreal-cm`, `duplicate-names` | declares every required bone on the fixture's own node names; no node path animated twice; hips animated |
 | Unmappable rig | Same check | 15 missing bones; crouch, body solver and arm IK reported off; exactly one `[avatar]` warning |
 | No `skeleton.pose()` | Guard in `test:avatars:bind` | pass |
-| Export → upload → render, facing, meaning anchors in viewer-web | Pipeline spec on a non-RPM and a −Z fixture, plus the unchanged spec | pending: viewer step waits on `feature/viewer-xr-interface` |
-| No regression | `pnpm run verify:pr` | doctor, check:all, every unit suite, build:all, knowledge, smoke pipeline (8/8, with the USD converter installed) pass; `test:portal` fails one spec that fails identically on `main` (B-022); `test:xr:smoke` (run separately after it) passes |
+| Export → upload → render, facing, meaning anchors in viewer-web | `apps/viewer-web/e2e/avatar-formats.pipeline.spec.ts` (in `test:smoke:pipeline`): records `unreal-cm` and `vrm0-minus-z` in the capture app, uploads to the real API, reads the feed card and immersive AR; the Unreal export again without `HOLOIM_humanoid`; a desktop pointing take on the Unreal rig | `output/avatar-formats-viewer/<fixture>-report.json`: hips and head from `holoim` under the fixture's own names (`pelvis`/`head`, `Hips`/`Head`) in feed and AR; recorded yaw −180.0°, feed and AR −180.0°; without the extension `names` finds `pelvis`; both pointing links light from `index_03_r_end`. Mutation: export without the facing correction fails at 0.0° vs −180.0° |
+| No regression | `pnpm run verify:pr` | 2026-10-25 (capture side): doctor, check:all, every unit suite, build:all, knowledge, smoke pipeline (8/8, with the USD converter installed) pass; `test:portal` fails one spec that fails identically on `main` (B-022); `test:xr:smoke` (run separately after it) passes. 2026-10-27 (after merging `main` and the viewer step): doctor, check:all, unit suites, build:all, knowledge and the smoke pipeline (13/13) pass; `test:portal` fails three phone specs (tilt, B-022, and the freeze and drag swipes) that fail identically on `origin/main` in this container; SMOKE_RESULT |
 
 Independent verification (2026-10-25, a separate Claude agent; the
 different-vendor rule is not met, as recorded under Ownership): nothing
@@ -322,6 +329,32 @@ blocking. Its findings and their outcomes:
   require it; no real file seen that needs it); `headTip` can pick a hair
   bone on VRoid-style rigs (only `body-fidelity` reads it); Rigify `DEF-`
   names are not mapped.
+
+Independent verification of the viewer step (2026-10-27, a separate Claude
+agent; no other vendor's agent is installed in this environment, so the
+different-vendor rule is again not met): nothing blocking. It loaded the
+real exports in Node, cloned them as the viewer does and resolved anchors
+under bad declarations, missing associations, props with their own
+`Hips`/`Head` and plain GLBs. It found no remaining bone-name lookup in
+`apps/viewer-web/src` outside the resolver's legacy fallback. Findings and
+outcomes:
+
+- Fixed: a malformed declaration with a negative node index could reach a
+  synthetic id when the loader keeps no associations. Declarations now take
+  only `node >= 0` (`humanoidRig.test.ts`).
+- Fixed: the anchor scope check walked the parent chain per candidate; it
+  is now one pass (once per load, never per frame).
+- Changed behavior, intended: a plain GLB (no `RecordedAvatar`) with an
+  Unreal, VRoid, CC4, Biped, ARKit, VRM 1.0 or prefixed Mixamo rig is now
+  placed under its hips, as Ready Player Me and Mixamo files always were,
+  instead of under its root. A prop with its own `Hips` inside the avatar
+  no longer takes over the card's framing.
+- Not changed (notes): the AR yaw is read in the hologram's own frame, so it
+  re-checks the file as cloned, not the placement turn (the feed reading
+  proves the same facing); `avatar-fixtures.ts` imports `@holoim/meaning`'s
+  source by relative path, as `pointing-desktop-take.ts` already does,
+  because the pipeline job runs Playwright without building workspace
+  packages; e2e specs sit outside every tsconfig (unchanged).
 
 Defects the checks found during implementation, all fixed:
 
@@ -352,32 +385,24 @@ A rig whose rest pose is a T-pose stands with its arms out on desktop
 and the clips' arm tracks are slice 2's T-pose correction. In XR the arm IK
 drives the arms from the measured bind pose, so recordings are unaffected.
 
-## Handoff state (2026-10-25)
+## Handoff state (2026-10-27)
 
-- Capture side of slice 1 is done, verified and pushed on
-  `feature/avatar-formats` (`db9207e`): resolver, routed lookups, axis
-  fixes, facing, `HOLOIM_humanoid` export, fixtures, `test:avatars:bind` and
-  `test:xr:avatars`.
-- Exports with `HOLOIM_humanoid` upload, render and convert to USDZ as
-  today (smoke pipeline; direct conversion of the −Z, Unreal and
-  duplicate-names exports). The converter lists the extension under its
-  generic "core-material fallback" message, as it does for
-  `KHR_lights_punctual`.
-- Environment: this container's Python lacks `usd-core`, so the smoke
-  pipeline's USDZ step needs `USDZ_PYTHON` pointing at a venv with
-  `usd-core pygltflib numpy pillow`.
-- Remaining for slice 1: the viewer-web anchors (`HOLOIM_humanoid`, then
-  the resolver, then legacy names) and the pipeline spec on a non-RPM and a
-  −Z export, after `feature/viewer-xr-interface` merges (still open on
-  2026-10-25), then merge.
+- Slice 1 is complete and merged to `main` with the viewer step: viewer-web
+  resolves the author's bones through `features/hologram/humanoidAnchors.ts`
+  (`HOLOIM_humanoid` or a VRM declaration by node index, then the
+  `@holoim/meaning` name tables, then the legacy Ready Player Me names,
+  within `RecordedAvatar`) for the feed card's framing, the R3F AR model and
+  the IWSDK viewer.
 - Real files checked by hand (2026-10-25) in the capture app: three.js's
   Mixamo `Xbot.glb` binds by names (mixamo) and pixiv's
   `VRM1_Constraint_Twist_Sample.vrm` by its `VRMC_vrm` declaration; both
   bind 54 bones with no required bone missing, no facing correction and no
-  feature off. On desktop both crouch like the shipped avatar (head down
-  17–21 cm, forward 23–24 cm). The VRM keeps its T-pose arms on desktop:
-  the VRM spec requires a T-pose rest, so the desktop limit below applies
-  to every VRM file until a desktop arm pose exists.
-- Not merged to `main`: the slice ships as one change once the viewer step
-  lands.
-
+  feature off. The VRM keeps its T-pose arms on desktop (see the limit
+  above).
+- Environment notes: the smoke pipeline's USDZ step needs `USDZ_PYTHON`
+  pointing at a venv with `apps/viewer-api/tools/requirements.txt`; this
+  container had Node 22 and a newer Chromium than the pinned Playwright
+  expects (run with `PLAYWRIGHT_BROWSERS_PATH` at symlinks named for the
+  pinned builds).
+- Next: slice 2 (locomotion clips retargeted onto avatars without their own
+  clips, with the T-pose correction), queued in `TODOS.md`.

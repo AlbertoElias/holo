@@ -10,7 +10,7 @@ import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, captureEvidence, expect, pressViewInAr, test } from "./bootstrap";
 
-// Standard avatar formats (docs/features/avatar-formats.md): exports from
+// Standard avatar formats (docs/features/archive/avatar-formats.md): exports from
 // avatars that are not Ready Player Me go through the real export → upload →
 // render path, and the feed card and immersive AR find the author's bones
 // and face the way the recording did.

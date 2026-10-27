@@ -19,7 +19,7 @@ import type {} from '../src/runtime/automationHooks';
 import type { HumanoidBindingReport } from '../src/avatar/HumanoidSkeleton';
 import { buildCandidates, generateAvatarFixtures, readGlb, resolveGltf, type FixtureInfo, type GltfJson } from './lib/avatar-fixtures.ts';
 
-// Standard avatar formats (docs/features/avatar-formats.md), in the real app:
+// Standard avatar formats (docs/features/archive/avatar-formats.md), in the real app:
 // every generated fixture loads with ?avatar=, reports its humanoid binding
 // and crouches like the shipped avatar; three export with HOLOIM_humanoid.
 // The geometric fixtures (bone axes, bind pose, facing, scale) then run the

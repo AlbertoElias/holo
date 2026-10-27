@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { readHumanoidDeclaration, resolveHumanoidRig, type HumanoidNodeCandidate } from "./humanoidRig.js";
 
-// Cases come from the failure list in docs/features/avatar-formats.md.
+// Cases come from the failure list in docs/features/archive/avatar-formats.md.
 const joints = (names: readonly string[]): HumanoidNodeCandidate[] =>
   names.map((name, index) => ({ name, index, isJoint: true }));
 const named = (names: readonly string[], declaration?: Parameters<typeof resolveHumanoidRig>[1]) => {

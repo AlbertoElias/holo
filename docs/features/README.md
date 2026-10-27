@@ -8,7 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| Standard avatar formats | Implementing (slice 1) | [avatar-formats.md](avatar-formats.md) |
+| Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |
 | Shared XR interface and viewer VR/AR | Complete | [viewer-xr-interface.md](archive/viewer-xr-interface.md) |
 | Creator accounts (IDEA-052) | Complete | [creator-accounts.md](archive/creator-accounts.md) |
 | Snappy feed first load | Implementing | [snappy-feed-first-load.md](snappy-feed-first-load.md) |
