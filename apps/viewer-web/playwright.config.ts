@@ -16,9 +16,13 @@ const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 const reuseExistingServer = process.env.REUSE_DEV_SERVER === "1";
 const runPipeline = process.env.RUN_E2E_PIPELINE === "1";
 const captureUrl = new URL(process.env.E2E_CAPTURE_URL ?? "https://127.0.0.1:5175/");
-// The pipeline API searches a local stand-in for Poly Haven, never the live registry (PRD-060).
+// The pipeline API searches local stand-ins for Poly Haven and Poly Pizza, never the live registries (PRD-060).
 const polyhavenPort = Number(process.env.E2E_POLYHAVEN_PORT ?? "3199");
 const polyhavenOrigin = `http://127.0.0.1:${polyhavenPort}`;
+const polypizzaPort = Number(process.env.E2E_POLYPIZZA_PORT ?? "3198");
+const polypizzaOrigin = `http://127.0.0.1:${polypizzaPort}`;
+// Matches POLYPIZZA_FIXTURE_KEY in apps/viewer-api/test/fixtures/polypizzaFixture.ts.
+const polypizzaKey = "fixture-polypizza-key";
 const webServers = [
   {
     command: `VITE_HMR_CLIENT_PORT=${e2ePort} VITE_API_PROXY_TARGET=${apiBaseUrl} pnpm exec vite --host 0.0.0.0 --port ${e2ePort} --strictPort`,
@@ -29,13 +33,13 @@ const webServers = [
   },
   ...(runPipeline
     ? [{
-        command: `E2E_POLYHAVEN_PORT=${polyhavenPort} pnpm --filter @holoim/api exec tsx test/fixtures/polyhavenFixtureServer.ts`,
+        command: `E2E_POLYHAVEN_PORT=${polyhavenPort} E2E_POLYPIZZA_PORT=${polypizzaPort} pnpm --filter @holoim/api exec tsx test/fixtures/registryFixtureServer.ts`,
         gracefulShutdown: { signal: "SIGTERM" as const, timeout: 5000 },
         timeout: 60000,
         reuseExistingServer,
         url: `${polyhavenOrigin}/assets`
       }, {
-        command: `POLYHAVEN_API_ORIGIN=${polyhavenOrigin} WEB_ORIGIN=${e2eBaseUrl} TEST_API_PORT=${apiPort} pnpm --filter @holoim/api exec tsx ../../scripts/test-api.ts`,
+        command: `POLYHAVEN_API_ORIGIN=${polyhavenOrigin} POLYPIZZA_API_ORIGIN=${polypizzaOrigin} POLYPIZZA_API_KEY=${polypizzaKey} WEB_ORIGIN=${e2eBaseUrl} TEST_API_PORT=${apiPort} pnpm --filter @holoim/api exec tsx ../../scripts/test-api.ts`,
         gracefulShutdown: { signal: "SIGTERM" as const, timeout: 5000 },
         timeout: 120000,
         reuseExistingServer,

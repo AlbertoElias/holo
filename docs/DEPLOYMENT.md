@@ -106,9 +106,30 @@ Live at https://holoim-capture.pages.dev. Limits of the static deploy: the
 dev-only input-recording sink (`/__holoim/input-recordings`, served by the
 local Vite server) does not exist there, so recording headset input as a
 replay fixture still happens against the local dev server. Capture calls
-only the API's public object-search routes (`/api/objects/*`), built with
-`VITE_API_ORIGIN=https://holoim-api.fly.dev`; those routes answer any origin,
-so capture's origin stays out of `WEB_ORIGINS`.
+only the API's object-search routes (`/api/objects/*`: search, GLBs and
+voice transcription), built with `VITE_API_ORIGIN=https://holoim-api.fly.dev`.
+Poly Pizza's API terms forbid offering its models to third parties, so those
+routes answer only the web origins, localhost and `CAPTURE_ORIGINS`
+(default `https://holoim-capture.pages.dev` and its
+`https://*.holoim-capture.pages.dev` previews); capture's origin stays out of
+`WEB_ORIGINS`, which also governs the authenticated routes.
+
+Object search secrets on `holoim-api` (each optional; the feature it enables
+is off without it):
+
+```sh
+fly secrets set -a holoim-api POLYPIZZA_API_KEY="<key from poly.pizza/settings/api>"
+# A Cloudflare API token with Workers AI read and run permission.
+fly secrets set -a holoim-api WORKERS_AI_ACCOUNT_ID="<account id>" WORKERS_AI_API_TOKEN="<token>"
+```
+
+Without the Poly Pizza key, search shows Poly Haven alone. Without the
+Workers AI pair, or once the account's free daily allowance (10,000 neurons,
+about 200 audio minutes) is used up, `POST /api/objects/transcribe` answers
+503 and capture falls back to typing. Each client may search 30 times and
+transcribe 10 recordings a minute (60 transcriptions a minute in all);
+clients are told apart by Fly's `Fly-Client-IP`, trusted only when
+`FLY_APP_NAME` is set.
 
 ## 3. Media on R2 (Phase 2)
 

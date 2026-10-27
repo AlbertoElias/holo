@@ -25,11 +25,19 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   app.get("/healthz", async () => ({ status: "ok" }));
 
+  // Object search (PRD-060) also answers the capture app, which is not a web
+  // origin: those routes carry no credentials, but Poly Pizza's terms forbid
+  // offering its models to any other site, so they are not open to all.
+  const objectRoutePrefix = `${API_PREFIX}/objects/`;
+  const objectOrigins = [...env.WEB_ORIGIN_LIST, ...env.CAPTURE_ORIGIN_LIST];
   app.register(cors, {
-    origin(origin, callback) {
-      callback(null, isAllowedWebOrigin(origin, env.WEB_ORIGIN, env.WEB_ORIGIN_LIST));
-    },
-    credentials: false
+    delegator(request, callback) {
+      const origin = request.headers.origin;
+      const allowed = request.url.startsWith(objectRoutePrefix)
+        ? isAllowedWebOrigin(origin, env.WEB_ORIGIN, objectOrigins)
+        : isAllowedWebOrigin(origin, env.WEB_ORIGIN, env.WEB_ORIGIN_LIST);
+      callback(null, { origin: allowed, credentials: false });
+    }
   });
 
   app.register(multipart, {
