@@ -70,6 +70,7 @@ Start with PRD-051 to learn which repairs authors need; the design-language choi
 | [PRD-016: Message-first editor, first lane operation](PRD-016-message-first-editor.md) | IDEA-022 | Draft |
 | [PRD-044: Give an image or chart a place](PRD-044-mixed-media-layers.md) | IDEA-061 | Draft |
 | [PRD-045: Summon and place while speaking](PRD-045-authoring-while-speaking.md) | IDEA-062 | Delivered |
+| [PRD-060: Find an object by asking](PRD-060-find-an-object-by-asking.md) | IDEA-079 | Draft |
 | [PRD-005: Gesture-drawn marks](PRD-005-gesture-drawn-marks.md) | IDEA-004 | Draft |
 | [PRD-004: Starter symbol set](PRD-004-starter-symbols.md) | IDEA-003 | Draft |
 | [PRD-021: One interaction grammar across devices](PRD-021-design-language.md) | IDEA-031 | Draft |
