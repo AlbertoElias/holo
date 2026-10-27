@@ -1,7 +1,7 @@
 # Feature brief: The cloche's rim follows the ground
 
 **Lead:** Claude (Opus)  
-**Status:** Design reviewed; three user decisions open (see "Open for the user")
+**Status:** Ready for implementation
 **Layer:** View (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -40,11 +40,9 @@ that the decisions correct.
 **Included (feed portal only: `HologramCardCanvas`, also the portal view):**
 - The shell, embers and sparks bend so the rim follows a per-direction height
   over the ground, recomputed as the bubble moves.
-- The recorded scene is clipped by the bent dome instead of the sphere
-  (pending user confirmation, question 2).
+- The recorded scene is clipped by the bent dome instead of the sphere.
 - Framing accounts for the lifted rim.
-- The shade rule for takes whose rim lifts (pending user confirmation,
-  question 1).
+- The shade rule for takes whose rim lifts.
 - Gate: the rim runs only when the sphere clip is active, the take is not a
   camera take, and `RecordedAvatar` is present; otherwise lift is 0.
 
@@ -83,7 +81,7 @@ never the implementation's height field.
 |---|---|
 | Props (posts, fences, walls, roofs, the boat `Barco`, canopies) count as ground | Connectivity ground rule (decision 3): disconnected surfaces drop out. Synthetic fixture has a post, an 8 m wall and a roof box |
 | Buried geometry in exports (a lowest-hit pick) | Flood fill stays on the connected top surface; fixture has a buried slab |
-| Water or glass counts as ground | Materials with opacity < 0.5 or transmission > 0 skipped; water counts if opaque and joined to the shore (question 3). Fixture has a water plane and a glass pane |
+| Water or glass counts as ground | Materials with opacity < 0.5 or transmission > 0 skipped; opaque water joined to the shore counts (user decision). Fixture has a water plane and a glass pane |
 | A ground object changes class between takes because the export is clipped | Per-triangle rule, no per-mesh extent test |
 | No ground anywhere under or inside the rim | Lift 0: today's dome |
 | Ground higher than the dome can take | Lift capped at 0.6 × dome height |
@@ -121,8 +119,7 @@ Chosen from mockups: the rim follows the ground. Reviewed mechanics:
    exceeds 0.05 m, the shade is not drawn and the recorded ground stands in
    for it; otherwise today's shade. Flat and camera takes keep the shade, and
    nothing pops during playback. Styleguide 5.1 gains that exception.
-   *Pending user confirmation (question 1); the alternative is a shade draped
-   on the ground field.*
+   Confirmed by the user 2026-10-27 over a shade draped on the ground.
 2. **Reading the ground.** At load, in `fitClocheNow`, cached per model. Over
    a grid of 0.2 m cells covering the path box + max(rx, rz) + 0.5 m:
    - Candidates: meshes inside `RecordedSceneBubble` only (no avatar,
@@ -130,6 +127,9 @@ Chosen from mockups: the rim follows the ground. Reviewed mechanics:
      opacity < 0.5 or transmission > 0.
    - Draw triangles whose world normal.y ≥ 0.35 into the cells, keeping up to
      4 height layers per cell (layers within 0.1 m merge).
+   - Water counts as ground when its material is opaque enough and it joins
+     the shore; the rim may rest on the water's surface (user, 2026-10-27).
+     The implementer records `Agua`'s alpha mode and opacity here.
    - Flood-fill from the cell under the author's feet at t = 0 and from each
      path sample, stepping to a neighbour's layer when |Δh| ≤ 0.35 m. Cells
      not reached have no ground.
@@ -159,22 +159,19 @@ Chosen from mockups: the rim follows the ground. Reviewed mechanics:
    ≤ 1, in place of the sphere clip; the avatar and recorded objects are
    exempt. One inside test in `xr-ui-core` with a GLSL twin; `hitTest`,
    `throughGlass`, `PointingHighlights` and `clocheOpacityAt` use it.
-   XR, IWSDK and AR keep the sphere clip. *Pending user confirmation
-   (question 2).*
+   XR, IWSDK and AR keep the sphere clip. Confirmed by the user 2026-10-27:
+   the feed's drawn edge is the dome's glass, crisp, not the sphere's fade.
 6. **Framing.** At load, the lowest rim per bin over about 16 path samples;
    `clocheFraming` frames the dome bent by it, fixed for the take.
 7. **XR later.** Not adopted and not queued: in AR the dome stands on the
    room floor by rule, and in a headset the dome fades out around the viewer.
    The maths in `xr-ui-core` keeps it possible.
 
-## Open for the user
+## User decisions (2026-10-27)
 
-1. A take whose rim lifts has no shade, with the recorded ground standing in
-   for it. Acceptable, or drape the shade on the ground?
-2. In the feed, the scene is cut by the bent dome rather than the 6 m sphere,
-   as in the approved mockup: slightly more ground ahead of and behind the
-   author, and a crisp edge at the glass instead of a 1.8 m fade. Confirm?
-3. Does water count as ground, so the rim can rest on the water's surface?
+All three review recommendations accepted: no shade on takes whose rim
+lifts; the feed clips the scene by the bent dome; opaque water counts as
+ground.
 
 ## Test plan and evidence
 
