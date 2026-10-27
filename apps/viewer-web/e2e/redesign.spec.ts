@@ -325,7 +325,7 @@ test.describe("phone by touch", () => {
     const foldedShift = () => controls.locator(".portal-controls-after").evaluate((node) => getComputedStyle(node).transform);
     expect(await foldedShift(), "folded, the line sits a gap lower").not.toBe("none");
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await expect.poll(foldedShift, { message: "under reduced motion it does not move", timeout: 2000 }).toBe("none");
+    await expect.poll(foldedShift, { message: "under reduced motion it does not move", timeout: 6000 }).toBe("none");
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await card.locator(".feed-card-portal").tap({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");

@@ -869,7 +869,20 @@ with no recording), and everything under "Physical-device limits".
    both fades. The locomotion spec takes the frames mid-fade and checks the
    chip against the glyphs at 240/300 (IWER frames here ran 0.1 s to
    seconds apart, so a wall-clock span cannot resolve 240 vs 300 ms).
+   At load 50 a single frame outlasted the whole 0.3 s and no frame fell
+   mid-fade, so both fades now step by at most 50 ms a frame: a long frame
+   on a loaded device shows a fade, not a pop, and the 0.3 s chip fade
+   always spans at least six frames. Gallery and locomotion then passed
+   3× each beside a parallel shard.
 5. **Defect 5, fixed.** The dock hides only while one of its own hand's
    pointers holds a grab (`grabPointerIds`). The foot-controls spec now
    grabs with the dominant hand alone and asserts that the left-hand dock
    stays visible.
+
+**Hosted CI (2026-10-26).** The grown immersive spec pushed the single
+viewer job past its 10-minute limit. The viewer specs now run as three
+shards split by measured time (`test:e2e:mocked:shard1..3` in
+`apps/viewer-web`; their union is the whole `test:e2e:mocked` list), with
+the Knowledge Atlas in shard 1. The immersive spec waits for the feed's
+late snap glide before reaching for a card: on a 2-CPU runner the glide
+moved the card out from under the cursor and its controls folded.
