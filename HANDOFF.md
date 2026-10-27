@@ -16,9 +16,10 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 The shared XR interface and viewer VR/AR is complete and on `main` (brief
 [`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md)).
 Next: AR recording (camera-only takes, meaning v1) is built and verified on
-`feature/ar-recording`; the `?arCamera=1` flag is removed by the user's decision (phone AR
-records camera takes by default); it waits for `main` to be green before it merges with slice 0's branch. Its device
-checks stay unverified (no Android phone). Otherwise pick the next queue item in
+`feature/ar-recording`. The `?arCamera=1` flag is removed by the user's
+decision: phone AR records camera takes by default. It waits for `main` to be
+green, then merges with slice 0's branch. Its device checks stay unverified
+(no Android phone). Otherwise pick the next queue item in
 [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
