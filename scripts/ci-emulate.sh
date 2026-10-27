@@ -9,8 +9,8 @@
 #
 # CPUs are pinned with --cpuset-cpus rather than --cpus so the harness sees
 # 4 CPUs (os.availableParallelism) and picks the same concurrency as CI.
-# The pnpm store and Playwright browsers live in named volumes, so only the
-# first run downloads them. Outputs are copied back to output/ci-emulate/.
+# The pnpm store, Playwright browsers and the Quick Look tools' virtualenv
+# live in named volumes, so only the first run downloads them. Outputs are copied back to output/ci-emulate/.
 set -euo pipefail
 
 if [ "$#" -eq 0 ]; then
@@ -34,8 +34,12 @@ docker run --rm --init \
   -v "$out":/out \
   -v holoim-ci-pnpm-store:/root/.local/share/pnpm/store \
   -v holoim-ci-playwright:/root/.cache/ms-playwright \
+  -v holoim-ci-usdz-venv:/root/.venv-usdz \
   "$image" bash -euo pipefail -c "
-    apt-get update -qq >/dev/null && apt-get install -y -qq rsync >/dev/null
+    apt-get update -qq >/dev/null
+    # rsync for the copy; Python and ffmpeg for the Quick Look conversion the
+    # pipeline checks run, as CI's pipeline job installs them.
+    apt-get install -y -qq rsync python3-venv ffmpeg >/dev/null
     rsync -a --exclude node_modules --exclude .worktrees --exclude output \
       --exclude .git --exclude 'apps/*/output' --exclude 'apps/*/dist' \
       --exclude 'apps/*/test-results' /src/ /work/
@@ -46,6 +50,9 @@ docker run --rm --init \
     cp apps/viewer-api/.env.example apps/viewer-api/.env
     pnpm --filter @holoim/api prisma:generate
     pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+    [ -x /root/.venv-usdz/bin/python3 ] || python3 -m venv /root/.venv-usdz
+    /root/.venv-usdz/bin/pip install -q -r apps/viewer-api/tools/requirements.txt
+    export PATH=/root/.venv-usdz/bin:\$PATH
     status=0
     ${cmd} || status=\$?
     for d in output apps/*/output apps/*/test-results apps/*/playwright-report; do

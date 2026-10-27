@@ -70,7 +70,12 @@ validation; deleting coverage without naming what replaces it.
 |---|---|---|
 | Lead | Claude (Opus) | Brief, CI workflows, integration |
 | Design reviewer | `design-reviewer` subagent (Opus) | Read-only |
-| Implementer | Claude (Opus), subagents per module | `.github/`, `scripts/ci-*`, `apps/viewer-web/e2e`, viewer XR test hook, `apps/capture/scripts` |
+| Implementer (step 1) | Lead | `.github/`, `scripts/ci-*`, docs (on `main`: `4916abd7b74f`, `46ed1eb637b1`) |
+| Implementer (viewer clock) | Opus subagent, `infra/ci5-viewer-clock` | `xr-viewer`, `hologram-feed`, `redesign`, `ar-bubble`, `portal` specs, `portal-helpers.ts`, `bootstrap.ts`, `packages/tooling-testing/src/xr-env.mjs`, viewer `package.json` scripts |
+| Implementer (camera take) | Sonnet subagent, `infra/ci5-camera-take` | `camera-take.pipeline.spec.ts` |
+| Implementer (capture clock) | Opus subagent, `infra/ci5-capture-clock` | `apps/capture/scripts/**` except the cost table |
+| Implementer (pipeline) | Opus subagent, `infra/ci5-pipeline` | Other `*.pipeline.spec.ts`, `apps/viewer-api/tools/**` |
+| Implementer (built bundles) | After the clock work lands | `playwright.config.ts`, viewer and capture Vite config, `ci.yml` |
 | Independent verifier | Codex (`-p standard`) | Read-only verification; test artifacts only |
 
 ## Design decision
@@ -130,7 +135,7 @@ after step 2 about 6–7 min; after step 3 about 5 min, with little margin.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Under 5 minutes | Two pushes to `main`, `gh run view` timings | pending |
+| Under 5 minutes | Two pushes to `main`, `gh run view` timings | Step 1 alone, run 40519789735 (capture area): 13 m 16 s green; capture deploy 43 s from the prebuilt bundle; pipeline shard 1 (726 s) still the long pole; a slow apt mirror still cost one job 228 s for 7 missing font packages, fixed by the `.deb` cache (`46ed1eb637b1`, offline warm install checked in an `ubuntu:24.04` container) |
 | Suites still gate | `ci.yml` / `deploy.yml` review, gate summary | pending |
 | No wall-clock waits | grep audit plus 5× `ci-emulate.sh` runs | pending |
 | Tests run alone | each spec file run per test with `--grep` | pending |
