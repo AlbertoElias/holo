@@ -538,6 +538,8 @@ let clickRetries = 0;
 test.beforeEach(() => {
   clickRetries = 0;
 });
+// Playwright hooks take their fixtures object first, even when it is unused.
+// eslint-disable-next-line no-empty-pattern
 test.afterEach(({}, testInfo) => {
   testInfo.annotations.push({ type: "clickRetries", description: String(clickRetries) });
 });

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
+import { type HumanoidBoneRef, HumanoidSkeleton, type HumanoidSource } from './HumanoidSkeleton';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { TrackedHandJointName, VrHandSide } from '../types/contracts';
 import { palmFrameQuaternion } from '../xr/palmFrame';
@@ -45,15 +47,17 @@ export interface HandFingerRetargetEntry {
 type FingerRetargetMapping = {
   finger: HandFingerName;
   segmentIndex: number;
-  boneSuffix: string;
+  /** Canonical bone, with the side filled in by the chain builder. */
+  bone: (side: VrHandSide) => HumanoidBoneRef;
   xrQuaternionSources: HandFingerRetargetEntry['xrQuaternionSources'];
   xrSourceJointNames: readonly TrackedHandJointName[];
   xrTargetJointNames: readonly TrackedHandJointName[];
 };
 
 // Each finger bone starts at a WebXR joint and must aim along the tracked
-// segment that starts at that same joint: Hand<Finger>1 (proximal phalanx,
-// from the knuckle) follows phalanx-proximal → phalanx-intermediate, and so on.
+// segment that starts at that same joint: the proximal phalanx bone (from the
+// knuckle) follows phalanx-proximal → phalanx-intermediate, and so on; the
+// fourth segment is the distal bone's end site, when the rig has one.
 // The metacarpal segment has no avatar bone; the hand bone covers it.
 function fingerRetargetMappings(finger: 'index' | 'middle' | 'ring' | 'pinky'): FingerRetargetMapping[] {
   const joint = (name: string) => `${finger}-finger-${name}` as TrackedHandJointName;
@@ -62,12 +66,14 @@ function fingerRetargetMappings(finger: 'index' | 'middle' | 'ring' | 'pinky'): 
   const intermediate = joint('phalanx-intermediate');
   const distal = joint('phalanx-distal');
   const tip = joint('tip');
-  const bone = `Hand${finger[0]!.toUpperCase()}${finger.slice(1)}`;
+  const vrmFinger = finger === 'pinky' ? 'Little' : `${finger[0]!.toUpperCase()}${finger.slice(1)}`;
+  const bone = (joint: string, tip = false) =>
+    (side: VrHandSide): HumanoidBoneRef => `${side}${vrmFinger}${joint}${tip ? 'Tip' : ''}` as HumanoidBoneRef;
   return [
     {
       finger,
       segmentIndex: 0,
-      boneSuffix: `${bone}1`,
+      bone: bone('Proximal'),
       xrQuaternionSources: [{ jointName: proximal, parentJointNames: [metacarpal, 'wrist'] }],
       xrSourceJointNames: [proximal],
       xrTargetJointNames: [intermediate, distal, tip]
@@ -75,7 +81,7 @@ function fingerRetargetMappings(finger: 'index' | 'middle' | 'ring' | 'pinky'): 
     {
       finger,
       segmentIndex: 1,
-      boneSuffix: `${bone}2`,
+      bone: bone('Intermediate'),
       xrQuaternionSources: [{ jointName: intermediate, parentJointNames: [proximal, metacarpal] }],
       xrSourceJointNames: [intermediate],
       xrTargetJointNames: [distal, tip]
@@ -83,7 +89,7 @@ function fingerRetargetMappings(finger: 'index' | 'middle' | 'ring' | 'pinky'): 
     {
       finger,
       segmentIndex: 2,
-      boneSuffix: `${bone}3`,
+      bone: bone('Distal'),
       xrQuaternionSources: [{ jointName: distal, parentJointNames: [intermediate, proximal] }],
       xrSourceJointNames: [distal],
       xrTargetJointNames: [tip]
@@ -91,7 +97,7 @@ function fingerRetargetMappings(finger: 'index' | 'middle' | 'ring' | 'pinky'): 
     {
       finger,
       segmentIndex: 3,
-      boneSuffix: `${bone}4`,
+      bone: bone('Distal', true),
       xrQuaternionSources: [
         { jointName: tip, parentJointNames: [distal] },
         { jointName: distal, parentJointNames: [intermediate] }
@@ -113,11 +119,28 @@ interface CrouchBoneBinding {
   bone: THREE.Bone;
   bindQuaternion: THREE.Quaternion;
   fullPitchRad: number;
+  /** Bone-local pitch axis. */
+  axis: THREE.Vector3;
 }
 
 interface CrouchHipsBinding extends CrouchBoneBinding {
   bindPosition: THREE.Vector3;
+  downInParent: THREE.Vector3;
+  backInParent: THREE.Vector3;
 }
+
+/**
+ * Controller grip → avatar palm frame (`palmFrame.ts`), per side. Measured on
+ * the shipped rig, where the old offset was Euler(-90°, ∓90°, 180°) × inverse
+ * hand bind; the grip offset is this times inverse(palmInHand) on any rig.
+ */
+/** The shipped rig's left eye from its head bone, in avatar space, per metre of hips-to-head length. */
+const EYE_FROM_HEAD_PER_HIPS_TO_HEAD = [0.0656, 0.1487, 0.149] as const;
+
+const GRIP_TO_PALM: Readonly<Record<VrHandSide, THREE.Quaternion>> = {
+  left: new THREE.Quaternion(0.335312, 0.596293, 0.577675, 0.445299),
+  right: new THREE.Quaternion(0.577203, 0.445464, 0.335794, 0.596356)
+};
 
 const CROUCH_POSE_EPSILON = 1e-4;
 const CROUCH_MAX_POSE_AMOUNT = 1.45;
@@ -148,6 +171,8 @@ export class AvatarRig {
 
   worldModel: THREE.Object3D | undefined;
   avatar: THREE.Object3D | undefined;
+  /** Canonical bones of the loaded avatar; every system finds bones here, never by name. */
+  humanoid: HumanoidSkeleton | undefined;
   headBone: THREE.Bone | undefined;
   leftEyeAnchor: THREE.Object3D | undefined;
   rightEyeAnchor: THREE.Object3D | undefined;
@@ -211,7 +236,6 @@ export class AvatarRig {
   private readonly tmpInvQuat = new THREE.Quaternion();
   private readonly tmpEyeWorld = new THREE.Vector3();
   private readonly tmpCrouchQuat = new THREE.Quaternion();
-  private readonly localXAxis = new THREE.Vector3(1, 0, 0);
   private readonly crouchGroundRaycaster = new THREE.Raycaster();
   private readonly tmpLeftFootWorld = new THREE.Vector3();
   private readonly tmpRightFootWorld = new THREE.Vector3();
@@ -220,13 +244,16 @@ export class AvatarRig {
     this.worldGroup.add(this.avatarRoot);
   }
 
-  applyLoadedModels(worldModel: THREE.Object3D, avatar: THREE.Object3D, config: RuntimeConfig): void {
+  applyLoadedModels(worldModel: THREE.Object3D, avatar: THREE.Object3D, config: RuntimeConfig, humanoidSource?: HumanoidSource): void {
     this.worldModel = worldModel;
     this.worldGroup.add(worldModel);
     this.centerModelOnGround(worldModel);
 
     this.avatar = avatar;
     this.avatarRoot.add(avatar);
+    // Facing first: bounds, height and eye metrics below assume +Y up and +Z forward.
+    this.humanoid = HumanoidSkeleton.bind(avatar, humanoidSource);
+    this.humanoid.normalizeFacing(avatar);
     this.centerModelXz(avatar);
 
     this.applyAvatarScaleAndMetrics(config);
@@ -321,8 +348,9 @@ export class AvatarRig {
     // Bone translations use parent-local units; avatarHeight is world meters.
     const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
     const heightInParent = this.avatarHeight / Math.max(1e-8, Math.abs(parentScale));
-    this.crouchHips.bone.position.y -= heightInParent * 0.11 * hipsAmount;
-    this.crouchHips.bone.position.z -= heightInParent * 0.045 * hipsAmount;
+    this.crouchHips.bone.position
+      .addScaledVector(this.crouchHips.downInParent, heightInParent * 0.11 * hipsAmount)
+      .addScaledVector(this.crouchHips.backInParent, heightInParent * 0.045 * hipsAmount);
     this.applyCrouchBoneRotation(this.crouchHips, hipsAmount);
     this.crouchHips.bone.updateMatrixWorld(true);
 
@@ -346,10 +374,14 @@ export class AvatarRig {
     this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend);
   }
 
+  /** The avatar's canonical bone, or its end site for a `…Tip` reference. */
+  bone(ref: HumanoidBoneRef): THREE.Bone | undefined {
+    return this.humanoid?.resolve(ref);
+  }
+
   getHandBoneWorldPosition(side: VrHandSide, out: THREE.Vector3): THREE.Vector3 | undefined {
-    const handName = side === 'left' ? 'LeftHand' : 'RightHand';
-    const hand = this.avatar?.getObjectByName(handName);
-    if (!isThreeBone(hand)) return undefined;
+    const hand = this.bone(`${side}Hand`);
+    if (!hand) return undefined;
     hand.getWorldPosition(out);
     if (!isFiniteVector3Like(out)) {
       return undefined;
@@ -357,15 +389,15 @@ export class AvatarRig {
     return out;
   }
 
-  getBoneWorldPosition(name: string, out: THREE.Vector3): THREE.Vector3 | undefined {
-    const bone = this.findAvatarBone(name);
+  getBoneWorldPosition(ref: HumanoidBoneRef, out: THREE.Vector3): THREE.Vector3 | undefined {
+    const bone = this.bone(ref);
     if (!bone) return undefined;
     bone.getWorldPosition(out);
     return isFiniteVector3Like(out) ? out : undefined;
   }
 
-  getBoneLocalQuaternion(name: string, out: THREE.Quaternion): THREE.Quaternion | undefined {
-    const bone = this.findAvatarBone(name);
+  getBoneLocalQuaternion(ref: HumanoidBoneRef, out: THREE.Quaternion): THREE.Quaternion | undefined {
+    const bone = this.bone(ref);
     if (!bone) return undefined;
     out.copy(bone.quaternion);
     if (!isFiniteQuaternionLike(out)) {
@@ -375,11 +407,10 @@ export class AvatarRig {
   }
 
   private computePalmInHand(side: VrHandSide, hand: THREE.Bone): THREE.Quaternion | undefined {
-    const prefix = side === 'left' ? 'Left' : 'Right';
-    const knuckle = (finger: string) => this.findAvatarBone(`${prefix}Hand${finger}1`)?.getWorldPosition(new THREE.Vector3());
+    const knuckle = (finger: string) => this.bone(`${side}${finger}Proximal` as VrmHumanoidBone)?.getWorldPosition(new THREE.Vector3());
     const index = knuckle('Index');
     const middle = knuckle('Middle');
-    const pinky = knuckle('Pinky');
+    const pinky = knuckle('Little');
     if (!index || !middle || !pinky) return undefined;
     const palmWorld = palmFrameQuaternion(hand.getWorldPosition(new THREE.Vector3()), index, middle, pinky, new THREE.Quaternion());
     if (!palmWorld) return undefined;
@@ -387,11 +418,31 @@ export class AvatarRig {
     return hand.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(palmWorld).normalize();
   }
 
+  /**
+   * The palm frame without knuckles: along the forearm → hand line, with the
+   * index side toward the avatar's forward (true whether the rest palm faces
+   * down or in), in the hand's bind frame.
+   */
+  private estimatePalmInHand(hand: THREE.Bone, foreArm: THREE.Object3D): THREE.Quaternion | undefined {
+    const wrist = hand.getWorldPosition(new THREE.Vector3());
+    const along = wrist.clone().sub(foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.canonicalFrameQuaternion());
+    const across = forward.addScaledVector(along, -forward.dot(along));
+    if (along.lengthSq() < 1e-10 || across.lengthSq() < 1e-10) return undefined;
+    across.normalize();
+    const middle = wrist.clone().addScaledVector(along, 0.08);
+    const index = middle.clone().addScaledVector(across, 0.02);
+    const pinky = middle.clone().addScaledVector(across, -0.02);
+    const palmWorld = palmFrameQuaternion(wrist, index, middle, pinky, new THREE.Quaternion());
+    return palmWorld ? hand.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(palmWorld).normalize() : undefined;
+  }
+
   createArmIkChain(side: VrHandSide): ArmIkChain | undefined {
-    const shoulder = this.findAvatarBone(side === 'left' ? 'LeftShoulder' : 'RightShoulder');
-    const upperArm = this.findAvatarBone(side === 'left' ? 'LeftArm' : 'RightArm');
-    const foreArm = this.findAvatarBone(side === 'left' ? 'LeftForeArm' : 'RightForeArm');
-    const hand = this.findAvatarBone(side === 'left' ? 'LeftHand' : 'RightHand');
+    const upperArm = this.bone(`${side}UpperArm`);
+    const foreArm = this.bone(`${side}LowerArm`);
+    const hand = this.bone(`${side}Hand`);
+    // A rig without clavicles drives the upper arm's parent (usually the upper chest) as the shoulder.
+    const shoulder = this.bone(`${side}Shoulder`) ?? (isThreeBone(upperArm?.parent) ? upperArm.parent : undefined);
     if (!shoulder || !upperArm || !foreArm || !hand || !upperArm.parent || !foreArm.parent || !hand.parent) {
       return undefined;
     }
@@ -417,11 +468,16 @@ export class AvatarRig {
     if (!this.toBindAimInParent(upperArm, this.tmpForeWorld, upperBindAimInParent)) return undefined;
     if (!this.toBindAimInParent(foreArm, this.tmpHandWorld, foreBindAimInParent)) return undefined;
 
-    const palmInHand = this.computePalmInHand(side, hand);
-    const sideTwist = side === 'left' ? -Math.PI * 0.5 : Math.PI * 0.5;
-    const handGripRotationOffset = new THREE.Quaternion()
-      .setFromEuler(new THREE.Euler(-Math.PI * 0.5, sideTwist, Math.PI, 'XYZ'))
-      .multiply(handBindQuaternion.clone().invert());
+    // Grip → hand from the rig's own palm frame, so it holds for any hand bone
+    // axes. Without finger bones the palm is estimated from the forearm and the
+    // avatar's forward (about 12° off on the shipped rig), and the report says so.
+    let palmInHand = this.computePalmInHand(side, hand);
+    if (!palmInHand) {
+      palmInHand = this.estimatePalmInHand(hand, foreArm);
+      this.humanoid?.note(`${side} hand grip estimated from the forearm: no index, middle and little proximal bones`);
+    }
+    if (!palmInHand) return undefined;
+    const handGripRotationOffset = GRIP_TO_PALM[side].clone().multiply(palmInHand.clone().invert());
 
     return {
       side,
@@ -440,24 +496,19 @@ export class AvatarRig {
       shoulderBindAimInParent,
       handGripRotationOffset,
       palmInHand,
+      // Avatar space (ArmIkSolver applies the avatar root's rotation), so it holds once facing is normalized.
       elbowHintLocal: new THREE.Vector3(side === 'left' ? 1 : -1, -0.05, 0.25).normalize()
     };
   }
 
   createHandFingerRetargetChain(side: VrHandSide): HandFingerRetargetChain | undefined {
-    const sidePrefix = side === 'left' ? 'Left' : 'Right';
-    const mappings: Array<{
-      finger: HandFingerName;
-      segmentIndex: number;
-      boneSuffix: string;
-      xrQuaternionSources: HandFingerRetargetEntry['xrQuaternionSources'];
-      xrSourceJointNames: readonly TrackedHandJointName[];
-      xrTargetJointNames: readonly TrackedHandJointName[];
-    }> = [
+    const thumb = (joint: string, tip = false) =>
+      (s: VrHandSide): HumanoidBoneRef => `${s}Thumb${joint}${tip ? 'Tip' : ''}` as HumanoidBoneRef;
+    const mappings: FingerRetargetMapping[] = [
       {
         finger: 'thumb',
         segmentIndex: 0,
-        boneSuffix: 'HandThumb1',
+        bone: thumb('Metacarpal'),
         xrQuaternionSources: [{ jointName: 'thumb-metacarpal', parentJointNames: ['wrist'] }],
         xrSourceJointNames: ['thumb-metacarpal', 'wrist'],
         xrTargetJointNames: ['thumb-phalanx-proximal', 'thumb-phalanx-distal', 'thumb-tip']
@@ -465,7 +516,7 @@ export class AvatarRig {
       {
         finger: 'thumb',
         segmentIndex: 1,
-        boneSuffix: 'HandThumb2',
+        bone: thumb('Proximal'),
         xrQuaternionSources: [{ jointName: 'thumb-phalanx-proximal', parentJointNames: ['thumb-metacarpal', 'wrist'] }],
         xrSourceJointNames: ['thumb-phalanx-proximal', 'thumb-metacarpal', 'wrist'],
         xrTargetJointNames: ['thumb-phalanx-distal', 'thumb-tip']
@@ -473,7 +524,7 @@ export class AvatarRig {
       {
         finger: 'thumb',
         segmentIndex: 2,
-        boneSuffix: 'HandThumb3',
+        bone: thumb('Distal'),
         xrQuaternionSources: [{ jointName: 'thumb-phalanx-distal', parentJointNames: ['thumb-phalanx-proximal', 'thumb-metacarpal'] }],
         xrSourceJointNames: ['thumb-phalanx-distal', 'thumb-phalanx-proximal'],
         xrTargetJointNames: ['thumb-tip']
@@ -481,7 +532,7 @@ export class AvatarRig {
       {
         finger: 'thumb',
         segmentIndex: 3,
-        boneSuffix: 'HandThumb4',
+        bone: thumb('Distal', true),
         xrQuaternionSources: [
           { jointName: 'thumb-tip', parentJointNames: ['thumb-phalanx-distal'] },
           { jointName: 'thumb-phalanx-distal', parentJointNames: ['thumb-phalanx-proximal'] }
@@ -494,7 +545,7 @@ export class AvatarRig {
 
     const entries: HandFingerRetargetEntry[] = [];
     for (const mapping of mappings) {
-      const bone = this.findAvatarBone(`${sidePrefix}${mapping.boneSuffix}`);
+      const bone = this.bone(mapping.bone(side));
       if (!bone || !bone.parent) continue;
       const childBone = bone.children.find(isThreeBone);
       const bindAimInParent = new THREE.Vector3();
@@ -542,10 +593,6 @@ export class AvatarRig {
       }
     }
     return undefined;
-  }
-
-  findBone(names: readonly string[]): THREE.Bone | undefined {
-    return this.findAvatarBoneAny(names);
   }
 
   private centerModelOnGround(model: THREE.Object3D): void {
@@ -725,62 +772,90 @@ export class AvatarRig {
     this.crouchLeftFoot = undefined;
     this.crouchRightFoot = undefined;
 
-    const hips = this.findAvatarBoneAny(['Hips', 'hips', 'mixamorigHips']);
-    const spine = this.findAvatarBoneAny(['Spine', 'spine', 'mixamorigSpine']);
-    const spine1 = this.findAvatarBoneAny(['Spine1', 'spine1', 'mixamorigSpine1']);
-    const spine2 = this.findAvatarBoneAny(['Spine2', 'spine2', 'mixamorigSpine2']);
-    const leftUpLeg = this.findAvatarBoneAny(['LeftUpLeg', 'leftUpLeg', 'mixamorigLeftUpLeg']);
-    const leftLeg = this.findAvatarBoneAny(['LeftLeg', 'leftLeg', 'mixamorigLeftLeg']);
-    const rightUpLeg = this.findAvatarBoneAny(['RightUpLeg', 'rightUpLeg', 'mixamorigRightUpLeg']);
-    const rightLeg = this.findAvatarBoneAny(['RightLeg', 'rightLeg', 'mixamorigRightLeg']);
-    const leftFoot = this.findAvatarBoneAny(['LeftFoot', 'leftFoot', 'mixamorigLeftFoot']);
-    const rightFoot = this.findAvatarBoneAny(['RightFoot', 'rightFoot', 'mixamorigRightFoot']);
+    const hips = this.bone('hips');
+    const spine = this.bone('spine');
+    const chest = this.bone('chest');
+    const upperChest = this.bone('upperChest');
+    const leftUpLeg = this.bone('leftUpperLeg');
+    const leftLeg = this.bone('leftLowerLeg');
+    const rightUpLeg = this.bone('rightUpperLeg');
+    const rightLeg = this.bone('rightLowerLeg');
+    const leftFoot = this.bone('leftFoot');
+    const rightFoot = this.bone('rightFoot');
 
-    if (!hips || !spine || !spine1 || !spine2 || !leftUpLeg || !leftLeg || !rightUpLeg || !rightLeg) {
-      if (!this.crouchWarningLogged) {
-        console.warn('Crouch pose disabled: expected hips/spine/leg bones were not found on avatar rig.');
-        this.crouchWarningLogged = true;
-      }
+    if (!hips || !spine || !leftUpLeg || !leftLeg || !rightUpLeg || !rightLeg) {
+      this.humanoid?.disableFeature('crouch', 'needs hips, spine and both upper and lower legs');
       return;
     }
 
     this.crouchHips = {
-      bone: hips,
-      bindQuaternion: hips.quaternion.clone(),
+      ...this.createCrouchBinding(hips, 12, 1),
       bindPosition: hips.position.clone(),
-      fullPitchRad: THREE.MathUtils.degToRad(12)
+      ...this.crouchHipsOffsetAxes(hips)
     };
-    this.crouchSpine.push(
-      this.createCrouchBinding(spine, 16),
-      this.createCrouchBinding(spine1, 13),
-      this.createCrouchBinding(spine2, 10)
-    );
-    this.crouchUpperLegs.push(this.createCrouchBinding(leftUpLeg, 68), this.createCrouchBinding(rightUpLeg, 68));
-    this.crouchLowerLegs.push(this.createCrouchBinding(leftLeg, -110), this.createCrouchBinding(rightLeg, -110));
+    // The shipped rig bends 16°/13°/10° over spine, chest and upper chest; a
+    // shorter spine takes the whole 39° over the bones it has.
+    const spineBones = [spine, chest, upperChest].filter((b): b is THREE.Bone => b !== undefined);
+    const spinePitch = spineBones.length === 3 ? [16, 13, 10] : spineBones.length === 2 ? [21, 18] : [39];
+    spineBones.forEach((bone, i) => this.crouchSpine.push(this.createCrouchBinding(bone, spinePitch[i]!, 1)));
+    this.crouchUpperLegs.push(this.createCrouchBinding(leftUpLeg, 68, -1), this.createCrouchBinding(rightUpLeg, 68, -1));
+    this.crouchLowerLegs.push(this.createCrouchBinding(leftLeg, -110, -1), this.createCrouchBinding(rightLeg, -110, -1));
     this.crouchLeftFoot = leftFoot;
     this.crouchRightFoot = rightFoot;
     if (leftFoot && rightFoot) {
       this.crouchFeet.push(
-        this.createCrouchBinding(leftFoot, CROUCH_FOOT_PITCH_DEG),
-        this.createCrouchBinding(rightFoot, CROUCH_FOOT_PITCH_DEG)
+        this.createCrouchBinding(leftFoot, CROUCH_FOOT_PITCH_DEG, -1),
+        this.createCrouchBinding(rightFoot, CROUCH_FOOT_PITCH_DEG, -1)
       );
     }
     this.crouchRigReady = true;
   }
 
-  private createCrouchBinding(bone: THREE.Bone, fullPitchDeg: number): CrouchBoneBinding {
+  /**
+   * Pitch axis in the bone's local frame: the avatar's lateral axis (+X, its
+   * left, once facing is normalized) times `lateralSign`. The shipped rig
+   * pitched every bone about local X, which is +lateral on the hips and spine
+   * and −lateral on the legs and feet; the signs keep that. A local axis within
+   * 10° of the wanted one is used as is, so the shipped rig's pose is unchanged.
+   */
+  private createCrouchBinding(bone: THREE.Bone, fullPitchDeg: number, lateralSign: 1 | -1): CrouchBoneBinding {
+    const avatarQuat = this.canonicalFrameQuaternion();
+    const wanted = new THREE.Vector3(lateralSign, 0, 0).applyQuaternion(avatarQuat);
+    const toLocal = bone.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const axis = wanted.applyQuaternion(toLocal).normalize();
+    const nearest = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)]
+      .map((a) => a.multiplyScalar(Math.sign(a.dot(axis)) || 1))
+      .find((a) => a.dot(axis) > Math.cos(THREE.MathUtils.degToRad(10)));
     return {
       bone,
       bindQuaternion: bone.quaternion.clone(),
-      fullPitchRad: THREE.MathUtils.degToRad(fullPitchDeg)
+      fullPitchRad: THREE.MathUtils.degToRad(fullPitchDeg),
+      axis: nearest ?? axis
     };
+  }
+
+  /**
+   * World rotation of the avatar's +Z-forward, +Y-up frame: the avatar node
+   * itself, since the facing correction sits on a child (`HumanoidFacing`)
+   * whose own frame is still the file's.
+   */
+  private canonicalFrameQuaternion(): THREE.Quaternion {
+    return this.avatar?.getWorldQuaternion(new THREE.Quaternion()) ?? new THREE.Quaternion();
+  }
+
+  /** Avatar-space down and back in the hips' parent frame, so the crouch drop holds for any armature orientation. */
+  private crouchHipsOffsetAxes(hips: THREE.Bone): Pick<CrouchHipsBinding, 'downInParent' | 'backInParent'> {
+    const avatarQuat = this.canonicalFrameQuaternion();
+    const toParent = hips.parent?.getWorldQuaternion(new THREE.Quaternion()).invert() ?? new THREE.Quaternion();
+    const inParent = (v: THREE.Vector3) => v.applyQuaternion(avatarQuat).applyQuaternion(toParent).normalize();
+    return { downInParent: inParent(new THREE.Vector3(0, -1, 0)), backInParent: inParent(new THREE.Vector3(0, 0, -1)) };
   }
 
   private applyCrouchBoneRotation(binding: CrouchBoneBinding, crouchAmount: number): void {
     if (Math.abs(crouchAmount) <= CROUCH_POSE_EPSILON) {
       return;
     }
-    this.tmpCrouchQuat.setFromAxisAngle(this.localXAxis, binding.fullPitchRad * crouchAmount);
+    this.tmpCrouchQuat.setFromAxisAngle(binding.axis, binding.fullPitchRad * crouchAmount);
     binding.bone.quaternion.multiply(this.tmpCrouchQuat).normalize();
   }
 
@@ -812,7 +887,7 @@ export class AvatarRig {
 
     if (requiredLift <= 1e-5) return;
     const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
-    this.crouchHips.bone.position.y += Math.min(requiredLift, maxLift) / Math.max(1e-8, Math.abs(parentScale));
+    this.crouchHips.bone.position.addScaledVector(this.crouchHips.downInParent, -Math.min(requiredLift, maxLift) / Math.max(1e-8, Math.abs(parentScale)));
     this.crouchHips.bone.updateMatrixWorld(true);
   }
 
@@ -829,42 +904,33 @@ export class AvatarRig {
     return bestY;
   }
 
-  private findAvatarBone(name: string): THREE.Bone | undefined {
-    if (!this.avatar) return undefined;
-    const found = this.avatar.getObjectByName(name);
-    return isThreeBone(found) ? found : undefined;
-  }
-
-  private findAvatarBoneAny(names: readonly string[]): THREE.Bone | undefined {
-    for (const name of names) {
-      const bone = this.findAvatarBone(name);
-      if (bone) return bone;
-    }
-    return undefined;
-  }
-
   private resolveHeadAndEyes(): void {
-    this.headBone =
-      this.findAvatarBone('Head') ??
-      this.findAvatarBone('head') ??
-      this.findAvatarBone('Wolf3D_Head') ??
-      this.findAvatarBone('mixamorigHead');
-
-    this.leftEyeAnchor = this.findEyeAnchorAny(['LeftEye', 'EyeLeft', 'leftEye']);
-    this.rightEyeAnchor = this.findEyeAnchorAny(['RightEye', 'EyeRight', 'rightEye']);
+    this.headBone = this.bone('head');
+    // Eye meshes are not anchors: skinned eye meshes sit at the armature origin.
+    this.leftEyeAnchor = this.bone('leftEye') ?? this.estimateEyeAnchor('left');
+    this.rightEyeAnchor = this.bone('rightEye') ?? this.estimateEyeAnchor('right');
   }
 
-  private findEyeAnchorAny(names: readonly string[]): THREE.Object3D | undefined {
-    if (!this.avatar) return undefined;
-    for (const name of names) {
-      const candidate = this.avatar.getObjectByName(name);
-      if (!candidate) continue;
-      // Some GLBs expose eyes as skinned meshes whose object transform sits at
-      // armature origin. Those are not valid anchors for camera placement.
-      if (isThreeMesh(candidate)) continue;
-      return candidate;
-    }
-    return undefined;
+  /**
+   * Rigs without eye bones (Mixamo downloads, the Unreal mannequin, Biped) get
+   * an anchor on the head where the shipped rig's eye sits, scaled by the
+   * hips-to-head length, so the camera and body solver still have eyes.
+   */
+  private estimateEyeAnchor(side: VrHandSide): THREE.Object3D | undefined {
+    const head = this.bone('head');
+    const hips = this.bone('hips');
+    if (!head || !hips) return undefined;
+    const hipsToHead = head.getWorldPosition(new THREE.Vector3()).distanceTo(hips.getWorldPosition(new THREE.Vector3()));
+    const offset = new THREE.Vector3(...EYE_FROM_HEAD_PER_HIPS_TO_HEAD).multiplyScalar(hipsToHead);
+    if (side === 'right') offset.x = -offset.x;
+    const eyeWorld = offset.applyQuaternion(this.canonicalFrameQuaternion()).add(head.getWorldPosition(new THREE.Vector3()));
+    const anchor = new THREE.Object3D();
+    anchor.name = `${side}EyeEstimate`;
+    head.add(anchor);
+    anchor.position.copy(head.worldToLocal(eyeWorld));
+    anchor.updateMatrixWorld(true);
+    this.humanoid?.note(`${side} eye estimated on the head: no eye bone`);
+    return anchor;
   }
 
   private toBindAimInParent(bone: THREE.Bone, childWorldPosition: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 | undefined {

@@ -56,6 +56,13 @@ const EYE_BONE_NAMES = {
 } as const;
 const EYE_MESH_NAMES = { left: ['EyeLeft', 'Eye_L'], right: ['EyeRight', 'Eye_R'] } as const;
 const HEAD_BONE_NAMES = ['Head', 'head', 'J_Bip_C_Head', 'CC_Base_Head'] as const;
+/** Head and eye bones already resolved from the avatar's humanoid skeleton; names are the fallback. */
+export interface FaceRigBones {
+  head?: THREE.Bone | undefined;
+  leftEye?: THREE.Bone | undefined;
+  rightEye?: THREE.Bone | undefined;
+}
+
 const GAZE_CHANNELS = new Set<FaceChannel>(FACE_CHANNELS.filter((channel) => channel.startsWith('eyeLook')));
 
 /**
@@ -79,7 +86,8 @@ export class FaceRig {
   private readonly tmpDirection = new THREE.Vector3();
   private readonly tmpQuat = new THREE.Quaternion();
 
-  constructor(avatar: THREE.Object3D) {
+  /** `avatar` is the avatar's facing-corrected frame: gaze is measured against it. */
+  constructor(avatar: THREE.Object3D, bones: FaceRigBones = {}) {
     avatar.updateMatrixWorld(true);
     avatar.traverse((object) => {
       const mesh = object as THREE.Mesh;
@@ -113,7 +121,7 @@ export class FaceRig {
     });
     const rootInverse = avatar.getWorldQuaternion(new THREE.Quaternion()).invert();
     for (const side of ['left', 'right'] as const) {
-      const bone = findFirst(avatar, EYE_BONE_NAMES[side], (o) => (o as THREE.Bone).isBone === true);
+      const bone = bones[side === 'left' ? 'leftEye' : 'rightEye'] ?? findFirst(avatar, EYE_BONE_NAMES[side], (o) => (o as THREE.Bone).isBone === true);
       if (!bone?.parent) continue;
       const eyeBind = rootInverse.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()));
       const parentBind = rootInverse.clone().multiply(bone.parent.getWorldQuaternion(new THREE.Quaternion()));
@@ -126,7 +134,7 @@ export class FaceRig {
         pivotOffsetMm: eyeMesh ? pivotOffset(bone, eyeMesh) : null
       };
     }
-    const head = findFirst(avatar, HEAD_BONE_NAMES, (o) => (o as THREE.Bone).isBone === true);
+    const head = bones.head ?? findFirst(avatar, HEAD_BONE_NAMES, (o) => (o as THREE.Bone).isBone === true);
     if (head) this.head = { bone: head, bindInverse: rootInverse.clone().multiply(head.getWorldQuaternion(new THREE.Quaternion())).invert() };
     for (const binding of this.suppressedBindings) binding.mesh.morphTargetInfluences![binding.index] = 0;
   }
@@ -272,8 +280,11 @@ function pivotOffset(bone: THREE.Object3D, mesh: THREE.Mesh): number | null {
   const points: THREE.Vector3[] = [];
   let max = 0;
   for (let i = 0; i < position.count; i += 1) {
-    // Skinned eye meshes are authored in bind space; the avatar is at bind here.
-    const p = new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld).sub(pivot);
+    // Where the vertex renders: through the skin when the eye is skinned, since
+    // a rig's rest pose need not match the pose its inverse binds encode.
+    const p = new THREE.Vector3().fromBufferAttribute(position, i);
+    if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) (mesh as THREE.SkinnedMesh).applyBoneTransform(i, p);
+    p.applyMatrix4(mesh.matrixWorld).sub(pivot);
     points.push(p);
     max = Math.max(max, p.length());
   }

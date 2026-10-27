@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { AvatarRig } from '../avatar/AvatarRig';
-import { isThreeBone } from '../shared/threeTypeGuards';
 
 type Leg = { upper: THREE.Bone; lower: THREE.Bone; foot: THREE.Bone; upInFoot: THREE.Vector3; correction: number };
 type LegSample = {
@@ -34,15 +33,8 @@ export class TerrainLegSolver {
     rig.avatarRoot.updateWorldMatrix(true, true);
     this.avatar = rig.avatar;
     this.legs = [];
-    for (const side of ['Left', 'Right']) {
-      const find = (suffix: string) => {
-        let found: THREE.Bone | undefined;
-        rig.avatar?.traverse((node) => {
-          if (isThreeBone(node) && node.name.toLowerCase().endsWith(`${side}${suffix}`.toLowerCase())) found = node;
-        });
-        return found;
-      };
-      const upper = find('UpLeg'), lower = find('Leg'), foot = find('Foot');
+    for (const side of ['left', 'right'] as const) {
+      const upper = rig.bone(`${side}UpperLeg`), lower = rig.bone(`${side}LowerLeg`), foot = rig.bone(`${side}Foot`);
       if (upper && lower && foot) this.legs.push({ upper, lower, foot, upInFoot: this.up.clone().applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()).invert()), correction: 0 });
     }
   }

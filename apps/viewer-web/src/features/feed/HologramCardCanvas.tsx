@@ -22,6 +22,7 @@ import { useSphereClipping } from "../hologram/useSphereClipping";
 import type { SphereClipResult } from "../hologram/useSphereClipping";
 import { useGltfAudio } from "../hologram/useGltfAudio";
 import { drawnPoints, motionPoints, recordedFloorY } from "../hologram/drawnPoints";
+import { type HumanoidGltf, resolveHumanoidAnchors } from "../hologram/humanoidAnchors";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
@@ -404,11 +405,9 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
     prepareAnimatedScene(clonedScene);
     framingTargetsRef.current = getFramingTargets(clonedScene);
     const avatarRootByName = findObjectByName(clonedScene, ["RecordedAvatar"]);
-    // Within the avatar when the export names it, so a recorded object's own
-    // bone names (a prop with a "Head") never take over the framing.
-    const avatarScope = avatarRootByName ?? clonedScene;
-    const hips = findObjectByName(avatarScope, ["Hips", "mixamorigHips"]);
-    const head = findObjectByName(avatarScope, ["Head", "mixamorigHead"]);
+    // Any avatar format, within the avatar when the export names it, so a
+    // recorded object's own bone names (a prop with a "Head") never take over the framing.
+    const { hips, head } = resolveHumanoidAnchors(clonedScene, gltf as unknown as HumanoidGltf);
 
     avatarRootRef.current = avatarRootByName ?? (hips ? getTopLevelAncestor(hips, clonedScene) : null);
     if (!avatarRootRef.current && framingTargetsRef.current.length > 0) {
@@ -436,7 +435,7 @@ function HologramModel({ url, active, muted, onHasAudio, onRendered, portal, tar
       );
       invalidate();
     }
-  }, [camera, clonedScene, computePreferredFraming, invalidate, sphereClip]);
+  }, [camera, clonedScene, computePreferredFraming, gltf, invalidate, sphereClip]);
 
   useEffect(() => {
     const allActions = Object.values(actions).filter(Boolean) as AnimationAction[];

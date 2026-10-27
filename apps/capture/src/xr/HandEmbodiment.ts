@@ -7,32 +7,35 @@ import { isFiniteVector3Like } from '../shared/math';
 import { TRACKED_HAND_JOINT_NAMES, type HandPoseSnapshot, type HandSample, type QuatLike, type TrackedHandJointName, type VrHandSide } from '../types/contracts';
 import { HandFingerRetargeter } from './HandFingerRetargeter';
 import { LegacyFingerRetargeter } from './LegacyFingerRetargeter';
+import type { HumanoidBoneRef } from '../avatar/HumanoidSkeleton';
 import { palmFrameQuaternion } from './palmFrame';
 import type { XrTracking } from './XrTracking';
 
 const SIDES = ['left', 'right'] as const;
 
-// Avatar bones that sit on the same anatomical joint as each WebXR hand joint.
-const AVATAR_BONE_FOR_HAND_JOINT: ReadonlyArray<readonly [TrackedHandJointName, string]> = [
-  ['wrist', 'Hand'],
-  ['thumb-metacarpal', 'HandThumb1'],
-  ['thumb-phalanx-proximal', 'HandThumb2'],
-  ['thumb-phalanx-distal', 'HandThumb3'],
-  ['thumb-tip', 'HandThumb4'],
+// Avatar bones that sit on the same anatomical joint as each WebXR hand joint;
+// tips are the distal bones' end sites, when the rig has them.
+const AVATAR_BONE_FOR_HAND_JOINT: ReadonlyArray<readonly [TrackedHandJointName, (side: VrHandSide) => HumanoidBoneRef]> = [
+  ['wrist', (side) => `${side}Hand`],
+  ['thumb-metacarpal', (side) => `${side}ThumbMetacarpal`],
+  ['thumb-phalanx-proximal', (side) => `${side}ThumbProximal`],
+  ['thumb-phalanx-distal', (side) => `${side}ThumbDistal`],
+  ['thumb-tip', (side) => `${side}ThumbDistalTip`],
   ...(['index', 'middle', 'ring', 'pinky'] as const).flatMap((finger) => {
-    const bone = `Hand${finger[0]!.toUpperCase()}${finger.slice(1)}`;
+    const vrm = finger === 'pinky' ? 'Little' : `${finger[0]!.toUpperCase()}${finger.slice(1)}`;
+    const ref = (joint: string) => (side: VrHandSide) => `${side}${vrm}${joint}` as HumanoidBoneRef;
     return [
-      [`${finger}-finger-phalanx-proximal`, `${bone}1`],
-      [`${finger}-finger-phalanx-intermediate`, `${bone}2`],
-      [`${finger}-finger-phalanx-distal`, `${bone}3`],
-      [`${finger}-finger-tip`, `${bone}4`]
+      [`${finger}-finger-phalanx-proximal`, ref('Proximal')],
+      [`${finger}-finger-phalanx-intermediate`, ref('Intermediate')],
+      [`${finger}-finger-phalanx-distal`, ref('Distal')],
+      [`${finger}-finger-tip`, ref('DistalTip')]
     ] as const;
   })
 ];
 
-const FINGER_DEBUG_BONES: Readonly<Record<VrHandSide, { thumb: string; index: string; middle: string }>> = {
-  left: { thumb: 'LeftHandThumb2', index: 'LeftHandIndex3', middle: 'LeftHandMiddle3' },
-  right: { thumb: 'RightHandThumb2', index: 'RightHandIndex3', middle: 'RightHandMiddle3' }
+const FINGER_DEBUG_BONES: Readonly<Record<VrHandSide, { thumb: HumanoidBoneRef; index: HumanoidBoneRef; middle: HumanoidBoneRef }>> = {
+  left: { thumb: 'leftThumbProximal', index: 'leftIndexDistal', middle: 'leftMiddleDistal' },
+  right: { thumb: 'rightThumbProximal', index: 'rightIndexDistal', middle: 'rightMiddleDistal' }
 };
 
 /**
@@ -81,7 +84,10 @@ export class HandEmbodiment {
     for (const side of SIDES) this.fingerRetargeter.setChain(side, this.fingerChains[side]);
     this.resetRuntimeState();
     this.rigReady = Boolean(this.armChains.left && this.armChains.right);
-    if (!this.rigReady) console.warn('VR hand embodiment disabled: missing or invalid avatar arm bones for IK chain.');
+    if (!this.rigReady) this.avatar.humanoid?.disableFeature('arm IK', 'needs both upper arms, lower arms and hands');
+    for (const side of SIDES) {
+      if (!this.fingerChains[side]) this.avatar.humanoid?.disableFeature(`${side} fingers`, 'no finger bones');
+    }
   }
 
   /** Clears per-session retarget state on XR entry and exit. */
@@ -148,15 +154,14 @@ export class HandEmbodiment {
   /** Tracked joints and the avatar bones on the same anatomical joints, in world space. */
   sample(): Record<VrHandSide, HandSample> {
     const sample = (side: VrHandSide): HandSample => {
-      const prefix = side === 'left' ? 'Left' : 'Right';
       const result: HandSample = { source: this.tracking.getHandPoseSource(side), tracked: {}, avatar: {} };
       for (const jointName of TRACKED_HAND_JOINT_NAMES) {
         if (this.tracking.getTrackedHandJointPosition(side, jointName, this.tmpVec)) {
           result.tracked[jointName] = [this.tmpVec.x, this.tmpVec.y, this.tmpVec.z];
         }
       }
-      for (const [jointName, boneSuffix] of AVATAR_BONE_FOR_HAND_JOINT) {
-        if (this.avatar.getBoneWorldPosition(`${prefix}${boneSuffix}`, this.tmpVec)) {
+      for (const [jointName, bone] of AVATAR_BONE_FOR_HAND_JOINT) {
+        if (this.avatar.getBoneWorldPosition(bone(side), this.tmpVec)) {
           result.avatar[jointName] = [this.tmpVec.x, this.tmpVec.y, this.tmpVec.z];
         }
       }
@@ -214,8 +219,8 @@ export class HandEmbodiment {
     world.propagateModifiedBodyPositionsToColliders();
   }
 
-  private boneLocalQuaternion(boneName: string): QuatLike | null {
-    const q = this.avatar.getBoneLocalQuaternion(boneName, this.tmpQuat);
+  private boneLocalQuaternion(bone: HumanoidBoneRef): QuatLike | null {
+    const q = this.avatar.getBoneLocalQuaternion(bone, this.tmpQuat);
     return q ? { x: q.x, y: q.y, z: q.z, w: q.w } : null;
   }
 

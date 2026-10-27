@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
 import { clamp } from '../shared/math';
@@ -157,6 +158,25 @@ const ROOT_SPEED_TIME_SEC = 0.15;
 // Spine: share of the lean and of the head–body twist per bone.
 const LEAN_WEIGHTS = { hips: 0.2, spine: 0.3, spine1: 0.27, spine2: 0.23 } as const;
 const TWIST_WEIGHTS = { spine: 0.12, spine1: 0.12, spine2: 0.16, neck: 0.25 } as const;
+
+interface SpineLink {
+  binding: BindBone;
+  lean: number;
+  twist: number;
+}
+
+/** Spine, chest, upper chest with the shipped rig's shares; a missing bone's share goes to the one below it. */
+function spineChain(spine: BindBone, chest: BindBone | undefined, upperChest: BindBone | undefined): SpineLink[] {
+  const chain: SpineLink[] = [{ binding: spine, lean: LEAN_WEIGHTS.spine, twist: TWIST_WEIGHTS.spine }];
+  for (const [binding, key] of [[chest, 'spine1'], [upperChest, 'spine2']] as const) {
+    if (binding) chain.push({ binding, lean: LEAN_WEIGHTS[key], twist: TWIST_WEIGHTS[key] });
+    else {
+      chain.at(-1)!.lean += LEAN_WEIGHTS[key];
+      chain.at(-1)!.twist += TWIST_WEIGHTS[key];
+    }
+  }
+  return chain;
+}
 const NECK_HEAD_SHARE = 0.4;
 const PELVIS_PASSES = 3;
 const SPINE_LEAN_PASSES = 3;
@@ -207,8 +227,8 @@ export class VrBodySolver {
   private bind: {
     hips: BindBone;
     spine: BindBone;
-    spine1: BindBone;
-    spine2: BindBone;
+    /** Spine bones above the hips with their lean and twist shares (chest and upper chest are optional). */
+    spineChain: SpineLink[];
     neck: BindBone;
     head: BindBone;
     legs: Record<'left' | 'right', LegBind>;
@@ -333,8 +353,8 @@ export class VrBodySolver {
     const avatarRoot = rig.avatarRoot;
     avatarRoot.updateMatrixWorld(true);
     const rootQuatInv = avatarRoot.getWorldQuaternion(new THREE.Quaternion()).invert();
-    const bindBone = (names: string[]): BindBone | undefined => {
-      const bone = rig.findBone(names);
+    const bindBone = (name: VrmHumanoidBone): BindBone | undefined => {
+      const bone = rig.bone(name);
       if (!bone) return undefined;
       return {
         bone,
@@ -343,24 +363,22 @@ export class VrBodySolver {
         rootQuaternion: rootQuatInv.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()))
       };
     };
-    const names = (base: string) => [base, `mixamorig${base}`, base[0]!.toLowerCase() + base.slice(1)];
-    const hips = bindBone(names('Hips'));
+    const hips = bindBone('hips');
     if (hips) this.hipsBindPosition.copy(hips.bone.position);
-    const spine = bindBone(names('Spine'));
-    const spine1 = bindBone(names('Spine1'));
-    const spine2 = bindBone(names('Spine2'));
-    const neck = bindBone(names('Neck'));
-    const head = bindBone(names('Head'));
+    const spine = bindBone('spine');
+    const chest = bindBone('chest');
+    const upperChest = bindBone('upperChest');
+    const neck = bindBone('neck');
+    const head = bindBone('head');
     const leftEye = rig.leftEyeAnchor;
     const rightEye = rig.rightEyeAnchor;
-    if (!hips || !spine || !spine1 || !spine2 || !neck || !head || !leftEye || !rightEye) return false;
+    if (!hips || !spine || !neck || !head || !leftEye || !rightEye) return false;
 
     const leg = (side: 'left' | 'right'): LegBind | undefined => {
-      const prefix = side === 'left' ? 'Left' : 'Right';
-      const upLeg = bindBone(names(`${prefix}UpLeg`));
-      const lowerLeg = bindBone(names(`${prefix}Leg`));
-      const foot = bindBone(names(`${prefix}Foot`));
-      const toe = bindBone(names(`${prefix}ToeBase`));
+      const upLeg = bindBone(`${side}UpperLeg`);
+      const lowerLeg = bindBone(`${side}LowerLeg`);
+      const foot = bindBone(`${side}Foot`);
+      const toe = bindBone(`${side}Toes`);
       if (!upLeg || !lowerLeg || !foot) return undefined;
       return {
         side,
@@ -388,8 +406,7 @@ export class VrBodySolver {
     this.bind = {
       hips,
       spine,
-      spine1,
-      spine2,
+      spineChain: spineChain(spine, chest, upperChest),
       neck,
       head,
       legs: { left, right },
@@ -477,7 +494,7 @@ export class VrBodySolver {
     const origin = this.avatarRig.avatar?.position;
     if (!bind || !origin || !Number.isFinite(ratio) || ratio <= 0 || ratio === 1) return;
     const about = (point: THREE.Vector3) => point.sub(origin).multiplyScalar(ratio).add(origin);
-    const bones = [bind.hips, bind.spine, bind.spine1, bind.spine2, bind.neck, bind.head];
+    const bones = [bind.hips, ...bind.spineChain.map((l) => l.binding), bind.neck, bind.head];
     for (const side of ['left', 'right'] as const) {
       const leg = bind.legs[side];
       bones.push(leg.upLeg, leg.leg, leg.foot);
@@ -501,7 +518,7 @@ export class VrBodySolver {
   restoreBindPose(): void {
     const bind = this.bind;
     if (!bind) return;
-    for (const bone of [bind.hips, bind.spine, bind.spine1, bind.spine2, bind.neck, bind.head]) bone.bone.quaternion.copy(bone.local);
+    for (const bone of [bind.hips, ...bind.spineChain.map((l) => l.binding), bind.neck, bind.head]) bone.bone.quaternion.copy(bone.local);
     bind.hips.bone.position.copy(this.hipsBindPosition);
     for (const side of ['left', 'right'] as const) {
       const leg = bind.legs[side];
@@ -1072,7 +1089,7 @@ export class VrBodySolver {
 
   private poseSpine(headTarget: THREE.Vector3, headQuat: THREE.Quaternion, rootQuat: THREE.Quaternion, twist: number): void {
     const bind = this.bind!;
-    for (const bone of [bind.hips, bind.spine, bind.spine1, bind.spine2, bind.neck, bind.head]) bone.bone.quaternion.copy(bone.local);
+    for (const bone of [bind.hips, ...bind.spineChain.map((l) => l.binding), bind.neck, bind.head]) bone.bone.quaternion.copy(bone.local);
 
     // Lean: rotate the bind pelvis→head axis onto the pelvis→head-target
     // direction, spread down the spine.
@@ -1089,10 +1106,10 @@ export class VrBodySolver {
     for (let pass = 0; pass < SPINE_LEAN_PASSES; pass += 1) {
       delta.slerpQuaternions(identity, lean, LEAN_WEIGHTS.hips);
       this.applyWorldDelta(bind.hips.bone, delta);
-      for (const [key, binding] of [['spine', bind.spine], ['spine1', bind.spine1], ['spine2', bind.spine2]] as const) {
-        delta.slerpQuaternions(identity, lean, LEAN_WEIGHTS[key]);
-        if (pass === 0) delta.multiply(twistQuat.setFromAxisAngle(UP, twist * TWIST_WEIGHTS[key]));
-        this.applyWorldDelta(binding.bone, delta);
+      for (const link of bind.spineChain) {
+        delta.slerpQuaternions(identity, lean, link.lean);
+        if (pass === 0) delta.multiply(twistQuat.setFromAxisAngle(UP, twist * link.twist));
+        this.applyWorldDelta(link.binding.bone, delta);
       }
       if (this.faults.has('no-spine-lean')) break;
       const actualAxis = this.poseVecA.subVectors(bind.head.bone.getWorldPosition(this.poseVecC), bind.hips.bone.getWorldPosition(this.legVec)).normalize();
