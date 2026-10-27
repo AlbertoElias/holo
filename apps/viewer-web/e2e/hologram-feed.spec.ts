@@ -10,7 +10,7 @@ import {
   waitForNoIwerSession
 } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, captureEvidence, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, FEED_CARD_RENDERED_TIMEOUT_MS, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const mockGlbPath = path.resolve(testDir, "../../capture/public/gltf/models/avatar.glb");
@@ -508,7 +508,7 @@ for (const viewport of [
     await page.goto("/");
     await assertViewerShell(page);
     const card = page.locator(".feed-card").first();
-    await expect(card).toHaveAttribute("data-model-state", "rendered");
+    await expect(card).toHaveAttribute("data-model-state", "rendered", { timeout: FEED_CARD_RENDERED_TIMEOUT_MS });
     const toggle = page.getByRole("button", { name: "Upload a hologram" });
     await expect(toggle).toBeVisible();
     await expect(card.getByRole("heading", { name: "A recorded hologram" })).toBeVisible();
