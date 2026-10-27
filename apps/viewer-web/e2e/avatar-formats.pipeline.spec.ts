@@ -37,7 +37,7 @@ type CaptureWindow = Window & {
 };
 /** What the viewer resolved on a loaded hologram, read the same way in the feed and in AR. */
 type HumanoidReading = { source: string | undefined; hips: string | undefined; head: string | undefined; yawDeg: number | null; bones: number };
-type FixtureFacts = { url: string; hips: string; head: string };
+type FixtureFacts = { url: string; hips: string; head: string; declared: string | undefined };
 
 function readGlbJson(bytes: Buffer): GltfJson {
   return JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString("utf8")) as GltfJson;
@@ -182,7 +182,10 @@ async function openAr(page: Page, uploaded: { id: string }): Promise<void> {
 }
 
 const fixtures = new Map<FixtureName, FixtureFacts>();
-const report: Record<string, unknown> = {};
+
+async function writeReport(name: string, value: unknown): Promise<void> {
+  await writeFile(path.join(evidenceDir, `${name}-report.json`), JSON.stringify(value, null, 2));
+}
 
 test.beforeAll(async () => {
   if (process.env.RUN_E2E_PIPELINE !== "1") return;
@@ -197,15 +200,12 @@ test.beforeAll(async () => {
     fixtures.set(name, {
       url: `/${path.relative(captureRoot, info.file).split(path.sep).join("/")}`,
       hips: nodes[mapping.bones.hips!]!.name!,
-      head: nodes[mapping.bones.head!]!.name!
+      head: nodes[mapping.bones.head!]!.name!,
+      declared: readHumanoidDeclaration(json)?.format
     });
   }
   expect([...fixtures.keys()].sort()).toEqual([...FIXTURES].sort());
   await mkdir(evidenceDir, { recursive: true });
-});
-
-test.afterAll(async () => {
-  if (Object.keys(report).length > 0) await writeFile(path.join(evidenceDir, "avatar-formats-report.json"), JSON.stringify(report, null, 2));
 });
 
 for (const name of FIXTURES) {
@@ -213,7 +213,9 @@ for (const name of FIXTURES) {
     test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture dev server and a live API.");
     test.setTimeout(240_000);
     const fixture = fixtures.get(name)!;
-    expect(fixture.hips, "the fixture is not a Ready Player Me rig").not.toBe("Hips");
+    // Unreal names only the name tables know; the VRM 0.x rig keeps the shipped names but maps by its own declaration.
+    if (name === "unreal-cm") expect(fixture.hips, "Unreal names, not Ready Player Me's").toBe("pelvis");
+    else expect(fixture.declared, "the fixture maps its bones by a VRM 0.x declaration").toBe("vrm0");
 
     // Record a short standing take on the fixture in the real capture app.
     const capture = await context.newPage();
@@ -263,7 +265,7 @@ for (const name of FIXTURES) {
     const ar = await readHumanoid(page, "ar");
     await captureEvidence(page, testInfo, `${name}-ar`);
 
-    report[name] = { fixture, recordedYawDeg: recordedYaw, feed, ar };
+    await writeReport(name, { fixture, recordedYawDeg: recordedYaw, feed, ar });
     for (const [view, reading] of [["feed", feed], ["AR", ar]] as const) {
       expect(reading.source, `${view}: hips from HOLOIM_humanoid`).toBe("holoim");
       expect(reading.hips, `${view}: hips`).toBe(fixture.hips);
@@ -282,7 +284,7 @@ for (const name of FIXTURES) {
       await openCard(page, plain);
       await page.waitForFunction((target) => Object.keys((window as unknown as { __feedProbes: Record<string, unknown> }).__feedProbes).some((url) => url.endsWith(target)), plain.url);
       const byNames = await readHumanoid(page, { feedUrl: plain.url });
-      report[`${name}-no-extension`] = { feed: byNames };
+      await writeReport(`${name}-no-extension`, { feed: byNames });
       expect(byNames.source, "without the extension: hips from the name tables").toBe("names");
       expect(byNames.hips).toBe(fixture.hips);
       expect(byNames.head).toBe(fixture.head);
@@ -319,7 +321,7 @@ test("unreal-cm pointing take: HOLOIM_meaning's fingertip anchors resolve in the
   const uploaded = await upload(page, "avatar-unreal-cm-pointing", glb);
   await openCard(page, uploaded);
   await page.waitForFunction((target) => Object.keys((window as unknown as { __feedProbes: Record<string, unknown> }).__feedProbes).some((url) => url.endsWith(target)), uploaded.url);
-  const resolved: Array<{ from: string | undefined; to: string | undefined; links: number }> = [];
+  const resolved: Array<{ from: string | undefined; to: string | undefined }> = [];
   for (const mark of marks) {
     // Seek into the mark's span, as playback would, and read the lit links.
     const midpoint = (mark.span.start + mark.span.end) / 2;
@@ -338,9 +340,10 @@ test("unreal-cm pointing take: HOLOIM_meaning's fingertip anchors resolve in the
       const probe = Object.entries(probes).find(([url]) => url.endsWith(target as string))![1];
       return probe.pointing.links.some((link) => link.referent === want);
     }, [uploaded.url, referent] as const), { message: `link to ${referent} lights`, timeout: 15_000 }).toBe(true);
-    resolved.push({ from: json.nodes?.[mark.anchor.from.node]?.name, to: referent, links: marks.length });
+    resolved.push({ from: json.nodes?.[mark.anchor.from.node]?.name, to: referent });
   }
   await page.locator(`.feed-card[data-card-id="${uploaded.id}"]`).screenshot({ path: path.join(evidenceDir, "unreal-cm-pointing-feed.png") });
-  report["unreal-cm-pointing"] = { takeFailures: take.failures, fromNames, resolved };
+  await writeReport("unreal-cm-pointing", { takeFailures: take.failures, fromNames, resolved });
+  expect(take.failures, "the pointing take on the Unreal rig").toEqual([]);
   expect(fromNames.every((n) => n && !/^(Left|Right)Hand/.test(n)), "anchors are the Unreal rig's own bones").toBe(true);
 });
