@@ -28,6 +28,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Knowledge Atlas | Complete | [archive/knowledge-atlas.md](archive/knowledge-atlas.md) |
 | Natural locomotion and terrain response | Complete | [archive/avatar-locomotion.md](archive/avatar-locomotion.md) |
 | Bubble rendering across feed and XR | Complete | [archive/bubble-rendering.md](archive/bubble-rendering.md) |
+| The cloche's rim follows the ground | Draft | [cloche-rim-follows-ground.md](cloche-rim-follows-ground.md) |
 | Animated Quick Look phone demo | Complete | [archive/quicklook-phone-demo.md](archive/quicklook-phone-demo.md) |
 | XR height refit and visual evidence | Complete | [archive/xr-height-refit.md](archive/xr-height-refit.md) |
 | XR avatar height adaptation | Complete | [archive/xr-height-adaptation.md](archive/xr-height-adaptation.md) |

@@ -21,6 +21,10 @@ with the shared XR interface before it. Pick the next queue item in
 
 ## Ready to merge (grouped)
 
+- `docs/rim-follows-hill` (docs only): Draft brief
+  [`docs/features/cloche-rim-follows-ground.md`](docs/features/cloche-rim-follows-ground.md)
+  and the capture hidden-triangle follow-up in `TODOS.md`. Rides along with
+  the next merge.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

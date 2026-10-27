@@ -152,6 +152,12 @@ it from the item below instead of duplicating its status here.
   tracking drives the rest. Needs a PRD first
   ([IDEA-078](docs/product/IDEAS.md)); depends on the two items above.
 
+- [ ] Capture drops scene triangles the hologram never shows: geometry
+  hidden below the ground's top surface (the underside and buried parts of a
+  hill) and outside the bubble, at export. Follow-up to
+  [`docs/features/cloche-rim-follows-ground.md`](docs/features/cloche-rim-follows-ground.md)
+  (user, 2026-10-27). Preserve export → upload → render compatibility.
+
 ## Later
 
 - [ ] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
