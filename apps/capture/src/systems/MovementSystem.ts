@@ -26,7 +26,7 @@ export class MovementSystem extends createSystem() {
     if (frame.arSpectator) return;
     const { motor, input, body, avatar, config } = c;
 
-    c.crouch.update(deltaSec, frame.vrActive, input.isCrouchHeld(), c.tracking.getCurrentHeadLocalY());
+    c.crouch.update(deltaSec, frame.vrActive, input.isCrouchHeld(), c.tracking.getCurrentHeadLocalY(), c.objects.reachDemand());
     const crouchAmount = c.crouch.amount;
     const stick = frame.vrActive ? c.locomotion.moveVector(this.stickMove) : { x: 0, z: 0 };
     motor.update(deltaSec, c.camera.lookYaw, input.moveState, input.consumeJumpQueued(), {

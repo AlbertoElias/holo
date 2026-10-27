@@ -5,6 +5,7 @@ import type { HandPoseSource, VrHandSide } from '../types/contracts';
 import type { ObjectPhysics } from '../physics/ObjectPhysics';
 import type { XrTracking } from '../xr/XrTracking';
 import type { DesktopCarryPose } from './DesktopCarryPose';
+import { DesktopReach, REACH_PALM_M } from './DesktopReach';
 import type { GrabIntent, ObjectGrabInput } from './ObjectGrabInput';
 import type { ObjectTray } from './ObjectTray';
 import type { SceneObject, SceneObjectRegistry } from './SceneObjectRegistry';
@@ -12,8 +13,10 @@ import type { SceneObject, SceneObjectRegistry } from './SceneObjectRegistry';
 const SIDES = ['left', 'right'] as const;
 // A grab needs the avatar's palm this close to the object's bounds.
 const VR_REACH_M = 0.1;
-// Desktop: the object's bounds within this fraction of the arm's reach of the shoulder joint.
+// Desktop: an object at or above the shoulder, its bounds within this fraction of the arm's reach of the shoulder joint.
 const DESKTOP_REACH_FRACTION = 1.15;
+// An object below the shoulder, its bounds within one arm's reach of the shoulder, measured across the floor; and no nearer than this to the feet.
+const DESKTOP_LOW_FEET_M = 0.15;
 // Tracking loss: the object freezes, then is released where it is.
 const LOST_RELEASE_SEC = 0.5;
 const TRACKED_SOURCES: ReadonlySet<HandPoseSource> = new Set(['xr-hand', 'controller', 'mock']);
@@ -51,6 +54,8 @@ export interface ObjectStep {
     pointHeld: boolean;
     /** 1–5 pressed this step while T holds the tray open, else null. */
     summonSlot: number | null;
+    /** The avatar is walking: it cancels a reach or a low set-down. */
+    walking: boolean;
     /** A mouse or touch press that landed on a reachable prop this step, and whether that pointer lifted. */
     grab: { press: SceneObject | null; release: boolean };
   };
@@ -80,13 +85,15 @@ interface Hold {
   desktop: boolean;
   /** Object pose in the hand anchor's frame. */
   offset: THREE.Matrix4;
-  /** Desktop: the object's pose when picked up, which it glides from into the hand. */
-  pickup: THREE.Matrix4 | null;
   lostSec: number;
   /** Grabbed by a mouse or touch press: lifting it releases. */
   pointer: boolean;
-  /** Being lowered onto the surface under it before it is let go. The object stays held meanwhile. */
-  settle: { startSec: number; lowerM: number } | null;
+  /**
+   * Being lowered onto the surface under it before it is let go. The object stays held meanwhile.
+   * `squat`: nothing is within the arm's standing reach below, so the body squats (the reach demand) instead of only the arm lowering;
+   * `fullSec` is when the squat bottomed out.
+   */
+  settle: { startSec: number; lowerM: number; squat: boolean; fullSec: number | null } | null;
 }
 
 /**
@@ -98,6 +105,7 @@ interface Hold {
  */
 export class ObjectInteraction {
   private hold: Hold | null = null;
+  private readonly reach = new DesktopReach();
   private physics: ObjectPhysics | null = null;
   /** Accumulated step time, which stamps the poses the release velocity is fitted from. */
   private clock = 0;
@@ -127,6 +135,18 @@ export class ObjectInteraction {
     }
   ) {}
 
+  /** The body's reach demand, 0 to 1: the crouch and squat a flat-screen pickup or low set-down asks of the avatar. */
+  reachDemand(): number {
+    return this.reach.demand;
+  }
+
+  /** The flat-screen reach: its phase, the body's demand, and the avatar's palm's distance to the first prop's bounds (null if either is missing). */
+  reachSnapshot(): { phase: string; demand: number; palmToPropM: number | null; settling: boolean; pointer: boolean } {
+    const object = this.deps.registry.all()[0];
+    const palm = this.deps.avatar.avatar ? this.palmWorld('right', this.pos2) : undefined;
+    return { phase: this.reach.phase, demand: this.reach.demand, palmToPropM: object && palm ? this.distanceToObject(object, palm) : null, settling: Boolean(this.hold?.settle), pointer: Boolean(this.hold?.pointer) };
+  }
+
   setPhysics(physics: ObjectPhysics | null): void {
     this.physics = physics;
   }
@@ -145,6 +165,7 @@ export class ObjectInteraction {
 
     if (step.vrActive) {
       carry.idle();
+      this.reach.reset();
       if (this.hold?.desktop) this.release(false);
       this.updateVr(step);
     } else {
@@ -164,6 +185,9 @@ export class ObjectInteraction {
   pick(ray: THREE.Raycaster, anywhere: boolean): SceneObject | null {
     const { registry, carry } = this.deps;
     if (this.hold?.settle && anywhere) return this.hold.object;
+    // A second press during a reach cancels it, wherever it falls.
+    if (this.reach.isReaching() && anywhere) return this.reach.object;
+    if (this.reach.isReaching()) return null;
     if (this.hold && !this.hold.settle) return null;
     let best: SceneObject | null = null;
     let bestDistance = Infinity;
@@ -274,8 +298,9 @@ export class ObjectInteraction {
 
   private updateDesktop(step: ObjectStep): void {
     const { carry, registry, tray } = this.deps;
+    const reach = this.reach;
     const slot = step.desktop.summonSlot;
-    const item = slot !== null && step.recording && !this.hold ? tray.getItems().find((candidate) => candidate.slot === slot) : undefined;
+    const item = slot !== null && step.recording && !this.hold && !reach.isReaching() ? tray.getItems().find((candidate) => candidate.slot === slot) : undefined;
     if (item && tray.isOpen() && this.readAnchor('right')) {
       // Appears in the right hand and rises with it as the carry pose blends in.
       const summoned = tray.summon(item, step.timeSec);
@@ -285,50 +310,76 @@ export class ObjectInteraction {
       this.grab(summoned, 'right', false);
       this.hold!.desktop = true;
     } else if (step.desktop.toggle) {
-      if (this.hold?.settle) {
+      if (reach.isReaching()) {
+        // G again while reaching: stand back up, nothing grabbed.
+        this.cancelReach();
+      } else if (this.hold?.settle) {
         // G again while setting down: let go now, where it is.
         this.release(false);
       } else if (this.hold) {
-        this.releaseDesktop();
-      } else {
-        const target = registry.eventObjects().find((object) => this.desktopReachable(object, carry));
-        if (target && this.readAnchor('right')) this.grab(target, 'right', true);
+        if (!reach.isLifting()) this.releaseDesktop();
+      } else if (reach.phase === 'idle') {
+        const target = this.nearestReachable();
+        if (target) this.beginReach(target, false);
       }
     }
     const { press, release } = step.desktop.grab;
-    if (press && registry.all().includes(press) && (!this.hold || this.hold.settle) && this.readAnchor('right')) {
-      if (this.hold) this.cancelSettle();
-      else {
-        this.grab(press, 'right', true);
-        this.hold!.pointer = true;
-      }
+    if (press && registry.all().includes(press)) {
+      if (reach.isReaching()) this.cancelReach();
+      else if (this.hold?.settle) this.cancelSettle(true);
+      else if (!this.hold && reach.phase === 'idle') this.beginReach(press, true);
     }
-    if (release && this.hold?.pointer && !this.hold.settle) this.releaseDesktop();
+    if (release) {
+      // A pointer lifted during the reach or the lift doesn't cancel it: the prop stays held until the next press or G.
+      if (reach.isReaching() || reach.isLifting()) {
+        reach.pointerDown = false;
+        if (this.hold) this.hold.pointer = false;
+      } else if (this.hold?.pointer && !this.hold.settle) this.releaseDesktop();
+    }
+    if (reach.isReaching() && !this.stillReaching(step)) this.cancelReach();
+    if (this.hold?.settle?.squat && step.desktop.walking) this.cancelSettle(false);
+
     const hold = this.hold;
     const settle = hold?.settle ?? null;
-    const settleT = settle ? Math.min(1, (this.clock - settle.startSec) / SET_DOWN_SEC) : 0;
-    const settleEase = settleT * settleT * (3 - 2 * settleT);
+    let lowerM = 0;
+    if (settle) {
+      if (settle.squat) {
+        // Squat further until the prop is just above the surface; at the bottom the arm lowers the rest of the way.
+        if (reach.stepLower(step.deltaSec) && settle.fullSec === null) {
+          settle.fullSec = this.clock;
+          settle.lowerM = carry.maxLowerM();
+        }
+        const ease = settle.fullSec === null ? 0 : Math.min(1, (this.clock - settle.fullSec) / SET_DOWN_SEC);
+        lowerM = ease * ease * (3 - 2 * ease) * settle.lowerM;
+      } else {
+        const t = Math.min(1, (this.clock - settle.startSec) / SET_DOWN_SEC);
+        lowerM = t * t * (3 - 2 * t) * settle.lowerM;
+      }
+    } else if (reach.isLifting()) reach.stepLift(step.deltaSec);
+    else reach.relax(step.deltaSec);
+    const worldBlend = reach.worldBlend();
     carry.update({
-      carrying: Boolean(hold) && !step.desktop.pointHeld,
+      carrying: (Boolean(hold) || reach.isReaching()) && !step.desktop.pointHeld,
       bodyYaw: step.bodyYaw,
       deltaSec: step.deltaSec,
-      lowerM: settle ? settleEase * settle.lowerM : 0
+      lowerM,
+      ...(worldBlend > 0 ? { worldTarget: { point: reach.grasp, blend: worldBlend } } : {})
     });
-    if (!hold || !this.readAnchor('right')) return;
+    if (!this.readAnchor('right')) return;
 
-    if (hold.pickup) {
-      // Glide from where it was picked up into the hand as the arm comes up.
-      const t = carry.getWeight();
-      this.inHandPose(hold.object, step.bodyYaw, this.tmpM);
-      hold.pickup.decompose(this.pos, this.quat, this.scale);
-      this.tmpM.decompose(this.pos2, this.quat2, this.scale);
-      this.pos.lerp(this.pos2, t);
-      this.quat.slerp(this.quat2, t);
-      this.world.compose(this.pos, this.quat, this.unit);
-      hold.offset.copy(this.anchor).invert().multiply(this.world);
-      if (t >= 1) hold.pickup = null;
+    // The hand has its arm pose for the step: take the prop once the palm is on it. It stays where it was until then.
+    if (reach.isReaching() && reach.object) {
+      const palm = this.palmWorld('right', this.pos2);
+      if (palm && this.distanceToObject(reach.object, palm) <= REACH_PALM_M) {
+        const object = reach.object;
+        this.grab(object, 'right', true);
+        this.hold!.pointer = reach.pointerDown;
+        reach.beginLift(true);
+      }
     }
-    this.world.multiplyMatrices(this.anchor, hold.offset);
+    const held = this.hold;
+    if (!held) return;
+    this.world.multiplyMatrices(this.anchor, held.offset);
 
     const { turnYaw, turnPitch } = step.desktop;
     if (turnYaw !== 0 || turnPitch !== 0) {
@@ -340,12 +391,57 @@ export class ObjectInteraction {
       this.quat2.setFromAxisAngle(this.axis, turnPitch * TURN_RAD_PER_SEC * step.deltaSec);
       this.quat.premultiply(this.quat2).normalize();
       this.world.compose(this.pos, this.quat, this.unit);
-      hold.offset.copy(this.anchor).invert().multiply(this.world);
+      held.offset.copy(this.anchor).invert().multiply(this.world);
     }
-    this.writeWorld(hold.object, this.world);
-    this.physics?.sample(hold.object, this.clock);
+    this.writeWorld(held.object, this.world);
+    this.physics?.sample(held.object, this.clock);
     // The prop moved only with the hand. Let go once it hangs just above what is under it, or the hand can go no lower.
-    if (settle && (settleT >= 1 || (this.physics?.gapBelow(hold.object, SET_DOWN_SEARCH_M) ?? Infinity) <= SET_DOWN_RELEASE_GAP_M)) this.release(false);
+    const hanging = (this.physics?.gapBelow(held.object, SET_DOWN_SEARCH_M) ?? Infinity) <= SET_DOWN_RELEASE_GAP_M;
+    const settled = held.settle && (held.settle.squat ? held.settle.fullSec !== null && this.clock - held.settle.fullSec >= SET_DOWN_SEC : this.clock - held.settle.startSec >= SET_DOWN_SEC);
+    if (held.settle && (settled || hanging)) this.release(false);
+  }
+
+  /** Starts a reach for `object`: the body bends toward it, and it is taken once the palm is on it. */
+  private beginReach(object: SceneObject, pointerDown: boolean): void {
+    this.box.setFromObject(object.model);
+    this.reach.grasp.set((this.box.min.x + this.box.max.x) / 2, this.box.max.y, (this.box.min.z + this.box.max.z) / 2);
+    this.reach.begin(object, pointerDown);
+  }
+
+  /** Stands back up with nothing grabbed. */
+  private cancelReach(): void {
+    this.reach.stop();
+  }
+
+  /** Whether a reach goes on: the prop is still there and reachable, nothing walks or points, and it has not timed out or moved. */
+  private stillReaching(step: ObjectStep): boolean {
+    const { registry, carry, avatar } = this.deps;
+    const object = this.reach.object;
+    if (!object || !registry.all().includes(object) || step.desktop.walking || step.desktop.pointHeld) return false;
+    if (!this.desktopReachable(object, carry)) return false;
+    const shoulder = avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
+    const reachM = carry.getReach();
+    if (!shoulder || !reachM) return false;
+    object.wrapper.updateWorldMatrix(true, false);
+    object.wrapper.matrixWorld.decompose(this.pos, this.quat, this.scale);
+    return this.reach.stepReach(step.deltaSec, this.pos, shoulder.distanceTo(this.reach.grasp), reachM) === 'reaching';
+  }
+
+  /** The reachable prop nearest the avatar's shoulder (what `G` takes without aiming). */
+  private nearestReachable(): SceneObject | null {
+    const { registry, carry, avatar } = this.deps;
+    const shoulder = avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
+    let best: SceneObject | null = null;
+    let bestDistance = Infinity;
+    for (const object of registry.eventObjects()) {
+      if (!object.placed || !this.desktopReachable(object, carry)) continue;
+      const distance = shoulder ? this.distanceToObject(object, shoulder) : 0;
+      if (distance < bestDistance) {
+        best = object;
+        bestDistance = distance;
+      }
+    }
+    return best;
   }
 
   /** A deliberate desktop let-go: a moving prop is thrown, a still one is set down on what is under it. */
@@ -356,21 +452,28 @@ export class ObjectInteraction {
       this.release(true);
       return;
     }
-    // The hand goes down by the prop's gap to the surface, less the release gap, as far as the arm reaches.
+    // The hand goes down by the prop's gap to the surface, less the release gap, if the arm reaches that far standing.
     const gap = this.physics.gapBelow(hold.object, SET_DOWN_SEARCH_M);
-    const lowerM = gap === null ? 0 : Math.min(Math.max(0, gap - SET_DOWN_RELEASE_GAP_M), this.deps.carry.maxLowerM());
-    hold.settle = { startSec: this.clock, lowerM };
+    const needed = gap === null ? 0 : Math.max(0, gap - SET_DOWN_RELEASE_GAP_M);
+    if (needed <= this.deps.carry.maxLowerM()) {
+      hold.settle = { startSec: this.clock, lowerM: needed, squat: false, fullSec: null };
+    } else {
+      // Nothing within the arm's standing reach below: squat until the prop is just above the surface.
+      hold.settle = { startSec: this.clock, lowerM: 0, squat: true, fullSec: null };
+      this.reach.beginLower();
+    }
   }
 
-  /** A new press during a set-down: the prop stays in the hand, where the ease has put it. */
-  private cancelSettle(): void {
+  /** A new press, or walking, during a set-down: the prop stays in the hand, where the lowering has put it. */
+  private cancelSettle(pointer: boolean): void {
     const hold = this.hold;
     if (!hold?.settle || !this.readAnchor(hold.side)) return;
     hold.object.wrapper.updateWorldMatrix(true, false);
     hold.offset.copy(this.anchor).invert().multiply(hold.object.wrapper.matrixWorld);
-    hold.pickup = null;
+    // A squat stands back up first, the hand easing back to the carry pose as the body rises.
+    if (hold.settle.squat) this.reach.beginLift(false);
     hold.settle = null;
-    hold.pointer = true;
+    hold.pointer = pointer;
     this.physics?.hold(hold.object);
   }
 
@@ -378,7 +481,7 @@ export class ObjectInteraction {
     object.wrapper.updateWorldMatrix(true, false);
     this.world.copy(object.wrapper.matrixWorld);
     const offset = this.anchor.clone().invert().multiply(this.world);
-    this.hold = { object, side, desktop, offset, pickup: desktop ? this.world.clone() : null, lostSec: 0, pointer: false, settle: null };
+    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, settle: null };
     object.heldBy = side;
     this.physics?.hold(object);
   }
@@ -389,6 +492,8 @@ export class ObjectInteraction {
     this.physics?.release(this.hold.object, throwIt);
     this.hold.object.heldBy = null;
     this.hold = null;
+    // A reach that was only for this prop ends with it; a body already standing up goes on standing.
+    this.reach.stop();
   }
 
   /** The avatar hand bone's world pose with its scale removed, into `anchor`. */
@@ -415,10 +520,24 @@ export class ObjectInteraction {
     return this.box.distanceToPoint(point);
   }
 
+  /**
+   * Within the avatar's reach on a flat screen: its bounds within the arm's reach (with margin) of the shoulder joint;
+   * or, for a prop below the shoulder, its bounds within one arm's reach of the shoulder across the
+   * floor, at any height down to the floor, and not under the feet. Low props are reached by bending and squatting.
+   */
   private desktopReachable(object: SceneObject, carry: DesktopCarryPose): boolean {
-    const shoulder = this.deps.avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
+    const { avatar } = this.deps;
+    const shoulder = avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
     const reach = carry.getReach();
-    return Boolean(shoulder && reach && this.distanceToObject(object, shoulder) <= reach * DESKTOP_REACH_FRACTION);
+    if (!shoulder || !reach) return false;
+    this.box.setFromObject(object.model);
+    if (this.box.distanceToPoint(shoulder) <= reach * DESKTOP_REACH_FRACTION) return true;
+    if (this.box.max.y >= shoulder.y) return false;
+    const across = Math.hypot(Math.max(this.box.min.x - shoulder.x, 0, shoulder.x - this.box.max.x), Math.max(this.box.min.z - shoulder.z, 0, shoulder.z - this.box.max.z));
+    if (across > reach) return false;
+    const root = avatar.avatarRoot.position;
+    const fromFeet = Math.hypot(Math.max(this.box.min.x - root.x, 0, root.x - this.box.max.x), Math.max(this.box.min.z - root.z, 0, root.z - this.box.max.z));
+    return fromFeet >= DESKTOP_LOW_FEET_M;
   }
 
   /** Desktop: the object just in front of the palm, keeping its own rotation. */

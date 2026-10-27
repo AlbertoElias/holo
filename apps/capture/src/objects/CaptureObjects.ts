@@ -88,6 +88,11 @@ export class CaptureObjects {
     return this.interaction.pick(this.pickRay, anywhere);
   }
 
+  /** The body's reach demand (0 to 1) for the crouch and squat. */
+  reachDemand(): number {
+    return this.interaction.reachDemand();
+  }
+
   physicsStats(): ObjectPhysicsStats | null {
     return this.physics?.stats() ?? null;
   }

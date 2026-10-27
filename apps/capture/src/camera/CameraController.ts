@@ -254,7 +254,13 @@ export class CameraController {
     return clamp(value, 0.18, 0.72);
   }
 
+  /** The point aim's pitch. */
   clampFirstPersonPitch(value: number): number {
     return clamp(value, -1.2, 1.2);
+  }
+
+  /** The first-person view's pitch: it can look further down, at a prop at the avatar's feet. */
+  clampFirstPersonLookPitch(value: number): number {
+    return clamp(value, -1.45, 1.2);
   }
 }

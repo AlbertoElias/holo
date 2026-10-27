@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { AvatarRig } from '../avatar/AvatarRig';
 
+// While a reach squat lowers the hips, the feet may be raised this much more (a fraction of height) to stay planted.
+const SQUAT_EXTRA_LIFT_RATIO = 0.25;
+
 type Leg = { upper: THREE.Bone; lower: THREE.Bone; foot: THREE.Bone; upInFoot: THREE.Vector3; correction: number };
 type LegSample = {
   side: string;
@@ -39,7 +42,7 @@ export class TerrainLegSolver {
     }
   }
 
-  update(rig: AvatarRig, grounded: boolean, deltaSec: number): void {
+  update(rig: AvatarRig, grounded: boolean, deltaSec: number, squat = 0): void {
     if (this.avatar !== rig.avatar) this.attach(rig);
     this.samples = [];
     if (!rig.worldModel || !rig.avatar) return;
@@ -56,10 +59,17 @@ export class TerrainLegSolver {
         for (const bone of [leg.upper, leg.lower, leg.foot]) this.originals.set(bone, bone.quaternion.clone());
         const sole = height * 0.035;
         // Preserve the authored swing arc, shifting it by local terrain elevation.
-        const desired = THREE.MathUtils.clamp(Math.max(surface.point.y - center.point.y, surface.point.y + sole - foot.y), -height * 0.18, height * 0.22);
+        const normal = Math.max(surface.point.y - center.point.y, surface.point.y + sole - foot.y);
+        const planted = surface.point.y + sole - foot.y;
+        const desired = THREE.MathUtils.clamp(THREE.MathUtils.lerp(normal, planted, squat), -height * 0.18, height * (0.22 + SQUAT_EXTRA_LIFT_RATIO * squat));
         leg.correction = THREE.MathUtils.lerp(leg.correction, desired, 1 - Math.exp(-18 * Math.max(0, deltaSec)));
         const target = foot.clone();
         target.y += leg.correction;
+        if (squat > 0) {
+          const stand = rig.squatFeet[index === 0 ? 'left' : 'right'];
+          target.x = THREE.MathUtils.lerp(target.x, stand.x, squat);
+          target.z = THREE.MathUtils.lerp(target.z, stand.z, squat);
+        }
         this.solve(leg, target, rig.avatarRoot);
         // Rotate the ankle toward the support normal while near contact.
         const contact = 1 - THREE.MathUtils.smoothstep(target.y - surface.point.y - sole, height * 0.025, height * 0.15);

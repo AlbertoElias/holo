@@ -37,8 +37,8 @@ export class BodyPoseSystem extends createSystem() {
       body.posed = true;
       body.solver.solve(body.head, avatar.avatarRoot.position, deltaSec, body.groundSampler, c.config.embodyOffset, character.grounded);
     } else if (!body.active) {
-      avatar.applyCrouchPose(c.crouch.poseAmount, character.horizontalSpeed);
-      c.terrainLegs.update(avatar, character.grounded, deltaSec);
+      avatar.applyCrouchPose(c.crouch.poseAmount, character.horizontalSpeed, c.crouch.squat);
+      c.terrainLegs.update(avatar, character.grounded, deltaSec, c.crouch.squat);
     }
   }
 }

@@ -18,6 +18,7 @@ export interface DesktopLook {
   firstPersonPitch: number;
   clampThirdPersonPitch(value: number): number;
   clampFirstPersonPitch(value: number): number;
+  clampFirstPersonLookPitch(value: number): number;
 }
 
 interface InputControllerOptions {
@@ -211,7 +212,7 @@ export class InputController {
     if (typeof payload.aimPitch === 'number') {
       const look = this.options.look;
       this.pointAimPitch = look.clampFirstPersonPitch(payload.aimPitch);
-      if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
+      if (look.desktopViewMode === 'first') look.firstPersonPitch = look.clampFirstPersonLookPitch(payload.aimPitch);
     }
   }
 
@@ -220,7 +221,7 @@ export class InputController {
     if (this.pointSources.size === 0) {
       const look = this.options.look;
       // First person aims where the view looks; third person starts level.
-      this.pointAimPitch = look.desktopViewMode === 'first' ? look.firstPersonPitch : 0;
+      this.pointAimPitch = look.desktopViewMode === 'first' ? look.clampFirstPersonPitch(look.firstPersonPitch) : 0;
     }
     this.pointSources.add(source);
   }
@@ -477,7 +478,7 @@ export class InputController {
     } else if (look.desktopViewMode === 'third') {
       look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - dy * sensitivity);
     } else {
-      look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - dy * sensitivity);
+      look.firstPersonPitch = look.clampFirstPersonLookPitch(look.firstPersonPitch - dy * sensitivity);
     }
   }
 

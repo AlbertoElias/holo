@@ -47,6 +47,8 @@ const SPAN_TOLERANCE_SEC = 0.1;
 // A released prop settles within this long and rests within this far of the surface.
 const REST_TIMEOUT_SEC = 3;
 const FLOOR_TOLERANCE_M = 0.01;
+// The scene sits 0.01 m above its authored floor.
+const FLOOR_Y = 0.01;
 
 const v3 = (a) => new THREE.Vector3(...a);
 const q4 = (a) => new THREE.Quaternion(...a);
@@ -133,7 +135,7 @@ function spread(relations) {
  * length, the extension, the hold spans, and the object's pose relative to
  * the avatar's RightHand at every held key against the relation capture read.
  * `compareTailSec` limits that to the hold's last seconds, for a hold whose
- * relation changes early (the desktop pickup glide and turn).
+ * relation changes early (the desktop turn).
  */
 export function checkObjectExport(buffer, { expectHolds, captureRelation, compareTailSec, compareEndGapSec = 0.02, fail }) {
   const take = loadTake(buffer);
@@ -489,9 +491,15 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     const glb = await record(0, path.join(artifactDir, `${label}.glb`), async () => {
       await advance(0.3);
       await page.keyboard.press('KeyG');
-      // The arm comes up and the object glides into the hand.
-      await advance(0.5);
-      holdSeconds += 0.5;
+      // The hand goes to the object, takes it where it hangs, and the arm settles into the carry pose.
+      // The hold begins when the palm is on it, so count the held time from there.
+      let reached = 0;
+      for (; reached < 90; reached += 1) {
+        await advance(1 / 60);
+        if ((await readState(page)).objects.items[0].heldBy) break;
+      }
+      await advance(0.8 - reached / 60);
+      holdSeconds += 0.8 - (reached + 1) / 60;
       state = await readState(page);
       pickedUp = { heldBy: state.objects.items[0].heldBy, carryWeight: state.objects.carryWeight, toHandM: round(v3(state.objects.items[0].position).distanceTo(v3(state.objects.hands.right.position)), 3) };
       const before = poseOf(state.objects.items[0]);
@@ -517,7 +525,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       const easing = (await readState(page)).objects.items[0];
       setDown = { heldDuringEase: easing.heldBy };
       let launch = easing;
-      for (let i = 0; i < 60 && launch.heldBy; i += 1) {
+      for (let i = 0; i < 150 && launch.heldBy; i += 1) {
         await advance(1 / 60);
         launch = (await readState(page)).objects.items[0];
         if (launch.heldBy) holdSeconds += 1 / 60;
@@ -558,9 +566,11 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     if (setDown.heldDuringEase !== 'right') fail('G released the object at once instead of setting it down');
     if (putDown.heldBy) fail('G did not put the object down');
     if (putDown.launchSpeedMps > 0.05 || putDown.launchSpinRadps > 0.05) fail(`the put-down object was flung: ${putDown.launchSpeedMps} m/s, ${putDown.launchSpinRadps} rad/s`);
-    if (putDown.driftM > 0.1) fail(`the put-down object drifted ${putDown.driftM} m sideways after a ${putDown.dropHeightM} m drop`);
+    // Slice 3: nothing is within the arm's standing reach below it, so the body squats until it is just above the floor.
+    if (putDown.dropHeightM > 0.03) fail(`the put-down object was let go ${putDown.dropHeightM} m above the floor (limit 0.03 m)`);
+    if (putDown.driftM > 0.02) fail(`the put-down object drifted ${putDown.driftM} m sideways after a ${putDown.dropHeightM} m drop (limit 0.02 m)`);
     if (putDown.body !== 'asleep') fail(`the put-down object did not come to rest (${putDown.body})`);
-    if (Math.abs(putDown.floorGapM) > FLOOR_TOLERANCE_M) fail(`the put-down object rests ${putDown.floorGapM} m from the floor`);
+    if (Math.abs(putDown.floorGapM - FLOOR_Y) > 0.003) fail(`the put-down object rests ${round(putDown.floorGapM - FLOOR_Y, 4)} m from the floor (limit 0.003 m)`);
 
     // Out of reach, G does nothing.
     await page.keyboard.press('KeyG');
@@ -591,7 +601,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     const exportReport = checkObjectExport(await readFile(glb), {
       expectHolds: [{ hand: 'right', duration: holdSeconds }],
       captureRelation: relations.at(-1) ?? null,
-      // The whole span after the pickup glide and turns, including the set-down ease: the prop stays rigid with the hand.
+      // The span after the Q turn, including the set-down squat: the prop stays rigid with the hand.
       compareTailSec: 0.6,
       fail
     });

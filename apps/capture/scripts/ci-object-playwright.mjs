@@ -8,11 +8,12 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 import { runDesktopObjectTake, runIwerObjectTake } from './lib/object-take.mjs';
 import { runIwerObjectPhysics } from './lib/object-physics.mjs';
 import { runDesktopMouseObject, runPhoneTouchObject } from './lib/object-pointer.mjs';
+import { runFloorReach, runMouseFloorReach, runPhoneFloorReach } from './lib/object-reach.mjs';
 
 // Explain with an object (PRD-043): an IWER controller take and a desktop
 // take load the bracket fixture, grab it, move and turn it, put it down, and
 // export; each GLB is checked against what capture read during the take (see
-// lib/object-take.mjs). A third run drives the physics scenarios (throw, drop,
+// lib/object-take.mjs). Slice 3 adds the crouch-and-reach runs (lib/object-reach.mjs). A third run drives the physics scenarios (throw, drop,
 // catch, bounds; lib/object-physics.mjs) and writes object-physics-report.json. Writes output/ci-object/report.json, per-take GLBs,
 // screenshots and a contact sheet.
 
@@ -28,7 +29,10 @@ try {
   const physics = await runIwerObjectPhysics({ browser, baseUrl, artifactDir, consoleErrors });
   const mouse = await runDesktopMouseObject({ browser, baseUrl, consoleErrors });
   const phone = await runPhoneTouchObject({ browser, baseUrl, consoleErrors });
-  const takes = [iwer, desktop, physics, mouse, phone];
+  const reach = await runFloorReach({ browser, baseUrl, artifactDir, consoleErrors });
+  const mouseReach = await runMouseFloorReach({ browser, baseUrl, consoleErrors });
+  const phoneReach = await runPhoneFloorReach({ browser, baseUrl, consoleErrors });
+  const takes = [iwer, desktop, physics, mouse, phone, reach, mouseReach, phoneReach];
   const sheet = writeContactSheet(artifactDir, path.join(artifactDir, 'object-sheet.jpg'));
   const failures = [...takes.flatMap((take) => take.failures.map((message) => `${take.label}: ${message}`)), ...consoleErrors.map((error) => `console: ${error}`)];
   const report = { status: failures.length ? 'fail' : 'pass', failures, takes, sheet: sheet ?? null };

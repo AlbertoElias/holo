@@ -146,6 +146,11 @@ const CROUCH_POSE_EPSILON = 1e-4;
 const CROUCH_MAX_POSE_AMOUNT = 1.45;
 const CROUCH_FOOT_GROUND_CLEARANCE_RATIO = 0.015;
 const CROUCH_MAX_HIPS_LIFT_RATIO = 0.16;
+// A reach squat: the hips drop this much more (a fraction of height) beyond the full crouch, and the forward bend grows by this factor.
+const SQUAT_EXTRA_HIPS_DROP_RATIO = 0.21;
+const SQUAT_EXTRA_LEAN = 1;
+// The crouch's leg bend is relaxed by this much at full squat: the leg solver bends the knees instead.
+const SQUAT_LEG_RELAX = 0.85;
 const CROUCH_WALK_BLEND_START_SPEED = 0.08;
 const CROUCH_WALK_BLEND_END_SPEED = 0.28;
 const CROUCH_WALK_HIPS_POSE_WEIGHT = 0.55;
@@ -215,6 +220,9 @@ export class AvatarRig {
   private crouchRigReady = false;
   private crouchWarningLogged = false;
   private lastCrouchAmount = -1;
+  private lastSquatAmount = 0;
+  /** Where each foot stood before a squat bent the body. */
+  readonly squatFeet = { left: new THREE.Vector3(), right: new THREE.Vector3() };
   private readonly preCrouchPose = new Map<THREE.Bone, { quaternion: THREE.Quaternion; position: THREE.Vector3 }>();
   private crouchHips: CrouchHipsBinding | undefined;
   private readonly crouchSpine: CrouchBoneBinding[] = [];
@@ -319,10 +327,12 @@ export class AvatarRig {
     this.preCrouchPose.clear();
   }
 
-  applyCrouchPose(amount: number, horizontalSpeed = 0): void {
+  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0): void {
     const clampedAmount = clamp(amount, 0, CROUCH_MAX_POSE_AMOUNT);
     if (!this.crouchRigReady || !this.crouchHips) return;
-    const amountChanged = Math.abs(clampedAmount - this.lastCrouchAmount) > CROUCH_POSE_EPSILON;
+    const squatAmount = clamp(squat, 0, 1);
+    const amountChanged = Math.abs(clampedAmount - this.lastCrouchAmount) > CROUCH_POSE_EPSILON || Math.abs(squatAmount - this.lastSquatAmount) > CROUCH_POSE_EPSILON;
+    this.lastSquatAmount = squatAmount;
     const wasCrouched = this.lastCrouchAmount > CROUCH_POSE_EPSILON;
     const isCrouched = clampedAmount > CROUCH_POSE_EPSILON;
     if (!amountChanged && !wasCrouched && !isCrouched) return;
@@ -335,11 +345,19 @@ export class AvatarRig {
     const hipsPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_HIPS_POSE_WEIGHT, walkBlend);
     const legPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_LEG_POSE_WEIGHT, walkBlend);
     const footPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_FOOT_POSE_WEIGHT, walkBlend);
+    const lean = 1 + SQUAT_EXTRA_LEAN * squatAmount;
     const hipsAmount = Math.pow(clampedAmount, 0.9) * hipsPoseWeight;
-    const legAmount = Math.pow(clampedAmount, 0.72) * legPoseWeight;
-    const spineAmount = Math.pow(clampedAmount, 0.78);
-    const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight;
+    const legAmount = Math.pow(clampedAmount, 0.72) * legPoseWeight * (1 - SQUAT_LEG_RELAX * squatAmount);
+    const spineAmount = Math.pow(clampedAmount, 0.78) * lean;
+    const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight * (1 - squatAmount);
 
+    if (squatAmount > 0) {
+      // Where the feet stand before the bend: a squat plants them there, however the hips lean.
+      this.crouchHips.bone.updateWorldMatrix(true, true);
+      for (const [side, foot] of [['left', this.crouchLeftFoot], ['right', this.crouchRightFoot]] as const) {
+        if (foot) foot.getWorldPosition(this.squatFeet[side]);
+      }
+    }
     for (const binding of [this.crouchHips, ...this.crouchSpine, ...this.crouchUpperLegs, ...this.crouchLowerLegs, ...this.crouchFeet]) {
       this.preCrouchPose.set(binding.bone, {
         quaternion: binding.bone.quaternion.clone(), position: binding.bone.position.clone()
@@ -349,9 +367,9 @@ export class AvatarRig {
     const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
     const heightInParent = this.avatarHeight / Math.max(1e-8, Math.abs(parentScale));
     this.crouchHips.bone.position
-      .addScaledVector(this.crouchHips.downInParent, heightInParent * 0.11 * hipsAmount)
+      .addScaledVector(this.crouchHips.downInParent, heightInParent * (0.11 * hipsAmount + SQUAT_EXTRA_HIPS_DROP_RATIO * squatAmount))
       .addScaledVector(this.crouchHips.backInParent, heightInParent * 0.045 * hipsAmount);
-    this.applyCrouchBoneRotation(this.crouchHips, hipsAmount);
+    this.applyCrouchBoneRotation(this.crouchHips, hipsAmount * lean);
     this.crouchHips.bone.updateMatrixWorld(true);
 
     for (const binding of this.crouchSpine) {
@@ -371,7 +389,7 @@ export class AvatarRig {
       binding.bone.updateMatrixWorld(true);
     }
 
-    this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend);
+    this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
   }
 
   /** The avatar's canonical bone, or its end site for a `…Tip` reference. */
@@ -859,14 +877,15 @@ export class AvatarRig {
     binding.bone.quaternion.multiply(this.tmpCrouchQuat).normalize();
   }
 
-  private applyCrouchFootGroundCompensation(crouchAmount: number, walkBlend: number): void {
+  private applyCrouchFootGroundCompensation(crouchAmount: number, walkBlend: number, squat: number): void {
     if (!this.crouchHips || !this.worldModel) return;
     if (crouchAmount <= 0.01) return;
     if (!this.crouchLeftFoot && !this.crouchRightFoot) return;
 
     const walkClearanceBoost = this.avatarHeight * CROUCH_WALK_EXTRA_GROUND_CLEARANCE_RATIO * clamp(walkBlend, 0, 1);
     const minClearance = this.avatarHeight * CROUCH_FOOT_GROUND_CLEARANCE_RATIO + walkClearanceBoost;
-    const maxLift = this.avatarHeight * CROUCH_MAX_HIPS_LIFT_RATIO;
+    // A squat keeps its hips low: the leg solver plants the feet instead.
+    const maxLift = this.avatarHeight * CROUCH_MAX_HIPS_LIFT_RATIO * (1 - squat);
     let requiredLift = 0;
 
     if (this.crouchLeftFoot) {

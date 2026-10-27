@@ -171,7 +171,7 @@ export async function runDesktopMouseObject({ browser, baseUrl, consoleErrors })
     if (!(easing.boundsMin[1] < beforeLift.boundsMin[1] - 0.005)) fail(`the prop was not lowered during the set-down (${round(beforeLift.boundsMin[1] - easing.boundsMin[1], 4)} m)`);
     // The let-go is the first free state: the prop was lowered with the hand, so it drops from there.
     let released = easing;
-    for (let i = 0; i < 40 && released.heldBy; i += 1) {
+    for (let i = 0; i < 150 && released.heldBy; i += 1) {
       await advance(1 / 60);
       released = await s.item();
     }
@@ -179,15 +179,20 @@ export async function runDesktopMouseObject({ browser, baseUrl, consoleErrors })
     const launch = released;
     const resting = await rest(s);
     const stillRelease = {
-      launchSpeedMps: round(Math.hypot(...launch.linvel)),
+      // Sideways speed: one step of gravity alone falls 0.16 m/s.
+      launchSpeedMps: round(Math.hypot(launch.linvel[0], launch.linvel[2])),
       fellFromHandM: round(beforeLift.boundsMin[1] - resting.boundsMin[1]),
       dropAfterLetGoM: round(launch.boundsMin[1] - resting.boundsMin[1], 4),
-      driftM: round(Math.hypot(centreOf(resting)[0] - centreOf(beforeLift)[0], centreOf(resting)[2] - centreOf(beforeLift)[2])),
+      driftM: round(Math.hypot(centreOf(resting)[0] - centreOf(launch)[0], centreOf(resting)[2] - centreOf(launch)[2])),
+      // The squat carries the prop out with the hand as the avatar leans over.
+      handTravelM: round(Math.hypot(centreOf(launch)[0] - centreOf(beforeLift)[0], centreOf(launch)[2] - centreOf(beforeLift)[2])),
       floorGapM: round(resting.boundsMin[1], 4),
       body: resting.body
     };
+    // Slice 3: nothing is within the arm's standing reach below, so the body squats and the prop is let go just above the surface.
+    if (stillRelease.dropAfterLetGoM > 0.03) fail(`a still release let go ${stillRelease.dropAfterLetGoM} m above the surface (limit 0.03 m)`);
     if (stillRelease.launchSpeedMps > 0.6) fail(`a still release launched the prop at ${stillRelease.launchSpeedMps} m/s`);
-    if (stillRelease.driftM > 0.05) fail(`a still release drifted ${stillRelease.driftM} m sideways`);
+    if (stillRelease.driftM > 0.02) fail(`a still release drifted ${stillRelease.driftM} m sideways after the let-go (limit 0.02 m)`);
     if (stillRelease.body !== 'asleep') fail(`the set-down prop did not come to rest (${stillRelease.body})`);
     if (!SURFACES_Y.some((y) => Math.abs(stillRelease.floorGapM - y) <= FLOOR_TOLERANCE_M)) fail(`the set-down prop rests at ${stillRelease.floorGapM} m, not on a surface of the scene (${SURFACES_Y.join(' or ')} m)`);
 
@@ -315,7 +320,9 @@ export async function runPhoneTouchObject({ browser, baseUrl, consoleErrors }) {
       grabAt = { x: centreAt.x + ox, y: centreAt.y + oy };
       await touch('touchStart', 4, grabAt.x, grabAt.y);
       await advance(0.1);
-      if ((await s.item()).heldBy) break;
+      // A touch on the model starts a reach; the prop is held once the palm is on it.
+      const started = await readState(page);
+      if (started.objects.items[0].heldBy || started.objects.reach.phase === 'reach') break;
       await touch('touchEnd', 4, 0, 0);
       await advance(0.1);
     }
@@ -337,11 +344,14 @@ export async function runPhoneTouchObject({ browser, baseUrl, consoleErrors }) {
     // Still, then lift: it is set down.
     await advance(0.5);
     const beforeLift = await s.item();
+    const preLift = (await readState(page)).objects.reach;
     await touch('touchEnd', 4, 0, 0);
+    await advance(1 / 60);
+    const postLift = (await readState(page)).objects.reach;
     await advance(0.1);
     const easing = await s.item();
     let lifted = easing;
-    for (let i = 0; i < 40 && lifted.heldBy; i += 1) {
+    for (let i = 0; i < 150 && lifted.heldBy; i += 1) {
       await advance(1 / 60);
       lifted = await s.item();
     }
@@ -350,13 +360,16 @@ export async function runPhoneTouchObject({ browser, baseUrl, consoleErrors }) {
       dropAfterLetGoM: round(lifted.boundsMin[1] - resting.boundsMin[1], 4),
       heldDuringEase: easing.heldBy,
       heldAfter: lifted.heldBy,
-      driftM: round(Math.hypot(centreOf(resting)[0] - centreOf(beforeLift)[0], centreOf(resting)[2] - centreOf(beforeLift)[2])),
+      preLift,
+      postLift,
+      driftM: round(Math.hypot(centreOf(resting)[0] - centreOf(lifted)[0], centreOf(resting)[2] - centreOf(lifted)[2])),
+      handTravelM: round(Math.hypot(centreOf(lifted)[0] - centreOf(beforeLift)[0], centreOf(lifted)[2] - centreOf(beforeLift)[2])),
       floorGapM: round(resting.boundsMin[1], 4),
       body: resting.body
     };
     if (lift.heldAfter) fail('lifting the finger did not release the prop');
-    // It lands on the floor from where the hand could lowest reach, so a short drop's tumble counts (recorded as dropAfterLetGoM).
-    if (lift.driftM > 0.1) fail(`a still touch lift drifted ${lift.driftM} m after a ${lift.dropAfterLetGoM} m drop`);
+    if (lift.dropAfterLetGoM > 0.03) fail(`a still touch lift let go ${lift.dropAfterLetGoM} m above the surface (limit 0.03 m)`);
+    if (lift.driftM > 0.02) fail(`a still touch lift drifted ${lift.driftM} m after the let-go (limit 0.02 m)`);
     if (lift.body !== 'asleep') fail(`the released prop did not come to rest (${lift.body})`);
 
     return { label, status: failures.length ? 'fail' : 'pass', failures, looked, pointPhase, walked, grab, draggedHeld, lift };

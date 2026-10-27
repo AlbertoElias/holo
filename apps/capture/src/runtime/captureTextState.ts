@@ -40,7 +40,7 @@ export function renderCaptureTextState(c: CaptureContext): string {
       z: avatar.avatarRoot.position.z,
       yaw: c.camera.lookYaw
     },
-    point: { held: input.isPointHeld(), aimPitch: input.getPointAimPitch(), ...c.point.snapshot() },
+    point: { held: input.isPointHeld(), aimPitch: input.getPointAimPitch(), viewPitch: c.camera.firstPersonPitch, ...c.point.snapshot() },
     locomotion: {
       state: animator.getState(),
       horizontalSpeed: character.horizontalSpeed,
@@ -50,13 +50,14 @@ export function renderCaptureTextState(c: CaptureContext): string {
       legs: c.terrainLegs.getSnapshot(),
       clip: animator.getClipSnapshot()
     },
-    crouch: { amount: crouch.amount, poseAmount: crouch.poseAmount, target: crouch.target, source: crouch.source },
+    crouch: { amount: crouch.amount, poseAmount: crouch.poseAmount, squat: crouch.squat, target: crouch.target, source: crouch.source },
     tracking: { left: c.hands.snapshot('left'), right: c.hands.snapshot('right') },
     objects: {
       items: c.objects.interaction.snapshot(),
       hands: c.objects.interaction.handSnapshot(),
       grab: { left: c.objects.grabInput.get('left'), right: c.objects.grabInput.get('right') },
       carryWeight: c.objects.carry.getWeight(),
+      reach: c.objects.interaction.reachSnapshot(),
       physics: c.objects.physicsStats(),
       tray: { ...c.objects.tray.snapshot(), gesture: c.objects.trayGesture.snapshot() }
     },

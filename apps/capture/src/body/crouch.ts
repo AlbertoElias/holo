@@ -126,22 +126,35 @@ export function computeCrouchPoseAmount(
   return clamp(crouchAmount * visualBoost, 0, tuning.maxPoseAmount);
 }
 
-/** Smoothed crouch from the desktop key and the VR head's drop below standing. */
+// A reach demand up to this fraction takes the crouch to its full pose; the rest becomes a squat.
+const REACH_CROUCH_SHARE = 0.6;
+
+/** Smoothed crouch from the desktop key and the VR head's drop below standing, and a desktop reach's demand (0 to 1). */
 export class CrouchState {
   amount = 0;
   poseAmount = 0;
+  /** 0 to 1 beyond the crouch: how far the hips drop below the full crouch for a floor reach. */
+  squat = 0;
+  private keyAmount = 0;
   target = 0;
   source: CrouchSource = "none";
   private baseline: VrCrouchBaselineState = { standingHeadY: 0, standingCaptured: false };
 
-  update(deltaSec: number, isVrActive: boolean, desktopHeld: boolean, vrHeadY: number | undefined): void {
+  update(deltaSec: number, isVrActive: boolean, desktopHeld: boolean, vrHeadY: number | undefined, reachDemand = 0): void {
     const vrCrouch = computeVrCrouchTarget(deltaSec, isVrActive ? vrHeadY : undefined, this.baseline);
     this.baseline = vrCrouch.baseline;
     const resolution = resolveCrouchTargetAndSource(isVrActive, desktopHeld ? 1 : 0, vrCrouch.vrTarget);
     this.target = resolution.target;
     this.source = resolution.source;
-    this.amount = stepCrouchAmount(this.amount, this.target, deltaSec);
+    this.keyAmount = stepCrouchAmount(this.keyAmount, this.target, deltaSec);
+    this.amount = this.keyAmount;
     this.poseAmount = computeCrouchPoseAmount(this.amount, isVrActive);
+    // A reach is already smoothed by its own rate: it bends the body as far as it asks, past the key's crouch.
+    const reach = clamp(isVrActive ? 0 : reachDemand, 0, 1);
+    const crouchShare = clamp(reach / REACH_CROUCH_SHARE, 0, 1);
+    this.squat = clamp((reach - REACH_CROUCH_SHARE) / (1 - REACH_CROUCH_SHARE), 0, 1);
+    this.amount = Math.max(this.amount, crouchShare);
+    this.poseAmount = Math.max(this.poseAmount, crouchShare * DEFAULT_CROUCH_TUNING.maxPoseAmount);
   }
 
   /** A fitted height is the standing reference for VR crouch. */
@@ -154,6 +167,8 @@ export class CrouchState {
   }
 
   release(): void {
+    this.keyAmount = 0;
+    this.squat = 0;
     this.amount = 0;
     this.poseAmount = 0;
     this.target = 0;

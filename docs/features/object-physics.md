@@ -122,8 +122,109 @@ AR recording carries objects.
   still looks, and lifting releases with the fitted velocity. Touches that
   start elsewhere, and the stick side, behave as today.
 
+**Slice 3: crouch and reach on flat screens** (user decision, 2026-10-27)
+
+The proof video showed that on desktop and phone a prop on the floor can't be
+picked up again. The reach rule starts at the shoulder, and the view can't
+aim at the avatar's feet. Since physics sends every dropped or thrown prop to
+the floor, flat-screen authors need a way to get it back.
+
+- **Pick up from low.** Aiming at a prop on or near the ground (within a short
+  horizontal reach of the avatar, at any height down to the floor) and
+  grabbing it (left press, touch or `G`) plays a reach. The avatar bends or
+  crouches, the right hand goes to the prop, the prop attaches to the hand at
+  its own pose, and the avatar stands back up into the carry pose holding it.
+  The prop never moves before the hand reaches it.
+- **Set down low.** A still release or `G`, with nothing within the arm's
+  standing reach below the prop, does the reverse. The avatar crouches until
+  the prop is just above the surface, lets go with zero velocity, then stands.
+  The 1 m floor drop goes away.
+- **Aiming down.** The flat-screen view can pitch far enough to aim at a prop
+  at the avatar's feet. The aim target is whatever prop the centre ray, or the
+  touch, hits.
+- **Recorded truthfully.** The crouch and reach are body motion, recorded and
+  replayed like any other. Hold spans start when the hand reaches the prop and
+  end when it lets go. The prop stays rigid in the hand throughout the hold.
+- **Interruptions.** Walking, a second press or `G` during the reach or the
+  set-down cancels it cleanly: the avatar stands, and a prop that wasn't yet
+  in hand stays where it was.
+
+Slice 3 design review (2026-10-27), adopted:
+
+- **Reach state machine.** A new `objects/DesktopReach.ts`, driven from
+  `ObjectInteraction.updateDesktop`. Its phases are idle → reach → lift →
+  carry, and carry → lower → stand.
+- **Crouch.** Driven through the crouch that already exists. `CrouchState`
+  takes a `reachDemand` of 0 to 1.45, and the crouch target is the larger of
+  that demand and the `C` key. The demand rises until the grasp point is
+  within 0.95 of the arm's reach, or reaches 1.45. If the crouch at 1.45 still
+  can't reach the floor, a forward-bend weight scales the spine and hip bend
+  already in `applyCrouchPose`. No new spine IK.
+- **Hand target.** `DesktopCarryPose` gets an optional world target, blended
+  in. The grasp point is the top centre of the prop's bounds.
+- **Hold.** It starts when the palm is within 0.10 m of the prop's bounds, at
+  the prop's own pose.
+- **Glide removed.** The desktop pickup glide is removed for every desktop
+  grab. It moved the prop before the hand and while held, the same fault as
+  round 1's must-fix. Tray summons keep their own path.
+- **Reach rule.** Prop bounds within a horizontal distance of one arm's reach
+  from the shoulder, at any height down to the floor, and at least 0.15 m
+  from the feet. The shoulder sphere still applies to props higher up.
+- **Cancels.** Before the hand reaches the prop, any of these stands the
+  avatar back up with nothing grabbed: moving, a second press, `G`, the point
+  action, entering VR, the prop being removed, moving (faster than 0.05 m/s)
+  or going out of reach, or a 1.5 s timeout. A cancel while lowering keeps
+  the prop held.
+- **Lead decisions.**
+  - Aiming down is first person only. In third person, `G` picks up the
+    nearest reachable prop without aiming, and the phone's touch can hit the
+    floor near the feet.
+  - A pointer lifted during the reach doesn't cancel it. The grab completes
+    and stays held until the next press or `G`.
+  - `G` during a set-down lets go at once.
+  - The camera pitch widens to about −1.45 rad for aiming, and the point
+    aim keeps its ±1.2 clamp.
+
+**Slice 3 spike (2026-10-27): the existing crouch can't reach the floor.**
+Arm reach is 0.526 m, so the limit (0.95 × reach) is 0.50 m. At crouch pose
+1.45 the hips are at 0.774 m and the shoulder at 1.087 m, which puts a floor
+point 0.45 m ahead 1.12 m from the shoulder. Scaling the existing forward bend
+gets the shoulder no lower than about 0.60 m, and with the hips at 0.774 m no
+floor point is ever within 0.50 m.
+
+Revised plan: a real squat. Beyond the existing crouch, the reach demand
+lowers the hips toward about 0.40 m. `TerrainLegSolver`, the two-bone leg
+solver that already plants the feet after animation, keeps the feet on the
+floor, so the knees bend into the squat; its correction cap is lifted while a
+reach drives the pose. A moderate forward lean (the existing bend scaled
+about 1.5×) brings the shoulder over the prop. The spike measures first; if
+the legs can't plant at that hip height, it stops and reports again.
+
+Slice 3 acceptance criteria (fixture `body-floor.gltf`, prop on the floor
+0.45 m ahead):
+
+- [ ] **Pick up from the floor.** With `G`, a first-person mouse press at
+  pitch −1.45, and a phone touch: the prop moves ≤1 mm before the hand
+  reaches it. Within 1.5 s the palm is ≤0.10 m from its bounds. In the
+  exported GLB the hips drop ≥0.15 m during the reach, and the crouch is back
+  to 0 within 0.8 s of the carry pose.
+- [ ] **Rigid hold.** Over the whole held span, glide included, the prop's
+  hand-relative change is ≤1e-4 m. The held span starts within 0.1 s of the
+  hand reaching the prop.
+- [ ] **Set down on the floor.** The prop is let go with its lowest point
+  ≤0.03 m above the floor and zero velocity. It rests within 2 cm of where it
+  was let go, with a floor gap ≤3 mm. This replaces the 1 m drop in
+  "Flat-screen set-down".
+- [ ] **Cancels.** Moving during the reach leaves the prop where it was (0 mm,
+  `heldBy` null), and the crouch is back to 0 within 0.5 s. A cancel while
+  lowering keeps the prop held.
+- [ ] **Point aim unchanged.** It stays clamped to ±1.2 rad.
+- [ ] **Replay.** The viewer matches the GLB at the hand reaching the prop,
+  mid-lift and the let-go.
+
 **Excluded:**
 
+- third-person mouse aiming at the feet;
 - passthrough AR props and real-surface colliders (follow-up in `TODOS.md`);
 - physics on a viewer's placed holograms;
 - collisions with the avatar's body or hands;
