@@ -528,9 +528,12 @@ jobs:
   deploy-web:
     name: Deploy viewer (Pages)
     needs: [changes, quality, e2e, xr-viewer-vr, pipeline, portal, deploy-api]
+    # When the push also changed the API, the viewer ships only after that
+    # API is live: a skipped deploy-api (its own gate failed) holds it back.
     if: >-
       !cancelled() && github.ref == 'refs/heads/main' &&
       needs.changes.outputs.web == 'true' &&
+      (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success') &&
       !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -561,7 +564,8 @@ jobs:
 
   deploy-capture:
     name: Deploy capture (Pages)
-    needs: [changes, quality, capture-xr, pipeline, portal]
+    # usdz-tools runs the Quick Look conversion on capture's exported take.
+    needs: [changes, quality, capture-xr, pipeline, usdz-tools, portal]
     if: >-
       !cancelled() && github.ref == 'refs/heads/main' &&
       needs.changes.outputs.capture_app == 'true' &&

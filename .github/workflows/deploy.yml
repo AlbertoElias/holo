@@ -74,8 +74,11 @@ jobs:
 
   deploy-web:
     name: Deploy viewer (Pages)
-    needs: [changes]
-    if: needs.changes.outputs.web == 'true'
+    needs: [changes, deploy-api]
+    # Deploying both: the viewer waits for the API to be live.
+    if: >-
+      !cancelled() && needs.changes.outputs.web == 'true' &&
+      (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:

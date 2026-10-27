@@ -40,10 +40,18 @@ cache="${DEB_CACHE:-}"
 if [ -n "${cache}" ] && compgen -G "${cache}/*.deb" >/dev/null; then
   echo "ci-playwright-deps: installing ${#missing[@]} missing package(s) from ${cache}: ${missing[*]}"
   if sudo dpkg -i "${cache}"/*.deb >/dev/null; then
-    exit 0
+    # A newer runner image may lack a package the cache never held.
+    still=()
+    for package in "${missing[@]}"; do
+      dpkg-query -W -f='${Status}' "${package}" 2>/dev/null | grep -q 'install ok installed' || still+=("${package}")
+    done
+    [ "${#still[@]}" -eq 0 ] && exit 0
+    missing=("${still[@]}")
+    echo "::warning::the .deb cache lacked ${missing[*]}; installing them with apt"
+  else
+    echo "::warning::cached .deb install failed; falling back to apt"
+    sudo dpkg --configure -a || true
   fi
-  echo "::warning::cached .deb install failed; falling back to apt"
-  sudo dpkg --configure -a || true
 fi
 
 echo "ci-playwright-deps: installing ${#missing[@]} missing package(s) with apt: ${missing[*]}"

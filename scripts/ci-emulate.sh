@@ -49,11 +49,20 @@ docker run --rm --init \
   -v holoim-ci-pnpm-store:/root/.local/share/pnpm/store \
   -v holoim-ci-playwright:/root/.cache/ms-playwright \
   -v holoim-ci-usdz-venv:/root/.venv-usdz \
+  -v holoim-ci-ktx:/root/.ktx \
   "$image" bash -euo pipefail -c "
     apt-get update -qq >/dev/null
     # rsync for the copy; Python and ffmpeg for the Quick Look conversion the
     # pipeline checks run, as CI's pipeline job installs them.
-    apt-get install -y -qq rsync python3-venv ffmpeg >/dev/null
+    apt-get install -y -qq rsync python3-venv ffmpeg bzip2 >/dev/null
+    # KTX-Software, which capture's builds use to compress textures, as CI's
+    # setup action installs it (the release matching this machine's arch).
+    if [ ! -x /root/.ktx/bin/ktx ]; then
+      case \$(uname -m) in aarch64) ktx_arch=arm64 ;; *) ktx_arch=x86_64 ;; esac
+      curl -fsSL \"https://github.com/KhronosGroup/KTX-Software/releases/download/v4.4.2/KTX-Software-4.4.2-Linux-\${ktx_arch}.tar.bz2\" \\
+        | tar -xj -C /root/.ktx --strip-components=1
+    fi
+    export PATH=/root/.ktx/bin:\$PATH
     rsync -a --exclude node_modules --exclude .worktrees --exclude output \
       --exclude .git --exclude 'apps/*/output' --exclude 'apps/*/dist' \
       --exclude 'apps/*/test-results' /src/ /work/
