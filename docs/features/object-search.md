@@ -121,7 +121,31 @@ card credit line answers Q7 provisionally in place of a details view, which
 the viewer does not have. A deployed capture needs `VITE_API_ORIGIN` (or an
 `/api` route) to reach the API; the dev and e2e setups use a proxy.
 
+The deploy gap is closed in `a834027`: capture's build gets
+`VITE_API_ORIGIN=https://holoim-api.fly.dev`, and the two public object
+routes answer any origin, so capture's origin stays out of `WEB_ORIGINS`.
+
+## Registries surveyed (2026-10-27)
+
+| Registry | Licences | Access | Fit |
+|---|---|---|---|
+| Poly Haven | CC0 | Open API, no key | Shipped in this slice; about 520 realistic models |
+| Poly Pizza | CC0, CC-BY | Free API key | Next: thousands of light low-poly GLBs, ideal for summoning |
+| Smithsonian Open Access | CC0 where marked | Open Access API (key) | Later: a few thousand scanned artefacts, often heavy; would need the 150k variant |
+| Sketchfab | Mixed CC (BY, BY-SA, NC, ND) | Download needs each user's Sketchfab login (OAuth), or a contract for app-only | Largest catalogue; only with a Sign in with Sketchfab flow and a licence filter |
+| Objaverse (Hugging Face) | Per-object CC | Static dataset, no search API | Only behind our own index |
+| Kenney, Quaternius, Khronos samples | CC0 | No API | Could seed a curated starter set we host |
+
+## Headset (VR and AR) slice: open design
+
+Capture's VR and passthrough AR sessions have no DOM, so the Find field
+cannot be reused. Quest Browser does not expose the Web Speech API, so
+voice means recording the mic and transcribing on the server (an STT
+provider: a billing decision). A text-free path needs no decisions:
+a Find action on the hand dock opens a `WorldPanel` with category
+shortcuts (chairs, plants, lamps, food, tools) and an in-world keyboard,
+results as thumbnail tiles, and a pick lands in the tray as on the desktop.
+
 ## Physical-device limits
 
-None for this slice: it is desktop-only. The headset overlay is the next
-slice.
+None for this slice: it is desktop-only.
