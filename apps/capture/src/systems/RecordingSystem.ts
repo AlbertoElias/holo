@@ -16,18 +16,21 @@ export class RecordingSystem extends createSystem() {
   update(): void {
     const c = this.capture;
     if (c.frame.arSpectator) return;
-    c.recording.recorder.capture(c.frame.elapsedSec, c.avatar.avatar, c.avatar.avatarRoot, activeCamera(c), this.pointingHands(), c.objects.registry.eventObjects(), c.objects.authoringFrame());
+    const held = c.frame.vrActive
+      ? c.headsetHolds.update({ timeSec: c.frame.elapsedSec, presenting: c.frame.xrPresenting && !c.tracking.mock.enabled, recording: c.recording.recorder.isEnabled(), camera: c.stage.xrCamera })
+      : c.headsetHolds.update({ timeSec: c.frame.elapsedSec, presenting: false, recording: false, camera: c.stage.xrCamera });
+    c.recording.recorder.capture(c.frame.elapsedSec, c.avatar.avatar, c.avatar.avatarRoot, activeCamera(c), this.pointingHands(), c.objects.registry.eventObjects(), c.objects.authoringFrame(), held);
   }
 
-  // A finger reaching for the wrist's record glyph is pressing chrome, not
-  // pointing at the other hand: that hand gives no point evidence meanwhile
-  // (docs/features/ui-redesign.md, failure cases).
+  // A finger reaching for the wrist's record glyph is pressing chrome, and a
+  // hand summoning the Halo is choosing from it, not pointing: that hand
+  // gives no point evidence meanwhile (docs/features/ui-redesign.md, failure cases).
   private pointingHands(): TrackedHandJointReader {
     const c = this.capture;
-    const poking = c.vrChrome.pokingHand(c.frame.elapsedSec);
-    if (!poking) return c.tracking;
+    const busy = c.vrChrome.pokingHand(c.frame.elapsedSec) ?? c.headsetHolds.haloHand();
+    if (!busy) return c.tracking;
     return {
-      getHandPoseSource: (side) => (side === poking ? 'none' : c.tracking.getHandPoseSource(side)),
+      getHandPoseSource: (side) => (side === busy ? 'none' : c.tracking.getHandPoseSource(side)),
       getTrackedHandJointPosition: (side, joint, out) => c.tracking.getTrackedHandJointPosition(side, joint, out)
     };
   }

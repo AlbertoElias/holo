@@ -5,7 +5,7 @@ import { tokens } from "@holoim/design-tokens";
 
 const { glyph } = tokens;
 
-/** Glyphs with a decided drawing. True size, exit, undo, redo and settings have none yet. */
+/** Glyphs with a decided drawing. True size, exit and settings have none yet. */
 export type DrawnGlyph = keyof typeof glyph.path;
 export type GlyphId = DrawnGlyph | "record";
 
@@ -95,6 +95,38 @@ export function glyphAppearance({ hovered = false, focusVisible = false, pressed
     opacity: (pressed ? glyph.states.pressedOpacity : 1) * (dimmed ? glyph.idleOpacity : 1),
     focusRing: focusVisible ? { width: metrics.focusRingWidthApx, offset: metrics.focusRingOffsetApx, color: glyph.states.focusRingColor } : null,
     glow: false
+  };
+}
+
+export interface LanternLook {
+  /** The ring's diameter: the glyph sits in it, as Play does. */
+  ringApx: number;
+  /** The lens the ring holds, so the gold glyph has dark ground under it. */
+  fill: string;
+  /** The ring and the glyph: the state's colour, gold or the cream lift. */
+  ringColor: string;
+  ringWidthApx: number;
+  /** The focus ring: ink, which holds on amber where gold does not. */
+  ink: string;
+  focusRing: { width: number; offset: number; color: string } | null;
+}
+
+/**
+ * A glyph control on the amber horizon (the feed's dock, 5.2), where gold
+ * fails (2.1:1) and no chip or shade may sit: the glyph keeps its gold in a
+ * ring that holds a deep-sea lens, and the focus ring is ink. No word shows
+ * beside it: ink text falls below 4.5:1 on most screens there; the lens, a
+ * control's boundary, holds 3:1.
+ */
+export function lanternLook(appearance: GlyphAppearance, { headset }: { headset: boolean }): LanternLook {
+  const metrics = glyphMetrics({ headset });
+  return {
+    ringApx: metrics.ringApx,
+    fill: glyph.lantern.fill,
+    ringColor: appearance.color,
+    ringWidthApx: metrics.strokeApx,
+    ink: glyph.lantern.ink,
+    focusRing: appearance.focusRing ? { ...appearance.focusRing, color: glyph.lantern.ink } : null
   };
 }
 

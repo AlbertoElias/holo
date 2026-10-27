@@ -80,6 +80,7 @@ describe("upload-intent cleanup", () => {
         "sizeBytes" INTEGER NOT NULL,
         "expiresAt" DATETIME NOT NULL,
         "completedHologramId" TEXT,
+        "ownerId" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);

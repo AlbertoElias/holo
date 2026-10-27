@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-24
+**Updated:** 2026-10-26
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -13,26 +13,41 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-Face and expressions on avatars is complete (brief
-[`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md)):
-webcam, WebXR eye gaze and liveness drive synthesized ARKit shapes, and
-`test:xr:face` (`FACE_VIDEO=1` for the proof video) runs in the capture XR
-suite. Next: validate the face on devices (see Unverified below), or pick the
-next queue item in [`TODOS.md`](TODOS.md).
+The shared XR interface and viewer VR/AR is complete and on `main` (brief
+[`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md)).
+Next: AR recording (camera-only takes, meaning v1) starts its slice 0, and the
+device checks under Unverified below. Otherwise pick the next queue item in
+[`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Nothing held. UI redesign slices 0 to 4 (brief
-  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are merged
-  to `main`: slices 0 to 2 on 2026-10-24, and slices 3 (every viewer page)
-  and 4 (every capture page, touch, handedness) together after `verify:pr`
-  passed on the combined tree (evidence in the brief). Next there: slice 5
-  (hold to mark "this" and the Halo). Open: Codex's independent pass over
-  slices 2 to 4 (it was at its usage limit on 2026-10-24); real wrist
-  drawings for Exit and Recenter, a known gap for a design pass; the
-  physical device checks in the brief.
+- UI redesign slices 0 to 6 (brief
+  [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
+  `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
+  baked into Quick Look previews, with the one-off `rebuild:usdz`) were
+  merged together on 2026-10-25 after `verify:pr` on the combined tree
+  (evidence in the brief). Phone AR marks are deferred to AR recording in
+  [`TODOS.md`](TODOS.md). The fixes from the
+  cross-vendor review of slices 2 to 4 and the second round (the brief's
+  "Independent verification" rows), with the globe's own colours, landed on
+  `main` on 2026-10-25 with Codex's verdict and its three must-fixes. Next there: slice 7 (cross-device task test and device checks).
+  Open: real wrist drawings for Exit and Recenter; the physical device checks
+  in the brief.
+- The production Quick Look rebuild to ql3 is done: both stored previews are
+  ql3, with the ql2 files and the database backup kept (B-022, evidence in
+  the brief).
 
 ## Unverified / device-only
+
+- Shared XR interface and viewer VR/AR (brief
+  [`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md),
+  on `main` with B-022): IWER only so far. On devices, check Quest 3 VR
+  comfort, including slide, snap turn and teleport. Check foot-control and
+  hand-dock reach and readability, the feel of grab, pinch and poke (and that
+  one pinch never fires a foot control twice), and the frame rate with four
+  holograms placed. Check audio by ear, Quest passthrough AR, Android phone
+  AR tap and two-finger pinch, and the feel of capture's chrome (hand-dock
+  Record, status line).
 
 - Self-resolving pointing on a Quest and a phone: score at least three new
   headset takes with 20 or more author-labelled points against PRD-022's

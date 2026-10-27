@@ -5,6 +5,7 @@ import { freezePageClock, waitForIwerSession, waitForTextContentPrefix } from "@
 import { resolve } from "node:path";
 import type { Probe } from "./ar-bubble-types";
 import { captureBubblePixels } from "./bubble-pixel-proof";
+import { measureFloor, type FloorReport } from "./floor-proof";
 
 import { assertViewerShell, captureEvidence, expect, test, pressViewInAr } from "./bootstrap";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
@@ -48,9 +49,25 @@ function animationDurationSeconds(gltf: GltfJson): number {
   return duration;
 }
 
+/** Floors agree to within this; the foot bone is the ankle, this far above its floor at most. */
+const FLOOR_TOLERANCE_METERS = 0.05;
+const ANKLE_HEIGHT_METERS = 0.2;
+
+// B-022: the recorded floor is the floor the viewer uses, in the feed and in AR.
+function expectOnRecordedFloor(report: FloorReport) {
+  const { mode, recordedFloorY, footBoneY, clocheBaseY, placementY } = report;
+  expect(Math.abs(clocheBaseY - recordedFloorY), `${mode}: cloche foot on the recorded floor`).toBeLessThanOrEqual(FLOOR_TOLERANCE_METERS);
+  expect(footBoneY - recordedFloorY, `${mode}: feet not under the recorded floor`).toBeGreaterThanOrEqual(-FLOOR_TOLERANCE_METERS);
+  expect(footBoneY - recordedFloorY, `${mode}: feet on the recorded floor`).toBeLessThanOrEqual(ANKLE_HEIGHT_METERS);
+  if (placementY !== null) {
+    expect(Math.abs(placementY - recordedFloorY), `${mode}: recorded floor on the room floor`).toBeLessThanOrEqual(FLOOR_TOLERANCE_METERS);
+  }
+}
+
 test("real capture bubble exports, uploads and draws in feed and immersive AR", async ({ page, context }, testInfo) => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture dev server and a live API.");
-  test.setTimeout(120_000);
+  // A hosted runner takes about 4× as long as a workstation (43 s here).
+  test.setTimeout(240_000);
 
   await page.addInitScript(() => {
     const hooks = window as unknown as { __feedProbe?: Probe; __bubbleProbe?: Probe; __HOLOIM_FEED_TEST_OBSERVER__?: (probe: Probe) => void; __HOLOIM_AR_TEST_OBSERVER__?: (probe: Probe) => void };
@@ -125,22 +142,34 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const feedBefore = await captureBubblePixels(page, "feed", artifactDir);
   await page.clock.runFor(400);
   const feedAfter = await captureBubblePixels(page, "feed", artifactDir);
+  const feedFloor = await measureFloor(page, "feed");
   expect(feedAfter.sphere, "feed sphere follows recorded motion").not.toEqual(feedBefore.sphere);
   await page.clock.resume();
   await pressViewInAr(page, card);
+  // The IWSDK shell, the default: it enters at once, or offers its entry button.
+  const xrView = page.locator(".xr-view-container");
+  await expect(xrView).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
+  if ((await xrView.getAttribute("data-xr-state")) === "ready") await page.getByRole("button", { name: "View in your room" }).click();
   await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
   await page.evaluate(() => {
     const device = (window as unknown as { IWER_DEVICE: { stereoEnabled: boolean; ipd: number } }).IWER_DEVICE;
     device.stereoEnabled = true; device.ipd = 0.064;
   });
+  // The hologram loads and finds its place in real time: wait for its bubble and its placement (as ar-bubble.spec does)
+  // before freezing the clock, which stops the frames and the search timer that would finish them.
+  await page.waitForFunction(() => Boolean((window as unknown as { __bubbleProbe?: Probe }).__bubbleProbe?.bubble.active), null, { timeout: 90_000 });
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __HOLOIM_XR_VIEWER__: { snapshot(): { placement: { stage: string } } } }).__HOLOIM_XR_VIEWER__.snapshot().placement.stage), { timeout: 30_000 }).toMatch(/placed|anchored/);
   await freezePageClock(page);
   await page.clock.runFor(1500);
-  await page.waitForFunction(() => Boolean((window as unknown as { __bubbleProbe?: Probe }).__bubbleProbe?.bubble.active));
   const arBefore = await captureBubblePixels(page, "ar", artifactDir);
   await page.clock.runFor(400);
   const arAfter = await captureBubblePixels(page, "ar", artifactDir);
+  const arFloor = await measureFloor(page, "ar");
   expect(arAfter.time, "capture animation advances in immersive AR").not.toEqual(arBefore.time);
   expect(arAfter.sphere, "AR sphere stays pinned").toEqual(arBefore.sphere);
   await writeFile(resolve(artifactDir, "metrics.json"), JSON.stringify({ feedBefore, feedAfter, arBefore, arAfter }, null, 2));
+  await writeFile(resolve(artifactDir, "floor-report.json"), JSON.stringify({ feed: feedFloor, ar: arFloor }, null, 2));
+  expectOnRecordedFloor(feedFloor);
+  expectOnRecordedFloor(arFloor);
 
 });

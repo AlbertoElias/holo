@@ -62,7 +62,7 @@ function inputRecordingSinkPlugin(outputDir: string): Plugin {
 // IWSDK's World bootstrap always imports UIKitML. Its component kits build
 // zod schemas for every Horizon component and import every lucide icon at
 // startup: about 1 MB gzipped and 25 MB of retained heap. Capture never
-// renders UIKitML (World's spatial UI is off), so builds and dev give
+// renders UIKitML (its headset chrome builds UIKit components directly), so builds and dev give
 // UIKitML empty kits and resolve lucide to the two icons Horizon imports.
 // Dev needs the same boundary: unbundled, the kits issue ~1600 icon module
 // requests, and one (Fingerprint.js) matches content-blocker rules, which
@@ -187,6 +187,11 @@ export default defineConfig(async ({ command }) => {
   ];
 
   return {
+    resolve: {
+      // @holoim/xr-ui-iwsdk resolves its own pnpm copy of @iwsdk/core (no React
+      // peer); one World needs one copy of IWSDK, UIKit and three.
+      dedupe: ['@iwsdk/core', '@pmndrs/uikit', '@pmndrs/pointer-events', 'three']
+    },
     plugins: buildPlugins,
     publicDir: tempPublicDir,
     server: {
@@ -199,6 +204,10 @@ export default defineConfig(async ({ command }) => {
             if (id.includes('/src/physics/')) return 'physics';
             if (id.includes('/src/xr/')) return 'xr';
             if (id.includes('/src/debug/')) return 'debug';
+            // Leaves shared by xr and debug: left to rollup, they land in one of
+            // those chunks and the two import each other (a TDZ error at startup).
+            if (/\/node_modules\/(three|super-three)\//.test(id)) return 'three';
+            if (id.includes('/packages/design-tokens/') || id.includes('/packages/xr-ui-core/')) return 'design';
             return undefined;
           }
         }

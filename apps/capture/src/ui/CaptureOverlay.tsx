@@ -1,17 +1,19 @@
 import { useEffect, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 
 import { tokens } from '@holoim/design-tokens';
-import { Chip, Dock, GlyphControl, SideSheet, Type } from '@holoim/ui-dom';
+import { Chip, defaultHitInput, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, HandednessPicker, SideSheet, Type } from '@holoim/ui-dom';
 import {
+  CAPTURE_HALO_ACTIONS,
   PHONE_EDGES,
   VIEW_TARGETS,
   chromeVisible,
   createRecordingUiState,
+  glyphAppearance,
+  glyphDrawing,
   glyphMetrics,
   hitAreaApx,
   recordingText,
   type Control,
-  type Handedness,
   type HitInput
 } from '@holoim/xr-ui-core';
 
@@ -42,6 +44,7 @@ function resolveStatusText(state: UiViewModel): string {
 
 /** The one notice the top status line carries, most urgent first; null when there is nothing to say. */
 function resolveNotice(state: UiViewModel): string | null {
+  if (state.notice) return state.notice;
   if (state.loadState === 'loading') return 'Loading the scene…';
   if (state.loadState === 'error' || state.loadState === 'warning') return state.warning ?? resolveStatusText(state);
   if (state.recordingState === 'exporting') return state.recordingMessage ?? 'Exporting…';
@@ -93,7 +96,9 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   const recording = createRecordingUiState(state.recordingState, state.recordingMessage);
   const isRecording = recording.status === 'recording';
   const target = touch ? VIEW_TARGETS.phone : VIEW_TARGETS.desktop;
-  const input: HitInput = touch ? 'touch' : 'mouse';
+  // The layout and help follow the primary pointer; hit areas take a finger
+  // wherever one can reach the screen, a touch laptop's too (6.1).
+  const input: HitInput = touch ? 'touch' : defaultHitInput();
   const show = (control: Control): boolean => chromeVisible(control, isRecording);
   const notice = resolveNotice(state);
   const vrMode = state.mode === 'vr' || state.mode === 'mock-vr';
@@ -158,6 +163,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
             </Type>
           ) : null}
         </span>
+        {!vrMode && state.mode !== 'ar' && show('halo') ? <DockHalo bridge={bridge} input={input} touch={touch} /> : null}
         {vrMode && show('record') && !isRecording ? (
           <GlyphControl glyph={null} label="Refit height" input={input} disabled={!state.heightFit.enabled} onPress={() => bridge.refitHeight()} />
         ) : null}
@@ -166,11 +172,48 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
         {show('exitAr') ? <XrEntryControl id="ARButton" mode="AR" offer={state.xrEntry.ar} input={input} onPress={() => bridge.toggleXr('ar')} /> : null}
       </Dock>
 
+      <KeyHaloRing bridge={bridge} />
+
       <div style={{ pointerEvents: 'auto' }}>
         <SideSheet open={settingsOpen && !isRecording} title="Settings" target={target} onClose={() => setSettingsOpen(false)}>
           <SettingsBody bridge={bridge} state={state} touch={touch} input={input} />
         </SideSheet>
       </div>
+    </div>
+  );
+}
+
+// The Halo on a flat screen (slice 5): press and hold its dock glyph, move
+// towards a direction, let go; a flick commits without the ring drawing. Its
+// ring is lifted above the dock so the south place stays on screen.
+function DockHalo({ bridge, input, touch }: { bridge: CaptureUiBridge; input: HitInput; touch: boolean }) {
+  const { layout } = bridge.halo;
+  const hit = hitAreaApx(input, glyphMetrics({ headset: false }).iconApx);
+  return (
+    <span data-capture-halo="" style={{ pointerEvents: 'auto', display: 'inline-flex' }}>
+      <Halo
+        actions={CAPTURE_HALO_ACTIONS}
+        ringLiftApx={layout.radiusApx + layout.slotApx / 2 + glyphMetrics({ headset: false }).gapApx}
+        onCommit={(commit) => {
+          if (commit.action) bridge.runHaloAction(commit.action, touch ? 'touch' : 'mouse');
+        }}
+        trigger={(view) => (
+          <span role="img" aria-label="Halo: hold and move to a direction" style={{ display: 'inline-grid', placeItems: 'center', width: hit, height: hit, cursor: 'pointer' }}>
+            <GlyphSvg drawing={glyphDrawing('halo')} appearance={glyphAppearance({ hovered: view.ringDrawn }, { headset: false })} />
+          </span>
+        )}
+      />
+    </span>
+  );
+}
+
+// The ring a held B draws, where the press happened (the screen's centre under pointer lock).
+function KeyHaloRing({ bridge }: { bridge: CaptureUiBridge }) {
+  const view = useSyncExternalStore(bridge.halo.subscribe, bridge.halo.getSnapshot, bridge.halo.getSnapshot);
+  if (!view.open || !view.ringDrawn) return null;
+  return (
+    <div data-capture-key-halo="" style={{ position: 'absolute', left: view.at.x, top: view.at.y, width: 0, height: 0 }}>
+      <HaloRing layout={bridge.halo.layout} highlighted={view.highlighted} />
     </div>
   );
 }
@@ -195,31 +238,10 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge; state: UiViewModel; touch: boolean; input: HitInput }) {
   const desktop = state.mode === 'desktop-third' || state.mode === 'desktop-first';
-  const options: Array<{ value: Handedness; label: string }> = [
-    { value: 'right', label: 'Right-handed' },
-    { value: 'left', label: 'Left-handed' }
-  ];
   return (
     <>
       <Section title="Hand">
-        <div role="radiogroup" aria-label="Dominant hand" style={{ display: 'flex', flexWrap: 'wrap' }}>
-          {options.map((option) => (
-            <GlyphControl
-              glyph={null}
-              key={option.value}
-              role="radio"
-              aria-checked={state.handedness === option.value}
-              label={option.label}
-              input={input}
-              onPress={() => bridge.setHandedness(option.value)}
-            />
-          ))}
-        </div>
-        <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
-          {/* An option has no selected look in the styleguide yet (brief,
-              slice 4, placeholder), so the choice is said in words. */}
-          {state.handedness === 'right' ? 'Right-handed' : 'Left-handed'}: in a headset, Record sits on your {state.handedness === 'right' ? 'left' : 'right'} wrist.
-        </Type>
+        <HandednessPicker value={state.handedness} onChange={(handedness) => bridge.setHandedness(handedness)} wristControl="Record" input={input} />
       </Section>
 
       {desktop ? (

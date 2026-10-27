@@ -131,28 +131,72 @@ export const tokens = {
       rest: 0.35,
       bright: 1
     },
+    ember: {
+      color: '#c2410c'
+    },
     cloche: {
       exponent: 2.6,
       fitMargin: 1.04,
       minHeightShare: 0.4,
-      rimAt: 0.9,
-      rimWaves: 0.045,
-      rimTears: 0.05,
-      rimRefMinPx: 120,
-      rimRefMaxPx: 200,
-      coreBand: 0.018,
-      highlightBand: 0.012,
-      charBand: 0.02,
-      glowStart: 0.24,
-      glowShare: 0.16,
-      footWidth: 0.005,
-      footShare: 0.5,
+      burnFrequency: 2.8,
+      burnThreshold: 0.4,
+      burnBreath: 0.03,
+      tearFrequency: 7,
+      tearFrom: 0.24,
+      tearTo: 0.4,
+      corePx: 1.5,
+      goldPx: 3.2,
+      charPx: 1.2,
+      glowPx: 9,
+      glowShare: 0.22,
+      lineGain: 1.3,
+      quietRest: 2.6,
+      quietFocus: 1.1,
+      farSide: 0.75,
+      closeNearShare: 0.75,
+      closeFromPx: 300,
+      closeToPx: 700,
+      depthDim: 0.6,
+      emberCount: 2500,
+      emberRestShare: 0.45,
+      emberSpread: 0.025,
+      emberDrift: 0.006,
+      emberSize: 0.009,
+      emberMinPx: 1.6,
+      emberMaxPx: 3.5,
+      emberNearFrom: 0.2,
+      emberNearTo: 0.6,
+      emberGain: 1.3,
+      sparkSize: 0.012,
+      sparkMaxPx: 4,
+      sparkSpeed: 0.16,
+      focusEase: 130,
       followYaw: 18,
       followPitch: 16,
       frameShare: 0.78,
       insideFadeFrom: 1.6,
       insideFadeTo: 1.05,
-      shadeScale: 1.15
+      shadeScale: 1.15,
+      quickLook: {
+        frontRadius: 0.0021,
+        creamShare: 0.25,
+        charShare: 0.65,
+        tearMin: 0.08,
+        frontGlow: 0.9,
+        creamGlow: 0.6,
+        samples: 110,
+        embers: 800,
+        emberScale: 0.7,
+        emberGlow: 1
+      },
+      colors: {
+        glow: '#ff6f22',
+        core: '#ff932b',
+        highlight: '#ffe59f',
+        char: '#250902',
+        ember: '#8a0d01',
+        shade: '#010303'
+      }
     }
   },
   glyph: {
@@ -173,6 +217,10 @@ export const tokens = {
       focusRingOffset: 3,
       focusRingColor: '#ffc872',
       pressedOpacity: 0.55
+    },
+    lantern: {
+      fill: '#081a1e',
+      ink: '#081a1e'
     },
     path: {
       play: {
@@ -196,8 +244,8 @@ export const tokens = {
         linejoin: 'round'
       },
       pause: {
-        d: 'M5.5 3v10M10.5 3v10',
-        fill: false,
+        d: 'M4.5 3h2.4v10H4.5zM9.1 3h2.4v10H9.1z',
+        fill: true,
         linejoin: 'miter'
       },
       soundOn: {
@@ -217,6 +265,41 @@ export const tokens = {
       },
       close: {
         d: 'M3.5 3.5l9 9M12.5 3.5l-9 9',
+        fill: false,
+        linejoin: 'miter'
+      },
+      undo: {
+        d: 'M6 3.5 2.5 7l3.5 3.5M2.5 7H10a3.5 3.5 0 0 1 0 7H8',
+        fill: false,
+        linejoin: 'round'
+      },
+      redo: {
+        d: 'M10 3.5 13.5 7 10 10.5M13.5 7H6a3.5 3.5 0 0 0 0 7h2',
+        fill: false,
+        linejoin: 'round'
+      },
+      halo: {
+        d: 'M5.25 3.24A5.5 5.5 0 0 1 10.75 3.24M12.76 5.25A5.5 5.5 0 0 1 12.76 10.75M10.75 12.76A5.5 5.5 0 0 1 5.25 12.76M3.24 10.75A5.5 5.5 0 0 1 3.24 5.25M9 8a1 1 0 1 1-2 0 1 1 0 1 1 2 0',
+        fill: false,
+        linejoin: 'miter'
+      },
+      stepInside: {
+        d: 'M3.5 14.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 12.5 3v11.5M1.5 14.5h13M7.1 5.2a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M8 7v3.5M8 10.5l-1.3 3M8 10.5l1.3 3M6.5 8.5h3',
+        fill: false,
+        linejoin: 'round'
+      },
+      restart: {
+        d: 'M3.5 3v10M12.5 3.2 6 8l6.5 4.8z',
+        fill: false,
+        linejoin: 'miter'
+      },
+      recenter: {
+        d: 'M8 1.5v2.5M8 12v2.5M1.5 8H4M12 8h2.5M8 5a3 3 0 1 0 0 6a3 3 0 1 0 0-6',
+        fill: false,
+        linejoin: 'miter'
+      },
+      exit: {
+        d: 'M9 2.5H4.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H9M7 8h7.5M12 5.5 14.5 8 12 10.5',
         fill: false,
         linejoin: 'miter'
       }
@@ -357,12 +440,12 @@ export const tokens = {
       xrHaloSwing: 0.05
     },
     sparks: {
-      countFlat: 26,
-      countRoomMax: 70,
+      countFlat: 120,
+      countRoomMax: 160,
       sizeMin: 0.004,
       sizeMax: 0.008,
-      lifeMin: 2000,
-      lifeMax: 4000,
+      lifeMin: 1100,
+      lifeMax: 2600,
       peripheralDegrees: 30
     },
     reducedMotion: {

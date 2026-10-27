@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { type MeaningMotionSpan, type MeaningLinkProvenance, type MeaningSpan, resolveHumanoidBone, type VrmHumanoidBone } from '@holoim/meaning';
 
+import { HOLD_DELAY_MS } from '@holoim/xr-ui-core';
+
 import { humanoidTagOf } from '../avatar/HumanoidSkeleton';
 import { isThreeBone } from '../shared/threeTypeGuards';
 import type { RecordingFrame, VrHandSide } from '../types/contracts';
-import type { AimHold, HandPointSample, PointSampleStore } from './PointSampleStore';
+import type { AimHold, AimInput, HandPointSample, PointSampleStore } from './PointSampleStore';
 import { POINT_DWELL_SEC, type PoseSegment, type ReferentRun, type ReferentSample, segmentPoses, splitByReferent } from './pointSegments';
 
 /** A link whose nodes are still objects; `GLTFMeaningPlugin` swaps them for node indices. */
@@ -24,9 +26,11 @@ export interface MeaningDraft {
 /** What resolution decided, in take seconds, for checks and debugging. */
 export interface PointResolutionReport {
   poseSegments: Array<{ side: VrHandSide; start: number; end: number; samples: number }>;
-  aimHolds: Array<{ side: VrHandSide; start: number; end: number; samples: number }>;
+  aimHolds: Array<{ side: VrHandSide; input: AimInput; start: number; end: number; samples: number }>;
   runs: Array<{
     source: 'hand' | 'aim';
+    /** For held marks: what held it. */
+    input?: AimInput;
     side: VrHandSide;
     start: number;
     end: number;
@@ -65,8 +69,17 @@ const RAY_NEAR = 0.01;
 const LARGE_SURFACE_RADIUS = 1.5;
 const LARGE_SURFACE_HIGHLIGHT_RADIUS = 0.15;
 const MAX_RESOLVE_RATE_HZ = 20;
-/** A desktop hold shorter than this is a tap, not a point. */
-const DESKTOP_MIN_HOLD_SEC = 0.2;
+/** A hold shorter than this is a tap, not a point; it neither links nor suppresses. */
+const MIN_HOLD_SEC = 0.2;
+/**
+ * A held mark's span reaches this far either side when it overrides inferred
+ * links: the holding pinch's onset and release can themselves score as a point.
+ */
+const HELD_OVERRIDE_PAD_SEC = 0.25;
+/** A touch becomes a hold only after the hold delay, inside the slop: the finger was on the referent from touchdown. */
+const TOUCH_HOLD_DELAY_SEC = HOLD_DELAY_MS / 1000;
+/** Holds made in a headset point with a tracked hand or ray and can land on the body, as inferred points do. */
+const BODY_HOLD_INPUTS: ReadonlySet<AimInput> = new Set(['hands', 'controllers']);
 
 interface CapsuleSpec {
   bone: VrmHumanoidBone;
@@ -126,9 +139,11 @@ interface Resolved extends ReferentSample {
  * samples are segmented, cast per frame against the clipped bubble meshes
  * and the avatar's body capsules (never the pointing arm), split where the
  * referent changes, and kept above POINT_MIN_CONFIDENCE as `inferred` links;
- * desktop aim holds are cast against the scene only and become `recorded`
- * links; inferred motion runs become motion spans. Times are take seconds
- * (from the first frame), clamped to the take.
+ * held marks (aim holds) become `recorded` links, cast against the scene
+ * (desktop and phone) or the scene and the body (headset), and an inferred
+ * link whose span overlaps a hold's span is dropped: the held mark says what
+ * was meant there. Inferred motion runs become motion spans. Times are take
+ * seconds (from the first frame), clamped to the take.
  */
 export class PointResolver {
   private readonly raycaster = new THREE.Raycaster();
@@ -165,23 +180,28 @@ export class PointResolver {
     this.raycaster.near = RAY_NEAR;
     this.raycaster.far = MAX_RAY_DISTANCE;
 
+    // Every hold long enough to count, in take seconds, whether or not it lands on anything.
+    const holds = store.getAimHolds()
+      .map((hold) => ({ hold, start: holdStart(hold), end: hold.endSec ?? hold.samples.at(-1)!.timeSec }))
+      .filter(({ start, end }) => end - start >= MIN_HOLD_SEC);
+    const heldSpans = holds.map(({ start, end }) => ({ start: start - t0 - HELD_OVERRIDE_PAD_SEC, end: end - t0 + HELD_OVERRIDE_PAD_SEC }));
+
     try {
       const handSamples = store.getHandSamples();
       for (const side of ['left', 'right'] as const) {
         const samples = handSamples.filter((sample) => sample.side === side);
         for (const segment of segmentPoses(samples)) {
           report.poseSegments.push({ side, start: round(segment.startSec - t0), end: round(segment.endSec - t0), samples: segment.samples.length });
-          this.resolveHandSegment(input, side, segment, toSpan, draft, report);
+          this.resolveHandSegment(input, side, segment, toSpan, heldSpans, draft, report);
         }
       }
 
       for (const hold of store.getAimHolds()) {
-        const start = hold.samples[0]!.timeSec;
+        const start = holdStart(hold);
         const end = hold.endSec ?? hold.samples.at(-1)!.timeSec;
-        report.aimHolds.push({ side: hold.side, start: round(start - t0), end: round(end - t0), samples: hold.samples.length });
-        if (end - start < DESKTOP_MIN_HOLD_SEC) continue;
-        this.resolveAimHold(hold, start, end, toSpan, draft, report);
+        report.aimHolds.push({ side: hold.side, input: hold.input, start: round(start - t0), end: round(end - t0), samples: hold.samples.length });
       }
+      for (const { hold, start, end } of holds) this.resolveAimHold(input, hold, start, end, toSpan, draft, report);
 
       for (const run of store.getInferredMotionRuns()) {
         draft.spans.push({ kind: 'motion', bones: [...run.bones], span: toSpan(run.startSec, run.endSec), provenance: { value: 'inferred' } });
@@ -203,6 +223,7 @@ export class PointResolver {
     side: VrHandSide,
     segment: PoseSegment,
     toSpan: (start: number, end: number) => MeaningSpan,
+    heldSpans: readonly MeaningSpan[],
     draft: MeaningDraft,
     report: PointResolutionReport
   ): void {
@@ -229,12 +250,21 @@ export class PointResolver {
         report.runs.push({ ...entry, linked: false, reason });
         return;
       }
-      draft.marks.push(this.link(from!, majority, span, { value: 'inferred', confidence: Math.max(confidence, 0.001) }));
-      report.runs.push({ ...entry, linked: true });
+      // A held mark says what was meant over its span: the inferred link keeps only what lies outside it.
+      const kept = subtractSpans(span, heldSpans).filter((piece) => piece.end - piece.start >= POINT_DWELL_SEC);
+      if (kept.length === 0) {
+        report.runs.push({ ...entry, linked: false, reason: 'suppressed by hold' });
+        return;
+      }
+      for (const piece of kept) {
+        draft.marks.push(this.link(from!, majority, { start: round(piece.start), end: round(piece.end) }, { value: 'inferred', confidence: Math.max(confidence, 0.001) }));
+      }
+      report.runs.push({ ...entry, linked: true, ...(kept.length !== 1 || kept[0]!.start !== span.start || kept[0]!.end !== span.end ? { reason: 'trimmed by hold' } : {}) });
     });
   }
 
   private resolveAimHold(
+    input: PointResolutionInput,
     hold: AimHold,
     start: number,
     end: number,
@@ -243,13 +273,17 @@ export class PointResolver {
     report: PointResolutionReport
   ): void {
     const from = this.fromAnchor(hold.side);
-    const resolved: Resolved[] = throttle(hold.samples).map((sample) => ({ ...this.cast(sample, []), score: 1 }));
+    const body = BODY_HOLD_INPUTS.has(hold.input);
+    const resolved: Resolved[] = throttle(hold.samples).map((sample) => {
+      const capsules = body ? this.poseCapsules(input, nearestFrameIndex(input.frames, sample.timeSec), hold.side) : [];
+      return { ...this.cast(sample, capsules), score: 1 };
+    });
     const runs = splitByReferent(resolved);
     runs.forEach((run, i) => {
       const runStart = i === 0 ? start : resolved[run.first]!.timeSec;
       const runEnd = i === runs.length - 1 ? end : resolved[run.last]!.timeSec;
       const span = toSpan(runStart, runEnd);
-      const entry = { source: 'aim' as const, side: hold.side, start: span.start, end: span.end, referent: run.key, agreement: round(run.agreement) };
+      const entry = { source: 'aim' as const, input: hold.input, side: hold.side, start: span.start, end: span.end, referent: run.key, agreement: round(run.agreement) };
       const reason = rejectReason(run, runEnd - runStart, from, undefined);
       if (reason) {
         report.runs.push({ ...entry, linked: false, reason });
@@ -507,6 +541,26 @@ export function rayCapsule(origin: THREE.Vector3, dir: THREE.Vector3, a: THREE.V
     if (t >= 0 && (best === undefined || t < best)) best = t;
   }
   return best;
+}
+
+/** What is left of `span` outside every one of `cuts`, in order. */
+export function subtractSpans(span: MeaningSpan, cuts: readonly MeaningSpan[]): MeaningSpan[] {
+  let pieces: MeaningSpan[] = [{ ...span }];
+  for (const cut of cuts) {
+    pieces = pieces.flatMap((piece) => {
+      if (cut.end <= piece.start || cut.start >= piece.end) return [piece];
+      const left = { start: piece.start, end: Math.min(piece.end, cut.start) };
+      const right = { start: Math.max(piece.start, cut.end), end: piece.end };
+      return [left, right].filter((part) => part.end > part.start);
+    });
+  }
+  return pieces;
+}
+
+/** When a hold began: its first sample, or for a touch the touchdown, one hold delay earlier. */
+function holdStart(hold: AimHold): number {
+  const first = hold.samples[0]!.timeSec;
+  return hold.input === 'touch' ? first - TOUCH_HOLD_DELAY_SEC : first;
 }
 
 function mean(values: readonly number[]): number {

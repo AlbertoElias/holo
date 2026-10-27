@@ -11,8 +11,8 @@ import { Matrix4, Object3D, Raycaster } from "three";
 
 import { tokens } from "@holoim/design-tokens";
 import { Cloche, HologramFootControls, WristControls, type GlyphSpec } from "@holoim/xr-ui-r3f";
+import { loadHandedness } from "@holoim/ui-dom";
 import {
-  DEFAULT_HANDEDNESS,
   formatRunningTime,
   isHeadset,
   nonDominantHand,
@@ -182,11 +182,13 @@ export function ArFootRows({ target, paused, onTogglePause, playbackSecondsRef, 
 /** Exit on the non-dominant wrist, in a headset only: a phone's Exit is in the dock. */
 export function ArWristExit({ target, onExit }: { target: ViewTarget; onExit: () => void }) {
   const headset = isHeadset(target);
-  const hand = nonDominantHand(DEFAULT_HANDEDNESS);
+  // The handedness set in the feed's settings, stored on this device (brief Q8).
+  const handedness = useMemo(loadHandedness, []);
+  const hand = nonDominantHand(handedness);
   const wrist = useWrist(hand, headset);
   useXrSelect(useMemo(() => new Map([[VIEWER_CONTROL_NAMES.exitAr, onExit]]), [onExit]));
   if (!headset) return null;
-  return <WristControls handedness={DEFAULT_HANDEDNESS} glyphs={[{ id: null, label: VIEWER_CONTROL_NAMES.exitAr, onSelect: onExit }]} input="ray" wrist={wrist} />;
+  return <WristControls handedness={handedness} glyphs={[{ id: null, label: VIEWER_CONTROL_NAMES.exitAr, onSelect: onExit }]} input="ray" wrist={wrist} />;
 }
 
 /** The cloche over the placed hologram (styleguide 3.4, 9.2), its char from the lighting estimate (3.2). */

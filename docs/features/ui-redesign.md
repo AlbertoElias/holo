@@ -4,7 +4,11 @@
 **Status:** Implementing (approved by the user 2026-10-24). Slices 0 to 4
 are on `main` (3 and 4 merged together after `verify:pr` on the combined
 tree); the user's second round (dock, controls, upload sheet, soot, the 3D
-cloche) is next to land, then slice 5
+cloche) is on `main` at `02d0282` and deployed. The halo's third pass (the
+burnt globe) replaces the cloche's rim-lit glass; slices 5 and 6 are on
+`main` at `b3b4365`. The cross-vendor review of slices 2 to 4 and the second
+round ran on 2026-10-25 and its fixes are in the verification rows below.
+Next: slice 7
 **Layer:** View (the edge, shade, chip, glyphs, ground, portal, Follow/Free
 and the Halo). The held mark writes to the Meaning layer. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -285,8 +289,58 @@ Codex; each is recorded here with its alternatives, and the styleguide and
   viewer's rescale carry it, replacing the flat ring and the bubble's blue
   glass; the aura stays for now. Capture draws no halo during a take and has
   no playback review yet; when it gets one, it mounts `ThreeCloche`. Quick
-  Look (slice 6) cannot draw a view-dependent rim, so the plan is gold seams
-  over the shell and an irregular emissive lip at the foot, no shadow.
+  Look (slice 6) cannot draw a view-dependent rim; after the third pass
+  (below) it bakes the burnt globe instead.
+
+### The halo, third pass: the burnt globe (2026-10-25)
+
+The user, on the deployed cloche: "we need to figure out the halo effect
+better so it's more ragged and it has the sparks coming out and so that it
+really feels like it wraps the whole 3d object, it looks very much 2d". The
+cloche's line sat at the silhouette in screen space, so it read as an
+outline: it did not change as the view turned, and nothing showed the far
+side.
+
+Five forms were prototyped in the real viewer on the same fitted dome, each
+with 3D sparks, a warm light and depth falloff, and rendered front-on,
+orbited, zoomed, from inside and on a phone, then recorded in motion:
+
+- a burnt shell (seeded 3D noise burns the dome away; only the fronts stay),
+- a cage of torn gold filaments,
+- an ember field on the dome,
+- a burning lip at the foot,
+- ash, the burnt shell with embers.
+
+Codex was at its usage limit, so an Opus design reviewer stood in. It
+ranked ash first (silhouette, far-side lines and embers in depth), then the
+burnt shell, the embers, the cage (a birdcage), and the lip (a flat
+ellipse, so 2D from the side). It picked ash on one condition: the front
+must be quiet over the event. Its tuning is built in:
+
+- the fronts fade where the shell faces the viewer and are whole at the
+  silhouette and on the far side;
+- widths are in screen pixels (a 1.5 px cream core, gold to 3.2 px, a pixel
+  of char);
+- the fronts are torn into dashes with a second noise and have about 40%
+  fewer holes, so the burn reads as burning, not contours;
+- embers are capped at 3.5 px and fade near the eye (no bokeh), mostly gold;
+- out of focus only the silhouette band burns and 45% of the embers drift;
+- focus brings full embers and sparks, eased over about 400 ms.
+
+The first pass at that tuning made the globe vanish, so the gating was
+relaxed until the silhouette carried it again. Sparks rise from 26 to 120 on
+flat screens (70 to 160 in a room) and live 1.1 to 2.6 s: a few sparks read
+on a 2D outline, but on a volume they are dust. The globe sheds no light of
+its own; the portal's stage light already does that.
+
+The burn noise is in `@holoim/xr-ui-core` (`clocheBurn.ts`), with the same
+noise as GLSL, so Quick Look (slice 6) can bake tubes along the same fronts
+for the same seed. Codex, on the built globe beside the old dome and all five
+prototypes: ragged, sparks and wrapping in 3D each answered, the event
+still dominates, no other prototype better ("the cage encloses too
+aggressively, embers alone lose the boundary, and the lip reads as a
+burning pedestal"), "Verdict: ship". Its two taste notes are built: zoomed
+in, the near side steps back to 75%, and fronts close to the eye fade.
 
 ## Delivery slices
 
@@ -713,20 +767,197 @@ Built (2026-10-24, branch `claude/sharp-snyder-e9566f`):
 - Any change to the meaning record goes through the `@holoim/meaning` owner
   as its own reviewed change; v0 files keep loading.
 
+#### Slice 5 build plan (lead, 2026-10-25)
+
+Found while planning:
+
+- **Capture's AR is a spectator.** In WebXR AR (Quest passthrough or
+  Android) every capture system returns early, recording included
+  (`frame.arSpectator`), so no AR take exists to hold a mark in. Phone AR
+  marks need AR recording first, a capability of its own. **Deferred** (the
+  lead, 2026-10-25): phone AR marks are out of slice 5, with no meaning v1
+  change; "AR recording (phone as a camera-only author)" is queued in
+  `TODOS.md`. Whether a take with no performer is a hologram is a product
+  question for the user, open, not decided. The Halo is built where capture
+  records (desktop, phone, VR).
+- **The tray already took two Halo summons.** PRD-045's tray holds on the
+  non-dominant Y/B button and on the non-dominant palm turned up: the
+  concept's Halo summons for controllers and hands. Taken instead (lead's
+  call, open to revisit):
+
+| Input | Mark "this" | Halo |
+| --- | --- | --- |
+| Desktop | Right button under pointer lock, or F (built) | Hold **B** and move the mouse; or press and hold the dock's Halo glyph |
+| Phone | Touch and hold the scene (look side) 300 ms within 22 apx, then the finger aims | Press and hold the dock's Halo glyph, drag |
+| Quest hands | Non-dominant thumb–middle pinch; the dominant index aims | **Dominant** thumb–middle pinch, drag the hand |
+| Quest controllers | Non-dominant trigger; the dominant ray aims | Press and hold the **non-dominant thumbstick**, tilt it (that stick stops walking or turning while held) |
+
+  Hands use the one alternate pinch on each hand: on the non-dominant hand it
+  holds "this", on the dominant hand it summons the Halo. Rejected: palm-up
+  and Y/B (the tray's), a long index pinch (the Grab verb), X/A (Speak's).
+  B on desktop: the left hand stays on the keys while the right hand flicks
+  the mouse; Space, R, F, C, V, G, T, Q, E, Z, X and 1 to 5 are taken, Tab
+  moves keyboard focus.
+
+How it is built:
+
+1. **One aim-hold record for every input.** `PointSampleStore` aim holds
+   gain the input that made them (`desktop`, `touch`, `hands`,
+   `controllers`). Desktop keeps its path; a phone hold casts a camera ray
+   through the finger and the arm points at what it lands on; a hand hold
+   takes the dominant index's filtered ray (`PointDetector`) whatever its
+   pose score; a controller hold takes the dominant target ray. Headset
+   holds resolve against the scene and the body (never the pointing arm), as
+   inferred points do; desktop and phone holds against the scene only, as
+   today. Each becomes a `recorded` link with the dominant hand as `from`,
+   which v0 already says truthfully.
+2. **Suppression by the hold's span.** After resolution every inferred
+   link is trimmed by the take's held spans (the hold, not its link, padded
+   0.25 s each side); a piece shorter than the point dwell is dropped. The
+   report says "trimmed by hold" or "suppressed by hold", so a hold that
+   lands on nothing still overrides a guess made meanwhile, and a guess
+   outside the hold survives. A tap (shorter than 0.2 s) or an undone hold
+   suppresses nothing.
+3. **Held modes through `stepHeldMode`.** Hands: the non-dominant
+   thumb–middle tips within 1.5 cm enter, beyond 3 cm leave, and only while
+   the thumb–index gap is wider by at least 1 cm (an ordinary pinch never
+   holds); a hand that loses tracking ends the mode. Controllers: the
+   non-dominant trigger above 0.5; a lost source ends it, and the trigger's
+   own select is swallowed while the mark holds and on its release. Phone:
+   the look-side touch waits out the hold delay inside the slop; moving out
+   first makes it a look drag. Every mode ends on blur and hidden page.
+   Headset modes start only while recording (no live mark in a headset).
+4. **Undo and redo.** The store keeps the take's holds and a redo stack:
+   W undoes the last hold (ending it if open), E restores the last undone
+   one, a new hold clears the redo stack. Undoing a hold lifts its
+   suppression. Only during a take; afterwards the take is exported.
+5. **The Halo.** `stepHalo` drives all of them; S toggles recording through
+   the Record control's own gate, W and E undo and redo. Flat screens draw
+   the ring with `@holoim/ui-dom` (a presentational `HaloRing` split out of
+   `Halo` so a held key can drive it; the key's ring opens at the mouse,
+   moved in until the whole ring is in the window, found by the proof
+   video when the mouse rested on the dock); headsets draw `ThreeHalo` where the
+   summoning hand is, facing the head. The dock's Halo glyph stays during a
+   take (it carries stop and undo), so `chromeVisible` keeps `halo` while
+   recording; styleguide 8.5 says so. A hand summoning the Halo gives no
+   point evidence meanwhile, as a poking hand does. Commits pulse a
+   controller and tick for a hand; the flat status line says "Mark undone"
+   or "Mark restored" for 1.5 s.
+6. **Glyphs.** Undo, redo and the Halo get drawings in `tokens.json`
+   (Codex reviews them with the screenshots).
+
+Design review (Opus design-reviewer, 2026-10-25), adopted:
+
+- The controller mark runs on the trigger's own `selectstart` and
+  `selectend`, and chrome ignores a select the mark owns (`ownsSelect`),
+  including one within 0.3 s of a mark's release.
+- The stick Halo opens only from a stick at rest; the stick stays locked
+  out of locomotion until it recentres; its release latches the last
+  direction for 100 ms, since a stick springs back as the press lets go.
+- Undo while a mark holds ends it and drops samples until that input
+  releases, so the same press does not open a new hold.
+- A hold is opened and closed by its writer; non-desktop holds bridge
+  frame gaps, and a holding hand gets 0.25 s of grace before tracking loss
+  ends it. A hand mark reads only that side's own hand: with it gone,
+  tracking lends the side the other hand's joints, which read as a release
+  (found by the marks check).
+- The aim pauses while the Halo is open; the view does not turn while B
+  holds.
+- The hands mark needs the thumb–index gap over 4 cm and never starts on a
+  hand that grabs or holds the tray; the hand Halo's drag is measured in the
+  head's yaw frame, so turning does not change the choice.
+- A touch hold is backdated to the touch's start; the touch input is not
+  written to the export (links are built field by field, and v0 says the
+  dominant hand truthfully).
+- Headset notices show on the status line; W with nothing held says
+  "Nothing to undo"; a handedness change ends a mark and closes the Halo.
+
+Verification, 2026-10-25: `verify:pr` passes step by step on this branch
+(the atlas e2e against this worktree's own knowledge server, since the main
+checkout's server held port 4176). Codex's independent pass is open: it hit
+its usage limit twice before reporting, and its one early note, whether the
+key's ring reads clearly enough over a busy scene, is for that pass.
+
+Not adopted, open to revisit: ending the take at the moment the Halo was
+pressed when S stops it (the release is when the author chose it), and
+requiring the drawn ring before the stick may commit S (a flick is a
+commit on every input). Known limits: an undone desktop or phone hold keeps
+its inferred arm-motion span; the byte-identical export check holds only
+for takes with no holds.
+
+Checks (emulation): `test:xr:pointing` adds a held-mark phase per input
+(desktop with Halo undo and redo, phone touch, IWER hands, IWER
+controllers) and reads the exported GLB for one `recorded` link per hold
+on the right referent and no inferred link overlapping a hold; release
+paths (release, tracking loss, blur) and the ordinary pinch are exercised.
+A Halo phase flicks and holds every direction with mouse, the B key,
+touch, IWER hands and IWER controllers, and reports what committed and
+whether the ring drew. The viewer pointing pipeline shows a held mark on
+phone and desktop.
+
 ### Slice 6: Quick Look baked halo
 
-`tools/glb_to_usdz.py` adds the gold core, the cream highlight and a static
-soft halo when it builds a USDZ. The outline matches the TypeScript edge for
-the same seed (Q10): the worker passes the computed points to the Python
-tool, or a golden-vector test holds the two together. The exported GLB is
-unchanged.
+Revised on 2026-10-25 for the cloche (styleguide 3.4 and 9.5), and again
+the same day for the burnt globe: the flat outline, core and soft halo of
+the first plan frame no hologram any more, and the seams, lip and glass of
+the first cloche bake went with the cloche's glass.
 
-Existing files are rebuilt by a one-off script: in production, every stored
-hologram's USDZ; locally, only the three most recent. The script writes each
-new USDZ beside the old one and switches the hologram to it only after the
-new file validates, so a failed rebuild leaves the old preview in place, and
-it can resume after an interruption. It runs on production once the slice is
-verified locally against the three local files.
+- **What is baked.** `apps/viewer-api/tools/glb_to_usdz.py` adds
+  `/Root/Cloche` when it builds a USDZ, fitted by `fitCloche`'s rules:
+  exponent 2.6, the foot on the lowest drawn point, a 4% margin, shoulders
+  at least 40% of the wider radius. The form is the burnt globe. RealityKit
+  has no shader and no view-dependent fade, so it is carried by geometry in
+  diffuse and emissive materials only: the burning fronts as thin emissive
+  gold tubes with a cream core on their outer face and a char strand on the
+  shell's side, torn into dashes where the web tears them, and the web's
+  resting embers as small emissive octahedra in three heats (ember, gold,
+  cream). No sparks, no glass. The bubble's old blue shell is hidden, as on
+  the web. Values are tokens (`edge.cloche.quickLook`). The exported GLB is
+  unchanged. `cloche.build(shape, seed)` returns the form as named parts
+  (meshes and materials), and the converter writes whatever it is given, so
+  a later form plugs in without touching the converter.
+- **The same burns as the web (Q10).** The seed is the hologram's id; the
+  worker passes it (`--seed`). `tools/cloche.py` ports `fitCloche`,
+  `clocheSeedOffset` and the burn rules of `clocheBurn.ts`
+  (`clocheBurnAt`, `clocheTearAt` (added for the bake: the shell shader's
+  tear), `clocheLocalPoint`, `clocheNormalAt`, `clocheRandom`,
+  `clocheBurnFronts`, `clocheEmbers`). The fronts are the zero level set of
+  `clocheBurnAt` over the dome, marched on a grid of directions (110 samples
+  per wider radius), so they lie where the web's shell is discarded. A
+  golden-vector file (`packages/xr-ui-core/src/fixtures/cloche-golden.json`)
+  is checked by the TypeScript tests and by `tools/test_cloche.py` (run by
+  the API's vitest suite), so the two cannot drift; four deliberate
+  mutations of the port (hash, tear, ember offset, fbm octave) each fail it.
+- **What is fitted.** The built stage: every visible mesh at the first frame
+  (at most 3,000 points each), kept to the pinned bubble, and the author's
+  joints at eight times through the take with 0.18 m head room, plus the box
+  corners of meshes the take moves by their own transform. The web reads a
+  walk relative to a bubble that follows its author; Quick Look pins the
+  bubble, so the walk is read in place and the dome covers it.
+- **Readback.** `inspect_usdz.py` refits the dome from its own GLB
+  evaluation and checks the recorded foot and radii; every part on the dome
+  (fronts within 2.5 tube radii, embers within their spread); the gold on
+  the burn's zero level (median and 99th percentile of |`clocheBurnAt`| at
+  its vertices); the embers the viewer's own for the seed; opaque matte
+  materials; the seed offset; and the hidden blue shell. The framing extent
+  includes the globe.
+- **No shadow.** Quick Look draws one grounding shadow under the whole
+  model and no USD attribute opts a mesh out; the fronts and embers are thin
+  and sparse, so they add little to it. Recorded as a limit.
+- **Converter version `ql3`.** New uploads store `-ql3.usdz`; deleting a
+  hologram removes every version.
+
+Existing files are rebuilt by a one-off script, `apps/viewer-api/src/rebuild-usdz.ts`
+(`pnpm --filter @holoim/api rebuild:usdz`): in production, every stored
+hologram's USDZ; locally, only the three most recent (`--recent 3`). For each
+`ready` record on an older version it converts the GLB again, inspects the new
+package (a cloche seeded by the id, and no check failed that the old preview
+passed), stores it beside the old file, and only then switches the record,
+so a failed rebuild leaves the old preview in place. It resumes after an
+interruption (switched records are skipped, a journal keeps failures, a
+first signal finishes the hologram in hand). Old files stay unless
+`--delete-old`. It runs on production only with the user's go-ahead, once
+the slice is verified locally against the three local files.
 
 ### Slice 7: cross-device task test and device checks
 
@@ -772,13 +1003,15 @@ See "Test plan and evidence" and "Physical-device limits".
   place.
 - [ ] Hold to mark "this" produces a `recorded` link from desktop, hands,
   controllers, phone and phone AR in end-to-end runs, no inferred link
-  overlaps it, and the viewer shows it on phone and desktop.
+  overlaps it, and the viewer shows it on phone and desktop. (Emulation
+  passes for all but phone AR, which is deferred to AR recording in
+  `TODOS.md`; device checks are open.)
 - [ ] The Halo opens with the same directions on every device, and a flick
   commits without the ring drawing.
 - [ ] The export → upload → render pipeline e2e passes; a take without marks
   exports byte-identical to before, with all chrome visible during the
   take; v0 files still load after the meaning change.
-- [ ] New USDZ files carry the baked edge, matching the viewer's outline for
+- [ ] New USDZ files carry the baked burnt globe, its fronts and embers the viewer's
   the same hologram; the rebuild script has updated the three most recent
   local holograms and then every production hologram, with no preview lost.
 - [ ] The cross-device task test has run and its results are recorded here.
@@ -885,7 +1118,7 @@ share no files.
 | Tokens and literals | `pnpm run verify:agent` after a token edit | Neither (tooling) | 2026-10-24: with only `tokens.json` changed the selector picks `@holoim/design-tokens` and `@holoim/config-eslint` and their 13 dependents (15 packages, reason `package-changes`); an edit without regenerating fails `pnpm --filter @holoim/design-tokens test` (drift). Tooling tests for both classifiers pass, as do the literal rule's tests (`@holoim/config-eslint` `test`). The DOM and 3D read-back waits for the slices that consume the tokens |
 | Contracts | `pnpm --filter @holoim/xr-ui-core test`, and the same for `ui-dom`, `xr-ui-r3f`, `xr-ui-three`, `design-tokens` | Neither (unit) | 2026-10-24: `design-tokens` 33 (drift, bad and circular alias, `$extensions` not exported, colour and alpha read-back, svg paths, sizes, fonts, MSDF atlases), `xr-ui-core` 78 (the old state tests unchanged; each new test cites its styleguide section; the edge golden file), `ui-dom` 70 (jsdom), `xr-ui-three` 77 (jsdom; colours read back with `getHexString(SRGBColorSpace)`, `toneMapped` off, chrome flag on every descendant, tabular timecode), `xr-ui-r3f` 66 (`@react-three/test-renderer`). None of the five keeps `--passWithNoTests` |
 | 3D render, slice 2 | The `xr-ui-three` objects drawn in Chromium with WebGL2 and ACES tone mapping, then read back | Emulation (browser) | 2026-10-24: 7 shader programs compile with no GL error; 1264 pixels read back exactly gold (`#d3a12c`) under tone mapping, so chrome is neither tone-mapped nor converted twice. Screenshot and JSON kept outside the repo |
-| Independent verification, slice 2 | Codex (a different vendor) given the brief and tree | Neither (review and probes) | 2026-10-24: Codex's probes found two defects, both fixed with tests: the timecode's figures were proportional (0:11 and 0:12 differed by 2.9 mm at 1 m), and labels took the font's 1.2 line height, not the role's 1.35. They confirmed text hides within 1 m, the soft edge reaches 0 at the rim, and the thumbnail halo stays inside its bounds. Codex hit its usage limit before writing a verdict, so slice 2 has no complete independent pass |
+| Independent verification, slice 2 | Codex (a different vendor) given the brief and tree | Neither (review and probes) | 2026-10-24: Codex's probes found two defects, both fixed with tests: the timecode's figures were proportional (0:11 and 0:12 differed by 2.9 mm at 1 m), and labels took the font's 1.2 line height, not the role's 1.35. They confirmed text hides within 1 m, the soft edge reaches 0 at the rim, and the thumbnail halo stays inside its bounds. Codex hit its usage limit before writing a verdict, so slice 2 has no complete independent pass. 2026-10-25: Codex's pass, below |
 | `verify:pr`, slices 0 and 1 | `pnpm run verify:pr` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 6/6 (the viewer pointing pipeline imports the ported `pointing-desktop-take.ts` and `pointing-iwer-replay.ts`), `test:portal` 6/6, `test:xr:capture` passes. `test:knowledge` 7/7 once run against its own server: Playwright reuses whatever answers on port 4176, and a knowledge dev server from the main checkout was running there, so its first run failed 3 tests (2 also fail that way on `main`). `test:xr:viewer` 9/9 on rerun; its first run hit B-021, a flake that also fails on `main` |
 | `verify:pr`, slice 2 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling), builds, `test:smoke:pipeline` 6/6, `test:portal` 6/6 and `test:xr:smoke` 9/9 pass; no app changed. `test:knowledge` 7/7 in Docker (port 4176 was held by the main checkout's server) once its bug-list check counted template cards instead of asserting on one: with B-020 and B-021 open there are two cards, and the old assertion failed Playwright's strict mode |
 | Viewer pages, phone and desktop | `pnpm run test:portal`, `pnpm --filter @holoim/web run test:e2e:mocked`, extended with box, colour, font and scale assertions | Emulation (Playwright viewports) | 2026-10-24, slice 3: `test:portal` 6/6. `test:xr:viewer` 14/14, which now includes `e2e/redesign.spec.ts`. At 1280 × 800 and 390 × 844 that spec checks the fixed ground gradient; Play, Free and Return in the shade (Return's word "Return", its name the core's); every glyph hit area at the input minimum; the timecode in its token font; the reach row hidden until the shade is reached; exactly one card sparking, at `sparkCount`; the side sheet at most 24rem wide, closing on "Close"; no sparks under reduced motion; and the empty, server-error ("Try again", `role=alert`) and offline notices on the phone chip. Screenshots in the ignored `output/redesign-slice-3/`, previewed with `preview.mjs` and shown to the user. Physical phones not checked |
@@ -894,19 +1127,35 @@ share no files.
 | `verify:pr`, slice 3 | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling) and builds pass. `test:smoke:pipeline` 8/8, `test:portal` 6/6, `test:xr:smoke` 14/14 and `test:xr:viewer` 14/14. `test:knowledge` in Docker: 6/7, then its live-update test (atomic replacement and rename) passed 3 of 3 alone, so a timing flake under amd64 emulation; slice 3 changes no knowledge code. Docker needed `PLAYWRIGHT_BROWSERS_PATH` set to a fresh folder: the shared `holoim-ci-playwright` volume holds an arm64 Chromium 1208 marked complete, which the now amd64 image cannot run |
 | User's look, slice 3 | Screenshots in `output/redesign-slice-3/` shown to the user | Neither (the user's eye) | 2026-10-24: the user answered "All the slice 3 looks are OK as they are." That covers the word placeholders (Pause, Upload, true size, Exit AR and Recenter in the Android dock); the side sheet's 24rem width and its stacking at the chip's opacity over the card; the dock padding; the "Close" word; the rescale label ("1:1.2" on the foot's second row, small and dim at Android's flat sizes); and the AR ring from two sides without the cyan ring. The disabled look (40%) is only on tilt where motion is unsupported, which no screenshot shows, so it was not judged. Android shots are IWER with an Android user agent and the dock lifted over IWER's view for the screenshot. Real wrist drawings for Exit and Recenter stay a known gap for a design pass, not a flat-screen blocker |
 | Dock shade, slice 3 | `ui-dom` `Surfaces.test.tsx`; screenshots in `output/redesign-slice-3/` | Contract test and the user's eye | 2026-10-24: the user saw two shadows: the dock painted the hologram's oval shade across the screen, so it read as a second object on the floor. On a before-and-after mock they chose "make the dock's shade a band along the bottom edge, so only holograms cast an oval shadow." `Dock` now uses `dockShadeGradient()`, the shade's stops as `linear-gradient(to top, …)`; the test checks the band, its stops and colour, and that it is not radial. Styleguide 5.2 says so. Capture's dock (slice 4) gets the same band |
-| Independent verification, slice 3 | Codex (a different vendor) given the brief, the tree and the slice 2 contracts | Neither (review and probes) | 2026-10-24: not run. Codex returned "You've hit your usage limit … try again at 9:20 PM" before reading anything, so slice 3 has no independent pass yet |
+| Independent verification, slice 3 | Codex (a different vendor) given the brief, the tree and the slice 2 contracts | Neither (review and probes) | 2026-10-24: not run. Codex returned "You've hit your usage limit … try again at 9:20 PM" before reading anything, so slice 3 has no independent pass yet. 2026-10-25: Codex's pass, below |
 | Capture pages, desktop and phone | `pnpm --filter @holoim/capture run test:xr:ui` (desktop 1280 × 800 and phone 390 × 844 with touch, Playwright) | Emulation (Playwright viewports) | 2026-10-24: desktop dock targets at least 24 apx (Record 36), Figtree loaded, the side sheet carries key words; handedness set by keyboard (Space on a radio), stored in `holoim.handedness`, kept across a reload, right by default; while recording the dock holds only Stop (a rose square) and "Recording 0:02". Phone: every dock target 44 × 44 apx, clear of the 20 apx side edges and the 34 apx home bar; touch words with no key help; the scene has `touch-action: none`; a drag on the right turns the view 0.54 rad, the walk stick shows under the finger and walks 3.2 m in 1 s, nothing starts in the edge or home-bar zone, and tap records. Report `output/ci-capture-ui/ui-report.json` (ignored) |
 | Capture headset rules | `test:xr:ui` headset phase | Emulation (IWER, controllers and hands) | 2026-10-24: Record on the left wrist for the right-handed, 4 cm off the wrist, drawn at 2.5× (15.1 mm), ray hit 15.1 mm, poke hit 20 mm (the floor); in view on a controller and on a tracked hand (on a controller it was hidden inside the avatar's sleeve until the wrist row drew over the body). Settings panel 1.5 m away, rows with ray-sized hits; every label at least 1 m away, and none shows, nor takes a hit, with the head 0.8 m from the panel. The panel and wrist stay put as the head walks 36 cm and turns 30°. A ray select on Record starts a take: the panel hides, "Recording 0:01" shows on the status line, which stays through a 10° turn (0.1 mm) and follows a 40° one (0.92 m). A poke stops it: the fingertip shade shows wide at 6 cm (16.6 mm) and sharpens at 2 cm (10.5 mm); one poke, one commit, one tick, even with the finger held; a tip arriving from behind commits nothing. Handedness from the panel row moves Record to the right wrist and the left ray presses it, while the right ray rests on Refit and refits nothing; the tray takes the non-dominant palm under both settings; with one controller, one select commits once |
 | Chrome stays out of the take | `test:xr:ui` export phase | Emulation (IWER) | 2026-10-24: a take without marks re-exported with every headset chrome object shown, hidden, moved visible into the scene model, or with a chrome-flagged box beside the avatar: the same canonical digest each time, and a repeat matches. A plain box in the same place changes it (the control). The canonical digest names each bufferView by its bytes' hash, because three's GLTFExporter orders texture bufferViews by when each async encode resolves, so two exports of one take can differ in raw bytes with the same content. The downloaded file differs from the re-exports because the exporter clones the live avatar's pose |
-| Independent verification, slice 4 | Codex (a different vendor), then a same-vendor stand-in | Neither (review) | 2026-10-24: Codex was at its usage limit and could not run. A Claude code-reviewer stood in; it is not independent by vendor. It found one bug: one controller made a select commit twice, because both sides fell back to the same input. It found weak spots: chrome shown vs hidden could not differ, since chrome sits outside the exported model; the occlusion raycast did not skip chrome; a poke armed with no approach; the XR entry mode could go stale; the home bar was not excluded from touch; and several assertions were weak. All are fixed and covered by the check above. Slice 2's `xr-ui-three` and `ui-dom` contracts still have no cross-vendor pass |
+| Independent verification, slice 4 | Codex (a different vendor), then a same-vendor stand-in | Neither (review) | 2026-10-24: Codex was at its usage limit and could not run. A Claude code-reviewer stood in; it is not independent by vendor. It found one bug: one controller made a select commit twice, because both sides fell back to the same input. It found weak spots: chrome shown vs hidden could not differ, since chrome sits outside the exported model; the occlusion raycast did not skip chrome; a poke armed with no approach; the XR entry mode could go stale; the home bar was not excluded from touch; and several assertions were weak. All are fixed and covered by the check above. Slice 2's `xr-ui-three` and `ui-dom` contracts still have no cross-vendor pass. 2026-10-25: Codex's pass, below |
 | `verify:pr`, slice 4 | `pnpm run verify:pr`; `test:knowledge` and `test:xr:viewer` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 on the branch: doctor, lint, typecheck, unit tests (all packages and tooling; `@holoim/ui-dom` 86/86) and builds pass. `test:smoke:pipeline` 6/6 and `test:portal` 6/6 pass. In `test:xr:smoke` every capture check passes (the full `test:xr` tier, now 12 checks with `ui`, passes too). The viewer's `ar-bubble.spec.ts:70` failed twice with B-021 while the machine was loaded (load average about 20) and passed 6/6 alone with B-021's command. In Docker, `test:knowledge` 7/7 and `test:xr:viewer` 9/9. The shared `holoim-ci-playwright` volume holds an arm64 Chromium 1208 marked complete, which an amd64 container cannot launch, so the runs set `PLAYWRIGHT_BROWSERS_PATH=/root/pw-fresh` |
 | `verify:pr`, slices 3 and 4 combined | `pnpm run verify:pr` on the merged tree (`c7ea749`); `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-24 before the merge to `main`: doctor, lint, typecheck, every unit test (`ui-dom` 87, `xr-ui-core` 84, `xr-ui-three` 77, `xr-ui-r3f` 73, `design-tokens` 33, viewer-web 33, capture 26) and builds pass; `test:smoke:pipeline` 8/8, `test:portal` 6/6, every capture XR check (`ui height terrain body face hands locomotion recording mock-vr`), `test:xr:viewer` 15/15. `test:knowledge` 7/7 in the CI emulator with a fresh `PLAYWRIGHT_BROWSERS_PATH`, since the main checkout's knowledge server holds port 4176 locally |
 | Second round: the cloche, contracts | `xr-ui-core` `cloche.test.ts`, `xr-ui-three` `cloche.test.ts` | Neither (unit) | 2026-10-25, written from failure modes first: no fit for nothing drawn; every drawn point inside the glass with the margin; the foot on the lowest point; a flat take and a wide low one keep 40% shoulders; the shade is the content's footprint × 1.15; Follow keeps every point of the drawn dome inside the viewing box at 78% and fills it (phone and desktop aspects); fully drawn outside, 0 at the glass and monotonic walking out; seeds stable and in range; char at rest on dark ground and full where the soot rule is on. The three.js object: chrome throughout, not tone-mapped, no depth writes; the eye read correctly under a placed, turned and 0.25-scaled parent (AR); inside drops the glass and keeps the floor shade; nothing in a headset while recording. `xr-ui-core` 95, `xr-ui-three` 81, `ui-dom` 88, viewer-web 33 |
 | Second round: viewer pages | `e2e/redesign.spec.ts`, `e2e/hologram-feed.spec.ts`, `e2e/ar-bubble.spec.ts` (IWER, 1280 × 800 and 390 × 844) | Emulation (Playwright, IWER) | 2026-10-25: 15/15. At rest only Play (or Pause) in the row and no Return in Follow; every glyph at the mouse minimum; on reach Free shows and Play neither moves (< 1 px) nor leaves the middle (< 2 px); no two controls closer than a glyph gap; no `.feed-card-edge` or `.feed-card-shade` on the page; the focused card's cloche drawn at opacity 1 with volume; under reduced motion the core steady and the glow within the slow fade (< 0.02 in 0.5 s); the sheet at most 26rem, its drop zone labelled for `#glb-upload`, the Quick Look switch toggled by its label. AR: the cloche drawn, all chrome, not head-locked, the recorded author inside it, standing within the bubble, at the same room position from in front and from behind, char at full strength on a Quest (no estimate), core 1, the old glass sphere hidden, the aura kept with no torus; `ar-cloche-front.png` and `ar-cloche-back.png`. View in AR is a reach control now, so the specs reach for the card before pressing it (`pressViewInAr`). Not checked on a Quest or an Android phone |
 | Second round: Codex on the renders | `codex exec -p deep` with before and after contact sheets (desktop, phone, upload sheet) | Neither (cross-vendor review) | 2026-10-25, first pass: "ship after the must-fixes". Must-fixes, all done: the avatar's head broke through its dome (the fit now samples the author's reach through the take, bones and moving meshes, relative to a following bubble); the dome's far side still showed inside (now 0 there, read back from the shell); the phone row sat at 85% down on amber (now ends above 75%); the dock showed through the phone sheet (hidden while it is open). Taste notes taken: the rim capped at a 2 to 4 px line, the chip over the picture hugging the controls showing. Left: the floor shade's dark crescent under the avatar's terrain (it is the hologram's own shade, kept). Second pass on the fixed renders: each must-fix resolved, none new, "ship on this visual pass"; it notes stills cannot prove the 4% clearance through the whole take, which the fit's contract test and the AR check (author inside from both sides) cover |
-| Hold to mark on every input | IWER scenarios (hands, controllers), the desktop pointing take, touch scenarios for phone and phone AR | Emulation | Exported GLBs with the expected `recorded` links and no overlapping inferred link; pending |
-| The Halo on every input | Flick and hold scenarios with mouse, touch and IWER (hands, controllers, `transient-pointer` if IWER emulates it) | Emulation | Report of directions committed; pending |
+| Third pass: the burnt globe, prototypes and pick | Five forms in the real viewer (`?halo=`, dev-only, not committed), rendered front, orbit, side, zoom, inside, phone, and a 42 s motion reel | Emulation (Chromium, SwiftShader) and review | 2026-10-25: Codex returned its usage limit before reading; an Opus design reviewer stood in (same vendor, not independent). Ranking ash, burn, embers, cage, lip; pick ash with a quiet front; its must-fixes built (see the decision above). Reel, zoom still and phone sheet in the ignored `output/halo-v2/`, sent to the user. Then Codex (cross-vendor) on the built globe, the old dome and the five prototypes: "Verdict: ship", no must-fixes; taste notes built (near side at 75% zoomed in, fronts fade near the eye) |
+| `verify:pr`, the burnt globe | `pnpm run verify:pr`; `test:knowledge` in `scripts/ci-emulate.sh` | Emulation and tooling | 2026-10-25 on the branch: doctor, lint, typecheck, every unit test (`xr-ui-core` 101, `xr-ui-three` 83, `xr-ui-r3f` 73, `ui-dom` 88, `design-tokens` 33, viewer-web 33, capture 26) and builds pass; `test:smoke:pipeline` 8/8, `test:portal` 6/6, `test:xr:smoke` (every capture check and the viewer 15/15). The capture `ui` check failed once under load (the status line moved 2.4 mm on a 10° turn; the limit is 1 mm) and passed alone and in the full tier rerun; the globe touches no capture code. `test:knowledge` 7/7 in the CI emulator |
+| Hosted CI, the burnt globe | CI on `31c082a`, then `test:xr:viewer` in `scripts/ci-emulate.sh` | Emulation (CI) | 2026-10-25: hosted CI failed two viewer checks that pass locally and in the emulator (they did not fail there with the original specs either, so intermittent). The AR bubble's pixel oracle hid only meshes outside the model, so the globe's embers and sparks (points) could count as geometry outside the bubble; it now hides chrome while it probes. The phone spacing check measured the reach row after a fixed 400 ms, mid-unfold on a loaded runner; it now waits for the row's transitions. `test:xr:viewer` 15/15 in the emulator; fixed on `main` at `2fb9161`. On `2fb9161` the pipeline's shard 1 then stalled past its 15-minute ceiling twice and was cancelled with no report. The same tests passed on `31c082a` in 4.7 minutes, and in the emulator with Quick Look conversion they take the same time before and after the globe (capture-to-viewer 1.7 vs 1.6 min, object 33.6 vs 35 s), so the globe adds no cost. The job's ceiling is now 20 minutes, Playwright stops itself at 16 minutes and names the test it was in, and diagnostics upload on cancel too. The next run named the cause: the pointing tests clicked the highlight toggle, a reach control, after a settle longer than the 4 s idle, so it had folded under the return button and the click retried until the 3-minute timeout. A 4.5 s pause reproduced it locally. The tests now reach for the card first, as a cursor would; with the pause, it passes, and `pointing.pipeline` passes 4/4 |
+| Third pass: the burnt globe, contracts | `xr-ui-core` `clocheBurn.test.ts`, `xr-ui-three` `cloche.test.ts` | Neither (unit) | 2026-10-25, from failure modes first: the noise stays in 0 to 1 and the threshold leaves both holes and shell; spark sites lie on the fronts (\|burn\| < 0.02) and on the dome; burns and embers the same per seed on every load and different across seeds; every ember within 3% of the wider radius of the shell and above the floor; normals point out; the quiet rule is 0 face-on, whole at the silhouette, 75% on the far side and further in when focused. The object: shell, embers, sparks and shade chrome, not tone-mapped, no depth writes; inside drops the shell, embers and sparks and keeps the shade; sparks only in focus, none under reduced motion or in a take; focus eases (0.2 to 0.8 after 100 ms, over 0.95 by 600 ms) and jumps with time held at 0 under reduced motion; nothing in a headset while recording. `xr-ui-core` 101, `xr-ui-three` 83 |
+| Third pass: viewer pages | `e2e/redesign.spec.ts`, `e2e/ar-bubble.spec.ts` (IWER, 1280 × 800 and 390 × 844) | Emulation (Playwright, IWER) | 2026-10-25: 9/9. The focused card's globe drawn at opacity 1 with all 2,500 embers and 120 sparks; under reduced motion no sparks and time held at 0, the line steady and the glow within the slow fade; AR: the globe drawn, all chrome, not head-locked, the author inside it from both sides, char at full strength on a Quest, line 1. Not checked on a Quest or an Android phone |
+| Independent verification, slices 2 to 4 and the second round | `codex exec -p deep -s read-only` (gpt-6-astra, xhigh) given the brief, the styleguide, `tokens.json`, the five UI packages, the viewer's feed, portal, AR and upload features and capture's UI; read-only probes in Node and jsdom | Neither (review and probes) | 2026-10-25: Codex hit its usage limit twice mid-review (12:49 and 14:01), each time after about 92k tokens and before writing its report. Its interim notes and probes were the findings; the lead confirmed each from the code or with a failing test first, then fixed it. **Slice 2:** an unfocused edge still cycled 0.50, 0.32, 0.58 (8.2 says steady at 0.50; `edgeFrame` now holds it, on every target, flickering or reduced); a touch laptop kept 24 apx targets under a finger, since the input came only from `(pointer: coarse)` (now `any-pointer` too); the side sheet was `aria-modal` but let Tab out (it now keeps Tab inside, both ways and from outside). **Slice 3 and the second round:** the cloche's fit read a paused card's take at t = 0 only, because three's `setTime` zeroes every action and a paused action, or a mixer at time scale 0 (paused AR), never advances, so every unfocused feed card and paused AR missed the author's reach (`motionPoints` now plays each clip alone on its own mixer and leaves the viewer's pose, time and pause untouched); the cloche's shaders wrote the tokens' linear values to the sRGB canvas, so the core `#ffc872` drew as `#ff932b` (the shaders now take sRGB values and blend in the canvas's space, as CSS does; the user kept the approved, deeper look, so the globe has its own tokens, `edge.cloche.colors`, holding what was on screen, and the DOM chrome keeps `edge.core`; styleguide 3.4. Rendered front, orbited and zoomed on the approved hologram, the globe matches the approved row: warm pixels' mean colour within 2 levels, mean frame difference under 1.3 levels, and at most 2 levels anywhere on a reduced-motion frame against `main`'s shader); on a touch phone a take with sound put Unmute at x = 380 of 390, inside the back-swipe edge, and one with highlights off the screen (the reach line now unfolds above Play when it does not fit beside it, on the same chip, so Play never moves: the user's call, recorded in styleguide 6); over the picture Play sat 5.5 px off the middle, from the chip's control-row padding (now alike at both ends). **Slice 4:** the viewer had no handedness setting, while scope item 6 gives slice 4 "a handedness setting in both apps" (the viewer's dock now has Settings with the same pair as capture, stored per device under the same key, and AR puts Exit on the wrist it names; the store and the pair moved to `@holoim/ui-dom`, which capture now uses). Checks: `xr-ui-core` `edge.test.ts`, `ui-dom` `Surfaces`, `GlyphControl`, `Chip` and `handedness` tests, viewer `drawnPoints.test.ts` (failure modes first); `e2e/redesign.spec.ts` gains a touch phone with a sounding take (every reach glyph at 44 apx, clear of the edges and of each other, stacked above a Play that does not move, on the chip over the picture), every globe part carrying `edge.cloche.colors` unconverted and not the chrome's gold (fails with the chrome token), and left-handed kept across a reload with Exit on the right wrist in AR. Each new check failed before its fix. Viewer mocked e2e 18/18 (one IWER CDN fetch flake, 3/3 on rerun), capture `test:xr:ui` passes, `verify:agent` green. Verdict (Codex, 19:07, over the fix commits `2d49ee2`, `e413c26` and `86063ae` on `main`): slice 2 ship; slices 3, 4 and the second round ship after must-fixes. It confirmed every fix above holds and kept both taste calls (the reach line above Play; the deeper globe, with `#ffc872` for the DOM chrome only). Its three must-fixes, each confirmed by a check that failed first, are fixed: the fit sampled each clip alone, while the feed and AR play a take's clips together (the first ranked at full weight, the rest at 0.35), so a clip on a child bone stacking on its parent's went uncovered (its probe: a head at 2.350 m under a 2.267 m ceiling); `motionPoints` now plays them together as the viewer does, from one ranking and one pair of weights the feed, AR and the fit share (`takePlayback.ts`; `drawnPoints.test.ts` checks against a mixer written out by hand, 2.68 against 2.85 before); the folded line above Play kept its 12 px slide under reduced motion, because the stacked rule outranked the override (the touch phone e2e now reads it under `reducedMotion: reduce`); capture forced mouse-size targets on a touch laptop (Settings 65 × 24; it now takes `defaultHitInput` unless the primary pointer is coarse, keeping the desktop layout and keyboard words; `test:xr:ui` gains a touch-laptop phase that answers the media queries as such a browser does, since Chromium cannot emulate one) |
+| `verify:pr`, verification fixes | `pnpm run verify:pr` steps on private ports (`E2E_BASE_URL` 3274, `E2E_API_PORT` 3101, capture 5374); `test:knowledge` against its own server on 4276 (a temporary config; 4176 is held by the main checkout's server, which the default config would reuse) | Emulation and tooling | 2026-10-25 on `bug/ui-redesign-verification` rebuilt onto `main` at `5f9d376` (the burnt globe, slices 5 and 6), with the globe's own colours: doctor, `check:all`, every unit suite and the builds pass; `test:smoke:pipeline` 10/10, `test:portal` 6/6, `test:xr:capture` (every check) and `test:xr:viewer` 18/18; `test:knowledge` 7/7 with `check:docs`. `phone: feed-wide notices sit on the chip` failed 3 of 3 repeats on the rebuilt tree: its own reload and offline step cut IWER's room off its CDN mid-load, logged as a console error; the check now ignores only that message (4/4 after). The Docker emulator could not run `test:knowledge` this time (its headless shell never landed in the browser volume). Hosted CI on `de8a3f8` then failed the new touch phone check: the row folded 4 s after the touch before it pressed Free; a 4.5 s pause reproduced it, and the check now reaches again first (`117eddb`, CI and deploy green). After Codex's must-fixes, every step again: doctor, `check:all`, units, builds, pipeline 10/10, portal 6/6, `test:xr:capture` (the new touch-laptop phase included), `test:xr:viewer` 18/18, knowledge 7/7 with `check:docs` |
+| Hold to mark on every input | `test:xr:marks` (`scripts/ci-held-mark-playwright.ts`): desktop F holds, a phone touch hold, IWER hands (non-dominant thumb–middle pinch, an ordinary pinch, the hand lost mid-hold), IWER controllers (non-dominant trigger); `test:xr:pointing` unchanged; the viewer pointing pipeline uploads the phone and hands takes | Emulation | Passed 2026-10-25: each GLB is valid v0 with a `recorded` link on the held target and no inferred link over it (hands: A recorded twice, B inferred after its undo); the ordinary pinch held nothing; loss ended the mark after the grace (`output/ci-marks/marks-report.json`). Phone AR deferred (`TODOS.md`, AR recording) |
+| The Halo on every input | The same check: the B key (hold W, flick E, flick W, hold S), the dock glyph by touch (hold, drag S), the IWER dominant pinch (drag W, drag S), the IWER non-dominant stick (W, E, S) | Emulation | Passed 2026-10-25: every committed action and input logged as expected; the ring drew while B held and not on a flick. `transient-pointer` not emulated by IWER: not built |
 | Pipeline and USDZ | `pnpm run test:smoke:pipeline` | Emulation | Pipeline result; byte-identical export with chrome visible; v0 and v1 files load; USDZ outline matches; pending |
+| Quick Look globe: the port | `pnpm --filter @holoim/xr-ui-core test` (golden block) and `python3 apps/viewer-api/tools/test_cloche.py` (run by the API's vitest suite) | Neither (unit) | 2026-10-25: one golden file (`cloche-golden.json`): 4 fits, 5 seeds (empty and non-ASCII included), the noise, and 9 burnt globes (3 domes × 3 seeds: 432 dome points, normals, burns and tears, 8 seeded randoms, 12 front sites, 64 embers each). TypeScript equal; Python within 1e-9 (embers 1e-6, kept in 32-bit floats). Four deliberate mutations of the port (hash, tear, ember offset, fbm octave) each fail it |
+| Quick Look globe: bake and readback | `glb_to_usdz.py --seed <id>` then `inspect_usdz.py` on the three most recent production GLBs (local copy) | Emulation (OpenUSD) | 2026-10-25: all three carry `/Root/Cloche` (form `burnt-globe`, 800 embers); the inspector's own refit matches the recorded foot and radii within 1e-6 m; the gold's vertices sit on the burn's zero level (99th percentile of the burn 0.006 to 0.008); every ember is the viewer's for the seed; no cloche failure. One file (abf8…) keeps joint and vertex tolerance failures that its old ql2 preview already had. Conversion about 2.6 s for an avatar |
+| Quick Look globe: render and review | RealityKit stills (`shot`, Follow camera, dark and light ground) of the real USDZs, reviewed by Codex (a different vendor) against the feed's globe | Emulation (RealityKit on macOS) | 2026-10-25: Codex chose the thinner fronts (0.0021 of the wider radius) and 800 embers over 0.0032 and 360, and asked for a quieter cream (0.25, emissive 0.6) and an opaque char shoulder (0.65) on the shell's side for light ground; renders of that spec show a dark burnt edge on light ground and clean gold on dark. Codex: recognisably the same halo; the near side's fronts still cross the people, which no bake can quiet. The island take's dome is higher than the feed's, because Quick Look pins the bubble and covers the whole walk, so its burns differ from the feed's for walking takes |
+| USDZ rebuild, local | `pnpm --filter @holoim/api rebuild:usdz` against a copy of production's database and files (the three most recent holograms) | Emulation | 2026-10-25, final design: the dry run lists three; a run stopped by SIGINT switched two and left the third on ql2; the resume switched the third; a further run had nothing to do. Earlier, a truncated GLB failed validation, stayed on ql2, was journaled, skipped on rerun and switched with `--retry-failed` once restored. Production not run: it waits for the user's go-ahead |
+| Slice 6, `verify:pr` | `pnpm run verify:pr` on the slice 6 branch rebased onto `31c082a`, ports 3574/3501/5575 | Emulation | 2026-10-25: doctor, lint and typecheck, every unit suite, build, `test:knowledge` 7/7, pipeline 8/8 (capture → viewer asserts the preview's cloche is seeded by the uploaded id and has its fronts), portal 6/6, XR smoke 15/15. Two retries were environmental, not the change: `test:knowledge` reused a stale atlas server on port 4176 started from the main checkout (main fails the same way against it; both pass 7/7 on their own server), and one portal run lost a CDN fetch of an environment map |
+| `verify:pr`, slices 5 and 6 combined | Every `verify:pr` step on the merged tree (slice 6 rebased onto `7462051`, slice 5 at `2896c97` merged in); `test:knowledge` against its own server (port 4176 held by a stale atlas server from the main checkout) | Emulation and tooling | 2026-10-25 before the merge to `main`: doctor, lint, typecheck, every unit suite, build, `check:docs`, knowledge 7/7, pipeline 10/10, portal 6/6, XR smoke 15/15 on its second run (the first lost a CDN fetch of the `office_small` environment map, as one portal run did earlier) |
+| USDZ rebuild, production | Database backed up to `/data/dev.db.pre-ql3-20261025` (integrity ok), `rebuild-usdz.js --dry-run`, then the rebuild with old files kept | Production | 2026-10-25 after the deploy of `5f9d376`: two stored previews, both now ql3. `cmvo1tcvc0000oejtzuhpu726` switched in 50 s. `cmvmig68e0000oejsj9pd83rz` (the long take) failed twice in the inspector (past 180 s, then past 900 s; it takes 75 s on a laptop), and the worker its Quick Look request re-queued failed three conversions past the converter's 100 s (12.6 s on a laptop): the shared CPU was throttled, about ten times slower, after its burst balance ran out (B-022). Once the CPU recovered, one Quick Look request had the worker publish it in about 30 s; the published file passes every inspector check (the old ql2 failed one) with the hologram's seeded globe (15 fronts, 800 embers). Both ql2 files are kept on the volume. The rebuild's inspection timeout is now 900 s |
+| Feed scroll and the lantern dock | The user's report ("the upload button doesnt look right"; the wheel zoomed instead of scrolling unless literally on the hologram). Codex (`-p deep`, read-only) reviewed the diff and screenshots; every `verify:pr` step on private ports (3675/3676/5675), knowledge on its own server (4276) | Emulation and tooling | 2026-10-25 on `bug/feed-scroll-and-upload` rebased onto `89f87df`. The wheel scrolls unless the gesture begins on the hologram (a raycast of its drawn meshes inside the bubble); one gesture spans the feed, so a scroll back up past the card above stays a scroll; a pinch still zooms anywhere. The feed's dock stands on the amber horizon as lanterns (5.2), Settings' word in a lantern capsule. Codex: ship with fixes; its two hit-test must-fixes (posed skinned bounds, recorded objects exempt from the bubble) and its per-card gesture concern are fixed, the last with a new e2e that fails on the old code. Doctor, `check:all`, every unit suite (`ui-dom` 99, `xr-ui-core` 107, viewer-web 40) and builds pass; knowledge 7/7, pipeline 10/10, portal 8/8, XR smoke 18/18 |
+| Touch scroll, the Settings corner and the control chip | The user's reports ("the problem scrolling was in touch devices"; Upload and Settings alike in one place; "the pill has too much spacing to the left"). Codex (`-p deep`, read-only) reviewed diffs and screenshots; every `verify:pr` step on private ports (3675/3676/5675), knowledge on its own server (4276) | Emulation and tooling | 2026-10-25 on `bug/feed-scroll-and-upload`. A touch looks around only when it starts on the hologram or inside its cloche glass; any other swipe scrolls, including one that begins sideways (which the browser will not scroll under `pan-y`, so the card scrolls it and settles on a card); a touch while the feed glides goes to the feed; a pinch zooms anywhere. Settings waits in the top corner its sheet unfolds from; Upload alone in the dock. Over the picture the control chip hugs its controls, its ends alike (18/18 apx desktop, 28/28 phone), Play at the middle in every state. Codex: ship with fixes; its six touch must-fixes (a gesture outliving card focus, flick speed from one event, a settle between cards, a stale settle restoring snapping, a pinch off the hologram taken for a pan, a glide-stopping touch read as a tap) are fixed; it kept the chip dark over the picture (2.3, 5.2: lanterns are the dock's alone). New phone e2e: a drifting swipe off the hologram browses without turning it, a swipe on it looks around, a two-pixel drift is no flick and a touch that stops the glide pauses nothing (both fail on the old code); the chip's ends match reached and folded. Not yet tried on a physical iPhone or Android phone |
 | Cross-device task test | The PRD-021 trial (below) | Physical | Recorded results; pending |
 
 ### Cross-device task test
@@ -957,3 +1206,22 @@ fingertip shade's look, and whether the take's microphone hears the tick;
 with Quest controllers, the pulse strengths and the ray landing on the wrist
 glyph; the world panel's 1.5 m legibility (check 7); and a left-handed
 participant through the whole capture flow.
+
+Slice 5 is unverified on devices; emulation cannot show any of these:
+
+- Quest 3 hands: whether the non-dominant thumb–middle pinch (1.5 cm on,
+  3 cm off, index clear by 4 cm) is reliable and free of false starts while
+  holding, grabbing, waving or making a fist; whether the dominant pinch
+  opens the Halo when a pointing thumb rests on the middle finger (IWER's
+  point pose keeps 9 cm between them; a real hand may not); the 0.25 s
+  loss grace; the Halo drag distance and its tick.
+- Quest controllers: the trigger hold's feel; the thumbstick press-and-tilt
+  ergonomics (pressing while tilting, the rest threshold 0.2, the 100 ms
+  release latch); that walking and turning stop on that stick while held.
+- A real phone: the 300 ms touch hold within 22 apx against look drags; the
+  arm and the ray landing under the finger; `navigator.vibrate` on Android
+  (iOS Safari has none); the dock glyph's hold and drag next to the home bar.
+- Desktop: B with the mouse on a real pointer lock (CDP reports no
+  `movementX` on macOS, so the check moves the mouse synthetically).
+- Not built: gaze-and-pinch and `transient-pointer` (Vision Pro); phone AR
+  marks are deferred to AR recording (`TODOS.md`).

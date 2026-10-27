@@ -109,7 +109,7 @@ jobs:
           retention-days: 7
 
   # Browser end-to-end checks run as parallel jobs (2 capture XR shards,
-  # viewer and Knowledge Atlas, 2 capture → viewer pipeline shards, portal)
+  # 3 viewer shards with the Knowledge Atlas, 2 capture → viewer pipeline shards, portal)
   # so CI wall time follows the slowest suite rather than their sum. Shard
   # counts balance wall time against billed minutes (per job, rounded up).
   capture-xr:
@@ -162,11 +162,19 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: Viewer and Knowledge browser checks
+    name: Viewer and Knowledge browser checks (shard ${{ matrix.shard }}/3)
     needs: [changes]
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # One runner overran 10 minutes once the immersive viewer spec grew
+    # (2026-10-26): the viewer specs split three ways by measured time, each
+    # about 6 minutes on a hosted runner (apps/viewer-web test:e2e:mocked:shardN);
+    # shard 1 also runs the Knowledge Atlas.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -174,15 +182,16 @@ jobs:
           pnpm-version: ${{ env.PNPM_VERSION }}
           playwright: "true"
       - name: Knowledge Atlas browser checks
+        if: matrix.shard == 1
         run: pnpm timed knowledge -- pnpm run test:knowledge
-      - name: Viewer AR checks
+      - name: Viewer AR and XR checks
         if: ${{ !cancelled() }}
-        run: pnpm timed xr-viewer -- pnpm run test:xr:viewer
+        run: pnpm timed xr-viewer-shard-${{ matrix.shard }} -- pnpm --filter @holoim/web run test:e2e:mocked:shard${{ matrix.shard }}
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-failure-${{ github.run_id }}
+          name: e2e-failure-${{ matrix.shard }}-${{ github.run_id }}
           path: |
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
@@ -195,7 +204,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-timings-${{ github.run_id }}
+          name: e2e-timings-${{ matrix.shard }}-${{ github.run_id }}
           path: output/test-results
           if-no-files-found: ignore
           retention-days: 7
@@ -207,8 +216,11 @@ jobs:
     runs-on: ubuntu-latest
     # Shard 1 takes about 9 minutes on a good runner (setup, the app builds and
     # ~7.5 minutes of tests, since PRD-043 added the object take), so 10 left
-    # no margin for a slow runner. The ceiling costs nothing when tests pass.
-    timeout-minutes: 15
+    # no margin for a slow runner. A slow runner stalled it past 15 twice on
+    # 2026-10-25, cancelled with no report. Playwright now stops itself at 16
+    # minutes of tests (playwright.config.ts), inside this ceiling, so a slow
+    # run fails with its diagnostics. The ceiling costs nothing when tests pass.
+    timeout-minutes: 20
     # The pipeline specs dominate this job; Playwright's file sharding splits
     # them between two runners.
     strategy:
@@ -246,7 +258,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Upload failure diagnostics
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-failure-${{ matrix.shard }}-${{ github.run_id }}
@@ -324,7 +336,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Quality, unit tests and build | ${QUALITY_RESULT} |"
             echo "| Capture XR checks (all shards) | ${CAPTURE_XR_RESULT} |"
-            echo "| Viewer and Knowledge browser checks | ${E2E_RESULT} |"
+            echo "| Viewer and Knowledge browser checks (all shards) | ${E2E_RESULT} |"
             echo "| Capture to viewer pipeline (all shards) | ${PIPELINE_RESULT} |"
             echo "| Portal view end-to-end | ${PORTAL_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"

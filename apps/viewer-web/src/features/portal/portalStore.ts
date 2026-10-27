@@ -37,6 +37,11 @@ export type PortalRuntime = {
   playbackSeconds: number;
   /** What the camera did last frame, for tests and debugging. */
   measured: { cameraDistance: number; insideDistance: number; outsideDistance: number; target: [number, number, number] };
+  /**
+   * Whether a screen point lies on the hologram itself, or with `glass`
+   * anywhere inside its cloche; set by the canvas once the model is in it.
+   */
+  hitTest: ((clientX: number, clientY: number, options?: { glass?: boolean }) => boolean) | null;
 };
 
 export const PITCH_MIN = MathUtils.degToRad(-8);
@@ -68,7 +73,8 @@ export function createPortalStore() {
     zoomSpan: Math.log(6),
     returnBlend: 0,
     playbackSeconds: 0,
-    measured: { cameraDistance: 0, insideDistance: 0, outsideDistance: 0, target: [0, 0, 0] }
+    measured: { cameraDistance: 0, insideDistance: 0, outsideDistance: 0, target: [0, 0, 0] },
+    hitTest: null
   };
   const listeners = new Set<() => void>();
 

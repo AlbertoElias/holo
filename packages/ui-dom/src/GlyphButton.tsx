@@ -1,10 +1,10 @@
 // The button around a glyph drawing: hit area (6.1), states (6) and label.
 // GlyphControl and the side sheet's close mark share it.
-import { useEffect, useState, type AriaAttributes, type ReactNode } from "react";
+import { useContext, useEffect, useState, type AriaAttributes, type ReactNode } from "react";
 
-import { glyphAppearance, glyphMetrics, hitAreaApx, type GlyphAppearance, type HitInput } from "@holoim/xr-ui-core";
+import { glyphAppearance, glyphMetrics, hitAreaApx, lanternLook, type GlyphAppearance, type HitInput } from "@holoim/xr-ui-core";
 
-import { defaultHitInput } from "./internal.js";
+import { OnHorizon, defaultHitInput } from "./internal.js";
 import { typeRoleStyle } from "./typeRoles.js";
 
 // Keyboard focus shows the ring, pointer focus does not. `:focus-visible` is
@@ -77,9 +77,13 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
   // placeholder): the idle dim, with no cream lift and no pressed state.
   const appearance = glyphAppearance(disabled ? { dimmed: true } : { hovered, focusVisible, pressed, dimmed }, { headset: false });
   const metrics = glyphMetrics({ headset: false });
-  const hit = hitAreaApx(hitInput, drawnApx);
-  const focusOutline = appearance.focusRing ? `${appearance.focusRing.width}px solid ${appearance.focusRing.color}` : "none";
-  const outlineOffset = appearance.focusRing ? `${appearance.focusRing.offset}px` : undefined;
+  // On the amber horizon a drawing sits in a lantern, with no word beside it;
+  // a control with no drawing yet holds its word in a lantern capsule.
+  const lantern = useContext(OnHorizon) ? lanternLook(appearance, { headset: false }) : null;
+  const hit = hitAreaApx(hitInput, lantern ? lantern.ringApx : drawnApx);
+  const focusRing = lantern ? lantern.focusRing : appearance.focusRing;
+  const focusOutline = focusRing ? `${focusRing.width}px solid ${focusRing.color}` : "none";
+  const outlineOffset = focusRing ? `${focusRing.offset}px` : undefined;
 
   return (
     <button
@@ -117,7 +121,26 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
         touchAction: "manipulation"
       }}
     >
-      {children ? (
+      {children && lantern ? (
+        <span
+          data-glyph-visual=""
+          data-glyph-lantern=""
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: lantern.ringApx,
+            height: lantern.ringApx,
+            borderRadius: "50%",
+            background: lantern.fill,
+            boxShadow: `inset 0 0 0 ${lantern.ringWidthApx}px ${lantern.ringColor}`,
+            outline: focusOutline,
+            outlineOffset
+          }}
+        >
+          <span style={{ display: "inline-flex", width: drawnApx, height: drawnApx }}>{children(appearance)}</span>
+        </span>
+      ) : children ? (
         <span
           data-glyph-visual=""
           style={{
@@ -136,13 +159,15 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
         <span
           data-glyph-visual=""
           data-glyph-word=""
+          {...(lantern ? { "data-glyph-lantern": "" } : {})}
           style={{
             ...typeRoleStyle("controlLabel"),
             display: "inline-flex",
             alignItems: "center",
-            minHeight: drawnApx,
-            paddingInline: metrics.gapApx / 2,
-            borderRadius: drawnApx / 2,
+            minHeight: lantern ? lantern.ringApx : drawnApx,
+            paddingInline: lantern ? lantern.ringApx / 3 : metrics.gapApx / 2,
+            borderRadius: (lantern ? lantern.ringApx : drawnApx) / 2,
+            ...(lantern ? { background: lantern.fill, boxShadow: `inset 0 0 0 ${lantern.ringWidthApx}px ${lantern.ringColor}` } : {}),
             color: appearance.color,
             whiteSpace: "nowrap",
             outline: focusOutline,
@@ -152,7 +177,7 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
           {word}
         </span>
       )}
-      {showLabel && children ? <span style={{ ...typeRoleStyle("controlLabel"), color: appearance.color }}>{word}</span> : null}
+      {showLabel && children && !lantern ? <span style={{ ...typeRoleStyle("controlLabel"), color: appearance.color }}>{word}</span> : null}
     </button>
   );
 }

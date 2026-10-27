@@ -19,7 +19,7 @@ export type PresignedPost = { url: string; fields: Record<string, string> };
 
 /**
  * Object storage for hologram media. Keys are storage-relative
- * (`<file>.glb`, `<file>-ql2.usdz`, `incoming/<intent>.glb`); the driver
+ * (`<file>.glb`, `<file>-ql3.usdz`, `incoming/<intent>.glb`); the driver
  * owns turning a key into a public URL.
  */
 export interface MediaStorage {
@@ -42,6 +42,15 @@ export interface MediaStorage {
 }
 
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
+
+function isR2Endpoint(endpoint: string | undefined): boolean {
+  if (!endpoint) return false;
+  try {
+    return new URL(endpoint).hostname.endsWith(".r2.cloudflarestorage.com");
+  } catch {
+    return false;
+  }
+}
 
 export class LocalMediaStorage implements MediaStorage {
   readonly kind = "local" as const;
@@ -229,7 +238,10 @@ export class S3MediaStorage implements MediaStorage {
     contentType: string,
     maxBytes: number,
     expiresSec: number
-  ): Promise<PresignedPost> {
+  ): Promise<PresignedPost | null> {
+    // R2 answers browser POST uploads with 501 NotImplemented; null sends
+    // clients down the multipart path, where the API writes the object.
+    if (isR2Endpoint(env.S3_ENDPOINT)) return null;
     const { url, fields } = await createPresignedPost(this.client, {
       Bucket: this.bucket,
       Key: key,

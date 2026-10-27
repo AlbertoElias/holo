@@ -7,6 +7,7 @@ import { API_PREFIX, MAX_GLB_BYTES, UPLOADS_DIR } from "./lib/constants.js";
 import { isAllowedWebOrigin } from "./lib/cors.js";
 import { env } from "./lib/env.js";
 import { registerStaticUploads } from "./plugins/static-uploads.js";
+import { registerAuthRoutes } from "./routes/auth.js";
 import { registerHologramRoutes } from "./routes/holograms.js";
 import { createMediaStorage, type MediaStorage } from "./services/media-storage.js";
 
@@ -43,6 +44,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   app.register(
     async (instance) => {
+      await registerAuthRoutes(instance);
       await registerHologramRoutes(instance, { uploadsRoot, storage });
     },
     { prefix: API_PREFIX }

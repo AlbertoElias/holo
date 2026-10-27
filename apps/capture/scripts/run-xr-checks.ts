@@ -33,6 +33,7 @@ const CHECKS = {
   height: 'scripts/ci-xr-height-playwright.ts',
   body: 'scripts/ci-body-replay-playwright.ts',
   pointing: 'scripts/ci-pointing-playwright.ts',
+  marks: 'scripts/ci-held-mark-playwright.ts',
   object: 'scripts/ci-object-playwright.mjs',
   summon: 'scripts/ci-summon-playwright.mjs',
   ui: 'scripts/ci-capture-ui-playwright.ts',
@@ -70,7 +71,7 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
 
 // Serial wall time in seconds on a 2-vCPU CI runner (CI run 39499697917);
 // parallel runs start the longest first and XR_SHARD balances on it.
-const CHECK_COST: Partial<Record<CheckName, number>> = { face: 40, body: 83, height: 45, terrain: 38, hands: 31, avatars: 120, locomotion: 21, 'mock-vr': 18, recording: 11 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { face: 40, marks: 19, body: 83, height: 45, terrain: 38, hands: 31, avatars: 120, locomotion: 21, 'mock-vr': 18, recording: 11 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);

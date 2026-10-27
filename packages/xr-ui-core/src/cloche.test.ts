@@ -6,7 +6,8 @@
 import { tokens } from "@holoim/design-tokens";
 import { describe, expect, it } from "vitest";
 
-import { clocheCharShare, clocheFollowDirection, clocheFraming, clocheOpacityAt, clocheSeedOffset, clocheSurfacePoints, clocheValue, fitCloche, type ClocheShape } from "./index.js";
+import golden from "./fixtures/cloche-golden.json" with { type: "json" };
+import { clocheBurnAt, clocheBurnFronts, clocheBurnNoise, clocheCharShare, clocheEmbers, clocheLocalPoint, clocheNormalAt, clocheRandom, clocheTearAt, clocheFollowDirection, clocheFraming, clocheOpacityAt, clocheSeedOffset, clocheSurfacePoints, clocheValue, fitCloche, type ClocheShape } from "./index.js";
 
 const { cloche } = tokens.edge;
 
@@ -127,6 +128,65 @@ describe("burns and char (3.2, 3.4)", () => {
     expect(clocheCharShare({ sootOpacity: 0 })).toBe(tokens.edge.char.rest);
     expect(clocheCharShare({ sootOpacity: tokens.edge.soot.flatOpacity })).toBe(tokens.edge.char.bright);
     expect(clocheCharShare({ sootOpacity: tokens.edge.soot.arNoEstimateOpacity })).toBe(tokens.edge.char.bright);
+  });
+});
+
+describe("the golden cloche the USDZ builder's port must reproduce (9.5)", () => {
+  const vector = ([x, y, z]: number[]) => ({ x: x!, y: y!, z: z! });
+
+  it("fits the same domes", () => {
+    for (const fit of golden.fits) expect(fitCloche(fit.points.map(vector))).toEqual(fit.shape);
+  });
+
+  it("offsets the same seeds", () => {
+    for (const { seed, offset } of golden.seeds) expect(clocheSeedOffset(seed)).toBe(offset);
+  });
+
+  // Within a tolerance, not bit for bit: the fronts and embers run through
+  // Math.sin and Math.cos, which V8 takes from the platform's libm on some
+  // builds (Linux x64), so their last bits differ between machines. The
+  // Python port is held to the same tolerances.
+  const near = (actual: number[], expected: number[], tolerance: number) => {
+    expect(actual.length).toBe(expected.length);
+    actual.forEach((value, i) => expect(Math.abs(value - expected[i]!)).toBeLessThanOrEqual(tolerance * Math.max(1, Math.abs(expected[i]!))));
+  };
+
+  it("burns the same globe: noise, holes, tears, dome points, fronts and embers", () => {
+    for (const { at, value } of golden.noise) near([clocheBurnNoise({ x: at[0]! * 9.3, y: at[1]! * 9.3, z: at[2]! * 9.3 })], [value], 1e-9);
+    for (const entry of golden.globe) {
+      const shape = fitCloche(golden.fits.find((fit) => fit.name === entry.fit)!.points.map(vector))!;
+      const offset = clocheSeedOffset(entry.seed);
+      const random = clocheRandom(offset);
+      expect(entry.random.map(() => random())).toEqual(entry.random);
+      for (const sample of entry.surface) {
+        const point = clocheLocalPoint(shape, vector(sample.direction));
+        near([point.x, point.y, point.z], sample.point, 1e-9);
+        const normal = clocheNormalAt(shape, point);
+        near([normal.x, normal.y, normal.z], sample.normal, 1e-9);
+        near([clocheBurnAt(shape, offset, point), clocheTearAt(shape, offset, point)], [sample.burn, sample.tear], 1e-9);
+      }
+      const fronts = clocheBurnFronts(shape, offset, 12);
+      expect(fronts.length).toBe(entry.fronts.length);
+      fronts.forEach(({ point, normal }, i) => {
+        near([point.x, point.y, point.z], entry.fronts[i]!.point, 1e-9);
+        near([normal.x, normal.y, normal.z], entry.fronts[i]!.normal, 1e-9);
+      });
+      const embers = clocheEmbers(shape, offset, 64);
+      // Kept in 32-bit floats.
+      near(Array.from(embers.positions), entry.embers.positions, 1e-6);
+      near(Array.from(embers.seeds), entry.embers.seeds, 1e-6);
+    }
+  });
+
+  it("burns holes and tears on part of every golden dome, not all or none", () => {
+    for (const entry of golden.globe) {
+      const burns = entry.surface.map((sample) => sample.burn);
+      const tears = entry.surface.map((sample) => sample.tear);
+      expect(burns.some((burn) => burn < 0) && burns.some((burn) => burn > 0)).toBe(true);
+      for (const tear of tears) expect(tear >= 0 && tear <= 1).toBe(true);
+    }
+    expect(golden.globe.flatMap((entry) => entry.surface).some((sample) => sample.tear === 0)).toBe(true);
+    expect(golden.globe.flatMap((entry) => entry.surface).some((sample) => sample.tear === 1)).toBe(true);
   });
 });
 

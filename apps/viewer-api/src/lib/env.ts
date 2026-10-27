@@ -5,6 +5,11 @@ const boolFromEnv = z
   .transform((value) => (typeof value === "boolean" ? value : value.toLowerCase() === "true" || value === "1"))
   .default(true);
 
+const boolFromEnvFalse = z
+  .union([z.boolean(), z.string()])
+  .transform((value) => (typeof value === "boolean" ? value : value.toLowerCase() === "true" || value === "1"))
+  .default(false);
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1).default("file:./prisma/dev.db"),
   PORT: z.coerce.number().int().positive().default(3001),
@@ -26,7 +31,10 @@ const envSchema = z.object({
   UPLOAD_INTENT_GRACE_MS: z.coerce.number().int().nonnegative().default(900_000),
   UPLOAD_INTENT_COMPLETED_RETENTION_MS: z.coerce.number().int().positive().default(86_400_000),
   USDZ_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
-  USDZ_STALE_CLAIM_MS: z.coerce.number().int().positive().default(600_000)
+  USDZ_STALE_CLAIM_MS: z.coerce.number().int().positive().default(600_000),
+  AUTH_MAGIC_LINK_TTL_MS: z.coerce.number().int().positive().default(900_000),
+  AUTH_SESSION_TTL_MS: z.coerce.number().int().positive().default(2_592_000_000),
+  AUTH_DEV_EXPOSE_MAGIC_LINK: boolFromEnvFalse
 });
 
 const parsed = envSchema.parse({
@@ -48,7 +56,10 @@ const parsed = envSchema.parse({
   UPLOAD_INTENT_GRACE_MS: process.env.UPLOAD_INTENT_GRACE_MS,
   UPLOAD_INTENT_COMPLETED_RETENTION_MS: process.env.UPLOAD_INTENT_COMPLETED_RETENTION_MS,
   USDZ_POLL_INTERVAL_MS: process.env.USDZ_POLL_INTERVAL_MS,
-  USDZ_STALE_CLAIM_MS: process.env.USDZ_STALE_CLAIM_MS
+  USDZ_STALE_CLAIM_MS: process.env.USDZ_STALE_CLAIM_MS,
+  AUTH_MAGIC_LINK_TTL_MS: process.env.AUTH_MAGIC_LINK_TTL_MS,
+  AUTH_SESSION_TTL_MS: process.env.AUTH_SESSION_TTL_MS,
+  AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK
 });
 
 if (parsed.STORAGE_DRIVER === "s3") {

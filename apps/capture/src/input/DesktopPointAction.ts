@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { VrmHumanoidBone } from '@holoim/meaning';
 import type { AvatarRig, ArmIkChain, HandFingerRetargetChain } from '../avatar/AvatarRig';
 import { ArmIkSolver } from '../ik/ArmIkSolver';
-import type { PointSampleStore } from '../recording/PointSampleStore';
+import type { AimInput, PointSampleStore } from '../recording/PointSampleStore';
 import { isFiniteQuaternionLike } from '../shared/math';
 import type { VrHandSide } from '../types/contracts';
 import type { PointCrosshair } from '../ui/PointCrosshair';
@@ -51,6 +51,11 @@ export interface DesktopPointStep {
   deltaSec: number;
   /** Simulation time of this step (what the recorder stamps frames with). */
   timeSec: number;
+  /**
+   * A phone's touch and hold (slice 5): the finger, CSS px. The camera ray
+   * through it decides the referent and the arm points at where it lands.
+   */
+  screenAim?: { x: number; y: number } | null;
 }
 
 interface Driven {
@@ -79,7 +84,11 @@ export class DesktopPointAction {
   private wasHeld = false;
   private readonly origin = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
+  /** Where the arm reaches: the aim itself, or from the shoulder to the landing for a camera ray. */
+  private readonly reach = new THREE.Vector3();
   private readonly landing = new THREE.Vector3();
+  private readonly ndc = new THREE.Vector2();
+  private input: AimInput = 'desktop';
   private landed = false;
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpB = new THREE.Vector3();
@@ -156,10 +165,15 @@ export class DesktopPointAction {
     const samples = this.deps.getPointSamples();
 
     if (step.held) {
+      const input: AimInput = step.screenAim ? 'touch' : 'desktop';
+      // A switch between mouse and touch mid-hold is a new hold.
+      if (this.wasHeld && input !== this.input) samples.endAim(step.timeSec);
+      this.input = input;
       this.computeRay(step);
       samples.recordAim({
         timeSec: step.timeSec,
         side: arm.side,
+        input,
         origin: { x: this.origin.x, y: this.origin.y, z: this.origin.z },
         direction: { x: this.direction.x, y: this.direction.y, z: this.direction.z }
       });
@@ -191,10 +205,18 @@ export class DesktopPointAction {
   }
 
   private computeRay(step: DesktopPointStep): void {
-    const { avatar, embodyOffset } = this.deps;
-    avatar.getEyeAnchorWorldPosition(this.origin, embodyOffset);
-    const cos = Math.cos(step.aimPitch);
-    this.direction.set(-Math.sin(step.lookYaw) * cos, Math.sin(step.aimPitch), -Math.cos(step.lookYaw) * cos).normalize();
+    const { avatar, embodyOffset, desktopCamera } = this.deps;
+    if (step.screenAim) {
+      desktopCamera.updateMatrixWorld(true);
+      this.ndc.set((step.screenAim.x / window.innerWidth) * 2 - 1, 1 - (step.screenAim.y / window.innerHeight) * 2);
+      this.raycaster.setFromCamera(this.ndc, desktopCamera);
+      this.origin.copy(this.raycaster.ray.origin);
+      this.direction.copy(this.raycaster.ray.direction).normalize();
+    } else {
+      avatar.getEyeAnchorWorldPosition(this.origin, embodyOffset);
+      const cos = Math.cos(step.aimPitch);
+      this.direction.set(-Math.sin(step.lookYaw) * cos, Math.sin(step.aimPitch), -Math.cos(step.lookYaw) * cos).normalize();
+    }
     this.landed = false;
     if (avatar.worldModel) {
       this.raycaster.set(this.origin, this.direction);
@@ -203,10 +225,15 @@ export class DesktopPointAction {
       if (hit) {
         this.landing.copy(hit.point);
         this.landed = true;
-        return;
       }
     }
-    this.landing.copy(this.origin).addScaledVector(this.direction, FAR_M);
+    if (!this.landed) this.landing.copy(this.origin).addScaledVector(this.direction, FAR_M);
+    this.reach.copy(this.direction);
+    if (step.screenAim) {
+      // The camera sits behind or beside the avatar: its arm points at what the finger touched.
+      this.arm?.chain.upperArm.getWorldPosition(this.tmpA);
+      if (this.arm) this.reach.subVectors(this.landing, this.tmpA).normalize();
+    }
   }
 
   /** Animation rewrites only the bones its clips drive; the rest keep what we wrote. */
@@ -224,7 +251,7 @@ export class DesktopPointAction {
     chain.shoulder.updateMatrixWorld(true);
     // Reach along the aim direction from the shoulder joint.
     chain.upperArm.getWorldPosition(this.tmpA);
-    this.tmpB.copy(this.tmpA).addScaledVector(this.direction, (chain.upperLength + chain.lowerLength) * REACH_FRACTION);
+    this.tmpB.copy(this.tmpA).addScaledVector(this.reach, (chain.upperLength + chain.lowerLength) * REACH_FRACTION);
     chain.hand.getWorldQuaternion(this.tmpHandQuat);
     if (this.solver.solve(chain, this.tmpB, this.tmpHandQuat, this.deps.avatar.avatarRoot, this.tmpHandQuat)) {
       // Turn the hand so the index finger runs along the aim.
@@ -260,7 +287,7 @@ export class DesktopPointAction {
     fingertip.getWorldPosition(this.tmpB);
     this.tmpB.sub(this.tmpA);
     if (this.tmpB.lengthSq() < 1e-10) return;
-    this.tmpQ.setFromUnitVectors(this.tmpB.normalize(), this.direction);
+    this.tmpQ.setFromUnitVectors(this.tmpB.normalize(), this.reach);
     chain.hand.getWorldQuaternion(this.tmpQ2);
     this.tmpQ2.premultiply(this.tmpQ);
     chain.hand.parent!.getWorldQuaternion(this.tmpQ3).invert();

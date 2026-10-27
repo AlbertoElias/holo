@@ -1,78 +1,50 @@
 import * as THREE from 'three';
-import { hitAreaMeters, tokens } from '@holoim/design-tokens';
+import type { World } from '@iwsdk/core';
+import { tokens } from '@holoim/design-tokens';
 import {
-  VIEW_TARGETS,
   chromeVisible,
   createRecordingUiState,
   dominantHand,
-  glyphAppearance,
   isInChrome,
   markChromeTree,
   nonDominantHand,
   recordingText,
+  type DockAction,
   type Hand,
   type Handedness
 } from '@holoim/xr-ui-core';
-import {
-  ThreeMsdfLabel,
-  ThreeStatusLine,
-  ThreeWorldPanel,
-  ThreeWristGlyphs,
-  createChromeMaterial,
-  finishChrome,
-  loadLabelAtlas,
-  setChromeOpacity
-} from '@holoim/xr-ui-three';
+import { AimRays, HandDock, POKE, StatusLine, WorldPanel, configureXrPointers, handPointerIds, multiPointer, pointerHand } from '@holoim/xr-ui-iwsdk';
 import type { UiViewModel } from '../types/contracts';
 import type { XrTracking } from '../xr/XrTracking';
 import { SpatialTick } from './SpatialTick';
 import type { UIStateStore } from './UIStateStore';
 
 interface VrChromeDeps {
+  world: World;
   store: UIStateStore;
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
+  /** Carries the tracked head pose; the status line follows it. */
+  xrCamera: THREE.Camera;
   tracking: XrTracking;
   refitHeight: () => void;
   toggleRecording: () => void;
   setHandedness: (handedness: Handedness) => void;
+  /** True when a held select on this source is already something else's (a Halo, a mark). */
+  ownsSelect?: (source: XRInputSource | undefined) => boolean;
 }
 
-// Set for slice 4 (docs/features/ui-redesign.md); the styleguide gives the
-// fingertip shade's look but no distances, so these are open to revisit.
-/** The fingertip shade appears this far above a glyph's face. */
-const POKE_PROXIMITY_M = 0.1;
-/** A fingertip this close to the face, inside the hit area, commits. */
-const POKE_CONTACT_M = 0.008;
-/** Below the face a fingertip still counts, so a fast poke is not missed. */
-const POKE_THROUGH_M = 0.04;
-/** One poke per approach: the finger must leave this far before the next. */
-const POKE_REARM_M = 0.03;
 /** After a commit the finger is still pulling back from chrome, not pointing. */
 const POKE_RELEASE_SEC = 0.5;
-/** How long a committed record glyph shows pressed; set to the rule, open to revisit. */
-const PRESSED_SHOW_SEC = 0.12;
 /** Controller pulses: a light one on hover, a firmer one on commit. */
 const PULSE_HOVER = { intensity: 0.15, durationMs: 12 };
 const PULSE_COMMIT = { intensity: 0.5, durationMs: 30 };
-const RAY_IDLE_LENGTH_M = 1.4;
+// A controller's grip to the wrist joint's axes, in which the palm faces −Y.
+const GRIP_TO_JOINT_LEFT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+const GRIP_TO_JOINT_RIGHT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
 const SHADE_SEGMENTS = 32;
 
 type RowId = 'refit' | 'hand';
-
-interface PanelRow {
-  id: RowId;
-  label: ThreeMsdfLabel;
-  hit: THREE.Mesh;
-  enabled: boolean;
-}
-
-interface RayState {
-  line: THREE.Line;
-  /** The hit the ray rests on: the wrist's record glyph or a panel row. */
-  hit: { kind: 'record' } | { kind: 'row'; id: RowId } | null;
-  hitDistance: number;
-}
 
 /** What the placement, label-distance and handedness reports read (`__sampleChrome`). */
 export interface VrChromeSnapshot {
@@ -96,95 +68,130 @@ const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 const tmpQuat = new THREE.Quaternion();
 const tmpScale = new THREE.Vector3();
+const axisX = new THREE.Vector3();
+const axisY = new THREE.Vector3();
+const normal = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
-const levelHead = new THREE.Object3D();
-/** Above the scene and the avatar, below the aim rays (998). */
-const WRIST_OVER_BODY_ORDER = 990;
 
 /**
- * Capture's chrome in a headset (styleguide 1.2, 6.1, 8.5, 9.1; brief
- * slice 4): the record glyph on the non-dominant wrist, "Recording 0:12" on
- * the periphery status line, settings on a world panel opened 1.5 m ahead,
- * and nothing locked to the head but the status line. The dominant hand
- * pokes the wrist (a fingertip shade before contact, a soft tick on commit)
- * or points at it with a controller ray (a pulse on hover and commit).
+ * Capture's chrome in a headset (styleguide 1.2, 6.1, 8.5, 9.1), built from
+ * @holoim/xr-ui-iwsdk as the viewer's is (docs/features/archive/viewer-xr-interface.md,
+ * step 5): the record glyph in the hand dock on the non-dominant wrist,
+ * "Recording 0:12" on the periphery status line, refit and handedness on a
+ * world panel opened 1.5 m ahead, and the gold aim rays. Nothing is locked to
+ * the head but the status line. IWSDK's pointers deliver every press: a
+ * controller ray clicks, a poke commits on contact. This class adds capture's
+ * feedback around them: the fingertip shade before contact, a soft tick on a
+ * poke, controller pulses on hover and commit.
  */
 export class VrChrome {
   /** Every chrome object hangs here, chrome-flagged, so recording, export and pointing skip it. */
   readonly root = new THREE.Group();
-  private wrist: ThreeWristGlyphs | null = null;
-  private wristKey = '';
+  private dock: HandDock | null = null;
+  private dockKey = '';
   private wristTracked = false;
-  /** The record state the wrist row was last drawn for; null after a rebuild. */
-  private wristDrawnRecording: boolean | null = null;
   private readonly wristAnchor = new THREE.Object3D();
-  private status: ThreeStatusLine | null = null;
-  private panel: ThreeWorldPanel | null = null;
-  private readonly rows: PanelRow[] = [];
+  private status: StatusLine | null = null;
+  private panel: WorldPanel | null = null;
+  private rays: AimRays | null = null;
   private placePanel = false;
-  private loading: Promise<void> | null = null;
+  /** Updates since show() while presenting; the head is posed from the second. */
+  private presentedFrames = 0;
   private readonly shade: THREE.Mesh;
   private readonly shadeMaterial: THREE.MeshBasicMaterial;
-  private readonly rays: Record<Hand, RayState>;
-  /** Armed once the fingertip is seen above the glyph's face, so only an approach from above commits. */
-  private pokeArmed = false;
   private pokeNear = false;
   private lastPokeSec = -Infinity;
-  private pressedUntilSec = 0;
   private elapsedSec = 0;
-  private unbindSelect: (() => void) | null = null;
   private readonly tick = new SpatialTick();
   private readonly feedback = { ticks: 0, pulses: 0, commits: 0 };
   private shown = false;
 
   constructor(private readonly deps: VrChromeDeps) {
     this.root.name = 'capture-chrome';
+    this.wristAnchor.name = 'wrist-anchor';
+    this.root.add(this.wristAnchor);
     // The fingertip shade (6.1): deep sea, soft at its rim, never a glow.
     const geometry = new THREE.CircleGeometry(1, SHADE_SEGMENTS);
     const count = geometry.getAttribute('position').count;
     const colours = new Float32Array(count * 4);
     for (let i = 0; i < count; i += 1) colours.set([1, 1, 1, i === 0 ? 1 : 0], i * 4);
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 4));
-    this.shadeMaterial = createChromeMaterial({ color: tokens.color.deepSea, vertexColors: true, doubleSided: true });
+    this.shadeMaterial = new THREE.MeshBasicMaterial({ color: tokens.color.deepSea, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
     this.shade = new THREE.Mesh(geometry, this.shadeMaterial);
     this.shade.name = 'fingertip-shade';
     this.shade.visible = false;
-    this.shade.renderOrder = 9;
+    this.shade.renderOrder = 991;
+    this.shade.raycast = () => undefined;
     this.root.add(this.shade);
-    this.rays = { left: this.createRay(), right: this.createRay() };
-    finishChrome(this.root);
+    markChromeTree(this.root);
   }
 
   show(): void {
     if (!this.root.parent) this.deps.scene.add(this.root);
+    this.root.visible = true;
     this.shown = true;
     this.placePanel = true;
-    this.loading ??= this.loadText();
-    this.bindSelect();
+    this.presentedFrames = 0;
+    this.build();
+    this.status?.reset();
     this.tick.prime();
   }
 
   hide(): void {
-    this.unbindSelect?.();
     this.root.parent?.remove(this.root);
+    this.root.visible = false;
     this.shown = false;
     this.shade.visible = false;
+    this.status?.set(null);
+    this.panel?.setVisible(false);
+    this.dock?.setVisible(false);
+  }
+
+  private sdkRoots(): THREE.Object3D[] {
+    return [this.status, this.panel, this.dock].flatMap((part) => (part ? [part.entity.object3D!] : []));
+  }
+
+  /** The status line, the world panel and the rays, once: the wrist is rebuilt per handedness and input. */
+  private build(): void {
+    if (this.status) return;
+    const { world } = this.deps;
+    configureXrPointers(world);
+    // IWSDK keeps its entities (status line, panel, wrist dock) under its level,
+    // outside this root: they place themselves in world space, and `sdkRoots`
+    // marks and hides them with the rest of the chrome.
+    this.status = new StatusLine(world, this.deps.xrCamera);
+    this.panel = new WorldPanel(
+      world,
+      [
+        { id: 'refit', text: 'Refit height', onSelect: () => this.deps.refitHeight() },
+        { id: 'hand', text: 'Right-handed', onSelect: () => this.deps.setHandedness(this.deps.store.getState().handedness === 'right' ? 'left' : 'right') }
+      ],
+      {
+        canCommit: (_row, pointerId) => !this.ownedElsewhere(pointerId),
+        onCommit: (_row, pointerId) => this.committed(pointerId, 'ray'),
+        onHover: (_row, pointerId, hovered) => hovered && this.pulsePointer(pointerId, PULSE_HOVER)
+      }
+    );
+    this.rays = new AimRays(world);
+    this.root.add(this.rays.group);
   }
 
   update(camera: THREE.Camera, deltaSec: number, elapsedSec: number): void {
     if (!this.shown) return;
     this.elapsedSec = elapsedSec;
+    if (this.deps.renderer.xr.isPresenting) this.presentedFrames += 1;
     const state = this.deps.store.getState();
     const recording = state.recordingState === 'recording';
     camera.updateWorldMatrix(true, false);
-    const head = camera.getWorldPosition(new THREE.Vector3());
 
     this.updateWrist(state.handedness, recording);
-    this.updateStatus(camera, deltaSec, state, recording);
-    this.updatePanel(camera, head, state, recording);
+    this.updateStatus(deltaSec, state, recording);
+    this.updatePanel(camera, state, recording);
     this.updatePoke(state.handedness);
-    this.updateRays(state.handedness, recording);
-    finishChrome(this.root);
+    // While a take runs, a ray shows only on the stop control it rests on.
+    this.rays?.update((hand) => this.deps.renderer.xr.isPresenting && Boolean(this.deps.tracking.getChromeInput(hand).targetRay) && (!recording || this.rayHit(hand) === 'record'));
+    markChromeTree(this.root);
+    for (const object of this.sdkRoots()) markChromeTree(object);
   }
 
   snapshot(camera: THREE.Camera): VrChromeSnapshot {
@@ -192,49 +199,48 @@ export class VrChrome {
     const state = this.deps.store.getState();
     const world = (object: THREE.Object3D): THREE.Vector3 => object.getWorldPosition(new THREE.Vector3());
     const labels: VrChromeSnapshot['labels'] = [];
-    this.root.traverseVisible((object) => {
-      const label = object.userData.msdfLabel as ThreeMsdfLabel | undefined;
-      if (label) labels.push({ name: object.name, text: label.getText(), distanceFromHeadM: world(object).distanceTo(head) });
-    });
+    const status = this.status?.probe();
+    if (status?.visible && status.text) labels.push({ name: 'status-line', text: status.text, distanceFromHeadM: new THREE.Vector3(...status.worldPosition).distanceTo(head) });
+    for (const row of this.panel?.readableRows() ?? []) labels.push({ name: `panel-row-${row.id}`, text: row.text, distanceFromHeadM: world(row.object).distanceTo(head) });
+    const panel = this.panel?.probe();
+    const recordHit = this.dock?.hitTarget('record');
+    const dock = this.dock?.probe();
     return {
       shown: this.shown,
       handedness: state.handedness,
-      wrist: this.wrist
+      wrist: this.dock && recordHit && dock
         ? {
-            hand: this.wrist.hand,
-            input: this.wrist.input === 'poke' ? 'poke' : 'ray',
-            visible: isShown(this.wrist.group),
-            position: world(this.wrist.glyphs[0]!.group).toArray(),
+            hand: nonDominantHand(state.handedness),
+            input: dock.input === 'poke' ? 'poke' : 'ray',
+            visible: dock.visible,
+            position: world(recordHit).toArray(),
             anchor: this.wristTracked ? world(this.wristAnchor).toArray() : null,
-            hitSizeM: this.wrist.glyphs[0]!.hitSizeM,
-            drawnSizeM: this.wrist.glyphs[0]!.drawnSizeM,
-            occludedBy: this.occluder(camera, world(this.wrist.glyphs[0]!.group)),
-            drawnOverBody: everyMesh(this.wrist.group, (mesh) => !(Array.isArray(mesh.material) ? mesh.material : [mesh.material]).some((material) => material.depthTest)),
+            hitSizeM: dock.hitSizeM,
+            drawnSizeM: dock.drawnSizeM,
+            occludedBy: this.occluder(camera, world(recordHit)),
+            drawnOverBody: everyMesh(this.dock.entity.object3D!, (mesh) => !(Array.isArray(mesh.material) ? mesh.material : [mesh.material]).some((material) => material.depthTest)),
             recording: state.recordingState === 'recording'
           }
         : null,
-      statusLine: this.status
-        ? { visible: isShown(this.status.group), text: this.status.label.getText(), position: world(this.status.group).toArray(), distanceFromHeadM: world(this.status.group).distanceTo(head) }
+      statusLine: status
+        ? { visible: status.visible, text: status.text, position: status.worldPosition, distanceFromHeadM: new THREE.Vector3(...status.worldPosition).distanceTo(head) }
         : null,
-      panel: this.panel
+      panel: panel
         ? {
-            visible: isShown(this.panel.group),
-            position: world(this.panel.group).toArray(),
-            distanceFromHeadM: world(this.panel.group).distanceTo(head),
-            rows: this.rows.map((row) => ({
-              id: row.id,
-              text: row.label.getText(),
-              visible: isShown(row.label.group),
+            visible: panel.visible,
+            position: panel.worldPosition,
+            distanceFromHeadM: new THREE.Vector3(...panel.worldPosition).distanceTo(head),
+            rows: panel.rows.map((row) => ({
+              id: row.id as RowId,
+              text: row.text,
+              visible: row.visible,
               enabled: row.enabled,
-              distanceFromHeadM: world(row.label.group).distanceTo(head),
-              hitHeightM: (row.hit.geometry as THREE.PlaneGeometry).parameters.height
+              distanceFromHeadM: new THREE.Vector3(...row.worldPosition).distanceTo(head),
+              hitHeightM: row.hitHeightM
             }))
           }
         : null,
-      rays: (['left', 'right'] as const).map((side) => {
-        const positions = this.rays[side].line.geometry.getAttribute('position') as THREE.BufferAttribute;
-        return { side, visible: this.rays[side].line.visible, hit: describeHit(this.rays[side].hit), origin: [positions.getX(0), positions.getY(0), positions.getZ(0)] };
-      }),
+      rays: (this.rays?.probe() ?? []).map((ray) => ({ side: ray.hand, visible: ray.visible, hit: ray.visible ? this.rayHit(ray.hand) : null, origin: ray.origin })),
       poke: this.pokeSnapshot(state.handedness),
       fingertipShade: { visible: this.shade.visible, radiusM: this.shade.scale.x, opacity: this.shadeMaterial.opacity },
       labels,
@@ -243,11 +249,199 @@ export class VrChrome {
     };
   }
 
+  /** A committed Halo action: a controller pulses, a hand hears the tick where the ring was. */
+  haloFeedback(side: Hand, at: THREE.Vector3, input: 'hands' | 'controllers'): void {
+    if (input === 'controllers') this.pulse(this.deps.tracking.getChromeInput(side).inputSource, PULSE_COMMIT);
+    else {
+      this.tick.play(at, this.deps.renderer.xr.getCamera());
+      this.feedback.ticks += 1;
+    }
+  }
+
   /** The hand pressing chrome now (its fingertip at a glyph, or just after a commit), whose points are not evidence. */
   pokingHand(elapsedSec: number): Hand | null {
-    if (!this.shown || !this.wrist || this.wrist.input !== 'poke') return null;
+    if (!this.shown || !this.dock || this.dockInput() !== 'poke') return null;
     const presser = dominantHand(this.deps.store.getState().handedness);
     return this.pokeNear || elapsedSec - this.lastPokeSec < POKE_RELEASE_SEC ? presser : null;
+  }
+
+  /** The world-space point at the centre of a panel row or the wrist glyph, for checks that aim at it. */
+  targetPosition(target: 'record' | RowId): number[] | null {
+    const object = target === 'record' ? this.dock?.hitTarget('record') : this.panel?.hitTarget(target);
+    return object ? object.getWorldPosition(new THREE.Vector3()).toArray() : null;
+  }
+
+  // --- The wrist ---
+
+  private dockInput(): 'poke' | 'ray' {
+    return this.dockKey.endsWith(':poke') ? 'poke' : 'ray';
+  }
+
+  private updateWrist(handedness: Handedness, recording: boolean): void {
+    const carrier = nonDominantHand(handedness);
+    // The pressing hand sets every hit area: a poke for a tracked hand, a ray for a controller.
+    const input = this.deps.tracking.getChromeInput(dominantHand(handedness)).hand ? 'poke' : 'ray';
+    const key = `${handedness}:${input}`;
+    if (key !== this.dockKey) {
+      this.dock?.dispose();
+      const record: DockAction = { id: 'record', glyph: 'record', label: 'Record', onSelect: () => this.deps.toggleRecording() };
+      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier), palm: [0, -1, 0] }, [record], {
+        input,
+        drawOverBody: true,
+        canCommit: (_action, pointerId) => this.canRecord(pointerId),
+        onCommit: (_action, pointerId, kind) => this.committed(pointerId, kind),
+        onHover: (_action, pointerId, hovered) => hovered && this.pulsePointer(pointerId, PULSE_HOVER)
+      });
+      this.dockKey = key;
+    }
+    this.wristTracked = this.placeWristAnchor(carrier);
+    this.dock!.setVisible(this.wristTracked && chromeVisible('record', recording));
+    this.dock!.setRecording(recording);
+    this.dock!.update();
+  }
+
+  /** Record runs unless a take is exporting, the select is something else's, or a hand-tracked ray points (hands poke). */
+  private canRecord(pointerId: number): boolean {
+    const state = this.deps.store.getState();
+    if (!createRecordingUiState(state.recordingState, state.recordingMessage).canToggle || this.ownedElsewhere(pointerId)) return false;
+    const hand = pointerHand(this.deps.world, pointerId);
+    const viaRay = hand !== null && multiPointer(this.deps.world, hand).ray.pointer.id === pointerId;
+    return !(viaRay && hand && this.deps.tracking.getChromeInput(hand).hand);
+  }
+
+  /** The carrying hand's wrist joint, or its controller's grip in the joint's axes; false when neither is tracked. */
+  private placeWristAnchor(side: Hand): boolean {
+    const tracking = this.deps.tracking;
+    const chromeInput = tracking.getChromeInput(side);
+    if (chromeInput.hand) {
+      if (!tracking.getTrackedHandJointPosition(side, 'wrist', tmpA) || !tracking.getTrackedHandJointQuaternion(side, 'wrist', tmpQuat)) return false;
+    } else if (chromeInput.grip) {
+      chromeInput.grip.updateWorldMatrix(true, false);
+      chromeInput.grip.matrixWorld.decompose(tmpA, tmpQuat, tmpScale);
+      // In the joint's axes, as the anchor is: out of the palm is −Y. The grip's
+      // palm is +X on the left hand and −X on the right (WebXR), a quarter turn
+      // about the grip's rod axis (Z) away.
+      tmpQuat.multiply(side === 'left' ? GRIP_TO_JOINT_LEFT : GRIP_TO_JOINT_RIGHT);
+    } else {
+      return false;
+    }
+    // World pose under the chrome root (which may itself be moved by a check's probe).
+    this.root.updateWorldMatrix(true, false);
+    const parentInverse = this.root.matrixWorld.clone().invert();
+    const local = new THREE.Matrix4().compose(tmpA, tmpQuat, new THREE.Vector3(1, 1, 1)).premultiply(parentInverse);
+    local.decompose(this.wristAnchor.position, this.wristAnchor.quaternion, tmpScale);
+    this.wristAnchor.updateMatrixWorld(true);
+    return true;
+  }
+
+  // --- The status line and the world panel ---
+
+  private updateStatus(deltaSec: number, state: UiViewModel, recording: boolean): void {
+    if (!this.status) return;
+    const base = recording ? recordingText(state.recordingElapsedMs) : state.heightFit.pending ? 'Hold still: fitting your height' : '';
+    // No mark shows live in a headset, so a Halo action is said here (slice 5).
+    const text = state.notice ? (base ? `${base} · ${state.notice}` : state.notice) : base;
+    this.status.set(text !== '' && chromeVisible('status', recording) ? { prefix: null, body: text } : null);
+    this.status.update(deltaSec * 1000);
+  }
+
+  private updatePanel(camera: THREE.Camera, state: UiViewModel, recording: boolean): void {
+    const panel = this.panel;
+    if (!panel) return;
+    // Opened level ahead once a presented frame has posed the head: on the
+    // session's first update three has not yet written the XR camera.
+    const posed = this.presentedFrames > 1 || !this.deps.renderer.xr.isPresenting;
+    if (this.placePanel && posed) {
+      panel.place(camera);
+      this.placePanel = false;
+    }
+    panel.setVisible(!this.placePanel && chromeVisible('settings', recording));
+    panel.setRow('refit', {
+      text: state.heightFit.pending ? 'Hold still…' : state.heightFit.enabled ? 'Refit height' : 'Refit after the take',
+      enabled: state.heightFit.enabled && !state.heightFit.pending
+    });
+    panel.setRow('hand', { text: state.handedness === 'right' ? 'Right-handed' : 'Left-handed' });
+    // Text within 1 m of the head hides (7.3), wherever the user has walked.
+    panel.update(camera);
+  }
+
+  // --- Poke feedback: the fingertip shade before contact ---
+
+  private updatePoke(handedness: Handedness): void {
+    const tracking = this.deps.tracking;
+    const presser = dominantHand(handedness);
+    const hit = this.dock?.hitTarget('record');
+    this.shade.visible = false;
+    this.pokeNear = false;
+    if (!hit || !this.dock || this.dockInput() !== 'poke' || !this.dock.probe().visible || !tracking.getTrackedHandJointPosition(presser, 'index-finger-tip', tmpA)) return;
+    const { drawnSizeM, hitSizeM } = this.dock.sizes;
+    const face = faceFrame(hit);
+    const offset = tmpB.copy(tmpA).sub(face.centre);
+    const x = offset.dot(axisX);
+    const y = offset.dot(axisY);
+    const depth = offset.dot(normal);
+    const half = hitSizeM / 2;
+    const near = Math.abs(x) <= half && Math.abs(y) <= half && depth <= POKE.proximityM && depth >= -POKE.throughM;
+    this.pokeNear = near;
+    if (!near) return;
+    // Blurred and wide while far, sharpening onto the glyph at contact.
+    const t = THREE.MathUtils.clamp(Math.max(0, depth) / POKE.proximityM, 0, 1);
+    this.shade.quaternion.copy(face.rotation);
+    this.shade.position.copy(face.centre).addScaledVector(axisX, x).addScaledVector(axisY, y).addScaledVector(normal, 0.001);
+    this.root.updateWorldMatrix(true, false);
+    this.root.worldToLocal(this.shade.position);
+    this.shade.scale.setScalar((drawnSizeM / 2) * (1 + 2 * t));
+    this.shadeMaterial.opacity = tokens.shade.mid.alpha + (tokens.shade.inner.alpha - tokens.shade.mid.alpha) * (1 - t);
+    this.shade.visible = true;
+  }
+
+  private pokeSnapshot(handedness: Handedness): VrChromeSnapshot['poke'] {
+    const hit = this.dock?.hitTarget('record');
+    const read = new THREE.Vector3();
+    const tip = this.deps.tracking.getTrackedHandJointPosition(dominantHand(handedness), 'index-finger-tip', read) ? read : null;
+    if (!hit) return { tip: tip?.toArray() ?? null, glyphNormal: null, depthM: null };
+    const face = faceFrame(hit);
+    return { tip: tip?.toArray() ?? null, glyphNormal: normal.toArray(), depthM: tip ? tip.clone().sub(face.centre).dot(normal) : null };
+  }
+
+  // --- Rays, commits and feedback ---
+
+  /** What a hand's ray pointer rests on, in the snapshot's words. */
+  private rayHit(hand: Hand): string | null {
+    const id = multiPointer(this.deps.world, hand).ray.pointer.id;
+    if (this.dock?.isHoveredBy('record', id)) return 'record';
+    for (const row of ['refit', 'hand'] as const) if (this.panel?.isHoveredBy(row, id)) return `row:${row}`;
+    return null;
+  }
+
+  private ownedElsewhere(pointerId: number): boolean {
+    const hand = pointerHand(this.deps.world, pointerId);
+    return hand !== null && Boolean(this.deps.ownsSelect?.(this.deps.tracking.getChromeInput(hand).inputSource));
+  }
+
+  private committed(pointerId: number, kind: 'poke' | 'ray'): void {
+    this.feedback.commits += 1;
+    if (kind === 'poke') {
+      this.lastPokeSec = this.elapsedSec;
+      const hit = this.dock?.hitTarget('record');
+      if (hit) this.tick.play(hit.getWorldPosition(tmpA), this.deps.renderer.xr.getCamera());
+      this.feedback.ticks += 1;
+    } else {
+      this.pulsePointer(pointerId, PULSE_COMMIT);
+    }
+  }
+
+  private pulsePointer(pointerId: number, strength: { intensity: number; durationMs: number }): void {
+    const hand = pointerHand(this.deps.world, pointerId);
+    if (hand) this.pulse(this.deps.tracking.getChromeInput(hand).inputSource, strength);
+  }
+
+  private pulse(inputSource: XRInputSource | undefined, { intensity, durationMs }: { intensity: number; durationMs: number }): void {
+    // `pulse` is the Gamepad extension WebXR browsers ship; the DOM types lack it.
+    const actuator = (inputSource?.gamepad as { hapticActuators?: ReadonlyArray<{ pulse?: (value: number, ms: number) => Promise<boolean> }> } | undefined)?.hapticActuators?.[0];
+    if (!actuator?.pulse) return;
+    void actuator.pulse(intensity, durationMs).catch(() => undefined);
+    this.feedback.pulses += 1;
   }
 
   /** The first visible scene mesh, not chrome, on the line from the head to `point`. */
@@ -263,312 +457,17 @@ export class VrChrome {
     raycaster.far = Infinity;
     return hit ? hit.object.name || hit.object.type : null;
   }
-
-  /** The world-space point at the centre of a panel row or the wrist glyph, for checks that aim at it. */
-  targetPosition(target: 'record' | RowId): number[] | null {
-    if (target === 'record') return this.wrist ? this.wrist.glyphs[0]!.hitTarget.getWorldPosition(new THREE.Vector3()).toArray() : null;
-    const row = this.rows.find((candidate) => candidate.id === target);
-    return row ? row.hit.getWorldPosition(new THREE.Vector3()).toArray() : null;
-  }
-
-  private pokeSnapshot(handedness: Handedness): VrChromeSnapshot['poke'] {
-    const glyph = this.wrist?.glyphs[0];
-    const read = new THREE.Vector3();
-    const tip = this.deps.tracking.getTrackedHandJointPosition(dominantHand(handedness), 'index-finger-tip', read) ? read : null;
-    if (!glyph) return { tip: tip?.toArray() ?? null, glyphNormal: null, depthM: null };
-    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(glyph.hitTarget.getWorldQuaternion(new THREE.Quaternion()));
-    const depth = tip ? glyph.hitTarget.worldToLocal(tip.clone()).z : null;
-    return { tip: tip?.toArray() ?? null, glyphNormal: normal.toArray(), depthM: depth };
-  }
-
-  private async loadText(): Promise<void> {
-    const [status, atlas] = await Promise.all([ThreeStatusLine.load({ chip: false, target: VIEW_TARGETS.vr }), loadLabelAtlas('controlLabel')]);
-    this.status = status;
-    this.status.group.visible = false;
-    this.root.add(this.status.group);
-    const panel = new ThreeWorldPanel({ target: VIEW_TARGETS.vr });
-    for (const id of ['refit', 'hand'] as const) {
-      const label = new ThreeMsdfLabel({ text: ' ', role: 'controlLabel', headset: true, distanceM: panel.distanceM, font: atlas.font, texture: atlas.texture, anchor: 'center' });
-      label.group.name = `panel-row-${id}`;
-      label.group.userData.msdfLabel = label;
-      panel.addRow(label);
-      const hit = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), createChromeMaterial({ color: tokens.glyph.color, visible: false, doubleSided: true }));
-      hit.name = `panel-hit-${id}`;
-      panel.group.add(hit);
-      this.rows.push({ id, label, hit, enabled: true });
-    }
-    status.label.group.userData.msdfLabel = status.label;
-    this.panel = panel;
-    this.panel.group.visible = false;
-    this.root.add(panel.group);
-    markChromeTree(this.root);
-  }
-
-  // --- The wrist ---
-
-  private updateWrist(handedness: Handedness, recording: boolean): void {
-    const tracking = this.deps.tracking;
-    const carrier = nonDominantHand(handedness);
-    const presser = tracking.getChromeInput(dominantHand(handedness));
-    // The pressing hand sets every hit area: a poke for a tracked hand, a ray for a controller.
-    const input = presser.hand ? 'poke' : 'ray';
-    const key = `${handedness}:${input}`;
-    if (key !== this.wristKey) {
-      if (this.wrist) {
-        this.root.remove(this.wrist.group);
-        this.wrist.dispose();
-      }
-      this.wrist = new ThreeWristGlyphs({ handedness, glyphs: ['record'], input });
-      this.wristKey = key;
-      this.wristDrawnRecording = null;
-      this.pokeArmed = false;
-      this.root.add(this.wrist.group);
-    }
-    this.wristTracked = this.placeWristAnchor(carrier);
-    const wrist = this.wrist!;
-    wrist.group.visible = this.wristTracked && chromeVisible('record', recording);
-    if (this.wristTracked) wrist.update(this.wristAnchor);
-    if (this.wristDrawnRecording !== recording) {
-      wrist.setRecording(recording);
-      drawOverBody(wrist.group);
-      this.wristDrawnRecording = recording;
-    }
-  }
-
-  /** The carrying hand's wrist joint, or its controller's grip; false when neither is tracked. */
-  private placeWristAnchor(side: Hand): boolean {
-    const tracking = this.deps.tracking;
-    const chromeInput = tracking.getChromeInput(side);
-    if (chromeInput.hand) {
-      if (!tracking.getTrackedHandJointPosition(side, 'wrist', tmpA) || !tracking.getTrackedHandJointQuaternion(side, 'wrist', tmpQuat)) return false;
-      this.wristAnchor.position.copy(tmpA);
-      this.wristAnchor.quaternion.copy(tmpQuat);
-    } else if (chromeInput.grip) {
-      chromeInput.grip.updateWorldMatrix(true, false);
-      chromeInput.grip.matrixWorld.decompose(this.wristAnchor.position, this.wristAnchor.quaternion, tmpScale);
-    } else {
-      return false;
-    }
-    this.wristAnchor.updateMatrixWorld(true);
-    return true;
-  }
-
-  // --- The status line and the world panel ---
-
-  private updateStatus(camera: THREE.Camera, deltaSec: number, state: UiViewModel, recording: boolean): void {
-    if (!this.status) return;
-    const text = recording ? recordingText(state.recordingElapsedMs) : state.heightFit.pending ? 'Hold still: fitting your height' : '';
-    if (text !== this.status.label.getText()) this.status.setText(text);
-    this.status.group.visible = text !== '' && chromeVisible('status', recording);
-    this.status.update(camera, deltaSec * 1000, false);
-  }
-
-  private updatePanel(camera: THREE.Camera, head: THREE.Vector3, state: UiViewModel, recording: boolean): void {
-    const panel = this.panel;
-    if (!panel) return;
-    if (this.placePanel) {
-      // Opened level ahead: a head pitched at that moment must not set the panel high or low.
-      camera.updateWorldMatrix(true, false);
-      camera.matrixWorld.decompose(levelHead.position, tmpQuat, tmpScale);
-      levelHead.quaternion.setFromEuler(new THREE.Euler(0, new THREE.Euler().setFromQuaternion(tmpQuat, 'YXZ').y, 0, 'YXZ'));
-      levelHead.updateMatrixWorld(true);
-      panel.place(levelHead);
-      this.placePanel = false;
-    }
-    panel.group.visible = chromeVisible('settings', recording);
-    const refit = this.rows[0]!;
-    const hand = this.rows[1]!;
-    refit.enabled = state.heightFit.enabled && !state.heightFit.pending;
-    const texts: Record<RowId, string> = {
-      refit: state.heightFit.pending ? 'Hold still…' : state.heightFit.enabled ? 'Refit height' : 'Refit after the take',
-      hand: state.handedness === 'right' ? 'Right-handed' : 'Left-handed'
-    };
-    let changed = false;
-    for (const row of [refit, hand]) {
-      if (row.label.getText() !== texts[row.id]) {
-        row.label.setText(texts[row.id]);
-        changed = true;
-      }
-    }
-    if (changed) {
-      panel.layout();
-      this.layoutRowHits(panel);
-    }
-    const pressed = glyphAppearance({ pressed: true }, { headset: true }).opacity;
-    refit.label.setOpacity(refit.enabled ? 1 : pressed);
-    // Text within 1 m of the head hides (7.3), wherever the user has walked.
-    for (const row of this.rows) row.label.updateVisibility(VIEW_TARGETS.vr, 'label', { fromHeadM: row.label.group.getWorldPosition(tmpA).distanceTo(head) });
-  }
-
-  /** Each row's hit area spans the panel and is at least a ray's minimum tall (6.1). */
-  private layoutRowHits(panel: ThreeWorldPanel): void {
-    const width = panel.rows.reduce((widest, row) => Math.max(widest, row.widthM), 0);
-    const minHeight = hitAreaMeters('ray', 0, panel.distanceM, { headset: false });
-    for (const row of this.rows) {
-      const height = Math.max(row.label.heightM, minHeight);
-      row.hit.geometry.dispose();
-      row.hit.geometry = new THREE.PlaneGeometry(width, height);
-      row.hit.position.set(0, row.label.group.position.y, 0.002);
-    }
-  }
-
-  // --- Poke, with the fingertip shade and the tick ---
-
-  private updatePoke(handedness: Handedness): void {
-    const tracking = this.deps.tracking;
-    const presser = dominantHand(handedness);
-    const glyph = this.wrist?.glyphs[0];
-    this.shade.visible = false;
-    this.pokeNear = false;
-    if (!glyph || this.wrist?.input !== 'poke' || !isShown(glyph.group) || !tracking.getTrackedHandJointPosition(presser, 'index-finger-tip', tmpA)) {
-      this.pokeArmed = false;
-      this.setGlyphState(false);
-      return;
-    }
-    const local = glyph.hitTarget.worldToLocal(tmpB.copy(tmpA));
-    const half = glyph.hitSizeM / 2;
-    const inside = Math.abs(local.x) <= half && Math.abs(local.y) <= half;
-    const depth = local.z;
-    // A tip arriving from the side, from behind, or already through the face never commits.
-    if (inside && depth > POKE_REARM_M) this.pokeArmed = true;
-    const near = inside && depth <= POKE_PROXIMITY_M && depth >= -POKE_THROUGH_M;
-    this.pokeNear = near;
-    if (near) {
-      // Blurred and wide while far, sharpening onto the glyph at contact.
-      const t = THREE.MathUtils.clamp(Math.max(0, depth) / POKE_PROXIMITY_M, 0, 1);
-      const radius = (glyph.drawnSizeM / 2) * (1 + 2 * t);
-      glyph.hitTarget.getWorldQuaternion(this.shade.quaternion);
-      glyph.hitTarget.localToWorld(this.shade.position.set(local.x, local.y, 0.001));
-      this.shade.scale.setScalar(radius);
-      setChromeOpacity(this.shadeMaterial, tokens.shade.mid.alpha + (tokens.shade.inner.alpha - tokens.shade.mid.alpha) * (1 - t));
-      this.shade.visible = true;
-    }
-    this.setGlyphState(near);
-    if (near && this.pokeArmed && depth <= POKE_CONTACT_M) {
-      this.pokeArmed = false;
-      this.lastPokeSec = this.elapsedSec;
-      if (this.commit({ kind: 'record' })) {
-        this.tick.play(glyph.hitTarget.getWorldPosition(tmpA), this.deps.renderer.xr.getCamera());
-        this.feedback.ticks += 1;
-      }
-    }
-  }
-
-  private setGlyphState(approached: boolean): void {
-    const glyph = this.wrist?.glyphs[0];
-    if (!glyph) return;
-    const rayOnIt = this.rays.left.hit?.kind === 'record' || this.rays.right.hit?.kind === 'record';
-    glyph.setState({ hovered: approached || rayOnIt, pressed: this.elapsedSec < this.pressedUntilSec });
-  }
-
-  // --- Rays and select ---
-
-  private createRay(): RayState {
-    const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]);
-    const material = new THREE.LineBasicMaterial({ color: tokens.glyph.color, transparent: true, depthTest: false, toneMapped: false });
-    const line = new THREE.Line(geometry, material);
-    line.name = 'aim-ray';
-    line.renderOrder = 998;
-    line.frustumCulled = false;
-    line.visible = false;
-    this.root.add(line);
-    return { line, hit: null, hitDistance: RAY_IDLE_LENGTH_M };
-  }
-
-  private updateRays(handedness: Handedness, recording: boolean): void {
-    for (const side of ['left', 'right'] as const) {
-      const ray = this.rays[side];
-      const chromeInput = this.deps.tracking.getChromeInput(side);
-      const before = describeHit(ray.hit);
-      ray.hit = null;
-      ray.hitDistance = RAY_IDLE_LENGTH_M;
-      const object = chromeInput.targetRay;
-      // The carrying hand never presses its own wrist; a hand's ray only reaches the panel, and
-      // a row whose label hides within 1 m takes no hits.
-      if (!object || !this.deps.renderer.xr.isPresenting) {
-        ray.line.visible = false;
-        continue;
-      }
-      object.updateWorldMatrix(true, false);
-      object.getWorldPosition(tmpA);
-      tmpB.set(0, 0, -1).applyQuaternion(object.getWorldQuaternion(tmpQuat)).normalize();
-      raycaster.set(tmpA, tmpB);
-      const targets: Array<{ mesh: THREE.Mesh; hit: NonNullable<RayState['hit']> }> = [];
-      if (this.wrist && side === dominantHand(handedness) && !chromeInput.hand) targets.push({ mesh: this.wrist.glyphs[0]!.hitTarget, hit: { kind: 'record' } });
-      for (const row of this.rows) if (row.enabled && isShown(row.label.group)) targets.push({ mesh: row.hit, hit: { kind: 'row', id: row.id } });
-      let best = Infinity;
-      for (const target of targets) {
-        if (!isShown(target.mesh)) continue;
-        const intersection = raycaster.intersectObject(target.mesh, false)[0];
-        if (intersection && intersection.distance < best) {
-          best = intersection.distance;
-          ray.hit = target.hit;
-          ray.hitDistance = intersection.distance;
-        }
-      }
-      // While a take runs, a ray shows only on the stop control it rests on.
-      ray.line.visible = !recording || ray.hit !== null;
-      const length = ray.hit ? Math.max(0.05, ray.hitDistance) : RAY_IDLE_LENGTH_M;
-      const positions = ray.line.geometry.getAttribute('position') as THREE.BufferAttribute;
-      positions.setXYZ(0, tmpA.x, tmpA.y, tmpA.z);
-      positions.setXYZ(1, tmpA.x + tmpB.x * length, tmpA.y + tmpB.y * length, tmpA.z + tmpB.z * length);
-      positions.needsUpdate = true;
-      const material = ray.line.material as THREE.LineBasicMaterial;
-      material.color.set(ray.hit ? tokens.glyph.states.hoverColor : tokens.glyph.color);
-      const now = describeHit(ray.hit);
-      if (now && now !== before) this.pulse(chromeInput.inputSource, PULSE_HOVER);
-    }
-  }
-
-  private bindSelect(): void {
-    if (this.unbindSelect) return;
-    const xr = this.deps.renderer.xr;
-    const bindings = [xr.getController(0), xr.getController(1)].map((controller) => {
-      const handler = (): void => {
-        if (!xr.isPresenting) return;
-        // Only the ray of the controller that fired selects (a refit never starts a take).
-        for (const side of ['left', 'right'] as const) {
-          const chromeInput = this.deps.tracking.getChromeInput(side);
-          const hit = this.rays[side].hit;
-          if (chromeInput.targetRay !== controller || !hit) continue;
-          if (this.commit(hit)) this.pulse(chromeInput.inputSource, PULSE_COMMIT);
-          return;
-        }
-      };
-      controller.addEventListener('select', handler);
-      return { controller, handler };
-    });
-    this.unbindSelect = () => {
-      for (const { controller, handler } of bindings) controller.removeEventListener('select', handler);
-      this.unbindSelect = null;
-    };
-  }
-
-  /** Runs the hit's action; false when it cannot run now (Record while a take exports). */
-  private commit(hit: NonNullable<RayState['hit']>): boolean {
-    const state = this.deps.store.getState();
-    if (hit.kind === 'record' && !createRecordingUiState(state.recordingState, state.recordingMessage).canToggle) return false;
-    this.feedback.commits += 1;
-    if (hit.kind === 'record') {
-      this.pressedUntilSec = this.elapsedSec + PRESSED_SHOW_SEC;
-      this.deps.toggleRecording();
-    } else if (hit.id === 'refit') this.deps.refitHeight();
-    else this.deps.setHandedness(state.handedness === 'right' ? 'left' : 'right');
-    return true;
-  }
-
-  private pulse(inputSource: XRInputSource | undefined, { intensity, durationMs }: { intensity: number; durationMs: number }): void {
-    // `pulse` is the Gamepad extension WebXR browsers ship; the DOM types lack it.
-    const actuator = (inputSource?.gamepad as { hapticActuators?: ReadonlyArray<{ pulse?: (value: number, ms: number) => Promise<boolean> }> } | undefined)?.hapticActuators?.[0];
-    if (!actuator?.pulse) return;
-    void actuator.pulse(intensity, durationMs).catch(() => undefined);
-    this.feedback.pulses += 1;
-  }
 }
 
-function describeHit(hit: RayState['hit']): string | null {
-  if (!hit) return null;
-  return hit.kind === 'record' ? 'record' : `row:${hit.id}`;
+/** A glyph's face in world space: its centre, its rotation, and its axes (x, y in the face; the normal out of it). */
+function faceFrame(hit: THREE.Object3D): { centre: THREE.Vector3; rotation: THREE.Quaternion } {
+  hit.updateWorldMatrix(true, false);
+  const centre = hit.getWorldPosition(new THREE.Vector3());
+  const rotation = hit.getWorldQuaternion(new THREE.Quaternion());
+  axisX.set(1, 0, 0).applyQuaternion(rotation);
+  axisY.set(0, 1, 0).applyQuaternion(rotation);
+  normal.set(0, 0, 1).applyQuaternion(rotation);
+  return { centre, rotation };
 }
 
 /** Visible all the way up to the scene (hit meshes draw nothing, but their objects stay visible). */
@@ -578,23 +477,6 @@ function isShown(object: THREE.Object3D): boolean {
     if (node.type === 'Scene') return true;
   }
   return false;
-}
-
-/**
- * The wrist row draws over the wearer's own avatar: held on a controller,
- * the record glyph sits inside the avatar's sleeve and cuff, and depth
- * testing hid it there (measured in IWER: occluded by the outfit). Nothing
- * else comes between the eye and a wrist at arm's reach. Record rebuilds its
- * shape and materials when it turns into Stop, so this runs after each
- * change. Set here, open to revisit; proposed as a ThreeWristGlyphs option.
- */
-function drawOverBody(group: THREE.Object3D): void {
-  group.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    mesh.renderOrder = WRIST_OVER_BODY_ORDER;
-    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) material.depthTest = false;
-  });
 }
 
 function everyMesh(root: THREE.Object3D, test: (mesh: THREE.Mesh) => boolean): boolean {

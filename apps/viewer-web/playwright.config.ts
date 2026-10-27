@@ -46,8 +46,13 @@ const suiteName = (process.env.npm_lifecycle_event ?? "test-e2e").replace(/[^a-z
 
 export default defineConfig({
   testDir: "./e2e",
+  // The pipeline shard runs ~7 minutes of tests under a 20-minute job. On CI
+  // it stops itself first, so a stalled run still names the test it was in
+  // and leaves its report and diagnostics instead of being cancelled blind.
+  globalTimeout: process.env.CI && runPipeline ? 16 * 60_000 : 0,
   reporter: [
-    [process.env.CI ? "dot" : "list"],
+    // The pipeline's tests run for minutes each; list prints each one's start.
+    [process.env.CI && !runPipeline ? "dot" : "list"],
     ["json", { outputFile: path.resolve(import.meta.dirname, "../../output/test-results", `playwright-web-${suiteName}.json`) }]
   ],
   use: {

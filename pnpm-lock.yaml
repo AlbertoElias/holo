@@ -96,6 +96,9 @@ importers:
       '@holoim/xr-ui-core':
         specifier: workspace:*
         version: link:../../packages/xr-ui-core
+      '@holoim/xr-ui-iwsdk':
+        specifier: workspace:*
+        version: link:../../packages/xr-ui-iwsdk
       '@holoim/xr-ui-three':
         specifier: workspace:*
         version: link:../../packages/xr-ui-three
@@ -105,6 +108,9 @@ importers:
       '@mediapipe/tasks-vision':
         specifier: 0.10.17
         version: 0.10.17
+      '@pmndrs/pointer-events':
+        specifier: 6.6.29
+        version: 6.6.29
       '@pmndrs/uikit':
         specifier: 1.0.77
         version: 1.0.77(super-three@0.181.0)
@@ -327,9 +333,21 @@ importers:
       '@holoim/xr-ui-core':
         specifier: workspace:*
         version: link:../../packages/xr-ui-core
+      '@holoim/xr-ui-iwsdk':
+        specifier: workspace:*
+        version: link:../../packages/xr-ui-iwsdk
       '@holoim/xr-ui-r3f':
         specifier: workspace:*
         version: link:../../packages/xr-ui-r3f
+      '@holoim/xr-ui-three':
+        specifier: workspace:*
+        version: link:../../packages/xr-ui-three
+      '@iwsdk/core':
+        specifier: ^1.0.1
+        version: 1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)
+      '@pmndrs/pointer-events':
+        specifier: 6.6.29
+        version: 6.6.29
       '@react-three/drei':
         specifier: ^9.120.4
         version: 9.122.0(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0))(@types/react@18.3.28)(@types/three@0.173.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0)(use-sync-external-store@1.6.0(react@18.3.1))
@@ -364,9 +382,6 @@ importers:
       '@holoim/tooling-testing':
         specifier: workspace:*
         version: link:../../packages/tooling-testing
-      '@iwsdk/core':
-        specifier: ^0.5.3
-        version: 0.5.3(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)
       '@iwsdk/scene-composition':
         specifier: ^0.5.3
         version: 0.5.3
@@ -651,6 +666,40 @@ importers:
       '@holoim/config-ts':
         specifier: workspace:*
         version: link:../config-ts
+      eslint:
+        specifier: 'catalog:'
+        version: 9.39.3(jiti@2.6.1)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(jiti@2.6.1)(jsdom@26.1.0)(tsx@4.21.0)
+
+  packages/xr-ui-iwsdk:
+    dependencies:
+      '@holoim/design-tokens':
+        specifier: workspace:*
+        version: link:../design-tokens
+      '@holoim/xr-ui-core':
+        specifier: workspace:*
+        version: link:../xr-ui-core
+      '@iwsdk/core':
+        specifier: ^1.0.1
+        version: 1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))
+      three:
+        specifier: npm:super-three@0.181.0
+        version: super-three@0.181.0
+    devDependencies:
+      '@holoim/config-eslint':
+        specifier: workspace:*
+        version: link:../config-eslint
+      '@holoim/config-ts':
+        specifier: workspace:*
+        version: link:../config-ts
+      '@types/three':
+        specifier: 0.173.0
+        version: 0.173.0
       eslint:
         specifier: 'catalog:'
         version: 9.39.3(jiti@2.6.1)
@@ -6242,6 +6291,30 @@ snapshots:
       - react
       - supports-color
 
+  '@iwsdk/core@1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))':
+    dependencies:
+      '@babylonjs/havok': 1.3.14
+      '@drawcall/uikitml': 0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.77(super-three@0.181.0))(super-three@0.181.0)
+      '@iwsdk/locomotor': 1.0.1(super-three@0.181.0)(three-mesh-bvh@0.9.14(super-three@0.181.0))
+      '@iwsdk/scene-composition': 1.0.1
+      '@iwsdk/xr-input': 1.0.1(super-three@0.181.0)
+      '@pmndrs/handle': 6.6.29
+      '@pmndrs/pointer-events': 6.6.29
+      '@pmndrs/uikit': 1.0.77(super-three@0.181.0)
+      '@preact/signals-core': 1.14.0
+      '@types/three': 0.173.0
+      '@types/webxr': 0.5.24
+      elics: 3.4.2
+      three: super-three@0.181.0
+      three-mesh-bvh: 0.9.14(super-three@0.181.0)
+    transitivePeerDependencies:
+      - '@opentelemetry/core'
+      - '@opentelemetry/exporter-trace-otlp-http'
+      - '@types/react'
+      - immer
+      - react
+      - supports-color
+
   '@iwsdk/core@1.0.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@types/react@18.3.28)(react@18.3.1)':
     dependencies:
       '@babylonjs/havok': 1.3.14
@@ -6466,6 +6539,15 @@ snapshots:
   '@playwright/test@1.58.2':
     dependencies:
       playwright: 1.58.2
+
+  '@pmndrs/handle@6.6.29':
+    dependencies:
+      '@pmndrs/pointer-events': 6.6.29
+      zustand: 4.5.7
+    transitivePeerDependencies:
+      - '@types/react'
+      - immer
+      - react
 
   '@pmndrs/handle@6.6.29(@types/react@18.3.28)(react@18.3.1)':
     dependencies:
@@ -9830,6 +9912,8 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
+  use-sync-external-store@1.6.0: {}
+
   use-sync-external-store@1.6.0(react@18.3.1):
     dependencies:
       react: 18.3.1
@@ -10098,6 +10182,10 @@ snapshots:
   zustand@3.7.2(react@18.3.1):
     optionalDependencies:
       react: 18.3.1
+
+  zustand@4.5.7:
+    dependencies:
+      use-sync-external-store: 1.6.0
 
   zustand@4.5.7(@types/react@18.3.28)(react@18.3.1):
     dependencies:

@@ -41,12 +41,13 @@ describe("ThreeHalo directions", () => {
     expect(filled.sort()).toEqual(["e", "s", "w"]);
     expect(h.slotObject("s")!.action).toBe("record");
     expect(h.slotObject("s")!.glyph.id).toBe("record");
-    // Undo and redo have no decided drawing yet: an empty gold ring of the slot size.
-    for (const direction of ["w", "e"] as const) {
+    // Undo and redo draw their arrows inside a gold ring of the slot size (6.2).
+    for (const [direction, id] of [["w", "undo"], ["e", "redo"]] as const) {
       const slot = h.slotObject(direction)!;
-      expect(slot.glyph.id).toBeNull();
+      expect(slot.glyph.id).toBe(id);
       expect(slot.glyph.ring).not.toBeNull();
-      expect(slot.glyph.shape).toBeNull();
+      expect(slot.glyph.shape).not.toBeNull();
+      expect(slot.glyph.drawnSizeM).toBeCloseTo(h.slotObject("s")!.glyph.drawnSizeM, 6);
     }
     expect(h.slotObject("n")).toBeUndefined();
   });

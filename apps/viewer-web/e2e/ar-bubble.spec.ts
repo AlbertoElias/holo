@@ -1,12 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { Page } from "@playwright/test";
 import type * as Three from "three";
 import type { Mesh, Object3D } from "three";
 import { tokens } from "@holoim/design-tokens";
 import { freezePageClock, waitForIwerSession } from "@holoim/tooling-testing/xr-env";
 import { clocheCharShare } from "@holoim/xr-ui-core";
 
-import { pinch } from "./ar-gestures";
 import { diagnosticGltf } from "./bubble-fixture";
 import { captureBubblePixels } from "./bubble-pixel-proof";
 
@@ -14,6 +14,96 @@ import { expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressV
 
 import type { Probe } from "./ar-bubble-types";
 type ProbeWindow = Window & { __HOLOIM_AR_TEST_OBSERVER__?: (value: Probe) => void; __bubbleProbe?: Probe };
+
+// `/ar/:id` is the IWSDK shell (viewer-xr-interface step 6). Its development
+// probe (`__HOLOIM_XR_VIEWER__`) reports placement and the scale chip, and
+// holds the clip clock; the AR observer hands the placed hologram's model,
+// bubble and cloche to these checks, as the R3F view did.
+type Vec3 = [number, number, number];
+type ViewerProbeWindow = Window & {
+  __HOLOIM_XR_VIEWER__?: {
+    snapshot(): {
+      placement: { stage: string; position: Vec3 | null };
+      hologram: { worldPosition: Vec3; worldScale: Vec3; grabbed: boolean } | null;
+      controls: { foot: { text: { scale: string } } } | null;
+    };
+    setClock(clipTime: number, playing: boolean): void;
+  };
+};
+
+const viewerSnapshot = (page: Page) => page.evaluate(() => (window as ViewerProbeWindow).__HOLOIM_XR_VIEWER__!.snapshot());
+
+/** From the feed card into the IWSDK AR session (auto-entry on the tap, or the entry button), placed. */
+async function enterArFromFeed(page: Page): Promise<void> {
+  await pressViewInAr(page);
+  await expect(page).toHaveURL(/\/ar\/bubble-render$/);
+  const container = page.locator(".xr-view-container");
+  await expect(container).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
+  if ((await container.getAttribute("data-xr-state")) === "ready") await page.getByRole("button", { name: "View in your room" }).click();
+  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
+  await page.waitForFunction(() => Boolean((window as ProbeWindow).__bubbleProbe?.bubble.active));
+  await expect.poll(async () => (await viewerSnapshot(page)).placement.stage, { timeout: 15_000 }).toMatch(/placed|anchored/);
+}
+
+type IwerWindow = Window & {
+  IWER_DEVICE: {
+    controlMode: string;
+    position: { x: number; y: number; z: number; set(...v: number[]): void };
+    quaternion: { set(...v: number[]): void };
+    controllers: Record<"left" | "right", { position: { set(...v: number[]): void }; quaternion: { set(...v: number[]): void }; updateButtonValue(id: string, v: number): void }>;
+  };
+};
+
+/**
+ * The viewer's own rescale on a headset: both grips on the hologram's front,
+ * brought together, so it shrinks to `factor` of its recorded size and brings
+ * the 4 m diagnostic bubble into the controlled view below.
+ */
+async function twoHandShrink(page: Page, factor: number): Promise<void> {
+  const { hologram } = await viewerSnapshot(page);
+  const [x, y, z] = hologram!.worldPosition;
+  // High on the diagnostic body (0.5 m): the foot chip is within 15 cm of
+  // its feet, and a touch candidate there outranks the grab.
+  const chest = y + 0.45;
+  // Just inside the front of the diagnostic body's 0.5 m pointer box.
+  const front = z + 0.25 - 0.02;
+  const pose = (side: "left" | "right" | "head", position: Vec3, quaternion: [number, number, number, number] = [0, 0, 0, 1]) => page.evaluate(({ side, position, quaternion }) => {
+    const device = (window as unknown as IwerWindow).IWER_DEVICE;
+    device.controlMode = "programmatic";
+    const tracked = side === "head" ? device : device.controllers[side];
+    tracked.position.set(...position);
+    tracked.quaternion.set(...quaternion);
+  }, { side, position, quaternion });
+  // One grip a few frames after the other, as hands close.
+  const squeeze = async (value: 0 | 1) => {
+    for (const side of ["left", "right"] as const) {
+      await page.evaluate(({ side, value }) => (window as unknown as IwerWindow).IWER_DEVICE.controllers[side].updateButtonValue("squeeze", value), { side, value });
+      await page.waitForTimeout(80);
+    }
+  };
+  const spread = 0.2;
+  await pose("head", [x, 1.6, z + 0.9]);
+  await pose("left", [x - spread, chest, front]);
+  await pose("right", [x + spread, chest, front]);
+  await page.waitForTimeout(250);
+  await squeeze(1);
+  await expect.poll(async () => (await viewerSnapshot(page)).hologram!.grabbed, { timeout: 3_000 }).toBe(true);
+  for (let step = 1; step <= 10; step += 1) {
+    const half = spread * (1 + (factor - 1) * step / 10);
+    await pose("left", [x - half, chest, front]);
+    await pose("right", [x + half, chest, front]);
+    await page.waitForTimeout(60);
+  }
+  await squeeze(0);
+  await expect.poll(async () => (await viewerSnapshot(page)).hologram!.grabbed, { timeout: 3_000 }).toBe(false);
+  // The hands leave, so nothing grabs again.
+  await pose("left", [x - 1, 0.2, z + 2]);
+  await pose("right", [x + 1, 0.2, z + 2]);
+}
+
+/** Holds the hologram's clock at `clipTime`, paused, or plays it from there. */
+const setClock = (page: Page, clipTime: number, playing: boolean) =>
+  page.evaluate(([time, play]) => (window as ViewerProbeWindow).__HOLOIM_XR_VIEWER__!.setClock(time, play), [clipTime, playing] as const);
 
 test("immersive AR renders the animated bubble and clips outside geometry in both eyes", async ({ page }, testInfo) => {
   test.setTimeout(90000);
@@ -28,19 +118,17 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   await observeFeedCardRenderer(page);
   await page.goto("/");
   await waitForFeedCardPresented(page);
-  await pressViewInAr(page);
-  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
-  await page.waitForFunction(() => Boolean((window as ProbeWindow).__bubbleProbe?.bubble.active));
+  await enterArFromFeed(page);
   await page.evaluate(() => {
     const device = (window as unknown as { IWER_DEVICE: { stereoEnabled: boolean; ipd: number } }).IWER_DEVICE;
     device.stereoEnabled = true; device.ipd = 0.064;
   });
-  await expect.poll(() => page.locator(".ar-view-container").getAttribute("data-placement-stage")).toMatch(/placed|anchored|locked/);
-  // AR opens at true scale (Q13); the viewer's own pinch gives the non-unit
-  // transform the clipping must survive, and brings the 4 m diagnostic bubble
-  // into the controlled view below.
-  await pinch(page, 250, 100);
-  await expect(page.locator(".ar-view-container")).toHaveAttribute("data-ar-scale-label", /^1:/);
+  // AR opens at true scale (Q13); the viewer's own two-hand rescale gives the
+  // non-unit transform the clipping must survive, and brings the 4 m
+  // diagnostic bubble into the controlled view below.
+  expect((await viewerSnapshot(page)).hologram!.worldScale[0], "AR opens at recorded scale").toBeCloseTo(1, 6);
+  await twoHandShrink(page, 0.45);
+  await expect.poll(async () => (await viewerSnapshot(page)).controls?.foot.text.scale).toMatch(/^\d+%$/);
   await freezePageClock(page);
   await page.clock.runFor(100);
   // The room chooses placement, but the pixel oracle needs a controlled view
@@ -57,7 +145,7 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
   });
   await page.clock.runFor(50);
 
-  await page.evaluate(() => { Object.values((window as ProbeWindow).__bubbleProbe!.actions).forEach((action) => { action.time = 0; }); });
+  await setClock(page, 0, true);
   await page.clock.runFor(50);
   const sphereBefore = await page.evaluate(() => (window as ProbeWindow).__bubbleProbe!.model.getObjectByName("RecordedBubbleSphere")!.position.toArray());
   const before = await page.evaluate(() => (window as ProbeWindow).__bubbleProbe!.model.getObjectByName("RecordedAvatar")!.position.x);
@@ -129,6 +217,9 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
       renderer.xr.enabled = false;
       renderer.setClearColor(0, 0);
       scene.background = null;
+      // The halo is chrome, not recorded geometry: its embers and sparks
+      // (points, not meshes) would count as geometry outside the bubble.
+      scene.traverse((node) => { if (node.userData.holoimChrome === true) node.visible = false; });
       scene.traverse((node) => {
         if (!(node as Mesh).isMesh) return;
         let ancestor: Object3D | null = node;
@@ -221,11 +312,9 @@ test("immersive AR renders the animated bubble and clips outside geometry in bot
       const device = (window as unknown as { IWER_DEVICE: { controlMode: string; position: { set: (...v: number[]) => void }; quaternion: { set: (...v: number[]) => void } } }).IWER_DEVICE;
       device.controlMode = "programmatic";
       device.position.set(...position.toArray()); device.quaternion.set(...orientation.toArray());
-      // Sample the actual mixer at an exact time; browser RAF phase must not
+      // Hold the clip clock at an exact time; browser RAF phase must not
       // change the avatar pose between the before and after recordings.
-      Object.values(probe.actions).forEach((action) => { action.paused = false; });
-      probe.mixer.setTime(frame / 24);
-      Object.values(probe.actions).forEach((action) => { action.paused = true; });
+      (window as ViewerProbeWindow).__HOLOIM_XR_VIEWER__!.setClock(frame / 24, false);
       return { position: position.toArray(), quaternion: orientation.toArray(), yaw, pitch };
     }, frame);
     await page.clock.runFor(50);
@@ -333,10 +422,7 @@ test("the cloche stands over the placed hologram, in the room, from either side"
   await observeFeedCardRenderer(page);
   await page.goto("/");
   await waitForFeedCardPresented(page);
-  await pressViewInAr(page);
-  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
-  await page.waitForFunction(() => Boolean((window as ProbeWindow).__bubbleProbe?.bubble.active));
-  await expect.poll(() => page.locator(".ar-view-container").getAttribute("data-placement-stage")).toMatch(/placed|anchored|locked/);
+  await enterArFromFeed(page);
   const shots = resolve("../../output/redesign-slice-3");
   await mkdir(shots, { recursive: true });
 
@@ -386,7 +472,7 @@ test("the cloche stands over the placed hologram, in the room, from either side"
         authorValue,
         height: box.max.y - box.min.y,
         opacity: uniforms.uOpacity!.value as number,
-        core: uniforms.uCoreOpacity!.value as number,
+        core: uniforms.uLine!.value as number,
         char: uniforms.uCharShare!.value as number,
         unflagged, headLocked,
         glass: (window as ProbeWindow).__bubbleProbe!.model.getObjectByName("RecordedBubbleSphere")?.visible ?? false,

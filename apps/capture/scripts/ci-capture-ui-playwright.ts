@@ -27,6 +27,8 @@ import {
 // chosen from the brief's failure cases:
 // - desktop: the dock, the side sheet, handedness stored per device, fonts,
 //   and only stop and "Recording 0:12" while a take runs;
+// - touch laptop (a mouse first, a touch screen too): the desktop layout with
+//   44 apx targets, since a finger can reach them;
 // - phone (390 × 844, touch): 44 apx targets clear of the gesture zones and
 //   insets, touch words not keyboard help, touch-action on the scene, and
 //   look, walk and record by touch;
@@ -147,6 +149,34 @@ async function desktopPhase(): Promise<void> {
   await page.getByRole('button', { name: CONTROL_NAMES.startRecording }).waitFor({ timeout: 30_000 });
   await page.screenshot({ path: path.join(artifacts, 'desktop.png') });
   report.desktop = { dock: dock.map(({ name, box }) => ({ name, width: round(box.width, 1), height: round(box.height, 1) })), font, recordingDock };
+  await context.close();
+}
+
+// --- Touch laptop ---
+
+async function touchLaptopPhase(): Promise<void> {
+  const context = await createXrContext(browser, { viewport: { width: 1280, height: 800 } });
+  // Chromium cannot emulate a fine primary pointer beside a coarse one, so
+  // the page is told what such a laptop's browser answers. A string, since
+  // tsx's helpers do not exist in the page.
+  await context.addInitScript({
+    content: `{
+      const native = window.matchMedia.bind(window);
+      window.matchMedia = function (query) {
+        if (!/^\\((any-)?pointer: (coarse|fine)\\)$/.test(query)) return native(query);
+        const matches = query === '(any-pointer: coarse)' || query === '(any-pointer: fine)' || query === '(pointer: fine)';
+        return { matches, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false };
+      };
+    }`
+  });
+  const page = await open(context);
+  const dock = await dockBoxes(page);
+  for (const { name, box } of dock) assert(Math.min(box.width, box.height) >= tokens.hit.touch - 0.5, `touch laptop: ${name} hit ${box.width}×${box.height} under the touch minimum`);
+  assert(dock.some(({ name }) => name === CONTROL_NAMES.startRecording), 'touch laptop: Record is in the dock');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('dialog', { name: 'Settings' }).waitFor();
+  assert((await page.getByRole('dialog').textContent())?.includes('W, A, S and D'), 'touch laptop: the keyboard words, its primary input');
+  report.touchLaptop = { dock: dock.map(({ name, box }) => ({ name, width: round(box.width, 1), height: round(box.height, 1) })) };
   await context.close();
 }
 
@@ -355,6 +385,8 @@ async function headsetPhase(): Promise<void> {
   const unscaledRing = glyphMetrics({ headset: false }).ringApx;
   assert(idle.wrist?.visible && idle.wrist.hand === 'left' && idle.wrist.input === 'ray', `headset: record on the left wrist for a right-handed controller user (${JSON.stringify(idle.wrist)})`);
   assert(Math.abs(distance(idle.wrist.position, idle.wrist.anchor!) - tokens.placement.wristOffsetM) < 0.002, 'headset: the wrist row sits 4 cm off the wrist');
+  // On the inside of the wrist (the user, 2026-10-25): a left grip's palm faces +X (WebXR).
+  assert(idle.poke.glyphNormal && idle.poke.glyphNormal[0]! > 0.9, `headset: Record faces out of the controller hand's palm (${idle.poke.glyphNormal})`);
   assert(Math.abs(idle.wrist.drawnSizeM - apxToMeters(unscaledRing, tokens.placement.armReachM, { headset: true })) < 1e-6, 'headset: the record ring is drawn at 2.5×');
   assert(idle.wrist.hitSizeM >= hitAreaMeters('ray', unscaledRing * tokens.size.headsetScale, tokens.placement.armReachM, { headset: false }) - 1e-6, 'headset: the record glyph takes a ray minimum');
   assert(idle.panel?.visible && idle.panel.distanceFromHeadM >= tokens.placement.worldPanelMinM, `headset: settings on a world panel 1 m away or more (${idle.panel?.distanceFromHeadM})`);
@@ -436,6 +468,8 @@ async function headsetPhase(): Promise<void> {
   });
   await frames(page, 20);
   const hands = await chrome(page);
+  // The tracked left hand is palm down (its wrist joint pitched about 30°): Record faces down, out of its palm.
+  assert(hands.poke.glyphNormal && hands.poke.glyphNormal[1]! < -0.7, `headset: Record faces out of the tracked hand's palm (${hands.poke.glyphNormal})`);
   assert(hands.wrist && (hands.wrist.occludedBy === null || hands.wrist.drawnOverBody), `headset: Record is in view on a tracked hand (behind ${hands.wrist?.occludedBy})`);
   assert(hands.wrist?.input === 'poke', `headset: a tracked dominant hand pokes (${hands.wrist?.input})`);
   assert(hands.wrist.hitSizeM >= Math.max(tokens.hit.pokeFloorMm / 1000, hitAreaMeters('poke', 0, tokens.placement.armReachM, { headset: false })) - 1e-6, 'headset: a poke hit area of 72 apx and at least 20 mm');
@@ -668,6 +702,7 @@ async function trayHands(page: Page): Promise<Record<'left' | 'right', { held: b
 try {
   const only = process.env.UI_PHASE;
   if (!only || only === 'desktop') await desktopPhase();
+  if (!only || only === 'touch-laptop') await touchLaptopPhase();
   if (!only || only === 'phone') await phonePhase();
   if (!only || only === 'headset') await headsetPhase();
   assert.deepEqual(consoleErrors, [], `console errors: ${consoleErrors.join('\n')}`);

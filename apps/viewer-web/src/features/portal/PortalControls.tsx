@@ -13,7 +13,7 @@ import { usePortalValue } from "./usePortalValue";
 // The controls at a card's foot, under its cloche (styleguide 1.2, 6): Play
 // or Pause alone in the middle, and Return beside it while the viewer drives.
 // The rest unfold from the cursor or touch and leave afterwards: the timecode
-// to the left; Free, highlights, tilt, View in AR and sound to the right.
+// to the left; Free, highlights, tilt, View in your room, Step inside and sound to the right.
 // Play never moves as they come and go. They are the viewer's own, on the
 // screen rather than in the hologram (principle 1 in what-a-hologram-is.md).
 
@@ -68,7 +68,7 @@ export type PortalControlsProps = {
   active: boolean;
   /** A cursor or touch is on the card: the reach controls show and the always-there set is at full strength. */
   reached: boolean;
-  /** More reach controls, after the portal's own (View in AR, sound). */
+  /** More reach controls, after the portal's own (View in your room, Step inside, sound). */
   children?: ReactNode;
 };
 
@@ -121,49 +121,51 @@ export function PortalControls({ store, tiltAvailable, active, reached, children
           <GlyphControl glyph="return" label={VIEWER_CONTROL_NAMES.returnToAuthorView} onPress={use(() => store.returnToFollow())} msSinceUse={msSinceUse} approached={reached} />
         )}
         <div className="portal-controls-reach portal-controls-after" {...reachGuard}>
-          {mode === "follow" && <GlyphControl glyph="free" label={VIEWER_CONTROL_NAMES.free} onPress={use(() => store.enterFree())} />}
-          {hasHighlights && (
-            <ChromeButton
-              label={VIEWER_CONTROL_NAMES.highlights}
-              pressed={highlights}
-              title={highlights ? "Hide what the author points at" : "Show what the author points at"}
-              onPress={() => store.toggleHighlights()}
-              drawnApx={METRICS.iconApx}
-            >
-              {(appearance) => (
-                <LineIcon appearance={appearance}>
-                  <path d="M2 14l4.7-4.7" />
-                  <path d="M6 6l4 .7-2 2z" />
-                  <circle cx="10.7" cy="5.3" r="3.3" strokeDasharray={highlights ? undefined : "1.3 2"} />
-                </LineIcon>
-              )}
-            </ChromeButton>
-          )}
-          {tiltAvailable && (
-            <ChromeButton
-              label={tiltStatus === "on" ? VIEWER_CONTROL_NAMES.tiltOff : VIEWER_CONTROL_NAMES.tiltOn}
-              pressed={tiltStatus === "on"}
-              title={tiltStatus === "denied" ? "Motion access was declined" : tiltStatus === "unsupported" ? "Motion is not available on this device" : undefined}
-              disabled={tiltStatus === "unsupported"}
-              onPress={() => {
-                if (tiltStatus === "on") {
-                  store.setTiltStatus("off");
-                } else {
-                  void enableTilt(store);
-                }
-              }}
-              drawnApx={METRICS.iconApx}
-            >
-              {(appearance) => (
-                <LineIcon appearance={appearance}>
-                  <rect x="4.7" y="1.7" width="6.6" height="12.6" rx="1.3" />
-                  <path d="M2 6c-.8 1.2-.8 2.8 0 4" />
-                  <path d="M14 6c.8 1.2.8 2.8 0 4" />
-                </LineIcon>
-              )}
-            </ChromeButton>
-          )}
-          {children}
+          <div className="portal-controls-after-inner">
+            {mode === "follow" && <GlyphControl glyph="free" label={VIEWER_CONTROL_NAMES.free} onPress={use(() => store.enterFree())} />}
+            {hasHighlights && (
+              <ChromeButton
+                label={VIEWER_CONTROL_NAMES.highlights}
+                pressed={highlights}
+                title={highlights ? "Hide what the author points at" : "Show what the author points at"}
+                onPress={() => store.toggleHighlights()}
+                drawnApx={METRICS.iconApx}
+              >
+                {(appearance) => (
+                  <LineIcon appearance={appearance}>
+                    <path d="M2 14l4.7-4.7" />
+                    <path d="M6 6l4 .7-2 2z" />
+                    <circle cx="10.7" cy="5.3" r="3.3" strokeDasharray={highlights ? undefined : "1.3 2"} />
+                  </LineIcon>
+                )}
+              </ChromeButton>
+            )}
+            {tiltAvailable && (
+              <ChromeButton
+                label={tiltStatus === "on" ? VIEWER_CONTROL_NAMES.tiltOff : VIEWER_CONTROL_NAMES.tiltOn}
+                pressed={tiltStatus === "on"}
+                title={tiltStatus === "denied" ? "Motion access was declined" : tiltStatus === "unsupported" ? "Motion is not available on this device" : undefined}
+                disabled={tiltStatus === "unsupported"}
+                onPress={() => {
+                  if (tiltStatus === "on") {
+                    store.setTiltStatus("off");
+                  } else {
+                    void enableTilt(store);
+                  }
+                }}
+                drawnApx={METRICS.iconApx}
+              >
+                {(appearance) => (
+                  <LineIcon appearance={appearance}>
+                    <rect x="4.7" y="1.7" width="6.6" height="12.6" rx="1.3" />
+                    <path d="M2 6c-.8 1.2-.8 2.8 0 4" />
+                    <path d="M14 6c.8 1.2.8 2.8 0 4" />
+                  </LineIcon>
+                )}
+              </ChromeButton>
+            )}
+            {children}
+          </div>
         </div>
       </div>
     </div>

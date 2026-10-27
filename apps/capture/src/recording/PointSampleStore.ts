@@ -17,21 +17,35 @@ export interface HandPointSample {
   direction: Vec3Like;
 }
 
-/** One frame of a held desktop point action: the eye-origin aim ray that decides the referent. */
+/**
+ * What held the mark "this" (docs/features/ui-redesign.md, slice 5): the
+ * desktop point action, a phone's touch and hold, the non-dominant
+ * thumb–middle pinch, or the non-dominant trigger.
+ */
+export type AimInput = 'desktop' | 'touch' | 'hands' | 'controllers';
+
+/**
+ * One frame of a held mark: the ray that decides the referent. Desktop: the
+ * eye-origin aim ray; phone: the camera ray through the finger; hands: the
+ * dominant index's filtered fingertip ray; controllers: the dominant target ray.
+ */
 export interface AimPointSample {
   timeSec: number;
   /** The avatar hand that shows the point; it becomes the link's `from`. */
   side: VrHandSide;
+  /** Default `desktop`. */
+  input?: AimInput;
   origin: Vec3Like;
   /** Unit length. */
   direction: Vec3Like;
 }
 
-/** A desktop hold: consecutive aim samples between press and release. */
+/** A hold: consecutive aim samples between press and release. */
 export interface AimHold {
   side: VrHandSide;
+  input: AimInput;
   samples: AimPointSample[];
-  /** When the hold ended (release, blur, page hidden, pointer lock lost); undefined while held or when recording stopped first. */
+  /** When the hold ended (release, blur, page hidden, pointer lock lost, tracking lost, undo); undefined while held or when recording stopped first. */
   endSec: number | undefined;
 }
 
@@ -56,17 +70,23 @@ const MAX_SAMPLE_GAP_SEC = 0.25;
  * Writers:
  * - Headset: `AvatarRecorder.capture` writes `recordHandSample` from
  *   `PointDetector`.
- * - Desktop point action: on each simulation step while the action is held,
- *   call `recordAim` with the eye-origin aim ray; call `endAim` on the step
- *   the hold ends. While synthesized arm motion is visible (including any
+ * - Held marks (desktop point action, phone touch, headset pinch or
+ *   trigger): on each simulation step while the mark is held, call
+ *   `recordAim` with its ray and input; call `endAim` on the step the hold
+ *   ends. `undoLastHold` and `redoHold` (the Halo's W and E) take the last
+ *   hold out of the take and put it back; a new hold clears what can be redone. While synthesized arm motion is visible (including any
  *   blend back to locomotion), call `recordInferredMotion` each step with the
- *   VRM bones it drives. Aim holds become `recorded` links; motion runs
- *   become `inferred` motion spans.
+ *   VRM bones it drives. Aim holds become `recorded` links that override
+ *   inferred links over their span; motion runs become `inferred` motion spans.
  */
 export class PointSampleStore {
   private enabled = false;
   private readonly handSamples: HandPointSample[] = [];
   private readonly aimHolds: AimHold[] = [];
+  /** Undone holds, most recent last; `redoHold` takes from the end. */
+  private readonly undoneHolds: AimHold[] = [];
+  /** An open hold was undone while its mark is still held: drop its samples until it is released. */
+  private droppingUntilRelease = false;
   private readonly motionRuns: InferredMotionRun[] = [];
 
   setEnabled(enabled: boolean): void {
@@ -81,6 +101,8 @@ export class PointSampleStore {
   clear(): void {
     this.handSamples.length = 0;
     this.aimHolds.length = 0;
+    this.undoneHolds.length = 0;
+    this.droppingUntilRelease = false;
     this.motionRuns.length = 0;
   }
 
@@ -89,25 +111,62 @@ export class PointSampleStore {
     this.handSamples.push(copyRaySample(sample));
   }
 
-  /** Desktop: one step of a held point action. */
+  /** One step of a held mark. */
   recordAim(sample: AimPointSample): void {
-    if (!this.enabled) return;
+    if (!this.enabled || this.droppingUntilRelease) return;
+    const input = sample.input ?? 'desktop';
     const open = this.aimHolds.at(-1);
     const last = open?.samples.at(-1);
-    const continues = open && open.endSec === undefined && open.side === sample.side && last && sample.timeSec - last.timeSec <= MAX_SAMPLE_GAP_SEC;
+    // A headset or touch hold is one held mode, opened and closed by its writer, so a gap in
+    // the aiming hand's tracking stays inside it; desktop splits on a gap as a missed release.
+    const bridged = input !== 'desktop' || (last !== undefined && sample.timeSec - last.timeSec <= MAX_SAMPLE_GAP_SEC);
+    const continues = open && open.endSec === undefined && open.side === sample.side && open.input === input && last && bridged;
     if (continues) {
       open.samples.push(copyRaySample(sample));
       return;
     }
     this.closeOpenHold();
-    this.aimHolds.push({ side: sample.side, samples: [copyRaySample(sample)], endSec: undefined });
+    this.undoneHolds.length = 0;
+    this.aimHolds.push({ side: sample.side, input, samples: [copyRaySample(sample)], endSec: undefined });
   }
 
-  /** Desktop: the hold ended on this step. Safe to call when no hold is open. */
+  /** The hold ended on this step. Safe to call when no hold is open. */
   endAim(timeSec: number): void {
     if (!this.enabled) return;
+    this.droppingUntilRelease = false;
     const open = this.aimHolds.at(-1);
     if (open && open.endSec === undefined) open.endSec = Math.max(timeSec, open.samples.at(-1)!.timeSec);
+  }
+
+  /**
+   * The Halo's W: takes the take's last hold out (ending it first if it is
+   * still held, and ignoring the rest of that hold). False when there is none.
+   */
+  undoLastHold(timeSec: number): boolean {
+    if (!this.enabled) return false;
+    const last = this.aimHolds.at(-1);
+    if (!last) return false;
+    if (last.endSec === undefined) {
+      last.endSec = Math.max(timeSec, last.samples.at(-1)!.timeSec);
+      this.droppingUntilRelease = true;
+    }
+    this.undoneHolds.push(this.aimHolds.pop()!);
+    return true;
+  }
+
+  /** The Halo's E: puts the last undone hold back. False when there is none. */
+  redoHold(): boolean {
+    if (!this.enabled) return false;
+    const hold = this.undoneHolds.pop();
+    if (!hold) return false;
+    // A new hold clears the undone ones, so every kept hold is older than this one.
+    this.aimHolds.push(hold);
+    return true;
+  }
+
+  /** How many holds the take keeps and how many can be redone. */
+  holdCounts(): { kept: number; undone: number } {
+    return { kept: this.aimHolds.length, undone: this.undoneHolds.length };
   }
 
   /** Desktop: synthesized motion drove `bones` on this step. */

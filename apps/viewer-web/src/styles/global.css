@@ -11,6 +11,8 @@
   --feed-dock-clearance: calc(var(--holoim-hit-touch) + 3 * var(--holoim-glyph-gap) + max(env(safe-area-inset-bottom), var(--holoim-hit-phone-home-bar)));
   /* Controls at the foot stand two glyph gaps apart, so no two crowd. */
   --feed-control-gap: calc(2 * var(--holoim-glyph-gap));
+  /* Room the Settings corner takes from the right of the screen: its word, its chip and the edge it keeps (a notch's inset, or the side edge). */
+  --feed-settings-clearance: calc(max(env(safe-area-inset-right), var(--holoim-hit-phone-side-edge)) + 7rem);
 }
 
 * {
@@ -52,8 +54,41 @@ body::before {
   scroll-behavior: smooth;
 }
 
+/* A sideways-started swipe the browser would not scroll is scrolled by the
+   card (usePortalTriggers); snapping waits until it settles on a card. */
+.feed-scroll[data-portal-scrolling] {
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+}
+
 .feed-sentinel {
   height: 1px;
+}
+
+/* IWSDK immersive routes: the flat ground from tokens.json until the session starts. */
+.xr-view-container {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, var(--holoim-ground-flat-stops));
+  color: var(--holoim-color-text);
+}
+
+.xr-view-scene {
+  position: absolute;
+  inset: 0;
+}
+
+/* The World's canvas only matters in the session; until then the ground shows. */
+.xr-view-container:not([data-xr-state="immersive"]) .xr-view-scene {
+  visibility: hidden;
+}
+
+.xr-view-entry {
+  position: absolute;
+  inset: 0 0 25%;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
 }
 
 /* Each card fills the screen. Cards pass vertical swipes to the feed; a
@@ -106,10 +141,75 @@ body::before {
   transition: opacity var(--holoim-motion-chrome-out) var(--holoim-motion-chrome-easing);
 }
 
+/* A title reaching the right of the screen stops short of the Settings corner. */
+.feed-card-meta {
+  padding-inline-end: max(0px, var(--feed-settings-clearance) - max(var(--holoim-hit-phone-side-edge), (100vw - var(--feed-card-max-width)) / 2));
+}
+
+/* ── Settings, in the top corner its side sheet unfolds from ── */
+
+.feed-settings {
+  position: fixed;
+  z-index: 10;
+  top: max(env(safe-area-inset-top), var(--holoim-glyph-gap));
+  right: max(env(safe-area-inset-right), var(--holoim-hit-phone-side-edge));
+  display: flex;
+}
+
 .feed-card-meta h2,
 .feed-card-meta p {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.auth-panel {
+  margin-top: 1rem;
+  background: rgb(4 10 15 / 86%);
+  border: 1px solid rgb(139 194 255 / 24%);
+  border-radius: 14px;
+  padding: 0.85rem;
+}
+
+.auth-signed-in {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.verified-badge {
+  margin-left: 0.45rem;
+  padding: 0.08rem 0.45rem;
+  border: 1px solid rgb(120 220 170 / 55%);
+  border-radius: 999px;
+  color: #9be7c0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.auth-dev-link {
+  color: #9fd3ff;
+  font-size: 0.78rem;
+}
+
+.auth-verify {
+  max-width: 28rem;
+  margin: 12vh auto;
+  padding: 1rem;
+  text-align: center;
+}
+
+.feed-card-delete {
+  margin-top: 0.45rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid rgb(255 150 150 / 45%);
+  border-radius: 999px;
+  background: transparent;
+  color: #ffb3b3;
+  font-size: 0.68rem;
+  cursor: pointer;
+  pointer-events: auto;
+  justify-self: start;
 }
 
 [data-flat-device="desktop"] .feed-card-title {
@@ -161,14 +261,27 @@ body::before {
   justify-content: center;
 }
 
-/* Over the picture the row takes the chip, no wider than the controls showing. */
+/* Over the picture the row takes the chip, no wider than the controls
+   showing: each side of Play only as wide as its own controls, and the chip
+   shifted so Play still holds the middle (usePlayHeldMiddle). */
 .feed-card-foot-chip {
   max-width: 100%;
   box-sizing: border-box;
+  translate: var(--feed-controls-shift, 0px) 0;
 }
 
 .feed-card-foot-chip .portal-controls {
   width: auto;
+  grid-template-columns: auto auto auto;
+}
+
+/* With the reach controls folded, no gap is left where they were. */
+.feed-card-foot-chip .portal-controls[data-reach="hidden"] .portal-controls-row {
+  margin-inline-start: calc(-1 * var(--feed-control-gap));
+}
+
+.feed-card-foot:not([data-reach-row="stacked"]) .feed-card-foot-chip .portal-controls[data-reach="hidden"] .portal-controls-after {
+  margin-inline-start: calc(-1 * var(--feed-control-gap));
 }
 
 /* ── Controls at the foot ── */
@@ -176,6 +289,7 @@ body::before {
 /* Play (or Pause) holds the middle; the reach controls unfold either side of
    it, so it never moves as they come and go. */
 .portal-controls {
+  position: relative;
   width: 100%;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -185,7 +299,8 @@ body::before {
 
 .portal-controls-row,
 .portal-controls-side,
-.portal-controls-reach {
+.portal-controls-reach,
+.portal-controls-after-inner {
   display: flex;
   align-items: center;
   column-gap: var(--feed-control-gap);
@@ -235,6 +350,26 @@ body::before {
   transform: translateX(calc(-1 * var(--feed-control-gap)));
 }
 
+/* Too narrow for the reach controls beside Play at the input's hit size (a
+   touch phone, a take with sound): they unfold above Play, centred on a chip
+   of the same colour, so Play holds still, no glyph shrinks and none reaches
+   the phone's back-swipe edges (6.1). */
+.feed-card-foot[data-reach-row="stacked"] .portal-controls-after {
+  position: absolute;
+  bottom: calc(100% + var(--holoim-glyph-gap));
+  left: 50%;
+  translate: -50% 0;
+  max-width: none;
+  padding: var(--holoim-chip-control-row-padding-start);
+  border-radius: var(--holoim-chip-radius);
+  background: var(--chip-surface, transparent);
+}
+
+.feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="hidden"] .portal-controls-after {
+  max-width: none;
+  transform: translateY(var(--holoim-glyph-gap));
+}
+
 .portal-controls[data-reach="shown"] .portal-controls-reach {
   max-width: 32rem;
   opacity: 1;
@@ -244,7 +379,8 @@ body::before {
 
 @media (prefers-reduced-motion: reduce) {
   .portal-controls-reach,
-  .portal-controls[data-reach="hidden"] .portal-controls-reach {
+  .portal-controls[data-reach="hidden"] .portal-controls-reach,
+  .feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="hidden"] .portal-controls-after {
     transform: none;
   }
 
@@ -268,7 +404,7 @@ body::before {
   white-space: nowrap;
 }
 
-/* View in AR in Quick Look: a link, drawn as the glyph with its word. */
+/* View in your room in Quick Look: a link, drawn as the glyph with its word. */
 .ar-quicklook-link {
   display: inline-flex;
   align-items: center;

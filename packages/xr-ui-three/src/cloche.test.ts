@@ -1,9 +1,11 @@
-// The cloche as a three.js object (styleguide 3.4). Its failure modes: a part
-// not flagged as chrome (it would be exported or hit by rays), tone mapping
-// or depth writes that dim or hide the event, an eye read in the wrong space
-// once the hologram is placed and rescaled (AR), glass still drawn with the
-// eye inside, the hologram's floor shade lost with it, and a dome drawn in a
-// headset during a take.
+// The burnt globe as a three.js object (styleguide 3.4). Its failure modes: a
+// part not flagged as chrome (it would be exported or hit by rays), tone
+// mapping or depth writes that dim or hide the event, an eye read in the
+// wrong space once the hologram is placed and rescaled (AR), fronts, embers
+// or sparks still drawn with the eye inside, the hologram's floor shade lost
+// with them, sparks on a hologram out of focus, under reduced motion or in a
+// take, a change of focus that snaps (or, under reduced motion, eases), and a
+// globe drawn in a headset during a take.
 import { VIEW_TARGETS, edgeFrame, fitCloche, type ClocheShape } from "@holoim/xr-ui-core";
 import { Group, Vector3, type ShaderMaterial } from "three";
 import { describe, expect, it } from "vitest";
@@ -35,7 +37,7 @@ describe("ThreeCloche (3.4)", () => {
     const cloche = new ThreeCloche({ seed: "town", shape });
     expect(cloche.group.name).toBe("cloche");
     expect(everyDescendantIsChrome(cloche.group)).toBe(true);
-    for (const mesh of [cloche.shell, cloche.shade]) {
+    for (const mesh of [cloche.shell, cloche.embers, cloche.sparks, cloche.shade]) {
       const material = mesh.material as ShaderMaterial;
       expect(material.toneMapped).toBe(false);
       expect(material.depthWrite).toBe(false);
@@ -62,9 +64,46 @@ describe("ThreeCloche (3.4)", () => {
 
     const inside = parent.localToWorld(new Vector3(shape.base.x, shape.base.y + 0.3, shape.base.z));
     cloche.update(resting, { eye: cloche.eyeInShape(inside), radiusPx: 200 });
-    expect(cloche.shell.visible, "nothing of the glass between the viewer and the event").toBe(false);
+    expect(cloche.shell.visible, "nothing of the globe between the viewer and the event").toBe(false);
+    expect(cloche.embers.visible).toBe(false);
+    expect(cloche.sparks.visible).toBe(false);
     expect(cloche.group.visible).toBe(true);
     expect(cloche.shade.visible, "the floor shade is the hologram's, not the glass's").toBe(true);
+  });
+
+  it("sheds sparks only from the hologram in focus, never under reduced motion or in a take", () => {
+    const cloche = new ThreeCloche({ seed: "town", shape });
+    const eye = { x: shape.base.x, y: 1, z: 20 };
+    const frame = (options: { inFocus: boolean; reducedMotion: boolean; recording: boolean }) =>
+      edgeFrame(VIEW_TARGETS.desktop, { timeMs: 0, soot, ...options });
+    cloche.update(frame({ inFocus: true, reducedMotion: false, recording: false }), { eye, radiusPx: 200, inFocus: true });
+    expect(cloche.sparks.visible).toBe(true);
+    expect(cloche.sparks.geometry.drawRange.count).toBeGreaterThan(0);
+    for (const quiet of [
+      { inFocus: false, reducedMotion: false, recording: false },
+      { inFocus: true, reducedMotion: true, recording: false },
+      { inFocus: true, reducedMotion: false, recording: true }
+    ]) {
+      cloche.update(frame(quiet), { eye, radiusPx: 200, inFocus: quiet.inFocus, reducedMotion: quiet.reducedMotion });
+      expect(cloche.sparks.visible, JSON.stringify(quiet)).toBe(false);
+      expect(cloche.shell.visible, "the fronts still burn").toBe(true);
+    }
+  });
+
+  it("eases between rest and focus, and under reduced motion changes at once and holds still", () => {
+    const cloche = new ThreeCloche({ seed: "town", shape });
+    const uniforms = (cloche.shell.material as ShaderMaterial).uniforms;
+    const eye = { x: shape.base.x, y: 1, z: 20 };
+    cloche.update(resting, { eye, radiusPx: 200, timeS: 0, inFocus: false });
+    cloche.update(resting, { eye, radiusPx: 200, timeS: 0.1, inFocus: true });
+    const after100ms = uniforms.uFocus!.value as number;
+    expect(after100ms).toBeGreaterThan(0.2);
+    expect(after100ms).toBeLessThan(0.8);
+    cloche.update(resting, { eye, radiusPx: 200, timeS: 0.6, inFocus: true });
+    expect(uniforms.uFocus!.value).toBeGreaterThan(0.95);
+    cloche.update(resting, { eye, radiusPx: 200, timeS: 0.61, inFocus: false, reducedMotion: true });
+    expect(uniforms.uFocus!.value).toBe(0);
+    expect(uniforms.uTime!.value).toBe(0);
   });
 
   it("draws nothing in a headset while recording (8.5)", () => {

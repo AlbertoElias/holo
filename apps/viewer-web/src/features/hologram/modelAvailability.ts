@@ -28,9 +28,12 @@ function looksLikeValidGlbHeader(buffer: ArrayBuffer): boolean {
 }
 
 async function fetchGlbHeader(url: string): Promise<Response> {
+  // no-store: a cached 206 makes Chrome complete the later full GLB download
+  // as an identity-encoded range request, losing the CDN's brotli (~3.5x).
   return fetch(url, {
     method: "GET",
-    headers: { Range: "bytes=0-63" }
+    headers: { Range: "bytes=0-63" },
+    cache: "no-store"
   });
 }
 
