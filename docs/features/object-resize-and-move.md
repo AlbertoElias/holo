@@ -1,7 +1,7 @@
 # Feature brief: Resize and move props on every device
 
 **Lead:** Claude Code (Opus)  
-**Status:** Implementing (slice 1)
+**Status:** Verifying
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
 **Builds on:** [Grab, place and throw objects with physics](archive/object-physics.md)
 
@@ -35,12 +35,10 @@ recording carries objects (the existing `TODOS.md` item).
 
 **Included**
 
-1. **Size state.** Each `SceneObject` has a uniform `scale` (1 = as loaded).
-   The wrapper keeps its rigid pose, and the size is applied as its uniform
-   scale on every write. That covers `writeWorld`, the physics write-back and
-   placement, and a pose written with unit scale cannot reset the size. The
-   scale is clamped to [0.25, 4]. When a resize gesture ends within ±6 % of
-   1×, the size snaps back to exactly 1×.
+1. **Size state.** Each `SceneObject` has a uniform `size` (1 = as loaded),
+   carried by a `sizer` node between the rigid wrapper and the model (see
+   Design decision). It is clamped to [0.25, 4] and shows exactly 1× while
+   the size asked for is within ±6 % of 1×.
 2. **Desktop resize.** While a prop is held:
    - The scroll wheel scales by ×1.1 per notch, proportional to `deltaY`, so
      trackpads are smooth.
@@ -61,30 +59,37 @@ recording carries objects (the existing `TODOS.md` item).
    beyond the hand:
    - Desktop: Shift+wheel, along the camera's view.
    - Touch: a two-finger pan up or down, along the camera's view.
-   - Headset: the right thumbstick's Y axis, at 2 m/s, along the line from
-     the eye through the holding hand. That axis is free today; only `turnX`
-     snap-turns.
+   - Headset: the right thumbstick's Y axis, at 2 m/s, along the holding
+     controller's ray (the eye through the hand would point at the floor).
+     That axis was free; while a prop is held, the stick locks to its
+     stronger axis, so pushing never snap-turns. Hand tracking has no stick
+     and no push.
 
    The prop stops short of scene geometry, using a shape cast in the prop
    world, so it can't be pushed through a wall. A still release while pushed
-   out lowers the prop straight down onto the surface under it, then lets go.
-   This is the remote form of today's set-down, because the hand can't follow
-   it there. A swing still throws.
+   out (desktop and touch) lowers the prop straight down onto the surface
+   under it, then lets go. This is the remote form of today's set-down,
+   because the hand can't follow it there. A headset release is a plain
+   drop. A swing still throws, but pushing never counts toward the throw.
 6. **Grab at a distance.** The prop glides into the hand over 0.3 s and is
    then held as if picked up. Only one prop moves, and nothing else changes.
-   - Desktop and touch: a press on a prop that is out of reach, up to 8 m
-     away and in clear line of sight.
-   - Headset: a squeeze or pinch with no prop in reach casts the hand's
-     pointing ray (the same ray as pointing at "this") up to 8 m.
+   - Desktop: a mouse press on a prop that is out of reach, up to 8 m away
+     and in clear line of sight. The prop then stays held until the next
+     press.
+   - Touch: a tap on such a prop. A touch-and-hold still marks "this".
+   - Headset: a squeeze or pinch with no prop in reach casts the
+     controller's target ray up to 8 m.
+
+   During the glide, the prop passes through other props.
 7. **Physics follows the size.** `ObjectPhysics` keeps each prop's hull
    points at 1× (capped at 128) and the box fallback. On a size change it
-   rebuilds the collider from the scaled points. Density stays at 500 kg/m³,
+   reshapes the collider from the scaled points (`setShape`). Density stays at 500 kg/m³,
    so mass follows the volume (s³). It rebuilds when the size has changed by
    more than 1 %, and always at the end of a gesture.
-8. **Recording carries size.** Samples already hold the full wrapper matrix.
-   The exporter keeps the decomposed scale, and when any sample's scale
-   differs from 1, it writes a `Size` child node between the wrapper and the
-   model with a linear `.scale` track. The wrapper's discrete 0/1 visibility
+8. **Recording carries size.** The sample store records the size per frame.
+   When any present sample differs from 1, the exporter writes a
+   `RecordedObjectSize` child node between the wrapper and the model, with a
+   linear `.scale` track. The wrapper's discrete 0/1 visibility
    track is untouched. The `HOLOIM_objects` schema is unchanged, so its
    version stays 0. Takes without a resize stay as they are.
 9. **Help.** `captureHelp.ts` desktop and touch lines describe resize, push
@@ -217,11 +222,14 @@ The design review (Opus `design-reviewer`, 2026-10-28) changed the plan as follo
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Desktop, touch, headset resize and move | `pnpm --filter @holoim/capture run test:xr:object` extended with resize, push and distance-grab steps (desktop keys/wheel, touch pointer events, IWER two-hand and stick) | pending |
-| Physics follows size | Same check: 2× prop rests on floor, mass ratio | pending |
-| Pipeline carries size | `RUN_E2E_PIPELINE=1` `object.pipeline.spec.ts` resized take | pending |
+| Desktop, touch, headset resize | `test:xr:object` runs `resizeDesktop`, `resizePhone`, `resizeIwer` (`scripts/lib/object-resize.mjs`) | Pass, 2026-10-28. Five wheel notches give 1.6105. A −40 px wheel stays at 1 (detent). `=` clamps at 4, `-` at 0.25, `0` gives 1. A phone spread ×2.0 gives size 2.0 with 0 rad of look. A pinch with no finger down gives 0.5 and is not released; a lone tap releases. An IWER stretch gives 1.95, and the hold is kept when the second hand lets go. |
+| Physics follows size | Same runs | Mass at 2× is 8.00× the mass at 1×. A 2× and a 4× prop set down rest at min y 0.0099 (floor 0.01) with no bounds reset. A prop grown 1→4 during a set-down rests on the floor. |
+| Push and pull | `pushDesktop`, `pushPhone`, `pushIwer` (`scripts/lib/object-push.mjs`) | Pass. Shift+wheel: 4 notches push 1.00 m along the view, clamped at 0 and 4 m, and stopped short of the `reach-wall` wall. A two-finger pan of 120 px pushes 1.2 m with no resize or look. The IWER stick pushes 1.02 m in 0.5 s along the controller ray (cos 1.0), with no snap turn; a sideways stick still snaps. A still release while pushed out: the hand doesn't move, the prop is lowered and let go 0.018 m above the floor with sideways speed 0, and rests at 0.0099. An IWER pushed release drops without a throw. |
+| Grab at a distance | `fetchDesktop`, `pushPhone`, `fetchIwer` | Pass. A mouse press at 5.2 m glides the prop to 0.09 m from the hand and keeps it held. Nothing is fetched beyond 8 m or behind the wall. A phone touch-and-hold on a far prop marks "this" and fetches nothing, while a tap fetches it. An IWER ray at the sky fetches nothing; on the prop, it glides to 0.095 m off the palm. |
+| Existing behavior | Full `test:xr:object` tier (22 takes) | Pass. One expectation changed: a mouse press on an out-of-reach prop now fetches it. The old test passed only because its press fell in the bracket's hole. |
+| Pipeline carries size | `RUN_E2E_PIPELINE=1` `object.pipeline.spec.ts` (4 tests) | Pass. A resized IWER take has 329 keys and a `RecordedObjectSize` child. The viewer's size-node scale matches the GLB at 7 times (≤1 %), and its world bounds match (<0.1 % of extent). The viewer counts 1 recorded object. The USDZ size prim has 66 time samples that match the track. The unresized GLB has no size node. |
 | No regression | `pnpm run verify:pr` | pending |
-| Proof | Proof video in `output/` | pending |
+| Proof | Proof video in `output/proof-object-resize/` | pending |
 
 ## Physical-device limits
 
