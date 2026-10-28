@@ -31,6 +31,8 @@ export type GroundBox = { minX: number; maxX: number; minZ: number; maxZ: number
 export type GroundField = {
   /** The ground's height at world (x, z): the highest joined ground triangle over it, NaN where there is none (outside the grid included). */
   heightAt(x: number, z: number): number;
+  /** The normal's y of the ground's top triangle at (x, z), NaN off the ground. */
+  normalYAt(x: number, z: number): number;
   box: GroundBox;
   columns: number;
   rows: number;
@@ -130,6 +132,8 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
 
   // The triangles, world xyz, and per cell a list of those over it with the layer each joined there.
   let triangles = new Float32Array(9 * 1024);
+  /** Each triangle's normal's y, for telling a lip from a steep face. */
+  let normalsY = new Float32Array(1024);
   let triangleCount = 0;
   const head = new Int32Array(cells).fill(-1);
   let entryTriangle = new Int32Array(4096);
@@ -193,9 +197,13 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
       const next = new Float32Array(triangles.length * 2);
       next.set(triangles);
       triangles = next;
+      const nextNormals = new Float32Array(normalsY.length * 2);
+      nextNormals.set(normalsY);
+      normalsY = nextNormals;
     }
     const triangle = triangleCount;
     triangles.set([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z], triangle * 9);
+    normalsY[triangle] = ny / length;
     triangleCount += 1;
     // Into every cell it overlaps, each joining the cell's layers: at the cell's centre where it covers it,
     // else at its nearest point to the centre (the weights clamped onto it), so a sliver stays connected.
@@ -340,9 +348,11 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
   }
   if (reached === 0) return null;
 
+  let topTriangle = -1;
   const heightAt = (x: number, z: number): number => {
     const i = Math.floor((x - box.minX) / cell);
     const j = Math.floor((z - box.minZ) / cell);
+    topTriangle = -1;
     if (i < 0 || j < 0 || i >= columns || j >= rows) return Number.NaN;
     let top = -Infinity;
     for (let entry = head[j * columns + i]!; entry >= 0; entry = entryNext[entry]!) {
@@ -358,13 +368,20 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
       const w0 = 1 - w1 - w2;
       if (w0 < -1e-6 || w1 < -1e-6 || w2 < -1e-6) continue;
       const height = ay * w0 + by * w1 + cy * w2;
-      if (height > top) top = height;
+      if (height > top) {
+        top = height;
+        topTriangle = triangle;
+      }
     }
     return top > -Infinity ? top : Number.NaN;
   };
+  const normalYAt = (x: number, z: number): number => {
+    heightAt(x, z);
+    return topTriangle >= 0 ? normalsY[topTriangle]! : Number.NaN;
+  };
 
   lastBuildEnd = performance.now();
-  return { heightAt, box, columns, rows, candidates: drawn, reached, buildMs: lastBuildEnd - started };
+  return { heightAt, normalYAt, box, columns, rows, candidates: drawn, reached, buildMs: lastBuildEnd - started };
 }
 
 const fieldCache = new WeakMap<Object3D, Map<string, GroundField | null>>();
@@ -448,6 +465,8 @@ function lipHeight(shape: ClocheShape, field: GroundField, x: number, z: number,
   for (let along = LIP_STEP; along <= reach + 1e-6; along += LIP_STEP) {
     let height = field.heightAt(x + (dx / length) * along, z + (dz / length) * along);
     if (!Number.isFinite(height)) continue;
+    // A face steeper than a lip can be (a prop's foot sunk beside the ground's edge) is not the lip.
+    if (field.normalYAt(x + (dx / length) * along, z + (dz / length) * along) < RIM.lipNormalY) continue;
     // The lip is where the ground continues inward: an isolated hit (a facet of a prop's sunk foot under it) is not.
     if (!Number.isFinite(field.heightAt(x + (dx / length) * (along + LIP_STEP), z + (dz / length) * (along + LIP_STEP)))) continue;
     // Ground rising more than its run within a step is a flank (a prop's sunk foot beside the ground's edge), not

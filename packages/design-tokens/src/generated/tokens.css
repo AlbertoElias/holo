@@ -158,6 +158,7 @@ docs/product/design/tokens.json. Do not edit; run `pnpm --filter @holoim/design-
   --holoim-edge-cloche-rim-ground-normal-y: 0.35;
   --holoim-edge-cloche-rim-min-opacity: 0.5;
   --holoim-edge-cloche-rim-step: 0.35;
+  --holoim-edge-cloche-rim-lip-normal-y: 0.65;
   --holoim-edge-cloche-rim-fill-share: 0.7;
   --holoim-edge-cloche-rim-max-candidates: 300000;
   --holoim-edge-cloche-rim-max-cells: 250000;

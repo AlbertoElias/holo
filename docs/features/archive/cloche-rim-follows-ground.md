@@ -310,7 +310,16 @@ failed; it now passes when either holds. At the pipeline's own end time the
 edge stood under the rock again, and the search first met one isolated
 facet of its sunk foot, 0.1 m in, with no ground past it; the grass began
 1.45 m in. A hit now counts as the lip only where the ground continues to
-the next 5 cm step inward (lead approval, 2026-10-28). Tolerances unchanged.
+the next 5 cm step inward (lead approval, 2026-10-28). One more bin (72 at
+the end) then landed on the rock's foot itself: a continuous 0.2 m facet
+at 17.94 m, 0.26 m under the grass beside it, which a rule asking for
+0.3 m of continuing ground would also accept (every step is within the
+flood fill's 0.35 m). So the class is a prop's steep foot, not its extent:
+a lip candidate must face up at least `lipNormalY` 0.65 (about 49°). An
+offline sweep of every bin at the three snapshot times (134 bins read the
+lip) chose it: 0.6 to 0.7 leave no bin off the oracle's ground, the rock's
+foot faces at 0.586, and 0.75 starts rejecting the grass's own steeper
+faces. The hill's slopes (31° at most) never reach it. Tolerances unchanged.
 
 Left open, for the lead:
 

@@ -186,6 +186,7 @@ export const tokens = {
         groundNormalY: 0.35,
         minOpacity: 0.5,
         step: 0.35,
+        lipNormalY: 0.65,
         fillShare: 0.7,
         maxCandidates: 300000,
         maxCells: 250000,
