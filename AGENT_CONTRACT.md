@@ -78,11 +78,15 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 When running a check directly does not reproduce a problem, and especially a
 failure seen only on CI, run it with `scripts/ci-emulate.sh <command>` (Docker
 must be running). It copies the working tree, including uncommitted edits,
-into a `node:24-bookworm` container pinned to 4 CPUs (`--cpuset-cpus`, so
+into a `linux/amd64` `node:24-bookworm` container (the runner's architecture;
+emulated on Apple silicon) pinned to 4 CPUs (`--cpuset-cpus`, so
 `availableParallelism()` is 4 and the harness chooses CI's concurrency) and
 16 GB, the size of a public repository's hosted runner, sets `CI=true`, and repeats the CI setup (frozen install, `.env`, Prisma,
-Chromium with `--with-deps`) before running the command. The pnpm store and
-browsers persist in Docker volumes, so only the first run downloads them.
+Chromium and the headless shell the viewer's suites launch, with `--with-deps`;
+the same pinned static ffmpeg as CI) before running the command. The pnpm
+store, browsers, ffmpeg and the Quick Look virtualenv persist in Docker
+volumes, so only the first run downloads them; the architecture-specific ones
+are named per platform.
 Outputs and Playwright reports are copied to `output/ci-emulate/`.
 
 ```bash
@@ -90,7 +94,8 @@ scripts/ci-emulate.sh pnpm run test:xr:viewer
 scripts/ci-emulate.sh pnpm --filter @holoim/viewer-web exec playwright test e2e/ar.spec.ts --repeat-each=20 --workers=1
 ```
 
-`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`). `CI_EMULATE_MEMORY` overrides the memory
+`CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`), and
+`CI_EMULATE_PLATFORM` the platform (default `linux/amd64`). `CI_EMULATE_MEMORY` overrides the memory
 limit (default `16g`). Run one emulation at a time: Docker Desktop's VM is
 usually smaller than two runners, and overlapping runs crash pages and time
 out navigations that pass on their own. The container is a

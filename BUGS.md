@@ -7,24 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-024 — CI's pipeline shard can spend its whole timeout installing ffmpeg
-
-- **Area:** `.github/workflows/ci.yml` pipeline job (`apt-get install ffmpeg`), `scripts/ci-emulate.sh`
-- **Severity:** P2
-- **Observed:** 2026-10-26, runs for `4178f157` and `da4a008b`
-- **Evidence:** in both runs shard 1/2 never started its tests: the
-  "Install Quick Look conversion dependencies" step pulled ffmpeg's ~90
-  packages from `azure.archive.ubuntu.com` at minutes per package and the
-  job hit `timeout-minutes: 20` (cancelled; CI Gate failed, deploy
-  skipped). Shard 2/2 installed the same packages in seconds. The same
-  tests pass locally in 5.2 min. Separately, `ci-emulate.sh` cannot run
-  this suite: it installs Chromium through `@holoim/capture`, but the
-  pipeline launches `chromium_headless_shell-1208`, which is missing.
-- **Expected:** a slow apt mirror does not cancel the run; e.g. a
-  static ffmpeg binary or a cached `.deb` set, and a step timeout so the
-  failure names the install rather than the job.
-- **Reproduction:** intermittent on hosted runners; see the two runs above.
-
 ### B-028 — A take drops set geometry whose vertices are far apart, such as a large floor
 
 - **Area:** `apps/capture/src/recording/SceneBubbleSampler.ts` (`triangleInsideBubble`)

@@ -10,8 +10,14 @@
 #
 # CPUs are pinned with --cpuset-cpus rather than --cpus so the harness sees
 # 4 CPUs (os.availableParallelism) and picks the same concurrency as CI.
-# The pnpm store, Playwright browsers and the Quick Look tools' virtualenv
-# live in named volumes, so only the first run downloads them. Outputs are copied back to output/ci-emulate/.
+# The container is linux/amd64 like the runner (CI_EMULATE_PLATFORM to
+# change it); on Apple silicon it runs under emulation. The pnpm store,
+# Playwright browsers, ffmpeg, KTX and the Quick Look tools' virtualenv live
+# in named volumes, so only the first run downloads them; the architecture-
+# specific ones are named per platform, since an install marked complete for
+# one architecture is never redone for another (B-024: an arm64 chromium-1208
+# beside an x86 headless shell left the pipeline without a browser). Outputs
+# are copied back to output/ci-emulate/.
 set -euo pipefail
 
 if [ "$#" -eq 0 ]; then
@@ -26,6 +32,9 @@ cpus="${CI_EMULATE_CPUS:-0-3}"
 # a time, or lower this.
 memory="${CI_EMULATE_MEMORY:-16g}"
 image="${CI_EMULATE_IMAGE:-node:24-bookworm}"
+platform="${CI_EMULATE_PLATFORM:-linux/amd64}"
+arch="${platform#linux/}"
+arch="${arch//\//-}"
 pnpm_version="$(sed -n 's/^  PNPM_VERSION: //p' "$root/.github/workflows/ci.yml")"
 out="$root/output/ci-emulate"
 mkdir -p "$out"
@@ -41,20 +50,22 @@ while IFS= read -r name; do
   esac
 done < <(compgen -e)
 
-docker run --rm --init \
+docker run --rm --init --platform "$platform" \
   --cpuset-cpus="$cpus" --memory="$memory" --shm-size=2g \
   -e CI=true -e HOME=/root ${env_args[@]+"${env_args[@]}"} \
   -v "$root":/src:ro \
   -v "$out":/out \
   -v holoim-ci-pnpm-store:/root/.local/share/pnpm/store \
-  -v holoim-ci-playwright:/root/.cache/ms-playwright \
-  -v holoim-ci-usdz-venv:/root/.venv-usdz \
-  -v holoim-ci-ktx:/root/.ktx \
+  -v "holoim-ci-playwright-$arch":/root/.cache/ms-playwright \
+  -v "holoim-ci-usdz-venv-$arch":/root/.venv-usdz \
+  -v "holoim-ci-ktx-$arch":/root/.ktx \
+  -v holoim-ci-ffmpeg:/root/.cache/ffmpeg-static \
   "$image" bash -euo pipefail -c "
     apt-get update -qq >/dev/null
     # rsync for the copy; Python and ffmpeg for the Quick Look conversion the
-    # pipeline checks run, as CI's pipeline job installs them.
-    apt-get install -y -qq rsync python3-venv ffmpeg bzip2 >/dev/null
+    # pipeline checks run, ffmpeg from the same pinned build as CI's jobs.
+    apt-get install -y -qq rsync python3-venv bzip2 >/dev/null
+    /src/scripts/ci-ffmpeg.sh
     # KTX-Software, which capture's builds use to compress textures, as CI's
     # setup action installs it (the release matching this machine's arch).
     if [ ! -x /root/.ktx/bin/ktx ]; then
@@ -72,7 +83,11 @@ docker run --rm --init \
     pnpm install --frozen-lockfile
     cp apps/viewer-api/.env.example apps/viewer-api/.env
     pnpm --filter @holoim/api prisma:generate
+    # Chromium and the headless shell the viewer's suites (pipeline included)
+    # launch, through the viewer's own Playwright, then a launch to prove it.
     pnpm --filter @holoim/capture exec playwright install --with-deps chromium
+    pnpm --filter @holoim/web exec playwright install chromium chromium-headless-shell
+    (cd apps/viewer-web && node -e \"require('@playwright/test').chromium.launch().then((b) => b.close())\")
     [ -x /root/.venv-usdz/bin/python3 ] || python3 -m venv /root/.venv-usdz
     /root/.venv-usdz/bin/pip install -q -r apps/viewer-api/tools/requirements.txt
     export PATH=/root/.venv-usdz/bin:\$PATH
