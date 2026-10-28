@@ -744,6 +744,8 @@ export class AvatarRig {
 
   private collectAvatarMaterials(model: THREE.Object3D): void {
     this.avatarMaterials.length = 0;
+    // New materials: the next first-person state applies the clip to them.
+    this.firstPersonClipOn = false;
     const materialSet = new Set<THREE.Material>();
     model.traverse((obj) => {
       if (!isThreeMesh(obj)) return;
@@ -776,6 +778,10 @@ export class AvatarRig {
   }
 
   private setDesktopFirstPersonAvatarClip(enabled: boolean): void {
+    if (enabled && this.firstPersonClipOn) {
+      this.refreshFirstPersonClip();
+      return;
+    }
     this.firstPersonClipOn = enabled;
     if (!enabled) {
       for (const material of this.avatarMaterials) {
@@ -794,14 +800,8 @@ export class AvatarRig {
       if (!this.avatarMaterialClippingBackup.has(material)) {
         this.avatarMaterialClippingBackup.set(material, material.clippingPlanes ? [...material.clippingPlanes] : null);
       }
-      this.tmpVecA.set(
-        this.avatarRoot.position.x,
-        this.avatarRoot.position.y + this.avatarEyeLocalY - this.avatarHeight * 0.06,
-        this.avatarRoot.position.z
-      );
-      // In first-person, clip upper-body geometry near the camera (head/neck/collar)
-      // to avoid inside-mesh artifacts when looking down while keeping lower body visible.
-      this.avatarClipPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, -1, 0), this.tmpVecA);
+      // The one writer of the plane is refreshFirstPersonClip, which follows the eye every frame.
+      this.refreshFirstPersonClip();
       material.clippingPlanes = [this.avatarClipPlane];
       material.needsUpdate = true;
     }

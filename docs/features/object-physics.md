@@ -549,6 +549,22 @@ the trench, wall, pit and VR-entry checks all fail):
    with the head, leaving the neck and collar in front of it. It now follows the eye
    anchor every frame (`AvatarRig.refreshFirstPersonClip`). Not checked by eye.
 
+**Round 7 (Codex, a076efea): FAIL.** Fixed:
+
+1. First-person clip: `setFirstPersonVisualState` ran every frame after the camera
+   refresh and rewrote the plane from the standing eye height. The plane now has one
+   writer, `refreshFirstPersonClip`; the setter calls it, and re-applies the materials
+   only on a state change or a new model.
+2. Torso: the per-step bound is back to 5 degrees. The relax rate is 2.5 per second
+   (was 3), which keeps the stationary and late cancels under 5 degrees a step.
+   A late cancel from demand 0.93 ends in 0.50 s (limit 0.5 s plus two frames).
+3. The walking allowance ends the moment the next step, reach or set-down begins, so
+   a planted squat is always judged tight. Proof: a synthetic log (walk, stop, new
+   reach 7 steps later, a 7 cm hips pop 3 steps in) fails (0.14 m second difference
+   against 0.04), and the clean log passes.
+4. The cancel deadline is timed from the cancel itself (the walk's 0.1 s counts),
+   and a `late-G-cancels-reach` case (near full depth) was added.
+
 Fixes after round 1: the prop stays rigid with the hand through the set-down, and it is let
 go at the surface or at the arm's lowest reach. A mode switch always releases
 with zero velocity and needs a fresh press. The floor bound is 3 mm. Results

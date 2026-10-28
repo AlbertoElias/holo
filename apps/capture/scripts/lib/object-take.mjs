@@ -161,9 +161,17 @@ export async function recordEveryStep(page) {
 const WALK_SETTLE_STEPS = 12;
 const WALKING_BOUNDS = { hipsM: 0.15, ankleM: 0.15, torsoDeg: 15 };
 
-export async function stepJumps(page, label, fail, { hipsM = 0.04, ankleM = 0.01, torsoDeg = 8 } = {}) {
+export async function stepJumps(page, label, fail, { hipsM = 0.04, ankleM = 0.01, torsoDeg = 5 } = {}) {
   const log = await page.evaluate(() => window.__stepLog.splice(0));
-  const loose = log.map((_, i) => log.slice(Math.max(0, i - WALK_SETTLE_STEPS), i + 1).some((e) => e.walking));
+  // Loose only while the user's input walks, and for the settle steps after it, ending the moment the next reach, step or set-down begins
+  // (a planted squat is always judged tight, however soon after a walk it starts).
+  const loose = log.map((_, i) => {
+    for (let j = i; j >= 0 && j > i - WALK_SETTLE_STEPS - 1; j -= 1) {
+      if (log[j].walking) return true;
+      if (j < i && ['step', 'reach', 'lower'].includes(log[j + 1].phase) && log[j].phase !== log[j + 1].phase) return false;
+    }
+    return false;
+  });
   let evaluated = 0;
   let looseEvaluated = 0;
   const worst = { hips: 0, ankle: 0, torso: 0, at: {} };

@@ -440,12 +440,14 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
       await s.rearm();
       const floorProp = await s.putOnFloor();
       const before = floorProp.position;
-      await press();
+      // press() returns the seconds it advanced after the cancel took effect, so the deadline is timed from the cancel itself.
+      const sinceCancelSec = (await press()) ?? 0;
       const after = await s.until((st) => st.crouch.amount < 0.01 && st.crouch.squat === 0 && st.objects.reach.phase === 'idle', 1.5);
       const prop = after.state.objects.items[0];
       cancels[name] = { movedM: round(dist(prop.position, before), 6), heldBy: prop.heldBy, standSec: round(after.sec), phase: after.state.objects.reach.phase };
       if (cancels[name].movedM > 1e-5 || prop.heldBy) fail(`${name}: the prop moved ${cancels[name].movedM} m or was held (${prop.heldBy})`);
-      if (after.sec > 0.5 + 2 / 60) fail(`${name}: the crouch took ${cancels[name].standSec} s to end (limit 0.5 s after the cancel, plus two frames of sampling)`);
+      cancels[name].standSec = round(after.sec + sinceCancelSec);
+      if (cancels[name].standSec > 0.5 + 2 / 60) fail(`${name}: the crouch took ${cancels[name].standSec} s from the cancel to end (limit 0.5 s, plus two frames of sampling)`);
     };
     await checkCancel('walk-cancels-reach', async () => {
       await page.keyboard.press('KeyG');
@@ -455,6 +457,15 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
       await page.keyboard.down('KeyD');
       await advance(0.1);
       await page.keyboard.up('KeyD');
+      return 0.1;
+    });
+    // A late cancel: near full depth (demand over 0.9), the slowest stand-up.
+    await checkCancel('late-G-cancels-reach', async () => {
+      await page.keyboard.press('KeyG');
+      let st = await s.state();
+      for (let k = 0; k < 120 && !(st.objects.reach.demand > 0.9) && st.objects.reach.phase !== 'lift'; k += 1) { await advance(1 / 60); st = await s.state(); }
+      cancels['late-G-cancels-reach-demandBefore'] = round(st.objects.reach.demand);
+      await page.keyboard.press('KeyG');
     });
     await checkCancel('second-G-cancels-reach', async () => {
       await page.keyboard.press('KeyG');

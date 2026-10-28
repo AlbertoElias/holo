@@ -32,7 +32,7 @@ const LIFT_MIN_SEC = 0.25;
 /** The relax after a let-go or a cancel takes this long to reach its full rate. */
 const RELAX_EASE_SEC = 0.15;
 /** A cancel or let-go stands the body up faster than a reach bends it: a late cancel is upright within half a second, the ease-in included. */
-const RELAX_RATE_PER_SEC = 3;
+const RELAX_RATE_PER_SEC = 2.5;
 
 export type ReachPhase = 'idle' | 'step' | 'reach' | 'lift' | 'carry' | 'lower';
 
