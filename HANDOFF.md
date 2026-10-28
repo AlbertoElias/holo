@@ -35,9 +35,6 @@ queue item in [`TODOS.md`](TODOS.md).
 - The production Quick Look rebuild to ql3 is done: both stored previews are
   ql3, with the ql2 files and the database backup kept (B-030, evidence in
   the brief).
-- `bug/desktop-help` (pushed, not merged): the desktop Keys help and status
-  line now say summoning needs a take, that a click grabs, and that a moving
-  let-go throws. `verify:agent` passed; ride along with the next merge.
 
 ## Unverified / device-only
 
