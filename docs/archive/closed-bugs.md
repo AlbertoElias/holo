@@ -822,3 +822,30 @@ bug above.)
   load ~60); it now waits for the scroll to begin before settling. The
   whole `portal.spec.ts` passed 54 of 54 (`--repeat-each=6`, one worker),
   the drag check alone 8 of 8 at load ~45.
+
+### B-036 — Knowledge live-update check fails after other browser suites
+
+- **Note:** this number also labels the object-search entry above, filed a
+  day later; this one is the Knowledge check cited in `ci-under-5m.md`.
+- **Area:** `apps/knowledge/e2e/atlas.spec.ts` ("any docs Markdown is discoverable and live updates through atomic replacement and rename")
+- **Severity:** P3
+- **Observed:** 2026-10-27, `scripts/ci-emulate.sh` on `infra/ci-under-5m`
+- **Evidence:** `toBeVisible` finds no element after the atomic replacement
+  when `test:knowledge` runs after three viewer mocked shards in one
+  container; passes 4 of 4 when it runs first (CI's order, viewer shard 4).
+  Likely a file-watch event missed or late under load.
+- **Expected:** the live update lands regardless of earlier load.
+- **Reproduction:** `scripts/ci-emulate.sh bash -c 'VITE_IWER_SEM_SCENE=office_small pnpm --filter @holoim/web run test:e2e:mocked:shard1 && pnpm run test:knowledge'`
+- **Fix:** No watcher event was missed. Logging chokidar's raw polls in the
+  emulated run showed every edit, atomic replacement and rename reached Vite
+  within 0.5 s, and the reload loaded the new content. Each live update is a
+  full reload, and boot parsed all docs Markdown (about 1.2 MB) with remark
+  before the first render. In the container after the viewer shards that took
+  more than the 5 s `expect` budget: the failing trace showed the new module
+  fetched 0.4 s after the write and no card 5 s later, and even the first
+  `page.goto` took 7.8 s. The Vite plugin now computes each document's title
+  and description in Node, cached per file so an update re-parses only the
+  changed file, and the client parses a document's tree only when a page reads
+  it. A local reload to the first card dropped from about 1,230 ms to 80 ms.
+  The reproduction plus two further `test:knowledge` runs in the same container
+  all passed.

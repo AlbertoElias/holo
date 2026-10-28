@@ -7,18 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-036 — Knowledge live-update check fails after other browser suites
-
-- **Area:** `apps/knowledge/e2e/atlas.spec.ts` ("any docs Markdown is discoverable and live updates through atomic replacement and rename")
-- **Severity:** P3
-- **Observed:** 2026-10-27, `scripts/ci-emulate.sh` on `infra/ci-under-5m`
-- **Evidence:** `toBeVisible` finds no element after the atomic replacement
-  when `test:knowledge` runs after three viewer mocked shards in one
-  container; passes 4 of 4 when it runs first (CI's order, viewer shard 4).
-  Likely a file-watch event missed or late under load.
-- **Expected:** the live update lands regardless of earlier load.
-- **Reproduction:** `scripts/ci-emulate.sh bash -c 'VITE_IWER_SEM_SCENE=office_small pnpm --filter @holoim/web run test:e2e:mocked:shard1 && pnpm run test:knowledge'`
-
 ### B-024 — CI's pipeline shard can spend its whole timeout installing ffmpeg
 
 - **Area:** `.github/workflows/ci.yml` pipeline job (`apt-get install ffmpeg`), `scripts/ci-emulate.sh`
