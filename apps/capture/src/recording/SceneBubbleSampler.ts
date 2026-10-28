@@ -9,6 +9,24 @@ const MIN_SCENE_SAMPLE_DISTANCE = 0.08;
 const MAX_SCENE_SAMPLES = 480;
 const OCCLUSION_TEST_MIN_NORMAL_Y_ABS = 0.6;
 const OCCLUSION_HIT_MIN_DISTANCE = 0.03;
+/** A kept triangle reaching past the bubble with an edge longer than this is split, so the take's set ends near the bubble. */
+const MAX_STRADDLING_EDGE = 1;
+const MAX_SPLIT_DEPTH = 6;
+
+/** A vertex a split adds: a blend of one source triangle's three vertices. */
+interface SplitVertex {
+  source: [number, number, number];
+  weights: [number, number, number];
+}
+
+/** One mesh's clip in progress: the source triangle being split and the vertices splits have added. */
+interface SplitContext {
+  positionAttr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+  clipMatrix: THREE.Matrix4;
+  source: [number, number, number];
+  extras: SplitVertex[];
+  midpoints: Map<string, number>;
+}
 
 export interface SceneBubble {
   group: THREE.Group;
@@ -34,6 +52,10 @@ export class SceneBubbleSampler {
   private readonly tmpTriEdgeAC = new THREE.Vector3();
   private readonly tmpTriNormal = new THREE.Vector3();
   private readonly tmpTriCentroid = new THREE.Vector3();
+  private readonly tmpTriangle = new THREE.Triangle();
+  private readonly tmpTriBox = new THREE.Box3();
+  private readonly tmpTriClosest = new THREE.Vector3();
+  private readonly tmpSplitCorner = new THREE.Vector3();
   private readonly tmpAvatarRootPos = new THREE.Vector3();
   private readonly tmpSampleDelta = new THREE.Vector3();
   private readonly occlusionRaycaster = new THREE.Raycaster();
@@ -157,6 +179,11 @@ export class SceneBubbleSampler {
     let groupCursor = 0;
     // Vertices are tested where the bubble samples are: the world, or the frame.
     const clipMatrix = frame ? this.tmpFramed.multiplyMatrices(frame, sourceMesh.matrixWorld) : sourceMesh.matrixWorld;
+    // Splitting and compacting rewrite the vertices, so only plain attributes take them; any other mesh keeps its
+    // straddling triangles whole and its source vertices.
+    const plain = Object.keys(sourceGeometry.morphAttributes).length === 0 &&
+      Object.values(sourceGeometry.attributes).every((attr) => !(attr as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute);
+    const split: SplitContext = { positionAttr, clipMatrix, source: [0, 0, 0], extras: [], midpoints: new Map() };
 
     const keptIndicesByMaterial = new Map<number, number[]>();
     for (let triStart = 0; triStart + 2 < indexCount; triStart += 3) {
@@ -184,15 +211,25 @@ export class SceneBubbleSampler {
       }
 
       const materialIndex = group.materialIndex ?? 0;
-      const kept = keptIndicesByMaterial.get(materialIndex);
-      if (kept) {
-        kept.push(i0, i1, i2);
+      let kept = keptIndicesByMaterial.get(materialIndex);
+      if (!kept) {
+        kept = [];
+        keptIndicesByMaterial.set(materialIndex, kept);
+      }
+      if (plain && this.straddlesWithLongEdge(this.tmpTriA, this.tmpTriB, this.tmpTriC)) {
+        split.source = [i0, i1, i2];
+        split.midpoints.clear();
+        this.keepSplit(split, [i0, i1, i2], 0, kept);
       } else {
-        keptIndicesByMaterial.set(materialIndex, [i0, i1, i2]);
+        kept.push(i0, i1, i2);
       }
     }
+    for (const [materialIndex, kept] of keptIndicesByMaterial) {
+      if (kept.length === 0) keptIndicesByMaterial.delete(materialIndex);
+    }
 
-    this.removeOccludedTriangles(sceneRoot, sourceMesh, positionAttr, keptIndicesByMaterial);
+    const localPosition = (index: number, target: THREE.Vector3) => this.splitVertexPosition(split, index, target);
+    this.removeOccludedTriangles(sceneRoot, sourceMesh, localPosition, keptIndicesByMaterial);
 
     if (keptIndicesByMaterial.size === 0) {
       return undefined;
@@ -223,6 +260,8 @@ export class SceneBubbleSampler {
       return undefined;
     }
 
+    // Only the kept triangles' vertices are exported, so the clipped mesh's bounds are what it draws.
+    if (plain) this.compactVertices(clippedGeometry, clippedIndices, positionAttr.count, split.extras);
     clippedGeometry.setIndex(clippedIndices);
     clippedGeometry.computeBoundingBox();
     clippedGeometry.computeBoundingSphere();
@@ -287,13 +326,24 @@ export class SceneBubbleSampler {
   }
 
 
+  /**
+   * A triangle is kept when its closest point lies within the radius of a
+   * sample, so coarse geometry (a floor of two triangles per face) stays
+   * under the take whatever its tessellation (B-028). A long triangle that
+   * reaches past the bubble is split first (`keepSplit`), so the set still
+   * ends about a metre past the bubble; on dense meshes this keeps one ring
+   * of triangles past the radius.
+   */
   private triangleInsideBubble(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): boolean {
     const radiusSq = RECORDING_SCENE_BUBBLE_RADIUS * RECORDING_SCENE_BUBBLE_RADIUS;
-    let insideCount = 0;
-    if (this.vertexNearAnySample(a, radiusSq)) insideCount += 1;
-    if (this.vertexNearAnySample(b, radiusSq)) insideCount += 1;
-    if (insideCount < 2 && this.vertexNearAnySample(c, radiusSq)) insideCount += 1;
-    return insideCount >= 2;
+    // Any vertex inside settles it cheaply; this is every triangle of a dense mesh near the take.
+    if (this.vertexNearAnySample(a, radiusSq) || this.vertexNearAnySample(b, radiusSq) || this.vertexNearAnySample(c, radiusSq)) return true;
+    this.tmpTriBox.makeEmpty().expandByPoint(a).expandByPoint(b).expandByPoint(c).expandByScalar(RECORDING_SCENE_BUBBLE_RADIUS);
+    this.tmpTriangle.set(a, b, c);
+    const near = (sample: THREE.Vector3) =>
+      this.tmpTriBox.containsPoint(sample) &&
+      this.tmpTriangle.closestPointToPoint(sample, this.tmpTriClosest).distanceToSquared(sample) <= radiusSq;
+    return this.pinnedSamples.some(near) || this.sceneBubbleSamples.some(near);
   }
 
   private vertexNearAnySample(v: THREE.Vector3, radiusSq: number): boolean {
@@ -337,18 +387,116 @@ export class SceneBubbleSampler {
     return false;
   }
 
+  /** A kept triangle that reaches past the bubble with a long edge: splitting it keeps the set near the bubble. */
+  private straddlesWithLongEdge(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): boolean {
+    const maxEdgeSq = Math.max(a.distanceToSquared(b), b.distanceToSquared(c), c.distanceToSquared(a));
+    if (maxEdgeSq <= MAX_STRADDLING_EDGE * MAX_STRADDLING_EDGE) return false;
+    const radiusSq = RECORDING_SCENE_BUBBLE_RADIUS * RECORDING_SCENE_BUBBLE_RADIUS;
+    return !(this.vertexNearAnySample(a, radiusSq) && this.vertexNearAnySample(b, radiusSq) && this.vertexNearAnySample(c, radiusSq));
+  }
+
+  /**
+   * Splits a triangle into four at its edge midpoints until its pieces are
+   * inside the bubble or short, keeping the pieces the bubble reaches. The
+   * winding of every piece is its parent's.
+   */
+  private keepSplit(split: SplitContext, tri: [number, number, number], depth: number, out: number[]): void {
+    const [a, b, c] = tri.map((index) => this.splitVertexPosition(split, index, new THREE.Vector3()).applyMatrix4(split.clipMatrix)) as [THREE.Vector3, THREE.Vector3, THREE.Vector3];
+    if (!this.triangleInsideBubble(a, b, c)) return;
+    if (depth >= MAX_SPLIT_DEPTH || !this.straddlesWithLongEdge(a, b, c)) {
+      out.push(...tri);
+      return;
+    }
+    const ab = this.splitMidpoint(split, tri[0], tri[1]);
+    const bc = this.splitMidpoint(split, tri[1], tri[2]);
+    const ca = this.splitMidpoint(split, tri[2], tri[0]);
+    this.keepSplit(split, [tri[0], ab, ca], depth + 1, out);
+    this.keepSplit(split, [ab, tri[1], bc], depth + 1, out);
+    this.keepSplit(split, [ca, bc, tri[2]], depth + 1, out);
+    this.keepSplit(split, [ab, bc, ca], depth + 1, out);
+  }
+
+  private splitMidpoint(split: SplitContext, p: number, q: number): number {
+    const key = p < q ? `${p}:${q}` : `${q}:${p}`;
+    const existing = split.midpoints.get(key);
+    if (existing !== undefined) return existing;
+    const wp = this.splitWeights(split, p);
+    const wq = this.splitWeights(split, q);
+    split.extras.push({ source: split.source, weights: [(wp[0] + wq[0]) / 2, (wp[1] + wq[1]) / 2, (wp[2] + wq[2]) / 2] });
+    const index = split.positionAttr.count + split.extras.length - 1;
+    split.midpoints.set(key, index);
+    return index;
+  }
+
+  /** A vertex's weights over the source triangle being split. */
+  private splitWeights(split: SplitContext, index: number): [number, number, number] {
+    if (index >= split.positionAttr.count) return split.extras[index - split.positionAttr.count]!.weights;
+    return split.source.map((sourceIndex) => (sourceIndex === index ? 1 : 0)) as [number, number, number];
+  }
+
+  /** A vertex's position in the mesh's own space, whether the source's or one a split added. */
+  private splitVertexPosition(split: SplitContext, index: number, target: THREE.Vector3): THREE.Vector3 {
+    if (index < split.positionAttr.count) return target.fromBufferAttribute(split.positionAttr, index);
+    const { source, weights } = split.extras[index - split.positionAttr.count]!;
+    target.set(0, 0, 0);
+    for (let k = 0; k < 3; k += 1) target.addScaledVector(this.tmpSplitCorner.fromBufferAttribute(split.positionAttr, source[k]!), weights[k]!);
+    return target;
+  }
+
+  /**
+   * Rewrites `geometry`'s attributes to the vertices `indices` uses, in first
+   * use order, and renumbers `indices` to match. A split vertex is a blend of
+   * its source triangle's values.
+   */
+  private compactVertices(geometry: THREE.BufferGeometry, indices: number[], sourceCount: number, extras: SplitVertex[]): void {
+    const renumbered = new Map<number, number>();
+    const used: number[] = [];
+    for (let i = 0; i < indices.length; i += 1) {
+      let next = renumbered.get(indices[i]!);
+      if (next === undefined) {
+        next = used.length;
+        renumbered.set(indices[i]!, next);
+        used.push(indices[i]!);
+      }
+      indices[i] = next;
+    }
+    for (const [name, attr] of Object.entries(geometry.attributes)) {
+      const source = attr as THREE.BufferAttribute;
+      const size = source.itemSize;
+      const ArrayType = source.array.constructor as new (length: number) => THREE.TypedArray;
+      const array = new ArrayType(used.length * size);
+      used.forEach((vertex, j) => {
+        const base = j * size;
+        if (vertex < sourceCount) {
+          for (let k = 0; k < size; k += 1) array[base + k] = source.array[vertex * size + k]!;
+          return;
+        }
+        const { source: corners, weights } = extras[vertex - sourceCount]!;
+        let lengthSq = 0;
+        for (let k = 0; k < size; k += 1) {
+          const value = weights[0] * source.array[corners[0] * size + k]! + weights[1] * source.array[corners[1] * size + k]! + weights[2] * source.array[corners[2] * size + k]!;
+          array[base + k] = value;
+          lengthSq += value * value;
+        }
+        // A blended normal is shorter than unit length; restore it.
+        if (name === 'normal' && lengthSq > 0) for (let k = 0; k < size; k += 1) array[base + k] = array[base + k]! / Math.sqrt(lengthSq);
+      });
+      geometry.setAttribute(name, new THREE.BufferAttribute(array, size, source.normalized));
+    }
+  }
+
   private removeOccludedTriangles(
     sceneRoot: THREE.Object3D,
     sourceMesh: THREE.Mesh,
-    positionAttr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
+    localPosition: (index: number, target: THREE.Vector3) => THREE.Vector3,
     keptByMaterial: Map<number, number[]>
   ): void {
     for (const [materialIndex, indices] of keptByMaterial) {
       let writeIndex = 0;
       for (let i = 0; i + 2 < indices.length; i += 3) {
-        this.tmpTriA.fromBufferAttribute(positionAttr, indices[i]!).applyMatrix4(sourceMesh.matrixWorld);
-        this.tmpTriB.fromBufferAttribute(positionAttr, indices[i + 1]!).applyMatrix4(sourceMesh.matrixWorld);
-        this.tmpTriC.fromBufferAttribute(positionAttr, indices[i + 2]!).applyMatrix4(sourceMesh.matrixWorld);
+        localPosition(indices[i]!, this.tmpTriA).applyMatrix4(sourceMesh.matrixWorld);
+        localPosition(indices[i + 1]!, this.tmpTriB).applyMatrix4(sourceMesh.matrixWorld);
+        localPosition(indices[i + 2]!, this.tmpTriC).applyMatrix4(sourceMesh.matrixWorld);
 
         const occluded = this.isOccludedFromAbove(sceneRoot, sourceMesh, this.tmpTriA, this.tmpTriB, this.tmpTriC);
         if (!occluded) {
