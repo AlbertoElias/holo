@@ -178,14 +178,22 @@ test.describe("phone", () => {
     // A touch that stops the feed's glide is not a tap: nothing pauses. The
     // glide stays short of the middle, so the card keeps focus.
     const feed = page.locator(".feed-scroll");
-    await feed.evaluate((element) => { element.style.scrollSnapType = "none"; });
-    await feed.evaluate((element) => element.scrollTo({ top: 300, behavior: "smooth" }));
+    await feed.evaluate((element) => {
+      element.style.scrollSnapType = "none";
+      // Snapping comes back only once this glide has ended: put back while
+      // it still runs, the feed is left where the glide stops, off a card.
+      (window as unknown as { glideEnded?: Promise<void> }).glideEnded = new Promise((resolve) => {
+        element.addEventListener("scrollend", () => resolve(), { once: true });
+      });
+      element.scrollTo({ top: 300, behavior: "smooth" });
+    });
     await expect.poll(() => feedScrollTop(page), { timeout: 2000, intervals: [10] }).toBeGreaterThan(20);
     await page.touchscreen.tap(below.x, below.y);
     // A negative (no pause follows) over the app's tap window: a real-time hold.
     await page.waitForTimeout(400);
     await expect(firstCard).toHaveAttribute("data-card-focus", "true");
     expect((await readPortal(page, first.url)).paused, "the card it stopped on did not pause").toBe(false);
+    await page.evaluate(() => (window as unknown as { glideEnded: Promise<void> }).glideEnded);
     await feed.evaluate((element) => { element.style.scrollSnapType = ""; });
     await scrollFeedToTop(page);
 
@@ -255,7 +263,10 @@ test("desktop (default): drag rotates, and the wheel or trackpad pinch over the 
   expect((await readPortal(page, first.url)).zoom).toBe(1);
   expect(await settleScroll(page), "zooming out does not scroll the feed").toBe(0);
   await page.mouse.wheel(0, 500);
-  expect(await settleScroll(page), "fully out, the wheel scrolls to the next card").toBeGreaterThan(0);
+  // A loaded main thread can start the scroll after three still readings,
+  // which settleScroll would take for settled at the top.
+  await expect.poll(() => feedScrollTop(page), { message: "fully out, the wheel scrolls to the next card" }).toBeGreaterThan(0);
+  expect(await settleScroll(page)).toBeGreaterThan(0);
 });
 
 /** One point in the viewing box, within the window, on the hologram itself and one off it, as the canvas's hit test sees them. */

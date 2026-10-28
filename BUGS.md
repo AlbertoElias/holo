@@ -7,20 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-038 — Phone "drag" check can leave the feed resting off a card
-
-- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("drag (default): a swipe off the hologram scrolls …"), `scrollFeedToTop`
-- **Severity:** P3
-- **Observed:** 2026-10-28, on `bug/portal-freeze-scroll` (`46c523f0` + B-025 work)
-- **Evidence:** once in 3 runs of the whole spec, `settleScroll` threw
-  "feed scroll did not settle: 300, 300, 300, 300, 300" at
-  `portal.spec.ts:190`: after the test stops a smooth glide to 300 with a
-  tap and puts `scroll-snap-type` back, the feed stays at 300 instead of
-  snapping to a card. Passed in the other 2 runs and in a later 3 of 3.
-- **Expected:** restoring snapping lands the feed on a card (or the test
-  returns it to a card itself) before `scrollFeedToTop`.
-- **Reproduction:** `E2E_BASE_URL=https://localhost:3294 E2E_API_PORT=3121 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1` (intermittent)
-
 ### B-036 — Knowledge live-update check fails after other browser suites
 
 - **Area:** `apps/knowledge/e2e/atlas.spec.ts` ("any docs Markdown is discoverable and live updates through atomic replacement and rename")

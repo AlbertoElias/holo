@@ -793,3 +793,32 @@ bug above.)
   View in your room landed on a slowed page, a new race. With the fix, the
   900 ms stall passes locally and in `scripts/ci-emulate.sh` (×2), the test
   alone passes 5 of 5 there, and the whole viewer shard 1 passes 2 of 2.
+
+### B-038 — Phone "drag" check can leave the feed resting off a card
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("drag (default): a swipe off the hologram scrolls …"), `scrollFeedToTop`
+- **Severity:** P3
+- **Observed:** 2026-10-28, on `bug/portal-freeze-scroll` (`46c523f0` + B-025 work)
+- **Evidence:** once in 3 runs of the whole spec, `settleScroll` threw
+  "feed scroll did not settle: 300, 300, 300, 300, 300" at
+  `portal.spec.ts:190`: after the test stops a smooth glide to 300 with a
+  tap and puts `scroll-snap-type` back, the feed stays at 300 instead of
+  snapping to a card. Passed in the other 2 runs and in a later 3 of 3.
+- **Expected:** restoring snapping lands the feed on a card (or the test
+  returns it to a card itself) before `scrollFeedToTop`.
+- **Reproduction:** `E2E_BASE_URL=https://localhost:3294 E2E_API_PORT=3121 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1` (intermittent)
+- **Closed:** 2026-10-28
+- **Cause:** the test's own restore, not the product. The check turns
+  snapping off and glides to 300 with a programmatic smooth scroll; the tap
+  does not stop that glide, and snapping was put back after a fixed 400 ms.
+  When the glide was still running (a loaded machine), Chrome finished it at
+  300 and never re-snapped; snapping put back after its `scrollend` lands on
+  a card every time (probe: mid-glide 2 of 2 stuck at 300, after `scrollend`
+  2 of 2 at 0). The app itself only puts snapping back on a glide's
+  `scrollend`, on its instant-landing fallback, or when a user scroll takes over.
+- **Fix:** the check waits for the glide's `scrollend` before putting
+  snapping back. The same spec's desktop wheel check also took a scroll
+  that had not started yet for "settled at the top" under load (2 of 6 at
+  load ~60); it now waits for the scroll to begin before settling. The
+  whole `portal.spec.ts` passed 54 of 54 (`--repeat-each=6`, one worker),
+  the drag check alone 8 of 8 at load ~45.
