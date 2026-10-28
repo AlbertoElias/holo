@@ -1,9 +1,9 @@
 # Feature brief: Resize and move props on every device
 
 **Lead:** Claude Code (Opus)  
-**Status:** Verifying
+**Status:** Complete
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
-**Builds on:** [Grab, place and throw objects with physics](archive/object-physics.md)
+**Builds on:** [Grab, place and throw objects with physics](object-physics.md)
 
 ## User outcome
 
@@ -160,7 +160,7 @@ recording carries objects (the existing `TODOS.md` item).
 | Lead | Claude Code (Opus) | Brief, integration, final handoff |
 | Design reviewer | `design-reviewer` subagent (Opus) | Read-only |
 | Implementer | Lead (capture interaction, physics, input); a subagent for the e2e spec extension | `apps/capture/src/objects/*`, `physics/ObjectPhysics.ts`, `input/*`, `recording/objectExport.ts`, `ui/captureHelp.ts`, `scripts/lib/object-*.mjs`, `apps/viewer-web/e2e/object.pipeline.spec.ts` |
-| Independent verifier | Codex (`-p standard`) | Read-only verification and test artifacts |
+| Independent verifier | Muse (Codex was over its usage limit) | Read-only verification and test artifacts |
 
 ## Design decision
 
@@ -228,8 +228,10 @@ The design review (Opus `design-reviewer`, 2026-10-28) changed the plan as follo
 | Grab at a distance | `fetchDesktop`, `pushPhone`, `fetchIwer` | Pass. A mouse press at 5.2 m glides the prop to 0.09 m from the hand and keeps it held. Nothing is fetched beyond 8 m or behind the wall. A phone touch-and-hold on a far prop marks "this" and fetches nothing, while a tap fetches it. An IWER ray at the sky fetches nothing; on the prop, it glides to 0.095 m off the palm. |
 | Existing behavior | Full `test:xr:object` tier (22 takes) | Pass. One expectation changed: a mouse press on an out-of-reach prop now fetches it. The old test passed only because its press fell in the bracket's hole. |
 | Pipeline carries size | `RUN_E2E_PIPELINE=1` `object.pipeline.spec.ts` (4 tests) | Pass. A resized IWER take has 329 keys and a `RecordedObjectSize` child. The viewer's size-node scale matches the GLB at 7 times (≤1 %), and its world bounds match (<0.1 % of extent). The viewer counts 1 recorded object. The USDZ size prim has 66 time samples that match the track. The unresized GLB has no size node. |
-| No regression | `pnpm run verify:pr` | pending |
-| Proof | Proof video in `output/proof-object-resize/` | pending |
+| No regression | `pnpm run verify:pr`, step by step on reassigned ports (another agent held 3001) | Pass, 2026-10-28, on `cdcae36`: doctor, `check:all`, `test:unit:all`, `build:all`, `check:e2e-shards`, `test:knowledge`, `test:portal` and `test:xr:smoke` (`face` passed this time; see B-039). `test:smoke:pipeline` couldn't run cleanly on shared ports, so it ran in `scripts/ci-emulate.sh`: 22 passed. |
+| Proof | Proof video in `output/proof-object-resize/` | Recorded and sent to the user, 2026-10-28 (desktop in first person, and phone). |
+| After avatar prop physics | Merge of `origin/main` (51488fe), full `test:xr:object` tier and the pipeline spec again | Pass. A gliding prop's ghost state goes through the per-frame avatar collision groups, and the push and lift-out queries ignore the avatar. The IWER resize and push checks glide the hand in to 7 cm, as the IWER take does, since a palm driven into a hovering prop now knocks it down. |
+| Independent verification | Muse, `output/codex-verify/verdict.md` | Code review passed criteria 1–6, 8 and 9. Its sandbox couldn't open a port, so it ran no XR suites; the lead's runs above cover them. It raised five should-fix defects. Two were fixed: a release mid-fetch threw the prop with the glide's speed, and turning toward a wall permanently shortened the push. The other three were kept: a gesture that starts with the walk-stick finger is walking, as the brief specifies; `PointResolver` sees only exported nodes, never capture's sizer; with no surface within 3 m below, a pushed release just drops. |
 
 ## Physical-device limits
 

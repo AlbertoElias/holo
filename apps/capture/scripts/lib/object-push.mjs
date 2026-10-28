@@ -13,7 +13,7 @@ import {
 
 import { OBJECT_URL, openCapture, readState, setupPage } from './object-take.mjs';
 
-// Push, pull and fetch (docs/features/object-resize-and-move.md, slice 2), by
+// Push, pull and fetch (docs/features/archive/object-resize-and-move.md, slice 2), by
 // capture's real input paths. Each run returns pass/fail `rows` with numbers.
 //   pushDesktop / fetchDesktop: Shift+wheel and a mouse press from a distance
 //     (the pointer lock is stood in at the DOM API, as the mouse check does).

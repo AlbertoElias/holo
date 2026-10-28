@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-27
+**Updated:** 2026-10-28
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -13,8 +13,8 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-Grab, place and throw objects with physics is complete and on `main` (brief
-[`docs/features/archive/object-physics.md`](docs/features/archive/object-physics.md));
+Resize and move props on every device is complete and on `main` (brief
+[`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md));
 its device checks are in the brief's "Physical-device limits". Pick the next
 queue item in [`TODOS.md`](TODOS.md).
 

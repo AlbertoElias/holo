@@ -17,7 +17,7 @@ import {
 import { findNode, loadTake, objectNodes, worldAt } from './object-glb.mjs';
 import { OBJECT_URL, clickButton, openCapture, readState, saveDownload, setupPage } from './object-take.mjs';
 
-// Resize a held prop (docs/features/object-resize-and-move.md), by capture's
+// Resize a held prop (docs/features/archive/object-resize-and-move.md), by capture's
 // real input paths. Each scenario returns pass/fail `rows` with the numbers.
 //   - resizeDesktop: keys and wheel are inert with nothing held; wheel notches,
 //     the detent at 1, the clamps at 4 and 1/4, 0 resets, mass follows the
