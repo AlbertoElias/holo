@@ -440,21 +440,24 @@ export async function runIwerObjectTake({ browser, baseUrl, artifactDir, console
       const s = Math.sin(-rigYaw);
       return [delta[0] * c + delta[2] * s, delta[1], -delta[0] * s + delta[2] * c];
     };
+    // It glides in and stops with the palm 7 cm short of the object, within grab range, as a hand closes before a squeeze: a palm
+    // driven into a hovering prop would knock it down (props collide with the avatar).
     let grip = [...rest.right];
-    let reachError = Infinity;
-    for (let iteration = 0; iteration < 16 && reachError > 0.02; iteration += 1) {
+    for (let i = 0; i < 150; i += 1) {
       state = await readState(page);
-      const center = state.objects.items[0].position;
-      const hand = state.objects.hands.right.position;
-      const delta = toTracking(center.map((v, i) => v - hand[i]));
-      reachError = Math.hypot(...delta);
-      grip = grip.map((v, i) => v + delta[i] * 0.8);
+      const gap = state.objects.reach.palmToPropM ?? Infinity;
+      if (gap <= 0.07) break;
+      const toCenter = state.objects.items[0].position.map((v, k) => v - state.objects.hands.right.position[k]);
+      const length = Math.hypot(...toCenter);
+      const move = Math.min(0.012, Math.max(0.002, (gap - 0.07) * 0.5));
+      const delta = toTracking(toCenter.map((v) => (v / length) * move));
+      grip = grip.map((v, k) => v + delta[k]);
       await controller('right', grip);
-      await step(6);
+      await step(1);
     }
     state = await readState(page);
-    reachError = Math.hypot(...state.objects.items[0].position.map((v, i) => v - state.objects.hands.right.position[i]));
-    if (reachError > 0.06) fail(`the avatar hand never reached the object (${round(reachError, 3)} m)`);
+    const reachGap = state.objects.reach.palmToPropM ?? Infinity;
+    if (reachGap > 0.1) fail(`the avatar hand never reached the object (palm ${round(reachGap, 3)} m from it)`);
 
     // The trigger is the HUD's select, never a grab.
     await button('right', 'trigger', 1);
@@ -552,7 +555,7 @@ export async function runIwerObjectTake({ browser, baseUrl, artifactDir, console
       glb,
       shots,
       capture: {
-        reachErrorM: round(reachError, 3),
+        palmToObjectM: round(reachGap, 3),
         movedM: round(moved, 3),
         turnedDeg: round(turned, 1),
         heldSteps: relations.length,
@@ -747,24 +750,71 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     const outOfReach = { heldBy: state.objects.items[0].heldBy };
     if (outOfReach.heldBy) fail('G picked up an object out of reach');
 
-    // Walking through the resting object moves neither it nor the avatar (props have no collision with the body).
+    // Walking into the resting object shoves it along (props collide with the avatar), and the avatar walks on at the same speed: props never push it.
     state = await readState(page);
     const restAt = state.objects.items[0].position;
-    let nearestM = Infinity;
-    for (let i = 0; i < 240 && nearestM > 0.1; i += 1) {
+    // Line the right foot up with it first (the avatar faces -z, so its right is +x): a prop dead centre passes between the feet.
+    const lineUpX = restAt[0] - 0.09;
+    for (let i = 0; i < 120 && Math.abs(state.avatar.x - lineUpX) > 0.02; i += 1) {
+      const side = lineUpX > state.avatar.x ? 'KeyD' : 'KeyA';
+      await page.keyboard.down(side);
+      await advance(1 / 60);
+      await page.keyboard.up(side);
+      await advance(1 / 60);
       state = await readState(page);
-      nearestM = Math.min(nearestM, Math.hypot(state.avatar.x - restAt[0], state.avatar.z - restAt[2]));
-      if (nearestM <= 0.1) break;
-      const key = restAt[2] < state.avatar.z ? 'KeyW' : 'KeyS';
-      await page.keyboard.down(key);
-      await advance(1 / 30);
-      await page.keyboard.up(key);
     }
-    await advance(0.3);
+    const key = restAt[2] < state.avatar.z ? 'KeyW' : 'KeyS';
+    const heading = Math.sign(restAt[2] - state.avatar.z);
+    const walk = [];
+    await page.keyboard.down(key);
+    for (let i = 0; i < 300; i += 1) {
+      await advance(1 / 30);
+      state = await readState(page);
+      walk.push({ z: state.avatar.z, gapM: Math.hypot(state.avatar.x - restAt[0], state.avatar.z - restAt[2]), prop: state.objects.items[0].position, body: state.objects.items[0].body });
+      // On until the avatar is 0.5 m past where the prop was.
+      if ((state.avatar.z - restAt[2]) * heading > 0.5) break;
+    }
+    await page.keyboard.up(key);
+    await advance(1.5);
     state = await readState(page);
-    const walkThrough = { nearestAvatarM: round(nearestM, 3), objectMovedM: round(v3(state.objects.items[0].position).distanceTo(v3(restAt)), 5), body: state.objects.items[0].body };
-    if (nearestM > 0.25) fail(`the avatar could not walk to the resting object (nearest ${walkThrough.nearestAvatarM} m)`);
-    if (walkThrough.objectMovedM > 1e-4) fail(`walking through the resting object moved it ${walkThrough.objectMovedM} m`);
+    const speedOver = (samples) => (samples.length < 2 ? null : Math.abs(samples.at(-1).z - samples[0].z) / ((samples.length - 1) / 30));
+    // Up to speed after 0.2 s; the approach ends 0.4 m short of the prop.
+    const approach = speedOver(walk.filter((w, i) => i > 6 && w.gapM > 0.4 && (w.z - restAt[2]) * heading < 0));
+    const firstMoved = walk.findIndex((w) => v3(w.prop).distanceTo(v3(restAt)) > 0.005);
+    const contact = firstMoved < 0 ? [] : walk.slice(firstMoved, firstMoved + 10);
+    const pushed = speedOver(contact);
+    const final = state.objects.items[0];
+    const walkThrough = {
+      walkedPastM: round((walk.at(-1).z - restAt[2]) * heading, 3),
+      objectMovedM: round(v3(final.position).distanceTo(v3(restAt)), 4),
+      objectMovedAlongM: round((final.position[2] - restAt[2]) * heading, 4),
+      approachSpeedMps: approach === null ? null : round(approach, 3),
+      contactSpeedMps: pushed === null ? null : round(pushed, 3),
+      wokeBody: walk.find((w) => w.body === 'dynamic') ? 'dynamic' : walk[0]?.body,
+      body: final.body
+    };
+    if (walkThrough.walkedPastM < 0.5) fail(`the avatar did not walk past the resting object (${walkThrough.walkedPastM} m past)`);
+    if (walkThrough.objectMovedAlongM < 0.1) fail(`walking into the resting object moved it only ${walkThrough.objectMovedAlongM} m along the walk (expected at least 0.1 m)`);
+    if (approach === null || pushed === null) fail('walking into the resting object: no approach or contact speed to compare');
+    else if (Math.abs(pushed - approach) > approach * 0.02 + 0.01) fail(`the shoved object changed the avatar's walking speed (${walkThrough.approachSpeedMps} m/s before, ${walkThrough.contactSpeedMps} m/s while pushing)`);
+
+    // A freshly placed object hovers in front of the avatar until something knocks it; walking into it does, and it falls to the floor.
+    const knockdownsBefore = state.objects.physics?.knockdowns ?? 0;
+    if (!(await page.evaluate((url) => window.__loadObjectUrl(url), OBJECT_URL))) fail('re-placing the object for the knock-down failed');
+    await advance(0.2);
+    state = await readState(page);
+    const hoverBody = state.objects.items[0].body;
+    const hoverAt = state.objects.items[0].position;
+    await page.keyboard.down('KeyW');
+    await advance(0.8);
+    await page.keyboard.up('KeyW');
+    await advance(2.5);
+    state = await readState(page);
+    const knocked = state.objects.items[0];
+    const knockdown = { hoverBody, hoverAtM: hoverAt.map((v) => round(v, 3)), knockdowns: (state.objects.physics?.knockdowns ?? 0) - knockdownsBefore, body: knocked.body, floorGapM: round(knocked.boundsMin[1] - FLOOR_Y, 4) };
+    if (hoverBody !== 'kinematic') fail(`the re-placed object was not hovering (${hoverBody})`);
+    if (knockdown.knockdowns !== 1) fail(`walking into the hovering object knocked down ${knockdown.knockdowns} objects, expected 1`);
+    if (knocked.body !== 'asleep' || Math.abs(knockdown.floorGapM) > 0.01) fail(`the knocked-down object did not come to rest on the floor (${knocked.body}, ${knockdown.floorGapM} m above it)`);
 
     const exportReport = checkObjectExport(await readFile(glb), {
       expectHolds: [{ hand: 'right', duration: holdSeconds }],
@@ -778,7 +828,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     await page.evaluate(() => window.__setManualClock(true, true));
     await advance(2 / 60);
     await page.screenshot({ path: shotFile });
-    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, setDown, outOfReach, walkThrough, shots: { final: shotFile }, export: exportReport };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, setDown, outOfReach, walkThrough, knockdown, shots: { final: shotFile }, export: exportReport };
   } finally {
     await context.close();
   }
