@@ -141,8 +141,10 @@ interface Hold {
    * and the body squats only as far as the arm needs.
    */
   settle: { startSec: number; lowerM: number; squat: boolean; handFrom?: THREE.Vector3; handTo?: THREE.Vector3; sec?: number; remote?: { dropFrom: number } } | null;
-  /** How far the prop is pushed out beyond the hand, along the view (flat screen) or the eye's line through the hand (headset). */
+  /** How far the prop is asked to be pushed out beyond the hand, along the view (flat screen) or the eye's line through the hand (headset). */
   pushM: number;
+  /** How far it is pushed out this frame: `pushM`, or less where the scene or another prop is in the way. */
+  pushedM: number;
   /** How far a remote set-down has lowered the pushed-out prop. */
   dropM: number;
   /** Fetched from a distance: the world pose it glides from, and when it started. */
@@ -339,7 +341,7 @@ export class ObjectInteraction {
         placed: object.placed,
         heldBy: object.heldBy,
         size: object.size,
-        pushM: this.hold?.object === object ? this.hold.pushM : 0,
+        pushM: this.hold?.object === object ? this.hold.pushedM : 0,
         mass: this.physics?.mass(object) ?? 0,
         position: [this.pos.x, this.pos.y, this.pos.z],
         quaternion: [this.quat.x, this.quat.y, this.quat.z, this.quat.w],
@@ -738,8 +740,8 @@ export class ObjectInteraction {
     // The hand goes down by the prop's gap to the surface, less the release gap, if the arm reaches that far standing.
     const gap = this.physics.gapBelow(hold.object, SET_DOWN_SEARCH_M);
     const needed = gap === null ? 0 : Math.max(0, gap - SET_DOWN_RELEASE_GAP_M);
-    if (hold.pushM > PUSHED_M || needed <= this.deps.carry.maxLowerM()) {
-      hold.settle = { startSec: this.clock, lowerM: needed, squat: false, ...(hold.pushM > PUSHED_M ? { remote: { dropFrom: hold.dropM } } : {}) };
+    if (hold.pushedM > PUSHED_M || needed <= this.deps.carry.maxLowerM()) {
+      hold.settle = { startSec: this.clock, lowerM: needed, squat: false, ...(hold.pushedM > PUSHED_M ? { remote: { dropFrom: hold.dropM } } : {}) };
     } else if (this.readAnchor(hold.side)) {
       // Nothing within the arm's standing reach below: the hand goes down to the floor over the pickup's stance, squatting only as far as it must.
       const handFrom = new THREE.Vector3().setFromMatrixPosition(this.anchor);
@@ -785,7 +787,7 @@ export class ObjectInteraction {
     object.wrapper.updateWorldMatrix(true, false);
     this.world.copy(object.wrapper.matrixWorld);
     const offset = this.anchor.clone().invert().multiply(this.world);
-    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null, rawSize: object.size, stretch: null, pushM: 0, dropM: 0, glide: null };
+    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null, rawSize: object.size, stretch: null, pushM: 0, pushedM: 0, dropM: 0, glide: null };
     object.heldBy = side;
     this.physics?.hold(object);
   }
@@ -833,32 +835,36 @@ export class ObjectInteraction {
 
   /** Pushes the held prop out (or pulls it in) by `deltaM`; what moved it is not the hand, so it never counts toward a throw. */
   private pushBy(hold: Hold, deltaM: number): void {
-    hold.pushM = THREE.MathUtils.clamp(hold.pushM + deltaM, 0, MAX_PUSH_M);
+    // From where it is: a push held against a wall builds up no distance to jump out by, nor a pull any to wind back first.
+    hold.pushM = THREE.MathUtils.clamp(Math.min(hold.pushM, hold.pushedM) + deltaM, 0, MAX_PUSH_M);
     this.physics?.forget(hold.object);
   }
 
   /**
    * From the in-hand pose in `world`: pushed out along `direction`, no further
-   * than the scene or another prop allows, lowered by a remote set-down, and
-   * blended from where a fetch started while it glides.
+   * than the scene or another prop allows this frame (the asked distance is
+   * kept for when the way clears), lowered by a remote set-down, and blended
+   * from where a fetch started while it glides.
    */
   private finishPose(hold: Hold, direction: THREE.Vector3): void {
+    hold.pushedM = hold.pushM;
     if (hold.pushM > 0 || hold.dropM > 0) {
       if (hold.pushM > 0 && this.physics) {
         this.writeWorld(hold.object, this.world);
-        hold.pushM = Math.min(hold.pushM, this.physics.clearance(hold.object, direction, hold.pushM));
+        hold.pushedM = Math.min(hold.pushM, this.physics.clearance(hold.object, direction, hold.pushM));
       }
-      this.world.elements[12] += direction.x * hold.pushM;
-      this.world.elements[13] += direction.y * hold.pushM - hold.dropM;
-      this.world.elements[14] += direction.z * hold.pushM;
+      this.world.elements[12] += direction.x * hold.pushedM;
+      this.world.elements[13] += direction.y * hold.pushedM - hold.dropM;
+      this.world.elements[14] += direction.z * hold.pushedM;
     }
     const glide = hold.glide;
     if (!glide) return;
+    // The glide is not the hand's swing: a release during it drops the prop rather than throwing it.
+    this.physics?.forget(hold.object);
     const t = Math.min(1, (this.clock - glide.startSec) / FETCH_SEC);
     if (t >= 1) {
       hold.glide = null;
       this.physics?.ghost(hold.object, false);
-      this.physics?.forget(hold.object);
       return;
     }
     const k = t * t * (3 - 2 * t);
