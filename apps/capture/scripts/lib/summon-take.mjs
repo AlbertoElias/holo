@@ -792,10 +792,16 @@ export async function runDesktopFindApiTake({ browser, baseUrl, captureRoot, art
       await advance(0.4);
       await page.keyboard.up('KeyT');
       await page.keyboard.press('KeyG');
-      await advance(0.3);
+      // G sets the summoned prop down (held while the arm or body lowers it, then let go just above the floor); the next summon needs the hand empty.
+      for (let i = 0; i < 180; i += 1) {
+        await advance(1 / 60);
+        if (!summonedItems(await readState(page)).some((item) => item.heldBy)) break;
+      }
+      await advance(0.1);
     }
     const state = await readState(page);
     const summoned = summonedItems(state).map((item) => item.name);
+    if (summoned.length !== 3) failures.push(`three summons expected, got ${JSON.stringify(summoned)}`);
     const glb = await saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), path.join(artifactDir, `${label}.glb`));
     return { label, status: failures.length ? 'fail' : 'pass', failures, glb, searches, resultNames, shown, summoned };
   } finally {
