@@ -145,18 +145,31 @@ export function motionPoints(
       }
     }
   };
+  sampleTake(root, played, MOTION_SAMPLES, readSample);
+  return points;
+}
+
+/**
+ * Plays the take's clips on a mixer of their own, as the viewer ranks and
+ * weights them, and calls `read` at `count` evenly spaced times from the
+ * start (`read` updates the world matrices it needs). The viewer's own
+ * playback is never touched; the pose is put back after.
+ */
+export function sampleTake(root: Object3D, clips: readonly AnimationClip[], count: number, read: (seconds: number) => void): void {
+  const played = clips.filter((clip) => clip.duration > 0);
+  if (played.length === 0) return;
   const sampler = new AnimationMixer(root);
-  played.sort(compareTakeClips).forEach((clip, index) => {
+  [...played].sort(compareTakeClips).forEach((clip, index) => {
     const weight = index === 0 ? TAKE_CLIP_WEIGHT.primary : TAKE_CLIP_WEIGHT.secondary;
     sampler.clipAction(clip).setLoop(LoopRepeat, Infinity).setEffectiveWeight(weight).play();
   });
   const span = Math.max(...played.map((clip) => clip.duration));
-  for (let sample = 0; sample < MOTION_SAMPLES; sample += 1) {
-    sampler.setTime((span * sample) / MOTION_SAMPLES);
-    readSample();
+  for (let sample = 0; sample < count; sample += 1) {
+    const seconds = (span * sample) / count;
+    sampler.setTime(seconds);
+    read(seconds);
   }
   sampler.stopAllAction();
   sampler.uncacheRoot(root);
   root.updateWorldMatrix(true, true);
-  return points;
 }

@@ -100,6 +100,8 @@ type Props = {
   portal: PortalStore;
   bubble: SphereClipResult;
   falloffWidth: number;
+  /** The feed's dome clip (3.4): whether a point is under the bent glass, null while the sphere clips. */
+  domeEdge?: { inside(point: Vector3): boolean | null } | undefined;
   getPlaybackTime: () => number;
   probe: PointingProbe;
   /**
@@ -110,7 +112,7 @@ type Props = {
   authorHex: string;
 };
 
-export function PointingHighlights({ links, portal, bubble, falloffWidth, getPlaybackTime, probe, authorHex }: Props) {
+export function PointingHighlights({ links, portal, bubble, falloffWidth, domeEdge, getPlaybackTime, probe, authorHex }: Props) {
   const groupRef = useRef<Group>(null);
   const visualsRef = useRef<LinkVisuals[]>([]);
   const savedRef = useRef(new Map<EmissiveMaterial, Saved>());
@@ -172,6 +174,9 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, getPla
 
     const edgeFade = (position: Vector3): number => {
       if (!bubble.active || bubble.radius <= 0) return 1;
+      // Cut with a hard edge by the bent dome, as the scene is.
+      const dome = domeEdge?.inside(position);
+      if (dome !== null && dome !== undefined) return dome ? 1 : 0;
       return 1 - smoothstep(bubble.radius - falloffWidth, bubble.radius, position.distanceTo(bubble.center));
     };
 
