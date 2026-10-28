@@ -1,6 +1,7 @@
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { Plugin } from "vite";
+import { type DocumentSummary, summarize } from "../src/markdown-tree";
 
 const moduleId = "virtual:holoim-knowledge";
 const resolvedId = `\0${moduleId}`;
@@ -32,6 +33,17 @@ export function knowledgePlugin(repoRoot: string): Plugin {
     });
   }
 
+  // Parsing every document on each reload is the slow part, so keep summaries
+  // per file and recompute only the ones whose content changed.
+  const summaries = new Map<string, { content: string; summary: DocumentSummary }>();
+  function summaryFor(filename: string, content: string): DocumentSummary {
+    const cached = summaries.get(filename);
+    if (cached?.content === content) return cached.summary;
+    const summary = summarize(content);
+    summaries.set(filename, { content, summary });
+    return summary;
+  }
+
   return {
     name: "holoim-knowledge",
     resolveId(id) {
@@ -46,9 +58,11 @@ export function knowledgePlugin(repoRoot: string): Plugin {
       const documents = files.sort().map((filename) => {
         requireRegularPath(filename);
         this.addWatchFile(filename);
+        const content = readFileSync(filename, "utf8");
         return {
           path: path.relative(repoRoot, filename).split(path.sep).join("/"),
-          content: readFileSync(filename, "utf8"),
+          content,
+          ...summaryFor(filename, content),
         };
       });
       return `export default ${JSON.stringify(documents)};`;
