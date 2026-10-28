@@ -19,6 +19,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Summon and place while speaking | Complete | [summon-and-place.md](archive/summon-and-place.md) |
 | Explain with an object | Complete | [explain-with-an-object.md](archive/explain-with-an-object.md) |
 | Grab, place and throw objects with physics | Complete | [object-physics.md](archive/object-physics.md) |
+| Props collide with the avatar | Complete | [avatar-prop-physics.md](archive/avatar-prop-physics.md) |
 | Resize and move props on every device | Implementing | [object-resize-and-move.md](object-resize-and-move.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |

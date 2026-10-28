@@ -74,6 +74,7 @@ export class CaptureObjects {
   /** Once the scene's collision mesh exists: props get their own world over a copy of it. */
   enablePhysics(trimesh: { vertices: Float32Array; indices: Uint32Array }, gravity: number): void {
     this.physics = new ObjectPhysics(trimesh, gravity);
+    this.physics.setAvatar(this.deps.avatar);
     this.interaction.setPhysics(this.physics);
     this.registry.onRemove = (object) => this.physics?.remove(object);
   }
