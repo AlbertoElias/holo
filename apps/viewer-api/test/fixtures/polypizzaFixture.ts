@@ -23,6 +23,8 @@ type FixtureModel = {
   downloadOrigin?: string;
   /** Patch the GLB the way a model the tray refuses would look. */
   kind?: "draco" | "skinned" | "huge" | "external";
+  /** Hold the GLB download this long, the way a stalled file host does. */
+  delayMs?: number;
 };
 
 export type PolypizzaFixture = {
@@ -153,7 +155,10 @@ export async function startPolypizzaFixture(extra: FixtureModel[] = [], options:
     if (file) {
       if (file[2] === "webp") return send(response, 200, PNG_1X1, "image/png");
       const glb = built.get(file[1]!);
-      return glb ? send(response, 200, glb, "model/gltf-binary") : send(response, 404, "", "text/plain");
+      if (!glb) return send(response, 404, "", "text/plain");
+      const delayMs = models.find((model) => model.id === file[1])?.delayMs ?? 0;
+      if (delayMs > 0) return void setTimeout(() => send(response, 200, glb, "model/gltf-binary"), delayMs);
+      return send(response, 200, glb, "model/gltf-binary");
     }
     return send(response, 404, "", "text/plain");
   }
