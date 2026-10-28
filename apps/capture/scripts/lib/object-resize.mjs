@@ -222,7 +222,6 @@ export async function runDesktopResize({ browser, baseUrl, artifactDir, consoleE
       row('grown while being lowered: released, at rest, not below the floor', !settled.heldBy && resting.body === 'asleep' && resting.boundsMin[1] >= FLOOR_Y - FLOOR_TOLERANCE_M, { heldBy: settled.heldBy, body: resting.body, boundsMinY: round(resting.boundsMin[1]), size: round(resting.size) });
       row('grown while being lowered: no bounds reset', resetsEnd === resetsMid, { resetsMid, resetsEnd });
     }
-    void again;
     return { label, status: failures.length ? 'fail' : 'pass', failures, rows };
   } finally {
     await context.close();

@@ -35,6 +35,9 @@ const STEP_TIME_SAMPLES = 600;
 const LIFT_CLEARANCE_M = 0.002;
 
 const DOWN = { x: 0, y: -1, z: 0 };
+// Collision groups (membership << 16 | filter): every group, or none.
+const SOLID_GROUPS = 0xffffffff;
+const GHOST_GROUPS = 0;
 
 interface PoseSample {
   t: number;
@@ -149,6 +152,17 @@ export class ObjectPhysics {
     collider.setTranslationWrtParent(desc.translation);
     // Density is per collider: setting it again makes the body's mass follow the new volume.
     collider.setDensity(DENSITY);
+  }
+
+  /** Poses so far no longer count toward a release's velocity: what moved the prop was not the hand's swing. */
+  forget(object: SceneObject): void {
+    const prop = this.props.get(object);
+    if (prop) prop.history.length = 0;
+  }
+
+  /** A prop gliding to the hand passes through other props instead of batting them. */
+  ghost(object: SceneObject, on: boolean): void {
+    this.props.get(object)?.body.collider(0).setCollisionGroups(on ? GHOST_GROUPS : SOLID_GROUPS);
   }
 
   /** The body's mass (kg), for checks. */

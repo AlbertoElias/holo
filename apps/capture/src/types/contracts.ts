@@ -196,6 +196,6 @@ export type MockInputState = {
   lookYaw?: number;
   aimPitch?: number;
   /** VR thumbstick axes, −1..1 (`moveY` forward-positive). */
-  thumbstick?: { moveX?: number; moveY?: number; turnX?: number };
+  thumbstick?: { moveX?: number; moveY?: number; turnX?: number; turnY?: number };
   turnMode?: 'snap' | 'smooth';
 };

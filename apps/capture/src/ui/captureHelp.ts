@@ -11,6 +11,7 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
       'During a take, pinch thumb to middle finger on your non-dominant hand, or hold its trigger, to mark what your other hand points at.',
       'For the Halo, pinch thumb to middle finger on your dominant hand and move it, or press the non-dominant stick and tilt it: down records or stops, left undoes the last mark, right restores it.',
       'Holding an object, grab it with your other hand too and pull your hands apart or together to resize it; near its first size it snaps back.',
+      'Point at an object out of reach and squeeze to bring it to your hand; push the right stick up or down to send a held object further out or bring it back.',
       'Settings are on the panel ahead of you.'
     ];
   }
@@ -22,7 +23,8 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
       'Tap the record circle to start a take, and the square to stop it.',
       'Touch and hold the scene to mark "this"; slide to aim, lift to finish.',
       'Tap the Halo glyph, or hold it and slide: left undoes the last mark, right restores it.',
-      'Holding an object, pinch with two fingers to resize it; near its first size it snaps back. Tap to let go.'
+      'Tap an object, near or far, to take it into your hand.',
+      'Holding an object, pinch with two fingers to resize it (near its first size it snaps back), or slide two fingers up or down to push it further out or bring it back. Tap to let go.'
     ];
   }
   return [
@@ -33,7 +35,8 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
     'Fill the tray before a take; during a take, hold T and press 1 to 5 to summon an item into your hand.',
     'G picks up the nearest object in reach, or click one at the centre of the view; Q and E turn it, Z and X tip it.',
     'Press G or click again to let go: held still, the object is set down; while you swing or walk, it is thrown.',
-    'While holding, scroll or press - and = to resize it, and 0 for its first size.'
+    'Click an object out of reach to bring it to your hand.',
+    'While holding, scroll or press - and = to resize it, and 0 for its first size; hold Shift and scroll to push it further out or bring it back.'
   ];
 }
 

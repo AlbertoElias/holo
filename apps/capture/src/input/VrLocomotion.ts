@@ -5,6 +5,8 @@ export interface ThumbstickState {
   moveX: number;
   moveY: number;
   turnX: number;
+  /** The turn stick's forward axis: it pushes and pulls a held prop. */
+  turnY: number;
 }
 
 export const STICK_DEADZONE = 0.15;
@@ -21,7 +23,9 @@ const clampUnit = (v: number): number => (Number.isFinite(v) ? Math.min(1, Math.
  * the same state, so IWER checks exercise the production path.
  */
 export class VrLocomotion {
-  readonly thumbstick: ThumbstickState = { moveX: 0, moveY: 0, turnX: 0 };
+  readonly thumbstick: ThumbstickState = { moveX: 0, moveY: 0, turnX: 0, turnY: 0 };
+  /** −1..1 push on a held prop this frame: the turn stick held mostly forward or back while a prop is held. */
+  objectPush = 0;
   turnMode: VrTurnMode = 'snap';
   /** Accumulated turn applied to the camera rig, radians. */
   turnYaw = 0;
@@ -32,6 +36,16 @@ export class VrLocomotion {
     if (patch.moveX !== undefined) this.thumbstick.moveX = clampUnit(patch.moveX);
     if (patch.moveY !== undefined) this.thumbstick.moveY = clampUnit(patch.moveY);
     if (patch.turnX !== undefined) this.thumbstick.turnX = clampUnit(patch.turnX);
+    if (patch.turnY !== undefined) this.thumbstick.turnY = clampUnit(patch.turnY);
+  }
+
+  /**
+   * While a prop is held, the turn stick locks to its stronger axis: forward
+   * or back pushes and pulls the prop and does not turn.
+   */
+  updateObjectPush(holding: boolean): void {
+    const { turnX, turnY } = this.thumbstick;
+    this.objectPush = holding && Math.abs(turnY) > STICK_DEADZONE && Math.abs(turnY) > Math.abs(turnX) ? turnY : 0;
   }
 
   setTurnMode(mode: VrTurnMode): void {
@@ -62,7 +76,7 @@ export class VrLocomotion {
 
   /** Advances turning for one step; returns the yaw delta to apply to the rig. */
   updateTurn(deltaSec: number): number {
-    const turnX = this.thumbstick.turnX;
+    const turnX = this.objectPush !== 0 ? 0 : this.thumbstick.turnX;
     let delta = 0;
     if (this.turnMode === 'smooth') {
       if (Math.abs(turnX) > STICK_DEADZONE) delta = -turnX * SMOOTH_TURN_RATE_RAD * deltaSec;

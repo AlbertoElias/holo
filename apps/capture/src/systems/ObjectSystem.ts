@@ -1,6 +1,7 @@
 import { createSystem } from '@iwsdk/core';
 import { gravity } from '../physics/CharacterMotor';
-import { type CaptureContext, captureContext } from './captureContext';
+import * as THREE from 'three';
+import { activeCamera, type CaptureContext, captureContext } from './captureContext';
 
 // Above this ground speed the avatar counts as walking, which cancels a flat-screen reach.
 const WALKING_MPS = 0.05;
@@ -12,6 +13,7 @@ const WALKING_MPS = 0.05;
  */
 export class ObjectSystem extends createSystem() {
   private capture!: CaptureContext;
+  private readonly view = new THREE.Vector3();
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -33,6 +35,8 @@ export class ObjectSystem extends createSystem() {
       recording: c.recording.recorder.isEnabled(),
       timeSec: c.frame.elapsedSec,
       bodyYaw: c.camera.lookYaw,
+      viewDirection: activeCamera(c).getWorldDirection(this.view),
+      vrPush: c.frame.vrActive ? c.locomotion.objectPush : 0,
       trayHeld: c.input.isTrayHeld(),
       desktop: {
         toggle: c.input.consumeObjectToggle(),
@@ -42,7 +46,8 @@ export class ObjectSystem extends createSystem() {
         pointHeld: c.input.isPointHeld(),
         summonSlot: c.input.consumeSummonSlot(),
         grab: c.input.consumeObjectGrab(),
-        resize: c.input.consumeObjectResize(c.frame.deltaSec)
+        resize: c.input.consumeObjectResize(c.frame.deltaSec),
+        push: c.input.consumeObjectPush()
       }
     });
   }

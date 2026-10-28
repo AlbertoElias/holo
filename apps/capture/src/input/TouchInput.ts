@@ -26,6 +26,10 @@ export interface TouchInputOptions {
   isHoldingObject?: () => boolean;
   /** A two-finger pinch on the held prop: the ratio of the fingers' spread since the last event. */
   onObjectPinch?: (ratio: number) => void;
+  /** A two-finger pan on the held prop: how far the fingers moved down the screen since the last event, CSS px. */
+  onObjectPan?: (dy: number) => void;
+  /** A look touch that lifted as a tap, holding nothing: true when it fetched a prop from a distance. */
+  onObjectTap?: (point: { x: number; y: number }) => boolean;
 }
 
 // The share of the screen's width, from the left, where a touch walks; a
@@ -58,10 +62,13 @@ export class TouchInput {
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
   /** The look touch that holds a prop: it still looks when dragged, never points. */
   private grabId: number | null = null;
-  /** While a prop is held, a lone touch that may yet be a tap (which presses, letting it go), a second finger's gesture, or a look. */
+  /**
+   * A lone look touch that may yet be a tap: while a prop is held, it presses (letting it go) as it lifts;
+   * otherwise a tap may fetch a prop out of reach. A second finger, a drag or a point hold make it something else.
+   */
   private tapDown: { id: number; x: number; y: number } | null = null;
   /** Two touches on a held prop. */
-  private gesture: { ids: [number, number]; startM: number; lastM: number; startMid: { x: number; y: number }; mode: 'open' | 'pinch' | 'pan' } | null = null;
+  private gesture: { ids: [number, number]; startM: number; lastM: number; startMid: { x: number; y: number }; lastMidY: number; mode: 'open' | 'pinch' | 'pan' } | null = null;
 
   constructor(private readonly options: TouchInputOptions) {}
 
@@ -142,8 +149,10 @@ export class TouchInput {
     }
     // A look touch that lands on a reachable prop picks it up; it never becomes a point hold.
     // While one is held, the press waits for the touch to lift as a tap, so a second finger can still make a gesture.
-    if (holding && this.grabId === null && this.lookPointers.size === 0) this.tapDown = { id: event.pointerId, ...point };
+    const lone = this.grabId === null && this.lookPointers.size === 0;
+    if (holding && lone) this.tapDown = { id: event.pointerId, ...point };
     const grabbed = !this.tapDown && this.grabId === null && (this.options.onObjectPress?.(point) ?? false);
+    if (!grabbed && lone) this.tapDown = { id: event.pointerId, ...point };
     if (grabbed) this.grabId = event.pointerId;
     this.lookPointers.set(event.pointerId, point);
     if (!grabbed && this.held.phase === 'idle' && this.lookPointers.size === 1) {
@@ -207,8 +216,11 @@ export class TouchInput {
     this.lookPointers.delete(event.pointerId);
     const tap = this.tapDown?.id === event.pointerId && event.type !== 'pointercancel' && this.held.phase !== 'held';
     if (this.tapDown?.id === event.pointerId) this.tapDown = null;
-    // A tap while a prop is held presses where it lifted, as a press would have; it lifted too.
-    if (tap && point && this.grabId === null && (this.options.onObjectPress?.(point) ?? false)) this.options.onObjectRelease?.();
+    // A tap while a prop is held presses where it lifted, as a press would have; one holding nothing may fetch. It lifted too.
+    if (tap && point && this.grabId === null) {
+      const pressed = this.options.isHoldingObject?.() ? this.options.onObjectPress?.(point) : this.options.onObjectTap?.(point);
+      if (pressed) this.options.onObjectRelease?.();
+    }
     this.feedHold(event.type === 'pointercancel' ? { type: 'trackingLost', source: `touch:${event.pointerId}` } : { type: 'release', source: `touch:${event.pointerId}`, atMs: event.timeStamp }, point);
   };
 
@@ -217,10 +229,10 @@ export class TouchInput {
     this.tapDown = null;
     if (this.holdDown && this.held.phase !== 'idle') this.feedHold({ type: 'trackingLost', source: `touch:${this.holdDown.id}` });
     const spread = this.spread(a, b);
-    this.gesture = { ids: [a, b], startM: spread.distance, lastM: spread.distance, startMid: spread.mid, mode: 'open' };
+    this.gesture = { ids: [a, b], startM: spread.distance, lastM: spread.distance, startMid: spread.mid, lastMidY: spread.mid.y, mode: 'open' };
   }
 
-  /** A pinch scales the held prop by the change of spread; the gesture locks to a pinch or a pan once one leads. */
+  /** A pinch scales the held prop by the change of spread, a pan pushes it; the gesture locks to one once it leads. */
   private moveGesture(): void {
     const gesture = this.gesture;
     if (!gesture) return;
@@ -230,7 +242,11 @@ export class TouchInput {
       else if (Math.hypot(mid.x - gesture.startMid.x, mid.y - gesture.startMid.y) > PAN_LOCK_APX) gesture.mode = 'pan';
     }
     if (gesture.mode === 'pinch' && gesture.lastM > 0) this.options.onObjectPinch?.(distance / gesture.lastM);
-    if (gesture.mode !== 'open') gesture.lastM = distance;
+    if (gesture.mode === 'pan') this.options.onObjectPan?.(mid.y - gesture.lastMidY);
+    if (gesture.mode !== 'open') {
+      gesture.lastM = distance;
+      gesture.lastMidY = mid.y;
+    }
   }
 
   private spread(a: number, b: number): { distance: number; mid: { x: number; y: number } } {

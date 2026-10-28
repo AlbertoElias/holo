@@ -31,7 +31,7 @@ interface InputControllerOptions {
   /** The Halo a held B summons (slice 5). */
   halo?: FlatHalo;
   /** The reachable prop under a point of the desktop view (normalized device coordinates), if any: a press there grabs it. */
-  pickObject?: (ndcX: number, ndcY: number, anywhere: boolean) => SceneObject | null;
+  pickObject?: (ndcX: number, ndcY: number, anywhere: boolean, far: boolean) => SceneObject | null;
   /** A prop is held on a flat screen: touch gestures and the wheel act on it. */
   isHoldingObject?: () => boolean;
 }
@@ -45,6 +45,9 @@ const STICK_DIRECTION_THRESHOLD = 0.38;
 const RESIZE_PER_NOTCH = 1.1;
 const RESIZE_PER_KEY_SEC = 1.8;
 const WHEEL_LINE_PX = 33;
+// Pushing a held prop out: Shift and one wheel notch, and one CSS px of a two-finger pan.
+const PUSH_PER_NOTCH_M = 0.25;
+const PUSH_PER_PAN_PX_M = 0.01;
 
 export class InputController {
   readonly moveState: MoveState = { forward: false, back: false, left: false, right: false };
@@ -71,6 +74,7 @@ export class InputController {
   // Resizing a held prop: the wheel and a pinch multiply in (consumed each step), `=`/`-` grow and shrink while held, `0` resets.
   private resizeFactor = 1;
   private resizeResetQueued = false;
+  private pushQueuedM = 0;
   private readonly resizeKeys = new Set<'grow' | 'shrink'>();
   // Desktop tray (PRD-045): T holds it open; 1–5 while held summon (queued for the next step).
   private trayHeld = false;
@@ -95,6 +99,11 @@ export class InputController {
       onObjectPinch: (ratio) => {
         this.resizeFactor *= ratio;
       },
+      // Fingers moving up the screen push the prop away.
+      onObjectPan: (dy) => {
+        this.pushQueuedM -= dy * PUSH_PER_PAN_PX_M;
+      },
+      onObjectTap: (point) => this.pressObject('touch', point.x, point.y, true),
       onHold: (phase, point) => {
         if (phase === 'end') {
           this.endPoint('touch');
@@ -216,6 +225,13 @@ export class InputController {
     return out;
   }
 
+  /** Metres to push the held prop out (negative: pull in) since the last step. Consumed. */
+  consumeObjectPush(): number {
+    const push = this.pushQueuedM;
+    this.pushQueuedM = 0;
+    return push;
+  }
+
   /** −1..1 turn (Q turns left, positive about world up) and tip (X positive, Z negative) for a carried object. */
   getObjectTurn(): { yaw: number; pitch: number } {
     const held = (code: 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX'): number => (this.objectTurnKeys.has(code) ? 1 : 0);
@@ -265,11 +281,12 @@ export class InputController {
   }
 
   /** Casts the press through the desktop view; true when it landed on a reachable prop and now holds it. */
-  private pressObject(source: 'mouse' | 'touch', clientX: number, clientY: number): boolean {
+  /** `far`: a prop out of reach but in sight may be fetched (a mouse press, a touch tap). */
+  private pressObject(source: 'mouse' | 'touch', clientX: number, clientY: number, far = source === 'mouse'): boolean {
     if (this.objectPointer !== null || this.options.isXrPresenting() || !this.options.pickObject) return false;
     const rect = this.options.domElement.getBoundingClientRect();
     if (!(rect.width > 0 && rect.height > 0)) return false;
-    const prop = this.options.pickObject(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1), source === 'mouse');
+    const prop = this.options.pickObject(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1), source === 'mouse', far);
     if (!prop) return false;
     this.objectPointer = source;
     this.objectPressQueued = prop;
@@ -277,12 +294,14 @@ export class InputController {
     return true;
   }
 
-  /** The wheel resizes a held prop; otherwise it is left alone. */
+  /** The wheel resizes a held prop, and with Shift pushes it out or pulls it in; otherwise it is left alone. */
   private readonly onWheel = (event: WheelEvent): void => {
     if (this.options.isXrPresenting() || !this.options.isHoldingObject?.()) return;
     event.preventDefault();
     const px = event.deltaY * (event.deltaMode === 1 ? WHEEL_LINE_PX : event.deltaMode === 2 ? window.innerHeight : 1);
-    this.resizeFactor *= RESIZE_PER_NOTCH ** (-px / 100);
+    // Shift turns some wheels sideways.
+    if (event.shiftKey) this.pushQueuedM += (-(px || event.deltaX) / 100) * PUSH_PER_NOTCH_M;
+    else this.resizeFactor *= RESIZE_PER_NOTCH ** (-px / 100);
   };
 
   private releaseObject(source: 'mouse' | 'touch'): void {
@@ -304,6 +323,7 @@ export class InputController {
     this.objectTurnKeys.clear();
     this.resizeFactor = 1;
     this.resizeResetQueued = false;
+    this.pushQueuedM = 0;
     this.resizeKeys.clear();
     this.trayHeld = false;
     this.summonSlotQueued = null;

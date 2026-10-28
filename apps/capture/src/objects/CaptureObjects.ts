@@ -83,9 +83,9 @@ export class CaptureObjects {
    * the desktop camera, for a mouse or touch press; null when none is hit or
    * in reach.
    */
-  pickAt(camera: THREE.Camera, ndcX: number, ndcY: number, anywhere: boolean): SceneObject | null {
+  pickAt(camera: THREE.Camera, ndcX: number, ndcY: number, anywhere: boolean, far = false): SceneObject | null {
     this.pickRay.setFromCamera(this.pickNdc.set(ndcX, ndcY), camera);
-    return this.interaction.pick(this.pickRay, anywhere);
+    return this.interaction.pick(this.pickRay, anywhere, far);
   }
 
   /** Whether either hand holds a prop. */

@@ -126,7 +126,7 @@ function standingSetDownWalk() {
   const interaction = Object.create(ObjectInteraction.prototype);
   interaction.reach = new DesktopReach();
   interaction.reach.phase = 'carry';
-  interaction.hold = { object, side: 'right', desktop: true, offset: new THREE.Matrix4(), pointer: false, settle: { startSec: 0, lowerM: 0.1, squat: false, fullSec: null } };
+  interaction.hold = { object, side: 'right', desktop: true, offset: new THREE.Matrix4(), pointer: false, pushM: 0, dropM: 0, glide: null, settle: { startSec: 0, lowerM: 0.1, squat: false, fullSec: null } };
   interaction.clock = 0;
   interaction.pendingStep = { x: 0, z: 0 };
   interaction.anchor = new THREE.Matrix4();
@@ -135,7 +135,7 @@ function standingSetDownWalk() {
   interaction.readAnchor = () => true;
   interaction.writeWorld = () => {};
   interaction.physics = { gapBelow: () => 1, sample: () => {}, release: () => { object.heldBy = null; }, hold: () => {} };
-  const walking = { deltaSec: 1 / 60, desktop: { summonSlot: null, toggle: false, grab: { press: null, release: false }, walking: true, pointHeld: false, turnYaw: 0, turnPitch: 0 } };
+  const walking = { deltaSec: 1 / 60, viewDirection: new THREE.Vector3(0, 0, -1), desktop: { summonSlot: null, toggle: false, grab: { press: null, release: false }, walking: true, pointHeld: false, turnYaw: 0, turnPitch: 0 } };
   const settlingBefore = Boolean(interaction.hold.settle);
   interaction.updateDesktop(walking);
   const heldAfter = object.heldBy;

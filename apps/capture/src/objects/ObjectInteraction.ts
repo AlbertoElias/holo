@@ -55,6 +55,14 @@ const SET_DOWN_SEARCH_M = 3;
 export const MIN_SIZE = 0.25;
 export const MAX_SIZE = 4;
 const SIZE_DETENT = 0.06;
+// A held prop can be pushed out this far beyond the hand; a headset's stick pushes it at this pace.
+export const MAX_PUSH_M = 4;
+const VR_PUSH_MPS = 2;
+// Pushed out further than this, a still desktop release lowers the prop itself onto the surface below.
+const PUSHED_M = 0.05;
+// A prop out of reach but within this far, in sight, is fetched: it glides into the hand over this long.
+export const FETCH_MAX_M = 8;
+const FETCH_SEC = 0.3;
 
 export interface ObjectStep {
   vrActive: boolean;
@@ -65,6 +73,10 @@ export interface ObjectStep {
   timeSec: number;
   /** The body's facing (the camera's look yaw). */
   bodyYaw: number;
+  /** The view's forward (world, unit): a flat screen pushes a held prop along it. */
+  viewDirection?: THREE.Vector3;
+  /** −1..1: the right stick's push (forward) or pull on a prop held in a headset. */
+  vrPush?: number;
   /** The hand that summons from an open tray in a headset (the dominant one). */
   summoner?: VrHandSide;
   desktop: {
@@ -83,6 +95,8 @@ export interface ObjectStep {
     grab: { press: SceneObject | null; release: boolean };
     /** Resizing the held prop this step: a size factor (wheel, `-`/`=`, a pinch) and `0`'s reset to 1. */
     resize?: { factor: number; reset: boolean };
+    /** Metres to push the held prop out (negative: pull it in) this step: Shift+wheel or a two-finger pan. */
+    push?: number;
   };
 }
 
@@ -97,6 +111,8 @@ export interface ObjectSnapshot {
   quaternion: [number, number, number, number];
   /** Uniform size against the model as loaded. */
   size: number;
+  /** How far a held prop is pushed out beyond the hand (m); 0 when not held. */
+  pushM: number;
   /** The prop body's mass (kg); 0 without one. */
   mass: number;
   /** The prop body: kinematic while held or hovering, dynamic once released, asleep at rest. */
@@ -124,7 +140,13 @@ interface Hold {
    * `squat`: nothing is within the arm's standing reach below, so the hand goes down to the floor (`handFrom` to `handTo`, world points)
    * and the body squats only as far as the arm needs.
    */
-  settle: { startSec: number; lowerM: number; squat: boolean; handFrom?: THREE.Vector3; handTo?: THREE.Vector3; sec?: number } | null;
+  settle: { startSec: number; lowerM: number; squat: boolean; handFrom?: THREE.Vector3; handTo?: THREE.Vector3; sec?: number; remote?: { dropFrom: number } } | null;
+  /** How far the prop is pushed out beyond the hand, along the view (flat screen) or the eye's line through the hand (headset). */
+  pushM: number;
+  /** How far a remote set-down has lowered the pushed-out prop. */
+  dropM: number;
+  /** Fetched from a distance: the world pose it glides from, and when it started. */
+  glide: { from: THREE.Matrix4; startSec: number } | null;
   /** The size asked for, before the detent at 1 and the clamp: resizes accumulate on it. */
   rawSize: number;
   /** A headset's other hand also holds the prop and stretches it: its side, the hands' distance and the raw size when it closed. */
@@ -172,6 +194,9 @@ export class ObjectInteraction {
   private readonly up = new THREE.Vector3(0, 1, 0);
   private readonly axis = new THREE.Vector3();
   private readonly otherPalm = new THREE.Vector3();
+  private readonly eyePos = new THREE.Vector3();
+  private readonly lineDir = new THREE.Vector3();
+  private readonly fetchRay = new THREE.Raycaster();
 
   constructor(
     private readonly deps: {
@@ -259,25 +284,30 @@ export class ObjectInteraction {
    * (it cancels the reach, or lets go like `G`). While a prop is being set down,
    * `anywhere` (a mouse press, whose ray is the view's centre) takes it back.
    */
-  pick(ray: THREE.Raycaster, anywhere: boolean): SceneObject | null {
+  pick(ray: THREE.Raycaster, anywhere: boolean, far = false): SceneObject | null {
     const { registry, carry } = this.deps;
     if (this.hold?.settle && anywhere) return this.hold.object;
     // A second press (mouse or touch) during a reach cancels it, wherever it falls.
     if (this.reach.isReaching()) return this.reach.object;
     // The next press lets a prop held from a reach go, like G.
     if (this.hold && !this.hold.settle) return this.hold.reached ? this.hold.object : null;
-    let best: SceneObject | null = null;
-    let bestDistance = Infinity;
-    for (const object of registry.eventObjects()) {
+    const hit = this.nearestProp(ray);
+    if (!hit) return null;
+    if (this.desktopReachable(hit.object, carry)) return hit.object;
+    // `far` (a mouse press, or a touch that lifted as a tap): a prop out of reach but in sight is fetched.
+    return far && hit.distance <= FETCH_MAX_M && !this.sceneBlocks(ray.ray.origin, hit.point) ? hit.object : null;
+  }
+
+  /** The nearest placed event prop `ray` meets, and where. */
+  private nearestProp(ray: THREE.Raycaster): { object: SceneObject; distance: number; point: THREE.Vector3 } | null {
+    let best: { object: SceneObject; distance: number; point: THREE.Vector3 } | null = null;
+    for (const object of this.deps.registry.eventObjects()) {
       if (!object.placed) continue;
       object.model.updateWorldMatrix(true, true);
       const hit = ray.intersectObject(object.model, true)[0];
-      if (hit && hit.distance < bestDistance) {
-        best = object;
-        bestDistance = hit.distance;
-      }
+      if (hit && hit.distance < (best?.distance ?? Infinity)) best = { object, distance: hit.distance, point: hit.point };
     }
-    return best && this.desktopReachable(best, carry) ? best : null;
+    return best;
   }
 
   isHeld(object: SceneObject): VrHandSide | null {
@@ -308,6 +338,7 @@ export class ObjectInteraction {
         placed: object.placed,
         heldBy: object.heldBy,
         size: object.size,
+        pushM: this.hold?.object === object ? this.hold.pushM : 0,
         mass: this.physics?.mass(object) ?? 0,
         position: [this.pos.x, this.pos.y, this.pos.z],
         quaternion: [this.quat.x, this.quat.y, this.quat.z, this.quat.w],
@@ -372,6 +403,11 @@ export class ObjectInteraction {
       }
       const target = registry.eventObjects().find((object) => this.distanceToObject(object, palm) <= VR_REACH_M);
       if (target) this.grab(target, side, false);
+      else {
+        // Nothing in reach: the prop the hand's ray points at, in sight, is fetched.
+        const far = this.rayTarget(side);
+        if (far) this.fetch(far, side, false);
+      }
     }
 
     const hold = this.hold;
@@ -392,7 +428,10 @@ export class ObjectInteraction {
       else this.resizeTo(hold, (stretch.startRaw * palm.distanceTo(other)) / stretch.startM);
     }
     if (this.readAnchor(hold.side)) {
-      this.writeWorld(hold.object, this.world.multiplyMatrices(this.anchor, hold.offset));
+      this.world.multiplyMatrices(this.anchor, hold.offset);
+      if (step.vrPush) this.pushBy(hold, step.vrPush * VR_PUSH_MPS * step.deltaSec);
+      this.finishPose(hold, this.eyeLine(hold.side, step.viewDirection));
+      this.writeWorld(hold.object, this.world);
       this.physics?.sample(hold.object, this.clock);
     }
   }
@@ -430,7 +469,11 @@ export class ObjectInteraction {
       if (reach.isReaching()) this.cancelReach();
       else if (this.hold?.settle) this.cancelSettle(true);
       else if (this.hold?.reached && !reach.isLifting()) this.releaseDesktop();
-      else if (!this.hold && reach.phase === 'idle') this.beginReach(press, true);
+      else if (!this.hold && reach.phase === 'idle') {
+        // Picked out of reach (a mouse press, or a touch tap): fetched into the hand, where it stays until the next press.
+        if (this.desktopReachable(press, carry)) this.beginReach(press, true);
+        else if (this.readAnchor('right')) this.fetch(press, 'right', true, step.bodyYaw);
+      }
     }
     if (release) {
       // A pointer lifted during the reach or the lift doesn't cancel it: the prop stays held until the next press or G.
@@ -463,7 +506,9 @@ export class ObjectInteraction {
         reach.stepLower(step.deltaSec, !shoulder || !reachM || shoulder.distanceTo(this.lowerPoint) > reachM * REACH_TARGET_FRACTION);
       } else {
         const t = Math.min(1, (this.clock - settle.startSec) / SET_DOWN_SEC);
-        lowerM = t * t * (3 - 2 * t) * settle.lowerM;
+        // A pushed-out prop is lowered by itself; the hand stays where it is.
+        if (settle.remote) hold!.dropM = settle.remote.dropFrom + t * t * (3 - 2 * t) * settle.lowerM;
+        else lowerM = t * t * (3 - 2 * t) * settle.lowerM;
       }
     } else if (reach.isLifting()) reach.stepLift(step.deltaSec);
     else reach.relax(step.deltaSec);
@@ -511,6 +556,9 @@ export class ObjectInteraction {
       this.world.compose(this.pos, this.quat, this.unit);
       held.offset.copy(this.anchor).invert().multiply(this.world);
     }
+    const push = step.desktop.push ?? 0;
+    if (push !== 0 && !held.settle) this.pushBy(held, push);
+    this.finishPose(held, step.viewDirection ?? this.axis.set(-Math.sin(step.bodyYaw), 0, -Math.cos(step.bodyYaw)));
     this.writeWorld(held.object, this.world);
     this.physics?.sample(held.object, this.clock);
     // The prop moved only with the hand. Let go once it hangs just above what is under it, or the hand can go no lower.
@@ -689,8 +737,8 @@ export class ObjectInteraction {
     // The hand goes down by the prop's gap to the surface, less the release gap, if the arm reaches that far standing.
     const gap = this.physics.gapBelow(hold.object, SET_DOWN_SEARCH_M);
     const needed = gap === null ? 0 : Math.max(0, gap - SET_DOWN_RELEASE_GAP_M);
-    if (needed <= this.deps.carry.maxLowerM()) {
-      hold.settle = { startSec: this.clock, lowerM: needed, squat: false };
+    if (hold.pushM > PUSHED_M || needed <= this.deps.carry.maxLowerM()) {
+      hold.settle = { startSec: this.clock, lowerM: needed, squat: false, ...(hold.pushM > PUSHED_M ? { remote: { dropFrom: hold.dropM } } : {}) };
     } else if (this.readAnchor(hold.side)) {
       // Nothing within the arm's standing reach below: the hand goes down to the floor over the pickup's stance, squatting only as far as it must.
       const handFrom = new THREE.Vector3().setFromMatrixPosition(this.anchor);
@@ -713,6 +761,13 @@ export class ObjectInteraction {
   private cancelSettle(pointer: boolean): void {
     const hold = this.hold;
     if (!hold?.settle || !this.readAnchor(hold.side)) return;
+    // A pushed-out prop stays out where the lowering put it.
+    if (hold.settle.remote) {
+      hold.settle = null;
+      hold.pointer = pointer;
+      this.physics?.hold(hold.object);
+      return;
+    }
     hold.object.wrapper.updateWorldMatrix(true, false);
     hold.offset.copy(this.anchor).invert().multiply(hold.object.wrapper.matrixWorld);
     // A squat stands back up first, the hand easing back to the carry pose as the body rises.
@@ -729,14 +784,110 @@ export class ObjectInteraction {
     object.wrapper.updateWorldMatrix(true, false);
     this.world.copy(object.wrapper.matrixWorld);
     const offset = this.anchor.clone().invert().multiply(this.world);
-    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null, rawSize: object.size, stretch: null };
+    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null, rawSize: object.size, stretch: null, pushM: 0, dropM: 0, glide: null };
     object.heldBy = side;
     this.physics?.hold(object);
+  }
+
+  /**
+   * A prop out of reach comes to the hand: held at once, gliding from where it
+   * was into the hand over a moment, passing through other props meanwhile.
+   * On a flat screen it lands in front of the palm (`bodyYaw`), in a headset at it.
+   */
+  private fetch(object: SceneObject, side: VrHandSide, desktop: boolean, bodyYaw = 0): void {
+    if (!this.readAnchor(side)) return;
+    object.wrapper.updateWorldMatrix(true, false);
+    const from = object.wrapper.matrixWorld.clone();
+    let target: THREE.Matrix4;
+    if (desktop) target = this.inHandPose(object, bodyYaw, new THREE.Matrix4());
+    else {
+      const palm = this.palmWorld(side, this.pos2) ?? this.pos2.setFromMatrixPosition(this.anchor);
+      this.box.setFromObject(object.model);
+      const radius = this.box.getSize(this.pos).length() / 2;
+      from.decompose(this.pos, this.quat, this.scale);
+      // Just off the palm, on the side it came from.
+      const toward = this.pos.sub(palm).normalize();
+      target = new THREE.Matrix4().compose(palm.clone().addScaledVector(toward, radius * 0.6), this.quat, this.unit);
+    }
+    this.grab(object, side, desktop);
+    const hold = this.hold!;
+    hold.offset.copy(this.anchor).invert().multiply(target);
+    hold.glide = { from, startSec: this.clock };
+    hold.reached = desktop;
+    this.physics?.ghost(object, true);
+  }
+
+  /** The placed event prop the headset hand's pointing ray meets, within fetch range and in sight. */
+  private rayTarget(side: VrHandSide): SceneObject | null {
+    const ray = this.deps.tracking.getChromeInput(side).targetRay;
+    if (!ray) return null;
+    ray.updateWorldMatrix(true, false);
+    ray.matrixWorld.decompose(this.pos, this.quat, this.scale);
+    this.fetchRay.set(this.pos, this.axis.set(0, 0, -1).applyQuaternion(this.quat));
+    this.fetchRay.near = 0;
+    this.fetchRay.far = FETCH_MAX_M;
+    const hit = this.nearestProp(this.fetchRay);
+    return hit && !this.sceneBlocks(this.fetchRay.ray.origin, hit.point) ? hit.object : null;
+  }
+
+  /** Pushes the held prop out (or pulls it in) by `deltaM`; what moved it is not the hand, so it never counts toward a throw. */
+  private pushBy(hold: Hold, deltaM: number): void {
+    hold.pushM = THREE.MathUtils.clamp(hold.pushM + deltaM, 0, MAX_PUSH_M);
+    this.physics?.forget(hold.object);
+  }
+
+  /**
+   * From the in-hand pose in `world`: pushed out along `direction`, no further
+   * than the scene or another prop allows, lowered by a remote set-down, and
+   * blended from where a fetch started while it glides.
+   */
+  private finishPose(hold: Hold, direction: THREE.Vector3): void {
+    if (hold.pushM > 0 || hold.dropM > 0) {
+      if (hold.pushM > 0 && this.physics) {
+        this.writeWorld(hold.object, this.world);
+        hold.pushM = Math.min(hold.pushM, this.physics.clearance(hold.object, direction, hold.pushM));
+      }
+      this.world.elements[12] += direction.x * hold.pushM;
+      this.world.elements[13] += direction.y * hold.pushM - hold.dropM;
+      this.world.elements[14] += direction.z * hold.pushM;
+    }
+    const glide = hold.glide;
+    if (!glide) return;
+    const t = Math.min(1, (this.clock - glide.startSec) / FETCH_SEC);
+    if (t >= 1) {
+      hold.glide = null;
+      this.physics?.ghost(hold.object, false);
+      this.physics?.forget(hold.object);
+      return;
+    }
+    const k = t * t * (3 - 2 * t);
+    this.world.decompose(this.pos, this.quat, this.scale);
+    glide.from.decompose(this.pos2, this.quat2, this.scale);
+    this.world.compose(this.pos2.lerp(this.pos, k), this.quat2.slerp(this.quat, k), this.unit);
+  }
+
+  /**
+   * A headset's push line: where the holding controller points (the stick that
+   * pushes is on a controller); else from the eye through the hand, or the
+   * view's forward when the hand is at the eye.
+   */
+  private eyeLine(side: VrHandSide, fallback: THREE.Vector3 | undefined): THREE.Vector3 {
+    const ray = this.deps.tracking.getChromeInput(side).targetRay;
+    if (ray) {
+      ray.updateWorldMatrix(true, false);
+      ray.matrixWorld.decompose(this.eyePos, this.quat2, this.scale);
+      return this.lineDir.set(0, 0, -1).applyQuaternion(this.quat2);
+    }
+    const eye = this.deps.avatar.getEyeAnchorWorldPosition(this.eyePos, this.deps.embodyOffset);
+    this.lineDir.setFromMatrixPosition(this.anchor).sub(eye);
+    if (this.lineDir.length() >= 0.1) return this.lineDir.normalize();
+    return this.lineDir.copy(fallback ?? this.axis.set(0, 0, -1));
   }
 
   /** A deliberate let-go throws with the fitted velocity; every other release drops with none. */
   private release(throwIt: boolean): void {
     if (!this.hold) return;
+    if (this.hold.glide) this.physics?.ghost(this.hold.object, false);
     this.physics?.release(this.hold.object, throwIt);
     this.hold.object.heldBy = null;
     this.hold = null;

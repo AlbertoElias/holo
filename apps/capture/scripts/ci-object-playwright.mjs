@@ -9,6 +9,7 @@ import { runDesktopObjectTake, runIwerObjectTake } from './lib/object-take.mjs';
 import { runIwerObjectPhysics } from './lib/object-physics.mjs';
 import { runDesktopMouseObject, runPhoneTouchObject } from './lib/object-pointer.mjs';
 import { runDesktopResize, runIwerResize, runPhoneResize } from './lib/object-resize.mjs';
+import { runDesktopFetch, runDesktopPush, runIwerFetch, runIwerPush, runPhoneFetchAndPush } from './lib/object-push.mjs';
 import { runFloorReach, runMouseFloorReach, runPhoneFloorReach, runPitReach, runRailingReach, runRevalidatesEveryFrame, runTrenchReach, runVrEntryMidStep, runWallReach } from './lib/object-reach.mjs';
 
 // Explain with an object (PRD-043): an IWER controller take and a desktop
@@ -44,6 +45,11 @@ try {
     ['resizeDesktop', () => runDesktopResize({ browser, baseUrl, artifactDir, consoleErrors })],
     ['resizePhone', () => runPhoneResize({ browser, baseUrl, consoleErrors })],
     ['resizeIwer', () => runIwerResize({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['pushDesktop', () => runDesktopPush({ browser, baseUrl, consoleErrors })],
+    ['fetchDesktop', () => runDesktopFetch({ browser, baseUrl, consoleErrors })],
+    ['pushPhone', () => runPhoneFetchAndPush({ browser, baseUrl, consoleErrors })],
+    ['pushIwer', () => runIwerPush({ browser, baseUrl, consoleErrors })],
+    ['fetchIwer', () => runIwerFetch({ browser, baseUrl, consoleErrors })],
     ['revalidate', async () => runRevalidatesEveryFrame()]
   ];
   const takes = [];
