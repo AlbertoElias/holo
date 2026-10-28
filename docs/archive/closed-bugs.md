@@ -655,3 +655,22 @@ bug above.)
   `e2e/bubble-capture.pipeline.spec.ts` now requires the feed's foot on the
   lowest drawn ground, never above the recorded floor, and every drawn point
   of the recorded scene under the glass; AR's foot stays on the recorded floor.
+
+### B-034 — The viewer's deploy health check fails on Pages' switchover
+
+- **Area:** `.github/workflows/ci.yml` and `deploy.yml`, the Pages health checks
+- **Severity:** P2 (marks a good deploy as failed and turns the CI gate red)
+- **Observed:** 2026-10-27, CI run 40576218115 on `main` at `d83b0a3a3258`
+- **Evidence:** wrangler printed "Deployment complete" at 20:30:00.21 and the
+  health check's single `curl -fsS` ran at 20:30:00.37 and got a 500. The site
+  and that deployment (`0ea600cc.holoim-viewer.pages.dev`) answered 200
+  minutes later, with the feed snapshot in the page. The feed function
+  (`apps/viewer-web/functions/index.ts`) never calls the API and serves the
+  plain page on any error of its own, so the 500 came from Pages moving the
+  `holoim-viewer.pages.dev` alias to the new Functions bundle.
+- **Expected:** a deploy that serves its page passes; a site that stays down fails.
+- **Fix:** all four Pages health checks (viewer and capture, in `ci.yml` and
+  `deploy.yml`) use `curl --retry 6 --retry-delay 5 --retry-all-errors`, so
+  they wait up to 30 s. Validation: the same command against a local server
+  that answers 500 twice and then 200 exits 0 on the third request, and
+  against one that always answers 500 exits 22 after seven tries.
