@@ -444,7 +444,12 @@ function glbModelBounds(take, root, i) {
   return box;
 }
 
-export async function runIwerResize({ browser, baseUrl, artifactDir, consoleErrors }) {
+/**
+ * The two-hand stretch take. Returns the pass/fail rows, the exported GLB path
+ * and capture's own per-step series (`capture.series`: size, bounds min/max,
+ * heldBy, body; `capture.offset` aligns series index i + offset to GLB key i).
+ */
+export async function runIwerResizeTake({ browser, baseUrl, artifactDir, consoleErrors }) {
   const label = 'resize-iwer';
   const failures = [];
   const { rows, row } = makeRows(failures);
@@ -666,8 +671,10 @@ export async function runIwerResize({ browser, baseUrl, artifactDir, consoleErro
     const sizes = Array.from({ length: scaleTrack.keys }, (_, i) => glbSize(i));
     row('track spans 1 to ~2', Math.min(...sizes) === 1 && Math.abs(Math.max(...sizes) / 2 - 1) <= 0.1, { min: Math.min(...sizes), max: round(Math.max(...sizes), 4) });
 
-    return { label, status: failures.length ? 'fail' : 'pass', failures, rows, glb, floorY: FLOOR_Y };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, rows, glb, floorY: FLOOR_Y, capture: { series: captured, offset: best.offset } };
   } finally {
     await context.close();
   }
 }
+
+export const runIwerResize = runIwerResizeTake;

@@ -38,6 +38,18 @@ type Take = {
   grab: { start: number; end: number };
 };
 
+type Box = { min: [number, number, number]; max: [number, number, number] };
+type Resized = {
+  file: string;
+  /** The object wrapper node, and the RecordedObjectSize node under it. */
+  node: number;
+  sizeNode: number;
+  /** Per key: the scale track's value (x), the key time, and the prop's world bounds in the recording's frame. */
+  keys: Array<{ key: number; time: number; size: number; bounds: Box }>;
+  keyCount: number;
+  captureSizeMax: number;
+};
+
 type Thrown = {
   file: string;
   node: number;
@@ -50,6 +62,8 @@ type Thrown = {
 
 let take: Take | undefined;
 let thrown: Thrown | undefined;
+let resized: Resized | undefined;
+let unresizedHasSizeNode: boolean | undefined;
 
 test.beforeAll(async () => {
   if (process.env.RUN_E2E_PIPELINE !== "1") return;
@@ -71,6 +85,14 @@ test.beforeAll(async () => {
     const physics = await runIwerObjectPhysics({ browser, baseUrl: captureUrl, artifactDir: path.join(evidenceDir, "throw"), consoleErrors });
     expect(physics.failures, "capture physics scenarios").toEqual([]);
     thrown = thrownFrom(glbLib, physics.glb, await readFile(physics.glb));
+    unresizedHasSizeNode = glbLib.findNode(glbLib.loadTake(await readFile(report.glb)), "RecordedObjectSize") >= 0;
+    // A resized take: the other controller stretches the held prop (capture's resizeIwer scenario).
+    // @ts-expect-error capture's .mjs scripts are untyped
+    const { runIwerResizeTake } = await import("../../capture/scripts/lib/object-resize.mjs");
+    const stretch = await runIwerResizeTake({ browser, baseUrl: captureUrl, artifactDir: path.join(evidenceDir, "resize"), consoleErrors });
+    expect(stretch.failures, "capture resize take").toEqual([]);
+    expect(consoleErrors, "capture runtime errors").toEqual([]);
+    resized = resizedFrom(glbLib, stretch.glb, await readFile(stretch.glb), stretch.capture.series.map((c: { size: number }) => c.size));
   } finally {
     await browser.close();
   }
@@ -121,6 +143,55 @@ function expectedFrom(lib: Record<string, (...args: never[]) => unknown>, file: 
   };
 }
 
+/** The size track and the prop's world bounds (corners of the meshes' local boxes, which the accessors give) at sampled keys. */
+function resizedFrom(lib: Record<string, unknown>, file: string, buffer: Buffer, captureSizes: number[]): Resized {
+  type Take = { json: { nodes: Array<{ mesh?: number; children?: number[] }>; meshes: Array<{ primitives: Array<{ attributes: { POSITION: number } }> }>; accessors: Array<{ min: number[]; max: number[] }> }; channels: Map<number, { scale?: { values: Float32Array } }>; times: number[] };
+  const loadTake = lib.loadTake as (b: Buffer) => Take;
+  const findNode = lib.findNode as (t: unknown, name: string) => number;
+  const objectNodes = lib.objectNodes as (t: unknown) => number[];
+  const worldAt = lib.worldAt as (t: unknown, node: number, key: number) => { elements: number[] };
+  const parsed = loadTake(buffer);
+  const wrappers = objectNodes(parsed);
+  const sizeNode = findNode(parsed, "RecordedObjectSize");
+  expect(wrappers.length, "one object wrapper in the resized export").toBe(1);
+  expect(sizeNode, "the resized export has a RecordedObjectSize node").toBeGreaterThanOrEqual(0);
+  const scale = parsed.channels.get(sizeNode)?.scale?.values;
+  expect(scale, "the size node has a scale track").toBeDefined();
+  const bounds = (key: number): Box => {
+    const min: [number, number, number] = [Infinity, Infinity, Infinity];
+    const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+    const visit = (index: number) => {
+      const node = parsed.json.nodes[index]!;
+      if (node.mesh !== undefined) {
+        const e = worldAt(parsed, index, key).elements;
+        for (const primitive of parsed.json.meshes[node.mesh]!.primitives) {
+          const accessor = parsed.json.accessors[primitive.attributes.POSITION]!;
+          for (const x of [accessor.min[0]!, accessor.max[0]!]) for (const y of [accessor.min[1]!, accessor.max[1]!]) for (const z of [accessor.min[2]!, accessor.max[2]!]) {
+            const w = [e[0]! * x + e[4]! * y + e[8]! * z + e[12]!, e[1]! * x + e[5]! * y + e[9]! * z + e[13]!, e[2]! * x + e[6]! * y + e[10]! * z + e[14]!];
+            for (let a = 0; a < 3; a += 1) { min[a] = Math.min(min[a]!, w[a]!); max[a] = Math.max(max[a]!, w[a]!); }
+          }
+        }
+      }
+      for (const child of node.children ?? []) visit(child);
+    };
+    visit(wrappers[0]!);
+    return { min, max };
+  };
+  // Sampled across the take, always including the largest size and the first key.
+  const count = parsed.times.length;
+  const sizes = Array.from({ length: count }, (_, i) => scale![i * 3]!);
+  const largest = sizes.indexOf(Math.max(...sizes));
+  const picks = [...new Set([0, Math.round(count * 0.2), Math.round(count * 0.35), Math.round(count * 0.5), largest, Math.round(count * 0.8), count - 1].map((k) => Math.min(Math.max(k, 0), count - 1)))].sort((a, b) => a - b);
+  return {
+    file,
+    node: wrappers[0]!,
+    sizeNode,
+    keys: picks.map((key) => ({ key, time: parsed.times[key]!, size: sizes[key]!, bounds: bounds(key) })),
+    keyCount: count,
+    captureSizeMax: Math.max(...captureSizes)
+  };
+}
+
 /** Poses of a thrown take at key times of the export, in the recording root's frame. */
 function thrownFrom(lib: Record<string, (...args: never[]) => unknown>, file: string, buffer: Buffer): Thrown {
   const loadTake = lib.loadTake as (b: Buffer) => { times: number[]; validation: { ok: true; value: { objects: Array<{ node: number; holds: Array<{ start: number; end: number }> }> } } };
@@ -151,6 +222,59 @@ function thrownFrom(lib: Record<string, (...args: never[]) => unknown>, file: st
     return { label, key, time: parsed.times[key]!, object: { position: p.position.toArray() as Pose["position"], quaternion: p.quaternion.toArray() as Pose["quaternion"] } };
   });
   return { file, node: entry.node, keys, flightKeys, keyCount: parsed.times.length, flightDisplacementM: at(releaseKey).position.distanceTo(at(landedKey).position) };
+}
+
+/** Seek the paused animation, then read the prop's size node and its world bounds relative to the recording's root. */
+async function readSizeAt(page: Page, modelPath: string, seconds: number): Promise<{ objects: number; hasSizeNode: boolean; sizeUnderObject: boolean; scale: number[] | null; bounds: Box | null }> {
+  return page.evaluate(([target, time]) => {
+    type O = {
+      name: string;
+      isMesh?: boolean;
+      geometry?: { boundingBox: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | null; computeBoundingBox: () => void };
+      matrixWorld: { elements: number[]; clone: () => M };
+      scale: { x: number; y: number; z: number };
+      parent: O | null;
+      traverse: (fn: (o: O) => void) => void;
+      updateWorldMatrix: (parents: boolean, children: boolean) => void;
+      getObjectByName: (name: string) => O | undefined;
+    };
+    type M = { elements: number[]; invert: () => M };
+    type Probe = { model: O; mixer: { update: (dt: number) => void }; actions: Record<string, { time: number } | null>; objects: Array<{ node: O }> };
+    const probes = (window as unknown as { __portalProbes: Record<string, Probe> }).__portalProbes;
+    const probe = Object.entries(probes).find(([url]) => url.endsWith(target as string))![1];
+    for (const action of Object.values(probe.actions)) if (action) action.time = time as number;
+    probe.mixer.update(0);
+    probe.model.updateWorldMatrix(true, true);
+    const inverse = probe.model.matrixWorld.clone().invert().elements;
+    const mul = (a: number[], b: number[]) => {
+      const out = new Array<number>(16).fill(0);
+      for (let c = 0; c < 4; c += 1) for (let r = 0; r < 4; r += 1) for (let k = 0; k < 4; k += 1) out[c * 4 + r]! += a[k * 4 + r]! * b[c * 4 + k]!;
+      return out;
+    };
+    const node = probe.objects[0]?.node;
+    const sizeNode = probe.model.getObjectByName("RecordedObjectSize");
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    let meshes = 0;
+    node?.traverse((child) => {
+      if (!child.isMesh || !child.geometry) return;
+      meshes += 1;
+      if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+      const box = child.geometry.boundingBox!;
+      const e = mul(inverse, child.matrixWorld.elements);
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+        const w = [e[0]! * x + e[4]! * y + e[8]! * z + e[12]!, e[1]! * x + e[5]! * y + e[9]! * z + e[13]!, e[2]! * x + e[6]! * y + e[10]! * z + e[14]!];
+        for (let a = 0; a < 3; a += 1) { min[a] = Math.min(min[a]!, w[a]!); max[a] = Math.max(max[a]!, w[a]!); }
+      }
+    });
+    return {
+      objects: probe.objects.length,
+      hasSizeNode: Boolean(sizeNode),
+      sizeUnderObject: Boolean(sizeNode && node && sizeNode.parent === node),
+      scale: sizeNode ? [sizeNode.scale.x, sizeNode.scale.y, sizeNode.scale.z] : null,
+      bounds: meshes > 0 ? { min: min as [number, number, number], max: max as [number, number, number] } : null
+    };
+  }, [modelPath, seconds] as const);
 }
 
 async function upload(page: Page, glb: Buffer): Promise<{ id: string; url: string }> {
@@ -408,6 +532,88 @@ test("real capture export: the object plays in the hand, matches the track, orbi
   report.usdz = { path: usdzPath, prim: usd.name, timeSamples: usd.timeSamples, displacementM: usdDisplacement, glbDisplacementM: expected.displacementM, turnDeg: usdTurn, glbTurnDeg: expected.turnDeg };
 
   await writeFile(path.join(evidenceDir, "report.json"), JSON.stringify(report, null, 2));
+});
+
+/** The size prim's local scale in the converted USDZ at the given seconds, and how many time samples its scale has. */
+const USD_SCALE_PROBE = `
+import json, sys
+from pxr import Usd, UsdGeom
+stage = Usd.Stage.Open(sys.argv[1])
+node = int(sys.argv[2])
+times = json.loads(sys.argv[3])
+fps = stage.GetTimeCodesPerSecond()
+prim = next((p for p in stage.Traverse() if p.GetCustomDataByKey("gltfNodeIndex") == node), None)
+out = {"found": prim is not None, "name": prim.GetName() if prim else None, "scaleSamples": 0, "anySamples": 0, "scales": []}
+if prim is not None:
+    xformable = UsdGeom.Xformable(prim)
+    ops = xformable.GetOrderedXformOps()
+    out["scaleSamples"] = max([len(op.GetTimeSamples()) for op in ops if op.GetOpType() == UsdGeom.XformOp.TypeScale] or [0])
+    out["anySamples"] = max([len(op.GetTimeSamples()) for op in ops] or [0])
+    for t in times:
+        m = xformable.GetLocalTransformation(Usd.TimeCode(t * fps))
+        m = m[0] if isinstance(m, tuple) else m
+        out["scales"].append([sum(m[r][c] ** 2 for c in range(3)) ** 0.5 for r in range(3)])
+print(json.dumps(out))
+`;
+
+test("the unresized take exports no size node", async () => {
+  test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
+  expect(unresizedHasSizeNode, "an unresized prop has no RecordedObjectSize node").toBe(false);
+});
+
+test("a resized take: the prop's size animates in the viewer as the GLB has it, and in the USDZ", async ({ page }) => {
+  test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
+  test.setTimeout(240_000);
+  const expected = resized!;
+  const sizes = expected.keys.map((key) => key.size);
+  expect(expected.keys.length, "sampled keys").toBeGreaterThanOrEqual(5);
+  expect(Math.min(...sizes), "the take starts at size 1").toBeCloseTo(1, 3);
+  expect(Math.max(...sizes), "the take grows the prop").toBeGreaterThan(1.5);
+
+  const uploaded = await upload(page, await readFile(expected.file));
+  await page.setViewportSize(DESKTOP);
+  await installProbe(page);
+  await showOnly(page, uploaded.id);
+  await page.goto("/");
+  await assertViewerShell(page);
+  const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
+  await waitForPortalReady(page, uploaded.id, uploaded.url);
+  await card.getByRole("button", { name: "Pause" }).click();
+  await expect(card).toHaveAttribute("data-portal-paused", "true");
+
+  const report: Record<string, unknown> = { glb: expected.file, hologram: uploaded.id, node: expected.node, sizeNode: expected.sizeNode, keyCount: expected.keyCount, captureSizeMax: expected.captureSizeMax, keys: [] };
+  for (const key of expected.keys) {
+    const reading = await readSizeAt(page, uploaded.url, key.time);
+    expect(reading.objects, "the extension names one object (the size node is not a second one)").toBe(1);
+    expect(reading.hasSizeNode, `key ${key.key}: the viewer has the size node`).toBe(true);
+    expect(reading.sizeUnderObject, "the size node sits under the object node").toBe(true);
+    expect(reading.bounds, "the prop has meshes").not.toBeNull();
+    const sizeError = Math.abs(reading.scale![0]! / key.size - 1);
+    expect(sizeError, `key ${key.key}: size node scale against the GLB track`).toBeLessThanOrEqual(0.01);
+    let worst = 0;
+    for (let a = 0; a < 3; a += 1) {
+      const extent = key.bounds.max[a]! - key.bounds.min[a]!;
+      worst = Math.max(worst, Math.abs(reading.bounds!.min[a]! - key.bounds.min[a]!) / extent, Math.abs(reading.bounds!.max[a]! - key.bounds.max[a]!) / extent);
+    }
+    expect(worst, `key ${key.key} (size ${key.size.toFixed(2)}): viewer world bounds against the GLB, as a fraction of extent`).toBeLessThanOrEqual(0.02);
+    (report.keys as unknown[]).push({ key: key.key, time: key.time, glbSize: key.size, viewerScale: reading.scale![0], sizeError, boundsErrorFractionOfExtent: worst, glbExtentM: key.bounds.max.map((v, a) => v - key.bounds.min[a]!) });
+    await page.waitForTimeout(150);
+  }
+  report.midScreenshot = await shot(page, uploaded.id, "resize-largest");
+
+  // Quick Look: the converted USDZ has the size prim, animated, with the GLB's scale at those times.
+  const quickLookUrl = `/api/holograms/${uploaded.id}/usdz`;
+  await expect.poll(async () => (await page.request.get(quickLookUrl, { timeout: 30_000 })).status(), { timeout: 120_000, intervals: [2_000] }).toBe(200);
+  const usdzPath = path.join(evidenceDir, "object-resize.usdz");
+  await writeFile(usdzPath, await (await page.request.get(quickLookUrl, { timeout: 120_000 })).body());
+  const { stdout } = await execFileAsync(process.env.USDZ_PYTHON ?? "python3", ["-c", USD_SCALE_PROBE, usdzPath, String(expected.sizeNode), JSON.stringify(expected.keys.map((key) => key.time))], { timeout: 60_000, maxBuffer: 1024 * 1024 });
+  const usd = JSON.parse(stdout) as { found: boolean; name: string; scaleSamples: number; anySamples: number; scales: number[][] };
+  expect(usd.found, "the size prim is in the USDZ").toBe(true);
+  expect(usd.scaleSamples, "the size prim's scale has time samples").toBeGreaterThan(1);
+  const usdErrors = expected.keys.map((key, i) => Math.max(...usd.scales[i]!.map((s) => Math.abs(s / key.size - 1))));
+  for (const [i, error] of usdErrors.entries()) expect(error, `USDZ scale at key ${expected.keys[i]!.key} (GLB ${expected.keys[i]!.size.toFixed(3)}, USDZ ${usd.scales[i]!.map((v) => v.toFixed(3)).join("/")})`).toBeLessThanOrEqual(0.01);
+  report.usdz = { path: usdzPath, prim: usd.name, scaleSamples: usd.scaleSamples, anySamples: usd.anySamples, scales: usd.scales, maxRelError: Math.max(...usdErrors) };
+  await writeFile(path.join(evidenceDir, "resize-report.json"), JSON.stringify(report, null, 2));
 });
 
 test("a thrown take: the flight and landing play in the viewer as the GLB has them, and in the USDZ", async ({ page }) => {
