@@ -178,6 +178,8 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     if (length === 0 || ny < RIM.groundNormalY * length) return false;
     const minX = Math.min(a.x, b.x, c.x), maxX = Math.max(a.x, b.x, c.x);
     const minZ = Math.min(a.z, b.z, c.z), maxZ = Math.max(a.z, b.z, c.z);
+    // A non-finite vertex would poison the entry budget.
+    if (!Number.isFinite(minX + maxX + minZ + maxZ + a.y + b.y + c.y)) return false;
     if (maxX < box.minX || minX > box.maxX || maxZ < box.minZ || minZ > box.maxZ) return false;
     const area = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
     if (Math.abs(area) < 1e-12) return false;
@@ -196,7 +198,7 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     const j1 = Math.min(rows - 1, Math.floor((maxZ - box.minZ) / cell));
     // Huge triangles cover many cells each: past the budget the field is abandoned, not drawn.
     entries += (i1 - i0 + 1) * (j1 - j0 + 1);
-    if (entries > RIM.maxEntries) return false;
+    if (!(entries <= RIM.maxEntries)) return false;
     const ci = Math.floor(((a.x + b.x + c.x) / 3 - box.minX) / cell);
     const cj = Math.floor(((a.z + b.z + c.z) / 3 - box.minZ) / cell);
     let covered = false;
@@ -246,13 +248,13 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
         read(indices ? indices[i + 1]! : i + 1, b);
         read(indices ? indices[i + 2]! : i + 2, c);
         if (drawTriangle(a, b, c, flip)) drawn += 1;
-        if (entries > RIM.maxEntries) break;
+        if (!(entries <= RIM.maxEntries)) break;
       }
-      if (entries > RIM.maxEntries) break;
+      if (!(entries <= RIM.maxEntries)) break;
     }
-    if (entries > RIM.maxEntries) break;
+    if (!(entries <= RIM.maxEntries)) break;
   }
-  if (entries > RIM.maxEntries) {
+  if (!(entries <= RIM.maxEntries)) {
     console.info(`[holoim] rim: the ground covers over ${RIM.maxEntries} cell entries; the cloche keeps a flat foot`);
     return null;
   }
