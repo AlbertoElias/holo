@@ -400,7 +400,7 @@ export async function runPhoneResize({ browser, baseUrl, consoleErrors }) {
         await down(3, centre.x + ox, centre.y + oy);
         await advance(1 / 60);
         const mid = await item();
-        row_check: if (mid.heldBy !== 'right') {
+        if (mid.heldBy !== 'right') {
           tapped = { ox, oy, phase: 'pressed at down' };
         }
         await up(3);
@@ -470,13 +470,11 @@ export async function runIwerResizeTake({ browser, baseUrl, artifactDir, console
     await waitForXrRenderLoop(page);
     await page.evaluate(() => window.__setFrameStepping(true, false));
 
-    let steps = 0;
     let series = null;
     const item = async () => (await readState(page)).objects.items[0];
     const step = async (count = 1) => {
       for (let i = 0; i < count; i += 1) {
         await page.clock.runFor(STEP_MS);
-        steps += 1;
         if (series) {
           const it = await item();
           series.push({ size: it.size, min: it.boundsMin, max: it.boundsMax, heldBy: it.heldBy, body: it.body });

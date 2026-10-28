@@ -285,7 +285,7 @@ export class ObjectInteraction {
    * `anywhere` (a mouse press, whose ray is the view's centre) takes it back.
    */
   pick(ray: THREE.Raycaster, anywhere: boolean, far = false): SceneObject | null {
-    const { registry, carry } = this.deps;
+    const { carry } = this.deps;
     if (this.hold?.settle && anywhere) return this.hold.object;
     // A second press (mouse or touch) during a reach cancels it, wherever it falls.
     if (this.reach.isReaching()) return this.reach.object;
