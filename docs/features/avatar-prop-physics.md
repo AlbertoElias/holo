@@ -156,11 +156,11 @@ difference is noted.
 - [x] **No teleport launch.** A VR snap turn with the open palm 7 cm from a
   hovering prop leaves it at under 0.3 m/s (it stayed still). Recenter is not
   driven by a check; it relies on the same jump rule.
-- [ ] **Recorded and replayed.** The physics run's recorded throw exports a
+- [x] **Recorded and replayed.** The physics run's recorded throw exports a
   `RecordedObject` track with a key for every avatar key, covering the flight,
   with no key-to-key turn over 180°. The recording path is unchanged, so a
-  bounce off the body is recorded the same way. The viewer pipeline spec runs
-  before merge.
+  bounce off the body is recorded the same way. The viewer pipeline spec
+  passes.
 - [x] **Cost (report).** Measured as in the archived brief: in Node, the same
   12,800-triangle trimesh and four 128-vertex hulls, plus the 14 avatar parts
   driven along a recorded walk-and-swing. Median and p95 `world.step` time are
@@ -250,7 +250,7 @@ All runs on 2026-10-28, on a local Mac, against the capture test build on port 5
 | Walking shoves | `OBJECT_ONLY=desktop`, `walkThrough` | Shoved 1.22 m along the walk; the avatar at 3.185 m/s before contact and 3.183 m/s while pushing |
 | Hovering knocked down | same, `knockdown` | 1 knock-down; at rest on the floor, 0.1 mm gap |
 | Reach unaffected | full `pnpm run test:xr:object` | All 14 takes pass (`output/ci-object-av/report.json`) |
-| Recorded and replayed | physics `recordedThrow`; viewer pipeline spec | Export checks pass; pipeline spec pending (before merge) |
+| Recorded and replayed | physics `recordedThrow`; `RUN_E2E_PIPELINE=1 playwright test e2e/object.pipeline.spec.ts` on its own ports | Export checks pass; both pipeline tests pass, the thrown take included (flight and landing in the viewer and the USDZ) |
 | Cost | `node --import tsx scripts/bench-object-physics.ts` | One frame's `ObjectPhysics.step` over 240 frames. Without the avatar: median 0.032 ms, p95 0.181 ms. With 14 parts walking through the pile: median 0.168 ms, p95 0.388 ms, max 2.29 ms. Within the budget (0.3 ms, 1 ms). The archived 0.12/0.41 ms baseline timed `world.step` alone on another pile, so this run's own no-avatar figure is the comparison. |
 | Workspace | `pnpm run verify:agent` | Pass |
 | Proof video | `apps/capture/output/avatar-physics-proof/record.mjs` (ignored) | Real time, 1:51. Desktop: knock-down and a sideways kick. Then the headset's own view: a bat, a throw across the body bouncing off it, and a drop onto the open left hand. The desktop follow camera sits behind the avatar, so the desktop knock-down is mostly hidden. |
