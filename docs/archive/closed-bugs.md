@@ -849,3 +849,78 @@ bug above.)
   it. A local reload to the first card dropped from about 1,230 ms to 80 ms.
   The reproduction plus two further `test:knowledge` runs in the same container
   all passed.
+
+### B-024 — CI's pipeline shard can spend its whole timeout installing ffmpeg
+
+- **Area:** `.github/workflows/ci.yml` pipeline job (`apt-get install ffmpeg`), `scripts/ci-emulate.sh`
+- **Severity:** P2
+- **Observed:** 2026-10-26, runs for `4178f157` and `da4a008b`
+- **Evidence:** in both runs shard 1/2 never started its tests: the
+  "Install Quick Look conversion dependencies" step pulled ffmpeg's ~90
+  packages from `azure.archive.ubuntu.com` at minutes per package and the
+  job hit `timeout-minutes: 20` (cancelled; CI Gate failed, deploy
+  skipped). Shard 2/2 installed the same packages in seconds. The same
+  tests pass locally in 5.2 min. Separately, `ci-emulate.sh` cannot run
+  this suite: it installs Chromium through `@holoim/capture`, but the
+  pipeline launches `chromium_headless_shell-1208`, which is missing.
+- **Expected:** a slow apt mirror does not cancel the run; e.g. a
+  static ffmpeg binary or a cached `.deb` set, and a step timeout so the
+  failure names the install rather than the job.
+- **Reproduction:** intermittent on hosted runners; see the two runs above.
+- **Fix:** `scripts/ci-ffmpeg.sh` installs pinned static ffmpeg and ffprobe
+  (eugeneware/ffmpeg-static `b6.1.1`, ffmpeg 7.0.2; `inspect_usdz.py` needs
+  ffprobe), checked against their sha256 and kept in `actions/cache`, so no
+  apt mirror is on the path: a warm install takes about 2 s. It runs as its
+  own "Install ffmpeg" step with `timeout-minutes: 2` in the pipeline and
+  Quick Look tool jobs, so a stall names the install. `scripts/ci-emulate.sh`
+  ran whatever `node:24-bookworm` the host had pulled, with one Playwright
+  volume for every architecture: it held an arm64 `chromium-1208` beside an
+  x86 headless shell, each marked installed, so neither was redone. It now
+  pins `linux/amd64` like the runner, names its architecture-specific
+  volumes per platform, installs the viewer's Chromium and headless shell and
+  launches one before the command, and uses the same pinned ffmpeg. Every
+  pipeline shard passes inside it.
+
+### B-028 — A take drops set geometry whose vertices are far apart, such as a large floor
+
+- **Area:** `apps/capture/src/recording/SceneBubbleSampler.ts` (`triangleInsideBubble`)
+- **Severity:** P2
+- **Observed:** 2026-10-25, while building AR recording (`docs/features/archive/ar-recording.md`)
+- **Evidence:** the bubble clip keeps a triangle only when two of its
+  vertices lie within 6 m of a sample. `fixtures/scenes/pointing-targets.gltf`'s
+  `PointingFloor` is a 14 m box with 12 vertices, so no triangle qualifies:
+  `output/ci-marks/desktop.glb` and `controllers.glb` (performer takes, the
+  same code as `main`) and the camera take `output/ci-ar-record/phone-a.glb`
+  hold `TargetA` and `TargetB` but no floor. The capture view shows the floor
+  under the author.
+- **Expected:** set geometry the take stood on or near is kept whatever its
+  tessellation (for example, a triangle is kept when it comes within the
+  radius of a sample, not only its vertices).
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:marks`, then
+  list the node names of `apps/capture/output/ci-marks/desktop.glb`: there is
+  no `PointingFloor_RecordedBubble`.
+- **Fix:** `triangleInsideBubble` keeps a triangle when its closest point
+  lies within the radius of a sample (any vertex inside settles it cheaply;
+  otherwise a box rejection, then `Triangle.closestPointToPoint`). A kept
+  triangle that reaches past the bubble with an edge over 1 m is split by
+  midpoints (up to six levels) and only the pieces inside are kept, so a
+  coarse floor ends about a metre past the bubble, as a dense one always
+  did; the viewer still clips drawing to `RecordedBubbleSphere`. Each
+  clipped mesh now carries only the vertices its triangles use (split
+  vertices blended from their source triangle), where before it carried
+  the source's whole vertex buffer, so its bounds are the kept geometry's.
+  The marks check now requires `PointingFloor_RecordedBubble` in every
+  phase's take and the AR record check in `phone-a`/`phone-b`; ar-record's
+  floor hold, which had "no referent" only because the floor was missing,
+  now names the floor with a highlight radius (four links, four
+  no-referent holds).
+- **Framing rule (user's call, 2026-10-28):** a camera take's feed card
+  centres the dome, and the dome wraps the whole floor the take keeps, so
+  the standing set sits small above the card's middle rather than being
+  framed on its own ("A: whole floor", chosen over framing the standing set
+  with the floor running out to the card's edges). `camera-take.pipeline.spec.ts`
+  checks that the set's drawn vertices lie inside the viewing box and that
+  the dome's middle (where the card aims), not the set, is centred.
+- **Validation:** `test:xr:marks`, `test:xr:ar-record`, `recording` and
+  `terrain` pass, as do the camera-take pipeline spec and `verify:pr`; a
+  proof video replays a take in the viewer feed with its floor.

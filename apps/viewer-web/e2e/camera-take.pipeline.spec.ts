@@ -45,7 +45,7 @@ const VOICE_RESTART_GRACE_S = 0.5;
 /** How far the voice's place may differ from the clip's time: a frame of a loaded machine and the output's latency. */
 const VOICE_SYNC_TOLERANCE_S = 0.25;
 const SET_MARGIN_PX = 4;
-/** The set's centre on screen, off the viewing box's centre by at most this share of its size. */
+/** The dome's middle on screen, off the viewing box's centre by at most this share of its size. */
 const CENTRE_TOLERANCE = 0.05;
 const ONE_CM = 0.01;
 /** SHELF_PREVIEW_HEIGHT_M (packages/xr-ui-iwsdk): the size a gallery tile's preview is fitted to. */
@@ -113,6 +113,8 @@ type Placement = { stage: string; mode: string | null; position: Vec3 | null };
 type FeedReading = SetReading & {
   /** The set's screen rectangle and the viewing box, in page pixels. */
   setRect: { left: number; top: number; right: number; bottom: number };
+  /** The fitted dome's middle on screen, where the card aims: the dome wraps the whole floor the take keeps (B-028). */
+  domeMiddle: { x: number; y: number } | null;
   box: { left: number; top: number; right: number; bottom: number };
   camera: Vec3;
 };
@@ -306,30 +308,51 @@ async function readSet(page: Page, mode: "feed" | "ar"): Promise<SetReading & { 
 /** The set as the card draws it: its screen rectangle against the viewing box. */
 async function readFeed(page: Page, cardId: string): Promise<FeedReading> {
   const set = await readSet(page, "feed");
-  return { ...set, ...(await projectSet(page, cardId, set)) };
+  return { ...set, ...(await projectSet(page, cardId)) };
 }
 
-async function projectSet(page: Page, cardId: string, set: SetReading): Promise<Pick<FeedReading, "setRect" | "box" | "camera">> {
-  return page.evaluate(async ([id, min, max]) => {
+async function projectSet(page: Page, cardId: string): Promise<Pick<FeedReading, "setRect" | "domeMiddle" | "box" | "camera">> {
+  return page.evaluate(async (id) => {
     const { Vector3 } = (await (window as unknown as { __HOLOIM_TEST_MODULES__: Promise<{ three: typeof Three }> }).__HOLOIM_TEST_MODULES__).three;
-    const { camera, renderer } = Object.values((window as unknown as { __portalProbes: Record<string, { camera: Three.PerspectiveCamera; renderer: Three.WebGLRenderer }> }).__portalProbes)[0]!;
+    type Shape = { base: Three.Vector3Like; radii: Three.Vector3Like };
+    const { camera, renderer, model, cloche } = Object.values((window as unknown as { __portalProbes: Record<string, { camera: Three.PerspectiveCamera; renderer: Three.WebGLRenderer; model: Three.Object3D; cloche: { shape: { current: Shape | null }; fitted: { current: Three.Vector3 | null } } }> }).__portalProbes)[0]!;
     camera.updateMatrixWorld();
+    model.updateWorldMatrix(true, true);
     const canvas = renderer.domElement.getBoundingClientRect();
-    const rect = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
-    const lo = min as Vec3;
-    const hi = max as Vec3;
-    for (let i = 0; i < 8; i += 1) {
-      const ndc = new Vector3(i & 1 ? hi[0] : lo[0], i & 2 ? hi[1] : lo[1], i & 4 ? hi[2] : lo[2]).project(camera);
+    const toScreen = (point: Three.Vector3, into: { left: number; top: number; right: number; bottom: number }) => {
+      const ndc = point.project(camera);
       const x = canvas.left + ((ndc.x + 1) / 2) * canvas.width;
       const y = canvas.top + ((1 - ndc.y) / 2) * canvas.height;
-      rect.left = Math.min(rect.left, x);
-      rect.right = Math.max(rect.right, x);
-      rect.top = Math.min(rect.top, y);
-      rect.bottom = Math.max(rect.bottom, y);
+      into.left = Math.min(into.left, x);
+      into.right = Math.max(into.right, x);
+      into.top = Math.min(into.top, y);
+      into.bottom = Math.max(into.bottom, y);
+    };
+    const rect = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+    // The set's drawn vertices, not its box's corners: a round floor (B-028) has corners far from anything drawn.
+    const vertex = new Vector3();
+    model.traverse((node) => {
+      const mesh = node as Three.Mesh;
+      if (!mesh.isMesh) return;
+      for (let n: Three.Object3D | null = node; n; n = n.parent) if (n.userData.holoimChrome === true || n.name === "RecordedBubbleSphere") return;
+      const position = mesh.geometry.getAttribute("position");
+      for (let i = 0; i < position.count; i += 1) {
+        toScreen(vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld), rect);
+      }
+    });
+    // The dome's middle, half its height over its foot (clocheFraming's target), where the bubble's centre has moved it since the fit.
+    let domeMiddle: { x: number; y: number } | null = null;
+    const shape = cloche.shape.current;
+    if (shape) {
+      const sphere = model.getObjectByName("RecordedBubbleSphere");
+      const shift = sphere && cloche.fitted.current ? sphere.getWorldPosition(new Vector3()).sub(cloche.fitted.current) : new Vector3();
+      const middle = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+      toScreen(new Vector3(shape.base.x, shape.base.y + shape.radii.y / 2, shape.base.z).add(shift), middle);
+      domeMiddle = { x: middle.left, y: middle.top };
     }
-    const box = document.querySelector(`.feed-card[data-card-id="${id as string}"] .feed-card-portal`)!.getBoundingClientRect();
-    return { setRect: rect, box: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, camera: camera.position.toArray() as [number, number, number] };
-  }, [cardId, set.min, set.max] as const);
+    const box = document.querySelector(`.feed-card[data-card-id="${id}"] .feed-card-portal`)!.getBoundingClientRect();
+    return { setRect: rect, domeMiddle, box: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, camera: camera.position.toArray() as [number, number, number] };
+  }, cardId);
 }
 
 async function enterAr(page: Page, cardId: string): Promise<void> {
@@ -408,14 +431,16 @@ const size = (set: SetReading): Vec3 => [set.max[0] - set.min[0], set.max[1] - s
 
 /** The set fills the viewing box without leaving it, and sits at its centre. */
 function expectFramed(feed: FeedReading): { offsetX: number; offsetY: number } {
-  const { box, setRect: rect } = feed;
+  const { box, setRect: rect, domeMiddle: middle } = feed;
   expect(rect.left, "the set's left edge is in the viewing box").toBeGreaterThanOrEqual(box.left + SET_MARGIN_PX);
   expect(rect.right, "right").toBeLessThanOrEqual(box.right - SET_MARGIN_PX);
   expect(rect.top, "top").toBeGreaterThanOrEqual(box.top + SET_MARGIN_PX);
   expect(rect.bottom, "bottom").toBeLessThanOrEqual(box.bottom - SET_MARGIN_PX);
-  const offsetX = ((rect.left + rect.right) / 2 - (box.left + box.right) / 2) / (box.right - box.left);
-  const offsetY = ((rect.top + rect.bottom) / 2 - (box.top + box.bottom) / 2) / (box.bottom - box.top);
-  expect(Math.abs(offsetX), "the set is centred across").toBeLessThanOrEqual(CENTRE_TOLERANCE);
+  // The card centres the dome, not the set: the dome wraps the whole floor the take keeps, so the standing set sits above its middle (B-028).
+  expect(middle, "the dome is fitted").not.toBeNull();
+  const offsetX = (middle!.x - (box.left + box.right) / 2) / (box.right - box.left);
+  const offsetY = (middle!.y - (box.top + box.bottom) / 2) / (box.bottom - box.top);
+  expect(Math.abs(offsetX), "the dome is centred across").toBeLessThanOrEqual(CENTRE_TOLERANCE);
   expect(Math.abs(offsetY), "and down").toBeLessThanOrEqual(CENTRE_TOLERANCE);
   return { offsetX, offsetY };
 }
@@ -630,7 +655,8 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   expect(Math.abs(tile.extent - SHELF_PREVIEW_M), "the set's largest extent is the tile's size").toBeLessThanOrEqual(ONE_CM);
   expect(Math.abs(tile.positionY), "the set stands on the tile by its origin, not lifted by the sphere").toBeLessThanOrEqual(1e-6);
   expect(Math.abs(tile.originY), "and nothing of the set is below its origin").toBeLessThanOrEqual(ONE_CM);
-  expect(tile.sphereExtent, "the bubble's sphere would have been far larger than the tile").toBeGreaterThan(SHELF_PREVIEW_M * 2);
+  // The take keeps its floor (B-028), which reaches past the bubble, so the set, not the sphere, is the widest thing in the tile.
+  expect(tile.sphereExtent, "the bubble's sphere is inside the set's extent: the floor reaches past it").toBeLessThan(tile.extent);
 
   real ??= { feed, ar };
   await writeFile(path.join(evidenceDir, "report.json"), JSON.stringify({
@@ -638,7 +664,7 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
     durationS: duration,
     loop: { clipS: clip, wraps, worstClockErrorS: worstClockError, playbackRate, deltaRate, highestS: highest, samples: samples.length },
     audio,
-    feed: { setRect: rect, box, offset: [offsetX, offsetY], clocheBaseY: feed.clocheBaseY, set: { min: feed.min, max: feed.max } },
+    feed: { setRect: rect, domeMiddle: feed.domeMiddle, box, offset: [offsetX, offsetY], clocheBaseY: feed.clocheBaseY, set: { min: feed.min, max: feed.max } },
     usdz: { status: "ready", bytes: usdzBytes.length },
     tile,
     ar: { scale: ar.scale, modelAt: ar.modelAt, sphereAt: ar.sphereAt, groupAt: ar.groupAt, placement: ar.placement, clocheBaseY: ar.clocheBaseY, set: { min: ar.min, max: ar.max } }

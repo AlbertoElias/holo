@@ -341,15 +341,20 @@ jobs:
         id: python
         with:
           python-version: "3.11"
-      # The conversion tools' packages (usd-core, numpy, Pillow) live in a
-      # cached virtualenv: a fresh pip install took 34 s.
-      # ffmpeg's .deb files, so a warm runner installs it with dpkg rather
-      # than from a slow apt mirror (scripts/ci-ffmpeg.sh).
-      - name: Cache ffmpeg packages
+      # ffmpeg and ffprobe are pinned, checksummed static builds rather than
+      # apt's ~90 packages, which a slow azure mirror once stretched past the
+      # job's timeout (B-024). Their own step and limit name the install if it
+      # stalls.
+      - name: Cache ffmpeg
         uses: actions/cache@v4
         with:
-          path: ~/.cache/ffmpeg-debs
-          key: ffmpeg-debs-${{ runner.os }}-${{ env.ImageOS }}
+          path: ~/.cache/ffmpeg-static
+          key: ffmpeg-static-b6.1.1-${{ runner.os }}-${{ runner.arch }}
+      - name: Install ffmpeg
+        timeout-minutes: 2
+        run: scripts/ci-ffmpeg.sh
+      # The conversion tools' packages (usd-core, numpy, Pillow) live in a
+      # cached virtualenv: a fresh pip install took 34 s.
       - name: Cache Quick Look conversion environment
         id: usdz-venv
         uses: actions/cache@v4
@@ -367,7 +372,6 @@ jobs:
             ~/.venv-usdz/bin/pip install -r apps/viewer-api/tools/requirements.txt
           fi
           echo "${HOME}/.venv-usdz/bin" >> "${GITHUB_PATH}"
-          DEB_CACHE="${HOME}/.cache/ffmpeg-debs" scripts/ci-ffmpeg.sh
           wait "${web}"
           wait "${capture}"
       - name: Capture to viewer pipeline
@@ -475,13 +479,18 @@ jobs:
         id: python
         with:
           python-version: "3.11"
-      # ffmpeg's .deb files, so a warm runner installs it with dpkg rather
-      # than from a slow apt mirror (scripts/ci-ffmpeg.sh).
-      - name: Cache ffmpeg packages
+      # ffmpeg and ffprobe are pinned, checksummed static builds rather than
+      # apt's ~90 packages, which a slow azure mirror once stretched past the
+      # job's timeout (B-024). Their own step and limit name the install if it
+      # stalls.
+      - name: Cache ffmpeg
         uses: actions/cache@v4
         with:
-          path: ~/.cache/ffmpeg-debs
-          key: ffmpeg-debs-${{ runner.os }}-${{ env.ImageOS }}
+          path: ~/.cache/ffmpeg-static
+          key: ffmpeg-static-b6.1.1-${{ runner.os }}-${{ runner.arch }}
+      - name: Install ffmpeg
+        timeout-minutes: 2
+        run: scripts/ci-ffmpeg.sh
       - name: Cache Quick Look conversion environment
         id: usdz-venv
         uses: actions/cache@v4
@@ -498,7 +507,6 @@ jobs:
             python3 -m venv ~/.venv-usdz
             ~/.venv-usdz/bin/pip install -r apps/viewer-api/tools/requirements.txt
           fi
-          DEB_CACHE="${HOME}/.cache/ffmpeg-debs" scripts/ci-ffmpeg.sh
           wait "${capture}"
       - name: Record the walk take in capture
         run: pnpm timed walk-take -- pnpm --filter @holoim/web run test:e2e:walk-take

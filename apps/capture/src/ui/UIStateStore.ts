@@ -79,7 +79,7 @@ export class UIStateStore {
   publishMode(mode: AppMode): void {
     const controls =
       mode === 'desktop-third' || mode === 'desktop-first'
-        ? 'Desktop: WASD + Space, hold C to crouch, V toggles 3rd/1st person, R to record, G picks up or puts down the object (Q/E turn it, Z/X tip it), hold T for the tray and press 1–5 to summon.'
+        ? 'Desktop: WASD + Space, hold C to crouch, V toggles 3rd/1st person, R to record, G or a click picks up the object and lets go (moving, it is thrown; Q/E turn it, Z/X tip it), during a take hold T for the tray and press 1–5 to summon.'
         : mode === 'ar'
           ? 'AR: use Recenter AR to place the scene in front of you again.'
           : 'VR: hold a neutral standing or seated posture briefly on entry to fit your height. Choose Refit height after switching sitting/standing. Record with the glyph on your non-dominant wrist: touch it, or point at it and press select. R also works. Settings are on the panel ahead of you. Squeeze or pinch near the object to hold it. Hold the upper face button (Y or B) on your non-dominant controller, or turn that palm up, to open the tray; squeeze or pinch an item with your dominant hand to summon it.';

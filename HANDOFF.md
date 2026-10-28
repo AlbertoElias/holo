@@ -45,7 +45,7 @@ queue item in [`TODOS.md`](TODOS.md).
   without dom-overlay, and that the 300 ms / 22 px hold boundary feels right.
   Also check the microphone prompt at AR entry (a Quest in passthrough is
   asked too, then released), local-floor, the frame rate while recording, and
-  the world-space phone case. B-028 is open.
+  the world-space phone case. B-028 is closed.
 
 - Shared XR interface and viewer VR/AR (brief
   [`docs/features/archive/viewer-xr-interface.md`](docs/features/archive/viewer-xr-interface.md),

@@ -95,6 +95,8 @@ async function readLinks(run: HeldMarkRun, phase: string, download: Download, fa
   const glb = path.join(run.artifactDir, `${phase}.glb`);
   await copyFile(await download.path(), glb);
   const gltf = readGlbJson(await readFile(glb));
+  // The take holds the set it happened on, the floor under the performer included (B-028).
+  if (!gltf.nodes?.some((node) => node.name === 'PointingFloor_RecordedBubble')) failures.push('no PointingFloor_RecordedBubble in the GLB: the take lost the floor it stood on');
   const raw = gltf.extensions?.[HOLOIM_MEANING_EXTENSION];
   if (raw === undefined) {
     failures.push(`no ${HOLOIM_MEANING_EXTENSION} in the GLB`);

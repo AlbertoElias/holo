@@ -28,8 +28,9 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
     'Click the scene to look with the mouse; hold the right button or F to point and mark "this".',
     'Click the Halo glyph, or hold B and move the mouse, for the Halo: left undoes the last mark, right restores it.',
     'R starts and stops a take.',
-    'G picks up or puts down the object; Q and E turn it, Z and X tip it.',
-    'Hold T for the tray and press 1 to 5 to summon an item.'
+    'Fill the tray before a take; during a take, hold T and press 1 to 5 to summon an item into your hand.',
+    'G picks up the nearest object in reach, or click one at the centre of the view; Q and E turn it, Z and X tip it.',
+    'Press G or click again to let go: held still, the object is set down; while you swing or walk, it is thrown.'
   ];
 }
 
