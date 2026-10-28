@@ -17,6 +17,10 @@ import { measureGlass, measureRim, mergeGlass, snapshotNeighbourExcess, pauseTak
 // bubble-capture.pipeline.spec.ts.
 
 const artifactDir = resolve(import.meta.dirname, "../../../output/cloche-rim");
+// The cost budgets are a desktop's (lead decision, 2026-10-28): on a shared CI runner timing is noise, so
+// there the reports keep the timings and only a catastrophe is asserted.
+const onCI = Boolean(process.env.CI);
+const budget = onCI ? { buildMs: 150, updateP99Ms: 2 } : { buildMs: 15, updateP99Ms: 0.25 };
 
 const hologram = {
   id: "rim-1",
@@ -102,8 +106,8 @@ test("the rim follows a hill's ground in the feed, with nothing outside the glas
   expect(motion.maxNeighbourExcess, `neighbouring bins apart by more than max(5% of the dome's height, the ground's step + 5 cm), settled bins, worst at bin ${motion.maxNeighbourExcessBin}`).toBeLessThanOrEqual(0);
   expect(motion.maxTargetNeighbourExcess, "the same for the rim's target, every frame").toBeLessThanOrEqual(0);
   expect(motion.settledPairs, "some bin pairs settled to judge the rim itself").toBeGreaterThanOrEqual(0.05 * motion.pairs);
-  expect(after.buildMs, "ground field build").toBeLessThanOrEqual(15);
-  expect(after.timing?.p99Ms ?? Infinity, `rim update per frame, 99th percentile of the last 600 (mean ${after.timing?.meanMs}, max ${after.timing?.maxMs} ms)`).toBeLessThanOrEqual(0.25);
+  expect(after.buildMs, `ground field build${onCI ? " (CI's catastrophe bound)" : ""}`).toBeLessThanOrEqual(budget.buildMs);
+  expect(after.timing?.p99Ms ?? Infinity, `rim update per frame, 99th percentile of the last 600 (mean ${after.timing?.meanMs}, max ${after.timing?.maxMs} ms)${onCI ? ", CI's catastrophe bound" : ""}`).toBeLessThanOrEqual(budget.updateP99Ms);
 });
 
 test("a flat take keeps its flat foot, its shade and the sphere's clip", async ({ page }, testInfo) => {
@@ -145,7 +149,7 @@ test("a camera take and an old export keep today's dome", async ({ page }) => {
 });
 
 // The feed's rim costs (brief: field ≤ 15 ms on desktop, ≤ 60 ms at 4× CPU
-// throttle; update ≤ 0.25 ms a frame). No other feed perf check exists.
+// throttle; update ≤ 0.25 ms a frame), asserted off CI. No other feed perf check exists.
 test("feed perf: the rim's ground field and per-frame update at 4× CPU throttle", async ({ page }) => {
   test.setTimeout(120_000);
   const cdp = await page.context().newCDPSession(page);
@@ -157,6 +161,6 @@ test("feed perf: the rim's ground field and per-frame update at 4× CPU throttle
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   await mkdir(artifactDir, { recursive: true });
   await writeFile(resolve(artifactDir, "perf-throttled-report.json"), JSON.stringify(state, null, 2));
-  expect(state.buildMs, "ground field build at 4× throttle").toBeLessThanOrEqual(60);
+  if (!onCI) expect(state.buildMs, "ground field build at 4× throttle").toBeLessThanOrEqual(60);
   expect(state.timing?.frames ?? 0, "the rim updated through playback").toBeGreaterThan(10);
 });

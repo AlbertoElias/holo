@@ -290,14 +290,10 @@ the smallest radius.
 
 Left open, for the lead:
 
-- **Cost budgets on CI.** On this desktop the hill passes: build 9.3 ms,
-  update p99 0.2 ms, mean 0.07 ms over 604 frames. In `scripts/ci-emulate.sh`
-  (4 pinned CPUs, software GL), with the host's load average at 30–40 from
-  other agents, the build took 60.6 ms (168 ms at 4× throttle) and the update
-  p99 0.9 ms, mean 0.22 ms; Codex's earlier Docker run built in 14.2 ms. Every
-  other check passes there. The budgets say "on desktop"; whether CI asserts
-  them, reports them, or asserts a CI-sized bound is undecided, and as it
-  stands `cloche-rim.spec.ts` would fail on `main`'s CI.
+- **Cost budgets on CI** (decided below, 2026-10-28). In
+  `scripts/ci-emulate.sh`, with the host's load average at 30–40 from other
+  agents, the build took 60.6 ms (168 ms at 4× throttle) and the update p99
+  0.9 ms, mean 0.22 ms, against 9.3 ms and 0.2 ms on this desktop.
 - **Oracle limits.** The playback neighbour check reads the product's own
   ground lift per frame (the snapshots use the test's raycast), and a
   ledge's exception does not establish that the ledge is connected ground.
@@ -314,6 +310,14 @@ Left open, for the lead:
 | Flat takes unchanged | `cloche-rim.spec.ts` flat take, plus a fixed-time reduced-motion screenshot diff against `main` | Lift 0, shade drawn, sphere clip; 0 differing pixels of 1280×720 against `main` |
 | Camera takes and old exports unchanged | `cloche-rim.spec.ts` camera take and old export | Pass; no rim, today's dome |
 | Cost | `cloche-rim.spec.ts` feed perf, desktop and 4× CPU throttle | Field build 7.3 ms on desktop (27.9 ms at 4× throttle, ≤ 60 ms); rim update p99 0.2 ms, mean 0.10 ms over the last 600 frames |
+
+**Cost on CI (lead decision, 2026-10-28).** The cost budgets above (build
+≤ 15 ms, ≤ 60 ms at 4× throttle, update p99 ≤ 0.25 ms) are a desktop's and
+are asserted whenever `CI` is unset; the host run is the evidence. Under CI
+(`CI` set, as `scripts/ci-emulate.sh` sets it), where timing on a shared
+runner is noise, the reports still record the timings and only a catastrophe
+is asserted: build ≤ 150 ms and update p99 ≤ 2 ms, with no 4× throttle
+assertion.
 
 A manual orbit of the production hill take closes the loop.
 
