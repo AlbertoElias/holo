@@ -1,7 +1,7 @@
 # Feature brief: The cloche's rim follows the ground
 
 **Lead:** Claude (Opus)  
-**Status:** In verification
+**Status:** Complete (merged to `main` 2026-10-28)
 **Layer:** View (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -57,23 +57,23 @@ scene triangles hidden below the ground at capture (queued in `TODOS.md`).
 All rim checks measure against the drawn ground with the test's own raycast,
 never the implementation's height field.
 
-- [ ] **Rim on the ground.** On the hill fixture and the capture pipeline's
+- [x] **Rim on the ground.** On the hill fixture and the capture pipeline's
   `scene.glb` take, per bin at t = 0, mid-take and the end: rim − ground at
   the dome's edge (or at the ground's edge measured inward) is within
   [−3 cm, +5 cm] where the slope is under 30°; on steeper slopes the
   tolerance is one cell × the slope.
-- [ ] **Nothing outside the glass.** Drawn ground vertices outside the bent
+- [x] **Nothing outside the glass.** Drawn ground vertices outside the bent
   glass = 0, from any orbit angle.
-- [ ] **Smooth.** At 60 fps, the largest per-frame change in any bin is
+- [x] **Smooth.** At 60 fps, the largest per-frame change in any bin is
   ≤ 2 cm except at a loop or seek snap; the largest change between
   neighbouring bins is ≤ max(0.05 × dome height, the ground's own step
   between them + 5 cm) (user decision, 2026-10-28).
-- [ ] **Flat takes unchanged.** Lift ≤ 1 mm everywhere and the shade drawn;
+- [x] **Flat takes unchanged.** Lift ≤ 1 mm everywhere and the shade drawn;
   a fixed-time, reduced-motion screenshot differs from `main` by ≤ 0.5% of
   pixels.
-- [ ] **Camera takes and old exports** (no `RecordedSceneBubble`) unchanged:
+- [x] **Camera takes and old exports** (no `RecordedSceneBubble`) unchanged:
   lift 0, sphere clip as today.
-- [ ] **Cost.** Ground field build ≤ 15 ms on desktop and ≤ 60 ms at 4× CPU
+- [x] **Cost.** Ground field build ≤ 15 ms on desktop and ≤ 60 ms at 4× CPU
   throttle on the hill; rim update ≤ 0.25 ms per frame.
 
 ## Failure cases considered
@@ -287,6 +287,14 @@ cached per exponent, the smoothing scratch reused); the hill check reads the
 cost over a full 600 frames; and the glass check's wall give is at most 1 cm
 anywhere (the dome scaled by 1 cm over its farthest reach), not 1 cm along
 the smallest radius.
+
+Round 3 (Codex `-p standard`, 2026-10-28): PASS on the round-2 fixes, no new
+defects: the overlap test is the triangle/square separating-axis test
+(40,000 winding comparisons against polygon clipping), the wall give is at
+most 0.99999 cm over 14,472 bent-wall cases, the CI gating matches the lead
+decision, and the cached edge directions differ from round 2 by under
+0.3 µm. On the final tree `verify:pr` passed and the rim suite passed 4/4 in
+`scripts/ci-emulate.sh` (build 57 ms, update p99 0.8 ms, 0 outside the glass).
 
 Left open, for the lead:
 
