@@ -258,3 +258,4 @@ export function updateAttention(state: AttentionState, now: number, near: boolea
     dimInMs: Math.max(0, timing.idleAfterMs - idleFor)
   };
 }
+export * from "./provisionalGlyphs.js";
