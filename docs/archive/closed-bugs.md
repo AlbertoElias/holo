@@ -655,3 +655,43 @@ bug above.)
   `e2e/bubble-capture.pipeline.spec.ts` now requires the feed's foot on the
   lowest drawn ground, never above the recorded floor, and every drawn point
   of the recorded scene under the glass; AR's foot stays on the recorded floor.
+
+### B-034 — The viewer's deploy health check fails on Pages' switchover
+
+- **Area:** `.github/workflows/ci.yml` and `deploy.yml`, the Pages health checks
+- **Severity:** P2 (marks a good deploy as failed and turns the CI gate red)
+- **Observed:** 2026-10-27, CI run 40576218115 on `main` at `d83b0a3a3258`
+- **Evidence:** wrangler printed "Deployment complete" at 20:30:00.21 and the
+  health check's single `curl -fsS` ran at 20:30:00.37 and got a 500. The site
+  and that deployment (`0ea600cc.holoim-viewer.pages.dev`) answered 200
+  minutes later, with the feed snapshot in the page. The feed function
+  (`apps/viewer-web/functions/index.ts`) never calls the API and serves the
+  plain page on any error of its own, so the 500 came from Pages moving the
+  `holoim-viewer.pages.dev` alias to the new Functions bundle.
+- **Expected:** a deploy that serves its page passes; a site that stays down fails.
+- **Fix:** all four Pages health checks (viewer and capture, in `ci.yml` and
+  `deploy.yml`) use `curl --retry 6 --retry-delay 5 --retry-all-errors`, so
+  they wait up to 30 s. Validation: the same command against a local server
+  that answers 500 twice and then 200 exits 0 on the third request, and
+  against one that always answers 500 exits 22 after seven tries.
+
+### B-035 — A fresh visit lands on the last hologram instead of the newest
+
+- **Area:** `apps/viewer-web` feed (`FeedPage.tsx`), edge first page (`functions/index.ts`)
+- **Severity:** P1 — the feed opens on the wrong hologram
+- **Observed:** 2026-10-27, on the deployed viewer (desktop browser, fresh load)
+- **Evidence:** With an edge snapshot that holds only the oldest hologram and
+  the live API holding five, the deployed feed ends at `scrollTop` 2880 of a
+  720 px card (card 5 of 5); a snapshot missing the newest one or two lands
+  one or two cards down. Scroll snapping holds the card that was snapped when
+  the live list inserts newer cards above it; `overflow-anchor: none` does not
+  change it.
+- **Expected:** A reader who has not scrolled stays on the newest hologram when
+  the API's list replaces the edge snapshot.
+- **Reproduction:** Serve `/` with a `__HOLOIM_FEED__` older than the API's
+  first page and load it.
+- **Fix:** The feed returns to the top when a new first card arrives while the
+  reader is still at the top (`useStayOnNewest`); a reader who has scrolled
+  keeps their card. The edge-snapshot test in `e2e/hologram-feed.spec.ts` now
+  requires the newer card in the viewport and the feed at the top; it fails
+  without the fix.
