@@ -77,7 +77,7 @@ export class DesktopCarryPose {
    * `worldTarget` sends the hand toward a world point instead of the carry pose, `blend` (0 to 1) of the way: the grasp when reaching
    * for a prop, easing back to the carry pose as the avatar stands.
    */
-  update(step: { carrying: boolean; bodyYaw: number; deltaSec: number; lowerM?: number; worldTarget?: { point: THREE.Vector3; blend: number; horizontalOnly?: boolean } }): void {
+  update(step: { carrying: boolean; bodyYaw: number; deltaSec: number; lowerM?: number; worldTarget?: { point: THREE.Vector3; blend: number } }): void {
     const chain = this.chain;
     if (!chain) return;
     const rate = step.carrying ? 1 / BLEND_IN_SEC : -1 / BLEND_OUT_SEC;
@@ -103,14 +103,7 @@ export class DesktopCarryPose {
     // Toward the midline: the body's left, for the right hand.
     this.target.x += -Math.cos(step.bodyYaw) * reach * INWARD;
     this.target.z += Math.sin(step.bodyYaw) * reach * INWARD;
-    if (step.worldTarget && step.worldTarget.blend > 0) {
-      const { point, blend, horizontalOnly } = step.worldTarget;
-      if (horizontalOnly) {
-        // Only across the floor: the height stays the carry pose's, lowered by the squat and the arm.
-        this.target.x += (point.x - this.target.x) * blend;
-        this.target.z += (point.z - this.target.z) * blend;
-      } else this.target.lerp(point, blend);
-    }
+    if (step.worldTarget && step.worldTarget.blend > 0) this.target.lerp(step.worldTarget.point, step.worldTarget.blend);
     this.targetQuat.setFromAxisAngle(this.up, step.bodyYaw);
     const solved = this.solver.solve(chain, this.target, this.targetQuat, this.avatar.avatarRoot);
     for (const driven of this.driven) {

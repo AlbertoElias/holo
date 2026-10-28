@@ -17,8 +17,15 @@ const VR_REACH_M = 0.1;
 const DESKTOP_REACH_FRACTION = 1.15;
 // An object below the shoulder, its bounds within one arm's reach of the shoulder, measured across the floor; and no nearer than this to the feet.
 const DESKTOP_LOW_FEET_M = 0.15;
-// The squat set-down has the hand over its stance by this fraction of the way down (the prop can be let go before the bottom).
-const LOWER_STANCE_DEMAND_GAIN = 2.5;
+// A squat set-down takes the hand to the floor at this pace (within these bounds), and aims this far past the release gap.
+const LOWER_MAX_SEC = 0.5;
+const LOWER_MIN_SEC = 0.3;
+// After the hand has been sent, the squat gets this long to catch up before the prop is let go where it is.
+const LOWER_SETTLE_SEC = 0.4;
+const LOWER_HAND_MPS = 2.2;
+const LOWER_OVERSHOOT_M = 0.01;
+// A reach for a low prop may start this far beyond the arm's reach across the floor: the avatar steps in first.
+const DESKTOP_STEP_ALLOWANCE_M = 0.25;
 // A reach steps in first only for a grasp point below this fraction of the avatar's height (hip height and under): a chest-high prop is bent for in place.
 const REACH_STEP_BELOW_HEIGHT_FRACTION = 0.5;
 // Tracking loss: the object freezes, then is released where it is.
@@ -96,10 +103,10 @@ interface Hold {
   reached: boolean;
   /**
    * Being lowered onto the surface under it before it is let go. The object stays held meanwhile.
-   * `squat`: nothing is within the arm's standing reach below, so the body squats (the reach demand) instead of only the arm lowering;
-   * `fullSec` is when the squat bottomed out.
+   * `squat`: nothing is within the arm's standing reach below, so the hand goes down to the floor (`handFrom` to `handTo`, world points)
+   * and the body squats only as far as the arm needs.
    */
-  settle: { startSec: number; lowerM: number; squat: boolean; fullSec: number | null } | null;
+  settle: { startSec: number; lowerM: number; squat: boolean; handFrom?: THREE.Vector3; handTo?: THREE.Vector3; sec?: number } | null;
 }
 
 /**
@@ -116,11 +123,10 @@ export class ObjectInteraction {
   private readonly pendingStep = { x: 0, z: 0 };
   private readonly stepDir = new THREE.Vector3();
   private readonly toeOffset = { x: 0, z: 0 };
-  /** Where a squat set-down brings the hand across the floor: the pickup's stance, `REACH_STEP_AHEAD_M` ahead of the toes. */
-  private readonly lowerStance = new THREE.Vector3();
-  private readonly lowerHandOffset = { x: 0, z: 0 };
+  /** Where the hand is in a squat set-down this frame, and whether a stand-up after a cancelled one still heads for it. */
   private readonly lowerPoint = new THREE.Vector3();
-  private lowerStanceSet = false;
+  private liftFromLower = false;
+  private lastBodyYaw = 0;
   private physics: ObjectPhysics | null = null;
   /** Accumulated step time, which stamps the poses the release velocity is fitted from. */
   private clock = 0;
@@ -153,6 +159,11 @@ export class ObjectInteraction {
   /** The body's reach demand, 0 to 1: the crouch and squat a flat-screen pickup or low set-down asks of the avatar. */
   reachDemand(): number {
     return this.reach.demand;
+  }
+
+  /** Extra forward lean (0 to 1) a set-down needs when the full squat still leaves the hand short of the floor. */
+  reachDeep(): number {
+    return this.reach.deepExtra;
   }
 
   /** True while the avatar steps in for a reach: its ground speed is the reach's own and doesn't count as walking. */
@@ -335,6 +346,7 @@ export class ObjectInteraction {
   private updateDesktop(step: ObjectStep): void {
     const { carry, registry, tray } = this.deps;
     const reach = this.reach;
+    this.lastBodyYaw = step.bodyYaw;
     const slot = step.desktop.summonSlot;
     const item = slot !== null && step.recording && !this.hold && !reach.isReaching() ? tray.getItems().find((candidate) => candidate.slot === slot) : undefined;
     if (item && tray.isOpen() && this.readAnchor('right')) {
@@ -382,13 +394,12 @@ export class ObjectInteraction {
     let lowerM = 0;
     if (settle) {
       if (settle.squat) {
-        // Squat further until the prop is just above the surface; at the bottom the arm lowers the rest of the way.
-        if (reach.stepLower(step.deltaSec) && settle.fullSec === null) {
-          settle.fullSec = this.clock;
-          settle.lowerM = carry.maxLowerM();
-        }
-        const ease = settle.fullSec === null ? 0 : Math.min(1, (this.clock - settle.fullSec) / SET_DOWN_SEC);
-        lowerM = ease * ease * (3 - 2 * ease) * settle.lowerM;
+        // The hand goes down to the floor over the stance, as the pickup came from there; the body squats only as far as the arm needs.
+        const t = Math.min(1, (this.clock - settle.startSec) / settle.sec!);
+        this.lowerPoint.lerpVectors(settle.handFrom!, settle.handTo!, t * t * (3 - 2 * t));
+        const shoulder = this.deps.avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
+        const reachM = carry.getReach();
+        reach.stepLower(step.deltaSec, !shoulder || !reachM || shoulder.distanceTo(this.lowerPoint) > reachM * REACH_TARGET_FRACTION);
       } else {
         const t = Math.min(1, (this.clock - settle.startSec) / SET_DOWN_SEC);
         lowerM = t * t * (3 - 2 * t) * settle.lowerM;
@@ -396,36 +407,17 @@ export class ObjectInteraction {
     } else if (reach.isLifting()) reach.stepLift(step.deltaSec);
     else reach.relax(step.deltaSec);
     let worldBlend = reach.worldBlend();
-    let horizontalOnly = false;
-    if (reach.phase === 'lower' && !this.lowerStanceSet) {
-      // The squat brings the held prop in over the feet, as the pickup took it from there, so it can be picked up again without a step.
-      this.stepRemaining(true);
-      const root = this.deps.avatar.avatarRoot.position;
-      this.lowerStance.set(root.x + this.toeOffset.x - Math.sin(step.bodyYaw) * REACH_STEP_AHEAD_M, 0, root.z + this.toeOffset.z - Math.cos(step.bodyYaw) * REACH_STEP_AHEAD_M);
-      this.lowerHandOffset.x = 0;
-      this.lowerHandOffset.z = 0;
-      this.lowerStanceSet = true;
-    }
-    if (worldBlend === 0 && this.lowerStanceSet && reach.phase !== 'carry') {
-      // The hand goes where it puts the prop's centre over the stance, however the prop sits in it (followed each frame, as the arm tilts it).
-      const palm = this.hold ? this.palmWorld('right', this.pos2) : undefined;
-      if (palm && this.hold) {
-        this.box.setFromObject(this.hold.object.model);
-        this.lowerHandOffset.x = palm.x - (this.box.min.x + this.box.max.x) / 2;
-        this.lowerHandOffset.z = palm.z - (this.box.min.z + this.box.max.z) / 2;
-      }
-      this.lowerPoint.set(this.lowerStance.x + this.lowerHandOffset.x, 0, this.lowerStance.z + this.lowerHandOffset.z);
-      // Eases in with the squat and back out with the stand-up, on the body's own demand.
-      const t = Math.min(1, reach.demand * LOWER_STANCE_DEMAND_GAIN);
-      worldBlend = t * t * (3 - 2 * t);
-      horizontalOnly = true;
+    let worldPoint = this.liftFromLower ? this.lowerPoint : reach.grasp;
+    if (settle?.squat) {
+      worldBlend = 1;
+      worldPoint = this.lowerPoint;
     }
     carry.update({
       carrying: (Boolean(hold) || reach.phase === 'reach') && !step.desktop.pointHeld,
       bodyYaw: step.bodyYaw,
       deltaSec: step.deltaSec,
       lowerM,
-      ...(worldBlend > 0 ? { worldTarget: { point: horizontalOnly ? this.lowerPoint : reach.grasp, blend: worldBlend, horizontalOnly } } : {})
+      ...(worldBlend > 0 ? { worldTarget: { point: worldPoint, blend: worldBlend } } : {})
     });
     if (!this.readAnchor('right')) return;
 
@@ -460,7 +452,7 @@ export class ObjectInteraction {
     this.physics?.sample(held.object, this.clock);
     // The prop moved only with the hand. Let go once it hangs just above what is under it, or the hand can go no lower.
     const hanging = (this.physics?.gapBelow(held.object, SET_DOWN_SEARCH_M) ?? Infinity) <= SET_DOWN_RELEASE_GAP_M;
-    const settled = held.settle && (held.settle.squat ? held.settle.fullSec !== null && this.clock - held.settle.fullSec >= SET_DOWN_SEC : this.clock - held.settle.startSec >= SET_DOWN_SEC);
+    const settled = held.settle && this.clock - held.settle.startSec >= (held.settle.squat ? held.settle.sec! + LOWER_SETTLE_SEC : SET_DOWN_SEC);
     if (held.settle && (settled || hanging)) {
       this.release(false);
     }
@@ -477,6 +469,7 @@ export class ObjectInteraction {
     let stepM = 0;
     const low = this.reach.grasp.y < avatar.avatarRoot.position.y + avatar.avatarHeight * REACH_STEP_BELOW_HEIGHT_FRACTION;
     if (low && shoulder && reachM && shoulder.distanceTo(this.reach.grasp) > reachM * REACH_TARGET_FRACTION) stepM = this.stepRemaining(true);
+    this.liftFromLower = false;
     this.reach.begin(object, pointerDown, stepM);
   }
 
@@ -559,11 +552,21 @@ export class ObjectInteraction {
     const gap = this.physics.gapBelow(hold.object, SET_DOWN_SEARCH_M);
     const needed = gap === null ? 0 : Math.max(0, gap - SET_DOWN_RELEASE_GAP_M);
     if (needed <= this.deps.carry.maxLowerM()) {
-      hold.settle = { startSec: this.clock, lowerM: needed, squat: false, fullSec: null };
-    } else {
-      // Nothing within the arm's standing reach below: squat until the prop is just above the surface.
-      hold.settle = { startSec: this.clock, lowerM: 0, squat: true, fullSec: null };
-      this.lowerStanceSet = false;
+      hold.settle = { startSec: this.clock, lowerM: needed, squat: false };
+    } else if (this.readAnchor(hold.side)) {
+      // Nothing within the arm's standing reach below: the hand goes down to the floor over the pickup's stance, squatting only as far as it must.
+      const handFrom = new THREE.Vector3().setFromMatrixPosition(this.anchor);
+      this.stepRemaining(true);
+      const root = this.deps.avatar.avatarRoot.position;
+      this.box.setFromObject(hold.object.model);
+      const handTo = new THREE.Vector3(
+        root.x + this.toeOffset.x - Math.sin(this.lastBodyYaw) * REACH_STEP_AHEAD_M + handFrom.x - (this.box.min.x + this.box.max.x) / 2,
+        handFrom.y - needed - LOWER_OVERSHOOT_M,
+        root.z + this.toeOffset.z - Math.cos(this.lastBodyYaw) * REACH_STEP_AHEAD_M + handFrom.z - (this.box.min.z + this.box.max.z) / 2
+      );
+      hold.settle = { startSec: this.clock, lowerM: 0, squat: true, handFrom, handTo, sec: THREE.MathUtils.clamp(handFrom.distanceTo(handTo) / LOWER_HAND_MPS, LOWER_MIN_SEC, LOWER_MAX_SEC) };
+      this.lowerPoint.copy(handFrom);
+      this.liftFromLower = false;
       this.reach.beginLower();
     }
   }
@@ -575,7 +578,10 @@ export class ObjectInteraction {
     hold.object.wrapper.updateWorldMatrix(true, false);
     hold.offset.copy(this.anchor).invert().multiply(hold.object.wrapper.matrixWorld);
     // A squat stands back up first, the hand easing back to the carry pose as the body rises.
-    if (hold.settle.squat) this.reach.beginLift(false);
+    if (hold.settle.squat) {
+      this.liftFromLower = true;
+      this.reach.beginLift(true);
+    }
     hold.settle = null;
     hold.pointer = pointer;
     this.physics?.hold(hold.object);
@@ -638,7 +644,7 @@ export class ObjectInteraction {
     if (this.box.distanceToPoint(shoulder) <= reach * DESKTOP_REACH_FRACTION) return true;
     if (this.box.max.y >= shoulder.y) return false;
     const across = Math.hypot(Math.max(this.box.min.x - shoulder.x, 0, shoulder.x - this.box.max.x), Math.max(this.box.min.z - shoulder.z, 0, shoulder.z - this.box.max.z));
-    if (across > reach) return false;
+    if (across > reach + DESKTOP_STEP_ALLOWANCE_M) return false;
     const root = avatar.avatarRoot.position;
     const fromFeet = Math.hypot(Math.max(this.box.min.x - root.x, 0, root.x - this.box.max.x), Math.max(this.box.min.z - root.z, 0, root.z - this.box.max.z));
     return fromFeet >= DESKTOP_LOW_FEET_M;

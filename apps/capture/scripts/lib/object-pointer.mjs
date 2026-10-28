@@ -1,6 +1,6 @@
 import { createXrContext, waitForPageFunctions, waitForTextContentPrefix, wireXrConsoleErrors } from '@holoim/tooling-testing/xr-env';
 
-import { OBJECT_URL, openCapture, readState } from './object-take.mjs';
+import { OBJECT_URL, openCapture, readState, squatTracker } from './object-take.mjs';
 
 // Grab, place and throw with physics (slice 2): a mouse and a touch grab, by
 // capture's real input events.
@@ -171,14 +171,19 @@ export async function runDesktopMouseObject({ browser, baseUrl, consoleErrors })
     if (!(easing.boundsMin[1] < beforeLift.boundsMin[1] - 0.005)) fail(`the prop was not lowered during the set-down (${round(beforeLift.boundsMin[1] - easing.boundsMin[1], 4)} m)`);
     // The let-go is the first free state: the prop was lowered with the hand, so it drops from there.
     let released = easing;
+    const squat = squatTracker();
     for (let i = 0; i < 150 && released.heldBy; i += 1) {
       await advance(1 / 60);
-      released = await s.item();
+      const frame = await readState(page);
+      squat.sample(frame);
+      released = frame.objects.items[0];
     }
+    squat.assert(fail, 'a still release');
     if (released.heldBy) fail('the set-down never released the prop');
     const launch = released;
     const resting = await rest(s);
     const stillRelease = {
+      squat: squat.result(),
       // Sideways speed: one step of gravity alone falls 0.16 m/s.
       launchSpeedMps: round(Math.hypot(launch.linvel[0], launch.linvel[2])),
       fellFromHandM: round(beforeLift.boundsMin[1] - resting.boundsMin[1]),
@@ -351,12 +356,17 @@ export async function runPhoneTouchObject({ browser, baseUrl, consoleErrors }) {
     await advance(0.1);
     const easing = await s.item();
     let lifted = easing;
+    const squat = squatTracker();
     for (let i = 0; i < 150 && lifted.heldBy; i += 1) {
       await advance(1 / 60);
-      lifted = await s.item();
+      const frame = await readState(page);
+      squat.sample(frame);
+      lifted = frame.objects.items[0];
     }
+    squat.assert(fail, 'a still touch lift');
     const resting = await rest(s);
     const lift = {
+      squat: squat.result(),
       dropAfterLetGoM: round(lifted.boundsMin[1] - resting.boundsMin[1], 4),
       heldDuringEase: easing.heldBy,
       heldAfter: lifted.heldBy,

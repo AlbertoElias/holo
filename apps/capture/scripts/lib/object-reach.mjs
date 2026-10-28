@@ -207,9 +207,11 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
       stepIn.toeToPropBeforeM = toes0 ? round(Math.hypot(grasp[0] - toes0[0], grasp[1] - toes0[1]), 4) : null;
     }
     const toeAhead = { minM: Infinity };
+    let minHipsY = Infinity;
     let stepStartStep = null;
     const samplePose = (st) => {
       const phase = st.objects.reach.phase;
+      if (st.pose.hips) minHipsY = Math.min(minHipsY, st.pose.hips.y);
       // The feet must not twist as the legs fold: each toe stays ahead of its ankle along the facing.
       st.pose.toes.forEach((toe, i) => {
         if (!toe) return;
@@ -298,6 +300,9 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
     }
     stepIn.minToeAheadOfAnkleM = round(toeAhead.minM, 4);
     if (toeAhead.minM < 0.06) fail(`a foot twisted: a toe came within ${stepIn.minToeAheadOfAnkleM} m of its ankle along the facing (standing ${round(Math.hypot(0.123), 3)} m, limit 0.06 m)`);
+    // Rendered hips bone height above the floor: a natural squat keeps them at 0.35 m or more.
+    const hipsPickupAboveFloorM = round(minHipsY - FLOOR_Y, 3);
+    if (hipsPickupAboveFloorM < 0.35) fail(`the hips went down to ${hipsPickupAboveFloorM} m above the floor during the pickup (limit 0.35 m)`);
     const spineReport = { maxDeg: round(pitch.maxDeg, 1), atDemand: pitch.atDemand, shoulderToGraspMinM: round(pitch.shoulderToGraspMinM, 3), shoulderToGraspAtFullM: pitch.shoulderToGraspAtFullM && round(pitch.shoulderToGraspAtFullM, 3), hipsYAtFull: pitch.hipsYAtFull && round(pitch.hipsYAtFull, 3) };
     if (pitch.maxDeg > 47) fail(`the spine pitched ${spineReport.maxDeg} degrees during the pickup (limit 45, tolerance 47)`);
     const cameraReport = { yRangeM: round(cam.maxY - cam.minY, 4), squatPitchRangeDeg: round(cam.squatMaxPitch - cam.squatMinPitch, 3) };
@@ -315,11 +320,13 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
     let launch = null;
     let lowestSquat = 0;
     let lowerPitchDeg = 0;
+    let lowerMinHipsY = Infinity;
     const lowerCam = { min: Infinity, max: -Infinity };
     for (let i = 0; i < 4 * 60 && !launch; i += 1) {
       await step(1);
       const st = await s.state();
       lowerPitchDeg = Math.max(lowerPitchDeg, st.pose.spinePitchDeg ?? 0);
+      if (st.pose.hips) lowerMinHipsY = Math.min(lowerMinHipsY, st.pose.hips.y);
       lowerCam.min = Math.min(lowerCam.min, st.camera.y);
       lowerCam.max = Math.max(lowerCam.max, st.camera.y);
       lowestSquat = Math.max(lowestSquat, st.objects.reach.demand);
@@ -327,6 +334,8 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
       if (!prop.heldBy) launch = prop;
     }
     if (!launch) fail('the low set-down never let go of the prop');
+    const hipsLowerAboveFloorM = round(lowerMinHipsY - FLOOR_Y, 3);
+    if (hipsLowerAboveFloorM < 0.35) fail(`the hips went down to ${hipsLowerAboveFloorM} m above the floor during the low set-down (limit 0.35 m)`);
     if (lowerPitchDeg > 47) fail(`the spine pitched ${round(lowerPitchDeg, 1)} degrees during the low set-down (limit 45, tolerance 47)`);
     if (lowerCam.max - lowerCam.min > 0.01) fail(`the follow camera's height moved ${round(lowerCam.max - lowerCam.min, 4)} m during the low set-down (limit 0.01 m)`);
     // The set-down leaves the prop about 0.25 m ahead of the toes, so picking it up again needs no step.
@@ -383,6 +392,39 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
     if (!hold) fail('export: no hold span');
     else if (Math.abs(hold.start - grabStep / 60) > 0.1) fail(`export: the hold starts at ${round(hold.start)} s, the hand reached the prop at ${round(grabStep / 60)} s (limit 0.1 s)`);
     if (exportReport.hipsDropM < 0.15) fail(`export: the hips dropped only ${exportReport.hipsDropM} m during the reach (need 0.15 m)`);
+
+    // --- Reach radius: from further out than a squat reaches the avatar steps in, up to arm reach plus the step. ---
+    const farReach = {};
+    for (const distanceM of [0.55, 0.7]) {
+      await s.rearm();
+      await s.putOnFloor();
+      await s.backOff(distanceM);
+      const before = await s.state();
+      const prop0 = before.objects.items[0];
+      const graspFar = [(prop0.boundsMin[0] + prop0.boundsMax[0]) / 2, (prop0.boundsMin[2] + prop0.boundsMax[2]) / 2];
+      const rootToPropM = round(Math.hypot(graspFar[0] - before.avatar.x, graspFar[1] - before.avatar.z), 3);
+      await page.keyboard.press('KeyG');
+      let aheadM = null;
+      let minHips = Infinity;
+      let held = null;
+      for (let i = 0; i < 5 * 60 && !held; i += 1) {
+        await advance(1 / 60);
+        const st = await s.state();
+        minHips = Math.min(minHips, st.pose.hips.y);
+        if (aheadM === null && st.objects.reach.phase === 'reach') {
+          const [a, b] = st.pose.toes;
+          const mx = (a.x + b.x) / 2;
+          const mz = (a.z + b.z) / 2;
+          aheadM = round((graspFar[0] - mx) * -Math.sin(st.avatar.yaw) + (graspFar[1] - mz) * -Math.cos(st.avatar.yaw), 3);
+        }
+        if (st.objects.items[0].heldBy && st.objects.reach.phase === 'carry') held = st;
+      }
+      farReach[distanceM] = { rootToPropM, heldBy: held?.objects.items[0].heldBy ?? null, aheadAfterStepM: aheadM, minHipsAboveFloorM: round(minHips - FLOOR_Y, 3) };
+      if (!held) fail(`G with the prop ${rootToPropM} m from the avatar's root never picked it up (phase ${(await s.state()).objects.reach.phase})`);
+      else if (aheadM < 0.2 || aheadM > 0.3) fail(`from ${rootToPropM} m the step left the grasp point ${aheadM} m ahead of the toes (need 0.20 to 0.30 m)`);
+      if (minHips - FLOOR_Y < 0.35) fail(`from ${rootToPropM} m the hips went down to ${round(minHips - FLOOR_Y, 3)} m above the floor (limit 0.35 m)`);
+      await s.until((st) => st.crouch.amount < 0.01, 2);
+    }
 
     // --- Cancels, each on a fresh floor prop. ---
     const cancels = {};
@@ -448,7 +490,7 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
     if (letGo) fail('G during the set-down did not let go at once');
     await s.rest();
 
-    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, floor, pickup: { secToGrab, secPressToGrab, palmAtGrabM: palmAtGrabM && round(palmAtGrabM, 4), maxMovedBeforeHoldM: round(maxMovedBeforeHoldM, 6), rigidHoldChangeM: rigidM, crouchBackSec, heldSamples: samples.length }, feet: footReport, stepIn, spine: { ...spineReport, lowerMaxDeg: round(lowerPitchDeg, 1) }, camera: { ...cameraReport, lowerYRangeM: round(lowerCam.max - lowerCam.min, 4) }, reachAgainStepM, setDown, export: exportReport, cancels };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, floor, pickup: { secToGrab, secPressToGrab, palmAtGrabM: palmAtGrabM && round(palmAtGrabM, 4), maxMovedBeforeHoldM: round(maxMovedBeforeHoldM, 6), rigidHoldChangeM: rigidM, crouchBackSec, heldSamples: samples.length }, feet: footReport, stepIn, spine: { ...spineReport, lowerMaxDeg: round(lowerPitchDeg, 1), hipsPickupAboveFloorM, hipsLowerAboveFloorM }, camera: { ...cameraReport, lowerYRangeM: round(lowerCam.max - lowerCam.min, 4) }, reachAgainStepM, farReach, setDown, export: exportReport, cancels };
   } finally {
     await s.context.close();
   }

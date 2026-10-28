@@ -93,6 +93,10 @@ export class CaptureObjects {
     return this.interaction.reachDemand();
   }
 
+  reachDeep(): number {
+    return this.interaction.reachDeep();
+  }
+
   isStepping(): boolean {
     return this.interaction.isStepping();
   }

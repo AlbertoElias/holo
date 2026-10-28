@@ -39,7 +39,7 @@ export class BodyPoseSystem extends createSystem() {
     } else if (!body.active) {
       // A reach plants the feet where they stood when it began, from the first bend to the end of the stand-up.
       const plant = c.crouch.reach > 0;
-      avatar.applyCrouchPose(c.crouch.poseAmount, character.horizontalSpeed, c.crouch.squat, plant);
+      avatar.applyCrouchPose(c.crouch.poseAmount, character.horizontalSpeed, c.crouch.squat, plant, c.crouch.deepExtra);
       c.terrainLegs.update(avatar, character.grounded, deltaSec, plant);
     }
   }

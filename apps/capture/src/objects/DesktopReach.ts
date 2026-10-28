@@ -24,6 +24,8 @@ const STEP_TIMEOUT_SEC = 2.5;
 const STEP_SETTLE_SEC = 0.3;
 // The step gives up and squats from where it stands when the toes stop closing on the prop (a wall).
 const STEP_STALL_SEC = 0.4;
+// A set-down whose hand is still short goes past the full squat (deeper hips, never more lean) from this demand on.
+const DEEP_FROM_DEMAND = 0.85;
 // Standing back up with the prop lasts at least this long, so a prop taken at chest height still rises smoothly into the carry pose.
 const LIFT_MIN_SEC = 0.25;
 
@@ -44,6 +46,8 @@ export type ReachPhase = 'idle' | 'step' | 'reach' | 'lift' | 'carry' | 'lower';
 export class DesktopReach {
   phase: ReachPhase = 'idle';
   demand = 0;
+  /** 0 to 1: extra depth past a full squat, only while a set-down's hand still can't reach the floor. */
+  deepExtra = 0;
   object: SceneObject | null = null;
   /** The pointer that started the reach is still down. */
   pointerDown = false;
@@ -102,6 +106,7 @@ export class DesktopReach {
   reset(): void {
     this.stop();
     this.demand = 0;
+    this.deepExtra = 0;
   }
 
   /**
@@ -160,6 +165,7 @@ export class DesktopReach {
     this.liftT = Math.min(1, this.liftT + deltaSec / duration);
     const ease = this.liftT * this.liftT * (3 - 2 * this.liftT);
     this.demand = this.liftFrom * (1 - ease);
+    this.deepExtra = Math.max(0, this.deepExtra - REACH_RATE_PER_SEC * deltaSec);
     if (this.liftT >= 1) {
       this.demand = 0;
       this.phase = 'carry';
@@ -179,14 +185,16 @@ export class DesktopReach {
     this.phase = 'lower';
   }
 
-  /** Squat further; true once the demand is at its limit. */
-  stepLower(deltaSec: number): boolean {
-    this.demand = Math.min(1, this.demand + REACH_RATE_PER_SEC * deltaSec);
+  /** Squat further while the hand needs it (`needMore`); true once the demand is at its limit. */
+  stepLower(deltaSec: number, needMore = true): boolean {
+    if (needMore && this.demand >= DEEP_FROM_DEMAND) this.deepExtra = Math.min(1, this.deepExtra + 2 * REACH_RATE_PER_SEC * deltaSec);
+    if (needMore) this.demand = Math.min(1, this.demand + REACH_RATE_PER_SEC * deltaSec);
     return this.demand >= 1;
   }
 
   /** Idle: the body relaxes back to standing. */
   relax(deltaSec: number): void {
     if (this.phase === 'idle' || this.phase === 'carry') this.demand = Math.max(0, this.demand - REACH_RATE_PER_SEC * deltaSec);
+    if (this.phase !== 'lower') this.deepExtra = Math.max(0, this.deepExtra - REACH_RATE_PER_SEC * deltaSec);
   }
 }

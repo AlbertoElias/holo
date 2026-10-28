@@ -137,12 +137,14 @@ export class CrouchState {
   squat = 0;
   /** A desktop reach's demand (0 to 1; 0 in VR): above 0 the body is bent by a reach, and the feet stay planted. */
   reach = 0;
+  /** 0 to 1: the extra depth past a full squat a reach's set-down asks for. */
+  deepExtra = 0;
   private keyAmount = 0;
   target = 0;
   source: CrouchSource = "none";
   private baseline: VrCrouchBaselineState = { standingHeadY: 0, standingCaptured: false };
 
-  update(deltaSec: number, isVrActive: boolean, desktopHeld: boolean, vrHeadY: number | undefined, reachDemand = 0): void {
+  update(deltaSec: number, isVrActive: boolean, desktopHeld: boolean, vrHeadY: number | undefined, reachDemand = 0, reachDeep = 0): void {
     const vrCrouch = computeVrCrouchTarget(deltaSec, isVrActive ? vrHeadY : undefined, this.baseline);
     this.baseline = vrCrouch.baseline;
     const resolution = resolveCrouchTargetAndSource(isVrActive, desktopHeld ? 1 : 0, vrCrouch.vrTarget);
@@ -154,6 +156,7 @@ export class CrouchState {
     // A reach is already smoothed by its own rate: it bends the body as far as it asks, past the key's crouch.
     const reach = clamp(isVrActive ? 0 : reachDemand, 0, 1);
     this.reach = reach;
+    this.deepExtra = isVrActive ? 0 : clamp(reachDeep, 0, 1);
     const crouchShare = clamp(reach / REACH_CROUCH_SHARE, 0, 1);
     this.squat = clamp((reach - REACH_CROUCH_SHARE) / (1 - REACH_CROUCH_SHARE), 0, 1);
     this.amount = Math.max(this.amount, crouchShare);
@@ -173,6 +176,7 @@ export class CrouchState {
     this.keyAmount = 0;
     this.squat = 0;
     this.reach = 0;
+    this.deepExtra = 0;
     this.amount = 0;
     this.poseAmount = 0;
     this.target = 0;

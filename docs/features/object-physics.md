@@ -211,15 +211,32 @@ set-down) and tilted the third-person floor. Now:
   the stance before the squat plants the feet. All cancels still apply during
   it. The step has its own 2.5 s budget (it gives up if the toes stop closing
   on the prop); the 1.5 s reach timeout starts at the squat.
-- **Squat, not dive.** No extra lean (`SQUAT_EXTRA_LEAN` 0): the spine stays
-  at the existing crouch's pitch, 42° from vertical at most, and the hips drop
-  further instead (`SQUAT_EXTRA_HIPS_DROP_RATIO` 0.40, hips 0.40 m high at the
-  bottom). A planted foot keeps its planted orientation
-  (`AvatarRig.plantFootQuats`): at this depth the old tilt-to-floor spun the
-  toes through 180° for a few frames.
-- **Set-down mirrors the pickup.** The squat set-down brings the held prop's
-  centre to the same stance, 0.25 m ahead of the toes, so picking it up again
-  needs no step.
+- **Squat, not dive.** No extra lean (the squat has no lean multiplier): the spine stays
+  at the existing crouch's pitch, 42° from vertical at most. The hips drop
+  further instead (`SQUAT_EXTRA_HIPS_DROP_RATIO` 0.20, which puts the rendered
+  hips bone about 0.39 m above the floor at full demand), and the pickup goes
+  only as deep as the palm needs: 0.41 m at the lowest (standing 1.04 m).
+  Measure hips as the rendered bone's world Y minus the floor; the first
+  build's 0.397 m came from a GLB window that ended at the grab and missed
+  the set-down, where the 0.40 ratio had the hips at 0.06 m. A planted foot
+  keeps its planted orientation (`AvatarRig.plantFootQuats`): the old
+  tilt-to-floor spun the toes through 180° for a few frames at depth.
+- **Set-down mirrors the pickup.** The hand goes down to the floor over the
+  pickup's stance (the prop's centre 0.25 m ahead of the toes, its lowest
+  point just above the surface) in 0.8 s, and the body squats only while the
+  shoulder is out of reach of the moving hand (hips 0.46 m at the lowest).
+  The prop is let go within the release gap. Picking it up again needs no
+  step (0 m measured). A floor prop gripped from its top (the floor pickup's
+  set-down) needs no more than the full squat. A prop gripped with the wrist
+  near its bottom (the hovering bracket) can't be brought to the floor from
+  the full squat: the shoulder (0.66 m) is out of the 0.53 m arm's reach of a
+  wrist at 0.06 m. The spine never leans past the crouch's 42°; instead, once
+  the squat is full and the hand is still short, `deepExtra` takes the hips
+  further down (`SQUAT_DEEP_EXTRA_RATIO` 0.07, a hard floor of about 0.28 m
+  above the floor; 0.29 m measured in those cases), only as far as needed.
+- **Reach radius.** A low prop is reachable out to arm reach plus a 0.25 m
+  step allowance across the floor from the shoulder (about 0.78 m); G from
+  0.57 m and 0.74 m root-to-prop steps in and picks it up.
 - **Camera.** The third-person view keeps its look target at the eye's offset
   from the avatar root, held from the start of a reach, lift or lower until it
   ends, so the floor doesn't tilt as the head drops. First person follows the
@@ -239,8 +256,14 @@ Slice 3 acceptance criteria (fixture `body-floor.gltf`, prop on the floor
   feet are planted from the first squat frame to the stand-up (rise and
   drop ≤0.01 m, slide ≤0.02 m, a toe never behind its ankle). The palm
   reaches the prop within 1.5 s of the end of the step.
-- [ ] **Spine pitch.** The hips-to-neck vector stays ≤45° from vertical
-  (47° tolerance) through the pickup and the low set-down (42.2° measured).
+- [ ] **Spine pitch and hips.** The hips-to-neck vector stays ≤45° from
+  vertical (47° tolerance) through the pickup and the low set-down (42.2°
+  measured), and the rendered hips stay ≥0.35 m above the floor for a prop
+  gripped from its top (0.41 m pickup, 0.46 m set-down). Every squat in every
+  check (the hovering bracket's set-down included) keeps the spine ≤47° and
+  the hips ≥0.27 m (0.29 m, 42.2° measured), reported per take.
+- [ ] **Reach radius.** G picks up a floor prop 0.55 m and 0.7 m (root to
+  prop) from the avatar, stepping in first (0.57 m and 0.74 m measured).
 - [ ] **Camera height.** In third person the follow camera's world Y changes
   ≤1 cm and its pitch ≤1° during the squat (0.001 m, 0.01° measured).
 - [ ] **Pick up again.** After a low set-down the prop is within 5 cm of the

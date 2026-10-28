@@ -84,6 +84,23 @@ export async function openCapture(page, baseUrl, query) {
   await waitForTextContentPrefix(page, '#status', 'loaded');
 }
 
+/** Min rendered hips height above the floor and max hips-to-neck spine pitch over the sampled frames of a squat, with the limits every squat in every check keeps. */
+export function squatTracker(floorY = 0.01) {
+  const t = { minHipsAboveFloorM: Infinity, maxSpinePitchDeg: 0 };
+  return {
+    sample(st) {
+      if (st.pose?.hips) t.minHipsAboveFloorM = Math.min(t.minHipsAboveFloorM, st.pose.hips.y - floorY);
+      if (typeof st.pose?.spinePitchDeg === 'number') t.maxSpinePitchDeg = Math.max(t.maxSpinePitchDeg, st.pose.spinePitchDeg);
+    },
+    result: () => ({ minHipsAboveFloorM: Number(t.minHipsAboveFloorM.toFixed(3)), maxSpinePitchDeg: Number(t.maxSpinePitchDeg.toFixed(1)) }),
+    assert(fail, label) {
+      const r = this.result();
+      if (r.minHipsAboveFloorM < 0.27) fail(`${label}: the hips went down to ${r.minHipsAboveFloorM} m above the floor (limit 0.27 m)`);
+      if (r.maxSpinePitchDeg > 47) fail(`${label}: the spine pitched ${r.maxSpinePitchDeg} degrees (limit 45, tolerance 47)`);
+    }
+  };
+}
+
 export const readState = (page) => page.evaluate(() => JSON.parse(window.render_game_to_text()));
 
 export async function clickButton(page, name) {
@@ -525,9 +542,12 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       const easing = (await readState(page)).objects.items[0];
       setDown = { heldDuringEase: easing.heldBy };
       let launch = easing;
+      const squat = squatTracker();
       for (let i = 0; i < 150 && launch.heldBy; i += 1) {
         await advance(1 / 60);
-        launch = (await readState(page)).objects.items[0];
+        const frame = await readState(page);
+        squat.sample(frame);
+        launch = frame.objects.items[0];
         if (launch.heldBy) holdSeconds += 1 / 60;
       }
       const released = poseOf(launch);
@@ -541,7 +561,9 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       }
       state = await readState(page);
       const item = state.objects.items[0];
+      squat.assert(fail, 'put-down');
       putDown = {
+        squat: squat.result(),
         trace,
         heldBy: item.heldBy,
         // How far it fell from the hand's lowest point to the floor, after the let-go.

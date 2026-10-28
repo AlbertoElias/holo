@@ -28,7 +28,7 @@ export class MovementSystem extends createSystem() {
 
     // A flat-screen reach's step in is a displacement, not input: it moves the avatar without counting as walking.
     const reachStep = frame.vrActive ? null : c.objects.takeReachStep();
-    c.crouch.update(deltaSec, frame.vrActive, input.isCrouchHeld(), c.tracking.getCurrentHeadLocalY(), c.objects.reachDemand());
+    c.crouch.update(deltaSec, frame.vrActive, input.isCrouchHeld(), c.tracking.getCurrentHeadLocalY(), c.objects.reachDemand(), c.objects.reachDeep());
     const crouchAmount = c.crouch.amount;
     const stick = frame.vrActive ? c.locomotion.moveVector(this.stickMove) : { x: 0, z: 0 };
     motor.update(deltaSec, c.camera.lookYaw, input.moveState, input.consumeJumpQueued(), {
