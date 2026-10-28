@@ -849,3 +849,34 @@ bug above.)
   it. A local reload to the first card dropped from about 1,230 ms to 80 ms.
   The reproduction plus two further `test:knowledge` runs in the same container
   all passed.
+
+### B-024 — CI's pipeline shard can spend its whole timeout installing ffmpeg
+
+- **Area:** `.github/workflows/ci.yml` pipeline job (`apt-get install ffmpeg`), `scripts/ci-emulate.sh`
+- **Severity:** P2
+- **Observed:** 2026-10-26, runs for `4178f157` and `da4a008b`
+- **Evidence:** in both runs shard 1/2 never started its tests: the
+  "Install Quick Look conversion dependencies" step pulled ffmpeg's ~90
+  packages from `azure.archive.ubuntu.com` at minutes per package and the
+  job hit `timeout-minutes: 20` (cancelled; CI Gate failed, deploy
+  skipped). Shard 2/2 installed the same packages in seconds. The same
+  tests pass locally in 5.2 min. Separately, `ci-emulate.sh` cannot run
+  this suite: it installs Chromium through `@holoim/capture`, but the
+  pipeline launches `chromium_headless_shell-1208`, which is missing.
+- **Expected:** a slow apt mirror does not cancel the run; e.g. a
+  static ffmpeg binary or a cached `.deb` set, and a step timeout so the
+  failure names the install rather than the job.
+- **Reproduction:** intermittent on hosted runners; see the two runs above.
+- **Fix:** `scripts/ci-ffmpeg.sh` installs pinned static ffmpeg and ffprobe
+  (eugeneware/ffmpeg-static `b6.1.1`, ffmpeg 7.0.2; `inspect_usdz.py` needs
+  ffprobe), checked against their sha256 and kept in `actions/cache`, so no
+  apt mirror is on the path: a warm install takes about 2 s. It runs as its
+  own "Install ffmpeg" step with `timeout-minutes: 2` in the pipeline and
+  Quick Look tool jobs, so a stall names the install. `scripts/ci-emulate.sh`
+  ran whatever `node:24-bookworm` the host had pulled, with one Playwright
+  volume for every architecture: it held an arm64 `chromium-1208` beside an
+  x86 headless shell, each marked installed, so neither was redone. It now
+  pins `linux/amd64` like the runner, names its architecture-specific
+  volumes per platform, installs the viewer's Chromium and headless shell and
+  launches one before the command, and uses the same pinned ffmpeg. Every
+  pipeline shard passes inside it.
