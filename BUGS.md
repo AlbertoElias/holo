@@ -7,6 +7,20 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-038 — Phone "drag" check can leave the feed resting off a card
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("drag (default): a swipe off the hologram scrolls …"), `scrollFeedToTop`
+- **Severity:** P3
+- **Observed:** 2026-10-28, on `bug/portal-freeze-scroll` (`46c523f0` + B-025 work)
+- **Evidence:** once in 3 runs of the whole spec, `settleScroll` threw
+  "feed scroll did not settle: 300, 300, 300, 300, 300" at
+  `portal.spec.ts:190`: after the test stops a smooth glide to 300 with a
+  tap and puts `scroll-snap-type` back, the feed stays at 300 instead of
+  snapping to a card. Passed in the other 2 runs and in a later 3 of 3.
+- **Expected:** restoring snapping lands the feed on a card (or the test
+  returns it to a card itself) before `scrollFeedToTop`.
+- **Reproduction:** `E2E_BASE_URL=https://localhost:3294 E2E_API_PORT=3121 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1` (intermittent)
+
 ### B-037 — AR recenter click sometimes misses on a hosted runner
 
 - **Area:** `apps/viewer-web/e2e/hologram-feed.spec.ts` ("AR places the model on a surface … recenter places again"), `rayClick`
@@ -34,19 +48,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   Likely a file-watch event missed or late under load.
 - **Expected:** the live update lands regardless of earlier load.
 - **Reproduction:** `scripts/ci-emulate.sh bash -c 'VITE_IWER_SEM_SCENE=office_small pnpm --filter @holoim/web run test:e2e:mocked:shard1 && pnpm run test:knowledge'`
-
-### B-025 — Portal "desktop freeze" check finds the feed back at the top
-
-- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("desktop freeze: … scrolling away resets"), portal scroll capture
-- **Severity:** P3
-- **Observed:** 2026-10-26, on `main` at `ac700f0f`
-- **Evidence:** `expect(await feedScrollTop(page)).toBeGreaterThan(0)` at
-  `portal.spec.ts:408` receives 0. Fails 3 of 3 on `main` when the whole
-  `portal.spec.ts` runs (`--repeat-each=3`, one worker), passes 3 of 3 when
-  the test runs alone. The paused card's capture may undo the instant
-  `scrollIntoView` before the reset lands.
-- **Expected:** scrolling to the next card from a paused card stays there.
-- **Reproduction:** `E2E_BASE_URL=https://localhost:3274 E2E_API_PORT=3101 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1`
 
 ### B-024 — CI's pipeline shard can spend its whole timeout installing ffmpeg
 

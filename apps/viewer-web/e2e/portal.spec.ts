@@ -410,3 +410,20 @@ test("desktop freeze: drags only explore while paused, pitch is clamped, keyboar
   await expect(card).toHaveAttribute("data-portal-paused", "false");
   expect(await feedScrollTop(page)).toBeGreaterThan(0);
 });
+
+test("desktop freeze: scrolling away just after a drag on a playing card stays scrolled", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 440 });
+  await openFeed(page, "freeze");
+  // While playing, a freeze drag belongs to the feed; this one leaves it on the card.
+  const center = await cardCenter(page, first.id);
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x - 200, center.y, { steps: 3 });
+  await page.mouse.up();
+  await page.locator(`.feed-card[data-card-id="${second.id}"]`).evaluate((element) => element.scrollIntoView({ behavior: "instant" }));
+  const away = await feedScrollTop(page);
+  expect(away).toBeGreaterThan(0);
+  // Past the 800 ms a settle waits for its glide: nothing pulls the feed back.
+  await page.waitForTimeout(1200);
+  expect(await feedScrollTop(page), "the feed stays on the card it scrolled to").toBe(away);
+});
