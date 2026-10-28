@@ -4,7 +4,8 @@
 // stop gating deploy, and one selected twice wastes a runner, so this lists
 // every shard and fails unless the shards together select each test of the
 // full suite exactly once. Listing starts no servers; the scripts list in
-// parallel (about 1 s each warm, longer on a cold runner).
+// parallel (about 1 s each warm, longer on a cold runner). Listing loads the
+// specs, which import built workspace packages, so run it after a build.
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";

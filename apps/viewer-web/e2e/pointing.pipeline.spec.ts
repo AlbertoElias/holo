@@ -130,6 +130,9 @@ function exportFor(label: ExportLabel): Promise<{ file: string; expected: Expect
 }
 
 async function recordExport(label: ExportLabel): Promise<{ file: string; expected: Expected[] }> {
+  // The held-mark takes save here without creating it; a shard may record
+  // only those.
+  await mkdir(takeDir, { recursive: true });
   const browser = await launchXrBrowser(chromium);
   const consoleErrors: string[] = [];
   try {

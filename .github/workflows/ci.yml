@@ -104,6 +104,11 @@ jobs:
       - name: Check the production viewer bundle
         if: ${{ !cancelled() }}
         run: node scripts/check-prod-bundle.mjs apps/viewer-web/dist
+      # Listing the specs loads the built workspace packages, so it follows
+      # the build.
+      - name: Check the browser suites' shards cover each test once
+        if: ${{ !cancelled() }}
+        run: pnpm timed e2e-shards -- pnpm run check:e2e-shards
       - name: Keep the viewer bundle for deploy
         if: needs.changes.outputs.web == 'true'
         uses: actions/upload-artifact@v4

@@ -156,8 +156,8 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
   and the VR checks in 2, each a script balanced by measured wall time
   (`test:e2e:pipeline:shard<i>`, `test:e2e:mocked:shard<i>`,
   `test:e2e:xr-viewer-vr:shard<i>` in
-  `apps/viewer-web/package.json`); `scripts/check-e2e-shards.mjs` (in
-  `check:all`) fails unless the shards run each test exactly once. Update
+  `apps/viewer-web/package.json`); `pnpm run check:e2e-shards` (after a
+  build: quality in CI, `verify:pr` locally) fails unless the shards run each test exactly once. Update
   `CHECK_COST` and those scripts from the CI timing artifacts
   (`xr-checks-shard-*.json`, `playwright-web-*.json`) when a cost changes a lot.
 - Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`, `FACE_VIDEO=1`) screenshot every frame
