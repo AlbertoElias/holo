@@ -297,12 +297,14 @@ export async function measureRim(page: Page, label: string, groundNames: readonl
       const error = found === null ? null : rim - found;
       const tolerance = slopeDeg < 30 ? null : cell * Math.tan((slopeDeg * Math.PI) / 180);
       let pass: boolean;
+      const onGround = error !== null && (tolerance === null ? error >= -0.03 && error <= 0.05 : Math.abs(error) <= Math.max(tolerance, 0.05));
       if (found === null) pass = lift <= 1e-3;
-      // Ground higher than the dome can take: the lift stays at its cap, 0.6 × the height (the brief's failure cases).
-      else if (capped) pass = found >= rim;
+      // Ground higher than the dome can take: the lift stays at its cap, 0.6 × the height (the brief's failure
+      // cases). A capped rim on the ground within the tolerance passes as any other.
+      else if (capped) pass = found >= rim || onGround;
       // The ground there is cut by the dome's floor: the rim stays at its foot, raised by its neighbours' smoothing at most.
       else if (belowFoot) pass = lift <= 0.03 + 1e-3;
-      else pass = tolerance === null ? error! >= -0.03 && error! <= 0.05 : Math.abs(error!) <= Math.max(tolerance, 0.05);
+      else pass = onGround;
       // A ledge of another mesh within a step (0.35 m) over the ground is ground too, by the brief's connectivity rule.
       let ledge: number | null = null;
       if (!pass && found !== null && groundNames) {

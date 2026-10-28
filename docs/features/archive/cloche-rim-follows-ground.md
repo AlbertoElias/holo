@@ -296,6 +296,22 @@ decision, and the cached edge directions differ from round 2 by under
 0.3 µm. On the final tree `verify:pr` passed and the rim suite passed 4/4 in
 `scripts/ci-emulate.sh` (build 57 ms, update p99 0.8 ms, 0 outside the glass).
 
+After merging `main`'s B-028 (2026-10-28): capture now clips the set near
+the bubble, so the dome's edge more often stands past the ground's edge and
+the rim reads the lip inward. On `scene.glb`'s end the edge stood inside a
+rock: 5 cm before the grass's lip the search met the rock's sunk foot, a
+flank facing up 54°, joined to the grass within a step, and set the rim
+23 cm under the lip. The lip search now climbs a flank (ground rising more
+than its run within one 5 cm step) to its top. B-028's geometry there is
+sound (the rock's faces are its own; the grass ends at it). The oracle's
+capped rule also replaced the ordinary check rather than adding to it: a
+capped rim 3.4 cm over the grass (a box's face above the cap beside it)
+failed; it now passes when either holds. At the pipeline's own end time the
+edge stood under the rock again, and the search first met one isolated
+facet of its sunk foot, 0.1 m in, with no ground past it; the grass began
+1.45 m in. A hit now counts as the lip only where the ground continues to
+the next 5 cm step inward (lead approval, 2026-10-28). Tolerances unchanged.
+
 Left open, for the lead:
 
 - **Cost budgets on CI** (decided below, 2026-10-28). In

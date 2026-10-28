@@ -446,8 +446,18 @@ function lipHeight(shape: ClocheShape, field: GroundField, x: number, z: number,
   if (length < 1e-6) return Number.NaN;
   const reach = Math.min(RIM.fillShare * Math.max(shape.radii.x, shape.radii.z), length);
   for (let along = LIP_STEP; along <= reach + 1e-6; along += LIP_STEP) {
-    const height = field.heightAt(x + (dx / length) * along, z + (dz / length) * along);
-    if (Number.isFinite(height)) return height;
+    let height = field.heightAt(x + (dx / length) * along, z + (dz / length) * along);
+    if (!Number.isFinite(height)) continue;
+    // The lip is where the ground continues inward: an isolated hit (a facet of a prop's sunk foot under it) is not.
+    if (!Number.isFinite(field.heightAt(x + (dx / length) * (along + LIP_STEP), z + (dz / length) * (along + LIP_STEP)))) continue;
+    // Ground rising more than its run within a step is a flank (a prop's sunk foot beside the ground's edge), not
+    // the lip: the lip is the flank's top.
+    for (let next = along + LIP_STEP; next <= reach + 1e-6; next += LIP_STEP) {
+      const above = field.heightAt(x + (dx / length) * next, z + (dz / length) * next);
+      if (!(above - height > LIP_STEP)) break;
+      height = above;
+    }
+    return height;
   }
   return Number.NaN;
 }
