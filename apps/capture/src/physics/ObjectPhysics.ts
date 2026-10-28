@@ -133,7 +133,8 @@ export class ObjectPhysics {
   setReachTarget(object: SceneObject | null): void {
     if (object === this.reachTarget) return;
     const previous = this.reachTarget ? this.props.get(this.reachTarget) : undefined;
-    if (previous && this.avatar) previous.excluded = this.overlappedParts(previous, this.avatar.allBits);
+    // Clear of the parts it is not inside after the next step, when this frame's avatar pose is known.
+    if (previous && this.avatar) previous.excluded = this.avatar.allBits;
     this.reachTarget = object;
   }
 
@@ -196,8 +197,8 @@ export class ObjectPhysics {
   /**
    * The object is let go: dynamic, with the fitted velocity when `throwIt`,
    * else at rest. It passes through the arm that held it for a moment, and
-   * through that arm and any other part it is inside now until it is clear of
-   * them. A flat-screen put-down (`desktop`, not a throw) also passes through
+   * through every part until the next step, after which it collides with all
+   * those it is clear of (the avatar's pose for this frame is not known yet). A flat-screen put-down (`desktop`, not a throw) also passes through
    * the legs for a moment.
    */
   release(object: SceneObject, throwIt: boolean, side?: VrHandSide, desktop = false): void {
@@ -207,7 +208,7 @@ export class ObjectPhysics {
     if (this.avatar) {
       const arm = side ? this.avatar.armBits(side) : 0;
       const putDown = desktop && !throwIt;
-      prop.excluded = arm | this.overlappedParts(prop, this.avatar.allBits);
+      prop.excluded = this.avatar.allBits;
       prop.graceBits = arm | (putDown ? this.avatar.legBits : 0);
       prop.graceSec = putDown ? LEG_GRACE_SEC : ARM_GRACE_SEC;
     }
@@ -259,7 +260,9 @@ export class ObjectPhysics {
     if (this.props.size === 0 || !(deltaSec > 0)) return;
 
     const avatar = this.avatar;
-    const jumped = avatar?.sync(deltaSec) ?? 0;
+    const simulatedSec = Math.min(deltaSec, MAX_SUBSTEPS * MAX_SUBSTEP_SEC);
+    // A hitch frame simulates less time than it took, so the avatar's motion is judged over the simulated time.
+    const jumped = avatar?.sync(simulatedSec) ?? 0;
     for (const [object, prop] of this.props) {
       // A part that jumped in passes through whatever it landed in, rather than launching it.
       if (jumped) prop.excluded |= this.overlappedParts(prop, jumped);
@@ -280,7 +283,7 @@ export class ObjectPhysics {
       this.rigidPose(object, prop.to.position, prop.to.quaternion);
     }
     const substeps = Math.min(MAX_SUBSTEPS, Math.max(1, Math.ceil(deltaSec / MAX_SUBSTEP_SEC - 1e-6)));
-    this.world.timestep = Math.min(deltaSec, MAX_SUBSTEPS * MAX_SUBSTEP_SEC) / substeps;
+    this.world.timestep = simulatedSec / substeps;
     const started = performance.now();
     for (let i = 0; i < substeps; i += 1) {
       // Kinematic bodies cover their frame's motion evenly across the substeps, so a swing hits at its own speed.
@@ -375,6 +378,13 @@ export class ObjectPhysics {
     prop.body.setNextKinematicRotation(prop.home.quaternion);
     prop.from.position.copy(prop.home.position);
     prop.from.quaternion.copy(prop.home.quaternion);
+    prop.to.position.copy(prop.home.position);
+    prop.to.quaternion.copy(prop.home.quaternion);
+    // Back where it was placed, it passes through the avatar until clear, as when first placed.
+    prop.excluded = this.avatar?.allBits ?? 0xfffe;
+    prop.graceBits = 0;
+    prop.graceSec = 0;
+    prop.sleepWritten = false;
   }
 
   /** A kick, bat or foot pressing a prop into the floor never sends it faster than a throw can, or spins it past what replay interpolates. */

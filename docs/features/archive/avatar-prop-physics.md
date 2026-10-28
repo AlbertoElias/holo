@@ -1,7 +1,7 @@
 # Feature brief: props collide with the avatar
 
 **Lead:** Claude Code (Opus, session avatar-physics)  
-**Status:** Verifying (independent Codex verification pending: the machine was offline on 2026-10-28)
+**Status:** Complete
 **Layer:** event (`docs/product/concepts/what-a-hologram-is.md`): the prop's
 flight off the body is part of what happened, so it is recorded as ordinary
 object poses.
@@ -16,7 +16,7 @@ never slowed, blocked or launched by a prop. The recipient sees all of this in
 the replay, because the prop's poses are recorded exactly as today.
 
 This reverses the "Collisions" decision of 2026-10-27 in
-[`archive/object-physics.md`](archive/object-physics.md) ("the avatar's body
+[`object-physics.md`](object-physics.md) ("the avatar's body
 and hands don't collide with props").
 
 Decisions taken with the user on 2026-10-28:
@@ -195,7 +195,7 @@ difference is noted.
 | Lead | Claude Code (Opus) | Brief, integration, final handoff |
 | Design reviewer | `design-reviewer` subagent (Opus) | Read-only review before implementation |
 | Implementer | Claude Code (lead) | `apps/capture/src/physics/ObjectPhysics.ts`, new `physics/AvatarColliders.ts`, `objects/ObjectInteraction.ts` (reach exclusion hook only), `objects/CaptureObjects.ts`, `systems/ObjectSystem.ts`, `scripts/lib/object-physics.mjs`, `scripts/lib/object-take.mjs`, a Node cost benchmark script |
-| Independent verifier | Codex (`-p standard`) | Read-only verification; test artifacts only |
+| Independent verifier | Muse (`--effort high`; Codex was out of quota) | Read-only verification; test artifacts only |
 
 ## Design decision
 
@@ -254,7 +254,13 @@ All runs on 2026-10-28, on a local Mac, against the capture test build on port 5
 | Cost | `node --import tsx scripts/bench-object-physics.ts` | One frame's `ObjectPhysics.step` over 240 frames. Without the avatar: median 0.032 ms, p95 0.181 ms. With 14 parts walking through the pile: median 0.168 ms, p95 0.388 ms, max 2.29 ms. Within the budget (0.3 ms, 1 ms). The archived 0.12/0.41 ms baseline timed `world.step` alone on another pile, so this run's own no-avatar figure is the comparison. |
 | Workspace | `pnpm run verify:agent` | Pass |
 | Proof video | `apps/capture/output/avatar-physics-proof/record.mjs` (ignored) | Real time, 1:51. Desktop: knock-down and a sideways kick. Then the headset's own view: a bat, a throw across the body bouncing off it, and a drop onto the open left hand. The desktop follow camera sits behind the avatar, so the desktop knock-down is mostly hidden. |
-| Independent verification | Codex `-p standard` | Pending: no network on 2026-10-28 |
+| Independent verification | Muse `exec --effort high` (Codex hit its usage limit) | Pass with notes, no blocker. Fixed: release and reach-end exclusion read the previous frame's avatar pose (now every part is passed through until the first step, then narrowed); `sendHome` left stale exclusion and grace (now reset as at placement); teleport detection used the uncapped frame time on hitches (now the simulated time). Full object tier rerun after the fixes: all 14 takes pass; bench median 0.187 ms, p95 0.731 ms. |
+| Workspace gate | `pnpm run verify:pr` | Pass (before the verification fixes; the object tier and typecheck were rerun after them) |
+
+Open, from the verification (minor): a knock-down is judged at the end pose
+from the part's centre speed, so a very fast swing through a small hovering prop
+within one frame, or a limb spinning about its middle, can miss it. The bench
+reports cost but does not assert the budget.
 
 ## Physical-device limits
 
