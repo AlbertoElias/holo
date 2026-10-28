@@ -31,6 +31,8 @@ const LIFT_MIN_SEC = 0.25;
 
 /** The relax after a let-go or a cancel takes this long to reach its full rate. */
 const RELAX_EASE_SEC = 0.15;
+/** A cancel or let-go stands the body up faster than a reach bends it: a late cancel is upright within half a second, the ease-in included. */
+const RELAX_RATE_PER_SEC = 3;
 
 export type ReachPhase = 'idle' | 'step' | 'reach' | 'lift' | 'carry' | 'lower';
 
@@ -220,14 +222,14 @@ export class DesktopReach {
    * acceleration, from whatever they were (a squat still going down when the prop is let go keeps going a moment), so the hips never reverse in one step.
    */
   relax(deltaSec: number): void {
-    const accel = (2 * REACH_RATE_PER_SEC) / RELAX_EASE_SEC;
+    const accel = (2 * RELAX_RATE_PER_SEC) / RELAX_EASE_SEC;
     if (this.phase === 'idle' || this.phase === 'carry') {
-      this.demandVel = Math.max(-REACH_RATE_PER_SEC, this.demandVel - accel * deltaSec);
+      this.demandVel = Math.max(-RELAX_RATE_PER_SEC, this.demandVel - accel * deltaSec);
       this.demand = THREE.MathUtils.clamp(this.demand + this.demandVel * deltaSec, 0, 1);
       if (this.demand <= 0 || this.demand >= 1) this.demandVel = 0;
     }
     if (this.phase !== 'lower') {
-      this.deepVel = Math.max(-REACH_RATE_PER_SEC, this.deepVel - accel * deltaSec);
+      this.deepVel = Math.max(-RELAX_RATE_PER_SEC, this.deepVel - accel * deltaSec);
       this.deepExtra = THREE.MathUtils.clamp(this.deepExtra + this.deepVel * deltaSec, 0, 1);
       if (this.deepExtra <= 0 || this.deepExtra >= 1) this.deepVel = 0;
     }

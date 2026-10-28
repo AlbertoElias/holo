@@ -1,10 +1,11 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-// Writes fixtures/scenes/reach-{trench,wall,pit}.gltf: the hazards the flat-screen floor reach must respect.
+// Writes fixtures/scenes/reach-{trench,wall,railing,pit}.gltf: the hazards the flat-screen floor reach must respect.
 // Each is a 14 m square floor (the avatar spawns at the origin facing -Z; a prop set down in front of it rests about 0.5 m ahead) with:
 //   trench: a 0.2 m wide, 1.2 m deep gap across the floor (z 0.10 to 0.30): a prop set down at z -0.24 and an avatar backed off to z 0.38 have it between them.
 //   wall:   a thin 2.2 m wall along x -0.36 with a doorway (z 0.6 to 1.4): an avatar that walks round to x -0.72 has a prop at x 0 within its radius, behind the wall.
+//   railing: an 8 cm bar at 0.55 to 0.63 m along x -0.36 (doorway at z 0.6 to 1.4): clear of the shoulder-to-prop line standing, in its way mid-squat.
 //   pit:    the floor ends at z -0.1 and drops 1.2 m: the prop the avatar sets down falls to the bottom, a drop away from its feet.
 // Capture grounds a scene by its lowest point, so in the trench and the pit scenes the floor the avatar stands on is 1.2 m up.
 // Load one with ?scene=/fixtures/scenes/reach-trench.gltf&sceneScale=1.
@@ -83,6 +84,17 @@ function build(name, add) {
 const scenes = {
   'reach-trench': ({ floorWithHole }) => floorWithHole(-2, 0.1, 2, 0.3),
   'reach-pit': ({ floorWithHole }) => floorWithHole(-3, -3, 3, -0.1),
+  'reach-railing': ({ quad, both, top }) => {
+    top(-FLOOR, -FLOOR, FLOOR, FLOOR, 0);
+    quad([-FLOOR, -SLAB, FLOOR], [FLOOR, -SLAB, FLOOR], [FLOOR, 0, FLOOR], [-FLOOR, 0, FLOOR]);
+    // A tall backdrop keeps the floor under the terrain helper's ceiling cut; the railing itself is a bar 8 cm tall at 0.55 to 0.63 m along x -0.36, with the doorway at z 0.6 to 1.4.
+    both([-FLOOR, 0, -FLOOR], [-FLOOR, 2.5, -FLOOR], [FLOOR, 2.5, -FLOOR], [FLOOR, 0, -FLOOR]);
+    for (const [z0, z1] of [[-3, 0.6], [1.4, 3]]) {
+      both([-0.36, 0.55, z0], [-0.36, 0.63, z0], [-0.36, 0.63, z1], [-0.36, 0.55, z1]);
+      top(-0.38, z0, -0.34, z1, 0.63);
+      top(-0.38, z0, -0.34, z1, 0.55);
+    }
+  },
   'reach-wall': ({ quad, both, top }) => {
     top(-FLOOR, -FLOOR, FLOOR, FLOOR, 0);
     // A 1 cm slab edge, as the body-floor scene has: the floor ends up 1 cm above capture's own ground disc.

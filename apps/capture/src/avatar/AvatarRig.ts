@@ -217,6 +217,8 @@ export class AvatarRig {
   private readonly firstPersonHiddenMeshes: THREE.Mesh[] = [];
   private readonly avatarMaterials: THREE.Material[] = [];
   private readonly avatarClipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+  private readonly clipNormal = new THREE.Vector3(0, -1, 0);
+  private firstPersonClipOn = false;
   private readonly avatarMaterialClippingBackup = new WeakMap<THREE.Material, THREE.Plane[] | null>();
   private crouchRigReady = false;
   private crouchWarningLogged = false;
@@ -765,7 +767,16 @@ export class AvatarRig {
     });
   }
 
+  /** Keeps the first-person clip plane the same distance under the eye as it moves: a bent head carries the camera down, and a fixed plane would leave the neck and collar in front of it. */
+  refreshFirstPersonClip(): void {
+    if (!this.firstPersonClipOn) return;
+    this.getEyeAnchorWorldPosition(this.tmpVecA, 0);
+    this.tmpVecA.y -= this.avatarHeight * 0.06;
+    this.avatarClipPlane.setFromNormalAndCoplanarPoint(this.clipNormal, this.tmpVecA);
+  }
+
   private setDesktopFirstPersonAvatarClip(enabled: boolean): void {
+    this.firstPersonClipOn = enabled;
     if (!enabled) {
       for (const material of this.avatarMaterials) {
         const original = this.avatarMaterialClippingBackup.get(material);

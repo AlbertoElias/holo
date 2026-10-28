@@ -519,6 +519,36 @@ the trench, wall, pit and VR-entry checks all fail):
    least 0.05 m forward of the hip-ankle line (0.207 measured) and above the ankle
    (0.169), the thigh turning at most 10 degrees a step (3.9).
 
+**Round 6 (Codex, a0d28f9f..93fb503a): FAIL.** Fixed:
+
+1. Obstruction was checked only at the start and the step's end. `stillReaching`
+   now re-checks the shoulder line and the knee-high line every reach frame and
+   cancels when blocked. Check `railing` (`fixtures/scenes/reach-railing.gltf`, an 8 cm bar
+   at 0.55 to 0.63 m) holds the end state (no grab, prop untouched). A railing that
+   closes the line only mid-squat cannot be set up where the avatar's body also
+   leaves room to grab, so the per-frame revalidation is proven on the class
+   (`reach-revalidates-every-frame`: the way closes on frame 10 and the reach
+   ends on that frame; with the check removed it runs on).
+2. The 45-step exclusion after root motion hid the squat descent after an
+   automatic step. Removed. Now only the user's own walking input (and 12 steps of
+   walk settle) is judged on looser nonzero bounds (hips 0.15 m, ankle 0.15 m, torso
+   15 degrees per step; measured 0.094, 0.100, 5.5), everything else on the tight
+   ones, and only both-step frames skip the ankle check (the step transition is
+   judged). Proof: with a throwaway 0.4 m hips jump injected 20 steps after
+   the step ended (`INJECT_POP=1`, not committed), the check fails (0.80 second
+   difference against 0.04). The torso bound is now 8 degrees per step, because
+   the quicker stand-up below turns the torso 5.6 degrees a step.
+3. A late cancel was still bent after 0.5 s. The relax rate is now 3 per second
+   (a reach bends at 2), with the 0.15 s ease-in; the check is back to 0.5 s plus
+   two frames of sampling.
+4. The wall probe no longer records a shared material's mutated side: each
+   material's original side is snapshotted once.
+5. The knee check fails on empty or non-finite knee, thigh or ankle data.
+6. First person, a brown tint for two frames at the grab: the first-person clip
+   plane sat at the standing eye height while the squat carried the camera down
+   with the head, leaving the neck and collar in front of it. It now follows the eye
+   anchor every frame (`AvatarRig.refreshFirstPersonClip`). Not checked by eye.
+
 Fixes after round 1: the prop stays rigid with the hand through the set-down, and it is let
 go at the surface or at the arm's lowest reach. A mode switch always releases
 with zero velocity and needs a fresh press. The floor bound is 3 mm. Results

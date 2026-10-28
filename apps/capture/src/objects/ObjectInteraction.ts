@@ -133,6 +133,7 @@ export class ObjectInteraction {
   /** One for ground heights (its range is the world's), one for lines between two points. */
   private readonly probe = new THREE.Raycaster();
   private readonly blockProbe = new THREE.Raycaster();
+  private readonly originalSides = new WeakMap<THREE.Material, THREE.Side>();
   private readonly probeFrom = new THREE.Vector3();
   private readonly probeTo = new THREE.Vector3();
   private readonly toeOffset = { x: 0, z: 0 };
@@ -577,16 +578,18 @@ export class ObjectInteraction {
     this.blockProbe.set(from, this.probeTo.copy(to).sub(from).normalize());
     this.blockProbe.near = 0;
     this.blockProbe.far = length - 0.02;
-    const sides: Array<[THREE.Material, THREE.Side]> = [];
+    // A wall blocks from both sides, so rays see back faces: every material is DoubleSide for the cast and put back from its snapshot (taken once, so a material two meshes share is not recorded as already changed).
+    const materials = new Set<THREE.Material>();
     world.traverse((child) => {
       const material = (child as THREE.Mesh).material;
-      for (const m of Array.isArray(material) ? material : material ? [material] : []) {
-        sides.push([m, m.side]);
-        m.side = THREE.DoubleSide;
-      }
+      for (const m of Array.isArray(material) ? material : material ? [material] : []) materials.add(m);
     });
+    for (const m of materials) {
+      if (!this.originalSides.has(m)) this.originalSides.set(m, m.side);
+      m.side = THREE.DoubleSide;
+    }
     const hit = this.blockProbe.intersectObject(world, true).length > 0;
-    for (const [m, side] of sides) m.side = side;
+    for (const m of materials) m.side = this.originalSides.get(m) ?? m.side;
     return hit;
   }
 
@@ -607,6 +610,8 @@ export class ObjectInteraction {
     const object = this.reach.object;
     if (!object || !registry.all().includes(object) || step.desktop.walking || step.desktop.pointHeld) return false;
     if (!this.desktopReachable(object, carry)) return false;
+    // The shoulder moves through the squat: the way to the prop must stay open every frame, not only at the start.
+    if (this.reachBlocked()) return false;
     const shoulder = avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
     const reachM = carry.getReach();
     if (!shoulder || !reachM) return false;

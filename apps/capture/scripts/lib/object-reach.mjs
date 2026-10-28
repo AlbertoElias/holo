@@ -445,7 +445,7 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
       const prop = after.state.objects.items[0];
       cancels[name] = { movedM: round(dist(prop.position, before), 6), heldBy: prop.heldBy, standSec: round(after.sec), phase: after.state.objects.reach.phase };
       if (cancels[name].movedM > 1e-5 || prop.heldBy) fail(`${name}: the prop moved ${cancels[name].movedM} m or was held (${prop.heldBy})`);
-      if (after.sec > 0.5 + 0.2) fail(`${name}: the crouch took ${cancels[name].standSec} s to end (limit 0.5 s after the cancel)`);
+      if (after.sec > 0.5 + 2 / 60) fail(`${name}: the crouch took ${cancels[name].standSec} s to end (limit 0.5 s after the cancel, plus two frames of sampling)`);
     };
     await checkCancel('walk-cancels-reach', async () => {
       await page.keyboard.press('KeyG');
@@ -848,6 +848,29 @@ export const runWallReach = (ctx) =>
     }
   });
 
+/**
+ * A railing (an 8 cm bar at 0.55 to 0.63 m) between the avatar and the prop: the line from the shoulder to the prop is clear while standing, and the lowering
+ * shoulder puts the bar in the way mid-squat. The reach must be cancelled once the bar is in the way, never complete.
+ */
+export const runRailingReach = (ctx) =>
+  runHazard({
+    ...ctx,
+    label: 'reach-railing',
+    scene: process.env.HAZARD_SCENE ?? '/fixtures/scenes/reach-railing.gltf',
+    prepare: async (s) => {
+      await s.putOnFloor();
+      await walkUntil(s, 'KeyS', (st) => st.avatar.z >= 1.0);
+      await walkUntil(s, 'KeyA', (st) => st.avatar.x <= -0.72);
+      await walkUntil(s, 'KeyW', (st) => st.avatar.z <= -0.2);
+    },
+    check: ({ fail, report, start }) => {
+      if (!(start.avatar.x < -0.6)) fail(`the avatar did not get round to the far side of the railing (x ${start.avatar.x})`);
+      if (report.held || report.propHeldBy) fail(`the prop was taken across a railing (heldBy ${report.propHeldBy})`);
+      if (report.propMovedM > 0.02) fail(`the prop behind the railing moved ${report.propMovedM} m`);
+      if (!report.phases.includes('reach')) fail(`no reach began (phases ${report.phases}); the railing was never in the way mid-squat`);
+    }
+  });
+
 /** A prop 1.2 m below the avatar's feet (a drop): not reachable, no step, no fall. */
 export const runPitReach = (ctx) =>
   runHazard({
@@ -894,4 +917,42 @@ export function runVrEntryMidStep() {
     failures.push(message);
   }
   return { label: 'reach-vr-entry-mid-step', status: failures.length ? 'fail' : 'pass', failures };
+}
+
+/**
+ * The way to the prop is checked on every frame of a reach, not at its start: the shoulder moves through the squat. A railing that closes the line mid-squat
+ * can not be set up where the avatar can also stand close enough to grab (its body is in the way of the bar), so this drives `stillReaching` on the class
+ * with the obstruction opening and closing between frames.
+ */
+export function runRevalidatesEveryFrame() {
+  const failures = [];
+  const object = { wrapper: new THREE.Group() };
+  const interaction = Object.create(ObjectInteraction.prototype);
+  interaction.reach = new DesktopReach();
+  interaction.reach.begin(object, false, 0);
+  interaction.reach.grasp.set(0, 0.13, -0.3);
+  interaction.pos = new THREE.Vector3();
+  interaction.pos2 = new THREE.Vector3();
+  interaction.quat = new THREE.Quaternion();
+  interaction.scale = new THREE.Vector3();
+  interaction.deps = {
+    registry: { all: () => [object] },
+    carry: { getReach: () => 0.5 },
+    avatar: { getBoneWorldPosition: (_ref, out) => out.set(0.1, 1.0, 0) }
+  };
+  interaction.desktopReachable = () => true;
+  let blocked = false;
+  interaction.reachBlocked = () => blocked;
+  const frame = { deltaSec: 1 / 60, desktop: { walking: false, pointHeld: false } };
+  const log = [];
+  for (let i = 0; i < 40; i += 1) {
+    // Open at first, shut from frame 10 to 20 (the bar between the lowering shoulder and the prop), open again.
+    blocked = i >= 10 && i < 20;
+    const going = interaction.stillReaching(frame);
+    log.push(going);
+    if (!going) break;
+  }
+  if (log.length !== 11 || log[10] !== false) failures.push(`the reach did not end on the first blocked frame (ended after ${log.length} frames: ${log.map(Number).join('')})`);
+  if (log.slice(0, 10).some((going) => !going)) failures.push('the reach ended before the way was blocked');
+  return { label: 'reach-revalidates-every-frame', status: failures.length ? 'fail' : 'pass', failures };
 }
