@@ -152,9 +152,10 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
   `ubuntu-latest` runner has 2 vCPUs, so the default is 1. Running 2 at a time
   passed on the branch but timed out on main: the hand and body checks each
   open 2 pages at once, and cold page loads then pass the 30 s goto limit.
-  The pipeline job runs its specs in 5 shards of whole files and the viewer
-  mocked suite in 4, each a script balanced by measured wall time
-  (`test:e2e:pipeline:shard<i>`, `test:e2e:mocked:shard<i>` in
+  The pipeline job runs its specs in 6 shards, the viewer mocked suite in 4
+  and the VR checks in 2, each a script balanced by measured wall time
+  (`test:e2e:pipeline:shard<i>`, `test:e2e:mocked:shard<i>`,
+  `test:e2e:xr-viewer-vr:shard<i>` in
   `apps/viewer-web/package.json`); `scripts/check-e2e-shards.mjs` (in
   `check:all`) fails unless the shards run each test exactly once. Update
   `CHECK_COST` and those scripts from the CI timing artifacts
@@ -246,7 +247,7 @@ Supported env vars for smoke and XR scripts:
   only the suites that exercise exactly the changed files: quality, unit
   tests and production build (one runner), capture XR checks (2 shards),
   viewer AR and Knowledge Atlas checks (4 shards), capture → viewer pipeline
-  (5 shards), the Quick Look tool check,
+  (6 shards), the Quick Look tool check,
   and portal view checks. Files no suite tests select nothing and the gate
   passes on skips: docs and `.md`, workflows and `.github/actions`, shell
   and Node scripts, agent tooling, editor and package-manager config, and

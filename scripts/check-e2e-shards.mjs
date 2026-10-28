@@ -17,7 +17,7 @@ const scripts = JSON.parse(readFileSync(path.join(webDir, "package.json"), "utf8
 // Full suite → the scripts that split it. The VR job's tests are part of the
 // mocked suite's spec files, so they count as one of its shards.
 const suites = {
-  "test:e2e:mocked": [/^test:e2e:mocked:shard\d+$/, /^test:e2e:xr-viewer-vr$/],
+  "test:e2e:mocked": [/^test:e2e:mocked:shard\d+$/, /^test:e2e:xr-viewer-vr:shard\d+$/],
   "test:e2e:pipeline": [/^test:e2e:pipeline:shard\d+$/]
 };
 

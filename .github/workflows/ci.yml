@@ -130,7 +130,7 @@ jobs:
           retention-days: 7
 
   # Browser end-to-end checks run as parallel jobs (2 capture XR shards,
-  # 4 viewer shards with the Knowledge Atlas, 5 capture → viewer pipeline shards, portal)
+  # 4 viewer shards with the Knowledge Atlas, 6 capture → viewer pipeline shards, portal)
   # so CI wall time follows the slowest suite rather than their sum. Shard
   # counts balance wall time against billed minutes (per job, rounded up).
   capture-xr:
@@ -250,14 +250,21 @@ jobs:
   # The viewer's longest VR checks run on their own runner: they wait on
   # rendered frames (B-026), and a software-GL runner draws few of them.
   xr-viewer-vr:
-    name: Viewer VR gallery, foot controls and locomotion
+    name: Viewer VR gallery, foot controls and locomotion (shard ${{ matrix.shard }}/2)
     needs: [changes]
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: ci-xr-viewer-vr-${{ github.ref }}
+      group: ci-xr-viewer-vr-${{ matrix.shard }}-${{ github.ref }}
       cancel-in-progress: true
     timeout-minutes: 20
+    # Gallery and foot controls on one runner, locomotion and recenter on the
+    # other (about 71 and 56 s in emulation): the four took 93 s on one
+    # runner and 183 s on a slow one (run 40612369043), the critical path then.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -270,21 +277,29 @@ jobs:
       - name: Build the viewer test bundle
         run: VITE_IWER_SEM_SCENE=office_small pnpm timed test-build-web -- node packages/tooling-testing/src/test-build.mjs build web
       - name: Viewer VR gallery, foot controls and locomotion
-        run: pnpm timed xr-viewer-vr -- pnpm --filter @holoim/web run test:e2e:xr-viewer-vr
+        run: pnpm timed xr-viewer-vr-shard-${{ matrix.shard }} -- pnpm --filter @holoim/web run test:e2e:xr-viewer-vr:shard${{ matrix.shard }}
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: xr-viewer-vr-failure-${{ github.run_id }}
+          name: xr-viewer-vr-failure-${{ matrix.shard }}-${{ github.run_id }}
           path: |
             apps/viewer-web/test-results
             apps/viewer-web/playwright-report
             output/test-results
           if-no-files-found: ignore
           retention-days: 14
+      - name: Upload timing summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-viewer-vr-timings-${{ matrix.shard }}-${{ github.run_id }}
+          path: output/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
   pipeline:
-    name: Capture to viewer pipeline (shard ${{ matrix.shard }}/5)
+    name: Capture to viewer pipeline (shard ${{ matrix.shard }}/6)
     needs: [changes]
     if: needs.changes.outputs.pipeline == 'true'
     runs-on: ubuntu-latest
@@ -296,17 +311,17 @@ jobs:
     # minutes of tests (playwright.config.ts), inside this ceiling, so a slow
     # run fails with its diagnostics. The ceiling costs nothing when tests pass.
     timeout-minutes: 20
-    # Five shards of whole spec files, balanced by measured wall time (run
-    # 40589635831, beforeAll recordings included): bubble-capture 112 s,
-    # pointing 115 s, camera-take + summon 92 s, avatar-formats + object 86 s,
-    # capture-to-viewer + object-search 108 s (apps/viewer-web
-    # test:e2e:pipeline:shardN). Each records its own takes; the walk take is
-    # shared only within a shard. scripts/check-e2e-shards.mjs (quality) fails
-    # unless the shards run each test of the suite exactly once.
+    # Six shards balanced by measured wall time (run 40589635831, recordings
+    # included): bubble-capture 112 s, pointing split in two by take (115 s
+    # whole, 195 s on a slow runner), camera-take + summon 92 s,
+    # avatar-formats + object 86 s, capture-to-viewer + object-search 108 s
+    # (apps/viewer-web test:e2e:pipeline:shardN). Each records its own takes;
+    # the walk take is shared only within a shard. scripts/check-e2e-shards.mjs
+    # (quality) fails unless the shards run each test exactly once.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -323,14 +338,21 @@ jobs:
           python-version: "3.11"
       # The conversion tools' packages (usd-core, numpy, Pillow) live in a
       # cached virtualenv: a fresh pip install took 34 s.
+      # ffmpeg's .deb files, so a warm runner installs it with dpkg rather
+      # than from a slow apt mirror (scripts/ci-ffmpeg.sh).
+      - name: Cache ffmpeg packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ffmpeg-debs
+          key: ffmpeg-debs-${{ runner.os }}-${{ env.ImageOS }}
       - name: Cache Quick Look conversion environment
         id: usdz-venv
         uses: actions/cache@v4
         with:
           path: ~/.venv-usdz
           key: usdz-venv-${{ runner.os }}-${{ steps.python.outputs.python-version }}-${{ hashFiles('apps/viewer-api/tools/requirements.txt') }}
-      # The two test bundles and the conversion dependencies (ffmpeg from apt
-      # took 14 s) install side by side on the 4-vCPU runner.
+      # The two test bundles and the conversion dependencies install side by
+      # side on the 4-vCPU runner.
       - name: Build the test bundles and install the conversion dependencies
         run: |
           pnpm timed test-build -- node packages/tooling-testing/src/test-build.mjs build web & web=$!
@@ -340,7 +362,7 @@ jobs:
             ~/.venv-usdz/bin/pip install -r apps/viewer-api/tools/requirements.txt
           fi
           echo "${HOME}/.venv-usdz/bin" >> "${GITHUB_PATH}"
-          command -v ffmpeg || scripts/ci-apt.sh 240 sudo sh -c 'apt-get update && apt-get install -y --no-install-recommends ffmpeg'
+          DEB_CACHE="${HOME}/.cache/ffmpeg-debs" scripts/ci-ffmpeg.sh
           wait "${web}"
           wait "${capture}"
       - name: Capture to viewer pipeline
@@ -448,6 +470,13 @@ jobs:
         id: python
         with:
           python-version: "3.11"
+      # ffmpeg's .deb files, so a warm runner installs it with dpkg rather
+      # than from a slow apt mirror (scripts/ci-ffmpeg.sh).
+      - name: Cache ffmpeg packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ffmpeg-debs
+          key: ffmpeg-debs-${{ runner.os }}-${{ env.ImageOS }}
       - name: Cache Quick Look conversion environment
         id: usdz-venv
         uses: actions/cache@v4
@@ -464,7 +493,7 @@ jobs:
             python3 -m venv ~/.venv-usdz
             ~/.venv-usdz/bin/pip install -r apps/viewer-api/tools/requirements.txt
           fi
-          command -v ffmpeg || scripts/ci-apt.sh 240 sudo sh -c 'apt-get update && apt-get install -y --no-install-recommends ffmpeg'
+          DEB_CACHE="${HOME}/.cache/ffmpeg-debs" scripts/ci-ffmpeg.sh
           wait "${capture}"
       - name: Record the walk take in capture
         run: pnpm timed walk-take -- pnpm --filter @holoim/web run test:e2e:walk-take
