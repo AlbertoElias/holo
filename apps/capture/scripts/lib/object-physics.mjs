@@ -27,8 +27,9 @@ import { OBJECT_URL, checkObjectExport, clickButton, openCapture, poseOf, readSt
 
 const STEP_MS = 1000 / 60;
 const FLOOR_TOLERANCE_M = 0.01;
-// How far below the floor a prop may sink while it lands.
-const PENETRATION_TOLERANCE_M = 0.003;
+// How far below the floor a prop may sink while it lands: a hull tumbling across the floor briefly dips 4.4 mm (the same with or without the
+// avatar's colliders), and Rapier's slop holds it under 3 mm at rest (FLOOR_TOLERANCE_M checks the rest gap).
+const PENETRATION_TOLERANCE_M = 0.005;
 const REST_TIMEOUT_SEC = 3;
 const SPEED_TOLERANCE = 0.2;
 const MAX_LINEAR_MPS = 12;
@@ -103,19 +104,29 @@ async function openSession({ browser, baseUrl, consoleErrors }) {
   return s;
 }
 
-/** Closes the loop on the avatar's hand bone until it is at the object. Returns the final distance. */
+// A reach glides in (at most this far a step, slowing near the end) and stops with the palm this far from the object's bounds: within grab range
+// (0.1 m), short of the palm collider (about 0.045 m) touching it, as a user's hand closes before the squeeze.
+const REACH_STOP_M = 0.07;
+const REACH_STEP_M = 0.012;
+// The palm's grab range (`VR_REACH_M`).
+const GRAB_RANGE_M = 0.1;
+
+/** Glides the right controller until the avatar's palm is just short of the object. Returns the palm's final distance from the object's bounds. */
 async function reach(s) {
-  let error = Infinity;
-  for (let i = 0; i < 20 && error > 0.02; i += 1) {
+  for (let i = 0; i < 150; i += 1) {
     const state = await s.state();
-    const delta = s.toTracking(state.objects.items[0].position.map((v, k) => v - state.objects.hands.right.position[k]));
-    error = Math.hypot(...delta);
-    s.grip = s.grip.map((v, k) => v + delta[k] * 0.8);
+    const item = state.objects.items[0];
+    const gap = state.objects.reach.palmToPropM ?? Infinity;
+    if (gap <= REACH_STOP_M) break;
+    const toCenter = item.position.map((v, k) => v - state.objects.hands.right.position[k]);
+    const length = Math.hypot(...toCenter);
+    const move = Math.min(REACH_STEP_M, Math.max(0.002, (gap - REACH_STOP_M) * 0.5));
+    const delta = s.toTracking(toCenter.map((v) => (v / length) * move));
+    s.grip = s.grip.map((v, k) => v + delta[k]);
     await s.controller('right', s.grip);
-    await s.step(6);
+    await s.step(1);
   }
-  const state = await s.state();
-  return Math.hypot(...state.objects.items[0].position.map((v, k) => v - state.objects.hands.right.position[k]));
+  return (await s.state()).objects.reach.palmToPropM ?? Infinity;
 }
 
 /** A fresh prepared object placed in front of the avatar, hovering. */
@@ -203,7 +214,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       const item = await rearm(s);
       const home = item.position;
       const reachM = await reach(s);
-      if (reachM > 0.06) fail(`still drop: the hand never reached the object (${round(reachM, 3)} m)`);
+      if (reachM > GRAB_RANGE_M) fail(`still drop: the hand never reached the object (${round(reachM, 3)} m)`);
       if (!(await grab(s))) fail('still drop: a squeeze on the object did not grab it');
       await s.step(20);
       const before = await s.item();
@@ -232,7 +243,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       await s.controller('right', s.grip);
       await s.step(6);
       const reachM = await reach(s);
-      if (reachM > 0.06) fail(`${name}: the hand never reached the object (${round(reachM, 3)} m)`);
+      if (reachM > GRAB_RANGE_M) fail(`${name}: the hand never reached the object (${round(reachM, 3)} m)`);
       if (!(await grab(s))) fail(`${name}: a squeeze on the object did not grab it`);
       const { held, trajectory } = await swing(s, dir.map((v) => v / Math.hypot(...dir)), speed);
       const fitted = heldSpeed(held);
@@ -432,7 +443,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       await s.step(30);
       // Re-grab it where it rests and let go without moving: it stays.
       const reachBack = await reach(s);
-      if (reachBack > 0.08) {
+      if (reachBack > GRAB_RANGE_M) {
         report.scenarios.surface.regrab = { skipped: `the hand could not reach the resting object (${round(reachBack, 3)} m)` };
       } else {
         const before = await s.item();
@@ -459,7 +470,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       const home = item.position;
       const reachM = await reach(s);
       const grabbed = await grab(s);
-      if (reachM > 0.06 || !grabbed) fail(`bounds: could not grab the object (reach ${round(reachM, 3)} m, grabbed ${grabbed})`);
+      if (reachM > GRAB_RANGE_M || !grabbed) fail(`bounds: could not grab the object (reach ${round(reachM, 3)} m, grabbed ${grabbed})`);
       // Carry it to the +x edge (the floor ends at x = 7).
       const walk = s.toTracking([6.8, 0, 0]);
       const moveSteps = 70;
@@ -495,7 +506,7 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       // Back at a clear spot: the rig has walked away from where the object spawns, which is fine, it spawns in front.
       s.grip = (await s.page.evaluate(() => { const p = window.IWER_DEVICE.controllers.right.position; return [p.x ?? p[0], p.y ?? p[1], p.z ?? p[2]]; }));
       const reachBefore = await reach(s);
-      if (reachBefore > 0.06) fail(`recorded throw: the hand never reached the object (${round(reachBefore, 3)} m)`);
+      if (reachBefore > GRAB_RANGE_M) fail(`recorded throw: the hand never reached the object (${round(reachBefore, 3)} m)`);
       await clickButton(s.page, 'Start Recording');
       await s.page.getByRole('button', { name: 'Stop Recording', exact: true }).waitFor({ timeout: 10_000 });
       await s.step(18);
@@ -526,6 +537,162 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
       if (end.body !== 'asleep') fail(`recorded throw: it had not come to rest (${end.body})`);
       if (findNode(take, 'RecordedAvatar') < 0) fail('recorded throw: no RecordedAvatar node');
       report.scenarios.recordedThrow.glb = glb;
+    }
+
+    // 8. The avatar's body (props collide with the avatar). Each scenario re-arms a fresh prop in front of the avatar wherever it stands.
+    /** Glides the right controller until the avatar's right hand bone is at `target` (world), over `steps` steps. */
+    const glideHandTo = async (target, steps = 30) => {
+      for (let i = 0; i < steps; i += 1) {
+        const hand = (await s.state()).objects.hands.right.position;
+        const delta = s.toTracking(target.map((v, k) => (v - hand[k]) / (steps - i)));
+        s.grip = s.grip.map((v, k) => v + delta[k]);
+        await s.controller('right', s.grip);
+        await s.step(1);
+      }
+    };
+    /** Glides the held prop's centre to `target` (world). */
+    const glidePropTo = async (target, steps = 30) => {
+      const state = await s.state();
+      const offset = state.objects.items[0].position.map((v, k) => v - state.objects.hands.right.position[k]);
+      await glideHandTo(target.map((v, k) => v - offset[k]), steps);
+    };
+    const takeProp = async (name) => {
+      await s.button('right', 'squeeze', 0);
+      await s.step(2);
+      await rearm(s);
+      const reachM = await reach(s);
+      const grabbed = await grab(s);
+      if (reachM > GRAB_RANGE_M || !grabbed) fail(`${name}: could not grab the object (reach ${round(reachM, 3)} m, grabbed ${grabbed})`);
+      return grabbed;
+    };
+    const avatarAt = async () => {
+      const st = await s.state();
+      return { x: st.avatar.x, y: st.avatar.y, z: st.avatar.z, yaw: st.avatar.yaw };
+    };
+    // World point `forward` metres ahead of and `right` metres to the right of the avatar, `up` above its root.
+    const around = (a, right, up, forward) => [a.x + Math.cos(a.yaw) * right - Math.sin(a.yaw) * forward, a.y + up, a.z - Math.sin(a.yaw) * right - Math.cos(a.yaw) * forward];
+
+    // 8a. Drop onto the left palm, held out palm-up at waist height: the prop stops on it or is deflected, never falling through.
+    {
+      await s.controller('left', s.toWorld([0, 0, 0]).map((_, k) => [-0.12, 1.0, -0.38][k] + s.origin[k]), [0, 0, 0, 1]);
+      await s.step(20);
+      if (await takeProp('palmDrop')) {
+        const palm = (await s.state()).objects.hands.left.position;
+        await glidePropTo([palm[0], palm[1] + 0.3, palm[2]], 40);
+        await s.step(20);
+        await s.button('right', 'squeeze', 0);
+        const trajectory = [];
+        for (let i = 0; i < 90; i += 1) {
+          await s.step(1);
+          const item = await s.item();
+          trajectory.push({ ...sampleOf(s, item), boundsMinY: round(item.boundsMin[1]), offPalmM: round(Math.hypot(item.position[0] - palm[0], item.position[2] - palm[2])) });
+        }
+        // Moving the right hand out of the way, so it can't catch the prop for the left.
+        s.grip = s.restGrip();
+        await s.controller('right', s.grip);
+        const through = trajectory.find((p) => p.boundsMinY < palm[1] && p.offPalmM < 0.05);
+        report.scenarios.palmDrop = { palmM: palm.map((v) => round(v)), fellThrough: Boolean(through), throughSample: through ?? null, finalM: trajectory.at(-1)?.position, trajectory: writeTrajectory(trajectory) };
+        if (through) fail(`palmDrop: the prop fell through the left palm (bottom ${through.boundsMinY} m under the palm at ${round(palm[1])} m, ${through.offPalmM} m off its centre)`);
+      }
+      await s.controller('left', s.toWorld([0, 0, 0]).map((_, k) => [-0.3, 0.9, -0.1][k] + s.origin[k]), [0, 0, 0, 1]);
+      await s.step(10);
+    }
+
+    // 8b. Throw across the body: from the right side at chest height, flung to the left through the torso. It hits the torso and loses at least half its speed.
+    {
+      if (await takeProp('bodyThrow')) {
+        const a = await avatarAt();
+        await glidePropTo(around(a, 0.42, 1.15, 0), 40);
+        await s.step(10);
+        const across = s.toTracking(around({ ...a, x: 0, y: 0, z: 0 }, -1, 0, 0));
+        const { held, trajectory } = await swing(s, across, 3, { steps: 14, releaseAt: 4 });
+        for (let i = 0; i < 60; i += 1) {
+          await s.step(1);
+          trajectory.push(sampleOf(s, await s.item()));
+        }
+        const dir = around({ ...a, x: 0, y: 0, z: 0 }, -1, 0, 0);
+        const along = (p) => p.linvel[0] * dir[0] + p.linvel[2] * dir[2];
+        const launch = trajectory[0] ? along(trajectory[0]) : 0;
+        const airborne = trajectory.slice(0, 30).filter((p) => p.floorGapM > 0.05);
+        const slowest = airborne.length ? Math.min(...airborne.map(along)) : launch;
+        report.scenarios.bodyThrow = { heldSteps: held.length, launchAlongMps: round(launch, 3), slowestAlongAirborneMps: round(slowest, 3), trajectory: writeTrajectory(trajectory) };
+        if (!(launch > 1)) fail(`bodyThrow: the throw left at only ${round(launch, 3)} m/s across the body`);
+        else if (slowest > launch * 0.5) fail(`bodyThrow: it kept ${round(slowest, 3)} of ${round(launch, 3)} m/s through the body (a hit loses at least half)`);
+      }
+    }
+
+    // 8c. Release against the chest: a prop let go inside the torso is not ejected. Only the first 5 steps count: after that it has
+    // fallen onto the thighs, which deflect it as a body would.
+    {
+      if (await takeProp('chestRelease')) {
+        const a = await avatarAt();
+        await glidePropTo(around(a, 0, 1.2, 0.08), 40);
+        await s.step(20);
+        await s.button('right', 'squeeze', 0);
+        const trajectory = [];
+        for (let i = 0; i < 5; i += 1) {
+          await s.step(1);
+          trajectory.push(sampleOf(s, await s.item()));
+        }
+        const fastest = Math.max(...trajectory.map((p) => horizontal(p.linvel)));
+        report.scenarios.chestRelease = { fastestHorizontalMps: round(fastest, 3), trajectory: writeTrajectory(trajectory) };
+        if (fastest > 0.3) fail(`chestRelease: the torso ejected the prop at ${round(fastest, 3)} m/s`);
+      }
+    }
+
+    // 8d. Bat: an open right hand swung through a hovering prop at 2 m/s knocks it away along the swing.
+    {
+      await s.button('right', 'squeeze', 0);
+      await s.step(2);
+      const item = await rearm(s);
+      const a = await avatarAt();
+      // The hand starts 0.3 m to the prop's right, at its height.
+      const right = around({ ...a, x: 0, y: 0, z: 0 }, 1, 0, 0);
+      await glideHandTo(item.position.map((v, k) => v + right[k] * 0.3), 40);
+      await s.step(10);
+      const before = await s.state();
+      const dir = s.toTracking(around({ ...a, x: 0, y: 0, z: 0 }, -1, 0, 0));
+      const { trajectory } = await swing(s, dir, 2, { steps: 24, releaseAt: 0 });
+      const after = await s.item();
+      const worldDir = around({ ...a, x: 0, y: 0, z: 0 }, -1, 0, 0);
+      const peak = trajectory.reduce((best, p) => (horizontal(p.linvel) > horizontal(best.linvel) ? p : best), trajectory[0]);
+      const heading = angleBetween([worldDir[0], 0, worldDir[2]], [peak.linvel[0], 0, peak.linvel[2]]);
+      const knocks = (await s.state()).objects.physics?.knockdowns ?? 0;
+      report.scenarios.bat = { peakHorizontalMps: round(horizontal(peak.linvel), 3), headingErrorDeg: round(heading, 1), body: after.body, knockdowns: knocks - (before.objects.physics?.knockdowns ?? 0), trajectory: writeTrajectory(trajectory) };
+      if (after.body === 'kinematic') fail('bat: the swing did not knock the hovering prop down');
+      if (horizontal(peak.linvel) < 0.5) fail(`bat: the prop left at only ${round(horizontal(peak.linvel), 3)} m/s`);
+      else if (heading > 45) fail(`bat: the prop left ${round(heading, 1)}° off the swing`);
+      s.grip = s.restGrip();
+      await s.controller('right', s.grip);
+      await s.step(10);
+    }
+
+    // 8e. Snap turn: with the open hand just short of a hovering prop's right side, a snap turn to the left sweeps the hand through it without launching it.
+    {
+      await s.button('right', 'squeeze', 0);
+      await s.step(2);
+      await rearm(s);
+      await reach(s);
+      await s.step(10);
+      const before = await s.state();
+      await s.page.evaluate(() => window.IWER_DEVICE.controllers.right.updateAxes('thumbstick', -1, 0));
+      const trajectory = [];
+      for (let i = 0; i < 8; i += 1) {
+        await s.step(1);
+        trajectory.push(sampleOf(s, await s.item()));
+      }
+      await s.page.evaluate(() => window.IWER_DEVICE.controllers.right.updateAxes('thumbstick', 0, 0));
+      for (let i = 0; i < 30; i += 1) {
+        await s.step(1);
+        trajectory.push(sampleOf(s, await s.item()));
+      }
+      const after = await s.state();
+      const snaps = (after.thumbstick?.snapCount ?? 0) - (before.thumbstick?.snapCount ?? 0);
+      const fastest = Math.max(...trajectory.map((p) => p.speedMps));
+      report.scenarios.snapTurn = { snaps, turnDeg: round(THREE.MathUtils.radToDeg((after.thumbstick?.rigYaw ?? 0) - (before.thumbstick?.rigYaw ?? 0)), 1), fastestMps: round(fastest, 3), trajectory: writeTrajectory(trajectory) };
+      if (snaps !== 1) fail(`snapTurn: the stick flick snapped ${snaps} times, expected 1`);
+      if (fastest > 0.3) fail(`snapTurn: the swept hand launched the prop at ${round(fastest, 3)} m/s`);
+      s.rigYaw = after.thumbstick?.rigYaw ?? s.rigYaw;
     }
 
     const finalState = await s.state();

@@ -213,6 +213,7 @@ export class ObjectInteraction {
 
   /** Steps the prop world after the hold update and writes free props' poses back. */
   stepPhysics(deltaSec: number): void {
+    this.physics?.setReachTarget(this.reach.isReaching() ? this.reach.object : null);
     this.physics?.step(this.deps.registry.eventObjects(), deltaSec, (object, world) => this.writeWorld(object, world));
   }
 
@@ -696,7 +697,7 @@ export class ObjectInteraction {
   /** A deliberate let-go throws with the fitted velocity; every other release drops with none. */
   private release(throwIt: boolean): void {
     if (!this.hold) return;
-    this.physics?.release(this.hold.object, throwIt);
+    this.physics?.release(this.hold.object, throwIt, this.hold.side, this.hold.desktop);
     this.hold.object.heldBy = null;
     this.hold = null;
     // A reach that was only for this prop ends with it; a body already standing up goes on standing.
