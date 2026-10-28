@@ -188,6 +188,8 @@ export const tokens = {
         step: 0.35,
         fillShare: 0.7,
         maxCandidates: 300000,
+        maxCells: 250000,
+        maxEntries: 4000000,
         deadBand: 0.03,
         maxShare: 0.6,
         maxFilter: 0,

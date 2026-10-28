@@ -160,6 +160,8 @@ docs/product/design/tokens.json. Do not edit; run `pnpm --filter @holoim/design-
   --holoim-edge-cloche-rim-step: 0.35;
   --holoim-edge-cloche-rim-fill-share: 0.7;
   --holoim-edge-cloche-rim-max-candidates: 300000;
+  --holoim-edge-cloche-rim-max-cells: 250000;
+  --holoim-edge-cloche-rim-max-entries: 4000000;
   --holoim-edge-cloche-rim-dead-band: 0.03;
   --holoim-edge-cloche-rim-max-share: 0.6;
   --holoim-edge-cloche-rim-max-filter: 0;

@@ -236,6 +236,10 @@ the hill fixture:
 - **Ground below the foot.** A bin whose ground lies below the dome's foot
   passes when the rim stays at the foot (lift is never negative; the floor
   cuts that ground).
+- **Bounded on any upload.** Besides `maxCandidates`, the field is
+  skipped (flat foot, logged) when its grid would pass `maxCells` (a path
+  box 100 m across) or its triangles would make more than `maxEntries`
+  cell entries, so a broken or hostile export cannot exhaust the tab.
 - **"Nothing outside the glass" on the GPU.** Every drawn pixel of the
   recorded scene (avatar aside) from 16 orbit views, read back to its world
   point and tested against the bent dome by the test's own formula. A
