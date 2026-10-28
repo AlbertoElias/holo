@@ -511,8 +511,23 @@ export async function runIwerResizeTake({ browser, baseUrl, artifactDir, console
       }
       return { grip, error };
     };
-    const right = await bring('right', [...rest.right], (st) => st.objects.items[0].position);
-    row('right hand reached the prop', right.error <= 0.06, { errorM: round(right.error, 3) });
+    // The right hand glides in until the palm is 7 cm from the prop: a palm driven into a hovering prop would knock it down (props
+    // collide with the avatar).
+    let rightGrip = [...rest.right];
+    let palmToProp = Infinity;
+    for (let i = 0; i < 150; i += 1) {
+      const st = await readState(page);
+      palmToProp = st.objects.reach.palmToPropM ?? Infinity;
+      if (palmToProp <= 0.07) break;
+      const toCenter = st.objects.items[0].position.map((v, k) => v - st.objects.hands.right.position[k]);
+      const length = Math.hypot(...toCenter);
+      const move = Math.min(0.012, Math.max(0.002, (palmToProp - 0.07) * 0.5));
+      const delta = toTracking(toCenter.map((v) => (v / length) * move));
+      rightGrip = rightGrip.map((v, k) => v + delta[k]);
+      await controller('right', rightGrip);
+      await step(1);
+    }
+    row('right hand reached the prop', palmToProp <= 0.1, { palmToPropM: round(palmToProp, 3) });
 
     // A left squeeze with nothing held (and a prop out of the left hand's reach) grabs nothing.
     await button('left', 'squeeze', 1);
@@ -549,7 +564,8 @@ export async function runIwerResizeTake({ browser, baseUrl, artifactDir, console
     row('left squeeze next to the held prop: right still holds, size 1', stretching.heldBy === 'right' && Math.abs(stretching.size - 1) <= 0.05, { heldBy: stretching.heldBy, size: stretching.size });
     const d0 = Math.max(palmGap, 0.01);
 
-    // Move the left controller away from the right hand until the palm distance doubles (size ~2).
+    // Move the left controller away from the right hand until the palm distance doubles (size ~2), evenly over each move's frames as a
+    // real hand does, so the size never jumps between recorded keys.
     let gripL = left.grip;
     const away = (() => {
       const delta = toTracking(state.objects.hands.left.position.map((v, k) => v - state.objects.hands.right.position[k]));
@@ -558,9 +574,12 @@ export async function runIwerResizeTake({ browser, baseUrl, artifactDir, console
     })();
     let size = 1;
     for (let i = 0; i < 30 && Math.abs(size - 2) > 0.05; i += 1) {
-      gripL = gripL.map((v, k) => v + away[k] * (2 - size) * d0 * 0.6);
-      await controller('left', gripL);
-      await step(6);
+      const move = away.map((v) => (v * (2 - size) * d0 * 0.6) / 6);
+      for (let f = 0; f < 6; f += 1) {
+        gripL = gripL.map((v, k) => v + move[k]);
+        await controller('left', gripL);
+        await step(1);
+      }
       size = (await item()).size;
     }
     await step(10);
@@ -645,14 +664,17 @@ export async function runIwerResizeTake({ browser, baseUrl, artifactDir, console
       if (unsettled) { fastSkipped += 1; continue; }
       const box = glbModelBounds(take, sizeNode, i);
       const gExt = [box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z];
-      const cExt = [0, 1, 2].map((a) => c.max[a] - c.min[a]);
       const gCentre = [(box.max.x + box.min.x) / 2, (box.max.y + box.min.y) / 2, (box.max.z + box.min.z) / 2];
       const centreAtFrame = (d) => {
         const f = captured[i + best.offset + d];
         return f ? [0, 1, 2].map((a) => (f.max[a] + f.min[a]) / 2) : null;
       };
       const cCentre = centreAtFrame(0);
-      maxExtentErr = Math.max(maxExtentErr, ...gExt.map((v, a) => Math.abs(v / cExt[a] - 1)));
+      // Like the size, within two frames of the aligned step (a stretch changes the size every frame).
+      maxExtentErr = Math.max(maxExtentErr, Math.min(...[-2, -1, 0, 1, 2].map((d) => {
+        const f = captured[i + best.offset + d];
+        return f ? Math.max(...gExt.map((v, a) => Math.abs(v / (f.max[a] - f.min[a]) - 1))) : Infinity;
+      })));
       const diff = gCentre.map((v, a) => v - cCentre[a]);
       centreShift ??= diff;
       // Within two frames of the aligned step (a fall is metres per second).

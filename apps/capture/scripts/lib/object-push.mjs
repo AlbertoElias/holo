@@ -619,20 +619,25 @@ export async function runIwerPush({ browser, baseUrl, consoleErrors }) {
   const { rows, row } = makeRows(failures);
   const s = await openIwer({ browser, baseUrl, consoleErrors, label });
   try {
-    // Bring the right hand to the prop and grab it.
+    // Glide the right hand in until the palm is 7 cm from the prop, and grab it: a palm driven into a hovering prop would knock it
+    // down (props collide with the avatar).
     let error = Infinity;
-    for (let i = 0; i < 20 && error > 0.02; i += 1) {
+    for (let i = 0; i < 150; i += 1) {
       const st = await s.state();
-      const delta = s.toTracking(st.objects.items[0].position.map((v, k) => v - st.objects.hands.right.position[k]));
-      error = Math.hypot(...delta);
-      s.grip = s.grip.map((v, k) => v + delta[k] * 0.8);
+      error = st.objects.reach.palmToPropM ?? Infinity;
+      if (error <= 0.07) break;
+      const toCenter = st.objects.items[0].position.map((v, k) => v - st.objects.hands.right.position[k]);
+      const length = Math.hypot(...toCenter);
+      const move = Math.min(0.012, Math.max(0.002, (error - 0.07) * 0.5));
+      const delta = s.toTracking(toCenter.map((v) => (v / length) * move));
+      s.grip = s.grip.map((v, k) => v + delta[k]);
       await s.controller('right', s.grip);
-      await s.step(6);
+      await s.step(1);
     }
     await s.button('right', 'squeeze', 1);
     await s.step(3);
     const held = await s.item();
-    row('right squeeze grabs the prop', held.heldBy === 'right' && held.pushM === 0, { heldBy: held.heldBy, pushM: held.pushM, reachErrM: round(error, 3) });
+    row('right squeeze grabs the prop', held.heldBy === 'right' && held.pushM === 0, { heldBy: held.heldBy, pushM: held.pushM, palmToPropM: round(error, 3) });
     await s.step(20);
     const base = await s.state();
     const p0 = base.objects.items[0].position;
