@@ -11,6 +11,8 @@ const BLEND_OUT_SEC = 0.3;
 const FORWARD = 0.62;
 const DOWN = 0.3;
 const INWARD = 0.18;
+// The lowest the carried hand goes: this fraction of full reach from the shoulder.
+const REACHABLE = 0.95;
 
 interface Driven {
   bone: THREE.Bone;
@@ -57,12 +59,25 @@ export class DesktopCarryPose {
     return this.chain ? this.chain.upperLength + this.chain.lowerLength : undefined;
   }
 
+  /** How far below the carry pose the hand can still be placed within the arm's reach. */
+  maxLowerM(): number {
+    const reach = this.getReach();
+    if (!reach) return 0;
+    const horizontal = Math.hypot(FORWARD, INWARD);
+    const vertical = Math.sqrt(Math.max(0, REACHABLE ** 2 - horizontal ** 2));
+    return Math.max(0, (vertical - DOWN) * reach);
+  }
+
   idle(): void {
     this.weight = 0;
     for (const driven of this.driven) driven.hasWritten = false;
   }
 
-  update(step: { carrying: boolean; bodyYaw: number; deltaSec: number }): void {
+  /**
+   * `worldTarget` sends the hand toward a world point instead of the carry pose, `blend` (0 to 1) of the way: the grasp when reaching
+   * for a prop, easing back to the carry pose as the avatar stands.
+   */
+  update(step: { carrying: boolean; bodyYaw: number; deltaSec: number; lowerM?: number; worldTarget?: { point: THREE.Vector3; blend: number } }): void {
     const chain = this.chain;
     if (!chain) return;
     const rate = step.carrying ? 1 / BLEND_IN_SEC : -1 / BLEND_OUT_SEC;
@@ -84,9 +99,11 @@ export class DesktopCarryPose {
     const forward = this.tmp.set(-Math.sin(step.bodyYaw), 0, -Math.cos(step.bodyYaw));
     chain.upperArm.getWorldPosition(this.target);
     this.target.addScaledVector(forward, reach * FORWARD).addScaledVector(this.up, -reach * DOWN);
+    this.target.y -= step.lowerM ?? 0;
     // Toward the midline: the body's left, for the right hand.
     this.target.x += -Math.cos(step.bodyYaw) * reach * INWARD;
     this.target.z += Math.sin(step.bodyYaw) * reach * INWARD;
+    if (step.worldTarget && step.worldTarget.blend > 0) this.target.lerp(step.worldTarget.point, step.worldTarget.blend);
     this.targetQuat.setFromAxisAngle(this.up, step.bodyYaw);
     const solved = this.solver.solve(chain, this.target, this.targetQuat, this.avatar.avatarRoot);
     for (const driven of this.driven) {

@@ -17,6 +17,8 @@ export class CameraSystem extends createSystem() {
     const frame = c.frame;
     if (frame.arSpectator) return;
     const rigWorldLocked = c.body.active && !c.body.solver.faults.has('rig-follows-avatar');
+    c.camera.holdLookHeight = c.objects.isReachActive();
+    c.avatar.refreshFirstPersonClip();
     c.camera.update(frame.vrActive, frame.xrPresenting, deltaSec, false, rigWorldLocked);
     // Tracked hands and the VR panel read the rig's world matrix.
     c.stage.cameraRig.updateMatrixWorld(true);

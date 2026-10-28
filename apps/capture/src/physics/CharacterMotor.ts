@@ -7,7 +7,7 @@ import type { CharacterSnapshot } from '../types/contracts';
 import type { MoveState } from '../input/InputController';
 import type { AvatarRig } from '../avatar/AvatarRig';
 
-const gravity = -9.81;
+export const gravity = -9.81;
 const groundedStickVelocity = -0.5;
 const CROUCH_TERRAIN_GUARD_CLEARANCE = 0.02;
 const CROUCH_TERRAIN_GUARD_SAMPLE_RADIUS_RATIO = 0.04;
@@ -43,6 +43,7 @@ export class CharacterMotor {
   private characterCollider: import('@dimforge/rapier3d-compat').Collider | undefined;
   private characterController: import('@dimforge/rapier3d-compat').KinematicCharacterController | undefined;
   private avatarRigRef: AvatarRig | undefined;
+  private worldTrimesh: { vertices: Float32Array; indices: Uint32Array } | undefined;
 
   private capsuleRadius = 0.3;
   private capsuleHalfHeight = 0.6;
@@ -71,6 +72,7 @@ export class CharacterMotor {
 
     const trimesh = this.buildWorldTrimeshData(avatarRig.worldModel);
     if (!trimesh) return false;
+    this.worldTrimesh = trimesh;
 
     this.rapierWorld = new RAPIER.World({ x: 0, y: gravity, z: 0 });
     this.rapierWorld.createCollider(RAPIER.ColliderDesc.trimesh(trimesh.vertices, trimesh.indices));
@@ -241,6 +243,11 @@ export class CharacterMotor {
     const respawned = this.resolveSpawn(this.avatarRigRef);
     if (respawned) this.rebuildCharacterController();
     return respawned;
+  }
+
+  /** The scene's collision triangles in world space, for the prop world's own copy. */
+  getWorldTrimesh(): { vertices: Float32Array; indices: Uint32Array } | undefined {
+    return this.worldTrimesh;
   }
 
   hasSpawnResolved(): boolean {

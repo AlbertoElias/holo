@@ -1,0 +1,89 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "holoim generate-reach-hazard-scenes.mjs"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "reach-wall",
+      "mesh": 0
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.42,
+          0.45,
+          0.5,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.9
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 864,
+      "uri": "data:application/octet-stream;base64,AADgwAAAAAAAAODAAADgwAAAAAAAAOBAAADgQAAAAAAAAOBAAADgwAAAAAAAAODAAADgQAAAAAAAAOBAAADgQAAAAAAAAODAAADgwArXI7wAAOBAAADgQArXI7wAAOBAAADgQAAAAAAAAOBAAADgwArXI7wAAOBAAADgQAAAAAAAAOBAAADgwAAAAAAAAOBA7FG4vgAAAAAAAEDA7FG4vs3MDEAAAEDA7FG4vs3MDECamRk/7FG4vgAAAAAAAEDA7FG4vs3MDECamRk/7FG4vgAAAACamRk/7FG4vgAAAAAAAEDA7FG4vgAAAACamRk/7FG4vs3MDECamRk/7FG4vgAAAAAAAEDA7FG4vs3MDECamRk/7FG4vs3MDEAAAEDA7FG4vgAAAAAzM7M/7FG4vs3MDEAzM7M/7FG4vs3MDEAAAEBA7FG4vgAAAAAzM7M/7FG4vs3MDEAAAEBA7FG4vgAAAAAAAEBA7FG4vgAAAAAzM7M/7FG4vgAAAAAAAEBA7FG4vs3MDEAAAEBA7FG4vgAAAAAzM7M/7FG4vs3MDEAAAEBA7FG4vs3MDEAzM7M/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAA"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 432
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 432,
+      "byteLength": 432
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3",
+      "min": [
+        -7,
+        -0.01,
+        -7
+      ],
+      "max": [
+        7,
+        2.2,
+        7
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 36,
+      "type": "VEC3"
+    }
+  ]
+}

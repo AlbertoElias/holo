@@ -18,6 +18,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | AR recording (the phone as a camera-only author) | Complete | [ar-recording.md](archive/ar-recording.md) |
 | Summon and place while speaking | Complete | [summon-and-place.md](archive/summon-and-place.md) |
 | Explain with an object | Complete | [explain-with-an-object.md](archive/explain-with-an-object.md) |
+| Grab, place and throw objects with physics | Complete | [object-physics.md](archive/object-physics.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |

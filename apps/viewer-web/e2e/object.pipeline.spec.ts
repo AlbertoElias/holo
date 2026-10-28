@@ -38,7 +38,18 @@ type Take = {
   grab: { start: number; end: number };
 };
 
+type Thrown = {
+  file: string;
+  node: number;
+  /** Poses at key times: before the grab, held, just released, mid-flight, landed. */
+  keys: Array<{ label: string; key: number; time: number; object: Pose }>;
+  flightKeys: number;
+  keyCount: number;
+  flightDisplacementM: number;
+};
+
 let take: Take | undefined;
+let thrown: Thrown | undefined;
 
 test.beforeAll(async () => {
   if (process.env.RUN_E2E_PIPELINE !== "1") return;
@@ -54,6 +65,12 @@ test.beforeAll(async () => {
     expect(report.failures, "capture take").toEqual([]);
     expect(consoleErrors, "capture runtime errors").toEqual([]);
     take = expectedFrom(glbLib, report.glb, await readFile(report.glb));
+    // A thrown take (capture's physics scenarios): the flight and the landing are recorded poses.
+    // @ts-expect-error capture's .mjs scripts are untyped
+    const { runIwerObjectPhysics } = await import("../../capture/scripts/lib/object-physics.mjs");
+    const physics = await runIwerObjectPhysics({ browser, baseUrl: captureUrl, artifactDir: path.join(evidenceDir, "throw"), consoleErrors });
+    expect(physics.failures, "capture physics scenarios").toEqual([]);
+    thrown = thrownFrom(glbLib, physics.glb, await readFile(physics.glb));
   } finally {
     await browser.close();
   }
@@ -102,6 +119,38 @@ function expectedFrom(lib: Record<string, (...args: never[]) => unknown>, file: 
     turnDeg: (moved.quaternion.angleTo(grabbed.quaternion) * 180) / Math.PI,
     grab: hold
   };
+}
+
+/** Poses of a thrown take at key times of the export, in the recording root's frame. */
+function thrownFrom(lib: Record<string, (...args: never[]) => unknown>, file: string, buffer: Buffer): Thrown {
+  const loadTake = lib.loadTake as (b: Buffer) => { times: number[]; validation: { ok: true; value: { objects: Array<{ node: number; holds: Array<{ start: number; end: number }> }> } } };
+  const worldAt = lib.worldAt as (t: unknown, node: number, key: number) => unknown;
+  const rigidPose = lib.rigidPose as (m: unknown) => { position: { toArray: () => number[]; distanceTo: (v: unknown) => number }; quaternion: { toArray: () => number[] } };
+  const parsed = loadTake(buffer);
+  const entry = parsed.validation.value.objects[0]!;
+  const hold = entry.holds[0]!;
+  const at = (key: number) => rigidPose(worldAt(parsed, entry.node, key));
+  // The last key at which the object still moves is where it lands.
+  let landedKey = parsed.times.length - 1;
+  while (landedKey > 0 && at(landedKey).position.distanceTo(at(landedKey - 1).position) < 1e-4) landedKey -= 1;
+  const releaseKey = parsed.times.findIndex((t) => t >= hold.end);
+  const flightKeys = landedKey - releaseKey;
+  const keyAt = (time: number) => parsed.times.reduce((best, t, i) => (Math.abs(t - time) < Math.abs(parsed.times[best]! - time) ? i : best), 0);
+  const midFlight = parsed.times[Math.round((releaseKey + landedKey) / 2)]!;
+  const picks: Array<[string, number]> = [
+    ["t0-before-grab", hold.start / 2],
+    ["t1-held", (hold.start + hold.end) / 2],
+    ["t2-released", hold.end + 0.05],
+    ["t3-mid-flight", midFlight],
+    ["t4-landed", parsed.times[landedKey]! + 0.1],
+    ["t5-end", parsed.times.at(-1)!]
+  ];
+  const keys = picks.map(([label, time]) => {
+    const key = keyAt(time);
+    const p = at(key);
+    return { label, key, time: parsed.times[key]!, object: { position: p.position.toArray() as Pose["position"], quaternion: p.quaternion.toArray() as Pose["quaternion"] } };
+  });
+  return { file, node: entry.node, keys, flightKeys, keyCount: parsed.times.length, flightDisplacementM: at(releaseKey).position.distanceTo(at(landedKey).position) };
 }
 
 async function upload(page: Page, glb: Buffer): Promise<{ id: string; url: string }> {
@@ -359,4 +408,57 @@ test("real capture export: the object plays in the hand, matches the track, orbi
   report.usdz = { path: usdzPath, prim: usd.name, timeSamples: usd.timeSamples, displacementM: usdDisplacement, glbDisplacementM: expected.displacementM, turnDeg: usdTurn, glbTurnDeg: expected.turnDeg };
 
   await writeFile(path.join(evidenceDir, "report.json"), JSON.stringify(report, null, 2));
+});
+
+test("a thrown take: the flight and landing play in the viewer as the GLB has them, and in the USDZ", async ({ page }) => {
+  test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
+  test.setTimeout(240_000);
+  const expected = thrown!;
+  expect(expected.flightKeys, "the take recorded a flight").toBeGreaterThanOrEqual(10);
+  expect(expected.flightDisplacementM, "the object travelled in flight").toBeGreaterThan(0.3);
+
+  const uploaded = await upload(page, await readFile(expected.file));
+  await page.setViewportSize(DESKTOP);
+  await installProbe(page);
+  await showOnly(page, uploaded.id);
+  await page.goto("/");
+  await assertViewerShell(page);
+  const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
+  await waitForPortalReady(page, uploaded.id, uploaded.url);
+  await card.getByRole("button", { name: "Pause" }).click();
+  await expect(card).toHaveAttribute("data-portal-paused", "true");
+
+  const report: Record<string, unknown> = { glb: expected.file, hologram: uploaded.id, node: expected.node, keyCount: expected.keyCount, flightKeys: expected.flightKeys, keys: [] };
+  for (const key of expected.keys) {
+    const reading = await readAt(page, uploaded.url, key.time);
+    expect(reading.object, `${key.label}: the object node is in the card`).not.toBeNull();
+    const positionError = distance(reading.object!.position, key.object.position);
+    const angleError = angleDeg(reading.object!.quaternion, key.object.quaternion);
+    expect(positionError, `${key.label}: position against the GLB`).toBeLessThanOrEqual(POSITION_TOLERANCE_M);
+    expect(angleError, `${key.label}: rotation against the GLB`).toBeLessThanOrEqual(ANGLE_TOLERANCE_DEG);
+    (report.keys as unknown[]).push({ label: key.label, time: key.time, positionErrorM: positionError, angleErrorDeg: angleError });
+    if (key.label === "t3-mid-flight") {
+      await page.waitForTimeout(300);
+      report.midFlightScreenshot = await shot(page, uploaded.id, "throw-mid-flight");
+    }
+  }
+
+  // Quick Look: the converted USDZ animates the object across the flight, to where the GLB lands.
+  const quickLookUrl = `/api/holograms/${uploaded.id}/usdz`;
+  await expect.poll(async () => (await page.request.get(quickLookUrl, { timeout: 30_000 })).status(), { timeout: 120_000, intervals: [2_000] }).toBe(200);
+  const usdzPath = path.join(evidenceDir, "object-throw.usdz");
+  await writeFile(usdzPath, await (await page.request.get(quickLookUrl, { timeout: 120_000 })).body());
+  const flight = expected.keys.filter((key) => key.label === "t2-released" || key.label === "t3-mid-flight" || key.label === "t4-landed");
+  const { stdout } = await execFileAsync(process.env.USDZ_PYTHON ?? "python3", ["-c", USD_PROBE, usdzPath, String(expected.node), JSON.stringify(flight.map((key) => key.time))], { timeout: 60_000, maxBuffer: 1024 * 1024 });
+  const usd = JSON.parse(stdout) as { found: boolean; name: string; timeSamples: number; poses: Pose[] };
+  expect(usd.found, "the object prim is in the USDZ").toBe(true);
+  expect(usd.timeSamples, "the USDZ samples the object across the flight").toBeGreaterThanOrEqual(expected.flightKeys);
+  // Displacements between flight keys match the GLB's (the USDZ frame differs, distances do not).
+  for (let i = 1; i < flight.length; i += 1) {
+    const glbStep = distance(flight[i]!.object.position, flight[i - 1]!.object.position);
+    const usdStep = distance(usd.poses[i]!.position, usd.poses[i - 1]!.position);
+    expect(Math.abs(usdStep - glbStep), `USDZ ${flight[i - 1]!.label} to ${flight[i]!.label}`).toBeLessThanOrEqual(POSITION_TOLERANCE_M);
+  }
+  report.usdz = { path: usdzPath, prim: usd.name, timeSamples: usd.timeSamples, poses: usd.poses };
+  await writeFile(path.join(evidenceDir, "throw-report.json"), JSON.stringify(report, null, 2));
 });

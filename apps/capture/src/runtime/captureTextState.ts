@@ -40,7 +40,7 @@ export function renderCaptureTextState(c: CaptureContext): string {
       z: avatar.avatarRoot.position.z,
       yaw: c.camera.lookYaw
     },
-    point: { held: input.isPointHeld(), aimPitch: input.getPointAimPitch(), ...c.point.snapshot() },
+    point: { held: input.isPointHeld(), aimPitch: input.getPointAimPitch(), viewPitch: c.camera.firstPersonPitch, ...c.point.snapshot() },
     locomotion: {
       state: animator.getState(),
       horizontalSpeed: character.horizontalSpeed,
@@ -50,13 +50,17 @@ export function renderCaptureTextState(c: CaptureContext): string {
       legs: c.terrainLegs.getSnapshot(),
       clip: animator.getClipSnapshot()
     },
-    crouch: { amount: crouch.amount, poseAmount: crouch.poseAmount, target: crouch.target, source: crouch.source },
+    pose: reachPoseSnapshot(c),
+    camera: { y: c.stage.desktopCamera.position.y, pitchDeg: THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(c.stage.desktopCamera.getWorldDirection(new THREE.Vector3()).y, -1, 1))) },
+    crouch: { amount: crouch.amount, poseAmount: crouch.poseAmount, squat: crouch.squat, target: crouch.target, source: crouch.source },
     tracking: { left: c.hands.snapshot('left'), right: c.hands.snapshot('right') },
     objects: {
       items: c.objects.interaction.snapshot(),
       hands: c.objects.interaction.handSnapshot(),
       grab: { left: c.objects.grabInput.get('left'), right: c.objects.grabInput.get('right') },
       carryWeight: c.objects.carry.getWeight(),
+      reach: c.objects.interaction.reachSnapshot(),
+      physics: c.objects.physicsStats(),
       tray: { ...c.objects.tray.snapshot(), gesture: c.objects.trayGesture.snapshot() }
     },
     heightAdaptation: {
@@ -94,4 +98,34 @@ export function renderCaptureTextState(c: CaptureContext): string {
       micHeld: c.recording.isMicHeld()
     }
   });
+}
+
+/** Debug: toes, hips-to-neck spine pitch from vertical (degrees) and the shoulder, for the flat-screen reach checks. */
+function reachPoseSnapshot(c: CaptureContext) {
+  const { avatar } = c;
+  const at = (ref: Parameters<typeof avatar.bone>[0]) => {
+    const bone = avatar.bone(ref);
+    return bone ? bone.getWorldPosition(new THREE.Vector3()) : null;
+  };
+  const hips = at('hips');
+  const neck = at('neck') ?? at('head');
+  const shoulder = at('rightUpperArm');
+  const head = at('head');
+  const ankles = (['left', 'right'] as const).map((side) => at(`${side}Foot`));
+  const toes = (['left', 'right'] as const).map((side) => at(`${side}Toes`));
+  const knees = (['left', 'right'] as const).map((side) => at(`${side}LowerLeg`));
+  const thighs = (['left', 'right'] as const).map((side) => at(`${side}UpperLeg`));
+  let spinePitchDeg: number | null = null;
+  if (hips && neck) {
+    const v = neck.clone().sub(hips);
+    spinePitchDeg = THREE.MathUtils.radToDeg(Math.atan2(Math.hypot(v.x, v.z), v.y));
+  }
+  const fromVertical = (a: THREE.Vector3 | null, b: THREE.Vector3 | null) => {
+    if (!a || !b) return null;
+    const d = b.clone().sub(a);
+    return THREE.MathUtils.radToDeg(Math.atan2(Math.hypot(d.x, d.z), d.y));
+  };
+  const torsoPitchDeg = fromVertical(hips, head);
+  const xyz = (v: THREE.Vector3 | null) => (v ? { x: v.x, y: v.y, z: v.z } : null);
+  return { spinePitchDeg, torsoPitchDeg, hips: xyz(hips), head: xyz(head), shoulder: xyz(shoulder), toes: toes.map(xyz), ankles: ankles.map(xyz), knees: knees.map(xyz), thighs: thighs.map(xyz) };
 }

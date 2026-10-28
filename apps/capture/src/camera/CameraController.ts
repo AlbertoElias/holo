@@ -20,6 +20,11 @@ export class CameraController {
   thirdPersonPitch = 0.32;
   firstPersonPitch = 0;
 
+  /** A flat-screen reach, lift or lower is under way: the third-person view keeps what it looks at steady, so the floor does not tilt as the avatar squats. */
+  holdLookHeight = false;
+  private lookOffsetHeld = false;
+  private readonly lookOffset = new THREE.Vector3();
+  private readonly lookOffsetNow = new THREE.Vector3();
   private snapDesktopCameraAfterVrExit = false;
   private postVrExitSnapFrames = 0;
   private postVrForceThirdFrames = 0;
@@ -177,6 +182,7 @@ export class CameraController {
     this.tmpDesiredCam.add(this.deps.avatarRig.avatarRoot.position);
 
     this.deps.avatarRig.getEyeAnchorWorldPosition(this.tmpTargetCam, this.deps.embodyOffset);
+    this.holdLookTarget(delta, snapInstantly);
     this.tmpCorrectedCam.copy(this.tmpDesiredCam);
 
     if (this.deps.avatarRig.worldModel) {
@@ -199,6 +205,30 @@ export class CameraController {
     const smoothing = snapInstantly ? 1 : 1 - Math.exp(-8 * delta);
     this.deps.desktopCamera.position.lerp(this.tmpCorrectedCam, smoothing);
     this.deps.desktopCamera.lookAt(this.tmpTargetCam);
+  }
+
+  /**
+   * The third-person view looks at the eye anchor, which drops by half a metre in a squat; held, it keeps
+   * the eye's offset from the avatar root as it was when the reach began, and eases back once it ends.
+   */
+  private holdLookTarget(delta: number, snap: boolean): void {
+    const root = this.deps.avatarRig.avatarRoot.position;
+    this.lookOffsetNow.subVectors(this.tmpTargetCam, root);
+    if (this.holdLookHeight) {
+      if (!this.lookOffsetHeld) {
+        // Keep the offset the camera was already using.
+        this.lookOffsetHeld = true;
+      }
+    } else if (this.lookOffsetHeld) {
+      this.lookOffset.lerp(this.lookOffsetNow, snap ? 1 : 1 - Math.exp(-8 * delta));
+      if (this.lookOffset.distanceToSquared(this.lookOffsetNow) < 1e-6) this.lookOffsetHeld = false;
+      this.tmpTargetCam.addVectors(root, this.lookOffset);
+      return;
+    } else {
+      this.lookOffset.copy(this.lookOffsetNow);
+      return;
+    }
+    this.tmpTargetCam.addVectors(root, this.lookOffset);
   }
 
   private updateFirstPersonCamera(source: 'desktop' | 'vr'): void {
@@ -254,7 +284,13 @@ export class CameraController {
     return clamp(value, 0.18, 0.72);
   }
 
+  /** The point aim's pitch. */
   clampFirstPersonPitch(value: number): number {
     return clamp(value, -1.2, 1.2);
+  }
+
+  /** The first-person view's pitch: it can look further down, at a prop at the avatar's feet. */
+  clampFirstPersonLookPitch(value: number): number {
+    return clamp(value, -1.45, 1.2);
   }
 }

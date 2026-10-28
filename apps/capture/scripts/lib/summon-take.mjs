@@ -396,33 +396,39 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
         carryTo = (await reach(page, step, { move: (p) => controller('right', p), start: reached.at, target: beside, rigYaw })).at;
       }
       await button('right', 'squeeze', 0);
-      summon.releaseKeyOffset = clock.steps - summonStep;
       await step(2);
       state = await readState(page);
       const placedItem = state.objects.items.find((item) => item.id === object.id);
       if (placedItem?.heldBy) fail(`releasing did not place ${object.name}`);
-      summon.placed = poseOf(placedItem);
+      // Let go, the object falls and comes to rest; that rest pose is where it was placed.
+      const settle = async () => {
+        let item;
+        for (let i = 0; i < 240; i += 1) {
+          await step(1);
+          state = await readState(page);
+          item = state.objects.items.find((candidate) => candidate.id === object.id);
+          if (item?.body === 'asleep') break;
+        }
+        if (item?.body !== 'asleep') fail(`${object.name} did not come to rest after release (${item?.body})`);
+        summon.releaseKeyOffset = clock.steps - summonStep;
+        summon.placed = poseOf(item);
+      };
       if (!place) {
-        // Grab it again beside the open tray: an event object, not a summon.
-        await step(10);
-        const back = await reach(page, step, { move: (p) => controller('right', p), start: carryTo, target: (st) => st.objects.items.find((item) => item.id === object.id).position, rigYaw, tolerance: 0.03 });
-        state = await readState(page);
+        // Catch it just after letting go beside the open tray: an event object, not a summon.
         const zoneDistanceM = Math.min(...state.objects.tray.items.map((item) => v3(item.position).distanceTo(v3(state.objects.hands.right.position))));
         await button('right', 'squeeze', 1);
-        await step(4);
+        await step(2);
         state = await readState(page);
         regrab = { heldBy: state.objects.items.find((item) => item.id === object.id)?.heldBy ?? null, summons: summonedItems(state).length, trayOpen: state.objects.tray.open, handToNearestMiniatureM: round(zoneDistanceM, 3) };
-        if (regrab.heldBy !== 'right' || regrab.summons !== 2) fail(`grabbing the placed object beside the tray failed or summoned (${JSON.stringify(regrab)})`);
+        if (regrab.heldBy !== 'right' || regrab.summons !== 2) fail(`catching the object beside the tray failed or summoned (${JSON.stringify(regrab)})`);
         for (let i = 1; i <= 20; i += 1) {
-          await controller('right', back.at.map((v, j) => v + (j === 1 ? 0.06 : 0) * smooth(i / 20)));
+          await controller('right', carryTo.map((v, j) => v + (j === 1 ? 0.06 : 0) * smooth(i / 20)));
           await step(1);
         }
         await button('right', 'squeeze', 0);
-        summon.releaseKeyOffset = clock.steps - summonStep;
         await step(2);
-        state = await readState(page);
-        summon.placed = poseOf(state.objects.items.find((item) => item.id === object.id));
       }
+      await settle();
       summons.push(summon);
       from = carryTo;
     }
@@ -437,7 +443,7 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
       const item = state.objects.items.find((candidate) => candidate.id === summon.id);
       return item ? round(v3(item.position).distanceTo(summon.placed.position), 5) : null;
     });
-    if (placedDrift.some((drift) => drift === null || drift > 1e-4)) fail(`placed objects moved after release (${placedDrift})`);
+    if (placedDrift.some((drift) => drift === null || drift > 0.002)) fail(`placed objects moved after rest (${placedDrift})`);
 
     const glb = path.join(artifactDir, `${label}.glb`);
     await saveDownload(page, async () => {
@@ -640,8 +646,12 @@ export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, arti
     if (summoned.name !== 'diagram.png' || summoned.heldBy !== 'right') fail(`T + 2 did not summon the image into the right hand (${JSON.stringify(summoned)})`);
     if (summoned.firstToHandM === null || summoned.firstToHandM > 0.25 || summoned.toHandM > 0.25) fail(`the summoned object is not in the hand (${JSON.stringify(summoned)})`);
     await page.keyboard.press('KeyG');
-    await advance(0.2);
-    state = await readState(page);
+    // G sets it down: held while the body squats toward the floor, then let go just above it.
+    for (let i = 0; i < 180; i += 1) {
+      await advance(1 / 60);
+      state = await readState(page);
+      if (!summonedItems(state)[0]?.heldBy) break;
+    }
     placed = { heldBy: summonedItems(state)[0]?.heldBy ?? null };
     if (placed.heldBy) fail('G did not put the summoned object down');
     const glb = await saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), path.join(artifactDir, `${label}.glb`));

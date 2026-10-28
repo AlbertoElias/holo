@@ -146,6 +146,12 @@ const CROUCH_POSE_EPSILON = 1e-4;
 const CROUCH_MAX_POSE_AMOUNT = 1.45;
 const CROUCH_FOOT_GROUND_CLEARANCE_RATIO = 0.015;
 const CROUCH_MAX_HIPS_LIFT_RATIO = 0.16;
+// A reach squat: the hips drop this much more (a fraction of height) beyond the full crouch, and the forward bend grows by this factor.
+const SQUAT_EXTRA_HIPS_DROP_RATIO = 0.20;
+// Past the full squat, a hand that still can't reach (a prop gripped near its bottom) takes the hips this much further down, a fraction of height: never more lean.
+const SQUAT_DEEP_EXTRA_RATIO = 0.07;
+// The crouch's leg bend is relaxed by this much at full squat: the leg solver bends the knees instead.
+const SQUAT_LEG_RELAX = 0.85;
 const CROUCH_WALK_BLEND_START_SPEED = 0.08;
 const CROUCH_WALK_BLEND_END_SPEED = 0.28;
 const CROUCH_WALK_HIPS_POSE_WEIGHT = 0.55;
@@ -211,10 +217,23 @@ export class AvatarRig {
   private readonly firstPersonHiddenMeshes: THREE.Mesh[] = [];
   private readonly avatarMaterials: THREE.Material[] = [];
   private readonly avatarClipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+  private readonly clipNormal = new THREE.Vector3(0, -1, 0);
+  private firstPersonClipOn = false;
   private readonly avatarMaterialClippingBackup = new WeakMap<THREE.Material, THREE.Plane[] | null>();
   private crouchRigReady = false;
   private crouchWarningLogged = false;
   private lastCrouchAmount = -1;
+  private lastSquatAmount = 0;
+  private lastDeepExtra = 0;
+  /** Where each foot stood when the current reach began, before it bent the body. */
+  readonly plantFeet = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+  /** The feet's world orientations when planted: a planted foot stays flat as it was, however far the legs fold. */
+  readonly plantFootQuats = { left: new THREE.Quaternion(), right: new THREE.Quaternion() };
+  private feetPlanted = false;
+  /** True while the feet are held where a reach planted them. */
+  get isPlanted(): boolean {
+    return this.feetPlanted;
+  }
   private readonly preCrouchPose = new Map<THREE.Bone, { quaternion: THREE.Quaternion; position: THREE.Vector3 }>();
   private crouchHips: CrouchHipsBinding | undefined;
   private readonly crouchSpine: CrouchBoneBinding[] = [];
@@ -319,10 +338,26 @@ export class AvatarRig {
     this.preCrouchPose.clear();
   }
 
-  applyCrouchPose(amount: number, horizontalSpeed = 0): void {
+  /** `plant`: a reach is driving the pose, so the feet stay where they stood when it began. */
+  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0, plant = false, deepExtra = 0): void {
     const clampedAmount = clamp(amount, 0, CROUCH_MAX_POSE_AMOUNT);
     if (!this.crouchRigReady || !this.crouchHips) return;
-    const amountChanged = Math.abs(clampedAmount - this.lastCrouchAmount) > CROUCH_POSE_EPSILON;
+    if (!plant) this.feetPlanted = false;
+    else if (!this.feetPlanted) {
+      // Once, at the start of the reach, before any bend: planting keeps them there however the hips move.
+      this.feetPlanted = true;
+      this.crouchHips.bone.updateWorldMatrix(true, true);
+      for (const [side, foot] of [['left', this.crouchLeftFoot], ['right', this.crouchRightFoot]] as const) {
+        if (foot) {
+          foot.getWorldPosition(this.plantFeet[side]);
+          foot.getWorldQuaternion(this.plantFootQuats[side]);
+        }
+      }
+    }
+    const squatAmount = clamp(squat, 0, 1);
+    const amountChanged = Math.abs(clampedAmount - this.lastCrouchAmount) > CROUCH_POSE_EPSILON || Math.abs(squatAmount - this.lastSquatAmount) > CROUCH_POSE_EPSILON || Math.abs(deepExtra - this.lastDeepExtra) > CROUCH_POSE_EPSILON;
+    this.lastSquatAmount = squatAmount;
+    this.lastDeepExtra = deepExtra;
     const wasCrouched = this.lastCrouchAmount > CROUCH_POSE_EPSILON;
     const isCrouched = clampedAmount > CROUCH_POSE_EPSILON;
     if (!amountChanged && !wasCrouched && !isCrouched) return;
@@ -335,10 +370,11 @@ export class AvatarRig {
     const hipsPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_HIPS_POSE_WEIGHT, walkBlend);
     const legPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_LEG_POSE_WEIGHT, walkBlend);
     const footPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_FOOT_POSE_WEIGHT, walkBlend);
+    const lean = 1;
     const hipsAmount = Math.pow(clampedAmount, 0.9) * hipsPoseWeight;
-    const legAmount = Math.pow(clampedAmount, 0.72) * legPoseWeight;
-    const spineAmount = Math.pow(clampedAmount, 0.78);
-    const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight;
+    const legAmount = Math.pow(clampedAmount, 0.72) * legPoseWeight * (1 - SQUAT_LEG_RELAX * squatAmount);
+    const spineAmount = Math.pow(clampedAmount, 0.78) * lean;
+    const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight * (1 - squatAmount);
 
     for (const binding of [this.crouchHips, ...this.crouchSpine, ...this.crouchUpperLegs, ...this.crouchLowerLegs, ...this.crouchFeet]) {
       this.preCrouchPose.set(binding.bone, {
@@ -349,9 +385,9 @@ export class AvatarRig {
     const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
     const heightInParent = this.avatarHeight / Math.max(1e-8, Math.abs(parentScale));
     this.crouchHips.bone.position
-      .addScaledVector(this.crouchHips.downInParent, heightInParent * 0.11 * hipsAmount)
+      .addScaledVector(this.crouchHips.downInParent, heightInParent * (0.11 * hipsAmount + (SQUAT_EXTRA_HIPS_DROP_RATIO * squatAmount + SQUAT_DEEP_EXTRA_RATIO * clamp(deepExtra, 0, 1))))
       .addScaledVector(this.crouchHips.backInParent, heightInParent * 0.045 * hipsAmount);
-    this.applyCrouchBoneRotation(this.crouchHips, hipsAmount);
+    this.applyCrouchBoneRotation(this.crouchHips, hipsAmount * lean);
     this.crouchHips.bone.updateMatrixWorld(true);
 
     for (const binding of this.crouchSpine) {
@@ -371,7 +407,8 @@ export class AvatarRig {
       binding.bone.updateMatrixWorld(true);
     }
 
-    this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend);
+    // Planted feet are pinned by the leg solver, so lifting the hips to clear the unplanted feet would only make the hips jump with the terrain probe.
+    if (!plant) this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
   }
 
   /** The avatar's canonical bone, or its end site for a `…Tip` reference. */
@@ -707,6 +744,8 @@ export class AvatarRig {
 
   private collectAvatarMaterials(model: THREE.Object3D): void {
     this.avatarMaterials.length = 0;
+    // New materials: the next first-person state applies the clip to them.
+    this.firstPersonClipOn = false;
     const materialSet = new Set<THREE.Material>();
     model.traverse((obj) => {
       if (!isThreeMesh(obj)) return;
@@ -730,7 +769,20 @@ export class AvatarRig {
     });
   }
 
+  /** Keeps the first-person clip plane the same distance under the eye as it moves: a bent head carries the camera down, and a fixed plane would leave the neck and collar in front of it. */
+  refreshFirstPersonClip(): void {
+    if (!this.firstPersonClipOn) return;
+    this.getEyeAnchorWorldPosition(this.tmpVecA, 0);
+    this.tmpVecA.y -= this.avatarHeight * 0.06;
+    this.avatarClipPlane.setFromNormalAndCoplanarPoint(this.clipNormal, this.tmpVecA);
+  }
+
   private setDesktopFirstPersonAvatarClip(enabled: boolean): void {
+    if (enabled && this.firstPersonClipOn) {
+      this.refreshFirstPersonClip();
+      return;
+    }
+    this.firstPersonClipOn = enabled;
     if (!enabled) {
       for (const material of this.avatarMaterials) {
         const original = this.avatarMaterialClippingBackup.get(material);
@@ -748,14 +800,8 @@ export class AvatarRig {
       if (!this.avatarMaterialClippingBackup.has(material)) {
         this.avatarMaterialClippingBackup.set(material, material.clippingPlanes ? [...material.clippingPlanes] : null);
       }
-      this.tmpVecA.set(
-        this.avatarRoot.position.x,
-        this.avatarRoot.position.y + this.avatarEyeLocalY - this.avatarHeight * 0.06,
-        this.avatarRoot.position.z
-      );
-      // In first-person, clip upper-body geometry near the camera (head/neck/collar)
-      // to avoid inside-mesh artifacts when looking down while keeping lower body visible.
-      this.avatarClipPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, -1, 0), this.tmpVecA);
+      // The one writer of the plane is refreshFirstPersonClip, which follows the eye every frame.
+      this.refreshFirstPersonClip();
       material.clippingPlanes = [this.avatarClipPlane];
       material.needsUpdate = true;
     }
@@ -839,6 +885,11 @@ export class AvatarRig {
    * itself, since the facing correction sits on a child (`HumanoidFacing`)
    * whose own frame is still the file's.
    */
+  /** The direction the avatar faces, in world space (its canonical +Z). */
+  facingWorld(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(0, 0, 1).applyQuaternion(this.canonicalFrameQuaternion());
+  }
+
   private canonicalFrameQuaternion(): THREE.Quaternion {
     return this.avatar?.getWorldQuaternion(new THREE.Quaternion()) ?? new THREE.Quaternion();
   }
@@ -859,14 +910,15 @@ export class AvatarRig {
     binding.bone.quaternion.multiply(this.tmpCrouchQuat).normalize();
   }
 
-  private applyCrouchFootGroundCompensation(crouchAmount: number, walkBlend: number): void {
+  private applyCrouchFootGroundCompensation(crouchAmount: number, walkBlend: number, squat: number): void {
     if (!this.crouchHips || !this.worldModel) return;
     if (crouchAmount <= 0.01) return;
     if (!this.crouchLeftFoot && !this.crouchRightFoot) return;
 
     const walkClearanceBoost = this.avatarHeight * CROUCH_WALK_EXTRA_GROUND_CLEARANCE_RATIO * clamp(walkBlend, 0, 1);
     const minClearance = this.avatarHeight * CROUCH_FOOT_GROUND_CLEARANCE_RATIO + walkClearanceBoost;
-    const maxLift = this.avatarHeight * CROUCH_MAX_HIPS_LIFT_RATIO;
+    // A squat keeps its hips low: the leg solver plants the feet instead.
+    const maxLift = this.avatarHeight * CROUCH_MAX_HIPS_LIFT_RATIO * (1 - squat);
     let requiredLift = 0;
 
     if (this.crouchLeftFoot) {
