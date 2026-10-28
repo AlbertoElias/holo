@@ -99,7 +99,7 @@ export interface UiViewModel {
   /** The supplied object, chosen before recording. */
   object: { status: 'none' | 'loading' | 'ready' | 'error'; name: string | null; message: string | null };
   /** The prepared tray (PRD-045): item names in slot order. */
-  tray: { names: string[]; loading: boolean; message: string | null };
+  tray: TrayUiState;
   faceCamera: 'off' | 'starting' | 'tracking' | 'no-face' | 'denied' | 'unavailable';
   /** The dominant hand, stored per device (docs/features/ui-redesign.md, Q8). */
   handedness: Handedness;
@@ -199,3 +199,18 @@ export type MockInputState = {
   thumbstick?: { moveX?: number; moveY?: number; turnX?: number; turnY?: number };
   turnMode?: 'snap' | 'smooth';
 };
+
+/** The tray as the dock row and the headset signifiers show it (docs/features/tray-everywhere.md). */
+export interface TrayUiState {
+  /** Item names in slot order. */
+  names: string[];
+  /** Filled slots in order; slots past the last are empty. */
+  slots: Array<{ slot: number; name: string; kind: 'model' | 'image'; thumbnail: string | null }>;
+  loading: boolean;
+  message: string | null;
+  open: boolean;
+  /** The summoning hand is full or reaching: a summon now does nothing. */
+  blocked: boolean;
+  /** Headset: the slot the summoning hand would take now, else null. */
+  reachableSlot: number | null;
+}

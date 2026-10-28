@@ -101,7 +101,10 @@ export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportF
     node.name = RECORDED_OBJECT_NODE_NAME;
     if (track.object.credit) node.userData[HOLOIM_CREDIT_EXTRAS_KEY] = track.object.credit;
     const model = track.object.model.clone(true);
-    const rest = track.object.origin === 'summoned' ? present.at(-1)!.last : present[0]!.first;
+    // In the scene when the event began, it was part of the set, however it got
+    // there (a summon before this take, or in an earlier one): prepared.
+    const origin = present[0]!.first === 0 ? 'prepared' : track.object.origin;
+    const rest = origin === 'summoned' ? present.at(-1)!.last : present[0]!.first;
     const resized = track.size.some((value, i) => track.relative[i] != null && Math.abs(value - 1) > SIZE_EPSILON);
     let size: THREE.Group | null = null;
     if (resized) {
@@ -143,7 +146,7 @@ export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportF
       node,
       credit: track.object.credit,
       name: track.object.name,
-      origin: track.object.origin,
+      origin,
       source: track.object.source,
       presence,
       holds

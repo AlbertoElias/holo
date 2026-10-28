@@ -12,7 +12,7 @@ import type { SceneObject, SceneObjectRegistry } from './SceneObjectRegistry';
 
 const SIDES = ['left', 'right'] as const;
 // A grab needs the avatar's palm this close to the object's bounds.
-const VR_REACH_M = 0.1;
+export const VR_REACH_M = 0.1;
 // Desktop: an object at or above the shoulder, its bounds within this fraction of the arm's reach of the shoulder joint.
 const DESKTOP_REACH_FRACTION = 1.15;
 // An object below the shoulder, its bounds within one arm's reach of the shoulder, measured across the floor; and no nearer than this to the feet.
@@ -67,8 +67,6 @@ const FETCH_SEC = 0.3;
 export interface ObjectStep {
   vrActive: boolean;
   deltaSec: number;
-  /** A take is recording: only then does a tray pick summon (PRD-045). */
-  recording: boolean;
   /** The take's clock, for the summon log. */
   timeSec: number;
   /** The body's facing (the camera's look yaw). */
@@ -133,8 +131,10 @@ interface Hold {
   lostSec: number;
   /** Grabbed by a mouse or touch press: lifting it releases. */
   pointer: boolean;
-  /** Taken by a flat-screen reach: the next press lets it go, like `G`. A tray summon is not. */
+  /** Taken by a flat-screen reach: the next press lets it go, like `G`. */
   reached: boolean;
+  /** Summoned from the tray on a flat screen: the next press (a touch on it, a click) lets it go, too. */
+  summoned?: boolean;
   /**
    * Being lowered onto the surface under it before it is let go. The object stays held meanwhile.
    * `squat`: nothing is within the arm's standing reach below, so the hand goes down to the floor (`handFrom` to `handTo`, world points)
@@ -292,8 +292,8 @@ export class ObjectInteraction {
     if (this.hold?.settle && anywhere) return this.hold.object;
     // A second press (mouse or touch) during a reach cancels it, wherever it falls.
     if (this.reach.isReaching()) return this.reach.object;
-    // The next press lets a prop held from a reach go, like G.
-    if (this.hold && !this.hold.settle) return this.hold.reached ? this.hold.object : null;
+    // The next press lets a prop held from a reach or a flat-screen summon go, like G.
+    if (this.hold && !this.hold.settle) return this.hold.reached || this.hold.summoned ? this.hold.object : null;
     const hit = this.nearestProp(ray);
     if (!hit) return null;
     if (this.desktopReachable(hit.object, carry)) return hit.object;
@@ -396,7 +396,7 @@ export class ObjectInteraction {
       const palm = this.palmWorld(side, this.pos2);
       if (!palm) continue;
       // An open tray's miniature wins over an object in reach (PRD-045).
-      const item = side === (step.summoner ?? 'right') && step.recording ? this.deps.tray.nearestItem(palm, VR_REACH_M) : null;
+      const item = side === (step.summoner ?? 'right') ? this.deps.tray.nearestItem(palm, VR_REACH_M) : null;
       if (item) {
         const summoned = this.deps.tray.summon(item, step.timeSec);
         this.writeWorld(summoned, this.deps.tray.miniaturePose(item, this.world));
@@ -444,7 +444,7 @@ export class ObjectInteraction {
     const reach = this.reach;
     this.lastBodyYaw = step.bodyYaw;
     const slot = step.desktop.summonSlot;
-    const item = slot !== null && step.recording && !this.hold && !reach.isReaching() ? tray.getItems().find((candidate) => candidate.slot === slot) : undefined;
+    const item = slot !== null && !this.hold && !reach.isReaching() ? tray.getItems().find((candidate) => candidate.slot === slot) : undefined;
     if (item && tray.isOpen() && this.readAnchor('right')) {
       // Appears in the right hand and rises with it as the carry pose blends in.
       const summoned = tray.summon(item, step.timeSec);
@@ -453,6 +453,7 @@ export class ObjectInteraction {
       summoned.placed = true;
       this.grab(summoned, 'right', false);
       this.hold!.desktop = true;
+      this.hold!.summoned = true;
     } else if (step.desktop.toggle) {
       if (reach.isReaching()) {
         // G again while reaching: stand back up, nothing grabbed.

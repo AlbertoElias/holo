@@ -67,7 +67,15 @@ export interface CameraResolutionInput {
   sceneMeshes: readonly THREE.Mesh[];
   /** The exported `RecordedObject` wrappers; a hit on any mesh below one names the wrapper. */
   objects: readonly THREE.Object3D[];
+  /**
+   * Each wrapper's presence, in seconds from `startSec`. An object placed during
+   * the take is no target for a hold that began before it was there. Absent: always present.
+   */
+  presence?: ReadonlyMap<THREE.Object3D, ReadonlyArray<{ start: number; end: number }>>;
 }
+
+// A hold starting within a frame of an object's first presence still sees it.
+const PRESENCE_SLACK_SEC = 1 / 30;
 
 /** Links at or above this confidence are written; below it nothing lights up. */
 export const POINT_MIN_CONFIDENCE = 0.5;
@@ -244,13 +252,11 @@ export class PointResolver {
     const screenHolds = input.store.getAimHolds().filter((hold) => hold.input === 'screen');
     if (screenHolds.length === 0) return { draft, report };
 
-    this.sceneTargets = new Map(input.sceneMeshes.map((mesh) => [mesh, sceneTarget(mesh)]));
-    for (const wrapper of input.objects) {
-      const target = objectTarget(wrapper);
-      wrapper.traverse((obj) => {
-        if (isThreeMesh(obj)) this.sceneTargets.set(obj, target);
-      });
-    }
+    const objectTargets = new Map<THREE.Object3D, Target>(input.objects.map((wrapper) => [wrapper, objectTarget(wrapper)]));
+    const presentAt = (wrapper: THREE.Object3D, sec: number): boolean => {
+      const spans = input.presence?.get(wrapper);
+      return !spans || spans.some((span) => sec >= span.start - PRESENCE_SLACK_SEC && sec <= span.end + PRESENCE_SLACK_SEC);
+    };
     this.raycaster.near = RAY_NEAR;
     this.raycaster.far = MAX_RAY_DISTANCE;
     const from = { camera: true as const, object: input.camera };
@@ -259,6 +265,13 @@ export class PointResolver {
       const end = hold.endSec ?? hold.samples.at(-1)!.timeSec;
       report.aimHolds.push({ side: hold.side, input: hold.input, start: round(start - t0), end: round(end - t0), samples: hold.samples.length });
       if (end - start < MIN_HOLD_SEC) continue;
+      this.sceneTargets = new Map(input.sceneMeshes.map((mesh) => [mesh, sceneTarget(mesh)]));
+      for (const [wrapper, target] of objectTargets) {
+        if (!presentAt(wrapper, start - t0)) continue;
+        wrapper.traverse((obj) => {
+          if (isThreeMesh(obj)) this.sceneTargets.set(obj, target);
+        });
+      }
       this.resolveHeld(hold, start, end, from, () => [], toSpan, draft, report);
     }
     this.sceneTargets = new Map();

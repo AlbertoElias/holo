@@ -32,7 +32,6 @@ export class ObjectSystem extends createSystem() {
     c.objects.update({
       vrActive: c.frame.vrActive,
       deltaSec: c.frame.deltaSec,
-      recording: c.recording.recorder.isEnabled(),
       timeSec: c.frame.elapsedSec,
       bodyYaw: c.camera.lookYaw,
       viewDirection: activeCamera(c).getWorldDirection(this.view),

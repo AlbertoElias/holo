@@ -42,8 +42,9 @@ export interface TraySnapshot {
  * The prepared tray (PRD-045): up to five items, seen only by the author.
  * Items are `authoring` objects in the registry, so the recorder and the
  * exporter never see them; while the tray is open they show as miniatures in
- * an arc above the avatar's holding palm (desktop: in front of the chest),
- * facing the author. `ObjectSystem` lays them out each step after the arms
+ * an arc above the avatar's holding palm, facing the author. On flat screens
+ * the dock's tray row shows them instead, so the arc is laid out (a summon
+ * starts from it) but not drawn. `ObjectSystem` lays them out each step after the arms
  * have their final pose. A summon adds a new full-size `event` object.
  */
 export class ObjectTray {
@@ -98,8 +99,9 @@ export class ObjectTray {
 
   /** Opens or closes the tray and lays out the miniatures for this step. */
   update(open: boolean, step: { vrActive: boolean; bodyYaw: number; hand: VrHandSide }): void {
-    this.open = open && this.items.length > 0;
-    for (const item of this.items) item.object.wrapper.visible = this.open;
+    // An empty tray opens too, so its five empty slots say what it is.
+    this.open = open;
+    for (const item of this.items) item.object.wrapper.visible = this.open && step.vrActive;
     if (!this.open) return;
 
     const anchor = step.vrActive ? this.palmAnchor(step.hand) : null;
@@ -165,9 +167,8 @@ export class ObjectTray {
     return object;
   }
 
-  /** Summoned objects leave with their take: the next take starts without them. */
-  clearSummoned(): void {
-    this.registry.clearSummoned();
+  /** A take starts: its summon log starts empty. Summoned objects stay in the scene. */
+  resetSummonLog(): void {
     this.summonLog.length = 0;
   }
 

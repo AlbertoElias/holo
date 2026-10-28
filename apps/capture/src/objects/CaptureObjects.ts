@@ -2,7 +2,7 @@ import { dominantHand, nonDominantHand, type Handedness } from '@holoim/xr-ui-co
 import * as THREE from 'three';
 
 import type { AuthoringFrame } from '../recording/authoringSpans';
-import type { HandPoseSource } from '../types/contracts';
+import type { HandPoseSource, TrayUiState } from '../types/contracts';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
@@ -11,12 +11,13 @@ import type { UIStateStore } from '../ui/UIStateStore';
 import type { XrTracking } from '../xr/XrTracking';
 import { DesktopCarryPose } from './DesktopCarryPose';
 import { ObjectGrabInput } from './ObjectGrabInput';
-import { ObjectInteraction, type ObjectStep } from './ObjectInteraction';
+import { ObjectInteraction, type ObjectStep, VR_REACH_M } from './ObjectInteraction';
 import { MAX_TRAY_BYTES, MAX_TRAY_ITEMS, ObjectTray } from './ObjectTray';
 import { SceneObjectRegistry, type SceneObject } from './SceneObjectRegistry';
 import { fetchSuppliedObject, parseSuppliedObject, readSuppliedObjectFile, type SuppliedObjectInput, SuppliedObjectError } from './suppliedObject';
 import { TrayGestureInput } from './TrayGestureInput';
 import { parseTrayItem } from './trayItem';
+import { type TrayThumbnail, TrayThumbnailer } from './trayThumbnail';
 
 export interface CaptureObjectsDeps {
   worldGroup: THREE.Group;
@@ -46,6 +47,12 @@ export class CaptureObjects {
   private loadSeq = 0;
   private trayLoadSeq = 0;
   private lastAuthoring: AuthoringFrame | null = null;
+  private readonly thumbnailer: TrayThumbnailer;
+  private readonly thumbnails = new Map<number, TrayThumbnail>();
+  // Tray loads run one after another, so a pick made while another loads is never dropped.
+  private trayLoads: Promise<unknown> = Promise.resolve();
+  private trayLoadsPending = 0;
+  private trayLive = { open: false, blocked: false, reachableSlot: null as number | null };
   private readonly palm = new THREE.Vector3();
   private readonly pickRay = new THREE.Raycaster();
   private readonly pickNdc = new THREE.Vector2();
@@ -56,6 +63,7 @@ export class CaptureObjects {
     this.carry = new DesktopCarryPose(deps.avatar);
     this.tray = new ObjectTray(this.registry, deps.avatar, deps.embodyOffset);
     this.trayGesture = new TrayGestureInput(deps.renderer, deps.tracking);
+    this.thumbnailer = new TrayThumbnailer(deps.renderer);
     this.interaction = new ObjectInteraction({
       registry: this.registry,
       avatar: deps.avatar,
@@ -143,6 +151,7 @@ export class CaptureObjects {
     // A grab by the holding hand closes the tray at once.
     if (this.interaction.isHolding(holder) && this.tray.isOpen()) this.tray.update(false, { vrActive, bodyYaw: step.bodyYaw, hand: holder });
     const palm = vrActive ? this.interaction.palmPosition(summoner, this.palm) : undefined;
+    this.publishTrayLive(vrActive, summoner, palm);
     this.lastAuthoring = {
       // Desktop tray motion moves no arm, so it has no hands-in-menu spans.
       trayOpen: vrActive && this.tray.isOpen(),
@@ -180,25 +189,49 @@ export class CaptureObjects {
     return this.loadTray(files.map((file) => () => readSuppliedObjectFile(file)));
   }
 
-  /** A take starts: summoned objects from the last one leave the scene. */
+  /**
+   * A take starts. Nothing leaves the scene (the user, 2026-10-28): what is in
+   * it now is in the take from its first frame. Only the summon log restarts.
+   */
   startTake(): void {
-    this.tray.clearSummoned();
+    this.tray.resetSummonLog();
     this.lastAuthoring = null;
   }
 
+  /** The scene the world group is drawn in (a structural check: three copies may differ). */
+  private liveScene(): THREE.Scene | undefined {
+    let root: THREE.Object3D = this.deps.worldGroup;
+    while (root.parent) root = root.parent;
+    return (root as THREE.Scene).isScene ? (root as THREE.Scene) : undefined;
+  }
+
+  /** A tray item's thumbnail, for a UIKit texture in a headset or phone AR. */
+  trayThumbnail(slot: number): TrayThumbnail | null {
+    return this.thumbnails.get(slot) ?? null;
+  }
+
   /**
-   * Adds items to the tray, before recording. All of a pick is refused
+   * Adds items to the tray, before or during a take. All of a pick is refused
    * together when it would pass five items or the size budget, or when any
-   * item is refused; capture keeps working with the tray it had.
+   * item is refused; capture, and a take, keep going with the tray it had.
    */
-  private async loadTray(reads: Array<() => Promise<SuppliedObjectInput>>): Promise<boolean> {
+  private loadTray(reads: Array<() => Promise<SuppliedObjectInput>>): Promise<boolean> {
+    this.trayLoadsPending += 1;
+    const run = this.trayLoads.then(() => this.loadTrayNow(reads)).finally(() => {
+      this.trayLoadsPending -= 1;
+      this.deps.ui.setTrayState({ ...this.deps.ui.getState().tray, loading: this.trayLoadsPending > 0 });
+    });
+    this.trayLoads = run.catch(() => undefined);
+    return run;
+  }
+
+  private async loadTrayNow(reads: Array<() => Promise<SuppliedObjectInput>>): Promise<boolean> {
     const { ui } = this.deps;
     const fail = (message: string) => {
       console.warn(message);
       ui.setTrayState({ ...this.trayState(), message });
       return false;
     };
-    if (this.deps.isTakeActive()) return fail('Prepare the tray before recording.');
     if (this.tray.getItems().length + reads.length > MAX_TRAY_ITEMS) return fail(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
     const seq = ++this.trayLoadSeq;
     ui.setTrayState({ ...this.trayState(), loading: true, message: null });
@@ -208,9 +241,16 @@ export class CaptureObjects {
       if (total > MAX_TRAY_BYTES) throw new SuppliedObjectError(`The tray would be ${(total / 1048576).toFixed(1)} MB; the limit is ${MAX_TRAY_BYTES / 1048576} MB.`);
       const loaded = await Promise.all(inputs.map(async (input) => ({ input, item: await parseTrayItem(this.deps.loader, input) })));
       if (seq !== this.trayLoadSeq) return false;
-      if (this.deps.isTakeActive()) throw new SuppliedObjectError('Prepare the tray before recording.');
       if (this.tray.getItems().length + loaded.length > MAX_TRAY_ITEMS) throw new SuppliedObjectError(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
-      for (const { input, item } of loaded) this.tray.add(item.model, { name: item.credit?.title ?? item.source.name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });
+      for (const { input, item } of loaded) {
+        const added = this.tray.add(item.model, { name: item.credit?.title ?? item.source.name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });
+        // Also uploads its textures and compiles its shaders now, not at its first draw mid-take.
+        const thumbnail = await this.thumbnailer.render(item.model, this.liveScene()).catch((error: unknown) => {
+          console.warn(`[tray] no thumbnail for ${added.object.name}: ${(error as Error).message}`);
+          return null;
+        });
+        if (thumbnail) this.thumbnails.set(added.slot, thumbnail);
+      }
       ui.setTrayState({ ...this.trayState(), message: null });
       return true;
     } catch (error) {
@@ -220,8 +260,27 @@ export class CaptureObjects {
     }
   }
 
-  private trayState(): { names: string[]; loading: boolean; message: string | null } {
-    return { names: this.tray.getItems().map((item) => item.object.name), loading: false, message: null };
+  private trayState(): TrayUiState {
+    const items = this.tray.getItems();
+    return {
+      names: items.map((item) => item.object.name),
+      slots: items.map((item) => ({ slot: item.slot, name: item.object.name, kind: item.kind, thumbnail: this.thumbnails.get(item.slot)?.url ?? null })),
+      loading: this.trayLoadsPending > 0,
+      message: null,
+      ...this.trayLive
+    };
+  }
+
+  /** The tray's open state, whether a summon would be refused, and (headset) the item in reach; published on change. */
+  private publishTrayLive(vrActive: boolean, summoner: 'left' | 'right', palm: THREE.Vector3 | null | undefined): void {
+    const open = this.tray.isOpen();
+    const blocked = this.interaction.isHolding(summoner) || this.interaction.isReachActive();
+    const reachableSlot = open && vrActive && palm && !blocked ? (this.tray.nearestItem(palm, VR_REACH_M)?.slot ?? null) : null;
+    const live = this.trayLive;
+    if (live.open === open && live.blocked === blocked && live.reachableSlot === reachableSlot) return;
+    this.trayLive = { open, blocked, reachableSlot };
+    const current = this.deps.ui.getState().tray;
+    this.deps.ui.setTrayState({ ...current, ...this.trayLive });
   }
 
   /** Replaces the prepared object. A failed load keeps capture working without one. */

@@ -78,6 +78,7 @@ export class InputController {
   private readonly resizeKeys = new Set<'grow' | 'shrink'>();
   // Desktop tray (PRD-045): T holds it open; 1–5 while held summon (queued for the next step).
   private trayHeld = false;
+  private trayOpenFromUi = false;
   private summonSlotQueued: number | null = null;
   private focusRecoveryUntilMs = 0;
   private lastFocusAttemptMs = 0;
@@ -206,8 +207,19 @@ export class InputController {
     return grab;
   }
 
+  /** T, or the dock's tray row held open; a slot queued from the row holds it for its step. */
   isTrayHeld(): boolean {
-    return this.trayHeld;
+    return this.trayHeld || this.trayOpenFromUi || this.summonSlotQueued !== null;
+  }
+
+  /** The flat dock's Tray glyph opened or closed the tray (docs/features/tray-everywhere.md). */
+  setTrayOpenFromUi(open: boolean): void {
+    this.trayOpenFromUi = open;
+  }
+
+  /** A click or tap on a flat tray slot summons it, as T + its key does. */
+  queueSummonSlot(slot: number): void {
+    this.summonSlotQueued = slot;
   }
 
   consumeSummonSlot(): number | null {
@@ -326,6 +338,7 @@ export class InputController {
     this.pushQueuedM = 0;
     this.resizeKeys.clear();
     this.trayHeld = false;
+    this.trayOpenFromUi = false;
     this.summonSlotQueued = null;
     this.pointSources.clear();
     this.touchAim = null;

@@ -328,6 +328,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       loadObjectFile: (file) => void objects.loadFile(file),
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       loadTrayUrls: (urls) => void objects.loadTrayUrls(urls),
+      setTrayOpen: (open) => input.setTrayOpenFromUi(open),
+      summonTraySlot: (slot) => input.queueSummonSlot(slot),
       toggleFaceCamera: () => capture.face.toggleCamera(),
       setHandedness,
       toggleXr: (mode) => {

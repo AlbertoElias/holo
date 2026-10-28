@@ -16,7 +16,7 @@ export class UIStateStore {
     heightFit: { enabled: false, pending: false, eyeHeight: null },
     micPermission: 'pending',
     object: { status: 'none', name: null, message: null },
-    tray: { names: [], loading: false, message: null },
+    tray: { names: [], slots: [], loading: false, message: null, open: false, blocked: false, reachableSlot: null },
     faceCamera: 'off',
     handedness: loadHandedness(),
     recordingElapsedMs: 0,

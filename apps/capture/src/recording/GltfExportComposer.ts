@@ -303,7 +303,8 @@ export class GltfExportComposer {
     const clip = new THREE.AnimationClip('RecordedMotion', -1, tracks);
 
     // Held marks: cast against the set and the objects as exported, in the set's frame. The
-    // objects stand still in a camera take (a camera author cannot grab one), so their rest pose is theirs throughout.
+    // objects stand still in a camera take (a camera author places but never grabs one), so their
+    // rest pose is theirs throughout; one placed mid-take is a target only for holds after it.
     let meaning: MeaningDraft | undefined;
     if (input.pointStore.hasSamples()) {
       scene.updateMatrixWorld(true);
@@ -313,7 +314,8 @@ export class GltfExportComposer {
         endSec: samples.at(-1)!.timeSec,
         camera,
         sceneMeshes: [...sceneBubble.clippedBySource.values()],
-        objects: objects?.nodes ?? []
+        objects: objects?.nodes ?? [],
+        presence: new Map((objects?.drafts ?? []).map((entry) => [entry.node, entry.presence]))
       });
       this.lastPointReport = report;
       if (draft.marks.length > 0) meaning = draft;
