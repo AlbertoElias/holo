@@ -766,3 +766,30 @@ bug above.)
   scrolling away just after a drag on a playing card stays scrolled" fails
   without the fix (feed back at 0) and passes with it; the whole spec passed
   27 of 27 (`--repeat-each=3`, one worker).
+
+### B-037 — AR recenter click sometimes misses on a hosted runner
+
+- **Area:** `apps/viewer-web/e2e/hologram-feed.spec.ts` ("AR places the model on a surface … recenter places again"), `rayClick`
+- **Severity:** P2 (fails CI and holds back the viewer deploy)
+- **Observed:** 2026-10-28, run 40617371918 (viewer shard 1/4), on `931710be7bbd`
+- **Evidence:** the first placement anchors at 8.9 s; after `recenterFromFoot`
+  no placement with a higher sequence arrives in 15 s
+  (`hologram-feed.spec.ts:463`). Passed 8 of 8 in `scripts/ci-emulate.sh`
+  (alone ×5, the whole shard ×3) and on runs 40612369043 and 40616950365.
+  Likely cause: `rayClick` presses and releases the trigger one real frame
+  apart, and IWSDK counts a press held past 800 ms of frame time as no
+  click, so one long frame on a slow runner drops the Recenter select.
+- **Expected:** the press and release land deterministically: step the page
+  clock (as the xr-viewer checks do) rather than ride real frames.
+- **Reproduction:** a 900 ms real-time stall between the press and the
+  release in `rayClick` (what one long runner frame looks like to IWSDK)
+  fails the test locally with the same signature at the same line.
+- **Fix:** `rayClick` lifts the emulated rays' `clickThresholdMs`, as
+  `xr-viewer.spec.ts` does since B-026: any press and release on one target
+  is a click, whatever the frame times; the spec drives the controls, not
+  IWSDK's long-press rule. Stepping a frozen page clock (the suggested fix)
+  also passed, but installing the clock before the feed loads let the feed's
+  reach controls fold (`tokens.glyph.idleAfter`) before Playwright's click on
+  View in your room landed on a slowed page, a new race. With the fix, the
+  900 ms stall passes locally and in `scripts/ci-emulate.sh` (×2), the test
+  alone passes 5 of 5 there, and the whole viewer shard 1 passes 2 of 2.

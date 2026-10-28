@@ -361,15 +361,25 @@ async function setPose(page: Page, who: "head" | "left" | "right", position: Vec
   await waitForXrFrames(page, 2);
 }
 
-/** Aims the right controller's ray at a world point and pulls the trigger. */
+/**
+ * Aims the right controller's ray at a world point and clicks: the trigger
+ * is pressed on one frame and released on the next. IWSDK's ray counts a
+ * press longer than 800 ms of frame time as no click, and one emulated frame
+ * on a slow runner can last longer than that (B-037), so the emulated rays
+ * take any press and release on one target as a click, as in xr-viewer.spec.ts.
+ * The spec drives the controls, not that long-press rule.
+ */
 async function rayClick(page: Page, target: Vec3, from: Vec3): Promise<void> {
+  await page.evaluate(() => {
+    const multiPointers = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { input: { xr: { multiPointers: Record<"left" | "right", { getPointer(kind: "ray"): { options: { clickThresholdMs?: number } } }> } } } } }).__HOLOIM_XR_VIEWER__.world.input.xr.multiPointers;
+    for (const hand of ["left", "right"] as const) multiPointers[hand].getPointer("ray").options.clickThresholdMs = Number.POSITIVE_INFINITY;
+  });
   await setPose(page, "right", from, target);
   for (const value of [1, 0]) {
     await page.evaluate((v) => {
       (window as unknown as { IWER_DEVICE: { controllers: Record<string, { updateButtonValue(id: string, v: number): void }> } }).IWER_DEVICE.controllers.right!.updateButtonValue("trigger", v);
     }, value);
-    // One frame reads each: IWSDK counts a press held past 800 ms of frame time as no click.
-    // An Exit press ends the session.
+    // One frame reads each. An Exit press ends the session.
     await waitForXrFrames(page, 1, { ended: true });
   }
 }
