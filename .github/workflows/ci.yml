@@ -9,7 +9,7 @@ name: CI
 #
 # Deploy runs in this workflow: each app deploys as soon as every suite that
 # exercises it has passed, from a production build (viewer, capture) or API
-# image made while the tests ran (docs/features/ci-under-5m.md). Manual
+# image made while the tests ran (docs/features/archive/ci-under-5m.md). Manual
 # redeploys and rollbacks stay in deploy.yml.
 on:
   push:

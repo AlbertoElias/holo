@@ -2,7 +2,7 @@ name: Deploy
 
 # Manual redeploy or rollback of the chosen targets (default all) from the
 # Actions tab. Pushes to main deploy from ci.yml as soon as each app's suites
-# pass (docs/features/ci-under-5m.md); this workflow builds from source and
+# pass (docs/features/archive/ci-under-5m.md); this workflow builds from source and
 # shares ci.yml's per-app deploy groups, so the two never deploy one app at
 # the same time.
 on:
