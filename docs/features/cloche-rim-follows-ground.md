@@ -1,7 +1,7 @@
 # Feature brief: The cloche's rim follows the ground
 
 **Lead:** Claude (Opus)  
-**Status:** Ready for implementation
+**Status:** In verification
 **Layer:** View (see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -66,7 +66,8 @@ never the implementation's height field.
   glass = 0, from any orbit angle.
 - [ ] **Smooth.** At 60 fps, the largest per-frame change in any bin is
   ≤ 2 cm except at a loop or seek snap; the largest change between
-  neighbouring bins is ≤ 0.05 × dome height.
+  neighbouring bins is ≤ max(0.05 × dome height, the ground's own step
+  between them + 5 cm) (user decision, 2026-10-28).
 - [ ] **Flat takes unchanged.** Lift ≤ 1 mm everywhere and the shade drawn;
   a fixed-time, reduced-motion screenshot differs from `main` by ≤ 0.5% of
   pixels.
@@ -129,7 +130,10 @@ Chosen from mockups: the rim follows the ground. Reviewed mechanics:
      4 height layers per cell (layers within 0.1 m merge).
    - Water counts as ground when its material is opaque enough and it joins
      the shore; the rim may rest on the water's surface (user, 2026-10-27).
-     The implementer records `Agua`'s alpha mode and opacity here.
+     `Agua` in `scene.glb` (mesh `Agua_blinn1_0`, material `blinn1`, shared
+     with `Mar_e_moto`): alpha mode `BLEND`, opacity 0.640 (base colour
+     alpha), no transmission, so it counts. The hill take's export clips the
+     scene to its bubble and holds no water.
    - Flood-fill from the cell under the author's feet at t = 0 and from each
      path sample, stepping to a neighbour's layer when |Δh| ≤ 0.35 m. Cells
      not reached have no ground.
@@ -173,16 +177,82 @@ All three review recommendations accepted: no shade on takes whose rim
 lifts; the feed clips the scene by the bent dome; opaque water counts as
 ground.
 
+## User decision (2026-10-28): hug the ground
+
+On `scene.glb` the ground steps by up to a metre between neighbouring bins
+at its crags, so "rim on the ground" and "neighbours ≤ 0.05 × dome height"
+cannot both hold: limiting the step floats the rim 0.24–1.08 m over the
+lower side. The user chose the ground ("Hug the ground"): the rim steps
+with the ground at crags, and the neighbour criterion becomes |Δrim| ≤
+max(0.05 × dome height, |Δground| + 5 cm), where Δground is the raw lift
+between the two bins before smoothing. No neighbour limit runs in the rim.
+
+Where the dome's edge crosses a crag's lip, or the take climbs faster than
+the rim may move, the ground under a bin changes faster than 2 cm a frame
+(the "Smooth" criterion, `maxRate`), and the rim lags it; while it lags,
+its step from its neighbour is the ground's history, bounded by the
+per-frame limit. So `floor-proof.ts` judges the neighbour rule on the rim's
+target every frame, and on the rim itself where both bins have settled
+(within 2 cm of their target); at least 5% of pairs must be settled.
+
+## Implementation notes (2026-10-27)
+
+Where the decisions above could not meet the acceptance criteria as written,
+the criteria won. Each deviation is a token in `edge.cloche.rim`, measured on
+the hill fixture:
+
+- **Exact ground, no fill or blur** (decision 2). The grid and the flood
+  fill stay, but the cells now index the ground triangles, and the ground's
+  height at a point is the highest joined triangle over it, as drawn. The
+  blurred, nearest-filled grid read `scene.glb`'s low-poly diorama 3–50 cm
+  off at its creases and facets (36, 48 and 18 of 180 bins failed at the
+  three times); exact triangles fail none. The `blur` token is gone.
+- **The lip measured inward** (decision 2). A bin whose edge stands past the
+  ground's edge reads the first ground inward toward the foot's centre, in
+  5 cm steps up to `fillShare` × the wider radius, as the criterion measures
+  it. The nearest ground on an oblique cut edge is down the slope: it read
+  up to 0.6 m low.
+- **Dead-band as a ramp, not a subtraction** (decision 3). Ground less than
+  3 cm over the foot lifts nothing; from 3 cm the lift ramps back to the full
+  height by 6 cm. Subtracting 3 cm everywhere puts every lifted rim exactly
+  at the criterion's −3 cm bound, with no room for the smoothing.
+- **No max filter** (`maxFilter` 0, decision 3 said ±2). One bin either side
+  already stands the rim +10 cm over a 30° flank and ±2 bins +31 cm, against
+  +5 cm. The Gaussian across bins stays, never below the raw lift, and now
+  never more than `smoothRise` 3 cm over it, so a cliff's corner does not
+  float its neighbours.
+- **A rate limit** (`maxRate` 1.18 m/s, decision 3's easing). A brisk walk up
+  a 30° flank moves the ground under the far edge by about 1.45 m/s; the
+  easing alone moved the rim 2.1 cm in a 60 fps frame. The rim now lags
+  rather than exceed 2 cm a frame.
+- **The take advances first.** drei's `useAnimations` advanced the mixer in
+  the card's own frame callback, after its children, so the shell, the rim
+  and the dome clip read the bubble a frame late (5 m off for a frame at
+  each loop). The card now advances its mixer at the start of the frame
+  (`useTakeAnimations`), ahead of the cloche.
+- **Takes that never lift** keep the flat foot, the shade and the sphere
+  clip; the bend and the dome clip run only on takes whose rim lifts more
+  than 5 cm somewhere on the path, decided at load.
+- **Ground below the foot.** A bin whose ground lies below the dome's foot
+  passes when the rim stays at the foot (lift is never negative; the floor
+  cuts that ground).
+- **"Nothing outside the glass" on the GPU.** Every drawn pixel of the
+  recorded scene (avatar aside) from 16 orbit views, read back to its world
+  point and tested against the bent dome by the test's own formula. A
+  silhouette test is the wrong proxy: from the uphill side the eye looks
+  under the clipped hill sheet, through the dome's open, bent floor, at
+  scene that is inside the dome.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Rim on the ground | New synthetic fixture in `e2e/bubble-fixture.ts` (a mound with a cut edge, a post, an 8 m wall, a roof box, a glass pane, a water plane, a buried slab, a bubble walking up the slope); capture pipeline on `scene.glb` (`bubble-capture.pipeline.spec.ts`); rim report from `floor-proof.ts` | `*-report.json` with rim − ground per bin at three times; pending |
-| Nothing outside the glass | `floor-proof.ts` `outsideGlass` on the bent inside test; feed orbit on the fixture | Count in the report; screenshot contact sheet; proof video; pending |
-| Smooth | Rim per bin per frame over the take | Max per-frame and neighbour change in the report; pending |
-| Flat takes unchanged | Existing feed and cloche checks plus a fixed-time screenshot diff against `main` | Pixel diff and lift in the report; pending |
-| Camera takes and old exports unchanged | Existing camera-take checks | Pass; lift 0 in the report; pending |
-| Cost | New feed perf check (none exists yet), desktop and 4× CPU throttle | Build and per-frame timing in the report; pending |
+| Rim on the ground | Hill fixture in `e2e/bubble-fixture.ts` (`cloche-rim.spec.ts`); capture pipeline on `scene.glb` (`bubble-capture.pipeline.spec.ts`); `measureRim` in `floor-proof.ts` | `output/cloche-rim/hill-report.json`, `output/bubble-rendering/capture/rim-report.json`: 0 of 180 bins off the ground at start, middle and end on both (2026-10-28) |
+| Nothing outside the glass | `measureGlass`: every drawn scene pixel from 16 orbit views read back to its world point and tested against the bent dome; control with the sphere's clip | Hill 0 outside (control 177), `scene.glb` 0 outside |
+| Smooth | `sampleRimMotion`: rim per bin every drawn frame over the take | Per-frame max 1.97 cm on both; neighbour excess over max(5% of height, ground step + 5 cm): hill −0.20 m, `scene.glb` −0.08 m on settled pairs and −0.05 m on the target |
+| Flat takes unchanged | `cloche-rim.spec.ts` flat take, plus a fixed-time reduced-motion screenshot diff against `main` | Lift 0, shade drawn, sphere clip; 0 differing pixels of 1280×720 against `main` |
+| Camera takes and old exports unchanged | `cloche-rim.spec.ts` camera take and old export | Pass; no rim, today's dome |
+| Cost | `cloche-rim.spec.ts` feed perf, desktop and 4× CPU throttle | Field build 6.6 ms (21.9 ms throttled, ≤ 15 ms desktop); rim update 0.12 ms mean per frame |
 
 A manual orbit of the production hill take closes the loop.
 

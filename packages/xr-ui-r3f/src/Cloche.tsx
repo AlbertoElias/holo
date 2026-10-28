@@ -28,6 +28,12 @@ export interface ClocheProps {
   reducedMotion: boolean;
   /** The soot rule's input (3.2); the cloche turns it into char, never a shadow. */
   soot: SootInput;
+  /**
+   * The feed's rim (3.4): the foot's lift per direction, read every frame
+   * (the caller updates `heights` in place), and whether the shade is drawn.
+   * Omit for a flat foot and the shade.
+   */
+  rim?: { heights: ArrayLike<number> | null; shade: boolean } | undefined;
 }
 
 /**
@@ -35,19 +41,21 @@ export interface ClocheProps {
  * space, or inside a placed hologram's group (AR), never under the camera.
  * Its group is named `cloche`.
  */
-export function Cloche({ seed, shape, shift, target: targetProp, recording, inFocus, reducedMotion, soot }: ClocheProps) {
+export function Cloche({ seed, shape, shift, target: targetProp, recording, inFocus, reducedMotion, soot, rim }: ClocheProps) {
   const target = useStable(targetProp);
   const cloche = useMemo(() => new ThreeCloche({ seed, shape }), [seed, shape]);
   useEffect(() => () => cloche.dispose(), [cloche]);
 
   const invalidate = useThree((state) => state.invalidate);
-  const inputs = useLatest({ target, recording, inFocus, reducedMotion, soot, shift });
+  const inputs = useLatest({ target, recording, inFocus, reducedMotion, soot, shift, rim });
   const scratch = useMemo(() => ({ eye: new Vector3(), centre: new Vector3(), scale: new Vector3(), buffer: new Vector2() }), []);
 
   const paint = useCallback(
     (state: { camera: Camera; gl: WebGLRenderer; clock: Clock }) => {
-      const { target: at, recording: isRecording, inFocus: focus, reducedMotion: reduced, soot: sootInput, shift: moved } = inputs.current;
+      const { target: at, recording: isRecording, inFocus: focus, reducedMotion: reduced, soot: sootInput, shift: moved, rim: bent } = inputs.current;
       const { group } = cloche;
+      cloche.setRim(bent?.heights ?? null);
+      cloche.setShade(bent?.shade ?? true);
       group.position.set(shape.base.x + (moved?.x ?? 0), shape.base.y + (moved?.y ?? 0), shape.base.z + (moved?.z ?? 0));
       group.updateWorldMatrix(true, false);
       const presenting = state.gl.xr?.isPresenting === true;

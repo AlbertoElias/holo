@@ -1,4 +1,4 @@
-import { useAnimations, useGLTF } from "@react-three/drei";
+import { useGLTF } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -15,12 +15,15 @@ import {
 import type { AnimationAction, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
 import { tokens } from "@holoim/design-tokens";
 import type { ObjectCredit } from "@holoim/objects";
-import { clocheFollowDirection, clocheFraming, clocheValue, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
+import { clocheFollowDirection, clocheFraming, clocheInside, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
 import { Cloche } from "@holoim/xr-ui-r3f";
+import { ClocheRimTexture } from "@holoim/xr-ui-three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { useSphereClipping } from "../hologram/useSphereClipping";
-import type { SphereClipResult } from "../hologram/useSphereClipping";
+import type { DomeClip, SphereClipResult } from "../hologram/useSphereClipping";
+import { useTakeAnimations } from "../hologram/useTakeAnimations";
+import { buildGroundField, cachedGroundField, groundFieldBudget, readRimTake, RimMotion, takeSamples, type RimTake } from "../hologram/groundField";
 import { useGltfAudio } from "../hologram/useGltfAudio";
 import { drawnBounds, drawnPoints, motionPoints } from "../hologram/drawnPoints";
 import { isCameraTake } from "../hologram/hologramScene";
@@ -93,6 +96,28 @@ const STAGE_LIGHT_DROP_METERS = 0.7;
 const FOLLOW_DIRECTION = new Vector3().copy(clocheFollowDirection());
 /** Inside end never comes closer than this share of the Follow distance. */
 const MAX_INSIDE_SHARE = 0.6;
+const RIM = tokens.edge.cloche.rim;
+
+/** What the feed's rim (3.4) did, for the e2e checks: ready once its ground field is read. */
+export type RimProbe = {
+  /** The rim may run: the sphere clip is active, a performer (not a camera) recorded it, with a recorded scene. */
+  gated: boolean;
+  rimReady: boolean;
+  /** The take's rim lifts somewhere on its path: no shade, and the bent dome clips the scene. */
+  lifts: boolean;
+  maxLift: number;
+  buildMs: number | null;
+  candidates: number;
+  /** The heights the cloche and the clip read this frame, and the target they ease toward. */
+  heights: Float32Array | null;
+  target: Float32Array | null;
+  /** The ground's lift per bin before smoothing. */
+  raw: Float32Array | null;
+  framing: Float32Array | null;
+  timing: { lastMs: number; meanMs: number; maxMs: number; frames: number } | null;
+  /** The ground's height at a world point, NaN where there is none (the field, for diagnostics only). */
+  groundAt: ((x: number, z: number) => number) | null;
+};
 
 function getFramingTargets(root: Object3D): Object3D[] {
   const targets = new Set<Object3D>();
@@ -170,6 +195,16 @@ function easeInOut(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/**
+ * Runs `run` every frame ahead of the siblings mounted after it: R3F calls
+ * frame callbacks in subscription order, and children subscribe before
+ * their parent.
+ */
+function FrameFirst({ run }: { run: (delta: number) => void }) {
+  useFrame((_, delta) => run(delta));
+  return null;
+}
+
 function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author }: {
   url: string;
   author: string;
@@ -213,7 +248,17 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   }, [audioState.hasAudio, onHasAudio]);
   const { camera, invalidate, gl: renderer, scene: renderScene } = useThree();
   const clonedScene = useMemo(() => cloneSkeleton(scene), [scene]);
-  const sphereClip = useSphereClipping(clonedScene, { falloffWidth: SPHERE_CLIP_FALLOFF });
+  // The feed clips a take whose rim lifts by the bent dome (3.4); its uniforms are set once the cloche is fitted.
+  const domeRim = useMemo(() => new ClocheRimTexture(), []);
+  useEffect(() => () => domeRim.dispose(), [domeRim]);
+  const domeClip = useMemo<DomeClip>(() => ({
+    u_domeOn: { value: 0 },
+    u_domeBase: { value: new Vector3() },
+    u_domeRadii: { value: new Vector3(1, 1, 1) },
+    u_domeExponent: { value: 2 },
+    u_domeRim: { value: domeRim.texture }
+  }), [domeRim]);
+  const sphereClip = useSphereClipping(clonedScene, { falloffWidth: SPHERE_CLIP_FALLOFF, dome: domeClip });
   const meaningLinks = useMemo(() => readMeaningLinks(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
   const recordedObjects = useMemo(() => readRecordedObjects(gltf as unknown as MeaningGltf, clonedScene), [gltf, clonedScene]);
   const credits = useMemo(() => readObjectCredits(recordedObjects), [recordedObjects]);
@@ -236,7 +281,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   const cameraTakeRef = useRef(false);
   const setBoundsRef = useRef<Box3 | null>(null);
   const avatarAnchorRef = useRef<{ hips: Object3D; head: Object3D | null } | null>(null);
-  const { actions, mixer } = useAnimations(animations, clonedScene);
+  const { actions, mixer } = useTakeAnimations(animations, clonedScene);
   // The cloche (3.4), fitted once on the first drawn frame, when the bubble's
   // live centre and the actions are known. A bubble moves with its author, so
   // the dome follows it by the centre's shift since the fit.
@@ -247,6 +292,41 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   const frameRectRef = useRef(frameRect);
   frameRectRef.current = frameRect;
   const framingRef = useRef<{ key: string; framing: ClocheFraming } | null>(null);
+  // The rim follows the ground (3.4): read at the fit, or a frame later when another card is reading its own.
+  const rimRef = useRef<{ take: RimTake; motion: RimMotion } | null>(null);
+  const rimPending = useRef(false);
+  const rimProp = useRef<{ heights: Float32Array | null; shade: boolean }>({ heights: null, shade: true }).current;
+  const rimProbe = useRef<RimProbe>({ gated: false, rimReady: false, lifts: false, maxLift: 0, buildMs: null, candidates: 0, heights: null, target: null, raw: null, framing: null, timing: null, groundAt: null }).current;
+  const buildRimNow = useCallback((shape: ClocheShape) => {
+    rimPending.current = false;
+    const sceneBubble = clonedScene.getObjectByName("RecordedSceneBubble");
+    const fitted = fittedCentre.current;
+    if (!sceneBubble || !fitted) return;
+    const samples = takeSamples(clonedScene, animations, RIM.framingSamples);
+    if (samples.length === 0) return;
+    // The grid covers where the foot goes, and the dome's reach around it.
+    const reach = Math.max(shape.radii.x, shape.radii.z);
+    const margin = reach + RIM.gridMargin;
+    const box = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+    for (const sample of samples) {
+      const x = shape.base.x + sample.bubble.x - fitted.x;
+      const z = shape.base.z + sample.bubble.z - fitted.z;
+      box.minX = Math.min(box.minX, x - margin);
+      box.maxX = Math.max(box.maxX, x + margin);
+      box.minZ = Math.min(box.minZ, z - margin);
+      box.maxZ = Math.max(box.maxZ, z + margin);
+    }
+    clonedScene.updateWorldMatrix(true, false);
+    const key = `${clonedScene.matrixWorld.elements.map((value) => value.toFixed(4)).join(",")}|${[box.minX, box.maxX, box.minZ, box.maxZ].map((value) => value.toFixed(2)).join(",")}`;
+    const field = cachedGroundField(scene, key, () => buildGroundField(sceneBubble, { box, seeds: samples.map((sample) => sample.feet) }));
+    if (!field) return;
+    const take = readRimTake(shape, field, samples, fitted);
+    rimRef.current = { take, motion: new RimMotion(shape, field) };
+    Object.assign(rimProbe, { rimReady: true, lifts: take.lifts, maxLift: take.maxLift, buildMs: field.buildMs, candidates: field.candidates, framing: take.framing, groundAt: field.heightAt });
+    // Decided once, so nothing pops in playback: a take whose rim lifts stands on its ground, with no shade (5.1).
+    rimProp.shade = !take.lifts;
+    framingRef.current = null;
+  }, [animations, clonedScene, rimProbe, rimProp, scene]);
   const fitClocheNow = useCallback(() => {
     const bubble = sphereClip.active && sphereClip.radius > 0 ? { center: sphereClip.center.clone(), radius: sphereClip.radius } : null;
     // A bubble follows its author, so the walk is read relative to it: the author's full reach, not their path.
@@ -259,18 +339,58 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     fittedCentre.current = bubble ? bubble.center : null;
     clocheRef.current = shape;
     setCloche(shape);
+    // A performer's take with its recorded scene; a camera take and an old export keep today's dome.
+    rimProbe.gated = Boolean(bubble) && !isCameraTake(clonedScene) && Boolean(clonedScene.getObjectByName("RecordedAvatar")) && Boolean(clonedScene.getObjectByName("RecordedSceneBubble"));
+    if (rimProbe.gated) {
+      if (groundFieldBudget()) buildRimNow(shape);
+      else rimPending.current = true;
+    }
     // The cloche is the bubble's look now; the recorded sphere's old glass is not drawn.
     clonedScene.traverse((child) => {
       if (child.name === "RecordedBubbleSphere") child.visible = false;
     });
-  }, [animations, clonedScene, sphereClip]);
+  }, [animations, buildRimNow, clonedScene, rimProbe, sphereClip]);
+
+  // The dome's shift and rim for this frame, set before the cloche paints
+  // (FrameFirst), so the shell and the scene's clip always agree.
+  const bubbleNode = useMemo(() => clonedScene.getObjectByName("RecordedBubbleSphere") ?? null, [clonedScene]);
+  const bubbleNow = useRef(new Vector3()).current;
+  const driveCloche = useCallback((delta: number) => {
+    // The take advances first: everything after reads this frame's pose.
+    mixer.update(delta);
+    // The bubble where it is now (a seek between frames included), not where the last draw synced it.
+    if (fittedCentre.current && sphereClip.active && bubbleNode) clocheShift.copy(bubbleNode.getWorldPosition(bubbleNow)).sub(fittedCentre.current);
+    const rim = rimRef.current;
+    const fittedShape = clocheRef.current;
+    if (rim?.take.lifts && fittedShape) {
+      const heights = rim.motion.update(clocheShift, { dtS: delta, playbackS: primaryActionRef.current?.time ?? 0, reducedMotion });
+      rimProp.heights = heights;
+      domeRim.set(heights);
+      domeClip.u_domeBase.value.set(fittedShape.base.x, fittedShape.base.y, fittedShape.base.z).add(clocheShift);
+      domeClip.u_domeRadii.value.set(fittedShape.radii.x, fittedShape.radii.y, fittedShape.radii.z);
+      domeClip.u_domeExponent.value = fittedShape.exponent;
+      domeClip.u_domeOn.value = 1;
+      rimProbe.heights = heights;
+      rimProbe.target = rim.motion.target;
+      rimProbe.raw = rim.motion.raw;
+      rimProbe.timing = rim.motion.timing;
+    }
+  }, [bubbleNode, bubbleNow, clocheShift, domeClip, domeRim, mixer, reducedMotion, rimProbe, rimProp, sphereClip]);
+
+  /** Whether a world point is under the glass where the dome is now, bent onto the rim of a take that lifts. */
+  const insideDome = useCallback((point: Vector3): boolean | null => {
+    const shape = clocheRef.current;
+    if (!shape || !rimRef.current?.take.lifts) return null;
+    return clocheInside(shape, rimProp.heights, { x: point.x - clocheShift.x, y: point.y - clocheShift.y, z: point.z - clocheShift.z });
+  }, [clocheShift, rimProp]);
+  const domeEdge = useMemo(() => ({ inside: insideDome }), [insideDome]);
 
   useEffect(() => {
     if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre } });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip });
     }
-  }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, sphereClip, url]);
+  }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, rimProbe, domeClip, sphereClip, url]);
 
   // The wheel zooms only over the hologram itself (usePortalTriggers): a
   // visible mesh of the recording, not chrome, not clipped away by its
@@ -290,7 +410,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
       const nearest = raycaster.ray.direction.dot(sample.copy(centre).sub(raycaster.ray.origin));
       for (let step = 0; step <= GLASS_RAY_SAMPLES; step += 1) {
         raycaster.ray.at(nearest - reach + (2 * reach * step) / GLASS_RAY_SAMPLES, sample).sub(clocheShift);
-        if (sample.y >= shape.base.y && clocheValue(shape, sample) < 1) return true;
+        if (clocheInside(shape, rimProp.heights, sample)) return true;
       }
       return false;
     };
@@ -320,14 +440,21 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
       return raycaster.intersectObject(clonedScene, true).some((hit) => (
         (hit.object as Mesh).isMesh === true
         && drawn(hit.object)
-        && (!bubble || isInsideRecordedObject(hit.object) || hit.point.distanceTo(bubble.center) <= bubble.radius)
+        && (!bubble || isInsideRecordedObject(hit.object) || drawnAt(hit.object, hit.point, bubble))
       ));
+    };
+    // What the clip leaves: the bent dome's inside for a take whose rim lifts (the avatar never cut), else the sphere.
+    const drawnAt = (object: Object3D, point: Vector3, bubble: SphereClipResult) => {
+      const dome = insideDome(point);
+      if (dome === null) return point.distanceTo(bubble.center) <= bubble.radius;
+      for (let node: Object3D | null = object; node; node = node.parent) if (node.name === "RecordedAvatar") return true;
+      return dome;
     };
     portal.runtime.hitTest = hitTest;
     return () => {
       if (portal.runtime.hitTest === hitTest) portal.runtime.hitTest = null;
     };
-  }, [camera, clocheShift, clonedScene, portal, renderer, sphereClip]);
+  }, [camera, clocheShift, clonedScene, insideDome, portal, renderer, rimProp, sphereClip]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {
@@ -546,7 +673,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   useFrame((frameState, delta) => {
     portal.runtime.playbackSeconds = primaryActionRef.current?.time ?? 0;
     if (!clocheRef.current) fitClocheNow();
-    if (fittedCentre.current && sphereClip.active) clocheShift.copy(sphereClip.center).sub(fittedCentre.current);
+    else if (rimPending.current && groundFieldBudget()) buildRimNow(clocheRef.current);
     if (!(camera instanceof PerspectiveCamera)) {
       return;
     }
@@ -580,7 +707,9 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     if (shape && rect && framed) {
       const key = `${rect.width}x${rect.height}:${baseFov}`;
       if (framingRef.current?.key !== key) {
-        framingRef.current = { key, framing: clocheFraming(shape, { fovY: MathUtils.degToRad(baseFov), aspect: rect.width / rect.height }) };
+        // A take whose rim lifts is framed bent by its lowest rim over the path, fixed for the take.
+        const rimFraming = rimRef.current?.take.lifts ? rimRef.current.take.framing : null;
+        framingRef.current = { key, framing: clocheFraming(shape, { fovY: MathUtils.degToRad(baseFov), aspect: rect.width / rect.height, rim: rimFraming }) };
       }
       const { target: middle, distance } = framingRef.current.framing;
       pose.followTarget.set(middle.x, middle.y, middle.z).add(clocheShift);
@@ -662,10 +791,11 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
 
   return (
     <>
+      <FrameFirst run={driveCloche} />
       <primitive object={clonedScene} />
       <pointLight ref={stageLightRef} color={tokens.color.glow} decay={2} />
       {cloche && (
-        <Cloche seed={seed} shape={cloche} shift={clocheShift} target={target} recording={false} inFocus={active} reducedMotion={reducedMotion} soot={soot} />
+        <Cloche seed={seed} shape={cloche} shift={clocheShift} target={target} recording={false} inFocus={active} reducedMotion={reducedMotion} soot={soot} rim={rimProp} />
       )}
       {meaningLinks.length > 0 && (
         <PointingHighlights
@@ -673,6 +803,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
           portal={portal}
           bubble={sphereClip}
           falloffWidth={SPHERE_CLIP_FALLOFF}
+          domeEdge={domeEdge}
           getPlaybackTime={getPlaybackTime}
           probe={pointingProbe}
           authorHex={authorHex}

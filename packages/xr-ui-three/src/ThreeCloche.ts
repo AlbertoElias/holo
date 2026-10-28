@@ -11,6 +11,8 @@ import { tokens } from "@holoim/design-tokens";
 import { tokenColor } from "@holoim/design-tokens/three";
 import {
   CLOCHE_NOISE_GLSL,
+  CLOCHE_RIM_BINS,
+  CLOCHE_RIM_GLSL,
   clocheBurnFronts,
   clocheCharShare,
   clocheEmbers,
@@ -26,13 +28,20 @@ import type { BufferGeometry } from "three";
 import {
   AdditiveBlending,
   BufferGeometry as Geometry,
+  ClampToEdgeWrapping,
   Color,
+  DataTexture,
+  DataUtils,
   DoubleSide,
   Float32BufferAttribute,
   Group,
+  HalfFloatType,
+  LinearFilter,
   Mesh,
   PlaneGeometry,
   Points,
+  RedFormat,
+  RepeatWrapping,
   SRGBColorSpace,
   ShaderMaterial,
   SphereGeometry,
@@ -71,9 +80,16 @@ float clocheQuiet(float facing) {
 
 // Depth falloff, in view space, so a placed and rescaled hologram (AR) needs
 // nothing from the CPU. Vertex stage only (it reads the model matrices).
+// The feed's rim (3.4): every part bends onto the heights in uRim, all zero
+// (a flat foot) unless the feed sets them.
 const COMMON = /* glsl */ `
 ${QUIET}
 uniform vec3 uCentre;
+uniform sampler2D uRim;
+uniform vec3 uRadii;
+uniform float uExponent;
+${CLOCHE_RIM_GLSL}
+vec3 clocheBend(vec3 p) { return clocheRimBend(uRim, uRadii, uExponent, p); }
 float clocheViewWider() { return uWider * length(modelMatrix[0].xyz); }
 float clocheCentreDepth() { return -(modelViewMatrix * vec4(uCentre, 1.0)).z; }
 float clocheDepthFade(float depth) {
@@ -89,10 +105,13 @@ varying vec3 vPosW;
 varying float vDepthFade;
 ${COMMON}
 void main() {
+  // The burn noise keeps the unbent position, so fronts never crawl as the rim moves.
   vLocal = position;
-  vec4 world = modelMatrix * vec4(position, 1.0);
+  float rise = clocheRimRise(uRim, uRadii, uExponent, position.xz);
+  vec3 bent = clocheBend(position);
+  vec4 world = modelMatrix * vec4(bent, 1.0);
   vPosW = world.xyz;
-  vNormalW = normalize(mat3(modelMatrix) * normal);
+  vNormalW = normalize(mat3(modelMatrix) * normalize(vec3(normal.x, normal.y / max(1.0 - rise / uRadii.y, 0.05), normal.z)));
   vec4 view = viewMatrix * world;
   // Fronts close to the eye go, as embers do, so none crosses the view big.
   float w = clocheViewWider();
@@ -154,7 +173,7 @@ ${COMMON}
 void main() {
   float t = uTime * (0.4 + aSeed.x * 0.8) + aSeed.y * 6.28;
   float drift = uWider * ${f(cloche.emberDrift)};
-  vec3 p = position + vec3(sin(t) * 0.6, 0.5 + 0.5 * sin(t * 0.7), cos(t * 1.3) * 0.6) * drift + aNormal * sin(t * 0.5) * drift * 0.7;
+  vec3 p = clocheBend(position) + vec3(sin(t) * 0.6, 0.5 + 0.5 * sin(t * 0.7), cos(t * 1.3) * 0.6) * drift + aNormal * sin(t * 0.5) * drift * 0.7;
   vec4 world = modelMatrix * vec4(p, 1.0);
   vec4 view = viewMatrix * world;
   float depth = -view.z;
@@ -210,7 +229,7 @@ void main() {
   float speed = uWider * ${f(cloche.sparkSpeed)};
   vec3 velocity = (aNormal * (0.25 + 0.4 * aSeed.z) + vec3(0.0, 0.5, 0.0) + r * 0.6) * speed;
   vec3 curl = sin(vec3(t * 3.1, t * 2.3, t * 2.7) + r * 6.28) * uWider * 0.012 * t;
-  vec3 p = position + velocity * t + vec3(0.0, 0.3 * speed * t * t, 0.0) + curl;
+  vec3 p = clocheBend(position) + velocity * t + vec3(0.0, 0.3 * speed * t * t, 0.0) + curl;
   vec4 view = modelViewMatrix * vec4(p, 1.0);
   float depth = -view.z;
   vFade = clocheDepthFade(depth) * uOpacity;
@@ -309,6 +328,44 @@ export interface ClocheUpdate {
 
 const MAX_SPARKS = Math.max(sparks.countFlat, sparks.countRoomMax);
 
+/**
+ * The feed's rim heights (3.4) for a shader: a `CLOCHE_RIM_BINS`×1
+ * half-float texture, linearly filtered and wrapping around the foot, small
+ * enough for any phone's limits where a uniform array is not.
+ */
+export class ClocheRimTexture {
+  readonly texture: DataTexture;
+  private readonly data = new Uint16Array(CLOCHE_RIM_BINS);
+  private readonly written = new Float32Array(CLOCHE_RIM_BINS);
+
+  constructor() {
+    this.texture = new DataTexture(this.data, CLOCHE_RIM_BINS, 1, RedFormat, HalfFloatType);
+    this.texture.wrapS = RepeatWrapping;
+    this.texture.wrapT = ClampToEdgeWrapping;
+    this.texture.magFilter = LinearFilter;
+    this.texture.minFilter = LinearFilter;
+    this.texture.generateMipmaps = false;
+    this.texture.needsUpdate = true;
+  }
+
+  /** Lifts in metres per bin; null, or fewer, is a flat foot. Uploads only what changed. */
+  set(heights: ArrayLike<number> | null): void {
+    let changed = false;
+    for (let bin = 0; bin < CLOCHE_RIM_BINS; bin += 1) {
+      const value = heights?.[bin] ?? 0;
+      if (value === this.written[bin]) continue;
+      this.written[bin] = value;
+      this.data[bin] = DataUtils.toHalfFloat(value);
+      changed = true;
+    }
+    if (changed) this.texture.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.texture.dispose();
+  }
+}
+
 export class ThreeCloche {
   /** Named `cloche`; placed at the dome's foot. Move it to follow a hologram whose volume moves. */
   readonly group = new Group();
@@ -321,6 +378,9 @@ export class ThreeCloche {
   private readonly base = new Vector3();
   private focus = 0;
   private lastTime: number | null = null;
+  private readonly rimTexture = new ClocheRimTexture();
+  private rim: ArrayLike<number> | null = null;
+  private shadeDrawn = true;
 
   constructor({ seed, shape, baseRenderOrder = 0 }: ThreeClocheOptions) {
     this.shape = shape;
@@ -332,6 +392,9 @@ export class ThreeCloche {
       uFocus: { value: 0 },
       uOpacity: { value: 1 },
       uCentre: { value: new Vector3(0, shape.radii.y / 2, 0) },
+      uRim: { value: this.rimTexture.texture },
+      uRadii: { value: new Vector3(shape.radii.x, shape.radii.y, shape.radii.z) },
+      uExponent: { value: shape.exponent },
       uTime: { value: 0 },
       uRadiusPx: { value: 300 },
       uGlowLevel: { value: 1 },
@@ -426,13 +489,14 @@ export class ThreeCloche {
   /** What the globe draws this frame. */
   update(frame: EdgeFrame, { eye, radiusPx, timeS = 0, inFocus = false, reducedMotion = false }: ClocheUpdate): void {
     const uniforms = this.shell.material.uniforms;
-    const opacity = clocheOpacityAt(this.shape, eye);
+    const opacity = clocheOpacityAt(this.shape, eye, this.rim);
     this.group.visible = frame.drawn;
     // Inside, the globe goes; the hologram's shade on its floor stays.
     const globe = opacity > 0;
     this.shell.visible = globe;
     this.embers.visible = globe;
     this.sparks.visible = globe && frame.sparks > 0;
+    this.shade.visible = this.shadeDrawn;
     this.sparks.geometry.setDrawRange(0, Math.min(frame.sparks, MAX_SPARKS));
     // Rest and focus ease into each other (about 400 ms); reduced motion jumps.
     const dt = this.lastTime === null ? Infinity : Math.max(0, timeS - this.lastTime);
@@ -449,6 +513,22 @@ export class ThreeCloche {
     uniforms.uCharShare!.value = clocheCharShare(frame);
   }
 
+  /**
+   * The feed's rim (3.4): the foot's lift per direction, in metres, from
+   * `smoothClocheRim`; null is a flat foot. Read the array again every call,
+   * so the caller may update it in place.
+   */
+  setRim(heights: ArrayLike<number> | null): void {
+    this.rim = heights;
+    this.rimTexture.set(heights);
+  }
+
+  /** Whether the hologram's shade is drawn: a take whose rim lifts stands on its own ground instead (5.1). */
+  setShade(drawn: boolean): void {
+    this.shadeDrawn = drawn;
+    this.shade.visible = drawn;
+  }
+
   /** A world point in the shape's own space (the group's parent may be placed and scaled, as in AR). */
   eyeInShape(world: Vector3Like): Vector3Like {
     this.group.updateWorldMatrix(true, false);
@@ -462,6 +542,7 @@ export class ThreeCloche {
       part.geometry.dispose();
       part.material.dispose();
     }
+    this.rimTexture.dispose();
   }
 }
 
