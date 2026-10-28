@@ -122,6 +122,8 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     for (let k = 1; k < depth; k += 1) if (layers[at + k]! < layers[at + lowest]!) lowest = k;
     if (height <= layers[at + lowest]!) return -1;
     layers[at + lowest] = height;
+    // The triangles that joined the dropped layer no longer belong to the one replacing it.
+    for (let entry = head[index]!; entry >= 0; entry = entryNext[entry]!) if (entrySlot[entry] === at + lowest) entrySlot[entry] = -1;
     return at + lowest;
   };
 
@@ -191,7 +193,8 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     const triangle = triangleCount;
     triangles.set([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z], triangle * 9);
     triangleCount += 1;
-    // Into every cell it overlaps; where it covers the cell's centre, its height there joins the cell's layers.
+    // Into every cell it overlaps, each joining the cell's layers: at the cell's centre where it covers it,
+    // else at its nearest point to the centre (the weights clamped onto it), so a sliver stays connected.
     const i0 = Math.max(0, Math.floor((minX - box.minX) / cell));
     const i1 = Math.min(columns - 1, Math.floor((maxX - box.minX) / cell));
     const j0 = Math.max(0, Math.floor((minZ - box.minZ) / cell));
@@ -199,21 +202,16 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     // Huge triangles cover many cells each: past the budget the field is abandoned, not drawn.
     entries += (i1 - i0 + 1) * (j1 - j0 + 1);
     if (!(entries <= RIM.maxEntries)) return false;
-    const ci = Math.floor(((a.x + b.x + c.x) / 3 - box.minX) / cell);
-    const cj = Math.floor(((a.z + b.z + c.z) / 3 - box.minZ) / cell);
-    let covered = false;
     for (let j = j0; j <= j1; j += 1) {
       const pz = box.minZ + (j + 0.5) * cell;
       for (let i = i0; i <= i1; i += 1) {
         const px = box.minX + (i + 0.5) * cell;
         const w1 = ((px - a.x) * (c.z - a.z) - (c.x - a.x) * (pz - a.z)) / area;
         const w2 = ((b.x - a.x) * (pz - a.z) - (px - a.x) * (b.z - a.z)) / area;
-        const w0 = 1 - w1 - w2;
-        const centre = w0 >= -1e-6 && w1 >= -1e-6 && w2 >= -1e-6;
-        // A triangle smaller than a cell still joins the cell it lies in, at its middle's height.
-        const slot = centre ? insert(j * columns + i, a.y * w0 + b.y * w1 + c.y * w2) : i === ci && j === cj && !covered ? insert(j * columns + i, (a.y + b.y + c.y) / 3) : -1;
-        if (centre) covered = true;
-        enter(j * columns + i, triangle, slot);
+        const u0 = Math.max(1 - w1 - w2, 0), u1 = Math.max(w1, 0), u2 = Math.max(w2, 0);
+        const sum = u0 + u1 + u2;
+        const index = j * columns + i;
+        enter(index, triangle, insert(index, (a.y * u0 + b.y * u1 + c.y * u2) / sum));
       }
     }
     return true;
@@ -473,17 +471,18 @@ export class RimMotion {
   readonly raw = new Float32Array(CLOCHE_RIM_BINS);
   private readonly lastShift = new Vector3();
   private lastPlayback: number | null = null;
-  /** The last update's cost, its mean and its worst, in milliseconds. */
-  readonly timing = { lastMs: 0, meanMs: 0, maxMs: 0, frames: 0 };
+  /** The last update's cost, its mean, its worst and the last 600, in milliseconds. */
+  readonly timing = { lastMs: 0, meanMs: 0, maxMs: 0, frames: 0, recent: new Float32Array(600) };
 
   constructor(private readonly shape: ClocheShape, private readonly field: GroundField) {}
 
-  update(shift: Vector3, { dtS, playbackS, reducedMotion }: { dtS: number; playbackS: number; reducedMotion: boolean }): Float32Array {
+  /** `advanceS`: how far the take's time should have moved this frame (the frame times its speed, 0 paused); any other change is a loop or a seek. */
+  update(shift: Vector3, { dtS, playbackS, advanceS, reducedMotion }: { dtS: number; playbackS: number; advanceS: number; reducedMotion: boolean }): Float32Array {
     const started = performance.now();
     rimTarget(this.shape, this.field, shift, this.raw, this.target);
     const first = this.lastPlayback === null;
-    // A loop or a seek: playback went back, or on by much more than the frame.
-    const skipped = !first && (playbackS < this.lastPlayback! - 1e-4 || playbackS - this.lastPlayback! > dtS + 0.25);
+    // A loop or a seek: the take's time moved other than the frame moved it, by more than a millisecond.
+    const skipped = !first && Math.abs(playbackS - this.lastPlayback! - advanceS) > 1e-3;
     const jumped = !first && shift.distanceTo(this.lastShift) > RIM.jump;
     easeClocheRim(this.heights, this.target, dtS, first || skipped || jumped || reducedMotion);
     this.lastPlayback = playbackS;
@@ -494,6 +493,7 @@ export class RimMotion {
     timing.lastMs = spent;
     timing.meanMs += (spent - timing.meanMs) / timing.frames;
     timing.maxMs = Math.max(timing.maxMs, spent);
+    timing.recent[(timing.frames - 1) % timing.recent.length] = spent;
     return this.heights;
   }
 }

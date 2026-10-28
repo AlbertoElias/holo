@@ -143,7 +143,7 @@ export type RimState = {
   maxLift: number;
   buildMs: number | null;
   candidates: number;
-  timing: { lastMs: number; meanMs: number; maxMs: number; frames: number } | null;
+  timing: { lastMs: number; meanMs: number; maxMs: number; frames: number; p99Ms: number } | null;
   shadeDrawn: boolean | null;
   /** The largest lift drawn this frame, metres. */
   liftNow: number;
@@ -162,7 +162,7 @@ export async function readRimState(page: Page): Promise<RimState> {
     const shade = scene.getObjectByName("cloche-shade");
     let liftNow = 0;
     for (const value of rim.heights ?? []) liftNow = Math.max(liftNow, value);
-    return { gated: rim.gated, rimReady: rim.rimReady, lifts: rim.lifts, maxLift: rim.maxLift, buildMs: rim.buildMs, candidates: rim.candidates, timing: rim.timing ? { ...rim.timing } : null, shadeDrawn: shade ? shade.visible : null, liftNow };
+    return { gated: rim.gated, rimReady: rim.rimReady, lifts: rim.lifts, maxLift: rim.maxLift, buildMs: rim.buildMs, candidates: rim.candidates, timing: rim.timing ? (() => { const { recent, ...rest } = rim.timing as typeof rim.timing & { recent: Float32Array }; const seen = Array.from(recent.subarray(0, Math.min(rest.frames, recent.length))).sort((a, b) => a - b); return { ...rest, p99Ms: seen[Math.floor(0.99 * Math.max(seen.length - 1, 0))] ?? 0 }; })() : null, shadeDrawn: shade ? shade.visible : null, liftNow };
   });
 }
 
@@ -240,6 +240,9 @@ export async function measureRim(page: Page, label: string, groundNames: readonl
       const out: number[] = [];
       for (const hit of raycaster.intersectObjects(others, false)) {
         if (!hit.face || ground.includes(hit.object)) continue;
+        // Only what the brief lets stand as ground: opaque, not glass.
+        const material = (hit.object as Three.Mesh).material as Three.Material & { transmission?: number };
+        if (Array.isArray(material) || material.opacity < 0.5 || (material.transmission ?? 0) > 0) continue;
         normal.copy(hit.face.normal).applyMatrix3(normalMatrix.getNormalMatrix(hit.object.matrixWorld)).normalize();
         if (normal.y >= 0.35) out.push(hit.point.y);
       }
@@ -295,9 +298,10 @@ export async function measureRim(page: Page, label: string, groundNames: readonl
       const tolerance = slopeDeg < 30 ? null : cell * Math.tan((slopeDeg * Math.PI) / 180);
       let pass: boolean;
       if (found === null) pass = lift <= 1e-3;
+      // Ground higher than the dome can take: the lift stays at its cap, 0.6 × the height (the brief's failure cases).
       else if (capped) pass = found >= rim;
-      // The ground there is cut by the dome's floor: the rim stays at its foot, no higher than the tolerance.
-      else if (belowFoot) pass = lift <= 0.05;
+      // The ground there is cut by the dome's floor: the rim stays at its foot, raised by its neighbours' smoothing at most.
+      else if (belowFoot) pass = lift <= 0.03 + 1e-3;
       else pass = tolerance === null ? error! >= -0.03 && error! <= 0.05 : Math.abs(error!) <= Math.max(tolerance, 0.05);
       // A ledge of another mesh within a step (0.35 m) over the ground is ground too, by the brief's connectivity rule.
       let ledge: number | null = null;
@@ -398,17 +402,44 @@ export async function sampleRimMotion(page: Page, seconds: number): Promise<RimM
   }), seconds);
 }
 
-export type GlassReport = { views: number; outside: number[]; drawn: number[]; images: string[] };
+export type GlassReport = { views: number; outside: number[]; drawn: number[]; images: string[]; worst: { metres: number; point: number[]; product: boolean | null; object: string | null } | null };
 
 /**
- * Nothing outside the glass, on the GPU: from orbit views around the dome,
+ * The neighbour rule against the test's own raycast ground at one time:
+ * neighbouring bins at most max(5% of the dome's height, the ground's step
+ * between them + 5 cm) apart. The most any pair goes over (≤ 0 passes).
+ */
+export function snapshotNeighbourExcess(snapshot: RimSnapshot): { excess: number; bin: number } {
+  let worst = { excess: -Infinity, bin: 0 };
+  const bins = snapshot.bins;
+  for (let bin = 0; bin < bins.length; bin += 1) {
+    const a = bins[bin]!;
+    const b = bins[(bin + 1) % bins.length]!;
+    // Where there is no ground, or it lies under the foot or over the cap, the rim stands where its own rule puts it.
+    const groundA = a.ground === null || a.belowFoot ? snapshot.footY : a.capped ? a.rim : a.ledge ?? a.ground;
+    const groundB = b.ground === null || b.belowFoot ? snapshot.footY : b.capped ? b.rim : b.ledge ?? b.ground;
+    const excess = Math.abs(a.rim - b.rim) - Math.max(0.05 * snapshot.heightY, Math.abs(groundA - groundB) + 0.05);
+    if (excess > worst.excess) worst = { excess, bin };
+  }
+  return worst;
+}
+
+/** Several glass readings (one per time) as one. */
+export function mergeGlass(reports: readonly GlassReport[]): GlassReport {
+  return { views: reports.reduce((sum, r) => sum + r.views, 0), outside: reports.flatMap((r) => r.outside), drawn: reports.flatMap((r) => r.drawn), images: reports.flatMap((r) => r.images), worst: reports.reduce<GlassReport["worst"]>((w, r) => (r.worst && (!w || r.worst.metres > w.metres) ? r.worst : w), null) };
+}
+
+/**
+ * Nothing outside the glass, on the GPU: from 24 orbit views around the dome
+ * (pitches 12°, 30°, 55°), with every recorded surface writing depth (glass
+ * and water too),
  * the recorded scene drawn as the feed draws it (its own clip; the avatar
  * left out), each drawn pixel's depth read back to the world point it shows,
  * and that point tested against the bent dome by the test's own reading of
  * the brief (lift per bin linearly filtered, w = smoothstep(bendFrom, 1, ρ),
  * y' = y + L·w·(1 − y/ry)). A point the dome holds may show below the
  * shell's lower edge, through its open floor; only a drawn point outside
- * the dome counts. With `control`, the same with the dome clip off (the
+ * the dome by more than a centimetre (across its floor or its wall) counts. With `control`, the same with the dome clip off (the
  * sphere's), to show the check can fail.
  */
 export async function measureGlass(page: Page, { control = false, debugImages = false }: { control?: boolean; debugImages?: boolean } = {}): Promise<GlassReport> {
@@ -434,8 +465,12 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
       const at = (i: number) => heights[((i % heights.length) + heights.length) % heights.length]!;
       return at(i0) + (at(i0 + 1) - at(i0)) * t;
     };
-    // Inside the bent dome, with a centimetre's give for the depth read back and the half-float heights.
-    const inside = (point: Three.Vector3) => {
+    // Inside the bent dome, with a centimetre's give across each boundary (the depth read back, the half-float
+    // heights): under the floor by 1 cm in the flat dome, which is at most 1 cm in the bent one, and out through
+    // the wall by 1 cm along the smallest radius. Exactly, with `give` 0.
+    let give = 0.01;
+    let wall = ((Math.min(radii.x, radii.y, radii.z) + give) / Math.min(radii.x, radii.y, radii.z)) ** n;
+    const insideExact = (point: Three.Vector3) => {
       const qx = (point.x - base.x) / radii.x;
       const qz = (point.z - base.z) / radii.z;
       const rho = (Math.abs(qx) ** n + Math.abs(qz) ** n) ** (1 / n);
@@ -445,11 +480,12 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
       const rise = lift(angle) * s * s * (3 - 2 * s);
       const y = point.y - base.y;
       const flat = y >= radii.y ? y : (y - rise) / (1 - rise / radii.y);
-      if (flat < -0.01) return false;
-      return Math.abs(qx) ** n + Math.abs(flat / radii.y) ** n + Math.abs(qz) ** n <= 1.01;
+      if (flat < -give) return false;
+      return Math.abs(qx) ** n + Math.abs(flat / radii.y) ** n + Math.abs(qz) ** n <= wall;
     };
     const centre = base.clone().add(new Vector3(0, radii.y / 2, 0));
-    const wider = Math.max(radii.x, radii.y, radii.z);
+    const inside = insideExact;
+        const wider = Math.max(radii.x, radii.y, radii.z);
     const size = 256;
     const target = new WebGLRenderTarget(size, size);
     target.depthTexture = new DepthTexture(size, size);
@@ -462,7 +498,8 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
       depthTest: false,
       depthWrite: false
     });
-    copyScene.add(new Mesh(new PlaneGeometry(2, 2), copyMaterial));
+    const copyPlane = new PlaneGeometry(2, 2);
+    copyScene.add(new Mesh(copyPlane, copyMaterial));
     const copyCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     const visibility = new Map<Three.Object3D, boolean>();
     scene.traverse((node) => visibility.set(node, node.visible));
@@ -481,16 +518,25 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
     const drawn: number[] = [];
     const images: string[] = [];
     const saved = control && dome ? dome.u_domeOn.value : null;
+    const depthWrites = new Map<Three.Material, boolean>();
+    let worst: { metres: number; point: number[]; product: boolean | null; object: string | null } | null = null;
     try {
       scene.background = null;
       scene.traverse((node) => {
         if (!(node as Three.Mesh).isMesh && !(node as Three.Points).isPoints) return;
         node.visible = within(node, sceneBubble) && !within(node, avatar) && visibility.get(node) === true;
+        // Surfaces drawn without depth (glass, water) are read back too.
+        if (!node.visible) return;
+        const materials = (node as Three.Mesh).material;
+        for (const material of Array.isArray(materials) ? materials : [materials]) {
+          if (!depthWrites.has(material)) depthWrites.set(material, material.depthWrite);
+          material.depthWrite = true;
+        }
       });
       if (control && dome) dome.u_domeOn.value = 0;
       const depth = new Float32Array(size * size * 4);
       const point = new Vector3();
-      for (const pitch of [12, 30]) {
+      for (const pitch of [12, 30, 55]) {
         for (let yaw = 0; yaw < 360; yaw += 45) {
           const camera = new PerspectiveCamera(40, 1, wider * 0.5, wider * 8);
           const p = (pitch * Math.PI) / 180;
@@ -515,7 +561,27 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
               total += 1;
               point.set(((i + 0.5) / size) * 2 - 1, ((j + 0.5) / size) * 2 - 1, d * 2 - 1).unproject(camera);
               const out = !inside(point);
-              if (out) count += 1;
+              if (out) {
+                count += 1;
+                // How far outside: the smallest give, in centimetres (50 cm at most), that holds it.
+                const held = give;
+                let metres = held;
+                do {
+                  metres += 0.01;
+                  give = metres;
+                  wall = ((Math.min(radii.x, radii.y, radii.z) + metres) / Math.min(radii.x, radii.y, radii.z)) ** n;
+                } while (metres < 0.5 && !insideExact(point));
+                give = held;
+                wall = ((Math.min(radii.x, radii.y, radii.z) + held) / Math.min(radii.x, radii.y, radii.z)) ** n;
+                if (!worst || metres > worst.metres) {
+                  const caster = new three.Raycaster();
+                  caster.setFromCamera(new three.Vector2(((i + 0.5) / size) * 2 - 1, ((j + 0.5) / size) * 2 - 1), camera);
+                  const hit = caster.intersectObject(sceneBubble, true).find((h) => h.object.visible);
+                  const names: string[] = [];
+                  for (let node: Three.Object3D | null = hit?.object ?? null; node && node !== sceneBubble; node = node.parent) names.push(node.name || node.type);
+                  worst = { metres, point: point.toArray(), product: (probe.rim as { insideDome?: ((p: Three.Vector3) => boolean | null) | null }).insideDome?.(point) ?? null, object: hit ? `${names.join(" < ")} @${hit.distance.toFixed(3)} vs ${point.distanceTo(camera.position).toFixed(3)}` : null };
+                }
+              }
               if (marks) marks[j * size + i] = out ? 2 : 1;
             }
           }
@@ -535,10 +601,12 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
           }
         }
       }
-      return { views: outside.length, outside, drawn, images };
+      return { views: outside.length, outside, drawn, images, worst };
     } finally {
       if (saved !== null && dome) dome.u_domeOn.value = saved;
       copyMaterial.dispose();
+      copyPlane.dispose();
+      for (const [material, was] of depthWrites) material.depthWrite = was;
       target.depthTexture?.dispose();
       target.dispose();
       depthCopy.dispose();

@@ -247,6 +247,37 @@ the hill fixture:
   under the clipped hill sheet, through the dome's open, bent floor, at
   scene that is inside the dome.
 
+## Independent verification (Codex `-p standard`, 2026-10-28)
+
+Round 1: changes required. Product defects fixed: a full cell replacing its
+lowest layer now cuts the triangles that had joined it (buried layers no
+longer inherit the new layer's connectivity); every triangle joins every
+cell it overlaps, at the cell centre's height or its nearest point, so a
+sliver of ground stays connected; and the rim snaps whenever the take's
+time moves other than the frame moved it (by > 1 ms), so every seek snaps.
+The GLSL twin now reads the rim's two texels and mixes them itself, in
+full precision, since a texture unit's 8-bit filter weights put the clip
+centimetres off its CPU twin across a metre's step between bins. Oracles
+tightened: the glass check is metric (1 cm across the floor or out through
+the wall, not a 1% value), reads back surfaces drawn without depth (glass,
+water), and runs 24 views at all three snapshot times; ledges count only
+when opaque; a bin over ground below the foot must stay within `smoothRise`
+of the foot; and the neighbour rule is also checked against the test's own
+raycast ground at each snapshot.
+
+Two readings for the lead:
+
+- **Capped bins.** Where the ground stands higher than 0.6 × the dome's
+  height, the rim stays at the cap (the failure cases above: "Lift capped
+  at 0.6 × dome height"), so "rim on the ground" is measured there as the
+  ground at or above the cap. On the hill's start and `scene.glb`'s end the
+  path climbs past that height.
+- **Cost per frame.** JavaScript cannot promise a hard per-frame maximum (a
+  garbage collection lands in some frame), and the browser's timer reads in
+  0.1 ms steps. The check is the 99th percentile of the last 600 frames
+  ≤ 0.25 ms, with the mean and the worst frame reported beside it. Bench:
+  mean 0.067 ms, p99 0.19 ms, a single 2.3 ms outlier in 2,400 frames.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |

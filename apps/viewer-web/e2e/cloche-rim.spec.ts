@@ -6,7 +6,7 @@ import type { Page } from "@playwright/test";
 import type { Probe } from "./ar-bubble-types";
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
 import { diagnosticGltf, flatGroundGltf, HILL_GROUND, HILL_SECONDS, hillGltf } from "./bubble-fixture";
-import { measureGlass, measureRim, pauseTake, readRimState, sampleRimMotion, seekTake, type RimSnapshot } from "./floor-proof";
+import { measureGlass, measureRim, mergeGlass, snapshotNeighbourExcess, pauseTake, readRimState, sampleRimMotion, seekTake, type GlassReport, type RimSnapshot } from "./floor-proof";
 
 // The rim follows the ground (styleguide 3.4, feature brief
 // cloche-rim-follows-ground): in the feed, a take recorded on a hill stands
@@ -69,12 +69,14 @@ test("the rim follows a hill's ground in the feed, with nothing outside the glas
 
   await pauseTake(page, true);
   const snapshots: RimSnapshot[] = [];
+  const glasses: GlassReport[] = [];
   for (const [label, seconds] of [["start", 0], ["middle", HILL_SECONDS / 2], ["end", HILL_SECONDS - 0.5]] as const) {
     await seekTake(page, seconds);
     snapshots.push(await measureRim(page, label, HILL_GROUND));
+    glasses.push(await measureGlass(page, { debugImages: true }));
   }
   await seekTake(page, 0);
-  const glass = await measureGlass(page, { debugImages: true });
+  const glass = mergeGlass(glasses);
   await mkdir(artifactDir, { recursive: true });
   for (const [index, image] of glass.images.entries()) await writeFile(resolve(artifactDir, `glass-outside-${index}.png`), Buffer.from(image, "base64"));
   glass.images = [];
@@ -85,7 +87,11 @@ test("the rim follows a hill's ground in the feed, with nothing outside the glas
   await writeFile(resolve(artifactDir, "hill-report.json"), JSON.stringify({ state: after, snapshots, glass, control, motion }, null, 2));
   await captureEvidence(page, testInfo, "rim-on-the-hill");
 
-  for (const snapshot of snapshots) expectRimOnGround(snapshot);
+  for (const snapshot of snapshots) {
+    expectRimOnGround(snapshot);
+    const step = snapshotNeighbourExcess(snapshot);
+    expect(step.excess, `${snapshot.label}: neighbours apart by more than the raycast ground allows, at bin ${step.bin}`).toBeLessThanOrEqual(0);
+  }
   expect(Math.max(...snapshots.map((s) => Math.max(...s.bins.map((bin) => bin.rim - s.footY)))), "the rim lifts somewhere").toBeGreaterThan(0.3);
   expect(Math.max(...glass.outside), `scene pixels outside the bent glass, per view ${glass.outside.join(",")}`).toBe(0);
   expect(Math.min(...glass.drawn), "every view sees the scene").toBeGreaterThan(0);
@@ -95,7 +101,7 @@ test("the rim follows a hill's ground in the feed, with nothing outside the glas
   expect(motion.maxTargetNeighbourExcess, "the same for the rim's target, every frame").toBeLessThanOrEqual(0);
   expect(motion.settledPairs, "some bin pairs settled to judge the rim itself").toBeGreaterThanOrEqual(0.05 * motion.pairs);
   expect(after.buildMs, "ground field build").toBeLessThanOrEqual(15);
-  expect(after.timing?.meanMs ?? Infinity, "rim update per frame").toBeLessThanOrEqual(0.25);
+  expect(after.timing?.p99Ms ?? Infinity, `rim update per frame, 99th percentile of the last 600 (mean ${after.timing?.meanMs}, max ${after.timing?.maxMs} ms)`).toBeLessThanOrEqual(0.25);
 });
 
 test("a flat take keeps its flat foot, its shade and the sphere's clip", async ({ page }, testInfo) => {

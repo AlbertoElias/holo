@@ -5,7 +5,7 @@ import { freezePageClock, waitForIwerSession } from "@holoim/tooling-testing/xr-
 import { resolve } from "node:path";
 import type { Probe } from "./ar-bubble-types";
 import { captureBubblePixels } from "./bubble-pixel-proof";
-import { measureFloor, measureGlass, measureRim, pauseTake, readRimState, sampleRimMotion, seekTake, type FloorReport, type GlassReport } from "./floor-proof";
+import { measureFloor, measureGlass, measureRim, mergeGlass, snapshotNeighbourExcess, pauseTake, readRimState, sampleRimMotion, seekTake, type FloorReport, type GlassReport } from "./floor-proof";
 
 import { assertViewerShell, captureEvidence, expect, test, pressViewInAr } from "./bootstrap";
 import { RECORDED_SECONDS, recordWalkTake } from "./pipeline-takes";
@@ -96,19 +96,25 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   await pauseTake(page, true);
   const rimState = await readRimState(page);
   const rims = [];
+  const glasses: GlassReport[] = [];
   for (const [label, seconds] of [["start", 0], ["middle", RECORDED_SECONDS / 2], ["end", RECORDED_SECONDS - 0.5]] as const) {
     await seekTake(page, seconds);
     rims.push(await measureRim(page, label, SCENE_GROUND));
+    if (rimState.lifts) glasses.push(await measureGlass(page));
   }
   await seekTake(page, 0);
-  const feedGlass = rimState.lifts ? await measureGlass(page) : null;
+  const feedGlass = rimState.lifts ? mergeGlass(glasses) : null;
   const rimMotion = rimState.lifts ? await sampleRimMotion(page, RECORDED_SECONDS + 0.2) : null;
   await writeFile(resolve(artifactDir, "rim-report.json"), JSON.stringify({ state: await readRimState(page), rims, glass: feedGlass, motion: rimMotion }, null, 2));
   expect(rimState.gated, "a performer's take with its recorded scene runs the rim").toBe(true);
   expect(rimState.rimReady, "the ground field is read").toBe(true);
   expect(rimState.shadeDrawn, "the shade is drawn only on a take whose rim stays flat (5.1)").toBe(!rimState.lifts);
   if (rimState.lifts) {
-    for (const rim of rims) expect(rim.failures, `${rim.label}: bins off the ground (worst ${JSON.stringify(rim.worst)})`).toBe(0);
+    for (const rim of rims) {
+      expect(rim.failures, `${rim.label}: bins off the ground (worst ${JSON.stringify(rim.worst)})`).toBe(0);
+      const step = snapshotNeighbourExcess(rim);
+      expect(step.excess, `${rim.label}: neighbours apart by more than the raycast ground allows, at bin ${step.bin}`).toBeLessThanOrEqual(0);
+    }
     expect(rimMotion!.maxFrameChange, "the rim's largest change in a frame").toBeLessThanOrEqual(0.02);
     expect(rimMotion!.maxNeighbourExcess, `neighbouring bins apart by more than max(5% of the height, the ground's step + 5 cm), settled bins, worst at bin ${rimMotion!.maxNeighbourExcessBin}`).toBeLessThanOrEqual(0);
     expect(rimMotion!.maxTargetNeighbourExcess, "the same for the rim's target, every frame").toBeLessThanOrEqual(0);

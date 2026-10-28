@@ -184,8 +184,11 @@ export function clocheBentSurfacePoints(shape: Shape, rim: ArrayLike<number> | n
 /**
  * GLSL twin of the rim: `clocheRimRise(rim, radii, n, local.xz)` and
  * `clocheBentInside(rim, radii, n, local)`, with `local` relative to the foot's
- * centre and the heights in a `CLOCHE_RIM_BINS`×1 texture, linearly filtered,
- * wrapping in u.
+ * centre and the heights in a `CLOCHE_RIM_BINS`×1 texture. Its two texel
+ * centres are read and mixed here, in full precision, rather than by the
+ * texture unit's filter, whose weights may be 8-bit: across a metre's step
+ * between bins (the rim hugs a crag) that would put the clip centimetres off
+ * its CPU twin.
  */
 export const CLOCHE_RIM_GLSL = /* glsl */ `
 float clocheRimRise(sampler2D rim, vec3 radii, float n, vec2 xz) {
@@ -193,8 +196,12 @@ float clocheRimRise(sampler2D rim, vec3 radii, float n, vec2 xz) {
   float rho = pow(pow(abs(q.x), n) + pow(abs(q.y), n), 1.0 / n);
   float w = smoothstep(${rimTokens.bendFrom.toFixed(4)}, 1.0, rho);
   if (w <= 0.0) return 0.0;
-  float u = atan(q.y, q.x) / 6.28318530718;
-  return texture2D(rim, vec2(fract(u), 0.5)).r * w;
+  float bins = ${CLOCHE_RIM_BINS.toFixed(1)};
+  float f = fract(atan(q.y, q.x) / 6.28318530718) * bins - 0.5;
+  float i0 = floor(f);
+  float a = texture2D(rim, vec2((mod(i0, bins) + 0.5) / bins, 0.5)).r;
+  float b = texture2D(rim, vec2((mod(i0 + 1.0, bins) + 0.5) / bins, 0.5)).r;
+  return mix(a, b, f - i0) * w;
 }
 vec3 clocheRimBend(sampler2D rim, vec3 radii, float n, vec3 local) {
   float rise = clocheRimRise(rim, radii, n, local.xz);

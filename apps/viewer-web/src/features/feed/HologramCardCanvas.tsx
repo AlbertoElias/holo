@@ -114,9 +114,11 @@ export type RimProbe = {
   /** The ground's lift per bin before smoothing. */
   raw: Float32Array | null;
   framing: Float32Array | null;
-  timing: { lastMs: number; meanMs: number; maxMs: number; frames: number } | null;
+  timing: { lastMs: number; meanMs: number; maxMs: number; frames: number; recent: Float32Array } | null;
   /** The ground's height at a world point, NaN where there is none (the field, for diagnostics only). */
   groundAt: ((x: number, z: number) => number) | null;
+  /** Whether a world point is under the bent glass this frame, null while the sphere clips (the clip's CPU twin, for diagnostics only). */
+  insideDome: ((point: Vector3) => boolean | null) | null;
 };
 
 function getFramingTargets(root: Object3D): Object3D[] {
@@ -296,7 +298,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   const rimRef = useRef<{ take: RimTake; motion: RimMotion } | null>(null);
   const rimPending = useRef(false);
   const rimProp = useRef<{ heights: Float32Array | null; shade: boolean }>({ heights: null, shade: true }).current;
-  const rimProbe = useRef<RimProbe>({ gated: false, rimReady: false, lifts: false, maxLift: 0, buildMs: null, candidates: 0, heights: null, target: null, raw: null, framing: null, timing: null, groundAt: null }).current;
+  const rimProbe = useRef<RimProbe>({ gated: false, rimReady: false, lifts: false, maxLift: 0, buildMs: null, candidates: 0, heights: null, target: null, raw: null, framing: null, timing: null, groundAt: null, insideDome: null }).current;
   const buildRimNow = useCallback((shape: ClocheShape) => {
     rimPending.current = false;
     const sceneBubble = clonedScene.getObjectByName("RecordedSceneBubble");
@@ -363,7 +365,9 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     const rim = rimRef.current;
     const fittedShape = clocheRef.current;
     if (rim?.take.lifts && fittedShape) {
-      const heights = rim.motion.update(clocheShift, { dtS: delta, playbackS: primaryActionRef.current?.time ?? 0, reducedMotion });
+      const action = primaryActionRef.current;
+      const advanceS = action && action.enabled && !action.paused ? delta * action.getEffectiveTimeScale() : 0;
+      const heights = rim.motion.update(clocheShift, { dtS: delta, playbackS: action?.time ?? 0, advanceS, reducedMotion });
       rimProp.heights = heights;
       domeRim.set(heights);
       domeClip.u_domeBase.value.set(fittedShape.base.x, fittedShape.base.y, fittedShape.base.z).add(clocheShift);
@@ -383,6 +387,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     if (!shape || !rimRef.current?.take.lifts) return null;
     return clocheInside(shape, rimProp.heights, { x: point.x - clocheShift.x, y: point.y - clocheShift.y, z: point.z - clocheShift.z });
   }, [clocheShift, rimProp]);
+  rimProbe.insideDome = insideDome;
   const domeEdge = useMemo(() => ({ inside: insideDome }), [insideDome]);
 
   useEffect(() => {
