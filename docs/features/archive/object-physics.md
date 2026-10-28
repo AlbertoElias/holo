@@ -1,10 +1,10 @@
 # Feature brief: Grab, place and throw objects with physics
 
 **Lead:** Claude Code (Opus)  
-**Status:** Implementing. Slices 1–3 work and pass every check; the squat pose fails the proof video (see "Next"). Not merged.
+**Status:** Complete (2026-10-27). Slices 1–3 merged to `main`; Codex round 8 passed.
 **Layer:** Event (see `docs/product/concepts/what-a-hologram-is.md`)  
-**Builds on:** [Explain with an object](explain-with-an-object.md) (PRD-043) and
-[Summon and place](summon-and-place.md) (PRD-045), which excluded physics.
+**Builds on:** [Explain with an object](../explain-with-an-object.md) (PRD-043) and
+[Summon and place](../summon-and-place.md) (PRD-045), which excluded physics.
 
 ## User outcome
 
@@ -412,39 +412,23 @@ viewer matched at key times.
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | VR throw, drop, catch, non-throw, bounds, walk-through, `G` | `pnpm --filter @holoim/capture run test:xr:object` (extended, IWER controllers) | `object-physics-report.json` with trajectories, rest heights, launch speeds, step times; contact sheet |
-| Summon still works | `pnpm --filter @holoim/capture run test:xr:summon` | Pending |
+| Summon still works | `pnpm --filter @holoim/capture run test:xr:summon` | Passed on fa7f8c26 |
 | Recorded and replayed | `pnpm --filter @holoim/web run test:e2e:pipeline` (object spec with a thrown take) | GLB vs viewer report at key times; USDZ time samples |
 | Mouse, touch (slice 2) | Playwright desktop and touch-emulated scenarios | Report rows per mode |
-| No regression | `pnpm run verify:pr` | Pending |
+| No regression | `pnpm run verify:pr` | Passed on fa7f8c26, except one viewer VR-locomotion teleport wait that timed out under load; that spec passed 2/2 rerun alone. The branch doesn't touch viewer-web runtime code |
 | Proof video | Real-time recording: throw, drop onto a table, replay in the feed | Under `output/`, not committed |
 
-## Next (2026-10-27)
+## Outcome (2026-10-27)
 
-Branch `feature/object-physics` (pushed) has slices 1–3. Codex's round 4
-passed the round 3 fixes, and its one new finding is fixed: a tray-summoned
-prop now ignores the next-press release. The object (8 takes), summon, marks
-and body checks pass, and the object and summon pipeline specs passed on the
-slice 3 tree.
+Slices 1–3 are on `main`. The flat-screen squat fix from the v2 proof video:
+a floor reach steps in until the prop is 0.25 m ahead of the toes, then
+squats with the hips at least 0.28 m up and the spine at 42° (hips to head
+≤50°), and the knees bend forward. A floor set-down sends the hand down at
+that stance, so a pickup afterwards needs no step. The follow camera holds
+its height through a reach. The proof videos (`output/object-physics-proof-v*/`)
+are not committed.
 
-The proof video (`output/object-physics-proof-v2/`, not committed) shows the
-physics, the rigid hold, the planted feet and the replay working. It also
-shows the flat-screen squat isn't natural yet. To reach a prop 0.45–0.55 m
-ahead with this avatar's 0.53 m arm, the torso pitches nearly horizontal: a
-dive, not a squat. Fix that before merging:
-
-1. **Step in, then squat.** The reach first steps the avatar in, on planted
-   feet, until the prop is about 0.2–0.3 m ahead of the toes. It then squats
-   with a modest lean (at most about 45° of spine pitch) instead of the 2×
-   bend. This also removes the need to step up by hand after a set-down,
-   which leaves the prop about 0.55 m ahead, just out of range. Re-measure
-   shoulder-to-prop with the shorter lean.
-2. **Camera.** Hold the follow camera's height during a reach, because today
-   the floor tilts for about 0.5 s each time.
-3. **Re-record** the proof video side-on, mouse and touch included, plus an
-   IWER controller throw. Then run `verify:pr`, have Codex verify a final
-   time, and merge.
-
-
+## Independent verification
 
 **Round 1 (Codex `-p standard`, 2026-10-27): FAIL.** Codex's sandbox couldn't
 launch Chromium, so it judged the run evidence from the existing reports plus
@@ -564,6 +548,13 @@ the trench, wall, pit and VR-entry checks all fail):
    against 0.04), and the clean log passes.
 4. The cancel deadline is timed from the cancel itself (the walk's 0.1 s counts),
    and a `late-G-cancels-reach` case (near full depth) was added.
+
+**Round 8 (Codex, fa7f8c26): PASS.** No findings. Codex re-ran its round 7
+repros: the clip plane stays at the squat eye height (0.743 m), a 35-frame
+cancel sweep peaks at 4.9° a step, injected post-walk pops fail, and the
+slowest cancel stands in 0.50 s against 0.533 s at the harness's fixed 60 Hz.
+Codex's sandbox couldn't launch Chromium in rounds 5–8, so it judged from the
+code and Node repros; the browser checks ran locally.
 
 Fixes after round 1: the prop stays rigid with the hand through the set-down, and it is let
 go at the surface or at the arm's lowest reach. A mode switch always releases

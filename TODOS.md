@@ -205,7 +205,7 @@ it from the item below instead of duplicating its status here.
   dock's Halo glyph, drag) through the shared screen-input bridge.
 - [ ] Props in AR capture, with real-floor and WebXR `plane-detection`
   colliders: cut from
-  [`docs/features/object-physics.md`](docs/features/object-physics.md) by its
+  [`docs/features/archive/object-physics.md`](docs/features/archive/object-physics.md) by its
   design review on 2026-10-27, because a headset in passthrough and a phone AR
   camera take are spectators that never handle props. Start once AR recording
   carries objects.
