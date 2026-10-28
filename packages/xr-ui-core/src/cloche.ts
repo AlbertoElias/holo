@@ -6,6 +6,7 @@
 // a GLB.
 import { tokens } from "@holoim/design-tokens";
 
+import { clocheBentSurfacePoints, clocheUnbend } from "./clocheRim.js";
 import type { EdgeFrame, Vector3Like } from "./edge.js";
 
 const { cloche } = tokens.edge;
@@ -126,10 +127,11 @@ export interface ClocheFraming {
  * from the dome's middle, just far enough that every point of the drawn dome
  * is inside the box's frustum at `frameShare` of its size. `fovY` is the
  * vertical field of view of the box in radians; `aspect` its width over
- * height.
+ * height. With `rim` (the feed's lowest rim over the take), the dome is
+ * framed bent onto it.
  */
-export function clocheFraming(shape: ClocheShape, { fovY, aspect, direction = clocheFollowDirection(), frameShare = cloche.frameShare }: { fovY: number; aspect: number; direction?: Vector3Like; frameShare?: number }): ClocheFraming {
-  const points = clocheSurfacePoints(shape);
+export function clocheFraming(shape: ClocheShape, { fovY, aspect, direction = clocheFollowDirection(), frameShare = cloche.frameShare, rim }: { fovY: number; aspect: number; direction?: Vector3Like; frameShare?: number; rim?: ArrayLike<number> | null | undefined }): ClocheFraming {
+  const points = rim ? clocheBentSurfacePoints(shape, rim) : clocheSurfacePoints(shape);
   const target = {
     x: shape.base.x,
     y: shape.base.y + shape.radii.y / 2,
@@ -153,10 +155,10 @@ export function clocheFraming(shape: ClocheShape, { fovY, aspect, direction = cl
 /**
  * How much of the dome is drawn with the eye at `eye`: 1 outside, easing to 0
  * as the viewer goes in, so inside the hologram nothing of the dome stands
- * between them and the event.
+ * between them and the event. With `rim`, against the bent dome.
  */
-export function clocheOpacityAt(shape: ClocheShape, eye: Vector3Like): number {
-  const value = clocheValue(shape, eye);
+export function clocheOpacityAt(shape: ClocheShape, eye: Vector3Like, rim?: ArrayLike<number> | null): number {
+  const value = clocheValue(shape, rim ? clocheUnbend(shape, rim, eye) : eye);
   const from = cloche.insideFadeFrom;
   const to = cloche.insideFadeTo;
   const t = Math.min(Math.max((value - to) / (from - to), 0), 1);

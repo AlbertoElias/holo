@@ -12,11 +12,13 @@
  */
 
 import { SphereGeometry, Vector3 } from "three";
-import type { Material, Mesh, Object3D, WebGLProgramParametersWithUniforms, WebGLRenderer } from "three";
+import type { Material, Mesh, Object3D, Texture, WebGLProgramParametersWithUniforms, WebGLRenderer } from "three";
 
 import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { createBubbleGlassMaterial, isBubbleGlassMaterial } from "./BubbleGlassMaterial";
 import {
+  DOME_CLIP_FRAGMENT_MAIN,
+  DOME_CLIP_FRAGMENT_PARS,
   SPHERE_CLIP_FRAGMENT_MAIN,
   SPHERE_CLIP_FRAGMENT_PARS,
   SPHERE_CLIP_VERTEX_MAIN,
@@ -36,6 +38,20 @@ export type SphereClipConfig = {
   onError?: (error: Error) => void;
   /** Optional callback for setup status. */
   onStatus?: (status: SphereClipStatus) => void;
+  /**
+   * The feed's dome clip (styleguide 3.4): its uniforms, which the feed sets
+   * once the cloche is fitted. Omitted (XR, IWSDK, AR), only the sphere clips.
+   */
+  dome?: DomeClip;
+};
+
+/** The bent dome the feed clips by: world foot centre (the bubble's shift included), radii, exponent and rim heights. Off (0) is the sphere clip. */
+export type DomeClip = {
+  u_domeOn: { value: number };
+  u_domeBase: { value: Vector3 };
+  u_domeRadii: { value: Vector3 };
+  u_domeExponent: { value: number };
+  u_domeRim: { value: Texture | null };
 };
 
 export type SphereClipStatus = "enabled" | "missing-bubble" | "error";
@@ -55,6 +71,7 @@ export type SphereClipResult = {
 const BUBBLE_MESH_NAME = "RecordedBubbleSphere";
 const DEFAULT_BUBBLE_RADIUS = 6;
 const CACHE_KEY = "sphere-clip-v2";
+const DOME_CACHE_KEY = "sphere-clip-v2-dome";
 
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                   */
@@ -99,6 +116,13 @@ function findBubbleMesh(root: Object3D): Mesh | null {
   return found;
 }
 
+function isInsideAvatar(object: Object3D): boolean {
+  for (let node: Object3D | null = object; node; node = node.parent) {
+    if (node.name === "RecordedAvatar") return true;
+  }
+  return false;
+}
+
 function readSphereRadius(mesh: Mesh): number {
   const geo = mesh.geometry;
   if (geo instanceof SphereGeometry) {
@@ -113,7 +137,7 @@ function readSphereRadius(mesh: Mesh): number {
   return geo.boundingSphere?.radius ?? DEFAULT_BUBBLE_RADIUS;
 }
 
-function patchMaterial(material: Material, uniforms: SphereClipUniforms): void {
+function patchMaterial(material: Material, uniforms: SphereClipUniforms, dome: DomeClip | undefined, exempt: boolean): void {
   material.transparent = true;
 
   // Preserve existing opacity for materials that were already transparent
@@ -131,6 +155,10 @@ function patchMaterial(material: Material, uniforms: SphereClipUniforms): void {
     shader.uniforms.u_sphereCenter = uniforms.u_sphereCenter;
     shader.uniforms.u_sphereRadius = uniforms.u_sphereRadius;
     shader.uniforms.u_sphereFalloff = uniforms.u_sphereFalloff;
+    if (dome) {
+      Object.assign(shader.uniforms, dome);
+      shader.uniforms.u_domeExempt = { value: exempt ? 1 : 0 };
+    }
 
     // --- Vertex ---
     shader.vertexShader = shader.vertexShader.replace(
@@ -145,16 +173,16 @@ function patchMaterial(material: Material, uniforms: SphereClipUniforms): void {
     // --- Fragment ---
     shader.fragmentShader = shader.fragmentShader.replace(
       "void main() {",
-      `${SPHERE_CLIP_FRAGMENT_PARS}\nvoid main() {`
+      `${SPHERE_CLIP_FRAGMENT_PARS}${dome ? DOME_CLIP_FRAGMENT_PARS : ""}\nvoid main() {`
     );
     // Inject just before the closing brace of main()
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <dithering_fragment>",
-      `#include <dithering_fragment>\n${SPHERE_CLIP_FRAGMENT_MAIN}`
+      `#include <dithering_fragment>\n${dome ? DOME_CLIP_FRAGMENT_MAIN : SPHERE_CLIP_FRAGMENT_MAIN}`
     );
   };
 
-  material.customProgramCacheKey = () => CACHE_KEY;
+  material.customProgramCacheKey = () => (dome ? DOME_CACHE_KEY : CACHE_KEY);
 }
 
 /* ------------------------------------------------------------------ */
@@ -281,7 +309,9 @@ export function applySphereClipping(
         cloned.forEach((material) => material.dispose());
         mesh.material = previousMaterial;
       });
-      cloned.forEach((material) => patchMaterial(material, clipUniforms));
+      // The avatar is never cut by the feed's dome: the author stands whole on their ground.
+      const exempt = isInsideAvatar(mesh);
+      cloned.forEach((material) => patchMaterial(material, clipUniforms, config.dome, exempt));
     });
 
     // Initial sphere centre + world radius

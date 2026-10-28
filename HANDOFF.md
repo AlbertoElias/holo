@@ -13,9 +13,12 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-Resize and move props on every device is complete and on `main` (brief
-[`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md));
-its device checks are in the brief's "Physical-device limits". Pick the next
+Resize and move props on every device
+([`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md))
+and the cloche's rim follows the ground
+([`docs/features/archive/cloche-rim-follows-ground.md`](docs/features/archive/cloche-rim-follows-ground.md))
+are complete and on `main`;
+their device checks are in each brief's "Physical-device limits". Pick the next
 queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)

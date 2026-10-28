@@ -10,6 +10,8 @@
  * sphere boundary.
  */
 
+import { CLOCHE_RIM_GLSL } from "@holoim/xr-ui-core";
+
 /* ------------------------------------------------------------------ */
 /*  Vertex shader                                                      */
 /* ------------------------------------------------------------------ */
@@ -62,3 +64,29 @@ export const SPHERE_CLIP_FRAGMENT_MAIN = /* glsl */ `
   gl_FragColor.a *= sphereAlpha;
 }
 `;
+
+/* ------------------------------------------------------------------ */
+/*  Dome clip (feed only)                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The feed's clip by the cloche's bent dome (styleguide 3.4): once a take's
+ * rim lifts, its scene is cut with a hard edge at the glass instead of the
+ * sphere's fade. Exempt materials (the avatar) are never cut. Off, the
+ * sphere clip runs as before. XR, IWSDK and AR never inject it.
+ */
+export const DOME_CLIP_FRAGMENT_PARS = /* glsl */ `
+uniform float u_domeOn;
+uniform float u_domeExempt;
+uniform vec3 u_domeBase;
+uniform vec3 u_domeRadii;
+uniform float u_domeExponent;
+uniform sampler2D u_domeRim;
+${CLOCHE_RIM_GLSL}
+`;
+
+export const DOME_CLIP_FRAGMENT_MAIN = /* glsl */ `
+if (u_domeOn > 0.5) {
+  if (u_domeExempt < 0.5 && !clocheBentInside(u_domeRim, u_domeRadii, u_domeExponent, v_sphereClipWorldPos - u_domeBase)) discard;
+} else
+${SPHERE_CLIP_FRAGMENT_MAIN}`;

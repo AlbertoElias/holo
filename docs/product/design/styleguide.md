@@ -328,6 +328,24 @@ enter.
   plays, so it never breathes. Its height is at least 40% of its wider radius, so
   every dome has the same shoulders. A bubble that follows its author carries
   its dome along.
+- **The rim follows the ground (feed).** Decided 2026-10-27 from mockups,
+  after a hilltop take showed its ground floating halfway up empty glass. In
+  the feed, a performer's take with its recorded scene bends its foot onto
+  the ground under its edge, per direction around it (180 directions), and
+  where the ground stops short of the edge the rim tucks in under its lip.
+  Ground is what the author could stand on: upward-facing, opaque surfaces
+  joined to the ground under their feet, so a post, a wall's top, a roof, a
+  boat or glass never counts and opaque water at the shore does. The bend
+  is full at the foot, none at the crown and none near the axis under the
+  author's feet; it never lifts more than 60% of the dome's height. As the
+  bubble walks, the rim rises within about 50 ms and settles over about
+  200 ms, and snaps on a loop or a seek. A take whose rim lifts is clipped
+  by the bent glass with a crisp edge (never the sphere's fade; the author
+  is never cut), draws no shade ([section 5.1](#51-the-shade-at-a-holograms-foot))
+  and is framed bent by its lowest rim over the take. Flat takes, camera
+  takes and older exports keep the flat foot, the shade and the sphere's
+  clip. XR, AR and Quick Look keep a flat foot on the recorded floor; Quick
+  Look's flat foot is an accepted difference (`edge.cloche.rim`).
 - **Anchored in the hologram's world.** It orbits, zooms and walks with the
   hologram on every target. It is never on the camera or the screen.
 - **Burnt through.** Revised the same day, after the user found the
@@ -390,7 +408,11 @@ enter.
 
 Every hologram casts a soft dark shade on its own floor, in its world: an
 ellipse 115% of the drawn content's footprint, with the stops below, moving
-with the hologram. It is the only shade anywhere. The cloche casts none, and
+with the hologram. It is the only shade anywhere. One exception (2026-10-27):
+in the feed, a take whose rim follows its ground (lifting more than 5 cm
+anywhere on its path, [section 3.4](#34-the-cloche-the-3d-halo)) draws no
+shade; its recorded ground stands in for it. This is decided once when the
+take loads, so the shade never pops during playback. The cloche casts none, and
 no control, edge or dock casts one on the screen.
 
 ```css
