@@ -8,7 +8,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 import { runDesktopObjectTake, runIwerObjectTake } from './lib/object-take.mjs';
 import { runIwerObjectPhysics } from './lib/object-physics.mjs';
 import { runDesktopMouseObject, runPhoneTouchObject } from './lib/object-pointer.mjs';
-import { runFloorReach, runMouseFloorReach, runPhoneFloorReach } from './lib/object-reach.mjs';
+import { runFloorReach, runMouseFloorReach, runPhoneFloorReach, runPitReach, runTrenchReach, runVrEntryMidStep, runWallReach } from './lib/object-reach.mjs';
 
 // Explain with an object (PRD-043): an IWER controller take and a desktop
 // take load the bracket fixture, grab it, move and turn it, put it down, and
@@ -34,7 +34,11 @@ try {
     ['phone', () => runPhoneTouchObject({ browser, baseUrl, consoleErrors })],
     ['reach', () => runFloorReach({ browser, baseUrl, artifactDir, consoleErrors })],
     ['mouseReach', () => runMouseFloorReach({ browser, baseUrl, consoleErrors })],
-    ['phoneReach', () => runPhoneFloorReach({ browser, baseUrl, consoleErrors })]
+    ['phoneReach', () => runPhoneFloorReach({ browser, baseUrl, consoleErrors })],
+    ['trench', () => runTrenchReach({ browser, baseUrl, consoleErrors })],
+    ['wall', () => runWallReach({ browser, baseUrl, consoleErrors })],
+    ['pit', () => runPitReach({ browser, baseUrl, consoleErrors })],
+    ['vrEntry', async () => runVrEntryMidStep()]
   ];
   const takes = [];
   for (const [name, run] of runs) if (!only || only.has(name)) takes.push(await run());

@@ -113,6 +113,8 @@ function reachPoseSnapshot(c: CaptureContext) {
   const head = at('head');
   const ankles = (['left', 'right'] as const).map((side) => at(`${side}Foot`));
   const toes = (['left', 'right'] as const).map((side) => at(`${side}Toes`));
+  const knees = (['left', 'right'] as const).map((side) => at(`${side}LowerLeg`));
+  const thighs = (['left', 'right'] as const).map((side) => at(`${side}UpperLeg`));
   let spinePitchDeg: number | null = null;
   if (hips && neck) {
     const v = neck.clone().sub(hips);
@@ -125,5 +127,5 @@ function reachPoseSnapshot(c: CaptureContext) {
   };
   const torsoPitchDeg = fromVertical(hips, head);
   const xyz = (v: THREE.Vector3 | null) => (v ? { x: v.x, y: v.y, z: v.z } : null);
-  return { spinePitchDeg, torsoPitchDeg, hips: xyz(hips), head: xyz(head), shoulder: xyz(shoulder), toes: toes.map(xyz), ankles: ankles.map(xyz) };
+  return { spinePitchDeg, torsoPitchDeg, hips: xyz(hips), head: xyz(head), shoulder: xyz(shoulder), toes: toes.map(xyz), ankles: ankles.map(xyz), knees: knees.map(xyz), thighs: thighs.map(xyz) };
 }

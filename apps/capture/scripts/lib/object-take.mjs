@@ -90,18 +90,23 @@ export async function openCapture(page, baseUrl, query) {
  * facing (a leg trailing back, or flung forward). Every squat in every check keeps the limits asserted below.
  */
 export function squatTracker(floorY = 0.01) {
-  const t = { minHipsAboveFloorM: Infinity, maxSpinePitchDeg: 0, maxTorsoDeg: 0, minHeadOverHipsM: Infinity, minAnkleAheadM: Infinity, maxAnkleAheadM: -Infinity, frames: [] };
+  const t = { n: 0, nTorso: 0, nSpine: 0, nHead: 0, nAnkle: 0, minHipsAboveFloorM: Infinity, maxSpinePitchDeg: 0, maxTorsoDeg: 0, minHeadOverHipsM: Infinity, minAnkleAheadM: Infinity, maxAnkleAheadM: -Infinity, frames: [] };
   return {
     sample(st) {
       const p = st.pose;
       if (!p?.hips) return;
+      t.n += 1;
       t.minHipsAboveFloorM = Math.min(t.minHipsAboveFloorM, p.hips.y - floorY);
+      if (Number.isFinite(p.spinePitchDeg)) t.nSpine += 1;
+      if (Number.isFinite(p.torsoPitchDeg)) t.nTorso += 1;
+      if (p.head && Number.isFinite(p.head.y)) t.nHead += 1;
       if (typeof p.spinePitchDeg === 'number') t.maxSpinePitchDeg = Math.max(t.maxSpinePitchDeg, p.spinePitchDeg);
       if (typeof p.torsoPitchDeg === 'number') t.maxTorsoDeg = Math.max(t.maxTorsoDeg, p.torsoPitchDeg);
       if (p.head) t.minHeadOverHipsM = Math.min(t.minHeadOverHipsM, p.head.y - p.hips.y);
       for (const a of p.ankles ?? []) {
         if (!a) continue;
         const ahead = (a.x - p.hips.x) * -Math.sin(st.avatar.yaw) + (a.z - p.hips.z) * -Math.cos(st.avatar.yaw);
+        if (Number.isFinite(ahead)) t.nAnkle += 1;
         t.minAnkleAheadM = Math.min(t.minAnkleAheadM, ahead);
         t.maxAnkleAheadM = Math.max(t.maxAnkleAheadM, ahead);
       }
@@ -117,6 +122,8 @@ export function squatTracker(floorY = 0.01) {
     trace: () => t.frames.filter((_, i) => i % 4 === 0),
     assert(fail, label) {
       const r = this.result();
+      if (t.n === 0 || t.nSpine === 0 || t.nTorso === 0 || t.nHead === 0 || t.nAnkle === 0) { fail(`${label}: the body was never sampled (samples ${t.n}, spine ${t.nSpine}, torso ${t.nTorso}, head ${t.nHead}, ankles ${t.nAnkle})`); return; }
+      for (const [name, value] of Object.entries(r)) if (!(Array.isArray(value) ? value.every(Number.isFinite) : Number.isFinite(value))) fail(`${label}: ${name} is not a finite number (${value})`);
       if (r.minHipsAboveFloorM < 0.27) fail(`${label}: the hips went down to ${r.minHipsAboveFloorM} m above the floor (limit 0.27 m)`);
       if (r.maxTorsoDeg > 50) fail(`${label}: the torso (hips to head) leaned ${r.maxTorsoDeg} degrees from vertical (limit 50)`);
       if (r.maxSpinePitchDeg > 47) fail(`${label}: the spine pitched ${r.maxSpinePitchDeg} degrees (limit 45, tolerance 47)`);
@@ -143,7 +150,7 @@ export async function recordEveryStep(page) {
         original(1000 / 60);
         const st = JSON.parse(window.render_game_to_text());
         const p = st.pose;
-        if (p?.hips) window.__stepLog.push({ phase: st.objects?.reach?.phase, yaw: st.avatar.yaw, hips: p.hips, torso: p.torsoPitchDeg, ankles: p.ankles ?? [], held: st.objects?.items?.[0]?.heldBy ?? null, root: [st.avatar.x, st.avatar.z], c: [st.crouch.amount, st.crouch.poseAmount, st.crouch.squat, st.objects?.reach?.demand].map((v) => Number(v?.toFixed?.(3))) });
+        if (p?.hips) window.__stepLog.push({ phase: st.objects?.reach?.phase, yaw: st.avatar.yaw, hips: p.hips, torso: p.torsoPitchDeg, ankles: p.ankles ?? [], knees: p.knees ?? [], thighs: p.thighs ?? [], held: st.objects?.items?.[0]?.heldBy ?? null, root: [st.avatar.x, st.avatar.z], c: [st.crouch.amount, st.crouch.poseAmount, st.crouch.squat, st.objects?.reach?.demand].map((v) => Number(v?.toFixed?.(3))) });
       }
     };
   });
@@ -151,20 +158,20 @@ export async function recordEveryStep(page) {
 
 export async function stepJumps(page, label, fail, { hipsM = 0.04, ankleM = 0.01, torsoDeg = 5 } = {}) {
   const log = await page.evaluate(() => window.__stepLog.splice(0));
+  let evaluated = 0;
   const worst = { hips: 0, ankle: 0, torso: 0, at: {} };
   for (let i = 1; i < log.length; i += 1) {
     const a = log[i - 1];
     const b = log[i];
     // A step-in or a walk legitimately moves the feet; the body-pose pops are judged around the squat.
-    const squatting = (ph) => ph && ph !== 'idle' && ph !== 'step';
-    if (!squatting(a.phase) && !squatting(b.phase)) continue;
     if (a.phase === 'step' || b.phase === 'step') continue;
     if (!(a.c[0] > 0.01 || b.c[0] > 0.01)) continue;
     // Walking away from a reach is the walk's own pose change, not a reach transition.
     // The walk animation also needs a moment to settle into the idle stance after the avatar stops, so look back a few steps.
-    if (log.slice(Math.max(0, i - 12), i + 1).some((e, n, arr) => n > 0 && Math.hypot(e.root[0] - arr[n - 1].root[0], e.root[1] - arr[n - 1].root[1]) > 0.002)) continue;
+    if (log.slice(Math.max(0, i - 45), i + 1).some((e, n, arr) => n > 0 && Math.hypot(e.root[0] - arr[n - 1].root[0], e.root[1] - arr[n - 1].root[1]) > 0.002)) continue;
     // The stand-up is fast but eased, so a pop is a jump in the hips' speed (a second difference), not a fast step.
     const c = log[i - 2];
+    evaluated += 1;
     const dh = c ? Math.abs(b.hips.y - 2 * a.hips.y + c.hips.y) : 0;
     if (dh > worst.hips) { worst.hips = dh; worst.at.hips = [i, a.phase, b.phase]; }
     const dt = Math.abs((b.torso ?? 0) - (a.torso ?? 0));
@@ -176,7 +183,42 @@ export async function stepJumps(page, label, fail, { hipsM = 0.04, ankleM = 0.01
       if (da > worst.ankle) { worst.ankle = da; worst.at.ankle = [i, a.phase, b.phase, k]; }
     });
   }
-  const out = { steps: log.length, hipsM: Number(worst.hips.toFixed(4)), ankleM: Number(worst.ankle.toFixed(4)), torsoDeg: Number(worst.torso.toFixed(2)), at: worst.at };
+  // Legs: each knee bends forward of the hip-ankle line (along the facing) and stays above its ankle; the thigh turns smoothly.
+  const knee = { minForwardM: Infinity, minAboveAnkleM: Infinity, maxThighDeg: 0, bad: [] };
+  for (let i = 0; i < log.length; i += 1) {
+    const e = log[i];
+    if (!(e.c[0] > 0.3)) continue;
+    if (log.slice(Math.max(0, i - 45), i + 1).some((q, n, arr) => n > 0 && Math.hypot(q.root[0] - arr[n - 1].root[0], q.root[1] - arr[n - 1].root[1]) > 0.002)) continue;
+    const fx = -Math.sin(e.yaw);
+    const fz = -Math.cos(e.yaw);
+    const fwd = (q) => q.x * fx + q.z * fz;
+    e.knees.forEach((k, side) => {
+      const t = e.thighs[side];
+      const a = e.ankles[side];
+      if (!k || !t || !a) return;
+      const bend = fwd(k) - (fwd(t) + fwd(a)) / 2;
+      const above = k.y - a.y;
+      knee.minForwardM = Math.min(knee.minForwardM, bend);
+      knee.minAboveAnkleM = Math.min(knee.minAboveAnkleM, above);
+      if (bend < 0.01 || above < 0.02) knee.bad.push([i, e.phase, side, Number(bend.toFixed(3)), Number(above.toFixed(3))]);
+      const prev = log[i - 1]?.knees[side] && log[i - 1].thighs[side];
+      if (prev) {
+        const d0 = [log[i - 1].knees[side].x - prev.x, log[i - 1].knees[side].y - prev.y, log[i - 1].knees[side].z - prev.z];
+        const d1 = [k.x - t.x, k.y - t.y, k.z - t.z];
+        const dot = d0[0] * d1[0] + d0[1] * d1[1] + d0[2] * d1[2];
+        const ang = (Math.acos(Math.max(-1, Math.min(1, dot / (Math.hypot(...d0) * Math.hypot(...d1))))) * 180) / Math.PI;
+        if (ang > knee.maxThighDeg) { knee.maxThighDeg = ang; knee.at = [i, e.phase, side, e.c]; }
+      }
+    });
+  }
+  const out = { kneeForwardM: Number(knee.minForwardM.toFixed(3)), kneeAboveAnkleM: Number(knee.minAboveAnkleM.toFixed(3)), thighDegPerStep: Number(knee.maxThighDeg.toFixed(2)), steps: log.length, hipsM: Number(worst.hips.toFixed(4)), ankleM: Number(worst.ankle.toFixed(4)), torsoDeg: Number(worst.torso.toFixed(2)), at: worst.at };
+  out.evaluated = evaluated;
+  if (evaluated < 30) fail(`${label}: only ${evaluated} squat transitions were evaluated for continuity`);
+  out.kneeSteps = log.filter((e) => e.c[0] > 0.3).length;
+  if (out.kneeSteps === 0) fail(`${label}: no squat steps were sampled for the knee check`);
+  if (knee.minForwardM < 0.05) fail(`${label}: a knee bent only ${out.kneeForwardM} m forward of the hip-ankle line (limit 0.05 m): a leg folded backward`);
+  if (knee.minAboveAnkleM < 0.02) fail(`${label}: a knee dropped to ${out.kneeAboveAnkleM} m above its ankle (limit 0.02 m)`);
+  if (knee.maxThighDeg > 10) fail(`${label}: a thigh turned ${out.thighDegPerStep} degrees in one step (limit 10)`);
   if (worst.hips > hipsM) fail(`${label}: the hips' speed jumped ${out.hipsM} m per step in one step (limit ${hipsM}) at ${JSON.stringify(worst.at.hips)}`);
   if (worst.ankle > ankleM) fail(`${label}: an ankle jumped ${out.ankleM} m in one step (limit ${ankleM}) at ${JSON.stringify(worst.at.ankle)}`);
   if (worst.torso > torsoDeg) fail(`${label}: the torso angle jumped ${out.torsoDeg} degrees in one step (limit ${torsoDeg}) at ${JSON.stringify(worst.at.torso)}`);

@@ -29,6 +29,9 @@ const DEEP_FROM_DEMAND = 0.85;
 // Standing back up with the prop lasts at least this long, so a prop taken at chest height still rises smoothly into the carry pose.
 const LIFT_MIN_SEC = 0.25;
 
+/** The relax after a let-go or a cancel takes this long to reach its full rate. */
+const RELAX_EASE_SEC = 0.15;
+
 export type ReachPhase = 'idle' | 'step' | 'reach' | 'lift' | 'carry' | 'lower';
 
 /**
@@ -63,6 +66,10 @@ export class DesktopReach {
   private settleSec = 0;
   private bestRemaining = Infinity;
   private stalledSec = 0;
+  /** The demand's and the extra depth's current rates (per second), so a relax carries on from a squat still going down. */
+  private stepBlocked = false;
+  private demandVel = 0;
+  private deepVel = 0;
 
   /** True while the hand is meant to be taking the prop, before it is held (the step in included). */
   isReaching(): boolean {
@@ -82,6 +89,7 @@ export class DesktopReach {
   /** `stepM`: how far the avatar must step in first; a step under `REACH_STEP_MIN_M` is skipped. */
   begin(object: SceneObject, pointerDown: boolean, stepM = 0): void {
     this.phase = stepM >= REACH_STEP_MIN_M ? 'step' : 'reach';
+    this.stepBlocked = false;
     this.stepSpeed = 0;
     this.stepSec = 0;
     this.settleSec = 0;
@@ -107,6 +115,8 @@ export class DesktopReach {
     this.stop();
     this.demand = 0;
     this.deepExtra = 0;
+    this.demandVel = 0;
+    this.deepVel = 0;
   }
 
   /**
@@ -118,8 +128,16 @@ export class DesktopReach {
     if (this.sinceSec > REACH_TIMEOUT_SEC) return 'cancel';
     if (this.lastPosition && deltaSec > 0 && this.lastPosition.distanceTo(objectPosition) / deltaSec > REACH_PROP_MAX_MPS) return 'cancel';
     this.lastPosition = (this.lastPosition ?? new THREE.Vector3()).copy(objectPosition);
-    if (this.phase === 'reach' && shoulderToGraspM > reachM * REACH_TARGET_FRACTION) this.demand = Math.min(1, this.demand + REACH_RATE_PER_SEC * deltaSec);
+    if (this.phase === 'reach') {
+      this.demandVel = shoulderToGraspM > reachM * REACH_TARGET_FRACTION && this.demand < 1 ? REACH_RATE_PER_SEC : 0;
+      this.demand = Math.min(1, this.demand + this.demandVel * deltaSec);
+    }
     return 'reaching';
+  }
+
+  /** The ground ends ahead: the step is over where it stands. */
+  blockStep(): void {
+    this.stepBlocked = true;
   }
 
   /**
@@ -134,7 +152,7 @@ export class DesktopReach {
       this.bestRemaining = remainingM;
       this.stalledSec = 0;
     } else this.stalledSec += deltaSec;
-    const arrived = remainingM <= 0.005 || this.stepSec > STEP_TIMEOUT_SEC || this.stalledSec > STEP_STALL_SEC;
+    const arrived = this.stepBlocked || remainingM <= 0.005 || this.stepSec > STEP_TIMEOUT_SEC || this.stalledSec > STEP_STALL_SEC;
     if (arrived) {
       this.stepSpeed = 0;
       this.settleSec += deltaSec;
@@ -166,6 +184,8 @@ export class DesktopReach {
     const ease = this.liftT * this.liftT * (3 - 2 * this.liftT);
     this.demand = this.liftFrom * (1 - ease);
     this.deepExtra = Math.max(0, this.deepExtra - REACH_RATE_PER_SEC * deltaSec);
+    this.demandVel = 0;
+    this.deepVel = 0;
     if (this.liftT >= 1) {
       this.demand = 0;
       this.phase = 'carry';
@@ -187,14 +207,29 @@ export class DesktopReach {
 
   /** Squat further while the hand needs it (`needMore`); true once the demand is at its limit. */
   stepLower(deltaSec: number, needMore = true): boolean {
-    if (needMore && this.demand >= DEEP_FROM_DEMAND) this.deepExtra = Math.min(1, this.deepExtra + 2 * REACH_RATE_PER_SEC * deltaSec);
-    if (needMore) this.demand = Math.min(1, this.demand + REACH_RATE_PER_SEC * deltaSec);
+    const deeper = needMore && this.demand >= DEEP_FROM_DEMAND && this.deepExtra < 1;
+    this.deepVel = deeper ? 2 * REACH_RATE_PER_SEC : 0;
+    this.deepExtra = Math.min(1, this.deepExtra + this.deepVel * deltaSec);
+    this.demandVel = needMore && this.demand < 1 ? REACH_RATE_PER_SEC : 0;
+    this.demand = Math.min(1, this.demand + this.demandVel * deltaSec);
     return this.demand >= 1;
   }
 
-  /** Idle: the body relaxes back to standing. */
+  /**
+   * Idle: the body relaxes back to standing. The rates of the demand and the extra depth turn around at a finite
+   * acceleration, from whatever they were (a squat still going down when the prop is let go keeps going a moment), so the hips never reverse in one step.
+   */
   relax(deltaSec: number): void {
-    if (this.phase === 'idle' || this.phase === 'carry') this.demand = Math.max(0, this.demand - REACH_RATE_PER_SEC * deltaSec);
-    if (this.phase !== 'lower') this.deepExtra = Math.max(0, this.deepExtra - REACH_RATE_PER_SEC * deltaSec);
+    const accel = (2 * REACH_RATE_PER_SEC) / RELAX_EASE_SEC;
+    if (this.phase === 'idle' || this.phase === 'carry') {
+      this.demandVel = Math.max(-REACH_RATE_PER_SEC, this.demandVel - accel * deltaSec);
+      this.demand = THREE.MathUtils.clamp(this.demand + this.demandVel * deltaSec, 0, 1);
+      if (this.demand <= 0 || this.demand >= 1) this.demandVel = 0;
+    }
+    if (this.phase !== 'lower') {
+      this.deepVel = Math.max(-REACH_RATE_PER_SEC, this.deepVel - accel * deltaSec);
+      this.deepExtra = THREE.MathUtils.clamp(this.deepExtra + this.deepVel * deltaSec, 0, 1);
+      if (this.deepExtra <= 0 || this.deepExtra >= 1) this.deepVel = 0;
+    }
   }
 }

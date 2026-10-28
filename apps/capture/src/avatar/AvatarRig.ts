@@ -228,6 +228,10 @@ export class AvatarRig {
   /** The feet's world orientations when planted: a planted foot stays flat as it was, however far the legs fold. */
   readonly plantFootQuats = { left: new THREE.Quaternion(), right: new THREE.Quaternion() };
   private feetPlanted = false;
+  /** True while the feet are held where a reach planted them. */
+  get isPlanted(): boolean {
+    return this.feetPlanted;
+  }
   private readonly preCrouchPose = new Map<THREE.Bone, { quaternion: THREE.Quaternion; position: THREE.Vector3 }>();
   private crouchHips: CrouchHipsBinding | undefined;
   private readonly crouchSpine: CrouchBoneBinding[] = [];
@@ -870,6 +874,11 @@ export class AvatarRig {
    * itself, since the facing correction sits on a child (`HumanoidFacing`)
    * whose own frame is still the file's.
    */
+  /** The direction the avatar faces, in world space (its canonical +Z). */
+  facingWorld(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(0, 0, 1).applyQuaternion(this.canonicalFrameQuaternion());
+  }
+
   private canonicalFrameQuaternion(): THREE.Quaternion {
     return this.avatar?.getWorldQuaternion(new THREE.Quaternion()) ?? new THREE.Quaternion();
   }

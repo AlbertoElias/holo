@@ -16,7 +16,15 @@ const VR_REACH_M = 0.1;
 // Desktop: an object at or above the shoulder, its bounds within this fraction of the arm's reach of the shoulder joint.
 const DESKTOP_REACH_FRACTION = 1.15;
 // An object below the shoulder, its bounds within one arm's reach of the shoulder, measured across the floor; and no nearer than this to the feet.
-const DESKTOP_LOW_FEET_M = 0.15;
+const DESKTOP_LOW_FEET_M = 0.1;
+// A prop whose lowest point is further below the feet's ground than this is down a drop, not a squat away.
+const REACH_BELOW_FEET_M = 0.3;
+// The step in stays on ground that is there and within this height of the ground under the avatar's root; it looks this far ahead, sampling this often.
+const STEP_GROUND_TOLERANCE_M = 0.15;
+const STEP_LOOKAHEAD_M = 0.12;
+const STEP_PROBE_SPACING_M = 0.05;
+// The height above the feet of the ray that checks the way to the prop for a low wall.
+const REACH_KNEE_RAY_M = 0.25;
 // A squat set-down takes the hand to the floor at this pace (within these bounds), and aims this far past the release gap.
 const LOWER_MAX_SEC = 0.5;
 const LOWER_MIN_SEC = 0.3;
@@ -122,6 +130,11 @@ export class ObjectInteraction {
   /** The step in a reach asked for this frame; the movement system takes it, as a displacement that is not input. */
   private readonly pendingStep = { x: 0, z: 0 };
   private readonly stepDir = new THREE.Vector3();
+  /** One for ground heights (its range is the world's), one for lines between two points. */
+  private readonly probe = new THREE.Raycaster();
+  private readonly blockProbe = new THREE.Raycaster();
+  private readonly probeFrom = new THREE.Vector3();
+  private readonly probeTo = new THREE.Vector3();
   private readonly toeOffset = { x: 0, z: 0 };
   /** Where the hand is in a squat set-down this frame, and whether a stand-up after a cancelled one still heads for it. */
   private readonly lowerPoint = new THREE.Vector3();
@@ -212,6 +225,7 @@ export class ObjectInteraction {
     if (step.vrActive) {
       carry.idle();
       this.reach.reset();
+      this.clearStep();
       if (this.hold?.desktop) this.release(false);
       this.updateVr(step);
     } else {
@@ -386,7 +400,14 @@ export class ObjectInteraction {
       } else if (this.hold?.pointer && !this.hold.settle) this.releaseDesktop();
     }
     if (reach.isReaching() && !this.stillReaching(step)) this.cancelReach();
-    if (reach.isStepping()) this.stepIn(step);
+    if (reach.isStepping()) {
+      this.stepIn(step);
+      // The step ended (arrived, stalled at a wall, or stopped at a ledge): the prop must still be reachable across open space.
+      if (!reach.isStepping()) {
+        this.clearStep();
+        if (this.reachBlocked()) this.cancelReach();
+      }
+    } else this.clearStep();
     if (this.hold?.settle && step.desktop.walking) this.cancelSettle(false);
 
     const hold = this.hold;
@@ -469,6 +490,8 @@ export class ObjectInteraction {
     let stepM = 0;
     const low = this.reach.grasp.y < avatar.avatarRoot.position.y + avatar.avatarHeight * REACH_STEP_BELOW_HEIGHT_FRACTION;
     if (low && shoulder && reachM && shoulder.distanceTo(this.reach.grasp) > reachM * REACH_TARGET_FRACTION) stepM = this.stepRemaining(true);
+    if (this.reachBlocked()) return;
+    if (stepM > 0) stepM = this.supportedStepM(stepM);
     this.liftFromLower = false;
     this.reach.begin(object, pointerDown, stepM);
   }
@@ -497,16 +520,85 @@ export class ObjectInteraction {
 
   /** One frame of the step in: asks the movement system for this frame's displacement toward the prop. */
   private stepIn(step: ObjectStep): void {
-    const moveM = this.reach.stepTowards(step.deltaSec, this.stepRemaining(false));
+    let moveM = this.reach.stepTowards(step.deltaSec, this.stepRemaining(false));
+    if (moveM > 0) {
+      // Ground ends ahead (a ledge, a gap): the step stops where the support does.
+      const allowed = this.supportedStepM(moveM);
+      if (allowed < moveM) {
+        moveM = allowed;
+        this.reach.blockStep();
+      }
+    }
     this.pendingStep.x = this.stepDir.x * moveM;
     this.pendingStep.z = this.stepDir.z * moveM;
   }
 
-  /** Stands back up with nothing grabbed. */
-  private cancelReach(): void {
+  private clearStep(): void {
     this.pendingStep.x = 0;
     this.pendingStep.z = 0;
+  }
+
+  /** Stands back up with nothing grabbed. */
+  private cancelReach(): void {
+    this.clearStep();
     this.reach.stop();
+  }
+
+  /** The ground height under a point, or undefined where the scene has none. */
+  private groundAt(x: number, z: number): number | undefined {
+    return this.deps.avatar.sampleTerrainYAt(x, z, this.probe);
+  }
+
+  /**
+   * How far along `stepDir` (from the root) the avatar can step, up to `wantM`, with ground under it the whole way:
+   * present, and within `STEP_GROUND_TOLERANCE_M` of the ground under the root. Looks `STEP_LOOKAHEAD_M` ahead of each position.
+   */
+  private supportedStepM(wantM: number): number {
+    const root = this.deps.avatar.avatarRoot.position;
+    const here = this.groundAt(root.x, root.z);
+    if (here === undefined) return 0;
+    const reachEnd = wantM + STEP_LOOKAHEAD_M;
+    let good = 0;
+    for (let d = STEP_PROBE_SPACING_M; ; d += STEP_PROBE_SPACING_M) {
+      const probe = Math.min(d, reachEnd);
+      const y = this.groundAt(root.x + this.stepDir.x * probe, root.z + this.stepDir.z * probe);
+      if (y === undefined || Math.abs(y - here) > STEP_GROUND_TOLERANCE_M) return Math.max(0, Math.min(wantM, good - STEP_LOOKAHEAD_M));
+      good = probe;
+      if (probe >= reachEnd) return wantM;
+    }
+  }
+
+  /** Whether scene geometry (a wall, a thin one included) lies between two points. Back faces count: a wall blocks from both sides. */
+  private sceneBlocks(from: THREE.Vector3, to: THREE.Vector3): boolean {
+    const world = this.deps.avatar.worldModel;
+    if (!world) return false;
+    const length = from.distanceTo(to);
+    if (length < 1e-4) return false;
+    this.blockProbe.set(from, this.probeTo.copy(to).sub(from).normalize());
+    this.blockProbe.near = 0;
+    this.blockProbe.far = length - 0.02;
+    const sides: Array<[THREE.Material, THREE.Side]> = [];
+    world.traverse((child) => {
+      const material = (child as THREE.Mesh).material;
+      for (const m of Array.isArray(material) ? material : material ? [material] : []) {
+        sides.push([m, m.side]);
+        m.side = THREE.DoubleSide;
+      }
+    });
+    const hit = this.blockProbe.intersectObject(world, true).length > 0;
+    for (const [m, side] of sides) m.side = side;
+    return hit;
+  }
+
+  /** Whether the way from the avatar to the prop's grasp point is open: the arm's line from the shoulder, and a knee-high line along the floor the step would walk. */
+  private reachBlocked(): boolean {
+    const { avatar } = this.deps;
+    const root = avatar.avatarRoot.position;
+    const shoulder = avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
+    if (shoulder && this.sceneBlocks(shoulder, this.reach.grasp)) return true;
+    this.probeFrom.set(root.x, root.y + REACH_KNEE_RAY_M, root.z);
+    this.pos.set(this.reach.grasp.x, root.y + REACH_KNEE_RAY_M, this.reach.grasp.z);
+    return this.sceneBlocks(this.probeFrom, this.pos);
   }
 
   /** Whether a reach goes on: the prop is still there and reachable, nothing walks or points, and it has not timed out or moved. */
@@ -641,6 +733,7 @@ export class ObjectInteraction {
     const reach = carry.getReach();
     if (!shoulder || !reach) return false;
     this.box.setFromObject(object.model);
+    if (this.box.min.y < avatar.avatarRoot.position.y - REACH_BELOW_FEET_M) return false;
     if (this.box.distanceToPoint(shoulder) <= reach * DESKTOP_REACH_FRACTION) return true;
     if (this.box.max.y >= shoulder.y) return false;
     const across = Math.hypot(Math.max(this.box.min.x - shoulder.x, 0, shoulder.x - this.box.max.x), Math.max(this.box.min.z - shoulder.z, 0, shoulder.z - this.box.max.z));

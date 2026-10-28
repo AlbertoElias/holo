@@ -40,9 +40,10 @@ export class BodyPoseSystem extends createSystem() {
       // A reach plants the feet where they stood when it began, from the first bend to the end of the stand-up.
       // Walking away unplants them at once: a foot left behind would snap to the stride when the stand-up ends.
       const moving = input.moveState.forward || input.moveState.back || input.moveState.left || input.moveState.right;
-      const plant = c.crouch.reach > 0 && !moving;
+      // The plant is held through the last of the stand-up, until the crouch is gone, so the feet do not snap as the reach ends.
+      const plant = (c.crouch.reach > 0 || (avatar.isPlanted && c.crouch.amount > 0.003)) && !moving;
       avatar.applyCrouchPose(c.crouch.poseAmount, character.horizontalSpeed, c.crouch.squat, plant, c.crouch.deepExtra);
-      c.terrainLegs.update(avatar, character.grounded, deltaSec, plant);
+      c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, c.crouch.poseAmount > 0.3);
     }
   }
 }

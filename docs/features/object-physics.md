@@ -483,6 +483,42 @@ viewer at every sampled key with 0 error. Must-fix:
 3. A second touch can't cancel a reach.
 4. Walking cancels a squat set-down, but not a standing one.
 
+**Round 5 (Codex, a0d28f9f..f37a663a): FAIL.** Fixed, each with an e2e check
+in `scripts/lib/object-reach.mjs` (negative controls: with the fix reverted,
+the trench, wall, pit and VR-entry checks all fail):
+
+1. The step walked off a ledge. The step now probes ground ahead (every 5 cm
+   plus 12 cm look-ahead, within 15 cm of the ground under the root) before it
+   starts and every frame, and stops where support ends. Check `trench`
+   (`fixtures/scenes/reach-trench.gltf`, from `scripts/generate-reach-hazard-scenes.mjs`):
+   the root never leaves the near strip and does not drop.
+2. The widened reach rule saw only horizontal bounds. A prop's lowest point
+   must now be within 0.3 m below the feet, and the shoulder-to-grasp line and
+   a knee-high line along the floor must be clear of scene geometry (back faces
+   count), at the start and again when the step ends (a wall-stalled step
+   cancels). Checks `wall` (a thin wall with a doorway) and `pit` (a prop
+   1.2 m down): no reach, no grab, the prop untouched.
+3. A queued step survived VR entry. The step is cleared on every cancel, stop,
+   VR frame and non-step frame, and `MovementSystem` takes it every frame. Check
+   `vrEntry` drives `ObjectInteraction.update` with a queued step (class level,
+   like the set-down walk check: a headset session cannot be entered at an exact step).
+4. The continuity check skipped idle frames. It now covers the whole crouch
+   relaxation and fails under 30 evaluated transitions. That exposed a real
+   hips reversal at a let-go (the relax now turns the rates around at a finite
+   acceleration) and a 2 cm foot snap when a plant ended (the foot now eases
+   back over 0.15 s, and the plant holds until the crouch is gone).
+5. The step distance is bound both ways (within 2 cm of what was needed), and
+   rise and drop are measured from the post-step stance. `squatTracker.assert`
+   fails with no samples or a non-finite value.
+6. Proof v5: a leg stretched behind the body at the deepest set-down. Cause:
+   the leg solver's knee bend plane followed the folded forward-kinematics knee,
+   which at a deep squat lies on or behind the hip-ankle axis, and the knee
+   flipped backward (0.36 m behind the line, below the ankle, 45 to 50 degrees
+   in one step) in the lowering of the set-down. The bend plane now follows the
+   facing whenever the body is planted or bent. Asserted per step: each knee at
+   least 0.05 m forward of the hip-ankle line (0.207 measured) and above the ankle
+   (0.169), the thigh turning at most 10 degrees a step (3.9).
+
 Fixes after round 1: the prop stays rigid with the hand through the set-down, and it is let
 go at the surface or at the arm's lowest reach. A mode switch always releases
 with zero velocity and needs a fresh press. The floor bound is 3 mm. Results

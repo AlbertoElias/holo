@@ -42,12 +42,12 @@ const round = (value, digits = 3) => Number(value.toFixed(digits));
 const centreOf = (item) => [0, 1, 2].map((a) => (item.boundsMin[a] + item.boundsMax[a]) / 2);
 const dist = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
 
-async function openPage(browser, baseUrl, consoleErrors, label, { viewport, touch }) {
+async function openPage(browser, baseUrl, consoleErrors, label, { viewport, touch, scene }) {
   const context = await createXrContext(browser, { viewport, acceptDownloads: true, ...(touch ? { hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : {}) });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
   await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"object-reach-input.json"}' }));
-  await openCapture(page, baseUrl, { object: OBJECT_URL });
+  await openCapture(page, baseUrl, { object: OBJECT_URL, ...(scene ? { scene } : {}) });
   await waitForPageFunctions(page, ['__projectToScreen', '__loadObjectUrl', '__setMockInput', '__sampleHolds']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   await recordEveryStep(page);
@@ -76,7 +76,7 @@ async function openPage(browser, baseUrl, consoleErrors, label, { viewport, touc
     await page.locator('canvas').first().focus();
     await page.keyboard.press('KeyG');
     const carried = await until((st) => st.objects.items[0].heldBy && st.objects.reach.phase === 'carry', 3);
-    if (!carried.state.objects.items[0].heldBy) throw new Error('the setup pickup did not hold the prop');
+    if (!carried.state.objects.items[0].heldBy) throw new Error(`the setup pickup did not hold the prop ${JSON.stringify({ reach: carried.state.objects.reach, avatar: carried.state.avatar, prop: carried.state.objects.items[0].position, shoulder: carried.state.pose.shoulder, sec: carried.sec })}`);
     await advance(0.3);
     await page.keyboard.press('KeyG');
     await until((st) => !st.objects.items[0].heldBy, 4);
@@ -128,6 +128,7 @@ function standingSetDownWalk() {
   interaction.reach.phase = 'carry';
   interaction.hold = { object, side: 'right', desktop: true, offset: new THREE.Matrix4(), pointer: false, settle: { startSec: 0, lowerM: 0.1, squat: false, fullSec: null } };
   interaction.clock = 0;
+  interaction.pendingStep = { x: 0, z: 0 };
   interaction.anchor = new THREE.Matrix4();
   interaction.world = new THREE.Matrix4();
   interaction.deps = { carry: { update: () => {} }, registry: { all: () => [object] }, tray: {} };
@@ -191,7 +192,7 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
       if (st.objects.reach.phase === 'step' || (st.objects.reach.phase === 'idle' && !plantedFeet)) return;
       plantedFeet ??= st.locomotion.legs.map((leg) => leg.foot);
       st.locomotion.legs.forEach((leg, i) => {
-        const stand = standingFeet[i];
+        const stand = plantedFeet[i];
         feet.maxRiseM = Math.max(feet.maxRiseM, leg.foot.y - stand.y);
         feet.maxDropM = Math.max(feet.maxDropM, stand.y - leg.foot.y);
         feet.minY = Math.min(feet.minY, leg.foot.y);
@@ -303,7 +304,7 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
       if (stepIn.toeToPropAfterM < 0.2 || stepIn.toeToPropAfterM > 0.3) fail(`after the step the prop's grasp point was ${stepIn.toeToPropAfterM} m from the toes (need 0.20 to 0.30 m)`);
       if (stepIn.aheadAfterM < 0.2 || stepIn.aheadAfterM > 0.3) fail(`after the step the grasp point was ${stepIn.aheadAfterM} m ahead of the toes along the facing (need 0.20 to 0.30 m)`);
       if (stepIn.sawStep && !(stepIn.walkFrames > 10)) fail(`the legs did not walk during the step (${stepIn.walkFrames ?? 0} walk frames)`);
-      if (neededStepM >= 0.05 && (!stepIn.sawStep || stepIn.movedM < neededStepM - 0.02)) fail(`the step moved the root ${stepIn.movedM} m, the stance needed ${stepIn.neededM} m`);
+      if (neededStepM >= 0.05 && (!stepIn.sawStep || Math.abs(stepIn.movedM - neededStepM) > 0.02)) fail(`the step moved the root ${stepIn.movedM} m, the stance needed ${stepIn.neededM} m (within 0.02 m)`);
     }
     stepIn.minToeAheadOfAnkleM = round(toeAhead.minM, 4);
     if (toeAhead.minM < 0.06) fail(`a foot twisted: a toe came within ${stepIn.minToeAheadOfAnkleM} m of its ankle along the facing (standing ${round(Math.hypot(0.123), 3)} m, limit 0.06 m)`);
@@ -499,8 +500,7 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
 
     s.tracker.assert(fail, 'the body');
     const jumps = await stepJumps(s.page, 'the body', fail);
-    console.log('[jumps]', JSON.stringify(jumps));
-    return { label, squat: s.tracker.result(), status: failures.length ? 'fail' : 'pass', failures, glb, floor, pickup: { secToGrab, secPressToGrab, palmAtGrabM: palmAtGrabM && round(palmAtGrabM, 4), maxMovedBeforeHoldM: round(maxMovedBeforeHoldM, 6), rigidHoldChangeM: rigidM, crouchBackSec, heldSamples: samples.length }, feet: footReport, stepIn, spine: { ...spineReport, lowerMaxDeg: round(lowerPitchDeg, 1), hipsPickupAboveFloorM, hipsLowerAboveFloorM }, camera: { ...cameraReport, lowerYRangeM: round(lowerCam.max - lowerCam.min, 4) }, reachAgainStepM, farReach, setDown, export: exportReport, cancels };
+    return { label, squat: s.tracker.result(), continuity: jumps, status: failures.length ? 'fail' : 'pass', failures, glb, floor, pickup: { secToGrab, secPressToGrab, palmAtGrabM: palmAtGrabM && round(palmAtGrabM, 4), maxMovedBeforeHoldM: round(maxMovedBeforeHoldM, 6), rigidHoldChangeM: rigidM, crouchBackSec, heldSamples: samples.length }, feet: footReport, stepIn, spine: { ...spineReport, lowerMaxDeg: round(lowerPitchDeg, 1), hipsPickupAboveFloorM, hipsLowerAboveFloorM }, camera: { ...cameraReport, lowerYRangeM: round(lowerCam.max - lowerCam.min, 4) }, reachAgainStepM, farReach, setDown, export: exportReport, cancels };
   } finally {
     await s.context.close();
   }
@@ -633,8 +633,7 @@ export async function runMouseFloorReach({ browser, baseUrl, consoleErrors }) {
     if (Math.abs(resting.boundsMin[1] - FLOOR_Y) > 0.003) fail(`the set-down prop rests ${reach.setDownFloorGapM} m from the floor`);
     s.tracker.assert(fail, 'the body');
     const jumps = await stepJumps(s.page, 'the body', fail);
-    console.log('[jumps]', JSON.stringify(jumps));
-    return { label, squat: s.tracker.result(), status: failures.length ? 'fail' : 'pass', failures, pitchLimits, aimed, secondPress, reach };
+    return { label, squat: s.tracker.result(), continuity: jumps, status: failures.length ? 'fail' : 'pass', failures, pitchLimits, aimed, secondPress, reach };
   } finally {
     await s.context.close();
   }
@@ -727,12 +726,12 @@ export async function runPhoneFloorReach({ browser, baseUrl, consoleErrors }) {
       await touch('touchStart', 9, restAt.x + ox, restAt.y + oy);
       await advance(0.1);
       early9 = (await s.state()).objects.reach.phase;
-      if (early9 === 'reach' || early9 === 'lift') break;
+      if (['step', 'reach', 'lift'].includes(early9)) break;
       await touch('touchEnd', 9, 0, 0);
       await advance(0.1);
     }
-    if (early9 === 'reach' || early9 === 'lift') await touch('touchEnd', 9, 0, 0);
-    else fail(`a touch on the resting prop never started a reach (phase ${early9}, projected at ${JSON.stringify(restAt)}, ${JSON.stringify(centreOf(await s.item()))})`);
+    if (['step', 'reach', 'lift'].includes(early9)) await touch('touchEnd', 9, 0, 0);
+    else fail(`a touch on the resting prop never started a reach (phase ${early9}, projected at ${JSON.stringify(restAt)}, ${JSON.stringify(centreOf(await s.item()))}, avatar ${JSON.stringify((await s.state()).avatar)}, shoulder ${JSON.stringify((await s.state()).pose.shoulder)}, crouch ${JSON.stringify((await s.state()).crouch)})`);
     const early = await s.until((st) => st.objects.items[0].heldBy && st.objects.reach.phase === 'carry', 2.5);
     await advance(0.5);
     const earlyHeld = (await s.item()).heldBy;
@@ -746,9 +745,153 @@ export async function runPhoneFloorReach({ browser, baseUrl, consoleErrors }) {
     await s.rest();
     s.tracker.assert(fail, 'the body');
     const jumps = await stepJumps(s.page, 'the body', fail);
-    console.log('[jumps]', JSON.stringify(jumps));
-    return { label, squat: s.tracker.result(), status: failures.length ? 'fail' : 'pass', failures, grab, secondTouch, earlyLift };
+    return { label, squat: s.tracker.result(), continuity: jumps, status: failures.length ? 'fail' : 'pass', failures, grab, secondTouch, earlyLift };
   } finally {
     await s.context.close();
   }
+}
+
+
+/**
+ * A press of G toward a prop that the scene makes unsafe or unreachable: the avatar must not leave its ground, and must not take the prop.
+ * `scene` is a hazard fixture (fixtures/scenes/reach-*.gltf, from scripts/generate-reach-hazard-scenes.mjs).
+ */
+async function runHazard({ browser, baseUrl, consoleErrors, label, scene, prepare, check }) {
+  const failures = [];
+  const fail = (message) => failures.push(`${label}: ${message}`);
+  const s = await openPage(browser, baseUrl, consoleErrors, label, { viewport: VIEWPORT, touch: false, scene });
+  const { page, advance } = s;
+  try {
+    await advance(1);
+    await prepare(s);
+    const settled = await s.rest();
+    const start = await s.state();
+    const startProp = settled.position;
+    await page.locator('canvas').first().focus();
+    await page.keyboard.press('KeyG');
+    const seen = new Set();
+    let held = false;
+    let minY = Infinity;
+    let maxMovedM = 0;
+    let maxRootDropM = 0;
+    let minZ = Infinity;
+    for (let i = 0; i < 4 * 60; i += 1) {
+      await advance(1 / 60);
+      const st = await s.state();
+      seen.add(st.objects.reach.phase);
+      held ||= Boolean(st.objects.items[0].heldBy);
+      minY = Math.min(minY, st.avatar.y);
+      minZ = Math.min(minZ, st.avatar.z);
+      maxMovedM = Math.max(maxMovedM, Math.hypot(st.avatar.x - start.avatar.x, st.avatar.z - start.avatar.z));
+      maxRootDropM = Math.max(maxRootDropM, start.avatar.y - st.avatar.y);
+    }
+    const end = await s.state();
+    const propMovedM = dist(end.objects.items[0].position, startProp);
+    const report = { propStart: startProp.map((v) => round(v)), phases: [...seen], held, avatarStart: [start.avatar.x, start.avatar.y, start.avatar.z].map((v) => round(v)), maxRootDropM: round(maxRootDropM, 4), maxMovedM: round(maxMovedM, 4), minZ: round(minZ, 4), propMovedM: round(propMovedM, 4), propHeldBy: end.objects.items[0].heldBy };
+    check({ fail, report, start, end });
+    if (!(report.propStart[1] < start.avatar.y - 0.3) && label === 'reach-pit') fail(`the prop did not end up in the pit (y ${report.propStart[1]}, feet ${round(start.avatar.y)})`);
+    s.tracker.sample(end);
+    return { label, status: failures.length ? 'fail' : 'pass', failures, hazard: report };
+  } finally {
+    await s.context.close();
+  }
+}
+
+/** Holds a key until the avatar's state says it is there (at most 5 s). */
+async function walkUntil(s, key, done) {
+  await s.page.locator('canvas').first().focus();
+  await s.page.keyboard.down(key);
+  for (let i = 0; i < 5 * 60 && !done(await s.state()); i += 1) await s.advance(1 / 60);
+  await s.page.keyboard.up(key);
+  await s.advance(0.6);
+}
+
+/** A prop across a gap in the floor: the step in stops at the edge, the avatar neither falls nor walks onto nothing. */
+export const runTrenchReach = (ctx) =>
+  runHazard({
+    ...ctx,
+    label: 'reach-trench',
+    scene: process.env.HAZARD_SCENE ?? '/fixtures/scenes/reach-trench.gltf',
+    // The avatar sets the prop down at z -0.24, then backs off across the trench (z 0.10 to 0.30) to z 0.38.
+    prepare: async (s) => {
+      await s.putOnFloor();
+      await walkUntil(s, 'KeyS', (st) => st.avatar.z >= 0.38);
+    },
+    check: ({ fail, report, start }) => {
+      if (report.maxRootDropM > 0.05) fail(`the avatar dropped ${report.maxRootDropM} m: it stepped off the edge`);
+      // The step began on the near strip (z 0.38 or more) and the trench's near edge is z 0.30: the root stays on the strip.
+      if (start.avatar.z < 0.3) fail(`the avatar started at z ${start.avatar.z}, not on the near side of the trench`);
+      if (report.minZ < 0.3 - 0.02) fail(`the avatar's root went to z ${report.minZ}, over the trench (near edge at 0.30)`);
+      if (!report.phases.some((phase) => phase === 'step' || phase === 'reach')) fail(`G did not start a reach at all (phases ${report.phases}); the guard was never exercised`);
+    }
+  });
+
+/** A prop behind a thin wall, within the arm's radius: no grab, the prop untouched. */
+export const runWallReach = (ctx) =>
+  runHazard({
+    ...ctx,
+    label: 'reach-wall',
+    scene: process.env.HAZARD_SCENE ?? '/fixtures/scenes/reach-wall.gltf',
+    // The prop is set down at x 0; the avatar walks out through the doorway (z 0.6 to 1.4) to x -0.72 and back up to the prop's row.
+    prepare: async (s) => {
+      await s.putOnFloor();
+      await walkUntil(s, 'KeyS', (st) => st.avatar.z >= 1.0);
+      await walkUntil(s, 'KeyA', (st) => st.avatar.x <= -0.72);
+      await walkUntil(s, 'KeyW', (st) => st.avatar.z <= -0.2);
+    },
+    check: ({ fail, report, start }) => {
+      if (!(start.avatar.x < -0.6)) fail(`the avatar did not get round to the far side of the wall (x ${start.avatar.x})`);
+      if (report.held || report.propHeldBy) fail(`the prop was taken across a wall (heldBy ${report.propHeldBy})`);
+      if (report.propMovedM > 0.02) fail(`the prop behind the wall moved ${report.propMovedM} m`);
+      if (report.phases.some((phase) => phase !== 'idle')) fail(`a reach began toward a prop behind a wall (phases ${report.phases})`);
+      if (report.maxMovedM > 0.02) fail(`the avatar moved ${report.maxMovedM} m toward a prop behind a wall`);
+    }
+  });
+
+/** A prop 1.2 m below the avatar's feet (a drop): not reachable, no step, no fall. */
+export const runPitReach = (ctx) =>
+  runHazard({
+    ...ctx,
+    label: 'reach-pit',
+    scene: process.env.HAZARD_SCENE ?? '/fixtures/scenes/reach-pit.gltf',
+    // The avatar sets the prop down at the rim; it falls into the pit.
+    prepare: async (s) => {
+      await s.putOnFloor();
+    },
+    check: ({ fail, report }) => {
+      if (report.held || report.propHeldBy) fail(`the prop 1.2 m below the feet was taken (heldBy ${report.propHeldBy})`);
+      if (report.phases.some((phase) => phase !== 'idle')) fail(`a reach began toward a prop in a pit (phases ${report.phases})`);
+      if (report.maxRootDropM > 0.02 || report.maxMovedM > 0.02) fail(`the avatar moved (${report.maxMovedM} m) or dropped (${report.maxRootDropM} m) for a prop in a pit`);
+    }
+  });
+
+/**
+ * Entering VR mid-step leaves no queued step: the interaction's update in VR clears it, and the next frame out of VR carries no displacement.
+ * Driven on the class itself (as standingSetDownWalk is): a real headset session can not be entered at an exact step of the reach.
+ */
+export function runVrEntryMidStep() {
+  const failures = [];
+  const interaction = Object.create(ObjectInteraction.prototype);
+  interaction.reach = new DesktopReach();
+  interaction.reach.phase = 'step';
+  interaction.hold = null;
+  interaction.pendingStep = { x: 0.012, z: -0.008 };
+  interaction.clock = 0;
+  interaction.deps = { avatar: { avatar: {} }, registry: { eventObjects: () => [], all: () => [] }, carry: { idle: () => {} }, grabInput: { reset: () => {} } };
+  interaction.updateVr = () => {};
+  interaction.place = () => {};
+  const vrFrame = { deltaSec: 1 / 60, vrActive: true, bodyYaw: 0 };
+  interaction.update(vrFrame);
+  const afterEntry = interaction.takeReachStep();
+  if (afterEntry !== null) fail(`a step of ${JSON.stringify(afterEntry)} stayed queued after VR entry`);
+  if (interaction.reach.phase !== 'idle') failures.push(`the reach was ${interaction.reach.phase} after VR entry (need idle)`);
+  // A queued step stays cleared however many VR frames pass, and the movement system takes it every frame (VR or not), so nothing carries out of VR.
+  interaction.pendingStep = { x: 0.02, z: 0 };
+  interaction.update(vrFrame);
+  const second = interaction.takeReachStep();
+  if (second !== null) failures.push(`a step stayed queued on a later VR frame (${JSON.stringify(second)})`);
+  function fail(message) {
+    failures.push(message);
+  }
+  return { label: 'reach-vr-entry-mid-step', status: failures.length ? 'fail' : 'pass', failures };
 }

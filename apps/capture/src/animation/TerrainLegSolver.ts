@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { AvatarRig } from '../avatar/AvatarRig';
 
-type Leg = { upper: THREE.Bone; lower: THREE.Bone; foot: THREE.Bone; upInFoot: THREE.Vector3; correction: number; planted: boolean; plantCorrection: number };
+type Leg = { upper: THREE.Bone; lower: THREE.Bone; foot: THREE.Bone; upInFoot: THREE.Vector3; correction: number; planted: boolean; plantCorrection: number; heldTarget: THREE.Vector3; heldQuat: THREE.Quaternion; release: number };
 type LegSample = {
   side: string;
   foot: { x: number; y: number; z: number };
@@ -10,6 +10,9 @@ type LegSample = {
   upper: number[];
   lower: number[];
 };
+
+/** A released plant eases the foot back to the animation over this long. */
+const PLANT_RELEASE_SEC = 0.15;
 
 /** Post-animation, leg-only terrain adaptation. No calibration or root ownership. */
 export class TerrainLegSolver {
@@ -35,12 +38,12 @@ export class TerrainLegSolver {
     this.legs = [];
     for (const side of ['left', 'right'] as const) {
       const upper = rig.bone(`${side}UpperLeg`), lower = rig.bone(`${side}LowerLeg`), foot = rig.bone(`${side}Foot`);
-      if (upper && lower && foot) this.legs.push({ upper, lower, foot, upInFoot: this.up.clone().applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()).invert()), correction: 0, planted: false, plantCorrection: 0 });
+      if (upper && lower && foot) this.legs.push({ upper, lower, foot, upInFoot: this.up.clone().applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()).invert()), correction: 0, planted: false, plantCorrection: 0, heldTarget: new THREE.Vector3(), heldQuat: new THREE.Quaternion(), release: 0 });
     }
   }
 
   /** `plant`: a reach is driving the pose; each foot stays where it stood when the reach began. */
-  update(rig: AvatarRig, grounded: boolean, deltaSec: number, plant = false): void {
+  update(rig: AvatarRig, grounded: boolean, deltaSec: number, plant = false, bent = false): void {
     if (this.avatar !== rig.avatar) this.attach(rig);
     this.samples = [];
     if (!rig.worldModel || !rig.avatar) return;
@@ -67,14 +70,22 @@ export class TerrainLegSolver {
           const stand = rig.plantFeet[index === 0 ? 'left' : 'right'];
           target = new THREE.Vector3(stand.x, stand.y + leg.plantCorrection, stand.z);
           leg.correction = target.y - foot.y;
+          leg.heldTarget.copy(target);
+          leg.heldQuat.copy(rig.plantFootQuats[index === 0 ? 'left' : 'right']);
+          leg.release = 1;
         } else {
           leg.planted = false;
           const desired = THREE.MathUtils.clamp(Math.max(surface.point.y - center.point.y, surface.point.y + sole - foot.y), -height * 0.18, height * 0.22);
           leg.correction = THREE.MathUtils.lerp(leg.correction, desired, 1 - Math.exp(-18 * Math.max(0, deltaSec)));
           target = foot.clone();
           target.y += leg.correction;
+          // Letting go of a plant eases the foot from where it was held to where the animation has it, not a snap.
+          if (leg.release > 0) {
+            leg.release = Math.max(0, leg.release - deltaSec / PLANT_RELEASE_SEC);
+            target.lerp(leg.heldTarget, leg.release * leg.release * (3 - 2 * leg.release));
+          }
         }
-        this.solve(leg, target, rig.avatarRoot);
+        this.solve(leg, target, rig.facingWorld(new THREE.Vector3()), plant || bent);
         if (plant) {
           // A planted foot keeps its orientation: at a deep squat the shin folds so far that tilting it toward the floor would spin it.
           const planted = rig.plantFootQuats[index === 0 ? 'left' : 'right'];
@@ -89,13 +100,16 @@ export class TerrainLegSolver {
           const tilt = new THREE.Quaternion().setFromUnitVectors(footUp, surface.normal);
           tilt.slerp(new THREE.Quaternion(), 1 - contact);
           const parentRotation = leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion());
-          leg.foot.quaternion.copy(parentRotation.invert().multiply(tilt).multiply(worldRotation)).normalize();
+          const free = tilt.multiply(worldRotation);
+          if (leg.release > 0) free.slerp(leg.heldQuat, leg.release * leg.release * (3 - 2 * leg.release));
+          leg.foot.quaternion.copy(parentRotation.invert().multiply(free)).normalize();
           leg.foot.updateWorldMatrix(false, true);
         }
       } else {
         // No inferred contact during flight or over a ledge.
         leg.correction = 0;
         leg.planted = false;
+        leg.release = 0;
       }
       const resolved = leg.foot.getWorldPosition(new THREE.Vector3());
       this.samples.push({ side: index === 0 ? 'left' : 'right', foot: { x: resolved.x, y: resolved.y, z: resolved.z }, groundY: surface?.point.y ?? null, correction: leg.correction, upper: leg.upper.quaternion.toArray(), lower: leg.lower.quaternion.toArray() });
@@ -115,7 +129,7 @@ export class TerrainLegSolver {
     return undefined;
   }
 
-  private solve(leg: Leg, target: THREE.Vector3, root: THREE.Object3D): void {
+  private solve(leg: Leg, target: THREE.Vector3, facing: THREE.Vector3, kneesForward: boolean): void {
     const hip = leg.upper.getWorldPosition(new THREE.Vector3());
     const knee = leg.lower.getWorldPosition(new THREE.Vector3());
     const ankle = leg.foot.getWorldPosition(new THREE.Vector3());
@@ -126,10 +140,9 @@ export class TerrainLegSolver {
     if (axis.lengthSq() < 1e-10) return;
     axis.normalize();
     const pole = knee.clone().sub(hip).addScaledVector(axis, -knee.clone().sub(hip).dot(axis));
-    if (pole.lengthSq() < a * a * 0.001) {
-      pole.set(0, 0, 1).transformDirection(root.matrixWorld);
-      pole.addScaledVector(axis, -pole.dot(axis));
-    }
+    // A knee bends forward. A deep squat folds the leg so far that the folded knee lies on the axis or behind it; keep the bend plane forward then, never flip the knee backward.
+    const forward = facing.clone().addScaledVector(axis, -facing.dot(axis));
+    if (forward.lengthSq() > 1e-6 && (kneesForward || pole.lengthSq() < a * a * 0.001 || pole.dot(forward) < 0)) pole.copy(forward);
     if (pole.lengthSq() < 1e-10) return;
     pole.normalize();
     const along = (a * a + distance * distance - b * b) / (2 * distance);
