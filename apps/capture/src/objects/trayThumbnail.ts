@@ -1,3 +1,4 @@
+import { tokens } from '@holoim/design-tokens';
 import * as THREE from 'three';
 
 /** Thumbnail edge in pixels: 2× the flat tray slot's 54 apx, rounded up. */
@@ -26,7 +27,8 @@ export class TrayThumbnailer {
   private readonly center = new THREE.Vector3();
 
   constructor(private readonly renderer: THREE.WebGLRenderer) {
-    this.scene.add(new THREE.HemisphereLight(0xfff6ea, 0x17424a, 2.2));
+    // Lit like the blue hour: warm from above, the ground's teal from below.
+    this.scene.add(new THREE.HemisphereLight(tokens.color.text, tokens.color.ground.mid, 2.2));
     const key = new THREE.DirectionalLight(0xffffff, 1.6);
     key.position.set(1, 2, 3);
     this.scene.add(key);
@@ -34,31 +36,12 @@ export class TrayThumbnailer {
 
   /**
    * `liveScene`: the scene the item will be drawn in. Its shaders depend on that
-   * scene's lights, so they are compiled against it as well.
+   * scene's lights, so they are compiled against it as well. Each costly step
+   * (compiles, each texture's upload, the draw that uploads the geometry, the
+   * read back) runs in its own task, so a load mid-take never holds one frame
+   * for all of them.
    */
   async render(model: THREE.Object3D, liveScene?: THREE.Scene): Promise<TrayThumbnail | null> {
-    const { renderer } = this;
-    if (liveScene) await renderer.compileAsync(model, this.camera, liveScene);
-    // An immersive session draws to its own layers; a thumbnail made there would be blank.
-    if (renderer.xr.isPresenting) return this.renderOutsideXr(model);
-    return this.draw(model);
-  }
-
-  dispose(): void {
-    this.target.dispose();
-  }
-
-  private async renderOutsideXr(model: THREE.Object3D): Promise<TrayThumbnail | null> {
-    const xr = this.renderer.xr;
-    xr.enabled = false;
-    try {
-      return await this.draw(model);
-    } finally {
-      xr.enabled = true;
-    }
-  }
-
-  private async draw(model: THREE.Object3D): Promise<TrayThumbnail | null> {
     const { renderer, scene, camera, target } = this;
     const proxy = model.clone();
     proxy.visible = true;
@@ -73,27 +56,71 @@ export class TrayThumbnailer {
     proxy.position.sub(this.center);
     const radius = Math.max(this.size.length() / 2, 1e-3);
     const distance = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2));
-    camera.position.set(distance * 0.55, distance * 0.45, distance * 0.7).normalize().multiplyScalar(distance);
+    camera.position.set(0.55, 0.45, 0.7).normalize().multiplyScalar(distance);
     camera.near = distance / 100;
     camera.far = distance * 4;
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
     scene.add(proxy);
     try {
-      await renderer.compileAsync(proxy, camera, scene);
-      const previousTarget = renderer.getRenderTarget();
-      const previousClear = renderer.getClearAlpha();
-      renderer.setRenderTarget(target);
-      renderer.setClearAlpha(0);
-      renderer.clear();
-      renderer.render(scene, camera);
-      renderer.readRenderTargetPixels(target, 0, 0, TRAY_THUMBNAIL_PX, TRAY_THUMBNAIL_PX, this.pixels);
-      renderer.setRenderTarget(previousTarget);
-      renderer.setClearAlpha(previousClear);
+      // Against the live scene's lights, as a summoned copy will be drawn. The
+      // proxy stands in for the model: compiles skip hidden objects, and a tray
+      // item stays hidden until its first summon.
+      if (liveScene) await renderer.compileAsync(proxy, camera, liveScene);
+      // Drawn into a render target, the proxy uses other programs than on screen.
+      await this.withTarget(() => renderer.compileAsync(proxy, camera, scene));
+      trayMark('compiled');
+      for (const texture of texturesOf(proxy)) {
+        await nextTask();
+        renderer.initTexture(texture);
+        trayMark('texture');
+      }
+      await nextTask();
+      this.drawOnce();
+      trayMark('drawn');
+      await renderer.readRenderTargetPixelsAsync(target, 0, 0, TRAY_THUMBNAIL_PX, TRAY_THUMBNAIL_PX, this.pixels);
+      trayMark('read');
     } finally {
       scene.remove(proxy);
     }
-    return this.toCanvas();
+    const thumbnail = this.toCanvas();
+    trayMark('thumbnail');
+    return thumbnail;
+  }
+
+  dispose(): void {
+    this.target.dispose();
+  }
+
+  private drawOnce(): void {
+    const { renderer, scene, camera } = this;
+    const previousClear = renderer.getClearAlpha();
+    this.withTarget(() => {
+      renderer.setClearAlpha(0);
+      renderer.clear();
+      renderer.render(scene, camera);
+    });
+    renderer.setClearAlpha(previousClear);
+  }
+
+  /**
+   * Runs `work` with the thumbnail target bound and the immersive session's
+   * layers set aside (a thumbnail drawn through them would be blank). The
+   * programs a compile picks depend on that target, so compiles go through here
+   * too; their GPU work continues after the target is restored.
+   */
+  private withTarget<T>(work: () => T): T {
+    const { renderer, target } = this;
+    const xrEnabled = renderer.xr.enabled;
+    const previousTarget = renderer.getRenderTarget();
+    renderer.xr.enabled = false;
+    try {
+      renderer.setRenderTarget(target);
+      return work();
+    } finally {
+      renderer.setRenderTarget(previousTarget);
+      renderer.xr.enabled = xrEnabled;
+    }
   }
 
   private toCanvas(): TrayThumbnail {
@@ -110,4 +137,28 @@ export class TrayThumbnailer {
     context.putImageData(image, 0, 0);
     return { url: canvas.toDataURL('image/png'), canvas };
   }
+}
+
+/**
+ * A User Timing mark at the end of a step of a tray load (`tray:<step>`), so a
+ * long task during a load can be traced to the step it overlaps.
+ */
+export const trayMark = (step: string): void => {
+  performance.mark(`tray:${step}`);
+};
+
+/** Yields to the frame loop: the next step of a load runs in a task of its own. */
+export const nextTask = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** Every texture the model's materials sample, once each. */
+function texturesOf(model: THREE.Object3D): THREE.Texture[] {
+  const out = new Set<THREE.Texture>();
+  model.traverse((node) => {
+    const material = (node as THREE.Mesh).material;
+    if (!material) return;
+    for (const entry of Array.isArray(material) ? material : [material]) {
+      for (const value of Object.values(entry)) if ((value as THREE.Texture | null)?.isTexture) out.add(value as THREE.Texture);
+    }
+  });
+  return [...out];
 }

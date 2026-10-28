@@ -18,6 +18,8 @@ import {
 import { emulatePhone, phoneFingerDown, phoneFingerMove, phoneFingerUp, phoneHold, phoneScreenPoint, phoneTap, phoneTargetRayLost, phoneViewOffset, phoneViewerSpaceUnavailable, setHeadPose, type PhoneQuat as Quat, type PhoneVec3 as Vec3 } from '@holoim/tooling-testing/iwer-phone';
 
 import type {} from '../src/runtime/automationHooks';
+import { validateHoloimObjects } from '@holoim/objects';
+
 import type { PointResolutionReport } from '../src/recording/PointResolver';
 import { TARGETS } from './lib/pointing-scene.ts';
 import {
@@ -26,6 +28,7 @@ import {
   comparePaths,
   inspectCameraTake,
   CAMERA_NODE_NAME as CAMERA_NODE,
+  OBJECT_NODE_NAME,
   type CameraTakeReport,
   type MeaningLinkReport,
   type NodeComparison,
@@ -78,6 +81,15 @@ import {
 //                     a take; Exit by tap mid-take exports the second. Screenshots of the view between
 //                     takes and while recording go to <artifactDir>/phone-dock-*.png.
 //   dock-exit-idle    Exit by tap with no take ends the session; nothing downloads.
+//   phone-tray        docs/features/tray-everywhere.md, phone AR placement: the page loads two tray items (?tray=bracket.glb
+//                     and diagram.png); before the take the dock's Tray glyph opens the row (two filled slots with
+//                     thumbnails, three empty, 44 apx hits) and the centre reticle hits the set or its floor. Record; a
+//                     1 s screen hold aimed at the reticle's point, ending before the placement; a tap on slot 1 places
+//                     the item there (a summoned event object, its lowest point on the hit, the row closes); a 1 s hold
+//                     on the placed object. In the export: a valid HOLOIM_objects with the one summoned RecordedObject
+//                     whose presence starts after 0, at the placement's take time; the hold made before it has no link to
+//                     its node; the hold after does. The open row is photographed to <artifactDir>/phone-tray-row.png.
+//                     Run alone with AR_RECORD_ONLY=phone-tray.
 // The dock is driven by taps (phoneTap) at the buttons' world positions, read from the page's
 // __samplePhoneChrome probe, in phone-a, phone-b, phone-dock and dock-exit-idle. The other phases press
 // Record through __toggleRecording. Quest passthrough and a device with no interactionMode must have no dock at all.
@@ -134,7 +146,8 @@ const PHASES = [
   'quest-passthrough',
   'interaction-undefined',
   'phone-dock',
-  'dock-exit-idle'
+  'dock-exit-idle',
+  'phone-tray'
 ] as const;
 type Phase = (typeof PHASES)[number];
 
@@ -163,6 +176,8 @@ type ArState = {
 
 /** `__samplePhoneChrome`: the dock's three one-glyph docks and the status line. */
 type DockId = 'record' | 'recenter' | 'exit';
+/** The dock's Tray glyph is not one of the three the older phases lay out. */
+type TapDockId = DockId | 'tray';
 type DockProbe = {
   visible: boolean;
   metresPerApx: number;
@@ -175,9 +190,19 @@ type PhoneProbe = {
   /** The dock's chip on the screen (CSS px from the top left), null while no control shows. */
   chip: { left: number; top: number; width: number; height: number } | null;
   viewport: { width: number; height: number; fovyDeg: number } | null;
-  docks: Partial<Record<DockId, DockProbe>>;
+  docks: Partial<Record<TapDockId, DockProbe>>;
   /** The status line's chip on the screen on a phone, once laid out. */
   statusLine: { visible: boolean; text: string; chip?: { left: number; top: number; width: number; height: number } | null } | null;
+  /** The tray row above the dock and the centre ray's placement. */
+  tray: {
+    row: { built: boolean; open: boolean; slots: Array<{ slot: number; filled: boolean; name: string | null; hitApx: number; thumbnail: boolean }>; chip: { left: number; top: number; width: number; height: number } | null } | null;
+    placement: {
+      open: boolean;
+      reticle: { hit: boolean; point: number[] | null; surface: 'mesh' | 'floor' | null; casts: number };
+      lastPlaced: { slot: number; objectId: string; point: number[]; yaw: number; timeSec: number } | null;
+      refused: number;
+    } | null;
+  };
 };
 
 type StepCoverage = {
@@ -261,6 +286,8 @@ type OpenOptions = {
   phone?: boolean | 'interaction-unset';
   scene?: boolean;
   object?: boolean;
+  /** Tray items to load (`?tray=`, repeated). */
+  trayUrls?: string[];
   micDenied?: boolean;
   /**
    * 'gate': getUserMedia waits on `window.__micGate` until `__openMicGate()`; 'track': it does not wait.
@@ -324,6 +351,7 @@ async function openPage(run: Run, options: OpenOptions): Promise<Page> {
     url.searchParams.set('sceneScale', '1');
   }
   if (options.object) url.searchParams.set('object', OBJECT_URL);
+  for (const trayUrl of options.trayUrls ?? []) url.searchParams.append('tray', trayUrl);
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['advanceTime', 'render_game_to_text', '__toggleRecording', '__arWorldFrame', '__setManualClock']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
@@ -474,7 +502,7 @@ function dockFailures(label: string, probe: PhoneProbe, expected: Record<DockId,
  * is not shown, unless `hidden` says the tap is meant for a button that is not (nothing may happen).
  * Exit ends the session mid-tap, so the tap is not waited for past `endsSession`.
  */
-async function tapDock(page: Page, id: DockId, options: { hidden?: boolean; endsSession?: boolean } = {}): Promise<void> {
+async function tapDock(page: Page, id: TapDockId, options: { hidden?: boolean; endsSession?: boolean } = {}): Promise<void> {
   // Two real frames: the XR camera, and the dock hung on it, have taken the head's latest pose.
   await nextXrFrame(page);
   await nextXrFrame(page);
@@ -1934,6 +1962,212 @@ function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: Mean
   if (resolution.runs.filter((resolved) => resolved.linked).length !== links.length) report.failures.push('resolution: linked runs and links in the file differ');
 }
 
+// --- Phone AR tray placement (docs/features/tray-everywhere.md) ---
+
+const TRAY_URLS = ['/fixtures/objects/bracket.glb', '/fixtures/objects/diagram.png'];
+/** The placed object's lowest point meets the reticle's hit within this, metres. */
+const TRAY_BASE_TOLERANCE_M = 0.02;
+/** A placement's presence starts within a frame (about 150 ms) and a step of the take time read around the tap. */
+const TRAY_PRESENCE_TOLERANCE_SEC = 0.3;
+/** Metres above the reticle's point the first hold aims: through the body of the object that will stand there. */
+const TRAY_HOLD_LIFT_M = 0.04;
+
+/** Taps a tray slot of the open row where it stands in the room now, with the head still. */
+async function tapTraySlot(page: Page, slot: number): Promise<void> {
+  // Two real frames: the XR camera, and the row hung on it, have taken the head's latest pose.
+  await nextXrFrame(page);
+  await nextXrFrame(page);
+  const position = await page.evaluate((n) => window.__phoneTraySlotPosition(n), slot);
+  if (!position) throw new Error(`tray slot ${slot} has no position: the row is not open`);
+  await drive(page, phoneTap(page, position as Vec3));
+}
+
+/** Frames and steps until the phone chrome satisfies `ready`, at most `frames`; returns the last probe. */
+async function chromeUntil(page: Page, ready: (probe: PhoneProbe) => boolean, frames = 60): Promise<PhoneProbe> {
+  let probe = await phoneChrome(page);
+  for (let i = 0; i < frames && !ready(probe); i += 1) {
+    await nextXrFrame(page);
+    await advance(page, STEP_MS);
+    probe = await phoneChrome(page);
+  }
+  return probe;
+}
+
+type TrayItem = { id: string; origin: string; layer: string; boundsMin: Vec3; boundsMax: Vec3 };
+const eventItems = (page: Page): Promise<TrayItem[]> => page.evaluate(() => JSON.parse(window.render_game_to_text()).objects.items as TrayItem[]);
+
+/** The GLB's JSON chunk. */
+function glbJson(glb: Buffer): { nodes?: Array<{ name?: string }>; extensionsUsed?: string[]; extensions?: Record<string, unknown> } {
+  return JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8'));
+}
+
+/**
+ * The camera author places a tray item (the phone AR placement): the Tray glyph opens the row, the centre
+ * reticle finds the set or its floor, a hold made before the placement is aimed where the item will stand,
+ * a tap on slot 1 places it, and a hold on it follows. The export has the item as a summoned RecordedObject
+ * present from the placement; the earlier hold does not link to it.
+ */
+async function trayPhase(run: Run): Promise<PhaseReport> {
+  const report: PhaseReport = { phase: 'phone-tray', failures: [], notes: {}, ar: {}, takes: [] };
+  const page = await openPage(run, { phone: true, scene: true, trayUrls: TRAY_URLS, viewport: PHONE_VIEWPORT });
+  const scenarios: MarkScenario[] = [];
+  try {
+    await enterAr(page, { position: [0, 1.6, 0], yaw: 0 });
+    const frame = toMatrix(await worldFrame(page));
+    report.worldFrame = frame.toArray().map((value) => round(value, 4));
+    report.ar.entered = await arOf(page);
+
+    // The head stands in the set looking down at the floor ahead: the centre ray meets the set or its floor.
+    const eye: Vec3 = [0, 1.5, 0.6];
+    const standing = setToRoom(frame, { position: eye, quaternion: lookQuat(eye, [0.3, 0, -0.6]) });
+    await setHeadPose(page, standing.position, standing.quaternion);
+    await nextXrFrame(page);
+    await advance(page, STEP_MS);
+
+    // Before the take: the dock offers Tray, and a tap opens the row.
+    const settled = await dockState(page);
+    report.notes.dockBeforeTray = dockSummary(settled);
+    if (!settled.docks.tray?.visible) report.failures.push('the dock does not show Tray before the take');
+    await tapDock(page, 'tray');
+    const opened = await chromeUntil(page, (probe) => {
+      const row = probe.tray.row;
+      return Boolean(row?.open && row.slots.filter((slot) => slot.filled && slot.thumbnail).length >= 2 && probe.tray.placement?.reticle.hit);
+    });
+    const row = opened.tray.row;
+    const reticle = opened.tray.placement?.reticle;
+    report.notes.rowBeforeTake = { row, reticle };
+    if (!row?.open) report.failures.push('a tap on the Tray glyph did not open the row');
+    const filled = row?.slots.filter((slot) => slot.filled) ?? [];
+    if (!row || row.slots.length !== 5 || filled.length !== 2 || !row.slots[0]!.filled || !row.slots[1]!.filled) report.failures.push(`the row shows ${filled.length} filled slot(s) of ${row?.slots.length ?? 0} (${JSON.stringify(row?.slots.map((slot) => slot.filled))}), expected slots 1 and 2 filled of 5`);
+    for (const slot of row?.slots ?? []) {
+      if (slot.hitApx < 44) report.failures.push(`tray slot ${slot.slot}: hit area ${slot.hitApx} apx, under 44`);
+      if (slot.filled && !slot.thumbnail) report.failures.push(`tray slot ${slot.slot}: filled with no thumbnail texture`);
+    }
+    if (!reticle?.hit || !reticle.point) report.failures.push('the reticle has no hit on the set or the floor with the row open');
+    if (!opened.docks.tray?.visible) report.failures.push('the dock lost Tray with the row open');
+    report.notes.rowChip = row?.chip ?? null;
+    await showCanvasOnly(page);
+    await screenshot(page, 'phone-tray-row.png', report);
+
+    // The take starts with the row open; a hold aimed at the reticle's point, over before the placement.
+    await startRecordingByDock(page);
+    await watchTouches(page);
+    for (let i = 0; i < 3; i += 1) {
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
+    }
+    let live = await phoneChrome(page);
+    report.notes.rowOpenAfterRecord = Boolean(live.tray.row?.open);
+    if (!live.tray.row?.open) {
+      // The take is allowed to close it; the placement below needs it open, so a failure here names the cause.
+      report.failures.push('Record closed the tray row; Tray stays through a take');
+      await tapDock(page, 'tray');
+      live = await chromeUntil(page, (probe) => Boolean(probe.tray.row?.open && probe.tray.placement?.reticle.hit));
+    }
+    const hit = live.tray.placement?.reticle;
+    if (!hit?.hit || !hit.point) {
+      report.failures.push('the reticle has no hit once the take is recording');
+      return report;
+    }
+    const hitPoint = hit.point as Vec3;
+    const aimed: Vec3 = [hitPoint[0], hitPoint[1] + TRAY_HOLD_LIFT_M, hitPoint[2]];
+    await touchScenario(page, report, scenarios, 'hold-before-placement', () => phoneHold(page, aimed, MARK_HOLD_MS), 1);
+
+    // Tap slot 1: the item is placed on the hit, in the take's own step, and the row closes.
+    live = await chromeUntil(page, (probe) => Boolean(probe.tray.row?.open && probe.tray.placement?.reticle.hit));
+    const target = (live.tray.placement?.reticle.point ?? hitPoint) as Vec3;
+    const takeBeforeTap = (await arOf(page)).takeSec;
+    await tapTraySlot(page, 1);
+    for (let i = 0; i < 4; i += 1) {
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
+    }
+    const takeAfterTap = (await arOf(page)).takeSec;
+    const placed = await phoneChrome(page);
+    const lastPlaced = placed.tray.placement?.lastPlaced ?? null;
+    report.notes.placement = { target, lastPlaced, refused: placed.tray.placement?.refused, takeBeforeTap: round(takeBeforeTap, 3), takeAfterTap: round(takeAfterTap, 3), rowOpenAfter: placed.tray.row?.open };
+    if (!lastPlaced || lastPlaced.slot !== 1) report.failures.push(`a tap on slot 1 left lastPlaced ${JSON.stringify(lastPlaced)}`);
+    if (placed.tray.row?.open) report.failures.push('the row is still open after a placement');
+    if ((placed.tray.placement?.refused ?? 0) > 0) report.failures.push(`${placed.tray.placement!.refused} placement(s) refused although the reticle had a hit`);
+    const items = await eventItems(page);
+    const summoned = items.filter((item) => item.origin === 'summoned' && item.layer === 'event');
+    report.notes.items = items.map((item) => ({ id: item.id, origin: item.origin, layer: item.layer }));
+    if (summoned.length !== 1) report.failures.push(`${summoned.length} summoned event object(s) after the placement, expected 1`);
+    const object = summoned[0];
+    if (object) {
+      const baseErrM = Math.abs(object.boundsMin[1] - target[1]);
+      const insideXz = target[0] >= object.boundsMin[0] - 0.05 && target[0] <= object.boundsMax[0] + 0.05 && target[2] >= object.boundsMin[2] - 0.05 && target[2] <= object.boundsMax[2] + 0.05;
+      report.notes.placedObject = { boundsMin: object.boundsMin.map((v) => round(v, 3)), boundsMax: object.boundsMax.map((v) => round(v, 3)), baseErrorCm: round(baseErrM * 100, 2), hitInsideFootprint: insideXz };
+      if (baseErrM > TRAY_BASE_TOLERANCE_M) report.failures.push(`the placed object's lowest point is ${round(baseErrM * 100, 2)} cm from the hit (limit ${TRAY_BASE_TOLERANCE_M * 100} cm)`);
+      if (!insideXz) report.failures.push('the hit point is outside the placed object\'s footprint');
+      await screenshot(page, 'phone-tray-placed.png', report);
+      // A hold on the placed object, after the placement.
+      const centre = object.boundsMin.map((v, k) => (v + object.boundsMax[k]!) / 2) as Vec3;
+      await touchScenario(page, report, scenarios, 'hold-on-placed-object', () => phoneHold(page, centre, MARK_HOLD_MS), 1);
+    }
+
+    // Stop, then read what the export made of it.
+    const download = expectDownload(page, 30000);
+    await tapDock(page, 'record');
+    const saved = await advanceUntilDownload(page, download);
+    if (!saved) {
+      report.failures.push('no GLB downloaded after Stop');
+      return report;
+    }
+    const glbPath = await saveDownload(saved, 'phone-tray', report);
+    const buffer = await readFile(glbPath);
+    const take = checkTake(report, buffer, { audio: true });
+    await expectDownloadCount(page, report, 1);
+    const json = glbJson(buffer);
+    const extension = json.extensions?.HOLOIM_objects;
+    const validation = extension === undefined ? null : validateHoloimObjects(extension);
+    if (!json.extensionsUsed?.includes('HOLOIM_objects') || !validation) {
+      report.failures.push('the export has no HOLOIM_objects extension');
+      return report;
+    }
+    if (!validation.ok) {
+      report.failures.push(`HOLOIM_objects invalid: ${validation.errors.join('; ')}`);
+      return report;
+    }
+    const entries = validation.value.objects;
+    report.notes.exportedObjects = entries.map((entry) => ({ node: entry.node, name: entry.name, origin: entry.origin, presence: entry.presence }));
+    const entry = entries[0];
+    if (entries.length !== 1 || !entry) {
+      report.failures.push(`the export has ${entries.length} object(s), expected the one placed`);
+      return report;
+    }
+    if (entry.origin !== 'summoned') report.failures.push(`the placed object's origin is ${entry.origin}, expected summoned`);
+    if (json.nodes?.[entry.node]?.name !== OBJECT_NODE_NAME) report.failures.push(`the placed object's node is named ${json.nodes?.[entry.node]?.name}, expected ${OBJECT_NODE_NAME}`);
+    const start = entry.presence[0]!.start;
+    report.notes.presenceStartSec = start;
+    if (!(start > 0)) report.failures.push(`the placed object is present from ${start} s, expected after the take's start`);
+    if (start < takeBeforeTap - TRAY_PRESENCE_TOLERANCE_SEC || start > takeAfterTap + TRAY_PRESENCE_TOLERANCE_SEC) {
+      report.failures.push(`the placed object's presence starts at ${start} s; the tap came between ${round(takeBeforeTap, 3)} s and ${round(takeAfterTap, 3)} s of the take (limit ${TRAY_PRESENCE_TOLERANCE_SEC} s)`);
+    }
+
+    // The presence filter: the hold made before the placement has no link to the object; the one after has.
+    const links = [...take.meaningLinks].sort((a, b) => a.span.start - b.span.start);
+    const toObject = links.filter((link) => link.to.node === entry.node);
+    const hold1 = scenarios.find((scenario) => scenario.name === 'hold-before-placement');
+    const hold2 = scenarios.find((scenario) => scenario.name === 'hold-on-placed-object');
+    report.notes.links = links.map((link) => ({ to: link.to.nodeName, toNode: link.to.node, span: link.span }));
+    report.notes.holds = { before: { downSec: hold1?.downSec, upSec: hold1?.upSec }, after: { downSec: hold2?.downSec, upSec: hold2?.upSec } };
+    for (const link of toObject) {
+      if (link.span.start < start - 0.15) report.failures.push(`a link to the placed object starts at ${link.span.start} s, before it was present (${start} s): the hold made before the placement linked to it`);
+    }
+    if (hold1?.upSec !== undefined && hold1.upSec > start) report.failures.push(`the hold before the placement ended at ${hold1.upSec} s, after the object appeared at ${start} s; the scenario does not isolate the filter`);
+    if (hold1?.downSec !== undefined && toObject.some((link) => Math.abs(link.span.start - hold1.downSec!) < MARK_START_TOLERANCE_SEC)) report.failures.push('the hold made before the placement links to the placed object');
+    if (hold2?.downSec !== undefined) {
+      const after = toObject.find((link) => Math.abs(link.span.start - hold2.downSec!) < MARK_START_TOLERANCE_SEC);
+      if (!after) report.failures.push('the hold on the placed object, after the placement, made no link to it');
+      else if (!after.to.point || after.to.point.some((v) => !Number.isFinite(v))) report.failures.push('the link to the placed object has no finite to.point');
+    }
+    return report;
+  } finally {
+    await page.context().close();
+  }
+}
+
 // --- Main ---
 
 await mkdir(artifactDir, { recursive: true });
@@ -1985,6 +2219,8 @@ try {
       finish(await headsetPhase(run, phase));
     } else if (phase === 'phone-dock') {
       finish(await dockPhase(run));
+    } else if (phase === 'phone-tray') {
+      finish(await trayPhase(run));
     } else {
       finish(await dockExitIdlePhase(run));
     }

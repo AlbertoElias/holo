@@ -10,6 +10,65 @@ import { type AvatarBones, AvatarColliders, PROP_BIT, groups } from './AvatarCol
 const MAX_HULL_POINTS = 128;
 // A resize rebuilds the collider once the size has moved this far (as a ratio) from the collider's.
 const RESHAPE_RATIO = 0.01;
+
+// Capped hull points in the wrapper's frame, by the model's first geometry: a
+// tray item and its summoned copies share their geometry and its pose in the
+// wrapper, so a dense item's vertices are walked once, at load, not mid-take.
+const hullPoints = new WeakMap<THREE.BufferGeometry, number[]>();
+
+const firstGeometry = (model: THREE.Object3D): THREE.BufferGeometry | null => {
+  let found: THREE.BufferGeometry | null = null;
+  model.traverse((node) => {
+    if (!found && isThreeMesh(node)) found = node.geometry;
+  });
+  return found;
+};
+
+function meshPoints(model: THREE.Object3D, toFrame: (node: THREE.Mesh, out: THREE.Matrix4) => THREE.Matrix4): number[] {
+  const points: number[] = [];
+  const v = new THREE.Vector3();
+  const m = new THREE.Matrix4();
+  model.traverse((node) => {
+    if (!isThreeMesh(node)) return;
+    const position = node.geometry.getAttribute('position');
+    if (!position) return;
+    toFrame(node, m);
+    for (let i = 0; i < position.count; i += 1) {
+      v.fromBufferAttribute(position, i).applyMatrix4(m);
+      points.push(v.x, v.y, v.z);
+    }
+  });
+  return points;
+}
+
+// Points scanned per task when a tray item's hull is prepared at load.
+const HULL_SCAN_CHUNK = 16_384;
+
+/**
+ * Walks a tray item's model once, ahead of the first release of a copy of it.
+ * A dense item's scan is split across tasks (`yieldTask` between chunks), so a
+ * load mid-take never holds a frame for it.
+ */
+export async function prepareHull(model: THREE.Object3D, yieldTask: () => Promise<void>): Promise<void> {
+  const geometry = firstGeometry(model);
+  if (!geometry || hullPoints.has(geometry)) return;
+  model.updateWorldMatrix(true, true);
+  // In the wrapper's frame at full size: the model's own placement in it, then each mesh under the model.
+  const modelInverse = model.matrixWorld.clone().invert();
+  const points = meshPoints(model, (node, out) => out.multiplyMatrices(model.matrix, modelInverse).multiply(node.matrixWorld));
+  if (points.length < 12) return;
+  const count = points.length / 3;
+  if (count <= MAX_HULL_POINTS) {
+    hullPoints.set(geometry, [...points]);
+    return;
+  }
+  const scan = new HullScan(MAX_HULL_POINTS);
+  for (let from = 0; from < count; from += HULL_SCAN_CHUNK) {
+    await yieldTask();
+    scan.scan(points, from, Math.min(count, from + HULL_SCAN_CHUNK));
+  }
+  hullPoints.set(geometry, scan.picked(points));
+}
 // One density for every prop (kg/m³): mass follows the hull's volume.
 const DENSITY = 500;
 // Max-combined with the scene (Rapier's default 0.5), so a dropped prop grips
@@ -535,21 +594,14 @@ export class ObjectPhysics {
     object.wrapper.updateWorldMatrix(true, false);
     object.wrapper.matrixWorld.decompose(this.p, this.q, this.s);
     this.rigidInverse.compose(this.p, this.q, this.unit).invert();
-    const points: number[] = [];
-    const v = new THREE.Vector3();
-    object.model.traverse((node) => {
-      if (!isThreeMesh(node)) return;
-      const position = node.geometry.getAttribute('position');
-      if (!position) return;
-      this.m.multiplyMatrices(this.rigidInverse, node.matrixWorld);
-      for (let i = 0; i < position.count; i += 1) {
-        v.fromBufferAttribute(position, i).applyMatrix4(this.m).divideScalar(object.size);
-        points.push(v.x, v.y, v.z);
-      }
-    });
+    const geometry = firstGeometry(object.model);
+    const cached = geometry ? hullPoints.get(geometry) : undefined;
+    const points = cached ?? meshPoints(object.model, (node, out) => out.multiplyMatrices(this.rigidInverse, node.matrixWorld)).map((value) => value / object.size);
     if (points.length < 12) return { points: boxCorners(new THREE.Box3(new THREE.Vector3(-0.1, -0.1, -0.1), new THREE.Vector3(0.1, 0.1, 0.1))), hull: false };
-    const capped = new Float32Array(cap(points, MAX_HULL_POINTS));
-    if (RAPIER.ColliderDesc.convexHull(capped)) return { points: capped, hull: true };
+    const capped = cached ?? cap(points, MAX_HULL_POINTS);
+    if (geometry && !cached) hullPoints.set(geometry, capped);
+    const hullPointsOf = new Float32Array(capped);
+    if (RAPIER.ColliderDesc.convexHull(hullPointsOf)) return { points: hullPointsOf, hull: true };
     return { points: boxCorners(new THREE.Box3().setFromArray(points)), hull: false };
   }
 
@@ -608,32 +660,52 @@ function rotationVector(q: THREE.Quaternion): THREE.Vector3 {
 function cap(points: readonly number[], limit: number): number[] {
   const count = points.length / 3;
   if (count <= limit) return [...points];
-  const picked = new Set<number>();
-  const directions: Array<[number, number, number]> = [
+  const scan = new HullScan(limit);
+  scan.scan(points, 0, count);
+  return scan.picked(points);
+}
+
+/** The point farthest along each of `limit` directions spread over the sphere, scanned in ranges. */
+class HullScan {
+  private readonly directions: Array<[number, number, number]> = [
     [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
   ];
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  const fan = limit - directions.length;
-  for (let i = 0; i < fan; i += 1) {
-    const y = 1 - (2 * (i + 0.5)) / fan;
-    const r = Math.sqrt(1 - y * y);
-    directions.push([Math.cos(golden * i) * r, y, Math.sin(golden * i) * r]);
-  }
-  for (const [dx, dy, dz] of directions) {
-    let best = 0;
-    let bestDot = -Infinity;
-    for (let i = 0; i < count; i += 1) {
-      const dot = (points[i * 3] ?? 0) * dx + (points[i * 3 + 1] ?? 0) * dy + (points[i * 3 + 2] ?? 0) * dz;
-      if (dot > bestDot) {
-        bestDot = dot;
-        best = i;
-      }
+  private readonly best: Int32Array;
+  private readonly bestDot: Float64Array;
+
+  constructor(limit: number) {
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    const fan = limit - this.directions.length;
+    for (let i = 0; i < fan; i += 1) {
+      const y = 1 - (2 * (i + 0.5)) / fan;
+      const r = Math.sqrt(1 - y * y);
+      this.directions.push([Math.cos(golden * i) * r, y, Math.sin(golden * i) * r]);
     }
-    picked.add(best);
+    this.best = new Int32Array(this.directions.length);
+    this.bestDot = new Float64Array(this.directions.length).fill(-Infinity);
   }
-  const out: number[] = [];
-  for (const i of picked) out.push(points[i * 3] ?? 0, points[i * 3 + 1] ?? 0, points[i * 3 + 2] ?? 0);
-  return out;
+
+  scan(points: readonly number[], from: number, to: number): void {
+    this.directions.forEach(([dx, dy, dz], d) => {
+      let best = this.best[d]!;
+      let bestDot = this.bestDot[d]!;
+      for (let i = from; i < to; i += 1) {
+        const dot = (points[i * 3] ?? 0) * dx + (points[i * 3 + 1] ?? 0) * dy + (points[i * 3 + 2] ?? 0) * dz;
+        if (dot > bestDot) {
+          bestDot = dot;
+          best = i;
+        }
+      }
+      this.best[d] = best;
+      this.bestDot[d] = bestDot;
+    });
+  }
+
+  picked(points: readonly number[]): number[] {
+    const out: number[] = [];
+    for (const i of new Set(this.best)) out.push(points[i * 3] ?? 0, points[i * 3 + 1] ?? 0, points[i * 3 + 2] ?? 0);
+    return out;
+  }
 }
 
 function popcount(bits: number): number {

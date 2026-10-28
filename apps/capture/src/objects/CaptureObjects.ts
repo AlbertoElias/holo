@@ -6,7 +6,7 @@ import type { HandPoseSource, TrayUiState } from '../types/contracts';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
-import { ObjectPhysics, type ObjectPhysicsStats } from '../physics/ObjectPhysics';
+import { ObjectPhysics, type ObjectPhysicsStats, prepareHull } from '../physics/ObjectPhysics';
 import type { UIStateStore } from '../ui/UIStateStore';
 import type { XrTracking } from '../xr/XrTracking';
 import { DesktopCarryPose } from './DesktopCarryPose';
@@ -17,7 +17,7 @@ import { SceneObjectRegistry, type SceneObject } from './SceneObjectRegistry';
 import { fetchSuppliedObject, parseSuppliedObject, readSuppliedObjectFile, type SuppliedObjectInput, SuppliedObjectError } from './suppliedObject';
 import { TrayGestureInput } from './TrayGestureInput';
 import { parseTrayItem } from './trayItem';
-import { type TrayThumbnail, TrayThumbnailer } from './trayThumbnail';
+import { nextTask, type TrayThumbnail, TrayThumbnailer, trayMark } from './trayThumbnail';
 
 export interface CaptureObjectsDeps {
   worldGroup: THREE.Group;
@@ -198,6 +198,31 @@ export class CaptureObjects {
     this.lastAuthoring = null;
   }
 
+  /**
+   * The phone camera author's summon (docs/features/tray-everywhere.md): a new
+   * full-size object from tray slot `slot`, standing with its base on `point`
+   * (the world group's frame) and turned to `yaw`, present from this step.
+   * No hand, no physics: it stays where it is put.
+   */
+  placeFromTray(slot: number, point: THREE.Vector3, yaw: number, timeSec: number): SceneObject | null {
+    const item = this.tray.getItems().find((candidate) => candidate.slot === slot);
+    if (!item) return null;
+    const object = this.tray.summon(item, timeSec);
+    const wrapper = object.wrapper;
+    wrapper.scale.setScalar(1);
+    wrapper.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    wrapper.position.copy(point);
+    wrapper.updateMatrixWorld(true);
+    // The wrapper is centred on the model's bounds: lift it until the bounds' bottom meets the point.
+    const bounds = new THREE.Box3().setFromObject(wrapper);
+    // Measured in the world group's frame, which a recenter may have moved.
+    const bottom = this.deps.worldGroup.worldToLocal(bounds.getCenter(new THREE.Vector3()).setY(bounds.min.y));
+    wrapper.position.y += point.y - bottom.y;
+    wrapper.updateMatrixWorld(true);
+    object.placed = true;
+    return object;
+  }
+
   /** The scene the world group is drawn in (a structural check: three copies may differ). */
   private liveScene(): THREE.Scene | undefined {
     let root: THREE.Object3D = this.deps.worldGroup;
@@ -237,18 +262,30 @@ export class CaptureObjects {
     ui.setTrayState({ ...this.trayState(), loading: true, message: null });
     try {
       const inputs = await Promise.all(reads.map((read) => read()));
+      trayMark('fetched');
       const total = this.tray.totalBytes() + inputs.reduce((sum, input) => sum + input.bytes.byteLength, 0);
       if (total > MAX_TRAY_BYTES) throw new SuppliedObjectError(`The tray would be ${(total / 1048576).toFixed(1)} MB; the limit is ${MAX_TRAY_BYTES / 1048576} MB.`);
       const loaded = await Promise.all(inputs.map(async (input) => ({ input, item: await parseTrayItem(this.deps.loader, input) })));
+      trayMark('parsed');
       if (seq !== this.trayLoadSeq) return false;
       if (this.tray.getItems().length + loaded.length > MAX_TRAY_ITEMS) throw new SuppliedObjectError(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
-      for (const { input, item } of loaded) {
-        const added = this.tray.add(item.model, { name: item.credit?.title ?? item.source.name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });
-        // Also uploads its textures and compiles its shaders now, not at its first draw mid-take.
-        const thumbnail = await this.thumbnailer.render(item.model, this.liveScene()).catch((error: unknown) => {
-          console.warn(`[tray] no thumbnail for ${added.object.name}: ${(error as Error).message}`);
+      // Everything costly about an item happens here, a task at a time, before it
+      // joins the tray: its thumbnail (which also uploads its textures and compiles
+      // its shaders), and the hull a summoned copy's body will use.
+      const prepared = [];
+      for (const entry of loaded) {
+        const name = entry.item.credit?.title ?? entry.item.source.name;
+        const thumbnail = await this.thumbnailer.render(entry.item.model, this.liveScene()).catch((error: unknown) => {
+          console.warn(`[tray] no thumbnail for ${name}: ${(error as Error).message}`);
           return null;
         });
+        await prepareHull(entry.item.model, nextTask);
+        trayMark('hull');
+        prepared.push({ ...entry, name, thumbnail });
+      }
+      if (this.tray.getItems().length + prepared.length > MAX_TRAY_ITEMS) throw new SuppliedObjectError(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
+      for (const { input, item, name, thumbnail } of prepared) {
+        const added = this.tray.add(item.model, { name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });
         if (thumbnail) this.thumbnails.set(added.slot, thumbnail);
       }
       ui.setTrayState({ ...this.trayState(), message: null });

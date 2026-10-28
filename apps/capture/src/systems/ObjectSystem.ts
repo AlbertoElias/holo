@@ -21,7 +21,13 @@ export class ObjectSystem extends createSystem() {
 
   update(): void {
     const c = this.capture;
-    if (c.frame.arSpectator || !c.motor.hasSpawnResolved()) return;
+    if (c.frame.arSpectator) {
+      // A phone camera author places tray items where its centre ray lands, in this step, before the camera is recorded.
+      // A headset in passthrough only watches: no summon.
+      if (c.frame.arCameraAuthor) c.phoneChrome.stepPlacement(c.frame.elapsedSec);
+      return;
+    }
+    if (!c.motor.hasSpawnResolved()) return;
     if (!c.objects.hasPhysics()) {
       const trimesh = c.motor.getWorldTrimesh();
       if (trimesh) c.objects.enablePhysics(trimesh, gravity);

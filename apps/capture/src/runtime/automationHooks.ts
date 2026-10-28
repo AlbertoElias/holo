@@ -48,6 +48,8 @@ export interface AutomationHooks {
   __sampleChrome: () => { ui: UiViewModel; vr: VrChromeSnapshot; touch: { stick: TouchStick | null; looking: number; hold: string } };
   /** The phone camera author's bottom dock (button positions and visibility) and status line, or built: false. */
   __samplePhoneChrome: () => PhoneArChromeProbe;
+  /** World position of a phone tray row slot's hit area (1-5), or null while the row is closed: where a check taps it. */
+  __phoneTraySlotPosition: (slot: number) => number[] | null;
   /** World position of the wrist's record glyph or a world-panel row, for checks that aim at it. */
   __chromeTarget: (target: ChromeTarget) => number[] | null;
   /** Find (PRD-060): the headset panel's search state, voice paths taken, and GLB prefetches. */

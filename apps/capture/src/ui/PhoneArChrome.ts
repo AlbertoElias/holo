@@ -1,8 +1,12 @@
 import * as THREE from 'three';
 import type { Entity, World } from '@iwsdk/core';
 import { chromeVisible, markChromeTree, recordingText, type DockAction, type DockGlyph } from '@holoim/xr-ui-core';
-import { HandDock, StatusLine, type HandDockProbe, type ScreenRect, type StatusLineProbe } from '@holoim/xr-ui-iwsdk';
+import { HandDock, PHONE_DOCK_DEPTH_M, StatusLine, type HandDockProbe, type ScreenRect, type StatusLineProbe } from '@holoim/xr-ui-iwsdk';
+import { ArPlacement, type ArPlacementProbe } from '../objects/ArPlacement';
+import type { SceneObject } from '../objects/SceneObjectRegistry';
+import type { TrayThumbnail } from '../objects/trayThumbnail';
 import type { UIStateStore } from './UIStateStore';
+import { PhoneTrayRow, type PhoneTrayRowProbe } from './XrTraySignifiers';
 
 interface PhoneArChromeDeps {
   world: World;
@@ -18,10 +22,25 @@ interface PhoneArChromeDeps {
   recenter: () => void;
   /** Ends the AR session, as Android's back does. */
   exit: () => void;
+  /** The live scene, for the placement reticle. */
+  scene: THREE.Object3D;
+  /** The set's frame (the AR world group): its y = 0 is the floor, and placed objects are positioned in it. */
+  setFrame: THREE.Object3D;
+  /** The set's own meshes: what the centre ray lands on besides the floor. */
+  setTargets: () => THREE.Object3D[];
+  /** A tray item's thumbnail, for the slot's texture. */
+  trayThumbnail: (slot: number) => TrayThumbnail | null;
+  /** Summons a tray slot with its base on a point of the set frame, turned to a yaw. */
+  placeFromTray: (slot: number, point: THREE.Vector3, yaw: number, timeSec: number) => SceneObject | null;
 }
 
-type DockId = 'record' | 'recenter' | 'exit';
-const DOCK_IDS: readonly DockId[] = ['recenter', 'record', 'exit'];
+const TRAY_OPEN: ReadonlySet<string> = new Set(['tray']);
+const NO_APPROACH: ReadonlySet<string> = new Set();
+
+type DockId = 'record' | 'recenter' | 'tray' | 'exit';
+const DOCK_IDS: readonly DockId[] = ['recenter', 'record', 'tray', 'exit'];
+/** The dock's Tray glyph is provisional: xr-ui-core's `DockGlyph` names it once the styleguide carries it. */
+const TRAY_GLYPH: DockGlyph = 'tray';
 
 export interface PhoneArChromeProbe {
   built: boolean;
@@ -31,6 +50,8 @@ export interface PhoneArChromeProbe {
   /** The chip under the row on the screen (CSS px from the top left), null while no action shows. */
   chip: ScreenRect | null;
   statusLine: StatusLineProbe | null;
+  /** The tray row above the dock, and the centre ray's placement (docs/features/tray-everywhere.md). */
+  tray: { row: PhoneTrayRowProbe | null; placement: ArPlacementProbe | null };
 }
 
 /**
@@ -54,9 +75,11 @@ export interface PhoneArChromeProbe {
 export class PhoneArChrome {
   private dock: HandDock | null = null;
   private status: StatusLine | null = null;
+  private trayRow: PhoneTrayRow | null = null;
+  private placement: ArPlacement | null = null;
   private cameraEntity: Entity | null = null;
   /** What each part should show when the camera pose is usable; a frame without one draws none of it. */
-  private wanted = { record: false, recenter: false, exit: false, status: false };
+  private wanted = { record: false, recenter: false, tray: false, exit: false, status: false };
   private releaseGuard: (() => void) | null = null;
   private viewport: PhoneArChromeProbe['viewport'] = null;
   private shown = false;
@@ -84,10 +107,15 @@ export class PhoneArChrome {
     // Record shows once the set has settled (not while it exports); while a take runs it is the stop control.
     this.wanted.record = this.deps.isSettled() && state.recordingState !== 'exporting' && chromeVisible('record', recording);
     dock.setRecording(recording);
+    // Tray stays through a take (§8.5 as amended): the author places mid-sentence. Like Record it waits for the set to settle.
+    this.wanted.tray = this.deps.isSettled() && state.recordingState !== 'exporting' && chromeVisible('tray', recording);
+    if (!this.wanted.tray && this.trayRow?.isOpen()) this.setTrayOpen(false);
     // Between takes only (§8.5): not while a take runs, exports, or waits on the microphone. A session end still stops and exports.
     this.wanted.recenter = !busy;
     this.wanted.exit = !busy;
-    dock.update();
+    // The Tray glyph turns to the cream highlight while the row is open (§6 states).
+    dock.update(this.trayRow?.isOpen() ? TRAY_OPEN : NO_APPROACH);
+    this.trayRow?.update(state.tray);
 
     const status = this.status!;
     const base = recording ? recordingText(state.recordingElapsedMs) : state.recordingState === 'exporting' ? (state.recordingMessage ?? 'Exporting…') : (state.recordingMessage ?? '');
@@ -102,6 +130,26 @@ export class PhoneArChrome {
     this.applyVisibility(usable);
   }
 
+  /**
+   * One simulation step of the placement ray and any queued tap, from
+   * `ObjectSystem`'s AR path, so a summoned object is in the step the camera
+   * records. Only a camera author calls it.
+   */
+  stepPlacement(timeSec: number): void {
+    this.placement?.step(timeSec);
+  }
+
+  private setTrayOpen(open: boolean): void {
+    this.trayRow?.setOpen(open);
+    this.placement?.setOpen(open);
+  }
+
+  /** The Tray glyph: opens the row, or closes it. */
+  private toggleTray(): void {
+    if (!this.trayRow) return;
+    this.setTrayOpen(!this.trayRow.isOpen());
+  }
+
   private poseUsable(): boolean {
     return this.deps.xrCamera.matrixWorld.elements.every(Number.isFinite);
   }
@@ -111,7 +159,13 @@ export class PhoneArChrome {
     if (!this.dock || !this.status) return;
     for (const id of DOCK_IDS) this.dock.setActionVisible(id, this.wanted[id]);
     this.dock.setVisible(usable);
+    if (this.trayRow) this.trayRow.entity.object3D!.visible = usable && this.trayRow.isOpen();
     this.status.entity.object3D!.visible = usable && this.wanted.status;
+  }
+
+  /** The world position of a tray slot's hit area while the row is open, for a check that taps it. */
+  traySlotPosition(slot: number): number[] | null {
+    return this.trayRow?.isOpen() ? this.trayRow.slotPosition(slot) : null;
   }
 
   probe(): PhoneArChromeProbe {
@@ -124,7 +178,14 @@ export class PhoneArChrome {
         docks[id] = { ...whole, visible: whole.visible && button.shown, hitApx: button.hitApx, glyphApx: button.glyphApx, buttons: { [id]: button } };
       }
     }
-    return { built: this.dock !== null, viewport: this.viewport, docks, chip: whole?.chip ?? null, statusLine: this.status?.probe() ?? null };
+    return {
+      built: this.dock !== null,
+      viewport: this.viewport,
+      docks,
+      chip: whole?.chip ?? null,
+      statusLine: this.status?.probe() ?? null,
+      tray: { row: this.trayRow?.probe() ?? null, placement: this.placement?.probe() ?? null }
+    };
   }
 
   /** Builds the dock and the status line once the XR view's projection is known; false until it is. */
@@ -144,9 +205,31 @@ export class PhoneArChrome {
     this.dock = new HandDock(world, mount, [
       action('recenter', 'recenter', 'Recenter', () => this.deps.recenter()),
       action('record', 'record', 'Record', () => this.deps.toggleRecording()),
+      action('tray', TRAY_GLYPH, 'Tray', () => this.toggleTray()),
       action('exit', 'exit', 'Exit', () => this.deps.exit())
     ]);
     markChromeTree(this.dock.entity.object3D!);
+    // The row above the dock and the centre ray that says where a tap will put an item.
+    const metresPerApx = (2 * PHONE_DOCK_DEPTH_M * Math.tan(fovy / 2)) / height;
+    this.placement = new ArPlacement({
+      scene: this.deps.scene,
+      setFrame: this.deps.setFrame,
+      targets: this.deps.setTargets,
+      camera: xrCamera,
+      metresPerApx,
+      place: this.deps.placeFromTray,
+      onPlaced: () => this.setTrayOpen(false)
+    });
+    this.trayRow = new PhoneTrayRow({
+      world,
+      camera: xrCamera,
+      verticalFovRad: fovy,
+      viewportHeightCss: height,
+      viewportWidthCss: width,
+      dockTopCss: () => this.dock?.probe().chip?.top ?? null,
+      thumbnail: this.deps.trayThumbnail,
+      onSlot: (slot) => this.placement?.request(slot)
+    });
     // A frame's camera pose arrives after the step; a pose lost to NaN (an emulated tracking loss) would stop the draw.
     const scene = world.scene;
     const previous = scene.onBeforeRender;
@@ -168,6 +251,10 @@ export class PhoneArChrome {
   private teardown(): void {
     this.releaseGuard?.();
     this.releaseGuard = null;
+    this.placement?.dispose();
+    this.placement = null;
+    this.trayRow?.dispose();
+    this.trayRow = null;
     this.dock?.dispose();
     this.dock = null;
     this.status?.dispose();

@@ -214,14 +214,26 @@ export async function runIwerFindTake({ browser, baseUrl, captureRoot, artifactD
     vr = await chrome(page);
     if (vr.find?.visible || !vr.panel?.visible) fail(`Close left find=${vr.find?.visible} settings=${vr.panel?.visible}`);
 
-    // The take: Find leaves the wrist, the tray summons the found object.
+    // The take: Find stays on the wrist and adds to the tray mid-take
+    // (docs/features/tray-everywhere.md); the tray summons the found object.
     await controller('right', REST.right, [0, 0, 0, 1]);
     await clickButton(page, 'Start Recording');
     await page.getByRole('button', { name: 'Stop Recording', exact: true }).waitFor({ timeout: 10_000 });
     await step(10);
     vr = await chrome(page);
     const duringTake = { dockGlyph: vr.find?.dockGlyph, findVisible: vr.find?.visible };
-    if (duringTake.dockGlyph || duringTake.findVisible) fail(`Find shows during the take (${JSON.stringify(duringTake)})`);
+    if (!duringTake.dockGlyph) fail(`Find left the wrist during the take (${JSON.stringify(duringTake)})`);
+    await openFindPanel(page, step, fail);
+    await selectTarget(page, step, 'find:category:chairs');
+    await until(page, step, (v, s) => s.headset.finding.status === 'done' && v.find?.results.length > 1, 'mid-take results', fail);
+    await selectTarget(page, step, 'find:result:1');
+    for (let i = 0; i < 120 && (await readState(page)).objects.tray.items.length < 2; i += 1) await step(1);
+    const midTakeTray = (await readState(page)).objects.tray.items.map((item) => item.name);
+    duringTake.midTakeTray = midTakeTray;
+    if (midTakeTray.length !== 2) fail(`a mid-take Find pick did not reach the tray (${JSON.stringify(midTakeTray)})`);
+    await selectTarget(page, step, 'find:close');
+    await step(4);
+    shots.midTake = await shot('5-mid-take-pick');
     state = await readState(page);
     const rigYaw = state.thumbstick.rigYaw;
     await controller('left', [-0.12, 1.1, -0.32]);

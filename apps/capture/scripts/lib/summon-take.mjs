@@ -16,15 +16,18 @@ import { clickButton, openCapture, OBJECT_URL, poseOf, readState, saveDownload, 
 // Summon and place while speaking (PRD-045): scripted IWER takes through
 // capture's real input paths, then the exported GLB read without a renderer.
 //   - Controllers: holding left Y opens the tray at the left hand; a right
-//     squeeze away from it, or before recording, summons nothing; a squeeze
-//     on each miniature summons a new object into the right hand, which a
-//     release places. Two items are summoned and placed in one take.
+//     squeeze away from it summons nothing; a squeeze on a miniature summons
+//     a new object into the right hand, which a release places, before a take
+//     as well as during one (docs/features/tray-everywhere.md). One item is
+//     summoned before the take, two more in it.
 //   - The GLB: two summoned RecordedObject nodes hidden (scale 0) until their
 //     summon key, at the hand then, and still where they were placed; no tray
 //     geometry; authoring spans for the tray arm and each reach, with the
 //     arm chain inside them an eased slerp of the boundary keys.
-//   - A tray-only take (open, reach, close, no summon): summoned objects from
-//     the last take are gone, and the GLB has `objects: []` with spans.
+//   - The GLB also carries the object summoned before the take: `prepared`,
+//     present from frame 0, where it lay when recording began.
+//   - A tray-only take (open, reach, close, no summon): nothing is cleared
+//     between takes, so all three objects are in it as `prepared`, with spans.
 //   - Tracked hands: palm up opens the tray after the dwell, palm down
 //     closes it, and a right pinch on a miniature summons.
 
@@ -101,7 +104,40 @@ function checkInterpolation(take, spans, fail) {
 }
 
 /** The summon take's GLB against what capture saw. */
-export function checkSummonExport(buffer, { summons, fail }) {
+/**
+ * `carried`: objects already in the scene when the take started (summoned
+ * before it, or in an earlier take). Each exports as `prepared`, present for
+ * the whole take with no scale track, where capture had it at the take's start:
+ * `{ name, handRelation }`, the object against the right hand then.
+ */
+export function checkCarried(take, entries, carried, fail) {
+  const end = take.times.length - 1;
+  const hand = findNode(take, 'RightHand');
+  // The object against the right hand at the first key, as capture had it when the take began.
+  const relationAt0 = (node) => relativePose(rigidPose(worldAt(take, hand, 0)), rigidPose(worldAt(take, node, 0)));
+  if (entries.length !== carried.length) fail(`export: ${entries.length} carried objects, expected ${carried.length}`);
+  const unmatched = [...entries];
+  return carried.map((expected, k) => {
+    // Matched by name and the nearest start pose: the same item can be carried twice.
+    const candidates = unmatched.filter((entry) => entry.name === expected.name);
+    const pick = candidates.sort((a, b) => relationAt0(a.node).position.distanceTo(expected.handRelation.position) - relationAt0(b.node).position.distanceTo(expected.handRelation.position))[0];
+    if (!pick) {
+      fail(`export: carried object ${k} (${expected.name}) is missing`);
+      return { name: expected.name, missing: true };
+    }
+    unmatched.splice(unmatched.indexOf(pick), 1);
+    const channels = take.channels.get(pick.node) ?? {};
+    const wholeTake = pick.presence.length === 1 && pick.presence[0].start === 0 && Math.abs(pick.presence[0].end - take.times[end]) < 1e-6;
+    const startError = round(relationAt0(pick.node).position.distanceTo(expected.handRelation.position));
+    const out = { name: pick.name, origin: pick.origin, presence: pick.presence, scaleTrack: Boolean(channels.scale), startErrorM: startError };
+    if (pick.origin !== 'prepared') fail(`export: carried object ${k} origin ${pick.origin}, expected prepared`);
+    if (!wholeTake || channels.scale) fail(`export: carried object ${k} is not present for the whole take (${JSON.stringify(out)})`);
+    if (startError > EXPORT_POSITION_M) fail(`export: carried object ${k} starts ${startError} m from where capture had it`);
+    return out;
+  });
+}
+
+export function checkSummonExport(buffer, { summons, carried = [], fail }) {
   const take = loadTake(buffer);
   const report = { keys: take.times.length, duration: round(take.times.at(-1) ?? 0, 3) };
   if (!take.validation?.ok) {
@@ -111,7 +147,7 @@ export function checkSummonExport(buffer, { summons, fail }) {
   const value = take.validation.value;
   const nodes = objectNodes(take);
   report.objectNodes = nodes.length;
-  if (nodes.length !== summons.length) fail(`export: ${nodes.length} RecordedObject nodes, expected ${summons.length}`);
+  if (nodes.length !== summons.length + carried.length) fail(`export: ${nodes.length} RecordedObject nodes, expected ${summons.length} summoned and ${carried.length} carried`);
 
   // No tray geometry: only the take's own top-level nodes, and each object
   // node carries one full-size model (never a miniature or the tray).
@@ -121,7 +157,10 @@ export function checkSummonExport(buffer, { summons, fail }) {
   if (take.json.nodes.some((node) => (node.name ?? '').startsWith('SceneObject_'))) fail('export: a capture SceneObject wrapper (tray item) was exported');
 
   const hand = findNode(take, 'RightHand');
-  report.objects = value.objects.map((entry, k) => {
+  const summonedEntries = value.objects.filter((entry) => entry.origin === 'summoned');
+  const carriedEntries = value.objects.filter((entry) => entry.origin !== 'summoned');
+  report.carried = checkCarried(take, carriedEntries, carried, fail);
+  report.objects = summonedEntries.map((entry, k) => {
     const summon = summons[k];
     const node = entry.node;
     const meshes = sceneRoots(take).find((root) => root.index === node)?.meshes ?? 0;
@@ -168,16 +207,16 @@ export function checkSummonExport(buffer, { summons, fail }) {
 
   // The two placed objects relative to each other, against capture.
   const placedCapture = summons.map((summon) => summon.placed).filter(Boolean);
-  if (placedCapture.length === 2 && nodes.length === 2) {
+  if (placedCapture.length === 2 && summonedEntries.length === 2) {
     const end = take.times.length - 1;
-    const glbRelation = relativePose(rigidPose(worldAt(take, value.objects[0].node, end)), rigidPose(worldAt(take, value.objects[1].node, end)));
+    const glbRelation = relativePose(rigidPose(worldAt(take, summonedEntries[0].node, end)), rigidPose(worldAt(take, summonedEntries[1].node, end)));
     const captureRelation = relativePose(placedCapture[0], placedCapture[1]);
     report.placedRelation = { positionErrorM: round(glbRelation.position.distanceTo(captureRelation.position)), angleErrorDeg: round(angleDeg(glbRelation.quaternion, captureRelation.quaternion), 3) };
     if (report.placedRelation.positionErrorM > EXPORT_POSITION_M || report.placedRelation.angleErrorDeg > EXPORT_ANGLE_DEG) fail(`export: placed objects differ from capture (${JSON.stringify(report.placedRelation)})`);
   }
   // Summon spacing against capture.
-  if (summons.length === 2 && value.objects.length === 2) {
-    const glbGap = value.objects[1].presence[0].start - value.objects[0].presence[0].start;
+  if (summons.length === 2 && summonedEntries.length === 2) {
+    const glbGap = summonedEntries[1].presence[0].start - summonedEntries[0].presence[0].start;
     const captureGap = summons[1].timeSec - summons[0].timeSec;
     report.summonGap = { glbSec: round(glbGap, 4), captureSec: round(captureGap, 4) };
     if (Math.abs(glbGap - captureGap) > 1e-3) fail(`export: summons ${round(glbGap, 3)} s apart in the GLB, ${round(captureGap, 3)} s in capture`);
@@ -191,7 +230,7 @@ export function checkSummonExport(buffer, { summons, fail }) {
   if (left.length < 1) fail('export: no left (tray arm) authoring span');
   if (right.length !== summons.length) fail(`export: ${right.length} right authoring spans, expected ${summons.length}`);
   right.forEach((span, k) => {
-    const start = value.objects[k]?.presence[0]?.start;
+    const start = summonedEntries[k]?.presence[0]?.start;
     if (start !== undefined && keyAt(take, span.end) !== keyAt(take, start) - 1) fail(`export: right span ${k} ends at ${round(span.end, 3)} s, not the key before its summon (${round(start, 3)} s)`);
   });
   report.interpolation = checkInterpolation(take, spans, fail);
@@ -265,6 +304,9 @@ export async function reach(page, step, { move, start, target, rigYaw, tolerance
   return { at, error };
 }
 
+/** Every event object in the scene now, as `checkSummonExport`'s `carried`. */
+export const carriedNow = (state) => state.objects.items.filter((item) => item.layer === 'event' && item.placed).map((item) => ({ name: item.name, id: item.id, handRelation: handRelationOf(state, item.id) }));
+
 export const summonedItems = (state) => state.objects.items.filter((item) => item.origin === 'summoned');
 
 function handRelationOf(state, id) {
@@ -321,21 +363,26 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
     const trayAbovePalm = state.objects.tray.items.map((item) => round(item.position[1] - palm[1], 3));
     if (!opened.open || opened.gesture.source !== 'button') fail(`holding Y did not open the tray (${JSON.stringify(opened)})`);
     if (trayAbovePalm.some((dy) => dy < 0.05 || dy > 0.25)) fail(`the tray is not above the left hand (${trayAbovePalm} m)`);
-    // Before recording, a squeeze on a miniature summons nothing.
+    // Before recording, a squeeze on a miniature summons too.
     const early = await reach(page, step, { move: (p) => controller('right', p), start: rest.right, target: (s) => s.objects.tray.items[0].position, rigYaw });
     await button('right', 'squeeze', 1);
     await step(4);
     state = await readState(page);
-    if (summonedItems(state).length) fail('a squeeze on the tray before recording summoned an object');
+    const preTake = summonedItems(state).map((item) => item.name);
+    if (preTake.length !== 1) fail(`a squeeze on the tray before recording summoned ${preTake.length} objects, expected 1`);
     await button('right', 'squeeze', 0);
     await controller('right', rest.right);
     await button('left', 'y-button', 0);
-    await step(6);
+    // Let the released object come to rest.
+    await step(90);
     state = await readState(page);
     if (state.objects.tray.open) fail('releasing Y did not close the tray');
 
     await clickButton(page, 'Start Recording');
     await page.getByRole('button', { name: 'Stop Recording', exact: true }).waitFor({ timeout: 10_000 });
+    // In the scene as the take begins (its first key is this step): the pre-take summon, at rest.
+    await step(1);
+    const carriedAtTake1 = carriedNow(await readState(page));
     // Talking with the right hand before reaching for the tray.
     for (let i = 1; i <= 30; i += 1) {
       await controller('right', [rest.right[0], rest.right[1] + 0.15 * Math.sin((i / 30) * Math.PI), rest.right[2] - 0.1]);
@@ -348,7 +395,7 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
     await button('right', 'squeeze', 1);
     await step(4);
     state = await readState(page);
-    if (summonedItems(state).length) fail('a squeeze away from the tray summoned an object');
+    if (summonedItems(state).length !== preTake.length) fail('a squeeze away from the tray summoned an object');
     await button('right', 'squeeze', 0);
     await step(2);
 
@@ -357,23 +404,29 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
     // The first item goes out to the right; the second is set down beside
     // the open tray, inside its zone but out of a miniature's reach, so it
     // can be grabbed again there (that reach is content, not menu).
-    const places = [[0.25, 1.05, -0.45], null];
+    const places = [[0.4, 1.05, -0.45], null];
     let regrab = null;
+    let signifiers = null;
     let from = rest.right;
     for (const [k, place] of places.entries()) {
       const slot = k;
       const reached = await reach(page, step, { move: (p) => controller('right', p), start: from, target: (s) => s.objects.tray.items[slot].position, rigYaw });
       if (reached.error > 0.06) fail(`the right hand never reached tray item ${slot + 1} (${round(reached.error, 3)} m)`);
-      if (k === 0) shots.trayOpen = await shot('1-tray-open');
+      if (k === 0) {
+        shots.trayOpen = await shot('1-tray-open');
+        signifiers = await page.evaluate(() => window.__sampleChrome?.().vr?.tray ?? null);
+        const reachable = signifiers?.slots.filter((entry) => entry.reachable) ?? [];
+        if (!signifiers?.visible || reachable.length !== 1 || reachable[0].slot !== 1 || reachable[0].glyph !== 'squeeze') fail(`the reachable miniature's signifier is wrong (${JSON.stringify(signifiers)})`);
+      }
       await button('right', 'squeeze', 1);
       await step(1);
       const summonStep = clock.steps;
       await step(1);
       state = await readState(page);
       const summoned = summonedItems(state);
-      const object = summoned[k];
+      const object = summoned[preTake.length + k];
       const log = state.objects.tray.summons[k];
-      if (summoned.length !== k + 1 || object?.heldBy !== 'right') {
+      if (summoned.length !== preTake.length + k + 1 || object?.heldBy !== 'right') {
         fail(`squeezing tray item ${slot + 1} did not summon it into the right hand (${JSON.stringify(summoned.map((o) => [o.name, o.heldBy]))})`);
         break;
       }
@@ -420,7 +473,7 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
         await step(2);
         state = await readState(page);
         regrab = { heldBy: state.objects.items.find((item) => item.id === object.id)?.heldBy ?? null, summons: summonedItems(state).length, trayOpen: state.objects.tray.open, handToNearestMiniatureM: round(zoneDistanceM, 3) };
-        if (regrab.heldBy !== 'right' || regrab.summons !== 2) fail(`catching the object beside the tray failed or summoned (${JSON.stringify(regrab)})`);
+        if (regrab.heldBy !== 'right' || regrab.summons !== preTake.length + 2) fail(`catching the object beside the tray failed or summoned (${JSON.stringify(regrab)})`);
         for (let i = 1; i <= 20; i += 1) {
           await controller('right', carryTo.map((v, j) => v + (j === 1 ? 0.06 : 0) * smooth(i / 20)));
           await step(1);
@@ -450,17 +503,16 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
       await clickButton(page, 'Stop Recording');
       for (let i = 0; i < 20; i += 1) await step(1);
     }, glb);
-    const exportReport = checkSummonExport(await readFile(glb), { summons, fail });
+    const exportReport = checkSummonExport(await readFile(glb), { summons, carried: carriedAtTake1, fail });
 
     // Tray-only take: open, reach in, close without summoning.
     await page.getByRole('button', { name: 'Start Recording', exact: true }).waitFor({ timeout: 30_000 });
     await clickButton(page, 'Start Recording');
     await page.getByRole('button', { name: 'Stop Recording', exact: true }).waitFor({ timeout: 10_000 });
-    await step(4);
     state = await readState(page);
-    const clearedAtNextTake = summonedItems(state).length === 0;
-    if (!clearedAtNextTake) fail('summoned objects from the last take are still in the scene');
-    await step(16);
+    const carriedAtTake2 = carriedNow(state);
+    if (carriedAtTake2.length !== 3) fail(`the next take started with ${carriedAtTake2.length} objects, expected all 3 to stay`);
+    await step(20);
     await button('left', 'y-button', 1);
     await step(4);
     await reach(page, step, { move: (p) => controller('right', p), start: rest.right, target: (s) => s.objects.tray.items[1].position, rigYaw });
@@ -478,9 +530,10 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
       objectNodes: objectNodes(trayOnly).length,
       valid: trayOnly.validation?.ok ?? false,
       objects: trayOnly.validation?.ok ? trayOnly.validation.value.objects.length : null,
+      origins: trayOnly.validation?.ok ? trayOnly.validation.value.objects.map((entry) => entry.origin) : null,
       authoring: trayOnly.validation?.ok ? trayOnly.validation.value.authoring ?? [] : null
     };
-    if (trayOnlyReport.objectNodes !== 0 || trayOnlyReport.objects !== 0) fail(`tray-only take exported objects (${JSON.stringify(trayOnlyReport)})`);
+    if (trayOnlyReport.objectNodes !== 3 || trayOnlyReport.objects !== 3 || trayOnlyReport.origins?.some((origin) => origin !== 'prepared')) fail(`tray-only take did not carry the three objects as prepared (${JSON.stringify(trayOnlyReport)})`);
     if (!trayOnlyReport.valid || !trayOnlyReport.authoring?.some((span) => span.hand === 'left') || !trayOnlyReport.authoring?.some((span) => span.hand === 'right')) fail(`tray-only take lacks its authoring spans (${JSON.stringify(trayOnlyReport)})`);
 
     return {
@@ -497,7 +550,9 @@ export async function runIwerSummonTake({ browser, baseUrl, artifactDir, console
         summons: summons.map((summon) => ({ name: summon.name, timeSec: round(summon.timeSec, 4), releaseKeyOffset: summon.releaseKeyOffset })),
         placedDriftM: placedDrift,
         regrabBesideTray: regrab,
-        clearedAtNextTake
+        preTakeSummons: preTake,
+        signifiers,
+        carriedAtTake2: carriedAtTake2.length
       },
       export: exportReport,
       trayOnly: trayOnlyReport
@@ -551,6 +606,9 @@ export async function runIwerHandsSummonTake({ browser, baseUrl, artifactDir, co
     await step(10);
     const reached = await reach(page, step, { move: (p) => hand('right', p), start: rest.right, target: (s) => s.objects.tray.items[0].position, rigYaw });
     if (reached.error > 0.06) fail(`the right hand never reached the tray (${round(reached.error, 3)} m)`);
+    const handSignifiers = await page.evaluate(() => window.__sampleChrome?.().vr?.tray ?? null);
+    const handReachable = handSignifiers?.slots.filter((entry) => entry.reachable) ?? [];
+    if (handSignifiers?.input !== 'hands' || handReachable.length !== 1 || handReachable[0].glyph !== 'pinch') fail(`tracked hands do not show the pinch signifier (${JSON.stringify(handSignifiers)})`);
     for (let i = 1; i <= 6; i += 1) {
       await pinch('right', i / 6);
       await step(1);
@@ -582,7 +640,7 @@ export async function runIwerHandsSummonTake({ browser, baseUrl, artifactDir, co
       await clickButton(page, 'Stop Recording');
       for (let i = 0; i < 20; i += 1) await step(1);
     }, path.join(artifactDir, `${label}.glb`));
-    return { label, status: failures.length ? 'fail' : 'pass', failures, restPalmUp: restPalm, beforeDwell, afterDwell, pinchSummon, placed, closed };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, restPalmUp: restPalm, beforeDwell, afterDwell, handSignifiers, pinchSummon, placed, closed };
   } finally {
     await context.close();
   }

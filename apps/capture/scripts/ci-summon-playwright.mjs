@@ -7,12 +7,16 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import { VOICE_BROWSER_ARGS, runDesktopVoiceTake, runIwerFindTake, runIwerVoiceTake } from './lib/find-take.mjs';
 import { runDesktopFindTake, runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
+import { runDesktopAnytimeTake, runTouchTrayTake, runTrayHitchTake } from './lib/tray-anytime-take.mjs';
 
 // Summon and place while speaking (PRD-045): IWER controller, IWER hands and
 // desktop takes open the tray with its held gesture, summon and place items,
 // and export; each GLB is checked against what capture read during the take
 // (see lib/summon-take.mjs). Find (PRD-060) on the desktop and in the
-// headset, with voice, summons a found object (see lib/find-take.mjs). Writes output/ci-summon/report.json, per-take
+// headset, with voice, summons a found object (see lib/find-take.mjs). The
+// tray on every device (docs/features/tray-everywhere.md): the flat dock row
+// before and during a take, touch, and a mid-take load's long tasks (see
+// lib/tray-anytime-take.mjs). Writes output/ci-summon/report.json, per-take
 // GLBs, screenshots and a contact sheet.
 
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -33,10 +37,21 @@ try {
     ['find', () => runDesktopFindTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['headset-find', () => runIwerFindTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['headset-voice', async () => runIwerVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
-    ['desktop-voice', async () => runDesktopVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })]
+    ['desktop-voice', async () => runDesktopVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
+    ['desktop-anytime', () => runDesktopAnytimeTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
+    ['touch-tray', () => runTouchTrayTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    // Timed: a browser of its own, so no earlier phase's GPU work is still draining.
+    ['tray-hitch', async () => {
+      const own = await launchXrBrowser(chromium);
+      try {
+        return await runTrayHitchTake({ browser: own, baseUrl, artifactDir, consoleErrors });
+      } finally {
+        await own.close();
+      }
+    }]
   ];
   const takes = [];
-  for (const [name, run] of phases) if (!only || only === name) takes.push(await run());
+  for (const [name, run] of phases) if (!only || only.split(',').includes(name)) takes.push(await run());
   const sheet = writeContactSheet(artifactDir, path.join(artifactDir, 'summon-sheet.jpg'));
   const failures = [...takes.flatMap((take) => take.failures.map((message) => `${take.label}: ${message}`)), ...consoleErrors.map((error) => `console: ${error}`)];
   const report = { status: failures.length ? 'fail' : 'pass', failures, takes, sheet: sheet ?? null };

@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 
 import { tokens } from '@holoim/design-tokens';
 import { Chip, defaultHitInput, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, HandednessPicker, SideSheet, Type } from '@holoim/ui-dom';
@@ -14,10 +14,12 @@ import {
   hitAreaApx,
   recordingText,
   type Control,
-  type HitInput
+  type HitInput,
+  type ViewTarget
 } from '@holoim/xr-ui-core';
 
 import { ObjectFinder } from './ObjectFinder';
+import { DockGlyphButton, TrayRow, aboveDockApx, useTrayGlyph } from './TrayRow';
 import type { UiViewModel, XrEntryOffer } from '../types/contracts';
 import type { CaptureUiBridge } from './captureUiBridge';
 import { captureHelp, isTouchDevice } from './captureHelp';
@@ -103,6 +105,58 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   const show = (control: Control): boolean => chromeVisible(control, isRecording);
   const notice = resolveNotice(state);
   const vrMode = state.mode === 'vr' || state.mode === 'mock-vr';
+  const flat = !vrMode && state.mode !== 'ar';
+  const [findOpen, setFindOpen] = useState(false);
+  // True while the tray was opened by the dock glyph: Escape or a press elsewhere then closes it (T held opens it without this).
+  const trayOpenedByUi = useRef(false);
+  const trayGlyph = useTrayGlyph(bridge, state.tray.open, touch, trayOpenedByUi);
+  const trayOpen = state.tray.open;
+
+  const summonSlot = (slot: number): void => {
+    bridge.summonTraySlot(slot);
+    trayOpenedByUi.current = false;
+    bridge.setTrayOpen(false);
+  };
+  const openFind = (): void => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    setFindOpen(true);
+  };
+
+  useEffect(() => {
+    if (!trayOpen) trayOpenedByUi.current = false;
+  }, [trayOpen]);
+
+  useEffect(() => {
+    if (!trayOpen) return undefined;
+    const close = (): void => {
+      if (!trayOpenedByUi.current) return;
+      trayOpenedByUi.current = false;
+      bridge.setTrayOpen(false);
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') close();
+    };
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-capture-tray-row], [data-testid="dock-tray"]')) return;
+      close();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [trayOpen, bridge]);
+
+  useEffect(() => {
+    if (!findOpen) return undefined;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setFindOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [findOpen]);
 
   // Everything but stop and the running time leaves while a take runs.
   useEffect(() => {
@@ -164,7 +218,23 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
             </Type>
           ) : null}
         </span>
-        {!vrMode && state.mode !== 'ar' && show('halo') ? <DockHalo bridge={bridge} input={input} touch={touch} /> : null}
+        {flat && show('halo') ? <DockHalo bridge={bridge} input={input} touch={touch} /> : null}
+        {flat && show('tray') ? (
+          <DockGlyphButton
+            glyph="tray"
+            label="Tray"
+            title={touch ? 'Tray' : 'Tray · hold T'}
+            testId="dock-tray"
+            input={input}
+            highlighted={trayOpen}
+            expanded={trayOpen}
+            onPress={trayGlyph.toggle}
+            pointerHandlers={trayGlyph.pointerHandlers}
+          />
+        ) : null}
+        {flat && show('find') ? (
+          <DockGlyphButton glyph="find" label="Find" testId="dock-find" input={input} highlighted={findOpen} expanded={findOpen} onPress={() => (findOpen ? setFindOpen(false) : openFind())} />
+        ) : null}
         {vrMode && show('record') && !isRecording ? (
           <GlyphControl glyph={null} label="Refit height" input={input} disabled={!state.heightFit.enabled} onPress={() => bridge.refitHeight()} />
         ) : null}
@@ -175,10 +245,45 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
       <KeyHaloRing bridge={bridge} />
 
+      {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDockApx(input)} onSummon={summonSlot} /> : null}
+
+      {flat && findOpen ? (
+        <FindSheet
+          input={input}
+          target={target}
+          bottom={aboveDockApx(input)}
+          raised={trayOpen}
+          loading={state.tray.loading}
+          onPick={(url) => bridge.loadTrayUrls([url])}
+          onClose={() => setFindOpen(false)}
+        />
+      ) : null}
+
       <div style={{ pointerEvents: 'auto' }}>
         <SideSheet open={settingsOpen && !isRecording} title="Settings" target={target} onClose={() => setSettingsOpen(false)}>
           <SettingsBody bridge={bridge} state={state} touch={touch} input={input} />
         </SideSheet>
+      </div>
+    </div>
+  );
+}
+
+// Find on a flat screen: the object finder in a small sheet above the dock, so
+// it stays reachable during a take, when the Settings sheet is closed.
+function FindSheet({ input, target, bottom, raised, loading, onPick, onClose }: { input: HitInput; target: ViewTarget; bottom: string; raised: boolean; loading: boolean; onPick: (url: string) => void; onClose: () => void }) {
+  const gap = glyphMetrics({ headset: false }).gapApx;
+  return (
+    <div style={{ position: 'absolute', left: 0, right: 0, bottom: raised ? `calc(${bottom} + 96px)` : bottom, display: 'flex', justifyContent: 'center', paddingInline: `max(env(safe-area-inset-left), ${PHONE_EDGES.side}px)`, pointerEvents: 'none' }}>
+      <div style={{ pointerEvents: 'auto', width: 'min(100%, 26rem)', maxHeight: '50vh', overflowY: 'auto' }}>
+        <Chip target={target} role="dialog" aria-label="Find an object" data-testid="find-sheet" style={{ display: 'grid', gap, padding: gap }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap }}>
+            <Type variant="byline" as="h3" style={{ margin: 0 }}>
+              Find
+            </Type>
+            <GlyphControl glyph="close" label="Close" input={input} onPress={onClose} />
+          </div>
+          <ObjectFinder disabled={loading} input={input} onPick={onPick} />
+        </Chip>
       </div>
     </div>
   );
@@ -256,9 +361,9 @@ function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge
       <Section title="Props">
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
           <ObjectPicker bridge={bridge} object={state.object} disabled={state.recordingState !== 'idle'} input={input} />
-          <TrayPicker bridge={bridge} tray={state.tray} disabled={state.recordingState !== 'idle'} input={input} />
+          <TrayPicker bridge={bridge} tray={state.tray} disabled={false} input={input} />
         </div>
-        <ObjectFinder disabled={state.recordingState !== 'idle' || state.tray.loading} input={input} onPick={(url) => bridge.loadTrayUrls([url])} />
+        <ObjectFinder disabled={state.tray.loading} input={input} onPick={(url) => bridge.loadTrayUrls([url])} />
       </Section>
 
       <Section title="Microphone">

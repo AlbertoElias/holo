@@ -472,7 +472,7 @@ export class ObjectInteraction {
     if (press && registry.all().includes(press)) {
       if (reach.isReaching()) this.cancelReach();
       else if (this.hold?.settle) this.cancelSettle(true);
-      else if (this.hold?.reached && !reach.isLifting()) this.releaseDesktop();
+      else if ((this.hold?.reached || this.hold?.summoned) && !reach.isLifting()) this.releaseDesktop();
       else if (!this.hold && reach.phase === 'idle') {
         // Picked out of reach (a mouse press, or a touch tap): fetched into the hand, where it stays until the next press.
         if (this.desktopReachable(press, carry)) this.beginReach(press, true);
