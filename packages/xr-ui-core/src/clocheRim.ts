@@ -90,6 +90,24 @@ export function clocheRimEdge(shape: Shape, bin: number, bins = CLOCHE_RIM_BINS)
   return { x: shape.base.x + (c / k) * shape.radii.x, z: shape.base.z + (s / k) * shape.radii.z };
 }
 
+/** The foot's edge per bin on a unit superellipse, kept per exponent: read every frame, so not recomputed. */
+const EDGE_DIRECTIONS = new Map<string, Float32Array>();
+function edgeDirections(exponent: number, bins: number): Float32Array {
+  const key = `${exponent}:${bins}`;
+  let directions = EDGE_DIRECTIONS.get(key);
+  if (!directions) {
+    directions = new Float32Array(bins * 2);
+    const unit = { base: { x: 0, y: 0, z: 0 }, radii: { x: 1, y: 1, z: 1 }, exponent } as Shape;
+    for (let bin = 0; bin < bins; bin += 1) {
+      const edge = clocheRimEdge(unit, bin, bins);
+      directions[bin * 2] = edge.x;
+      directions[bin * 2 + 1] = edge.z;
+    }
+    EDGE_DIRECTIONS.set(key, directions);
+  }
+  return directions;
+}
+
 /**
  * The dead-band: ground less than `deadBand` over the foot does not lift it
  * (a flat take's foot a few cm under its surface), and above that the lift
@@ -110,9 +128,9 @@ function deadBand(height: number): number {
  */
 export function clocheRimRaw(shape: Shape, groundAt: (x: number, z: number) => number, out: Float32Array = new Float32Array(CLOCHE_RIM_BINS)): Float32Array {
   const cap = rimTokens.maxShare * shape.radii.y;
+  const directions = edgeDirections(shape.exponent, out.length);
   for (let bin = 0; bin < out.length; bin += 1) {
-    const edge = clocheRimEdge(shape, bin, out.length);
-    const ground = groundAt(edge.x, edge.z);
+    const ground = groundAt(shape.base.x + directions[bin * 2]! * shape.radii.x, shape.base.z + directions[bin * 2 + 1]! * shape.radii.z);
     out[bin] = Number.isFinite(ground) ? Math.min(deadBand(ground - shape.base.y), cap) : 0;
   }
   return out;
@@ -133,9 +151,13 @@ const GAUSSIAN = (() => {
  * neighbours. Where the ground itself steps (a ledge, a crag), the rim
  * steps with it: it hugs the ground rather than standing over the lower side.
  */
+/** Scratch for the max filter, reused: the rim smooths every frame. */
+let PEAK = new Float32Array(CLOCHE_RIM_BINS);
+
 export function smoothClocheRim(raw: ArrayLike<number>, out: Float32Array = new Float32Array(raw.length)): Float32Array {
   const bins = raw.length;
-  const peak = new Float32Array(bins);
+  if (PEAK.length !== bins) PEAK = new Float32Array(bins);
+  const peak = PEAK;
   const reach = rimTokens.maxFilter;
   for (let bin = 0; bin < bins; bin += 1) {
     let highest = 0;

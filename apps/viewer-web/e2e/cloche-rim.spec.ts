@@ -82,6 +82,8 @@ test("the rim follows a hill's ground in the feed, with nothing outside the glas
   glass.images = [];
   const control = await measureGlass(page, { control: true });
   const motion = await sampleRimMotion(page, HILL_SECONDS + 0.5);
+  // The cost's 99th percentile is read over a full 600 frames of the looping take.
+  await expect.poll(() => readRimState(page).then((state) => state.timing?.frames ?? 0), { timeout: 60_000 }).toBeGreaterThanOrEqual(600);
   const after = await readRimState(page);
   await mkdir(artifactDir, { recursive: true });
   await writeFile(resolve(artifactDir, "hill-report.json"), JSON.stringify({ state: after, snapshots, glass, control, motion }, null, 2));

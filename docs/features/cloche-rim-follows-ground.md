@@ -278,16 +278,42 @@ Two readings for the lead:
   ≤ 0.25 ms, with the mean and the worst frame reported beside it. Bench:
   mean 0.067 ms, p99 0.19 ms, a single 2.3 ms outlier in 2,400 frames.
 
+Round 2: changes required; Codex accepted both readings, the generation fix,
+the seek snap and the GLSL twin. Fixed since: a triangle joins only the cells
+it actually overlaps (an edge-line test per cell), not every cell of its
+bounding box, so a prop no longer joins across empty ground or evicts the
+seeded layers; the rim's per-frame update allocates nothing (edge directions
+cached per exponent, the smoothing scratch reused); the hill check reads the
+cost over a full 600 frames; and the glass check's wall give is at most 1 cm
+anywhere (the dome scaled by 1 cm over its farthest reach), not 1 cm along
+the smallest radius.
+
+Left open, for the lead:
+
+- **Cost budgets on CI.** On this desktop the hill passes: build 9.3 ms,
+  update p99 0.2 ms, mean 0.07 ms over 604 frames. In `scripts/ci-emulate.sh`
+  (4 pinned CPUs, software GL), with the host's load average at 30–40 from
+  other agents, the build took 60.6 ms (168 ms at 4× throttle) and the update
+  p99 0.9 ms, mean 0.22 ms; Codex's earlier Docker run built in 14.2 ms. Every
+  other check passes there. The budgets say "on desktop"; whether CI asserts
+  them, reports them, or asserts a CI-sized bound is undecided, and as it
+  stands `cloche-rim.spec.ts` would fail on `main`'s CI.
+- **Oracle limits.** The playback neighbour check reads the product's own
+  ground lift per frame (the snapshots use the test's raycast), and a
+  ledge's exception does not establish that the ledge is connected ground.
+  Codex's pipeline recheck in Docker once reported one pixel 2 cm outside on
+  `Montanha` mid-take and an AR entry failure; neither reproduced on the host.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Rim on the ground | Hill fixture in `e2e/bubble-fixture.ts` (`cloche-rim.spec.ts`); capture pipeline on `scene.glb` (`bubble-capture.pipeline.spec.ts`); `measureRim` in `floor-proof.ts` | `output/cloche-rim/hill-report.json`, `output/bubble-rendering/capture/rim-report.json`: 0 of 180 bins off the ground at start, middle and end on both (2026-10-28) |
-| Nothing outside the glass | `measureGlass`: every drawn scene pixel from 16 orbit views read back to its world point and tested against the bent dome; control with the sphere's clip | Hill 0 outside (control 177), `scene.glb` 0 outside |
+| Nothing outside the glass | `measureGlass`: every drawn scene pixel from 24 orbit views at each of the three snapshot times (72 views) read back to its world point and tested against the bent dome, 1 cm give; control with the sphere's clip | Hill 0 outside (control 1,552), `scene.glb` 0 outside of 72 views |
 | Smooth | `sampleRimMotion`: rim per bin every drawn frame over the take | Per-frame max 1.97 cm on both; neighbour excess over max(5% of height, ground step + 5 cm): hill −0.20 m, `scene.glb` −0.08 m on settled pairs and −0.05 m on the target |
 | Flat takes unchanged | `cloche-rim.spec.ts` flat take, plus a fixed-time reduced-motion screenshot diff against `main` | Lift 0, shade drawn, sphere clip; 0 differing pixels of 1280×720 against `main` |
 | Camera takes and old exports unchanged | `cloche-rim.spec.ts` camera take and old export | Pass; no rim, today's dome |
-| Cost | `cloche-rim.spec.ts` feed perf, desktop and 4× CPU throttle | Field build 6.6 ms (21.9 ms throttled, ≤ 15 ms desktop); rim update 0.12 ms mean per frame |
+| Cost | `cloche-rim.spec.ts` feed perf, desktop and 4× CPU throttle | Field build 7.3 ms on desktop (27.9 ms at 4× throttle, ≤ 60 ms); rim update p99 0.2 ms, mean 0.10 ms over the last 600 frames |
 
 A manual orbit of the production hill take closes the loop.
 

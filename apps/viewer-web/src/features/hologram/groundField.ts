@@ -206,10 +206,18 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     // Huge triangles cover many cells each: past the budget the field is abandoned, not drawn.
     entries += (i1 - i0 + 1) * (j1 - j0 + 1);
     if (!(entries <= RIM.maxEntries)) return false;
+    // A cell of the bounding rectangle is overlapped unless one edge's line leaves it wholly outside.
+    const side = Math.sign(area);
+    const half = cell / 2;
+    const outside = (p: Vector3, q: Vector3, px: number, pz: number) => {
+      const dx = q.x - p.x, dz = q.z - p.z;
+      return side * (dx * (pz - p.z) - dz * (px - p.x)) + half * (Math.abs(dx) + Math.abs(dz)) < 0;
+    };
     for (let j = j0; j <= j1; j += 1) {
       const pz = box.minZ + (j + 0.5) * cell;
       for (let i = i0; i <= i1; i += 1) {
         const px = box.minX + (i + 0.5) * cell;
+        if (outside(a, b, px, pz) || outside(b, c, px, pz) || outside(c, a, px, pz)) continue;
         const w1 = ((px - a.x) * (c.z - a.z) - (c.x - a.x) * (pz - a.z)) / area;
         const w2 = ((b.x - a.x) * (pz - a.z) - (px - a.x) * (b.z - a.z)) / area;
         const u0 = Math.max(1 - w1 - w2, 0), u1 = Math.max(w1, 0), u2 = Math.max(w2, 0);

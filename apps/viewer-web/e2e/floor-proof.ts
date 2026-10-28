@@ -467,9 +467,12 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
     };
     // Inside the bent dome, with a centimetre's give across each boundary (the depth read back, the half-float
     // heights): under the floor by 1 cm in the flat dome, which is at most 1 cm in the bent one, and out through
-    // the wall by 1 cm along the smallest radius. Exactly, with `give` 0.
+    // the wall by at most 1 cm anywhere: the dome scaled about its centre by give over its farthest reach
+    // (no point of it is farther than the radii's diagonal), and the bent dome's floor only compresses it. Exactly, with `give` 0.
+    const reach = Math.hypot(radii.x, radii.y, radii.z);
+    const wallFor = (metres: number) => (1 + metres / reach) ** n;
     let give = 0.01;
-    let wall = ((Math.min(radii.x, radii.y, radii.z) + give) / Math.min(radii.x, radii.y, radii.z)) ** n;
+    let wall = wallFor(give);
     const insideExact = (point: Three.Vector3) => {
       const qx = (point.x - base.x) / radii.x;
       const qz = (point.z - base.z) / radii.z;
@@ -569,10 +572,10 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
                 do {
                   metres += 0.01;
                   give = metres;
-                  wall = ((Math.min(radii.x, radii.y, radii.z) + metres) / Math.min(radii.x, radii.y, radii.z)) ** n;
+                  wall = wallFor(metres);
                 } while (metres < 0.5 && !insideExact(point));
                 give = held;
-                wall = ((Math.min(radii.x, radii.y, radii.z) + held) / Math.min(radii.x, radii.y, radii.z)) ** n;
+                wall = wallFor(held);
                 if (!worst || metres > worst.metres) {
                   const caster = new three.Raycaster();
                   caster.setFromCamera(new three.Vector2(((i + 0.5) / size) * 2 - 1, ((j + 0.5) / size) * 2 - 1), camera);
