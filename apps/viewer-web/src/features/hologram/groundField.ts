@@ -101,6 +101,7 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
   const depth = RIM.layers;
   const layers = new Float32Array(cells * depth).fill(Number.NaN);
   const counts = new Uint8Array(cells);
+  const slotGeneration = new Uint32Array(cells * depth);
 
   /** A height into a cell's layers; the layer it joined, or −1 when it was dropped under a full cell. */
   const insert = (index: number, height: number): number => {
@@ -122,8 +123,8 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     for (let k = 1; k < depth; k += 1) if (layers[at + k]! < layers[at + lowest]!) lowest = k;
     if (height <= layers[at + lowest]!) return -1;
     layers[at + lowest] = height;
-    // The triangles that joined the dropped layer no longer belong to the one replacing it.
-    for (let entry = head[index]!; entry >= 0; entry = entryNext[entry]!) if (entrySlot[entry] === at + lowest) entrySlot[entry] = -1;
+    // The triangles that joined the dropped layer no longer belong to the one replacing it: a new generation.
+    slotGeneration[at + lowest] = slotGeneration[at + lowest]! + 1;
     return at + lowest;
   };
 
@@ -133,6 +134,7 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
   const head = new Int32Array(cells).fill(-1);
   let entryTriangle = new Int32Array(4096);
   let entrySlot = new Int32Array(4096);
+  let entryGeneration = new Int32Array(4096);
   let entryNext = new Int32Array(4096);
   let entryCount = 0;
   const grow = (array: Int32Array) => {
@@ -144,10 +146,12 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     if (entryCount === entryTriangle.length) {
       entryTriangle = grow(entryTriangle);
       entrySlot = grow(entrySlot);
+      entryGeneration = grow(entryGeneration);
       entryNext = grow(entryNext);
     }
     entryTriangle[entryCount] = triangle;
     entrySlot[entryCount] = slot;
+    entryGeneration[entryCount] = slot >= 0 ? slotGeneration[slot]! : 0;
     entryNext[entryCount] = head[index]!;
     head[index] = entryCount;
     entryCount += 1;
@@ -316,7 +320,7 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
   const ground = new Uint8Array(triangleCount);
   for (let entry = 0; entry < entryCount; entry += 1) {
     const slot = entrySlot[entry]!;
-    if (slot >= 0 && joined[slot]) ground[entryTriangle[entry]!] = 1;
+    if (slot >= 0 && entryGeneration[entry] === slotGeneration[slot] && joined[slot]) ground[entryTriangle[entry]!] = 1;
   }
   let reached = 0;
   for (let index = 0; index < cells; index += 1) {
