@@ -41,7 +41,8 @@ export class ObjectSystem extends createSystem() {
         walking: moving,
         pointHeld: c.input.isPointHeld(),
         summonSlot: c.input.consumeSummonSlot(),
-        grab: c.input.consumeObjectGrab()
+        grab: c.input.consumeObjectGrab(),
+        resize: c.input.consumeObjectResize(c.frame.deltaSec)
       }
     });
   }

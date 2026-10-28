@@ -102,7 +102,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     onRecordToggle: () => recording.toggle(),
     onTouchStick: (stick) => touchStick.update(stick),
     halo: flatHalo,
-    pickObject: (ndcX, ndcY, anywhere) => objects.pickAt(stage.desktopCamera, ndcX, ndcY, anywhere)
+    pickObject: (ndcX, ndcY, anywhere) => objects.pickAt(stage.desktopCamera, ndcX, ndcY, anywhere),
+    isHoldingObject: () => objects.isHolding()
   });
   const setHandedness = (handedness: Handedness): void => {
     saveHandedness(handedness);

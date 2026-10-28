@@ -32,6 +32,8 @@ interface InputControllerOptions {
   halo?: FlatHalo;
   /** The reachable prop under a point of the desktop view (normalized device coordinates), if any: a press there grabs it. */
   pickObject?: (ndcX: number, ndcY: number, anywhere: boolean) => SceneObject | null;
+  /** A prop is held on a flat screen: touch gestures and the wheel act on it. */
+  isHoldingObject?: () => boolean;
 }
 
 const MOUSE_LOOK_RAD_PER_PX = 0.0025;
@@ -39,6 +41,10 @@ const MOUSE_LOOK_RAD_PER_PX = 0.0025;
 const TOUCH_LOOK_RAD_PER_PX = 0.006;
 // Stick share past which a direction is held (the motor walks in eight directions).
 const STICK_DIRECTION_THRESHOLD = 0.38;
+// Resizing a held prop: one wheel notch (100 px), and `=` or `-` held for a second.
+const RESIZE_PER_NOTCH = 1.1;
+const RESIZE_PER_KEY_SEC = 1.8;
+const WHEEL_LINE_PX = 33;
 
 export class InputController {
   readonly moveState: MoveState = { forward: false, back: false, left: false, right: false };
@@ -62,6 +68,10 @@ export class InputController {
   private objectPressQueued: SceneObject | null = null;
   private objectReleaseQueued = false;
   private readonly objectTurnKeys = new Set<'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX'>();
+  // Resizing a held prop: the wheel and a pinch multiply in (consumed each step), `=`/`-` grow and shrink while held, `0` resets.
+  private resizeFactor = 1;
+  private resizeResetQueued = false;
+  private readonly resizeKeys = new Set<'grow' | 'shrink'>();
   // Desktop tray (PRD-045): T holds it open; 1–5 while held summon (queued for the next step).
   private trayHeld = false;
   private summonSlotQueued: number | null = null;
@@ -81,6 +91,10 @@ export class InputController {
       onStick: (stick) => options.onTouchStick?.(stick),
       onObjectPress: (point) => this.pressObject('touch', point.x, point.y),
       onObjectRelease: () => this.releaseObject('touch'),
+      isHoldingObject: () => options.isHoldingObject?.() ?? false,
+      onObjectPinch: (ratio) => {
+        this.resizeFactor *= ratio;
+      },
       onHold: (phase, point) => {
         if (phase === 'end') {
           this.endPoint('touch');
@@ -107,6 +121,7 @@ export class InputController {
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
     this.options.domElement.addEventListener('click', this.onClick);
     this.options.domElement.addEventListener('pointerdown', this.onPointerDown, true);
+    this.options.domElement.addEventListener('wheel', this.onWheel, { passive: false });
     this.touch.init();
   }
 
@@ -192,6 +207,15 @@ export class InputController {
     return slot;
   }
 
+  /** The held prop's resize since the last step: a size factor and whether `0` reset it. Consumed. */
+  consumeObjectResize(deltaSec: number): { factor: number; reset: boolean } {
+    const keys = (this.resizeKeys.has('grow') ? 1 : 0) - (this.resizeKeys.has('shrink') ? 1 : 0);
+    const out = { factor: this.resizeFactor * RESIZE_PER_KEY_SEC ** (keys * deltaSec), reset: this.resizeResetQueued };
+    this.resizeFactor = 1;
+    this.resizeResetQueued = false;
+    return out;
+  }
+
   /** −1..1 turn (Q turns left, positive about world up) and tip (X positive, Z negative) for a carried object. */
   getObjectTurn(): { yaw: number; pitch: number } {
     const held = (code: 'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX'): number => (this.objectTurnKeys.has(code) ? 1 : 0);
@@ -253,6 +277,14 @@ export class InputController {
     return true;
   }
 
+  /** The wheel resizes a held prop; otherwise it is left alone. */
+  private readonly onWheel = (event: WheelEvent): void => {
+    if (this.options.isXrPresenting() || !this.options.isHoldingObject?.()) return;
+    event.preventDefault();
+    const px = event.deltaY * (event.deltaMode === 1 ? WHEEL_LINE_PX : event.deltaMode === 2 ? window.innerHeight : 1);
+    this.resizeFactor *= RESIZE_PER_NOTCH ** (-px / 100);
+  };
+
   private releaseObject(source: 'mouse' | 'touch'): void {
     if (this.objectPointer !== source) return;
     this.objectPointer = null;
@@ -270,6 +302,9 @@ export class InputController {
     this.jumpQueued = false;
     this.objectToggleQueued = false;
     this.objectTurnKeys.clear();
+    this.resizeFactor = 1;
+    this.resizeResetQueued = false;
+    this.resizeKeys.clear();
     this.trayHeld = false;
     this.summonSlotQueued = null;
     this.pointSources.clear();
@@ -375,6 +410,12 @@ export class InputController {
         this.trayHeld = true;
         event.preventDefault();
       }
+      const resize = resizeKey(event);
+      if (resize && this.options.isHoldingObject?.()) {
+        if (resize === 'reset') this.resizeResetQueued = true;
+        else this.resizeKeys.add(resize);
+        event.preventDefault();
+      }
       const slot = summonSlot(event.code);
       if (slot !== null && this.trayHeld && !event.repeat) {
         this.summonSlotQueued = slot;
@@ -410,6 +451,9 @@ export class InputController {
       this.objectTurnKeys.delete(event.code);
       event.preventDefault();
     }
+
+    const resize = resizeKey(event);
+    if (resize === 'grow' || resize === 'shrink') this.resizeKeys.delete(resize);
 
     if (event.code === 'KeyT') {
       this.trayHeld = false;
@@ -526,4 +570,13 @@ function isTextEntry(target: EventTarget | null): boolean {
 
 function isControl(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('button, input, select, textarea, [contenteditable="true"], [role="radio"], [role="button"]') !== null;
+}
+
+/** `=` (or keypad +) grows, `-` shrinks, `0` resets a held prop's size; never with a modifier, so browser zoom keeps its keys. */
+function resizeKey(event: KeyboardEvent): 'grow' | 'shrink' | 'reset' | null {
+  if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  if (event.code === 'Equal' || event.code === 'NumpadAdd') return 'grow';
+  if (event.code === 'Minus' || event.code === 'NumpadSubtract') return 'shrink';
+  if (event.code === 'Digit0' || event.code === 'Numpad0') return 'reset';
+  return null;
 }

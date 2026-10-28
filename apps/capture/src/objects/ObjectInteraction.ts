@@ -51,6 +51,10 @@ const SET_DOWN_MAX_MPS = 0.3;
 const SET_DOWN_SEC = 0.3;
 const SET_DOWN_RELEASE_GAP_M = 0.02;
 const SET_DOWN_SEARCH_M = 3;
+// A held prop's size, against the model as loaded: clamped, and caught at 1 while within the detent.
+export const MIN_SIZE = 0.25;
+export const MAX_SIZE = 4;
+const SIZE_DETENT = 0.06;
 
 export interface ObjectStep {
   vrActive: boolean;
@@ -77,6 +81,8 @@ export interface ObjectStep {
     walking: boolean;
     /** A mouse or touch press that landed on a reachable prop this step, and whether that pointer lifted. */
     grab: { press: SceneObject | null; release: boolean };
+    /** Resizing the held prop this step: a size factor (wheel, `-`/`=`, a pinch) and `0`'s reset to 1. */
+    resize?: { factor: number; reset: boolean };
   };
 }
 
@@ -89,6 +95,10 @@ export interface ObjectSnapshot {
   heldBy: VrHandSide | null;
   position: [number, number, number];
   quaternion: [number, number, number, number];
+  /** Uniform size against the model as loaded. */
+  size: number;
+  /** The prop body's mass (kg); 0 without one. */
+  mass: number;
   /** The prop body: kinematic while held or hovering, dynamic once released, asleep at rest. */
   body: 'none' | 'kinematic' | 'dynamic' | 'asleep';
   linvel: [number, number, number];
@@ -115,6 +125,10 @@ interface Hold {
    * and the body squats only as far as the arm needs.
    */
   settle: { startSec: number; lowerM: number; squat: boolean; handFrom?: THREE.Vector3; handTo?: THREE.Vector3; sec?: number } | null;
+  /** The size asked for, before the detent at 1 and the clamp: resizes accumulate on it. */
+  rawSize: number;
+  /** A headset's other hand also holds the prop and stretches it: its side, the hands' distance and the raw size when it closed. */
+  stretch: { side: VrHandSide; startM: number; startRaw: number } | null;
 }
 
 /**
@@ -157,6 +171,7 @@ export class ObjectInteraction {
   private readonly unit = new THREE.Vector3(1, 1, 1);
   private readonly up = new THREE.Vector3(0, 1, 0);
   private readonly axis = new THREE.Vector3();
+  private readonly otherPalm = new THREE.Vector3();
 
   constructor(
     private readonly deps: {
@@ -292,6 +307,8 @@ export class ObjectInteraction {
         layer: object.layer,
         placed: object.placed,
         heldBy: object.heldBy,
+        size: object.size,
+        mass: this.physics?.mass(object) ?? 0,
         position: [this.pos.x, this.pos.y, this.pos.z],
         quaternion: [this.quat.x, this.quat.y, this.quat.z, this.quat.w],
         body: body.state,
@@ -324,6 +341,20 @@ export class ObjectInteraction {
         this.release(!intent.switched);
         continue;
       }
+      // The other hand lets go of a stretch: the prop stays in the first hand at its new size.
+      if (this.hold?.stretch?.side === side && (intent.switched || !intent.pressed)) {
+        this.hold.stretch = null;
+        continue;
+      }
+      // The other hand closing on the held prop stretches it, ahead of an open tray's miniature.
+      if (rising && !intent.switched && this.hold && this.hold.side !== side && !this.hold.stretch) {
+        const palm = this.palmWorld(side, this.pos2);
+        const other = this.palmWorld(this.hold.side, this.otherPalm);
+        if (palm && other && this.distanceToObject(this.hold.object, palm) <= VR_REACH_M) {
+          this.hold.stretch = { side, startM: Math.max(palm.distanceTo(other), 0.01), startRaw: this.hold.rawSize };
+          continue;
+        }
+      }
       // A switch is not a fresh press: the new source has to open and close again.
       if (intent.switched) continue;
       // First hand wins: the other hand's grab is ignored until release.
@@ -352,6 +383,14 @@ export class ObjectInteraction {
       return;
     }
     hold.lostSec = 0;
+    const stretch = hold.stretch;
+    if (stretch) {
+      const palm = TRACKED_SOURCES.has(tracking.getHandPoseSource(stretch.side)) ? this.palmWorld(stretch.side, this.pos2) : undefined;
+      const other = this.palmWorld(hold.side, this.otherPalm);
+      // The stretching hand losing tracking ends the stretch where it is.
+      if (!palm || !other) hold.stretch = null;
+      else this.resizeTo(hold, (stretch.startRaw * palm.distanceTo(other)) / stretch.startM);
+    }
     if (this.readAnchor(hold.side)) {
       this.writeWorld(hold.object, this.world.multiplyMatrices(this.anchor, hold.offset));
       this.physics?.sample(hold.object, this.clock);
@@ -456,6 +495,8 @@ export class ObjectInteraction {
     }
     const held = this.hold;
     if (!held) return;
+    const resize = step.desktop.resize;
+    if (resize && (resize.reset || resize.factor !== 1)) this.resizeTo(held, resize.reset ? 1 : held.rawSize * resize.factor);
     this.world.multiplyMatrices(this.anchor, held.offset);
 
     const { turnYaw, turnPitch } = step.desktop;
@@ -688,7 +729,7 @@ export class ObjectInteraction {
     object.wrapper.updateWorldMatrix(true, false);
     this.world.copy(object.wrapper.matrixWorld);
     const offset = this.anchor.clone().invert().multiply(this.world);
-    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null };
+    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null, rawSize: object.size, stretch: null };
     object.heldBy = side;
     this.physics?.hold(object);
   }
@@ -701,6 +742,21 @@ export class ObjectInteraction {
     this.hold = null;
     // A reach that was only for this prop ends with it; a body already standing up goes on standing.
     this.reach.stop();
+  }
+
+  /**
+   * The held prop takes the size asked for: clamped, and exactly 1 within the
+   * detent. It grows about its center, and its collider follows.
+   */
+  private resizeTo(hold: Hold, raw: number): void {
+    hold.rawSize = THREE.MathUtils.clamp(raw, MIN_SIZE, MAX_SIZE);
+    const size = Math.abs(hold.rawSize - 1) <= SIZE_DETENT ? 1 : hold.rawSize;
+    const object = hold.object;
+    if (size === object.size) return;
+    object.size = size;
+    object.sizer.scale.setScalar(size);
+    object.wrapper.updateMatrixWorld(true);
+    this.physics?.resize(object);
   }
 
   /** The avatar hand bone's world pose with its scale removed, into `anchor`. */

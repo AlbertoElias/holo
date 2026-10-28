@@ -24,12 +24,17 @@ export interface SceneObject {
   readonly credit?: ObjectCredit | undefined;
   readonly origin: SceneObjectOrigin;
   readonly layer: SceneObjectLayer;
-  /** Unit-scale wrapper the object system moves; the model keeps its own transform under it. */
+  /** The rigid wrapper the object system moves (a tray miniature's is scaled down). */
   readonly wrapper: THREE.Group;
+  /** Between the wrapper and the model: carries the object's size, about the model's center. */
+  readonly sizer: THREE.Group;
+  /** Keeps its own transform under the sizer. */
   readonly model: THREE.Object3D;
   /** Placed in front of the avatar once the spawn resolves. */
   placed: boolean;
   heldBy: VrHandSide | null;
+  /** Uniform size against the model as loaded (1): the sizer's scale. */
+  size: number;
 }
 
 /**
@@ -50,12 +55,15 @@ export class SceneObjectRegistry {
   add(model: THREE.Object3D, options: { name: string; source: ObjectSource; credit?: ObjectCredit | undefined; origin: SceneObjectOrigin; layer: SceneObjectLayer }): SceneObject {
     const wrapper = new THREE.Group();
     wrapper.name = `SceneObject_${options.name}`;
-    wrapper.add(model);
+    const sizer = new THREE.Group();
+    sizer.name = 'SceneObjectSize';
+    wrapper.add(sizer);
+    sizer.add(model);
     // The wrapper's origin is the model's center, so grabs and turns pivot there.
     wrapper.updateMatrixWorld(true);
     model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
     this.parent.add(wrapper);
-    const object: SceneObject = { id: `object-${this.nextId++}`, ...options, wrapper, model, placed: false, heldBy: null };
+    const object: SceneObject = { id: `object-${this.nextId++}`, ...options, wrapper, sizer, model, placed: false, heldBy: null, size: 1 };
     this.objects.push(object);
     return object;
   }

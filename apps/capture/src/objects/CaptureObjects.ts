@@ -88,6 +88,11 @@ export class CaptureObjects {
     return this.interaction.pick(this.pickRay, anywhere);
   }
 
+  /** Whether either hand holds a prop. */
+  isHolding(): boolean {
+    return this.interaction.isHolding('left') || this.interaction.isHolding('right');
+  }
+
   /** The body's reach demand (0 to 1) for the crouch and squat. */
   reachDemand(): number {
     return this.interaction.reachDemand();

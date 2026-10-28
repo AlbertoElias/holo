@@ -6,6 +6,7 @@ import { HOLD_DELAY_MS } from '@holoim/xr-ui-core';
 
 import { humanoidTagOf } from '../avatar/HumanoidSkeleton';
 import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
+import { RECORDED_OBJECT_SIZE_NODE_NAME } from './objectExport';
 import type { RecordingFrame, VrHandSide } from '../types/contracts';
 import type { AimHold, AimInput, AimPointSample, HandPointSample, PointSampleStore } from './PointSampleStore';
 import { POINT_DWELL_SEC, type PoseSegment, type ReferentRun, type ReferentSample, segmentPoses, splitByReferent } from './pointSegments';
@@ -494,9 +495,14 @@ function sceneTarget(mesh: THREE.Mesh): Target {
   return { key: `mesh:${mesh.name || 'unnamed'}#${mesh.uuid.slice(0, 8)}`, object: mesh, large: radius > LARGE_SURFACE_RADIUS };
 }
 
-/** A `RecordedObject` wrapper is one referent whatever mesh of it a ray meets; hits are local to the wrapper node. */
+/**
+ * A `RecordedObject` wrapper is one referent whatever mesh of it a ray meets. Hits are local to the
+ * wrapper node, or to its size node when it was resized, so a mark stays on the surface as it grows.
+ */
 function objectTarget(wrapper: THREE.Object3D): Target {
-  return { key: `object:${wrapper.children[0]?.name || wrapper.name}#${wrapper.uuid.slice(0, 8)}`, object: wrapper, large: false };
+  const size = wrapper.children.find((child) => child.name === RECORDED_OBJECT_SIZE_NODE_NAME);
+  const model = size ? size.children[0] : wrapper.children[0];
+  return { key: `object:${model?.name || wrapper.name}#${wrapper.uuid.slice(0, 8)}`, object: size ?? wrapper, large: false };
 }
 
 /** Seconds since `t0`, clamped to the take (`t0` to `tEnd`) and rounded: a link's span. */

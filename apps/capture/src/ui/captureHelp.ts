@@ -10,6 +10,7 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
       'Record with the glyph on your non-dominant wrist: touch it, or point at it and press select.',
       'During a take, pinch thumb to middle finger on your non-dominant hand, or hold its trigger, to mark what your other hand points at.',
       'For the Halo, pinch thumb to middle finger on your dominant hand and move it, or press the non-dominant stick and tilt it: down records or stops, left undoes the last mark, right restores it.',
+      'Holding an object, grab it with your other hand too and pull your hands apart or together to resize it; near its first size it snaps back.',
       'Settings are on the panel ahead of you.'
     ];
   }
@@ -20,7 +21,8 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
       'Drag anywhere else to look around.',
       'Tap the record circle to start a take, and the square to stop it.',
       'Touch and hold the scene to mark "this"; slide to aim, lift to finish.',
-      'Tap the Halo glyph, or hold it and slide: left undoes the last mark, right restores it.'
+      'Tap the Halo glyph, or hold it and slide: left undoes the last mark, right restores it.',
+      'Holding an object, pinch with two fingers to resize it; near its first size it snaps back. Tap to let go.'
     ];
   }
   return [
@@ -30,7 +32,8 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
     'R starts and stops a take.',
     'Fill the tray before a take; during a take, hold T and press 1 to 5 to summon an item into your hand.',
     'G picks up the nearest object in reach, or click one at the centre of the view; Q and E turn it, Z and X tip it.',
-    'Press G or click again to let go: held still, the object is set down; while you swing or walk, it is thrown.'
+    'Press G or click again to let go: held still, the object is set down; while you swing or walk, it is thrown.',
+    'While holding, scroll or press - and = to resize it, and 0 for its first size.'
   ];
 }
 

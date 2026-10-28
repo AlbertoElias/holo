@@ -6,6 +6,8 @@ import { isThreeMesh } from '../shared/threeTypeGuards';
 
 // A convex hull is built from at most this many of the model's vertices.
 const MAX_HULL_POINTS = 128;
+// A resize rebuilds the collider once the size has moved this far (as a ratio) from the collider's.
+const RESHAPE_RATIO = 0.01;
 // One density for every prop (kg/m³): mass follows the hull's volume.
 const DENSITY = 500;
 // Max-combined with the scene (Rapier's default 0.5), so a dropped prop grips
@@ -29,6 +31,8 @@ const BOUNDS_MARGIN_M = 0.5;
 const BELOW_FLOOR_M = 1;
 const ABOVE_CEILING_M = 100;
 const STEP_TIME_SAMPLES = 600;
+// A prop lifted out of a surface it was grown into lands this far above it.
+const LIFT_CLEARANCE_M = 0.002;
 
 const DOWN = { x: 0, y: -1, z: 0 };
 
@@ -47,6 +51,10 @@ interface PropBody {
   /** The wrapper already has the pose the body fell asleep with. */
   sleepWritten: boolean;
   history: PoseSample[];
+  /** The collider's points at size 1, in the wrapper's frame, and whether they are a hull's (else a box's corners). */
+  shape: { points: Float32Array; hull: boolean };
+  /** The size the collider was built at. */
+  size: number;
 }
 
 export interface ObjectPhysicsStats {
@@ -118,10 +126,47 @@ export class ObjectPhysics {
         .setLinearDamping(LINEAR_DAMPING)
         .setAngularDamping(ANGULAR_DAMPING)
     );
-    this.world.createCollider(this.colliderFor(object).setDensity(DENSITY).setFriction(FRICTION).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max).setRestitution(RESTITUTION), body);
-    const prop: PropBody = { body, home: { position: this.p.clone(), quaternion: this.q.clone() }, dynamic: false, sleepWritten: false, history: [] };
+    const shape = this.shapeFor(object);
+    const prop: PropBody = { body, home: { position: this.p.clone(), quaternion: this.q.clone() }, dynamic: false, sleepWritten: false, history: [], shape, size: object.size };
+    this.attachCollider(prop);
     this.props.set(object, prop);
     return prop;
+  }
+
+  /**
+   * The collider follows the object's size: rebuilt from the size-1 points once
+   * the size has moved past the rebuild ratio, or always with `exact` (a
+   * gesture's end). Density stays, so mass follows the volume.
+   */
+  resize(object: SceneObject, exact = false): void {
+    const prop = this.props.get(object);
+    if (!prop || prop.size === object.size) return;
+    if (!exact && Math.abs(object.size / prop.size - 1) < RESHAPE_RATIO) return;
+    prop.size = object.size;
+    const desc = this.shapeAt(prop);
+    const collider = prop.body.collider(0);
+    collider.setShape(desc.shape);
+    collider.setTranslationWrtParent(desc.translation);
+    // Density is per collider: setting it again makes the body's mass follow the new volume.
+    collider.setDensity(DENSITY);
+  }
+
+  /** The body's mass (kg), for checks. */
+  mass(object: SceneObject): number {
+    return this.props.get(object)?.body.mass() ?? 0;
+  }
+
+  /**
+   * How far (m) the object, at its wrapper's current pose, can move along the
+   * unit `direction` before its collider meets the scene or another prop, up to
+   * `maxM`. Its own body is ignored.
+   */
+  clearance(object: SceneObject, direction: THREE.Vector3, maxM: number): number {
+    const prop = this.props.get(object);
+    if (!prop || !(maxM > 0)) return Math.max(0, maxM);
+    this.rigidPose(object, this.p, this.q);
+    const hit = this.world.castShape(this.p, this.q, direction, prop.body.collider(0).shape, 0, maxM, true, undefined, undefined, undefined, prop.body);
+    return hit ? hit.time_of_impact : maxM;
   }
 
   /** The object is grabbed (or caught mid-air): kinematic at once, with no velocity. */
@@ -146,11 +191,17 @@ export class ObjectPhysics {
     if (prop.history.length > MAX_HISTORY) prop.history.shift();
   }
 
-  /** The object is let go: dynamic, with the fitted velocity when `throwIt`, else at rest. */
+  /**
+   * The object is let go: dynamic, with the fitted velocity when `throwIt`,
+   * else at rest. Its collider takes its final size first, and a prop grown
+   * into a surface while held is lifted out onto it.
+   */
   release(object: SceneObject, throwIt: boolean): void {
     const prop = this.props.get(object);
     if (!prop) return;
+    this.resize(object, true);
     this.rigidPose(object, this.p, this.q);
+    this.p.y += this.liftOut(prop, this.p, this.q);
     prop.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     prop.body.setTranslation(this.p, true);
     prop.body.setRotation(this.q, true);
@@ -249,6 +300,24 @@ export class ObjectPhysics {
     return { state, linvel: [l.x, l.y, l.z], angvel: [a.x, a.y, a.z] };
   }
 
+  /**
+   * How far up the prop at `position` must go for its collider to clear what
+   * it overlaps, landing on top of it; 0 when it overlaps nothing, or when
+   * there is no room above.
+   */
+  private liftOut(prop: PropBody, position: THREE.Vector3, quaternion: THREE.Quaternion): number {
+    const shape = prop.body.collider(0).shape;
+    if (!this.world.intersectionWithShape(position, quaternion, shape, undefined, undefined, undefined, prop.body)) return 0;
+    let reach = 0;
+    const { points } = prop.shape;
+    for (let i = 0; i < points.length; i += 3) reach = Math.max(reach, Math.hypot(points[i] ?? 0, points[i + 1] ?? 0, points[i + 2] ?? 0));
+    const above = 2 * reach * prop.size + LIFT_CLEARANCE_M;
+    const from = { x: position.x, y: position.y + above, z: position.z };
+    if (this.world.intersectionWithShape(from, quaternion, shape, undefined, undefined, undefined, prop.body)) return 0;
+    const hit = this.world.castShape(from, quaternion, DOWN, shape, 0, above, true, undefined, undefined, undefined, prop.body);
+    return hit ? Math.max(0, above - hit.time_of_impact) + LIFT_CLEARANCE_M : 0;
+  }
+
   /** The prop returns to its placement pose, at rest and hovering as it first appeared. */
   private sendHome(prop: PropBody): void {
     prop.dynamic = false;
@@ -282,13 +351,30 @@ export class ObjectPhysics {
     object.wrapper.matrixWorld.decompose(position, quaternion, this.s);
   }
 
+  /** The prop's collider at its current size. */
+  private attachCollider(prop: PropBody): void {
+    this.world.createCollider(this.shapeAt(prop).setDensity(DENSITY).setFriction(FRICTION).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max).setRestitution(RESTITUTION), prop.body);
+  }
+
+  /** The prop's collider description at its current size. */
+  private shapeAt(prop: PropBody): RAPIER.ColliderDesc {
+    const { points, hull } = prop.shape;
+    const scaled = points.map((value) => value * prop.size);
+    const desc = hull ? RAPIER.ColliderDesc.convexHull(scaled) : null;
+    if (desc) return desc;
+    const box = new THREE.Box3().setFromArray(scaled);
+    const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5).max(new THREE.Vector3(0.005, 0.005, 0.005));
+    const center = box.getCenter(new THREE.Vector3());
+    return RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(center.x, center.y, center.z);
+  }
+
   /**
-   * A convex hull of the model's vertices (the extreme ones in a fan of
-   * directions when there are more than the cap), in the wrapper's frame so
-   * the body's origin is the wrapper's. A box of the model's bounds when the
-   * hull can't be built.
+   * The points of a convex hull of the model's vertices (the extreme ones in a
+   * fan of directions when there are more than the cap), in the wrapper's frame
+   * with the object's size divided out, so the body's origin is the wrapper's. A box of the model's
+   * bounds when the hull can't be built.
    */
-  private colliderFor(object: SceneObject): RAPIER.ColliderDesc {
+  private shapeFor(object: SceneObject): { points: Float32Array; hull: boolean } {
     object.model.updateWorldMatrix(true, true);
     object.wrapper.updateWorldMatrix(true, false);
     object.wrapper.matrixWorld.decompose(this.p, this.q, this.s);
@@ -301,19 +387,14 @@ export class ObjectPhysics {
       if (!position) return;
       this.m.multiplyMatrices(this.rigidInverse, node.matrixWorld);
       for (let i = 0; i < position.count; i += 1) {
-        v.fromBufferAttribute(position, i).applyMatrix4(this.m);
+        v.fromBufferAttribute(position, i).applyMatrix4(this.m).divideScalar(object.size);
         points.push(v.x, v.y, v.z);
       }
     });
-    if (points.length < 12) return RAPIER.ColliderDesc.cuboid(0.1, 0.1, 0.1);
-    const capped = cap(points, MAX_HULL_POINTS);
-    const hull = RAPIER.ColliderDesc.convexHull(new Float32Array(capped));
-    if (hull) return hull;
-    const box = new THREE.Box3();
-    for (let i = 0; i < points.length; i += 3) box.expandByPoint(v.set(points[i] ?? 0, points[i + 1] ?? 0, points[i + 2] ?? 0));
-    const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5).max(new THREE.Vector3(0.005, 0.005, 0.005));
-    const center = box.getCenter(new THREE.Vector3());
-    return RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(center.x, center.y, center.z);
+    if (points.length < 12) return { points: boxCorners(new THREE.Box3(new THREE.Vector3(-0.1, -0.1, -0.1), new THREE.Vector3(0.1, 0.1, 0.1))), hull: false };
+    const capped = new Float32Array(cap(points, MAX_HULL_POINTS));
+    if (RAPIER.ColliderDesc.convexHull(capped)) return { points: capped, hull: true };
+    return { points: boxCorners(new THREE.Box3().setFromArray(points)), hull: false };
   }
 
   /**
@@ -397,4 +478,11 @@ function cap(points: readonly number[], limit: number): number[] {
   const out: number[] = [];
   for (const i of picked) out.push(points[i * 3] ?? 0, points[i * 3 + 1] ?? 0, points[i * 3 + 2] ?? 0);
   return out;
+}
+
+/** The eight corners of `box`, flat xyz. */
+function boxCorners(box: THREE.Box3): Float32Array {
+  const out: number[] = [];
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) out.push(x, y, z);
+  return new Float32Array(out);
 }
