@@ -8,6 +8,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 import { runDesktopObjectTake, runIwerObjectTake } from './lib/object-take.mjs';
 import { runIwerObjectPhysics } from './lib/object-physics.mjs';
 import { runDesktopMouseObject, runPhoneTouchObject } from './lib/object-pointer.mjs';
+import { runDesktopResize, runIwerResize, runPhoneResize } from './lib/object-resize.mjs';
 import { runFloorReach, runMouseFloorReach, runPhoneFloorReach, runPitReach, runRailingReach, runRevalidatesEveryFrame, runTrenchReach, runVrEntryMidStep, runWallReach } from './lib/object-reach.mjs';
 
 // Explain with an object (PRD-043): an IWER controller take and a desktop
@@ -40,6 +41,9 @@ try {
     ['pit', () => runPitReach({ browser, baseUrl, consoleErrors })],
     ['railing', () => runRailingReach({ browser, baseUrl, consoleErrors })],
     ['vrEntry', async () => runVrEntryMidStep()],
+    ['resizeDesktop', () => runDesktopResize({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['resizePhone', () => runPhoneResize({ browser, baseUrl, consoleErrors })],
+    ['resizeIwer', () => runIwerResize({ browser, baseUrl, artifactDir, consoleErrors })],
     ['revalidate', async () => runRevalidatesEveryFrame()]
   ];
   const takes = [];
