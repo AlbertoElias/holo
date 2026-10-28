@@ -84,21 +84,103 @@ export async function openCapture(page, baseUrl, query) {
   await waitForTextContentPrefix(page, '#status', 'loaded');
 }
 
-/** Min rendered hips height above the floor and max hips-to-neck spine pitch over the sampled frames of a squat, with the limits every squat in every check keeps. */
+/**
+ * What a squat looks like, over the sampled frames: the hips' lowest height above the floor, the torso's lean from vertical
+ * (hips to head, and hips to neck), the head's height over the hips, and where each ankle is relative to the hips along the
+ * facing (a leg trailing back, or flung forward). Every squat in every check keeps the limits asserted below.
+ */
 export function squatTracker(floorY = 0.01) {
-  const t = { minHipsAboveFloorM: Infinity, maxSpinePitchDeg: 0 };
+  const t = { minHipsAboveFloorM: Infinity, maxSpinePitchDeg: 0, maxTorsoDeg: 0, minHeadOverHipsM: Infinity, minAnkleAheadM: Infinity, maxAnkleAheadM: -Infinity, frames: [] };
   return {
     sample(st) {
-      if (st.pose?.hips) t.minHipsAboveFloorM = Math.min(t.minHipsAboveFloorM, st.pose.hips.y - floorY);
-      if (typeof st.pose?.spinePitchDeg === 'number') t.maxSpinePitchDeg = Math.max(t.maxSpinePitchDeg, st.pose.spinePitchDeg);
+      const p = st.pose;
+      if (!p?.hips) return;
+      t.minHipsAboveFloorM = Math.min(t.minHipsAboveFloorM, p.hips.y - floorY);
+      if (typeof p.spinePitchDeg === 'number') t.maxSpinePitchDeg = Math.max(t.maxSpinePitchDeg, p.spinePitchDeg);
+      if (typeof p.torsoPitchDeg === 'number') t.maxTorsoDeg = Math.max(t.maxTorsoDeg, p.torsoPitchDeg);
+      if (p.head) t.minHeadOverHipsM = Math.min(t.minHeadOverHipsM, p.head.y - p.hips.y);
+      for (const a of p.ankles ?? []) {
+        if (!a) continue;
+        const ahead = (a.x - p.hips.x) * -Math.sin(st.avatar.yaw) + (a.z - p.hips.z) * -Math.cos(st.avatar.yaw);
+        t.minAnkleAheadM = Math.min(t.minAnkleAheadM, ahead);
+        t.maxAnkleAheadM = Math.max(t.maxAnkleAheadM, ahead);
+      }
+      t.frames.push([st.objects?.reach?.phase, Number(st.objects?.reach?.demand?.toFixed(2)), Number((p.hips.y - floorY).toFixed(3)), Number(p.torsoPitchDeg?.toFixed(1)), Number((p.head ? p.head.y - p.hips.y : 0).toFixed(3))]);
     },
-    result: () => ({ minHipsAboveFloorM: Number(t.minHipsAboveFloorM.toFixed(3)), maxSpinePitchDeg: Number(t.maxSpinePitchDeg.toFixed(1)) }),
+    result: () => ({
+      minHipsAboveFloorM: Number(t.minHipsAboveFloorM.toFixed(3)),
+      maxSpinePitchDeg: Number(t.maxSpinePitchDeg.toFixed(1)),
+      maxTorsoDeg: Number(t.maxTorsoDeg.toFixed(1)),
+      minHeadOverHipsM: Number(t.minHeadOverHipsM.toFixed(3)),
+      ankleAheadOfHipsM: [Number(t.minAnkleAheadM.toFixed(3)), Number(t.maxAnkleAheadM.toFixed(3))]
+    }),
+    trace: () => t.frames.filter((_, i) => i % 4 === 0),
     assert(fail, label) {
       const r = this.result();
       if (r.minHipsAboveFloorM < 0.27) fail(`${label}: the hips went down to ${r.minHipsAboveFloorM} m above the floor (limit 0.27 m)`);
+      if (r.maxTorsoDeg > 50) fail(`${label}: the torso (hips to head) leaned ${r.maxTorsoDeg} degrees from vertical (limit 50)`);
       if (r.maxSpinePitchDeg > 47) fail(`${label}: the spine pitched ${r.maxSpinePitchDeg} degrees (limit 45, tolerance 47)`);
+      if (r.minHeadOverHipsM < 0.05) fail(`${label}: the head came down to ${r.minHeadOverHipsM} m over the hips (limit 0.05 m)`);
+      if (r.ankleAheadOfHipsM[0] < -0.3 || r.ankleAheadOfHipsM[1] > 0.45) fail(`${label}: an ankle was ${r.ankleAheadOfHipsM} m ahead of the hips along the facing (limits -0.3 to 0.45 m): a leg trailing or flung`);
     }
   };
+}
+
+
+/**
+ * Wraps `window.advanceTime` so every 1/60 s simulation step is sampled (the pose after
+ * it), whatever step size a scenario advances by. `stepJumps` then finds one-step pops.
+ */
+export async function recordEveryStep(page) {
+  await page.evaluate(() => {
+    if (window.__stepLogInstalled) { window.__stepLog.length = 0; return; }
+    window.__stepLogInstalled = true;
+    window.__stepLog = [];
+    const original = window.advanceTime.bind(window);
+    window.advanceTime = (ms) => {
+      const steps = Math.max(1, Math.round(ms / (1000 / 60)));
+      for (let i = 0; i < steps; i += 1) {
+        original(1000 / 60);
+        const st = JSON.parse(window.render_game_to_text());
+        const p = st.pose;
+        if (p?.hips) window.__stepLog.push({ phase: st.objects?.reach?.phase, yaw: st.avatar.yaw, hips: p.hips, torso: p.torsoPitchDeg, ankles: p.ankles ?? [], held: st.objects?.items?.[0]?.heldBy ?? null, root: [st.avatar.x, st.avatar.z], c: [st.crouch.amount, st.crouch.poseAmount, st.crouch.squat, st.objects?.reach?.demand].map((v) => Number(v?.toFixed?.(3))) });
+      }
+    };
+  });
+}
+
+export async function stepJumps(page, label, fail, { hipsM = 0.04, ankleM = 0.01, torsoDeg = 5 } = {}) {
+  const log = await page.evaluate(() => window.__stepLog.splice(0));
+  const worst = { hips: 0, ankle: 0, torso: 0, at: {} };
+  for (let i = 1; i < log.length; i += 1) {
+    const a = log[i - 1];
+    const b = log[i];
+    // A step-in or a walk legitimately moves the feet; the body-pose pops are judged around the squat.
+    const squatting = (ph) => ph && ph !== 'idle' && ph !== 'step';
+    if (!squatting(a.phase) && !squatting(b.phase)) continue;
+    if (a.phase === 'step' || b.phase === 'step') continue;
+    if (!(a.c[0] > 0.01 || b.c[0] > 0.01)) continue;
+    // Walking away from a reach is the walk's own pose change, not a reach transition.
+    // The walk animation also needs a moment to settle into the idle stance after the avatar stops, so look back a few steps.
+    if (log.slice(Math.max(0, i - 12), i + 1).some((e, n, arr) => n > 0 && Math.hypot(e.root[0] - arr[n - 1].root[0], e.root[1] - arr[n - 1].root[1]) > 0.002)) continue;
+    // The stand-up is fast but eased, so a pop is a jump in the hips' speed (a second difference), not a fast step.
+    const c = log[i - 2];
+    const dh = c ? Math.abs(b.hips.y - 2 * a.hips.y + c.hips.y) : 0;
+    if (dh > worst.hips) { worst.hips = dh; worst.at.hips = [i, a.phase, b.phase]; }
+    const dt = Math.abs((b.torso ?? 0) - (a.torso ?? 0));
+    if (dt > worst.torso) { worst.torso = dt; worst.at.torso = [i, a.phase, b.phase]; }
+    b.ankles.forEach((q, k) => {
+      const r = a.ankles[k];
+      if (!q || !r) return;
+      const da = Math.hypot(q.x - r.x, q.y - r.y, q.z - r.z);
+      if (da > worst.ankle) { worst.ankle = da; worst.at.ankle = [i, a.phase, b.phase, k]; }
+    });
+  }
+  const out = { steps: log.length, hipsM: Number(worst.hips.toFixed(4)), ankleM: Number(worst.ankle.toFixed(4)), torsoDeg: Number(worst.torso.toFixed(2)), at: worst.at };
+  if (worst.hips > hipsM) fail(`${label}: the hips' speed jumped ${out.hipsM} m per step in one step (limit ${hipsM}) at ${JSON.stringify(worst.at.hips)}`);
+  if (worst.ankle > ankleM) fail(`${label}: an ankle jumped ${out.ankleM} m in one step (limit ${ankleM}) at ${JSON.stringify(worst.at.ankle)}`);
+  if (worst.torso > torsoDeg) fail(`${label}: the torso angle jumped ${out.torsoDeg} degrees in one step (limit ${torsoDeg}) at ${JSON.stringify(worst.at.torso)}`);
+  return out;
 }
 
 export const readState = (page) => page.evaluate(() => JSON.parse(window.render_game_to_text()));
@@ -454,6 +536,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
   const { context, page } = await setupPage(browser, { iwer: false, consoleErrors, label });
   try {
     await openCapture(page, baseUrl, {});
+    await recordEveryStep(page);
     const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
     const record = async (seconds, file, between) => {
       await page.getByRole('button', { name: 'Start Recording' }).click();
@@ -562,6 +645,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       state = await readState(page);
       const item = state.objects.items[0];
       squat.assert(fail, 'put-down');
+      await stepJumps(page, 'put-down', fail);
       putDown = {
         squat: squat.result(),
         trace,

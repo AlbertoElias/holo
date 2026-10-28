@@ -1,6 +1,6 @@
 import { createXrContext, waitForPageFunctions, waitForTextContentPrefix, wireXrConsoleErrors } from '@holoim/tooling-testing/xr-env';
 
-import { OBJECT_URL, openCapture, readState, squatTracker } from './object-take.mjs';
+import { OBJECT_URL, openCapture, readState, squatTracker, recordEveryStep, stepJumps } from './object-take.mjs';
 
 // Grab, place and throw with physics (slice 2): a mouse and a touch grab, by
 // capture's real input events.
@@ -33,6 +33,7 @@ async function openPage(browser, baseUrl, consoleErrors, label, { viewport, touc
   await openCapture(page, baseUrl, { object: OBJECT_URL });
   await waitForPageFunctions(page, ['__projectToScreen', '__loadObjectUrl', '__setMockInput', '__sampleHolds']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
+  await recordEveryStep(page);
   const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
   const item = async () => (await readState(page)).objects.items[0];
   const rearm = async () => {
@@ -179,6 +180,7 @@ export async function runDesktopMouseObject({ browser, baseUrl, consoleErrors })
       released = frame.objects.items[0];
     }
     squat.assert(fail, 'a still release');
+    await stepJumps(page, 'a still release', fail);
     if (released.heldBy) fail('the set-down never released the prop');
     const launch = released;
     const resting = await rest(s);
@@ -364,6 +366,7 @@ export async function runPhoneTouchObject({ browser, baseUrl, consoleErrors }) {
       lifted = frame.objects.items[0];
     }
     squat.assert(fail, 'a still touch lift');
+    await stepJumps(page, 'a still touch lift', fail);
     const resting = await rest(s);
     const lift = {
       squat: squat.result(),

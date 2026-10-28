@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { DesktopReach } from '../../src/objects/DesktopReach.ts';
 import { ObjectInteraction } from '../../src/objects/ObjectInteraction.ts';
 import { findNode, loadTake, relativePose, rigidPose, worldAt } from './object-glb.mjs';
-import { OBJECT_URL, openCapture, poseOf, readState, saveDownload } from './object-take.mjs';
+import { OBJECT_URL, openCapture, poseOf, readState, saveDownload, squatTracker, recordEveryStep, stepJumps } from './object-take.mjs';
 
 // Crouch and reach on flat screens (slice 3): a prop on the floor is picked up
 // and set down by capture's real input paths.
@@ -50,8 +50,15 @@ async function openPage(browser, baseUrl, consoleErrors, label, { viewport, touc
   await openCapture(page, baseUrl, { object: OBJECT_URL });
   await waitForPageFunctions(page, ['__projectToScreen', '__loadObjectUrl', '__setMockInput', '__sampleHolds']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
+  await recordEveryStep(page);
   const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
-  const state = () => readState(page);
+  // Every state a check reads is also a sample of how the body looks: torso lean, head over hips, ankles under the body.
+  const tracker = squatTracker(FLOOR_Y);
+  const state = async () => {
+    const st = await readState(page);
+    tracker.sample(st);
+    return st;
+  };
   const item = async () => (await state()).objects.items[0];
   /** Steps until `done(state)` holds, at most `maxSec`; returns the last state and the seconds stepped. */
   const until = async (done, maxSec) => {
@@ -97,7 +104,7 @@ async function openPage(browser, baseUrl, consoleErrors, label, { viewport, touc
   // The prop placed while the page loads sits further out than the avatar's reach; place it again in front of the settled avatar.
   await advance(1);
   await rearm();
-  return { context, page, advance, state, item, until, rest, putOnFloor, backOff, rearm };
+  return { context, page, advance, state, item, until, rest, putOnFloor, backOff, rearm, tracker };
 }
 
 /** Hand-relative pose of the held prop at a state: the object in the hand anchor's frame. */
@@ -490,7 +497,10 @@ export async function runFloorReach({ browser, baseUrl, artifactDir, consoleErro
     if (letGo) fail('G during the set-down did not let go at once');
     await s.rest();
 
-    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, floor, pickup: { secToGrab, secPressToGrab, palmAtGrabM: palmAtGrabM && round(palmAtGrabM, 4), maxMovedBeforeHoldM: round(maxMovedBeforeHoldM, 6), rigidHoldChangeM: rigidM, crouchBackSec, heldSamples: samples.length }, feet: footReport, stepIn, spine: { ...spineReport, lowerMaxDeg: round(lowerPitchDeg, 1), hipsPickupAboveFloorM, hipsLowerAboveFloorM }, camera: { ...cameraReport, lowerYRangeM: round(lowerCam.max - lowerCam.min, 4) }, reachAgainStepM, farReach, setDown, export: exportReport, cancels };
+    s.tracker.assert(fail, 'the body');
+    const jumps = await stepJumps(s.page, 'the body', fail);
+    console.log('[jumps]', JSON.stringify(jumps));
+    return { label, squat: s.tracker.result(), status: failures.length ? 'fail' : 'pass', failures, glb, floor, pickup: { secToGrab, secPressToGrab, palmAtGrabM: palmAtGrabM && round(palmAtGrabM, 4), maxMovedBeforeHoldM: round(maxMovedBeforeHoldM, 6), rigidHoldChangeM: rigidM, crouchBackSec, heldSamples: samples.length }, feet: footReport, stepIn, spine: { ...spineReport, lowerMaxDeg: round(lowerPitchDeg, 1), hipsPickupAboveFloorM, hipsLowerAboveFloorM }, camera: { ...cameraReport, lowerYRangeM: round(lowerCam.max - lowerCam.min, 4) }, reachAgainStepM, farReach, setDown, export: exportReport, cancels };
   } finally {
     await s.context.close();
   }
@@ -621,7 +631,10 @@ export async function runMouseFloorReach({ browser, baseUrl, consoleErrors }) {
     const resting = await s.rest();
     reach.setDownFloorGapM = round(resting.boundsMin[1] - FLOOR_Y, 4);
     if (Math.abs(resting.boundsMin[1] - FLOOR_Y) > 0.003) fail(`the set-down prop rests ${reach.setDownFloorGapM} m from the floor`);
-    return { label, status: failures.length ? 'fail' : 'pass', failures, pitchLimits, aimed, secondPress, reach };
+    s.tracker.assert(fail, 'the body');
+    const jumps = await stepJumps(s.page, 'the body', fail);
+    console.log('[jumps]', JSON.stringify(jumps));
+    return { label, squat: s.tracker.result(), status: failures.length ? 'fail' : 'pass', failures, pitchLimits, aimed, secondPress, reach };
   } finally {
     await s.context.close();
   }
@@ -731,7 +744,10 @@ export async function runPhoneFloorReach({ browser, baseUrl, consoleErrors }) {
     if (earlyLift.heldAfterLift !== 'right') fail(`a touch lifted during the reach did not leave the prop held (${earlyLift.heldAfterLift})`);
     if (earlyLift.heldAfterNextTouch) fail('the next touch did not let the early-lifted prop go');
     await s.rest();
-    return { label, status: failures.length ? 'fail' : 'pass', failures, grab, secondTouch, earlyLift };
+    s.tracker.assert(fail, 'the body');
+    const jumps = await stepJumps(s.page, 'the body', fail);
+    console.log('[jumps]', JSON.stringify(jumps));
+    return { label, squat: s.tracker.result(), status: failures.length ? 'fail' : 'pass', failures, grab, secondTouch, earlyLift };
   } finally {
     await s.context.close();
   }

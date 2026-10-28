@@ -401,7 +401,8 @@ export class AvatarRig {
       binding.bone.updateMatrixWorld(true);
     }
 
-    this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
+    // Planted feet are pinned by the leg solver, so lifting the hips to clear the unplanted feet would only make the hips jump with the terrain probe.
+    if (!plant) this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
   }
 
   /** The avatar's canonical bone, or its end site for a `…Tip` reference. */

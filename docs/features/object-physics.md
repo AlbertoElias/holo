@@ -262,6 +262,18 @@ Slice 3 acceptance criteria (fixture `body-floor.gltf`, prop on the floor
   gripped from its top (0.41 m pickup, 0.46 m set-down). Every squat in every
   check (the hovering bracket's set-down included) keeps the spine ≤47° and
   the hips ≥0.27 m (0.29 m, 42.2° measured), reported per take.
+- [ ] **No one-step pop.** Every simulation step (the harness wraps
+  `advanceTime` and samples each 1/60 s) through the grab, the let-go and the
+  stand-up: the hips' speed changes ≤0.04 m per step between steps (a second
+  difference; the stand-up is fast but eased), a planted ankle moves ≤1 cm per
+  step, and the hips-to-head angle changes ≤5° per step (3.7° measured). Walking
+  away is excluded. Torso (hips to head) ≤50° (49.3° measured), head ≥0.05 m
+  over the hips (0.31 m). Cause of the dive found this way: the foot
+  ground-clearance lift in `applyCrouchFootGroundCompensation` flickered the hips
+  by 5 to 6 cm in single steps while the feet were planted (second difference
+  0.06 to 0.07 m before, ≤0.033 m after); it is skipped while planted. Walking
+  away mid-reach now unplants the feet at once, so they no longer snap 0.28 m
+  to the stride when the stand-up ends.
 - [ ] **Reach radius.** G picks up a floor prop 0.55 m and 0.7 m (root to
   prop) from the avatar, stepping in first (0.57 m and 0.74 m measured).
 - [ ] **Camera height.** In third person the follow camera's world Y changes
