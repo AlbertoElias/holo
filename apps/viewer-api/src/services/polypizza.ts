@@ -33,6 +33,8 @@ const MODEL_TTL_MS = 60 * 60 * 1000;
 /** Results asked of the API; the first ones that pass vetting are offered. */
 const API_RESULTS = 16;
 const VET_CONCURRENCY = 4;
+/** A search answers with what has passed vetting by then; the rest keeps vetting for the next search. */
+const SEARCH_DEADLINE_MS = 2000;
 /** GLB downloads in flight across all searches and picks, so concurrent searches cannot multiply them. */
 const DOWNLOADS_IN_FLIGHT = 4;
 const SEARCH_CACHE_ENTRIES = 100;
@@ -53,6 +55,7 @@ export type PolypizzaConfig = {
   allowedHosts: string[];
   fetchImpl?: typeof fetch;
   now?: () => number;
+  searchDeadlineMs?: number;
 };
 
 export type PolypizzaModel = {
@@ -106,6 +109,7 @@ function hasExternalUri(json: Record<string, unknown>): boolean {
 
 export function createPolypizza(config: PolypizzaConfig) {
   const now = config.now ?? Date.now;
+  const searchDeadlineMs = config.searchDeadlineMs ?? SEARCH_DEADLINE_MS;
   const apiOrigin = config.apiOrigin.replace(/\/+$/, "");
   const apiHost = new URL(apiOrigin).hostname.toLowerCase();
   // Poly Pizza asks for the key on its file host too.
@@ -255,6 +259,8 @@ export function createPolypizza(config: PolypizzaConfig) {
     const ranked = await searchApi(trimmedQuery);
 
     const found: Array<PolypizzaCandidate | null> = new Array(ranked.length).fill(null);
+    let markAccepted = () => {};
+    const firstAccepted = new Promise<void>((resolve) => (markAccepted = resolve));
     let accepted = 0;
     let failures = 0;
     let next = 0;
@@ -267,6 +273,7 @@ export function createPolypizza(config: PolypizzaConfig) {
           if ("bytes" in known) {
             found[index] = { ...model, bytes: known.bytes };
             accepted += 1;
+            markAccepted();
           }
           continue;
         }
@@ -274,12 +281,25 @@ export function createPolypizza(config: PolypizzaConfig) {
           const glb = await pack(model);
           found[index] = { ...model, bytes: glb.byteLength };
           accepted += 1;
+          markAccepted();
         } catch (error) {
           if (!(error instanceof RefusedModelError || error instanceof ObjectTooLargeError)) failures += 1;
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(VET_CONCURRENCY, ranked.length) }, worker));
+    const vetting = Promise.all(Array.from({ length: Math.min(VET_CONCURRENCY, ranked.length) }, worker));
+    // Vetting may outlive this search, so a late rejection must not go unhandled.
+    vetting.catch(() => undefined);
+    // One stalled download must not hold the search for the whole fetch timeout:
+    // answer at the deadline with what has passed, unless nothing has yet.
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, searchDeadlineMs);
+      timer.unref();
+    });
+    await Promise.race([vetting, deadline]);
+    if (accepted === 0) await Promise.race([vetting, firstAccepted]);
+    clearTimeout(timer);
     const results = found.filter((entry): entry is PolypizzaCandidate => entry !== null).slice(0, limit);
     if (results.length === 0 && failures > 0) throw new UpstreamError("Poly Pizza could not be reached.");
     return results;

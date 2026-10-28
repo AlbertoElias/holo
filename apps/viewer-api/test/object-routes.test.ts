@@ -457,6 +457,61 @@ describe("object search with Poly Pizza unavailable", () => {
   });
 });
 
+describe("object search with a stalled Poly Pizza download", () => {
+  const STALL_MS = 1500;
+  const DEADLINE_MS = 300;
+  let haven: PolyhavenFixture;
+  let pizza: PolypizzaFixture;
+  let app: Awaited<ReturnType<typeof objectApp>>;
+
+  beforeAll(async () => {
+    haven = await startPolyhavenFixture();
+    pizza = await startPolypizzaFixture([
+      { id: "PzKettleSlow", title: "Copper Kettle", creator: "Slow Host", licence: "CC0 1.0", tags: ["kettle"], delayMs: STALL_MS },
+      { id: "PzKettle01", title: "Steel Kettle", creator: "Pizza Carpenter", licence: "CC0 1.0", tags: ["kettle"] },
+      { id: "PzAnvilSlow", title: "Anvil", creator: "Slow Host", licence: "CC0 1.0", tags: ["anvil"], delayMs: STALL_MS }
+    ]);
+    const { createPolyhaven } = await import("../src/services/polyhaven.js");
+    const { createPolypizza } = await import("../src/services/polypizza.js");
+    app = await objectApp({
+      polyhaven: createPolyhaven({ apiOrigin: haven.origin, allowedHosts: [] }),
+      polypizza: createPolypizza({ apiOrigin: pizza.origin, apiKey: POLYPIZZA_FIXTURE_KEY, allowedHosts: [], searchDeadlineMs: DEADLINE_MS }),
+      transcriber: null
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await haven.close();
+    await pizza.close();
+  });
+
+  async function timedSearch(q: string) {
+    const started = performance.now();
+    const response = await app.inject({ method: "GET", url: `/api/objects/search?q=${q}` });
+    expect(response.statusCode).toBe(200);
+    const ids = objectSearchResponseSchema.parse(response.json()).results.map((result) => result.id);
+    return { ids, ms: performance.now() - started };
+  }
+
+  it("answers at the deadline with what has passed, and offers the stalled model once it arrives", async () => {
+    const first = await timedSearch("kettle");
+    expect(first.ids).toEqual(["PzKettle01"]);
+    expect(first.ms).toBeLessThan(STALL_MS);
+
+    await new Promise((resolve) => setTimeout(resolve, STALL_MS));
+    const again = await timedSearch("kettle");
+    expect(again.ids).toEqual(["PzKettleSlow", "PzKettle01"]);
+    expect(again.ms).toBeLessThan(DEADLINE_MS);
+  });
+
+  it("waits past the deadline rather than answer empty while a model is still on its way", async () => {
+    const { ids, ms } = await timedSearch("anvil");
+    expect(ids).toEqual(["PzAnvilSlow"]);
+    expect(ms).toBeGreaterThanOrEqual(STALL_MS - 50);
+  });
+});
+
 describe("voice search transcription", () => {
   type Call = { path: string; authorization: string | undefined; body: { audio?: string; task?: string } };
   let workersAi: Server;

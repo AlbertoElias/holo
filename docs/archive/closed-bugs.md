@@ -718,3 +718,23 @@ bug above.)
   `?manualClock=1`, like the other replay checks, so it never ticks on real
   time. Three back-to-back runs give byte-identical reports, and
   `compare-xr-reports.ts` no longer tolerates differences in this file.
+
+### B-036 — An object search can take 20 s when one Poly Pizza download stalls
+
+- **Area:** `apps/viewer-api` object search (`src/services/polypizza.ts`)
+- **Severity:** P2 — Find shows nothing for 20 s on some searches
+- **Observed:** 2026-10-28, on the deployed API
+- **Evidence:** New searches for "sofa" and "teapot" took 20.6 s and 20.5 s
+  (Fly logs: `responseTime` 20288 ms and 20212 ms), while "chairs", "lamp" and
+  "guitar" took 0.9–1.05 s. Poly Haven alone answered "sofa" in 2.0 s and had
+  no "teapot" results, so the wait was Poly Pizza's: its search downloads and
+  vets every candidate before answering, and one stalled download held it for
+  the 20 s fetch timeout.
+- **Expected:** A search answers within a couple of seconds even when one
+  model's file host is slow.
+- **Fix:** Poly Pizza's search answers at a 2 s deadline with the models that
+  have passed vetting (unless none has yet, when it waits for the first) and
+  keeps vetting the rest, so a repeated search lists them. Validation: the new
+  stalled-download tests in `test/object-routes.test.ts` (the deadline test
+  fails without the fix), and the same "chair" search with a 20 s stall took
+  20.1 s before and 2.0 s after, with the same six results.
