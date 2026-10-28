@@ -28,7 +28,17 @@ const polypizzaPort = Number(process.env.E2E_POLYPIZZA_PORT ?? "3198");
 const polypizzaOrigin = `http://127.0.0.1:${polypizzaPort}`;
 // Matches POLYPIZZA_FIXTURE_KEY in apps/viewer-api/test/fixtures/polypizzaFixture.ts.
 const polypizzaKey = "fixture-polypizza-key";
-const webServers = [
+const captureServer = {
+  command: `${testBuild} capture -- --host ${captureUrl.hostname} --port ${captureUrl.port} --strictPort`,
+  ignoreHTTPSErrors: true,
+  timeout: 180000,
+  reuseExistingServer,
+  url: captureUrl.href
+};
+// E2E_CAPTURE_ONLY=1 serves capture alone, for a check that only records a
+// take there (walk-take.pipeline.spec.ts, the Quick Look tool check's input).
+const captureOnly = process.env.E2E_CAPTURE_ONLY === "1";
+const webServers = captureOnly ? [captureServer] : [
   {
     command: `VITE_HMR_CLIENT_PORT=${e2ePort} VITE_API_PROXY_TARGET=${apiBaseUrl} ${testBuild} web -- --host 0.0.0.0 --port ${e2ePort} --strictPort`,
     ignoreHTTPSErrors: true,
@@ -50,13 +60,7 @@ const webServers = [
         timeout: 120000,
         reuseExistingServer,
         url: `${apiBaseUrl}/api/holograms?limit=1`
-      }, {
-        command: `${testBuild} capture -- --host ${captureUrl.hostname} --port ${captureUrl.port} --strictPort`,
-        ignoreHTTPSErrors: true,
-        timeout: 180000,
-        reuseExistingServer,
-        url: captureUrl.href
-      }]
+      }, captureServer]
     : [])
 ];
 

@@ -19,7 +19,7 @@
     "lint:all": "pnpm run lint:tooling && pnpm -r --if-present lint",
     "typecheck:tooling": "tsc -p tsconfig.scripts.json --noEmit",
     "typecheck:all": "pnpm run typecheck:tooling && pnpm -r --if-present typecheck",
-    "check:all": "pnpm run lint:all && pnpm run typecheck:all",
+    "check:all": "pnpm run lint:all && pnpm run typecheck:all && node scripts/check-e2e-shards.mjs",
     "build:all": "pnpm -r --if-present build",
     "test:tooling": "tsx --test scripts/*.test.ts",
     "test:unit:capture": "pnpm --filter @holoim/capture test:unit",

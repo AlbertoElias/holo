@@ -152,10 +152,13 @@ before pushing. Measured locally on Node 22 (M-series, shared machine):
   `ubuntu-latest` runner has 2 vCPUs, so the default is 1. Running 2 at a time
   passed on the branch but timed out on main: the hand and body checks each
   open 2 pages at once, and cold page loads then pass the 30 s goto limit.
-  The pipeline job runs its two specs as Playwright shards
-  (`pnpm run test:smoke:pipeline --shard=<i>/2`); the capture-to-viewer spec
-  (~100 s on CI) is the long pole. Update `CHECK_COST` from the CI
-  `xr-checks-shard-*.json` timings when a check's cost changes a lot.
+  The pipeline job runs its specs in 5 shards of whole files and the viewer
+  mocked suite in 4, each a script balanced by measured wall time
+  (`test:e2e:pipeline:shard<i>`, `test:e2e:mocked:shard<i>` in
+  `apps/viewer-web/package.json`); `scripts/check-e2e-shards.mjs` (in
+  `check:all`) fails unless the shards run each test exactly once. Update
+  `CHECK_COST` and those scripts from the CI timing artifacts
+  (`xr-checks-shard-*.json`, `playwright-web-*.json`) when a cost changes a lot.
 - Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`, `FACE_VIDEO=1`) screenshot every frame
   and multiply wall time; combine them with `XR_REPLAY_ONLY`.
 
@@ -242,7 +245,8 @@ Supported env vars for smoke and XR scripts:
   `scripts/ci-push-base.sh`, falling back to the push's `before`) selects
   only the suites that exercise exactly the changed files: quality, unit
   tests and production build (one runner), capture XR checks (2 shards),
-  viewer AR and Knowledge Atlas checks, capture → viewer pipeline (2 shards),
+  viewer AR and Knowledge Atlas checks (4 shards), capture → viewer pipeline
+  (5 shards), the Quick Look tool check,
   and portal view checks. Files no suite tests select nothing and the gate
   passes on skips: docs and `.md`, workflows and `.github/actions`, shell
   and Node scripts, agent tooling, editor and package-manager config, and
