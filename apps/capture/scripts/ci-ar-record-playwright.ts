@@ -56,15 +56,15 @@ import {
 //   interaction-undefined  a phone whose interactionMode is undefined: treated like a headset.
 //   marks-a/marks-b   slice 4, at a 412x915 portrait phone, the same prepared set and bracket, under two
 //                     placements: Record by the dock, then with the head still: a one-frame tap on the bracket
-//                     (no hold), a 1 s hold on the bracket, a 1 s hold on empty floor (a hold, no referent), a 1 s
+//                     (no hold), a 1 s hold on the bracket, a 1 s hold on the set's floor (names the floor, with a radius), a 1 s
 //                     hold that begins on the dock's chip (no hold, no dock action), a drag of 100 apx that ends
 //                     before the first simulation step and then stays still past the hold delay (no hold), a finger
 //                     still at the screen centre while the head turns 4 degrees as it lands, judged after the hold
 //                     delay (a hold, no referent), a finger still while its ray is unplaceable for four frames and the head
 //                     turns 4 degrees (a hold, no referent), a 1 s hold that begins on the status chip with the bracket behind it (no hold), a 1 s hold on TargetA, and a
 //                     1 s hold on TargetA while the head walks toward it and turns with the finger fixed on the
-//                     screen; Stop by the dock. Exactly three recorded links from RecordedAuthorCamera
-//                     (RecordedObject, TargetA, TargetA), spans starting at the touch, HOLOIM_meaning version 1,
+//                     screen; Stop by the dock. Exactly four recorded links from RecordedAuthorCamera
+//                     (RecordedObject, PointingFloor, TargetA, TargetA), spans starting at the touch, HOLOIM_meaning version 1,
 //                     "no referent" in the resolver's report; to.point of the still holds agrees across the two
 //                     placements within 1 cm. While a finger is down each XR frame is 100 ms of page time and the
 //                     simulation steps by the same, as a phone's clock does, so the take is the same on any host.
@@ -774,6 +774,8 @@ async function walkPhase(run: Run, phase: 'phone-a' | 'phone-b', start: { positi
     const xs = take.camera!.path.translation?.values.map((row) => row[0]!) ?? [0];
     report.notes.cameraSpanXMeters = round(Math.max(...xs) - Math.min(...xs));
     if ((report.notes.cameraSpanXMeters as number) < 0.3) report.failures.push('the exported camera barely moved; the walk was not recorded');
+    // The take holds the set it happened on, the floor the camera walked over included (B-028).
+    if (!take.setNodes.some((node) => node.name === 'PointingFloor_RecordedBubble')) report.failures.push(`no PointingFloor_RecordedBubble among the set nodes (${take.setNodes.map((node) => node.name).join(', ')}): the take lost the floor`);
     if (take.objects.length !== 1) report.failures.push(`${take.objects.length} event objects in the take, expected the one placed before AR`);
     for (const object of take.objects) {
       const t = object.channels.translation;
@@ -1558,7 +1560,7 @@ type Marked = { report: PhaseReport; take: CameraTakeReport | null; links: Meani
 
 /**
  * Hold to mark from the camera, under one placement: Record by the dock, then with the head still a
- * tap, holds on the bracket, on empty floor, from the dock's chip and on TargetA, and a hold on TargetA
+ * tap, holds on the bracket, on the floor, from the dock's chip and on TargetA, and a hold on TargetA
  * while the head walks toward it and turns with the finger fixed on the screen. Stop by the dock; the
  * links in the export are the facts.
  */
@@ -1602,8 +1604,8 @@ async function marksPhase(run: Run, phase: 'marks-a' | 'marks-b', start: { posit
     if ((tap.touchMs ?? Infinity) > TAP_LIMIT_MS) report.failures.push(`tap-on-bracket: the tap lasted ${tap.touchMs} ms; emulated frames are too slow to show a tap under the 300 ms hold delay`);
 
     await touchScenario(page, report, scenarios, 'hold-on-bracket', () => phoneHold(page, bracket, MARK_HOLD_MS), 1);
-    // Floor where the set has none: a hold the take keeps, with nothing to name.
-    await touchScenario(page, report, scenarios, 'hold-on-empty-floor', () => phoneHold(page, floor, MARK_HOLD_MS), 1);
+    // The set's floor, which the take holds (B-028): a large surface, named with a radius around the hit.
+    await touchScenario(page, report, scenarios, 'hold-on-floor', () => phoneHold(page, floor, MARK_HOLD_MS), 1);
 
     // A hold that begins on the dock: the chip around Record, beside the ring's hit area.
     const dock = await dockState(page);
@@ -1887,10 +1889,11 @@ function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: Mean
   if (take.meaningVersion !== 1) report.failures.push(`HOLOIM_meaning version ${take.meaningVersion}, expected 1 (a camera link)`);
   const expected = [
     { scenario: 'hold-on-bracket', to: 'RecordedObject' },
+    { scenario: 'hold-on-floor', to: 'PointingFloor' },
     { scenario: 'hold-on-target-a', to: 'TargetA' },
     { scenario: 'hold-on-target-a-walking', to: 'TargetA' }
   ];
-  if (links.length !== expected.length) report.failures.push(`${links.length} link(s) in the take, expected exactly ${expected.length} (bracket, TargetA, TargetA walking); the tap, the floor and the chip must make none`);
+  if (links.length !== expected.length) report.failures.push(`${links.length} link(s) in the take, expected exactly ${expected.length} (bracket, floor, TargetA, TargetA walking); the tap and the chip must make none`);
   const cameraNode = take.camera?.nodeIndex;
   links.forEach((link, i) => {
     const want = expected[i];
@@ -1910,7 +1913,9 @@ function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: Mean
     if (link.span.end - link.span.start < 0.3) report.failures.push(`link ${i} (${want.scenario}): span ${link.span.start}..${link.span.end} s is shorter than the 300 ms hold delay`);
   });
   const targetANode = take.setNodes.find((node) => node.name.startsWith('TargetA'));
-  const stillLink = links[1];
+  const floorLink = links[1];
+  if (floorLink?.to.nodeName.startsWith('PointingFloor') && !(floorLink.to.radius! > 0)) report.failures.push(`the floor link has no radius (${floorLink.to.radius}); a large surface is named with one`);
+  const stillLink = links[2];
   if (targetANode && stillLink?.to.point) {
     const world = stillLink.to.point.map((v, k) => v + targetANode.worldTranslation[k]!);
     const centre = TARGETS.TargetA!.center;
@@ -1925,7 +1930,7 @@ function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: Mean
   const holds = resolution.aimHolds;
   if (holds.length !== 8 || holds.some((hold) => hold.input !== 'screen')) report.failures.push(`resolution lists ${holds.length} hold(s) [${holds.map((hold) => hold.input).join(', ')}], expected 8 screen holds (bracket, floor, turn at touchdown, target ray lost, view offset, no viewer baseline, TargetA, TargetA walking)`);
   const unlinked = resolution.runs.filter((resolved) => !resolved.linked);
-  if (unlinked.length !== 5 || unlinked.some((resolved) => resolved.reason !== 'no referent')) report.failures.push(`resolution: unlinked runs ${JSON.stringify(unlinked.map((resolved) => resolved.reason))}, expected exactly five "no referent" (the floor, the turn at touchdown, the target ray lost, the view offset, no viewer baseline)`);
+  if (unlinked.length !== 4 || unlinked.some((resolved) => resolved.reason !== 'no referent')) report.failures.push(`resolution: unlinked runs ${JSON.stringify(unlinked.map((resolved) => resolved.reason))}, expected exactly four "no referent" (the turn at touchdown, the target ray lost, the view offset, no viewer baseline)`);
   if (resolution.runs.filter((resolved) => resolved.linked).length !== links.length) report.failures.push('resolution: linked runs and links in the file differ');
 }
 
