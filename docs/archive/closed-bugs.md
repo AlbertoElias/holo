@@ -738,3 +738,31 @@ bug above.)
   stalled-download tests in `test/object-routes.test.ts` (the deadline test
   fails without the fix), and the same "chair" search with a 20 s stall took
   20.1 s before and 2.0 s after, with the same six results.
+
+### B-025 — Portal "desktop freeze" check finds the feed back at the top
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("desktop freeze: … scrolling away resets"), portal scroll capture
+- **Severity:** P3
+- **Observed:** 2026-10-26, on `main` at `ac700f0f`
+- **Evidence:** `expect(await feedScrollTop(page)).toBeGreaterThan(0)` at
+  `portal.spec.ts:408` receives 0. Fails 3 of 3 on `main` when the whole
+  `portal.spec.ts` runs (`--repeat-each=3`, one worker), passes 3 of 3 when
+  the test runs alone. The paused card's capture may undo the instant
+  `scrollIntoView` before the reset lands.
+- **Expected:** scrolling to the next card from a paused card stays there.
+- **Reproduction:** `E2E_BASE_URL=https://localhost:3274 E2E_API_PORT=3101 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1`
+- **Closed:** 2026-10-28
+- **Cause:** a real product bug, not test-order pollution. In `freeze`, a
+  mouse drag on a playing card scrolls the feed; on release a settle
+  suspends snapping, glides to the card and waits up to 800 ms for the
+  glide's `scrollend`. A drag that left the feed on its card had no glide,
+  so no `scrollend` came, and the 800 ms fallback then put the feed back on
+  that card, undoing any scroll away made in between. The whole spec runs
+  fast enough on a warm server to land inside that window; alone it did not.
+- **Fix:** a release that leaves the feed on its card lands at once
+  (snapping back, nothing pending), and a wheel or key in the feed during a
+  settle takes it over instead of being pulled back
+  (`usePortalTriggers.ts`). The new `portal.spec.ts` check "desktop freeze:
+  scrolling away just after a drag on a playing card stays scrolled" fails
+  without the fix (feed back at 0) and passes with it; the whole spec passed
+  27 of 27 (`--repeat-each=3`, one worker).
