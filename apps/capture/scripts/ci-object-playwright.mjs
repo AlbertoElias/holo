@@ -24,15 +24,20 @@ await mkdir(artifactDir, { recursive: true });
 const browser = await launchXrBrowser(chromium);
 const consoleErrors = [];
 try {
-  const iwer = await runIwerObjectTake({ browser, baseUrl, artifactDir, consoleErrors });
-  const desktop = await runDesktopObjectTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors });
-  const physics = await runIwerObjectPhysics({ browser, baseUrl, artifactDir, consoleErrors });
-  const mouse = await runDesktopMouseObject({ browser, baseUrl, consoleErrors });
-  const phone = await runPhoneTouchObject({ browser, baseUrl, consoleErrors });
-  const reach = await runFloorReach({ browser, baseUrl, artifactDir, consoleErrors });
-  const mouseReach = await runMouseFloorReach({ browser, baseUrl, consoleErrors });
-  const phoneReach = await runPhoneFloorReach({ browser, baseUrl, consoleErrors });
-  const takes = [iwer, desktop, physics, mouse, phone, reach, mouseReach, phoneReach];
+  // OBJECT_ONLY=reach,mouseReach,phoneReach runs a subset while iterating; the full tier runs everything.
+  const only = process.env.OBJECT_ONLY ? new Set(process.env.OBJECT_ONLY.split(',')) : null;
+  const runs = [
+    ['iwer', () => runIwerObjectTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['desktop', () => runDesktopObjectTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
+    ['physics', () => runIwerObjectPhysics({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['mouse', () => runDesktopMouseObject({ browser, baseUrl, consoleErrors })],
+    ['phone', () => runPhoneTouchObject({ browser, baseUrl, consoleErrors })],
+    ['reach', () => runFloorReach({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['mouseReach', () => runMouseFloorReach({ browser, baseUrl, consoleErrors })],
+    ['phoneReach', () => runPhoneFloorReach({ browser, baseUrl, consoleErrors })]
+  ];
+  const takes = [];
+  for (const [name, run] of runs) if (!only || only.has(name)) takes.push(await run());
   const sheet = writeContactSheet(artifactDir, path.join(artifactDir, 'object-sheet.jpg'));
   const failures = [...takes.flatMap((take) => take.failures.map((message) => `${take.label}: ${message}`)), ...consoleErrors.map((error) => `console: ${error}`)];
   const report = { status: failures.length ? 'fail' : 'pass', failures, takes, sheet: sheet ?? null };

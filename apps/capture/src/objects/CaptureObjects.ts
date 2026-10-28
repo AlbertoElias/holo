@@ -93,6 +93,18 @@ export class CaptureObjects {
     return this.interaction.reachDemand();
   }
 
+  isStepping(): boolean {
+    return this.interaction.isStepping();
+  }
+
+  isReachActive(): boolean {
+    return this.interaction.isReachActive();
+  }
+
+  takeReachStep(): { x: number; z: number } | null {
+    return this.interaction.takeReachStep();
+  }
+
   physicsStats(): ObjectPhysicsStats | null {
     return this.physics?.stats() ?? null;
   }

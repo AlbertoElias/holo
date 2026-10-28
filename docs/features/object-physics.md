@@ -196,9 +196,34 @@ Revised plan: a real squat. Beyond the existing crouch, the reach demand
 lowers the hips toward about 0.40 m. `TerrainLegSolver`, the two-bone leg
 solver that already plants the feet after animation, keeps the feet on the
 floor, so the knees bend into the squat; its correction cap is lifted while a
-reach drives the pose. A moderate forward lean (the existing bend scaled
-about 1.5×) brings the shoulder over the prop. The spike measures first; if
-the legs can't plant at that hip height, it stops and reports again.
+reach drives the pose.
+
+**As built (2026-10-27, step-in and 45° rule).** The first build leaned the
+spine 2× to reach the floor, which read as a dive (78° at the peak, 90° in the
+set-down) and tilted the third-person floor. Now:
+
+- **Step in, then squat.** A reach for a prop out of the arm's standing reach
+  first walks the avatar in (new `step` phase of `DesktopReach`) until the
+  prop's grasp point is 0.25 m ahead of the toes (steps under 5 cm are
+  skipped). The step is a displacement through the character motor's
+  `externalDisplacement`, not input, so it doesn't count as walking; it eases
+  up to 0.7 m/s and back, the legs walk (`walk` state), and then 0.3 s settles
+  the stance before the squat plants the feet. All cancels still apply during
+  it. The step has its own 2.5 s budget (it gives up if the toes stop closing
+  on the prop); the 1.5 s reach timeout starts at the squat.
+- **Squat, not dive.** No extra lean (`SQUAT_EXTRA_LEAN` 0): the spine stays
+  at the existing crouch's pitch, 42° from vertical at most, and the hips drop
+  further instead (`SQUAT_EXTRA_HIPS_DROP_RATIO` 0.40, hips 0.40 m high at the
+  bottom). A planted foot keeps its planted orientation
+  (`AvatarRig.plantFootQuats`): at this depth the old tilt-to-floor spun the
+  toes through 180° for a few frames.
+- **Set-down mirrors the pickup.** The squat set-down brings the held prop's
+  centre to the same stance, 0.25 m ahead of the toes, so picking it up again
+  needs no step.
+- **Camera.** The third-person view keeps its look target at the eye's offset
+  from the avatar root, held from the start of a reach, lift or lower until it
+  ends, so the floor doesn't tilt as the head drops. First person follows the
+  eye down.
 
 Slice 3 acceptance criteria (fixture `body-floor.gltf`, prop on the floor
 0.45 m ahead):
@@ -208,6 +233,18 @@ Slice 3 acceptance criteria (fixture `body-floor.gltf`, prop on the floor
   reaches it. Within 1.5 s the palm is ≤0.10 m from its bounds. In the
   exported GLB the hips drop ≥0.15 m during the reach, and the crouch is back
   to 0 within 0.8 s of the carry pose.
+- [ ] **Step in.** With the avatar 0.5 m from the prop, the reach steps the
+  root in by the needed distance (±2 cm) and the grasp point ends 0.20 to
+  0.30 m ahead of the toes (0.2526 m measured), the legs walking during it. The
+  feet are planted from the first squat frame to the stand-up (rise and
+  drop ≤0.01 m, slide ≤0.02 m, a toe never behind its ankle). The palm
+  reaches the prop within 1.5 s of the end of the step.
+- [ ] **Spine pitch.** The hips-to-neck vector stays ≤45° from vertical
+  (47° tolerance) through the pickup and the low set-down (42.2° measured).
+- [ ] **Camera height.** In third person the follow camera's world Y changes
+  ≤1 cm and its pitch ≤1° during the squat (0.001 m, 0.01° measured).
+- [ ] **Pick up again.** After a low set-down the prop is within 5 cm of the
+  squat stance (0 measured).
 - [ ] **Rigid hold.** Over the whole held span, glide included, the prop's
   hand-relative change is ≤1e-4 m. The held span starts within 0.1 s of the
   hand reaching the prop.

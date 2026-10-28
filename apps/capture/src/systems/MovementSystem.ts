@@ -26,6 +26,8 @@ export class MovementSystem extends createSystem() {
     if (frame.arSpectator) return;
     const { motor, input, body, avatar, config } = c;
 
+    // A flat-screen reach's step in is a displacement, not input: it moves the avatar without counting as walking.
+    const reachStep = frame.vrActive ? null : c.objects.takeReachStep();
     c.crouch.update(deltaSec, frame.vrActive, input.isCrouchHeld(), c.tracking.getCurrentHeadLocalY(), c.objects.reachDemand());
     const crouchAmount = c.crouch.amount;
     const stick = frame.vrActive ? c.locomotion.moveVector(this.stickMove) : { x: 0, z: 0 };
@@ -33,7 +35,7 @@ export class MovementSystem extends createSystem() {
       moveSpeedMultiplier: 1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount,
       allowJump: true,
       stickToTerrain: crouchAmount >= CROUCH_MIN_EFFECT_THRESHOLD,
-      ...(frame.bodyTracking ? { externalDisplacement: body.displacement } : {}),
+      ...(frame.bodyTracking ? { externalDisplacement: body.displacement } : reachStep ? { externalDisplacement: reachStep } : {}),
       ...(stick.x !== 0 || stick.z !== 0 ? { analogMove: stick } : {})
     });
     frame.character = motor.getSnapshot();

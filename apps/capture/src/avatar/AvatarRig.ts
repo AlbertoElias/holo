@@ -147,8 +147,8 @@ const CROUCH_MAX_POSE_AMOUNT = 1.45;
 const CROUCH_FOOT_GROUND_CLEARANCE_RATIO = 0.015;
 const CROUCH_MAX_HIPS_LIFT_RATIO = 0.16;
 // A reach squat: the hips drop this much more (a fraction of height) beyond the full crouch, and the forward bend grows by this factor.
-const SQUAT_EXTRA_HIPS_DROP_RATIO = 0.21;
-const SQUAT_EXTRA_LEAN = 1;
+const SQUAT_EXTRA_HIPS_DROP_RATIO = 0.40;
+const SQUAT_EXTRA_LEAN = 0;
 // The crouch's leg bend is relaxed by this much at full squat: the leg solver bends the knees instead.
 const SQUAT_LEG_RELAX = 0.85;
 const CROUCH_WALK_BLEND_START_SPEED = 0.08;
@@ -223,6 +223,8 @@ export class AvatarRig {
   private lastSquatAmount = 0;
   /** Where each foot stood when the current reach began, before it bent the body. */
   readonly plantFeet = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+  /** The feet's world orientations when planted: a planted foot stays flat as it was, however far the legs fold. */
+  readonly plantFootQuats = { left: new THREE.Quaternion(), right: new THREE.Quaternion() };
   private feetPlanted = false;
   private readonly preCrouchPose = new Map<THREE.Bone, { quaternion: THREE.Quaternion; position: THREE.Vector3 }>();
   private crouchHips: CrouchHipsBinding | undefined;
@@ -338,7 +340,10 @@ export class AvatarRig {
       this.feetPlanted = true;
       this.crouchHips.bone.updateWorldMatrix(true, true);
       for (const [side, foot] of [['left', this.crouchLeftFoot], ['right', this.crouchRightFoot]] as const) {
-        if (foot) foot.getWorldPosition(this.plantFeet[side]);
+        if (foot) {
+          foot.getWorldPosition(this.plantFeet[side]);
+          foot.getWorldQuaternion(this.plantFootQuats[side]);
+        }
       }
     }
     const squatAmount = clamp(squat, 0, 1);

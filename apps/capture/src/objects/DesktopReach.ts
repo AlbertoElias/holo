@@ -12,18 +12,31 @@ export const REACH_PALM_M = 0.1;
 export const REACH_TARGET_FRACTION = 0.95;
 /** A prop that moves faster than this while it is being reached for is left alone. */
 export const REACH_PROP_MAX_MPS = 0.05;
+/** A flat-screen pickup from low first steps in until the prop's grasp point is this far ahead of the toes. */
+export const REACH_STEP_AHEAD_M = 0.25;
+/** A step shorter than this is skipped: the avatar is already close enough. */
+export const REACH_STEP_MIN_M = 0.05;
+const STEP_PEAK_MPS = 0.7;
+const STEP_ACCEL_MPS2 = 2.4;
+const STEP_MIN_MPS = 0.15;
+// The step's own budget (the reach timeout covers the squat only), and how long the legs get to settle into the idle stance before the feet are planted.
+const STEP_TIMEOUT_SEC = 2.5;
+const STEP_SETTLE_SEC = 0.3;
+// The step gives up and squats from where it stands when the toes stop closing on the prop (a wall).
+const STEP_STALL_SEC = 0.4;
 // Standing back up with the prop lasts at least this long, so a prop taken at chest height still rises smoothly into the carry pose.
 const LIFT_MIN_SEC = 0.25;
 
-export type ReachPhase = 'idle' | 'reach' | 'lift' | 'carry' | 'lower';
+export type ReachPhase = 'idle' | 'step' | 'reach' | 'lift' | 'carry' | 'lower';
 
 /**
  * Flat-screen pickup and set-down from low: the phases and the body's reach
  * demand (0 to 1), which `CrouchState` turns into a crouch and a squat.
  *
- *   idle → reach → lift → carry → lower → idle
+ *   idle → step → reach → lift → carry → lower → idle
  *
- * `reach` bends toward a prop until the palm is on it; `lift` stands back up
+ * `step` walks the avatar in until the prop is a squat away (skipped when it
+ * is close already); `reach` bends toward a prop until the palm is on it; `lift` stands back up
  * holding it; `lower` squats until the held prop is just above a surface. A
  * cancel before the hand arrives goes straight back to `idle`. This class
  * owns the phase and the demand only; `ObjectInteraction` grabs and lets go.
@@ -41,10 +54,20 @@ export class DesktopReach {
   private liftFrom = 0;
   private liftWorld = 0;
   private lastPosition: THREE.Vector3 | null = null;
+  private stepSpeed = 0;
+  private stepSec = 0;
+  private settleSec = 0;
+  private bestRemaining = Infinity;
+  private stalledSec = 0;
 
-  /** True while the hand is meant to be taking the prop, before it is held. */
+  /** True while the hand is meant to be taking the prop, before it is held (the step in included). */
   isReaching(): boolean {
-    return this.phase === 'reach';
+    return this.phase === 'reach' || this.phase === 'step';
+  }
+
+  /** True while the avatar is stepping in: its movement is the reach's, not walking. */
+  isStepping(): boolean {
+    return this.phase === 'step';
   }
 
   /** True from the grasp until the avatar is standing in the carry pose. */
@@ -52,8 +75,14 @@ export class DesktopReach {
     return this.phase === 'lift';
   }
 
-  begin(object: SceneObject, pointerDown: boolean): void {
-    this.phase = 'reach';
+  /** `stepM`: how far the avatar must step in first; a step under `REACH_STEP_MIN_M` is skipped. */
+  begin(object: SceneObject, pointerDown: boolean, stepM = 0): void {
+    this.phase = stepM >= REACH_STEP_MIN_M ? 'step' : 'reach';
+    this.stepSpeed = 0;
+    this.stepSec = 0;
+    this.settleSec = 0;
+    this.bestRemaining = Infinity;
+    this.stalledSec = 0;
     this.object = object;
     this.pointerDown = pointerDown;
     this.sinceSec = 0;
@@ -63,6 +92,7 @@ export class DesktopReach {
   /** Stands the avatar back up with nothing grabbed (or after a let-go). */
   stop(): void {
     this.phase = 'idle';
+    this.stepSpeed = 0;
     this.object = null;
     this.pointerDown = false;
     this.lastPosition = null;
@@ -79,12 +109,40 @@ export class DesktopReach {
    * moving). `shoulderToGraspM` and `reachM` drive the demand.
    */
   stepReach(deltaSec: number, objectPosition: THREE.Vector3, shoulderToGraspM: number, reachM: number): 'cancel' | 'reaching' {
-    this.sinceSec += deltaSec;
+    if (this.phase === 'reach') this.sinceSec += deltaSec;
     if (this.sinceSec > REACH_TIMEOUT_SEC) return 'cancel';
     if (this.lastPosition && deltaSec > 0 && this.lastPosition.distanceTo(objectPosition) / deltaSec > REACH_PROP_MAX_MPS) return 'cancel';
     this.lastPosition = (this.lastPosition ?? new THREE.Vector3()).copy(objectPosition);
-    if (shoulderToGraspM > reachM * REACH_TARGET_FRACTION) this.demand = Math.min(1, this.demand + REACH_RATE_PER_SEC * deltaSec);
+    if (this.phase === 'reach' && shoulderToGraspM > reachM * REACH_TARGET_FRACTION) this.demand = Math.min(1, this.demand + REACH_RATE_PER_SEC * deltaSec);
     return 'reaching';
+  }
+
+  /**
+   * One frame of the step in: how far to move toward the prop this frame, given
+   * how far is left (the toes' distance to the stance, measured after last
+   * frame's move). Eases up to a walking pace and back down, then waits for the
+   * legs to settle before the squat plants the feet. Hands over to `reach` when done.
+   */
+  stepTowards(deltaSec: number, remainingM: number): number {
+    this.stepSec += deltaSec;
+    if (remainingM < this.bestRemaining - 0.002) {
+      this.bestRemaining = remainingM;
+      this.stalledSec = 0;
+    } else this.stalledSec += deltaSec;
+    const arrived = remainingM <= 0.005 || this.stepSec > STEP_TIMEOUT_SEC || this.stalledSec > STEP_STALL_SEC;
+    if (arrived) {
+      this.stepSpeed = 0;
+      this.settleSec += deltaSec;
+      if (this.settleSec >= STEP_SETTLE_SEC) {
+        this.phase = 'reach';
+        this.sinceSec = 0;
+        this.lastPosition = null;
+      }
+      return 0;
+    }
+    const brake = Math.sqrt(2 * STEP_ACCEL_MPS2 * Math.max(0, remainingM));
+    this.stepSpeed = Math.max(STEP_MIN_MPS, Math.min(this.stepSpeed + STEP_ACCEL_MPS2 * deltaSec, STEP_PEAK_MPS, brake));
+    return Math.min(remainingM, this.stepSpeed * deltaSec);
   }
 
   /** The palm is on the prop: stand up with it. `worldTarget` is whether the hand heads for the grasp point first. */

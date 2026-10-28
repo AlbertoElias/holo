@@ -322,7 +322,7 @@ export async function runPhoneTouchObject({ browser, baseUrl, consoleErrors }) {
       await advance(0.1);
       // A touch on the model starts a reach; the prop is held once the palm is on it.
       const started = await readState(page);
-      if (started.objects.items[0].heldBy || started.objects.reach.phase === 'reach') break;
+      if (started.objects.items[0].heldBy || ['step', 'reach'].includes(started.objects.reach.phase)) break;
       await touch('touchEnd', 4, 0, 0);
       await advance(0.1);
     }

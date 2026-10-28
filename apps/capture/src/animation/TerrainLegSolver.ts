@@ -75,15 +75,23 @@ export class TerrainLegSolver {
           target.y += leg.correction;
         }
         this.solve(leg, target, rig.avatarRoot);
-        // Rotate the ankle toward the support normal while near contact.
-        const contact = 1 - THREE.MathUtils.smoothstep(target.y - surface.point.y - sole, height * 0.025, height * 0.15);
-        const worldRotation = leg.foot.getWorldQuaternion(new THREE.Quaternion());
-        const footUp = leg.upInFoot.clone().applyQuaternion(worldRotation);
-        const tilt = new THREE.Quaternion().setFromUnitVectors(footUp, surface.normal);
-        tilt.slerp(new THREE.Quaternion(), 1 - contact);
-        const parentRotation = leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion());
-        leg.foot.quaternion.copy(parentRotation.invert().multiply(tilt).multiply(worldRotation)).normalize();
-        leg.foot.updateWorldMatrix(false, true);
+        if (plant) {
+          // A planted foot keeps its orientation: at a deep squat the shin folds so far that tilting it toward the floor would spin it.
+          const planted = rig.plantFootQuats[index === 0 ? 'left' : 'right'];
+          const parentRotation = leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion());
+          leg.foot.quaternion.copy(parentRotation.invert().multiply(planted)).normalize();
+          leg.foot.updateWorldMatrix(false, true);
+        } else {
+          // Rotate the ankle toward the support normal while near contact.
+          const contact = 1 - THREE.MathUtils.smoothstep(target.y - surface.point.y - sole, height * 0.025, height * 0.15);
+          const worldRotation = leg.foot.getWorldQuaternion(new THREE.Quaternion());
+          const footUp = leg.upInFoot.clone().applyQuaternion(worldRotation);
+          const tilt = new THREE.Quaternion().setFromUnitVectors(footUp, surface.normal);
+          tilt.slerp(new THREE.Quaternion(), 1 - contact);
+          const parentRotation = leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion());
+          leg.foot.quaternion.copy(parentRotation.invert().multiply(tilt).multiply(worldRotation)).normalize();
+          leg.foot.updateWorldMatrix(false, true);
+        }
       } else {
         // No inferred contact during flight or over a ledge.
         leg.correction = 0;

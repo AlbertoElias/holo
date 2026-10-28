@@ -26,7 +26,7 @@ export class ObjectSystem extends createSystem() {
     }
     const turn = c.input.getObjectTurn();
     const walk = c.input.moveState;
-    const moving = walk.forward || walk.back || walk.left || walk.right || (c.frame.character?.horizontalSpeed ?? 0) > WALKING_MPS;
+    const moving = walk.forward || walk.back || walk.left || walk.right || (!c.objects.isStepping() && (c.frame.character?.horizontalSpeed ?? 0) > WALKING_MPS);
     c.objects.update({
       vrActive: c.frame.vrActive,
       deltaSec: c.frame.deltaSec,
