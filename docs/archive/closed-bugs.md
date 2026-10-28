@@ -655,3 +655,197 @@ bug above.)
   `e2e/bubble-capture.pipeline.spec.ts` now requires the feed's foot on the
   lowest drawn ground, never above the recorded floor, and every drawn point
   of the recorded scene under the glass; AR's foot stays on the recorded floor.
+
+### B-034 — The viewer's deploy health check fails on Pages' switchover
+
+- **Area:** `.github/workflows/ci.yml` and `deploy.yml`, the Pages health checks
+- **Severity:** P2 (marks a good deploy as failed and turns the CI gate red)
+- **Observed:** 2026-10-27, CI run 40576218115 on `main` at `d83b0a3a3258`
+- **Evidence:** wrangler printed "Deployment complete" at 20:30:00.21 and the
+  health check's single `curl -fsS` ran at 20:30:00.37 and got a 500. The site
+  and that deployment (`0ea600cc.holoim-viewer.pages.dev`) answered 200
+  minutes later, with the feed snapshot in the page. The feed function
+  (`apps/viewer-web/functions/index.ts`) never calls the API and serves the
+  plain page on any error of its own, so the 500 came from Pages moving the
+  `holoim-viewer.pages.dev` alias to the new Functions bundle.
+- **Expected:** a deploy that serves its page passes; a site that stays down fails.
+- **Fix:** all four Pages health checks (viewer and capture, in `ci.yml` and
+  `deploy.yml`) use `curl --retry 6 --retry-delay 5 --retry-all-errors`, so
+  they wait up to 30 s. Validation: the same command against a local server
+  that answers 500 twice and then 200 exits 0 on the third request, and
+  against one that always answers 500 exits 22 after seven tries.
+
+### B-035 — A fresh visit lands on the last hologram instead of the newest
+
+- **Area:** `apps/viewer-web` feed (`FeedPage.tsx`), edge first page (`functions/index.ts`)
+- **Severity:** P1 — the feed opens on the wrong hologram
+- **Observed:** 2026-10-27, on the deployed viewer (desktop browser, fresh load)
+- **Evidence:** With an edge snapshot that holds only the oldest hologram and
+  the live API holding five, the deployed feed ends at `scrollTop` 2880 of a
+  720 px card (card 5 of 5); a snapshot missing the newest one or two lands
+  one or two cards down. Scroll snapping holds the card that was snapped when
+  the live list inserts newer cards above it; `overflow-anchor: none` does not
+  change it.
+- **Expected:** A reader who has not scrolled stays on the newest hologram when
+  the API's list replaces the edge snapshot.
+- **Reproduction:** Serve `/` with a `__HOLOIM_FEED__` older than the API's
+  first page and load it.
+- **Fix:** The feed returns to the top when a new first card arrives while the
+  reader is still at the top (`useStayOnNewest`); a reader who has scrolled
+  keeps their card. The edge-snapshot test in `e2e/hologram-feed.spec.ts` now
+  requires the newer card in the viewport and the feed at the top; it fails
+  without the fix.
+
+### B-020 — Capture's height check is not repeatable
+
+- **Area:** `apps/capture` XR checks (`test:xr:height`)
+- **Severity:** P3
+- **Observed:** 2026-10-24
+- **Evidence:** two runs of `main` (`eebf013`) with
+  `XR_CHECK_CONCURRENCY=2` give `output/ci-xr-height/height-report.json`
+  positions up to 0.45 mm apart (`baseWorldY`, sensor and bone positions),
+  found while comparing the slice 0 port in
+  `docs/features/ui-redesign.md`. The check still passes.
+- **Expected:** identical reports, as `AGENT_CONTRACT.md` says of the XR
+  checks; `compare-xr-reports.ts` tolerates 1 mm in this file meanwhile.
+- **Reproduction:** run `pnpm --filter @holoim/capture run test:xr:height`
+  twice and compare the two output folders with
+  `node --import tsx scripts/compare-xr-reports.ts`.
+- **Fix:** The check loaded the page on the real-time clock and only
+  switched to the manual clock before its baseline, so the character's
+  settling slide (up to 0.45 mm) depended on how long the page ran
+  before that, which varies with host load. The page now loads with
+  `?manualClock=1`, like the other replay checks, so it never ticks on real
+  time. Three back-to-back runs give byte-identical reports, and
+  `compare-xr-reports.ts` no longer tolerates differences in this file.
+
+### B-036 — An object search can take 20 s when one Poly Pizza download stalls
+
+- **Area:** `apps/viewer-api` object search (`src/services/polypizza.ts`)
+- **Severity:** P2 — Find shows nothing for 20 s on some searches
+- **Observed:** 2026-10-28, on the deployed API
+- **Evidence:** New searches for "sofa" and "teapot" took 20.6 s and 20.5 s
+  (Fly logs: `responseTime` 20288 ms and 20212 ms), while "chairs", "lamp" and
+  "guitar" took 0.9–1.05 s. Poly Haven alone answered "sofa" in 2.0 s and had
+  no "teapot" results, so the wait was Poly Pizza's: its search downloads and
+  vets every candidate before answering, and one stalled download held it for
+  the 20 s fetch timeout.
+- **Expected:** A search answers within a couple of seconds even when one
+  model's file host is slow.
+- **Fix:** Poly Pizza's search answers at a 2 s deadline with the models that
+  have passed vetting (unless none has yet, when it waits for the first) and
+  keeps vetting the rest, so a repeated search lists them. Validation: the new
+  stalled-download tests in `test/object-routes.test.ts` (the deadline test
+  fails without the fix), and the same "chair" search with a 20 s stall took
+  20.1 s before and 2.0 s after, with the same six results.
+
+### B-025 — Portal "desktop freeze" check finds the feed back at the top
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("desktop freeze: … scrolling away resets"), portal scroll capture
+- **Severity:** P3
+- **Observed:** 2026-10-26, on `main` at `ac700f0f`
+- **Evidence:** `expect(await feedScrollTop(page)).toBeGreaterThan(0)` at
+  `portal.spec.ts:408` receives 0. Fails 3 of 3 on `main` when the whole
+  `portal.spec.ts` runs (`--repeat-each=3`, one worker), passes 3 of 3 when
+  the test runs alone. The paused card's capture may undo the instant
+  `scrollIntoView` before the reset lands.
+- **Expected:** scrolling to the next card from a paused card stays there.
+- **Reproduction:** `E2E_BASE_URL=https://localhost:3274 E2E_API_PORT=3101 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1`
+- **Closed:** 2026-10-28
+- **Cause:** a real product bug, not test-order pollution. In `freeze`, a
+  mouse drag on a playing card scrolls the feed; on release a settle
+  suspends snapping, glides to the card and waits up to 800 ms for the
+  glide's `scrollend`. A drag that left the feed on its card had no glide,
+  so no `scrollend` came, and the 800 ms fallback then put the feed back on
+  that card, undoing any scroll away made in between. The whole spec runs
+  fast enough on a warm server to land inside that window; alone it did not.
+- **Fix:** a release that leaves the feed on its card lands at once
+  (snapping back, nothing pending), and a wheel or key in the feed during a
+  settle takes it over instead of being pulled back
+  (`usePortalTriggers.ts`). The new `portal.spec.ts` check "desktop freeze:
+  scrolling away just after a drag on a playing card stays scrolled" fails
+  without the fix (feed back at 0) and passes with it; the whole spec passed
+  27 of 27 (`--repeat-each=3`, one worker).
+
+### B-037 — AR recenter click sometimes misses on a hosted runner
+
+- **Area:** `apps/viewer-web/e2e/hologram-feed.spec.ts` ("AR places the model on a surface … recenter places again"), `rayClick`
+- **Severity:** P2 (fails CI and holds back the viewer deploy)
+- **Observed:** 2026-10-28, run 40617371918 (viewer shard 1/4), on `931710be7bbd`
+- **Evidence:** the first placement anchors at 8.9 s; after `recenterFromFoot`
+  no placement with a higher sequence arrives in 15 s
+  (`hologram-feed.spec.ts:463`). Passed 8 of 8 in `scripts/ci-emulate.sh`
+  (alone ×5, the whole shard ×3) and on runs 40612369043 and 40616950365.
+  Likely cause: `rayClick` presses and releases the trigger one real frame
+  apart, and IWSDK counts a press held past 800 ms of frame time as no
+  click, so one long frame on a slow runner drops the Recenter select.
+- **Expected:** the press and release land deterministically: step the page
+  clock (as the xr-viewer checks do) rather than ride real frames.
+- **Reproduction:** a 900 ms real-time stall between the press and the
+  release in `rayClick` (what one long runner frame looks like to IWSDK)
+  fails the test locally with the same signature at the same line.
+- **Fix:** `rayClick` lifts the emulated rays' `clickThresholdMs`, as
+  `xr-viewer.spec.ts` does since B-026: any press and release on one target
+  is a click, whatever the frame times; the spec drives the controls, not
+  IWSDK's long-press rule. Stepping a frozen page clock (the suggested fix)
+  also passed, but installing the clock before the feed loads let the feed's
+  reach controls fold (`tokens.glyph.idleAfter`) before Playwright's click on
+  View in your room landed on a slowed page, a new race. With the fix, the
+  900 ms stall passes locally and in `scripts/ci-emulate.sh` (×2), the test
+  alone passes 5 of 5 there, and the whole viewer shard 1 passes 2 of 2.
+
+### B-038 — Phone "drag" check can leave the feed resting off a card
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("drag (default): a swipe off the hologram scrolls …"), `scrollFeedToTop`
+- **Severity:** P3
+- **Observed:** 2026-10-28, on `bug/portal-freeze-scroll` (`46c523f0` + B-025 work)
+- **Evidence:** once in 3 runs of the whole spec, `settleScroll` threw
+  "feed scroll did not settle: 300, 300, 300, 300, 300" at
+  `portal.spec.ts:190`: after the test stops a smooth glide to 300 with a
+  tap and puts `scroll-snap-type` back, the feed stays at 300 instead of
+  snapping to a card. Passed in the other 2 runs and in a later 3 of 3.
+- **Expected:** restoring snapping lands the feed on a card (or the test
+  returns it to a card itself) before `scrollFeedToTop`.
+- **Reproduction:** `E2E_BASE_URL=https://localhost:3294 E2E_API_PORT=3121 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1` (intermittent)
+- **Closed:** 2026-10-28
+- **Cause:** the test's own restore, not the product. The check turns
+  snapping off and glides to 300 with a programmatic smooth scroll; the tap
+  does not stop that glide, and snapping was put back after a fixed 400 ms.
+  When the glide was still running (a loaded machine), Chrome finished it at
+  300 and never re-snapped; snapping put back after its `scrollend` lands on
+  a card every time (probe: mid-glide 2 of 2 stuck at 300, after `scrollend`
+  2 of 2 at 0). The app itself only puts snapping back on a glide's
+  `scrollend`, on its instant-landing fallback, or when a user scroll takes over.
+- **Fix:** the check waits for the glide's `scrollend` before putting
+  snapping back. The same spec's desktop wheel check also took a scroll
+  that had not started yet for "settled at the top" under load (2 of 6 at
+  load ~60); it now waits for the scroll to begin before settling. The
+  whole `portal.spec.ts` passed 54 of 54 (`--repeat-each=6`, one worker),
+  the drag check alone 8 of 8 at load ~45.
+
+### B-036 — Knowledge live-update check fails after other browser suites
+
+- **Note:** this number also labels the object-search entry above, filed a
+  day later; this one is the Knowledge check cited in `ci-under-5m.md`.
+- **Area:** `apps/knowledge/e2e/atlas.spec.ts` ("any docs Markdown is discoverable and live updates through atomic replacement and rename")
+- **Severity:** P3
+- **Observed:** 2026-10-27, `scripts/ci-emulate.sh` on `infra/ci-under-5m`
+- **Evidence:** `toBeVisible` finds no element after the atomic replacement
+  when `test:knowledge` runs after three viewer mocked shards in one
+  container; passes 4 of 4 when it runs first (CI's order, viewer shard 4).
+  Likely a file-watch event missed or late under load.
+- **Expected:** the live update lands regardless of earlier load.
+- **Reproduction:** `scripts/ci-emulate.sh bash -c 'VITE_IWER_SEM_SCENE=office_small pnpm --filter @holoim/web run test:e2e:mocked:shard1 && pnpm run test:knowledge'`
+- **Fix:** No watcher event was missed. Logging chokidar's raw polls in the
+  emulated run showed every edit, atomic replacement and rename reached Vite
+  within 0.5 s, and the reload loaded the new content. Each live update is a
+  full reload, and boot parsed all docs Markdown (about 1.2 MB) with remark
+  before the first render. In the container after the viewer shards that took
+  more than the 5 s `expect` budget: the failing trace showed the new module
+  fetched 0.4 s after the write and no card 5 s later, and even the first
+  `page.goto` took 7.8 s. The Vite plugin now computes each document's title
+  and description in Node, cached per file so an update re-parses only the
+  changed file, and the client parses a document's tree only when a page reads
+  it. A local reload to the first card dropped from about 1,230 ms to 80 ms.
+  The reproduction plus two further `test:knowledge` runs in the same container
+  all passed.

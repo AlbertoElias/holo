@@ -61,15 +61,18 @@ const FLICK_PX_PER_MS = 0.3;
 /**
  * The settle under way on each feed, by scroller: it owns the snapping it
  * suspended until it lands. A later swipe on any card of that feed takes it
- * over, so an earlier settle cannot restore snapping under it.
+ * over, so an earlier settle cannot restore snapping under it; so does the
+ * wheel or a key, which scroll the feed somewhere the glide must not undo.
  */
-const settles = new WeakMap<HTMLElement, { timer: number; landed: (event?: Event) => void }>();
+const settles = new WeakMap<HTMLElement, { timer: number; landed: (event?: Event) => void; takenOver: () => void }>();
 
 function cancelSettle(scroller: HTMLElement): void {
   const settle = settles.get(scroller);
   if (!settle) return;
   window.clearTimeout(settle.timer);
   scroller.removeEventListener("scrollend", settle.landed);
+  scroller.removeEventListener("wheel", settle.takenOver);
+  scroller.removeEventListener("keydown", settle.takenOver);
   settles.delete(scroller);
 }
 /** A flick's speed is read over the last stretch of the swipe, not one event. */
@@ -166,6 +169,13 @@ export function usePortalTriggers(
       const target = turns
         ? (direction > 0 ? stops.find((stop) => stop > from + 1) : [...stops].reverse().find((stop) => stop < from - 1)) ?? from
         : from;
+      // Already on the card, there is no glide and no end of one to wait
+      // for; a settle left waiting would pull back a later scroll.
+      if (Math.abs(scroller.scrollTop - target) <= 1) {
+        cancelSettle(scroller);
+        restore();
+        return;
+      }
       scroller.scrollTo({ top: target, behavior: "smooth" });
       // Snapping comes back once the glide has landed on the card. The end
       // of the swipe's own last scroll may be reported after the glide has
@@ -178,9 +188,15 @@ export function usePortalTriggers(
         restore();
         if (away) scroller.scrollTo({ top: target, behavior: "instant" });
       };
+      const takenOver = () => {
+        cancelSettle(scroller);
+        restore();
+      };
       cancelSettle(scroller);
-      settles.set(scroller, { timer: window.setTimeout(landed, 800), landed });
+      settles.set(scroller, { timer: window.setTimeout(landed, 800), landed, takenOver });
       scroller.addEventListener("scrollend", landed);
+      scroller.addEventListener("wheel", takenOver, { passive: true });
+      scroller.addEventListener("keydown", takenOver);
       settledOn = scroller;
     };
 

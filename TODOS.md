@@ -8,6 +8,11 @@ it from the item below instead of duplicating its status here.
 
 ## Now
 
+- [ ] Finish the CI determinism criteria left open by
+  [`docs/features/archive/ci-under-5m.md`](docs/features/archive/ci-under-5m.md):
+  5 identical `scripts/ci-emulate.sh` runs of the VR, AR and pipeline checks,
+  and step the page clock in `hologram-feed.spec.ts`'s `rayClick` (B-037).
+
 - [x] Record real Quest hand input for `test:xr:hands` and recalibrate the
   fidelity thresholds against it. Delivered 2026-10-18:
   `apps/capture/fixtures/input-recordings/headset-open-fist-pinch-point-wave-reach.json`
@@ -214,6 +219,12 @@ it from the item below instead of duplicating its status here.
   [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md) by its
   design review on 2026-10-25; the idiom is the phone's (press and hold the
   dock's Halo glyph, drag) through the shared screen-input bridge.
+- [ ] Props in AR capture, with real-floor and WebXR `plane-detection`
+  colliders: cut from
+  [`docs/features/archive/object-physics.md`](docs/features/archive/object-physics.md) by its
+  design review on 2026-10-27, because a headset in passthrough and a phone AR
+  camera take are spectators that never handle props. Start once AR recording
+  carries objects.
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
   and success signal are explicit. The lens points to IDEA-045 (portal view)

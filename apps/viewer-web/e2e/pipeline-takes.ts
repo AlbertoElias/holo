@@ -10,12 +10,15 @@ import { captureEvidence, expect } from "./bootstrap";
 
 // One real walking take per Playwright worker, shared by the pipeline specs
 // that need the same content (capture-to-viewer's Quick Look path and
-// bubble-capture's feed and AR draws). It is recorded in the running capture
-// app on first use, never committed, and written to a fixed path under
-// output/ so the Quick Look tool check (apps/viewer-api test:usdz-tools) can
-// run on the same export. Specs that need other content (pointing, object,
-// summon, avatar formats) record their own. Capture's own XR recording check
-// still runs separately, so sharing the take hides no capture regression.
+// bubble-capture's feed and AR draws) when they run in one worker; CI runs
+// them in separate shards, so each records its own. It is recorded in the
+// running capture app on first use, never committed, and written to a fixed
+// path under output/ so the Quick Look tool check (apps/viewer-api
+// test:usdz-tools) can run on the same export; CI records it for that check
+// with walk-take.pipeline.spec.ts, in capture alone. Specs that need other
+// content (pointing, object, summon, avatar formats) record their own.
+// Capture's own XR recording check still runs separately, so sharing the
+// take hides no capture regression.
 
 const captureUrl = process.env.E2E_CAPTURE_URL ?? "https://127.0.0.1:5175/";
 export const RECORDED_SECONDS = 1.5;

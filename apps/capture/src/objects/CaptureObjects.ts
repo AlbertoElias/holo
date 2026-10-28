@@ -6,13 +6,14 @@ import type { HandPoseSource } from '../types/contracts';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
+import { ObjectPhysics, type ObjectPhysicsStats } from '../physics/ObjectPhysics';
 import type { UIStateStore } from '../ui/UIStateStore';
 import type { XrTracking } from '../xr/XrTracking';
 import { DesktopCarryPose } from './DesktopCarryPose';
 import { ObjectGrabInput } from './ObjectGrabInput';
 import { ObjectInteraction, type ObjectStep } from './ObjectInteraction';
 import { MAX_TRAY_BYTES, MAX_TRAY_ITEMS, ObjectTray } from './ObjectTray';
-import { SceneObjectRegistry } from './SceneObjectRegistry';
+import { SceneObjectRegistry, type SceneObject } from './SceneObjectRegistry';
 import { fetchSuppliedObject, parseSuppliedObject, readSuppliedObjectFile, type SuppliedObjectInput, SuppliedObjectError } from './suppliedObject';
 import { TrayGestureInput } from './TrayGestureInput';
 import { parseTrayItem } from './trayItem';
@@ -41,10 +42,13 @@ export class CaptureObjects {
   readonly tray: ObjectTray;
   readonly trayGesture: TrayGestureInput;
   readonly interaction: ObjectInteraction;
+  private physics: ObjectPhysics | null = null;
   private loadSeq = 0;
   private trayLoadSeq = 0;
   private lastAuthoring: AuthoringFrame | null = null;
   private readonly palm = new THREE.Vector3();
+  private readonly pickRay = new THREE.Raycaster();
+  private readonly pickNdc = new THREE.Vector2();
 
   constructor(private readonly deps: CaptureObjectsDeps) {
     this.registry = new SceneObjectRegistry(deps.worldGroup);
@@ -61,6 +65,52 @@ export class CaptureObjects {
       tray: this.tray,
       embodyOffset: deps.embodyOffset
     });
+  }
+
+  hasPhysics(): boolean {
+    return this.physics !== null;
+  }
+
+  /** Once the scene's collision mesh exists: props get their own world over a copy of it. */
+  enablePhysics(trimesh: { vertices: Float32Array; indices: Uint32Array }, gravity: number): void {
+    this.physics = new ObjectPhysics(trimesh, gravity);
+    this.interaction.setPhysics(this.physics);
+    this.registry.onRemove = (object) => this.physics?.remove(object);
+  }
+
+  /**
+   * The reachable prop under a screen point (normalized device coordinates) of
+   * the desktop camera, for a mouse or touch press; null when none is hit or
+   * in reach.
+   */
+  pickAt(camera: THREE.Camera, ndcX: number, ndcY: number, anywhere: boolean): SceneObject | null {
+    this.pickRay.setFromCamera(this.pickNdc.set(ndcX, ndcY), camera);
+    return this.interaction.pick(this.pickRay, anywhere);
+  }
+
+  /** The body's reach demand (0 to 1) for the crouch and squat. */
+  reachDemand(): number {
+    return this.interaction.reachDemand();
+  }
+
+  reachDeep(): number {
+    return this.interaction.reachDeep();
+  }
+
+  isStepping(): boolean {
+    return this.interaction.isStepping();
+  }
+
+  isReachActive(): boolean {
+    return this.interaction.isReachActive();
+  }
+
+  takeReachStep(): { x: number; z: number } | null {
+    return this.interaction.takeReachStep();
+  }
+
+  physicsStats(): ObjectPhysicsStats | null {
+    return this.physics?.stats() ?? null;
   }
 
   /** Once the avatar is loaded and in its bind pose. */
@@ -83,6 +133,7 @@ export class CaptureObjects {
     this.tray.update(held && !this.interaction.isHolding(holder), { vrActive, bodyYaw: step.bodyYaw, hand: holder });
     const summonsBefore = this.tray.snapshot().summons.length;
     this.interaction.update({ ...step, summoner });
+    this.interaction.stepPhysics(step.deltaSec);
     // A grab by the holding hand closes the tray at once.
     if (this.interaction.isHolding(holder) && this.tray.isOpen()) this.tray.update(false, { vrActive, bodyYaw: step.bodyYaw, hand: holder });
     const palm = vrActive ? this.interaction.palmPosition(summoner, this.palm) : undefined;

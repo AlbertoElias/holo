@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { tokens } from "@holoim/design-tokens";
@@ -31,6 +31,30 @@ function useOnline(): boolean {
     };
   }, []);
   return online;
+}
+
+/**
+ * Newer holograms arriving above the top card (the API's list replacing the
+ * edge snapshot) leave a reader at the top on the newest. Scroll snapping
+ * would otherwise hold the card they were on, now further down the feed.
+ */
+function useStayOnNewest(feedRef: React.RefObject<HTMLElement | null>, firstId: string | null): void {
+  const atTop = useRef(true);
+  const shownFirst = useRef(firstId);
+  useEffect(() => {
+    const feed = feedRef.current;
+    if (!feed) return undefined;
+    const update = () => {
+      atTop.current = feed.scrollTop < 1;
+    };
+    feed.addEventListener("scroll", update, { passive: true });
+    return () => feed.removeEventListener("scroll", update);
+  }, [feedRef]);
+  useLayoutEffect(() => {
+    if (firstId === shownFirst.current) return;
+    shownFirst.current = firstId;
+    if (atTop.current) feedRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [feedRef, firstId]);
 }
 
 /** The card nearest the middle of the feed's window (styleguide 8.2): it plays, sparks and redraws. */
@@ -104,6 +128,7 @@ export function FeedPage() {
   const feedRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const focusedId = useFocusedCard(feedRef, items.length);
+  useStayOnNewest(feedRef, items[0]?.id ?? null);
   // Leaving an immersive view returns to the hologram that was opened.
   const focusHologramId = (useLocation().state as { focusHologramId?: string } | null)?.focusHologramId ?? null;
   const focusedOnReturn = useRef(false);

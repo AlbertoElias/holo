@@ -42,6 +42,8 @@ export interface SceneObject {
 export class SceneObjectRegistry {
   private readonly objects: SceneObject[] = [];
   private nextId = 1;
+  /** Called as an object leaves, so its physics body goes with it. */
+  onRemove: ((object: SceneObject) => void) | null = null;
 
   constructor(private readonly parent: THREE.Object3D) {}
 
@@ -62,6 +64,7 @@ export class SceneObjectRegistry {
     const index = this.objects.indexOf(object);
     if (index < 0) return;
     this.objects.splice(index, 1);
+    this.onRemove?.(object);
     object.wrapper.removeFromParent();
   }
 

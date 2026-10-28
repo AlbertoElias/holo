@@ -1,5 +1,6 @@
 import type { DesktopViewMode, MockInputState } from '../types/contracts';
 import type { FlatHalo } from '../ui/flatHalo';
+import type { SceneObject } from '../objects/SceneObjectRegistry';
 import { TouchInput, type TouchStick } from './TouchInput';
 
 export interface MoveState {
@@ -17,6 +18,7 @@ export interface DesktopLook {
   firstPersonPitch: number;
   clampThirdPersonPitch(value: number): number;
   clampFirstPersonPitch(value: number): number;
+  clampFirstPersonLookPitch(value: number): number;
 }
 
 interface InputControllerOptions {
@@ -28,6 +30,8 @@ interface InputControllerOptions {
   onTouchStick?: (stick: TouchStick | null) => void;
   /** The Halo a held B summons (slice 5). */
   halo?: FlatHalo;
+  /** The reachable prop under a point of the desktop view (normalized device coordinates), if any: a press there grabs it. */
+  pickObject?: (ndcX: number, ndcY: number, anywhere: boolean) => SceneObject | null;
 }
 
 const MOUSE_LOOK_RAD_PER_PX = 0.0025;
@@ -52,6 +56,11 @@ export class InputController {
   private crouchHeld = false;
   // Desktop object carry: G toggles (queued for the next step), Q/E turn, Z/X tip.
   private objectToggleQueued = false;
+  // Desktop object grab by pointer: the left button under pointer lock, or a look touch on a prop.
+  // The press and its release queue for the next step.
+  private objectPointer: 'mouse' | 'touch' | null = null;
+  private objectPressQueued: SceneObject | null = null;
+  private objectReleaseQueued = false;
   private readonly objectTurnKeys = new Set<'KeyQ' | 'KeyE' | 'KeyZ' | 'KeyX'>();
   // Desktop tray (PRD-045): T holds it open; 1–5 while held summon (queued for the next step).
   private trayHeld = false;
@@ -70,6 +79,8 @@ export class InputController {
       onMove: (x, y) => this.applyStick(x, y),
       onLook: (dx, dy) => this.applyLook(dx, dy, TOUCH_LOOK_RAD_PER_PX),
       onStick: (stick) => options.onTouchStick?.(stick),
+      onObjectPress: (point) => this.pressObject('touch', point.x, point.y),
+      onObjectRelease: () => this.releaseObject('touch'),
       onHold: (phase, point) => {
         if (phase === 'end') {
           this.endPoint('touch');
@@ -163,6 +174,14 @@ export class InputController {
     return queued;
   }
 
+  /** A mouse or touch press that landed on a reachable prop since the last step, and whether that pointer lifted. Consumed. */
+  consumeObjectGrab(): { press: SceneObject | null; release: boolean } {
+    const grab = { press: this.objectPressQueued, release: this.objectReleaseQueued };
+    this.objectPressQueued = null;
+    this.objectReleaseQueued = false;
+    return grab;
+  }
+
   isTrayHeld(): boolean {
     return this.trayHeld;
   }
@@ -194,7 +213,7 @@ export class InputController {
     if (typeof payload.aimPitch === 'number') {
       const look = this.options.look;
       this.pointAimPitch = look.clampFirstPersonPitch(payload.aimPitch);
-      if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
+      if (look.desktopViewMode === 'first') look.firstPersonPitch = look.clampFirstPersonLookPitch(payload.aimPitch);
     }
   }
 
@@ -203,7 +222,7 @@ export class InputController {
     if (this.pointSources.size === 0) {
       const look = this.options.look;
       // First person aims where the view looks; third person starts level.
-      this.pointAimPitch = look.desktopViewMode === 'first' ? look.firstPersonPitch : 0;
+      this.pointAimPitch = look.desktopViewMode === 'first' ? look.clampFirstPersonPitch(look.firstPersonPitch) : 0;
     }
     this.pointSources.add(source);
   }
@@ -221,8 +240,28 @@ export class InputController {
     if (x !== 0 || y !== 0) this.focusRecoveryUntilMs = 0;
   }
 
+  /** Casts the press through the desktop view; true when it landed on a reachable prop and now holds it. */
+  private pressObject(source: 'mouse' | 'touch', clientX: number, clientY: number): boolean {
+    if (this.objectPointer !== null || this.options.isXrPresenting() || !this.options.pickObject) return false;
+    const rect = this.options.domElement.getBoundingClientRect();
+    if (!(rect.width > 0 && rect.height > 0)) return false;
+    const prop = this.options.pickObject(((clientX - rect.left) / rect.width) * 2 - 1, -(((clientY - rect.top) / rect.height) * 2 - 1), source === 'mouse');
+    if (!prop) return false;
+    this.objectPointer = source;
+    this.objectPressQueued = prop;
+    this.objectReleaseQueued = false;
+    return true;
+  }
+
+  private releaseObject(source: 'mouse' | 'touch'): void {
+    if (this.objectPointer !== source) return;
+    this.objectPointer = null;
+    this.objectReleaseQueued = true;
+  }
+
   private clearMovementState(): void {
     this.touch.reset();
+    this.releaseObject('mouse');
     this.moveState.forward = false;
     this.moveState.back = false;
     this.moveState.left = false;
@@ -395,12 +434,20 @@ export class InputController {
   };
 
   private readonly onMouseDown = (event: MouseEvent): void => {
+    // Under lock a left press grabs the prop at the view's centre. The click that takes the lock
+    // goes down before it, so it never grabs.
+    if (event.button === 0 && !this.haloKeyHeld && !this.options.isXrPresenting() && document.pointerLockElement === this.options.domElement) {
+      const rect = this.options.domElement.getBoundingClientRect();
+      this.pressObject('mouse', rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return;
+    }
     if (event.button !== 2 || this.options.isXrPresenting() || document.pointerLockElement !== this.options.domElement) return;
     this.startPoint('mouse');
     event.preventDefault();
   };
 
   private readonly onMouseUp = (event: MouseEvent): void => {
+    if (event.button === 0) this.releaseObject('mouse');
     if (event.button !== 2) return;
     this.endPoint('mouse');
   };
@@ -411,7 +458,10 @@ export class InputController {
   };
 
   private readonly onPointerLockChange = (): void => {
-    if (document.pointerLockElement !== this.options.domElement) this.endPoint('mouse');
+    if (document.pointerLockElement !== this.options.domElement) {
+      this.endPoint('mouse');
+      this.releaseObject('mouse');
+    }
   };
 
   private readonly onPointerDown = (event: PointerEvent): void => {
@@ -439,7 +489,7 @@ export class InputController {
     } else if (look.desktopViewMode === 'third') {
       look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - dy * sensitivity);
     } else {
-      look.firstPersonPitch = look.clampFirstPersonPitch(look.firstPersonPitch - dy * sensitivity);
+      look.firstPersonPitch = look.clampFirstPersonLookPitch(look.firstPersonPitch - dy * sensitivity);
     }
   }
 

@@ -23,11 +23,12 @@ import { angleDeg, findNode, loadTake, objectNodes, relativePose, rigidPose, wor
 //   - IWER controllers: a squeeze out of reach and a trigger press grab
 //     nothing; a squeeze with the avatar hand on the object grabs it; moving
 //     and turning the controller moves and turns the object rigidly with the
-//     avatar's hand; releasing leaves it in place.
+//     avatar's hand; releasing hands it to physics, which drops it to the
+//     floor and leaves it at rest.
 //   - Desktop: a take with no object exports no object; the overlay picker
 //     refuses an unsupported file and loads the bracket; G picks it up into
-//     the right hand, Q turns it, walking carries it, G puts it down, and G
-//     out of reach does nothing.
+//     the right hand, Q turns it, walking carries it, G puts it down
+//     (it drops to the floor, no throw), and G out of reach does nothing.
 // Each export is checked: one RecordedObject node, as many keys as the
 // avatar, a valid HOLOIM_objects extension with the hold span, and the
 // object's pose relative to the avatar's RightHand matching capture's.
@@ -43,6 +44,11 @@ const RIGID_ANGLE_DEG = 0.5;
 const EXPORT_POSITION_M = 0.01;
 const EXPORT_ANGLE_DEG = 1;
 const SPAN_TOLERANCE_SEC = 0.1;
+// A released prop settles within this long and rests within this far of the surface.
+const REST_TIMEOUT_SEC = 3;
+const FLOOR_TOLERANCE_M = 0.01;
+// The scene sits 0.01 m above its authored floor.
+const FLOOR_Y = 0.01;
 
 const v3 = (a) => new THREE.Vector3(...a);
 const q4 = (a) => new THREE.Quaternion(...a);
@@ -78,6 +84,167 @@ export async function openCapture(page, baseUrl, query) {
   await waitForTextContentPrefix(page, '#status', 'loaded');
 }
 
+/**
+ * What a squat looks like, over the sampled frames: the hips' lowest height above the floor, the torso's lean from vertical
+ * (hips to head, and hips to neck), the head's height over the hips, and where each ankle is relative to the hips along the
+ * facing (a leg trailing back, or flung forward). Every squat in every check keeps the limits asserted below.
+ */
+export function squatTracker(floorY = 0.01) {
+  const t = { n: 0, nTorso: 0, nSpine: 0, nHead: 0, nAnkle: 0, minHipsAboveFloorM: Infinity, maxSpinePitchDeg: 0, maxTorsoDeg: 0, minHeadOverHipsM: Infinity, minAnkleAheadM: Infinity, maxAnkleAheadM: -Infinity, frames: [] };
+  return {
+    sample(st) {
+      const p = st.pose;
+      if (!p?.hips) return;
+      t.n += 1;
+      t.minHipsAboveFloorM = Math.min(t.minHipsAboveFloorM, p.hips.y - floorY);
+      if (Number.isFinite(p.spinePitchDeg)) t.nSpine += 1;
+      if (Number.isFinite(p.torsoPitchDeg)) t.nTorso += 1;
+      if (p.head && Number.isFinite(p.head.y)) t.nHead += 1;
+      if (typeof p.spinePitchDeg === 'number') t.maxSpinePitchDeg = Math.max(t.maxSpinePitchDeg, p.spinePitchDeg);
+      if (typeof p.torsoPitchDeg === 'number') t.maxTorsoDeg = Math.max(t.maxTorsoDeg, p.torsoPitchDeg);
+      if (p.head) t.minHeadOverHipsM = Math.min(t.minHeadOverHipsM, p.head.y - p.hips.y);
+      for (const a of p.ankles ?? []) {
+        if (!a) continue;
+        const ahead = (a.x - p.hips.x) * -Math.sin(st.avatar.yaw) + (a.z - p.hips.z) * -Math.cos(st.avatar.yaw);
+        if (Number.isFinite(ahead)) t.nAnkle += 1;
+        t.minAnkleAheadM = Math.min(t.minAnkleAheadM, ahead);
+        t.maxAnkleAheadM = Math.max(t.maxAnkleAheadM, ahead);
+      }
+      t.frames.push([st.objects?.reach?.phase, Number(st.objects?.reach?.demand?.toFixed(2)), Number((p.hips.y - floorY).toFixed(3)), Number(p.torsoPitchDeg?.toFixed(1)), Number((p.head ? p.head.y - p.hips.y : 0).toFixed(3))]);
+    },
+    result: () => ({
+      minHipsAboveFloorM: Number(t.minHipsAboveFloorM.toFixed(3)),
+      maxSpinePitchDeg: Number(t.maxSpinePitchDeg.toFixed(1)),
+      maxTorsoDeg: Number(t.maxTorsoDeg.toFixed(1)),
+      minHeadOverHipsM: Number(t.minHeadOverHipsM.toFixed(3)),
+      ankleAheadOfHipsM: [Number(t.minAnkleAheadM.toFixed(3)), Number(t.maxAnkleAheadM.toFixed(3))]
+    }),
+    trace: () => t.frames.filter((_, i) => i % 4 === 0),
+    assert(fail, label) {
+      const r = this.result();
+      if (t.n === 0 || t.nSpine === 0 || t.nTorso === 0 || t.nHead === 0 || t.nAnkle === 0) { fail(`${label}: the body was never sampled (samples ${t.n}, spine ${t.nSpine}, torso ${t.nTorso}, head ${t.nHead}, ankles ${t.nAnkle})`); return; }
+      for (const [name, value] of Object.entries(r)) if (!(Array.isArray(value) ? value.every(Number.isFinite) : Number.isFinite(value))) fail(`${label}: ${name} is not a finite number (${value})`);
+      if (r.minHipsAboveFloorM < 0.27) fail(`${label}: the hips went down to ${r.minHipsAboveFloorM} m above the floor (limit 0.27 m)`);
+      if (r.maxTorsoDeg > 50) fail(`${label}: the torso (hips to head) leaned ${r.maxTorsoDeg} degrees from vertical (limit 50)`);
+      if (r.maxSpinePitchDeg > 47) fail(`${label}: the spine pitched ${r.maxSpinePitchDeg} degrees (limit 45, tolerance 47)`);
+      if (r.minHeadOverHipsM < 0.05) fail(`${label}: the head came down to ${r.minHeadOverHipsM} m over the hips (limit 0.05 m)`);
+      if (r.ankleAheadOfHipsM[0] < -0.3 || r.ankleAheadOfHipsM[1] > 0.45) fail(`${label}: an ankle was ${r.ankleAheadOfHipsM} m ahead of the hips along the facing (limits -0.3 to 0.45 m): a leg trailing or flung`);
+    }
+  };
+}
+
+
+/**
+ * Wraps `window.advanceTime` so every 1/60 s simulation step is sampled (the pose after
+ * it), whatever step size a scenario advances by. `stepJumps` then finds one-step pops.
+ */
+export async function recordEveryStep(page) {
+  await page.evaluate(() => {
+    if (window.__stepLogInstalled) { window.__stepLog.length = 0; return; }
+    window.__stepLogInstalled = true;
+    window.__stepLog = [];
+    const original = window.advanceTime.bind(window);
+    window.advanceTime = (ms) => {
+      const steps = Math.max(1, Math.round(ms / (1000 / 60)));
+      for (let i = 0; i < steps; i += 1) {
+        original(1000 / 60);
+        const st = JSON.parse(window.render_game_to_text());
+        const p = st.pose;
+        if (p?.hips) window.__stepLog.push({ phase: st.objects?.reach?.phase, yaw: st.avatar.yaw, hips: p.hips, torso: p.torsoPitchDeg, ankles: p.ankles ?? [], knees: p.knees ?? [], thighs: p.thighs ?? [], held: st.objects?.items?.[0]?.heldBy ?? null, walking: Boolean(st.input?.forward || st.input?.back || st.input?.left || st.input?.right), root: [st.avatar.x, st.avatar.z], c: [st.crouch.amount, st.crouch.poseAmount, st.crouch.squat, st.objects?.reach?.demand].map((v) => Number(v?.toFixed?.(3))) });
+      }
+    };
+  });
+}
+
+// While the user's own input walks the avatar, and for this many steps after (the walk cycle settling into the idle stance), the
+// pose is judged against these looser bounds: nonzero, so a snap still fails. Everything else is judged tight.
+const WALK_SETTLE_STEPS = 12;
+const WALKING_BOUNDS = { hipsM: 0.15, ankleM: 0.15, torsoDeg: 15 };
+
+export async function stepJumps(page, label, fail, { hipsM = 0.04, ankleM = 0.01, torsoDeg = 5 } = {}) {
+  const log = await page.evaluate(() => window.__stepLog.splice(0));
+  // Loose only while the user's input walks, and for the settle steps after it, ending the moment the next reach, step or set-down begins
+  // (a planted squat is always judged tight, however soon after a walk it starts).
+  const loose = log.map((_, i) => {
+    for (let j = i; j >= 0 && j > i - WALK_SETTLE_STEPS - 1; j -= 1) {
+      if (log[j].walking) return true;
+      if (j < i && ['step', 'reach', 'lower'].includes(log[j + 1].phase) && log[j].phase !== log[j + 1].phase) return false;
+    }
+    return false;
+  });
+  let evaluated = 0;
+  let looseEvaluated = 0;
+  const worst = { hips: 0, ankle: 0, torso: 0, at: {} };
+  const worstLoose = { hips: 0, ankle: 0, torso: 0 };
+  for (let i = 1; i < log.length; i += 1) {
+    const a = log[i - 1];
+    const b = log[i];
+    if (!(a.c[0] > 0.01 || b.c[0] > 0.01)) continue;
+    // The stand-up is fast but eased, so a pop is a jump in the hips' speed (a second difference), not a fast step.
+    const c = log[i - 2];
+    const target = loose[i] ? worstLoose : worst;
+    if (loose[i]) looseEvaluated += 1;
+    else evaluated += 1;
+    const dh = c ? Math.abs(b.hips.y - 2 * a.hips.y + c.hips.y) : 0;
+    if (dh > target.hips) { target.hips = dh; if (!loose[i]) worst.at.hips = [i, a.phase, b.phase]; }
+    const dt = Math.abs((b.torso ?? 0) - (a.torso ?? 0));
+    if (dt > target.torso) { target.torso = dt; if (!loose[i]) worst.at.torso = [i, a.phase, b.phase]; }
+    // The automatic step in walks the legs (ankles swing); the transition out of it, into the squat, is checked.
+    if (a.phase === 'step' && b.phase === 'step') continue;
+    b.ankles.forEach((q, k) => {
+      const r = a.ankles[k];
+      if (!q || !r) return;
+      const da = Math.hypot(q.x - r.x, q.y - r.y, q.z - r.z);
+      if (da > target.ankle) { target.ankle = da; if (!loose[i]) worst.at.ankle = [i, a.phase, b.phase, k]; }
+    });
+  }
+  // Legs: each knee bends forward of the hip-ankle line (along the facing) and stays above its ankle; the thigh turns smoothly.
+  const knee = { missing: 0, measured: 0, minForwardM: Infinity, minAboveAnkleM: Infinity, maxThighDeg: 0, bad: [] };
+  for (let i = 0; i < log.length; i += 1) {
+    const e = log[i];
+    if (!(e.c[0] > 0.3)) continue;
+    if (loose[i]) continue;
+    const fx = -Math.sin(e.yaw);
+    const fz = -Math.cos(e.yaw);
+    const fwd = (q) => q.x * fx + q.z * fz;
+    if (e.knees.length < 2 || e.thighs.length < 2 || e.ankles.length < 2) { knee.missing += 1; continue; }
+    e.knees.forEach((k, side) => {
+      const t = e.thighs[side];
+      const a = e.ankles[side];
+      if (!k || !t || !a || ![k.x, k.y, k.z, t.x, t.y, t.z, a.x, a.y, a.z].every(Number.isFinite)) { knee.missing += 1; return; }
+      knee.measured += 1;
+      const bend = fwd(k) - (fwd(t) + fwd(a)) / 2;
+      const above = k.y - a.y;
+      knee.minForwardM = Math.min(knee.minForwardM, bend);
+      knee.minAboveAnkleM = Math.min(knee.minAboveAnkleM, above);
+      if (bend < 0.01 || above < 0.02) knee.bad.push([i, e.phase, side, Number(bend.toFixed(3)), Number(above.toFixed(3))]);
+      const prev = log[i - 1]?.knees[side] && log[i - 1].thighs[side];
+      if (prev) {
+        const d0 = [log[i - 1].knees[side].x - prev.x, log[i - 1].knees[side].y - prev.y, log[i - 1].knees[side].z - prev.z];
+        const d1 = [k.x - t.x, k.y - t.y, k.z - t.z];
+        const dot = d0[0] * d1[0] + d0[1] * d1[1] + d0[2] * d1[2];
+        const ang = (Math.acos(Math.max(-1, Math.min(1, dot / (Math.hypot(...d0) * Math.hypot(...d1))))) * 180) / Math.PI;
+        if (ang > knee.maxThighDeg) { knee.maxThighDeg = ang; knee.at = [i, e.phase, side, e.c]; }
+      }
+    });
+  }
+  const out = { kneeForwardM: Number(knee.minForwardM.toFixed(3)), kneeAboveAnkleM: Number(knee.minAboveAnkleM.toFixed(3)), thighDegPerStep: Number(knee.maxThighDeg.toFixed(2)), steps: log.length, hipsM: Number(worst.hips.toFixed(4)), ankleM: Number(worst.ankle.toFixed(4)), torsoDeg: Number(worst.torso.toFixed(2)), at: worst.at };
+  out.evaluated = evaluated;
+  if (evaluated < 30) fail(`${label}: only ${evaluated} squat transitions were evaluated for continuity`);
+  out.looseEvaluated = looseEvaluated;
+  out.walkingMax = { hipsM: Number(worstLoose.hips.toFixed(4)), ankleM: Number(worstLoose.ankle.toFixed(4)), torsoDeg: Number(worstLoose.torso.toFixed(2)) };
+  out.kneeSteps = knee.measured;
+  if (knee.missing > 0 || knee.measured === 0 || !Number.isFinite(knee.minForwardM) || !Number.isFinite(knee.minAboveAnkleM)) fail(`${label}: the knee check had no usable data (${knee.measured} measured, ${knee.missing} missing)`);
+  for (const [name, value] of Object.entries(WALKING_BOUNDS)) if (worstLoose[name === 'hipsM' ? 'hips' : name === 'ankleM' ? 'ankle' : 'torso'] > value) fail(`${label}: while walking, ${name} changed ${JSON.stringify(out.walkingMax)} in one step (limits ${JSON.stringify(WALKING_BOUNDS)})`);
+  if (knee.minForwardM < 0.05) fail(`${label}: a knee bent only ${out.kneeForwardM} m forward of the hip-ankle line (limit 0.05 m): a leg folded backward`);
+  if (knee.minAboveAnkleM < 0.02) fail(`${label}: a knee dropped to ${out.kneeAboveAnkleM} m above its ankle (limit 0.02 m)`);
+  if (knee.maxThighDeg > 10) fail(`${label}: a thigh turned ${out.thighDegPerStep} degrees in one step (limit 10)`);
+  if (worst.hips > hipsM) fail(`${label}: the hips' speed jumped ${out.hipsM} m per step in one step (limit ${hipsM}) at ${JSON.stringify(worst.at.hips)}`);
+  if (worst.ankle > ankleM) fail(`${label}: an ankle jumped ${out.ankleM} m in one step (limit ${ankleM}) at ${JSON.stringify(worst.at.ankle)}`);
+  if (worst.torso > torsoDeg) fail(`${label}: the torso angle jumped ${out.torsoDeg} degrees in one step (limit ${torsoDeg}) at ${JSON.stringify(worst.at.torso)}`);
+  return out;
+}
+
 export const readState = (page) => page.evaluate(() => JSON.parse(window.render_game_to_text()));
 
 export async function clickButton(page, name) {
@@ -89,6 +256,20 @@ export async function saveDownload(page, stop, file) {
   await stop();
   await (await download).saveAs(file);
   return file;
+}
+
+/**
+ * Steps (via `step`) until the first object's body sleeps or is nearly still,
+ * up to `timeoutSec`; returns its snapshot then.
+ */
+export async function settle(page, step, timeoutSec = REST_TIMEOUT_SEC) {
+  let item;
+  for (let i = 0; i < Math.round(timeoutSec * 60) + 1; i += 1) {
+    await step(1);
+    item = (await readState(page)).objects.items[0];
+    if (item.body === 'asleep') break;
+  }
+  return { item, atRest: item.body === 'asleep' };
 }
 
 /** Hold relation samples (object in the hand anchor's frame) while an object is held. */
@@ -115,9 +296,9 @@ function spread(relations) {
  * length, the extension, the hold spans, and the object's pose relative to
  * the avatar's RightHand at every held key against the relation capture read.
  * `compareTailSec` limits that to the hold's last seconds, for a hold whose
- * relation changes early (the desktop pickup glide and turn).
+ * relation changes early (the desktop turn).
  */
-export function checkObjectExport(buffer, { expectHolds, captureRelation, compareTailSec, fail }) {
+export function checkObjectExport(buffer, { expectHolds, captureRelation, compareTailSec, compareEndGapSec = 0.02, fail }) {
   const take = loadTake(buffer);
   const nodes = objectNodes(take);
   const report = { objectNodes: nodes.length, keys: take.times.length, duration: round(take.times.at(-1) ?? 0, 3) };
@@ -165,8 +346,8 @@ export function checkObjectExport(buffer, { expectHolds, captureRelation, compar
     let checked = 0;
     take.times.forEach((time, i) => {
       // Inside the span, away from the grab and release keys.
-      const from = compareTailSec ? held.end - compareTailSec : held.start + 0.05;
-      if (time < from || time > held.end - 0.02) return;
+      const from = compareTailSec ? held.end - compareEndGapSec - compareTailSec : held.start + 0.05;
+      if (time < from || time > held.end - compareEndGapSec) return;
       const relation = relativePose(rigidPose(worldAt(take, hand, i)), rigidPose(worldAt(take, node, i)));
       position = Math.max(position, relation.position.distanceTo(captureRelation.position));
       angle = Math.max(angle, angleDeg(relation.quaternion, captureRelation.quaternion));
@@ -329,7 +510,7 @@ export async function runIwerObjectTake({ browser, baseUrl, artifactDir, console
     const rigid = relations.length ? spread(relations) : null;
     if (rigid && (rigid.position > RIGID_POSITION_M || rigid.angleDeg > RIGID_ANGLE_DEG)) fail(`the held object slid in the hand: ${JSON.stringify(rigid)}`);
 
-    // Release and move the hand away: the object stays.
+    // Release and move the hand away: the object falls and comes to rest.
     await button('right', 'squeeze', 0);
     const releaseStep = steps;
     await step(2);
@@ -340,11 +521,14 @@ export async function runIwerObjectTake({ browser, baseUrl, artifactDir, console
       await controller('right', [grip[0] + 0.3 - 0.3 * smooth(i / 30), grip[1] + 0.15 - 0.4 * smooth(i / 30), grip[2] + 0.1 * smooth(i / 30)]);
       await step(1);
     }
-    await step(12);
-    state = await readState(page);
-    const settled = poseOf(state.objects.items[0]);
-    const drift = settled.position.distanceTo(releasedAt.position);
-    if (drift > 1e-4) fail(`the released object moved ${round(drift, 5)} m`);
+    const resting = await settle(page, step);
+    const settled = poseOf(resting.item);
+    const fell = releasedAt.position.y - settled.position.y;
+    const floorGapM = resting.item.boundsMin[1];
+    if (!resting.atRest) fail(`the released object had not come to rest after ${REST_TIMEOUT_SEC} s (${resting.item.body}, ${round(Math.hypot(...resting.item.linvel), 3)} m/s)`);
+    if (fell < 0.3) fail(`the released object fell only ${round(fell, 3)} m`);
+    if (floorGapM < -FLOOR_TOLERANCE_M || floorGapM > FLOOR_TOLERANCE_M) fail(`the released object rests ${round(floorGapM, 4)} m from the floor (limit ${FLOOR_TOLERANCE_M} m)`);
+    const drift = Math.hypot(settled.position.x - releasedAt.position.x, settled.position.z - releasedAt.position.z);
     shots.released = await shot('3-released');
 
     const glb = path.join(artifactDir, `${label}.glb`);
@@ -373,7 +557,9 @@ export async function runIwerObjectTake({ browser, baseUrl, artifactDir, console
         turnedDeg: round(turned, 1),
         heldSteps: relations.length,
         rigidHold: rigid,
-        releasedDriftM: round(drift, 5),
+        fellM: round(fell, 3),
+        restHorizontalDriftM: round(drift, 3),
+        restFloorGapM: round(floorGapM, 4),
         handRelation: captureRelation && { position: captureRelation.position.toArray().map((v) => round(v)), quaternion: captureRelation.quaternion.toArray().map((v) => round(v)) }
       },
       export: exportReport
@@ -412,6 +598,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
   const { context, page } = await setupPage(browser, { iwer: false, consoleErrors, label });
   try {
     await openCapture(page, baseUrl, {});
+    await recordEveryStep(page);
     const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
     const record = async (seconds, file, between) => {
       await page.getByRole('button', { name: 'Start Recording' }).click();
@@ -460,14 +647,21 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     let pickedUp;
     let carried;
     let putDown;
+    let setDown;
     const relations = [];
     let holdSeconds = 0;
     const glb = await record(0, path.join(artifactDir, `${label}.glb`), async () => {
       await advance(0.3);
       await page.keyboard.press('KeyG');
-      // The arm comes up and the object glides into the hand.
-      await advance(0.5);
-      holdSeconds += 0.5;
+      // The hand goes to the object, takes it where it hangs, and the arm settles into the carry pose.
+      // The hold begins when the palm is on it, so count the held time from there.
+      let reached = 0;
+      for (; reached < 90; reached += 1) {
+        await advance(1 / 60);
+        if ((await readState(page)).objects.items[0].heldBy) break;
+      }
+      await advance(0.8 - reached / 60);
+      holdSeconds += 0.8 - (reached + 1) / 60;
       state = await readState(page);
       pickedUp = { heldBy: state.objects.items[0].heldBy, carryWeight: state.objects.carryWeight, toHandM: round(v3(state.objects.items[0].position).distanceTo(v3(state.objects.hands.right.position)), 3) };
       const before = poseOf(state.objects.items[0]);
@@ -483,13 +677,51 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       state = await readState(page);
       const after = poseOf(state.objects.items[0]);
       carried = { movedM: round(after.position.distanceTo(before.position), 3), turnedDeg: round(angleDeg(after.quaternion, before.quaternion), 1) };
+      // Stop walking and turning, then put it down: it drops, with no throw.
+      await advance(0.6);
+      holdSeconds += 0.6;
       await page.keyboard.press('KeyG');
-      await advance(0.05);
+      // Set down: the hand lowers the prop rigidly toward the surface; it is let go at 2 cm above it, or when the hand can go no lower.
+      await advance(0.1);
+      holdSeconds += 0.1;
+      const easing = (await readState(page)).objects.items[0];
+      setDown = { heldDuringEase: easing.heldBy };
+      let launch = easing;
+      const squat = squatTracker();
+      for (let i = 0; i < 150 && launch.heldBy; i += 1) {
+        await advance(1 / 60);
+        const frame = await readState(page);
+        squat.sample(frame);
+        launch = frame.objects.items[0];
+        if (launch.heldBy) holdSeconds += 1 / 60;
+      }
+      const released = poseOf(launch);
+      await keyFor('KeyS', 0.5);
+      const trace = [];
+      for (let i = 0; i < Math.round(REST_TIMEOUT_SEC * 60); i += 1) {
+        await advance(1 / 60);
+        const sample = (await readState(page)).objects.items[0];
+        if (i % 6 === 0) trace.push({ t: round(i / 60, 2), centre: [0, 1, 2].map((a) => round((sample.boundsMin[a] + sample.boundsMax[a]) / 2, 3)), linvel: sample.linvel.map((v) => round(v, 2)), body: sample.body });
+        if (sample.body === 'asleep') break;
+      }
       state = await readState(page);
-      const released = poseOf(state.objects.items[0]);
-      await keyFor('KeyS', 1);
-      state = await readState(page);
-      putDown = { heldBy: state.objects.items[0].heldBy, driftM: round(poseOf(state.objects.items[0]).position.distanceTo(released.position), 5) };
+      const item = state.objects.items[0];
+      squat.assert(fail, 'put-down');
+      await stepJumps(page, 'put-down', fail);
+      putDown = {
+        squat: squat.result(),
+        trace,
+        heldBy: item.heldBy,
+        // How far it fell from the hand's lowest point to the floor, after the let-go.
+        dropHeightM: round(launch.boundsMin[1] - item.boundsMin[1], 4),
+        launchSpeedMps: round(Math.hypot(launch.linvel[0], launch.linvel[2]), 3),
+        launchSpinRadps: round(Math.hypot(...launch.angvel), 3),
+        // The bounds centre, not the model origin: a tipping prop swings its origin.
+        driftM: round(Math.hypot((item.boundsMin[0] + item.boundsMax[0] - launch.boundsMin[0] - launch.boundsMax[0]) / 2, (item.boundsMin[2] + item.boundsMax[2] - launch.boundsMin[2] - launch.boundsMax[2]) / 2), 3),
+        originDriftM: round(Math.hypot(item.position[0] - released.position.x, item.position[2] - released.position.z), 3),
+        body: item.body,
+        floorGapM: round(item.boundsMin[1], 4)
+      };
       await advance(0.2);
     });
     await page.getByRole('button', { name: 'Start Recording' }).waitFor();
@@ -499,8 +731,14 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     if (pickedUp.toHandM > 0.15) fail(`the carried object is ${pickedUp.toHandM} m from the hand`);
     if (carried.turnedDeg < 30) fail(`Q turned the object only ${carried.turnedDeg}°`);
     if (carried.movedM < 0.5) fail(`walking carried the object only ${carried.movedM} m`);
+    if (setDown.heldDuringEase !== 'right') fail('G released the object at once instead of setting it down');
     if (putDown.heldBy) fail('G did not put the object down');
-    if (putDown.driftM > 1e-4) fail(`the put-down object moved ${putDown.driftM} m while the avatar walked away`);
+    if (putDown.launchSpeedMps > 0.05 || putDown.launchSpinRadps > 0.05) fail(`the put-down object was flung: ${putDown.launchSpeedMps} m/s, ${putDown.launchSpinRadps} rad/s`);
+    // Slice 3: nothing is within the arm's standing reach below it, so the body squats until it is just above the floor.
+    if (putDown.dropHeightM > 0.03) fail(`the put-down object was let go ${putDown.dropHeightM} m above the floor (limit 0.03 m)`);
+    if (putDown.driftM > 0.02) fail(`the put-down object drifted ${putDown.driftM} m sideways after a ${putDown.dropHeightM} m drop (limit 0.02 m)`);
+    if (putDown.body !== 'asleep') fail(`the put-down object did not come to rest (${putDown.body})`);
+    if (Math.abs(putDown.floorGapM - FLOOR_Y) > 0.003) fail(`the put-down object rests ${round(putDown.floorGapM - FLOOR_Y, 4)} m from the floor (limit 0.003 m)`);
 
     // Out of reach, G does nothing.
     await page.keyboard.press('KeyG');
@@ -509,10 +747,30 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     const outOfReach = { heldBy: state.objects.items[0].heldBy };
     if (outOfReach.heldBy) fail('G picked up an object out of reach');
 
+    // Walking through the resting object moves neither it nor the avatar (props have no collision with the body).
+    state = await readState(page);
+    const restAt = state.objects.items[0].position;
+    let nearestM = Infinity;
+    for (let i = 0; i < 240 && nearestM > 0.1; i += 1) {
+      state = await readState(page);
+      nearestM = Math.min(nearestM, Math.hypot(state.avatar.x - restAt[0], state.avatar.z - restAt[2]));
+      if (nearestM <= 0.1) break;
+      const key = restAt[2] < state.avatar.z ? 'KeyW' : 'KeyS';
+      await page.keyboard.down(key);
+      await advance(1 / 30);
+      await page.keyboard.up(key);
+    }
+    await advance(0.3);
+    state = await readState(page);
+    const walkThrough = { nearestAvatarM: round(nearestM, 3), objectMovedM: round(v3(state.objects.items[0].position).distanceTo(v3(restAt)), 5), body: state.objects.items[0].body };
+    if (nearestM > 0.25) fail(`the avatar could not walk to the resting object (nearest ${walkThrough.nearestAvatarM} m)`);
+    if (walkThrough.objectMovedM > 1e-4) fail(`walking through the resting object moved it ${walkThrough.objectMovedM} m`);
+
     const exportReport = checkObjectExport(await readFile(glb), {
       expectHolds: [{ hand: 'right', duration: holdSeconds }],
       captureRelation: relations.at(-1) ?? null,
-      compareTailSec: 0.15,
+      // The span after the Q turn, including the set-down squat: the prop stays rigid with the hand.
+      compareTailSec: 0.6,
       fail
     });
     const shotFile = path.join(artifactDir, `${label}-put-down.png`);
@@ -520,7 +778,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     await page.evaluate(() => window.__setManualClock(true, true));
     await advance(2 / 60);
     await page.screenshot({ path: shotFile });
-    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, outOfReach, shots: { final: shotFile }, export: exportReport };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, noObject, refusal, pickedUp, carried, putDown, setDown, outOfReach, walkThrough, shots: { final: shotFile }, export: exportReport };
   } finally {
     await context.close();
   }

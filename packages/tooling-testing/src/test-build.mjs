@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Browser checks load a test build served by `vite preview`, not the Vite dev
-// server (docs/features/ci-under-5m.md, "Built bundles"). A test build is the
+// server (docs/features/archive/ci-under-5m.md, "Built bundles"). A test build is the
 // production build plus HOLOIM_TEST_BUILD=1: IWER injected, test hooks kept,
 // the API reached through a relative /api that preview proxies.
 //

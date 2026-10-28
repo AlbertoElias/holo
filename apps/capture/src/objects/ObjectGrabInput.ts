@@ -19,6 +19,8 @@ export interface GrabIntent {
   source: GrabInputSource;
   /** Squeeze value (0..1) or pinch distance (m) behind `pressed`. */
   value: number | null;
+  /** The source changed between controller and hand this update: a release now is not a deliberate let-go. */
+  switched: boolean;
 }
 
 interface InputSourceLike {
@@ -34,9 +36,13 @@ interface InputSourceLike {
  */
 export class ObjectGrabInput {
   private readonly state: Record<VrHandSide, GrabIntent> = {
-    left: { pressed: false, source: 'none', value: null },
-    right: { pressed: false, source: 'none', value: null }
+    left: { pressed: false, source: 'none', value: null, switched: false },
+    right: { pressed: false, source: 'none', value: null, switched: false }
   };
+  // The last real source while a side is held, kept across frames with no input source.
+  private readonly lastReal: Record<VrHandSide, GrabInputSource> = { left: 'none', right: 'none' };
+  // After a switch, a side cannot press until the new source is seen open.
+  private readonly needsOpen: Record<VrHandSide, boolean> = { left: false, right: false };
   private readonly thumb = new THREE.Vector3();
   private readonly index = new THREE.Vector3();
 
@@ -53,13 +59,24 @@ export class ObjectGrabInput {
       // A switch between controller and hand mid-hold releases: the two
       // thresholds mean different things.
       const kind: GrabInputSource = source?.hand ? 'pinch' : source?.gamepad?.buttons?.[SQUEEZE_BUTTON] ? 'squeeze' : 'none';
-      if (kind !== 'none' && state.source !== 'none' && kind !== state.source) state.pressed = false;
+      const remembered = state.source !== 'none' ? state.source : state.pressed ? this.lastReal[side] : 'none';
+      state.switched = kind !== 'none' && remembered !== 'none' && kind !== remembered;
+      if (state.switched) {
+        state.pressed = false;
+        this.needsOpen[side] = true;
+      }
+      if (kind !== 'none') this.lastReal[side] = kind;
       if (source?.hand) {
         const tracked = this.tracking.getTrackedHandJointPosition(side, 'thumb-tip', this.thumb)
           && this.tracking.getTrackedHandJointPosition(side, 'index-finger-tip', this.index);
         const distance = tracked ? this.thumb.distanceTo(this.index) : null;
         state.source = 'pinch';
         state.value = distance;
+        if (this.needsOpen[side]) {
+          if (distance !== null && distance >= PINCH_OFF_M) this.needsOpen[side] = false;
+          state.pressed = false;
+          continue;
+        }
         state.pressed = distance === null ? state.pressed : state.pressed ? distance < PINCH_OFF_M : distance < PINCH_ON_M;
         continue;
       }
@@ -68,12 +85,20 @@ export class ObjectGrabInput {
         const value = button.value ?? (button.pressed ? 1 : 0);
         state.source = 'squeeze';
         state.value = value;
+        if (this.needsOpen[side]) {
+          if (value < SQUEEZE_OFF) this.needsOpen[side] = false;
+          state.pressed = false;
+          continue;
+        }
         state.pressed = state.pressed ? value > SQUEEZE_OFF : value >= SQUEEZE_ON;
         continue;
       }
       // The input went away (a controller lost or asleep): keep the last
       // intent, so a held object freezes and the loss rule releases it.
-      if (!session) state.pressed = false;
+      if (!session) {
+        state.pressed = false;
+        this.lastReal[side] = 'none';
+      } else if (!state.pressed) this.lastReal[side] = 'none';
       state.source = 'none';
       state.value = null;
     }
@@ -84,6 +109,10 @@ export class ObjectGrabInput {
   }
 
   reset(): void {
-    for (const side of ['left', 'right'] as const) this.state[side] = { pressed: false, source: 'none', value: null };
+    for (const side of ['left', 'right'] as const) {
+      this.state[side] = { pressed: false, source: 'none', value: null, switched: false };
+      this.lastReal[side] = 'none';
+      this.needsOpen[side] = false;
+    }
   }
 }

@@ -41,12 +41,14 @@ USDZ and reports for seven days.
 
 The source-derived challenges (moving facial weights/ancestors, alpha/PBR/UV
 changes, silence, nonloop audio and unsupported/corrupt inputs) are the tool
-check, run on the walking take the pipeline records to
+check, run on the walking take the pipeline specs share, at
 `output/pipeline-takes/walk.glb` (never committed; pass another GLB as the
 first argument or `USDZ_TOOLS_GLB`). CI runs it when these tools or capture's
-GLB export change.
+GLB export change, recording the take in capture alone first so it need not
+wait for the pipeline:
 
 ```sh
+pnpm --filter @holoim/web run test:e2e:walk-take
 pnpm --filter @holoim/api run test:usdz-tools
 ```
 

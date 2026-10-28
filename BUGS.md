@@ -7,19 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-025 — Portal "desktop freeze" check finds the feed back at the top
-
-- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("desktop freeze: … scrolling away resets"), portal scroll capture
-- **Severity:** P3
-- **Observed:** 2026-10-26, on `main` at `ac700f0f`
-- **Evidence:** `expect(await feedScrollTop(page)).toBeGreaterThan(0)` at
-  `portal.spec.ts:408` receives 0. Fails 3 of 3 on `main` when the whole
-  `portal.spec.ts` runs (`--repeat-each=3`, one worker), passes 3 of 3 when
-  the test runs alone. The paused card's capture may undo the instant
-  `scrollIntoView` before the reset lands.
-- **Expected:** scrolling to the next card from a paused card stays there.
-- **Reproduction:** `E2E_BASE_URL=https://localhost:3274 E2E_API_PORT=3101 VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts --repeat-each=3 --workers=1`
-
 ### B-024 — CI's pipeline shard can spend its whole timeout installing ffmpeg
 
 - **Area:** `.github/workflows/ci.yml` pipeline job (`apt-get install ffmpeg`), `scripts/ci-emulate.sh`
@@ -37,23 +24,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   static ffmpeg binary or a cached `.deb` set, and a step timeout so the
   failure names the install rather than the job.
 - **Reproduction:** intermittent on hosted runners; see the two runs above.
-
-### B-020 — Capture's height check is not repeatable
-
-- **Area:** `apps/capture` XR checks (`test:xr:height`)
-- **Severity:** P3
-- **Observed:** 2026-10-24
-- **Evidence:** two runs of `main` (`eebf013`) with
-  `XR_CHECK_CONCURRENCY=2` give `output/ci-xr-height/height-report.json`
-  positions up to 0.45 mm apart (`baseWorldY`, sensor and bone positions),
-  found while comparing the slice 0 port in
-  `docs/features/ui-redesign.md`. The check still passes.
-- **Expected:** identical reports, as `AGENT_CONTRACT.md` says of the XR
-  checks; `compare-xr-reports.ts` tolerates 1 mm in this file meanwhile.
-- **Reproduction:** run `pnpm --filter @holoim/capture run test:xr:height`
-  twice and compare the two output folders with
-  `node --import tsx scripts/compare-xr-reports.ts`.
-
 
 ### B-028 — A take drops set geometry whose vertices are far apart, such as a large floor
 

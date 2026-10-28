@@ -1,8 +1,8 @@
 import type { Nodes, Root, RootContent, Table } from "mdast";
-import remarkGfm from "remark-gfm";
-import remarkParse from "remark-parse";
-import { unified } from "unified";
 import sources from "virtual:holoim-knowledge";
+import { nodeText, parser } from "./markdown-tree";
+
+export { nodeText };
 
 export type DocumentKind =
   | "Concept"
@@ -37,14 +37,6 @@ export type Bug = {
   severity: string;
   area: string;
 };
-const parser = unified().use(remarkParse).use(remarkGfm);
-
-export function nodeText(node: Nodes): string {
-  if ("value" in node) return node.value;
-  if ("children" in node)
-    return node.children.map((child) => nodeText(child)).join("");
-  return "";
-}
 
 function kindFor(path: string): DocumentKind {
   if (path.startsWith("docs/product/concepts/")) return "Concept";
@@ -55,19 +47,18 @@ function kindFor(path: string): DocumentKind {
   return "Guide";
 }
 
+// Titles and descriptions arrive precomputed; a full tree is parsed only when a
+// page reads it, so a live source update reloads without reparsing every document.
 export const documents: KnowledgeDocument[] = sources.map((source) => {
-  const tree = parser.parse(source.content);
-  const title = tree.children.find((node) => node.type === "heading");
-  const description = tree.children.find(
-    (node) =>
-      node.type === "paragraph" &&
-      !/^\*\*/.test(source.content.slice(node.position?.start.offset ?? 0)),
-  );
+  let tree: Root | undefined;
   return {
-    ...source,
-    tree,
-    title: title ? nodeText(title) : source.path,
-    description: description ? nodeText(description) : "",
+    path: source.path,
+    content: source.content,
+    get tree() {
+      return (tree ??= parser.parse(source.content));
+    },
+    title: source.title ?? source.path,
+    description: source.description,
     kind: kindFor(source.path),
     status:
       source.content.match(/\*\*Status:\*\*\s*([^\n]+)/)?.[1]?.trim() ?? null,

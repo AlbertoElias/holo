@@ -13,11 +13,10 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-AR recording (camera-only takes from a phone, meaning v1) is complete and on
-`main` (brief
-[`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md)),
-with the shared XR interface before it. Pick the next queue item in
-[`TODOS.md`](TODOS.md).
+Grab, place and throw objects with physics is complete and on `main` (brief
+[`docs/features/archive/object-physics.md`](docs/features/archive/object-physics.md));
+its device checks are in the brief's "Physical-device limits". Pick the next
+queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 

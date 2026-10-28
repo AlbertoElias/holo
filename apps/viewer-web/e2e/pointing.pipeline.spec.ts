@@ -12,7 +12,7 @@ import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Self-resolving pointing in the viewer (PRD-022): the referent lights up while
 // the author points. Two kinds of take go through the real upload → feed → render
-// path: capture's own exports, recorded in the spec's beforeAll (the desktop
+// path: capture's own exports, each recorded when a test first needs it (the desktop
 // take is recorded-style, the IWER replay is inferred-style, and the held-mark
 // takes are a phone touch hold and IWER hands mixing both), and a
 // hand-built GLB, kept only for what the exports cannot cover: a large-surface
@@ -98,7 +98,7 @@ const takeDir = path.resolve(import.meta.dirname, "../../../output/pointing-view
 // takes capture's own pointing check scores: a scripted desktop point action
 // (recorded style) and the IWER headset replay (inferred style). Nothing is
 // committed, so a break in capture's export shows up as a failure in this spec.
-const exportsByLabel = new Map<string, { file: string; expected: Expected[] }>();
+const exportsByLabel = new Map<string, Promise<{ file: string; expected: Expected[] }>>();
 
 function expectedFrom(glb: Buffer): Expected[] {
   const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString("utf8")) as {
@@ -113,34 +113,52 @@ function expectedFrom(glb: Buffer): Expected[] {
   }));
 }
 
-test.beforeAll(async () => {
-  if (process.env.RUN_E2E_PIPELINE !== "1") return;
-  test.setTimeout(300_000);
-  const { runDesktopPointingCheck } = await import("../../capture/scripts/lib/pointing-desktop-take.ts");
-  const { replayPointingTake } = await import("../../capture/scripts/lib/pointing-iwer-replay.ts");
-  const { runHeldMarkPhase } = await import("../../capture/scripts/lib/held-mark-takes.ts");
+type ExportLabel = "desktop-recorded" | "iwer-inferred" | "phone-held" | "hands-held";
+
+/**
+ * Records one capture export the first time a test asks for it, in its own
+ * XR browser, so a shard that runs only some of these tests records only
+ * their takes (CI splits this spec across two runners).
+ */
+function exportFor(label: ExportLabel): Promise<{ file: string; expected: Expected[] }> {
+  let recording = exportsByLabel.get(label);
+  if (!recording) {
+    recording = recordExport(label);
+    exportsByLabel.set(label, recording);
+  }
+  return recording;
+}
+
+async function recordExport(label: ExportLabel): Promise<{ file: string; expected: Expected[] }> {
+  // The held-mark takes save here without creating it; a shard may record
+  // only those.
+  await mkdir(takeDir, { recursive: true });
   const browser = await launchXrBrowser(chromium);
   const consoleErrors: string[] = [];
   try {
-    const desktop = await runDesktopPointingCheck({ browser, baseUrl: captureUrl, artifactDir: takeDir, consoleErrors });
-    const iwer = await replayPointingTake({
-      browser, baseUrl: captureUrl, captureRoot, labelsDir: "fixtures/pointing-labels", artifactDir: takeDir, consoleErrors,
-      labelFile: "iwer-pointing-targets.json"
-    });
-    // Held marks (slice 5): a phone touch hold, and headset hands where held
-    // marks and inferred points share one take.
     const run = { browser, baseUrl: captureUrl, artifactDir: takeDir, consoleErrors };
-    const phone = await runHeldMarkPhase(run, "phone");
-    const hands = await runHeldMarkPhase(run, "hands");
-    for (const [label, report] of [["desktop-recorded", desktop], ["iwer-inferred", iwer], ["phone-held", phone], ["hands-held", hands]] as const) {
-      expect(report.failures, `${label} take`).toEqual([]);
-      exportsByLabel.set(label, { file: report.glb, expected: expectedFrom(await readFile(report.glb)) });
+    let report: { failures: unknown[]; glb: string };
+    if (label === "desktop-recorded") {
+      const { runDesktopPointingCheck } = await import("../../capture/scripts/lib/pointing-desktop-take.ts");
+      report = await runDesktopPointingCheck(run);
+    } else if (label === "iwer-inferred") {
+      const { replayPointingTake } = await import("../../capture/scripts/lib/pointing-iwer-replay.ts");
+      report = await replayPointingTake({
+        ...run, captureRoot, labelsDir: "fixtures/pointing-labels", labelFile: "iwer-pointing-targets.json"
+      });
+    } else {
+      // Held marks (slice 5): a phone touch hold, and headset hands where held
+      // marks and inferred points share one take.
+      const { runHeldMarkPhase } = await import("../../capture/scripts/lib/held-mark-takes.ts");
+      report = await runHeldMarkPhase(run, label === "phone-held" ? "phone" : "hands");
     }
-    expect(consoleErrors, "capture runtime errors").toEqual([]);
+    expect(report.failures, `${label} take`).toEqual([]);
+    expect(consoleErrors, `${label}: capture runtime errors`).toEqual([]);
+    return { file: report.glb, expected: expectedFrom(await readFile(report.glb)) };
   } finally {
     await browser.close();
   }
-});
+}
 
 const REAL_EXPORTS = [
   { label: "desktop-recorded", styles: ["recorded"] },
@@ -152,9 +170,10 @@ const REAL_EXPORTS = [
 for (const { label, styles } of REAL_EXPORTS) {
   test(`real capture export ${label}: highlights follow the links, orbit and toggle`, async ({ page }) => {
     test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
-    test.setTimeout(180_000);
+    // Includes recording the take in capture (11-70 s on a hosted runner).
+    test.setTimeout(240_000);
 
-    const { file, expected } = exportsByLabel.get(label)!;
+    const { file, expected } = await exportFor(label);
     expect(expected.length, "links in the export").toBeGreaterThan(0);
     for (const mark of expected) expect(styles).toContain(mark.style);
     const uploaded = await upload(page, label, await readFile(file));

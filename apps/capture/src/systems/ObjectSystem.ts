@@ -1,5 +1,9 @@
 import { createSystem } from '@iwsdk/core';
+import { gravity } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
+
+// Above this ground speed the avatar counts as walking, which cancels a flat-screen reach.
+const WALKING_MPS = 0.05;
 
 /**
  * Supplied objects and the tray: grab, carry, release and summon, after the
@@ -16,7 +20,13 @@ export class ObjectSystem extends createSystem() {
   update(): void {
     const c = this.capture;
     if (c.frame.arSpectator || !c.motor.hasSpawnResolved()) return;
+    if (!c.objects.hasPhysics()) {
+      const trimesh = c.motor.getWorldTrimesh();
+      if (trimesh) c.objects.enablePhysics(trimesh, gravity);
+    }
     const turn = c.input.getObjectTurn();
+    const walk = c.input.moveState;
+    const moving = walk.forward || walk.back || walk.left || walk.right || (!c.objects.isStepping() && (c.frame.character?.horizontalSpeed ?? 0) > WALKING_MPS);
     c.objects.update({
       vrActive: c.frame.vrActive,
       deltaSec: c.frame.deltaSec,
@@ -28,8 +38,10 @@ export class ObjectSystem extends createSystem() {
         toggle: c.input.consumeObjectToggle(),
         turnYaw: turn.yaw,
         turnPitch: turn.pitch,
+        walking: moving,
         pointHeld: c.input.isPointHeld(),
-        summonSlot: c.input.consumeSummonSlot()
+        summonSlot: c.input.consumeSummonSlot(),
+        grab: c.input.consumeObjectGrab()
       }
     });
   }
