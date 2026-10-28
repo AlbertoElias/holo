@@ -7,6 +7,22 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-037 — AR recenter click sometimes misses on a hosted runner
+
+- **Area:** `apps/viewer-web/e2e/hologram-feed.spec.ts` ("AR places the model on a surface … recenter places again"), `rayClick`
+- **Severity:** P2 (fails CI and holds back the viewer deploy)
+- **Observed:** 2026-10-28, run 40617371918 (viewer shard 1/4), on `931710be7bbd`
+- **Evidence:** the first placement anchors at 8.9 s; after `recenterFromFoot`
+  no placement with a higher sequence arrives in 15 s
+  (`hologram-feed.spec.ts:463`). Passed 8 of 8 in `scripts/ci-emulate.sh`
+  (alone ×5, the whole shard ×3) and on runs 40612369043 and 40616950365.
+  Likely cause: `rayClick` presses and releases the trigger one real frame
+  apart, and IWSDK counts a press held past 800 ms of frame time as no
+  click, so one long frame on a slow runner drops the Recenter select.
+- **Expected:** the press and release land deterministically: step the page
+  clock (as the xr-viewer checks do) rather than ride real frames.
+- **Reproduction:** not yet local; hosted runner only.
+
 ### B-036 — Knowledge live-update check fails after other browser suites
 
 - **Area:** `apps/knowledge/e2e/atlas.spec.ts` ("any docs Markdown is discoverable and live updates through atomic replacement and rename")
