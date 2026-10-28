@@ -66,23 +66,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   failure names the install rather than the job.
 - **Reproduction:** intermittent on hosted runners; see the two runs above.
 
-### B-020 — Capture's height check is not repeatable
-
-- **Area:** `apps/capture` XR checks (`test:xr:height`)
-- **Severity:** P3
-- **Observed:** 2026-10-24
-- **Evidence:** two runs of `main` (`eebf013`) with
-  `XR_CHECK_CONCURRENCY=2` give `output/ci-xr-height/height-report.json`
-  positions up to 0.45 mm apart (`baseWorldY`, sensor and bone positions),
-  found while comparing the slice 0 port in
-  `docs/features/ui-redesign.md`. The check still passes.
-- **Expected:** identical reports, as `AGENT_CONTRACT.md` says of the XR
-  checks; `compare-xr-reports.ts` tolerates 1 mm in this file meanwhile.
-- **Reproduction:** run `pnpm --filter @holoim/capture run test:xr:height`
-  twice and compare the two output folders with
-  `node --import tsx scripts/compare-xr-reports.ts`.
-
-
 ### B-028 — A take drops set geometry whose vertices are far apart, such as a large floor
 
 - **Area:** `apps/capture/src/recording/SceneBubbleSampler.ts` (`triangleInsideBubble`)

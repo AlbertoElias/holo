@@ -40,10 +40,6 @@ const FILE_RULES: Record<string, FileRule> = {
   'xr-checks/face.log': {
     reason: 'Prints the export size above.',
     keys: { '*': { absolute: 0, relative: 0.005 } }
-  },
-  'ci-xr-height/height-report.json': {
-    reason: 'Positions differ by up to 0.45 mm between two runs of main.',
-    keys: { x: { absolute: 1e-3, relative: 0 }, y: { absolute: 1e-3, relative: 0 }, z: { absolute: 1e-3, relative: 0 }, baseWorldY: { absolute: 1e-3, relative: 0 }, translation: { absolute: 1e-3, relative: 0 } }
   }
 };
 

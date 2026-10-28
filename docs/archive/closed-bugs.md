@@ -695,3 +695,26 @@ bug above.)
   keeps their card. The edge-snapshot test in `e2e/hologram-feed.spec.ts` now
   requires the newer card in the viewport and the feed at the top; it fails
   without the fix.
+
+### B-020 — Capture's height check is not repeatable
+
+- **Area:** `apps/capture` XR checks (`test:xr:height`)
+- **Severity:** P3
+- **Observed:** 2026-10-24
+- **Evidence:** two runs of `main` (`eebf013`) with
+  `XR_CHECK_CONCURRENCY=2` give `output/ci-xr-height/height-report.json`
+  positions up to 0.45 mm apart (`baseWorldY`, sensor and bone positions),
+  found while comparing the slice 0 port in
+  `docs/features/ui-redesign.md`. The check still passes.
+- **Expected:** identical reports, as `AGENT_CONTRACT.md` says of the XR
+  checks; `compare-xr-reports.ts` tolerates 1 mm in this file meanwhile.
+- **Reproduction:** run `pnpm --filter @holoim/capture run test:xr:height`
+  twice and compare the two output folders with
+  `node --import tsx scripts/compare-xr-reports.ts`.
+- **Fix:** The check loaded the page on the real-time clock and only
+  switched to the manual clock before its baseline, so the character's
+  settling slide (up to 0.45 mm) depended on how long the page ran
+  before that, which varies with host load. The page now loads with
+  `?manualClock=1`, like the other replay checks, so it never ticks on real
+  time. Three back-to-back runs give byte-identical reports, and
+  `compare-xr-reports.ts` no longer tolerates differences in this file.
