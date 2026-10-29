@@ -415,8 +415,20 @@ export async function runTrayHitchTake({ browser, baseUrl, artifactDir, consoleE
     if (!loaded) fail('the ~7 MB GLB was refused mid-take');
     if (!heavyItem) fail(`the heavy item was not summoned mid-take (${JSON.stringify(summonedItems(state).map((item) => item.name))})`);
     const budget = Math.max(LONG_TASK_BUDGET_MS, baseline.maxTaskMs * 1.5);
-    if (load.maxTaskMs > budget) fail(`a ${round(load.maxTaskMs, 0)} ms task while loading mid-take (budget ${round(budget, 0)} ms; baseline max ${round(baseline.maxTaskMs, 0)} ms)`);
-    if (summon.maxTaskMs > budget) fail(`a ${round(summon.maxTaskMs, 0)} ms task at the first open and summon (budget ${round(budget, 0)} ms)`);
+    // The budget holds on a hardware GPU. On a software one (SwiftShader, as on
+    // CI) the GPU's own upload and raster run on the CPU and block the page, so
+    // the stalls are recorded, not failed (docs/features/tray-everywhere.md).
+    const gpu = await page.evaluate(() => {
+      const gl = document.createElement('canvas').getContext('webgl2');
+      const info = gl?.getExtension('WEBGL_debug_renderer_info');
+      return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER) ?? null;
+    });
+    const softwareGpu = /swiftshader|llvmpipe|software/i.test(gpu ?? '');
+    const enforced = !softwareGpu || process.env.SUMMON_HITCH_GPU === '1';
+    const over = (what, ms) => (enforced ? fail : (message) => stalls.push(message))(`a ${round(ms, 0)} ms task ${what} (budget ${round(budget, 0)} ms; baseline max ${round(baseline.maxTaskMs, 0)} ms)`);
+    const stalls = [];
+    if (load.maxTaskMs > budget) over('while loading mid-take', load.maxTaskMs);
+    if (summon.maxTaskMs > budget) over('at the first open and summon', summon.maxTaskMs);
 
     const glb = await saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), path.join(artifactDir, `${label}.glb`));
     const take = loadTake(await readFile(glb));
@@ -425,7 +437,7 @@ export async function runTrayHitchTake({ browser, baseUrl, artifactDir, consoleE
     // Body keys keep coming through the load: no gap in the take longer than a hitch would leave.
     const keyGaps = take.times.slice(1).map((t, i) => t - take.times[i]);
     exported.maxKeyGapSec = round(Math.max(0, ...keyGaps), 4);
-    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, heavyBytes: heavy.length, budgetMs: round(budget, 1), baseline, load, summon, export: exported };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, heavyBytes: heavy.length, gpu, budgetEnforced: enforced, softwareGpuStalls: stalls, budgetMs: round(budget, 1), baseline, load, summon, export: exported };
   } finally {
     await context.close();
   }

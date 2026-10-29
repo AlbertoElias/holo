@@ -42,7 +42,10 @@ try {
     ['touch-tray', () => runTouchTrayTake({ browser, baseUrl, artifactDir, consoleErrors })],
     // Timed: a browser of its own, so no earlier phase's GPU work is still draining.
     ['tray-hitch', async () => {
-      const own = await launchXrBrowser(chromium);
+      // SUMMON_HITCH_GPU=1: on this machine's GPU, where the long-task budget is enforced.
+      const own = process.env.SUMMON_HITCH_GPU === '1'
+        ? await chromium.launch({ headless: true, args: ['--use-gl=angle', `--use-angle=${process.platform === 'darwin' ? 'metal' : 'default'}`, '--enable-gpu', '--ignore-gpu-blocklist'] })
+        : await launchXrBrowser(chromium);
       try {
         return await runTrayHitchTake({ browser: own, baseUrl, artifactDir, consoleErrors });
       } finally {
