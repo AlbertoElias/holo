@@ -480,6 +480,10 @@ a gesture zone.
 | Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
 | Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
 | Undo / Redo | The Halo's W and E: undo or redo the last held mark | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
+| Tray | Open the tray of objects to summon (capture) | "Tray" (name; "Tray · hold T" with a keyboard) | A cube, a cone and a ball on a shelf (`glyph.path.tray`) |
+| Squeeze | Beside the tray miniature in reach, with controllers: squeeze to summon it | None | A closed fist, front on, the thumb across the fingers (`glyph.path.squeeze`; after Lucide's hand-fist) |
+| Pinch | The same, with bare hands: pinch to summon it | None | A hand side on, the thumb meeting the index fingertip, two contact ticks (`glyph.path.pinch`; after Iconoven's hand-pinch) |
+| Slot model / image | Inside a filled tray slot until its thumbnail renders | None | A globe for a model; a frame with a sun over a peak for an image (`glyph.path.slotModel` / `slotImage`) |
 
 The rose record dot has no keyline of its own; the gold ring around it is
 the same as Play's. The Play triangle, the Pause bars and the record shapes are filled;
@@ -682,9 +686,11 @@ hologram.
 | Gold core and highlight | Drop to 0.55 opacity | No edge |
 
 **Chrome while recording:** everything but the stop control,
-"Recording 0:12" and the Halo glyph hides until the take ends. The Halo
-stays because it carries the take's own actions: stop, and undo or redo the
-held mark.
+"Recording 0:12", the Halo glyph, the Tray glyph and Find hides until the
+take ends. The Halo stays because it carries the take's own actions: stop,
+and undo or redo the held mark. The tray and Find stay because bringing an
+object into the event is part of the take: a summon or a pick mid-take is
+recorded from its frame ([tray everywhere](../../features/tray-everywhere.md)).
 
 The state is carried by shape and word, not colour: the record control turns
 from a filled rose circle into a rose rounded square (stop), and

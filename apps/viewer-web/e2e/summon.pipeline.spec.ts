@@ -29,7 +29,7 @@ const captureUrl = process.env.E2E_CAPTURE_URL ?? "https://127.0.0.1:5175/";
 
 type Pose = { position: [number, number, number]; quaternion: [number, number, number, number] };
 type Pick = { label: string; key: number; time: number; objects: Array<{ pose: Pose; present: boolean }> };
-type Take = { file: string; nodes: number[]; starts: number[]; picks: Pick[] };
+type Take = { file: string; nodes: number[]; indices: number[]; total: number; starts: number[]; picks: Pick[] };
 
 let take: Take | undefined;
 
@@ -54,12 +54,15 @@ test.beforeAll(async () => {
 
 /** Each object's pose at chosen keys, in the recording root's frame, read without a renderer. */
 function expectedFrom(lib: Record<string, (...args: never[]) => unknown>, file: string, buffer: Buffer): Take {
-  type Parsed = { times: number[]; validation: { ok: true; value: { objects: Array<{ node: number; presence: Array<{ start: number; end: number }> }> } } };
+  type Parsed = { times: number[]; validation: { ok: true; value: { objects: Array<{ node: number; origin: string; presence: Array<{ start: number; end: number }> }> } } };
   const loadTake = lib.loadTake as (b: Buffer) => Parsed;
   const worldAt = lib.worldAt as (t: unknown, node: number, key: number) => unknown;
   const rigidPose = lib.rigidPose as (m: unknown) => { position: { toArray: () => number[] }; quaternion: { toArray: () => number[] } };
   const parsed = loadTake(buffer);
-  const objects = parsed.validation.value.objects;
+  // The take's mid-take summons; the object summoned before it is carried in
+  // as `prepared` (the 60 s carry test below covers those).
+  const all = parsed.validation.value.objects;
+  const objects = all.filter((entry) => entry.origin === "summoned");
   const keyAt = (time: number) => parsed.times.reduce((best, t, i) => (Math.abs(t - time) < Math.abs(parsed.times[best]! - time) ? i : best), 0);
   const starts = objects.map((entry) => entry.presence[0]!.start);
   const end = parsed.times.at(-1)!;
@@ -72,6 +75,9 @@ function expectedFrom(lib: Record<string, (...args: never[]) => unknown>, file: 
   return {
     file,
     nodes: objects.map((entry) => entry.node),
+    // Where each sits among all the take's objects, as the viewer lists them.
+    indices: objects.map((entry) => all.indexOf(entry)),
+    total: all.length,
     starts,
     picks: picks.map(([label, time]) => {
       const key = keyAt(time);
@@ -225,9 +231,9 @@ test("real capture export: summoned objects appear in the hand at their summon, 
   const report: Record<string, unknown> = { glb: expected.file, hologram: uploaded.id, nodes: expected.nodes, summonStarts: expected.starts, picks: [] };
   for (const pick of expected.picks) {
     const reading = await readAt(page, uploaded.url, pick.time);
-    expect(reading.objects, "the extension names both objects").toBe(2);
+    expect(reading.objects, "the extension names every object").toBe(expected.total);
     const errors = pick.objects.map((object, k) => {
-      const read = reading.poses[k];
+      const read = reading.poses[expected.indices[k]!];
       expect(read, `${pick.label}: object ${k} is in the card`).not.toBeNull();
       if (!object.present) {
         expect(read!.scale, `${pick.label}: object ${k} is hidden before its summon`).toBeLessThan(1e-6);
@@ -266,4 +272,48 @@ test("real capture export: summoned objects appear in the hand at their summon, 
   });
   report.usdz = { path: usdzPath, prims: usd };
   await writeFile(path.join(evidenceDir, "report.json"), JSON.stringify(report, null, 2));
+});
+
+// The tray on every device (docs/features/tray-everywhere.md): nothing clears
+// between takes, so a take can carry many objects in from before it began.
+// Five placed before a 60 s take convert to USDZ, each prim visible from the
+// first frame to the last.
+test("a 60 s take carrying five objects from before it converts to USDZ, each present throughout", async ({ page }) => {
+  test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
+  test.setTimeout(420_000);
+  // @ts-expect-error capture's .mjs scripts are untyped
+  const { runLongCarryTake } = await import("../../capture/scripts/lib/tray-anytime-take.mjs");
+  const browser = await launchXrBrowser(chromium);
+  const consoleErrors: string[] = [];
+  let report: { failures: string[]; glb: string; export: { durationSec: number; objects: Array<{ name: string }> } };
+  try {
+    report = await runLongCarryTake({ browser, baseUrl: captureUrl, artifactDir: path.join(evidenceDir, "long-carry"), consoleErrors });
+  } finally {
+    await browser.close();
+  }
+  expect(report.failures, "capture take").toEqual([]);
+  expect(consoleErrors, "capture runtime errors").toEqual([]);
+  // @ts-expect-error capture's .mjs scripts are untyped
+  const glbLib = await import("../../capture/scripts/lib/object-glb.mjs");
+  const nodes = (glbLib.loadTake(await readFile(report.glb)) as { validation: { value: { objects: Array<{ node: number }> } } }).validation.value.objects.map((entry) => entry.node);
+  expect(nodes.length, "five carried objects").toBe(5);
+
+  const uploaded = await upload(page, await readFile(report.glb));
+  const quickLookUrl = `/api/holograms/${uploaded.id}/usdz`;
+  await expect.poll(async () => (await page.request.get(quickLookUrl, { timeout: 30_000 })).status(), { timeout: 240_000, intervals: [2_000] }).toBe(200);
+  await mkdir(evidenceDir, { recursive: true });
+  const usdzPath = path.join(evidenceDir, "long-carry.usdz");
+  await writeFile(usdzPath, await (await page.request.get(quickLookUrl, { timeout: 120_000 })).body());
+  const times = [0, report.export.durationSec / 2, report.export.durationSec];
+  const { stdout } = await execFileAsync(process.env.USDZ_PYTHON ?? "python3", ["-c", USD_PROBE, usdzPath, JSON.stringify(nodes), JSON.stringify(times)], { timeout: 60_000, maxBuffer: 1024 * 1024 });
+  const usd = JSON.parse(stdout) as Array<{ found: boolean; minScale: number | null; samples: Array<{ time: number; visibility: string; scale: number }> }>;
+  usd.forEach((prim, k) => {
+    expect(prim.found, `carried prim ${k} is in the USDZ`).toBe(true);
+    expect(prim.minScale ?? 1, `carried prim ${k} never has a zero scale`).toBeGreaterThan(0);
+    for (const sample of prim.samples) {
+      expect(sample.visibility, `carried prim ${k} at ${sample.time} s`).toBe("inherited");
+      expect(sample.scale, `carried prim ${k} at full size at ${sample.time} s`).toBeGreaterThan(0.5);
+    }
+  });
+  await writeFile(path.join(evidenceDir, "long-carry-report.json"), JSON.stringify({ glb: report.glb, export: report.export, usdz: { path: usdzPath, prims: usd } }, null, 2));
 });

@@ -27,8 +27,11 @@ export const GLYPHS = {
   restart: path.restart,
   recenter: path.recenter,
   exit: path.exit,
-  // Tray, Find, Pinch and Squeeze: provisional until the styleguide's glyph
-  // table and tokens.json carry them; xr-ui-core holds the one drawing of each.
+  // The tray's glyphs (§6), and the summon signifiers at its miniatures.
+  tray: path.tray,
+  pinch: path.pinch,
+  squeeze: path.squeeze,
+  // Find: provisional until the styleguide's glyph table carries it; xr-ui-core holds its drawing.
   ...PROVISIONAL_GLYPHS,
   // Record (§6): filled rose circle idle, rose rounded square while recording.
   recordIdle: { d: "M8 1a7 7 0 1 0 0 14a7 7 0 1 0 0-14z", fill: true },

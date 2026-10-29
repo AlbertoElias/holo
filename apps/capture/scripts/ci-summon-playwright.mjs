@@ -7,7 +7,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import { VOICE_BROWSER_ARGS, runDesktopVoiceTake, runIwerFindTake, runIwerVoiceTake } from './lib/find-take.mjs';
 import { runDesktopFindTake, runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
-import { runDesktopAnytimeTake, runTouchTrayTake, runTrayHitchTake } from './lib/tray-anytime-take.mjs';
+import { runDesktopAnytimeTake, runLongCarryTake, runTouchTrayTake, runTrayHitchTake } from './lib/tray-anytime-take.mjs';
 
 // Summon and place while speaking (PRD-045): IWER controller, IWER hands and
 // desktop takes open the tray with its held gesture, summon and place items,
@@ -40,6 +40,7 @@ try {
     ['desktop-voice', async () => runDesktopVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['desktop-anytime', () => runDesktopAnytimeTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['touch-tray', () => runTouchTrayTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['long-carry', () => runLongCarryTake({ browser, baseUrl, artifactDir, consoleErrors })],
     // Timed: a browser of its own, so no earlier phase's GPU work is still draining.
     ['tray-hitch', async () => {
       // SUMMON_HITCH_GPU=1: on this machine's GPU, where the long-task budget is enforced.

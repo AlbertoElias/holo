@@ -39,7 +39,7 @@ const NO_APPROACH: ReadonlySet<string> = new Set();
 
 type DockId = 'record' | 'recenter' | 'tray' | 'exit';
 const DOCK_IDS: readonly DockId[] = ['recenter', 'record', 'tray', 'exit'];
-/** The dock's Tray glyph is provisional: xr-ui-core's `DockGlyph` names it once the styleguide carries it. */
+/** The dock's Tray glyph (styleguide 6, `glyph.path.tray`). */
 const TRAY_GLYPH: DockGlyph = 'tray';
 
 export interface PhoneArChromeProbe {

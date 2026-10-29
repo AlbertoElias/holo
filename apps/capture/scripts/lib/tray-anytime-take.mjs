@@ -18,6 +18,9 @@ import { carriedNow, checkCarried, PIXEL_PNG, STEP_MS, summonedItems, TRAY_URLS 
 //   - touch-tray: at phone size with touch, the dock's Tray glyph opens the
 //     row, a tap summons into the hand, a touch lets go; mid-take, press, hold
 //     and slide onto a slot summons.
+//   - long-carry: five objects summoned and placed before a 60 s take, all
+//     carried into it as `prepared` from frame 0 (the viewer pipeline converts
+//     this take to USDZ: apps/viewer-web/e2e/summon.pipeline.spec.ts).
 //   - tray-hitch: real time, no manual clock: an ~7 MB GLB loaded mid-take and
 //     summoned; every long task is reported against the take's own baseline.
 
@@ -442,3 +445,58 @@ export async function runTrayHitchTake({ browser, baseUrl, artifactDir, consoleE
     await context.close();
   }
 }
+
+/**
+ * Five objects summoned with T + 1 or 2 and placed with G before a long take,
+ * a step apart, then a `seconds` take: each is carried in as `prepared`,
+ * present from frame 0 to the end.
+ */
+export async function runLongCarryTake({ browser, baseUrl, artifactDir, consoleErrors, seconds = 60, count = 5 }) {
+  const label = 'long-carry';
+  const failures = [];
+  const fail = (message) => failures.push(message);
+  await mkdir(artifactDir, { recursive: true });
+  const { context, page } = await setupFlatPage(browser, { consoleErrors, label });
+  try {
+    await openCapture(page, baseUrl, { tray: TRAY_URLS });
+    await advance(page, 1);
+    await page.locator('canvas').first().focus();
+    for (let i = 0; i < count; i += 1) {
+      await page.keyboard.down('KeyT');
+      await advance(page, 0.3);
+      await page.keyboard.press(i % 2 ? 'Digit2' : 'Digit1');
+      await advance(page, 0.3);
+      await page.keyboard.up('KeyT');
+      await advance(page, 0.6);
+      await page.keyboard.press('KeyG');
+      await advanceUntil(page, (s) => summonedItems(s).every((item) => !item.heldBy), 4);
+      // A step to the side, so the next one lands apart.
+      await page.keyboard.down('KeyD');
+      await advance(page, 0.5);
+      await page.keyboard.up('KeyD');
+      await advance(page, 1);
+    }
+    const carried = carriedNow(await readState(page));
+    if (carried.length !== count) fail(`${carried.length} objects placed before the take, expected ${count}`);
+    await page.getByRole('button', { name: 'Start Recording' }).click();
+    await page.getByRole('button', { name: 'Stop Recording' }).waitFor();
+    for (let elapsed = 0; elapsed < seconds; elapsed += 5) await advance(page, Math.min(5, seconds - elapsed));
+    const glb = await saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), path.join(artifactDir, `${label}.glb`));
+    const take = loadTake(await readFile(glb));
+    const durationSec = round(take.times.at(-1) - take.times[0], 2);
+    const exported = { valid: take.validation?.ok ?? false, durationSec, objectNodes: objectNodes(take).length };
+    if (durationSec < seconds - 0.5) fail(`the take is ${durationSec} s, expected ${seconds}`);
+    if (!exported.valid) fail(`HOLOIM_objects invalid: ${take.validation?.errors?.join('; ') ?? 'absent'}`);
+    else {
+      const entries = take.validation.value.objects;
+      exported.objects = entries.map((entry) => ({ name: entry.name, origin: entry.origin, presence: entry.presence }));
+      const whole = entries.filter((entry) => entry.origin === 'prepared' && entry.presence.length === 1 && entry.presence[0].start === 0);
+      if (entries.length !== count || whole.length !== count) fail(`expected ${count} prepared objects present from frame 0 (${JSON.stringify(exported.objects)})`);
+      exported.carried = checkCarried(take, entries, carried, fail);
+    }
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, export: exported };
+  } finally {
+    await context.close();
+  }
+}
+

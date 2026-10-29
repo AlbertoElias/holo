@@ -7,6 +7,7 @@ import {
   PROVISIONAL_GLYPHS,
   chromeTransition,
   glyphAppearance,
+  glyphDrawing,
   glyphMetrics,
   hitAreaApx,
   type GlyphDrawing,
@@ -26,8 +27,6 @@ const TILE_APX = 54;
 const TOUCH_TILE_APX = 44;
 /** Touch: a press held this long on the Tray glyph starts press-hold-slide. */
 const HOLD_MS = 300;
-/** The walk stick's zone is the left share of the screen (input/TouchInput.ts). */
-const WALK_SHARE = 0.4;
 /** Height of a dock row on its chip: the glyph's hit area plus the chip's 5 apx padding twice. */
 function dockHeightApx(input: HitInput): number {
   return hitAreaApx(input, glyphMetrics({ headset: false }).iconApx) + tokens.chip.paddingBlock * 2;
@@ -61,11 +60,15 @@ export function useAboveDock(input: HitInput): string {
   return measured === null ? aboveDockApx(input) : `${measured + glyphMetrics({ headset: false }).gapApx}px`;
 }
 
-function drawingOf(name: ProvisionalGlyphName): GlyphDrawing {
+function drawingOf(name: DockTrayGlyph): GlyphDrawing {
+  if (name === 'tray') return glyphDrawing('tray');
   return { kind: 'path', d: PROVISIONAL_GLYPHS[name].d, fill: false, linejoin: 'round', ringed: false, drawnApx: tokens.glyph.icon };
 }
 
-/** A dock glyph action with a provisional drawing (GlyphControl takes only decided drawings). */
+/** The dock's Tray and Find: Tray is drawn from tokens.json, Find's lens is still provisional. */
+type DockTrayGlyph = 'tray' | ProvisionalGlyphName;
+
+/** A dock glyph action that may carry a provisional drawing (GlyphControl takes only decided drawings). */
 export function DockGlyphButton({
   glyph,
   label,
@@ -77,7 +80,7 @@ export function DockGlyphButton({
   pointerHandlers,
   testId
 }: {
-  glyph: ProvisionalGlyphName;
+  glyph: DockTrayGlyph;
   label: string;
   title?: string;
   highlighted?: boolean;
@@ -224,8 +227,8 @@ export function useTrayGlyph(bridge: CaptureUiBridge, open: boolean, touch: bool
 }
 
 function SlotFallbackGlyph({ kind }: { kind: 'model' | 'image' }) {
-  // Cube for a model, a frame with a hill for an image: drawn on the 16 apx grid.
-  const d = kind === 'model' ? 'M8 2l5.5 3v6L8 14l-5.5-3V5zM2.5 5L8 8l5.5-3M8 8v6' : 'M2.5 3h11v10h-11zM2.5 11l3.5-3.5 3 3 2-2 2.5 2.5';
+  // A globe for a model, a sun over a peak for an image (styleguide 6).
+  const d = kind === 'model' ? tokens.glyph.path.slotModel.d : tokens.glyph.path.slotImage.d;
   return (
     <svg width={tokens.glyph.icon} height={tokens.glyph.icon} viewBox="0 0 16 16" aria-hidden="true" focusable="false" style={{ display: 'block' }}>
       <path d={d} fill="none" stroke="var(--holoim-color-gold)" strokeWidth={tokens.glyph.stroke} strokeLinecap="round" strokeLinejoin="round" />
@@ -292,7 +295,7 @@ function Slot({
 
   if (item) {
     return (
-      <div data-tray-slot-wrap="" style={{ display: 'grid', justifyItems: 'center', gap: 4, width: tileApx, opacity: blocked ? 0.4 : 1 }}>
+      <div data-tray-slot-wrap="" style={{ display: 'grid', justifyItems: 'center', gap: 4, flexShrink: 0, width: tileApx, opacity: blocked ? 0.4 : 1 }}>
         <button
           type="button"
           data-tray-slot={slot}
@@ -326,7 +329,7 @@ function Slot({
   }
 
   return (
-    <div data-tray-slot-wrap="" style={{ display: 'grid', justifyItems: 'center', gap: 4, width: tileApx }}>
+    <div data-tray-slot-wrap="" style={{ display: 'grid', justifyItems: 'center', gap: 4, flexShrink: 0, width: tileApx }}>
       <div
         data-tray-slot={slot}
         data-tray-filled="false"
@@ -418,8 +421,10 @@ export function TrayRow({
       style={{
         position: 'absolute',
         bottom,
-        // On touch the row keeps to the right of the walk stick's zone.
-        left: touch ? `${WALK_SHARE * 100}vw` : 0,
+        // On touch the row keeps right, clear of the walk stick's zone where it
+        // fits; on a narrow phone it reaches in rather than shrink a slot below
+        // 44 apx (its slots are buttons, so a touch on one never walks).
+        left: 0,
         right: 0,
         paddingInline: `max(env(safe-area-inset-right), ${PHONE_EDGES.side}px)`,
         display: 'flex',
@@ -433,7 +438,7 @@ export function TrayRow({
           : { opacity: shown ? 1 : 0, transition: `opacity ${motion.durationMs}ms ${easing}` })
       }}
     >
-      <div style={{ display: 'flex', gap: rowGap, pointerEvents: tray.open ? 'auto' : 'none' }}>
+      <div style={{ display: 'flex', gap: rowGap, flexShrink: 0, pointerEvents: tray.open ? 'auto' : 'none' }}>
         {Array.from({ length: SLOTS }, (_, index) => {
           const slot = index + 1;
           return (
