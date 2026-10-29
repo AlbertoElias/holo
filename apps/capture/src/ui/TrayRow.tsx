@@ -33,9 +33,32 @@ function dockHeightApx(input: HitInput): number {
   return hitAreaApx(input, glyphMetrics({ headset: false }).iconApx) + tokens.chip.paddingBlock * 2;
 }
 
-/** Distance from the screen bottom to the top of the dock, plus one gap. */
+/** Distance from the screen bottom to the top of a one-row dock, plus one gap. */
 export function aboveDockApx(input: HitInput): string {
   return `calc(max(env(safe-area-inset-bottom), ${PHONE_EDGES.bottom}px) + ${dockHeightApx(input) + glyphMetrics({ headset: false }).gapApx}px)`;
+}
+
+/**
+ * Distance from the screen bottom to the top of the dock as laid out, plus one
+ * gap: a dock unfolded onto a second line lifts what sits above it. Falls back
+ * to the one-row height until the dock has been measured.
+ */
+export function useAboveDock(input: HitInput): string {
+  const [measured, setMeasured] = useState<number | null>(null);
+  useEffect(() => {
+    const row = document.querySelector<HTMLElement>('[data-capture-dock] [data-dock-row]');
+    if (!row) return undefined;
+    const measure = () => setMeasured(Math.round(window.innerHeight - row.getBoundingClientRect().top));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  return measured === null ? aboveDockApx(input) : `${measured + glyphMetrics({ headset: false }).gapApx}px`;
 }
 
 function drawingOf(name: ProvisionalGlyphName): GlyphDrawing {

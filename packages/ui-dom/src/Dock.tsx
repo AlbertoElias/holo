@@ -15,6 +15,13 @@ export interface DockProps extends HTMLAttributes<HTMLDivElement> {
   input?: HitInput;
   /** What the dock stands on: a picture, so the row takes the chip, or the feed's amber horizon. */
   ground?: "picture" | "horizon";
+  /**
+   * When the controls do not fit one row at the input's hit size, the ones
+   * that overflow unfold in a centred line of their own above, a glyph gap
+   * over the row (as the viewer's reach controls do, styleguide 5.3); the
+   * first controls keep the bottom row. Off by default: the row never wraps.
+   */
+  unfold?: boolean;
   children?: ReactNode;
 }
 
@@ -23,7 +30,7 @@ export interface DockProps extends HTMLAttributes<HTMLDivElement> {
  * the row takes the chip; on the horizon each control holds its own lens
  * (`lanternLook`), so no slab sits across the row.
  */
-export function Dock({ input, ground = "picture", style, children, ...props }: DockProps) {
+export function Dock({ input, ground = "picture", unfold = false, style, children, ...props }: DockProps) {
   const gap = glyphGapApx(input ?? defaultHitInput(), { headset: false });
   const chip = ground === "horizon" ? null : chipSurfaceStyle(VIEW_TARGETS.desktop, { controlRow: true });
   return (
@@ -45,7 +52,7 @@ export function Dock({ input, ground = "picture", style, children, ...props }: D
         ...style
       }}
     >
-      <div data-dock-row="" data-dock-ground={ground} style={{ ...chip, display: "flex", alignItems: "center", justifyContent: "center", gap, pointerEvents: "auto" }}>
+      <div data-dock-row="" data-dock-ground={ground} style={{ ...chip, display: "flex", alignItems: "center", justifyContent: "center", gap, pointerEvents: "auto", ...(unfold ? { flexWrap: "wrap-reverse" as const } : null) }}>
         <OnHorizon.Provider value={ground === "horizon"}>{children}</OnHorizon.Provider>
       </div>
     </div>

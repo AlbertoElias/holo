@@ -19,7 +19,7 @@ import {
 } from '@holoim/xr-ui-core';
 
 import { ObjectFinder } from './ObjectFinder';
-import { DockGlyphButton, TrayRow, aboveDockApx, useTrayGlyph } from './TrayRow';
+import { DockGlyphButton, TrayRow, useAboveDock, useTrayGlyph } from './TrayRow';
 import type { UiViewModel, XrEntryOffer } from '../types/contracts';
 import type { CaptureUiBridge } from './captureUiBridge';
 import { captureHelp, isTouchDevice } from './captureHelp';
@@ -109,6 +109,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   const [findOpen, setFindOpen] = useState(false);
   // True while the tray was opened by the dock glyph: Escape or a press elsewhere then closes it (T held opens it without this).
   const trayOpenedByUi = useRef(false);
+  const aboveDock = useAboveDock(input);
   const trayGlyph = useTrayGlyph(bridge, state.tray.open, touch, trayOpenedByUi);
   const trayOpen = state.tray.open;
 
@@ -191,7 +192,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
         </div>
       ) : null}
 
-      <Dock input={input} aria-label="Capture" data-capture-dock="" onClickCapture={returnFocusToScene} style={{ pointerEvents: 'none' }}>
+      <Dock input={input} unfold aria-label="Capture" data-capture-dock="" onClickCapture={returnFocusToScene} style={{ pointerEvents: 'none' }}>
         {show('settings') ? (
           <GlyphControl
             glyph={null}
@@ -245,13 +246,13 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
       <KeyHaloRing bridge={bridge} />
 
-      {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDockApx(input)} onSummon={summonSlot} /> : null}
+      {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} onSummon={summonSlot} /> : null}
 
       {flat && findOpen ? (
         <FindSheet
           input={input}
           target={target}
-          bottom={aboveDockApx(input)}
+          bottom={aboveDock}
           raised={trayOpen}
           loading={state.tray.loading}
           onPick={(url) => bridge.loadTrayUrls([url])}

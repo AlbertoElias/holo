@@ -274,6 +274,18 @@ export async function runTouchTrayTake({ browser, baseUrl, artifactDir, consoleE
     checkRow(row, { filled: 2, keys: false, fail, where: 'touch row' });
     const small = row?.slots.filter((slot) => slot.filled && (slot.size.width < 44 || slot.size.height < 44)) ?? [];
     if (small.length) fail(`touch slots under 44 apx: ${JSON.stringify(small)}`);
+    // A phone's dock unfolds rather than clipping, and the row clears it.
+    const dock = await page.evaluate(() => {
+      const row = document.querySelector('[data-capture-dock] [data-dock-row]').getBoundingClientRect();
+      const tray = document.querySelector('[data-testid="tray-row"]').getBoundingClientRect();
+      const clipped = [...document.querySelectorAll('[data-capture-dock] [data-dock-row] button')]
+        .map((button) => ({ label: button.getAttribute('aria-label') ?? button.textContent, rect: button.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.left < 0 || rect.right > window.innerWidth)
+        .map(({ label }) => label);
+      return { clipped, dockTop: Math.round(row.top), trayBottom: Math.round(tray.bottom), lines: Math.round(row.height) };
+    });
+    if (dock.clipped.length) fail(`dock controls off screen on a phone: ${dock.clipped.join(', ')}`);
+    if (dock.trayBottom > dock.dockTop) fail(`the tray row overlaps the dock (${JSON.stringify(dock)})`);
     await shot('1-row-open');
 
     // Tap a slot: summoned into the right hand; the row closes.
@@ -326,7 +338,7 @@ export async function runTouchTrayTake({ browser, baseUrl, artifactDir, consoleE
       exported.carried = checkCarried(take, entries.filter((entry) => entry.origin !== 'summoned'), carried, fail);
       if (entries.filter((entry) => entry.origin === 'summoned').length !== 1) fail(`expected one mid-take summon in the export (${exported.origins})`);
     }
-    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, shots, glyphTitle, row, tapped, letGo, slid, export: exported };
+    return { label, status: failures.length ? 'fail' : 'pass', failures, glb, shots, glyphTitle, row, dock, tapped, letGo, slid, export: exported };
   } finally {
     await context.close();
   }
