@@ -175,7 +175,7 @@ it from the item below instead of duplicating its status here.
   carried object stays in every later take and the tray only grows to its
   five slots; the author needs a way to take one out of the scene or the
   tray. See [`docs/features/archive/tray-everywhere.md`](docs/features/archive/tray-everywhere.md).
-- [ ] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
+- [x] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
   `tsconfig.app.json` (src, functions, configs) only, so a spec's missing
   import shows only when Playwright runs it (found in the slice 0 review,
   2026-10-26, on `feature/xr-shared-screen-input`). A probe
@@ -186,8 +186,9 @@ it from the item below instead of duplicating its status here.
   `/node_modules/.vite/deps/three.js` in `ar-bubble.spec.ts` and
   `redesign.spec.ts`; `never`/`HTMLElement | SVGElement` narrowing in
   `xr-viewer.spec.ts` and `portal.spec.ts`; and `import.meta.env` in capture
-  sources the pipeline specs import. Fix those, add the config, and add it to
-  `typecheck`.
+  sources the pipeline specs import. Done: `apps/viewer-web/tsconfig.e2e.json`
+  is part of `typecheck`, and the errors are fixed (the in-page `three.js`
+  imports no longer exist).
 
 - [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered
   ECS systems, keeping Rapier and its algorithms

@@ -23,6 +23,8 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- `claude/e2e-typecheck-3df1eb`: `@holoim/web` `typecheck` now also covers the e2e specs
+  (`apps/viewer-web/tsconfig.e2e.json`); `portal.spec.ts` passes.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
