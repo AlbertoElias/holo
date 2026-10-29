@@ -81,7 +81,7 @@ import {
 //                     a take; Exit by tap mid-take exports the second. Screenshots of the view between
 //                     takes and while recording go to <artifactDir>/phone-dock-*.png.
 //   dock-exit-idle    Exit by tap with no take ends the session; nothing downloads.
-//   phone-tray        docs/features/tray-everywhere.md, phone AR placement: the page loads two tray items (?tray=bracket.glb
+//   phone-tray        docs/features/archive/tray-everywhere.md, phone AR placement: the page loads two tray items (?tray=bracket.glb
 //                     and diagram.png); before the take the dock's Tray glyph opens the row (two filled slots with
 //                     thumbnails, three empty, 44 apx hits) and the centre reticle hits the set or its floor. Record; a
 //                     1 s screen hold aimed at the reticle's point, ending before the placement; a tap on slot 1 places
@@ -1162,7 +1162,8 @@ async function dockPhase(run: Run): Promise<PhaseReport> {
     report.ar.entered = await arOf(page);
     let frameValues = await worldFrame(page);
 
-    // Layout: Record in the middle of the bottom edge, Recenter and Exit a glyph pitch (hit area + 12 apx) either side.
+    // Layout: Record in the middle of the bottom edge, Recenter a glyph pitch (hit area + 12 apx) to its left,
+    // and Tray (once the set settles) then Exit a pitch apart to its right.
     const between = await dockState(page);
     report.notes.dockBetweenTakes = dockSummary(between);
     report.failures.push(...dockFailures('between takes', between, { record: true, recenter: true, exit: true }));
@@ -1177,7 +1178,9 @@ async function dockPhase(run: Run): Promise<PhaseReport> {
     };
     near(screen.record.x, width / 2, 'Record x');
     near(screen.recenter.x, width / 2 - pitch, 'Recenter x');
-    near(screen.exit.x, width / 2 + pitch, 'Exit x');
+    const trayShown = between.docks.tray?.visible ?? false;
+    report.notes.dockLayout = { ...(report.notes.dockLayout as object), trayShown };
+    near(screen.exit.x, width / 2 + (trayShown ? 2 : 1) * pitch, 'Exit x');
     near(screen.recenter.y, screen.record.y, 'Recenter y');
     near(screen.exit.y, screen.record.y, 'Exit y');
     if (screen.record.y < height * 0.85 || screen.record.y > height) report.failures.push(`dock layout: the dock is at y ${round(screen.record.y, 1)} of ${height}, expected the bottom 15%`);
@@ -1962,7 +1965,7 @@ function checkMarkLinks(report: PhaseReport, take: CameraTakeReport, links: Mean
   if (resolution.runs.filter((resolved) => resolved.linked).length !== links.length) report.failures.push('resolution: linked runs and links in the file differ');
 }
 
-// --- Phone AR tray placement (docs/features/tray-everywhere.md) ---
+// --- Phone AR tray placement (docs/features/archive/tray-everywhere.md) ---
 
 const TRAY_URLS = ['/fixtures/objects/bracket.glb', '/fixtures/objects/diagram.png'];
 /** The placed object's lowest point meets the reticle's hit within this, metres. */

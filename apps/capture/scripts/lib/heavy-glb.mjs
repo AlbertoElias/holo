@@ -1,7 +1,7 @@
 import { deflateSync } from 'node:zlib';
 
 // A tray item near the 8 MB supplied-object limit, built in memory for the
-// mid-take load check (docs/features/tray-everywhere.md): a dense, textured
+// mid-take load check (docs/features/archive/tray-everywhere.md): a dense, textured
 // mesh whose parse, texture decode and upload cost what a large found object
 // would. Deterministic: the same bytes every run, so nothing is committed.
 

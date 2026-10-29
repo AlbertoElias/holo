@@ -8,7 +8,7 @@ import { loadTake, objectNodes, readGlb } from './object-glb.mjs';
 import { OBJECT_URL, openCapture, proofPace, proofVideoOptions, readState, saveDownload } from './object-take.mjs';
 import { carriedNow, checkCarried, PIXEL_PNG, STEP_MS, summonedItems, TRAY_URLS } from './summon-take.mjs';
 
-// The tray on every device (docs/features/tray-everywhere.md), through
+// The tray on every device (docs/features/archive/tray-everywhere.md), through
 // capture's real flat-screen UI:
 //   - desktop-anytime: hold T shows the dock row (thumbnails, keys, empty
 //     slots); T + 1 summons before the take and G places it; the take keeps it
@@ -430,7 +430,7 @@ export async function runTrayHitchTake({ browser, baseUrl, artifactDir, consoleE
     const budget = Math.max(LONG_TASK_BUDGET_MS, baseline.maxTaskMs * 1.5);
     // The budget holds on a hardware GPU. On a software one (SwiftShader, as on
     // CI) the GPU's own upload and raster run on the CPU and block the page, so
-    // the stalls are recorded, not failed (docs/features/tray-everywhere.md).
+    // the stalls are recorded, not failed (docs/features/archive/tray-everywhere.md).
     const gpu = await page.evaluate(() => {
       const gl = document.createElement('canvas').getContext('webgl2');
       const info = gl?.getExtension('WEBGL_debug_renderer_info');

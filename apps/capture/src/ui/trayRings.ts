@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-// The tray's slot rings (docs/features/tray-everywhere.md): a solid ring for a
+// The tray's slot rings (docs/features/archive/tray-everywhere.md): a solid ring for a
 // filled slot, a dashed one for an empty slot. Flat in the XY plane, centred
 // on the origin, in whatever unit `outer` is given (metres in a headset, apx
 // in a UIKit slot). Shared by the headset signifiers and the phone AR row.

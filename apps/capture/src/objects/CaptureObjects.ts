@@ -199,7 +199,7 @@ export class CaptureObjects {
   }
 
   /**
-   * The phone camera author's summon (docs/features/tray-everywhere.md): a new
+   * The phone camera author's summon (docs/features/archive/tray-everywhere.md): a new
    * full-size object from tray slot `slot`, standing with its base on `point`
    * (the world group's frame) and turned to `yaw`, present from this step.
    * No hand, no physics: it stays where it is put.

@@ -71,7 +71,7 @@ export interface VrChromeSnapshot {
   panel: { visible: boolean; position: number[]; distanceFromHeadM: number; rows: Array<{ id: RowId; text: string; visible: boolean; enabled: boolean; distanceFromHeadM: number; hitHeightM: number }> } | null;
   /** The Find panel (PRD-060 slice 2) and the dock's Find glyph. */
   find: (VrFindPanelProbe & { mode: ChromeMode; dockGlyph: boolean; distanceFromHeadM: number }) | null;
-  /** The tray's rings and the summon glyph on the reachable slot: one entry per slot (docs/features/tray-everywhere.md). */
+  /** The tray's rings and the summon glyph on the reachable slot: one entry per slot (docs/features/archive/tray-everywhere.md). */
   tray: XrTraySignifiersProbe | null;
   rays: Array<{ side: Hand; visible: boolean; hit: string | null; origin: number[] }>;
   /** The dominant index fingertip against the wrist glyph: world tip, the glyph's face normal, height above it. */
@@ -678,7 +678,7 @@ function everyMesh(root: THREE.Object3D, test: (mesh: THREE.Mesh) => boolean): b
   return all;
 }
 
-/** Ray targets that stay live during a take (styleguide 8.5; docs/features/tray-everywhere.md). */
+/** Ray targets that stay live during a take (styleguide 8.5; docs/features/archive/tray-everywhere.md). */
 function shownInTake(hit: string | null): boolean {
   return hit === 'record' || hit === 'find' || Boolean(hit?.startsWith('find:'));
 }

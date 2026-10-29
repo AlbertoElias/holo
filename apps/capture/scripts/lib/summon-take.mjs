@@ -18,7 +18,7 @@ import { clickButton, openCapture, OBJECT_URL, poseOf, PROOF_VIDEO_DIR, proofPac
 //   - Controllers: holding left Y opens the tray at the left hand; a right
 //     squeeze away from it summons nothing; a squeeze on a miniature summons
 //     a new object into the right hand, which a release places, before a take
-//     as well as during one (docs/features/tray-everywhere.md). One item is
+//     as well as during one (docs/features/archive/tray-everywhere.md). One item is
 //     summoned before the take, two more in it.
 //   - The GLB: two summoned RecordedObject nodes hidden (scale 0) until their
 //     summon key, at the hand then, and still where they were placed; no tray

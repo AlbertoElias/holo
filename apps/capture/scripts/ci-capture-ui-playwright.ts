@@ -138,7 +138,7 @@ async function desktopPhase(): Promise<void> {
   await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).waitFor();
   await page.evaluate(() => window.advanceTime(2100));
   const recordingDock = await dockContents(page);
-  // A take keeps the tray and Find (styleguide 8.5 as amended by docs/features/tray-everywhere.md).
+  // A take keeps the tray and Find (styleguide 8.5 as amended by docs/features/archive/tray-everywhere.md).
   assert.deepEqual(recordingDock, [CONTROL_NAMES.stopRecording, 'Recording 0:02', 'Tray', 'Find'], `desktop: recording chrome is stop, the time, Tray and Find (${recordingDock.join(', ')})`);
   assert.equal(await page.getByRole('dialog').count(), 0, 'desktop: no side sheet while recording');
   const shape = await page.locator('[data-capture-dock] button[aria-label="Stop Recording"] rect').count();

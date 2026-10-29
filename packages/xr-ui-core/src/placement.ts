@@ -29,7 +29,7 @@ export type Control =
   | "play" | "free" | "return" | "timecode" | "caption" | "scale"
   // Actions: general controls and the hand's tools.
   | "record" | "ink" | "undo" | "exitAr" | "placingHint" | "upload" | "signIn" | "halo"
-  // Capture's object tray and the search that fills it (docs/features/tray-everywhere.md).
+  // Capture's object tray and the search that fills it (docs/features/archive/tray-everywhere.md).
   | "tray" | "find"
   // Lists and long text.
   | "settings" | "library" | "longText"

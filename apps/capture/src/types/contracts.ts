@@ -200,7 +200,7 @@ export type MockInputState = {
   turnMode?: 'snap' | 'smooth';
 };
 
-/** The tray as the dock row and the headset signifiers show it (docs/features/tray-everywhere.md). */
+/** The tray as the dock row and the headset signifiers show it (docs/features/archive/tray-everywhere.md). */
 export interface TrayUiState {
   /** Item names in slot order. */
   names: string[];

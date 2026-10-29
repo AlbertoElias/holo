@@ -215,7 +215,7 @@ export async function runIwerFindTake({ browser, baseUrl, captureRoot, artifactD
     if (vr.find?.visible || !vr.panel?.visible) fail(`Close left find=${vr.find?.visible} settings=${vr.panel?.visible}`);
 
     // The take: Find stays on the wrist and adds to the tray mid-take
-    // (docs/features/tray-everywhere.md); the tray summons the found object.
+    // (docs/features/archive/tray-everywhere.md); the tray summons the found object.
     await controller('right', REST.right, [0, 0, 0, 1]);
     await clickButton(page, 'Start Recording');
     await page.getByRole('button', { name: 'Stop Recording', exact: true }).waitFor({ timeout: 10_000 });

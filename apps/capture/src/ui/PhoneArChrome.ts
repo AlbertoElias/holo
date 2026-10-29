@@ -50,21 +50,21 @@ export interface PhoneArChromeProbe {
   /** The chip under the row on the screen (CSS px from the top left), null while no action shows. */
   chip: ScreenRect | null;
   statusLine: StatusLineProbe | null;
-  /** The tray row above the dock, and the centre ray's placement (docs/features/tray-everywhere.md). */
+  /** The tray row above the dock, and the centre ray's placement (docs/features/archive/tray-everywhere.md). */
   tray: { row: PhoneTrayRowProbe | null; placement: ArPlacementProbe | null };
 }
 
 /**
  * Capture's chrome in phone AR as a camera author (docs/features/archive/ar-recording.md,
- * slice 3; styleguide 6, 8.5, 9.2, 9.3): Record/Stop, Recenter and Exit in the
+ * slice 3; styleguide 6, 8.5, 9.2, 9.3): Record/Stop, Recenter, Tray and Exit in the
  * bottom dock, and "Recording 0:12" on the periphery status line, from
  * @holoim/xr-ui-iwsdk as the viewer's phone chrome is. Taps arrive as screen
  * input sources through the package's ScreenInputSystem.
  *
- * One `HandDock` holds the three actions, Recenter, Record, Exit, on one chip
+ * One `HandDock` holds the actions, Recenter, Record, Tray, Exit, on one chip
  * fitted to the ones showing, with Record (the 36 apx ring) at the screen's
- * middle whatever else shows. While a take runs or exports only Record, as
- * Stop, shows (§8.5), and the chip shrinks to it.
+ * middle whatever else shows. While a take runs Record, as Stop, and Tray
+ * show (§8.5 as amended); while it exports only Stop, and the chip shrinks.
  *
  * The dock and the status line are children of the XR camera, a plain three object, so they
  * never lag the view. IWSDK's TransformSystem moves an entity whose parent is

@@ -274,7 +274,7 @@ test("real capture export: summoned objects appear in the hand at their summon, 
   await writeFile(path.join(evidenceDir, "report.json"), JSON.stringify(report, null, 2));
 });
 
-// The tray on every device (docs/features/tray-everywhere.md): nothing clears
+// The tray on every device (docs/features/archive/tray-everywhere.md): nothing clears
 // between takes, so a take can carry many objects in from before it began.
 // Five placed before a 60 s take convert to USDZ, each prim visible from the
 // first frame to the last.

@@ -10,7 +10,7 @@ import type { XrTracking } from '../xr/XrTracking';
 import { dashedRingGeometry, ringGeometry, ringMaterial } from './trayRings';
 
 // How each tray slot says it can be summoned on a headset and on a phone's AR
-// screen (docs/features/tray-everywhere.md, "The tray UI"). Both are chrome:
+// screen (docs/features/archive/tray-everywhere.md, "The tray UI"). Both are chrome:
 // flagged so recording, export and pointing skip them.
 
 const SLOTS = 5;

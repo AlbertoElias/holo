@@ -4,7 +4,7 @@ import { isInChrome, markChromeTree } from '@holoim/xr-ui-core';
 import { dashedRingGeometry, ringGeometry, ringMaterial } from '../ui/trayRings';
 import type { SceneObject } from './SceneObjectRegistry';
 
-// Placing a tray item from the phone's camera (docs/features/tray-everywhere.md,
+// Placing a tray item from the phone's camera (docs/features/archive/tray-everywhere.md,
 // "Phone AR placement"; reverses ar-recording.md's exclusion of summoning).
 
 /** The cast runs on every third step: a reticle needs no more, and the set can be large. */

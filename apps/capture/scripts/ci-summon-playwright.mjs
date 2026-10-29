@@ -14,7 +14,7 @@ import { runDesktopAnytimeTake, runLongCarryTake, runTouchTrayTake, runTrayHitch
 // and export; each GLB is checked against what capture read during the take
 // (see lib/summon-take.mjs). Find (PRD-060) on the desktop and in the
 // headset, with voice, summons a found object (see lib/find-take.mjs). The
-// tray on every device (docs/features/tray-everywhere.md): the flat dock row
+// tray on every device (docs/features/archive/tray-everywhere.md): the flat dock row
 // before and during a take, touch, and a mid-take load's long tasks (see
 // lib/tray-anytime-take.mjs). Writes output/ci-summon/report.json, per-take
 // GLBs, screenshots and a contact sheet.

@@ -18,7 +18,7 @@ import {
 import type { TrayUiState } from '../types/contracts';
 import type { CaptureUiBridge } from './captureUiBridge';
 
-// The tray on a flat screen (docs/features/tray-everywhere.md, decision 5):
+// The tray on a flat screen (docs/features/archive/tray-everywhere.md, decision 5):
 // the dock's Tray and Find glyphs and a row of five slots above the dock.
 // DOM chrome, never recorded.
 

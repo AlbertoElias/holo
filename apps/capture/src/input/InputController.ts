@@ -212,7 +212,7 @@ export class InputController {
     return this.trayHeld || this.trayOpenFromUi || this.summonSlotQueued !== null;
   }
 
-  /** The flat dock's Tray glyph opened or closed the tray (docs/features/tray-everywhere.md). */
+  /** The flat dock's Tray glyph opened or closed the tray (docs/features/archive/tray-everywhere.md). */
   setTrayOpenFromUi(open: boolean): void {
     this.trayOpenFromUi = open;
   }
