@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
-import type { RecordingFrame } from '../types/contracts';
+import type { HandPoseSource, RecordingFrame, VrHandSide } from '../types/contracts';
 
 interface MorphCaptureBinding {
   mesh: THREE.Mesh;
@@ -25,7 +25,7 @@ export class FrameCaptureStore {
     return this.enabled;
   }
 
-  captureFrame(timeSec: number, avatar: THREE.Object3D, avatarRoot: THREE.Object3D): void {
+  captureFrame(timeSec: number, avatar: THREE.Object3D, avatarRoot: THREE.Object3D, handSources?: Record<VrHandSide, HandPoseSource>): void {
     this.refreshMorphCaptureBindings(avatar);
 
     avatarRoot.getWorldPosition(this.tmpPos);
@@ -62,7 +62,8 @@ export class FrameCaptureStore {
       rootPosition,
       rootQuaternion,
       bones,
-      morphs
+      morphs,
+      ...(handSources ? { handSources: { ...handSources } } : {})
     });
   }
 

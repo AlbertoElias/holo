@@ -154,6 +154,36 @@ Decided after the design review on 2026-10-28:
   changes. The scene is drawn at true scale (`<primitive object={clonedScene}/>`),
   so the trace needs no extra scaling.
 
+### Decided during implementation (2026-10-29)
+
+- **Root jumps are a rate, not a distance.** Capture's respawn (its
+  teleport) moves the recorded hips about 7 cm in one frame, under any
+  distance a walk could not also reach. A jump is a hip step over 3 cm
+  faster than 2.5 m/s, or a hip turn over 12° between samples
+  (`handTraceSampler.ts`).
+- **Snap turns break on the fingertip.** A take is recorded in the rig's
+  frame, so a snap turn never turns the exported hips; it moves the arms
+  instead (the fingertip steps about 23 cm in one frame). A fingertip step
+  over 8 cm faster than 6 m/s also breaks that hand's trace.
+- **The scripted teleport is capture's respawn.** A headset that jumps more
+  than 0.5 m is re-origined by capture and never moves the avatar
+  (`HEAD_TRACKING_JUMP_METERS`), so the travel take respawns the character
+  (`__respawnCharacter`) instead.
+- **Ribbon values.** 8 mm wide in the world; the oldest end is half as
+  wide; never under 3 CSS px anywhere along it (the cross-vendor review
+  caught the floor applied before the taper, which drew a 1.5 px hairline
+  on a phone card); opacity 0.85 at the newest end, 0.3 at the
+  oldest (the tail fades to 0); double-sided, not tone mapped. The first,
+  thinner values drew the circle about 1 px wide at 20 % opacity.
+- **The sampler caches keyframes ahead of a pause.** While a card plays it
+  samples keyframes into its cache for up to 0.5 ms a frame, so a pause
+  mostly reads the cache. A cold first pause measured 4.6 to 5.0 ms; warmed,
+  it is 1.6 ms at most.
+- **The control.** Its accessible name, "Trace the author's hands", lives in
+  the viewer's `VIEWER_CONTROL_NAMES` (`controlNames.ts`). Its glyph, a
+  dashed stroke ending in a dot that turns solid when on, is added to the
+  styleguide's glyph table.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |

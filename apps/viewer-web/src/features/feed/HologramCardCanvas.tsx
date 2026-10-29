@@ -26,6 +26,7 @@ import { drawnBounds, drawnPoints, motionPoints } from "../hologram/drawnPoints"
 import { isCameraTake } from "../hologram/hologramScene";
 import { type HumanoidGltf, resolveHumanoidAnchors } from "../hologram/humanoidAnchors";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
+import { createHandTracesProbe, HandTraces, useHandTraceSource } from "../meaning/HandTraces";
 import { PointingHighlights } from "../meaning/PointingHighlights";
 import type { PointingProbe } from "../meaning/PointingHighlights";
 import { readMeaningLinks } from "../meaning/meaningLinks";
@@ -221,12 +222,20 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     onCredits(credits);
   }, [credits, onCredits]);
   const pointingProbe = useRef<PointingProbe>({ links: [] }).current;
+  const tracesProbe = useRef(createHandTracesProbe()).current;
+  // Hand traces read the recorded author's fingertips and hips (PRD-023); a camera take has no author's body.
+  const traceAnchors = useMemo(() => (isCameraTake(clonedScene) ? null : resolveHumanoidAnchors(clonedScene, gltf as unknown as HumanoidGltf)), [clonedScene, gltf]);
+  const traceSource = useHandTraceSource(gltf, clonedScene, traceAnchors);
   const presenceProbe = useRef(createPresenceProbe()).current;
   const authorHex = useMemo(() => identityOf(author).hex, [author]);
   useEffect(() => {
     portal.setHasHighlights(meaningLinks.length > 0);
     return () => portal.setHasHighlights(false);
   }, [meaningLinks, portal]);
+  useEffect(() => {
+    portal.setHasTraces(traceSource !== null);
+    return () => portal.setHasTraces(false);
+  }, [portal, traceSource]);
   const animatedBoundsRef = useRef(new Box3());
   const fullSceneBoundsRef = useRef(new Box3());
   const scratchBoundsRef = useRef(new Box3());
@@ -268,9 +277,9 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   useEffect(() => {
     if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre } });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre } });
     }
-  }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, sphereClip, url]);
+  }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, sphereClip, tracesProbe, url]);
 
   // The wheel zooms only over the hologram itself (usePortalTriggers): a
   // visible mesh of the recording, not chrome, not clipped away by its
@@ -677,6 +686,9 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
           probe={pointingProbe}
           authorHex={authorHex}
         />
+      )}
+      {traceSource && (
+        <HandTraces source={traceSource} portal={portal} active={active} getPlaybackTime={getPlaybackTime} probe={tracesProbe} />
       )}
       <AuthorCameraMark scene={clonedScene} author={author} probe={presenceProbe} />
     </>

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RecordingFrame } from '../types/contracts';
+import type { HandPoseSource, RecordingFrame, VrHandSide } from '../types/contracts';
 
 import type { SceneObject } from '../objects/SceneObjectRegistry';
 import { type AuthoringFrame, AuthoringSampleStore, IDLE_AUTHORING_FRAME } from './authoringSpans';
@@ -44,7 +44,8 @@ export class AvatarRecorder {
    * `authoring` is what the tray and hands were doing (PRD-045). `held` is
    * the headset mark "this": while it holds, its ray (the dominant index's
    * filtered fingertip ray, or the dominant controller's) is a held aim
-   * sample, unless the Halo is open meanwhile.
+   * sample, unless the Halo is open meanwhile. `handSources` is what drove
+   * each hand (headset only); its `xr-hand` stretches become recorded hand spans.
    */
   capture(
     timeSec: number,
@@ -54,14 +55,15 @@ export class AvatarRecorder {
     hands?: TrackedHandJointReader,
     objects: readonly SceneObject[] = [],
     authoring?: AuthoringFrame,
-    held?: HeadsetMarkStep
+    held?: HeadsetMarkStep,
+    handSources?: Record<VrHandSide, HandPoseSource>
   ): void {
     if (!this.frameCaptureStore.isEnabled() || !avatar) {
       return;
     }
 
     this.sceneBubbleSampler.captureSceneBubbleSample(activeCamera, avatarRoot);
-    this.frameCaptureStore.captureFrame(timeSec, avatar, avatarRoot);
+    this.frameCaptureStore.captureFrame(timeSec, avatar, avatarRoot, handSources);
     this.objectSamples.capture(avatar, objects);
     // One authoring frame per recorded frame keeps the two stores aligned.
     this.authoringSamples.capture(authoring ?? IDLE_AUTHORING_FRAME);

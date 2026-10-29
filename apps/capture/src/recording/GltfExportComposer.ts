@@ -13,6 +13,7 @@ import { AUTHOR_CAMERA_NODE_NAME, type CameraTrackStore } from './CameraTrackSto
 import { buildObjectExports, type ObjectExport } from './objectExport';
 import type { ObjectSampleStore } from './ObjectSampleStore';
 import { FrameCaptureStore } from './FrameCaptureStore';
+import { buildRecordedHandSpans } from './handSpans';
 import type { PointSampleStore } from './PointSampleStore';
 import { type MeaningDraft, PointResolver, type PointResolutionReport } from './PointResolver';
 import { SceneBubbleSampler } from './SceneBubbleSampler';
@@ -202,6 +203,13 @@ export class GltfExportComposer {
       });
       this.lastPointReport = report;
       if (draft.marks.length > 0 || draft.spans.length > 0) meaning = draft;
+    }
+    // Where tracked hands drove the hands (PRD-023), written with or without
+    // pointing: every headset take with hand tracking now carries the extension.
+    const handSpans = buildRecordedHandSpans(recorded, frameSpans);
+    if (handSpans.length > 0) {
+      meaning ??= { marks: [], spans: [] };
+      meaning.spans = [...meaning.spans, ...handSpans].sort((a, b) => a.span.start - b.span.start);
     }
 
     return new Promise<Blob>((resolve, reject) => {
