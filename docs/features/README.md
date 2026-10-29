@@ -34,6 +34,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Natural locomotion and terrain response | Complete | [archive/avatar-locomotion.md](archive/avatar-locomotion.md) |
 | Bubble rendering across feed and XR | Complete | [archive/bubble-rendering.md](archive/bubble-rendering.md) |
 | The cloche's rim follows the ground | Complete | [archive/cloche-rim-follows-ground.md](archive/cloche-rim-follows-ground.md) |
+| Capture drops set triangles the hologram never shows | Blocked on a user decision | [export-trim-hidden.md](export-trim-hidden.md) |
 | Animated Quick Look phone demo | Complete | [archive/quicklook-phone-demo.md](archive/quicklook-phone-demo.md) |
 | XR height refit and visual evidence | Complete | [archive/xr-height-refit.md](archive/xr-height-refit.md) |
 | XR avatar height adaptation | Complete | [archive/xr-height-adaptation.md](archive/xr-height-adaptation.md) |

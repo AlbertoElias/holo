@@ -6,7 +6,7 @@ import { GltfExportComposer } from './GltfExportComposer';
 import { ObjectSampleStore } from './ObjectSampleStore';
 import { PointSampleStore } from './PointSampleStore';
 import type { PointResolutionReport } from './PointResolver';
-import { SceneBubbleSampler } from './SceneBubbleSampler';
+import { SceneBubbleSampler, type SceneTrimReport } from './SceneBubbleSampler';
 
 /**
  * The recorder of a camera take (docs/features/archive/ar-recording.md): the author
@@ -48,6 +48,11 @@ export class CameraRecorder {
   /** What point resolution decided at the latest export, in take seconds. */
   getLastPointReport(): PointResolutionReport | undefined {
     return this.gltfExportComposer.lastPointReport;
+  }
+
+  /** What the latest export's set clip kept and dropped. */
+  getLastTrimReport(): SceneTrimReport | undefined {
+    return this.sceneBubbleSampler.lastTrimReport;
   }
 
   get sampleCount(): number {

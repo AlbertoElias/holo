@@ -167,6 +167,8 @@ it from the item below instead of duplicating its status here.
   hill) and outside the bubble, at export. Follow-up to
   [`docs/features/archive/cloche-rim-follows-ground.md`](docs/features/archive/cloche-rim-follows-ground.md)
   (user, 2026-10-27). Preserve export → upload → render compatibility.
+  Measured and reviewed; waiting on the user's call in
+  [`docs/features/export-trim-hidden.md`](docs/features/export-trim-hidden.md).
 
 ## Later
 

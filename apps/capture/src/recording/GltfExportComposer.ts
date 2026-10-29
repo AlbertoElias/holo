@@ -15,7 +15,7 @@ import type { ObjectSampleStore } from './ObjectSampleStore';
 import { FrameCaptureStore } from './FrameCaptureStore';
 import type { PointSampleStore } from './PointSampleStore';
 import { type MeaningDraft, PointResolver, type PointResolutionReport } from './PointResolver';
-import { SceneBubbleSampler } from './SceneBubbleSampler';
+import { CAMERA_SET_REACH, PERFORMER_SET_REACH, SceneBubbleSampler } from './SceneBubbleSampler';
 import { nextFrame } from '../shared/async';
 
 interface MorphExportBinding {
@@ -179,7 +179,8 @@ export class GltfExportComposer {
     const scene = new THREE.Scene();
     scene.add(clone);
     scene.add(bubbleSphere);
-    const sceneBubble = sceneRoot ? bubbleSampler.collectSceneBubbleGroup(sceneRoot) : undefined;
+    // The viewer's bubble follows the sphere's track, so the set is kept within reach of it.
+    const sceneBubble = sceneRoot ? bubbleSampler.collectSceneBubbleGroup(sceneRoot, undefined, { centres: rootPosValues, radius: PERFORMER_SET_REACH }) : undefined;
     if (sceneBubble) {
       scene.add(sceneBubble.group);
     }
@@ -291,7 +292,8 @@ export class GltfExportComposer {
       tracks.push(...objects.tracks);
     }
 
-    const sceneBubble = input.bubbleSampler.collectSceneBubbleGroup(input.sceneRoot, input.setInverse);
+    // A camera take's bubble stands at the set's origin for the whole take.
+    const sceneBubble = input.bubbleSampler.collectSceneBubbleGroup(input.sceneRoot, input.setInverse, { centres: [0, 0, 0], radius: CAMERA_SET_REACH });
     if (!sceneBubble) throw new Error('Nothing in the set to export: no part of it came within reach of the camera.');
 
     const scene = new THREE.Scene();

@@ -389,8 +389,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __chromeTarget: (target) => vrChrome.targetPosition(target),
         __sampleObjectSearch: () => ({ headset: vrChrome.findSession.getState(), voiceLog: [...voiceLog], prefetch: { ...prefetchStats } }),
         __setRetainLastTake: (retain) => recording.setRetainLastTake(retain),
-        __reexportLastTake: async () => {
-          const bytes = await recording.reexportLastTake();
+        __reexportLastTake: async (options) => {
+          const bytes = await recording.reexportLastTake(options);
           if (!bytes) return null;
           let binary = '';
           const view = new Uint8Array(bytes);
@@ -410,6 +410,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         }),
         __toggleRecording: () => recording.toggle(),
         __lastPointReport: () => recording.cameraRecorder.getLastPointReport() ?? null,
+        __lastTrimReport: () => ({ performer: recording.recorder.getLastTrimReport() ?? null, camera: recording.cameraRecorder.getLastTrimReport() ?? null }),
         __arWorldFrame: () => stage.worldGroup.matrixWorld.toArray(),
         __projectToScreen: (point) => {
           const ndc = new Vector3(point[0], point[1], point[2]).project(stage.desktopCamera);

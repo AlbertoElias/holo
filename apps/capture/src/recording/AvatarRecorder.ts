@@ -11,7 +11,7 @@ import { GltfExportComposer } from './GltfExportComposer';
 import { ObjectSampleStore } from './ObjectSampleStore';
 import { PointSampleStore } from './PointSampleStore';
 import type { PointResolutionReport } from './PointResolver';
-import { SceneBubbleSampler } from './SceneBubbleSampler';
+import { SceneBubbleSampler, type SceneTrimReport } from './SceneBubbleSampler';
 
 export class AvatarRecorder {
   private readonly frameCaptureStore = new FrameCaptureStore();
@@ -82,6 +82,16 @@ export class AvatarRecorder {
   /** What point resolution decided at the latest export, in take seconds. */
   getLastPointReport(): PointResolutionReport | undefined {
     return this.gltfExportComposer.lastPointReport;
+  }
+
+  /** What the latest export's set clip kept and dropped. */
+  getLastTrimReport(): SceneTrimReport | undefined {
+    return this.sceneBubbleSampler.lastTrimReport;
+  }
+
+  /** Off only for a test's untrimmed export of the same take. */
+  setTrimHidden(trim: boolean): void {
+    this.sceneBubbleSampler.trimHidden = trim;
   }
 
   getFrames(): RecordingFrame[] {

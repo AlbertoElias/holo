@@ -131,12 +131,20 @@ export class RecordingSession {
     if (!retain) this.lastTake = null;
   }
 
-  /** The last take exported again from the same samples, against the scene as it is now. */
-  async reexportLastTake(): Promise<ArrayBuffer | null> {
+  /**
+   * The last take exported again from the same samples, against the scene as
+   * it is now; with `trim` false, without dropping what no viewer draws.
+   */
+  async reexportLastTake({ trim = true }: { trim?: boolean } = {}): Promise<ArrayBuffer | null> {
     const take = this.lastTake;
     if (!take) return null;
-    const blob = await this.recorder.exportToGlbBlob(take.avatar, take.worldModel, take.audioData);
-    return blob.arrayBuffer();
+    this.recorder.setTrimHidden(trim);
+    try {
+      const blob = await this.recorder.exportToGlbBlob(take.avatar, take.worldModel, take.audioData);
+      return await blob.arrayBuffer();
+    } finally {
+      this.recorder.setTrimHidden(true);
+    }
   }
 
   /** Raw device input for this XR frame; called inside the frame's callback. */

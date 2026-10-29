@@ -1,4 +1,4 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -30,7 +30,20 @@ type CaptureWindow = Window & {
   __setMockInput: (input: { forward?: boolean }) => void;
   advanceTime: (ms: number) => void;
   __pipelineAudioBytes?: number;
+  __setRetainLastTake: (retain: boolean) => void;
+  __reexportLastTake: (options?: { trim?: boolean }) => Promise<{ base64: string; byteLength: number } | null>;
+  __lastTrimReport: () => { performer: SceneTrimReport | null };
 };
+
+/** What capture's set clip kept and dropped at an export (`SceneTrimReport`). */
+export type SceneTrimReport = { clipped: number; outOfReach: number; enclosed: number; kept: number; enclosureSkipped: boolean; ms: number };
+
+/**
+ * The walk take exported again from the same samples, after the take: once
+ * as capture exports it and once without dropping what no viewer draws, so
+ * a check can draw both and compare them.
+ */
+export type WalkTakeExports = { trimmedPath: string; untrimmedPath: string; trimmed: SceneTrimReport; untrimmed: SceneTrimReport };
 
 export type GltfJson = {
   animations?: Array<{ samplers: Array<{ input: number }> }>;
@@ -40,7 +53,7 @@ export type GltfJson = {
   extensions?: Record<string, unknown>;
 };
 
-export type WalkTake = { glbPath: string; bytes: Buffer; gltf: GltfJson };
+export type WalkTake = { glbPath: string; bytes: Buffer; gltf: GltfJson; exports: WalkTakeExports };
 
 export function readGlbJson(bytes: Buffer): GltfJson {
   expect(bytes.readUInt32LE(0), "GLB magic").toBe(0x46546c67);
@@ -74,6 +87,9 @@ export function recordWalkTake(browser: Browser, testInfo: TestInfo): Promise<Wa
 }
 
 async function recordWalk(browser: Browser, testInfo: TestInfo): Promise<WalkTake> {
+  const exportsAt = { trimmedPath: WALK_TAKE_PATH.replace(/\.glb$/, "-trimmed.glb"), untrimmedPath: WALK_TAKE_PATH.replace(/\.glb$/, "-untrimmed.glb") };
+  let trimmed: SceneTrimReport | null = null;
+  let untrimmed: SceneTrimReport | null = null;
   const context = await createXrContext(browser);
   try {
     const capture = await context.newPage();
@@ -121,9 +137,22 @@ async function recordWalk(browser: Browser, testInfo: TestInfo): Promise<WalkTak
       { message: "real MediaRecorder produced microphone audio" }).toBeGreaterThan(0);
     await captureEvidence(capture, testInfo, "capture-recording-in-progress");
     const downloadPromise = capture.waitForEvent("download");
+    await capture.evaluate(() => (window as CaptureWindow).__setRetainLastTake(true));
     await capture.getByRole("button", { name: CONTROL_NAMES.stopRecording }).click();
     await mkdir(path.dirname(WALK_TAKE_PATH), { recursive: true });
     await (await downloadPromise).saveAs(WALK_TAKE_PATH);
+    for (const trim of [true, false]) {
+      const exported = await capture.evaluate(async (trim) => {
+        const hooks = window as CaptureWindow;
+        const glb = await hooks.__reexportLastTake({ trim });
+        return { glb, report: hooks.__lastTrimReport().performer };
+      }, trim);
+      expect(exported.glb, "the retained take exports again").not.toBeNull();
+      const target = trim ? exportsAt.trimmedPath : exportsAt.untrimmedPath;
+      await writeFile(target, Buffer.from(exported.glb!.base64, "base64"));
+      if (trim) trimmed = exported.report;
+      else untrimmed = exported.report;
+    }
     await capture.close();
     expect(captureErrors, "capture runtime errors").toEqual([]);
   } finally {
@@ -136,7 +165,8 @@ async function recordWalk(browser: Browser, testInfo: TestInfo): Promise<WalkTak
   expect(gltf.skins?.length ?? 0, "exported skins").toBeGreaterThan(0);
   expect(gltf.nodes?.some((node) => node.name === "RecordedBubbleSphere"), "exported scene bubble").toBe(true);
   expect(animationDurationSeconds(gltf), "exported animation length").toBeGreaterThan(RECORDED_SECONDS * 0.9);
-  return { glbPath: WALK_TAKE_PATH, bytes, gltf };
+  expect(trimmed && untrimmed, "both exports report their set clip").toBeTruthy();
+  return { glbPath: WALK_TAKE_PATH, bytes, gltf, exports: { ...exportsAt, trimmed: trimmed!, untrimmed: untrimmed! } };
 }
 
 /**

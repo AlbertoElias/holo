@@ -12,6 +12,21 @@ const OCCLUSION_HIT_MIN_DISTANCE = 0.03;
 /** A kept triangle reaching past the bubble with an edge longer than this is split, so the take's set ends near the bubble. */
 const MAX_STRADDLING_EDGE = 1;
 const MAX_SPLIT_DEPTH = 6;
+/**
+ * How far past its centre the viewer can draw the set: a performer's dome (the
+ * feed's clip on a take whose rim lifts) reaches past the 6 m sphere, as far
+ * as the straddling pieces kept above; a camera take is clipped by its
+ * sphere alone.
+ */
+export const PERFORMER_SET_REACH = RECORDING_SCENE_BUBBLE_RADIUS + MAX_STRADDLING_EDGE;
+export const CAMERA_SET_REACH = RECORDING_SCENE_BUBBLE_RADIUS;
+/** Clip centres closer than this to the previous one add nothing to the reach. */
+const MIN_CENTRE_DISTANCE = 0.08;
+/** Above this many clipped triangles the enclosure pass is skipped: it casts without a BVH. */
+const MAX_ENCLOSURE_TRIANGLES = 60_000;
+/** Grid cell of the enclosure pass's ray caster, in metres. */
+const ENCLOSURE_CELL = 0.5;
+const ENCLOSURE_HIT_MIN_DISTANCE = 1e-4;
 
 /** A vertex a split adds: a blend of one source triangle's three vertices. */
 interface SplitVertex {
@@ -27,6 +42,47 @@ interface SplitContext {
   extras: SplitVertex[];
   midpoints: Map<string, number>;
 }
+
+/** Where the viewer's clip is centred over the take, and how far past it the set can be drawn. */
+export interface SetReach {
+  /** Clip centres, x y z flat, in the clip's frame: the sphere's track, or a camera take's origin. */
+  centres: ArrayLike<number>;
+  radius: number;
+}
+
+/** What the latest export's clip kept and dropped, in triangles. */
+export interface SceneTrimReport {
+  /** Triangles the clip kept before the two passes. */
+  clipped: number;
+  /** Dropped because no viewer's clip reaches them. */
+  outOfReach: number;
+  /** Dropped because the set encloses them (under the ground, inside another surface). */
+  enclosed: number;
+  /** Triangles exported. */
+  kept: number;
+  /** The enclosure pass did not run (over budget, or turned off). */
+  enclosureSkipped: boolean;
+  /** Time the two passes took, in milliseconds. */
+  ms: number;
+}
+
+/**
+ * Directions a viewer can look at the set from: straight down, and down at
+ * 45° and nearly level from every side. Rays go the other way, from the set
+ * toward the viewer: up, up at 45°, and slightly down (the feed's orbit
+ * looks up from 8° under its target).
+ */
+const ENCLOSURE_DIRECTIONS: readonly THREE.Vector3[] = (() => {
+  const directions = [new THREE.Vector3(0, 1, 0)];
+  for (const elevation of [45, -5]) {
+    for (let k = 0; k < 8; k += 1) {
+      const azimuth = (k * Math.PI) / 4;
+      const e = (elevation * Math.PI) / 180;
+      directions.push(new THREE.Vector3(Math.cos(e) * Math.cos(azimuth), Math.sin(e), Math.cos(e) * Math.sin(azimuth)));
+    }
+  }
+  return directions;
+})();
 
 export interface SceneBubble {
   group: THREE.Group;
@@ -64,6 +120,11 @@ export class SceneBubbleSampler {
   private readonly pinnedSamples: THREE.Vector3[] = [];
   /** Source mesh → frame matrix scratch; used only when a take clips in a frame other than the world's. */
   private readonly tmpFramed = new THREE.Matrix4();
+  /** The reach and enclosure passes; off only for a test's untrimmed export of the same take. */
+  trimHidden = true;
+  /** What the latest `collectSceneBubbleGroup` kept and dropped. */
+  lastTrimReport: SceneTrimReport | undefined;
+  private trimCounts = { clipped: 0, outOfReach: 0 };
 
   captureSceneBubbleSample(activeCamera: THREE.Camera | undefined, avatarRoot: THREE.Object3D): void {
     if (activeCamera) {
@@ -119,22 +180,41 @@ export class SceneBubbleSampler {
    * are in that frame, and each clipped mesh is posed in it. The occlusion
    * test stays in world space, where the scene it casts against lives.
    * Without it, the world frame is used, as for every performer take.
+   *
+   * `reach`, when given, then drops what no viewer draws: pieces farther
+   * than its radius from every clip centre, and triangles the clipped set
+   * encloses (`dropEnclosedTriangles`). Splits are decided by the samples
+   * as before, so every vertex within reach is the one exported without it.
    */
-  collectSceneBubbleGroup(sceneRoot: THREE.Object3D, frame?: THREE.Matrix4): SceneBubble | undefined {
+  collectSceneBubbleGroup(sceneRoot: THREE.Object3D, frame?: THREE.Matrix4, reach?: SetReach): SceneBubble | undefined {
     if (this.sceneBubbleSamples.length === 0 && this.pinnedSamples.length === 0) return undefined;
+    const started = performance.now();
     sceneRoot.updateMatrixWorld(true);
     const group = new THREE.Group();
     group.name = 'RecordedSceneBubble';
     const clippedBySource = new Map<THREE.Mesh, THREE.Mesh>();
+    const centres = reach && this.trimHidden ? new ReachCentres(reach) : undefined;
+    this.trimCounts = { clipped: 0, outOfReach: 0 };
     sceneRoot.traverse((obj) => {
       // Chrome (wrist glyphs, labels, panels, rays) is view layer, never the event (styleguide 1).
       if (!isSetMesh(obj)) return;
-      const bubbleMesh = this.createSceneBubbleMesh(sceneRoot, obj, frame);
+      const bubbleMesh = this.createSceneBubbleMesh(sceneRoot, obj, frame, centres);
       if (bubbleMesh) {
         group.add(bubbleMesh);
         clippedBySource.set(obj, bubbleMesh);
       }
     });
+    const enclosure = centres ? this.dropEnclosedTriangles(group, clippedBySource) : { enclosed: 0, skipped: true };
+    let kept = 0;
+    for (const mesh of clippedBySource.values()) kept += (mesh.geometry.getIndex()?.count ?? 0) / 3;
+    this.lastTrimReport = {
+      clipped: this.trimCounts.clipped,
+      outOfReach: this.trimCounts.outOfReach,
+      enclosed: enclosure.enclosed,
+      kept,
+      enclosureSkipped: enclosure.skipped,
+      ms: performance.now() - started
+    };
     return group.children.length > 0 ? { group, clippedBySource } : undefined;
   }
 
@@ -164,7 +244,7 @@ export class SceneBubbleSampler {
     this.sceneBubbleSamples.push(source.clone());
   }
 
-  private createSceneBubbleMesh(sceneRoot: THREE.Object3D, sourceMesh: THREE.Mesh, frame?: THREE.Matrix4): THREE.Mesh | undefined {
+  private createSceneBubbleMesh(sceneRoot: THREE.Object3D, sourceMesh: THREE.Mesh, frame?: THREE.Matrix4, centres?: ReachCentres): THREE.Mesh | undefined {
     const sourceGeometry = sourceMesh.geometry;
     const positionAttr = sourceGeometry.getAttribute('position');
     if (!positionAttr || positionAttr.count < 3) return undefined;
@@ -230,6 +310,8 @@ export class SceneBubbleSampler {
 
     const localPosition = (index: number, target: THREE.Vector3) => this.splitVertexPosition(split, index, target);
     this.removeOccludedTriangles(sceneRoot, sourceMesh, localPosition, keptIndicesByMaterial);
+    for (const indices of keptIndicesByMaterial.values()) this.trimCounts.clipped += indices.length / 3;
+    if (centres) this.removeOutOfReach(centres, clipMatrix, localPosition, keptIndicesByMaterial);
 
     if (keptIndicesByMaterial.size === 0) {
       return undefined;
@@ -485,6 +567,82 @@ export class SceneBubbleSampler {
     }
   }
 
+  /**
+   * Drops the triangles the clipped set encloses: from each of seven points
+   * on the triangle, a ray toward every side a viewer looks from meets an
+   * opaque surface of the set from behind (under the ground, inside a rock,
+   * a hill's flank under the grass). One ray that escapes, or meets a
+   * surface's front, keeps it. The set cast against is the clip, so a ray
+   * leaving through the clip's cut edge escapes.
+   */
+  private dropEnclosedTriangles(group: THREE.Group, clippedBySource: Map<THREE.Mesh, THREE.Mesh>): { enclosed: number; skipped: boolean } {
+    group.updateMatrixWorld(true);
+    const meshes = [...clippedBySource.values()];
+    const caster = EnclosureCaster.build(meshes);
+    if (!caster) return { enclosed: 0, skipped: true };
+    let enclosed = 0;
+    for (const [source, mesh] of clippedBySource) {
+      const drop = caster.enclosedTriangles(meshes.indexOf(mesh));
+      if (drop.size === 0) continue;
+      enclosed += drop.size;
+      const geometry = mesh.geometry;
+      const index = geometry.getIndex()!;
+      const groups = geometry.groups.length > 0 ? geometry.groups : [{ start: 0, count: index.count, materialIndex: 0 }];
+      const indices: number[] = [];
+      const kept: { start: number; count: number; materialIndex: number }[] = [];
+      for (const drawGroup of groups) {
+        const start = indices.length;
+        for (let i = drawGroup.start; i + 2 < drawGroup.start + drawGroup.count; i += 3) {
+          if (drop.has(i / 3)) continue;
+          indices.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+        }
+        if (indices.length > start) kept.push({ start, count: indices.length - start, materialIndex: drawGroup.materialIndex ?? 0 });
+      }
+      if (indices.length === 0) {
+        group.remove(mesh);
+        clippedBySource.delete(source);
+        continue;
+      }
+      geometry.clearGroups();
+      for (const drawGroup of kept) geometry.addGroup(drawGroup.start, drawGroup.count, drawGroup.materialIndex);
+      const position = geometry.getAttribute('position');
+      const plain = Object.keys(geometry.morphAttributes).length === 0 &&
+        Object.values(geometry.attributes).every((attr) => !(attr as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute);
+      if (plain) this.compactVertices(geometry, indices, position.count, []);
+      geometry.setIndex(indices);
+      geometry.computeBoundingBox();
+      geometry.computeBoundingSphere();
+    }
+    return { enclosed, skipped: false };
+  }
+
+  /** Drops the pieces no clip centre reaches: the viewer never draws them. */
+  private removeOutOfReach(
+    centres: ReachCentres,
+    clipMatrix: THREE.Matrix4,
+    localPosition: (index: number, target: THREE.Vector3) => THREE.Vector3,
+    keptByMaterial: Map<number, number[]>
+  ): void {
+    for (const [materialIndex, indices] of keptByMaterial) {
+      let writeIndex = 0;
+      for (let i = 0; i + 2 < indices.length; i += 3) {
+        localPosition(indices[i]!, this.tmpTriA).applyMatrix4(clipMatrix);
+        localPosition(indices[i + 1]!, this.tmpTriB).applyMatrix4(clipMatrix);
+        localPosition(indices[i + 2]!, this.tmpTriC).applyMatrix4(clipMatrix);
+        if (!centres.reaches(this.tmpTriA, this.tmpTriB, this.tmpTriC)) {
+          this.trimCounts.outOfReach += 1;
+          continue;
+        }
+        indices[writeIndex] = indices[i]!;
+        indices[writeIndex + 1] = indices[i + 1]!;
+        indices[writeIndex + 2] = indices[i + 2]!;
+        writeIndex += 3;
+      }
+      if (writeIndex === 0) keptByMaterial.delete(materialIndex);
+      else indices.length = writeIndex;
+    }
+  }
+
   private removeOccludedTriangles(
     sceneRoot: THREE.Object3D,
     sourceMesh: THREE.Mesh,
@@ -512,5 +670,243 @@ export class SceneBubbleSampler {
         indices.length = writeIndex;
       }
     }
+  }
+}
+
+/** The viewer's clip centres over a take, binned so a triangle finds the ones near it. */
+class ReachCentres {
+  private readonly radius: number;
+  private readonly cells = new Map<string, THREE.Vector3[]>();
+  private readonly box = new THREE.Box3();
+  private readonly triangle = new THREE.Triangle();
+  private readonly closest = new THREE.Vector3();
+
+  constructor({ centres, radius }: SetReach) {
+    this.radius = radius;
+    let last: THREE.Vector3 | undefined;
+    for (let i = 0; i + 2 < centres.length; i += 3) {
+      const centre = new THREE.Vector3(centres[i]!, centres[i + 1]!, centres[i + 2]!);
+      if (!isFiniteVector3Like(centre)) continue;
+      if (last && last.distanceToSquared(centre) < MIN_CENTRE_DISTANCE * MIN_CENTRE_DISTANCE) continue;
+      last = centre;
+      const key = this.key(Math.floor(centre.x / radius), Math.floor(centre.y / radius), Math.floor(centre.z / radius));
+      const cell = this.cells.get(key);
+      if (cell) cell.push(centre);
+      else this.cells.set(key, [centre]);
+    }
+  }
+
+  /** Whether the triangle comes within the radius of any centre. */
+  reaches(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): boolean {
+    const r = this.radius;
+    this.box.makeEmpty().expandByPoint(a).expandByPoint(b).expandByPoint(c).expandByScalar(r);
+    this.triangle.set(a, b, c);
+    const rSq = r * r;
+    const [x0, y0, z0] = [Math.floor(this.box.min.x / r), Math.floor(this.box.min.y / r), Math.floor(this.box.min.z / r)];
+    const [x1, y1, z1] = [Math.floor(this.box.max.x / r), Math.floor(this.box.max.y / r), Math.floor(this.box.max.z / r)];
+    for (let x = x0; x <= x1; x += 1) {
+      for (let y = y0; y <= y1; y += 1) {
+        for (let z = z0; z <= z1; z += 1) {
+          for (const centre of this.cells.get(this.key(x, y, z)) ?? []) {
+            if (!this.box.containsPoint(centre)) continue;
+            if (this.triangle.closestPointToPoint(centre, this.closest).distanceToSquared(centre) <= rSq) return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  private key(x: number, y: number, z: number): string {
+    return `${x},${y},${z}`;
+  }
+}
+
+/** Whether a surface hides what is behind it: drawn, and with no see-through (blend, cutout, transmission). */
+function isOpaque(material: THREE.Material | undefined): boolean {
+  if (!material || !material.visible) return false;
+  if (material.transparent || material.alphaTest > 0) return false;
+  const physical = material as THREE.MeshPhysicalMaterial;
+  return !(physical.transmission > 0) && !physical.alphaMap;
+}
+
+/**
+ * The clipped set's triangles in a uniform grid, for casting the enclosure
+ * pass's rays (three's raycaster honours each material's side, and this
+ * needs the side every hit faces).
+ */
+class EnclosureCaster {
+  private readonly ray = new THREE.Ray();
+  private readonly a = new THREE.Vector3();
+  private readonly b = new THREE.Vector3();
+  private readonly c = new THREE.Vector3();
+  private readonly hit = new THREE.Vector3();
+  private readonly point = new THREE.Vector3();
+  /** The triangle being tested: its corners and centroid. */
+  private readonly sampleCorners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] as const;
+  private stamp = 0;
+
+  private constructor(
+    /** World corners, nine numbers per triangle. */
+    private readonly corners: Float32Array,
+    /** Unit geometric normals, three per triangle. */
+    private readonly normals: Float32Array,
+    private readonly opaque: Uint8Array,
+    /** The mesh (its index in the list built from) and its triangle number, per triangle. */
+    private readonly owner: Uint32Array,
+    private readonly local: Uint32Array,
+    private readonly firstOf: number[],
+    private readonly origin: THREE.Vector3,
+    private readonly cell: number,
+    private readonly dims: [number, number, number],
+    private readonly cellStart: Uint32Array,
+    private readonly cellItems: Uint32Array,
+    private readonly seen: Uint32Array
+  ) {}
+
+  static build(meshes: readonly THREE.Mesh[]): EnclosureCaster | null {
+    let count = 0;
+    for (const mesh of meshes) count += (mesh.geometry.getIndex()?.count ?? 0) / 3;
+    if (count === 0 || count > MAX_ENCLOSURE_TRIANGLES) return null;
+    const corners = new Float32Array(count * 9);
+    const normals = new Float32Array(count * 3);
+    const opaque = new Uint8Array(count);
+    const owner = new Uint32Array(count);
+    const local = new Uint32Array(count);
+    const firstOf: number[] = [];
+    const bounds = new THREE.Box3();
+    const v = new THREE.Vector3();
+    const e1 = new THREE.Vector3();
+    const e2 = new THREE.Vector3();
+    let t = 0;
+    meshes.forEach((mesh, m) => {
+      firstOf.push(t);
+      const geometry = mesh.geometry;
+      const index = geometry.getIndex()!;
+      const position = geometry.getAttribute('position');
+      const groups = geometry.groups.length > 0 ? geometry.groups : [{ start: 0, count: index.count, materialIndex: 0 }];
+      const materialOf = (i: number) => {
+        const drawGroup = groups.find((g) => i >= g.start && i < g.start + g.count);
+        return Array.isArray(mesh.material) ? mesh.material[drawGroup?.materialIndex ?? 0] : mesh.material;
+      };
+      for (let i = 0; i + 2 < index.count; i += 3, t += 1) {
+        for (let k = 0; k < 3; k += 1) {
+          v.fromBufferAttribute(position, index.getX(i + k)).applyMatrix4(mesh.matrixWorld);
+          corners.set([v.x, v.y, v.z], t * 9 + k * 3);
+          bounds.expandByPoint(v);
+        }
+        e1.set(corners[t * 9 + 3]! - corners[t * 9]!, corners[t * 9 + 4]! - corners[t * 9 + 1]!, corners[t * 9 + 5]! - corners[t * 9 + 2]!);
+        e2.set(corners[t * 9 + 6]! - corners[t * 9]!, corners[t * 9 + 7]! - corners[t * 9 + 1]!, corners[t * 9 + 8]! - corners[t * 9 + 2]!);
+        e1.cross(e2);
+        const length = e1.length();
+        if (length > 1e-12) normals.set([e1.x / length, e1.y / length, e1.z / length], t * 3);
+        opaque[t] = length > 1e-12 && isOpaque(materialOf(i)) ? 1 : 0;
+        owner[t] = m;
+        local[t] = i / 3;
+      }
+    });
+    bounds.expandByScalar(0.01);
+    const size = bounds.getSize(new THREE.Vector3());
+    // No more than 256 cells along an axis, so a wide set keeps a small grid.
+    const cell = Math.max(ENCLOSURE_CELL, Math.max(size.x, size.y, size.z) / 256);
+    const dims: [number, number, number] = [Math.max(1, Math.ceil(size.x / cell)), Math.max(1, Math.ceil(size.y / cell)), Math.max(1, Math.ceil(size.z / cell))];
+    const cellOf = (value: number, axis: 0 | 1 | 2) => Math.min(dims[axis] - 1, Math.max(0, Math.floor((value - bounds.min.getComponent(axis)) / cell)));
+    const counts = new Uint32Array(dims[0] * dims[1] * dims[2] + 1);
+    const ranges: number[][] = [];
+    for (let i = 0; i < count; i += 1) {
+      const range: number[] = [];
+      for (let axis = 0 as 0 | 1 | 2; axis < 3; axis = (axis + 1) as 0 | 1 | 2) {
+        const values = [corners[i * 9 + axis]!, corners[i * 9 + 3 + axis]!, corners[i * 9 + 6 + axis]!];
+        range.push(cellOf(Math.min(...values), axis), cellOf(Math.max(...values), axis));
+      }
+      ranges.push(range);
+      for (let x = range[0]!; x <= range[1]!; x += 1) for (let y = range[2]!; y <= range[3]!; y += 1) for (let z = range[4]!; z <= range[5]!; z += 1) counts[(x * dims[1] + y) * dims[2] + z + 1]! += 1;
+    }
+    for (let i = 1; i < counts.length; i += 1) counts[i]! += counts[i - 1]!;
+    const cellStart = counts.slice();
+    const fill = counts.slice();
+    const cellItems = new Uint32Array(cellStart[cellStart.length - 1]!);
+    ranges.forEach((range, i) => {
+      for (let x = range[0]!; x <= range[1]!; x += 1) for (let y = range[2]!; y <= range[3]!; y += 1) for (let z = range[4]!; z <= range[5]!; z += 1) cellItems[fill[(x * dims[1] + y) * dims[2] + z]!++] = i;
+    });
+    return new EnclosureCaster(corners, normals, opaque, owner, local, firstOf, bounds.min.clone(), cell, dims, cellStart, cellItems, new Uint32Array(count));
+  }
+
+  /** The local triangle numbers of mesh `m` that the set encloses. */
+  enclosedTriangles(m: number): Set<number> {
+    const enclosed = new Set<number>();
+    const first = this.firstOf[m]!;
+    const end = m + 1 < this.firstOf.length ? this.firstOf[m + 1]! : this.owner.length;
+    for (let t = first; t < end; t += 1) {
+      if (this.isEnclosed(t)) enclosed.add(this.local[t]!);
+    }
+    return enclosed;
+  }
+
+  private isEnclosed(t: number): boolean {
+    const f = this.corners;
+    const [a, b, c, centroid] = this.sampleCorners;
+    a.fromArray(f, t * 9);
+    b.fromArray(f, t * 9 + 3);
+    c.fromArray(f, t * 9 + 6);
+    centroid.copy(a).add(b).add(c).multiplyScalar(1 / 3);
+    // The centroid, points 90% of the way to each corner, and each edge's middle nudged 1% inward.
+    for (let k = 0; k < 7; k += 1) {
+      if (k === 0) this.point.copy(centroid);
+      else if (k < 4) this.point.copy(k === 1 ? a : k === 2 ? b : c).lerp(centroid, 0.1);
+      else {
+        const [p, q] = k === 4 ? [a, b] : k === 5 ? [b, c] : [c, a];
+        this.point.copy(p).add(q).multiplyScalar(0.5).lerp(centroid, 0.01);
+      }
+      for (const direction of ENCLOSURE_DIRECTIONS) {
+        if (!this.backHit(this.point, direction, t)) return false;
+      }
+    }
+    return true;
+  }
+
+  /** Whether the nearest opaque surface along the ray (other than `self`) is met from behind. */
+  private backHit(from: THREE.Vector3, direction: THREE.Vector3, self: number): boolean {
+    this.ray.set(from, direction);
+    this.stamp += 1;
+    if (this.stamp === 0xffffffff) {
+      this.seen.fill(0);
+      this.stamp = 1;
+    }
+    const { cell, dims, origin } = this;
+    const local = [(from.x - origin.x) / cell, (from.y - origin.y) / cell, (from.z - origin.z) / cell];
+    const d = [direction.x, direction.y, direction.z];
+    const at = local.map((value) => Math.floor(value));
+    const step = d.map((value) => (value > 0 ? 1 : value < 0 ? -1 : 0));
+    const tMax = d.map((value, axis) => (value === 0 ? Infinity : ((value > 0 ? at[axis]! + 1 - local[axis]! : local[axis]! - at[axis]!) * cell) / Math.abs(value)));
+    const tDelta = d.map((value) => (value === 0 ? Infinity : cell / Math.abs(value)));
+    let nearest = Infinity;
+    let nearestTri = -1;
+    // The ray starts inside the grid (on a triangle of it), and a box once left is never re-entered.
+    while (at[0]! >= 0 && at[0]! < dims[0] && at[1]! >= 0 && at[1]! < dims[1] && at[2]! >= 0 && at[2]! < dims[2]) {
+      const c = (at[0]! * dims[1] + at[1]!) * dims[2] + at[2]!;
+      for (let j = this.cellStart[c]!; j < this.cellStart[c + 1]!; j += 1) {
+        const tri = this.cellItems[j]!;
+        if (tri === self || !this.opaque[tri] || this.seen[tri] === this.stamp) continue;
+        this.seen[tri] = this.stamp;
+        const f = this.corners;
+        this.a.fromArray(f, tri * 9);
+        this.b.fromArray(f, tri * 9 + 3);
+        this.c.fromArray(f, tri * 9 + 6);
+        if (!this.ray.intersectTriangle(this.a, this.b, this.c, false, this.hit)) continue;
+        const distance = this.hit.distanceTo(from);
+        if (distance < ENCLOSURE_HIT_MIN_DISTANCE || distance >= nearest) continue;
+        nearest = distance;
+        nearestTri = tri;
+      }
+      const axis = tMax[0]! < tMax[1]! ? (tMax[0]! < tMax[2]! ? 0 : 2) : tMax[1]! < tMax[2]! ? 1 : 2;
+      // A hit nearer than where the ray leaves this cell is the nearest anywhere.
+      if (nearest <= tMax[axis]! || tMax[axis] === Infinity) break;
+      at[axis]! += step[axis]!;
+      tMax[axis]! += tDelta[axis]!;
+    }
+    if (nearestTri < 0) return false;
+    const n = this.normals;
+    return n[nearestTri * 3]! * direction.x + n[nearestTri * 3 + 1]! * direction.y + n[nearestTri * 3 + 2]! * direction.z > 0;
   }
 }

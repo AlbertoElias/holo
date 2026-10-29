@@ -7,6 +7,7 @@ import type { BodySample, HandSample, MockInputState, MockVrPoseInput, Spectator
 import type { TouchStick } from '../input/TouchInput';
 import type { FlatHaloView } from '../ui/flatHalo';
 import type { PointResolutionReport } from '../recording/PointResolver';
+import type { SceneTrimReport } from '../recording/SceneBubbleSampler';
 import type { PhoneArChromeProbe } from '../ui/PhoneArChrome';
 import type { ChromeTarget, VrChromeSnapshot } from '../ui/VrChrome';
 import type { prefetchStats } from '../objects/objectSearch';
@@ -56,8 +57,10 @@ export interface AutomationHooks {
   __sampleObjectSearch: () => { headset: ObjectSearchState; voiceLog: typeof voiceLog; prefetch: typeof prefetchStats };
   /** Keep the last take's samples after export so `__reexportLastTake` can export them again. */
   __setRetainLastTake: (retain: boolean) => void;
-  /** The last take exported again against the scene as it is now: the GLB's bytes (base64) and size. */
-  __reexportLastTake: () => Promise<{ base64: string; byteLength: number } | null>;
+  /** The last take exported again against the scene as it is now: the GLB's bytes (base64) and size; `trim: false` keeps what no viewer draws. */
+  __reexportLastTake: (options?: { trim?: boolean }) => Promise<{ base64: string; byteLength: number } | null>;
+  /** What the latest performer and camera exports' set clip kept and dropped. */
+  __lastTrimReport: () => { performer: SceneTrimReport | null; camera: SceneTrimReport | null };
   /** A box in the scene model beside the avatar (chrome-flagged or plain), the live headset chrome moved into the scene model, or none. */
   __setChromeProbe: (mode: 'none' | 'flagged' | 'plain' | 'chrome') => void;
   /** Shows or hides every headset chrome object at once. */
