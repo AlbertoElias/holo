@@ -924,3 +924,25 @@ bug above.)
 - **Validation:** `test:xr:marks`, `test:xr:ar-record`, `recording` and
   `terrain` pass, as do the camera-take pipeline spec and `verify:pr`; a
   proof video replays a take in the viewer feed with its floor.
+
+### B-039 — The face XR check fails intermittently: the page has no IWER gaze device
+
+- **Area:** `apps/capture/scripts/ci-face-playwright.ts` (eye-gaze sweep), IWER device setup
+- **Severity:** P2 (it breaks `verify:pr`'s `test:xr:smoke`)
+- **Observed:** 2026-10-28, while verifying `feature/object-resize`. The check fails the same way on `origin/main` (`69f0795382b9`), in a clean worktree.
+- **Evidence:** `page.evaluate: TypeError: Cannot set properties of undefined (setting 'connected')` at `ci-face-playwright.ts:230`, because `window.IWER_DEVICE.gaze` is undefined. Every other check in `test:xr:smoke` passes.
+- **Intermittent:** the same check passed in a later `test:xr:smoke` run of the same day (ports 5295/5296/3295), so the gaze device is sometimes there.
+- **Expected:** the face check's eye-gaze sweep finds a gaze device, or it sets one up.
+- **Reproduction:** `cd apps/capture && pnpm run test:xr:face`.
+- **Root cause:** `waitForServer` accepted any HTTP 200 from the port, even when
+  the server it had just started lost the port (`--strictPort` exit) to another
+  run's server. When that was a Quest 3 default build, the face check got a page
+  with no gaze device. Reproduced deterministically with a stub server holding
+  the port: `waitForServer` accepted it.
+- **Fix:** `startTestBuildServer` pipes the server's stdout and exposes `listening`,
+  resolved when Vite prints its `Local:` line (only after this process holds the
+  port); `waitForServer` waits for it, so a lost port now fails fast with
+  "Process exited before readiness check passed".
+- **Evidence:** stub-server repro now rejects; `test:xr:face` 7 of 7 passes; the
+  parallel capture checks (mock-vr … marks, with face) pass. Closed 2026-10-29 by
+  the fix commit on branch `claude/b039-face-gaze-84de5a`.

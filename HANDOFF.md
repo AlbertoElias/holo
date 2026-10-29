@@ -23,6 +23,9 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- B-039 fix (a test server must announce its own bind before a check trusts the port):
+  branch `claude/b039-face-gaze-84de5a`, verified locally, not merged.
+
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
