@@ -32,7 +32,7 @@ const LONG_TASK_BUDGET_MS = 100;
 
 const round = (value, digits = 3) => Number(value.toFixed(digits));
 
-async function setupFlatPage(browser, { consoleErrors, label, touch = false }) {
+export async function setupFlatPage(browser, { consoleErrors, label, touch = false }) {
   const context = await createXrContext(browser, {
     viewport: touch ? PHONE_VIEWPORT : DESKTOP_VIEWPORT,
     acceptDownloads: true,
@@ -46,7 +46,7 @@ async function setupFlatPage(browser, { consoleErrors, label, touch = false }) {
 }
 
 /** The dock row as drawn: per slot, filled or not, its key, and whether its thumbnail is a rendered image. */
-function readRow(page) {
+export function readRow(page) {
   return page.evaluate(() => {
     const row = document.querySelector('[data-testid="tray-row"]');
     if (!row) return null;
@@ -88,7 +88,7 @@ function checkRow(row, { filled, keys, fail, where }) {
 }
 
 /** Steps the manual clock until `done(state)` or `maxSec` passes. */
-async function advanceUntil(page, done, maxSec = 3) {
+export async function advanceUntil(page, done, maxSec = 3) {
   let state = await readState(page);
   for (let i = 0; i < Math.round(maxSec * 60) && !done(state); i += 1) {
     await page.evaluate((ms) => window.advanceTime(ms), STEP_MS);
@@ -97,7 +97,7 @@ async function advanceUntil(page, done, maxSec = 3) {
   return state;
 }
 
-const advance = async (page, seconds) => {
+export const advance = async (page, seconds) => {
   // A proof video steps a tenth of a second at a time, each in real time.
   const frames = Math.round(seconds * 60);
   const chunk = proofVideoOptions(DESKTOP_VIEWPORT).recordVideo ? 6 : frames;

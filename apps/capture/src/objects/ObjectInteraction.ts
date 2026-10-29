@@ -164,6 +164,7 @@ interface Hold {
  */
 export class ObjectInteraction {
   private hold: Hold | null = null;
+  private putBackQueued: SceneObject | null = null;
   private readonly reach = new DesktopReach();
   /** The step in a reach asked for this frame; the movement system takes it, as a displacement that is not input. */
   private readonly pendingStep = { x: 0, z: 0 };
@@ -313,8 +314,34 @@ export class ObjectInteraction {
     return best;
   }
 
+  /** A headset hand's palm is in the open tray's zone: letting go of a held prop there puts it back. */
+  isOverTray(side: VrHandSide): boolean {
+    if (!this.deps.tray.isOpen()) return false;
+    const palm = this.palmWorld(side, this.pos2);
+    return Boolean(palm && this.deps.tray.inPutBackZone(palm));
+  }
+
+  /** The prop a headset hand let go of over the open tray this step, once. */
+  takePutBack(): SceneObject | null {
+    const object = this.putBackQueued;
+    this.putBackQueued = null;
+    return object;
+  }
+
+  /** `object` is leaving the scene: let go of it, and stop reaching or gliding for it. */
+  forget(object: SceneObject): void {
+    if (this.putBackQueued === object) this.putBackQueued = null;
+    if (this.hold?.object === object) this.release(false);
+    if (this.reach.object === object) this.cancelReach();
+  }
+
   isHeld(object: SceneObject): VrHandSide | null {
     return this.hold?.object === object ? this.hold.side : null;
+  }
+
+  /** The held prop, if any. */
+  heldObject(): SceneObject | null {
+    return this.hold?.object ?? null;
   }
 
   /** Whether `side` holds an object (one hold at a time: the first hand wins). */
@@ -372,7 +399,12 @@ export class ObjectInteraction {
       const rising = intent.pressed && !this.wasPressed[side];
       this.wasPressed[side] = intent.pressed;
       if (this.hold?.side === side && (intent.switched || !intent.pressed)) {
-        this.release(!intent.switched);
+        // Let go over the open tray's arc: the prop goes back (docs/features/tray-remove.md), it is not dropped.
+        // A plain release here; `CaptureObjects` removes the prop in this same step, before physics steps or a frame records it falling.
+        if (!intent.switched && side === (step.summoner ?? 'right') && this.isOverTray(side)) {
+          this.putBackQueued = this.hold.object;
+          this.release(false);
+        } else this.release(!intent.switched);
         continue;
       }
       // The other hand lets go of a stretch: the prop stays in the first hand at its new size.

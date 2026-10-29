@@ -25,6 +25,10 @@ import type { CaptureUiBridge } from './captureUiBridge';
 const SLOTS = 5;
 const TILE_APX = 54;
 const TOUCH_TILE_APX = 44;
+/** A slot dragged further than this (half a touch target) is no longer a click (styleguide 6.1). */
+const DRAG_SLOP_APX = 22;
+/** A slot dragged up past this and let go leaves the tray (docs/features/tray-remove.md). */
+const LIFT_OFF_APX = 30;
 /** Touch: a press held this long on the Tray glyph starts press-hold-slide. */
 const HOLD_MS = 300;
 /** Height of a dock row on its chip: the glyph's hit area plus the chip's 5 apx padding twice. */
@@ -244,7 +248,8 @@ function Slot({
   loading,
   armed,
   tileApx,
-  onSummon
+  onSummon,
+  onRemove
 }: {
   slot: number;
   item: TrayUiState['slots'][number] | undefined;
@@ -254,8 +259,10 @@ function Slot({
   armed: boolean;
   tileApx: number;
   onSummon: (slot: number) => void;
+  onRemove: (slot: number) => void;
 }) {
   const stroke = tokens.glyph.stroke;
+  const lift = useLiftOff(slot, onSummon, onRemove);
   const tile: CSSProperties = {
     position: 'relative',
     boxSizing: 'border-box',
@@ -302,16 +309,22 @@ function Slot({
           data-tray-filled="true"
           data-testid={`tray-slot-${slot}`}
           aria-label={`Summon ${item.name}`}
-          onClick={() => onSummon(slot)}
+          aria-description="Drag up off the row to remove it from the tray"
+          data-tray-lifting={lift.state}
+          {...lift.handlers}
           style={{
             ...tile,
             padding: 0,
-            cursor: 'pointer',
+            cursor: lift.state === 'idle' ? 'pointer' : 'grabbing',
+            transform: `translate(${lift.offset.x}px, ${lift.offset.y}px)`,
+            opacity: lift.state === 'off' ? 0.55 : 1,
+            transition: lift.state === 'idle' ? 'transform 200ms ease-out' : 'none',
             background: 'rgb(var(--holoim-color-deep-sea-rgb) / 72%)',
-            border: `${stroke}px solid ${armed ? 'var(--holoim-color-highlight)' : 'var(--holoim-color-gold)'}`,
+            // Lifted past the line, it shows it will leave on release: the highlight, like an armed slot.
+            border: `${stroke}px solid ${armed || lift.state === 'off' ? 'var(--holoim-color-highlight)' : 'var(--holoim-color-gold)'}`,
             outline: armed ? `${stroke}px solid var(--holoim-color-highlight)` : 'none',
             WebkitTapHighlightColor: 'transparent',
-            touchAction: 'manipulation'
+            touchAction: 'none'
           }}
         >
           {item.thumbnail ? (
@@ -354,6 +367,70 @@ function Slot({
   );
 }
 
+/** Dragged up past LIFT_OFF_APX, more up than sideways: a slide along the row never removes. */
+function liftedOff(x: number, y: number): boolean {
+  return y < -LIFT_OFF_APX && -y > Math.abs(x);
+}
+
+/**
+ * Lift a slot off the shelf (docs/features/tray-remove.md): a press that
+ * stays within the slop is a click that summons; dragged up past
+ * LIFT_OFF_APX and let go, the item leaves the tray; anything else snaps
+ * back. The pointer is captured, so a touch drag keeps its events.
+ */
+function useLiftOff(slot: number, onSummon: (slot: number) => void, onRemove: (slot: number) => void) {
+  const start = useRef<{ id: number; x: number; y: number; dragging: boolean } | null>(null);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const state: 'idle' | 'dragging' | 'off' = !start.current?.dragging ? 'idle' : liftedOff(offset.x, offset.y) ? 'off' : 'dragging';
+  const end = (commit: boolean, event: ReactPointerEvent<HTMLButtonElement>): void => {
+    const press = start.current;
+    if (!press || press.id !== event.pointerId) return;
+    start.current = null;
+    setOffset({ x: 0, y: 0 });
+    // A pointer leaves no focus on the slot: a key pressed next (Backspace to put back) is the scene's, not the slot's.
+    event.currentTarget.blur();
+    if (!commit) return;
+    if (!press.dragging) onSummon(slot);
+    else if (liftedOff(event.clientX - press.x, event.clientY - press.y)) onRemove(slot);
+  };
+  return {
+    offset,
+    state,
+    handlers: {
+      onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (event.button !== 0) return;
+        start.current = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false };
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      },
+      onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => {
+        const press = start.current;
+        if (!press || press.id !== event.pointerId) return;
+        const x = event.clientX - press.x;
+        const y = event.clientY - press.y;
+        if (!press.dragging && Math.hypot(x, y) < DRAG_SLOP_APX) return;
+        press.dragging = true;
+        // It lifts up off the shelf, never down into the dock.
+        setOffset({ x, y: Math.min(0, y) });
+      },
+      onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => end(true, event),
+      onPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => end(false, event),
+      // Keyboard: Enter or Space summons; a pointer's click was handled on its lift.
+      onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (event.detail === 0) onSummon(slot);
+      },
+      onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        // Delete or Backspace on a slot focused from the keyboard removes it, for keyboard users. After a
+        // click the slot keeps focus without `:focus-visible`, and Backspace there puts the held object back.
+        if ((event.key === 'Delete' || event.key === 'Backspace') && event.currentTarget.matches(':focus-visible')) {
+          event.preventDefault();
+          event.stopPropagation();
+          onRemove(slot);
+        }
+      }
+    }
+  };
+}
+
 function captionStyle(widthApx: number): CSSProperties {
   return {
     width: widthApx + 12,
@@ -375,7 +452,8 @@ export function TrayRow({
   input,
   armedSlot,
   bottom,
-  onSummon
+  onSummon,
+  onRemove
 }: {
   tray: TrayUiState;
   touch: boolean;
@@ -383,6 +461,7 @@ export function TrayRow({
   armedSlot: number | null;
   bottom: string;
   onSummon: (slot: number) => void;
+  onRemove: (slot: number) => void;
 }) {
   const reduced = useReducedMotion();
   const [mounted, setMounted] = useState(tray.open);
@@ -449,9 +528,10 @@ export function TrayRow({
               touch={touch}
               blocked={tray.blocked}
               loading={tray.loading && slot === firstEmpty}
-              armed={armedSlot === slot}
+              armed={armedSlot === slot || tray.returnSlot === slot}
               tileApx={tileApx}
               onSummon={onSummon}
+              onRemove={onRemove}
             />
           );
         })}
