@@ -111,7 +111,129 @@ async function samplePoses(page: Page): Promise<PoseBones> {
 }
 const POSE_TOLERANCE_M = 0.015;
 
-async function openApp(avatarUrl: string | null) {
+// Locomotion on avatars without their own clips (docs/features/locomotion-retarget.md).
+// 1. Each state's clip, posed at fixed clip times on each profile, with nothing
+//    blended in: every canonical bone and fingertip on desktop, the legs in VR.
+// 2. A physics-driven desktop take (walk, stop, jump, land) sampled every 100 ms.
+// 3. A mock-VR walk (the animation path in XR) sampled every 100 ms: legs only.
+// 4. Pointing, then releasing, returns the arm to the clip's pose. After a
+//    round trip through mock VR the arms match the shipped avatar's (which
+//    keeps the arm IK's last pose: nothing restores it on the shipped rig either).
+// Fixtures share the shipped proportions, so all compare against the shipped
+// avatar at the same times, hips-relative (a rest that moves the avatar's
+// bounds moves its centering), except the bones a fixture maps elsewhere or
+// lacks by design (eyes, fingers: the binding check covers those).
+type Bones = Record<string, [number, number, number]>;
+type PoseSample = { bones: Bones; locomotion: { state: string; profile: string; clip: string | null } };
+interface LocomotionSamples {
+  clips: Record<string, Bones>;
+  take: PoseSample[];
+  mockVr: PoseSample[];
+  armRest: Bones;
+  afterPoint: Bones;
+  afterVr: Bones;
+}
+const CLIP_TIMES = [0, 0.15, 0.3, 0.45];
+const TWISTED = 't-pose-twisted';
+const LEG_KEYS = /^(hips|(left|right)(UpperLeg|LowerLeg|Foot|Toes))$/;
+const ARM_KEYS = /^(left|right)(LowerArm|Hand|(Middle|Thumb)DistalTip)$/;
+async function sampleLocomotion(page: Page): Promise<LocomotionSamples> {
+  const clips = await page.evaluate(({ times }) => {
+    const out: Record<string, Bones> = {};
+    for (const [profile, states] of [['desktop-full', ['idle', 'walk', 'jump', 'fall']], ['vr-lower-body', ['walk', 'jump', 'fall']]] as const) {
+      for (const state of states) {
+        for (const t of times) {
+          window.__poseLocomotion(state, profile, t);
+          out[`${profile} ${state} @${t}s`] = window.__sampleAvatarPose().bones;
+        }
+      }
+    }
+    window.__poseLocomotion('idle', 'desktop-full', 0);
+    return out;
+  }, { times: CLIP_TIMES });
+  // Mock input changes only the keys it names: release each one explicitly.
+  const steps = (plan: { ms: number; input: Record<string, unknown> }[]) => page.evaluate((plan) => {
+    const out: PoseSample[] = [];
+    for (const step of plan) {
+      window.__setMockInput(step.input);
+      for (let at = 0; at < step.ms; at += 100) { window.advanceTime(100); out.push(window.__sampleAvatarPose()); }
+    }
+    return out;
+  }, plan);
+  await page.evaluate(() => { window.__respawnCharacter(); window.__setMockInput({}); window.advanceTime(800); });
+  const take = await steps([
+    { ms: 1200, input: { forward: true } }, { ms: 1500, input: { forward: false } }, { ms: 200, input: { jump: true } }, { ms: 1500, input: {} }
+  ]);
+  const armRest = await page.evaluate(() => window.__sampleAvatarPose().bones);
+  await steps([{ ms: 800, input: { point: true } }, { ms: 1500, input: { point: false } }]);
+  const afterPoint = await page.evaluate(() => window.__sampleAvatarPose().bones);
+  await page.evaluate(() => { window.__respawnCharacter(); window.__setMockVrPose({ enabled: true }); window.__setMockInput({}); window.advanceTime(800); });
+  const mockVr = await steps([{ ms: 1200, input: { forward: true } }, { ms: 600, input: { forward: false } }]);
+  await page.evaluate(() => { window.__setMockVrPose({ enabled: false }); window.__setMockInput({}); window.advanceTime(1000); });
+  const afterVr = await page.evaluate(() => window.__sampleAvatarPose().bones);
+  return { clips, take, mockVr, armRest, afterPoint, afterVr };
+}
+
+const OPTIONAL_KEYS = /Eye$|Thumb|Index|Middle|Ring|Little/;
+/** Worst hips-relative distance between matching keys that `keep` accepts; a missing required bone is listed. */
+function worstOf(want: Bones, got: Bones, keep: (key: string) => boolean): { d: number; key: string; missing: string[] } {
+  let d = 0;
+  let key = '';
+  const missing: string[] = [];
+  const wh = want.hips ?? [0, 0, 0];
+  const gh = got.hips ?? [0, 0, 0];
+  for (const [k, w] of Object.entries(want)) {
+    if (!keep(k)) continue;
+    const g = got[k];
+    if (!g) { if (!OPTIONAL_KEYS.test(k)) missing.push(k); continue; }
+    const e = Math.hypot(g[0] - gh[0] - w[0] + wh[0], g[1] - gh[1] - w[1] + wh[1], g[2] - gh[2] - w[2] + wh[2]);
+    if (e > d) { d = e; key = k; }
+  }
+  return { d, key, missing };
+}
+
+function checkLocomotion(fixture: FixtureInfo, want: LocomotionSamples, got: LocomotionSamples): Record<string, unknown> {
+  const remapped = new Set(Object.keys(fixture.expect.bonesByName ?? {}));
+  const body = (k: string) => !remapped.has(k.replace(/Tip$/, ''));
+  const worst = { clips: 0, take: 0, mockVr: 0, point: 0, vr: 0 };
+  const note = (kind: keyof typeof worst, label: string, w: Bones, g: Bones, keep: (k: string) => boolean) => {
+    const r = worstOf(w, g, keep);
+    if (r.missing.length > 0) fail(fixture.name, `${label}: no ${r.missing.slice(0, 3).join(', ')}`);
+    worst[kind] = Math.max(worst[kind], r.d);
+    if (r.d > POSE_TOLERANCE_M) fail(fixture.name, `${label}: ${r.key} is ${(r.d * 100).toFixed(1)} cm off`);
+  };
+  for (const [key, w] of Object.entries(want.clips)) {
+    note('clips', `clip ${key}`, w, got.clips[key] ?? {}, (k) => body(k) && (key.startsWith('desktop') || LEG_KEYS.test(k)));
+  }
+  const sequence = (samples: PoseSample[]) => samples.map((s) => s.locomotion.state).filter((s, i, a) => s !== a[i - 1]).join('>');
+  // A rig whose arms are corrected has a desktop idle clip (the correction), so walking
+  // crossfades in and out of it, where the shipped avatar (no desktop idle clip) starts
+  // and stops at once: on such a rig the 200 ms after each state change are not compared.
+  const armCorrected = fixture.expect.armBelowHorizontalDegrees !== undefined;
+  for (const [kind, w, g, keep] of [
+    ['take', want.take, got.take, body],
+    ['mockVr', want.mockVr, got.mockVr, (k: string) => body(k) && LEG_KEYS.test(k)]
+  ] as const) {
+    if (sequence(g) !== sequence(w)) fail(fixture.name, `${kind} states ${sequence(g)} (shipped ${sequence(w)})`);
+    // t-pose-twisted tests the twist correction. Its forward arms move its bounds-based centering 3.9 cm, which
+    // the terrain legs and crouch then see, so only its clip poses (hips-relative) compare.
+    if (fixture.name === TWISTED) continue;
+    const changed = (i: number) => i === 0 || (i > 0 && w[i]!.locomotion.state !== w[i - 1]!.locomotion.state);
+    w.forEach((sample, i) => {
+      if (armCorrected && kind === 'take' && (changed(i) || changed(i - 1))) return;
+      note(kind, `${kind} at ${(i + 1) * 100} ms`, sample.bones, g[i]?.bones ?? {}, keep);
+    });
+  }
+  if (!got.mockVr.some((s) => s.locomotion.profile === 'vr-lower-body' && s.locomotion.state === 'walk')) fail(fixture.name, 'mock VR never walked on the VR profile');
+  note('point', 'arm after pointing', got.armRest, got.afterPoint, (k) => ARM_KEYS.test(k));
+  note('vr', 'arm after a mock VR round trip', want.afterVr, got.afterVr, (k) => ARM_KEYS.test(k));
+  return {
+    sequence: { take: sequence(got.take), mockVr: sequence(got.mockVr) },
+    worstCm: Object.fromEntries(Object.entries(worst).map(([k, v]) => [k, +(v * 100).toFixed(2)]))
+  };
+}
+
+async function openApp(avatarUrl: string | null, extraParams: Record<string, string> = {}) {
   const context = await createXrContext(browser, { viewport: { width: 640, height: 360 }, acceptDownloads: true });
   const page = await context.newPage();
   const warnings: string[] = [];
@@ -125,8 +247,9 @@ async function openApp(avatarUrl: string | null) {
   const pageUrl = new URL(baseUrl);
   pageUrl.searchParams.set('manualClock', '1');
   if (avatarUrl) pageUrl.searchParams.set('avatar', avatarUrl);
+  for (const [k, v] of Object.entries(extraParams)) pageUrl.searchParams.set(k, v);
   await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
-  await waitForPageFunctions(page, ['__sampleHumanoid', '__sampleBody', '__setMockInput', 'advanceTime']);
+  await waitForPageFunctions(page, ['__sampleHumanoid', '__sampleBody', '__setMockInput', 'advanceTime', '__poseLocomotion', '__sampleAvatarPose']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   return { context, page, warnings, errors };
 }
@@ -136,12 +259,27 @@ const browser = await launchXrBrowser(chromium);
 const summary: Record<string, unknown>[] = [];
 const shipped = await openApp(null);
 const shippedPoses = await samplePoses(shipped.page);
+const shippedLocomotion = await sampleLocomotion(shipped.page);
+const shippedReport = await shipped.page.evaluate(() => window.__sampleHumanoid()) as HumanoidBindingReport | null;
 await shipped.context.close();
+await writeFile(path.join(artifactDir, 'shipped-locomotion.json'), JSON.stringify({ report: shippedReport?.locomotion, ...shippedLocomotion }, null, 2));
+if (Object.values(shippedReport?.locomotion?.clips ?? {}).some((c) => c !== 'own')) fail('shipped', `locomotion ${JSON.stringify(shippedReport?.locomotion)}`);
+// The take must exercise every state, or matching the shipped sequence proves little.
+const shippedStates = new Set(shippedLocomotion.take.map((s) => s.locomotion.state));
+for (const state of ['idle', 'walk', 'jump', 'fall']) if (!shippedStates.has(state)) fail('shipped', `the take never reaches ${state}`);
 await writeFile(path.join(artifactDir, 'shipped-poses.json'), JSON.stringify(shippedPoses, null, 2));
 for (const fixture of fixtures) {
   const { context, page, warnings, errors } = await openApp(urlOf(fixture));
   const report = await page.evaluate(() => window.__sampleHumanoid()) as HumanoidBindingReport | null;
   const poses = fixture.name === 'unmappable' ? null : await samplePoses(page);
+  const locomotionSamples = fixture.name === 'unmappable' ? null : await sampleLocomotion(page);
+  const locomotion = locomotionSamples ? checkLocomotion(fixture, shippedLocomotion, locomotionSamples) : null;
+  if (locomotionSamples) await writeFile(path.join(artifactDir, `${fixture.name}-locomotion.json`), JSON.stringify({ report: report?.locomotion, ...locomotion, ...locomotionSamples }, null, 2));
+  if (report && fixture.name !== 'unmappable') {
+    const want = fixture.expect.ownClips ? 'own' : 'retargeted';
+    const clips = report.locomotion?.clips ?? {};
+    if (['idle', 'walk', 'jump', 'fall'].some((state) => clips[state] !== want)) fail(fixture.name, `locomotion clips ${JSON.stringify(clips)}; expected ${want}`);
+  }
   if (EXPORTED.includes(fixture.name)) await checkExport(fixture, page);
   await context.close();
   await writeFile(path.join(artifactDir, `${fixture.name}-humanoid.json`), JSON.stringify({ report, poses, warnings, errors }, null, 2));
@@ -156,7 +294,7 @@ for (const fixture of fixtures) {
         if (d > poseWorst) { poseWorst = d; worstAt = `${pose} ${bone}`; }
       }
     }
-    if (poseWorst > POSE_TOLERANCE_M) fail(fixture.name, `${worstAt} is ${(poseWorst * 100).toFixed(1)} cm from the shipped avatar's`);
+    if (poseWorst > POSE_TOLERANCE_M && fixture.name !== TWISTED) fail(fixture.name, `${worstAt} is ${(poseWorst * 100).toFixed(1)} cm from the shipped avatar's`);
   }
 
   const pageErrors = errors.filter((e) => !/Failed to load resource|favicon/.test(e));
@@ -165,7 +303,7 @@ for (const fixture of fixtures) {
   const disabled = Object.keys(report.disabledFeatures);
   if (fixture.kind === 'negative' && fixture.name === 'unmappable') {
     if (report.missingRequired.length !== 15) fail(fixture.name, `expected 15 missing required bones, got ${report.missingRequired.length}`);
-    for (const feature of REQUIRED_FEATURES_OFF_WHEN_UNMAPPABLE) {
+    for (const feature of [...REQUIRED_FEATURES_OFF_WHEN_UNMAPPABLE, 'locomotion']) {
       if (!disabled.includes(feature)) fail(fixture.name, `${feature} should be reported off`);
     }
     if (warnings.length !== 1) fail(fixture.name, `expected one [avatar] warning, got ${warnings.length}`);
@@ -189,7 +327,19 @@ for (const fixture of fixtures) {
       fail(fixture.name, `facing correction ${JSON.stringify(report.facing)}; expected yaw ${wantYaw}`);
     }
   }
-  summary.push({ fixture: fixture.name, source: report.source, standard: report.standard ?? '-', bones: Object.keys(report.bones).length, missing: report.missingRequired.length, off: disabled.length, facingDeg: report.facing.correctionDeg, poseCm: poses ? +(poseWorst * 100).toFixed(2) : '-', notes: report.notes.length });
+  summary.push({ fixture: fixture.name, source: report.source, standard: report.standard ?? '-', bones: Object.keys(report.bones).length, missing: report.missingRequired.length, off: disabled.length, facingDeg: report.facing.correctionDeg, poseCm: poses ? +(poseWorst * 100).toFixed(2) : '-', locomotionCm: locomotion ? JSON.stringify(locomotion.worstCm) : '-', arms: JSON.stringify(report.locomotion?.restCorrectionDeg ?? {}), notes: report.notes.length });
+}
+// A clip library that fails to load turns locomotion off, says so once, and the avatar still loads.
+const tPose = fixtures.find((f) => f.name === 't-pose');
+if (tPose) {
+  const { context, page, warnings, errors } = await openApp(urlOf(tPose), { locomotionLibrary: '/gltf/animations/missing-library.glb' });
+  const report = await page.evaluate(() => window.__sampleHumanoid()) as HumanoidBindingReport | null;
+  await context.close();
+  const pageErrors = errors.filter((e) => !/Failed to load resource|favicon/.test(e));
+  if (!report?.disabledFeatures.locomotion) fail('missing-library', `locomotion not reported off: ${JSON.stringify(report?.disabledFeatures)}`);
+  if (warnings.length !== 1) fail('missing-library', `expected one [avatar] warning, got ${warnings.length}`);
+  if (pageErrors.length > 0) fail('missing-library', `page errors: ${pageErrors.slice(0, 2).join(' | ')}`);
+  summary.push({ fixture: 't-pose (library missing)', off: Object.keys(report?.disabledFeatures ?? {}).join(',') });
 }
 await browser.close();
 console.table(summary);

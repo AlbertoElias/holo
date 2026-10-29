@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import type { VrmHumanoidBone } from '@holoim/meaning';
+import { VRM_HUMANOID_BONES, type VrmHumanoidBone } from '@holoim/meaning';
 
 import type { HumanoidSkeleton } from '../avatar/HumanoidSkeleton';
 
 export type LocomotionState = 'idle' | 'walk' | 'jump' | 'fall';
 export type LocomotionProfile = 'desktop-full' | 'vr-lower-body';
+/** Where each state's clip came from: the avatar's own, the retargeted library, or neither. */
+export type LocomotionClipSource = 'own' | 'retargeted' | 'none';
 
 export interface LocomotionUpdateInput {
   deltaSec: number;
@@ -18,7 +20,7 @@ export interface LocomotionUpdateInput {
   referenceSpeed?: number;
 }
 
-const LOCOMOTION_STATES: readonly LocomotionState[] = ['idle', 'walk', 'jump', 'fall'];
+export const LOCOMOTION_STATES: readonly LocomotionState[] = ['idle', 'walk', 'jump', 'fall'];
 const CLIP_MATCHERS: Readonly<Record<LocomotionState, RegExp>> = {
   idle: /idle|breath|stand/i,
   walk: /walk|locomotion/i,
@@ -44,6 +46,22 @@ const WALK_STATE_SPEED_THRESHOLD = 0.12;
 const WALK_FADE_SEC = 0.08;
 const WALK_ENTRY_TIME_OFFSET_SEC = 0.12;
 
+/** Node key (leaf name, namespace and path trimmed, lowercased) and property of a track. */
+function parseTrackName(trackName: string): { nodeName: string; property: 'position' | 'quaternion' | 'scale' } | undefined {
+  const match = /^(.+)\.(position|quaternion|scale)$/.exec(trackName);
+  if (!match) return undefined;
+  const rawNodeName = match[1]!;
+  const rawProperty = match[2]!;
+
+  const pathLeaf = rawNodeName.split('/').pop() ?? rawNodeName;
+  const bracketMatch = /\[([^[\]]+)\]/.exec(pathLeaf);
+  const nodeLeaf = bracketMatch?.[1] ?? pathLeaf;
+  const namespaceTrimmed = nodeLeaf.includes(':') ? nodeLeaf.slice(nodeLeaf.lastIndexOf(':') + 1) : nodeLeaf;
+  const nodeName = namespaceTrimmed.toLowerCase();
+  const property = rawProperty as 'position' | 'quaternion' | 'scale';
+  return { nodeName, property };
+}
+
 export class LocomotionAnimator {
   private mixer: THREE.AnimationMixer | null = null;
   private lowerBodyNames: ReadonlySet<string> | undefined;
@@ -56,21 +74,64 @@ export class LocomotionAnimator {
   private activeProfile: LocomotionProfile = 'desktop-full';
   private activeAction: THREE.AnimationAction | null = null;
   private currentTimeScale = 1;
+  private clipSources: Record<LocomotionState, LocomotionClipSource> = { idle: 'none', walk: 'none', jump: 'none', fall: 'none' };
+
+  /**
+   * The avatar plays its own clips when it has a usable Idle and Walk (a clip
+   * of that name with a rotation track on one of this rig's canonical bones);
+   * otherwise it plays the library's for every state. Never a mix: the
+   * library's clips carry the T-pose correction, so mixing would make the
+   * arms pop between states.
+   */
+  static usesOwnClips(clips: readonly THREE.AnimationClip[], humanoid?: HumanoidSkeleton): boolean {
+    return LocomotionAnimator.ownClip(clips, 'idle', humanoid) !== undefined && LocomotionAnimator.ownClip(clips, 'walk', humanoid) !== undefined;
+  }
+
+  private static ownClip(clips: readonly THREE.AnimationClip[], state: LocomotionState, humanoid?: HumanoidSkeleton): THREE.AnimationClip | undefined {
+    const canonical = humanoid ? LocomotionAnimator.boneKeys(humanoid, VRM_HUMANOID_BONES) : undefined;
+    return clips.find((clip) => CLIP_MATCHERS[state].test(clip.name) && clip.tracks.some((track) => {
+      if (!canonical) return true;
+      const parts = parseTrackName(track.name);
+      return parts?.property === 'quaternion' && canonical.has(parts.nodeName);
+    }));
+  }
+
+  /** Track node keys of these bones: the rig's own (lowercased) names, and the uuids retargeted tracks bind by. */
+  private static boneKeys(humanoid: HumanoidSkeleton, bones: readonly VrmHumanoidBone[]): Set<string> {
+    return new Set(bones.flatMap((b) => { const bone = humanoid.bone(b); return bone ? [bone.name.toLowerCase(), bone.uuid.toLowerCase()] : []; }));
+  }
+
+  /** Rebinds tracks named for a canonical bone to its uuid, so a prop with the same name cannot take them. */
+  private static bindToBones(clip: THREE.AnimationClip, humanoid: HumanoidSkeleton): THREE.AnimationClip {
+    const byName = new Map(VRM_HUMANOID_BONES.flatMap((b) => { const bone = humanoid.bone(b); return bone ? [[bone.name.toLowerCase(), bone.uuid] as const] : []; }));
+    const tracks = clip.tracks.map((track) => {
+      const parts = parseTrackName(track.name);
+      const uuid = parts && byName.get(parts.nodeName);
+      if (!parts || !uuid) return track;
+      const rebound = track.clone();
+      rebound.name = `${uuid}.${parts.property}`;
+      return rebound;
+    });
+    const out = new THREE.AnimationClip(clip.name, clip.duration, tracks);
+    out.blendMode = clip.blendMode;
+    return out;
+  }
 
   /**
    * With the avatar's humanoid skeleton, tracks are kept by canonical bone
-   * (the rig's own hips and leg bone names); without it, by the shipped rig's
-   * name suffixes.
+   * (the rig's own hips and leg bones); without it, by the shipped rig's name
+   * suffixes. `retargeted` (the library's clips on this rig) play when the
+   * avatar's own do not qualify (`usesOwnClips`).
    */
-  attachClips(root: THREE.Object3D, clips: THREE.AnimationClip[], humanoid?: HumanoidSkeleton): void {
+  attachClips(root: THREE.Object3D, ownClips: THREE.AnimationClip[], humanoid?: HumanoidSkeleton, retargeted: readonly THREE.AnimationClip[] = []): void {
     this.lowerBodyNames = undefined;
     this.rootMotionNames = undefined;
     if (humanoid) {
-      const names = (bones: readonly VrmHumanoidBone[]) =>
-        new Set(bones.flatMap((b) => { const bone = humanoid.bone(b); return bone ? [bone.name.toLowerCase()] : []; }));
-      this.lowerBodyNames = names(LOWER_BODY_BONES);
-      this.rootMotionNames = new Set([...names(['hips']), 'armature', 'root']);
+      this.lowerBodyNames = LocomotionAnimator.boneKeys(humanoid, LOWER_BODY_BONES);
+      this.rootMotionNames = new Set([...LocomotionAnimator.boneKeys(humanoid, ['hips']), 'armature', 'root']);
     }
+    const own = !humanoid || LocomotionAnimator.usesOwnClips(ownClips, humanoid);
+    const clips = own ? (humanoid ? ownClips.map((clip) => LocomotionAnimator.bindToBones(clip, humanoid)) : ownClips) : [...retargeted];
     this.mixer?.stopAllAction();
     this.mixer = new THREE.AnimationMixer(root);
     this.activeAction = null;
@@ -86,6 +147,9 @@ export class LocomotionAnimator {
 
     this.bindProfileActions('desktop-full', desktopClips);
     this.bindProfileActions('vr-lower-body', vrClips);
+    for (const state of LOCOMOTION_STATES) {
+      this.clipSources[state] = this.resolveClip(clips, state) ? (own ? 'own' : 'retargeted') : 'none';
+    }
     this.playState(this.state, this.activeProfile, 0);
   }
 
@@ -118,6 +182,29 @@ export class LocomotionAnimator {
     if (!this.activeAction) return null;
     const clip = this.activeAction.getClip();
     return { name: clip.name, time: this.activeAction.time, duration: clip.duration };
+  }
+
+  /**
+   * Automation: shows one state's clip at a clip time, on one profile, with
+   * nothing blended in (rest where the profile has no clip for the state).
+   * Read the pose before the next simulation step overwrites it.
+   */
+  poseForCheck(state: LocomotionState, profile: LocomotionProfile, timeSec: number): string | null {
+    if (!this.mixer) return null;
+    this.mixer.stopAllAction();
+    const action = this.actionsByProfile[profile][state] ?? null;
+    this.state = state;
+    this.activeProfile = profile;
+    this.activeAction = action;
+    if (!action) return null;
+    action.reset().setEffectiveWeight(1).setEffectiveTimeScale(1).play();
+    action.time = timeSec;
+    this.mixer.update(0);
+    return action.getClip().name;
+  }
+
+  getClipSources(): Readonly<Record<LocomotionState, LocomotionClipSource>> {
+    return this.clipSources;
   }
 
   getCurrentTimeScale(): number {
@@ -250,7 +337,7 @@ export class LocomotionAnimator {
   }
 
   private shouldKeepTrack(trackName: string, profile: LocomotionProfile, isIdleClip: boolean): boolean {
-    const parts = this.parseTrackName(trackName);
+    const parts = parseTrackName(trackName);
     if (!parts) return false;
 
     if (parts.property === 'position' && this.isRootMotionTarget(parts.nodeName)) {
@@ -269,7 +356,7 @@ export class LocomotionAnimator {
     if (!isWalkClip) return track;
     if (!(track instanceof THREE.QuaternionKeyframeTrack)) return track;
 
-    const parts = this.parseTrackName(track.name);
+    const parts = parseTrackName(track.name);
     if (!parts || parts.property !== 'quaternion' || !this.isLowerBodyTarget(parts.nodeName)) {
       return track;
     }
@@ -307,21 +394,6 @@ export class LocomotionAnimator {
       values[aOffset + 3]! * values[bOffset + 3]!
     );
     return Number.isFinite(dot) && dot >= WALK_LOOP_QUAT_MATCH_DOT;
-  }
-
-  private parseTrackName(trackName: string): { nodeName: string; property: 'position' | 'quaternion' | 'scale' } | undefined {
-    const match = /^(.+)\.(position|quaternion|scale)$/.exec(trackName);
-    if (!match) return undefined;
-    const rawNodeName = match[1]!;
-    const rawProperty = match[2]!;
-
-    const pathLeaf = rawNodeName.split('/').pop() ?? rawNodeName;
-    const bracketMatch = /\[([^[\]]+)\]/.exec(pathLeaf);
-    const nodeLeaf = bracketMatch?.[1] ?? pathLeaf;
-    const namespaceTrimmed = nodeLeaf.includes(':') ? nodeLeaf.slice(nodeLeaf.lastIndexOf(':') + 1) : nodeLeaf;
-    const nodeName = namespaceTrimmed.toLowerCase();
-    const property = rawProperty as 'position' | 'quaternion' | 'scale';
-    return { nodeName, property };
   }
 
   private isRootMotionTarget(nodeName: string): boolean {

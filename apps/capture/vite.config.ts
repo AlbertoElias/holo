@@ -163,7 +163,9 @@ function stripUikitmlSourcemapsPlugin(): Plugin {
 // - scene.glb: optimization flips triangle winding (and mirrors some
 //   meshes), corrupting the physics trimesh built from the scene — floors
 //   become ceilings and the avatar falls through.
-const PRESERVED_MODEL_ASSETS = ['gltf/models/avatar.glb', 'gltf/models/scene.glb'] as const;
+// - locomotion.glb: the clip library retargeted onto avatars without clips;
+//   the optimizer writes it out unreadable, and its keys must stay exact.
+const PRESERVED_MODEL_ASSETS = ['gltf/models/avatar.glb', 'gltf/models/scene.glb', 'gltf/animations/locomotion.glb'] as const;
 
 function preserveModelAssetsPlugin(sourcePublicDir: string, tempPublicDir: string): Plugin {
   let outDir = path.resolve('dist');

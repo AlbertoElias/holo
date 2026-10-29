@@ -18,7 +18,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Accessor, Document, Node, NodeIO, Skin } from '@gltf-transform/core';
+import type { Accessor, Document, Node, Skin } from '@gltf-transform/core';
+import { NodeIO } from '@gltf-transform/core';
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import {
   VRM_HUMANOID_BONES,
@@ -55,9 +56,13 @@ export interface FixtureExpect {
   readonly facing: '+Z' | '-Z';
   /** Upper arms point this many degrees below horizontal (in the world XY plane) in the node TRS rest pose. */
   readonly armBelowHorizontalDegrees?: number;
+  /** Upper arms also swing this many degrees forward (toward +Z) of the side, in the rest pose. */
+  readonly armForwardDegrees?: number;
   readonly notes: string;
   /** The required bones resolve and none of the 30 finger bones do (fingers off, grip estimated). */
   readonly noFingers?: boolean;
+  /** Keeps the shipped Idle/Walk/Jump/Fall clips; every other fixture drops them, as real third-party files lack them. */
+  readonly ownClips?: boolean;
 }
 
 export interface FixtureInfo {
@@ -516,7 +521,11 @@ const VRM0_THUMB_NAMES: Partial<Record<VrmHumanoidBone, string>> = {
 };
 
 const BUILDERS: Record<string, (ctx: Ctx) => Built> = {
-  'mixamo-prefixed': renamed((n) => `mixamorig1:${n}`, 'every joint `mixamorig1:<name>`', 'mixamo'),
+  'mixamo-prefixed': (ctx) => {
+    // The one fixture that keeps its own clips: they bind under renamed bones and win over the library.
+    const built = renamed((n) => `mixamorig1:${n}`, 'every joint `mixamorig1:<name>`; keeps the shipped clips', 'mixamo')(ctx);
+    return { ...built, expect: { ...built.expect, ownClips: true } };
+  },
 
   'unreal-cm': (ctx) => {
     renameJoints(ctx, schemeRenamer(UNREAL));
@@ -620,6 +629,26 @@ const BUILDERS: Record<string, (ctx: Ctx) => Built> = {
 
   'a-pose': armPose(45, 'A-pose'),
   't-pose': armPose(0, 'T-pose'),
+  // Off-axis and twisted: arms 15° forward of the side and forearms rolled 90° (palms forward), so a
+  // swing-only correction (or a direction-only check) cannot pass; the fingertips show the roll.
+  't-pose-twisted': (ctx) => {
+    const built = armPose(0, 'T-pose')(ctx);
+    for (const side of ['Left', 'Right'] as const) {
+      const sign = side === 'Left' ? 1 : -1;
+      rotateRestInWorld(jointByName(ctx, `${side}Arm`), axisAngle([0, 1, 0], -15 * sign));
+      const forearm = jointByName(ctx, `${side}ForeArm`);
+      const along = new Vector3().setFromMatrixPosition(new Matrix4().fromArray(jointByName(ctx, `${side}Hand`).getWorldMatrix()))
+        .sub(new Vector3().setFromMatrixPosition(new Matrix4().fromArray(forearm.getWorldMatrix()))).normalize();
+      rotateRestInWorld(forearm, new Quaternion().setFromAxisAngle(along, (Math.PI / 2) * sign));
+    }
+    return {
+      ...built,
+      expect: {
+        ...built.expect, armForwardDegrees: 15,
+        notes: 'T-pose with upper arms 15° forward and forearms rolled 90° (palms forward); IBMs unchanged (cheap route)'
+      }
+    };
+  },
 
   'vrm0-minus-z': (ctx) => {
     const humanBones = VRM_HUMANOID_BONES.flatMap((bone) => {
@@ -681,8 +710,8 @@ const BUILDERS: Record<string, (ctx: Ctx) => Built> = {
     return {
       kind: 'negative',
       expect: {
-        ...IDENTITY_EXPECT, vertexExact: true, source: 'names', standard: 'mixamo',
-        notes: 'shipped rig plus a skinned cube prop whose 2 joints are named Hips and Head (after the avatar in node order)'
+        ...IDENTITY_EXPECT, vertexExact: true, source: 'names', standard: 'mixamo', ownClips: true,
+        notes: 'shipped rig plus a skinned cube prop whose 2 joints are named Hips and Head (after the avatar in node order); keeps the shipped clips, which must drive the avatar, not the prop'
       }
     };
   }
@@ -725,6 +754,14 @@ function armPose(targetDegrees: number, label: string): (ctx: Ctx) => Built {
       }
     };
   };
+}
+
+/** Applies a world-frame rotation to a node's rest: r' = (R_wp⁻¹·Q_w·R_wp)·r. */
+function rotateRestInWorld(node: Node, worldRotation: Quaternion): void {
+  const parentWorld = new Quaternion();
+  new Matrix4().fromArray(node.getParentNode()!.getWorldMatrix()).decompose(new Vector3(), parentWorld, new Vector3());
+  const inParent = parentWorld.clone().invert().multiply(worldRotation).multiply(parentWorld);
+  node.setRotation(quatArr(inParent.multiply(quat(node.getRotation())).normalize()));
 }
 
 /**
@@ -780,6 +817,19 @@ export function shippedMapping(source: Uint8Array): HumanoidMapping {
  * Writes every fixture to `outDir` and describes it. Deterministic: the same
  * shipped avatar always produces byte-identical files.
  */
+/** Removes every animation and the accessors only they used. */
+function dropAnimations(doc: Document): void {
+  const root = doc.getRoot();
+  for (const animation of root.listAnimations()) {
+    for (const sampler of animation.listSamplers()) sampler.dispose();
+    for (const channel of animation.listChannels()) channel.dispose();
+    animation.dispose();
+  }
+  for (const accessor of root.listAccessors()) {
+    if (accessor.listParents().every((p) => p.propertyType === 'Root')) accessor.dispose();
+  }
+}
+
 export async function generateAvatarFixtures(
   outDir: string,
   source?: Uint8Array
@@ -791,6 +841,7 @@ export async function generateAvatarFixtures(
   for (const [name, build] of Object.entries(BUILDERS)) {
     const ctx = await loadCtx(source, shipped);
     const built = build(ctx);
+    if (!built.expect.ownClips) dropAnimations(ctx.doc);
     const origIndex = ctx.doc.getRoot().listNodes().map((node) => ctx.orig.get(node) ?? -1);
     let glb: Uint8Array = await io.writeBinary(ctx.doc);
     if (built.patch) glb = patchGlbJson(glb, built.patch);
