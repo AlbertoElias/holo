@@ -37,6 +37,9 @@ it from the item below instead of duplicating its status here.
   Poly Haven from capture's tray and carry the credit into the take. Owned by
   [`docs/features/object-search.md`](docs/features/object-search.md). Next
   slices: voice input, Poly Pizza (needs its API key), the headset overlay.
+- [ ] Hand traces (PRD-023, approved 2026-10-28): paused headset takes show
+  each hand's path from the last 3 s in the feed portal. Owned by
+  [`docs/features/hand-traces.md`](docs/features/hand-traces.md).
 - [ ] Self-resolving pointing (PRD-022, approved 2026-10-22): highlight what
   the author points at in the feed portal, from headset hands and a desktop
   point action. Owned by
