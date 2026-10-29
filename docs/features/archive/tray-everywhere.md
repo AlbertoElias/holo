@@ -1,7 +1,7 @@
 # Feature brief: The tray on every device
 
 **Lead:** Claude Code (Opus), session `tray-ui`
-**Status:** Implementing
+**Status:** Complete
 **Layer:** event (what is summoned and when it appears) and view (the
 tray's chrome, which never enters the recording); see
 `docs/product/concepts/what-a-hologram-is.md`
@@ -172,51 +172,53 @@ its export stays valid.
 
 ## Acceptance criteria
 
-- [ ] **Desktop, before a take:** holding T shows the row of five slots, with
+- [x] **Desktop, before a take:** holding T shows the row of five slots, with
   a thumbnail and its key on each filled slot, and muted empty slots. T + 1
   summons into the right hand, and G places. Pressing record keeps the
   object, and the exported GLB has it as a `RecordedObject` with
   `origin: 'prepared'`, present from frame 0 (no scale track), at its
   pre-take pose within 1 cm (the harness's `EXPORT_POSITION_M`).
-- [ ] **Desktop, during a take:** the dock shows Tray and Find. Find
+- [x] **Desktop, during a take:** the dock shows Tray and Find. Find
   (fixture search) adds an item to the tray mid-take, and T + its key summons
   it. The export validates (`gltf-validator`, no errors) and has the item as
   `origin: 'summoned'`, with presence from its summon frame (within one
   frame) and its credit.
-- [ ] **No hitch (emulated, real-time clock):** during a take, an 8 MB
+- [x] **No hitch (real-time clock; enforced on a hardware GPU, see Hitch decision):** during a take, an 8 MB
   fixture GLB is loaded mid-take and the tray is then opened for the first
   time. A `PerformanceObserver('longtask')` records no task longer than
   100 ms. The report lists every long task and the step intervals, and the
   take's export still validates. Quest timing is a device check.
-- [ ] **Between takes:** a second take starts with the first take's objects
+- [x] **Between takes:** a second take starts with the first take's objects
   where they were left, all present from frame 0 as `prepared`. A 60 s take
   carrying five or more objects converts to USDZ.
-- [ ] **Touch (phone size, touch emulation):** tapping the Tray glyph opens
+- [x] **Touch (phone size, touch emulation):** tapping the Tray glyph opens
   the tray with a ring of at least 44 apx on each filled slot. Tapping one
   summons it into the hand, and a touch on the held object releases it.
   Press-hold-slide-lift on the glyph also summons. Before a take and during
   one.
-- [ ] **VR (IWER, controllers and hands):** a squeeze or pinch on a
+- [x] **VR (IWER, controllers and hands):** a squeeze or pinch on a
   miniature summons before a take, where today it does nothing. The
   reachable item's probe reads `reachable: true` with the right glyph, and
   the others read false. Find on the wrist stays during a take and adds to
   the tray.
-- [ ] **Phone AR (camera author, emulated):** the Tray glyph opens the row,
+- [x] **Phone AR (camera author, emulated):** the Tray glyph opens the row,
   the reticle sits on the set, and a tap places the item on the hit point.
   The camera take's export has it with presence from that frame. A screen
   hold made before the placement, aimed where the object later stands, does
   not link to it.
-- [ ] **Quest passthrough:** no summon. Find fills the tray.
-- [ ] **Help** on each device says summoning works before and during a take,
+- [ ] **Quest passthrough:** no summon. Find fills the tray. Unverified:
+  the spectator gate is unchanged code, but no check drives passthrough.
+- [x] **Help** on each device says summoning works before and during a take,
   and how.
-- [ ] **No regression:** `test:xr:summon`, `test:xr:object`, `test:xr:ui`,
+- [x] **No regression:** `test:xr:summon`, `test:xr:object`, `test:xr:ui`,
   the AR record check and `verify:pr` pass. Three assertions are changed by
   this brief and not regressions: `summon-take.mjs`'s tray-only take
   exporting `objects: []`, a squeeze before recording summoning nothing, and
   the origin expectations for carried objects.
-- [ ] **Design:** Codex reviews the screenshots of each device's open tray
+- [x] **Design:** Codex reviews the screenshots of each device's open tray
   against the styleguide, and its findings are fixed before the user sees
-  them.
+  them. Codex hit its usage limit, so Muse reviewed instead; its one finding
+  (the phone dock clipping the row) was fixed with the dock's `unfold`.
 
 ## Failure cases considered
 
@@ -274,22 +276,54 @@ Alternatives rejected: rewriting `origin` on the live object; UIKit on flat
 screens (the DOM gives touch, focus and names for free); a worker parse
 (measure first).
 
+## Hitch decision (the user, through the lead)
+
+"Enforce on real GPU". `tray-hitch` loads the 8 MB fixture mid-take and
+opens the tray, with a `PerformanceObserver('longtask')` and `tray:*` User
+Timing marks. On a hardware GPU (WebGL renderer string, or
+`SUMMON_HITCH_GPU=1`) any task over 100 ms fails; on Metal there were 0 long
+tasks. On SwiftShader the GPU process's work runs on the CPU and blocks the
+page, so the stalls are recorded, not failed, and the export must still
+validate: about 164–200 ms at the first draw after the texture upload, about
+136 ms around the read-back, and about 111–121 ms at the summon. The fixture
+and threshold are unchanged. The work that got there: compile with the
+thumbnail target bound, compile a visible proxy for the live scene, one
+texture upload per task, an async read-back, and a hull scan in 16,384-point
+chunks.
+
+## Glyphs (the user, 2026-10-28)
+
+Tray (a shelf of shapes), Squeeze (a closed fist, after Lucide hand-fist),
+Pinch (a real pinch, after Iconoven hand-pinch), and the slot fallbacks for
+a model (a globe) and an image (a frame with a sun over a peak) are in
+`tokens.json` and the styleguide's glyph table. Find stays provisional.
+Styleguide 8.5 now keeps Tray and Find on the dock during a take.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 | --- | --- | --- |
-| Desktop pre-take and mid-take, between takes, hitch | `SUMMON_ONLY=desktop` and new `desktop-anytime` phase of `test:xr:summon` | `output/summon/*-report.json`, screenshots; pending |
-| Touch | new `touch-tray` phase | report and screenshot; pending |
-| VR controllers and hands | `controllers`, `hands` phases (assertions flipped for pre-take) | report; pending |
-| Find mid-take (flat, headset, voice) | `find`, `headset-find`, `desktop-voice` phases mid-take | report; pending |
-| Phone AR placement | AR record check, new tray phase | report, GLB probe; pending |
-| No regression | `test:xr:object`, `test:xr:ui`, `verify:pr` | pending |
-| Proof | Real-time recording of desktop, touch and IWER VR | `output/tray-everywhere/`, not committed; pending |
+| Desktop pre-take and mid-take, between takes | `desktop`, `desktop-anytime` phases of `test:xr:summon` | pass; `apps/capture/output/ci-summon/report.json`, `desktop-anytime-*.png` |
+| Hitch | `tray-hitch` phase (`SUMMON_HITCH_GPU=1` for Metal) | pass; 0 long tasks on Metal, SwiftShader stalls recorded above |
+| 60 s, five carried objects, USDZ | `long-carry` phase, then `summon.pipeline.spec.ts` | pass; five `prepared` objects present 0–59.98 s, each within 0.1 mm of its start; USDZ converts |
+| Touch | `touch-tray` phase | pass; 44 apx slots, tap and slide summon, dock clearance in the report |
+| VR controllers and hands | `controllers`, `hands` phases | pass; pre-take squeeze and pinch summon |
+| Find mid-take (flat, headset, voice) | `find`, `headset-find`, `desktop-voice` phases | pass |
+| Phone AR placement | AR record check, `phone-tray` phase | pass; `phone-tray.glb` has the `RecordedObject` from its placement |
+| No regression | `test:xr:object`, `test:xr:ui`, `verify:pr` after rebase on main | pass |
+| Proof | Real-time recording of desktop, touch and IWER VR (`SUMMON_VIDEO_DIR`) | `output/tray-everywhere-proof/`, not committed |
+
+Verifier: Codex was out of usage, so Muse verified against this brief. Its
+sandbox blocks sockets, so it judged recorded artifacts and the code; it
+found no correctness defects. Its notes: the `seq` guard in `loadTrayNow` is
+now dead code (left), and the AR reticle is faint (a device check).
 
 ## Physical-device limits
 
 IWER and touch emulation prove the logic and layout, not feel. Still to do on
 devices: Quest 3 hands and controllers (whether the reachable highlight reads
 at arm's length, and pinch comfort), an Android phone (touch tray and AR
-placement), and an iPhone (touch tray, portal-only). Each is recorded here
-once run, or listed as Unverified at close.
+placement), and an iPhone (touch tray, portal-only).
+
+Unverified at close: all of the above, plus mid-take load timing on Quest
+and the AR reticle's contrast on a phone camera feed.

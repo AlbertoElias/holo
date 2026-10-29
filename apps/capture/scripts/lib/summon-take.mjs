@@ -11,7 +11,7 @@ import {
 } from '@holoim/tooling-testing/xr-env';
 
 import { angleDeg, findNode, loadTake, objectNodes, readGlb, relativePose, rigidPose, worldAt } from './object-glb.mjs';
-import { clickButton, openCapture, OBJECT_URL, poseOf, readState, saveDownload, setupPage } from './object-take.mjs';
+import { clickButton, openCapture, OBJECT_URL, poseOf, PROOF_VIDEO_DIR, proofPace, readState, saveDownload, setupPage } from './object-take.mjs';
 
 // Summon and place while speaking (PRD-045): scripted IWER takes through
 // capture's real input paths, then the exported GLB read without a renderer.
@@ -249,13 +249,18 @@ export async function enterIwer(page, mode) {
   });
   await freezePageClock(page);
   await waitForXrRenderLoop(page);
-  await page.evaluate(() => window.__setFrameStepping(true, false));
+  // A proof video watches the body from the spectator view, with every frame drawn.
+  await page.evaluate((proof) => {
+    window.__setFrameStepping(true, proof);
+    if (proof) window.__setSpectatorView('body');
+  }, Boolean(PROOF_VIDEO_DIR));
 }
 
 export function stepper(page) {
   const state = { steps: 0 };
   state.step = async (count = 1) => {
     for (let i = 0; i < count; i += 1) await page.clock.runFor(STEP_MS);
+    await proofPace(page, count * STEP_MS);
     state.steps += count;
   };
   return state;
@@ -271,11 +276,11 @@ export function shooter(page, step, artifactDir, label) {
     await step(2);
     const file = path.join(artifactDir, `${label}-${name}.png`);
     await page.screenshot({ path: file });
-    await page.evaluate(() => {
-      window.__setSpectatorView(false);
-      window.__setFrameStepping(true, false);
+    await page.evaluate((proof) => {
+      window.__setSpectatorView(proof ? 'body' : false);
+      window.__setFrameStepping(true, proof);
       for (const element of document.querySelectorAll('#ui-root, #VRButton, #ARButton, [data-webxr_runtime] > div')) element.style.visibility = '';
-    });
+    }, Boolean(PROOF_VIDEO_DIR));
     return file;
   };
 }

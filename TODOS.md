@@ -174,7 +174,7 @@ it from the item below instead of duplicating its status here.
   tray everywhere, 2026-10-28). Nothing clears between takes now, so a
   carried object stays in every later take and the tray only grows to its
   five slots; the author needs a way to take one out of the scene or the
-  tray. See [`docs/features/tray-everywhere.md`](docs/features/tray-everywhere.md).
+  tray. See [`docs/features/archive/tray-everywhere.md`](docs/features/archive/tray-everywhere.md).
 - [ ] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
   `tsconfig.app.json` (src, functions, configs) only, so a spec's missing
   import shows only when Playwright runs it (found in the slice 0 review,

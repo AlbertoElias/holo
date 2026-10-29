@@ -59,8 +59,20 @@ export function poseOf(entry) {
   return entry ? { position: v3(entry.position), quaternion: q4(entry.quaternion) } : null;
 }
 
+/**
+ * SUMMON_VIDEO_DIR=<dir>: each page records a video there, and every simulated
+ * step also waits its own length in real time, so the video plays at the
+ * take's pace (a proof video; output/ only, never committed).
+ */
+export const PROOF_VIDEO_DIR = process.env.SUMMON_VIDEO_DIR ?? null;
+
+export const proofVideoOptions = (viewport) => (PROOF_VIDEO_DIR ? { recordVideo: { dir: PROOF_VIDEO_DIR, size: viewport } } : {});
+
+/** In a proof video run, waits `ms` of real time; otherwise returns at once. */
+export const proofPace = (page, ms) => (PROOF_VIDEO_DIR ? page.waitForTimeout(ms) : undefined);
+
 export async function setupPage(browser, { iwer, consoleErrors, label }) {
-  const context = await createXrContext(browser, { viewport: VIEWPORT, acceptDownloads: true });
+  const context = await createXrContext(browser, { viewport: VIEWPORT, acceptDownloads: true, ...proofVideoOptions(VIEWPORT) });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
   await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"object-take-input.json"}' }));
@@ -82,6 +94,8 @@ export async function openCapture(page, baseUrl, query) {
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['advanceTime', 'render_game_to_text', '__setManualClock', '__setFrameStepping', '__setSpectatorView']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
+  // The manual clock skips drawing; a proof video needs the frames drawn.
+  if (PROOF_VIDEO_DIR) await page.evaluate(() => window.__setManualClock(true, true));
 }
 
 /**

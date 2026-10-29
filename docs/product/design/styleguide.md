@@ -690,7 +690,7 @@ hologram.
 take ends. The Halo stays because it carries the take's own actions: stop,
 and undo or redo the held mark. The tray and Find stay because bringing an
 object into the event is part of the take: a summon or a pick mid-take is
-recorded from its frame ([tray everywhere](../../features/tray-everywhere.md)).
+recorded from its frame ([tray everywhere](../../features/archive/tray-everywhere.md)).
 
 The state is carried by shape and word, not colour: the record control turns
 from a filled rose circle into a rose rounded square (stop), and

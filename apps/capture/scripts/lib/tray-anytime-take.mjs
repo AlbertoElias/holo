@@ -5,7 +5,7 @@ import { createXrContext, waitForPageFunctions, waitForTextContentPrefix, wireXr
 
 import { heavyGlb } from './heavy-glb.mjs';
 import { loadTake, objectNodes, readGlb } from './object-glb.mjs';
-import { OBJECT_URL, openCapture, readState, saveDownload } from './object-take.mjs';
+import { OBJECT_URL, openCapture, proofPace, proofVideoOptions, readState, saveDownload } from './object-take.mjs';
 import { carriedNow, checkCarried, PIXEL_PNG, STEP_MS, summonedItems, TRAY_URLS } from './summon-take.mjs';
 
 // The tray on every device (docs/features/tray-everywhere.md), through
@@ -36,7 +36,8 @@ async function setupFlatPage(browser, { consoleErrors, label, touch = false }) {
   const context = await createXrContext(browser, {
     viewport: touch ? PHONE_VIEWPORT : DESKTOP_VIEWPORT,
     acceptDownloads: true,
-    ...(touch ? { hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : {})
+    ...(touch ? { hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : {}),
+    ...proofVideoOptions(touch ? PHONE_VIEWPORT : DESKTOP_VIEWPORT)
   });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
@@ -96,7 +97,16 @@ async function advanceUntil(page, done, maxSec = 3) {
   return state;
 }
 
-const advance = (page, seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
+const advance = async (page, seconds) => {
+  // A proof video steps a tenth of a second at a time, each in real time.
+  const frames = Math.round(seconds * 60);
+  const chunk = proofVideoOptions(DESKTOP_VIEWPORT).recordVideo ? 6 : frames;
+  for (let done = 0; done < frames; done += chunk) {
+    const n = Math.min(chunk, frames - done);
+    await page.evaluate((ms) => window.advanceTime(ms), n * STEP_MS);
+    await proofPace(page, n * STEP_MS);
+  }
+};
 
 async function routeFind(page, captureRoot) {
   const fixture = await readFile(path.join(captureRoot, 'fixtures/objects/credited-bracket.glb'));
