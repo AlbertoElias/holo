@@ -13,7 +13,7 @@ import type { Object3D } from "three";
 
 import { applySphereClipping, type SphereClipConfig, type SphereClipping, type SphereClipResult } from "./sphereClipping";
 
-export type { SphereClipConfig, SphereClipResult, SphereClipStatus } from "./sphereClipping";
+export type { DomeClip, SphereClipConfig, SphereClipResult, SphereClipStatus } from "./sphereClipping";
 
 export function useSphereClipping(scene: Object3D, config: SphereClipConfig): SphereClipResult {
   const clippingRef = useRef<SphereClipping | null>(null);
@@ -21,6 +21,7 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
   const resultRef = useRef<SphereClipResult>({ active: false, radius: 0, center: new Vector3() });
   const falloffWidth = config.falloffWidth;
   const safeMode = config.safeMode ?? true;
+  const dome = config.dome;
   const callbacksRef = useRef(config);
   callbacksRef.current = config;
 
@@ -31,6 +32,7 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
     const clipping = applySphereClipping(scene, {
       falloffWidth,
       safeMode,
+      ...(dome ? { dome } : {}),
       onStatus: (status) => callbacksRef.current.onStatus?.(status),
       onError: (error) => callbacksRef.current.onError?.(error)
     }, result);
@@ -42,7 +44,7 @@ export function useSphereClipping(scene: Object3D, config: SphereClipConfig): Sp
       result.active = false;
       result.radius = 0;
     };
-  }, [falloffWidth, safeMode, scene]);
+  }, [dome, falloffWidth, safeMode, scene]);
 
   return resultRef.current;
 }

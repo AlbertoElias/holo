@@ -20,6 +20,9 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Summon and place while speaking | Complete | [summon-and-place.md](archive/summon-and-place.md) |
 | Explain with an object | Complete | [explain-with-an-object.md](archive/explain-with-an-object.md) |
 | Grab, place and throw objects with physics | Complete | [object-physics.md](archive/object-physics.md) |
+| Props collide with the avatar | Complete | [avatar-prop-physics.md](archive/avatar-prop-physics.md) |
+| Resize and move props on every device | Complete | [object-resize-and-move.md](archive/object-resize-and-move.md) |
+| The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |
@@ -31,6 +34,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Knowledge Atlas | Complete | [archive/knowledge-atlas.md](archive/knowledge-atlas.md) |
 | Natural locomotion and terrain response | Complete | [archive/avatar-locomotion.md](archive/avatar-locomotion.md) |
 | Bubble rendering across feed and XR | Complete | [archive/bubble-rendering.md](archive/bubble-rendering.md) |
+| The cloche's rim follows the ground | Complete | [archive/cloche-rim-follows-ground.md](archive/cloche-rim-follows-ground.md) |
 | Animated Quick Look phone demo | Complete | [archive/quicklook-phone-demo.md](archive/quicklook-phone-demo.md) |
 | XR height refit and visual evidence | Complete | [archive/xr-height-refit.md](archive/xr-height-refit.md) |
 | XR avatar height adaptation | Complete | [archive/xr-height-adaptation.md](archive/xr-height-adaptation.md) |

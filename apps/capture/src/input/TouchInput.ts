@@ -22,12 +22,24 @@ export interface TouchInputOptions {
   /** The touch that grabbed a prop lifted or was cancelled. */
   onObjectRelease?: () => void;
   onHold?: (phase: 'start' | 'move' | 'end', point: { x: number; y: number }) => void;
+  /** A prop is held: a second touch makes a two-finger gesture on it, and a lone touch presses only when it lifts as a tap. */
+  isHoldingObject?: () => boolean;
+  /** A two-finger pinch on the held prop: the ratio of the fingers' spread since the last event. */
+  onObjectPinch?: (ratio: number) => void;
+  /** A two-finger pan on the held prop: how far the fingers moved down the screen since the last event, CSS px. */
+  onObjectPan?: (dy: number) => void;
+  /** A look touch that lifted as a tap, holding nothing: true when it fetched a prop from a distance. */
+  onObjectTap?: (point: { x: number; y: number }) => boolean;
 }
 
 // The share of the screen's width, from the left, where a touch walks; a
 // touch anywhere else on the scene looks. Help text says "the left of the
 // screen", so this is a rule of the copy, not of the styleguide.
 const WALK_SHARE = 0.4;
+// A two-finger gesture on a held prop is a pinch once the spread has changed by this ratio, before the fingers have moved together this far.
+const PINCH_LOCK_RATIO = 1.08;
+const PAN_LOCK_APX = 24;
+
 // Full travel of the stick: one touch target from where the finger went down.
 export const STICK_TRAVEL_APX = tokens.hit.touch;
 
@@ -50,6 +62,13 @@ export class TouchInput {
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
   /** The look touch that holds a prop: it still looks when dragged, never points. */
   private grabId: number | null = null;
+  /**
+   * A lone look touch that may yet be a tap: while a prop is held, it presses (letting it go) as it lifts;
+   * otherwise a tap may fetch a prop out of reach. A second finger, a drag or a point hold make it something else.
+   */
+  private tapDown: { id: number; x: number; y: number } | null = null;
+  /** Two touches on a held prop. */
+  private gesture: { ids: [number, number]; startM: number; lastM: number; startMid: { x: number; y: number }; lastMidY: number; mode: 'open' | 'pinch' | 'pan' } | null = null;
 
   constructor(private readonly options: TouchInputOptions) {}
 
@@ -68,6 +87,8 @@ export class TouchInput {
     this.stickId = null;
     this.stick = null;
     this.endGrab();
+    this.tapDown = null;
+    this.gesture = null;
     this.lookPointers.clear();
     this.options.onStick(null);
   }
@@ -112,6 +133,14 @@ export class TouchInput {
     event.preventDefault();
     this.options.domElement.setPointerCapture?.(event.pointerId);
     const point = { x: event.clientX, y: event.clientY };
+    const holding = this.options.isHoldingObject?.() ?? false;
+    // A second finger while a prop is held, wherever it lands, makes a gesture on the prop with the first.
+    const first = holding && !this.gesture && this.lookPointers.size === 1 ? [...this.lookPointers.entries()][0] : undefined;
+    if (first) {
+      this.lookPointers.set(event.pointerId, point);
+      this.startGesture(first[0], event.pointerId);
+      return;
+    }
     if (this.stickId === null && event.clientX < width * WALK_SHARE) {
       this.stickId = event.pointerId;
       this.stick = { origin: point, current: point };
@@ -119,7 +148,11 @@ export class TouchInput {
       return;
     }
     // A look touch that lands on a reachable prop picks it up; it never becomes a point hold.
-    const grabbed = this.grabId === null && (this.options.onObjectPress?.(point) ?? false);
+    // While one is held, the press waits for the touch to lift as a tap, so a second finger can still make a gesture.
+    const lone = this.grabId === null && this.lookPointers.size === 0;
+    if (holding && lone) this.tapDown = { id: event.pointerId, ...point };
+    const grabbed = !this.tapDown && this.grabId === null && (this.options.onObjectPress?.(point) ?? false);
+    if (!grabbed && lone) this.tapDown = { id: event.pointerId, ...point };
     if (grabbed) this.grabId = event.pointerId;
     this.lookPointers.set(event.pointerId, point);
     if (!grabbed && this.held.phase === 'idle' && this.lookPointers.size === 1) {
@@ -152,6 +185,11 @@ export class TouchInput {
     const last = this.lookPointers.get(event.pointerId);
     if (!last) return;
     this.lookPointers.set(event.pointerId, point);
+    if (this.gesture?.ids.includes(event.pointerId)) {
+      this.moveGesture();
+      return;
+    }
+    if (this.tapDown?.id === event.pointerId && Math.hypot(point.x - this.tapDown.x, point.y - this.tapDown.y) > TOUCH_HOLD_SLOP_APX) this.tapDown = null;
     const source = `touch:${event.pointerId}`;
     if (this.held.phase === 'held' && this.held.source === source) {
       this.options.onHold?.('move', point);
@@ -172,8 +210,48 @@ export class TouchInput {
       this.options.onStick(null);
     }
     if (event.pointerId === this.grabId) this.endGrab();
+    // Either finger lifting ends a gesture; the other goes on looking.
+    if (this.gesture?.ids.includes(event.pointerId)) this.gesture = null;
     const point = this.lookPointers.get(event.pointerId);
     this.lookPointers.delete(event.pointerId);
+    const tap = this.tapDown?.id === event.pointerId && event.type !== 'pointercancel' && this.held.phase !== 'held';
+    if (this.tapDown?.id === event.pointerId) this.tapDown = null;
+    // A tap while a prop is held presses where it lifted, as a press would have; one holding nothing may fetch. It lifted too.
+    if (tap && point && this.grabId === null) {
+      const pressed = this.options.isHoldingObject?.() ? this.options.onObjectPress?.(point) : this.options.onObjectTap?.(point);
+      if (pressed) this.options.onObjectRelease?.();
+    }
     this.feedHold(event.type === 'pointercancel' ? { type: 'trackingLost', source: `touch:${event.pointerId}` } : { type: 'release', source: `touch:${event.pointerId}`, atMs: event.timeStamp }, point);
   };
+
+  /** Two fingers on a held prop: neither looks nor marks from now on. */
+  private startGesture(a: number, b: number): void {
+    this.tapDown = null;
+    if (this.holdDown && this.held.phase !== 'idle') this.feedHold({ type: 'trackingLost', source: `touch:${this.holdDown.id}` });
+    const spread = this.spread(a, b);
+    this.gesture = { ids: [a, b], startM: spread.distance, lastM: spread.distance, startMid: spread.mid, lastMidY: spread.mid.y, mode: 'open' };
+  }
+
+  /** A pinch scales the held prop by the change of spread, a pan pushes it; the gesture locks to one once it leads. */
+  private moveGesture(): void {
+    const gesture = this.gesture;
+    if (!gesture) return;
+    const { distance, mid } = this.spread(...gesture.ids);
+    if (gesture.mode === 'open') {
+      if (Math.abs(Math.log(distance / gesture.startM)) > Math.log(PINCH_LOCK_RATIO)) gesture.mode = 'pinch';
+      else if (Math.hypot(mid.x - gesture.startMid.x, mid.y - gesture.startMid.y) > PAN_LOCK_APX) gesture.mode = 'pan';
+    }
+    if (gesture.mode === 'pinch' && gesture.lastM > 0) this.options.onObjectPinch?.(distance / gesture.lastM);
+    if (gesture.mode === 'pan') this.options.onObjectPan?.(mid.y - gesture.lastMidY);
+    if (gesture.mode !== 'open') {
+      gesture.lastM = distance;
+      gesture.lastMidY = mid.y;
+    }
+  }
+
+  private spread(a: number, b: number): { distance: number; mid: { x: number; y: number } } {
+    const pa = this.lookPointers.get(a) ?? { x: 0, y: 0 };
+    const pb = this.lookPointers.get(b) ?? pa;
+    return { distance: Math.max(1, Math.hypot(pa.x - pb.x, pa.y - pb.y)), mid: { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 } };
+  }
 }

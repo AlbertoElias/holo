@@ -1,12 +1,14 @@
 // Chrome while recording (styleguide 8.5): everything but the stop control,
 // the running time and the Halo hides until the take ends, and the state is
 // carried by shape and word, never by red alone. The Halo stays because it
-// carries the take's own actions: stop, and undo or redo the held mark.
+// carries the take's own actions: stop, and undo or redo the held mark. The
+// tray and Find stay too (the user, 2026-10-28): objects are summoned, and
+// searched for, mid-take.
 import type { Control } from "./placement.js";
 
-const SHOWN_WHILE_RECORDING: ReadonlySet<Control> = new Set(["record", "timecode", "status", "halo"]);
+const SHOWN_WHILE_RECORDING: ReadonlySet<Control> = new Set(["record", "timecode", "status", "halo", "tray", "find"]);
 
-/** Whether a control shows. While recording only record (as stop), the timecode slot, the status line and the Halo do. */
+/** Whether a control shows. While recording only record (as stop), the timecode slot, the status line, the Halo, the tray and Find do. */
 export function chromeVisible(control: Control, recording: boolean): boolean {
   return !recording || SHOWN_WHILE_RECORDING.has(control);
 }

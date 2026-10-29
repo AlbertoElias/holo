@@ -138,7 +138,8 @@ async function desktopPhase(): Promise<void> {
   await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).waitFor();
   await page.evaluate(() => window.advanceTime(2100));
   const recordingDock = await dockContents(page);
-  assert.deepEqual(recordingDock, [CONTROL_NAMES.stopRecording, 'Recording 0:02'], `desktop: recording chrome is stop and the time (${recordingDock.join(', ')})`);
+  // A take keeps the tray and Find (styleguide 8.5 as amended by docs/features/archive/tray-everywhere.md).
+  assert.deepEqual(recordingDock, [CONTROL_NAMES.stopRecording, 'Recording 0:02', 'Tray', 'Find'], `desktop: recording chrome is stop, the time, Tray and Find (${recordingDock.join(', ')})`);
   assert.equal(await page.getByRole('dialog').count(), 0, 'desktop: no side sheet while recording');
   const shape = await page.locator('[data-capture-dock] button[aria-label="Stop Recording"] rect').count();
   assert(shape >= 1, 'desktop: stop is the rounded square (shape, not colour)');
@@ -249,7 +250,7 @@ async function phonePhase(): Promise<void> {
   await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).waitFor();
   await page.evaluate(() => window.advanceTime(1100));
   const recordingDock = await dockContents(page);
-  assert.deepEqual(recordingDock, [CONTROL_NAMES.stopRecording, 'Recording 0:01'], 'phone: recording chrome is stop and the time');
+  assert.deepEqual(recordingDock, [CONTROL_NAMES.stopRecording, 'Recording 0:01', 'Tray', 'Find'], `phone: recording chrome is stop, the time, Tray and Find (${recordingDock.join(', ')})`);
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).tap();
   for (let i = 0; i < 20; i += 1) await page.evaluate(() => window.advanceTime(50));

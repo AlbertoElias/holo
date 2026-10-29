@@ -14,12 +14,14 @@ import {
   type Handedness
 } from '@holoim/xr-ui-core';
 import { AimRays, CHIP_OPACITY, HandDock, POKE, StatusLine, WorldPanel, configureXrPointers, handPointerIds, multiPointer, pointerHand } from '@holoim/xr-ui-iwsdk';
+import type { ObjectTray } from '../objects/ObjectTray';
 import { SHOW_CAPABILITIES, capabilityLine } from '../objects/findCapabilities';
 import { ObjectSearchSession } from '../objects/objectSearchSession';
 import type { UiViewModel } from '../types/contracts';
 import type { XrTracking } from '../xr/XrTracking';
 import { SpatialTick } from './SpatialTick';
 import { SystemKeyboard } from './systemKeyboard';
+import { XrTraySignifiers, type XrTraySignifiersProbe } from './XrTraySignifiers';
 import { VrFindPanel, type FindTargetId, type VrFindPanelProbe } from './VrFindPanel';
 import type { UIStateStore } from './UIStateStore';
 
@@ -38,6 +40,8 @@ interface VrChromeDeps {
   ownsSelect?: (source: XRInputSource | undefined) => boolean;
   /** A Find pick: the result's GLB goes to the tray through its loader (PRD-060). */
   pickObject: (url: string) => void;
+  /** The tray, for the rings its miniatures stand on while it is open in a headset. */
+  tray: ObjectTray;
 }
 
 /** VR carries the whole chrome; passthrough AR (the spectator) carries Find only. */
@@ -67,6 +71,8 @@ export interface VrChromeSnapshot {
   panel: { visible: boolean; position: number[]; distanceFromHeadM: number; rows: Array<{ id: RowId; text: string; visible: boolean; enabled: boolean; distanceFromHeadM: number; hitHeightM: number }> } | null;
   /** The Find panel (PRD-060 slice 2) and the dock's Find glyph. */
   find: (VrFindPanelProbe & { mode: ChromeMode; dockGlyph: boolean; distanceFromHeadM: number }) | null;
+  /** The tray's rings and the summon glyph on the reachable slot: one entry per slot (docs/features/archive/tray-everywhere.md). */
+  tray: XrTraySignifiersProbe | null;
   rays: Array<{ side: Hand; visible: boolean; hit: string | null; origin: number[] }>;
   /** The dominant index fingertip against the wrist glyph: world tip, the glyph's face normal, height above it. */
   poke: { tip: number[] | null; glyphNormal: number[] | null; depthM: number | null };
@@ -107,6 +113,7 @@ export class VrChrome {
   private status: StatusLine | null = null;
   private panel: WorldPanel | null = null;
   private rays: AimRays | null = null;
+  private traySignifiers: XrTraySignifiers | null = null;
   private placePanel = false;
   /** Updates since show() while presenting; the head is posed from the second. */
   private presentedFrames = 0;
@@ -178,6 +185,7 @@ export class VrChrome {
     this.status?.set(null);
     this.panel?.setVisible(false);
     this.dock?.setVisible(false);
+    this.traySignifiers?.hide();
     this.closeFind();
   }
 
@@ -208,6 +216,8 @@ export class VrChrome {
     );
     this.rays = new AimRays(world);
     this.root.add(this.rays.group);
+    this.traySignifiers = new XrTraySignifiers({ world, tray: this.deps.tray, tracking: this.deps.tracking, getHandedness: () => this.deps.store.getState().handedness });
+    this.root.add(this.traySignifiers.root);
   }
 
   /** The Find panel, built on first open: its chip is the session's (VR 72%, passthrough 97%). */
@@ -310,10 +320,12 @@ export class VrChrome {
     this.updateWrist(state.handedness, recording);
     this.updateStatus(deltaSec, state, recording);
     this.updatePanel(camera, state, recording);
-    this.updateFind(camera, state, recording);
+    this.updateFind(camera, state);
+    // Rings and the summon glyph at the open tray's miniatures; only in a headset, never in passthrough (a spectator does not summon).
+    this.traySignifiers?.update(camera, this.shown, this.mode === 'vr', state.tray, this.root);
     this.updatePoke(state.handedness);
-    // While a take runs, a ray shows only on the stop control it rests on.
-    this.rays?.update((hand) => this.deps.renderer.xr.isPresenting && Boolean(this.deps.tracking.getChromeInput(hand).targetRay) && (!recording || this.rayHit(hand) === 'record'));
+    // While a take runs, a ray shows only on the chrome a take keeps: stop, and Find with its panel.
+    this.rays?.update((hand) => this.deps.renderer.xr.isPresenting && Boolean(this.deps.tracking.getChromeInput(hand).targetRay) && (!recording || shownInTake(this.rayHit(hand))));
     markChromeTree(this.root);
     for (const object of this.sdkRoots()) markChromeTree(object);
   }
@@ -375,6 +387,7 @@ export class VrChrome {
         : this.dock
           ? { visible: false, worldPosition: [], query: '', status: '', keyboard: 'none', results: [], targets: [], mode: this.mode, dockGlyph: Boolean(this.dock.probe().buttons.find?.shown && this.dock.probe().visible), distanceFromHeadM: 0 }
           : null,
+      tray: this.traySignifiers?.probe() ?? null,
       rays: (this.rays?.probe() ?? []).map((ray) => ({ side: ray.hand, visible: ray.visible, hit: ray.visible ? this.rayHit(ray.hand) : null, origin: ray.origin })),
       poke: this.pokeSnapshot(state.handedness),
       fingertipShade: { visible: this.shade.visible, radiusM: this.shade.scale.x, opacity: this.shadeMaterial.opacity },
@@ -432,8 +445,8 @@ export class VrChrome {
     }
     this.wristTracked = this.placeWristAnchor(carrier);
     this.dock!.setVisible(this.wristTracked && (this.mode === 'ar' || chromeVisible('record', recording)));
-    // Find is for before the take (PRD-060): it leaves the wrist while one runs.
-    this.dock!.setActionVisible('find', chromeVisible('settings', recording));
+    // Find stays on the wrist during a take (tray-everywhere): the author searches mid-sentence.
+    this.dock!.setActionVisible('find', true);
     this.dock!.setRecording(recording);
     this.dock!.update();
   }
@@ -447,9 +460,9 @@ export class VrChrome {
     return !(viaRay && hand && this.deps.tracking.getChromeInput(hand).hand);
   }
 
-  /** Find opens before a take, from a poke (hands) or a controller ray, like Record. */
+  /** Find opens any time, from a poke (hands) or a controller ray, like Record. */
   private canFind(pointerId: number): boolean {
-    if (this.deps.store.getState().recordingState !== 'idle' || this.ownedElsewhere(pointerId)) return false;
+    if (this.ownedElsewhere(pointerId)) return false;
     const hand = pointerHand(this.deps.world, pointerId);
     const viaRay = hand !== null && multiPointer(this.deps.world, hand).ray.pointer.id === pointerId;
     return !(viaRay && hand && this.deps.tracking.getChromeInput(hand).hand);
@@ -511,10 +524,8 @@ export class VrChrome {
     panel.update(camera);
   }
 
-  private updateFind(camera: THREE.Camera, state: UiViewModel, recording: boolean): void {
+  private updateFind(camera: THREE.Camera, state: UiViewModel): void {
     if (!this.find) return;
-    // A take closes Find, as the desktop field disables.
-    if (this.findOpen && recording) this.closeFind();
     const posed = this.presentedFrames > 1 || !this.deps.renderer.xr.isPresenting;
     if (this.findOpen && this.placeFind && posed) {
       this.find.place(camera);
@@ -533,7 +544,7 @@ export class VrChrome {
       ? 'Adding to the tray…'
       : tray.message ?? (this.pickedAt !== null && tray.names.length > this.pickedAt ? `In the tray: ${tray.names[tray.names.length - 1]}` : null);
     this.find.update(camera, {
-      disabled: state.recordingState !== 'idle' || tray.loading,
+      disabled: tray.loading,
       trayLine,
       debugLine: SHOW_CAPABILITIES ? capabilityLine(this.deps.renderer.xr.getSession()) : null
     });
@@ -665,4 +676,9 @@ function everyMesh(root: THREE.Object3D, test: (mesh: THREE.Mesh) => boolean): b
     if ((object as THREE.Mesh).isMesh && !test(object as THREE.Mesh)) all = false;
   });
   return all;
+}
+
+/** Ray targets that stay live during a take (styleguide 8.5; docs/features/archive/tray-everywhere.md). */
+function shownInTake(hit: string | null): boolean {
+  return hit === 'record' || hit === 'find' || Boolean(hit?.startsWith('find:'));
 }

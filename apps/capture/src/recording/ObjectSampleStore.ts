@@ -9,6 +9,8 @@ export interface ObjectTrackSamples {
   /** Object pose relative to the avatar model (`avatar.matrixWorld⁻¹ · object.matrixWorld`). */
   relative: Array<THREE.Matrix4 | null>;
   heldBy: Array<VrHandSide | null>;
+  /** The object's uniform size (1 as loaded); 1 where it is not in the event. */
+  size: number[];
 }
 
 /**
@@ -35,17 +37,19 @@ export class ObjectSampleStore {
       if (!object.placed) continue;
       let track = this.tracks.get(object);
       if (!track) {
-        track = { object, relative: [], heldBy: [] };
+        track = { object, relative: [], heldBy: [], size: [] };
         this.tracks.set(object, track);
       }
       // An object that entered mid-take (PRD-045) has no samples before it.
       while (track.relative.length < frameIndex) {
         track.relative.push(null);
         track.heldBy.push(null);
+        track.size.push(1);
       }
       object.wrapper.updateWorldMatrix(true, false);
       track.relative.push(new THREE.Matrix4().multiplyMatrices(this.avatarInverse, object.wrapper.matrixWorld));
       track.heldBy.push(object.heldBy);
+      track.size.push(object.size);
     }
   }
 
@@ -55,6 +59,7 @@ export class ObjectSampleStore {
       while (track.relative.length < this.frameCount) {
         track.relative.push(null);
         track.heldBy.push(null);
+        track.size.push(1);
       }
       return track;
     });

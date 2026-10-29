@@ -29,7 +29,8 @@ const polypizzaOrigin = `http://127.0.0.1:${polypizzaPort}`;
 // Matches POLYPIZZA_FIXTURE_KEY in apps/viewer-api/test/fixtures/polypizzaFixture.ts.
 const polypizzaKey = "fixture-polypizza-key";
 const captureServer = {
-  command: `${testBuild} capture -- --host ${captureUrl.hostname} --port ${captureUrl.port} --strictPort`,
+  // Capture's object search goes through its own proxy, so it needs the test API's port too.
+  command: `VITE_API_PROXY_TARGET=${apiBaseUrl} ${testBuild} capture -- --host ${captureUrl.hostname} --port ${captureUrl.port} --strictPort`,
   ignoreHTTPSErrors: true,
   timeout: 180000,
   reuseExistingServer,

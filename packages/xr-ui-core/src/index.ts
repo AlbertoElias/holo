@@ -8,6 +8,7 @@ export * from "./chip.js";
 export * from "./chromeFlag.js";
 export * from "./cloche.js";
 export * from "./clocheBurn.js";
+export * from "./clocheRim.js";
 export * from "./edge.js";
 export * from "./glyph.js";
 export * from "./halo.js";
@@ -150,7 +151,7 @@ export interface HologramControlActions {
   resetScale(): void;
 }
 
-export type DockGlyph = "exit" | "record" | "recenter" | "find";
+export type DockGlyph = "exit" | "record" | "recenter" | "find" | "tray";
 
 /** A glyph in the hand dock (headset) or bottom dock (phone). Glyphs only within reach. */
 export interface DockAction {
@@ -257,3 +258,4 @@ export function updateAttention(state: AttentionState, now: number, near: boolea
     dimInMs: Math.max(0, timing.idleAfterMs - idleFor)
   };
 }
+export * from "./provisionalGlyphs.js";

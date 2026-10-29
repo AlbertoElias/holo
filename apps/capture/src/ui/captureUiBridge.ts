@@ -16,6 +16,10 @@ export interface CaptureUiBridge {
   loadObjectFile: (file: File) => void;
   loadTrayFiles: (files: File[]) => void;
   loadTrayUrls: (urls: string[]) => void;
+  /** The dock's Tray glyph opened or closed the tray (flat screens). */
+  setTrayOpen: (open: boolean) => void;
+  /** A click or tap on a tray slot summons it. */
+  summonTraySlot: (slot: number) => void;
   toggleFaceCamera: () => void;
   setHandedness: (handedness: Handedness) => void;
   toggleXr: (mode: "vr" | "ar") => void;

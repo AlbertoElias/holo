@@ -26,6 +26,11 @@ interface ExportFrameSpace {
   avatarScale: THREE.Vector3;
 }
 
+// The child that carries a resized object's size, between the wrapper and the model.
+export const RECORDED_OBJECT_SIZE_NODE_NAME = 'RecordedObjectSize';
+// Sizes this close to 1 are written as no resize.
+const SIZE_EPSILON = 1e-4;
+
 /** Consecutive frames where `active(i)` holds, as spans of take seconds. */
 function runs(times: number[], length: number, active: (index: number) => boolean): Array<{ first: number; last: number }> {
   const out: Array<{ first: number; last: number }> = [];
@@ -47,7 +52,10 @@ function runs(times: number[], length: number, active: (index: number) => boolea
  * STEP scale of 0 and holds the nearest present pose; an object present for
  * the whole take gets no scale track. The rest pose (what a still, or a
  * player that ignores the clip, shows) is the first present pose; for a
- * summoned object it is the last, where it was placed.
+ * summoned object it is the last, where it was placed. An object resized
+ * during the take gets a `RecordedObjectSize` child between the wrapper and
+ * the model with a linear scale track, so the wrapper's visibility steps stay
+ * as they are; an object never resized has no such child.
  */
 export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportFrameSpace): ObjectExport {
   const { times } = space;
@@ -86,20 +94,36 @@ export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportF
       }, present[0]!.first);
       for (let k = 0; k < 3; k += 1) posValues[i * 3 + k] = posValues[nearest * 3 + k]!;
       for (let k = 0; k < 4; k += 1) quatValues[i * 4 + k] = quatValues[nearest * 4 + k]!;
+      track.size[i] = track.size[nearest] ?? 1;
     }
 
     const node = new THREE.Group();
     node.name = RECORDED_OBJECT_NODE_NAME;
     if (track.object.credit) node.userData[HOLOIM_CREDIT_EXTRAS_KEY] = track.object.credit;
     const model = track.object.model.clone(true);
-    node.add(model);
-    const rest = track.object.origin === 'summoned' ? present.at(-1)!.last : present[0]!.first;
+    // In the scene when the event began, it was part of the set, however it got
+    // there (a summon before this take, or in an earlier one): prepared.
+    const origin = present[0]!.first === 0 ? 'prepared' : track.object.origin;
+    const rest = origin === 'summoned' ? present.at(-1)!.last : present[0]!.first;
+    const resized = track.size.some((value, i) => track.relative[i] != null && Math.abs(value - 1) > SIZE_EPSILON);
+    let size: THREE.Group | null = null;
+    if (resized) {
+      size = new THREE.Group();
+      size.name = RECORDED_OBJECT_SIZE_NODE_NAME;
+      size.add(model);
+      node.add(size);
+      // Outside presence the size holds its nearest present value, like the pose.
+      size.scale.setScalar(track.size[rest] ?? 1);
+    } else {
+      node.add(model);
+    }
     node.position.fromArray(posValues, rest * 3);
     node.quaternion.fromArray(quatValues, rest * 4);
     node.updateMatrixWorld(true);
 
     out.tracks.push(new THREE.VectorKeyframeTrack(`${node.uuid}.position`, times, posValues));
     out.tracks.push(new THREE.QuaternionKeyframeTrack(`${node.uuid}.quaternion`, times, quatValues));
+    if (size) out.tracks.push(new THREE.VectorKeyframeTrack(`${size.uuid}.scale`, times, track.size.slice(0, count).flatMap((value) => [value, value, value])));
     const wholeTake = present.length === 1 && present[0]!.first === 0 && present[0]!.last === count - 1;
     if (!wholeTake) {
       const scaleValues: number[] = [];
@@ -122,7 +146,7 @@ export function buildObjectExports(samples: ObjectTrackSamples[], space: ExportF
       node,
       credit: track.object.credit,
       name: track.object.name,
-      origin: track.object.origin,
+      origin,
       source: track.object.source,
       presence,
       holds

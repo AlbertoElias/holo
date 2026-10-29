@@ -42,7 +42,7 @@ import {
 const ALL_TARGETS: ViewTarget[] = Object.values(VIEW_TARGETS);
 const ALL_CONTROLS: Control[] = [
   "play", "free", "return", "timecode", "caption", "scale", "record", "ink", "undo", "exitAr", "placingHint",
-  "upload", "signIn", "halo", "settings", "library", "longText", "status", "markEditor", "menu"
+  "upload", "signIn", "halo", "tray", "find", "settings", "library", "longText", "status", "markEditor", "menu"
 ];
 
 describe("glyphs (styleguide 6)", () => {
@@ -204,9 +204,9 @@ describe("headset text (styleguide 7.3)", () => {
 });
 
 describe("recording chrome (styleguide 8.5)", () => {
-  it("hides everything but stop, the running time and the Halo until the take ends", () => {
+  it("hides everything but stop, the running time, the Halo, the tray and Find until the take ends", () => {
     const shown = ALL_CONTROLS.filter((control) => chromeVisible(control, true));
-    expect(shown.sort()).toEqual(["halo", "record", "status", "timecode"]);
+    expect(shown.sort()).toEqual(["find", "halo", "record", "status", "timecode", "tray"]);
     expect(ALL_CONTROLS.every((control) => chromeVisible(control, false))).toBe(true);
   });
 

@@ -1,6 +1,7 @@
 import { createSystem } from '@iwsdk/core';
 import { gravity } from '../physics/CharacterMotor';
-import { type CaptureContext, captureContext } from './captureContext';
+import * as THREE from 'three';
+import { activeCamera, type CaptureContext, captureContext } from './captureContext';
 
 // Above this ground speed the avatar counts as walking, which cancels a flat-screen reach.
 const WALKING_MPS = 0.05;
@@ -12,6 +13,7 @@ const WALKING_MPS = 0.05;
  */
 export class ObjectSystem extends createSystem() {
   private capture!: CaptureContext;
+  private readonly view = new THREE.Vector3();
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -19,7 +21,13 @@ export class ObjectSystem extends createSystem() {
 
   update(): void {
     const c = this.capture;
-    if (c.frame.arSpectator || !c.motor.hasSpawnResolved()) return;
+    if (c.frame.arSpectator) {
+      // A phone camera author places tray items where its centre ray lands, in this step, before the camera is recorded.
+      // A headset in passthrough only watches: no summon.
+      if (c.frame.arCameraAuthor) c.phoneChrome.stepPlacement(c.frame.elapsedSec);
+      return;
+    }
+    if (!c.motor.hasSpawnResolved()) return;
     if (!c.objects.hasPhysics()) {
       const trimesh = c.motor.getWorldTrimesh();
       if (trimesh) c.objects.enablePhysics(trimesh, gravity);
@@ -30,9 +38,10 @@ export class ObjectSystem extends createSystem() {
     c.objects.update({
       vrActive: c.frame.vrActive,
       deltaSec: c.frame.deltaSec,
-      recording: c.recording.recorder.isEnabled(),
       timeSec: c.frame.elapsedSec,
       bodyYaw: c.camera.lookYaw,
+      viewDirection: activeCamera(c).getWorldDirection(this.view),
+      vrPush: c.frame.vrActive ? c.locomotion.objectPush : 0,
       trayHeld: c.input.isTrayHeld(),
       desktop: {
         toggle: c.input.consumeObjectToggle(),
@@ -41,7 +50,9 @@ export class ObjectSystem extends createSystem() {
         walking: moving,
         pointHeld: c.input.isPointHeld(),
         summonSlot: c.input.consumeSummonSlot(),
-        grab: c.input.consumeObjectGrab()
+        grab: c.input.consumeObjectGrab(),
+        resize: c.input.consumeObjectResize(c.frame.deltaSec),
+        push: c.input.consumeObjectPush()
       }
     });
   }

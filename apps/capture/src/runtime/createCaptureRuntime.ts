@@ -102,7 +102,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     onRecordToggle: () => recording.toggle(),
     onTouchStick: (stick) => touchStick.update(stick),
     halo: flatHalo,
-    pickObject: (ndcX, ndcY, anywhere) => objects.pickAt(stage.desktopCamera, ndcX, ndcY, anywhere)
+    pickObject: (ndcX, ndcY, anywhere, far) => objects.pickAt(stage.desktopCamera, ndcX, ndcY, anywhere, far),
+    isHoldingObject: () => objects.isHolding()
   });
   const setHandedness = (handedness: Handedness): void => {
     saveHandedness(handedness);
@@ -148,7 +149,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     toggleRecording: () => recording.toggle(),
     setHandedness,
     ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec),
-    pickObject: (url) => void objects.loadTrayUrls([url])
+    pickObject: (url) => void objects.loadTrayUrls([url]),
+    tray: objects.tray
   });
   // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.
   const recenterAr = (): void => {
@@ -169,7 +171,13 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     toggleRecording: () => recording.toggle(),
     recenter: recenterAr,
     // The session ends as Android's back ends it: a take in progress stops and exports on the session's end.
-    exit: () => xrEntry.toggle('ar')
+    exit: () => xrEntry.toggle('ar'),
+    scene,
+    setFrame: stage.worldGroup,
+    // The set's own model: the objects, the avatar and the chrome are not what a placement lands on.
+    setTargets: () => (avatar.worldModel ? [avatar.worldModel] : []),
+    trayThumbnail: (slot) => objects.trayThumbnail(slot),
+    placeFromTray: (slot, point, yaw, timeSec) => objects.placeFromTray(slot, point, yaw, timeSec)
   });
   const headsetHolds = new HeadsetHolds({
     tracking,
@@ -327,6 +335,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       loadObjectFile: (file) => void objects.loadFile(file),
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       loadTrayUrls: (urls) => void objects.loadTrayUrls(urls),
+      setTrayOpen: (open) => input.setTrayOpenFromUi(open),
+      summonTraySlot: (slot) => input.queueSummonSlot(slot),
       toggleFaceCamera: () => capture.face.toggleCamera(),
       setHandedness,
       toggleXr: (mode) => {
@@ -374,6 +384,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __sampleHumanoid: () => avatar.humanoid?.report() ?? null,
         __toggleFaceCamera: () => capture.face.toggleCamera(),
         __samplePhoneChrome: () => phoneChrome.probe(),
+        __phoneTraySlotPosition: (slot) => phoneChrome.traySlotPosition(slot),
         __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),
         __chromeTarget: (target) => vrChrome.targetPosition(target),
         __sampleObjectSearch: () => ({ headset: vrChrome.findSession.getState(), voiceLog: [...voiceLog], prefetch: { ...prefetchStats } }),

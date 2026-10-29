@@ -328,6 +328,24 @@ enter.
   plays, so it never breathes. Its height is at least 40% of its wider radius, so
   every dome has the same shoulders. A bubble that follows its author carries
   its dome along.
+- **The rim follows the ground (feed).** Decided 2026-10-27 from mockups,
+  after a hilltop take showed its ground floating halfway up empty glass. In
+  the feed, a performer's take with its recorded scene bends its foot onto
+  the ground under its edge, per direction around it (180 directions), and
+  where the ground stops short of the edge the rim tucks in under its lip.
+  Ground is what the author could stand on: upward-facing, opaque surfaces
+  joined to the ground under their feet, so a post, a wall's top, a roof, a
+  boat or glass never counts and opaque water at the shore does. The bend
+  is full at the foot, none at the crown and none near the axis under the
+  author's feet; it never lifts more than 60% of the dome's height. As the
+  bubble walks, the rim rises within about 50 ms and settles over about
+  200 ms, and snaps on a loop or a seek. A take whose rim lifts is clipped
+  by the bent glass with a crisp edge (never the sphere's fade; the author
+  is never cut), draws no shade ([section 5.1](#51-the-shade-at-a-holograms-foot))
+  and is framed bent by its lowest rim over the take. Flat takes, camera
+  takes and older exports keep the flat foot, the shade and the sphere's
+  clip. XR, AR and Quick Look keep a flat foot on the recorded floor; Quick
+  Look's flat foot is an accepted difference (`edge.cloche.rim`).
 - **Anchored in the hologram's world.** It orbits, zooms and walks with the
   hologram on every target. It is never on the camera or the screen.
 - **Burnt through.** Revised the same day, after the user found the
@@ -390,7 +408,11 @@ enter.
 
 Every hologram casts a soft dark shade on its own floor, in its world: an
 ellipse 115% of the drawn content's footprint, with the stops below, moving
-with the hologram. It is the only shade anywhere. The cloche casts none, and
+with the hologram. It is the only shade anywhere. One exception (2026-10-27):
+in the feed, a take whose rim follows its ground (lifting more than 5 cm
+anywhere on its path, [section 3.4](#34-the-cloche-the-3d-halo)) draws no
+shade; its recorded ground stands in for it. This is decided once when the
+take loads, so the shade never pops during playback. The cloche casts none, and
 no control, edge or dock casts one on the screen.
 
 ```css
@@ -459,6 +481,10 @@ a gesture zone.
 | Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
 | Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
 | Undo / Redo | The Halo's W and E: undo or redo the last held mark | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
+| Tray | Open the tray of objects to summon (capture) | "Tray" (name; "Tray · hold T" with a keyboard) | A cube, a cone and a ball on a shelf (`glyph.path.tray`) |
+| Squeeze | Beside the tray miniature in reach, with controllers: squeeze to summon it | None | A closed fist, front on, the thumb across the fingers (`glyph.path.squeeze`; after Lucide's hand-fist) |
+| Pinch | The same, with bare hands: pinch to summon it | None | A hand side on, the thumb meeting the index fingertip, two contact ticks (`glyph.path.pinch`; after Iconoven's hand-pinch) |
+| Slot model / image | Inside a filled tray slot until its thumbnail renders | None | A globe for a model; a frame with a sun over a peak for an image (`glyph.path.slotModel` / `slotImage`) |
 
 The rose record dot has no keyline of its own; the gold ring around it is
 the same as Play's. The Play triangle, the Pause bars and the record shapes are filled;
@@ -661,9 +687,11 @@ hologram.
 | Gold core and highlight | Drop to 0.55 opacity | No edge |
 
 **Chrome while recording:** everything but the stop control,
-"Recording 0:12" and the Halo glyph hides until the take ends. The Halo
-stays because it carries the take's own actions: stop, and undo or redo the
-held mark.
+"Recording 0:12", the Halo glyph, the Tray glyph and Find hides until the
+take ends. The Halo stays because it carries the take's own actions: stop,
+and undo or redo the held mark. The tray and Find stay because bringing an
+object into the event is part of the take: a summon or a pick mid-take is
+recorded from its frame ([tray everywhere](../../features/archive/tray-everywhere.md)).
 
 The state is carried by shape and word, not colour: the record control turns
 from a filled rose circle into a rose rounded square (stop), and

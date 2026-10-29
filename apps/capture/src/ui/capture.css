@@ -26,3 +26,20 @@ body {
 [data-capture-dock] > * {
   pointer-events: auto;
 }
+
+/* A tray slot waiting on its load: a slow pulse; still under reduced motion. */
+@keyframes tray-slot-pulse {
+  0%, 100% { background-color: rgb(var(--holoim-color-deep-sea-rgb) / 72%); }
+  50% { background-color: rgb(var(--holoim-color-text-muted-rgb) / 28%); }
+}
+
+.tray-slot-loading {
+  animation: tray-slot-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tray-slot-loading {
+    animation: none;
+    background-color: rgb(var(--holoim-color-text-muted-rgb) / 28%);
+  }
+}

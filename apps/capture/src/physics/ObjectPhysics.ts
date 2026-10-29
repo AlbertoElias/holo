@@ -3,9 +3,72 @@ import * as THREE from 'three';
 
 import type { SceneObject } from '../objects/SceneObjectRegistry';
 import { isThreeMesh } from '../shared/threeTypeGuards';
+import type { VrHandSide } from '../types/contracts';
+import { type AvatarBones, AvatarColliders, PROP_BIT, groups } from './AvatarColliders';
 
 // A convex hull is built from at most this many of the model's vertices.
 const MAX_HULL_POINTS = 128;
+// A resize rebuilds the collider once the size has moved this far (as a ratio) from the collider's.
+const RESHAPE_RATIO = 0.01;
+
+// Capped hull points in the wrapper's frame, by the model's first geometry: a
+// tray item and its summoned copies share their geometry and its pose in the
+// wrapper, so a dense item's vertices are walked once, at load, not mid-take.
+const hullPoints = new WeakMap<THREE.BufferGeometry, number[]>();
+
+const firstGeometry = (model: THREE.Object3D): THREE.BufferGeometry | null => {
+  let found: THREE.BufferGeometry | null = null;
+  model.traverse((node) => {
+    if (!found && isThreeMesh(node)) found = node.geometry;
+  });
+  return found;
+};
+
+function meshPoints(model: THREE.Object3D, toFrame: (node: THREE.Mesh, out: THREE.Matrix4) => THREE.Matrix4): number[] {
+  const points: number[] = [];
+  const v = new THREE.Vector3();
+  const m = new THREE.Matrix4();
+  model.traverse((node) => {
+    if (!isThreeMesh(node)) return;
+    const position = node.geometry.getAttribute('position');
+    if (!position) return;
+    toFrame(node, m);
+    for (let i = 0; i < position.count; i += 1) {
+      v.fromBufferAttribute(position, i).applyMatrix4(m);
+      points.push(v.x, v.y, v.z);
+    }
+  });
+  return points;
+}
+
+// Points scanned per task when a tray item's hull is prepared at load.
+const HULL_SCAN_CHUNK = 16_384;
+
+/**
+ * Walks a tray item's model once, ahead of the first release of a copy of it.
+ * A dense item's scan is split across tasks (`yieldTask` between chunks), so a
+ * load mid-take never holds a frame for it.
+ */
+export async function prepareHull(model: THREE.Object3D, yieldTask: () => Promise<void>): Promise<void> {
+  const geometry = firstGeometry(model);
+  if (!geometry || hullPoints.has(geometry)) return;
+  model.updateWorldMatrix(true, true);
+  // In the wrapper's frame at full size: the model's own placement in it, then each mesh under the model.
+  const modelInverse = model.matrixWorld.clone().invert();
+  const points = meshPoints(model, (node, out) => out.multiplyMatrices(model.matrix, modelInverse).multiply(node.matrixWorld));
+  if (points.length < 12) return;
+  const count = points.length / 3;
+  if (count <= MAX_HULL_POINTS) {
+    hullPoints.set(geometry, [...points]);
+    return;
+  }
+  const scan = new HullScan(MAX_HULL_POINTS);
+  for (let from = 0; from < count; from += HULL_SCAN_CHUNK) {
+    await yieldTask();
+    scan.scan(points, from, Math.min(count, from + HULL_SCAN_CHUNK));
+  }
+  hullPoints.set(geometry, scan.picked(points));
+}
 // One density for every prop (kg/m³): mass follows the hull's volume.
 const DENSITY = 500;
 // Max-combined with the scene (Rapier's default 0.5), so a dropped prop grips
@@ -29,8 +92,19 @@ const BOUNDS_MARGIN_M = 0.5;
 const BELOW_FLOOR_M = 1;
 const ABOVE_CEILING_M = 100;
 const STEP_TIME_SAMPLES = 600;
+// A hovering prop is knocked down only by a part moving faster than this: a hand slowly closing on it grabs it instead.
+const KNOCK_MPS = 0.5;
+// A released prop passes through the arm that held it this long, then until clear: a hand that stops after a throw doesn't catch what it threw.
+const ARM_GRACE_SEC = 0.25;
+// A flat-screen put-down also passes through the legs this long (the squat's knees rise past it).
+const LEG_GRACE_SEC = 1;
+
+// A prop lifted out of a surface it was grown into lands this far above it.
+const LIFT_CLEARANCE_M = 0.002;
 
 const DOWN = { x: 0, y: -1, z: 0 };
+// Queries that see the scene and props but never the avatar.
+const NO_AVATAR = groups(PROP_BIT, PROP_BIT);
 
 interface PoseSample {
   t: number;
@@ -44,9 +118,27 @@ interface PropBody {
   home: { position: THREE.Vector3; quaternion: THREE.Quaternion };
   /** Kinematic (held, or hovering where it was placed) until its first release. */
   dynamic: boolean;
+  held: boolean;
+  /** Avatar parts this prop passes through until it is clear of them (all of them while it is a reach's target). */
+  excluded: number;
+  /** Groups last given to the collider, and which collider: one rebuilt (a resize) gets them again. */
+  groups: number;
+  groupsCollider: number;
+  /** Parts excluded for `graceSec` more, overlapping or not. */
+  graceBits: number;
+  graceSec: number;
+  /** Gliding to the hand: collides with nothing. */
+  ghosted: boolean;
+  /** A kinematic prop's pose after the last step and its target for this one, interpolated per substep. */
+  from: { position: THREE.Vector3; quaternion: THREE.Quaternion };
+  to: { position: THREE.Vector3; quaternion: THREE.Quaternion };
   /** The wrapper already has the pose the body fell asleep with. */
   sleepWritten: boolean;
   history: PoseSample[];
+  /** The collider's points at size 1, in the wrapper's frame, and whether they are a hull's (else a box's corners). */
+  shape: { points: Float32Array; hull: boolean };
+  /** The size the collider was built at. */
+  size: number;
 }
 
 export interface ObjectPhysicsStats {
@@ -55,15 +147,20 @@ export interface ObjectPhysicsStats {
   stepMedianMs: number | null;
   stepSamples: number;
   resets: number;
+  /** Avatar parts with a collider. */
+  avatarParts: number;
+  /** Hovering props the avatar has knocked down. */
+  knockdowns: number;
 }
 
 /**
  * The props' own physics world: a copy of the scene's collision mesh and a
- * ground backstop, one body per event object, and no avatar. It is separate
- * from the character motor's world so props never block the capsule or its
- * raycasts, and so it steps after the hold update (the motor steps before the
- * arms are final). A prop is kinematic while held and dynamic once released;
- * the object system writes the result back to the wrapper.
+ * ground backstop, one body per event object, and the avatar as kinematic
+ * parts that push props and are never pushed. It is separate from the
+ * character motor's world so props never block the capsule or its raycasts,
+ * and so it steps after the hold update (the motor steps before the arms are
+ * final). A prop is kinematic while held and dynamic once released; the
+ * object system writes the result back to the wrapper.
  */
 export class ObjectPhysics {
   private readonly world: RAPIER.World;
@@ -71,6 +168,9 @@ export class ObjectPhysics {
   private readonly bounds = new THREE.Box3();
   private readonly stepTimes: number[] = [];
   private resets = 0;
+  private knockdowns = 0;
+  private avatar: AvatarColliders | null = null;
+  private reachTarget: SceneObject | null = null;
 
   private readonly m = new THREE.Matrix4();
   private readonly rigidInverse = new THREE.Matrix4();
@@ -92,6 +192,20 @@ export class ObjectPhysics {
     const halfZ = (max.z - min.z) / 2 + 50;
     const slab = RAPIER.ColliderDesc.cuboid(halfX, 0.5, halfZ).setTranslation((min.x + max.x) / 2, min.y - 0.5, (min.z + max.z) / 2);
     this.world.createCollider(slab);
+  }
+
+  /** The avatar's bones, once it is loaded: its parts join the world. */
+  setAvatar(bones: AvatarBones): void {
+    if (!this.avatar) this.avatar = new AvatarColliders(this.world, bones);
+  }
+
+  /** A flat-screen reach's target passes through the whole avatar until it is grabbed, or clear of it once the reach ends. */
+  setReachTarget(object: SceneObject | null): void {
+    if (object === this.reachTarget) return;
+    const previous = this.reachTarget ? this.props.get(this.reachTarget) : undefined;
+    // Clear of the parts it is not inside after the next step, when this frame's avatar pose is known.
+    if (previous && this.avatar) previous.excluded = this.avatar.allBits;
+    this.reachTarget = object;
   }
 
   /** Whether `object` has a body. */
@@ -118,10 +232,62 @@ export class ObjectPhysics {
         .setLinearDamping(LINEAR_DAMPING)
         .setAngularDamping(ANGULAR_DAMPING)
     );
-    this.world.createCollider(this.colliderFor(object).setDensity(DENSITY).setFriction(FRICTION).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max).setRestitution(RESTITUTION), body);
-    const prop: PropBody = { body, home: { position: this.p.clone(), quaternion: this.q.clone() }, dynamic: false, sleepWritten: false, history: [] };
+    // Placed where it is, it passes through whatever of the avatar it was placed in until clear (narrowed after the first step).
+    const prop: PropBody = { body, home: { position: this.p.clone(), quaternion: this.q.clone() }, dynamic: false, held: false, excluded: 0xfffe, groups: 0, groupsCollider: -1, graceBits: 0, graceSec: 0, ghosted: false, from: { position: this.p.clone(), quaternion: this.q.clone() }, to: { position: this.p.clone(), quaternion: this.q.clone() }, sleepWritten: false, history: [], shape: this.shapeFor(object), size: object.size };
+    this.attachCollider(prop);
     this.props.set(object, prop);
     return prop;
+  }
+
+  /**
+   * The collider follows the object's size: rebuilt from the size-1 points once
+   * the size has moved past the rebuild ratio, or always with `exact` (a
+   * gesture's end). Density stays, so mass follows the volume.
+   */
+  resize(object: SceneObject, exact = false): void {
+    const prop = this.props.get(object);
+    if (!prop || prop.size === object.size) return;
+    if (!exact && Math.abs(object.size / prop.size - 1) < RESHAPE_RATIO) return;
+    prop.size = object.size;
+    const desc = this.shapeAt(prop);
+    const collider = prop.body.collider(0);
+    collider.setShape(desc.shape);
+    collider.setTranslationWrtParent(desc.translation);
+    // Density is per collider: setting it again makes the body's mass follow the new volume.
+    collider.setDensity(DENSITY);
+  }
+
+  /** Poses so far no longer count toward a release's velocity: what moved the prop was not the hand's swing. */
+  forget(object: SceneObject): void {
+    const prop = this.props.get(object);
+    if (prop) prop.history.length = 0;
+  }
+
+  /** A prop gliding to the hand passes through other props instead of batting them. */
+  ghost(object: SceneObject, on: boolean): void {
+    const prop = this.props.get(object);
+    if (!prop) return;
+    prop.ghosted = on;
+    // The next step gives the collider its groups.
+    prop.groupsCollider = -1;
+  }
+
+  /** The body's mass (kg), for checks. */
+  mass(object: SceneObject): number {
+    return this.props.get(object)?.body.mass() ?? 0;
+  }
+
+  /**
+   * How far (m) the object, at its wrapper's current pose, can move along the
+   * unit `direction` before its collider meets the scene or another prop, up to
+   * `maxM`. Its own body is ignored.
+   */
+  clearance(object: SceneObject, direction: THREE.Vector3, maxM: number): number {
+    const prop = this.props.get(object);
+    if (!prop || !(maxM > 0)) return Math.max(0, maxM);
+    this.rigidPose(object, this.p, this.q);
+    const hit = this.world.castShape(this.p, this.q, direction, prop.body.collider(0).shape, 0, maxM, true, undefined, NO_AVATAR, undefined, prop.body);
+    return hit ? hit.time_of_impact : maxM;
   }
 
   /** The object is grabbed (or caught mid-air): kinematic at once, with no velocity. */
@@ -129,12 +295,15 @@ export class ObjectPhysics {
     const prop = this.ensure(object);
     prop.history.length = 0;
     prop.dynamic = false;
+    prop.held = true;
     prop.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
     prop.body.setLinvel({ x: 0, y: 0, z: 0 }, false);
     prop.body.setAngvel({ x: 0, y: 0, z: 0 }, false);
     this.rigidPose(object, this.p, this.q);
     prop.body.setTranslation(this.p, true);
     prop.body.setRotation(this.q, true);
+    prop.from.position.copy(this.p);
+    prop.from.quaternion.copy(this.q);
   }
 
   /** A pose of the held object at `timeSec`, for the release fit. */
@@ -146,11 +315,28 @@ export class ObjectPhysics {
     if (prop.history.length > MAX_HISTORY) prop.history.shift();
   }
 
-  /** The object is let go: dynamic, with the fitted velocity when `throwIt`, else at rest. */
-  release(object: SceneObject, throwIt: boolean): void {
+  /**
+   * The object is let go: dynamic, with the fitted velocity when `throwIt`,
+   * else at rest. It passes through the arm that held it for a moment, and
+   * through every part until the next step, after which it collides with all
+   * those it is clear of (the avatar's pose for this frame is not known yet). A flat-screen put-down (`desktop`, not a throw) also passes through
+   * the legs for a moment. Its collider takes its final size first, and a
+   * prop grown into a surface while held is lifted out onto it.
+   */
+  release(object: SceneObject, throwIt: boolean, side?: VrHandSide, desktop = false): void {
     const prop = this.props.get(object);
     if (!prop) return;
+    this.resize(object, true);
+    prop.held = false;
+    if (this.avatar) {
+      const arm = side ? this.avatar.armBits(side) : 0;
+      const putDown = desktop && !throwIt;
+      prop.excluded = this.avatar.allBits;
+      prop.graceBits = arm | (putDown ? this.avatar.legBits : 0);
+      prop.graceSec = putDown ? LEG_GRACE_SEC : ARM_GRACE_SEC;
+    }
     this.rigidPose(object, this.p, this.q);
+    this.p.y += this.liftOut(prop, this.p, this.q);
     prop.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     prop.body.setTranslation(this.p, true);
     prop.body.setRotation(this.q, true);
@@ -177,7 +363,7 @@ export class ObjectPhysics {
     const prop = this.props.get(object);
     if (!prop) return null;
     this.rigidPose(object, this.p, this.q);
-    const hit = this.world.castShape(this.p, this.q, DOWN, prop.body.collider(0).shape, 0, maxM, true, undefined, undefined, undefined, prop.body);
+    const hit = this.world.castShape(this.p, this.q, DOWN, prop.body.collider(0).shape, 0, maxM, true, undefined, NO_AVATAR, undefined, prop.body);
     return hit ? hit.time_of_impact : null;
   }
 
@@ -197,22 +383,73 @@ export class ObjectPhysics {
     for (const object of objects) if (object.placed) this.ensure(object);
     if (this.props.size === 0 || !(deltaSec > 0)) return;
 
+    const avatar = this.avatar;
+    const simulatedSec = Math.min(deltaSec, MAX_SUBSTEPS * MAX_SUBSTEP_SEC);
+    // A hitch frame simulates less time than it took, so the avatar's motion is judged over the simulated time.
+    const jumped = avatar?.sync(simulatedSec) ?? 0;
     for (const [object, prop] of this.props) {
+      // A part that jumped in passes through whatever it landed in, rather than launching it.
+      if (jumped) prop.excluded |= this.overlappedParts(prop, jumped);
+      if (prop.graceSec > 0) {
+        prop.graceSec -= deltaSec;
+        if (prop.graceSec <= 0) prop.excluded |= prop.graceBits;
+      }
+      const ignored = this.reachTarget === object ? 0xfffe : prop.excluded | (prop.graceSec > 0 ? prop.graceBits : 0);
+      const next = prop.ghosted ? 0 : groups(PROP_BIT, PROP_BIT | (~ignored & 0xfffe));
+      const collider = prop.body.collider(0);
+      if (next !== prop.groups || collider.handle !== prop.groupsCollider) {
+        collider.setCollisionGroups(next);
+        prop.groups = next;
+        prop.groupsCollider = collider.handle;
+      }
       if (prop.dynamic) continue;
       object.wrapper.updateWorldMatrix(true, true);
-      this.rigidPose(object, this.p, this.q);
-      prop.body.setNextKinematicTranslation(this.p);
-      prop.body.setNextKinematicRotation(this.q);
+      this.rigidPose(object, prop.to.position, prop.to.quaternion);
     }
     const substeps = Math.min(MAX_SUBSTEPS, Math.max(1, Math.ceil(deltaSec / MAX_SUBSTEP_SEC - 1e-6)));
-    this.world.timestep = Math.min(deltaSec, MAX_SUBSTEPS * MAX_SUBSTEP_SEC) / substeps;
+    this.world.timestep = simulatedSec / substeps;
     const started = performance.now();
-    for (let i = 0; i < substeps; i += 1) this.world.step();
+    for (let i = 0; i < substeps; i += 1) {
+      // Kinematic bodies cover their frame's motion evenly across the substeps, so a swing hits at its own speed.
+      const fraction = (i + 1) / substeps;
+      avatar?.substep(fraction);
+      for (const prop of this.props.values()) {
+        if (prop.dynamic) continue;
+        prop.body.setNextKinematicTranslation(this.p.lerpVectors(prop.from.position, prop.to.position, fraction));
+        prop.body.setNextKinematicRotation(this.q.slerpQuaternions(prop.from.quaternion, prop.to.quaternion, fraction));
+      }
+      this.world.step();
+    }
     this.stepTimes.push(performance.now() - started);
     if (this.stepTimes.length > STEP_TIME_SAMPLES) this.stepTimes.shift();
+    avatar?.settle();
+    const moving = avatar?.movingBits(KNOCK_MPS) ?? 0;
+
+    for (const [object, prop] of this.props) {
+      if (!prop.dynamic) {
+        prop.from.position.copy(prop.to.position);
+        prop.from.quaternion.copy(prop.to.quaternion);
+      }
+      if (!avatar || this.reachTarget === object) continue;
+      // Parts it has come clear of collide again.
+      if (prop.excluded) prop.excluded = this.overlappedParts(prop, prop.excluded);
+      const touching = moving & ~prop.excluded & ~(prop.graceSec > 0 ? prop.graceBits : 0);
+      if (!touching) continue;
+      if (prop.dynamic && prop.body.isSleeping() && this.overlappedParts(prop, touching)) prop.body.wakeUp();
+      if (!prop.dynamic && !prop.held && this.overlappedParts(prop, touching)) {
+        // The avatar walked or swung into a hovering prop: it falls, and the next step pushes it.
+        prop.dynamic = true;
+        prop.sleepWritten = false;
+        prop.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+        prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        prop.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        this.knockdowns += 1;
+      }
+    }
 
     for (const [object, prop] of this.props) {
       if (!prop.dynamic) continue;
+      this.clampSpeed(prop.body);
       if (this.outOfBounds(prop.body.translation())) {
         this.sendHome(prop);
         this.resets += 1;
@@ -235,7 +472,9 @@ export class ObjectPhysics {
       bodies: this.props.size,
       stepMedianMs: sorted[Math.floor(sorted.length / 2)] ?? null,
       stepSamples: sorted.length,
-      resets: this.resets
+      resets: this.resets,
+      avatarParts: this.avatar ? popcount(this.avatar.liveBits) : 0,
+      knockdowns: this.knockdowns
     };
   }
 
@@ -249,9 +488,28 @@ export class ObjectPhysics {
     return { state, linvel: [l.x, l.y, l.z], angvel: [a.x, a.y, a.z] };
   }
 
+  /**
+   * How far up the prop at `position` must go for its collider to clear what
+   * it overlaps, landing on top of it; 0 when it overlaps nothing, or when
+   * there is no room above.
+   */
+  private liftOut(prop: PropBody, position: THREE.Vector3, quaternion: THREE.Quaternion): number {
+    const shape = prop.body.collider(0).shape;
+    if (!this.world.intersectionWithShape(position, quaternion, shape, undefined, NO_AVATAR, undefined, prop.body)) return 0;
+    let reach = 0;
+    const { points } = prop.shape;
+    for (let i = 0; i < points.length; i += 3) reach = Math.max(reach, Math.hypot(points[i] ?? 0, points[i + 1] ?? 0, points[i + 2] ?? 0));
+    const above = 2 * reach * prop.size + LIFT_CLEARANCE_M;
+    const from = { x: position.x, y: position.y + above, z: position.z };
+    if (this.world.intersectionWithShape(from, quaternion, shape, undefined, NO_AVATAR, undefined, prop.body)) return 0;
+    const hit = this.world.castShape(from, quaternion, DOWN, shape, 0, above, true, undefined, NO_AVATAR, undefined, prop.body);
+    return hit ? Math.max(0, above - hit.time_of_impact) + LIFT_CLEARANCE_M : 0;
+  }
+
   /** The prop returns to its placement pose, at rest and hovering as it first appeared. */
   private sendHome(prop: PropBody): void {
     prop.dynamic = false;
+    prop.held = false;
     prop.history.length = 0;
     prop.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
     prop.body.setLinvel({ x: 0, y: 0, z: 0 }, false);
@@ -260,6 +518,32 @@ export class ObjectPhysics {
     prop.body.setRotation(prop.home.quaternion, true);
     prop.body.setNextKinematicTranslation(prop.home.position);
     prop.body.setNextKinematicRotation(prop.home.quaternion);
+    prop.from.position.copy(prop.home.position);
+    prop.from.quaternion.copy(prop.home.quaternion);
+    prop.to.position.copy(prop.home.position);
+    prop.to.quaternion.copy(prop.home.quaternion);
+    // Back where it was placed, it passes through the avatar until clear, as when first placed.
+    prop.excluded = this.avatar?.allBits ?? 0xfffe;
+    prop.graceBits = 0;
+    prop.graceSec = 0;
+    prop.sleepWritten = false;
+  }
+
+  /** A kick, bat or foot pressing a prop into the floor never sends it faster than a throw can, or spins it past what replay interpolates. */
+  private clampSpeed(body: RAPIER.RigidBody): void {
+    const l = body.linvel();
+    const linear = Math.hypot(l.x, l.y, l.z);
+    if (linear > MAX_LINEAR_MPS) body.setLinvel({ x: (l.x * MAX_LINEAR_MPS) / linear, y: (l.y * MAX_LINEAR_MPS) / linear, z: (l.z * MAX_LINEAR_MPS) / linear }, true);
+    const a = body.angvel();
+    const angular = Math.hypot(a.x, a.y, a.z);
+    if (angular > MAX_ANGULAR_RADPS) body.setAngvel({ x: (a.x * MAX_ANGULAR_RADPS) / angular, y: (a.y * MAX_ANGULAR_RADPS) / angular, z: (a.z * MAX_ANGULAR_RADPS) / angular }, true);
+  }
+
+  /** Which of `bits`' avatar parts the prop's collider, where it was after the last step, overlaps at the parts' pose for the coming one. */
+  private overlappedParts(prop: PropBody, bits: number): number {
+    if (!bits || !this.avatar) return 0;
+    const collider = prop.body.collider(0);
+    return this.avatar.overlaps(collider.shape, collider.translation(), collider.rotation(), bits);
   }
 
   private outOfBounds(t: { x: number; y: number; z: number }): boolean {
@@ -282,38 +566,43 @@ export class ObjectPhysics {
     object.wrapper.matrixWorld.decompose(position, quaternion, this.s);
   }
 
+  /** The prop's collider at its current size. */
+  private attachCollider(prop: PropBody): void {
+    this.world.createCollider(this.shapeAt(prop).setDensity(DENSITY).setFriction(FRICTION).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max).setRestitution(RESTITUTION), prop.body);
+  }
+
+  /** The prop's collider description at its current size. */
+  private shapeAt(prop: PropBody): RAPIER.ColliderDesc {
+    const { points, hull } = prop.shape;
+    const scaled = points.map((value) => value * prop.size);
+    const desc = hull ? RAPIER.ColliderDesc.convexHull(scaled) : null;
+    if (desc) return desc;
+    const box = new THREE.Box3().setFromArray(scaled);
+    const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5).max(new THREE.Vector3(0.005, 0.005, 0.005));
+    const center = box.getCenter(new THREE.Vector3());
+    return RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(center.x, center.y, center.z);
+  }
+
   /**
-   * A convex hull of the model's vertices (the extreme ones in a fan of
-   * directions when there are more than the cap), in the wrapper's frame so
-   * the body's origin is the wrapper's. A box of the model's bounds when the
-   * hull can't be built.
+   * The points of a convex hull of the model's vertices (the extreme ones in a
+   * fan of directions when there are more than the cap), in the wrapper's frame
+   * with the object's size divided out, so the body's origin is the wrapper's. A box of the model's
+   * bounds when the hull can't be built.
    */
-  private colliderFor(object: SceneObject): RAPIER.ColliderDesc {
+  private shapeFor(object: SceneObject): { points: Float32Array; hull: boolean } {
     object.model.updateWorldMatrix(true, true);
     object.wrapper.updateWorldMatrix(true, false);
     object.wrapper.matrixWorld.decompose(this.p, this.q, this.s);
     this.rigidInverse.compose(this.p, this.q, this.unit).invert();
-    const points: number[] = [];
-    const v = new THREE.Vector3();
-    object.model.traverse((node) => {
-      if (!isThreeMesh(node)) return;
-      const position = node.geometry.getAttribute('position');
-      if (!position) return;
-      this.m.multiplyMatrices(this.rigidInverse, node.matrixWorld);
-      for (let i = 0; i < position.count; i += 1) {
-        v.fromBufferAttribute(position, i).applyMatrix4(this.m);
-        points.push(v.x, v.y, v.z);
-      }
-    });
-    if (points.length < 12) return RAPIER.ColliderDesc.cuboid(0.1, 0.1, 0.1);
-    const capped = cap(points, MAX_HULL_POINTS);
-    const hull = RAPIER.ColliderDesc.convexHull(new Float32Array(capped));
-    if (hull) return hull;
-    const box = new THREE.Box3();
-    for (let i = 0; i < points.length; i += 3) box.expandByPoint(v.set(points[i] ?? 0, points[i + 1] ?? 0, points[i + 2] ?? 0));
-    const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5).max(new THREE.Vector3(0.005, 0.005, 0.005));
-    const center = box.getCenter(new THREE.Vector3());
-    return RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(center.x, center.y, center.z);
+    const geometry = firstGeometry(object.model);
+    const cached = geometry ? hullPoints.get(geometry) : undefined;
+    const points = cached ?? meshPoints(object.model, (node, out) => out.multiplyMatrices(this.rigidInverse, node.matrixWorld)).map((value) => value / object.size);
+    if (points.length < 12) return { points: boxCorners(new THREE.Box3(new THREE.Vector3(-0.1, -0.1, -0.1), new THREE.Vector3(0.1, 0.1, 0.1))), hull: false };
+    const capped = cached ?? cap(points, MAX_HULL_POINTS);
+    if (geometry && !cached) hullPoints.set(geometry, capped);
+    const hullPointsOf = new Float32Array(capped);
+    if (RAPIER.ColliderDesc.convexHull(hullPointsOf)) return { points: hullPointsOf, hull: true };
+    return { points: boxCorners(new THREE.Box3().setFromArray(points)), hull: false };
   }
 
   /**
@@ -371,30 +660,63 @@ function rotationVector(q: THREE.Quaternion): THREE.Vector3 {
 function cap(points: readonly number[], limit: number): number[] {
   const count = points.length / 3;
   if (count <= limit) return [...points];
-  const picked = new Set<number>();
-  const directions: Array<[number, number, number]> = [
+  const scan = new HullScan(limit);
+  scan.scan(points, 0, count);
+  return scan.picked(points);
+}
+
+/** The point farthest along each of `limit` directions spread over the sphere, scanned in ranges. */
+class HullScan {
+  private readonly directions: Array<[number, number, number]> = [
     [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
   ];
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  const fan = limit - directions.length;
-  for (let i = 0; i < fan; i += 1) {
-    const y = 1 - (2 * (i + 0.5)) / fan;
-    const r = Math.sqrt(1 - y * y);
-    directions.push([Math.cos(golden * i) * r, y, Math.sin(golden * i) * r]);
-  }
-  for (const [dx, dy, dz] of directions) {
-    let best = 0;
-    let bestDot = -Infinity;
-    for (let i = 0; i < count; i += 1) {
-      const dot = (points[i * 3] ?? 0) * dx + (points[i * 3 + 1] ?? 0) * dy + (points[i * 3 + 2] ?? 0) * dz;
-      if (dot > bestDot) {
-        bestDot = dot;
-        best = i;
-      }
+  private readonly best: Int32Array;
+  private readonly bestDot: Float64Array;
+
+  constructor(limit: number) {
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    const fan = limit - this.directions.length;
+    for (let i = 0; i < fan; i += 1) {
+      const y = 1 - (2 * (i + 0.5)) / fan;
+      const r = Math.sqrt(1 - y * y);
+      this.directions.push([Math.cos(golden * i) * r, y, Math.sin(golden * i) * r]);
     }
-    picked.add(best);
+    this.best = new Int32Array(this.directions.length);
+    this.bestDot = new Float64Array(this.directions.length).fill(-Infinity);
   }
+
+  scan(points: readonly number[], from: number, to: number): void {
+    this.directions.forEach(([dx, dy, dz], d) => {
+      let best = this.best[d]!;
+      let bestDot = this.bestDot[d]!;
+      for (let i = from; i < to; i += 1) {
+        const dot = (points[i * 3] ?? 0) * dx + (points[i * 3 + 1] ?? 0) * dy + (points[i * 3 + 2] ?? 0) * dz;
+        if (dot > bestDot) {
+          bestDot = dot;
+          best = i;
+        }
+      }
+      this.best[d] = best;
+      this.bestDot[d] = bestDot;
+    });
+  }
+
+  picked(points: readonly number[]): number[] {
+    const out: number[] = [];
+    for (const i of new Set(this.best)) out.push(points[i * 3] ?? 0, points[i * 3 + 1] ?? 0, points[i * 3 + 2] ?? 0);
+    return out;
+  }
+}
+
+function popcount(bits: number): number {
+  let count = 0;
+  for (let b = bits; b; b &= b - 1) count += 1;
+  return count;
+}
+
+/** The eight corners of `box`, flat xyz. */
+function boxCorners(box: THREE.Box3): Float32Array {
   const out: number[] = [];
-  for (const i of picked) out.push(points[i * 3] ?? 0, points[i * 3 + 1] ?? 0, points[i * 3 + 2] ?? 0);
-  return out;
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) out.push(x, y, z);
+  return new Float32Array(out);
 }

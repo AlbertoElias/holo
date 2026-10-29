@@ -41,9 +41,10 @@ export class VrLocomotionSystem extends createSystem() {
       const move = c.headsetHolds.locomotionBlocked('left') ? { x: 0, y: 0 } : c.tracking.getThumbstickAxes('left');
       const turn = c.headsetHolds.locomotionBlocked('right') ? { x: 0, y: 0 } : c.tracking.getThumbstickAxes('right');
       if (move) loco.setThumbstick({ moveX: move.x, moveY: move.y });
-      if (turn) loco.setThumbstick({ turnX: turn.x });
+      if (turn) loco.setThumbstick({ turnX: turn.x, turnY: turn.y });
     }
 
+    loco.updateObjectPush(c.objects.isHolding());
     const delta = loco.updateTurn(deltaSec);
     // Facing the motor steers by: in real XR the turned rig makes the
     // head's world yaw carry the turn (syncYaw reads it); the mock pose

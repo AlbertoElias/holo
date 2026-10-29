@@ -165,8 +165,19 @@ it from the item below instead of duplicating its status here.
   tracking drives the rest. Needs a PRD first
   ([IDEA-078](docs/product/IDEAS.md)); depends on the two items above.
 
+- [ ] Capture drops scene triangles the hologram never shows: geometry
+  hidden below the ground's top surface (the underside and buried parts of a
+  hill) and outside the bubble, at export. Follow-up to
+  [`docs/features/archive/cloche-rim-follows-ground.md`](docs/features/archive/cloche-rim-follows-ground.md)
+  (user, 2026-10-27). Preserve export → upload → render compatibility.
+
 ## Later
 
+- [ ] Dismiss a placed object and remove a tray item (raised building the
+  tray everywhere, 2026-10-28). Nothing clears between takes now, so a
+  carried object stays in every later take and the tray only grows to its
+  five slots; the author needs a way to take one out of the scene or the
+  tray. See [`docs/features/archive/tray-everywhere.md`](docs/features/archive/tray-everywhere.md).
 - [ ] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
   `tsconfig.app.json` (src, functions, configs) only, so a spec's missing
   import shows only when Playwright runs it (found in the slice 0 review,

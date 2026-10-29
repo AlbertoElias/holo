@@ -1,4 +1,5 @@
 import { tokens } from "@holoim/design-tokens";
+import { PROVISIONAL_GLYPHS } from "@holoim/xr-ui-core";
 import { UIKit } from "@iwsdk/core";
 import type { BufferGeometry} from "three";
 import { Color, DoubleSide, Mesh, MeshBasicMaterial, ShapeGeometry, Vector3 } from "three";
@@ -26,9 +27,12 @@ export const GLYPHS = {
   restart: path.restart,
   recenter: path.recenter,
   exit: path.exit,
-  // Find (object search, PRD-060 slice 2): a lens and its handle. Provisional
-  // until the styleguide's glyph table and tokens.json carry a drawing.
-  find: { d: "M6.75 2a4.75 4.75 0 1 0 0 9.5a4.75 4.75 0 1 0 0-9.5zM10.2 10.2l4.3 4.3" },
+  // The tray's glyphs (§6), and the summon signifiers at its miniatures.
+  tray: path.tray,
+  pinch: path.pinch,
+  squeeze: path.squeeze,
+  // Find: provisional until the styleguide's glyph table carries it; xr-ui-core holds its drawing.
+  ...PROVISIONAL_GLYPHS,
   // Record (§6): filled rose circle idle, rose rounded square while recording.
   recordIdle: { d: "M8 1a7 7 0 1 0 0 14a7 7 0 1 0 0-14z", fill: true },
   recordStop: { d: "M4.5 1.5h7a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3z", fill: true }

@@ -113,8 +113,8 @@ export async function runDesktopMouseObject({ browser, baseUrl, consoleErrors })
     };
     // Presses at offsets from the prop's centre until one lands on the model; returns the offset, or null.
     const OFFSETS = [[0, 0], [12, 0], [-12, 0], [0, 12], [0, -12], [24, 0], [-24, 0], [0, 24], [0, -24], [20, 20], [-20, -20], [20, -20], [-20, 20]];
-    const grabByMouse = async (holdSec) => {
-      for (const [x, y] of OFFSETS) {
+    const grabByMouse = async (holdSec, offsets = OFFSETS) => {
+      for (const [x, y] of offsets) {
         await aim({ x: -x, y: -y });
         await press(holdSec);
         if ((await s.item()).heldBy) return { x, y };
@@ -142,18 +142,29 @@ export async function runDesktopMouseObject({ browser, baseUrl, consoleErrors })
     if (!acquiring.lockedAfter) fail('the click did not take the pointer lock');
     if (acquiring.heldBy) fail('the lock-acquiring click grabbed the prop');
 
-    // Out of reach: walk back, look at the prop from there, and press.
+    // Out of reach: walk back, look at the prop from there, and press. Slice 2: a prop within 8 m and in sight is fetched into the hand
+    // (it was a press that grabbed nothing before). Beyond 8 m and behind a wall nothing happens: see lib/object-push.mjs.
     await page.keyboard.down('KeyS');
     await advance(1.5);
     await page.keyboard.up('KeyS');
     await advance(0.3);
     const farAimPx = await aim();
-    await press(0.3);
+    // The bracket is an L, seen thin from afar: press at offsets until one lands on the model.
+    const fine = [];
+    for (let x = -16; x <= 16; x += 4) for (let y = -16; y <= 16; y += 4) fine.push([x, y]);
+    const farHit = await grabByMouse(0.3, fine.sort((p, q) => Math.hypot(...p) - Math.hypot(...q)));
+    await advance(0.5);
     const far = await s.item();
+    const farHand = (await readState(page)).objects.hands.right.position;
+    const farToHandM = Math.hypot(...far.position.map((v, k) => v - farHand[k]));
     await lift();
-    const outOfReach = { heldBy: far.heldBy, aimedPx: round(farAimPx, 1) };
+    await advance(0.5);
+    const stillHeld = (await s.item()).heldBy;
+    const outOfReach = { heldBy: far.heldBy, aimedPx: round(farAimPx, 1), hitOffsetPx: farHit, toHandM: round(farToHandM, 3), heldAfterLift: stillHeld };
     if (farAimPx > 40) fail(`the far prop was not in the view centre (${outOfReach.aimedPx} px), so the out-of-reach press tested nothing`);
-    if (outOfReach.heldBy) fail('a press on a prop out of reach grabbed it');
+    if (!farHit || outOfReach.heldBy !== 'right') fail('a press on a prop out of reach but within 8 m and in sight did not fetch it');
+    if (outOfReach.toHandM > 0.15) fail(`the fetched prop is ${outOfReach.toHandM} m from the hand after 0.5 s`);
+    if (stillHeld !== 'right') fail('the fetched prop was let go when the button lifted');
 
     // Still: grab, hold, let go. Held through the set-down ease, then dropped from a few cm.
     await s.rearm();
