@@ -23,6 +23,11 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- Hand traces v0 (PRD-023, brief
+  [`docs/features/hand-traces.md`](docs/features/hand-traces.md)) is on
+  branch `feature/hand-traces`, merged with `main` and verified with
+  `verify:pr` on 2026-10-29 (evidence in the brief). Merge it together with
+  the next finished change; it adds e2e pipeline shard 7 to CI.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

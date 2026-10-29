@@ -1,7 +1,7 @@
 # Feature brief: Hand traces (v0)
 
 **Lead:** Claude Code  
-**Status:** Reviewed
+**Status:** Verified; ready to merge (grouped)
 **Layer:** Meaning (read)
 
 Product decision and trial plan: [PRD-023](../product/prds/PRD-023-hand-path-ribbons.md),
@@ -38,52 +38,52 @@ traces; controller traces; speed encoding on a paused trace; cleaned shapes
 
 ## Acceptance criteria
 
-- [ ] **Signal.** A headset take's export carries `HOLOIM_meaning` with
+- [x] **Signal.** A headset take's export carries `HOLOIM_meaning` with
   `recorded` motion spans over `leftHand`/`rightHand` and their finger bones
   for frames whose source was `xr-hand`, whether or not the take has pointing.
   `controller`, `mock`, `held`, `fallback`, `none` and hands-in-menu
   (`neutralizeAuthoringSpans`) frames are excluded; spans shorter than
   0.25 s are dropped. The record still validates as v0. A desktop take
   writes no recorded hand spans.
-- [ ] **Presence.** Paused on a headset take, each hand whose fingertip
+- [x] **Presence.** Paused on a headset take, each hand whose fingertip
   moved more than 5 cm in spatial extent (largest distance from the end
   point) within the window shows a trace ending at its fingertip; a hand
   under that shows none, however much it jittered.
-- [ ] **Recorded only.** A trace segment is drawn only when both of its end
+- [x] **Recorded only.** A trace segment is drawn only when both of its end
   samples fall inside a recorded span whose `bones` include `${side}Hand`.
-- [ ] **Fidelity.** Every drawn trace point is within 2 mm of the fingertip
+- [x] **Fidelity.** Every drawn trace point is within 2 mm of the fingertip
   node's world position at the same recording time.
-- [ ] **Shape.** On the scripted take (a 30 cm circle at mid-reach and a
+- [x] **Shape.** On the scripted take (a 30 cm circle at mid-reach and a
   figure-eight), the report gives the avatar fingertip's error against the
   IWER ground-truth path, and the drawn circle's fitted radius matches the
   avatar fingertip's own circle within 1 cm. Nothing is drawn while the
   scripted hands are still.
-- [ ] **Orbit.** A paused card shows the same trace from two orbit angles.
-- [ ] **Travel.** No segment is drawn while the hips' horizontal speed,
+- [x] **Orbit.** A paused card shows the same trace from two orbit angles.
+- [x] **Travel.** No segment is drawn while the hips' horizontal speed,
   averaged over 0.25 s, is above 0.3 m/s, or across a root jump (teleport,
   snap turn) between two samples. Proven on a scripted headset walk, a
   teleport and a snap turn. Leaning and crouching while drawing do not
   suppress.
-- [ ] **Time.** Scrubbing while paused recomputes the trace for the new
+- [x] **Time.** Scrubbing while paused recomputes the trace for the new
   time; the window clamps at the clip start and does not wrap across the
   loop.
-- [ ] **Playing.** With Traces off, nothing is drawn while playing; with it
+- [x] **Playing.** With Traces off, nothing is drawn while playing; with it
   on, a tail of at most the last 1 s fades behind each moving hand. Resuming
   clears the paused trace.
-- [ ] **Control.** The Traces control shows only on cards with recorded hand
+- [x] **Control.** The Traces control shows only on cards with recorded hand
   spans, its state is per card, and it follows the control rules in the
   styleguide.
-- [ ] **Older and other takes.** A desktop take, a headset export with only
+- [x] **Older and other takes.** A desktop take, a headset export with only
   inferred spans, and one with no `HOLOIM_meaning` show no traces and play
   unchanged.
-- [ ] **Style.** Traces use the Ink inferred style (styleguide 1.1, 4): the
+- [x] **Style.** Traces use the Ink inferred style (styleguide 1.1, 4): the
   pointing highlight hue, lighter than recorded marks, never gold, never
   hollow; they taper in width and opacity toward the oldest end, with a
   minimum on-screen width that stays legible on a phone card.
-- [ ] **Cost.** Measured with `performance.now()` around the trace work via
+- [x] **Cost.** Measured with `performance.now()` around the trace work via
   the card probe: under 5 ms once per pause or scrub, and p95 under 0.5 ms
   per frame with the tail on.
-- [ ] **Compatibility.** Export → upload → render stays compatible; the AR
+- [x] **Compatibility.** Export → upload → render stays compatible; the AR
   and VR viewers and other glTF loaders load the new export unchanged.
 
 ## Failure cases considered
@@ -188,16 +188,16 @@ Decided after the design review on 2026-10-28:
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Signal, v0 validity | Pipeline spec: scripted headset take → export; read `HOLOIM_meaning` | `output/hand-traces/report.json` spans section: pending |
-| Presence, recorded only, fidelity, shape | `hand-traces.pipeline.spec.ts`: take made by setting `IWER_DEVICE.hands.*.position` per manual-clock step (as in `generate-iwer-pose-fixture.ts`), uploaded, paused in the feed | Report (per-point error, avatar vs ground truth, fitted radii), screenshots: pending |
-| Orbit, time, playing, control | Same spec | Screenshots and report: pending |
-| Travel | Same spec on scripted headset walk, teleport and snap-turn takes | Report (hip speed distribution, segments drawn): pending |
-| Older and other takes | Same spec on a desktop take, the new export with recorded spans stripped, and one with `HOLOIM_meaning` removed | Report: pending |
-| Real gesturing | Same spec on a take replayed from `headset-open-fist-pinch-point-wave-reach.json` | Screenshots, hip speed distribution: pending |
-| Style | Screenshot review against the styleguide (Codex) | Pending |
-| Cost | Same spec, card probe timings | Report: pending |
-| Compatibility | `pnpm run verify:pr` | Pending |
-| Proof video | Real-time recording of pause, trace, orbit, scrub, toggle | `output/` only, sent to the user: pending |
+| Signal, v0 validity | Pipeline spec: scripted headset take → export; read `HOLOIM_meaning` | `output/hand-traces/report.json` `shapes.signal`: v0, valid, recorded spans 0–10.72 s over 16 bones per hand, listed in `extensionsUsed` only. The travel take is cut at the controller second (spans 0–9.68 s and 10.72–11.74 s per hand). Desktop take: no `HOLOIM_meaning`. Hands-in-menu take: the recorded span (0.656–1.424 s, right) does not overlap the authoring spans. Pass |
+| Presence, recorded only, fidelity, shape | `hand-traces.pipeline.spec.ts`: take made by setting `IWER_DEVICE.hands.*.position` per manual-clock step (as in `generate-iwer-pose-fixture.ts`), uploaded, paused in the feed | Report `shapes`: still extents 0.4 and 2.5 cm (nothing drawn); circle 30 cm, figure-eight 15 cm, the other hand none. Every drawn segment sits in a span. Fidelity against the mixer-posed fingertip: max error 0 (188 and 189 points, limit 2 mm). Circle radius drawn = avatar = IWER = 0.15 m. Avatar fingertip vs IWER: circle mean 3.2 cm, figure-eight 0.6 cm, lean 2.9 cm (a constant offset of the rig). `shapes-1-circle.png`, `shapes-2-figure-eight.png`. Pass |
+| Orbit, time, playing, control | Same spec | `shapes-3-orbit-a.png`, `shapes-4-orbit-b.png`. Window clamps at 0 (paused at 1 s, window starts at 0). At the clip end the window is 7.72–10.72 s with no wrap. Scrubbing back recomputes the same trace. Traces off while playing: mode `none`. Tail: 63 points spanning at most 1 s (`shapes-6-tail.png`); resuming clears the paused trace. The control shows only on cards with recorded spans, and its state is per card (two cards). Pass |
+| Travel | Same spec on scripted headset walk, teleport and snap-turn takes | Report `travel`. Walk at about 0.8 m/s: 127 samples suppressed for travel, and the fastest drawn segment's hip speed is 0.28 m/s. Teleport (capture's respawn) and snap turn (one snap, rig yaw −30°): each breaks the trace once (`jumps` 1). No drawn step exceeds 1.6 cm, and nothing is drawn during the controller second. Lean and crouch: hip speed 0.038 m/s at most, 125 samples drawn, none suppressed. `travel-*.png`. Pass |
+| Older and other takes | Same spec on a desktop take, the new export with recorded spans stripped, and one with `HOLOIM_meaning` removed | Report `olderAndOther`: all three have no control and no traces mounted, and they play. `negative-*.png`. Pass |
+| Real gesturing | Same spec on a take replayed from `headset-open-fist-pinch-point-wave-reach.json` | Report `realFixture`: traces drawn at fist, point, pinch, wave and reach, with extents of 10–18 cm and no suppression. `real-*.png`. Pass |
+| Style | Screenshot review against the styleguide (cross-vendor) | Codex hit its usage limit, so Muse (Meta) reviewed. It passed style, the control glyph and placement, no gold or hollow, and hue consistency with the pointing highlights. It failed phone legibility: the oldest end was 1.5 px because the minimum was applied before the taper. That is fixed, and `shapes-4-orbit-phone.png` shows a 3 px minimum along the whole ribbon. Muse's other suggestion, adding the glyph to `tokens.json`, was left out: the highlights glyph is not tokenized either. Pass after fix |
+| Cost | Same spec, card probe timings | Report `shapes.cost`: pause or scrub 1.4 ms max, 0.4 ms p50 (9 pauses; the keyframe cache warms while playing, at most 0.5 ms a frame). Tail frame p95 0.2 ms. Pass |
+| Compatibility | `pnpm run verify:pr` | Passed on the tree merged with `main` (2026-10-29): doctor, checks, unit, build, shards, knowledge, pipeline 27/27 (including all 4 hand-traces tests), portal 10/10, XR smoke 30/30. The last three ran on spare ports because another agent held 3199. Pass |
+| Proof video | Real-time recording of pause, trace, orbit, scrub, toggle | `output/hand-traces/proof/hand-traces-proof.mp4` (H.264), watched and sent to the user. Pass |
 
 ## Physical-device limits
 
