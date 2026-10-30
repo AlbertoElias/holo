@@ -29,8 +29,9 @@ export type Control =
   | "play" | "free" | "return" | "timecode" | "caption" | "scale"
   // Actions: general controls and the hand's tools.
   | "record" | "ink" | "undo" | "exitAr" | "placingHint" | "upload" | "signIn" | "halo"
-  // Capture's object tray and the search that fills it (docs/features/archive/tray-everywhere.md).
-  | "tray" | "find"
+  // Capture's object tray, the search that fills it (docs/features/archive/tray-everywhere.md),
+  // and putting a held object back into it (docs/features/tray-remove.md).
+  | "tray" | "find" | "putBack"
   // Lists and long text.
   | "settings" | "library" | "longText"
   // State only.
@@ -58,7 +59,7 @@ export interface Placement {
 }
 
 const FOOT: ReadonlySet<Control> = new Set(["play", "free", "return", "timecode", "caption", "scale"]);
-const ACTIONS: ReadonlySet<Control> = new Set(["record", "ink", "undo", "exitAr", "placingHint", "upload", "signIn", "halo", "tray", "find"]);
+const ACTIONS: ReadonlySet<Control> = new Set(["record", "ink", "undo", "exitAr", "placingHint", "upload", "signIn", "halo", "tray", "find", "putBack"]);
 const LISTS: ReadonlySet<Control> = new Set(["settings", "library", "longText"]);
 
 /**

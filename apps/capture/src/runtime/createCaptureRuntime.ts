@@ -150,7 +150,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     setHandedness,
     ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec),
     pickObject: (url) => void objects.loadTrayUrls([url]),
-    tray: objects.tray
+    tray: objects.tray,
+    removeTraySlot: (slot) => void objects.removeTraySlot(slot)
   });
   // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.
   const recenterAr = (): void => {
@@ -177,8 +178,13 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     // The set's own model: the objects, the avatar and the chrome are not what a placement lands on.
     setTargets: () => (avatar.worldModel ? [avatar.worldModel] : []),
     trayThumbnail: (slot) => objects.trayThumbnail(slot),
-    placeFromTray: (slot, point, yaw, timeSec) => objects.placeFromTray(slot, point, yaw, timeSec)
+    placeFromTray: (slot, point, yaw, timeSec) => objects.placeFromTray(slot, point, yaw, timeSec),
+    objects: () => objects.registry.eventObjects(),
+    putBack: (object, timeSec) => objects.putBack(object, timeSec),
+    removeTraySlot: (slot) => void objects.removeTraySlot(slot)
   });
+  // A removal renumbers the tray: a phone tap queued for a slot number would summon its neighbour.
+  objects.onTrayChanged = () => phoneChrome.trayChanged();
   const headsetHolds = new HeadsetHolds({
     tracking,
     root: vrChrome.root,
@@ -337,6 +343,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       loadTrayUrls: (urls) => void objects.loadTrayUrls(urls),
       setTrayOpen: (open) => input.setTrayOpenFromUi(open),
       summonTraySlot: (slot) => input.queueSummonSlot(slot),
+      removeTraySlot: (slot) => input.queueTrayRemove(slot),
+      putBackHeld: () => input.queuePutBack(),
       toggleFaceCamera: () => capture.face.toggleCamera(),
       setHandedness,
       toggleXr: (mode) => {
@@ -387,6 +395,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __phoneTraySlotPosition: (slot) => phoneChrome.traySlotPosition(slot),
         __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),
         __chromeTarget: (target) => vrChrome.targetPosition(target),
+        __trayClosePosition: (slot) => vrChrome.trayClosePosition(slot),
+        __phoneTrayClosePosition: (slot) => phoneChrome.trayClosePosition(slot),
         __sampleObjectSearch: () => ({ headset: vrChrome.findSession.getState(), voiceLog: [...voiceLog], prefetch: { ...prefetchStats } }),
         __setRetainLastTake: (retain) => recording.setRetainLastTake(retain),
         __reexportLastTake: async () => {

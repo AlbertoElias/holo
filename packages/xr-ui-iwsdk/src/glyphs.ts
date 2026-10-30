@@ -31,6 +31,8 @@ export const GLYPHS = {
   tray: path.tray,
   pinch: path.pinch,
   squeeze: path.squeeze,
+  // Close: a miniature's ring that takes it off the tray (docs/features/tray-remove.md).
+  close: path.close,
   // Find: provisional until the styleguide's glyph table carries it; xr-ui-core holds its drawing.
   ...PROVISIONAL_GLYPHS,
   // Record (§6): filled rose circle idle, rose rounded square while recording.

@@ -7,7 +7,9 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import { VOICE_BROWSER_ARGS, runDesktopVoiceTake, runIwerFindTake, runIwerVoiceTake } from './lib/find-take.mjs';
 import { runDesktopFindTake, runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
+import { runIwerHandsPutBackTake, runIwerPutBackTake } from './lib/put-back-xr-take.mjs';
 import { runDesktopAnytimeTake, runLongCarryTake, runTouchTrayTake, runTrayHitchTake } from './lib/tray-anytime-take.mjs';
+import { runDesktopPutBackTake, runTouchPutBackTake, runTrayBudgetTake } from './lib/put-back-take.mjs';
 
 // Summon and place while speaking (PRD-045): IWER controller, IWER hands and
 // desktop takes open the tray with its held gesture, summon and place items,
@@ -33,6 +35,8 @@ try {
   const phases = [
     ['controllers', () => runIwerSummonTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['hands', () => runIwerHandsSummonTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['put-back-controllers', () => runIwerPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['put-back-hands', () => runIwerHandsPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['desktop', () => runDesktopSummonTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['find', () => runDesktopFindTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['headset-find', () => runIwerFindTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
@@ -40,6 +44,10 @@ try {
     ['desktop-voice', async () => runDesktopVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['desktop-anytime', () => runDesktopAnytimeTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['touch-tray', () => runTouchTrayTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    // Put back and remove a tray item (docs/features/tray-remove.md).
+    ['desktop-put-back', () => runDesktopPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['touch-put-back', () => runTouchPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['tray-budget', () => runTrayBudgetTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['long-carry', () => runLongCarryTake({ browser, baseUrl, artifactDir, consoleErrors })],
     // Timed: a browser of its own, so no earlier phase's GPU work is still draining.
     ['tray-hitch', async () => {

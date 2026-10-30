@@ -3,12 +3,13 @@
 // carried by shape and word, never by red alone. The Halo stays because it
 // carries the take's own actions: stop, and undo or redo the held mark. The
 // tray and Find stay too (the user, 2026-10-28): objects are summoned, and
-// searched for, mid-take.
+// searched for, mid-take. Put back stays with them: an object leaving is part
+// of the take as well (docs/features/tray-remove.md).
 import type { Control } from "./placement.js";
 
-const SHOWN_WHILE_RECORDING: ReadonlySet<Control> = new Set(["record", "timecode", "status", "halo", "tray", "find"]);
+const SHOWN_WHILE_RECORDING: ReadonlySet<Control> = new Set(["record", "timecode", "status", "halo", "tray", "find", "putBack"]);
 
-/** Whether a control shows. While recording only record (as stop), the timecode slot, the status line, the Halo, the tray and Find do. */
+/** Whether a control shows. While recording only record (as stop), the timecode slot, the status line, the Halo, the tray, Find and Put back do. */
 export function chromeVisible(control: Control, recording: boolean): boolean {
   return !recording || SHOWN_WHILE_RECORDING.has(control);
 }

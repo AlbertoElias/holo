@@ -11,13 +11,14 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
       'During a take, pinch thumb to middle finger on your non-dominant hand, or hold its trigger, to mark what your other hand points at.',
       'For the Halo, pinch thumb to middle finger on your dominant hand and move it, or press the non-dominant stick and tilt it: down records or stops, left undoes the last mark, right restores it.',
       'Turn your non-dominant palm up (or hold Y) to open the tray, then pinch or squeeze an item with your dominant hand to summon it, before or during a take; Find on your wrist searches for more.',
+      'To put a held object back, open the tray and let go of it over the tray; poke the cross above an item (or aim and pull the trigger) to take it off the tray.',
       'Holding an object, grab it with your other hand too and pull your hands apart or together to resize it; near its first size it snaps back.',
       'Point at an object out of reach and squeeze to bring it to your hand; push the right stick up or down to send a held object further out or bring it back.',
       'Settings are on the panel ahead of you.'
     ];
   }
   if (mode === 'ar') {
-    return ['Recenter AR places the scene in front of you again.', 'Tap Tray, then an item to place it where the centre of the screen points.'];
+    return ['Recenter AR places the scene in front of you again.', 'Tap Tray, then an item to place it where the centre of the screen points.', 'With the tray open, aim at a placed object and tap Put back to remove it; tap the cross over an item to take it off the tray.'];
   }
   if (touch) {
     return [
@@ -27,6 +28,7 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
       'Touch and hold the scene to mark "this"; slide to aim, lift to finish.',
       'Tap the Halo glyph, or hold it and slide: left undoes the last mark, right restores it.',
       'Tap Tray, then tap an item to summon it, before or during a take; Find searches for more.',
+      'While holding an object, tap Put back to send it back to the tray; drag an item up off the tray to remove it.',
       'Tap an object, near or far, to take it into your hand.',
       'Holding an object, pinch with two fingers to resize it (near its first size it snaps back), or slide two fingers up or down to push it further out or bring it back. Tap to let go.'
     ];
@@ -37,6 +39,7 @@ export function captureHelp(mode: AppMode, touch: boolean): string[] {
     'Click the Halo glyph, or hold B and move the mouse, for the Halo: left undoes the last mark, right restores it.',
     'R starts and stops a take.',
     'Hold T to open the tray and press 1 to 5 to summon, before or during a take; Find searches for more.',
+    'Backspace puts the held object back into the tray; drag an item up off the tray to remove it.',
     'G picks up the nearest object in reach, or click one at the centre of the view; Q and E turn it, Z and X tip it.',
     'Press G or click again to let go: held still, the object is set down; while you swing or walk, it is thrown.',
     'Click an object out of reach to bring it to your hand.',

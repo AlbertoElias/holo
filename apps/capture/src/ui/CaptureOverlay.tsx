@@ -233,6 +233,9 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
             pointerHandlers={trayGlyph.pointerHandlers}
           />
         ) : null}
+        {flat && show('putBack') && state.tray.holding && state.recordingState !== 'exporting' ? (
+          <DockGlyphButton glyph="putBack" label="Put back" title={touch ? 'Put back' : 'Put back · Backspace'} testId="dock-put-back" input={input} onPress={() => bridge.putBackHeld()} />
+        ) : null}
         {flat && show('find') ? (
           <DockGlyphButton glyph="find" label="Find" testId="dock-find" input={input} highlighted={findOpen} expanded={findOpen} onPress={() => (findOpen ? setFindOpen(false) : openFind())} />
         ) : null}
@@ -246,7 +249,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
       <KeyHaloRing bridge={bridge} />
 
-      {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} onSummon={summonSlot} /> : null}
+      {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} onSummon={summonSlot} onRemove={(slot) => bridge.removeTraySlot(slot)} /> : null}
 
       {flat && findOpen ? (
         <FindSheet
