@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| Hand traces (PRD-023 v0) | Complete | [hand-traces.md](archive/hand-traces.md) |
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |
 | Shared XR interface and viewer VR/AR | Complete | [viewer-xr-interface.md](archive/viewer-xr-interface.md) |
 | Creator accounts (IDEA-052) | Complete | [creator-accounts.md](archive/creator-accounts.md) |

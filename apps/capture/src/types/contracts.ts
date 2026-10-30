@@ -130,6 +130,8 @@ export interface RecordingFrame {
   rootQuaternion: QuatLike;
   bones: BoneTransform[];
   morphs: MorphTransform[];
+  /** What drove each hand on this frame; absent on frames recorded without hand input (desktop, camera). */
+  handSources?: Record<VrHandSide, HandPoseSource>;
 }
 
 // Tracked joints and the avatar bones at the same anatomical joints, in world
