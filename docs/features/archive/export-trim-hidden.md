@@ -1,7 +1,7 @@
 # Feature brief: Capture drops set triangles the hologram never shows
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed: not ready; blocked on a user decision (2026-10-29)
+**Status:** Parked (user, 2026-10-29): the gain is too small to justify the risk. The code stays on `feature/export-trim-hidden` (commit `6e68d7e2955e`) as a record; it is not merged.
 **Layer:** Event (the recorded set; see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -14,7 +14,7 @@ smaller and the viewer draws, raycasts and fits less, while the feed, the
 XR and AR viewers and Quick Look draw the same picture.
 
 Queued in `TODOS.md` (user, 2026-10-27) as the follow-up to
-[`archive/cloche-rim-follows-ground.md`](archive/cloche-rim-follows-ground.md).
+[`archive/cloche-rim-follows-ground.md`](cloche-rim-follows-ground.md).
 
 ## Background (measured 2026-10-29)
 
