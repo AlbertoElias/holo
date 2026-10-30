@@ -127,6 +127,7 @@ function realFixtureTake(): Promise<{ glb: string; failures: string[] }> {
 
 function menuTake(): Promise<{ glb: string; failures: string[] }> {
   return once("menu", () => inXrBrowser("hands summon", async (browser, consoleErrors) => {
+    // @ts-expect-error capture's .mjs scripts are untyped
     const { runIwerHandsSummonTake } = await import("../../capture/scripts/lib/summon-take.mjs");
     const result = await runIwerHandsSummonTake({ browser, baseUrl: captureUrl, artifactDir: takeDir, consoleErrors }) as { failures: string[] };
     return { glb: path.join(takeDir, "iwer-hands-summon.glb"), failures: result.failures };
