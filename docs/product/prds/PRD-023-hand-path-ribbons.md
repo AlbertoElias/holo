@@ -200,5 +200,5 @@ mark until slice 2, which needs its own decision after the v0 trial.
   [PRD-002 portal view](PRD-002-portal-view.md),
   [PRD-028 ghost frames](PRD-028-ghost-frames.md)
 - Mockups: none
-- Feature brief: [hand traces](../../features/hand-traces.md)
+- Feature brief: [hand traces](../../features/archive/hand-traces.md)
 - Implementation issue: none

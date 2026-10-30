@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-28
+**Updated:** 2026-10-29
 **Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. The shared checkout's
 uncommitted Oct 18 device-session edits are superseded by that merge
@@ -17,17 +17,13 @@ Resize and move props on every device
 ([`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md))
 and the cloche's rim follows the ground
 ([`docs/features/archive/cloche-rim-follows-ground.md`](docs/features/archive/cloche-rim-follows-ground.md))
-are complete and on `main`;
+are complete and on `main`, as is hand traces v0
+([`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md));
 their device checks are in each brief's "Physical-device limits". Pick the next
 queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Hand traces v0 (PRD-023, brief
-  [`docs/features/hand-traces.md`](docs/features/hand-traces.md)) is on
-  branch `feature/hand-traces`, merged with `main` and verified with
-  `verify:pr` on 2026-10-29 (evidence in the brief). Merge it together with
-  the next finished change; it adds e2e pipeline shard 7 to CI.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
@@ -45,6 +41,12 @@ queue item in [`TODOS.md`](TODOS.md).
   the brief).
 
 ## Unverified / device-only
+
+- Hand traces (brief
+  [`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md)):
+  IWER only. On a Quest, record real demonstrations and check how hand jitter
+  and `xr-hand` dropouts look as traces; view them on a real phone; then run
+  PRD-023's recipient trial, which decides slice 2.
 
 - AR recording (brief
   [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md)):

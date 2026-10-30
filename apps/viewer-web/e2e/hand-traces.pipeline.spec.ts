@@ -13,7 +13,7 @@ import { recordWalkTake } from "./pipeline-takes";
 import { VIEWER_CONTROL_NAMES } from "../src/features/chrome/controlNames";
 import type { HandTraceTake } from "../../capture/scripts/lib/hand-trace-takes";
 
-// Hand traces (PRD-023, docs/features/hand-traces.md): paused on a headset
+// Hand traces (PRD-023, docs/features/archive/hand-traces.md): paused on a headset
 // take, each moving hand's last 3 s at true scale; playing with Traces on, a
 // 1 s fading tail. Every take goes through the real path: recorded and
 // exported by capture (scripted IWER hands, the real headset fixture replayed,

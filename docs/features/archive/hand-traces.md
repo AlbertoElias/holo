@@ -1,10 +1,10 @@
 # Feature brief: Hand traces (v0)
 
 **Lead:** Claude Code  
-**Status:** Verified; ready to merge (grouped)
+**Status:** Complete
 **Layer:** Meaning (read)
 
-Product decision and trial plan: [PRD-023](../product/prds/PRD-023-hand-path-ribbons.md),
+Product decision and trial plan: [PRD-023](../../product/prds/PRD-023-hand-path-ribbons.md),
 approved 2026-10-28.
 
 ## User outcome
