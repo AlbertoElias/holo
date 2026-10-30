@@ -8,7 +8,8 @@
  *   - on every mappable fixture, each retargeted clip puts every canonical
  *     bone within 1.5 cm of the library's pose (hips-relative, root frame) at
  *     eleven times per clip, with T-pose and A-pose arms corrected;
- *   - the rest-pose correction reported per limb is the arm angle difference.
+ *   - the rest-pose correction reported per limb is the arm angle difference;
+ *   - a prop clip named like a state never plays over the body clip that qualified.
  */
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
@@ -16,6 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM_HUMANOID_BONES, type VrmHumanoidBone } from '../../../../packages/meaning/src/index.ts';
 
 import { HumanoidSkeleton } from '../../src/avatar/HumanoidSkeleton.ts';
+import { LocomotionAnimator } from '../../src/animation/LocomotionAnimator.ts';
 import { retargetClips, type RetargetRig } from '../../src/animation/retargetClips.ts';
 import { LOCOMOTION_LIBRARY, buildLocomotionLibrary } from '../build-locomotion-library.ts';
 import type { FixtureInfo } from './avatar-fixtures.ts';
@@ -140,6 +142,13 @@ export async function checkLocomotionRetarget(fixtures: readonly FixtureInfo[]):
     }
     for (const bone of ['leftUpperLeg', 'rightUpperLeg', 'leftLowerLeg', 'rightLowerLeg'] as const) {
       if (correctionDeg[bone]) fail.push(`${bone} corrected ${correctionDeg[bone]}° on a rig with the shipped legs`);
+    }
+    if (fixture.expect.ownClips) {
+      const prop = new THREE.AnimationClip('Idle_Prop', 1, [new THREE.QuaternionKeyframeTrack('NotABone.quaternion', [0, 1], [0, 0, 0, 1, 0, 0, 0, 1])]);
+      const animator = new LocomotionAnimator();
+      animator.attachClips(target.root, [prop, ...target.clips], target.humanoid);
+      const played = animator.poseForCheck('idle', 'desktop-full', 0);
+      if (played === prop.name) fail.push('a prop clip took the idle state from the body clip');
     }
     rows.push({
       fixture: fixture.name,

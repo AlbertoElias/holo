@@ -110,6 +110,12 @@ async function samplePoses(page: Page): Promise<PoseBones> {
   return { standing, crouched };
 }
 const POSE_TOLERANCE_M = 0.015;
+// A rig whose arms are corrected has a desktop idle clip (the correction), so walking crossfades in and
+// out of it, where the shipped avatar (no desktop idle clip) starts and stops at once.
+const CROSSFADE_TOLERANCE_M = 0.03;
+// t-pose-twisted's forward arms move its bounds-based centering 3.9 cm, which the terrain legs and crouch
+// see: its take compares the upper body at the normal tolerance, not the legs, and its leg poses take this.
+const TWISTED_TOLERANCE_M = 0.055;
 
 // Locomotion on avatars without their own clips (docs/features/locomotion-retarget.md).
 // 1. Each state's clip, posed at fixed clip times on each profile, with nothing
@@ -196,32 +202,29 @@ function checkLocomotion(fixture: FixtureInfo, want: LocomotionSamples, got: Loc
   const remapped = new Set(Object.keys(fixture.expect.bonesByName ?? {}));
   const body = (k: string) => !remapped.has(k.replace(/Tip$/, ''));
   const worst = { clips: 0, take: 0, mockVr: 0, point: 0, vr: 0 };
-  const note = (kind: keyof typeof worst, label: string, w: Bones, g: Bones, keep: (k: string) => boolean) => {
+  const note = (kind: keyof typeof worst, label: string, w: Bones, g: Bones, keep: (k: string) => boolean, limit = POSE_TOLERANCE_M) => {
     const r = worstOf(w, g, keep);
     if (r.missing.length > 0) fail(fixture.name, `${label}: no ${r.missing.slice(0, 3).join(', ')}`);
     worst[kind] = Math.max(worst[kind], r.d);
-    if (r.d > POSE_TOLERANCE_M) fail(fixture.name, `${label}: ${r.key} is ${(r.d * 100).toFixed(1)} cm off`);
+    if (r.d > limit) fail(fixture.name, `${label}: ${r.key} is ${(r.d * 100).toFixed(1)} cm off`);
   };
   for (const [key, w] of Object.entries(want.clips)) {
     note('clips', `clip ${key}`, w, got.clips[key] ?? {}, (k) => body(k) && (key.startsWith('desktop') || LEG_KEYS.test(k)));
   }
   const sequence = (samples: PoseSample[]) => samples.map((s) => s.locomotion.state).filter((s, i, a) => s !== a[i - 1]).join('>');
-  // A rig whose arms are corrected has a desktop idle clip (the correction), so walking
-  // crossfades in and out of it, where the shipped avatar (no desktop idle clip) starts
-  // and stops at once: on such a rig the 200 ms after each state change are not compared.
   const armCorrected = fixture.expect.armBelowHorizontalDegrees !== undefined;
   for (const [kind, w, g, keep] of [
     ['take', want.take, got.take, body],
     ['mockVr', want.mockVr, got.mockVr, (k: string) => body(k) && LEG_KEYS.test(k)]
   ] as const) {
     if (sequence(g) !== sequence(w)) fail(fixture.name, `${kind} states ${sequence(g)} (shipped ${sequence(w)})`);
-    // t-pose-twisted tests the twist correction. Its forward arms move its bounds-based centering 3.9 cm, which
-    // the terrain legs and crouch then see, so only its clip poses (hips-relative) compare.
-    if (fixture.name === TWISTED) continue;
     const changed = (i: number) => i === 0 || (i > 0 && w[i]!.locomotion.state !== w[i - 1]!.locomotion.state);
     w.forEach((sample, i) => {
-      if (armCorrected && kind === 'take' && (changed(i) || changed(i - 1))) return;
-      note(kind, `${kind} at ${(i + 1) * 100} ms`, sample.bones, g[i]?.bones ?? {}, keep);
+      const crossfade = armCorrected && kind === 'take' && (changed(i) || changed(i - 1));
+      const twisted = fixture.name === TWISTED;
+      const limit = twisted && kind === 'mockVr' ? TWISTED_TOLERANCE_M : crossfade ? CROSSFADE_TOLERANCE_M : POSE_TOLERANCE_M;
+      const compared = twisted && kind === 'take' ? (k: string) => keep(k) && !LEG_KEYS.test(k) : keep;
+      note(kind, `${kind} at ${(i + 1) * 100} ms`, sample.bones, g[i]?.bones ?? {}, compared, limit);
     });
   }
   if (!got.mockVr.some((s) => s.locomotion.profile === 'vr-lower-body' && s.locomotion.state === 'walk')) fail(fixture.name, 'mock VR never walked on the VR profile');
@@ -294,7 +297,7 @@ for (const fixture of fixtures) {
         if (d > poseWorst) { poseWorst = d; worstAt = `${pose} ${bone}`; }
       }
     }
-    if (poseWorst > POSE_TOLERANCE_M && fixture.name !== TWISTED) fail(fixture.name, `${worstAt} is ${(poseWorst * 100).toFixed(1)} cm from the shipped avatar's`);
+    if (poseWorst > (fixture.name === TWISTED ? TWISTED_TOLERANCE_M : POSE_TOLERANCE_M)) fail(fixture.name, `${worstAt} is ${(poseWorst * 100).toFixed(1)} cm from the shipped avatar's`);
   }
 
   const pageErrors = errors.filter((e) => !/Failed to load resource|favicon/.test(e));

@@ -88,12 +88,17 @@ export class LocomotionAnimator {
   }
 
   private static ownClip(clips: readonly THREE.AnimationClip[], state: LocomotionState, humanoid?: HumanoidSkeleton): THREE.AnimationClip | undefined {
-    const canonical = humanoid ? LocomotionAnimator.boneKeys(humanoid, VRM_HUMANOID_BONES) : undefined;
-    return clips.find((clip) => CLIP_MATCHERS[state].test(clip.name) && clip.tracks.some((track) => {
-      if (!canonical) return true;
+    return clips.find((clip) => CLIP_MATCHERS[state].test(clip.name) && LocomotionAnimator.turnsBones(clip, humanoid));
+  }
+
+  /** Whether a clip rotates one of this rig's canonical bones (any clip, without a humanoid). */
+  private static turnsBones(clip: THREE.AnimationClip, humanoid?: HumanoidSkeleton): boolean {
+    if (!humanoid) return true;
+    const canonical = LocomotionAnimator.boneKeys(humanoid, VRM_HUMANOID_BONES);
+    return clip.tracks.some((track) => {
       const parts = parseTrackName(track.name);
       return parts?.property === 'quaternion' && canonical.has(parts.nodeName);
-    }));
+    });
   }
 
   /** Track node keys of these bones: the rig's own (lowercased) names, and the uuids retargeted tracks bind by. */
@@ -131,7 +136,10 @@ export class LocomotionAnimator {
       this.rootMotionNames = new Set([...LocomotionAnimator.boneKeys(humanoid, ['hips']), 'armature', 'root']);
     }
     const own = !humanoid || LocomotionAnimator.usesOwnClips(ownClips, humanoid);
-    const clips = own ? (humanoid ? ownClips.map((clip) => LocomotionAnimator.bindToBones(clip, humanoid)) : ownClips) : [...retargeted];
+    // A clip that moves only a prop must not win a state from the body clip that qualified.
+    const clips = own
+      ? (humanoid ? ownClips.filter((clip) => LocomotionAnimator.turnsBones(clip, humanoid)).map((clip) => LocomotionAnimator.bindToBones(clip, humanoid)) : ownClips)
+      : [...retargeted];
     this.mixer?.stopAllAction();
     this.mixer = new THREE.AnimationMixer(root);
     this.activeAction = null;
