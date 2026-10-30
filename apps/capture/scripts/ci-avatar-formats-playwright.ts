@@ -33,7 +33,7 @@ const only = process.env.XR_AVATAR_ONLY;
 // XR_AVATAR_BIND_ONLY=1 stops after the in-app bindings, poses and exports (fast loop).
 const bindOnly = process.env.XR_AVATAR_BIND_ONLY === '1';
 
-const REPLAYED = ['reoriented-axes', 'a-pose', 't-pose', 'vrm0-minus-z', 'z-up', 'unreal-cm'];
+const REPLAYED = ['reoriented-axes', 'a-pose', 't-pose', 't-pose-twisted', 'vrm0-minus-z', 'z-up', 'unreal-cm'];
 const FACE_ON = 'vrm0-minus-z';
 // Exports checked for HOLOIM_humanoid and per-node tracks: a declared rig facing
 // -Z, a renamed rig, and one with duplicate bone names.
@@ -222,7 +222,7 @@ function checkLocomotion(fixture: FixtureInfo, want: LocomotionSamples, got: Loc
     w.forEach((sample, i) => {
       const crossfade = armCorrected && kind === 'take' && (changed(i) || changed(i - 1));
       const twisted = fixture.name === TWISTED;
-      const limit = twisted && kind === 'mockVr' ? TWISTED_TOLERANCE_M : crossfade ? CROSSFADE_TOLERANCE_M : POSE_TOLERANCE_M;
+      const limit = twisted ? (kind === 'mockVr' ? TWISTED_TOLERANCE_M : POSE_TOLERANCE_M) : crossfade ? CROSSFADE_TOLERANCE_M : POSE_TOLERANCE_M;
       const compared = twisted && kind === 'take' ? (k: string) => keep(k) && !LEG_KEYS.test(k) : keep;
       note(kind, `${kind} at ${(i + 1) * 100} ms`, sample.bones, g[i]?.bones ?? {}, compared, limit);
     });
