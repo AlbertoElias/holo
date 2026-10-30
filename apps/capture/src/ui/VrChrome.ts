@@ -42,7 +42,7 @@ interface VrChromeDeps {
   pickObject: (url: string) => void;
   /** The tray, for the rings its miniatures stand on while it is open in a headset. */
   tray: ObjectTray;
-  /** A miniature's Close ring: its item leaves the tray (docs/features/tray-remove.md). */
+  /** A miniature's Close ring: its item leaves the tray (docs/features/archive/tray-remove.md). */
   removeTraySlot: (slot: number) => void;
 }
 
@@ -222,7 +222,7 @@ export class VrChrome {
     this.root.add(this.traySignifiers.root);
   }
 
-  /** The world position of a miniature's Close ring while it shows, for a check (docs/features/tray-remove.md). */
+  /** The world position of a miniature's Close ring while it shows, for a check (docs/features/archive/tray-remove.md). */
   trayClosePosition(slot: number): number[] | null {
     return this.traySignifiers?.closePosition(slot) ?? null;
   }

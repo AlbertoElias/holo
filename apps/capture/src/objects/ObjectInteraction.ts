@@ -399,7 +399,7 @@ export class ObjectInteraction {
       const rising = intent.pressed && !this.wasPressed[side];
       this.wasPressed[side] = intent.pressed;
       if (this.hold?.side === side && (intent.switched || !intent.pressed)) {
-        // Let go over the open tray's arc: the prop goes back (docs/features/tray-remove.md), it is not dropped.
+        // Let go over the open tray's arc: the prop goes back (docs/features/archive/tray-remove.md), it is not dropped.
         // A plain release here; `CaptureObjects` removes the prop in this same step, before physics steps or a frame records it falling.
         if (!intent.switched && side === (step.summoner ?? 'right') && this.isOverTray(side)) {
           this.putBackQueued = this.hold.object;

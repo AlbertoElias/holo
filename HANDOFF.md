@@ -39,10 +39,9 @@ queue item in [`TODOS.md`](TODOS.md).
 - The production Quick Look rebuild to ql3 is done: both stored previews are
   ql3, with the ql2 files and the database backup kept (B-030, evidence in
   the brief).
-- Put an object back and remove a tray item (brief
-  [`docs/features/tray-remove.md`](docs/features/tray-remove.md)) is
-  is on `main` (merged 2026-10-29). Open for the user: approve the Put back
-  glyph's drawing (provisional until then).
+- Closing `tray-remove`: the approved Put back glyph moves to `tokens.json` (same
+  drawing) and the brief to the archive, on branch `docs/tray-remove-close`, not
+  merged: merge it with the next finished change.
 
 ## Unverified / device-only
 
@@ -52,7 +51,7 @@ queue item in [`TODOS.md`](TODOS.md).
   and `xr-hand` dropouts look as traces; view them on a real phone; then run
   PRD-023's recipient trial, which decides slice 2.
 - Put back and tray removal (brief
-  [`docs/features/tray-remove.md`](docs/features/tray-remove.md)): IWER
+  [`docs/features/archive/tray-remove.md`](docs/features/archive/tray-remove.md)): IWER
   only. On a Quest, check the 12 cm put-back zone and poking a Close ring
   without summoning; on an Android phone in AR, the reticle on small objects
   and the Close glyph above a slot.

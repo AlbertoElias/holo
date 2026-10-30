@@ -30,7 +30,7 @@ export type Control =
   // Actions: general controls and the hand's tools.
   | "record" | "ink" | "undo" | "exitAr" | "placingHint" | "upload" | "signIn" | "halo"
   // Capture's object tray, the search that fills it (docs/features/archive/tray-everywhere.md),
-  // and putting a held object back into it (docs/features/tray-remove.md).
+  // and putting a held object back into it (docs/features/archive/tray-remove.md).
   | "tray" | "find" | "putBack"
   // Lists and long text.
   | "settings" | "library" | "longText"

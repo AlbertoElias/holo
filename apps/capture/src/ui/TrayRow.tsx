@@ -27,7 +27,7 @@ const TILE_APX = 54;
 const TOUCH_TILE_APX = 44;
 /** A slot dragged further than this (half a touch target) is no longer a click (styleguide 6.1). */
 const DRAG_SLOP_APX = 22;
-/** A slot dragged up past this and let go leaves the tray (docs/features/tray-remove.md). */
+/** A slot dragged up past this and let go leaves the tray (docs/features/archive/tray-remove.md). */
 const LIFT_OFF_APX = 30;
 /** Touch: a press held this long on the Tray glyph starts press-hold-slide. */
 const HOLD_MS = 300;
@@ -66,11 +66,12 @@ export function useAboveDock(input: HitInput): string {
 
 function drawingOf(name: DockTrayGlyph): GlyphDrawing {
   if (name === 'tray') return glyphDrawing('tray');
-  return { kind: 'path', d: PROVISIONAL_GLYPHS[name].d, fill: false, linejoin: 'round', ringed: false, drawnApx: tokens.glyph.icon };
+  const d = name === 'putBack' ? tokens.glyph.path.putBack.d : PROVISIONAL_GLYPHS[name].d;
+  return { kind: 'path', d, fill: false, linejoin: 'round', ringed: false, drawnApx: tokens.glyph.icon };
 }
 
-/** The dock's Tray and Find: Tray is drawn from tokens.json, Find's lens is still provisional. */
-type DockTrayGlyph = 'tray' | ProvisionalGlyphName;
+/** The dock's Tray and Find: Tray and Put back are drawn from tokens.json, Find's lens is still provisional. */
+type DockTrayGlyph = 'tray' | 'putBack' | ProvisionalGlyphName;
 
 /** A dock glyph action that may carry a provisional drawing (GlyphControl takes only decided drawings). */
 export function DockGlyphButton({
@@ -373,7 +374,7 @@ function liftedOff(x: number, y: number): boolean {
 }
 
 /**
- * Lift a slot off the shelf (docs/features/tray-remove.md): a press that
+ * Lift a slot off the shelf (docs/features/archive/tray-remove.md): a press that
  * stays within the slop is a click that summons; dragged up past
  * LIFT_OFF_APX and let go, the item leaves the tray; anything else snaps
  * back. The pointer is captured, so a touch drag keeps its events.

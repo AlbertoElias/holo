@@ -1,7 +1,7 @@
 # Feature brief: Put an object back and remove a tray item
 
 **Lead:** Claude Code (Opus), session `tray-remove`
-**Status:** Ready to merge (branch `claude/tray-remove-aa6e28`)
+**Status:** Complete (on `main`, merged 2026-10-29; Quest and Android checks are in "Physical-device limits")
 **Layer:** event (what is in the take and when it leaves) and view (the
 tray's chrome, which never enters the recording); see
 `docs/product/concepts/what-a-hologram-is.md`
@@ -69,9 +69,9 @@ options as working mocks, headset and phone AR sketched).
   slot highlights. A carried object with no tray item (the `?object=`
   prepared prop) can be put back as well: it leaves the scene.
 - **New glyph: Put back**, an arrow down onto the tray's shelf, the mirror
-  of Upload: `M1.5 13.5h13M8 1.5v10M4.8 8.3 8 11.5l3.2-3.2` (the arrowhead lands on the shelf). Provisional
-  (`provisionalGlyphs.ts`, like Find) until the user approves its drawing,
-  then into `tokens.json` and the styleguide's glyph table.
+  of Upload: `M1.5 13.5h13M8 1.5v10M4.8 8.3 8 11.5l3.2-3.2` (the arrowhead lands on the shelf). The user approved its drawing on
+  2026-10-30; it is `glyph.path.putBack` in `tokens.json` and the
+  styleguide's glyph table.
 
   | Device | Put back the held object | Remove a tray item |
   | --- | --- | --- |

@@ -20,7 +20,7 @@ export interface CaptureUiBridge {
   setTrayOpen: (open: boolean) => void;
   /** A click or tap on a tray slot summons it. */
   summonTraySlot: (slot: number) => void;
-  /** A tray slot dragged up off the row: its item leaves the tray (docs/features/tray-remove.md). */
+  /** A tray slot dragged up off the row: its item leaves the tray (docs/features/archive/tray-remove.md). */
   removeTraySlot: (slot: number) => void;
   /** The dock's Put back: the held prop goes back into the tray. */
   putBackHeld: () => void;

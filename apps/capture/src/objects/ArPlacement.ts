@@ -36,7 +36,7 @@ export interface ArPlacementProbe {
   lastPlaced: { slot: number; objectId: string; point: number[]; yaw: number; timeSec: number } | null;
   /** Taps refused for want of a hit. */
   refused: number;
-  /** The placed object under the reticle (docs/features/tray-remove.md): what Put back takes; null when none. */
+  /** The placed object under the reticle (docs/features/archive/tray-remove.md): what Put back takes; null when none. */
   target: { objectId: string; name: string } | null;
   /** Objects put back from here. */
   putBacks: number;

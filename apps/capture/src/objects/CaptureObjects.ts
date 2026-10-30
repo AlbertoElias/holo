@@ -209,7 +209,7 @@ export class CaptureObjects {
   }
 
   /**
-   * Puts `object` back into the tray (docs/features/tray-remove.md): it leaves
+   * Puts `object` back into the tray (docs/features/archive/tray-remove.md): it leaves
    * the scene on this step, so a take's track for it ends at the frame
    * before, and the slot it came from lights briefly. It does not animate: a
    * shrink would be recorded as a resize. False when it is not in the scene.
@@ -233,7 +233,7 @@ export class CaptureObjects {
   }
 
   /**
-   * Takes tray slot `slot`'s item off the tray (docs/features/tray-remove.md).
+   * Takes tray slot `slot`'s item off the tray (docs/features/archive/tray-remove.md).
    * The rest close up and keep their thumbnails. Objects summoned from it
    * stay in the scene, sharing its model.
    */

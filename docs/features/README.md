@@ -23,7 +23,6 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Props collide with the avatar | Complete | [avatar-prop-physics.md](archive/avatar-prop-physics.md) |
 | Resize and move props on every device | Complete | [object-resize-and-move.md](archive/object-resize-and-move.md) |
 | The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
-| Put an object back and remove a tray item | Ready to merge | [tray-remove.md](tray-remove.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |
@@ -44,6 +43,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | MetaVR setup for physical Quest automation | Complete | [archive/metavr-setup.md](archive/metavr-setup.md) |
 | Live deployment (Fly + R2 + async USDZ) | Verifying | [live-deployment.md](live-deployment.md) |
 | Migrate workspace typechecking to tsgo / TypeScript 7 | Complete | [archive/tsgo-typescript7-migration.md](archive/tsgo-typescript7-migration.md) |
+| Put an object back and remove a tray item | Complete | [archive/tray-remove.md](archive/tray-remove.md) |
 | Deterministic, lean CI | Complete | [archive/deterministic-lean-ci.md](archive/deterministic-lean-ci.md) |
 | Development reliability foundation | Complete | [archive/reliability-foundation.md](archive/reliability-foundation.md) |
 

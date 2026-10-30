@@ -32,7 +32,7 @@ interface PhoneArChromeDeps {
   trayThumbnail: (slot: number) => TrayThumbnail | null;
   /** Summons a tray slot with its base on a point of the set frame, turned to a yaw. */
   placeFromTray: (slot: number, point: THREE.Vector3, yaw: number, timeSec: number) => SceneObject | null;
-  /** The scene's event objects: the reticle finds a placed one for Put back (docs/features/tray-remove.md). */
+  /** The scene's event objects: the reticle finds a placed one for Put back (docs/features/archive/tray-remove.md). */
   objects: () => readonly SceneObject[];
   /** Puts an object back into the tray; false when it has left the scene. */
   putBack: (object: SceneObject, timeSec: number) => boolean;
@@ -116,7 +116,7 @@ export class PhoneArChrome {
     // Tray stays through a take (§8.5 as amended): the author places mid-sentence. Like Record it waits for the set to settle.
     this.wanted.tray = this.deps.isSettled() && state.recordingState !== 'exporting' && chromeVisible('tray', recording);
     if (!this.wanted.tray && this.trayRow?.isOpen()) this.setTrayOpen(false);
-    // Put back shows while the row is open and the reticle is on a placed object (docs/features/tray-remove.md).
+    // Put back shows while the row is open and the reticle is on a placed object (docs/features/archive/tray-remove.md).
     this.wanted.putBack = this.wanted.tray && chromeVisible('putBack', recording) && Boolean(this.trayRow?.isOpen() && this.placement?.currentTarget());
     // Between takes only (§8.5): not while a take runs, exports, or waits on the microphone. A session end still stops and exports.
     this.wanted.recenter = !busy;

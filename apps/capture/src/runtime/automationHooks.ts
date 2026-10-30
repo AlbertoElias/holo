@@ -50,7 +50,7 @@ export interface AutomationHooks {
   __samplePhoneChrome: () => PhoneArChromeProbe;
   /** World position of a phone tray row slot's hit area (1-5), or null while the row is closed: where a check taps it. */
   __phoneTraySlotPosition: (slot: number) => number[] | null;
-  /** World position of a headset tray miniature's Close ring (1-5), or null while it is hidden (docs/features/tray-remove.md). */
+  /** World position of a headset tray miniature's Close ring (1-5), or null while it is hidden (docs/features/archive/tray-remove.md). */
   __trayClosePosition: (slot: number) => number[] | null;
   /** World position of a phone AR tray slot's Close glyph (1-5), or null while the row is closed. */
   __phoneTrayClosePosition: (slot: number) => number[] | null;

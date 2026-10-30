@@ -230,7 +230,7 @@ export class InputController {
     return slot;
   }
 
-  /** Backspace or Delete while holding, or the dock's Put back (docs/features/tray-remove.md). */
+  /** Backspace or Delete while holding, or the dock's Put back (docs/features/archive/tray-remove.md). */
   queuePutBack(): void {
     this.putBackQueued = true;
   }

@@ -7,7 +7,7 @@ import { loadTake } from './object-glb.mjs';
 import { clickButton, openCapture, readState, saveDownload, setupPage } from './object-take.mjs';
 import { enterIwer, reach, shooter, stepper, summonedItems, TRAY_URLS } from './summon-take.mjs';
 
-// Put an object back, and remove a tray item, in a headset (docs/features/tray-remove.md):
+// Put an object back, and remove a tray item, in a headset (docs/features/archive/tray-remove.md):
 // IWER controllers and tracked hands through capture's real input paths.
 //   - Let go outside the open tray's zone: a plain drop. Let go with the dominant palm in the
 //     zone: the object leaves the registry, the take log gets a put-back for its slot, and the
