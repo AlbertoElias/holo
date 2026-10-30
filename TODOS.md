@@ -8,10 +8,11 @@ it from the item below instead of duplicating its status here.
 
 ## Now
 
-- [ ] Finish the CI determinism criteria left open by
+- [x] Finish the CI determinism criteria left open by
   [`docs/features/archive/ci-under-5m.md`](docs/features/archive/ci-under-5m.md):
-  5 identical `scripts/ci-emulate.sh` runs of the VR, AR and pipeline checks,
-  and step the page clock in `hologram-feed.spec.ts`'s `rayClick` (B-037).
+  5 identical `scripts/ci-emulate.sh` runs of the VR, AR and pipeline checks
+  (5/5 passes with identical counts, 2026-10-29), and `rayClick` (B-037)
+  no longer rides the clock (`clickThresholdMs` lifted).
 
 - [x] Record real Quest hand input for `test:xr:hands` and recalibrate the
   fidelity thresholds against it. Delivered 2026-10-18:

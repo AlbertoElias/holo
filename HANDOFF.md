@@ -24,6 +24,10 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- Branch `claude/ci-determinism-630dec` (docs only): 5/5 emulated passes of
+  the VR, AR and pipeline checks recorded in
+  `docs/features/archive/ci-under-5m.md`; the determinism TODO is checked off.
+  Rides along with the next merge.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
