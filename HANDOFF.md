@@ -24,6 +24,9 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- `feature/icon-hover-hints` (pushed 2026-11-09, `verify:agent` and the
+  redesign feed check green): icon-only controls show their name on the chip
+  on hover or keyboard focus. Merge with the next finished change.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
