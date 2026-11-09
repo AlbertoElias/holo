@@ -1,6 +1,6 @@
 # PRD: Hand traces (hand-path ribbons)
 
-**Status:** Draft amendment for approval (v1, author-marked traces); v0 approved 2026-10-28 and shipped 2026-10-29  
+**Status:** Approved (v1, author-marked traces, 2026-11-09); v0 approved 2026-10-28 and shipped 2026-10-29  
 **Source ideas:** IDEA-033  
 **Layer:** Meaning (added: the author marks the span, the body draws the path)  
 **Depends on:** v0 hand traces (shipped), hand-tracking fidelity (verifying), PRD-022 meaning record (approved), the Halo (styleguide 6.2)  
@@ -217,8 +217,8 @@ tail behind a Traces control; the index fingertip; headset takes only; no
 stored mark.
 
 v1 amendment, requested 2026-11-09 by Alberto Elias ("if when capturing i
-want to generate traces, then they become part of the final hologram"):
-pending until explicitly decided. Proposed: the author marks traces in
+want to generate traces, then they become part of the final hologram"),
+approved 2026-11-09 by Alberto Elias as drafted: the author marks traces in
 headset capture with the Halo's Ink direction; traces are stored as `recorded`
 `trace` marks in `HOLOIM_meaning` v2 and replay with their original timing;
 v0's viewer control and paused window are removed; automatic detection
