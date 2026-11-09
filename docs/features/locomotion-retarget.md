@@ -1,7 +1,7 @@
 # Feature brief: Locomotion clips on every avatar
 
 **Lead:** Claude Code (session 2026-10-29)
-**Status:** Verifying
+**Status:** Ready to merge
 **Layer:** Event (the recorded body; see `docs/product/concepts/what-a-hologram-is.md`)
 
 Slice 2 of [`archive/avatar-formats.md`](archive/avatar-formats.md).
@@ -239,7 +239,8 @@ Alternatives considered:
 Independent verification (Codex, two passes): the Node check, its three
 mutations, the production build keeping the library byte for byte, and an audit
 of the browser report numbers. Chromium cannot launch in Codex's sandbox, so the
-in-app, replay and pipeline results are the implementer's own runs.
+in-app, replay and pipeline results are the implementer's own runs. The user
+accepted this verification as is on 2026-11-09.
 
 ## Physical-device limits
 
