@@ -31,7 +31,8 @@ const STYLES: Record<ResolvedLink["style"], Style> = {
   recorded: { emissive: 0.9, line: 0.55, glow: 0.85, ring: 0.9 },
   inferred: { emissive: 0.4, line: 0.25, glow: 0.4, ring: 0.45 }
 };
-const HIGHLIGHT_COLOR = new Color("#7fe4ff");
+/** The pointing highlight hue, shared with hand traces (PRD-023). */
+export const HIGHLIGHT_COLOR = new Color("#7fe4ff");
 const LINE_RADIUS = 0.006;
 const GLOW_RADIUS = 0.11;
 

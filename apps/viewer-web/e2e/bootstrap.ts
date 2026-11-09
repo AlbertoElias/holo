@@ -19,7 +19,7 @@ export function expectConsoleErrors(page: Page, pattern: RegExp): void {
 
 export const test = base.extend({
   page: async ({ page }, consumePage) => {
-    await attachXrEnvironment(page, { mode: process.env.XR_TEST_MODE });
+    await attachXrEnvironment(page, process.env.XR_TEST_MODE === undefined ? {} : { mode: process.env.XR_TEST_MODE });
     const stepsBefore = xrStepTotals();
     const runtimeErrors: string[] = [];
     page.on("pageerror", (error) => {

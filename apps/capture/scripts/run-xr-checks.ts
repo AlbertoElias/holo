@@ -72,6 +72,8 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
   // Sixteen phases on a frozen page clock but marks-low-fps (about 80 s locally); real time is page loads, session
   // entry, the microphone and the exports. A loaded runner can still take 200 s.
   'ar-record': 300000,
+  // Sixteen phases, five of them put back and tray removal (docs/features/tray-remove.md): about 130 s locally.
+  summon: 300000,
   body: 360000,
   face: 360000,
   avatars: 900000

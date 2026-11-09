@@ -36,6 +36,10 @@ export interface ArPlacementProbe {
   lastPlaced: { slot: number; objectId: string; point: number[]; yaw: number; timeSec: number } | null;
   /** Taps refused for want of a hit. */
   refused: number;
+  /** The placed object under the reticle (docs/features/tray-remove.md): what Put back takes; null when none. */
+  target: { objectId: string; name: string } | null;
+  /** Objects put back from here. */
+  putBacks: number;
 }
 
 export interface ArPlacementDeps {
@@ -53,6 +57,10 @@ export interface ArPlacementDeps {
   place: (slot: number, point: THREE.Vector3, yaw: number, timeSec: number) => SceneObject | null;
   /** A placement landed, so the row closes. */
   onPlaced?: (object: SceneObject) => void;
+  /** The scene's placed event objects: the reticle also finds them, for Put back. */
+  objects?: () => readonly SceneObject[];
+  /** Puts `object` back into the tray; false when it is no longer in the scene. */
+  putBack?: (object: SceneObject, timeSec: number) => boolean;
 }
 
 const origin = new THREE.Vector3();
@@ -79,6 +87,12 @@ export class ArPlacement {
   private hit: ArPlacementHit | null = null;
   private pending: number | null = null;
   private lastPlaced: ArPlacementProbe['lastPlaced'] = null;
+  /** The placed object nearest along the centre ray, nearer than the set's hit. */
+  private target: SceneObject | null = null;
+  private putBackPending: SceneObject | null = null;
+  private putBacks = 0;
+  private readonly objectBox = new THREE.Box3();
+  private readonly boxHit = new THREE.Vector3();
   private readonly raycaster = new THREE.Raycaster();
   private readonly plane = new THREE.Plane();
   private readonly reticle = new THREE.Group();
@@ -112,9 +126,28 @@ export class ArPlacement {
     if (this.open === open) return;
     this.open = open;
     this.pending = null;
+    this.putBackPending = null;
     if (open) this.steps = 0;
-    else this.hit = null;
+    else {
+      this.hit = null;
+      this.target = null;
+    }
     this.draw();
+  }
+
+  /** The tray's slots were renumbered: a queued tap named an item that has moved. */
+  cancelPending(): void {
+    this.pending = null;
+  }
+
+  /** The placed object under the reticle now, if any. */
+  currentTarget(): SceneObject | null {
+    return this.open ? this.target : null;
+  }
+
+  /** Put back: queues the object under the reticle at the moment of the tap; `step` removes it, in the take's own step. */
+  requestPutBack(): void {
+    if (this.open && this.target) this.putBackPending = this.target;
   }
 
   /** Queues a tap on `slot`; `step` places it, in the take's own step. */
@@ -128,6 +161,13 @@ export class ArPlacement {
     // The first step after opening casts at once; after that every third.
     if (this.steps % CAST_EVERY_STEPS === 0) this.cast();
     this.steps += 1;
+    const back = this.putBackPending;
+    this.putBackPending = null;
+    if (back && this.deps.putBack?.(back, timeSec)) {
+      this.putBacks += 1;
+      if (this.target === back) this.target = null;
+      this.draw();
+    }
     const slot = this.pending;
     this.pending = null;
     if (slot === null) return;
@@ -145,7 +185,9 @@ export class ArPlacement {
       open: this.open,
       reticle: { hit: this.hit !== null, point: this.hit ? [...this.hit.point] : null, surface: this.hit?.surface ?? null, casts: this.casts },
       lastPlaced: this.lastPlaced ? { ...this.lastPlaced, point: [...this.lastPlaced.point] } : null,
-      refused: this.refused
+      refused: this.refused,
+      target: this.open && this.target ? { objectId: this.target.id, name: this.target.name } : null,
+      putBacks: this.putBacks
     };
   }
 
@@ -187,10 +229,35 @@ export class ArPlacement {
       }
     }
     this.hit = best;
+    this.target = this.castObjects(best?.distanceM ?? MAX_DISTANCE_M);
     this.draw();
   }
 
+  /**
+   * The placed object the centre ray meets first, nearer than `beyondM`: a
+   * box test first, so a large model's triangles are cast only when its box is hit.
+   */
+  private castObjects(beyondM: number): SceneObject | null {
+    let best: SceneObject | null = null;
+    let bestM = beyondM;
+    const ray = this.raycaster.ray;
+    for (const object of this.deps.objects?.() ?? []) {
+      if (!object.placed || !isShown(object.wrapper)) continue;
+      object.wrapper.updateWorldMatrix(true, true);
+      if (!ray.intersectBox(this.objectBox.setFromObject(object.model), this.boxHit)) continue;
+      if (ray.origin.distanceTo(this.boxHit) >= bestM) continue;
+      const hit = this.raycaster.intersectObject(object.model, true)[0];
+      if (hit && hit.distance < bestM) {
+        best = object;
+        bestM = hit.distance;
+      }
+    }
+    return best;
+  }
+
   private draw(): void {
+    // On a placed object the reticle turns to the cream highlight: Put back would take it.
+    ((this.reticle.children[0] as THREE.Mesh).material as THREE.MeshBasicMaterial).color.set(this.open && this.target ? tokens.color.highlight : tokens.color.gold);
     const hit = this.open ? this.hit : null;
     this.reticle.visible = hit !== null;
     this.centreMarker.visible = this.open && hit === null;

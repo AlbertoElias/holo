@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| Hand traces (PRD-023 v0) | Complete | [hand-traces.md](archive/hand-traces.md) |
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |
 | Locomotion clips on every avatar (avatar formats slice 2) | Ready to merge | [locomotion-retarget.md](locomotion-retarget.md) |
 | Shared XR interface and viewer VR/AR | Complete | [viewer-xr-interface.md](archive/viewer-xr-interface.md) |
@@ -23,6 +24,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Props collide with the avatar | Complete | [avatar-prop-physics.md](archive/avatar-prop-physics.md) |
 | Resize and move props on every device | Complete | [object-resize-and-move.md](archive/object-resize-and-move.md) |
 | The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
+| Put an object back and remove a tray item | Ready to merge | [tray-remove.md](tray-remove.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |

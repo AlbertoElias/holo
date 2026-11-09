@@ -185,6 +185,6 @@ export async function touchPinch(page: Page, cdp: CDPSession, center: { x: numbe
 
 export async function dispatchOrientation(page: Page, alpha: number, beta: number): Promise<void> {
   await page.evaluate(([a, b]) => {
-    window.dispatchEvent(new DeviceOrientationEvent("deviceorientation", { alpha: a, beta: b, gamma: 0 }));
+    window.dispatchEvent(new DeviceOrientationEvent("deviceorientation", { alpha: a ?? null, beta: b ?? null, gamma: 0 }));
   }, [alpha, beta]);
 }

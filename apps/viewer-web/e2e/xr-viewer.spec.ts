@@ -187,8 +187,8 @@ async function avatarWithAudio(): Promise<Buffer> {
     const accessor = json.accessors[index]!;
     const start = (json.bufferViews[accessor.bufferView]!.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
     for (let i = 0; i < accessor.count; i++) bin.writeFloatLE(bin.readFloatLE(start + i * 4) * CLIP_STRETCH, start + i * 4);
-    accessor.min = accessor.min?.map((v) => v * CLIP_STRETCH);
-    accessor.max = accessor.max?.map((v) => v * CLIP_STRETCH);
+    if (accessor.min) accessor.min = accessor.min.map((v) => v * CLIP_STRETCH);
+    if (accessor.max) accessor.max = accessor.max.map((v) => v * CLIP_STRETCH);
   }
   const wav = toneWav(AUDIO_SECONDS);
   const audioOffset = Math.ceil(bin.length / 4) * 4;
@@ -2166,14 +2166,14 @@ async function phoneStatusChrome(page: Page, controls: Controls) {
     const world = (window as unknown as { __HOLOIM_XR_VIEWER__: { world: { camera: { position: { constructor: new (x: number, y: number, z: number) => V } }; scene: O } } }).__HOLOIM_XR_VIEWER__.world;
     const Vector = world.camera.position.constructor;
     const centre = new Vector(...at).project(world.camera);
-    let line: O | null = null;
+    const found: O[] = [];
     const visit = (object: O) => {
-      if (object.name === "StatusLine") line = object;
+      if (object.name === "StatusLine") found.push(object);
       object.children.forEach(visit);
     };
     visit(world.scene);
     let flagged = false;
-    for (let node: O | null = line; node; node = node.parent) if (node.userData.holoimChrome === true) flagged = true;
+    for (let node: O | null = found[0] ?? null; node; node = node.parent) if (node.userData.holoimChrome === true) flagged = true;
     return { x: (centre.x + 1) / 2 * innerWidth, y: (1 - centre.y) / 2 * innerHeight, flagged, innerWidth, innerHeight };
   }, status.worldPosition);
   const insets = await page.evaluate(() => {

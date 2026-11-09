@@ -342,7 +342,7 @@ test("desktop: a scroll back up stays a scroll as the card above, and its hologr
   const feed = page.locator(".feed-scroll");
   const above = page.locator(`.feed-card[data-card-id="${first.id}"]`);
   const below = page.locator(`.feed-card[data-card-id="${second.id}"]`);
-  const cardHeight = await above.evaluate((element) => element.offsetHeight);
+  const cardHeight = await above.evaluate((element) => (element as HTMLElement).offsetHeight);
   const scrollTo = (top: number) => feed.evaluate((element, to) => element.scrollTo({ top: to, behavior: "instant" }), top);
   // Without snapping, a part-way scroll stays where the wheel leaves it.
   await feed.evaluate((element) => { element.style.scrollSnapType = "none"; });

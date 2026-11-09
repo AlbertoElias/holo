@@ -15,6 +15,8 @@ export interface AuthoringFrame {
   summonerNearTray: boolean;
   /** A tray item was summoned into the summoning hand this frame. */
   summoned: boolean;
+  /** A tray item was taken off the tray this frame (docs/features/tray-remove.md): the reach was to the menu too. */
+  removed?: boolean;
   /** The hand's pose came from tracking (not a held or fallback pose). */
   tracked: Record<VrHandSide, boolean>;
 }
@@ -96,7 +98,7 @@ export function findAuthoringSpans(frames: readonly AuthoringFrame[]): Authoring
     for (const run of runs(frames.length, (i) => frames[i]!.trayOpen && frames[i]!.holder === holder && frames[i]!.empty[holder])) spans.push({ hand: holder, ...run });
     for (const run of runs(frames.length, (i) => frames[i]!.trayOpen && frames[i]!.holder === holder && frames[i]!.empty[summoner] && frames[i]!.summonerNearTray)) {
       const next = frames[run.last + 1];
-      const endedInMenu = !next || next.summoned || !next.trayOpen;
+      const endedInMenu = !next || next.summoned || next.removed === true || !next.trayOpen;
       if (endedInMenu) spans.push({ hand: summoner, ...run });
     }
   }

@@ -11,6 +11,7 @@ export const VIEWER_CONTROL_NAMES = {
   viewInAr: "View in your room",
   stepInside: "Step inside",
   highlights: "Highlight what the author points at",
+  traces: "Trace the author's hands",
   tiltOn: "Look around by tilting the phone",
   tiltOff: "Stop looking around by tilting",
   soundOn: "Unmute audio",
