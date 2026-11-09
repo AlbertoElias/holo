@@ -172,7 +172,7 @@ solver cannot drive), walks only with the terrain legs.
 | Duplicate bone names bind tracks to a prop | Tracks bind by `uuid`; `duplicate-names` pose check. |
 | Own clips present but named for another rig (RPM clips on a VRM) | Not usable: no track reaches a canonical bone of this rig; the library plays. |
 | Duplicate names let a prop take the avatar's own clips | Own tracks are rebound to the canonical bone's uuid; `duplicate-names` keeps its clips and is compared with the shipped avatar. |
-| Retargeted arm tracks fight arm IK or desktop pointing; the mixer writes a constant track only when its value changes | VR profile keeps only leg tracks; the point and mock-VR round-trip checks return the arm to the clip's pose. |
+| Retargeted arm tracks fight arm IK or desktop pointing; the mixer writes a constant track only when its value changes | VR profile keeps only leg tracks; after pointing the arm returns to its own rest with clips, and after a mock VR round trip it matches the shipped avatar's (which keeps its IK arm, pre-existing). |
 | Crouch, terrain legs or body solver read a pose the clip wrote | Same order as the shipped avatar (`BodyPoseSystem`); crouch comparison already in the `avatars` check. |
 | Library missing, 404 or fails to bind | Locomotion reported off, one warning, avatar still loads; covered by loading with a bad library URL in the check. |
 | Library drifts from `avatar.glb` (clips re-authored) | `test:avatars:bind` compares them. |
@@ -240,7 +240,8 @@ Independent verification (Codex, two passes): the Node check, its three
 mutations, the production build keeping the library byte for byte, and an audit
 of the browser report numbers. Chromium cannot launch in Codex's sandbox, so the
 in-app, replay and pipeline results are the implementer's own runs. The user
-accepted this verification as is on 2026-11-09.
+accepted this verification as is on 2026-11-09. A third Codex pass on the
+merged tree (`dc86c4e`) closed the earlier findings and passed.
 
 ## Physical-device limits
 
