@@ -8,10 +8,11 @@ it from the item below instead of duplicating its status here.
 
 ## Now
 
-- [ ] Finish the CI determinism criteria left open by
+- [x] Finish the CI determinism criteria left open by
   [`docs/features/archive/ci-under-5m.md`](docs/features/archive/ci-under-5m.md):
-  5 identical `scripts/ci-emulate.sh` runs of the VR, AR and pipeline checks,
-  and step the page clock in `hologram-feed.spec.ts`'s `rayClick` (B-037).
+  5 identical `scripts/ci-emulate.sh` runs of the VR, AR and pipeline checks
+  (5/5 passes with identical counts, 2026-10-29), and `rayClick` (B-037)
+  no longer rides the clock (`clickThresholdMs` lifted).
 
 - [x] Record real Quest hand input for `test:xr:hands` and recalibrate the
   fidelity thresholds against it. Delivered 2026-10-18:
@@ -180,8 +181,8 @@ it from the item below instead of duplicating its status here.
   tray everywhere, 2026-10-28). Nothing clears between takes now, so a
   carried object stays in every later take and the tray only grows to its
   five slots; the author needs a way to take one out of the scene or the
-  tray. See [`docs/features/archive/tray-everywhere.md`](docs/features/archive/tray-everywhere.md).
-- [ ] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
+  tray. See [`docs/features/archive/tray-everywhere.md`](docs/features/archive/tray-everywhere.md); brief [`docs/features/tray-remove.md`](docs/features/tray-remove.md).
+- [x] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
   `tsconfig.app.json` (src, functions, configs) only, so a spec's missing
   import shows only when Playwright runs it (found in the slice 0 review,
   2026-10-26, on `feature/xr-shared-screen-input`). A probe
@@ -192,8 +193,9 @@ it from the item below instead of duplicating its status here.
   `/node_modules/.vite/deps/three.js` in `ar-bubble.spec.ts` and
   `redesign.spec.ts`; `never`/`HTMLElement | SVGElement` narrowing in
   `xr-viewer.spec.ts` and `portal.spec.ts`; and `import.meta.env` in capture
-  sources the pipeline specs import. Fix those, add the config, and add it to
-  `typecheck`.
+  sources the pipeline specs import. Done: `apps/viewer-web/tsconfig.e2e.json`
+  is part of `typecheck`, and the errors are fixed (the in-page `three.js`
+  imports no longer exist).
 
 - [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered
   ECS systems, keeping Rapier and its algorithms

@@ -21,9 +21,11 @@ const DESKTOP_FORWARD_M = 0.38;
 const DESKTOP_BELOW_EYES_M = 0.32;
 /** The right palm within this of a miniature's bounds is "in the tray". */
 export const TRAY_ZONE_M = 0.25;
+/** The right palm within this of a miniature's bounds, letting go of a held prop, puts it back. */
+export const PUT_BACK_ZONE_M = 0.12;
 
 export interface TrayItem {
-  /** 1-based slot: the desktop key that summons it. */
+  /** 1-based slot: the desktop key that summons it. Renumbered when an item before it is removed. */
   slot: number;
   kind: TrayItemKind;
   bytes: number;
@@ -36,6 +38,8 @@ export interface TraySnapshot {
   open: boolean;
   items: Array<{ slot: number; name: string; kind: TrayItemKind; position: [number, number, number]; visible: boolean }>;
   summons: Array<{ slot: number; objectId: string; timeSec: number }>;
+  /** Objects put back this take (docs/features/tray-remove.md); `slot` is null when their item had left the tray. */
+  putBacks: Array<{ slot: number | null; objectId: string; timeSec: number }>;
 }
 
 /**
@@ -51,6 +55,9 @@ export class ObjectTray {
   private readonly items: TrayItem[] = [];
   private open = false;
   private readonly summonLog: TraySnapshot['summons'] = [];
+  private readonly putBackLog: TraySnapshot['putBacks'] = [];
+  /** The item each summoned object came from, so putting it back knows its slot. */
+  private readonly sources = new WeakMap<SceneObject, TrayItem>();
   private readonly palm = new THREE.Vector3();
   private readonly knuckle = new THREE.Vector3();
   private readonly center = new THREE.Vector3();
@@ -91,6 +98,20 @@ export class ObjectTray {
   clear(): void {
     for (const item of this.items) this.registry.remove(item.object);
     this.items.length = 0;
+  }
+
+  /**
+   * Takes `item` off the tray (docs/features/tray-remove.md). The rest close
+   * up, so the slots, and the desktop keys, stay 1 to N. Nothing is disposed:
+   * objects summoned from it share its geometry, materials and textures.
+   */
+  remove(item: TrayItem): boolean {
+    const index = this.items.indexOf(item);
+    if (index < 0) return false;
+    this.items.splice(index, 1);
+    this.registry.remove(item.object);
+    this.items.forEach((rest, i) => (rest.slot = i + 1));
+    return true;
   }
 
   isOpen(): boolean {
@@ -152,6 +173,17 @@ export class ObjectTray {
     return this.nearestItem(point, TRAY_ZONE_M) !== null;
   }
 
+  /**
+   * Whether a hand letting go at `point` puts its prop back (docs/features/tray-remove.md):
+   * in the arc itself, tighter than the zone, so a catch beside the open tray stays a catch.
+   * An empty open tray still has a place: the arc's centre.
+   */
+  inPutBackZone(point: THREE.Vector3): boolean {
+    if (!this.open) return false;
+    if (this.items.length === 0) return this.center.distanceTo(point) <= PUT_BACK_ZONE_M;
+    return this.nearestItem(point, PUT_BACK_ZONE_M) !== null;
+  }
+
   /** The item's miniature world pose with its scale removed: where a summoned object appears. */
   miniaturePose(item: TrayItem, out: THREE.Matrix4): THREE.Matrix4 {
     const wrapper = item.object.wrapper;
@@ -163,13 +195,33 @@ export class ObjectTray {
   /** Summons `item`: a new full-size event object, sharing the item's geometry and materials. */
   summon(item: TrayItem, timeSec: number): SceneObject {
     const object = this.registry.summon(item.object);
+    this.sources.set(object, item);
     this.summonLog.push({ slot: item.slot, objectId: object.id, timeSec });
     return object;
   }
 
-  /** A take starts: its summon log starts empty. Summoned objects stay in the scene. */
+  /** The tray item `object` was summoned from, on the tray or not. */
+  originOf(object: SceneObject): TrayItem | null {
+    return this.sources.get(object) ?? null;
+  }
+
+  /** The tray item `object` was summoned from, while that item is still on the tray. */
+  sourceOf(object: SceneObject): TrayItem | null {
+    const item = this.sources.get(object);
+    return item && this.items.includes(item) ? item : null;
+  }
+
+  /** A take starts: its summon and put-back logs start empty. Summoned objects stay in the scene. */
   resetSummonLog(): void {
     this.summonLog.length = 0;
+    this.putBackLog.length = 0;
+  }
+
+  /** `object` was put back: logged against the slot it came from, if that item is still here. */
+  logPutBack(object: SceneObject, timeSec: number): number | null {
+    const slot = this.sourceOf(object)?.slot ?? null;
+    this.putBackLog.push({ slot, objectId: object.id, timeSec });
+    return slot;
   }
 
   snapshot(): TraySnapshot {
@@ -180,7 +232,8 @@ export class ObjectTray {
         this.pos.setFromMatrixPosition(item.object.wrapper.matrixWorld);
         return { slot: item.slot, name: item.object.name, kind: item.kind, position: [this.pos.x, this.pos.y, this.pos.z], visible: item.object.wrapper.visible };
       }),
-      summons: [...this.summonLog]
+      summons: [...this.summonLog],
+      putBacks: [...this.putBackLog]
     };
   }
 

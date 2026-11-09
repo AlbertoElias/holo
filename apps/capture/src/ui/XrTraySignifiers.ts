@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { UIKit, UIKitDocument, RayInteractable, type Entity, type World } from '@iwsdk/core';
-import { apxToMeters, tokens } from '@holoim/design-tokens';
+import { UIKit, UIKitDocument, PokeInteractable, RayInteractable, type Entity, type World } from '@iwsdk/core';
+import { apxToMeters, hitAreaMeters, tokens } from '@holoim/design-tokens';
 import { dominantHand, markChrome, markChromeTree, type Handedness } from '@holoim/xr-ui-core';
 import { COLOR, CHIP, CHIP_OPACITY, GLYPH, HIT, PHONE_DOCK_DEPTH_M, createGlyph, withAlpha, type GlyphElement } from '@holoim/xr-ui-iwsdk';
 import type { ObjectTray } from '../objects/ObjectTray';
@@ -23,6 +23,8 @@ const TRAY_SPACING_M = 0.1;
 const BLOCKED_OPACITY = 0.4;
 /** The reachable ring's pinch or squeeze glyph stands this far toward the author from the ring's centre. */
 const GLYPH_TOWARD_M = 0.07;
+/** A miniature's Close ring stands this far above its top (docs/features/tray-remove.md). */
+const CLOSE_ABOVE_M = 0.035;
 
 export type SummonGlyph = 'pinch' | 'squeeze';
 
@@ -34,6 +36,10 @@ export interface TraySignifierSlotProbe {
   glyph: SummonGlyph | null;
   /** The ring's opacity: 1, or 0.4 while blocked; 0 when no ring shows at this slot. */
   opacity: number;
+  /** The Close ring above the miniature shows (docs/features/tray-remove.md): the arc is open and the summoning hand is empty. */
+  close: boolean;
+  /** A held prop let go now would go back into this slot: it carries the Put back glyph. */
+  returning: boolean;
 }
 
 export interface XrTraySignifiersProbe {
@@ -48,6 +54,16 @@ interface XrTraySignifiersDeps {
   tray: ObjectTray;
   tracking: XrTracking;
   getHandedness: () => Handedness;
+  /** A Close ring was poked (hands) or selected by a controller's ray: the slot's item leaves the tray. */
+  onRemove: (slot: number) => void;
+}
+
+interface CloseRing {
+  entity: Entity;
+  document: UIKitDocument;
+  glyph: GlyphElement;
+  /** The tray slot it stands over now, or null while hidden. */
+  slot: number | null;
 }
 
 interface SlotRing {
@@ -78,6 +94,7 @@ export class XrTraySignifiers {
   private glyphEntity: Entity | null = null;
   private glyph: GlyphElement | null = null;
   private glyphDocument: UIKitDocument | null = null;
+  private readonly closeRings: CloseRing[] = [];
   private lastProbe: XrTraySignifiersProbe = { visible: false, input: 'hands', slots: emptySlots() };
 
   constructor(private readonly deps: XrTraySignifiersDeps) {
@@ -124,10 +141,15 @@ export class XrTraySignifiers {
         if (last) spacing = last.distanceTo(at) || spacing;
         last = at;
         const reachable = tray.reachableSlot === item.slot;
-        this.place(this.rings[i]!, at, parent, false, reachable ? COLOR.highlight : COLOR.gold, opacity);
-        slots[i] = { slot: item.slot, filled: true, reachable, glyph: reachable ? (input === 'hands' ? 'pinch' : 'squeeze') : null, opacity };
-        if (reachable) reachableAt = at;
+        const returning = tray.returnSlot === item.slot;
+        this.place(this.rings[i]!, at, parent, false, reachable || returning ? COLOR.highlight : COLOR.gold, opacity);
+        // Close: only while the summoning hand is empty, so a hand carrying a prop back into the arc never pokes one.
+        const close = !tray.holding;
+        this.placeClose(i, close ? item.slot : null, camera, new THREE.Vector3(centre.x, box.max.y + CLOSE_ABOVE_M, centre.z));
+        slots[i] = { slot: item.slot, filled: true, reachable, glyph: reachable ? (input === 'hands' ? 'pinch' : 'squeeze') : null, opacity, close, returning };
+        if (reachable || returning) reachableAt = at;
       });
+      for (let i = Math.min(items.length, SLOTS); i < SLOTS; i += 1) this.placeClose(i, null, camera, null);
       // One dashed ring where the next item will stand, continuing the arc's spacing along its right-hand axis.
       const lastItem = items[Math.min(items.length, SLOTS) - 1];
       if (lastItem && last && items.length < SLOTS) {
@@ -136,21 +158,30 @@ export class XrTraySignifiers {
         const next = (last as THREE.Vector3).clone().addScaledVector(right, spacing);
         const index = items.length;
         this.place(this.rings[index]!, next, parent, true, COLOR.textMuted, opacity);
-        slots[index] = { slot: index + 1, filled: false, reachable: false, glyph: null, opacity };
+        slots[index] = { slot: index + 1, filled: false, reachable: false, glyph: null, opacity, close: false, returning: false };
       }
     }
-    this.updateGlyph(camera, reachableAt, input, tray.blocked);
+    if (!visible) for (let i = 0; i < SLOTS; i += 1) this.placeClose(i, null, camera, null);
+    this.updateGlyph(camera, reachableAt, tray.returnSlot !== null ? 'putBack' : input === 'hands' ? 'pinch' : 'squeeze', tray.blocked && tray.returnSlot === null);
     this.lastProbe = { visible, input, slots };
     markChromeTree(this.root);
     if (this.glyphEntity) markChromeTree(this.glyphEntity.object3D!);
+    for (const ring of this.closeRings) markChromeTree(ring.entity.object3D!);
   }
 
   probe(): XrTraySignifiersProbe {
     return { ...this.lastProbe, slots: this.lastProbe.slots.map((slot) => ({ ...slot })) };
   }
 
+  /** The world position of slot `slot`'s Close ring while it shows, for a check that pokes or aims at it. */
+  closePosition(slot: number): number[] | null {
+    const ring = this.closeRings.find((candidate) => candidate.slot === slot);
+    return ring && ring.entity.object3D!.visible ? ring.entity.object3D!.getWorldPosition(new THREE.Vector3()).toArray() : null;
+  }
+
   hide(): void {
     for (const ring of this.rings) ring.group.visible = false;
+    for (let i = 0; i < this.closeRings.length; i += 1) this.placeClose(i, null, null, null);
     if (this.glyphEntity) this.glyphEntity.object3D!.visible = false;
     this.lastProbe = { visible: false, input: this.lastProbe.input, slots: emptySlots() };
   }
@@ -160,6 +191,13 @@ export class XrTraySignifiers {
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
     }
+    for (const ring of this.closeRings) {
+      ring.glyph.dispose();
+      ring.document.dispose();
+      ring.entity.object3D?.removeFromParent();
+      ring.entity.destroy();
+    }
+    this.closeRings.length = 0;
     this.glyph?.dispose();
     this.glyphDocument?.dispose();
     this.glyphEntity?.object3D?.removeFromParent();
@@ -181,16 +219,81 @@ export class XrTraySignifiers {
     material.opacity = opacity;
   }
 
-  /** The pinch or squeeze glyph in its own gold ring, beside the reachable slot's ring, turned to the eyes. */
-  private updateGlyph(camera: THREE.Camera, at: THREE.Vector3 | null, input: 'hands' | 'controllers', blocked: boolean): void {
+  /**
+   * Slot index `i`'s Close ring: shown over `slot`'s miniature at `at` (world),
+   * turned to the eyes, or hidden when `slot` is null. Built on first use.
+   */
+  private placeClose(i: number, slot: number | null, camera: THREE.Camera | null, at: THREE.Vector3 | null): void {
+    if (slot === null || !camera || !at) {
+      const ring = this.closeRings[i];
+      if (ring?.entity.object3D!.visible) {
+        ring.slot = null;
+        ring.entity.object3D!.visible = false;
+        ring.glyph.setColor(COLOR.gold);
+      }
+      return;
+    }
+    const ring = this.closeRings[i] ?? this.buildClose(i);
+    ring.slot = slot;
+    const object = ring.entity.object3D!;
+    object.parent?.updateWorldMatrix(true, false);
+    object.position.copy(object.parent ? object.parent.worldToLocal(at.clone()) : at);
+    camera.getWorldPosition(eye);
+    object.lookAt(eye);
+    object.visible = true;
+  }
+
+  private buildClose(i: number): CloseRing {
+    const m = apxToMeters(1, ARM_REACH_M, { headset: true });
+    // A poke's hit (§6.1): 72 apx, never under 20 mm, at arm's reach.
+    const hitApx = hitAreaMeters('poke', GLYPH.ring * tokens.size.headsetScale, ARM_REACH_M, { headset: false }) / m;
+    const glyph = createGlyph('close', { size: GLYPH.ring, color: COLOR.gold, ring: { innerSize: GLYPH.icon } });
+    glyph.element.setProperties({ pointerEvents: 'none' });
+    const hit = new UIKit.Container({ width: hitApx, height: hitApx, alignItems: 'center', justifyContent: 'center' });
+    hit.add(glyph.element);
+    const root = new UIKit.Container({ pixelSize: m, flexDirection: 'row', alignItems: 'center', anchorX: 'center', anchorY: 'center' });
+    root.add(hit);
+    const document = new UIKitDocument(root);
+    const entity = this.deps.world.createTransformEntity(undefined, { parent: this.deps.world.activeLevel.value });
+    const object = entity.object3D!;
+    object.name = `tray-close-${i + 1}`;
+    markChrome(object);
+    object.add(document);
+    entity.addComponent(RayInteractable);
+    entity.addComponent(PokeInteractable);
+    object.visible = false;
+    const ring: CloseRing = { entity, document, glyph, slot: null };
+    type ClosePointerEvent = { pointerType: string };
+    let committedAt = 0;
+    const commit = (event: ClosePointerEvent): void => {
+      // A fingertip poke (hands), or a controller's ray and trigger. A tracked hand's ray selects with the
+      // same pinch that summons a miniature beneath it, so it never removes.
+      const hands = this.deps.tracking.getHandPoseSource(dominantHand(this.deps.getHandedness())) === 'xr-hand';
+      if (event.pointerType !== 'touch' && hands) return;
+      const now = performance.now();
+      if (ring.slot === null || !object.visible || now - committedAt < COMMIT_DEBOUNCE_MS) return;
+      committedAt = now;
+      this.deps.onRemove(ring.slot);
+    };
+    // Hover or a fingertip near it: the highlight (§6), so the ring about to remove an item shows it first.
+    hit.addEventListener('pointerenter' as never, (() => glyph.setColor(COLOR.highlight)) as never);
+    hit.addEventListener('pointerleave' as never, (() => glyph.setColor(COLOR.gold)) as never);
+    hit.addEventListener('pointerdown' as never, ((event: ClosePointerEvent) => { if (event.pointerType === 'touch') commit(event); }) as never);
+    hit.addEventListener('click' as never, ((event: ClosePointerEvent) => { if (event.pointerType !== 'touch') commit(event); }) as never);
+    this.closeRings[i] = ring;
+    return ring;
+  }
+
+  /** The pinch, squeeze or Put back glyph in its own gold ring, beside a slot's ring, turned to the eyes. */
+  private updateGlyph(camera: THREE.Camera, at: THREE.Vector3 | null, drawing: 'pinch' | 'squeeze' | 'putBack', blocked: boolean): void {
     if (!at) {
       if (this.glyphEntity) this.glyphEntity.object3D!.visible = false;
       return;
     }
-    if (!this.glyphEntity) this.buildGlyph(input);
+    if (!this.glyphEntity) this.buildGlyph(drawing);
     const entity = this.glyphEntity!;
     const object = entity.object3D!;
-    this.glyph!.setDrawing(input === 'hands' ? 'pinch' : 'squeeze');
+    this.glyph!.setDrawing(drawing);
     this.glyph!.setColor(COLOR.highlight);
     this.glyph!.setOpacity(blocked ? BLOCKED_OPACITY : 1);
     camera.getWorldPosition(eye);
@@ -205,9 +308,9 @@ export class XrTraySignifiers {
     object.visible = true;
   }
 
-  private buildGlyph(input: 'hands' | 'controllers'): void {
+  private buildGlyph(drawing: 'pinch' | 'squeeze' | 'putBack'): void {
     const m = apxToMeters(1, ARM_REACH_M, { headset: true });
-    this.glyph = createGlyph(input === 'hands' ? 'pinch' : 'squeeze', { size: GLYPH.ring, color: COLOR.highlight, ring: { innerSize: GLYPH.icon } });
+    this.glyph = createGlyph(drawing, { size: GLYPH.ring, color: COLOR.highlight, ring: { innerSize: GLYPH.icon } });
     const root = new UIKit.Container({ pixelSize: m, flexDirection: 'row', alignItems: 'center', anchorX: 'center', anchorY: 'center', pointerEvents: 'none' });
     this.glyph.element.setProperties({ pointerEvents: 'none' });
     root.add(this.glyph.element);
@@ -221,7 +324,7 @@ export class XrTraySignifiers {
 }
 
 function emptySlots(): TraySignifierSlotProbe[] {
-  return Array.from({ length: SLOTS }, (_, i) => ({ slot: i + 1, filled: false, reachable: false, glyph: null, opacity: 0 }));
+  return Array.from({ length: SLOTS }, (_, i) => ({ slot: i + 1, filled: false, reachable: false, glyph: null, opacity: 0, close: false, returning: false }));
 }
 
 // --- Phone AR: the row above the dock ---
@@ -255,6 +358,8 @@ interface PhoneTrayRowDeps {
   dockTopCss: () => number | null;
   thumbnail: (slot: number) => TrayThumbnail | null;
   onSlot: (slot: number) => void;
+  /** A slot's Close glyph, tapped and lifted on it: the item leaves the tray (docs/features/tray-remove.md). */
+  onRemove: (slot: number) => void;
 }
 
 interface PhoneSlot {
@@ -267,8 +372,13 @@ interface PhoneSlot {
   filled: boolean;
   name: string | null;
   committedAt: number;
+  /** The Close glyph's hit above the slot, shown while the slot is filled. */
+  close: InstanceType<typeof UIKit.Container>;
+  closeGlyph: GlyphElement;
 }
 
+/** Between a phone slot and its Close glyph above it. */
+const CLOSE_GAP_APX = 12;
 /** A tap commits on the press or on the click, whichever the pointer delivers first. */
 const COMMIT_DEBOUNCE_MS = 400;
 
@@ -307,14 +417,22 @@ export class PhoneTrayRow {
     root.add(this.chip);
     const outer = hitApx / 2;
     for (let i = 0; i < SLOTS; i += 1) {
+      // Each slot is a column: its Close glyph over it, then the slot.
+      const column = new UIKit.Container({ flexDirection: 'column', alignItems: 'center', gap: CLOSE_GAP_APX });
+      // Hidden, it takes no pointer either: a hold on the scene behind it is a point hold, not chrome.
+      const close = new UIKit.Container({ width: hitApx, height: hitApx, alignItems: 'center', justifyContent: 'center', visibility: 'hidden', pointerEvents: 'none' });
+      const closeGlyph = createGlyph('close', { size: GLYPH.icon, color: COLOR.gold });
+      closeGlyph.element.setProperties({ pointerEvents: 'none' });
+      close.add(closeGlyph.element);
       const hit = new UIKit.Container({ width: hitApx, height: hitApx, alignItems: 'center', justifyContent: 'center' });
       const solid = this.ring(ringGeometry(outer, GLYPH.stroke), COLOR.gold, hitApx);
       const dashed = this.ring(dashedRingGeometry(outer, GLYPH.stroke), COLOR.textMuted, hitApx);
       const inner = hitApx - 2 * (GLYPH.stroke + 3);
       const image = new UIKit.Image({ width: inner, height: inner, borderRadius: inner / 2, objectFit: 'cover', display: 'none', pointerEvents: 'none' });
       hit.add(solid, dashed, image);
-      this.chip.add(hit);
-      const slot: PhoneSlot = { hit, solid, dashed, image, texture: null, canvas: null, filled: false, name: null, committedAt: 0 };
+      column.add(close, hit);
+      this.chip.add(column);
+      const slot: PhoneSlot = { hit, solid, dashed, image, texture: null, canvas: null, filled: false, name: null, committedAt: 0, close, closeGlyph };
       this.bind(slot, i + 1);
       this.slots.push(slot);
     }
@@ -327,12 +445,16 @@ export class PhoneTrayRow {
     this.entity.addComponent(RayInteractable);
     deps.camera.add(object);
     object.visible = false;
+    this.chip.setProperties({ display: 'none' });
     this.layout();
   }
 
   setOpen(open: boolean): void {
     this.open = open;
     this.entity.object3D!.visible = open;
+    // Closed, the row is out of the layout too: a hidden UIKit panel still takes the screen's ray, and one finger on
+    // the scene behind it would begin on chrome and never mark.
+    this.chip.setProperties({ display: open ? 'flex' : 'none' });
     if (!open) this.chipRect = null;
   }
 
@@ -351,6 +473,7 @@ export class PhoneTrayRow {
         slot.filled = filled;
         slot.solid.setProperties({ display: filled ? 'flex' : 'none' });
         slot.dashed.setProperties({ display: filled ? 'none' : 'flex' });
+        slot.close.setProperties({ visibility: filled ? 'visible' : 'hidden', pointerEvents: filled ? 'auto' : 'none' });
       }
       slot.name = info?.name ?? null;
       const canvas = filled ? this.deps.thumbnail(i + 1)?.canvas ?? null : null;
@@ -375,7 +498,7 @@ export class PhoneTrayRow {
   private layout(): void {
     const { viewportHeightCss: height, viewportWidthCss: width } = this.deps;
     const hitApx = HIT.touch;
-    const rowHeight = hitApx + 2 * CHIP.controlRowPaddingStart;
+    const rowHeight = 2 * hitApx + CLOSE_GAP_APX + 2 * CHIP.controlRowPaddingStart;
     const rowWidth = CHIP.controlRowPaddingStart * 2 + SLOTS * hitApx + (SLOTS - 1) * GLYPH.gap;
     const dockTop = this.deps.dockTopCss();
     // Distance from the screen's bottom edge to the row's bottom edge, in apx.
@@ -394,6 +517,12 @@ export class PhoneTrayRow {
     };
   }
 
+  /** The world position of a filled slot's Close glyph, for a check that taps it. */
+  closePosition(slot: number): number[] | null {
+    const entry = this.slots[slot - 1];
+    return entry?.filled ? entry.close.getWorldPosition(new THREE.Vector3()).toArray() : null;
+  }
+
   /** The world position of a slot's hit area, for a check that taps it. */
   slotPosition(slot: number): number[] | null {
     const hit = this.slots[slot - 1]?.hit;
@@ -401,7 +530,10 @@ export class PhoneTrayRow {
   }
 
   dispose(): void {
-    for (const slot of this.slots) slot.texture?.dispose();
+    for (const slot of this.slots) {
+      slot.texture?.dispose();
+      slot.closeGlyph.dispose();
+    }
     this.entity.object3D!.removeFromParent();
     this.document.dispose();
     this.entity.destroy();
@@ -428,5 +560,12 @@ export class PhoneTrayRow {
     };
     slot.hit.addEventListener('pointerdown' as never, ((_event: PointerEvent) => commit()) as never);
     slot.hit.addEventListener('click' as never, ((_event: PointerEvent) => commit()) as never);
+    // Close removes, so it commits only on a click: a press lifted on the glyph itself, never on the press.
+    slot.close.addEventListener('click' as never, ((_event: PointerEvent) => {
+      const now = performance.now();
+      if (!this.open || !slot.filled || !this.entity.object3D!.visible || now - slot.committedAt < COMMIT_DEBOUNCE_MS) return;
+      slot.committedAt = now;
+      this.deps.onRemove(number);
+    }) as never);
   }
 }

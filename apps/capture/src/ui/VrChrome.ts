@@ -42,6 +42,8 @@ interface VrChromeDeps {
   pickObject: (url: string) => void;
   /** The tray, for the rings its miniatures stand on while it is open in a headset. */
   tray: ObjectTray;
+  /** A miniature's Close ring: its item leaves the tray (docs/features/tray-remove.md). */
+  removeTraySlot: (slot: number) => void;
 }
 
 /** VR carries the whole chrome; passthrough AR (the spectator) carries Find only. */
@@ -216,8 +218,13 @@ export class VrChrome {
     );
     this.rays = new AimRays(world);
     this.root.add(this.rays.group);
-    this.traySignifiers = new XrTraySignifiers({ world, tray: this.deps.tray, tracking: this.deps.tracking, getHandedness: () => this.deps.store.getState().handedness });
+    this.traySignifiers = new XrTraySignifiers({ world, tray: this.deps.tray, tracking: this.deps.tracking, getHandedness: () => this.deps.store.getState().handedness, onRemove: (slot) => this.deps.removeTraySlot(slot) });
     this.root.add(this.traySignifiers.root);
+  }
+
+  /** The world position of a miniature's Close ring while it shows, for a check (docs/features/tray-remove.md). */
+  trayClosePosition(slot: number): number[] | null {
+    return this.traySignifiers?.closePosition(slot) ?? null;
   }
 
   /** The Find panel, built on first open: its chip is the session's (VR 72%, passthrough 97%). */

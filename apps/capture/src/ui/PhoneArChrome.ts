@@ -32,13 +32,19 @@ interface PhoneArChromeDeps {
   trayThumbnail: (slot: number) => TrayThumbnail | null;
   /** Summons a tray slot with its base on a point of the set frame, turned to a yaw. */
   placeFromTray: (slot: number, point: THREE.Vector3, yaw: number, timeSec: number) => SceneObject | null;
+  /** The scene's event objects: the reticle finds a placed one for Put back (docs/features/tray-remove.md). */
+  objects: () => readonly SceneObject[];
+  /** Puts an object back into the tray; false when it has left the scene. */
+  putBack: (object: SceneObject, timeSec: number) => boolean;
+  /** A slot's Close glyph on the row: its item leaves the tray. */
+  removeTraySlot: (slot: number) => void;
 }
 
 const TRAY_OPEN: ReadonlySet<string> = new Set(['tray']);
 const NO_APPROACH: ReadonlySet<string> = new Set();
 
-type DockId = 'record' | 'recenter' | 'tray' | 'exit';
-const DOCK_IDS: readonly DockId[] = ['recenter', 'record', 'tray', 'exit'];
+type DockId = 'record' | 'recenter' | 'tray' | 'putBack' | 'exit';
+const DOCK_IDS: readonly DockId[] = ['recenter', 'record', 'tray', 'putBack', 'exit'];
 /** The dock's Tray glyph (styleguide 6, `glyph.path.tray`). */
 const TRAY_GLYPH: DockGlyph = 'tray';
 
@@ -79,7 +85,7 @@ export class PhoneArChrome {
   private placement: ArPlacement | null = null;
   private cameraEntity: Entity | null = null;
   /** What each part should show when the camera pose is usable; a frame without one draws none of it. */
-  private wanted = { record: false, recenter: false, tray: false, exit: false, status: false };
+  private wanted = { record: false, recenter: false, tray: false, putBack: false, exit: false, status: false };
   private releaseGuard: (() => void) | null = null;
   private viewport: PhoneArChromeProbe['viewport'] = null;
   private shown = false;
@@ -110,6 +116,8 @@ export class PhoneArChrome {
     // Tray stays through a take (§8.5 as amended): the author places mid-sentence. Like Record it waits for the set to settle.
     this.wanted.tray = this.deps.isSettled() && state.recordingState !== 'exporting' && chromeVisible('tray', recording);
     if (!this.wanted.tray && this.trayRow?.isOpen()) this.setTrayOpen(false);
+    // Put back shows while the row is open and the reticle is on a placed object (docs/features/tray-remove.md).
+    this.wanted.putBack = this.wanted.tray && chromeVisible('putBack', recording) && Boolean(this.trayRow?.isOpen() && this.placement?.currentTarget());
     // Between takes only (§8.5): not while a take runs, exports, or waits on the microphone. A session end still stops and exports.
     this.wanted.recenter = !busy;
     this.wanted.exit = !busy;
@@ -163,6 +171,16 @@ export class PhoneArChrome {
     this.status.entity.object3D!.visible = usable && this.wanted.status;
   }
 
+  /** The tray's slots were renumbered: a tap queued for a slot number is dropped. */
+  trayChanged(): void {
+    this.placement?.cancelPending();
+  }
+
+  /** The world position of a slot's Close glyph while the row is open, for a check that taps it. */
+  trayClosePosition(slot: number): number[] | null {
+    return this.trayRow?.isOpen() ? this.trayRow.closePosition(slot) : null;
+  }
+
   /** The world position of a tray slot's hit area while the row is open, for a check that taps it. */
   traySlotPosition(slot: number): number[] | null {
     return this.trayRow?.isOpen() ? this.trayRow.slotPosition(slot) : null;
@@ -206,6 +224,7 @@ export class PhoneArChrome {
       action('recenter', 'recenter', 'Recenter', () => this.deps.recenter()),
       action('record', 'record', 'Record', () => this.deps.toggleRecording()),
       action('tray', TRAY_GLYPH, 'Tray', () => this.toggleTray()),
+      action('putBack', 'putBack', 'Put back', () => this.placement?.requestPutBack()),
       action('exit', 'exit', 'Exit', () => this.deps.exit())
     ]);
     markChromeTree(this.dock.entity.object3D!);
@@ -218,7 +237,9 @@ export class PhoneArChrome {
       camera: xrCamera,
       metresPerApx,
       place: this.deps.placeFromTray,
-      onPlaced: () => this.setTrayOpen(false)
+      onPlaced: () => this.setTrayOpen(false),
+      objects: this.deps.objects,
+      putBack: this.deps.putBack
     });
     this.trayRow = new PhoneTrayRow({
       world,
@@ -228,7 +249,8 @@ export class PhoneArChrome {
       viewportWidthCss: width,
       dockTopCss: () => this.dock?.probe().chip?.top ?? null,
       thumbnail: this.deps.trayThumbnail,
-      onSlot: (slot) => this.placement?.request(slot)
+      onSlot: (slot) => this.placement?.request(slot),
+      onRemove: (slot) => this.deps.removeTraySlot(slot)
     });
     // A frame's camera pose arrives after the step; a pose lost to NaN (an emulated tracking loss) would stop the draw.
     const scene = world.scene;

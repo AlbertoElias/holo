@@ -80,6 +80,8 @@ export class InputController {
   private trayHeld = false;
   private trayOpenFromUi = false;
   private summonSlotQueued: number | null = null;
+  private putBackQueued = false;
+  private trayRemoveQueued: number | null = null;
   private focusRecoveryUntilMs = 0;
   private lastFocusAttemptMs = 0;
   private lastPointerType = 'mouse';
@@ -228,6 +230,28 @@ export class InputController {
     return slot;
   }
 
+  /** Backspace or Delete while holding, or the dock's Put back (docs/features/tray-remove.md). */
+  queuePutBack(): void {
+    this.putBackQueued = true;
+  }
+
+  consumePutBack(): boolean {
+    const queued = this.putBackQueued;
+    this.putBackQueued = false;
+    return queued;
+  }
+
+  /** A flat tray slot dragged up off the row: its item leaves the tray. */
+  queueTrayRemove(slot: number): void {
+    this.trayRemoveQueued = slot;
+  }
+
+  consumeTrayRemove(): number | null {
+    const slot = this.trayRemoveQueued;
+    this.trayRemoveQueued = null;
+    return slot;
+  }
+
   /** The held prop's resize since the last step: a size factor and whether `0` reset it. Consumed. */
   consumeObjectResize(deltaSec: number): { factor: number; reset: boolean } {
     const keys = (this.resizeKeys.has('grow') ? 1 : 0) - (this.resizeKeys.has('shrink') ? 1 : 0);
@@ -340,6 +364,8 @@ export class InputController {
     this.trayHeld = false;
     this.trayOpenFromUi = false;
     this.summonSlotQueued = null;
+    this.putBackQueued = false;
+    this.trayRemoveQueued = null;
     this.pointSources.clear();
     this.touchAim = null;
     this.haloKeyHeld = false;
@@ -447,6 +473,10 @@ export class InputController {
       if (resize && this.options.isHoldingObject?.()) {
         if (resize === 'reset') this.resizeResetQueued = true;
         else this.resizeKeys.add(resize);
+        event.preventDefault();
+      }
+      if ((event.code === 'Backspace' || event.code === 'Delete') && !event.repeat && this.options.isHoldingObject?.()) {
+        this.putBackQueued = true;
         event.preventDefault();
       }
       const slot = summonSlot(event.code);

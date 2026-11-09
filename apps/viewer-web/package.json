@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "tsc -p tsconfig.app.json && vite build",
     "lint": "eslint . && node ../../packages/config-eslint/src/check-css-literals.mjs src",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.e2e.json --noEmit",
     "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck && pnpm run test",
     "verify:full": "pnpm run verify:fast && pnpm run build",

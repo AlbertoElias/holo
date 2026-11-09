@@ -687,11 +687,14 @@ hologram.
 | Gold core and highlight | Drop to 0.55 opacity | No edge |
 
 **Chrome while recording:** everything but the stop control,
-"Recording 0:12", the Halo glyph, the Tray glyph and Find hides until the
-take ends. The Halo stays because it carries the take's own actions: stop,
+"Recording 0:12", the Halo glyph, the Tray glyph, Find and Put back hides
+until the take ends. The Halo stays because it carries the take's own actions: stop,
 and undo or redo the held mark. The tray and Find stay because bringing an
 object into the event is part of the take: a summon or a pick mid-take is
-recorded from its frame ([tray everywhere](../../features/archive/tray-everywhere.md)).
+recorded from its frame ([tray everywhere](../../features/archive/tray-everywhere.md)). Put back
+(shown only while an object is held, or under the phone AR reticle) stays
+for the same reason: an object leaving is part of the take
+([put back](../../features/tray-remove.md)).
 
 The state is carried by shape and word, not colour: the record control turns
 from a filled rose circle into a rose rounded square (stop), and

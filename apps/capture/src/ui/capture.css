@@ -43,3 +43,9 @@ body {
     background-color: rgb(var(--holoim-color-text-muted-rgb) / 28%);
   }
 }
+
+/* A filled tray slot focused from the keyboard (Delete or Backspace removes it): the gold focus ring, 3 apx out (styleguide §6). */
+[data-tray-filled="true"]:focus-visible {
+  outline: 1.5px solid var(--holoim-color-gold) !important;
+  outline-offset: 3px;
+}

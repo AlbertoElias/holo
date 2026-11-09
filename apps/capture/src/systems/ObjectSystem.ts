@@ -32,6 +32,11 @@ export class ObjectSystem extends createSystem() {
       const trimesh = c.motor.getWorldTrimesh();
       if (trimesh) c.objects.enablePhysics(trimesh, gravity);
     }
+    // The flat dock and keys (docs/features/tray-remove.md), before this step's summon and grab.
+    const removeSlot = c.input.consumeTrayRemove();
+    // A slot queued with the removal named the item before the renumber: dropped.
+    if (removeSlot !== null && c.objects.removeTraySlot(removeSlot)) c.input.consumeSummonSlot();
+    if (c.input.consumePutBack()) c.objects.putBackHeld();
     const turn = c.input.getObjectTurn();
     const walk = c.input.moveState;
     const moving = walk.forward || walk.back || walk.left || walk.right || (!c.objects.isStepping() && (c.frame.character?.horizontalSpeed ?? 0) > WALKING_MPS);
