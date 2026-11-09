@@ -1,4 +1,4 @@
-import { HOLOIM_MEANING_EXTENSION, isCameraFrom, meaningFromLabel, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
+import { HOLOIM_MEANING_EXTENSION, isCameraFrom, linkMarks, meaningFromLabel, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
 import type { MeaningLinkFrom, MeaningLinkProvenance, MeaningLinkTo } from '../../../../packages/meaning/src/index.ts';
 
 // Scores the HOLOIM_meaning record of an exported GLB against a labels file
@@ -125,7 +125,7 @@ export function scorePointing({ labels, gltf }: { labels: PointingLabels; gltf: 
   if (!(gltf.extensionsUsed ?? []).includes(HOLOIM_MEANING_EXTENSION)) failures.push(`${HOLOIM_MEANING_EXTENSION} is not listed in extensionsUsed`);
   if ((gltf.extensionsRequired ?? []).includes(HOLOIM_MEANING_EXTENSION)) failures.push(`${HOLOIM_MEANING_EXTENSION} must never be in extensionsRequired`);
 
-  const links: PointingLink[] = validation.value.marks.map((mark) => ({
+  const links: PointingLink[] = linkMarks(validation.value).map((mark) => ({
     from: mark.anchor.from,
     to: mark.anchor.to,
     start: mark.span.start,

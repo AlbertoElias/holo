@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   MIXAMO_TO_VRM,
+  STILL_EXTENT_METERS,
+  holoimMeaningV1Schema,
+  isLinkMark,
+  isTraceMark,
+  pathExtent,
   VRM_HUMANOID_BONES,
   resolveHumanoidBone,
   encodeHoloimMeaning,
@@ -26,6 +31,13 @@ import {
 // 17. the reader changes a v0 record's content
 // 18. the writer writes v1 for a record the v0 schema accepts, or v0 for one with a camera `from`
 // 19. v1 stops accepting a bone `from` (or its inferred provenance)
+// v2 (`trace` marks, PRD-023 v1) adds:
+// 20. a trace validates under v0 or v1         21. a v2 trace is rejected
+// 22. an inferred trace, a camera anchor, or an unknown trace key validates
+// 23. v2 stops accepting v1's links (or their camera refine)
+// 24. the writer writes v2 for a record without a trace, or changes the
+//     bytes it writes for a v0 or v1 record
+// 25. version 3 validates
 const example = {
   version: 0,
   marks: [
@@ -75,7 +87,7 @@ describe("validateHoloimMeaning", () => {
     ["null", null],
     ["array", []],
     ["string", "x"],
-    ["version 2", { ...example, version: 2 }],
+    ["version 3", { ...example, version: 3 }],
     ["string version", { ...example, version: "0" }],
     ["missing version", { marks: [], spans: [] }],
     ["unknown top-level key", { ...example, extra: 1 }]
@@ -137,7 +149,9 @@ describe("HOLOIM_meaning v1", () => {
     const result = validateHoloimMeaning(v1Camera);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const from = result.value.marks[0]!.anchor.from;
+    const first = result.value.marks[0]!;
+    if (!isLinkMark(first)) throw new Error("expected a link");
+    const from = first.anchor.from;
     expect(isCameraFrom(from)).toBe(true);
     expect(from).toEqual({ camera: true, node: 31 });
   });
@@ -166,7 +180,7 @@ describe("HOLOIM_meaning v1", () => {
   });
 
   it.each([
-    ["version 2", { ...v1Camera, version: 2 }],
+    ["version 3", { ...v1Camera, version: 3 }],
     ["missing version", { marks: [cameraLink], spans: [] }]
   ])("rejects %s, naming the unsupported version", (_n, input) => {
     const result = validateHoloimMeaning(input);
@@ -181,6 +195,17 @@ describe("HOLOIM_meaning v1", () => {
     const camera = encodeHoloimMeaning({ marks: [cameraLink] as never, spans: [] });
     expect(camera.version).toBe(1);
     expect(camera).toEqual(v1Camera);
+  });
+
+  it("writes the same bytes for v0 and v1 records as before v2", () => {
+    // Golden strings: key order is the schema's, so a schema edit that reorders keys shows here.
+    const bone = encodeHoloimMeaning({ marks: example.marks as never, spans: example.spans as never });
+    expect(JSON.stringify(bone)).toBe(
+      '{"version":0,"marks":[{"kind":"link","anchor":{"from":{"bone":"rightIndexDistal","node":41},"to":{"node":7,"point":[0.02,0.31,-0.1],"radius":0.15}},"span":{"start":2.84,"end":4.1},"provenance":{"value":"inferred","confidence":0.86}},{"kind":"link","anchor":{"from":{"bone":"rightIndexDistal","node":41},"to":{"node":33,"bone":"leftHand","point":[0,0,0]}},"span":{"start":5,"end":5.5},"provenance":{"value":"recorded"}}],"spans":[{"kind":"motion","bones":["rightShoulder","rightUpperArm","rightLowerArm","rightHand"],"span":{"start":1.2,"end":2},"provenance":{"value":"inferred"}}]}'
+    );
+    const camera = encodeHoloimMeaning({ marks: [cameraLink] as never, spans: [] });
+    expect(JSON.stringify(camera)).toBe(JSON.stringify(holoimMeaningV1Schema.parse(v1Camera)));
+    expect(JSON.stringify(camera).startsWith('{"version":1,"marks":[{"kind":"link","anchor":{"from":{"camera":true,"node":31}')).toBe(true);
   });
 
   it("throws when no version accepts the record", () => {
@@ -217,5 +242,58 @@ describe("humanoid bones", () => {
     for (const t of targets) expect(VRM_HUMANOID_BONES).toContain(t);
     const unreached = VRM_HUMANOID_BONES.filter((b) => !targets.has(b));
     expect(unreached.sort()).toEqual(["jaw", "leftEye", "rightEye"]);
+  });
+});
+
+const trace = {
+  kind: "trace",
+  anchor: { bone: "rightIndexDistal", node: 41 },
+  span: { start: 1.5, end: 6.25 },
+  provenance: { value: "recorded" }
+};
+const v2Trace = { version: 2, marks: [example.marks[0], trace, cameraLink], spans: example.spans };
+
+describe("HOLOIM_meaning v2 (trace marks)", () => {
+  it("validates a v2 record of links and a trace, unchanged", () => {
+    const result = validateHoloimMeaning(v2Trace);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual(v2Trace);
+    expect(result.value.marks.filter(isTraceMark)).toEqual([trace]);
+    expect(result.value.marks.filter(isLinkMark)).toHaveLength(2);
+  });
+
+  it.each([0, 1])("rejects a trace in a v%i record", (version) => {
+    expect(validateHoloimMeaning({ version, marks: [trace], spans: [] }).ok).toBe(false);
+  });
+
+  it.each([
+    ["inferred provenance", { provenance: { value: "inferred", confidence: 0.9 } }],
+    ["a camera anchor", { anchor: { camera: true, node: 31 } }],
+    ["an anchor without a bone", { anchor: { node: 41 } }],
+    ["an unknown bone", { anchor: { bone: "rightIndexTip", node: 41 } }],
+    ["an unknown key", { path: [[0, 0, 0]] }],
+    ["an end before its start", { span: { start: 3, end: 2 } }]
+  ])("rejects a trace with %s", (_n, patch) => {
+    expect(validateHoloimMeaning({ version: 2, marks: [{ ...trace, ...patch }], spans: [] }).ok).toBe(false);
+  });
+
+  it("keeps v1's link rules in v2", () => {
+    const inferredCamera = { ...cameraLink, provenance: { value: "inferred", confidence: 0.5 } };
+    expect(validateHoloimMeaning({ version: 2, marks: [inferredCamera], spans: [] }).ok).toBe(false);
+    expect(validateHoloimMeaning({ ...example, version: 2 }).ok).toBe(true);
+  });
+
+  it("writes v2 only when a trace is present", () => {
+    const traced = encodeHoloimMeaning({ marks: [example.marks[0], trace] as never, spans: example.spans as never });
+    expect(traced.version).toBe(2);
+    expect(traced.marks).toEqual([example.marks[0], trace]);
+    expect(encodeHoloimMeaning({ marks: [], spans: example.spans as never }).version).toBe(0);
+  });
+
+  it("measures a path's extent from its newest point", () => {
+    expect(pathExtent([])).toBe(0);
+    expect(pathExtent([{ x: 0, y: 0, z: 0 }, { x: 0.03, y: 0.04, z: 0 }, { x: 0, y: 0, z: 0 }])).toBeCloseTo(0.05);
+    expect(STILL_EXTENT_METERS).toBe(0.05);
   });
 });

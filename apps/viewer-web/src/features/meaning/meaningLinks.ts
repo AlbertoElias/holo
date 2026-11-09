@@ -1,4 +1,4 @@
-import { HOLOIM_MEANING_EXTENSION, isCameraFrom, validateHoloimMeaning } from "@holoim/meaning";
+import { HOLOIM_MEANING_EXTENSION, isCameraFrom, linkMarks, validateHoloimMeaning } from "@holoim/meaning";
 import type { MeaningLinkMark } from "@holoim/meaning";
 import type { Object3D } from "three";
 
@@ -58,7 +58,8 @@ export function readMeaningLinks(gltf: MeaningGltf, clone: Object3D): ResolvedLi
 
   const nodes = mapNodeIndices(gltf.scene, clone, gltf.parser?.associations);
   const links: ResolvedLink[] = [];
-  for (const mark of result.value.marks) {
+  // A v2 record also holds hand traces (PRD-023), drawn by HandTraces.
+  for (const mark of linkMarks(result.value)) {
     const from = nodes.get(mark.anchor.from.node);
     const to = nodes.get(mark.anchor.to.node);
     if (!from || !to) continue;

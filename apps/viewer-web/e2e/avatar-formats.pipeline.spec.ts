@@ -310,9 +310,9 @@ test("unreal-cm pointing take: HOLOIM_meaning's fingertip anchors resolve in the
   expect(consoleErrors, "capture runtime errors").toEqual([]);
   const glb = await readFile(take.glb);
   const json = readGlbJson(glb) as GltfJson & {
-    extensions: { HOLOIM_meaning?: { marks: Array<{ anchor: { from: { node: number }; to: { node: number } }; span: { start: number; end: number } }> } };
+    extensions: { HOLOIM_meaning?: { marks: Array<{ kind: string; anchor: { from: { node: number }; to: { node: number } }; span: { start: number; end: number } }> } };
   };
-  const marks = json.extensions.HOLOIM_meaning?.marks ?? [];
+  const marks = (json.extensions.HOLOIM_meaning?.marks ?? []).filter((mark) => mark.kind === "link");
   expect(marks.length, "the take recorded pointing marks").toBeGreaterThan(0);
   const fromNames = marks.map((mark) => json.nodes?.[mark.anchor.from.node]?.name);
   expect(readHumanoidDeclaration(json)?.format, "export carries HOLOIM_humanoid").toBe("holoim");

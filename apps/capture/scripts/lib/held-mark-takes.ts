@@ -15,7 +15,7 @@ import {
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
 
-import { HOLOIM_MEANING_EXTENSION, meaningFromLabel, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
+import { HOLOIM_MEANING_EXTENSION, linkMarks, meaningFromLabel, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
 import type { HoldsSnapshot } from '../../src/runtime/automationHooks';
 import { installHandBlend } from './iwer-hand-blend.ts';
 import { TARGETS, type Vec3 } from './pointing-scene.ts';
@@ -107,7 +107,7 @@ async function readLinks(run: HeldMarkRun, phase: string, download: Download, fa
     failures.push(`${HOLOIM_MEANING_EXTENSION} fails the schema: ${validation.errors.join('; ')}`);
     return { glb, links: [] };
   }
-  const links = validation.value.marks.map((mark) => ({
+  const links = linkMarks(validation.value).map((mark) => ({
     from: meaningFromLabel(mark.anchor.from),
     to: mark.anchor.to.bone ?? gltf.nodes?.[mark.anchor.to.node]?.name ?? `node ${mark.anchor.to.node}`,
     start: round(mark.span.start),
