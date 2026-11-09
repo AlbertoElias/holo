@@ -128,6 +128,30 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     const play = controls.getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) });
     await expect(play).toBeVisible();
     await expect(controls.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }), "Return comes only while looking around").toHaveCount(0);
+
+    // A drawing whose word does not show names itself on the chip when a mouse rests on it.
+    if (label === "desktop") {
+      const iconOnly = page.locator(".portal-controls button:visible, .feed-dock button:visible");
+      const names: string[] = [];
+      for (let i = 0; i < await iconOnly.count(); i++) {
+        const control = iconOnly.nth(i);
+        if ((await control.innerText()).trim()) continue;
+        const name = (await control.getAttribute("aria-label"))!;
+        await control.hover();
+        const hint = page.locator("[data-hint]");
+        await expect(hint, `${name} names itself on hover`).toHaveText(name);
+        await expect(hint).toHaveCSS("opacity", "1");
+        const [at, own] = [await control.boundingBox(), await hint.boundingBox()];
+        expect(own!.y + own!.height, `${name}'s hint sits above it`).toBeLessThanOrEqual(at!.y + 1);
+        expect(own!.x).toBeGreaterThanOrEqual(0);
+        expect(own!.x + own!.width).toBeLessThanOrEqual(viewport.width);
+        names.push(name);
+      }
+      expect(names, "the foot's drawings and Upload's lantern are all hinted").toEqual(expect.arrayContaining(["Upload a hologram"]));
+      expect(names.length).toBeGreaterThanOrEqual(2);
+      await page.mouse.move(2, 2);
+      await expect(page.locator("[data-hint]")).toHaveCount(0);
+    }
     for (const control of await controls.locator(".portal-controls-row button").all()) {
       const box = await control.boundingBox();
       expect(box!.width, "every glyph's hit area is at least the mouse minimum").toBeGreaterThanOrEqual(hitAreaApx("mouse", 0) - 0.5);
