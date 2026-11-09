@@ -47,8 +47,9 @@ it from the item below instead of duplicating its status here.
 - [ ] Author-marked hand traces (PRD-023 v1, approved 2026-11-09): in headset
   capture the Halo's Ink toggles a trace, stored as a `recorded` `trace` mark
   (`HOLOIM_meaning` v2) that replays with its original timing; v0's viewer
-  Traces control and paused 3 s window are removed. Needs its own brief and
-  design review; replace the two v0 test takes on the live feed afterwards.
+  Traces control and paused 3 s window are removed. Owned by
+  [`docs/features/authored-traces.md`](docs/features/authored-traces.md);
+  replace the two v0 test takes on the live feed afterwards.
 - [ ] Self-resolving pointing (PRD-022, approved 2026-10-22): highlight what
   the author points at in the feed portal, from headset hands and a desktop
   point action. Owned by
