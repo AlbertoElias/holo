@@ -1,94 +1,111 @@
 # PRD: Hand traces (hand-path ribbons)
 
-**Status:** Approved  
+**Status:** Draft amendment for approval (v1, author-marked traces); v0 approved 2026-10-28 and shipped 2026-10-29  
 **Source ideas:** IDEA-033  
-**Layer:** Meaning (read)  
-**Depends on:** hand-tracking fidelity (verifying), IDEA-045 portal (implementing), PRD-022 meaning record (approved)  
+**Layer:** Meaning (added: the author marks the span, the body draws the path)  
+**Depends on:** v0 hand traces (shipped), hand-tracking fidelity (verifying), PRD-022 meaning record (approved), the Halo (styleguide 6.2)  
 **Owner:** Alberto Elias  
-**Last updated:** 2026-10-28
+**Last updated:** 2026-11-09
 
 **Name.** The idea was called "hand-path ribbons", but the
 [design language](../concepts/design-language.md) already calls the timeline
 strip the Ribbon. In the product and code this mark is a **hand trace**.
+
+## Why this amendment
+
+v0 put the decision in the wrong place. A viewer control chose whether to show
+the hands' last 3 s, so the viewer had to guess which motion was the
+demonstration, and every card with tracked hands carried one more control.
+Which motion matters is meaning, and the lens gives meaning to the author:
+the viewer's controls change how they see the event, never what matters in
+it. v1 lets the author mark a trace while recording, stores it in the
+hologram, and replays it with the message. It also removes v0's hardest open
+problem: telling a demonstration from ordinary gesturing no longer has to be
+guessed.
 
 ## User Outcome
 
 Before: when the author demonstrates a motion (a twist, a sweep, an arc, "this
 big, this way round"), a recipient sees it once from one angle. They cannot
 read its depth, size or direction, so they replay it and still copy it wrong.
-After: the recipient pauses, and the path each hand just took hangs in the air
-at true size. They orbit it in the phone or desktop portal, see the shape from
-the side and how far it reached, then copy the motion correctly. The author
-does nothing extra.
+After: while recording, the author turns on Trace, demonstrates, and turns it
+off. In playback, the motion draws itself in the air at true size as the hand
+moves, and stays there. The recipient sees the whole shape, orbits it in the
+portal to read its depth, and copies it correctly, without knowing to pause
+or where to look.
 
 ## Problem
 
 Showing how to move is one of the main things people will use holograms for
 ("swing like this", "turn it this way"). In video, motion blurs, depth is
 lost, and the camera angle hides one axis. A hologram already stores the hand's
-path in 3D at true scale, but playback shows only one instant of it at a time.
+path in 3D at true scale, but playback shows only one instant of it at a time,
+and only the author knows which stretch of motion was the lesson.
 
 ## Primary User And Moment
 
-- **Author:** someone in a headset demonstrating a movement with tracked
-  hands. They do nothing extra.
-- **Recipient:** someone watching through the feed portal on a phone or
-  desktop, who will repeat the movement. The moment: they pause right after
-  the movement to look at it again.
+- **Author:** someone in a headset with tracked hands, about to demonstrate a
+  movement. They spend two quick gestures: Trace on before, Trace off after.
+- **Recipient:** someone watching in the feed portal on a phone or desktop,
+  who will repeat the movement. The moment: the trace draws in as the author
+  moves; they can pause and orbit it afterwards.
 
-## Proposed Interaction (v0)
+## Proposed Interaction (v1)
 
-v0 is a deliberately simple experiment. It shows the hands' own recorded path
-around the paused moment, with no detection of what counts as a
-demonstration. That answers the first open question, whether a trace
-clarifies a motion or clutters the scene, before we build detection.
+### Capturing
 
-- **Paused:** each hand that moved shows a trace of where it went in the
-  **3 s before** the paused moment. The trace is thin and tapers in width and
-  opacity toward the oldest end, so direction reads without arrows. The
-  paused moment is the solid end, at the hand.
-- **Orbit:** the trace is real geometry in the hologram's world, so the
-  portal's freeze-and-orbit shows it from any side, at true scale.
-- **Playing:** nothing by default. A **Traces** toggle in the card's controls
-  also draws a short fading tail (the last 1 s) behind each moving hand during
-  playback. It is off by default, to keep the playing feed calm.
-- **Which point:** the index fingertip, using the rig's tip bone if it has
-  one, otherwise the index distal bone. One trace per hand.
-- **What is suppressed:** still hands (path under 5 cm in the window), and
-  spans where the body itself is travelling (hips faster than 0.3 m/s),
-  so walking does not leave metres of trace.
-- **Which takes:** headset takes with tracked hands only. Desktop takes move
-  the arms by IK and procedural swing, which is not a demonstration, so they
-  show no traces in v0.
+- **Trace is the Halo's Ink direction (NW).** The Halo's eight directions are
+  fixed on every device (styleguide 6.2), and capture leaves Ink empty today.
+  Inking with your hand in the air is a trace, so Ink is where it belongs: no
+  new control and no new place. While recording, Ink toggles tracing on; Ink
+  again, or stopping the take, toggles it off.
+- **Both hands, while it is on.** A hand that stays still (under 5 cm of
+  spatial extent across the span) draws nothing, so the author does not have
+  to say which hand. The span starts and ends with the toggles; the Halo
+  gesture that turns it on or off is not itself traced.
+- **What the author sees.** The status line says "Tracing" with its time
+  while it is on, and the trace draws live behind each moving fingertip, so
+  the author can see the shape they are leaving and redo it.
+- **Undo.** The Halo's Undo (W) removes the last trace, as it removes the last
+  held mark today; Redo (E) restores it.
+- **Which takes.** Headset takes with tracked hands. Only frames inside the
+  recorded hand spans that v0 already writes (`xr-hand` frames, hands not in a
+  menu) are drawn, so a switch to controllers or a tracking dropout leaves a
+  gap rather than a made-up path. Desktop takes have no tracked hands and get
+  no Ink in v1. A phone-camera take has no hands; tracing the camera's own
+  path is a separate idea.
 
-### Where the data comes from
+### Stored in the hologram
 
-The trace is the hand's motion itself, so v0 stores nothing new. The viewer
-samples the fingertip node's world position from the exported animation
-(`RecordedMotion`, sampled every capture frame) over the window, and draws
-that. Older exports get traces as soon as the viewer ships, if they are
-headset takes.
+A trace is a mark in the `HOLOIM_meaning` record:
 
-A take has to say whether its hands were tracked. If no existing field records
-this, capture adds a single take-level input-source flag to the `HOLOIM_meaning`
-record (PRD-022's extension) or `HOLOIM_humanoid`. Older takes that lack the
-flag show no traces. Which of the two belongs in the brief.
+- **kind:** `trace`.
+- **anchor:** the fingertip it follows, per hand, as a humanoid bone, the
+  same form as a pointing link's `from`.
+- **span:** start and end in recording time.
+- **provenance:** `recorded`. The author chose the span; the path is the
+  recorded motion.
 
-### Provenance and look
+The path itself is not stored: the viewer reads it from the recorded motion,
+as v0 does, so it cannot drift from the avatar and adds no size to the file.
+`trace` is a new kind, so a take with a trace writes version 2 of the record;
+takes without one keep writing the lowest version that fits (v0 or v1).
+Viewers that predate v2 ignore the record and play the event unchanged.
 
-A trace is read from the body, so it uses the inferred style of the Ink
-material (styleguide 1.1 and 4): the same hue as pointing highlights until
-identity hues land, and lighter than recorded marks. It is never gold and
-never hollow. The path itself is recorded data; only the choice to show it is
-inferred, and v0 has no confidence to show.
+### Viewing
 
-### Slice 2, not part of this approval
-
-Stored, detected demonstration spans: a `trace` mark kind in `HOLOIM_meaning`
-with a span, a hand anchor and inferred provenance with confidence. Detection
-would use deliberate motion relative to the body and, later, speech that
-refers to motion. Traces would then show during playback at those spans
-without a toggle. Whether to build slice 2 depends on the v0 trial.
+- **Playing:** each trace draws in as the hand moves through its span, with
+  its original timing, and stays drawn after the span ends until the take
+  loops. The look is v0's ribbon: thin, tapering toward the oldest end,
+  never gold, never hollow, in the plain style of a recorded mark (styleguide
+  1.1 and 4).
+- **Paused:** every trace drawn so far stays. The portal's orbit shows it from
+  any side at true scale.
+- **No viewer control.** The Traces control from v0 is removed, and so is the
+  automatic 3 s window on pause. What is not traced is not drawn.
+- **Older takes.** Takes recorded before v1 have no trace marks and show no
+  traces. The two test takes on the live feed are exports of this kind and
+  will show none; they are replaced by takes recorded with Ink.
 
 ## Why Holograms
 
@@ -98,107 +115,127 @@ seen from the side and measured against the body. Fair comparison: the same
 hologram in the same portal without traces, and a video of the take.
 
 - **Anchored to the event:** the path of a body part over a span of time.
-- **Read from the body:** the trace is the recorded motion. No authoring.
-- **Intent, not a view:** it shows the motion; each device frames it.
-- **Works on a flat phone:** a paused trace gives depth when orbited, and the
-  taper shows direction even without orbiting.
+- **Read from the body:** the path is the recorded motion; the author only
+  says which stretch matters, which the body cannot say on its own.
+- **Intent, not a view:** "this motion is the lesson"; each device frames it.
+- **Works on a flat phone:** the trace draws in during playback, and the
+  taper shows direction without orbiting.
 - **Lost as a video:** the 3D path at true scale.
 
 ## Across Devices
 
 | Device | Appearance | Control |
 | --- | --- | --- |
-| Phone portal | Trace of the last 3 s while paused; optional 1 s tail while playing | Traces toggle; orbit while paused |
+| Headset capture | "Tracing" in the status line; the trace draws live behind the fingertips | Halo Ink (NW) toggles; Undo removes the last trace |
+| Desktop capture | No Ink in v1 (no tracked hands) | None |
+| Phone portal | Each trace draws in with its original timing and stays; visible from any orbit | None (orbit while paused) |
 | Desktop | Same | Same |
-| Headset (VR or AR) | Later: the same trace at true scale, walkable (v0 plays the event without traces) | Later |
+| Headset (VR or AR) viewing | Later: the same trace at true scale, walkable | Later |
 | Still image or Quick Look | Later: baked into a still; dropped in Quick Look | None |
 
 ## In Scope
 
-- [ ] Sampling each hand's fingertip path from the exported animation in the
-  viewer, with the stillness and travelling suppression above.
-- [ ] Trace rendering in the feed portal on phone and desktop, in the Ink
-  inferred style, while paused, with a Traces toggle that adds the playing
-  tail.
-- [ ] A take-level "hands were tracked" signal, if none exists, so desktop and
-  older unknown takes show nothing.
-- [ ] An end-to-end check: an IWER-scripted headset take that draws a known
-  shape (a 30 cm circle and a figure-eight at chest height), exported and
-  uploaded through the real pipeline, then paused and orbited in the feed
-  portal, with screenshots and a numeric report.
-- [ ] The same run on the real headset fixture
-  (`headset-open-fist-pinch-point-wave-reach.json`), to see what ordinary
-  gesturing looks like.
+- [ ] Ink (Halo NW) in headset capture toggles tracing while recording; it
+  ends on Ink again or on stop; Undo and Redo apply to traces.
+- [ ] "Tracing" in the status line and the live trace while recording.
+- [ ] `trace` marks in `HOLOIM_meaning` version 2, written only when a take
+  has a trace, with `recorded` provenance.
+- [ ] Viewer playback: traces draw in with their original timing and stay
+  while paused, inside recorded hand spans only, still hands suppressed.
+- [ ] Removing v0's Traces control, its paused 3 s window, and the styleguide
+  row for the control.
+- [ ] End-to-end checks: an IWER-scripted headset take that turns Ink on,
+  draws a 30 cm circle, turns it off, then draws a figure-eight untraced;
+  exported, uploaded and played in the feed, with a numeric report and
+  screenshots. Replace the two live test takes with this kind of take.
 
 ## Out Of Scope
 
-- [ ] Detection of demonstration spans and a stored `trace` mark (slice 2).
+- [ ] Choosing or trimming a trace after the take (review on the time ribbon).
+- [ ] Voice as a trigger ("watch this").
+- [ ] Detecting demonstrations automatically (v0's slice 2 is dropped).
+- [ ] Desktop and controller traces; tracing a phone camera's path.
 - [ ] Traces in the headset viewer, immersive AR, stills and Quick Look.
-- [ ] Desktop-take traces; controller traces.
 - [ ] Cleaned or simplified shapes (IDEA-004); comparing the viewer's own
   motion (IDEA-040, parked).
-- [ ] Speed encoding along the trace (for example spacing or ticks for
-  timing). The tail during playback carries speed; a paused trace does not.
+- [ ] Speed encoding along a finished trace.
 
 ## Success Signals
 
+- [ ] **Technical, marking:** on the scripted take, exactly one trace per
+  moving hand is stored, its span within one frame of the Ink toggles; the
+  untraced figure-eight leaves no mark and draws nothing.
 - [ ] **Technical, fidelity:** every drawn trace point is within 2 mm of the
-  fingertip node's world position at the same recording time (the trace is
-  the recorded data, so the only error is sampling). On the scripted take,
-  the drawn circle's fitted radius is 30 cm ± 1 cm at the hologram's true
-  scale.
-- [ ] **Technical, suppression:** the walking replay fixture shows no traces
-  while the author travels. The scripted take shows exactly the two scripted
-  shapes and no trace while the hands are still.
-- [ ] **Technical, cost:** pausing a phone-sized portal card with two traces
-  adds under 1 ms of frame time on the desktop e2e run.
+  fingertip node's world position at the same recording time, and the
+  circle's fitted radius matches the avatar fingertip's own circle within
+  1 cm.
+- [ ] **Technical, timing:** in playback, the trace's drawn end is at the
+  fingertip at every frame of its span, and the whole trace stays drawn after
+  the span and while paused.
+- [ ] **Technical, compatibility:** a take without traces writes the same
+  record version as before; a v2 take plays unchanged in a viewer that
+  predates v1.
 - [ ] **Communication:** in the trial below, recipients copy a demonstrated
   motion more accurately with traces than without.
-- [ ] **Clutter (the open question):** in the same trial, ask after each task
-  whether a trace got in the way. If traces from ordinary gesturing confuse
-  people, build slice 2 detection before anything else. If nobody minds, keep
-  the simple window.
+- [ ] **Authoring:** in the same sessions, authors mark their demonstrations
+  with Ink without being reminded after one explanation, and say whether the
+  toggle interrupted the demonstration.
 
 ## Risks And Open Questions
 
-- [ ] When does a trace clarify a motion, and when is it clutter? v0 answers
-  this before we invest in detection.
-- [ ] Is a fixed 3 s window right? A slow demonstration may be longer, and a
-  quick one gets mixed with the gesture before it.
-- [ ] Fingertip or wrist: fingertip shows sweeps but picks up finger curl. If
-  the real fixture's traces look noisy, compare against the hand (wrist) bone.
-- [ ] Hand-tracking quality on a physical headset sets the ceiling. Jitter
-  shows up directly as a wobbly trace; emulation cannot answer this.
-- [ ] Only one real headset recording exists, and it is not a demonstration.
-  The trial needs new headset takes of real demonstrations.
+- [ ] Do authors remember to turn Trace on before demonstrating? If not,
+  marking after the take on the time ribbon moves into scope.
+- [ ] Does summoning the Halo with the dominant hand right before and after a
+  demonstration interrupt it? Watch for it in the trial.
+- [ ] Is Ink the right home for a trace, or should Ink stay for drawn marks
+  (PRD-005) and Trace take another place? Proposed: Ink is the trace, and a
+  later cleaned shape (IDEA-004) is a trace with cleaning applied.
+- [ ] The live trace in the headset is the first mark that shows live there
+  (slice 5 of the UI redesign said Halo actions only in the status line).
+  Check it reads as feedback, not clutter.
+- [ ] Fingertip or wrist: fingertip shows sweeps but picks up finger curl.
+- [ ] Hand-tracking quality on a physical headset sets the ceiling; jitter
+  shows directly as a wobbly trace.
 
 ## Comparison And Learning
 
 Task: three real headset takes, each demonstrating one motion (for example a
 figure-eight, a twist of a held object, and an arc of a given size and
-height). At least five recipients on their own phones each see portal with
-traces, portal without, and a video, in rotated order. They copy the motion
-on camera. Measures: shape, size and direction, judged from the recording
-against the original, plus the clutter question above. Continue (to slice 2
-or the headset) if traces clearly improve accuracy. Park if clutter outweighs
-the gain.
+height), recorded by authors using Ink. At least five recipients on their own
+phones each see portal with traces, portal without, and a video, in rotated
+order, and copy the motion on camera. Measures: shape, size and direction,
+judged from the recording against the original; for authors, whether they
+marked the motion and whether the toggle got in the way. Continue (to the
+headset viewer and stills) if traces clearly improve accuracy; move marking
+into review if authors forget the toggle.
 
 ## Decision
 
-Approved 2026-10-28 by Alberto Elias, as drafted: the name "hand trace";
-v0 shows traces while paused, with an opt-in playing tail behind the Traces
-toggle; a 3 s window; the index fingertip; headset takes only; and no stored
-mark until slice 2, which needs its own decision after the v0 trial.
+v0, approved 2026-10-28 by Alberto Elias and shipped 2026-10-29: the name
+"hand trace"; traces of the last 3 s while paused, with an opt-in playing
+tail behind a Traces control; the index fingertip; headset takes only; no
+stored mark.
+
+v1 amendment, requested 2026-11-09 by Alberto Elias ("if when capturing i
+want to generate traces, then they become part of the final hologram"):
+pending until explicitly decided. Proposed: the author marks traces in
+headset capture with the Halo's Ink direction; traces are stored as `recorded`
+`trace` marks in `HOLOIM_meaning` v2 and replay with their original timing;
+v0's viewer control and paused window are removed; automatic detection
+(v0's slice 2) is dropped.
 
 ## Links
 
 - Concept: [viewer experience](../concepts/viewer-experience.md),
   [design language](../concepts/design-language.md),
   [what a hologram is](../concepts/what-a-hologram-is.md)
+- Design: [styleguide 6.2, the Halo](../design/styleguide.md#62-the-halo)
 - Research: [open questions](../research/open-questions.md) (question 4)
 - Related PRDs: [PRD-022 self-resolving pointing](PRD-022-self-resolving-pointing.md),
+  [PRD-005 gesture-drawn marks](PRD-005-gesture-drawn-marks.md),
   [PRD-002 portal view](PRD-002-portal-view.md),
   [PRD-028 ghost frames](PRD-028-ghost-frames.md)
 - Mockups: none
-- Feature brief: [hand traces](../../features/archive/hand-traces.md)
+- Feature brief: v0 [hand traces](../../features/archive/hand-traces.md);
+  v1 none yet
 - Implementation issue: none
