@@ -447,7 +447,7 @@ amber dock the control is a lantern with no word ([section 5.2](#52-where-the-ch
 **Pause**) alone in the middle of its foot, plus **Return** beside it while
 the viewer drives (Free). Reaching for the card (a cursor over it, a touch)
 unfolds the rest either side of Play, two glyph gaps (24 apx) apart: the
-timecode to the left; Free, highlights, traces, tilt, View in your room, Step inside and sound to the
+timecode to the left; Free, highlights, tilt, View in your room, Step inside and sound to the
 right. Play never moves as they come and go. The row stands below the
 viewing box, off the cloche's foot line, and ends above 75% down the screen,
 where the ground is still dark enough for bare gold ([section 9.3](#93-phone-portal)),
@@ -457,7 +457,7 @@ the middle.
 
 **Too many for one row.** When the reach controls do not fit beside Play at
 the input's hit size (a touch phone with a take that has sound), Free,
-highlights, traces, tilt, View in AR and sound unfold in a line of their own above
+highlights, tilt, View in AR and sound unfold in a line of their own above
 Play, centred, a glyph gap (12 apx) over the row, on the same chip when the
 row has one. The timecode stays left of Play and Return right of it. Play
 still never moves, and no glyph shrinks below its input's minimum or enters
@@ -475,12 +475,12 @@ a gesture zone.
 | Record | Start or stop a take (capture) | "Recording 0:12" while recording | Inside the 36 apx gold ring: a 14 apx filled rose circle when idle; a 13 apx rose rounded square (radius 3 apx) while recording |
 | View in your room | Open the hologram in AR Quick Look or WebXR AR | "View in your room" | A cube in viewfinder brackets `M1.5 4.5v-3h3M11.5 1.5h3v3M14.5 11.5v3h-3M4.5 14.5h-3v-3M8 4.8l3 1.7v3.3L8 11.5 5 9.8V6.5zM5 6.5l3 1.7 3-1.7M8 8.2v3.3`, round joins and caps; on the card, in its shade |
 | Step inside | Enter the hologram's event in WebXR VR, at recorded scale | "Step inside" | A door frame on a threshold line with a figure standing in it `M3.5 14.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 12.5 3v11.5M1.5 14.5h13M7.1 5.2a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M8 7v3.5M8 10.5l-1.3 3M8 10.5l1.3 3M6.5 8.5h3`, round joins and caps; on the card, in its shade, beside View in your room |
-| Traces | A fading tail behind each moving hand while the event plays (PRD-023); shown only on takes with tracked hands. A paused take shows its hand traces whatever this says | "Trace the author's hands" (name) | A curving path into a fingertip dot `M1.5 13.5c1.5-4 4-5.5 6-4s4 .5 4.5-3.5` and a circle r 1.8 at (12.5, 3.5); the path dashes (1.3 2) while off, as the highlights glyph's ring does |
 | Sound on / off | Mute or unmute the event | "Mute" / "Unmute" (name) | A speaker with waves, or with a cross (`tokens.json`, `glyph.path.soundOn` / `soundOff`) |
 | Upload | Open the upload sheet; send the upload | "Upload" | An arrow up out of a tray (`glyph.path.upload`) |
 | Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
 | Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
-| Undo / Redo | The Halo's W and E: undo or redo the last held mark | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
+| Undo / Redo | The Halo's W and E: undo or redo the last held mark or hand trace | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
+| Ink | The Halo's NW in a headset: start or end a hand trace while recording (PRD-023) | "Ink" (name); "Tracing 0:03" on the status line while on | A curving path into a fingertip dot (`glyph.path.ink`) |
 | Tray | Open the tray of objects to summon (capture) | "Tray" (name; "Tray · hold T" with a keyboard) | A cube, a cone and a ball on a shelf (`glyph.path.tray`) |
 | Squeeze | Beside the tray miniature in reach, with controllers: squeeze to summon it | None | A closed fist, front on, the thumb across the fingers (`glyph.path.squeeze`; after Lucide's hand-fist) |
 | Pinch | The same, with bare hands: pinch to summon it | None | A hand side on, the thumb meeting the index fingertip, two contact ticks (`glyph.path.pinch`; after Iconoven's hand-pinch) |
@@ -554,8 +554,10 @@ One radial menu with eight directions that never change, on every device:
   (12 apx) apart, so the ring's radius is about 63 apx. Headset values are
   2.5× these.
 - A direction with no action draws nothing, and its place stays reserved.
-  Capture's Halo carries S, W (undo the last held mark) and E (redo it). On
-  a flat screen S stays empty, since the dock carries Record.
+  Capture's Halo carries S, W (undo the last held mark or hand trace), E
+  (redo it) and, in a headset, NW (Ink: trace the hands while recording,
+  PRD-023). On a flat screen S and NW stay empty: the dock carries Record,
+  and a flat take has no tracked hands to trace.
 - Summoned, per input: on desktop hold **B** and move the mouse, or click
   the dock's Halo glyph (or press, hold and drag it); on a phone tap the
   dock's Halo glyph, or press and hold it and drag; with Quest hands the dominant thumb–middle pinch and a
@@ -564,7 +566,8 @@ One radial menu with eight directions that never change, on every device:
   the summoning hand is, facing the head.
 - The dock's Halo glyph is four arcs around a point, open at the
   diagonals (`glyph.path.halo`). W and E draw the undo and redo arrows
-  (`glyph.path.undo`, `glyph.path.redo`); S draws Record.
+  (`glyph.path.undo`, `glyph.path.redo`); S draws Record; NW draws Ink
+  (`glyph.path.ink`).
 
 ## 7. Type
 
@@ -689,7 +692,11 @@ hologram.
 **Chrome while recording:** everything but the stop control,
 "Recording 0:12", the Halo glyph, the Tray glyph, Find and Put back hides
 until the take ends. The Halo stays because it carries the take's own actions: stop,
-and undo or redo the held mark. The tray and Find stay because bringing an
+undo or redo the held mark or trace, and, in a headset, Ink. While Ink is on
+the status line reads "Recording 0:12 · Tracing 0:03", and the trace draws
+live behind each moving fingertip in the trace style
+([section 4](#4-viewpoints-scale-and-provenance)): the one mark a headset
+shows live, as feedback on the shape being left (PRD-023). The tray and Find stay because bringing an
 object into the event is part of the take: a summon or a pick mid-take is
 recorded from its frame ([tray everywhere](../../features/archive/tray-everywhere.md)). Put back
 (shown only while an object is held, or under the phone AR reticle) stays
