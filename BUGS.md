@@ -9,6 +9,28 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 None.
 
+### B-041 — Avatar object checks release props just over the 3 cm limit on `unreal-cm`
+
+- **Area:** `apps/capture` avatar-formats suite (`scripts/ci-avatar-formats-playwright.ts`, `test:xr:avatars`)
+- **Severity:** P2 (local suite only; hosted CI does not run `avatars`, so it fails on `main` unnoticed)
+- **Observed:** 2026-11-10 on `main` `623e4645f986`; first seen by the locomotion retarget session, which also saw `reoriented-axes` and `no-fingers` fail their object checks
+- **Evidence:** 3 of 3 runs fail with identical numbers, `unreal-cm: object check failed`:
+  `desktop-object-bracket` "the put-down object was let go 0.0322 m above the floor (limit 0.03 m)",
+  plus "walking into the resting object moved it only -0.0001 m along the walk (expected at least 0.1 m)";
+  `desktop-mouse-object` 0.0324 m; `phone-touch-object` 0.0306 m. The other object checks pass.
+  Report and frames in `apps/capture/output/ci-avatars/unreal-cm/object/`.
+- **Expected:** a still release puts the prop down within 3 cm of the surface on every fixture, and walking into it moves it.
+- **Reproduction:** `XR_AVATAR_ONLY=unreal-cm pnpm --filter @holoim/capture run test:xr:avatars` (about 160 s). Not yet rerun for `reoriented-axes` and `no-fingers`. Suspect: the palm-derived grip offset (`OBJECT_ON`) sits 0.3–2 mm too high on centimetre-scaled rigs, or the limit is too tight; the failed walk-into suggests the prop was not at rest.
+
+### B-042 — The portal phone drag test once timed out under load
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts:109`, "phone › drag (default): a swipe off the hologram scrolls, even one that begins sideways, and never turns it; one on the hologram looks around"
+- **Severity:** P3 (flake; blocks `verify:pr` when it fires)
+- **Observed:** 2026-10-29/11-09 in the locomotion retarget session's `verify:pr`, on its branch and on `main`, while other sessions loaded the machine
+- **Evidence:** `Test timeout of 60000ms exceeded` in `page.waitForTimeout(400)` at `portal.spec.ts:193`, right after `page.touchscreen.tap(below.x, below.y)`; the test normally takes about 31 s.
+- **Expected:** the test passes in well under its 60 s timeout.
+- **Reproduction:** not yet. On `main` `623e4645f986` it passed 5 of 5 (`pnpm --filter @holoim/viewer-web run test:e2e:portal --grep "a swipe off the hologram scrolls"`) and inside the combined `verify:pr` of 2026-11-10. Suspect: the smooth-scroll and tap waits at lines 188–196 stall when the CPU is saturated; retry under load (for example beside a second `verify:pr`) before changing it.
+
 ## Entry template
 
 ```md
