@@ -34,7 +34,9 @@ Slice 2, which stores a place with a hologram, decides how that is shown.
   and production has no Spark code at all.
 - Placement: Scaniverse scans are gravity-aligned and metric, so the
   orientation is fixed per format (confirmed once on the user's scan) with a
-  `placeFlip` value. The floor height is found from an opacity-weighted
+  `placeFlip` value (as built: PLY, SPLAT and KSPLAT are turned half a turn
+  about x by default, the y-down trainers' convention; SPZ is not; the
+  convention is unconfirmed on the user's scan, and `placeFlip=0|1` overrides it). The floor height is found from an opacity-weighted
   histogram of splat heights (2 cm bins, the lowest peak above a density
   threshold, ignoring the bottom tail of floaters) and put on the take's
   floor. x and z default to the median of the floor band; `placeX`,
@@ -56,7 +58,7 @@ Slice 2, which stores a place with a hologram, decides how that is shown.
   recorded objects, marks, traces and the cloche stay.
 - Rendering in the demand frameloop: `invalidate()` when a sort finishes and
   when the clip uniforms change; splats are not tone mapped (their colours
-  are display-ready); the cloche glass, traces and highlights draw after the
+  are display-ready; decided as built: Spark's default premultiplied alpha is kept, and edge haloes are unchecked until the real scan); the cloche glass, traces and highlights draw after the
   splats. A ready probe says when the first sort has landed.
 - Zoom: with the set hidden, a wheel or touch inside the cloche counts as a
   hit on the hologram, so the zoom continuum works over the scan.
@@ -150,15 +152,15 @@ and zoom details; tabletops and camera takes out of scope. All taken.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Splat shows; no place = unchanged | `place.spec.ts`: a PLY written by the spec (floor, table band, floaters, coloured boxes; nothing committed) on a real walk take from `recordWalkTake` | Screenshots with and without; place report JSON |
-| Floor and feet | Same check reads the place report through test hooks | `floorFound`, `takeFloor`, `feetY` |
-| Clipped by extent, follows the dome | Same check at two playback times | `outside: 0` at both times |
-| Cloche unchanged | Same check: shape with and without | Equal radii, base, exponent |
-| Set hidden, rim off | Same check | Visibility and `rimProbe.gated` |
-| Portal still works | Follow/Free/orbit/zoom case from `portal.spec.ts`, parameterised with `?place=` | Existing assertions pass |
-| Broken URL | `place.spec.ts` with a 404 | One warning, card unchanged |
-| No Spark in production | Build, then search `dist` for Spark | No match |
-| Real scan (SPZ) | User's Scaniverse export on the dev server, Mac and iPhone | Proof video (not committed); numbers noted here |
+| Splat shows; no place = unchanged | `place.spec.ts`: a PLY written by the spec (floor, table band, floaters, coloured boxes; nothing committed) on a real walk take from `recordWalkTake` | Screenshots with and without; place report JSON: Pass (2026-11-09, local, `RUN_E2E_PIPELINE=1 playwright test e2e/place.spec.ts`): card differs from baseline by the scan; baseline render noise 0; screenshots and `place-report.json` under ignored `output/place/`. Loaded 81933 splats, kept 51872, 24289 drawn |
+| Floor and feet | Same check reads the place report through test hooks | `floorFound`, `takeFloor`, `feetY`: Pass: scan floor 21.25993 vs take floor 21.25993 (within 2 cm); feet (ankle bone) 21.375, 0.115 above the floor |
+| Clipped by extent, follows the dome | Same check at two playback times | `outside: 0` at both times: Pass: `outside` 0 at t=0 and t=0.5 s (dome moved 1.73 m); magenta ring past the glass drawn at t=0 (410 px) and gone at t=0.5 s. Caveat: the mock take walks down a hillside, so the dome leaves the flat scan floor after about 1 s; checked earlier in the walk |
+| Cloche unchanged | Same check: shape with and without | Equal radii, base, exponent: Pass: base, radii and exponent equal to a millimetre, with and without, and at both times |
+| Set hidden, rim off | Same check | Visibility and `rimProbe.gated`: Pass: set visible and rim gated without a place; set hidden and rim off with one |
+| Portal still works | Follow/Free/orbit/zoom case from `portal.spec.ts`, parameterised with `?place=` | Existing assertions pass: Pass: orbit drag to Free, zoom with the cursor over the glass above the scan, Return, Play (in the real-take case of `place.spec.ts`) |
+| Broken URL | `place.spec.ts` with a 404 | One warning, card unchanged: Pass: one warning, no error text, pixel difference within render noise, same dome and rim |
+| No Spark in production | Build, then search `dist` for Spark | No match: Pass: `pnpm --filter @holoim/web build`, then `grep -rlE "SparkRenderer\|sparkjs\|place_clip_fade\|__HOLOIM_PLACE__\|local-places" apps/viewer-web/dist` found nothing; `node scripts/check-prod-bundle.mjs` passes |
+| Real scan (SPZ) | User's Scaniverse export on the dev server, Mac and iPhone | Proof video (not committed); numbers noted here: Not done: needs the user's scan and iPhone |
 
 SPZ is covered only by the real scan; the spec writes PLY.
 
