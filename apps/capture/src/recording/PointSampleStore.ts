@@ -221,7 +221,9 @@ export class PointSampleStore {
     const open = this.openTrace();
     if (open) {
       open.endSec = Math.max(pressSec, open.startSec);
-      return this.take({ kind: 'trace', trace: open });
+      // Its own entry, which a hold begun inside the trace may follow in the history.
+      const entry = this.history.find((kept) => kept.kind === 'trace' && kept.trace === open)!;
+      return this.take(entry);
     }
     const last = this.history.at(-1);
     if (!last) return null;

@@ -143,7 +143,8 @@ And Learning"), which need people and devices.
 
 Reviewed 2026-11-09 by the `design-reviewer` subagent (Opus). Its changes are
 folded in below. One finding went back to the user as a product question
-(the summoning hand, last bullet of "Capture").
+(the summoning hand, last bullet of "Capture"); the user decided it on
+2026-11-10.
 
 **Schema (`packages/meaning`, lead-owned contract).**
 - `meaningTraceMarkSchema`: strict `{ kind: "trace", anchor, span,
@@ -195,10 +196,13 @@ itself and searches for no child.
   still runs, but only `xr-hand` frames can draw or store anything.
 - *The summoning hand.* After Ink-on it travels back from the NW slot, and
   before Ink-off it lifts to pinch. Both stretches fall inside the span and
-  can exceed 5 cm. Whether to trim them is a product question, sent to the
-  user on 2026-11-09. Built meanwhile as one parameter: the summoning hand's
-  span is trimmed by a 0.4 s settle at each end (0 means no trim), and the
-  other hand keeps the exact span.
+  can exceed 5 cm. **Decided by the user on 2026-11-10 (option A):** trim
+  only the summoning hand's trace, by a 0.4 s settle at each end
+  (`SUMMONING_HAND_SETTLE_SEC` in `PointResolver.ts`); the other hand keeps
+  the exact span. The live trace waits out the same settle. Rejected: exact
+  spans for both hands (B), and an adaptive trim (C). The e2e reports what
+  was trimmed in `report.json` → `authoredCapture.marks.summoningHand`:
+  per trace, the lead-in and tail cut and the motion kept.
 
 **Export.**
 - `PointResolver.resolve` emits trace drafts using its existing
@@ -280,14 +284,15 @@ itself and searches for no child.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Ink, ends, status line, live trace, marks stored, undo and redo, version | Scripted IWER headset take (`hand-trace-takes.ts`): Ink on by a hands Halo, a 30 cm circle with the right index, Ink off, an untraced figure-eight, then traces exercising undo, redo and stop; export read back | `output/authored-traces/report.json`, capture screenshots of the live trace and status line; pending |
-| Replay timing, recorded only, fidelity, untraced motion | `hand-traces.pipeline.spec.ts`: the take uploaded and played in the feed, sampled every frame and paused | Report and screenshots; pending |
-| No viewer control, older and other takes | Same spec on a v0-style take, a desktop take and a file without the extension; one-off load of the v2 take in a viewer built from `main` | Report, screenshots; pending |
-| Version compatibility | Same spec: a no-trace headset take's meaning JSON against the v0 encoding; `packages/meaning` tests | Report; pending |
-| Style | Cross-vendor screenshot review against the styleguide | Review notes; pending |
-| Cost | Card probe timings in the spec | Report; pending |
+| Ink, ends, status line, live trace, marks stored, undo and redo, version | Scripted IWER headset take (`hand-trace-takes.ts`): Ink on by a hands Halo, a 30 cm circle with the right index, Ink off, an untraced figure-eight, then traces exercising undo, redo and stop; export read back | `output/authored-traces/report.json`, capture screenshots of the live trace and status line. 2026-11-10, shard 7 pass: the 12 Halo actions fire as scripted; four marks (right circle, left circle, redone right line, stop-ended left line), each `<side>IndexDistal` anchored, `recorded`, and within one frame of its toggle (`authoredCapture.marks`); stored ends equal commit and press steps (`store`, 0 steps off); 158 "Recording · Tracing" rows and no status failures (`statusLine`); live trace on the tracing hand only, cleared on Ink off, undo and stop (`liveTrace`); the summoning hand's settle cuts 17.2 cm of lead-in and 5.8–7.3 cm of tail per trace (`marks.summoningHand`); version 2, `extensionsUsed` only (`signal`) |
+| Replay timing, recorded only, fidelity, untraced motion | `hand-traces.pipeline.spec.ts`: the take uploaded and played in the feed, sampled every frame and paused | Report and `authored-*.png`. Nothing drawn in the 30 frames before a span, the head on the clip time in every frame of it (`headTimeErrorMax` 0), and the trace held after it; pause and scrub-back match playback, and the loop clears (`authoredViewer.playing`, `paused`, `scrubBackSame`). Every drawn point in its span and recorded `xr-hand` spans; 0 m from the mixer-posed fingertip (`fidelity`); circle radius drawn 0.150 m vs scripted 0.150 m (`shape`). The figure-eight draws no new mark (`untraced`). Travel, teleport and snap turn suppressed, and the controller second leaves a gap (`travel`). The real-gesture fixture marks only the wave and reach (`realFixture`) |
+| No viewer control, older and other takes | Same spec on a v0-style take, a desktop take and a file without the extension; one-off load of the v2 take in a viewer built from `main` | Report and `older-*.png`: no Traces control, no portal-store trace keys and no trace layer mounted on v0 headset, desktop and no-meaning takes, all of which play (`olderAndOther`); a viewer built from `main` plays the v2 take without traces (proof video) |
+| Version compatibility | Same spec: a no-trace headset take's meaning JSON against the v0 encoding; `packages/meaning` tests | `olderAndOther.v0Headset` is version 0 with the v0 encoder's identical JSON (`preV2Reader.v0EncoderSameJson`); the pre-v2 reader (commit `6e264a3`) reads v0 and rejects v2 by version only; golden byte tests and 70 `@holoim/meaning` tests pass |
+| Style | Cross-vendor screenshot review against the styleguide | Muse verdict (`output/authored-traces/verify/verdict.md`): the replayed ribbon is thin, solid cyan and tapering, legible on the phone card, never gold or hollow, and stronger than v0's inferred style (`authored-1/3/6*.png`); the live arc matches; the Ink glyph is line-drawn with round joins |
+| Cost | Card probe timings in the spec | `authoredViewer.cost`: frame p95 0.1 ms (max 0.2 ms) over 600 frames, pause 0.1 ms, one 0.9 ms warm-up |
+| Undo and Redo across holds and traces | `apps/capture/src/recording/PointSampleStore.test.ts`: nine failure modes of the one history, listed in the file; no scripted take interleaves a hold with a trace | 9 pass; caught the defect fixed below |
 | Whole pipeline | `pnpm run verify:pr` | Pending |
-| Proof video | Real-time recording: Ink on, circle, Ink off, figure-eight, then feed playback and orbit | `output/authored-traces/proof/*.mp4`; pending |
+| Proof video | Real-time recording: Ink on, circle, Ink off, figure-eight, then feed playback and orbit | `output/authored-traces/proof/authored-traces-proof.mp4`: 88 s, H.264 1280×720, watched via its contact sheet (Halo and Ink, live circle with "Tracing 0:03", untraced figure-eight, feed playback, orbit, phone card, viewer from `main`) |
 
 ## Physical-device limits
 
@@ -296,3 +301,29 @@ recorded data. It does not prove how summoning the Halo before and after a
 demonstration feels, whether the live trace reads as feedback rather than
 clutter, real Quest hand jitter in a trace, or the PRD's author and recipient
 trials. Those are Unverified until run on a Quest and phones.
+
+## Implementation notes
+
+- *Automation hooks.* `__runHaloAction(action, input)` and `simSec` in
+  `__sampleHolds()` let the e2e drive and time the Halo; the IWER take still
+  summons it with a real pinch and drag (`scripts/lib/iwer-halo.ts`).
+- *Mark cap.* The viewer draws at most 64 trace marks per take, one per
+  fingertip node and span, and warns past that: a GLB from the feed is
+  untrusted input. The schema stays unbounded.
+- *Live-trace settle.* The live trace waits out the summoning hand's 0.4 s
+  settle too, so it never shows the summon movement the export trims.
+- *Undo while tracing.* Independent verification (Muse, 2026-11-10) found no
+  product defect but no evidence for Undo across holds and traces. The store
+  test it prompted found one: Undo while tracing, with a hold begun inside the
+  trace, dropped the hold's history entry instead of the trace's, so that hold
+  could no longer be undone. Fixed in `PointSampleStore.undoLast`.
+- *Verifier's run.* Muse's sandbox cannot open ports, so the lead re-ran shard
+  7 outside it with freshly recorded takes (`5 passed`,
+  `output/authored-traces/verify/shard7-lead.txt`) and Muse judged that output.
+
+## Not covered by automation
+
+- A viewer built from `main` playing the v2 take is shown in the proof video
+  only; the e2e proves it through the pre-v2 reader rejecting v2 by version.
+- The wrist-poke stop ending a trace, Ink from the controllers ring, and the
+  64-mark cap are reviewed in code, not exercised.

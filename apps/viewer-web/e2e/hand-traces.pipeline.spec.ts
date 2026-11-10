@@ -803,9 +803,9 @@ test.describe("author-marked hand traces", () => {
       const tail = truthPath(take, "right", trace.off - SETTLE_SEC, trace.off);
       return {
         trace: i, trimmedLeadInSec: SETTLE_SEC, trimmedTailSec: SETTLE_SEC,
-        leadIn: { extent: round(extentOf(leadIn)), length: round(pathLength(leadIn)) },
-        tail: { extent: round(extentOf(tail)), length: round(pathLength(tail)) },
-        kept: { extent: round(extentOf(inside)), length: round(pathLength(inside)) },
+        leadIn: { samples: leadIn.length, extent: round(extentOf(leadIn)), length: round(pathLength(leadIn)) },
+        tail: { samples: tail.length, extent: round(extentOf(tail)), length: round(pathLength(tail)) },
+        kept: { samples: inside.length, extent: round(extentOf(inside)), length: round(pathLength(inside)) },
         rightMark: marks.some((m) => m.side === "right" && m.name !== null && expected.marks.find((e) => e.name === m.name)!.on === trace.on)
       };
     });
@@ -873,7 +873,7 @@ test.describe("author-marked hand traces", () => {
       return {
         side: mark.side, span: mark.span,
         before: { frames: before.length, drawn: before.filter((f) => f.marks[m]!.drawn || f.marks[m]!.drawnPoints > 0).length },
-        during: { frames: during.length, drawn: drawnDuring.length, headTimeErrorMax: round(maxOf(headTimeError), 6), headVsSamplerMaxM: round(maxOf(headVsSampler), 6), headVsMixerMaxM: round(maxOf(headVsMixer), 6), headVsMixerFrames: headVsMixer.length, drawnPointsGrow: drawnDuring.every((f, i) => i === 0 || f.marks[m]!.drawnPoints >= drawnDuring[i - 1]!.marks[m]!.drawnPoints) },
+        during: { frames: during.length, drawn: drawnDuring.length, headTimeErrorMax: round(maxOf(headTimeError), 6), headVsOwnSamplerMaxM: round(maxOf(headVsSampler), 6), headVsMixerMaxM: round(maxOf(headVsMixer), 6), headVsMixerFrames: headVsMixer.length, drawnPointsGrow: drawnDuring.every((f, i) => i === 0 || f.marks[m]!.drawnPoints >= drawnDuring[i - 1]!.marks[m]!.drawnPoints) },
         after: { frames: after.length, notDrawn: after.filter((f) => !f.marks[m]!.drawn).length, drawnPoints: afterPoints, headAtEnd: after.every((f) => f.marks[m]!.headTime !== null && Math.abs(f.marks[m]!.headTime! - mark.span.end) < 1e-4) },
         nextLoopBeforeSpan: { frames: nextLoop.filter((f) => f.time < mark.span.start).length, drawn: nextLoop.filter((f) => f.time < mark.span.start && f.marks[m]!.drawn).length }
       };
@@ -888,7 +888,7 @@ test.describe("author-marked hand traces", () => {
       expect(entry.during.frames, `${label}: frames sampled inside its span`).toBeGreaterThan(10);
       expect(entry.during.drawn / entry.during.frames, `${label}: drawing during its span`).toBeGreaterThan(0.8);
       expect(entry.during.headTimeErrorMax, `${label}: the drawn end is at the clip time`).toBeLessThan(1e-4);
-      expect(entry.during.headVsSamplerMaxM, `${label}: the drawn end is at the sampled fingertip`).toBeLessThanOrEqual(FIDELITY_METERS);
+      expect(entry.during.headVsOwnSamplerMaxM, `${label}: the ribbon agrees with its own sampler (consistency only; fidelity is the mixer check below)`).toBeLessThanOrEqual(FIDELITY_METERS);
       expect(entry.during.headVsMixerMaxM, `${label}: the drawn end is at the mixer-posed fingertip`).toBeLessThanOrEqual(FIDELITY_METERS);
       expect(entry.during.drawnPointsGrow, `${label}: draws in`).toBe(true);
       expect(entry.after.notDrawn, `${label}: whole after its span`).toBe(0);
