@@ -41,7 +41,7 @@ import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
 import { ScreenHolds } from '../xr/ScreenHolds';
 import { XrTracking } from '../xr/XrTracking';
-import { installAutomationHooks, tracesSnapshot } from './automationHooks';
+import { type BodycamLogEntry, installAutomationHooks, tracesSnapshot } from './automationHooks';
 import { CaptureHistory, type HistoryEntry } from './CaptureHistory';
 import { createHaloActions } from './haloActions';
 import type { PointHistoryEntry } from '../recording/PointSampleStore';
@@ -270,7 +270,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     crouch: new CrouchState(),
     hands,
     objects,
-    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state)),
+    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state), tracking.camera),
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
@@ -419,6 +419,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       recenterAr
     },
     start: async () => {
+      const bodycamLog: BodycamLogEntry[] = [];
       installAutomationHooks({
         render_game_to_text: () => renderCaptureTextState(capture),
         advanceTime: (ms) => loop.advanceTime(ms),
@@ -459,6 +460,14 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           else if (!tracking.isXrPresenting()) tracking.camera.feed(frame);
         },
         __sampleBodycam: (includeRecorded) => sampleBodycam(capture, includeRecorded),
+        __bodycamTap: (on) => capture.face.setBodycamTap(on ? (frame, info) => bodycamLog.push({ nowMs: info.nowMs, ran: info.ran, frame }) : null),
+        __bodycamSteppedStart: (url) => capture.face.startStepped(url),
+        __bodycamSteppedFrame: (index, fps) => capture.face.steppedFrame(index, fps),
+        __drainBodycamLog: () => bodycamLog.splice(0),
+        __sampleBodycamTracker: () => {
+          const stats = capture.face.bodycamStats();
+          return stats ? { ...stats, camera: capture.face.webcam.state, cameraDelegate: capture.face.webcam.delegate, nowMs: performance.now() } : null;
+        },
         __samplePhoneChrome: () => phoneChrome.probe(),
         __phoneTraySlotPosition: (slot) => phoneChrome.traySlotPosition(slot),
         __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),

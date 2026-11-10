@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 import { TRACKED_HAND_JOINT_NAMES, type HandPoseSource, type TrackedHandJointName, type VrHandSide } from '../types/contracts';
-import { BODYCAM_HAND_HOLD_SEC, BODYCAM_REST_EASE_SEC, BodycamSource } from '../bodycam/BodycamSource';
+import { BODYCAM_ARM_RELEASE_SEC, BODYCAM_ARM_RETURN_SEC, BODYCAM_HAND_HOLD_SEC, BODYCAM_REST_EASE_SEC, BodycamSource } from '../bodycam/BodycamSource';
 import type { BodyHand } from '../bodycam/convert';
 import { type MockHand, MockVrPose } from './MockVrPose';
 import { palmFrameQuaternion } from './palmFrame';
@@ -97,6 +97,8 @@ export class XrTracking {
   private cameraRig: THREE.Group | null = null;
   // Seconds each hand has gone without camera data.
   private readonly cameraUnseenSec: Record<VrHandSide, number> = { left: 0, right: 0 };
+  /** How much of each camera arm's IK pose shows (1), against the idle animation's (0): ramps up on a return, down on a release. */
+  readonly cameraArmWeight: Record<VrHandSide, number> = { left: 0, right: 0 };
 
   private wasXrPresenting = false;
   private session: XRSession | null = null;
@@ -554,6 +556,7 @@ export class XrTracking {
       const data = camera.current?.hands[side];
       if (data) {
         this.cameraUnseenSec[side] = 0;
+        this.cameraArmWeight[side] = Math.min(1, this.cameraArmWeight[side] + camera.dtSec / BODYCAM_ARM_RETURN_SEC);
         this.clearTrackedHandJoints(side);
         this.setCameraHand(side, data);
         this.updateLowFingerJointWarning(side, true);
@@ -564,6 +567,7 @@ export class XrTracking {
         this.clearTrackedHandJoints(side);
         target.poseValid = false;
         this.handPoseSource[side] = 'none';
+        this.cameraArmWeight[side] = 0;
         continue;
       }
       this.cameraUnseenSec[side] += camera.dtSec;
@@ -575,6 +579,15 @@ export class XrTracking {
       }
       this.clearTrackedHandJoints(side);
       const eased = THREE.MathUtils.smoothstep(lost / BODYCAM_REST_EASE_SEC, 0, 1);
+      if (lost >= BODYCAM_REST_EASE_SEC) {
+        // Rested: the arm hands back to the idle animation over a moment instead of holding a rest target.
+        this.cameraArmWeight[side] = Math.max(0, this.cameraArmWeight[side] - camera.dtSec / BODYCAM_ARM_RELEASE_SEC);
+        if (this.cameraArmWeight[side] <= 0) {
+          target.poseValid = false;
+          this.handPoseSource[side] = 'none';
+          continue;
+        }
+      }
       const width = camera.shoulderWidth;
       // Hanging at the side: a little outside the shoulder, about an arm below it.
       this.tmpVecB.set((side === 'left' ? -0.55 : 0.55) * width, -1.45 * width, -0.05 * width).applyAxisAngle(WORLD_UP, camera.worldYaw);
@@ -582,7 +595,7 @@ export class XrTracking {
       target.targetPosition.copy(this.tmpVecA);
       target.targetQuaternion.copy(target.lastValidQuaternion);
       target.poseValid = true;
-      this.handPoseSource[side] = eased < 1 ? 'held' : 'none';
+      this.handPoseSource[side] = 'held';
     }
   }
 
@@ -640,6 +653,7 @@ export class XrTracking {
       this.lowFingerJointFrames[side] = 0;
       this.lowFingerJointWarned[side] = false;
       this.cameraUnseenSec[side] = 0;
+      this.cameraArmWeight[side] = 0;
     }
     // Input sources stay: their 'connected' events, which carry handedness,
     // fire before entry and do not fire again for the session.

@@ -6,6 +6,10 @@ export const BODYCAM_FRESH_SEC = 0.2;
 /** A hand without fresh data holds its last pose this long, then eases to rest. */
 export const BODYCAM_HAND_HOLD_SEC = 0.5;
 export const BODYCAM_REST_EASE_SEC = 0.4;
+/** After the ease the arm hands back to the idle animation over this long. */
+export const BODYCAM_ARM_RELEASE_SEC = 0.5;
+/** A hand that returns takes its pose over this long, from wherever the arm was. */
+export const BODYCAM_ARM_RETURN_SEC = 0.2;
 
 /**
  * The camera as a tracking source: the latest landmark frame, how old it is,
