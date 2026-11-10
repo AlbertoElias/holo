@@ -186,8 +186,9 @@ export function startTestBuildServer({ app, host, port, cwd, env }) {
       process.stdout.write(chunk);
       if (seen !== null) {
         seen += chunk.toString('utf8');
+        // Vite colours the line when CI is set, even into a pipe, so strip it.
         // eslint-disable-next-line no-control-regex
-        if (/Local:\s+(?:\u001b\[[0-9;]*m)*https?:\/\//.test(seen)) {
+        if (/Local:\s+https?:\/\//.test(seen.replace(/\u001b\[[0-9;]*m/g, ''))) {
           seen = null;
           resolve();
         }

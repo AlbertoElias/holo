@@ -950,3 +950,9 @@ bug above.)
 - **Harness note:** the viewer pipeline and knowledge e2e hardcode default ports
   (`E2E_BASE_URL` 3174, `E2E_POLYHAVEN_PORT` 3199, `E2E_CAPTURE_URL` 5175,
   `KNOWLEDGE_E2E_PORT` 4176); parallel sessions must set all of them.
+- Follow-up (2026-11-10): the first push to `main` failed both capture XR
+  shards with "Server did not become ready". With `CI` set, Vite colours its
+  `Local:` line even into a pipe (`\x1b[1mLocal\x1b[22m:`), so the readiness
+  match never fired; local runs print it plain. The match now strips colour
+  codes first. Reproduced and fixed locally with `CI=1`: `test:xr` on capture
+  passes in both modes.
