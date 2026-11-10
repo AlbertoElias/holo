@@ -168,8 +168,21 @@ and zoom details; tabletops and camera takes out of scope. All taken.
 | First card, and `placeFor` | `place.spec.ts`: a faked two-card feed, pixels of each card with and without the place | Pass: `?place=` changes the first card only; `placeFor=<id>` changes the second only |
 | A large splat's extent never spills | `place.spec.ts`: one large splat just inside the dome on its upper front diagonal, whose extent (checked) reaches past the glass, against a control of small splats at the same point | Pass: control drawn (magenta pixels), large splat 0 magenta pixels, `outside` 0 |
 | Real scan (SPZ) | User's Scaniverse export on the dev server, Mac and iPhone | Proof video (not committed); numbers noted here: Not done: needs the user's scan and iPhone |
+| Real GPU, generated scan (2026-11-09) | Headed Chromium on the Mac (Metal), real walk take, the spec's PLY | About 120 fps while playing; ready 1.8 s, first drawn 2.5 s after load (nothing draws before Spark's first sort); the scan draws in every sample while the dome is on its floor; proof video seen by the lead (not committed) |
 
 SPZ is covered only by the real scan; the spec writes PLY.
+
+## Findings
+
+- **A take must stand on ground as flat as the scan.** The pipeline's walk
+  take descends about 2.8 m over its loop on capture's set, so its dome sinks
+  below a flat scan's floor and the scan leaves the cloche for most of the
+  loop. A real room is flat; takes recorded on capture's hilly set do not fit
+  one. Recording a take inside a scanned place (a later slice) removes this;
+  until then, a take on flat ground is the right pairing.
+- In software WebGL (headless checks under load) Spark rarely finishes a
+  sort while a walk take moves the clip every frame; on the Mac's GPU it
+  keeps up. The checks pause or seek before reading pixels.
 
 ## Physical-device limits
 
