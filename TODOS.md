@@ -33,6 +33,16 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Record a take inside a scanned place (split capture slice 2, the
+  user's direction on 2026-11-10): capture loads a scan (SPZ or PLY) as the
+  take's set, and the place is stored with the hologram through export →
+  upload → render (a contract change: `KHR_gaussian_splatting` in the GLB or a
+  file it points to). It must work on every capture device: Quest VR, Quest
+  passthrough AR, phone AR and the desktop capture page. Open for the brief:
+  in AR, whether the scan is lined up with the real room it was taken in or
+  replaces the passthrough; how the author brings a scan into capture; scan
+  size and frame rate on a phone. Slice 1, the viewer's render end, is in
+  [`docs/features/splat-place.md`](docs/features/splat-place.md).
 - [ ] Find an object by asking (PRD-060, built overnight 2026-10-27 on the
   user's request; its provisional decisions await their approval): search
   Poly Haven from capture's tray and carry the credit into the take. Owned by

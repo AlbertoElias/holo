@@ -203,6 +203,13 @@ SPZ is covered only by the real scan; the spec writes PLY.
 - In software WebGL (headless checks under load) Spark rarely finishes a
   sort while a walk take moves the clip every frame; on the Mac's GPU it
   keeps up. The checks pause or seek before reading pixels.
+- **The place belongs to capture, on every capture device (the user,
+  2026-11-10).** Slice 1 adds a scan of a different place in the viewer; the
+  next slice records the take inside the scan and stores it with the
+  hologram. It must work wherever capture runs: Quest VR, Quest passthrough
+  AR, phone AR and the desktop capture page. This slice's loader, crop,
+  floor and way-up reading are that flow's render end. Queued in
+  [`TODOS.md`](../../TODOS.md).
 
 ## Physical-device limits
 
