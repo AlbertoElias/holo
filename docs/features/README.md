@@ -8,7 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| Camera-driven avatar (evaluation spike, IDEA-078) | Reviewed | [camera-avatar-spike.md](camera-avatar-spike.md) |
+| Camera-driven avatar (evaluation spike, IDEA-078) | Implementing | [camera-avatar-spike.md](camera-avatar-spike.md) |
 | Author-marked hand traces (PRD-023 v1) | Complete | [authored-traces.md](archive/authored-traces.md) |
 | Hand traces (PRD-023 v0) | Complete | [hand-traces.md](archive/hand-traces.md) |
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |

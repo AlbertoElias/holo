@@ -19,6 +19,13 @@ export class CameraController {
   lookYaw = 0;
   thirdPersonPitch = 0.32;
   firstPersonPitch = 0;
+  /**
+   * A camera tracker drives the avatar (`?input=camera`): the third-person view sits in front of the avatar, looking
+   * at its face and upper body, and the canvas is flipped like a selfie preview so the author's right hand is on the
+   * right of the screen. Only the canvas is flipped; the scene, the take and DOM chrome are not.
+   */
+  mirrorView = false;
+  private canvasFlipped = false;
 
   /** A flat-screen reach, lift or lower is under way: the third-person view keeps what it looks at steady, so the floor does not tilt as the avatar squats. */
   holdLookHeight = false;
@@ -86,6 +93,7 @@ export class CameraController {
   // rigWorldLocked: the VR body solver owns the rig (it moves only with
   // artificial locomotion), so the camera must not dolly it to the avatar.
   update(isVrActive: boolean, isXrPresenting: boolean, deltaSec: number, isAr = false, rigWorldLocked = false): void {
+    this.applyCanvasFlip(this.mirrorView && !isVrActive && !isAr && !isXrPresenting && this.desktopViewMode === 'third');
     // AR spectator: the WebXR device controls the camera directly.
     // Keep cameraRig at origin so the XR pose maps 1:1 to world space.
     if (isAr) {
@@ -166,8 +174,30 @@ export class CameraController {
     }
   }
 
+  private applyCanvasFlip(flipped: boolean): void {
+    if (flipped === this.canvasFlipped) return;
+    this.canvasFlipped = flipped;
+    this.deps.renderer.domElement.style.transform = flipped ? 'scaleX(-1)' : '';
+  }
+
+  // In front of the avatar, level with its chest, close enough that head to hips and both raised hands fill the frame.
+  private updateMirrorCamera(delta: number, snapInstantly: boolean): void {
+    const avatarHeight = this.deps.avatarRig.avatarHeight;
+    const root = this.deps.avatarRig.avatarRoot.position;
+    this.tmpTargetCam.set(root.x, root.y + avatarHeight * 0.68, root.z);
+    const distance = avatarHeight * 0.72;
+    this.tmpDesiredCam.set(root.x - Math.sin(this.lookYaw) * distance, root.y + avatarHeight * 0.72, root.z - Math.cos(this.lookYaw) * distance);
+    const smoothing = snapInstantly ? 1 : 1 - Math.exp(-8 * delta);
+    this.deps.desktopCamera.position.lerp(this.tmpDesiredCam, smoothing);
+    this.deps.desktopCamera.lookAt(this.tmpTargetCam);
+  }
+
   private updateThirdPersonCamera(delta: number, snapInstantly = false): void {
     if (!this.deps.avatarRig.avatar) return;
+    if (this.mirrorView) {
+      this.updateMirrorCamera(delta, snapInstantly);
+      return;
+    }
 
     const avatarHeight = this.deps.avatarRig.avatarHeight;
     const followDistance = avatarHeight * 1.8;

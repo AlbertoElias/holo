@@ -42,6 +42,8 @@ const CHECKS = {
   object: 'scripts/ci-object-playwright.mjs',
   summon: 'scripts/ci-summon-playwright.mjs',
   ui: 'scripts/ci-capture-ui-playwright.ts',
+  // Camera avatar (slice 1): a synthetic landmark stream drives the desktop avatar's hands and head; no camera or models.
+  bodycam: 'scripts/ci-bodycam-playwright.ts',
   // Needs the Quest Pro emulator for eye gaze; see CHECK_SERVER_ENV.
   face: 'scripts/ci-face-playwright.ts',
   // Standard avatar formats: binds generated rigs, replays hands and body on
@@ -83,7 +85,7 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
 // (CI run 40472119472; avatars is not in CI and keeps its older estimate).
 // Parallel runs start the longest first and XR_SHARD balances on it. Refresh
 // it on purpose from the xr-checks-shard-*.json timing artifacts.
-const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, recording: 5, 'mock-vr': 4, avatars: 120 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, recording: 5, bodycam: 40, 'mock-vr': 4, avatars: 120 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);
