@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import type { HologramDTO } from "@holoim/contracts";
 import { tokens } from "@holoim/design-tokens";
+import { useHint } from "@holoim/ui-dom";
 import { glyphAppearance } from "@holoim/xr-ui-core";
 
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
@@ -28,6 +29,7 @@ function CubeGlyph() {
 export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
   const [current, setCurrent] = useState(item);
   const [timedOut, setTimedOut] = useState(false);
+  const { handlers: hintOn, hint } = useHint(VIEWER_CONTROL_NAMES.viewInAr);
 
   useEffect(() => {
     setCurrent(item);
@@ -68,7 +70,9 @@ export function ARQuickLookLink({ item }: ARQuickLookLinkProps) {
         href={resolveMediaUrl(current.usdzUrl)}
         className="ar-trigger-button ar-quicklook-link"
         aria-label={VIEWER_CONTROL_NAMES.viewInAr}
+        {...hintOn}
       >
+        {hint}
         <img
           src={transparentPixel}
           alt=""

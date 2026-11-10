@@ -4,6 +4,7 @@ import { useContext, useEffect, useState, type AriaAttributes, type ReactNode } 
 
 import { glyphAppearance, glyphMetrics, hitAreaApx, lanternLook, type GlyphAppearance, type HitInput } from "@holoim/xr-ui-core";
 
+import { useHint } from "./Hint.js";
 import { OnHorizon, defaultHitInput } from "./internal.js";
 import { typeRoleStyle } from "./typeRoles.js";
 
@@ -82,6 +83,9 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
   const lantern = useContext(OnHorizon) ? lanternLook(appearance, { headset: false }) : null;
   const hit = hitAreaApx(hitInput, lantern ? lantern.ringApx : drawnApx);
   const focusRing = lantern ? lantern.focusRing : appearance.focusRing;
+  // A drawing whose word does not show names itself on hover.
+  const wordHidden = Boolean(children) && (lantern !== null || !showLabel);
+  const { handlers: hintOn, hint } = useHint(wordHidden ? label : undefined);
   const focusOutline = focusRing ? `${focusRing.width}px solid ${focusRing.color}` : "none";
   const outlineOffset = focusRing ? `${focusRing.offset}px` : undefined;
 
@@ -91,15 +95,15 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
       type="button"
       aria-label={label}
       onClick={onPress}
-      onPointerEnter={(event) => { if (event.pointerType !== "touch") setHovered(true); }}
-      onPointerLeave={() => { setHovered(false); setPressed(false); }}
-      onPointerDown={() => setPressed(true)}
+      onPointerEnter={(event) => { if (event.pointerType !== "touch") setHovered(true); hintOn.onPointerEnter(event); }}
+      onPointerLeave={() => { setHovered(false); setPressed(false); hintOn.onPointerLeave(); }}
+      onPointerDown={() => { setPressed(true); hintOn.onPointerDown(); }}
       onPointerUp={() => setPressed(false)}
       onPointerCancel={() => setPressed(false)}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setPressed(true); }}
       onKeyUp={() => setPressed(false)}
-      onFocus={(event) => setFocusVisible(isFocusVisible(event.currentTarget))}
-      onBlur={() => { setFocusVisible(false); setPressed(false); }}
+      onFocus={(event) => { setFocusVisible(isFocusVisible(event.currentTarget)); hintOn.onFocus(event); }}
+      onBlur={() => { setFocusVisible(false); setPressed(false); hintOn.onBlur(); }}
       style={{
         boxSizing: "border-box",
         display: "inline-flex",
@@ -178,6 +182,7 @@ export function GlyphButton({ label, onPress, input, dimmed = false, drawnApx, s
         </span>
       )}
       {showLabel && children && !lantern ? <span style={{ ...typeRoleStyle("controlLabel"), color: appearance.color }}>{word}</span> : null}
+      {hint}
     </button>
   );
 }
