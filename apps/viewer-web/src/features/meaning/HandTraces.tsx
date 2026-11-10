@@ -396,6 +396,8 @@ export function HandTraces({ source, portal, active, getPlaybackTime, probe }: P
   const { gl } = useThree();
   const ribbons = useMemo(() => source.marks.map((mark) => new Ribbon(mark.span.start)), [source]);
   const drawn = useRef<Array<Drawn | null>>([]);
+  /** The source whose ribbons and probe entries the effect has installed; frames wait for it. */
+  const installed = useRef<HandTraceSource | null>(null);
   const last = useRef<{ paused: boolean; time: number; visible: boolean }>({ paused: false, time: -1, visible: false });
   const size = useMemo(() => new Vector2(), []);
   const scratch = useMemo(() => new Vector3(), []);
@@ -420,7 +422,9 @@ export function HandTraces({ source, portal, active, getPlaybackTime, probe }: P
     probe.group = group;
     probe.spans = source.spans;
     probe.tipAt = (mark, time) => source.sampler.tipAt(mark, time, scratch).toArray() as [number, number, number];
+    installed.current = source;
     return () => {
+      installed.current = null;
       for (const ribbon of ribbons) {
         group.remove(ribbon.mesh);
         ribbon.dispose();
@@ -437,6 +441,8 @@ export function HandTraces({ source, portal, active, getPlaybackTime, probe }: P
   }, [probe, ribbons, scratch, source]);
 
   useFrame(() => {
+    // A new source renders before its effect runs: until then probe.marks belongs to the old one (or is empty).
+    if (installed.current !== source) return;
     const paused = portal.getState().paused;
     gl.getDrawingBufferSize(size);
     const pixelRatio = gl.getPixelRatio();

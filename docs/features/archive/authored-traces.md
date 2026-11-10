@@ -317,6 +317,11 @@ trials. Those are Unverified until run on a Quest and phones.
   test it prompted found one: Undo while tracing, with a hold begun inside the
   trace, dropped the hold's history entry instead of the trace's, so that hold
   could no longer be undone. Fixed in `PointSampleStore.undoLast`.
+- *Source swap on CI.* The first `main` CI run (42755796134) failed shard 7
+  with `Cannot set properties of undefined (setting 'drawn')`: when a card's
+  trace source changed, the frame loop ran on the new marks before the
+  effect had installed their probe entries. Frames now wait for the
+  installed source; shard 7 was re-verified in `scripts/ci-emulate.sh`.
 - *Verifier's run.* Muse's sandbox cannot open ports, so the lead re-ran shard
   7 outside it with freshly recorded takes (`5 passed`,
   `output/authored-traces/verify/shard7-lead.txt`) and Muse judged that output.
