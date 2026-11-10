@@ -28,6 +28,12 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- A scanned place around a take, slice 1 (brief
+  [`docs/features/splat-place.md`](docs/features/splat-place.md)): pushed on
+  `feature/splat-place` (2026-11-10), dev and e2e builds only. It is to be
+  merged with the next finished change. The way-up reading has no cross-vendor
+  review yet, and the user's own Scaniverse scan and the iPhone checks are
+  still open (the brief's test plan).
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
