@@ -1,7 +1,7 @@
 import type * as Spark from "@sparkjsdev/spark";
 
-import { readFloor, type FloorReading } from "./placeAnalysis";
-import type { PlaceScan, PlaceSource } from "./placeRequest";
+import { readFloor, readUpright, turnCenters, type FloorReading } from "./placeAnalysis";
+import { placeFlipDefault, type PlaceScan, type PlaceSource } from "./placeRequest";
 
 // Loads and reads a scan (docs/features/splat-place.md). Spark arrives by a
 // dynamic import, here and nowhere else, so a build with the test hooks off
@@ -21,6 +21,9 @@ export type LoadedPlace = {
   scale: Float32Array;
   opacity: Float32Array;
   floor: FloorReading;
+  /** The half turn about x the file was given, and who decided it: the URL, the scan, or (when the scan could not tell) its format. */
+  flip: boolean;
+  upright: "given" | "read" | "format";
   loadMs: number;
 };
 
@@ -44,30 +47,44 @@ async function read(request: PlaceSource): Promise<LoadedPlace> {
   const centers = new Float32Array(numSplats * 3);
   const scale = new Float32Array(numSplats);
   const opacity = new Float32Array(numSplats);
-  const turn = request.flip ? -1 : 1;
   splats.forEachSplat((index, center, scales, _quaternion, alpha) => {
     centers[index * 3] = center.x;
-    centers[index * 3 + 1] = center.y * turn;
-    centers[index * 3 + 2] = center.z * turn;
+    centers[index * 3 + 1] = center.y;
+    centers[index * 3 + 2] = center.z;
     scale[index] = Math.max(scales.x, scales.y, scales.z);
     opacity[index] = alpha;
   });
+  let flip = request.flip;
+  let upright: LoadedPlace["upright"] = "given";
+  let floor: FloorReading | null = null;
+  let turned: Float32Array | null = null;
+  if (flip === null) {
+    // The scan says which way is up: each way's floor is read anyway, so the chosen one is kept.
+    turned = turnCenters(centers, numSplats);
+    const reading = readUpright(centers, turned, opacity, numSplats);
+    flip = reading.flip ?? placeFlipDefault(request.url);
+    upright = reading.flip === null ? "format" : "read";
+    floor = flip ? reading.turned.floor : reading.asStored.floor;
+  }
+  const upCenters = flip ? turned ?? turnCenters(centers, numSplats) : centers;
   return {
     spark,
     packedArray,
     numSplats,
     encoding: splatEncoding,
-    centers,
+    centers: upCenters,
     scale,
     opacity,
-    floor: readFloor(centers, opacity, numSplats),
+    floor: floor ?? readFloor(upCenters, opacity, numSplats),
+    flip,
+    upright,
     loadMs: performance.now() - started
   };
 }
 
-/** One read per scan and orientation, shared by every mount of the card; the two most recent are kept. A failure is not kept, so a retry reads again. */
+/** One read per scan and way up asked for (0, 1 or the scan's own), shared by every mount of the card; the two most recent are kept. A failure is not kept, so a retry reads again. */
 export function loadPlace(request: PlaceSource): Promise<LoadedPlace> {
-  const key = `${request.url}|${request.flip ? 1 : 0}`;
+  const key = `${request.url}|${request.flip === null ? "read" : request.flip ? 1 : 0}`;
   const kept = cache.get(key);
   if (kept) {
     // Most recently used last.

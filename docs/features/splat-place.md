@@ -32,11 +32,15 @@ Slice 2, which stores a place with a hologram, decides how that is shown.
   feed loads it; `placeFor=<id>` picks another. Spark is loaded by a dynamic
   `import()` inside the `testHooks` branch, so dev and e2e builds have it
   and production has no Spark code at all.
-- Placement: Scaniverse scans are gravity-aligned and metric, so the
-  orientation is fixed per format (confirmed once on the user's scan) with a
-  `placeFlip` value (as built: PLY, SPLAT and KSPLAT are turned half a turn
-  about x by default, the y-down trainers' convention; SPZ is not; the
-  convention is unconfirmed on the user's scan, and `placeFlip=0|1` overrides it). The floor height is found from an opacity-weighted
+- Placement: Scaniverse scans are gravity-aligned and metric, so the only
+  orientation question is which way is up (y up, or the trainers' y down: a
+  half turn about x). As built, the scan says: each way up has a floor (the
+  lowest strong peak below), and the right way is the one with clearly more
+  of the scan (1.25 times) standing in the 1.2 m above its floor, where
+  furniture and the foot of the walls are; the wrong way, the floor found is
+  the floor seen from under it or the ceiling. When neither way is clearly
+  ahead, the format's convention decides (PLY, SPLAT and KSPLAT y down, SPZ y
+  up). `placeFlip=0|1` overrides it. The floor height is found from an opacity-weighted
   histogram of splat heights (2 cm bins, the lowest peak above a density
   threshold, ignoring the bottom tail of floaters) and put on the take's
   floor. x and z default to the median of the floor band; `placeX`,
@@ -106,7 +110,8 @@ Slice 2, which stores a place with a hologram, decides how that is shown.
 
 | Failure case | Prevention or evidence |
 |---|---|
-| Scan axes differ from the assumed convention | Fixed per-format orientation confirmed on the user's scan; `placeFlip`; the e2e fixture is written in the confirmed convention |
+| Scan axes differ from the assumed convention | The scan says which way is up (more of it standing just above its floor), so a producer's convention does not matter; the format's convention only when the scan cannot tell; `placeFlip`; e2e: fixtures written y up and y down, with and without a ceiling as dense as the floor, and `placeFlip` against the scan; Spark's y-down `fireplace.spz` comes in upright with no flag |
+| A ceiling is taken for the floor | The wrong way up the ceiling is the lowest strong peak, but only the tops of the walls stand on it; e2e: a ceiling as dense as the floor |
 | Floor found at a table top or on floaters | Lowest density peak above a threshold, bottom tail ignored; fixture has a table band and floaters; report the found floor; `placeY`; no floor found means the place fails (one warning naming `placeY`) unless `placeY` is given, never a silent guess |
 | The dome moves (walk takes) and a load-time crop goes stale | Clip in the shader from per-frame uniforms; CPU crop is coarse only |
 | While a walk take plays, the clip can lag the dome by a frame (Spark regenerates asynchronously) | Accepted for slice 1; the e2e seeks and waits for `clipStale: false`, so it does not see it |
@@ -164,10 +169,11 @@ and zoom details; tabletops and camera takes out of scope. All taken.
 | Broken URL | `place.spec.ts` with a 404 | One warning, card unchanged: Pass: one warning, no error text, pixel difference within render noise, same dome and rim |
 | No Spark in production | Build, then search `dist` for Spark | No match: Pass: `pnpm --filter @holoim/web build`, then `grep -rlE "SparkRenderer\|sparkjs\|place_clip_fade\|__HOLOIM_PLACE__\|local-places" apps/viewer-web/dist` found nothing; `node scripts/check-prod-bundle.mjs` passes |
 | Exactly one warning on every failure path | `place.spec.ts`: a 404 that arrives after the fit's 5 s wait | Warnings counted: Pass: one (the timeout's), card rendered, no error text |
-| No floor is never guessed | `place.spec.ts`: a scan whose splat heights are not numbers | Status and warning text: Pass: status `failed`, one warning naming `placeY`; with `placeY` in the URL the place is `ready` with no warning |
+| No floor is never guessed | `place.spec.ts`: a scan whose splat heights are not numbers | Status and warning text: Pass: status `failed`, one warning naming `placeY`, the way up left to the format (`upright: "format"`); with `placeY` in the URL the place is `ready` with no warning |
+| Which way is up (2026-11-10) | `place.spec.ts`: the fixture written y up (against the PLY convention), y down with a ceiling 2.7 m up as dense as the floor, and y up with that ceiling; then the y-up one with `placeFlip=1` | Report `upright`, `flipped`, `floorFoundY`; magenta ring pixels: Pass: each read by the scan (`read`) and turned only when y down; the floor found is the floor, not the ceiling, and lies on the take's floor; `outside` 0, ring 0 px; with `placeFlip=1` the turn is the URL's (`given`) and the floor found is the floor seen from under it |
 | First card, and `placeFor` | `place.spec.ts`: a faked two-card feed, pixels of each card with and without the place | Pass: `?place=` changes the first card only; `placeFor=<id>` changes the second only |
 | A large splat's extent never spills | `place.spec.ts`: one large splat just inside the dome on its upper front diagonal, whose extent (checked) reaches past the glass, against a control of small splats at the same point | Pass: control drawn (magenta pixels), large splat 0 magenta pixels, `outside` 0 |
-| Real scan, downloaded (SPZ, 2026-11-10) | Spark's example `fireplace.spz` (a captured room, 301,000 splats, 4.4 MB), git-ignored under `public/local-places/`, around capture's avatar; headed Chromium on the Mac (Metal) | Decoded 0.39 s, ready 0.9 s, sorted 1.1 s after load; 120 fps; 28,179 splats kept by the crop, 5,047 drawn inside the dome, 0 outside. The file is y down: it needs `placeFlip=1` (see Findings). Placed by hand at the hearth with `placeX=2.37&placeZ=0.95&placeYaw=90`; proof video seen by the lead (not committed). `snow-street.spz`, a street scan whose content sits 8–28 m below its origin, finds a floor 26 m down and shows only a dark patch: not a usable place without hand placement |
+| Real scan, downloaded (SPZ, 2026-11-10) | Spark's example `fireplace.spz` (a captured room, 301,000 splats, 4.4 MB), git-ignored under `public/local-places/`, around capture's avatar; headed Chromium on the Mac (Metal) | Decoded 0.39 s, ready 0.9 s, sorted 1.1 s after load; 120 fps; 28,179 splats kept by the crop, 5,047 drawn inside the dome, 0 outside. First run needed `placeFlip=1`; since the way up is read, no flag (decode 0.48 s). Placed by hand at the hearth with `placeX=2.37&placeZ=0.95&placeYaw=90`; proof video seen by the lead (not committed). `snow-street.spz`, a street scan whose content sits 8–28 m from its origin, shows only a patch of its ground around the take: not a usable place without hand placement |
 | Real scan (SPZ), the user's | User's Scaniverse export on the dev server, Mac and iPhone | Not done: needs the user's scan and iPhone |
 | Real GPU, generated scan (2026-11-09) | Headed Chromium on the Mac (Metal), real walk take, the spec's PLY | About 120 fps while playing; ready 1.8 s, first drawn 2.5 s after load (nothing draws before Spark's first sort); the scan draws in every sample while the dome is on its floor; proof video seen by the lead (not committed) |
 
@@ -183,12 +189,13 @@ SPZ is covered only by the real scan; the spec writes PLY.
   until then, a take on flat ground is the right pairing.
 - **SPZ orientation is the producer's, not the format's.** Spark's example
   `fireplace.spz` is y down (its floor is the top of its height range and the
-  hearth hangs under it), so the SPZ default of no flip puts it upside down.
-  The floor finder does not notice: the floor is the scan's only strong
-  height peak either way up, so the take stands on the floor's underside with
-  the room cut away below the dome. Only a look tells; `placeFlip=1` fixes
-  it. A sound default needs the user's Scaniverse export, or a check that most
-  of the scan lies above the floor found (a follow-up, not built).
+  hearth hangs under it), so a per-format default of no flip for SPZ put it
+  upside down, and the floor finder did not notice: the floor is the scan's
+  only strong height peak either way up, so the take stood on the floor's
+  underside with the room cut away below the dome. Built since: the scan says
+  which way is up (see Placement). With no flag, `fireplace.spz` is now turned
+  (`upright: "read"`), at about 90 ms more decode; `snow-street.spz` is turned
+  too, and its snow-covered ground is then underfoot.
 - **The dome shows about a metre of the place.** Around a standing take the
   cloche cuts a room to the floor under the feet; furniture shows only where
   the take stands next to it. Finding that spot took a search of the scan and

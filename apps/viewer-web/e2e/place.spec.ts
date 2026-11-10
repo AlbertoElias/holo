@@ -52,6 +52,8 @@ type PlaceReading = {
   splatsLoaded: number;
   splatsKept: number;
   floorFound: boolean;
+  flipped: boolean;
+  upright: string;
   floorFoundY: number;
   floorBandY: number;
   scanFloor: number;
@@ -298,8 +300,12 @@ test.describe("a scanned place around a take", () => {
     await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
     await waitForPortalReady(page, item.id, item.url);
     await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "failed");
+    // The card fits its dome on the frame after the failure, which in software WebGL can be a second or more away.
+    await page.waitForFunction(() => (window as unknown as { __feedProbe: { cloche: { shape: { current: unknown } } } }).__feedProbe.cloche.shape.current !== null);
     const card = page.locator(`.feed-card[data-card-id="${item.id}"]`);
-    expect((await readPlace(page)).floorFound, "no floor was found").toBe(false);
+    const unplaced = await readPlace(page);
+    expect(unplaced.floorFound, "no floor was found").toBe(false);
+    expect([unplaced.upright, unplaced.flipped], "a scan that cannot say which way is up takes its format's convention, y down for PLY").toEqual(["format", true]);
     expect(warnings, "one warning").toHaveLength(1);
     expect(warnings[0], "that names placeY").toContain("placeY");
     expect((await readCard(page)).setVisible ?? false, "today's card").toBe(false);
@@ -311,6 +317,53 @@ test.describe("a scanned place around a take", () => {
     await waitForPortalReady(page, item.id, item.url);
     await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready");
     expect(warnings, "no warning when the floor is given").toHaveLength(0);
+  });
+
+  test("a scan says which way is up: stored either way, with a ceiling as dense as its floor, unless placeFlip says", async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    const item = fakeItem("u");
+    await installProbes(page);
+    await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: [item], nextCursor: null } }));
+    await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
+    await page.goto("/");
+    await waitForPortalReady(page, item.id, item.url);
+    await seek(page, 0, false);
+    const baseline = await readCard(page);
+    const radius = Math.max(baseline.dome.radii.x, baseline.dome.radii.z) * 1.06 + 0.1;
+    const ring = { x: 0, z: 0, radius };
+    // The wrong way up, the floor found is the floor seen from under it, or the ceiling: either way the room is not where the take stands.
+    const cases = [
+      { name: "y up, against the PLY convention", options: { yUp: true }, upright: "read", flipped: false },
+      { name: "y down, with a ceiling", options: { ceiling: 2.7 }, upright: "read", flipped: true },
+      { name: "y up, with a ceiling", options: { yUp: true, ceiling: 2.7 }, upright: "read", flipped: false }
+    ] as const;
+    // Each case serves its own file at the scan's path: the route added last answers.
+    for (const [index, entry] of cases.entries()) {
+      const fixture = await writeFixture(testInfo.outputPath("fixture"), `upright-${index}.ply`, { half: radius + 1.5, ring, ...entry.options });
+      await serveScan(page, fixture.file);
+      await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
+      await waitForPortalReady(page, item.id, item.url);
+      await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
+      await seek(page, 0, true);
+      const place = await readPlace(page);
+      const stats = await shotStats(page, await cardShot(page, item.id, `upright-${index}.png`));
+      expect([place.upright, place.flipped], `${entry.name}: who decided, and the turn`).toEqual([entry.upright, entry.flipped]);
+      expect(Math.abs(place.floorFoundY - fixture.floorY), `${entry.name}: the floor found is the floor, not the ceiling`).toBeLessThan(FLOOR_TOLERANCE_METERS);
+      expect(Math.abs(place.floorBandY - place.takeFloor), `${entry.name}: placed on the take's floor`).toBeLessThan(FLOOR_TOLERANCE_METERS);
+      expect(place.shown, `${entry.name}: splats are drawn`).toBeGreaterThan(500);
+      expect(place.outside, `${entry.name}: none outside the dome`).toBe(0);
+      expect(stats.magenta, `${entry.name}: the ring outside the glass is not drawn`).toBe(0);
+    }
+
+    // placeFlip is obeyed even against the scan: the y-up file turned as asked, its room hanging under the floor found.
+    const fixture = await writeFixture(testInfo.outputPath("fixture"), "upright-given.ply", { half: radius + 1.5, ring, yUp: true });
+    await serveScan(page, fixture.file);
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}&placeFlip=1`);
+    await waitForPortalReady(page, item.id, item.url);
+    await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
+    const given = await readPlace(page);
+    expect([given.upright, given.flipped], "placeFlip=1 decides").toEqual(["given", true]);
+    expect(Math.abs(given.floorFoundY + fixture.floorY), "the floor found is the floor seen from under it").toBeLessThan(FLOOR_TOLERANCE_METERS);
   });
 
   test("the first card takes the place, and placeFor moves it to another", async ({ page }, testInfo) => {

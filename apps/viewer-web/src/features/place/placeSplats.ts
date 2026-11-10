@@ -28,7 +28,8 @@ export type Placement = {
  * metric.
  */
 export function placeOnFloor(place: PlacedScan, dome: DomeShape, takeFloorY: number): Placement {
-  const { nudge, flip } = place.request;
+  const { nudge } = place.request;
+  const { flip } = place;
   const at = new Vector3(dome.base.x + nudge.x, takeFloorY + nudge.y, dome.base.z + nudge.z);
   const yaw = yawOf(place);
   const turn = new Quaternion(flip ? 1 : 0, 0, 0, flip ? 0 : 1);

@@ -69,3 +69,59 @@ export function readFloor(centers: Float32Array, opacity: Float32Array, count: n
   };
   return { found: true, floorY, x: median(xs), z: median(zs) };
 }
+
+/** What stands on a floor, the furniture and the foot of the walls, lies this far above it, metres. */
+export const UPRIGHT_BAND_METERS = 1.2;
+/** The way up wins by at least this factor over the other, or the scan says nothing. */
+export const UPRIGHT_MARGIN = 1.25;
+
+export type Upright = {
+  /** Turn the file half a turn about x; null when the scan cannot tell. */
+  flip: boolean | null;
+  /** Each way's floor and the share of opacity standing on it: the file's own axes, then turned. */
+  asStored: { floor: FloorReading; standing: number };
+  turned: { floor: FloorReading; standing: number };
+};
+
+/** The file's centres turned half a turn about x (y and z negated): the trainers' y down made y up, or the reverse. */
+export function turnCenters(centers: Float32Array, count: number): Float32Array {
+  const turned = new Float32Array(count * 3);
+  for (let i = 0; i < count; i += 1) {
+    turned[i * 3] = centers[i * 3]!;
+    turned[i * 3 + 1] = -centers[i * 3 + 1]!;
+    turned[i * 3 + 2] = -centers[i * 3 + 2]!;
+  }
+  return turned;
+}
+
+function standingOn(floor: FloorReading, centers: Float32Array, opacity: Float32Array, count: number): number {
+  if (!floor.found) return 0;
+  let total = 0;
+  let standing = 0;
+  for (let i = 0; i < count; i += 1) {
+    const y = centers[i * 3 + 1]!;
+    if (!Number.isFinite(y)) continue;
+    total += opacity[i]!;
+    if (y > floor.floorY + FLOOR_BAND_METERS && y <= floor.floorY + UPRIGHT_BAND_METERS) standing += opacity[i]!;
+  }
+  return total > 0 ? standing / total : 0;
+}
+
+/**
+ * Which way up a scan is, when its file does not say. Each way up has a floor
+ * (the lowest strong peak); the right way, the furniture and the foot of the
+ * walls stand on it. The wrong way, the floor found is the room's floor seen
+ * from under it, with the room hanging below, or its ceiling, with only the
+ * tops of the walls above. So the way with clearly more of the scan in the
+ * band just above its floor is up; anything closer is left to the caller.
+ */
+export function readUpright(centers: Float32Array, turned: Float32Array, opacity: Float32Array, count: number): Upright {
+  const storedFloor = readFloor(centers, opacity, count);
+  const turnedFloor = readFloor(turned, opacity, count);
+  const asStored = { floor: storedFloor, standing: standingOn(storedFloor, centers, opacity, count) };
+  const result = { asStored, turned: { floor: turnedFloor, standing: standingOn(turnedFloor, turned, opacity, count) } };
+  const a = result.asStored.standing;
+  const b = result.turned.standing;
+  const flip = b > a * UPRIGHT_MARGIN && b > 0 ? true : a > b * UPRIGHT_MARGIN && a > 0 ? false : null;
+  return { flip, ...result };
+}

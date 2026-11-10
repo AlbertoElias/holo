@@ -50,6 +50,8 @@ export default function PlaceMount({ request, gate, shape, shift, scene, clips, 
     loadPlace({ url, flip }).then((loaded) => {
       if (!live) return;
       report.splatsLoaded = loaded.numSplats;
+      report.flipped = loaded.flip;
+      report.upright = loaded.upright;
       report.floorFound = loaded.floor.found;
       report.floorFoundY = loaded.floor.floorY;
       report.loadMs = loaded.loadMs;

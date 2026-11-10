@@ -6,8 +6,12 @@ import { PLACE_FIT_WAIT_MS } from "./placeGate";
 
 export type PlaceRequest = {
   url: string;
-  /** The file's y and z axes point down and back (3DGS training output): turned half a revolution about x. */
-  flip: boolean;
+  /**
+   * `placeFlip`: true when the file's y and z axes point down and back (3DGS
+   * training output), turned half a revolution about x; false when y is up;
+   * null to let the scan say which way is up, falling back to its format's convention.
+   */
+  flip: boolean | null;
   /** Hand nudges from the default placement, metres and degrees. */
   nudge: { x: number; y: number; z: number; yawDeg: number };
   /** `placeY` is in the URL: when the scan's floor cannot be found, it is the floor's height in the scan, metres, y up. */
@@ -22,7 +26,11 @@ export type PlaceScan = Omit<PlaceRequest, "waitMs">;
 /** What is read and decoded: the same file, turned the same way, is one cache entry. */
 export type PlaceSource = Pick<PlaceRequest, "url" | "flip">;
 
-/** SPZ is y-up like three; PLY, SPLAT and KSPLAT are as the trainers write them, y down. */
+/**
+ * The format's convention, for a scan that cannot say which way is up: SPZ is
+ * written y up by Niantic's library, PLY, SPLAT and KSPLAT as the trainers
+ * write them, y down. Producers differ (Spark's example SPZs are y down).
+ */
 export function placeFlipDefault(url: string): boolean {
   const path = url.split(/[?#]/)[0]?.toLowerCase() ?? "";
   return !path.endsWith(".spz");
@@ -41,8 +49,8 @@ function waitOf(value: string | null): number {
 
 /**
  * `?place=<url>` puts a splat around the first card; `placeFor=<id>` picks
- * another. `placeFlip=0|1`, `placeX`, `placeY`, `placeZ` and `placeYaw`
- * correct the fixed orientation and the default placement by hand. A scan
+ * another. Which way is up is read from the scan; `placeFlip=0|1` says it
+ * instead. `placeX`, `placeY`, `placeZ` and `placeYaw` correct the default placement by hand. A scan
  * with no clear floor shows only with `placeY` (its floor's height in the scan).
  * `placeWait` lengthens the fit's wait for the scan, in ms.
  */
@@ -56,7 +64,8 @@ export function readPlaceRequest(search: string, card: { id: string; first: bool
   const placeY = params.get("placeY");
   return {
     url,
-    flip: flip === null ? placeFlipDefault(url) : flip === "1",
+    // Only 0 or 1 says which way is up; anything else leaves it to the scan.
+    flip: flip === "1" ? true : flip === "0" ? false : null,
     nudge: { x: number(params.get("placeX")), y: number(placeY), z: number(params.get("placeZ")), yawDeg: number(params.get("placeYaw")) },
     // Only a real number stands in for a floor that cannot be found; `placeY=` or `placeY=abc` is no floor at all.
     floorGiven: placeY !== null && placeY.trim() !== "" && Number.isFinite(Number(placeY)),

@@ -5,8 +5,8 @@ import path from "node:path";
 // floor, a table-height band, floaters under the floor, coloured boxes and
 // clutter of every size, and a magenta ring just past the glass of a dome the
 // caller measured, where that dome stands at one time of a take. Binary little-endian 3DGS PLY in the trainers' convention,
-// y down and z back (a half turn about x from the y-up room), which is what
-// the viewer reads `.ply` as by default.
+// y down and z back (a half turn about x from the y-up room), which is the
+// convention the viewer falls back on for `.ply`; `yUp` writes it the other way.
 
 export type FixtureOptions = {
   /** The scan's own floor height, y up: not zero, so the floor must be found. */
@@ -19,6 +19,10 @@ export type FixtureOptions = {
   blobs?: Array<{ x: number; z: number; height: number; scale: number; color: [number, number, number] }>;
   /** Every splat's height is not a number: a scan with no floor to find. */
   noFloor?: boolean;
+  /** A ceiling this far above the floor, as dense as the floor: the other strong peak, which the wrong way up is the lowest. */
+  ceiling?: number;
+  /** Written y up, the other way from the trainers' convention `.ply` is read as by default. */
+  yUp?: boolean;
 };
 
 export type Fixture = { bytes: Buffer; floorY: number; middle: { x: number; z: number }; count: number };
@@ -37,7 +41,7 @@ function mulberry32(seed: number): () => number {
 
 type Splat = { x: number; y: number; z: number; r: number; g: number; b: number; opacity: number; scale: number };
 
-export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = false }: FixtureOptions): Fixture {
+export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = false, ceiling, yUp = false }: FixtureOptions): Fixture {
   const rand = mulberry32(0x5ca17);
   const middle = { x: 1, z: -0.5 };
   const splats: Splat[] = [];
@@ -49,6 +53,11 @@ export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = f
     for (let iz = -Math.round(half / step); iz <= Math.round(half / step); iz += 1) {
       const tile = (Math.floor((ix * step + 1000) / 0.5) + Math.floor((iz * step + 1000) / 0.5)) % 2 === 0;
       add(middle.x + ix * step, floorY + (rand() - 0.5) * 0.01, middle.z + iz * step, tile ? [0.55, 0.56, 0.5] : [0.38, 0.4, 0.36], 0.045);
+    }
+  }
+  if (ceiling !== undefined) {
+    for (let ix = -Math.round(half / step); ix <= Math.round(half / step); ix += 1) {
+      for (let iz = -Math.round(half / step); iz <= Math.round(half / step); iz += 1) add(middle.x + ix * step, floorY + ceiling + (rand() - 0.5) * 0.01, middle.z + iz * step, [0.85, 0.85, 0.82], 0.045);
     }
   }
   // A table band, 74 cm up: a smaller peak than the floor's, and higher.
@@ -76,7 +85,7 @@ export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = f
   const body = Buffer.alloc(splats.length * names.length * 4);
   splats.forEach((splat, index) => {
     const values = [
-      splat.x, noFloor ? Number.NaN : -splat.y, -splat.z, 0, 0, 0,
+      splat.x, noFloor ? Number.NaN : yUp ? splat.y : -splat.y, yUp ? splat.z : -splat.z, 0, 0, 0,
       (splat.r - 0.5) / SH_C0, (splat.g - 0.5) / SH_C0, (splat.b - 0.5) / SH_C0,
       Math.log(splat.opacity / (1 - splat.opacity)),
       Math.log(splat.scale), Math.log(splat.scale), Math.log(splat.scale),

@@ -9,6 +9,9 @@ export type PlaceReport = {
   splatsLoaded: number;
   splatsKept: number;
   floorFound: boolean;
+  /** Whether the file was turned half a turn about x, and who decided: the URL (`given`), the scan (`read`), or its format when the scan could not tell. */
+  flipped: boolean;
+  upright: "" | "given" | "read" | "format";
   /** The floor the histogram found, in the scan's own frame (y up), metres. */
   floorFoundY: number;
   /** The median height of the kept splats within a few centimetres of the floor, measured after placing: where the scan's floor really stands. */
@@ -55,6 +58,8 @@ export function createPlaceReport(): { report: PlaceReport; bind: (readings: Pla
     splatsLoaded: 0,
     splatsKept: 0,
     floorFound: false,
+    flipped: false,
+    upright: "" as PlaceReport["upright"],
     floorFoundY: Number.NaN,
     floorBandY: Number.NaN,
     scanFloor: Number.NaN,
