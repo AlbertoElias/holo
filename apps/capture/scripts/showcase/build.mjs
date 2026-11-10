@@ -14,7 +14,11 @@ import { renderSheet } from './lib/browser.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(here, '../../../../output/showcase');
-export const SCENES = ['light', 'door', 'murmuration', 'blue-hour', 'words', 'seasons', 'hearts', 'rain', 'bath', 'strings'];
+export const SCENES = [
+  'light', 'door', 'murmuration', 'blue-hour',
+  'words', 'seasons', 'hearts', 'rain', 'bath', 'strings',
+  'street', 'orion', 'corridor', 'mirror', 'dive', 'stairs'
+];
 
 const args = process.argv.slice(2);
 const sheet = !args.includes('--no-sheet');
