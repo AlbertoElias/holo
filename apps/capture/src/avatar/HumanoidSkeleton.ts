@@ -30,6 +30,14 @@ export interface HumanoidFacingReport {
   readonly note?: string;
 }
 
+/** Which locomotion clips the avatar plays (docs/features/locomotion-retarget.md). */
+export interface HumanoidLocomotionReport {
+  /** Per state (idle, walk, jump, fall): the avatar's own clip, the retargeted library clip, or none. */
+  readonly clips: Readonly<Record<string, 'own' | 'retargeted' | 'none'>>;
+  /** Rest-pose (T-pose or A-pose) correction per limb bone, in degrees. */
+  readonly restCorrectionDeg: Readonly<Partial<Record<VrmHumanoidBone, number>>>;
+}
+
 export interface HumanoidBindingReport {
   readonly source: HumanoidMapping['source'];
   readonly declarationFormat?: HumanoidMapping['declarationFormat'];
@@ -44,6 +52,7 @@ export interface HumanoidBindingReport {
   /** Feature → reason, registered by each system that turned itself off. */
   readonly disabledFeatures: Readonly<Record<string, string>>;
   readonly notes: readonly string[];
+  readonly locomotion: HumanoidLocomotionReport | null;
 }
 
 const FACING_NODE = 'HumanoidFacing';
@@ -96,6 +105,7 @@ export class HumanoidSkeleton {
   private readonly notes: string[] = [];
   private facing: HumanoidFacingReport = { detectedForward: null, detectedUp: null, correctionDeg: null };
   private warned = false;
+  private locomotion: HumanoidLocomotionReport | null = null;
 
   private constructor(
     private readonly bones: ReadonlyMap<VrmHumanoidBone, THREE.Bone>,
@@ -178,6 +188,10 @@ export class HumanoidSkeleton {
   /** Records that a feature turned itself off because of the rig, for the report and the one warning. */
   disableFeature(feature: string, reason: string): void {
     this.disabled[feature] = reason;
+  }
+
+  setLocomotion(report: HumanoidLocomotionReport): void {
+    this.locomotion = report;
   }
 
   note(text: string): void {
@@ -263,7 +277,8 @@ export class HumanoidSkeleton {
       declarationErrors: this.mapping.declarationErrors,
       facing: this.facing,
       disabledFeatures: { ...this.disabled },
-      notes: [...this.notes]
+      notes: [...this.notes],
+      locomotion: this.locomotion
     };
   }
 

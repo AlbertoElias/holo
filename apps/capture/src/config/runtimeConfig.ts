@@ -1,6 +1,8 @@
 export interface RuntimeConfig {
   sceneUrl: string;
   avatarUrl: string;
+  /** Idle/Walk/Jump/Fall retargeted onto an avatar without its own (docs/features/locomotion-retarget.md). */
+  locomotionLibraryUrl: string;
   /** The supplied object (PRD-043): a GLB URL, loaded before recording. */
   objectUrl: string | null;
   /** The prepared tray (PRD-045): repeated `?tray=` GLB or image URLs, loaded before recording. */
@@ -23,16 +25,18 @@ export interface RuntimeConfig {
   mockVrEnabledFromQuery: boolean;
 }
 
+export const DEFAULT_AVATAR_URL = '/gltf/models/avatar.glb';
+
 export function loadRuntimeConfig(search = window.location.search): RuntimeConfig {
   const query = new URLSearchParams(search);
   const defaultSceneUrl = '/gltf/models/scene.glb';
-  const defaultAvatarUrl = '/gltf/models/avatar.glb';
   const handRetargetModeQuery = (query.get('handRetargetMode') ?? 'hybrid').toLowerCase();
   const handRetargetMode = handRetargetModeQuery === 'legacy' ? 'legacy' : 'hybrid';
 
   return {
     sceneUrl: query.get('scene') ?? defaultSceneUrl,
-    avatarUrl: query.get('avatar') ?? defaultAvatarUrl,
+    avatarUrl: query.get('avatar') ?? DEFAULT_AVATAR_URL,
+    locomotionLibraryUrl: query.get('locomotionLibrary') ?? '/gltf/animations/locomotion.glb',
     objectUrl: query.get('object'),
     trayUrls: query.getAll('tray').filter(Boolean),
     avatarHeightOverride: Number(query.get('avatarHeight')),

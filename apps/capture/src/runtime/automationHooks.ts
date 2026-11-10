@@ -1,5 +1,6 @@
 import type { XRDevice } from 'iwer';
 
+import type { LocomotionProfile, LocomotionState } from '../animation/LocomotionAnimator';
 import type { HumanoidBindingReport } from '../avatar/HumanoidSkeleton';
 import type { FaceSample } from '../face/faceTypes';
 import type { FaceSnapshot } from '../face/FaceDriver';
@@ -19,6 +20,11 @@ import type { HaloActionRecord } from './haloActions';
  * Page functions the deterministic XR checks drive. Every one acts through
  * the production pipeline: clock adapters step the same systems and draws.
  */
+export interface AvatarPoseSample {
+  readonly bones: Record<string, [number, number, number]>;
+  readonly locomotion: { state: LocomotionState; profile: LocomotionProfile; clip: string | null };
+}
+
 export interface AutomationHooks {
   render_game_to_text: () => string;
   advanceTime: (ms: number) => void;
@@ -43,6 +49,10 @@ export interface AutomationHooks {
   __sampleFace: () => FaceSnapshot;
   /** The avatar's canonical humanoid binding (bones, facing, disabled features), or null before load. */
   __sampleHumanoid: () => HumanoidBindingReport | null;
+  /** Poses one locomotion state's clip at a clip time on one profile, for a pose read right after (null: rest, no clip). */
+  __poseLocomotion: (state: LocomotionState, profile: LocomotionProfile, timeSec: number) => string | null;
+  /** Every canonical bone (and finger end sites, as `<bone>Tip`) in the avatar root's frame, plus the animator. */
+  __sampleAvatarPose: () => AvatarPoseSample;
   __toggleFaceCamera: () => void;
   /** The chrome as drawn: the overlay's view model, the headset chrome's placement, the touch stick (slice 4 reports). */
   __sampleChrome: () => { ui: UiViewModel; vr: VrChromeSnapshot; touch: { stick: TouchStick | null; looking: number; hold: string } };

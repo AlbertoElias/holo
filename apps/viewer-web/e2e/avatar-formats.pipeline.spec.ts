@@ -18,6 +18,9 @@ import { assertViewerShell, captureEvidence, expect, pressViewInAr, test } from 
 //   export's HOLOIM_humanoid (or the shared name tables) can find its bones;
 // - vrm0-minus-z: a VRM 0.x rig facing −Z, which capture turns by 180°; the
 //   viewer must show it facing as recorded, judged by a numeric yaw.
+// Both fixtures lack their own locomotion clips, so the take walks with the
+// clips retargeted onto them (docs/features/locomotion-retarget.md): the
+// export must carry the stride on the fixture's own knee bones.
 // The same Unreal export without its HOLOIM_humanoid falls back to the name
 // tables, and a pointing take on the Unreal rig proves HOLOIM_meaning's bone
 // anchors (the author's fingertip) still resolve.
@@ -30,14 +33,44 @@ const FIXTURES = ["unreal-cm", "vrm0-minus-z"] as const;
 type FixtureName = (typeof FIXTURES)[number];
 const YAW_TOLERANCE_DEG = 10;
 
-type GltfJson = { nodes?: Array<{ name?: string }>; extensions?: Record<string, unknown>; extensionsUsed?: string[] };
+type GltfJson = {
+  nodes?: Array<{ name?: string }>;
+  extensions?: Record<string, unknown>;
+  extensionsUsed?: string[];
+  animations?: Array<{ channels: Array<{ sampler: number; target: { node?: number; path: string } }>; samplers: Array<{ output: number }> }>;
+  accessors?: Array<{ bufferView?: number; byteOffset?: number; count: number; type: string; componentType: number }>;
+  bufferViews?: Array<{ byteOffset?: number; byteLength: number; byteStride?: number }>;
+};
 type CaptureWindow = Window & {
   __sampleBody: () => { bones: Record<string, [number, number, number] | undefined> };
   advanceTime: (ms: number) => void;
+  __setMockInput: (input: { forward?: boolean }) => void;
 };
 /** What the viewer resolved on a loaded hologram, read the same way in the feed and in AR. */
 type HumanoidReading = { source: string | undefined; hips: string | undefined; head: string | undefined; yawDeg: number | null; bones: number };
 type FixtureFacts = { url: string; hips: string; head: string; declared: string | undefined };
+
+/** Largest angle (degrees) a node's exported rotation track swings through, from its first key. */
+function rotationRangeDeg(bytes: Buffer, json: GltfJson, node: number): number {
+  const binStart = 20 + bytes.readUInt32LE(12) + 8;
+  let worst = 0;
+  for (const animation of json.animations ?? []) {
+    for (const channel of animation.channels) {
+      if (channel.target.node !== node || channel.target.path !== "rotation") continue;
+      const accessor = json.accessors![animation.samplers[channel.sampler]!.output]!;
+      expect(accessor.componentType, "float rotation keys").toBe(5126);
+      const view = json.bufferViews![accessor.bufferView!]!;
+      const at = binStart + (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+      const q = (i: number) => [0, 1, 2, 3].map((c) => bytes.readFloatLE(at + (i * 4 + c) * 4));
+      const first = q(0);
+      for (let i = 1; i < accessor.count; i++) {
+        const dot = Math.min(1, Math.abs(q(i).reduce((sum, v, c) => sum + v * first[c]!, 0)));
+        worst = Math.max(worst, (2 * Math.acos(dot) * 180) / Math.PI);
+      }
+    }
+  }
+  return worst;
+}
 
 function readGlbJson(bytes: Buffer): GltfJson {
   return JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString("utf8")) as GltfJson;
@@ -217,7 +250,7 @@ for (const name of FIXTURES) {
     if (name === "unreal-cm") expect(fixture.hips, "Unreal names, not Ready Player Me's").toBe("pelvis");
     else expect(fixture.declared, "the fixture maps its bones by a VRM 0.x declaration").toBe("vrm0");
 
-    // Record a short standing take on the fixture in the real capture app.
+    // Record a short walking take on the fixture in the real capture app.
     const capture = await context.newPage();
     const captureErrors: string[] = [];
     capture.on("pageerror", (error) => captureErrors.push(`pageerror: ${error.message}`));
@@ -235,7 +268,13 @@ for (const name of FIXTURES) {
     await expect(capture.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible();
     const recordedBones = await capture.evaluate(() => (window as unknown as CaptureWindow).__sampleBody().bones);
     const recordedYaw = yawFromSides([[recordedBones.leftShoulder, recordedBones.rightShoulder], [recordedBones.leftHip, recordedBones.rightHip]]);
-    await capture.evaluate(() => (window as unknown as CaptureWindow).advanceTime(1000));
+    await capture.evaluate(() => {
+      const w = window as unknown as CaptureWindow;
+      w.__setMockInput({ forward: true });
+      w.advanceTime(1200);
+      w.__setMockInput({});
+      w.advanceTime(400);
+    });
     const download = capture.waitForEvent("download");
     await capture.getByRole("button", { name: CONTROL_NAMES.stopRecording }).click();
     const glbPath = testInfo.outputPath(`${name}-export.glb`);
@@ -252,6 +291,12 @@ for (const name of FIXTURES) {
     expect(json.extensionsUsed ?? [], "HOLOIM_humanoid is listed as used").toContain("HOLOIM_humanoid");
     expect(json.nodes?.[declaration!.bones.hips!]?.name, "declared hips keep the fixture's name").toBe(fixture.hips);
     expect(json.nodes?.[declaration!.bones.head!]?.name, "declared head keeps the fixture's name").toBe(fixture.head);
+    // The retargeted walk reached the recording: the knees bend through a stride.
+    const kneeSwingDeg = Math.min(
+      rotationRangeDeg(glb, json, declaration!.bones.leftLowerLeg!),
+      rotationRangeDeg(glb, json, declaration!.bones.rightLowerLeg!)
+    );
+    expect(kneeSwingDeg, `both knees swing in the export (${kneeSwingDeg.toFixed(1)}°)`).toBeGreaterThan(8);
 
     await installProbes(page);
     const uploaded = await upload(page, `avatar-${name}`, glb);
@@ -265,7 +310,7 @@ for (const name of FIXTURES) {
     const ar = await readHumanoid(page, "ar");
     await captureEvidence(page, testInfo, `${name}-ar`);
 
-    await writeReport(name, { fixture, recordedYawDeg: recordedYaw, feed, ar });
+    await writeReport(name, { fixture, recordedYawDeg: recordedYaw, kneeSwingDeg, feed, ar });
     for (const [view, reading] of [["feed", feed], ["AR", ar]] as const) {
       expect(reading.source, `${view}: hips from HOLOIM_humanoid`).toBe("holoim");
       expect(reading.hips, `${view}: hips`).toBe(fixture.hips);

@@ -13,6 +13,10 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
+Ready to merge with the next finished change, not merged:
+`claude/locomotion-retarget-9a0612` (locomotion clips on every avatar,
+[`docs/features/locomotion-retarget.md`](docs/features/locomotion-retarget.md)).
+
 Resize and move props on every device
 ([`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md))
 and the cloche's rim follows the ground
