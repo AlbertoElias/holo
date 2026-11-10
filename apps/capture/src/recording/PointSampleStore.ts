@@ -52,6 +52,26 @@ export interface AimHold {
   endSec: number | undefined;
 }
 
+/**
+ * An author-marked trace (PRD-023 v1): the take seconds the author turned Ink
+ * on and off, and the hand that summoned the Halo for each toggle (the
+ * summoning hand's settle is trimmed at export). `endSec` is undefined while
+ * the trace is open.
+ */
+export interface TraceSpan {
+  startSec: number;
+  endSec: number | undefined;
+  onSide?: VrHandSide;
+  offSide?: VrHandSide;
+}
+
+/** What `undoLast` or `redoLast` took out or put back. */
+export type HistoryKind = 'hold' | 'trace';
+
+type HistoryEntry = { kind: 'hold'; hold: AimHold } | { kind: 'trace'; trace: TraceSpan };
+
+const entryStart = (entry: HistoryEntry): number => (entry.kind === 'hold' ? entry.hold.samples[0]!.timeSec : entry.trace.startSec);
+
 /** Contiguous frames where synthesized motion, not tracking, drove `bones`. */
 export interface InferredMotionRun {
   bones: VrmHumanoidBone[];
@@ -76,8 +96,8 @@ const MAX_SAMPLE_GAP_SEC = 0.25;
  * - Held marks (desktop point action, phone touch, headset pinch or
  *   trigger): on each simulation step while the mark is held, call
  *   `recordAim` with its ray and input; call `endAim` on the step the hold
- *   ends. `undoLastHold` and `redoHold` (the Halo's W and E) take the last
- *   hold out of the take and put it back; a new hold clears what can be redone. While synthesized arm motion is visible (including any
+ *   ends. `undoLast` and `redoLast` (the Halo's W and E) take the last hold or
+ *   trace out of the take and put it back; a new hold or trace clears what can be redone. While synthesized arm motion is visible (including any
  *   blend back to locomotion), call `recordInferredMotion` each step with the
  *   VRM bones it drives. Aim holds become `recorded` links that override
  *   inferred links over their span; motion runs become `inferred` motion spans.
@@ -86,15 +106,29 @@ export class PointSampleStore {
   private enabled = false;
   private readonly handSamples: HandPointSample[] = [];
   private readonly aimHolds: AimHold[] = [];
-  /** Undone holds, most recent last; `redoHold` takes from the end. */
-  private readonly undoneHolds: AimHold[] = [];
+  /** Author-marked traces, in the order they began. */
+  private readonly traces: TraceSpan[] = [];
+  /** Holds and traces kept, ordered by when they began: what Undo takes from the end. */
+  private readonly history: HistoryEntry[] = [];
+  /** Undone entries, most recent last; `redoLast` takes from the end. */
+  private readonly undone: HistoryEntry[] = [];
+  /** The latest time any writer gave: where a stop closes an open trace. */
+  private lastSec = 0;
   /** An open hold was undone while its mark is still held: drop its samples until it is released. */
   private droppingUntilRelease = false;
   private readonly motionRuns: InferredMotionRun[] = [];
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    if (!enabled) this.closeOpenHold();
+    if (!enabled) {
+      this.closeOpenHold();
+      this.closeOpenTrace(this.lastSec);
+    }
+  }
+
+  /** The step's simulation time, so a stop can close an open trace where the take ended. */
+  noteTime(timeSec: number): void {
+    if (timeSec > this.lastSec) this.lastSec = timeSec;
   }
 
   isEnabled(): boolean {
@@ -104,19 +138,24 @@ export class PointSampleStore {
   clear(): void {
     this.handSamples.length = 0;
     this.aimHolds.length = 0;
-    this.undoneHolds.length = 0;
+    this.traces.length = 0;
+    this.history.length = 0;
+    this.undone.length = 0;
+    this.lastSec = 0;
     this.droppingUntilRelease = false;
     this.motionRuns.length = 0;
   }
 
   recordHandSample(sample: HandPointSample): void {
     if (!this.enabled) return;
+    this.noteTime(sample.timeSec);
     this.handSamples.push(copyRaySample(sample));
   }
 
   /** One step of a held mark. */
   recordAim(sample: AimPointSample): void {
     if (!this.enabled || this.droppingUntilRelease) return;
+    this.noteTime(sample.timeSec);
     const input = sample.input ?? 'desktop';
     const open = this.aimHolds.at(-1);
     const last = open?.samples.at(-1);
@@ -129,47 +168,107 @@ export class PointSampleStore {
       return;
     }
     this.closeOpenHold();
-    this.undoneHolds.length = 0;
-    this.aimHolds.push({ side: sample.side, input, samples: [copyRaySample(sample)], endSec: undefined });
+    this.undone.length = 0;
+    const hold: AimHold = { side: sample.side, input, samples: [copyRaySample(sample)], endSec: undefined };
+    this.aimHolds.push(hold);
+    this.history.push({ kind: 'hold', hold });
   }
 
   /** The hold ended on this step. Safe to call when no hold is open. */
   endAim(timeSec: number): void {
     if (!this.enabled) return;
+    this.noteTime(timeSec);
     this.droppingUntilRelease = false;
     const open = this.aimHolds.at(-1);
     if (open && open.endSec === undefined) open.endSec = Math.max(timeSec, open.samples.at(-1)!.timeSec);
   }
 
+  /** The trace still being drawn, or null. */
+  openTrace(): TraceSpan | null {
+    const last = this.traces.at(-1);
+    return last && last.endSec === undefined ? last : null;
+  }
+
+  /** Ink on: a trace begins at `sec`, which clears what can be redone. `side` is the hand that summoned the Halo. */
+  startTrace(sec: number, side?: VrHandSide): boolean {
+    if (!this.enabled || this.openTrace()) return false;
+    this.noteTime(sec);
+    this.undone.length = 0;
+    const trace: TraceSpan = { startSec: sec, endSec: undefined, ...(side ? { onSide: side } : {}) };
+    this.traces.push(trace);
+    this.history.push({ kind: 'trace', trace });
+    return true;
+  }
+
+  /** Ink off: ends the open trace at `sec` (the press of the Halo that turned it off) and returns it; null when none is open. */
+  endTrace(sec: number, side?: VrHandSide): TraceSpan | null {
+    const open = this.openTrace();
+    if (!this.enabled || !open) return null;
+    open.endSec = Math.max(sec, open.startSec);
+    if (side) open.offSide = side;
+    this.noteTime(open.endSec);
+    return open;
+  }
+
   /**
-   * The Halo's W: takes the take's last hold out (ending it first if it is
-   * still held, and ignoring the rest of that hold). False when there is none.
+   * The Halo's W. While a trace is open it is ended at `pressSec` and removed,
+   * even if a hold began inside it. Otherwise the entry that began last goes:
+   * a hold (ended first if still held, ignoring the rest of that hold) or a
+   * trace. Null when there is nothing.
    */
-  undoLastHold(timeSec: number): boolean {
-    if (!this.enabled) return false;
-    const last = this.aimHolds.at(-1);
-    if (!last) return false;
-    if (last.endSec === undefined) {
-      last.endSec = Math.max(timeSec, last.samples.at(-1)!.timeSec);
+  undoLast(pressSec: number): HistoryKind | null {
+    if (!this.enabled) return null;
+    const open = this.openTrace();
+    if (open) {
+      open.endSec = Math.max(pressSec, open.startSec);
+      return this.take({ kind: 'trace', trace: open });
+    }
+    const last = this.history.at(-1);
+    if (!last) return null;
+    if (last.kind === 'hold' && last.hold.endSec === undefined) {
+      last.hold.endSec = Math.max(pressSec, last.hold.samples.at(-1)!.timeSec);
       this.droppingUntilRelease = true;
     }
-    this.undoneHolds.push(this.aimHolds.pop()!);
-    return true;
+    return this.take(last);
   }
 
-  /** The Halo's E: puts the last undone hold back. False when there is none. */
-  redoHold(): boolean {
-    if (!this.enabled) return false;
-    const hold = this.undoneHolds.pop();
-    if (!hold) return false;
-    // A new hold clears the undone ones, so every kept hold is older than this one.
-    this.aimHolds.push(hold);
-    return true;
+  /** The Halo's E: puts the most recently undone hold or trace back. Null when there is none. */
+  redoLast(): HistoryKind | null {
+    if (!this.enabled) return null;
+    const entry = this.undone.pop();
+    if (!entry) return null;
+    // Kept in the order they began, so an undone trace that held a later hold returns before it.
+    const at = this.history.findIndex((kept) => entryStart(kept) > entryStart(entry));
+    this.history.splice(at < 0 ? this.history.length : at, 0, entry);
+    const list: Array<AimHold | TraceSpan> = entry.kind === 'hold' ? this.aimHolds : this.traces;
+    const item = entry.kind === 'hold' ? entry.hold : entry.trace;
+    const start = (x: AimHold | TraceSpan): number => ('samples' in x ? x.samples[0]!.timeSec : x.startSec);
+    const index = list.findIndex((kept) => start(kept) > start(item));
+    list.splice(index < 0 ? list.length : index, 0, item);
+    return entry.kind;
   }
 
-  /** How many holds the take keeps and how many can be redone. */
+  private take(entry: HistoryEntry): HistoryKind {
+    const from: Array<AimHold | TraceSpan> = entry.kind === 'hold' ? this.aimHolds : this.traces;
+    const item = entry.kind === 'hold' ? entry.hold : entry.trace;
+    from.splice(from.indexOf(item), 1);
+    this.history.splice(this.history.indexOf(entry), 1);
+    this.undone.push(entry);
+    return entry.kind;
+  }
+
+  /** How many holds the take keeps and how many holds and traces can be redone. */
   holdCounts(): { kept: number; undone: number } {
-    return { kept: this.aimHolds.length, undone: this.undoneHolds.length };
+    return { kept: this.aimHolds.length, undone: this.undone.filter((entry) => entry.kind === 'hold').length };
+  }
+
+  /** How many traces the take keeps (an open one counts) and how many can be redone. */
+  traceCounts(): { kept: number; undone: number } {
+    return { kept: this.traces.length, undone: this.undone.filter((entry) => entry.kind === 'trace').length };
+  }
+
+  getTraces(): readonly TraceSpan[] {
+    return this.traces;
   }
 
   /** Desktop: synthesized motion drove `bones` on this step. */
@@ -204,7 +303,12 @@ export class PointSampleStore {
   }
 
   hasSamples(): boolean {
-    return this.handSamples.length > 0 || this.aimHolds.length > 0 || this.motionRuns.length > 0;
+    return this.handSamples.length > 0 || this.aimHolds.length > 0 || this.traces.length > 0 || this.motionRuns.length > 0;
+  }
+
+  private closeOpenTrace(sec: number): void {
+    const open = this.openTrace();
+    if (open) open.endSec = Math.max(sec, open.startSec);
   }
 
   private closeOpenHold(): void {

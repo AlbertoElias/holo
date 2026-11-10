@@ -37,7 +37,7 @@ import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
 import { ScreenHolds } from '../xr/ScreenHolds';
 import { XrTracking } from '../xr/XrTracking';
-import { installAutomationHooks } from './automationHooks';
+import { installAutomationHooks, tracesSnapshot } from './automationHooks';
 import { createHaloActions } from './haloActions';
 import { createCaptureStage, holdXrInputBetweenFrames, syncPlayerToRig } from './captureStage';
 import { renderCaptureTextState } from './captureTextState';
@@ -90,7 +90,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ui,
     recording: { toggle: () => recording.toggle() },
     getPointSamples: () => recording.recorder.pointSamples,
-    getTimeSec: () => capture.frame.elapsedSec
+    getTimeSec: () => capture.frame.elapsedSec,
+    anyTraceDrawn: () => vrChrome.liveTrace.anyDrawn()
   });
   const flatHalo = new FlatHalo((commit) => {
     if (commit.action) haloActions.run(commit.action, 'key');
@@ -151,7 +152,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec),
     pickObject: (url) => void objects.loadTrayUrls([url]),
     tray: objects.tray,
-    removeTraySlot: (slot) => void objects.removeTraySlot(slot)
+    removeTraySlot: (slot) => void objects.removeTraySlot(slot),
+    getAvatarRoot: () => avatar.avatarRoot,
+    getOpenTraceStart: () => recording.recorder.pointSamples.openTrace()?.startSec ?? null
   });
   // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.
   const recenterAr = (): void => {
@@ -192,8 +195,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     getHandedness: () => ui.getState().handedness,
     // A hand grabbing, or holding the tray open, is doing that: no mark or Halo on it.
     isHandBusy: (side) => objects.grabInput.get(side).pressed || (side === nonDominantHand(ui.getState().handedness) && objects.trayGesture.isHeld()),
-    onHaloAction: (action, kind, side, at) => {
-      haloActions.run(action, kind);
+    onHaloAction: (action, kind, side, at, pressSec) => {
+      haloActions.run(action, kind, pressSec, side);
       vrChrome.haloFeedback(side, at, kind);
     }
   });
@@ -414,6 +417,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __sampleHolds: () => ({
           headset: headsetHolds.snapshot(),
           holds: recording.recorder.pointSamples.holdCounts(),
+          traces: tracesSnapshot(recording.recorder.pointSamples),
+          liveTrace: vrChrome.liveTrace.probe(),
           touch: input.touch.snapshot().hold,
           flatHalo: flatHalo.getSnapshot(),
           actions: haloActions.log

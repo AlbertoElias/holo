@@ -17,6 +17,8 @@ export class CaptureUiSystem extends createSystem() {
       const frames = c.recording.recorder.getFrames();
       if (frames.length > 0) c.ui.setRecordingElapsed((frames[frames.length - 1]!.timeSec - frames[0]!.timeSec) * 1000);
     }
+    const open = c.recording.kind === 'camera' ? null : c.recording.recorder.pointSamples.openTrace();
+    c.ui.setTracingElapsed(open ? (c.frame.elapsedSec - open.startSec) * 1000 : null);
     if (c.frame.arCameraAuthor) {
       c.phoneChrome.update(deltaSec);
       return;

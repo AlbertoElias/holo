@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { type MeaningMotionSpan, type MeaningLinkProvenance, type MeaningSpan, resolveHumanoidBone, type VrmHumanoidBone } from '@holoim/meaning';
+import { type MeaningMotionSpan, type MeaningLinkProvenance, type MeaningSpan, pathExtent, resolveHumanoidBone, STILL_EXTENT_METERS, type VrmHumanoidBone } from '@holoim/meaning';
 
 import { HOLD_DELAY_MS } from '@holoim/xr-ui-core';
 
@@ -8,6 +8,8 @@ import { humanoidTagOf } from '../avatar/HumanoidSkeleton';
 import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
 import { RECORDED_OBJECT_SIZE_NODE_NAME } from './objectExport';
 import type { RecordingFrame, VrHandSide } from '../types/contracts';
+import type { AuthoringFrameSpan } from './authoringSpans';
+import { recordedHandFrames } from './handSpans';
 import type { AimHold, AimInput, AimPointSample, HandPointSample, PointSampleStore } from './PointSampleStore';
 import { POINT_DWELL_SEC, type PoseSegment, type ReferentRun, type ReferentSample, segmentPoses, splitByReferent } from './pointSegments';
 
@@ -20,8 +22,24 @@ export interface MeaningLinkDraft {
   provenance: MeaningLinkProvenance;
 }
 
+/**
+ * The hand whose Halo summoned an Ink toggle has to travel back from the Halo
+ * (after on) or lift to pinch (before off), and that travel is not the
+ * demonstration: its trace span is trimmed by this much at that end. The
+ * other hand keeps the exact span. 0 turns the trim off.
+ */
+export const SUMMONING_HAND_SETTLE_SEC = 0.4;
+
+/** A trace for one hand; `GLTFMeaningPlugin` swaps the node for its index. */
+export interface MeaningTraceDraft {
+  from: { bone: VrmHumanoidBone; object: THREE.Object3D };
+  span: MeaningSpan;
+}
+
 export interface MeaningDraft {
   marks: MeaningLinkDraft[];
+  /** Author-marked hand traces (PRD-023 v1), one per hand that moved. */
+  traces: MeaningTraceDraft[];
   spans: MeaningMotionSpan[];
 }
 
@@ -46,6 +64,8 @@ export interface PointResolutionReport {
 
 export interface PointResolutionInput {
   frames: readonly RecordingFrame[];
+  /** The take's hands-in-menu spans, which a trace's stillness and mark never count. */
+  menuSpans?: readonly AuthoringFrameSpan[];
   store: PointSampleStore;
   /** The live avatar the frames were recorded from; cloned and posed per frame for capsules. */
   avatar: THREE.Object3D;
@@ -185,7 +205,7 @@ export class PointResolver {
 
   resolve(input: PointResolutionInput): { draft: MeaningDraft; report: PointResolutionReport } {
     const report: PointResolutionReport = { poseSegments: [], aimHolds: [], runs: [] };
-    const draft: MeaningDraft = { marks: [], spans: [] };
+    const draft: MeaningDraft = { marks: [], traces: [], spans: [] };
     const { frames, store } = input;
     if (frames.length === 0 || !store.hasSamples()) return { draft, report };
 
@@ -222,6 +242,8 @@ export class PointResolver {
       }
       for (const { hold, start, end } of holds) this.resolveAimHold(input, hold, start, end, toSpan, draft, report);
 
+      this.resolveTraces(input, t0, draft);
+
       for (const run of store.getInferredMotionRuns()) {
         draft.spans.push({ kind: 'motion', bones: [...run.bones], span: toSpan(run.startSec, run.endSec), provenance: { value: 'inferred' } });
       }
@@ -246,7 +268,7 @@ export class PointResolver {
    */
   resolveCamera(input: CameraResolutionInput): { draft: MeaningDraft; report: PointResolutionReport } {
     const report: PointResolutionReport = { poseSegments: [], aimHolds: [], runs: [] };
-    const draft: MeaningDraft = { marks: [], spans: [] };
+    const draft: MeaningDraft = { marks: [], traces: [], spans: [] };
     const toSpan = spanWithin(input.startSec, input.endSec);
     const t0 = input.startSec;
     const screenHolds = input.store.getAimHolds().filter((hold) => hold.input === 'screen');
@@ -277,6 +299,42 @@ export class PointResolver {
     this.sceneTargets = new Map();
     draft.marks.sort((a, b) => a.span.start - b.span.start);
     return { draft, report };
+  }
+
+  /**
+   * Each ended trace becomes one mark per hand that moved: over the frames in
+   * the (settle-trimmed) span where tracked hands drove that hand, the export
+   * avatar is posed and its fingertip measured; under the still extent, no mark.
+   */
+  private resolveTraces(input: PointResolutionInput, t0: number, draft: MeaningDraft): void {
+    const { frames } = input;
+    const menuSpans = input.menuSpans ?? [];
+    for (const trace of input.store.getTraces()) {
+      if (trace.endSec === undefined) continue;
+      for (const side of ['left', 'right'] as const) {
+        const start = trace.startSec + (trace.onSide === side ? SUMMONING_HAND_SETTLE_SEC : 0);
+        const end = trace.endSec - (trace.offSide === side ? SUMMONING_HAND_SETTLE_SEC : 0);
+        const from = this.fromAnchor(side);
+        if (end <= start || !from || !('bone' in from)) continue;
+        const recorded = recordedHandFrames(frames, menuSpans, side);
+        const first = nearestFrameIndex(frames, start);
+        const points: THREE.Vector3[] = [];
+        let firstSec = Number.NaN;
+        let lastSec = Number.NaN;
+        for (let i = first; i < frames.length && frames[i]!.timeSec <= end; i += 1) {
+          if (frames[i]!.timeSec < start || recorded[i] !== 1) continue;
+          this.posedFrame(input, i);
+          const tip = this.posedBones.get(from.bone);
+          if (!tip) break;
+          points.push(tip.getWorldPosition(new THREE.Vector3()));
+          if (Number.isNaN(firstSec)) firstSec = frames[i]!.timeSec;
+          lastSec = frames[i]!.timeSec;
+        }
+        if (points.length < 2 || pathExtent(points) <= STILL_EXTENT_METERS) continue;
+        draft.traces.push({ from, span: { start: round(firstSec - t0), end: round(lastSec - t0) } });
+      }
+    }
+    draft.traces.sort((a, b) => a.span.start - b.span.start);
   }
 
   private resolveHandSegment(
@@ -455,7 +513,7 @@ export class PointResolver {
 
   // Poses the avatar clone as the export will show `frameIndex` and returns
   // its body capsules without the pointing side's arm and hand.
-  private poseCapsules(input: PointResolutionInput, frameIndex: number, pointingSide: VrHandSide): Capsule[] {
+  private posedFrame(input: PointResolutionInput, frameIndex: number): void {
     if (!this.posedAvatar) {
       this.posedAvatar = SkeletonUtils.clone(input.avatar);
       this.posedBoneList = [];
@@ -468,6 +526,10 @@ export class PointResolver {
       applyFrame(this.posedAvatar, this.posedBoneList, input.frames[frameIndex]!);
       this.posedFrameIndex = frameIndex;
     }
+  }
+
+  private poseCapsules(input: PointResolutionInput, frameIndex: number, pointingSide: VrHandSide): Capsule[] {
+    this.posedFrame(input, frameIndex);
     const capsules: Capsule[] = [];
     const position = (bone: VrmHumanoidBone): THREE.Vector3 | undefined => {
       const object = this.posedBones.get(bone);
@@ -533,7 +595,7 @@ function spanWithin(t0: number, tEnd: number): (start: number, end: number) => M
  * its end site, the fingertip, when the rig has one. Untagged rigs fall back
  * to bone names.
  */
-function collectHumanoidBones(root: THREE.Object3D, out: Map<VrmHumanoidBone, THREE.Bone>): void {
+export function collectHumanoidBones(root: THREE.Object3D, out: Map<VrmHumanoidBone, THREE.Bone>): void {
   out.clear();
   const tips = new Map<VrmHumanoidBone, THREE.Bone>();
   root.traverse((obj) => {

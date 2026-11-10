@@ -28,11 +28,11 @@ import {
 // chrome is exported in the GLB or becomes a pointing referent.
 
 describe("Halo directions (Q20)", () => {
-  it("has eight fixed directions, and capture's first Halo fills S, W and E", () => {
+  it("has eight fixed directions, and capture's headset Halo fills S, W, E and NW", () => {
     const layout = haloLayout(CAPTURE_HALO_ACTIONS, { headset: false });
     expect(layout.slots.map((slot) => slot.direction)).toEqual([...HALO_DIRECTIONS]);
     expect(Object.fromEntries(layout.slots.map((slot) => [slot.direction, slot.action]))).toEqual({
-      n: null, ne: null, e: "redo", se: null, s: "record", sw: null, w: "undo", nw: null
+      n: null, ne: null, e: "redo", se: null, s: "record", sw: null, w: "undo", nw: "ink"
     });
   });
 

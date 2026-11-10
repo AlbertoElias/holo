@@ -105,6 +105,8 @@ export interface UiViewModel {
   handedness: Handedness;
   /** Running time of the take, whole seconds as ms, on the simulation clock. */
   recordingElapsedMs: number;
+  /** How long the open Ink trace has run (whole seconds as ms, simulation clock), or null while not tracing (PRD-023 v1). */
+  tracingElapsedMs: number | null;
   /** What the dock's VR and AR entries offer. */
   xrEntry: { vr: XrEntryOffer; ar: XrEntryOffer };
   /** A brief word after a Halo action ("Mark undone"), on the status line; null otherwise. */

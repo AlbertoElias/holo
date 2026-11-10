@@ -7,6 +7,8 @@ import type { BodySample, HandSample, MockInputState, MockVrPoseInput, Spectator
 import type { TouchStick } from '../input/TouchInput';
 import type { FlatHaloView } from '../ui/flatHalo';
 import type { PointResolutionReport } from '../recording/PointResolver';
+import type { PointSampleStore } from '../recording/PointSampleStore';
+import type { LiveTraceProbe } from '../ui/LiveTrace';
 import type { PhoneArChromeProbe } from '../ui/PhoneArChrome';
 import type { ChromeTarget, VrChromeSnapshot } from '../ui/VrChrome';
 import type { prefetchStats } from '../objects/objectSearch';
@@ -78,9 +80,28 @@ export interface AutomationHooks {
   __projectToScreen: (point: readonly number[]) => { x: number; y: number } | null;
 }
 
+export interface TracesSnapshot {
+  open: { startSec: number } | null;
+  kept: Array<{ startSec: number; endSec: number; onSide: VrHandSide | null; offSide: VrHandSide | null }>;
+  undone: number;
+}
+
+export function tracesSnapshot(store: PointSampleStore): TracesSnapshot {
+  const open = store.openTrace();
+  return {
+    open: open ? { startSec: open.startSec } : null,
+    kept: store.getTraces().flatMap((trace) => (trace.endSec === undefined ? [] : [{ startSec: trace.startSec, endSec: trace.endSec, onSide: trace.onSide ?? null, offSide: trace.offSide ?? null }])),
+    undone: store.traceCounts().undone
+  };
+}
+
 export interface HoldsSnapshot {
   headset: ReturnType<HeadsetHolds['snapshot']>;
   holds: { kept: number; undone: number };
+  /** Author-marked traces (PRD-023 v1): the open one, the ones kept (take seconds on the simulation clock), how many were undone. */
+  traces: TracesSnapshot;
+  /** The live trace behind each fingertip, per hand. */
+  liveTrace: LiveTraceProbe;
   touch: string;
   flatHalo: FlatHaloView;
   actions: HaloActionRecord[];

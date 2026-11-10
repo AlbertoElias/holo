@@ -20,6 +20,7 @@ export class UIStateStore {
     faceCamera: 'off',
     handedness: loadHandedness(),
     recordingElapsedMs: 0,
+    tracingElapsedMs: null,
     xrEntry: { vr: 'unknown', ar: 'unknown' },
     notice: null
   };
@@ -40,7 +41,7 @@ export class UIStateStore {
 
   setRecordingState(recordingState: UiViewModel['recordingState'], recordingMessage: string | null = null): void {
     const recordingElapsedMs = recordingState === 'recording' && this.value.recordingState === 'recording' ? this.value.recordingElapsedMs : 0;
-    this.value = { ...this.value, recordingState, recordingMessage, recordingElapsedMs };
+    this.value = { ...this.value, recordingState, recordingMessage, recordingElapsedMs, tracingElapsedMs: recordingState === 'recording' ? this.value.tracingElapsedMs : null };
     this.emit();
   }
 
@@ -49,6 +50,14 @@ export class UIStateStore {
     const whole = Math.max(0, Math.floor(ms / 1000) * 1000);
     if (this.value.recordingState !== 'recording' || whole === this.value.recordingElapsedMs) return;
     this.value = { ...this.value, recordingElapsedMs: whole };
+    this.emit();
+  }
+
+  /** The open trace's running time, or null when none is open; only whole seconds change what anyone sees. */
+  setTracingElapsed(ms: number | null): void {
+    const whole = ms === null ? null : Math.max(0, Math.floor(ms / 1000) * 1000);
+    if (whole === this.value.tracingElapsedMs) return;
+    this.value = { ...this.value, tracingElapsedMs: whole };
     this.emit();
   }
 

@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { GLTFExporterPlugin } from 'three/examples/jsm/exporters/GLTFExporter.js';
-import { encodeHoloimMeaning, HOLOIM_MEANING_EXTENSION, type MeaningLinkMark } from '@holoim/meaning';
+import { encodeHoloimMeaning, HOLOIM_MEANING_EXTENSION, type MeaningLinkMark, type MeaningTraceMark } from '@holoim/meaning';
 
 import { AUTHOR_CAMERA_NODE_NAME } from './CameraTrackStore';
 import type { MeaningDraft } from './PointResolver';
@@ -18,7 +18,7 @@ interface GLTFWriterInternal {
  * exist only once the writer has processed the scene, so drafts carry
  * objects and are mapped through the writer's `nodeMap` here. A link whose
  * node was not exported is dropped; nothing is written when nothing is left.
- * The version is chosen by `encodeHoloimMeaning` (lowest that accepts the
+ * Author-marked traces (PRD-023 v1) are `trace` marks anchored to the fingertip node; a take with one writes v2. The version is chosen by `encodeHoloimMeaning` (lowest that accepts the
  * record): performer drafts carry bone froms and keep writing v0; a camera
  * take's links come from its camera node and write v1. The schema checks the
  * extension alone, so this writer asserts a camera `from` names the author
@@ -57,9 +57,18 @@ export class GLTFMeaningPlugin implements GLTFExporterPlugin {
         provenance: mark.provenance
       });
     }
-    if (marks.length === 0 && this.draft.spans.length === 0) return;
+    // A trace whose fingertip node was not exported is dropped, as a link is.
+    const traces: MeaningTraceMark[] = [];
+    for (const trace of this.draft.traces) {
+      const node = nodeMap.get(trace.from.object);
+      if (node === undefined) continue;
+      traces.push({ kind: 'trace', anchor: { bone: trace.from.bone, node }, span: trace.span, provenance: { value: 'recorded' } });
+    }
+    if (marks.length === 0 && traces.length === 0 && this.draft.spans.length === 0) return;
 
-    const meaning = encodeHoloimMeaning({ marks, spans: this.draft.spans });
+    // Links keep their order; with traces, both are sorted by start (links first on a tie).
+    const all = traces.length === 0 ? marks : [...marks, ...traces].sort((a, b) => a.span.start - b.span.start);
+    const meaning = encodeHoloimMeaning({ marks: all, spans: this.draft.spans });
     const json = this.writer.json;
     if (!json.extensions) json.extensions = {};
     json.extensions[HOLOIM_MEANING_EXTENSION] = meaning;

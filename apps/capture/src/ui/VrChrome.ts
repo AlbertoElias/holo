@@ -8,6 +8,7 @@ import {
   isInChrome,
   markChromeTree,
   nonDominantHand,
+  formatRunningTime,
   recordingText,
   type DockAction,
   type Hand,
@@ -19,6 +20,7 @@ import { SHOW_CAPABILITIES, capabilityLine } from '../objects/findCapabilities';
 import { ObjectSearchSession } from '../objects/objectSearchSession';
 import type { UiViewModel } from '../types/contracts';
 import type { XrTracking } from '../xr/XrTracking';
+import { LiveTrace } from './LiveTrace';
 import { SpatialTick } from './SpatialTick';
 import { SystemKeyboard } from './systemKeyboard';
 import { XrTraySignifiers, type XrTraySignifiersProbe } from './XrTraySignifiers';
@@ -44,6 +46,10 @@ interface VrChromeDeps {
   tray: ObjectTray;
   /** A miniature's Close ring: its item leaves the tray (docs/features/tray-remove.md). */
   removeTraySlot: (slot: number) => void;
+  /** The avatar whose index fingertips the live trace follows. */
+  getAvatarRoot: () => THREE.Object3D | null;
+  /** When the open Ink trace began (simulation seconds), or null (PRD-023 v1). */
+  getOpenTraceStart: () => number | null;
 }
 
 /** VR carries the whole chrome; passthrough AR (the spectator) carries Find only. */
@@ -108,6 +114,8 @@ const raycaster = new THREE.Raycaster();
 export class VrChrome {
   /** Every chrome object hangs here, chrome-flagged, so recording, export and pointing skip it. */
   readonly root = new THREE.Group();
+  /** The trace behind each moving fingertip while Ink is on; hangs under `root`, so it is chrome. */
+  readonly liveTrace = new LiveTrace();
   private dock: HandDock | null = null;
   private dockKey = '';
   private wristTracked = false;
@@ -161,6 +169,7 @@ export class VrChrome {
     this.shade.renderOrder = 991;
     this.shade.raycast = () => undefined;
     this.root.add(this.shade);
+    this.root.add(this.liveTrace.group);
     markChromeTree(this.root);
   }
 
@@ -184,6 +193,7 @@ export class VrChrome {
     this.root.visible = false;
     this.shown = false;
     this.shade.visible = false;
+    this.liveTrace.clear();
     this.status?.set(null);
     this.panel?.setVisible(false);
     this.dock?.setVisible(false);
@@ -326,6 +336,12 @@ export class VrChrome {
 
     this.updateWrist(state.handedness, recording);
     this.updateStatus(deltaSec, state, recording);
+    this.liveTrace.update({
+      startSec: recording ? this.deps.getOpenTraceStart() : null,
+      elapsedSec,
+      avatarRoot: this.deps.getAvatarRoot(),
+      tracked: (side) => this.deps.tracking.getHandPoseSource(side) === 'xr-hand'
+    });
     this.updatePanel(camera, state, recording);
     this.updateFind(camera, state);
     // Rings and the summon glyph at the open tray's miniatures; only in a headset, never in passthrough (a spectator does not summon).
@@ -504,7 +520,8 @@ export class VrChrome {
 
   private updateStatus(deltaSec: number, state: UiViewModel, recording: boolean): void {
     if (!this.status) return;
-    const base = recording ? recordingText(state.recordingElapsedMs) : state.heightFit.pending ? 'Hold still: fitting your height' : '';
+    const tracing = recording && state.tracingElapsedMs !== null ? ` · Tracing ${formatRunningTime(state.tracingElapsedMs)}` : '';
+    const base = recording ? `${recordingText(state.recordingElapsedMs)}${tracing}` : state.heightFit.pending ? 'Hold still: fitting your height' : '';
     // No mark shows live in a headset, so a Halo action is said here (slice 5).
     const text = state.notice ? (base ? `${base} · ${state.notice}` : state.notice) : base;
     this.status.set(text !== '' && chromeVisible('status', recording) ? { prefix: null, body: text } : null);
