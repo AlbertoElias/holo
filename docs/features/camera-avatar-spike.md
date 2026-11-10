@@ -173,14 +173,30 @@ meaning layer (principle 7), and with what confidence.
 1. **Model files (blocks slice 2).** Download the pose model (about 9 MB)
    and the hand model (about 8 MB) from Google's MediaPipe model storage and
    commit them to `apps/capture/public/mediapipe/`, as the face model is.
-2. **Ground truth (blocks slices 2 and 3).** The numbers need a person on
-   camera. Options, in rising cost and value:
-   - a CC0 stock clip: proves the pipeline, no pointing truth;
-   - the user records about 30 seconds, propped, following a script (point
-     at two taped marks, touch the nose and the opposite shoulder, pinch,
-     fist, open hand, one hand raised), kept under ignored `output/`;
-   - the user does the same wearing the Quest, synced on a clap, scored by
-     `scripts/lib/hand-fidelity.ts` against the headset's own hands.
+2. **Ground truth: decided (the user, 2026-11-10).** The user records one
+   clip on a propped phone's front camera, following the script below; it
+   stays at `output/bodycam/clip.mov` (ignored) and is never committed. If
+   the result is borderline, repeat it wearing the Quest, synced on a clap
+   and scored by `scripts/lib/hand-fidelity.ts` against the headset's own
+   hands.
+
+### Clip script
+
+Setup: phone propped upright at face height; the author about 1 m from the
+lens, with head, shoulders and both raised hands in frame; one mark 50 cm to
+each side of the lens at lens height. The author reports the three real
+distances. Each pose is held for about 3 seconds, in this order:
+
+1. Both open hands still at shoulder height, palms to the lens (jitter at rest).
+2. Right hand raised alone (sides).
+3. Right index points at the left mark, the right mark, then the lens (aim error).
+4. Left index points at the right mark (aim error, other hand).
+5. Right index touches the nose, then the right hand touches the left
+   shoulder (the join between pose and hand models).
+6. Right thumb and index pinch, facing the lens (pinch distance).
+7. Both fists, then both hands open (finger curl).
+8. Head turns left, right, then nods (head rotation).
+9. Right hand leaves the frame for 2 seconds and returns (hold and release).
 
 ## Test plan and evidence
 
