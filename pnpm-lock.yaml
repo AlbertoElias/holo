@@ -366,6 +366,9 @@ importers:
       '@react-three/xr':
         specifier: ^6.2.5
         version: 6.6.29(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(super-three@0.181.0)
+      '@sparkjsdev/spark':
+        specifier: 2.3.1
+        version: 2.3.1(super-three@0.181.0)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -2280,6 +2283,11 @@ packages:
 
   '@so-ric/colorspace@1.1.6':
     resolution: {integrity: sha512-/KiKkpHNOBgkFJwu9sh48LkHSMYGyuTcSFK/qMBdnOAlrRJzRSXAOFB5qwzaVQuDl8wAvHVMkaASQDReTahxuw==}
+
+  '@sparkjsdev/spark@2.3.1':
+    resolution: {integrity: sha512-K+SyIbkO/dx1TLLudK8Jp3/noS13z/kdNPo6OK2waxQaGy81HBmKGnNBT/t/K9Ew3dsIXmWqsJXxGfmAu1T5Jg==}
+    peerDependencies:
+      three: '>=0.180.0'
 
   '@speed-highlight/core@1.2.24':
     resolution: {integrity: sha512-qeW2e1l78afw8VhRPfPQ1Gjj+KU5XFQ/OFV5ti6eTa9bruO7mJyZtA4vw0ofqmA3tKCkROE9xLk3VZoeRc98nw==}
@@ -6978,6 +6986,11 @@ snapshots:
     dependencies:
       color: 5.0.3
       text-hex: 1.0.0
+
+  '@sparkjsdev/spark@2.3.1(super-three@0.181.0)':
+    dependencies:
+      fflate: 0.8.2
+      three: super-three@0.181.0
 
   '@speed-highlight/core@1.2.24': {}
 
