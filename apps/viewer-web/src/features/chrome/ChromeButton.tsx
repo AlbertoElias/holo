@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from "react";
 
 import { tokens } from "@holoim/design-tokens";
-import { typeRoleStyle } from "@holoim/ui-dom";
+import { typeRoleStyle, useHint } from "@holoim/ui-dom";
 import { glyphAppearance, glyphMetrics, hitAreaApx, inputFromPointerType, type GlyphAppearance, type HitInput } from "@holoim/xr-ui-core";
 
 export interface ChromeButtonProps {
@@ -53,6 +53,8 @@ export function ChromeButton({
   const hitInput = input ?? lastInput;
   const appearance = glyphAppearance({ hovered, focusVisible, pressed: down, dimmed: false }, { headset: false });
   const metrics = glyphMetrics({ headset: false });
+  // A drawing without its word names itself on hover; an explanation (`title`) takes the hint's place.
+  const { handlers: hintOn, hint } = useHint(children && !word ? (title ?? label) : title);
   const hit = hitAreaApx(hitInput, drawnApx ?? 0);
   const drawing = children ? (
     <span
@@ -79,21 +81,25 @@ export function ChromeButton({
       aria-label={label}
       aria-pressed={pressed}
       disabled={disabled}
-      title={title}
+      // A disabled button takes no pointer events, so its explanation stays the browser's own.
+      title={disabled ? title : undefined}
       className={className}
       {...data}
       onClick={onPress}
       onPointerEnter={(event) => {
         setLastInput(inputFromPointerType(event.pointerType));
         if (event.pointerType !== "touch") setHovered(true);
+        hintOn.onPointerEnter(event);
       }}
       onPointerLeave={() => {
         setHovered(false);
         setDown(false);
+        hintOn.onPointerLeave();
       }}
       onPointerDown={(event) => {
         setLastInput(inputFromPointerType(event.pointerType));
         setDown(true);
+        hintOn.onPointerDown();
       }}
       onPointerUp={() => setDown(false)}
       onPointerCancel={() => setDown(false)}
@@ -109,10 +115,12 @@ export function ChromeButton({
           visible = false;
         }
         setFocusVisible(visible);
+        hintOn.onFocus(event);
       }}
       onBlur={() => {
         setFocusVisible(false);
         setDown(false);
+        hintOn.onBlur();
       }}
       style={{
         boxSizing: "border-box",
@@ -137,6 +145,7 @@ export function ChromeButton({
       }}
     >
       {drawing}
+      {hint}
       {word ? <span style={{ ...typeRoleStyle("controlLabel"), color: appearance.color, whiteSpace: "nowrap" }}>{word}</span> : null}
     </button>
   );
