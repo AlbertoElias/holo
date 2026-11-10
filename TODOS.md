@@ -149,12 +149,11 @@ it from the item below instead of duplicating its status here.
     not assume the shipped rig's rest pose.
   - Prove it end to end: one fixture avatar per standard through the replay
     harness, checking hand fidelity and export → upload → render.
-- [ ] Retarget the locomotion clips (Idle, Walk, Jump, Fall) onto avatars that
+- [x] Retarget the locomotion clips (Idle, Walk, Jump, Fall) onto avatars that
   lack their own, with the per-bone T-pose correction that needs: slice 2 of
   [`docs/features/archive/avatar-formats.md`](docs/features/archive/avatar-formats.md).
-  Until then such an avatar reports "locomotion: off" and walks with the
-  procedural legs (or stands still on desktop), and T-pose rigs, every VRM
-  included, keep their arms out on desktop. Needs its own brief.
+  Delivered 2026-11-10 in
+  [`docs/features/archive/locomotion-retarget.md`](docs/features/archive/locomotion-retarget.md).
 - [x] Face and expressions on avatars, as the foundation for phone-driven
   avatars. Delivered 2026-10-24 in
   [`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md); device validation is listed in `HANDOFF.md`. Define one canonical expression set and map

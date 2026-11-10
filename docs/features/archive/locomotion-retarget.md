@@ -1,10 +1,10 @@
 # Feature brief: Locomotion clips on every avatar
 
 **Lead:** Claude Code (session 2026-10-29)
-**Status:** Ready to merge
+**Status:** Complete (merged to `main` 2026-11-10)
 **Layer:** Event (the recorded body; see `docs/product/concepts/what-a-hologram-is.md`)
 
-Slice 2 of [`archive/avatar-formats.md`](archive/avatar-formats.md).
+Slice 2 of [`avatar-formats.md`](avatar-formats.md).
 
 ## User outcome
 

@@ -1,5 +1,5 @@
 /**
- * Node half of the locomotion retarget check (docs/features/locomotion-retarget.md),
+ * Node half of the locomotion retarget check (docs/features/archive/locomotion-retarget.md),
  * run by `test:avatars:bind`:
  *   - the committed clip library equals what `build-locomotion-library.ts`
  *     makes from `avatar.glb` (no drift after re-authoring the clips);

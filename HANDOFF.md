@@ -13,23 +13,19 @@ uncommitted Oct 18 device-session edits are superseded by that merge
 
 ## Next action
 
-Ready to merge with the next finished change, not merged:
-`claude/locomotion-retarget-9a0612` (locomotion clips on every avatar,
-[`docs/features/locomotion-retarget.md`](docs/features/locomotion-retarget.md)).
-
 Resize and move props on every device
 ([`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md))
 and the cloche's rim follows the ground
 ([`docs/features/archive/cloche-rim-follows-ground.md`](docs/features/archive/cloche-rim-follows-ground.md))
-are complete and on `main`, as is hand traces v0
-([`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md));
+are complete and on `main`, as are hand traces v0
+([`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md)),
+locomotion clips on every avatar
+([`docs/features/archive/locomotion-retarget.md`](docs/features/archive/locomotion-retarget.md)),
+the B-039 port fix and tray removal (merged 2026-11-10);
 their device checks are in each brief's "Physical-device limits". Pick the next
 queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
-
-- B-039 fix (a test server must announce its own bind before a check trusts the port):
-  branch `claude/b039-face-gaze-84de5a`, verified locally, not merged.
 
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
@@ -46,9 +42,6 @@ queue item in [`TODOS.md`](TODOS.md).
 - The production Quick Look rebuild to ql3 is done: both stored previews are
   ql3, with the ql2 files and the database backup kept (B-030, evidence in
   the brief).
-- Closing `tray-remove`: the approved Put back glyph moves to `tokens.json` (same
-  drawing) and the brief to the archive, on branch `docs/tray-remove-close`, not
-  merged: merge it with the next finished change.
 
 ## Unverified / device-only
 

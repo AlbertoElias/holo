@@ -21,7 +21,7 @@ export interface AttachLocomotionInput {
 
 /**
  * Attaches the avatar's locomotion clips, retargeting the library's onto any
- * avatar without usable clips of its own (docs/features/locomotion-retarget.md). A failed load or retarget leaves those
+ * avatar without usable clips of its own (docs/features/archive/locomotion-retarget.md). A failed load or retarget leaves those
  * states without a clip, reported, and the avatar loads as before.
  */
 export async function attachLocomotion({ animator, avatar, ownClips, humanoid, library: loadLibrary }: AttachLocomotionInput): Promise<void> {

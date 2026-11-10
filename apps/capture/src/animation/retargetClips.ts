@@ -90,7 +90,7 @@ function positionInRoot(obj: THREE.Object3D, root: THREE.Object3D): THREE.Vector
 
 /**
  * Retargets clips authored on `source` onto `target`
- * (docs/features/locomotion-retarget.md). Motion moves as a rotation in the
+ * (docs/features/archive/locomotion-retarget.md). Motion moves as a rotation in the
  * shared root frame (+Z forward, +Y up after the facing correction), so bone
  * axes, armature nodes and scale do not matter: per canonical bone the target
  * takes T(t) = S(t) · Rs⁻¹ · A · Rt, where S is the source bone's root-frame

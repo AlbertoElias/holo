@@ -19,7 +19,7 @@ import { assertViewerShell, captureEvidence, expect, pressViewInAr, test } from 
 // - vrm0-minus-z: a VRM 0.x rig facing −Z, which capture turns by 180°; the
 //   viewer must show it facing as recorded, judged by a numeric yaw.
 // Both fixtures lack their own locomotion clips, so the take walks with the
-// clips retargeted onto them (docs/features/locomotion-retarget.md): the
+// clips retargeted onto them (docs/features/archive/locomotion-retarget.md): the
 // export must carry the stride on the fixture's own knee bones.
 // The same Unreal export without its HOLOIM_humanoid falls back to the name
 // tables, and a pointing take on the Unreal rig proves HOLOIM_meaning's bone

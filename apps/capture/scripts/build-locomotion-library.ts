@@ -1,7 +1,7 @@
 /**
  * Writes `public/gltf/animations/locomotion.glb`, the clip library retargeted
  * onto avatars without their own locomotion clips
- * (docs/features/locomotion-retarget.md): the shipped avatar's skeleton, rest
+ * (docs/features/archive/locomotion-retarget.md): the shipped avatar's skeleton, rest
  * pose and Idle/Walk/Jump/Fall clips, with one skinned triangle in place of
  * its meshes (so GLTFLoader still makes the joints bones) and no materials.
  *

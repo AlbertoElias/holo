@@ -1,7 +1,7 @@
 export interface RuntimeConfig {
   sceneUrl: string;
   avatarUrl: string;
-  /** Idle/Walk/Jump/Fall retargeted onto an avatar without its own (docs/features/locomotion-retarget.md). */
+  /** Idle/Walk/Jump/Fall retargeted onto an avatar without its own (docs/features/archive/locomotion-retarget.md). */
   locomotionLibraryUrl: string;
   /** The supplied object (PRD-043): a GLB URL, loaded before recording. */
   objectUrl: string | null;

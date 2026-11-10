@@ -117,7 +117,7 @@ const CROSSFADE_TOLERANCE_M = 0.03;
 // see: its take compares the upper body at the normal tolerance, not the legs, and its leg poses take this.
 const TWISTED_TOLERANCE_M = 0.055;
 
-// Locomotion on avatars without their own clips (docs/features/locomotion-retarget.md).
+// Locomotion on avatars without their own clips (docs/features/archive/locomotion-retarget.md).
 // 1. Each state's clip, posed at fixed clip times on each profile, with nothing
 //    blended in: every canonical bone and fingertip on desktop, the legs in VR.
 // 2. A physics-driven desktop take (walk, stop, jump, land) sampled every 100 ms.

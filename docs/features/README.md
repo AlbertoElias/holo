@@ -10,7 +10,6 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | --- | --- | --- |
 | Hand traces (PRD-023 v0) | Complete | [hand-traces.md](archive/hand-traces.md) |
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |
-| Locomotion clips on every avatar (avatar formats slice 2) | Ready to merge | [locomotion-retarget.md](locomotion-retarget.md) |
 | Shared XR interface and viewer VR/AR | Complete | [viewer-xr-interface.md](archive/viewer-xr-interface.md) |
 | Creator accounts (IDEA-052) | Complete | [creator-accounts.md](archive/creator-accounts.md) |
 | Find an object by asking (PRD-060) | Delivered; device checks open | [object-search.md](object-search.md) |
@@ -33,6 +32,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Native IWSDK capture runtime refactor | Complete | [archive/iwsdk-runtime-refactor.md](archive/iwsdk-runtime-refactor.md) |
 | IWSDK runtime prototype (evaluation spike) | Complete | [archive/iwsdk-runtime-prototype.md](archive/iwsdk-runtime-prototype.md) |
 | Knowledge Atlas | Complete | [archive/knowledge-atlas.md](archive/knowledge-atlas.md) |
+| Locomotion clips on every avatar (avatar formats slice 2) | Complete | [archive/locomotion-retarget.md](archive/locomotion-retarget.md) |
 | Natural locomotion and terrain response | Complete | [archive/avatar-locomotion.md](archive/avatar-locomotion.md) |
 | Bubble rendering across feed and XR | Complete | [archive/bubble-rendering.md](archive/bubble-rendering.md) |
 | The cloche's rim follows the ground | Complete | [archive/cloche-rim-follows-ground.md](archive/cloche-rim-follows-ground.md) |

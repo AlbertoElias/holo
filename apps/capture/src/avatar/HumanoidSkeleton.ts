@@ -30,7 +30,7 @@ export interface HumanoidFacingReport {
   readonly note?: string;
 }
 
-/** Which locomotion clips the avatar plays (docs/features/locomotion-retarget.md). */
+/** Which locomotion clips the avatar plays (docs/features/archive/locomotion-retarget.md). */
 export interface HumanoidLocomotionReport {
   /** Per state (idle, walk, jump, fall): the avatar's own clip, the retargeted library clip, or none. */
   readonly clips: Readonly<Record<string, 'own' | 'retargeted' | 'none'>>;
