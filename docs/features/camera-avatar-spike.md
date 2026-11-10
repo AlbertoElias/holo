@@ -1,7 +1,7 @@
 # Feature brief: Camera-driven avatar (evaluation spike)
 
 **Lead:** Claude (Fable 5)  
-**Status:** Reviewed (design review 2026-11-10; slice 1 may start; slices 2 and 3 wait on the user's decisions below)
+**Status:** Implementing (slice 1 built and re-run independently, 2026-11-10; slice 2 next; the measured numbers wait on the user's clip)
 **Layer:** event (the author's head, face, arms and hands over time); see
 `docs/product/concepts/what-a-hologram-is.md`
 
@@ -141,7 +141,7 @@ scoring only); iPhone performance tuning. The GLB and the API do not change.
 |---|---|---|
 | Lead | Claude (Fable 5) | Brief, integration, final handoff |
 | Design reviewer | `design-reviewer` subagent (Opus) | Done 2026-11-10 |
-| Implementer | Claude (Sonnet) subagent | `apps/capture/src/bodycam/**` (new); narrow edits to `xr/XrTracking.ts`, `xr/HandEmbodiment.ts`, `systems/TrackedHandsSystem.ts`, `systems/RecordingSystem.ts`, `face/WebcamFace.ts`, `face/FaceDriver.ts`, `types/contracts.ts`, `runtime/createCaptureRuntime.ts`, `runtime/automationHooks.ts`; `apps/capture/scripts/ci-bodycam-playwright.ts` (new) and its entry in `scripts/run-xr-checks.ts` |
+| Implementer | Claude (Sonnet) subagent | `apps/capture/src/bodycam/**` (new); narrow edits to `xr/XrTracking.ts`, `xr/HandEmbodiment.ts`, `systems/TrackedHandsSystem.ts`, `systems/RecordingSystem.ts`, `face/WebcamFace.ts`, `face/FaceDriver.ts`, `types/contracts.ts`, `runtime/createCaptureRuntime.ts`, `runtime/automationHooks.ts`, `camera/CameraController.ts` and the canvas style (mirror view only); `apps/capture/scripts/ci-bodycam-playwright.ts` (new), its entry in `scripts/run-xr-checks.ts` and the `test:xr:bodycam` script in `package.json` |
 | Independent verifier | Codex (`-p standard`) | Read-only verification; test artifacts only |
 
 ## Design decision
@@ -150,6 +150,12 @@ A distinct camera source inside `XrTracking`, beside the mock and XR
 branches, filling the same per-joint position store and hand targets, so arm
 IK, finger retargeting, recording and export are the headset's own. The rest
 of the frame stays on the desktop path: rig, body, view.
+
+**The mirror is a view, not the event (lead, 2026-11-10).** The take is
+unmirrored: the author's right hand is the avatar's right hand. Only the
+author's live view is flipped, as a selfie preview is, with the view camera
+in front of the avatar, so the author sees its face and their right hand on
+the right of the screen.
 
 Changed by design review (2026-11-10): the first draft reused `MockVrPose`,
 computed joint rotations, synthesized metacarpals, asserted on real-model
@@ -170,9 +176,12 @@ meaning layer (principle 7), and with what confidence.
 
 ## Open decisions for the user
 
-1. **Model files (blocks slice 2).** Download the pose model (about 9 MB)
-   and the hand model (about 8 MB) from Google's MediaPipe model storage and
-   commit them to `apps/capture/public/mediapipe/`, as the face model is.
+1. **Model files: decided (the user, 2026-11-10).** Downloaded from Google's
+   MediaPipe model storage
+   (`storage.googleapis.com/mediapipe-models`, `float16/latest`) into
+   `apps/capture/public/mediapipe/`, beside the face model:
+   `pose_landmarker_full.task` (9,398,198 bytes, SHA-256 `4eaa5eb7…cec4ad`)
+   and `hand_landmarker.task` (7,819,105 bytes, SHA-256 `fbc2a300…7cde1`).
 2. **Ground truth: decided (the user, 2026-11-10).** The user records one
    clip on a propped phone's front camera, following the script below; it
    stays at `output/bodycam/clip.mov` (ignored) and is never committed. If
@@ -202,13 +211,28 @@ distances. Each pose is held for about 3 seconds, in this order:
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Follows, mirror, sides, body still | New `test:xr:bodycam`: committed landmark stream through the automation hook, manual clock | Pending: `output/ci-bodycam/report.json`, contact sheet |
-| Take exports and plays | Same check records, exports, and opens the GLB in the viewer | Pending |
-| Source value, no spans | Same check reads `handSources` and the GLB's `HOLOIM_meaning` | Pending |
-| Hold timeout, VR entry, lazy load | Same check: stream gap; IWER session entry; network log | Pending |
+| Follows, mirror, sides, body still | `test:xr:bodycam`: scripted landmark stream through `__setBodycamFrame`, manual clock | Pass (2026-11-10, re-run by a separate check runner): right wrist 111.5 px right of the left on a 960 px screen after the flip; face toward the view camera (dot -0.993); head turns +30 and -30 degrees; root yaw, root move and hips range 0; `vrActive` never true. `output/ci-bodycam/report.json` |
+| Take exports and plays | Same check records and exports | Export: pass (arm tracks travel 175 degrees, fingers 72, head 18). **Playing in `viewer-web`: not run**; only the `RUN_E2E_PIPELINE` specs upload and play a take, so this goes to independent verification |
+| Source value, no spans | Same check reads `handSources` from the recorder's frames and the GLB's `HOLOIM_meaning` | Pass: 1448 driven hand frames, 0 not `camera-hand`; sources in the take are `camera-hand`, `held`, `none`; `HOLOIM_meaning` absent |
+| Hold timeout, VR entry, lazy load | Same check: stream gap; IWER session entry; network log | Hold: pass (frozen 0.533 s, then eases, recovers). Head on a stall: pass (largest step 1.87 degrees). VR entry: pass (source released, canvas unflipped). Lazy load: pending, slice 2 |
 | Measurement report | Report-only run: Chromium with the clip as its camera, real MediaPipe; the live page on a propped phone | Pending |
-| Headset path unchanged | `pnpm run verify:agent`, `test:xr:hands`, the face check | Pending |
+| Headset path unchanged | `pnpm run verify:agent`, `test:xr:hands`, `test:xr:face` | Pass (2026-11-10, same re-run) |
 | Proof video | Screen recording of the clip beside the avatar | Pending: `output/` only |
+
+## Known limits after slice 1
+
+- **Pointer input is mirrored against the picture** while the mirror view is
+  on: mouse picking, the desktop point aim and screen holds read x from the
+  unflipped canvas. Acceptable behind the flag; a designed camera mode needs
+  a flip in the projection instead of CSS.
+- **A hand at rest settles with the elbow out**, like a hand on a hip: the
+  rest target is a fixed point below the shoulder. Slice 2 releases a rested
+  arm to the idle animation instead.
+- **The stream is scripted, not a person.** MediaPipe's axis convention and
+  the head rotation's zero are assumptions until slice 2 runs the real
+  models.
+- A page without `?input=camera` is covered only by the unchanged hands and
+  face checks.
 
 ## Physical-device limits
 

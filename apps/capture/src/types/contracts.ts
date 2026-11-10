@@ -141,9 +141,10 @@ export interface RecordingFrame {
 // Tracked joints and the avatar bones at the same anatomical joints, in world
 // space, for comparing how closely the avatar follows the user's hands.
 // Input behind a hand pose: real XRHand joints, a controller, the
-// deterministic mock payload, the last valid pose held through a dropout, a
+// deterministic mock payload, a camera tracker's hand (`camera-hand`, never a
+// recorded `xr-hand` span), the last valid pose held through a dropout, a
 // neutral pose shown before any tracking, or nothing.
-export type HandPoseSource = 'xr-hand' | 'controller' | 'mock' | 'held' | 'fallback' | 'none';
+export type HandPoseSource = 'xr-hand' | 'controller' | 'mock' | 'camera-hand' | 'held' | 'fallback' | 'none';
 
 export type HandSample = {
   source: HandPoseSource;

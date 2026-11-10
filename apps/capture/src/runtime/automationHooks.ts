@@ -4,6 +4,8 @@ import type { HaloAction } from '@holoim/xr-ui-core';
 
 import type { LocomotionProfile, LocomotionState } from '../animation/LocomotionAnimator';
 import type { HumanoidBindingReport } from '../avatar/HumanoidSkeleton';
+import type { LandmarkFrame } from '../bodycam/types';
+import type { BodycamSnapshot } from '../bodycam/snapshot';
 import type { FaceSample } from '../face/faceTypes';
 import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, UiViewModel, VrHandSide } from '../types/contracts';
@@ -59,6 +61,13 @@ export interface AutomationHooks {
   /** Every canonical bone (and finger end sites, as `<bone>Tip`) in the avatar root's frame, plus the animator. */
   __sampleAvatarPose: () => AvatarPoseSample;
   __toggleFaceCamera: () => void;
+  /**
+   * Camera avatar: one landmark frame as the camera tracker would deliver it (pose, hands, head rotation), or null to
+   * release the camera source. Ignored unless the page has `?input=camera` and no XR session presents.
+   */
+  __setBodycamFrame: (frame: LandmarkFrame | null) => void;
+  /** The camera source, both hands' sources and joints (camera and avatar), the head, and the body. */
+  __sampleBodycam: (includeRecorded?: boolean) => BodycamSnapshot;
   /** The chrome as drawn: the overlay's view model, the headset chrome's placement, the touch stick (slice 4 reports). */
   __sampleChrome: () => { ui: UiViewModel; vr: VrChromeSnapshot; touch: { stick: TouchStick | null; looking: number; hold: string } };
   /** The phone camera author's bottom dock (button positions and visibility) and status line, or built: false. */

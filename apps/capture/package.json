@@ -33,6 +33,7 @@
     "test:xr:object": "node --import tsx scripts/run-xr-checks.ts object",
     "test:xr:summon": "node --import tsx scripts/run-xr-checks.ts summon",
     "test:xr:face": "node --import tsx scripts/run-xr-checks.ts face",
+    "test:xr:bodycam": "node --import tsx scripts/run-xr-checks.ts bodycam",
     "test:xr:ui": "node --import tsx scripts/run-xr-checks.ts ui",
     "test:xr:avatars": "node --import tsx scripts/run-xr-checks.ts avatars",
     "test:avatars:bind": "node --conditions=development --import tsx scripts/check-avatar-bindings.ts",

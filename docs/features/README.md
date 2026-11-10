@@ -11,7 +11,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | A scanned place around a take (split capture, first attempt) | Complete | [splat-place.md](archive/splat-place.md) |
 | Record a take inside a scanned place (split capture, slice 2) | 2a on `main` (2026-11-11); 2b, 2c not started | [splat-capture.md](splat-capture.md) |
 | Positional audio in holograms | Complete | [positional-audio.md](archive/positional-audio.md) |
-| Camera-driven avatar (evaluation spike, IDEA-078) | Reviewed | [camera-avatar-spike.md](camera-avatar-spike.md) |
+| Camera-driven avatar (evaluation spike, IDEA-078) | Implementing | [camera-avatar-spike.md](camera-avatar-spike.md) |
 | Author-marked hand traces (PRD-023 v1) | Complete | [authored-traces.md](archive/authored-traces.md) |
 | Hand traces (PRD-023 v0) | Complete | [hand-traces.md](archive/hand-traces.md) |
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |
