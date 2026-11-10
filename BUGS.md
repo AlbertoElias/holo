@@ -29,7 +29,7 @@ None.
 - **Observed:** 2026-10-29/11-09 in the locomotion retarget session's `verify:pr`, on its branch and on `main`, while other sessions loaded the machine
 - **Evidence:** `Test timeout of 60000ms exceeded` in `page.waitForTimeout(400)` at `portal.spec.ts:193`, right after `page.touchscreen.tap(below.x, below.y)`; the test normally takes about 31 s.
 - **Expected:** the test passes in well under its 60 s timeout.
-- **Reproduction:** not yet. On `main` `623e4645f986` it passed 5 of 5 (`pnpm --filter @holoim/viewer-web run test:e2e:portal --grep "a swipe off the hologram scrolls"`) and inside the combined `verify:pr` of 2026-11-10. Suspect: the smooth-scroll and tap waits at lines 188–196 stall when the CPU is saturated; retry under load (for example beside a second `verify:pr`) before changing it.
+- **Reproduction:** not yet. On `main` `623e4645f986` it passed 5 of 5 (`pnpm --filter @holoim/web run test:e2e:portal --grep "a swipe off the hologram scrolls"`) and inside the combined `verify:pr` of 2026-11-10. Suspect: the smooth-scroll and tap waits at lines 188–196 stall when the CPU is saturated; retry under load (for example beside a second `verify:pr`) before changing it.
 
 ## Entry template
 
