@@ -24,6 +24,14 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- Showcase holograms (branch `feature/showcase-holograms`, pushed, not
+  merged): four authored GLBs built by `apps/capture/scripts/showcase/`
+  (`showcase:build`, `showcase:upload`), described in
+  [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md).
+  Scripts and docs only, no app code; `verify:agent` passed 2026-11-09 and
+  all four were checked in the local viewer feed. Merge with the next
+  finished change. Not yet uploaded to the live feed: that waits for the
+  user's go-ahead.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

@@ -87,3 +87,39 @@ typing a prompt in the app uses the same tool.
   performance?
 - What is the smallest plan format an agent can reliably write and a person
   can edit?
+
+## First authored pieces (2026-11-09)
+
+Four showcase holograms now exist as scene scripts in
+`apps/capture/scripts/showcase/`. An agent wrote each scene by hand; this is
+not the prompt, plan, compose flow above, and nobody speaks in them. They
+were chosen to fail test 5 as hard as possible: each loses its point as a
+video.
+
+| Piece | Feeling | What a video would lose |
+| --- | --- | --- |
+| Walk beside light | Awe, loneliness | The Earth and Moon at 1 : 100,000,000 are a true 3.84 m apart, and light crosses at its real speed, 3 m/s at that scale. A frame shrinks the gap; here the gap is the room. |
+| Two sides of a door | Ache | One person on each side of a closed door. Each side shows one; the viewer's own step finds the other. |
+| Murmuration | Wonder | 480 starlings at true size. Outside it is one shape; at the standing spot it passes around your head. |
+| Blue hour | Coziness | A miniature house at dusk. Each side hides something: a reader, a cat, a sleeper, lit roots. |
+
+Build one with `pnpm --filter @holoim/capture run showcase:build <scene>`
+(`light`, `door`, `murmuration`, `blue-hour`); the GLB and a contact sheet
+land in the ignored `output/showcase/`. `showcase:upload --api <origin>
+<scene>` sends it through the normal upload route.
+
+What building them showed:
+
+- **Provenance has nowhere to show.** Each file says
+  `asset.extras.holoim.authored = "synthetic"` and uploads as "Claude
+  (agent-authored)", but the byline is the only place a viewer sees it. The
+  authenticity rule above needs a visible mark (IDEA-024).
+- **The portal cannot lean in.** Its closest view is 1.6 m from the anchor,
+  made for a life-size author. A tabletop miniature cannot be inspected on a
+  flat screen, so Blue hour is shown at 1:8 instead of its modelled 1:12.
+- **True scale can read as empty on a card.** A file with no avatar is framed
+  on its whole bounds, so the 12.7 cm Earth in a 3.84 m scene is a few
+  pixels until the viewer zooms. The piece is made for a headset or AR.
+- **Restraint held up.** The door's two figures are jointed mannequins of
+  light with no faces, and the scene still reads; the open question about
+  needing a lifelike presenter leans toward "not at first".
