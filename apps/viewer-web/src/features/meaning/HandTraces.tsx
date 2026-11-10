@@ -45,6 +45,8 @@ const OLDEST_WIDTH = 0.5;
 /** Opacity at the newest and oldest ends: a recorded mark, plainer and stronger than an inferred one. */
 const NEWEST_OPACITY = 0.95;
 const OLDEST_OPACITY = 0.55;
+/** Trace marks drawn per card at most (a file is untrusted); the first by start are kept. */
+export const MAX_TRACE_MARKS = 64;
 /** How many per-frame timings the probe keeps. */
 const PROBE_FRAMES = 600;
 /** Frame time spent warming marks' keyframes while a card plays, so each is built before its span starts. */
@@ -146,13 +148,23 @@ export function useHandTraceSource(gltf: TraceGltf, clone: Object3D, anchors: Hu
     const objects = mapNodeIndices(gltf.scene, clone, gltf.parser?.associations);
     const resolved: HandTraceSource["marks"] = [];
     const sampled: SamplerMark[] = [];
+    const seen = new Set<string>();
+    let dropped = 0;
     for (const mark of marks) {
       const node = objects.get(mark.anchor.node);
       if (!node) continue;
+      const key = `${mark.anchor.node}:${mark.span.start}:${mark.span.end}`;
+      if (seen.has(key)) continue;
+      if (sampled.length >= MAX_TRACE_MARKS) {
+        dropped += 1;
+        continue;
+      }
+      seen.add(key);
       const side: HandSide = mark.anchor.bone.startsWith("left") ? "left" : "right";
       resolved.push({ side, bone: mark.anchor.bone, node: mark.anchor.node, span: { start: mark.span.start, end: mark.span.end } });
       sampled.push({ side, node, span: { start: mark.span.start, end: mark.span.end } });
     }
+    if (dropped > 0) console.warn(`HandTraces: drew the first ${MAX_TRACE_MARKS} trace marks and dropped ${dropped}.`);
     if (sampled.length === 0) return null;
     const spans = readRecordedHandSpans(gltf.userData);
     const clip = gltf.animations.slice().sort(compareTakeClips)[0];

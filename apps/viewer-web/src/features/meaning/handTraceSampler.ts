@@ -173,11 +173,14 @@ const WARM_LEAD_SEC = 0.25;
  */
 export class HandTraceSampler {
   private readonly sampler: ClipChainSampler;
+  /** Each distinct fingertip node once, then the hips. */
   private readonly nodes: Object3D[];
+  /** Per mark: its fingertip node's slot in `nodes`, shared by every mark on that node. */
+  private readonly slots: number[];
   private readonly stride: number;
   private readonly hipOffset: number;
   private readonly keyed: Uint8Array;
-  /** Per keyframe: each mark's tip, then the hips (xyz each). */
+  /** Per keyframe: each fingertip node, then the hips (xyz each). */
   private readonly positions: Float32Array;
   private readonly hipQuats: Float32Array;
   private readonly outs: Vector3[];
@@ -196,9 +199,17 @@ export class HandTraceSampler {
     private readonly spans: Record<HandSide, Span[]>
   ) {
     this.sampler = new ClipChainSampler(root, clip);
-    this.nodes = [...marks.map((mark) => mark.node), hips];
+    // One slot per distinct node, so the stride stays a few nodes however many marks a file holds.
+    const tips: Object3D[] = [];
+    this.slots = marks.map((mark) => {
+      const found = tips.indexOf(mark.node);
+      if (found >= 0) return found;
+      tips.push(mark.node);
+      return tips.length - 1;
+    });
+    this.nodes = [...tips, hips];
     this.stride = this.nodes.length * 3;
-    this.hipOffset = marks.length * 3;
+    this.hipOffset = tips.length * 3;
     const count = this.sampler.times.length;
     this.keyed = new Uint8Array(count);
     this.positions = new Float32Array(count * this.stride);
@@ -215,7 +226,7 @@ export class HandTraceSampler {
   /** The mark's fingertip node's world position at a clip time, exactly as the path samples it. */
   tipAt(mark: number, time: number, out: Vector3): Vector3 {
     this.sampler.sample(time, this.nodes, this.outs);
-    return out.copy(this.outs[mark]!);
+    return out.copy(this.outs[this.slots[mark]!]!);
   }
 
   isBuilt(mark: number): boolean {
@@ -348,7 +359,7 @@ export class HandTraceSampler {
       return true;
     });
 
-    const tip = markIndex * 3;
+    const tip = this.slots[markIndex]! * 3;
     const positions = new Float32Array(count * 3);
     for (let s = 0; s < count; s += 1) {
       positions[s * 3] = pos[s * stride + tip]!;
