@@ -7,7 +7,7 @@ import { PlaceLayer } from "./PlaceLayer";
 import { loadPlace, type LoadedPlace } from "./loadPlace";
 import { warnPlaceOnce, type PlaceGate } from "./placeGate";
 import { createPlaceReport } from "./placeReport";
-import type { PlaceRequest } from "./placeRequest";
+import type { PlaceRequest, PlaceScan } from "./placeRequest";
 import { recordedFloorY } from "./takeFloor";
 
 /**
@@ -39,7 +39,7 @@ export default function PlaceMount({ request, gate, shape, shift, scene, clips, 
     report.status = "loading";
     report.url = url;
     window.__HOLOIM_PLACE__ = report;
-    const request: PlaceRequest = { url, flip, nudge: { x, y, z, yawDeg }, floorGiven };
+    const request: PlaceScan = { url, flip, nudge: { x, y, z, yawDeg }, floorGiven };
     const fail = (error: unknown) => {
       // One warning for the mount, whatever failed first (a timeout may have warned already).
       warnPlaceOnce(gate, `Place ${url} did not load; the card shows its recorded set.`, error);

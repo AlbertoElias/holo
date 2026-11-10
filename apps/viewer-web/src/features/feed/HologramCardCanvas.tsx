@@ -327,7 +327,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
       placeGate.status = "timeout";
       warnPlaceOnce(placeGate, `Place ${placeRequest?.url ?? ""} did not load in time; the card shows its recorded set.`);
       invalidate();
-    }, PLACE_FIT_WAIT_MS);
+    }, placeRequest?.waitMs ?? PLACE_FIT_WAIT_MS);
     return () => window.clearTimeout(timer);
   }, [invalidate, placeGate, placeRequest]);
   const buildRimNow = useCallback((shape: ClocheShape) => {

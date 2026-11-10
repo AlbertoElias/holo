@@ -27,6 +27,9 @@ const avatarGlb = path.resolve(testDir, "../../capture/public/gltf/models/avatar
 const outputDir = path.resolve(testDir, "../../../output/place");
 const DESKTOP = { width: 800, height: 440 };
 const SCAN_PATH = "/place-fixtures/room.ply";
+// The fit's default 5 s wait is a product rule; a loaded machine decodes slower, so the checks wait longer
+// (the slow-failure case keeps the default, since it tests that timeout).
+const WAIT = "&placeWait=30000";
 /** The scan's floor, put on the take's floor, within this, metres. */
 const FLOOR_TOLERANCE_METERS = 0.02;
 /** The author's foot bone is the ankle, this far above the floor at most; never under it by more than the floor's tolerance. */
@@ -200,7 +203,7 @@ test.describe("a scanned place around a take", () => {
     // The same card with a scan that is not there.
     expectConsoleErrors(page, /404|Failed to load resource/);
     await page.route((url) => url.pathname === SCAN_PATH, (route) => route.fulfill({ status: 404, body: "no such scan" }));
-    await page.goto(`/?place=${SCAN_PATH}`);
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
     await waitForPortalReady(page, item.id, item.url);
     await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "failed");
     await seek(page, 0, false);
@@ -234,7 +237,7 @@ test.describe("a scanned place around a take", () => {
     const radius = Math.max(baseline.dome.radii.x, baseline.dome.radii.z) * 1.06 + 0.1;
     const fixture = await writeFixture(testInfo.outputPath("fixture"), "avatar-room.ply", { half: radius + 1.5, ring: { x: 0, z: 0, radius } });
     await serveScan(page, fixture.file);
-    await page.goto(`/?place=${SCAN_PATH}`);
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
     await waitForPortalReady(page, item.id, item.url);
     await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
     await seek(page, 0, true);
@@ -292,7 +295,7 @@ test.describe("a scanned place around a take", () => {
     const fixture = await writeFixture(testInfo.outputPath("fixture"), "no-floor.ply", { half: 3, ring: { x: 0, z: 0, radius: 0 }, noFloor: true });
     await serveScan(page, fixture.file);
 
-    await page.goto(`/?place=${SCAN_PATH}`);
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
     await waitForPortalReady(page, item.id, item.url);
     await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "failed");
     const card = page.locator(`.feed-card[data-card-id="${item.id}"]`);
@@ -304,7 +307,7 @@ test.describe("a scanned place around a take", () => {
 
     // With placeY the scan is taken as the user says; it is placed, whatever it holds.
     warnings.length = 0;
-    await page.goto(`/?place=${SCAN_PATH}&placeY=0.35`);
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}&placeY=0.35`);
     await waitForPortalReady(page, item.id, item.url);
     await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready");
     expect(warnings, "no warning when the floor is given").toHaveLength(0);
@@ -348,14 +351,14 @@ test.describe("a scanned place around a take", () => {
     const fixture = await writeFixture(testInfo.outputPath("fixture"), "two-cards.ply", { half: radius + 1.5, ring: { x: 0, z: 0, radius } });
     await serveScan(page, fixture.file);
 
-    await page.goto(`/?place=${SCAN_PATH}`);
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
     await page.waitForFunction(() => ["ready", "timeout", "failed"].includes((window as PlaceWindow).__HOLOIM_PLACE__?.status ?? ""), undefined, { timeout: 60_000 });
     expect((await readPlace(page)).status, "the first card's place is ready").toBe("ready");
     const onFirst = await shots("first", true);
     expect(await shotDifference(page, before[first.id]!, onFirst[first.id]!), "the first card shows the place").toBeGreaterThan(0.005);
     expect(await shotDifference(page, before[second.id]!, onFirst[second.id]!), "the second card is today's").toBeLessThanOrEqual(noise + 0.0005);
 
-    await page.goto(`/?place=${SCAN_PATH}&placeFor=${second.id}`);
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}&placeFor=${second.id}`);
     await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
     const onSecond = await shots("second", true);
     expect(await shotDifference(page, before[second.id]!, onSecond[second.id]!), "placeFor moves the place to the second card").toBeGreaterThan(0.005);
@@ -384,7 +387,7 @@ test.describe("a scanned place around a take", () => {
       const blobs = Array.from({ length: count }, (_, i) => ({ x: offset.x + (i % 5) * 0.03, z: offset.z + Math.floor(i / 5) * 0.03, height: offset.height, scale, color: [1, 0, 1] as [number, number, number] }));
       const fixture = await writeFixture(testInfo.outputPath(name), `${name}.ply`, { half: 6, ring: { x: 0, z: 0, radius: 0 }, blobs });
       await serveScan(page, fixture.file);
-      await page.goto(`/?place=${SCAN_PATH}`);
+      await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
       await waitForPortalReady(page, item.id, item.url);
       await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
       await seek(page, 0, true);
@@ -451,7 +454,7 @@ test.describe("a scanned place around a take", () => {
     const ring = { x: walked.shift[0], z: walked.shift[2], radius: sectionAt(walked.shift[1]) * 1.06 + 0.1 };
     const fixture = await writeFixture(testInfo.outputPath("fixture"), "room.ply", { half: Math.hypot(ring.x, ring.z) + ring.radius + 1.5, ring });
     await serveScan(page, fixture.file);
-    await page.goto(`/?place=${SCAN_PATH}`);
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
     await waitForPortalReady(page, withoutId, uploaded.url);
     await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
     await seek(page, 0, true);

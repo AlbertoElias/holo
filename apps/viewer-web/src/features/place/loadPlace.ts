@@ -1,7 +1,7 @@
 import type * as Spark from "@sparkjsdev/spark";
 
 import { readFloor, type FloorReading } from "./placeAnalysis";
-import type { PlaceRequest } from "./placeRequest";
+import type { PlaceScan } from "./placeRequest";
 
 // Loads and reads a scan (docs/features/splat-place.md). Spark arrives by a
 // dynamic import, here and nowhere else, so a build with the test hooks off
@@ -11,7 +11,7 @@ export type SparkModule = typeof Spark;
 
 export type LoadedPlace = {
   spark: SparkModule;
-  request: PlaceRequest;
+  request: PlaceScan;
   /** Spark's packed splats, 4 words each: kept across remounts, so the file is read and decoded once. */
   packedArray: Uint32Array;
   numSplats: number;
@@ -28,7 +28,7 @@ export type LoadedPlace = {
 const CACHE_ENTRIES = 2;
 const cache = new Map<string, Promise<LoadedPlace>>();
 
-async function read(request: PlaceRequest): Promise<LoadedPlace> {
+async function read(request: PlaceScan): Promise<LoadedPlace> {
   const started = performance.now();
   const spark = await import("@sparkjsdev/spark");
   const response = await fetch(request.url);
@@ -64,7 +64,7 @@ async function read(request: PlaceRequest): Promise<LoadedPlace> {
 }
 
 /** One read per scan and orientation, shared by every mount of the card; the two most recent are kept. A failure is not kept, so a retry reads again. */
-export function loadPlace(request: PlaceRequest): Promise<LoadedPlace> {
+export function loadPlace(request: PlaceScan): Promise<LoadedPlace> {
   const key = `${request.url}|${request.flip ? 1 : 0}`;
   const kept = cache.get(key);
   if (kept) {
