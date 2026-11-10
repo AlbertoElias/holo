@@ -15,6 +15,10 @@ export type FixtureOptions = {
   half: number;
   /** A magenta ring of splats, `radius` around the point `x`, `z` from the middle of the floor; none when the radius is 0. */
   ring: { x: number; z: number; radius: number };
+  /** Single splats of one colour, `x` and `z` from the middle of the floor, `height` above it, `scale` their standard deviation, metres. */
+  blobs?: Array<{ x: number; z: number; height: number; scale: number; color: [number, number, number] }>;
+  /** Every splat's height is not a number: a scan with no floor to find. */
+  noFloor?: boolean;
 };
 
 export type Fixture = { bytes: Buffer; floorY: number; middle: { x: number; z: number }; count: number };
@@ -33,7 +37,7 @@ function mulberry32(seed: number): () => number {
 
 type Splat = { x: number; y: number; z: number; r: number; g: number; b: number; opacity: number; scale: number };
 
-export function makeFixture({ floorY = 0.35, half, ring }: FixtureOptions): Fixture {
+export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = false }: FixtureOptions): Fixture {
   const rand = mulberry32(0x5ca17);
   const middle = { x: 1, z: -0.5 };
   const splats: Splat[] = [];
@@ -65,13 +69,14 @@ export function makeFixture({ floorY = 0.35, half, ring }: FixtureOptions): Fixt
       add(middle.x + ring.x + Math.cos(angle) * ring.radius, floorY + 0.05 + rand() * 1.4, middle.z + ring.z + Math.sin(angle) * ring.radius, [1, 0, 1], 0.06);
     }
   }
+  for (const blob of blobs) add(middle.x + blob.x, floorY + blob.height, middle.z + blob.z, blob.color, blob.scale, 0.99);
 
   const names = ["x", "y", "z", "nx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"];
   const header = `ply\nformat binary_little_endian 1.0\nelement vertex ${splats.length}\n${names.map((name) => `property float ${name}`).join("\n")}\nend_header\n`;
   const body = Buffer.alloc(splats.length * names.length * 4);
   splats.forEach((splat, index) => {
     const values = [
-      splat.x, -splat.y, -splat.z, 0, 0, 0,
+      splat.x, noFloor ? Number.NaN : -splat.y, -splat.z, 0, 0, 0,
       (splat.r - 0.5) / SH_C0, (splat.g - 0.5) / SH_C0, (splat.b - 0.5) / SH_C0,
       Math.log(splat.opacity / (1 - splat.opacity)),
       Math.log(splat.scale), Math.log(splat.scale), Math.log(splat.scale),

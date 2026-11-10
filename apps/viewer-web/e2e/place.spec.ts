@@ -8,6 +8,7 @@ import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, expectConsoleErrors, test } from "./bootstrap";
 import { measureFloor } from "./floor-proof";
+import { diagonalFactor, extentLeavesDome, SPLAT_EXTENT_SIGMA } from "../src/features/place/placeClip";
 import { writeFixture } from "./place-fixture";
 import { shotDifference, shotStats } from "./place-pixels";
 import { animationFrames, cardCenter, readPortal, waitForPortalReady } from "./portal-helpers";
@@ -132,19 +133,22 @@ async function readPlace(page: Page): Promise<PlaceReading> {
  * does and waits for what is drawn to catch up. The pause lands a frame after
  * it is asked for, and a seek before that would be played on from.
  */
-async function seek(page: Page, seconds: number, withPlace: boolean): Promise<void> {
+async function seek(page: Page, seconds: number, withPlace: boolean, url?: string): Promise<void> {
   type SeekProbe = { actions: Record<string, { time: number }>; mixer: { update: (dt: number) => void }; renderer: { info: { render: { frame: number } } }; portal: { setPaused: (paused: boolean) => void } };
-  const frame = () => page.evaluate(() => (window as unknown as { __feedProbe: SeekProbe }).__feedProbe.renderer.info.render.frame);
-  await page.evaluate(() => (window as unknown as { __feedProbe: SeekProbe }).__feedProbe.portal.setPaused(true));
+  // The card's own probe when its url is given (a feed of several cards), else the latest one.
+  type Probes = Window & { __feedProbe: SeekProbe; __portalProbes: Record<string, SeekProbe> };
+  const frame = () => page.evaluate((url) => { const w = window as unknown as Probes; return (url ? w.__portalProbes[url]! : w.__feedProbe).renderer.info.render.frame; }, url);
+  await page.evaluate((url) => { const w = window as unknown as Probes; (url ? w.__portalProbes[url]! : w.__feedProbe).portal.setPaused(true); }, url);
   const paused = await frame();
-  await page.waitForFunction((from) => (window as unknown as { __feedProbe: SeekProbe }).__feedProbe.renderer.info.render.frame >= from + 4, paused);
-  const from = await page.evaluate((seconds) => {
-    const probe = (window as unknown as { __feedProbe: SeekProbe }).__feedProbe;
+  await page.waitForFunction(({ from, url }) => { const w = window as unknown as Probes; return (url ? w.__portalProbes[url]! : w.__feedProbe).renderer.info.render.frame >= from + 4; }, { from: paused, url });
+  const from = await page.evaluate(({ seconds, url }) => {
+    const w = window as unknown as Probes;
+    const probe = url ? w.__portalProbes[url]! : w.__feedProbe;
     for (const action of Object.values(probe.actions)) action.time = seconds;
     probe.mixer.update(0);
     return probe.renderer.info.render.frame;
-  }, seconds);
-  await page.waitForFunction((from) => (window as unknown as { __feedProbe: SeekProbe }).__feedProbe.renderer.info.render.frame >= from + 3, from);
+  }, { seconds, url });
+  await page.waitForFunction(({ from, url }) => { const w = window as unknown as Probes; return (url ? w.__portalProbes[url]! : w.__feedProbe).renderer.info.render.frame >= from + 3; }, { from, url });
   if (withPlace) await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.clipStale === false && (window as PlaceWindow).__HOLOIM_PLACE__?.sorted, undefined, { timeout: 60_000 });
   await animationFrames(page, 3);
 }
@@ -240,13 +244,160 @@ test.describe("a scanned place around a take", () => {
     const stats = await shotStats(page, shot);
 
     expect(place.floorFound, "the scan's floor is found").toBe(true);
-    expect(Math.abs(place.scanFloor - place.takeFloor), "on the dome's floor").toBeLessThan(FLOOR_TOLERANCE_METERS);
+    expect(Math.abs(place.floorFoundY - fixture.floorY), "the histogram finds the scan's own floor, not the table band or the floaters").toBeLessThan(FLOOR_TOLERANCE_METERS);
+    expect(Math.abs(place.floorBandY - place.takeFloor), "the placed floor band lies on the dome's floor").toBeLessThan(FLOOR_TOLERANCE_METERS);
     expect(Math.abs(place.takeFloor - baseline.dome.base.y), "the take's floor is the dome's base without a set").toBeLessThan(0.001);
+    expect(place.floorBandY, "a floor band is drawn").not.toBeNaN();
     expect(place.shown, "splats are drawn").toBeGreaterThan(500);
     expect(place.outside, "none outside the dome").toBe(0);
     expect(stats.magenta, "the ring outside the glass is not drawn").toBe(0);
     expect(await shotDifference(page, baseShot, shot), "the card shows the place").toBeGreaterThan(0.005);
     expectSameDome(card.dome, baseline.dome, "the dome is today's");
+  });
+
+  test("a slow scan that then fails warns once, with the fit's timeout", async ({ page }) => {
+    test.setTimeout(120_000);
+    const item = fakeItem("c");
+    await installProbes(page);
+    await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: [item], nextCursor: null } }));
+    await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
+    const warnings: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "warning" && /Place /.test(message.text())) warnings.push(message.text());
+    });
+    expectConsoleErrors(page, /404|Failed to load resource/);
+    // Past the fit's wait (5 s), then a 404.
+    await page.route((url) => url.pathname === SCAN_PATH, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 6500));
+      await route.fulfill({ status: 404, body: "late and missing" });
+    });
+    await page.goto(`/?place=${SCAN_PATH}`);
+    await waitForPortalReady(page, item.id, item.url);
+    await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "failed", undefined, { timeout: 30_000 });
+    await animationFrames(page, 5);
+    expect(warnings, "one warning for the timeout and the failure after it").toHaveLength(1);
+    await expect(page.locator(`.feed-card[data-card-id="${item.id}"]`)).toHaveAttribute("data-model-state", "rendered");
+  });
+
+  test("a scan with no floor to find is not placed by a guess, unless placeY is given", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const item = fakeItem("d");
+    await installProbes(page);
+    await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: [item], nextCursor: null } }));
+    await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
+    const warnings: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "warning" && /Place /.test(message.text())) warnings.push(message.text());
+    });
+    const fixture = await writeFixture(testInfo.outputPath("fixture"), "no-floor.ply", { half: 3, ring: { x: 0, z: 0, radius: 0 }, noFloor: true });
+    await serveScan(page, fixture.file);
+
+    await page.goto(`/?place=${SCAN_PATH}`);
+    await waitForPortalReady(page, item.id, item.url);
+    await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "failed");
+    const card = page.locator(`.feed-card[data-card-id="${item.id}"]`);
+    expect((await readPlace(page)).floorFound, "no floor was found").toBe(false);
+    expect(warnings, "one warning").toHaveLength(1);
+    expect(warnings[0], "that names placeY").toContain("placeY");
+    expect((await readCard(page)).setVisible ?? false, "today's card").toBe(false);
+    await expect(card.getByText("Hologram failed to load")).toHaveCount(0);
+
+    // With placeY the scan is taken as the user says; it is placed, whatever it holds.
+    warnings.length = 0;
+    await page.goto(`/?place=${SCAN_PATH}&placeY=0.35`);
+    await waitForPortalReady(page, item.id, item.url);
+    await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready");
+    expect(warnings, "no warning when the floor is given").toHaveLength(0);
+  });
+
+  test("the first card takes the place, and placeFor moves it to another", async ({ page }, testInfo) => {
+    test.setTimeout(240_000);
+    const first = fakeItem("e");
+    const second = fakeItem("f");
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await installProbes(page);
+    await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: [first, second], nextCursor: null } }));
+    await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
+
+    const shots = async (label: string, withPlace: boolean) => {
+      const result: Record<string, Buffer> = {};
+      for (const item of [first, second]) {
+        await page.locator(`.feed-card[data-card-id="${item.id}"]`).scrollIntoViewIfNeeded();
+        await waitForPortalReady(page, item.id, item.url);
+        await seek(page, 0, withPlace && (await readPlace(page)).status === "ready", item.url);
+        result[item.id] = await cardShot(page, item.id, `two-cards-${label}-${item.id}.png`);
+      }
+      return result;
+    };
+    // Today's two cards, and the first again for the render's own noise.
+    await page.goto("/");
+    await assertViewerShell(page);
+    const before = await shots("before", false);
+    await page.reload();
+    const again = await shots("before-again", false);
+    const noise = Math.max(await shotDifference(page, before[first.id]!, again[first.id]!), await shotDifference(page, before[second.id]!, again[second.id]!));
+
+    // The dome of the first card, for a scan that stands on it.
+    const domeOf = async (item: { url: string }) => page.evaluate((url) => {
+      const probe = (window as unknown as { __portalProbes: Record<string, { cloche: { shape: { current: { base: { x: number; y: number; z: number }; radii: { x: number; y: number; z: number } } } } }> }).__portalProbes[url]!;
+      const shape = probe.cloche.shape.current;
+      return { base: { ...shape.base }, radii: { ...shape.radii } };
+    }, item.url);
+    const dome = await domeOf(first);
+    const radius = Math.max(dome.radii.x, dome.radii.z) * 1.06 + 0.1;
+    const fixture = await writeFixture(testInfo.outputPath("fixture"), "two-cards.ply", { half: radius + 1.5, ring: { x: 0, z: 0, radius } });
+    await serveScan(page, fixture.file);
+
+    await page.goto(`/?place=${SCAN_PATH}`);
+    await page.waitForFunction(() => ["ready", "timeout", "failed"].includes((window as PlaceWindow).__HOLOIM_PLACE__?.status ?? ""), undefined, { timeout: 60_000 });
+    expect((await readPlace(page)).status, "the first card's place is ready").toBe("ready");
+    const onFirst = await shots("first", true);
+    expect(await shotDifference(page, before[first.id]!, onFirst[first.id]!), "the first card shows the place").toBeGreaterThan(0.005);
+    expect(await shotDifference(page, before[second.id]!, onFirst[second.id]!), "the second card is today's").toBeLessThanOrEqual(noise + 0.0005);
+
+    await page.goto(`/?place=${SCAN_PATH}&placeFor=${second.id}`);
+    await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
+    const onSecond = await shots("second", true);
+    expect(await shotDifference(page, before[second.id]!, onSecond[second.id]!), "placeFor moves the place to the second card").toBeGreaterThan(0.005);
+    expect(await shotDifference(page, before[first.id]!, onSecond[first.id]!), "and the first card is today's").toBeLessThanOrEqual(noise + 0.0005);
+  });
+
+  test("a large splat just inside the dome, whose extent would reach past the glass, is not drawn", async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    const item = fakeItem("g");
+    await installProbes(page);
+    await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: [item], nextCursor: null } }));
+    await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
+    await page.goto("/");
+    await waitForPortalReady(page, item.id, item.url);
+    await seek(page, 0, false);
+    const { dome } = await readCard(page);
+
+    // A point on the dome's upper front diagonal, deep enough inside that its centre is well in (value 0.6), where the splat's reach is what decides.
+    const t = 0.6 / diagonalFactor(dome.exponent);
+    const offset = { x: t * dome.radii.x, height: t * dome.radii.y, z: t * dome.radii.z };
+    const centre = { x: dome.base.x + offset.x, y: dome.base.y + offset.height, z: dome.base.z + offset.z };
+    const spill = 1.4 / SPLAT_EXTENT_SIGMA;
+    expect(extentLeavesDome(dome, centre, spill), "the large splat's extent reaches past the glass from there").toBe(true);
+
+    const run = async (name: string, scale: number, count: number) => {
+      const blobs = Array.from({ length: count }, (_, i) => ({ x: offset.x + (i % 5) * 0.03, z: offset.z + Math.floor(i / 5) * 0.03, height: offset.height, scale, color: [1, 0, 1] as [number, number, number] }));
+      const fixture = await writeFixture(testInfo.outputPath(name), `${name}.ply`, { half: 6, ring: { x: 0, z: 0, radius: 0 }, blobs });
+      await serveScan(page, fixture.file);
+      await page.goto(`/?place=${SCAN_PATH}`);
+      await waitForPortalReady(page, item.id, item.url);
+      await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
+      await seek(page, 0, true);
+      const read = await readPlace(page);
+      const stats = await shotStats(page, await cardShot(page, item.id, `${name}.png`));
+      return { read, magenta: stats.magenta };
+    };
+    const small = await run("splat-small", 0.06, 25);
+    expect(small.magenta, "the same place with small splats there is drawn: the point is in view").toBeGreaterThan(5);
+    const large = await run("splat-large", spill, 1);
+    // Magenta anywhere is a drawn part of the large splat; none can be outside the glass either.
+    expect(large.magenta, "the large splat is not drawn at all, so none of it spills past the glass").toBe(0);
+    expect(large.read.outside, "and none is outside by the extent probe").toBe(0);
   });
 
   test("a scan shows around a real walk take, on its floor, clipped by the moving dome, with the portal still working", async ({ page, browser }, testInfo) => {

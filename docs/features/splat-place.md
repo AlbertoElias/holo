@@ -107,9 +107,10 @@ Slice 2, which stores a place with a hologram, decides how that is shown.
 | Failure case | Prevention or evidence |
 |---|---|
 | Scan axes differ from the assumed convention | Fixed per-format orientation confirmed on the user's scan; `placeFlip`; the e2e fixture is written in the confirmed convention |
-| Floor found at a table top or on floaters | Lowest density peak above a threshold, bottom tail ignored; fixture has a table band and floaters; report the found floor; `placeY` |
+| Floor found at a table top or on floaters | Lowest density peak above a threshold, bottom tail ignored; fixture has a table band and floaters; report the found floor; `placeY`; no floor found means the place fails (one warning naming `placeY`) unless `placeY` is given, never a silent guess |
 | The dome moves (walk takes) and a load-time crop goes stale | Clip in the shader from per-frame uniforms; CPU crop is coarse only |
-| Large splats drawn past the glass | Extent test plus edge fade |
+| While a walk take plays, the clip can lag the dome by a frame (Spark regenerates asynchronously) | Accepted for slice 1; the e2e seeks and waits for `clipStale: false`, so it does not see it |
+| Large splats drawn past the glass | Extent test (with the per-axis diagonal factor `3^(1/n)`, in the shader and its TS twin) plus edge fade; the crop counts each splat's reach; e2e: a large splat just inside the dome is not drawn |
 | Hiding the set before the fit shrinks the dome by load timing | Fit waits for the place; fit with the set, then hide it |
 | The rim lifts to hidden recorded ground | Rim off when a place shows |
 | Demand frameloop leaves an unsorted frame | `invalidate()` on sort and uniform change; ready probe before screenshots |
@@ -160,6 +161,10 @@ and zoom details; tabletops and camera takes out of scope. All taken.
 | Portal still works | Follow/Free/orbit/zoom case from `portal.spec.ts`, parameterised with `?place=` | Existing assertions pass: Pass: orbit drag to Free, zoom with the cursor over the glass above the scan, Return, Play (in the real-take case of `place.spec.ts`) |
 | Broken URL | `place.spec.ts` with a 404 | One warning, card unchanged: Pass: one warning, no error text, pixel difference within render noise, same dome and rim |
 | No Spark in production | Build, then search `dist` for Spark | No match: Pass: `pnpm --filter @holoim/web build`, then `grep -rlE "SparkRenderer\|sparkjs\|place_clip_fade\|__HOLOIM_PLACE__\|local-places" apps/viewer-web/dist` found nothing; `node scripts/check-prod-bundle.mjs` passes |
+| Exactly one warning on every failure path | `place.spec.ts`: a 404 that arrives after the fit's 5 s wait | Warnings counted: Pass: one (the timeout's), card rendered, no error text |
+| No floor is never guessed | `place.spec.ts`: a scan whose splat heights are not numbers | Status and warning text: Pass: status `failed`, one warning naming `placeY`; with `placeY` in the URL the place is `ready` with no warning |
+| First card, and `placeFor` | `place.spec.ts`: a faked two-card feed, pixels of each card with and without the place | Pass: `?place=` changes the first card only; `placeFor=<id>` changes the second only |
+| A large splat's extent never spills | `place.spec.ts`: one large splat just inside the dome on its upper front diagonal, whose extent (checked) reaches past the glass, against a control of small splats at the same point | Pass: control drawn (magenta pixels), large splat 0 magenta pixels, `outside` 0 |
 | Real scan (SPZ) | User's Scaniverse export on the dev server, Mac and iPhone | Proof video (not committed); numbers noted here: Not done: needs the user's scan and iPhone |
 
 SPZ is covered only by the real scan; the spec writes PLY.
