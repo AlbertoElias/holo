@@ -167,7 +167,8 @@ and zoom details; tabletops and camera takes out of scope. All taken.
 | No floor is never guessed | `place.spec.ts`: a scan whose splat heights are not numbers | Status and warning text: Pass: status `failed`, one warning naming `placeY`; with `placeY` in the URL the place is `ready` with no warning |
 | First card, and `placeFor` | `place.spec.ts`: a faked two-card feed, pixels of each card with and without the place | Pass: `?place=` changes the first card only; `placeFor=<id>` changes the second only |
 | A large splat's extent never spills | `place.spec.ts`: one large splat just inside the dome on its upper front diagonal, whose extent (checked) reaches past the glass, against a control of small splats at the same point | Pass: control drawn (magenta pixels), large splat 0 magenta pixels, `outside` 0 |
-| Real scan (SPZ) | User's Scaniverse export on the dev server, Mac and iPhone | Proof video (not committed); numbers noted here: Not done: needs the user's scan and iPhone |
+| Real scan, downloaded (SPZ, 2026-11-10) | Spark's example `fireplace.spz` (a captured room, 301,000 splats, 4.4 MB), git-ignored under `public/local-places/`, around capture's avatar; headed Chromium on the Mac (Metal) | Decoded 0.39 s, ready 0.9 s, sorted 1.1 s after load; 120 fps; 28,179 splats kept by the crop, 5,047 drawn inside the dome, 0 outside. The file is y down: it needs `placeFlip=1` (see Findings). Placed by hand at the hearth with `placeX=2.37&placeZ=0.95&placeYaw=90`; proof video seen by the lead (not committed). `snow-street.spz`, a street scan whose content sits 8–28 m below its origin, finds a floor 26 m down and shows only a dark patch: not a usable place without hand placement |
+| Real scan (SPZ), the user's | User's Scaniverse export on the dev server, Mac and iPhone | Not done: needs the user's scan and iPhone |
 | Real GPU, generated scan (2026-11-09) | Headed Chromium on the Mac (Metal), real walk take, the spec's PLY | About 120 fps while playing; ready 1.8 s, first drawn 2.5 s after load (nothing draws before Spark's first sort); the scan draws in every sample while the dome is on its floor; proof video seen by the lead (not committed) |
 
 SPZ is covered only by the real scan; the spec writes PLY.
@@ -180,6 +181,18 @@ SPZ is covered only by the real scan; the spec writes PLY.
   loop. A real room is flat; takes recorded on capture's hilly set do not fit
   one. Recording a take inside a scanned place (a later slice) removes this;
   until then, a take on flat ground is the right pairing.
+- **SPZ orientation is the producer's, not the format's.** Spark's example
+  `fireplace.spz` is y down (its floor is the top of its height range and the
+  hearth hangs under it), so the SPZ default of no flip puts it upside down.
+  The floor finder does not notice: the floor is the scan's only strong
+  height peak either way up, so the take stands on the floor's underside with
+  the room cut away below the dome. Only a look tells; `placeFlip=1` fixes
+  it. A sound default needs the user's Scaniverse export, or a check that most
+  of the scan lies above the floor found (a follow-up, not built).
+- **The dome shows about a metre of the place.** Around a standing take the
+  cloche cuts a room to the floor under the feet; furniture shows only where
+  the take stands next to it. Finding that spot took a search of the scan and
+  `placeX`/`placeZ`/`placeYaw` by hand.
 - In software WebGL (headless checks under load) Spark rarely finishes a
   sort while a walk take moves the clip every frame; on the Mac's GPU it
   keeps up. The checks pause or seek before reading pixels.
