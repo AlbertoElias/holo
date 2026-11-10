@@ -154,7 +154,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     tray: objects.tray,
     removeTraySlot: (slot) => void objects.removeTraySlot(slot),
     getAvatarRoot: () => avatar.avatarRoot,
-    getOpenTraceStart: () => recording.recorder.pointSamples.openTrace()?.startSec ?? null
+    getOpenTrace: () => recording.recorder.pointSamples.openTrace()
   });
   // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.
   const recenterAr = (): void => {

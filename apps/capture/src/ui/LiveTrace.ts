@@ -3,7 +3,7 @@ import { pathExtent, STILL_EXTENT_METERS, type VrmHumanoidBone } from '@holoim/m
 import { markChromeTree } from '@holoim/xr-ui-core';
 
 import type { VrHandSide } from '../types/contracts';
-import { collectHumanoidBones } from '../recording/PointResolver';
+import { collectHumanoidBones, SUMMONING_HAND_SETTLE_SEC } from '../recording/PointResolver';
 
 // The live trace (PRD-023 v1): while the author traces, a thin ribbon behind
 // each moving fingertip of the capture avatar, in the viewer's trace style.
@@ -79,6 +79,8 @@ export interface LiveTraceProbe {
 export interface LiveTraceStep {
   /** When the open trace began (simulation seconds), or null when none is open. */
   startSec: number | null;
+  /** The hand that summoned the Halo to turn Ink on: it draws only after the settle, as the stored mark does. */
+  onSide?: VrHandSide | undefined;
   elapsedSec: number;
   /** The capture avatar's root; its fingertips are followed. */
   avatarRoot: THREE.Object3D | null;
@@ -274,7 +276,9 @@ export class LiveTrace {
     for (const side of SIDES) {
       const trail = this.trails[side];
       const bone = this.bones.get(`${side}IndexDistal`) ?? this.bones.get(`${side}Hand`);
-      if (!bone || !step.tracked(side)) {
+      // The summoning hand is still travelling back from the Halo: export trims it, so the live trace does too.
+      const settling = side === step.onSide && step.elapsedSec - step.startSec < SUMMONING_HAND_SETTLE_SEC;
+      if (!bone || !step.tracked(side) || settling) {
         trail.breakLine();
         continue;
       }

@@ -18,7 +18,7 @@ import { AimRays, CHIP_OPACITY, HandDock, POKE, StatusLine, WorldPanel, configur
 import type { ObjectTray } from '../objects/ObjectTray';
 import { SHOW_CAPABILITIES, capabilityLine } from '../objects/findCapabilities';
 import { ObjectSearchSession } from '../objects/objectSearchSession';
-import type { UiViewModel } from '../types/contracts';
+import type { UiViewModel, VrHandSide } from '../types/contracts';
 import type { XrTracking } from '../xr/XrTracking';
 import { LiveTrace } from './LiveTrace';
 import { SpatialTick } from './SpatialTick';
@@ -49,7 +49,7 @@ interface VrChromeDeps {
   /** The avatar whose index fingertips the live trace follows. */
   getAvatarRoot: () => THREE.Object3D | null;
   /** When the open Ink trace began (simulation seconds), or null (PRD-023 v1). */
-  getOpenTraceStart: () => number | null;
+  getOpenTrace: () => { startSec: number; onSide?: VrHandSide } | null;
 }
 
 /** VR carries the whole chrome; passthrough AR (the spectator) carries Find only. */
@@ -337,7 +337,8 @@ export class VrChrome {
     this.updateWrist(state.handedness, recording);
     this.updateStatus(deltaSec, state, recording);
     this.liveTrace.update({
-      startSec: recording ? this.deps.getOpenTraceStart() : null,
+      startSec: recording ? (this.deps.getOpenTrace()?.startSec ?? null) : null,
+      onSide: this.deps.getOpenTrace()?.onSide,
       elapsedSec,
       avatarRoot: this.deps.getAvatarRoot(),
       tracked: (side) => this.deps.tracking.getHandPoseSource(side) === 'xr-hand'
