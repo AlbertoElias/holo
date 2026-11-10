@@ -419,11 +419,13 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           holds: recording.recorder.pointSamples.holdCounts(),
           traces: tracesSnapshot(recording.recorder.pointSamples),
           liveTrace: vrChrome.liveTrace.probe(),
+          simSec: capture.frame.elapsedSec,
           touch: input.touch.snapshot().hold,
           flatHalo: flatHalo.getSnapshot(),
           actions: haloActions.log
         }),
         __toggleRecording: () => recording.toggle(),
+        __runHaloAction: (action, input) => haloActions.run(action, input),
         __lastPointReport: () => recording.cameraRecorder.getLastPointReport() ?? null,
         __arWorldFrame: () => stage.worldGroup.matrixWorld.toArray(),
         __projectToScreen: (point) => {

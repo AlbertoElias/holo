@@ -1,4 +1,5 @@
 import type { XRDevice } from 'iwer';
+import type { HaloAction } from '@holoim/xr-ui-core';
 
 import type { HumanoidBindingReport } from '../avatar/HumanoidSkeleton';
 import type { FaceSample } from '../face/faceTypes';
@@ -72,6 +73,8 @@ export interface AutomationHooks {
   __sampleHolds: () => HoldsSnapshot;
   /** Record or Stop, through the same `recording.toggle()` the dock, the key and the wrist glyph reach. */
   __toggleRecording: () => void;
+  /** Runs a Halo action as if `input`'s Halo committed it now (no press time, no summoning hand): scripted Ink toggles where the gesture is not the point. */
+  __runHaloAction: (action: HaloAction, input: HaloActionRecord['input']) => boolean;
   /** What point resolution decided at the latest camera take's export (holds, referents, "no referent"), or null. */
   __lastPointReport: () => PointResolutionReport | null;
   /** `worldGroup.matrixWorld` (column-major, 16 numbers): the set's frame in the room, for scripting a camera walk in the set's frame. */
@@ -102,6 +105,8 @@ export interface HoldsSnapshot {
   traces: TracesSnapshot;
   /** The live trace behind each fingertip, per hand. */
   liveTrace: LiveTraceProbe;
+  /** Capture's simulation clock now, seconds: what trace, hold and frame times are on. */
+  simSec: number;
   touch: string;
   flatHalo: FlatHaloView;
   actions: HaloActionRecord[];
