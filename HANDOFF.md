@@ -55,6 +55,15 @@ queue item in [`TODOS.md`](TODOS.md).
   is `none`; cause not looked into). The GLB writer now refuses
   non-finite values, after a NaN vertex made one piece draw as nothing in
   the viewer while its contact sheet looked right.
+- Positional audio (branch `feature/positional-audio`, pushed, not merged;
+  brief [`docs/features/positional-audio.md`](docs/features/positional-audio.md)).
+  Stacked on `feature/showcase-holograms` (merged in, not rewritten), so it
+  merges with or after that branch. Several placed sounds per hologram in the
+  feed and the XR viewer, HRTF on both; new avatar takes place the voice on
+  the head; Quick Look plays every source unplaced. The live feed's rain
+  piece is the old single-mix build; re-uploading the retrofitted one needs
+  the user's go-ahead. Listening by ear and a physical headset are
+  unverified.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

@@ -35,10 +35,25 @@ type CaptureWindow = Window & {
 export type GltfJson = {
   animations?: Array<{ samplers: Array<{ input: number }> }>;
   accessors?: Array<{ max?: number[] }>;
-  nodes?: Array<{ name?: string }>;
+  nodes?: Array<{ name?: string; extensions?: Record<string, unknown> }>;
+  scenes?: Array<{ extensions?: Record<string, unknown> }>;
   skins?: unknown[];
   extensions?: Record<string, unknown>;
 };
+
+type KhrAudio = { emitters?: Array<{ type?: string; positional?: { refDistance?: number } }> };
+
+/**
+ * Where the take's voice is heard from (docs/features/positional-audio.md):
+ * the node index carrying a positional emitter, or "global" when the scene
+ * lists it.
+ */
+export function voicePlacement(gltf: GltfJson): { node: number | null; global: boolean; emitters: KhrAudio["emitters"] } {
+  const audio = gltf.extensions?.KHR_audio as KhrAudio | undefined;
+  const node = gltf.nodes?.findIndex((entry) => (entry.extensions?.KHR_audio as { emitter?: number } | undefined)?.emitter !== undefined) ?? -1;
+  const sceneEmitters = (gltf.scenes?.[0]?.extensions?.KHR_audio as { emitters?: number[] } | undefined)?.emitters ?? [];
+  return { node: node >= 0 ? node : null, global: sceneEmitters.length > 0, emitters: audio?.emitters };
+}
 
 export type WalkTake = { glbPath: string; bytes: Buffer; gltf: GltfJson };
 
@@ -133,6 +148,11 @@ async function recordWalk(browser: Browser, testInfo: TestInfo): Promise<WalkTak
   const bytes = await readFile(WALK_TAKE_PATH);
   const gltf = readGlbJson(bytes);
   expect(gltf.extensions?.KHR_audio, "real recording embeds audio").toBeDefined();
+  // The author's voice is placed on the avatar's head (docs/features/positional-audio.md).
+  const head = (gltf.extensions?.HOLOIM_humanoid as { humanBones?: { head?: { node: number } } } | undefined)?.humanBones?.head?.node;
+  const voice = voicePlacement(gltf);
+  expect(head, "the take names its head bone").toBeDefined();
+  expect({ node: voice.node, global: voice.global, type: voice.emitters?.[0]?.type, emitters: voice.emitters?.length }, "the voice is one positional emitter on the head node").toEqual({ node: head, global: false, type: "positional", emitters: 1 });
   expect(gltf.skins?.length ?? 0, "exported skins").toBeGreaterThan(0);
   expect(gltf.nodes?.some((node) => node.name === "RecordedBubbleSphere"), "exported scene bubble").toBe(true);
   expect(animationDurationSeconds(gltf), "exported animation length").toBeGreaterThan(RECORDED_SECONDS * 0.9);

@@ -44,6 +44,18 @@ Image.MAX_IMAGE_PIXELS = MAX_TEXTURE_PIXELS
 SUPPORTED_EXTENSIONS = {"KHR_audio", "KHR_texture_transform", "KHR_materials_unlit", "KHR_materials_emissive_strength"}
 
 
+def _audio_emitters(gltf, scene):
+    """KHR_audio emitters Quick Look plays: the scene's (global), then each
+    one a node names (placed sounds), once each. Quick Look hears a placed
+    sound unplaced, so a hologram's whole mix still plays there."""
+    emitters = list((scene.extensions or {}).get("KHR_audio", {}).get("emitters", []))
+    for node in gltf.nodes or []:
+        emitter = (node.extensions or {}).get("KHR_audio", {}).get("emitter")
+        if isinstance(emitter, int) and emitter not in emitters:
+            emitters.append(emitter)
+    return emitters
+
+
 def _name(value):
     return re.sub(r"[^a-zA-Z0-9_]", "_", value or "unnamed")
 
@@ -792,11 +804,11 @@ class Converter:
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
             raise ValueError("Recorded audio conversion requires ffmpeg")
-        emitters = (scene.extensions or {}).get("KHR_audio", {}).get("emitters", [])
+        emitters = _audio_emitters(self.gltf, scene)
         for emitter_index in emitters:
             emitter = extension["emitters"][emitter_index]
-            if emitter.get("type") != "global":
-                raise ValueError("Only capture's global KHR_audio emitter is supported")
+            if emitter.get("type") not in ("global", "positional"):
+                raise ValueError("Unsupported KHR_audio emitter type")
             for source_index in emitter["sources"]:
                 source = extension["sources"][source_index]
                 audio = extension["audio"][source["audio"]]
@@ -827,7 +839,8 @@ class Converter:
                 prim.CreatePlaybackModeAttr().Set("loopFromStage" if source.get("loop") else "onceFromStart")
                 prim.CreateStartTimeAttr().Set(Sdf.TimeCode(0))
                 prim.CreateMediaOffsetAttr().Set(0.0)
-                prim.CreateGainAttr().Set(float(emitter.get("gain", 1)))
+                # The viewer plays a source at its own gain times its emitter's.
+                prim.CreateGainAttr().Set(float(emitter.get("gain", 1)) * float(source.get("gain", 1)))
 
     def fit_points(self):
         """What the hologram draws, for fitting its cloche by the viewer's

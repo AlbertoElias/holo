@@ -14,6 +14,7 @@ import { Quaternion, Vector3 } from "three";
 
 import { identityOf } from "../src/features/presence/identityHue";
 import { assertViewerShell, expect, pressViewInAr, reachFor, test } from "./bootstrap";
+import { voicePlacement, type GltfJson as PipelineGltf } from "./pipeline-takes";
 import { installProbe, waitForPortalReady } from "./portal-helpers";
 import { buildPointingGlb } from "./pointing-fixture";
 
@@ -548,6 +549,9 @@ test("a camera take uploads, frames its set in the feed, loops, sounds, converts
   expect(json.nodes.some((node) => node.name === "RecordedAvatar"), "no avatar").toBe(false);
   expect(json.nodes.some((node) => node.name === "RecordedAuthorCamera"), "the author is a camera node").toBe(true);
   expect(json.extensions?.KHR_audio, "the voice is in the take").toBeDefined();
+  // A camera take has no head, so its voice stays one global emitter, as before positional audio.
+  const voice = voicePlacement(json as unknown as PipelineGltf);
+  expect({ node: voice.node, global: voice.global, type: voice.emitters?.[0]?.type }, "the voice stays global").toEqual({ node: null, global: true, type: "global" });
   expect(duration, "the take's clip is its camera's path").toBeGreaterThan(1);
 
   await observeAudio(page);
