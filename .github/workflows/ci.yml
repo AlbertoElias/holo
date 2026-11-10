@@ -29,7 +29,7 @@ env:
 jobs:
   changes:
     name: Select jobs for changed areas
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read
@@ -77,7 +77,7 @@ jobs:
     name: Quality, unit tests and build
     needs: [changes]
     if: needs.changes.outputs.quality == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: ci-quality-${{ github.ref }}
       cancel-in-progress: true
@@ -142,7 +142,7 @@ jobs:
     name: Capture XR checks (shard ${{ matrix.shard }}/2)
     needs: [changes]
     if: needs.changes.outputs.capture_xr == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: ci-capture-xr-${{ matrix.shard }}-${{ github.ref }}
       cancel-in-progress: true
@@ -199,7 +199,7 @@ jobs:
     name: Viewer and Knowledge browser checks (shard ${{ matrix.shard }}/4)
     needs: [changes]
     if: needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: ci-e2e-${{ matrix.shard }}-${{ github.ref }}
       cancel-in-progress: true
@@ -258,7 +258,7 @@ jobs:
     name: Viewer VR gallery, foot controls and locomotion (shard ${{ matrix.shard }}/2)
     needs: [changes]
     if: needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: ci-xr-viewer-vr-${{ matrix.shard }}-${{ github.ref }}
       cancel-in-progress: true
@@ -307,7 +307,7 @@ jobs:
     name: Capture to viewer pipeline (shard ${{ matrix.shard }}/6)
     needs: [changes]
     if: needs.changes.outputs.pipeline == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: ci-pipeline-${{ matrix.shard }}-${{ github.ref }}
       cancel-in-progress: true
@@ -414,7 +414,7 @@ jobs:
     name: Portal view end-to-end
     needs: [changes]
     if: needs.changes.outputs.portal == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: ci-portal-${{ github.ref }}
       cancel-in-progress: true
@@ -464,7 +464,7 @@ jobs:
     name: Quick Look tool check
     needs: [changes]
     if: needs.changes.outputs.usdz_tools == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
       group: ci-usdz-tools-${{ github.ref }}
@@ -536,7 +536,7 @@ jobs:
     name: Build API image
     needs: [changes]
     if: needs.changes.outputs.api == 'true' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:
       group: ci-api-image-${{ github.ref }}
@@ -556,7 +556,7 @@ jobs:
       !cancelled() && github.ref == 'refs/heads/main' &&
       needs.changes.outputs.api == 'true' &&
       !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
       group: deploy-production-api
@@ -590,7 +590,7 @@ jobs:
       needs.changes.outputs.web == 'true' &&
       (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success') &&
       !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
       group: deploy-production-web
@@ -627,7 +627,7 @@ jobs:
       !cancelled() && github.ref == 'refs/heads/main' &&
       needs.changes.outputs.capture_app == 'true' &&
       !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
       group: deploy-production-capture
@@ -672,7 +672,7 @@ jobs:
     # here only to report failure. Failed or skipped jobs still reach the gate.
     if: ${{ !cancelled() }}
     needs: [changes, quality, capture-xr, e2e, xr-viewer-vr, pipeline, usdz-tools, portal, api-image, deploy-api, deploy-web, deploy-capture]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     env:
       CHANGES_RESULT: ${{ needs.changes.result }}
