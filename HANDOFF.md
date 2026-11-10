@@ -36,6 +36,12 @@ queue item in [`TODOS.md`](TODOS.md).
   (`cmwa443hq0005oeirkgp3b33k`), Murmuration (`cmwa4402a0003oeirbj759hxp`)
   and Walk beside light (`cmwa43uab0001oeirkv0e9bzr`). All four render at
   https://holoim-viewer.pages.dev; not yet seen in a headset or AR.
+  A second set of six was added on the same branch 2026-11-10 (`words`,
+  `seasons`, `hearts`, `rain`, `bath`, `strings`; see "Second set" in the
+  concept page), checked in the local viewer feed, and is not on the live
+  feed: that waits for the user's go-ahead. The GLB writer now refuses
+  non-finite values, after a NaN vertex made one piece draw as nothing in
+  the viewer while its contact sheet looked right.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

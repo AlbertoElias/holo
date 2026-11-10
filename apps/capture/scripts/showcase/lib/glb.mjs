@@ -56,6 +56,11 @@ export class Glb {
 
   accessor(array, type, { target, minMax = false, componentType = FLOAT } = {}) {
     const size = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[type];
+    // One NaN vertex is invisible in a plain three.js render but poisons the
+    // viewer's measured bounds, and the whole hologram then draws as nothing.
+    for (let i = 0; i < array.length; i += 1) {
+      if (!Number.isFinite(array[i])) throw new Error(`accessor (${type}, ${array.length / size} items) has a non-finite value at index ${i}`);
+    }
     const accessor = {
       bufferView: this.bufferView(array, target),
       componentType,

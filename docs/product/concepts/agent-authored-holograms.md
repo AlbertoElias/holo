@@ -104,7 +104,8 @@ video.
 | Blue hour | Coziness | A miniature house at dusk. Each side hides something: a reader, a cat, a sleeper, lit roots. |
 
 Build one with `pnpm --filter @holoim/capture run showcase:build <scene>`
-(`light`, `door`, `murmuration`, `blue-hour`); the GLB and a contact sheet
+(`light`, `door`, `murmuration`, `blue-hour`, and the second set's scenes
+below); the GLB and a contact sheet
 land in the ignored `output/showcase/`. `showcase:upload --api <origin>
 <scene>` sends it through the normal upload route.
 
@@ -123,3 +124,36 @@ What building them showed:
 - **Restraint held up.** The door's two figures are jointed mannequins of
   light with no faces, and the scene still reads; the open question about
   needing a lifelike presenter leans toward "not at first".
+
+## Second set (2026-11-10)
+
+Six more, pushed further from anything a camera could have recorded. Each
+is built around one thing only the viewer's own position can do.
+
+| Piece | Scene | Feeling | What the viewer's position does |
+| --- | --- | --- | --- |
+| From where you stand | `words` | A turn from loneliness to warmth | One sculpture of 895 bricks reads ALONE from the first view and LOVED a quarter turn to the right. |
+| Walk around the year | `seasons` | Time passing through one place | One apple tree in all four seasons at once, a quarter each. Walking round it is walking through the year; a red scarf carries the story from the autumn branch to the snowman to the spring melt. |
+| Three hearts | `hearts` | Awe, tenderness | A blue whale's heart (1.5 m), a person's and a hummingbird's at true size, beating at 4, 64 and 1,200 a minute. The whale's beat comes twice in the 30 s loop; the waiting is the point. |
+| The shape the rain leaves | `rain` | Presence made of absence | Rain on an adult and a child with a red umbrella, neither of them drawn. Water stopping, clinging and running off shows them; from above, the dry ground does. |
+| The sea in the bathtub | `bath` | Delight | A true-size clawfoot tub holding a storm: a paper boat, a kraken with the plug, a lighthouse tap, a thundercloud under the shower head. |
+| Who holds the strings | `strings` | Vertigo | A puppet theatre from the front. Behind it the puppeteer; above the puppeteer, strings to a giant hand. One gesture passes down four levels, and at 9 s each one looks up at whoever holds it. |
+
+What this set added to the findings above:
+
+- **A piece that depends on the viewpoint must be built for the feed's
+  exact first view.** The feed opens at yaw 18°, pitch 16°. The word
+  sculpture is turned 18° and each brick is raised by `(u − w) · cell ·
+  tan 16°`, so rows at different depths land on the same screen row from
+  that tilt. Built for a level view, the letters broke.
+- **Nothing can hide underneath.** The portal's pitch stops at −8°, so every
+  reveal in this set is behind, above, inside or on the far side.
+- **Compact and dense reads on a card.** All six stay within about 3.5 m and
+  are filled; none has the empty-frame problem of Walk beside light.
+- **An invisible subject needs help at card size.** Rain stopping in mid-air
+  was not enough to show two people in a 300 px view; droplets clinging to
+  the unseen bodies were added, which is closer to drawing them than the
+  idea first intended.
+- **The sound is one track for the whole piece.** It cannot follow the
+  viewer, so Walk around the year plays one phrase per season in turn
+  instead of the season being faced.
