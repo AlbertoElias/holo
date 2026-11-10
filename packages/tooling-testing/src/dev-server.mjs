@@ -169,12 +169,33 @@ const testBuildScript = fileURLToPath(new URL('./test-build.mjs', import.meta.ur
  * server's readiness wait does not include the build.
  */
 export function startTestBuildServer({ app, host, port, cwd, env }) {
-  return spawnManaged(
+  const child = spawnManaged(
     process.execPath,
     [testBuildScript, 'serve', app, '--', '--host', host, '--port', String(port), '--strictPort'],
     // The caller built already; a forced rebuild must not repeat here.
-    { cwd, stdio: 'inherit', env: { ...(env ?? process.env), HOLOIM_TEST_BUILD_FORCE: '' } }
+    { cwd, stdio: ['inherit', 'pipe', 'inherit'], env: { ...(env ?? process.env), HOLOIM_TEST_BUILD_FORCE: '' } }
   );
+  // Vite prints its "Local:" line only once this process holds the port
+  // (--strictPort makes a taken port exit instead). A response from the port
+  // alone does not prove it: another run's server may already answer there,
+  // and waitForServer would accept it (a Quest 3 build where the face check
+  // needs a Quest Pro, B-039). So readiness waits for this line.
+  child.listening = new Promise((resolve) => {
+    let seen = '';
+    child.stdout.on('data', (chunk) => {
+      process.stdout.write(chunk);
+      if (seen !== null) {
+        seen += chunk.toString('utf8');
+        // eslint-disable-next-line no-control-regex
+        if (/Local:\s+(?:\u001b\[[0-9;]*m)*https?:\/\//.test(seen)) {
+          seen = null;
+          resolve();
+        }
+      }
+    });
+    child.once('exit', resolve);
+  });
+  return child;
 }
 
 export async function waitForServer(url, timeoutMs = 30000, processHandle) {
@@ -186,6 +207,10 @@ export async function waitForServer(url, timeoutMs = 30000, processHandle) {
   processHandle?.once('error', onProcessError);
 
   try {
+    // A server this process started proves it owns the port by announcing it.
+    if (processHandle?.listening) {
+      await Promise.race([processHandle.listening, delay(timeoutMs)]);
+    }
     while (Date.now() - startedAt < timeoutMs) {
       if (processError) {
         throw new Error(`Process failed before readiness check passed (${url}): ${processError.message}`);
