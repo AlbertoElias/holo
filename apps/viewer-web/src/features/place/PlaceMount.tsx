@@ -5,7 +5,7 @@ import type { AnimationClip, Object3D, Vector3 } from "three";
 
 import { PlaceLayer } from "./PlaceLayer";
 import { loadPlace, type LoadedPlace } from "./loadPlace";
-import type { PlaceGate } from "./placeGate";
+import { warnPlaceOnce, type PlaceGate } from "./placeGate";
 import { createPlaceReport } from "./placeReport";
 import type { PlaceRequest } from "./placeRequest";
 import { recordedFloorY } from "./takeFloor";
@@ -32,37 +32,55 @@ export default function PlaceMount({ request, gate, shape, shift, scene, clips, 
   const [place, setPlace] = useState<LoadedPlace | null>(null);
   const { url, flip, nudge } = request;
   const { x, y, z, yawDeg } = nudge;
+  const { floorGiven } = request;
 
   useEffect(() => {
     let live = true;
     report.status = "loading";
     report.url = url;
     window.__HOLOIM_PLACE__ = report;
-    loadPlace({ url, flip, nudge: { x, y, z, yawDeg } }).then((loaded) => {
+    const request: PlaceRequest = { url, flip, nudge: { x, y, z, yawDeg }, floorGiven };
+    const fail = (error: unknown) => {
+      // One warning for the mount, whatever failed first (a timeout may have warned already).
+      warnPlaceOnce(gate, `Place ${url} did not load; the card shows its recorded set.`, error);
+      if (gate.status === "loading") gate.status = "failed";
+      report.status = "failed";
+      invalidate();
+    };
+    loadPlace(request).then((loaded) => {
       if (!live) return;
       report.splatsLoaded = loaded.numSplats;
       report.floorFound = loaded.floor.found;
       report.floorFoundY = loaded.floor.floorY;
       report.loadMs = loaded.loadMs;
+      let floor = loaded.floor;
+      if (!floor.found) {
+        // A scan without a clear floor is never placed by a guess: it fails, unless the URL names the floor's height.
+        if (!floorGiven) {
+          fail(new Error(`no floor found in the scan; pass placeY=<the floor's height in the scan, metres, y up> to place it`));
+          return;
+        }
+        floor = { found: false, floorY: y, x: 0, z: 0 };
+      }
+      // A scan that arrives after the fit timed out is not shown late: the card
+      // keeps today's look for this mount, and the dome it fitted without it.
       if (gate.status === "loading") {
         gate.status = "ready";
         report.status = "ready";
       } else {
         report.status = "timeout";
       }
-      setPlace({ ...loaded, request: { url, flip, nudge: { x, y, z, yawDeg } } });
+      setPlace({ ...loaded, floor, request: floor.found ? request : { ...request, nudge: { x, y: 0, z, yawDeg } } });
       invalidate();
-    }, () => {
+    }, (error: unknown) => {
       if (!live) return;
-      if (gate.status === "loading") gate.status = "failed";
-      report.status = "failed";
-      invalidate();
+      fail(error);
     });
     return () => {
       live = false;
       if (window.__HOLOIM_PLACE__ === report) delete window.__HOLOIM_PLACE__;
     };
-  }, [bind, flip, gate, invalidate, report, url, x, y, z, yawDeg]);
+  }, [bind, flip, floorGiven, gate, invalidate, report, url, x, y, z, yawDeg]);
 
   // Read once, at the dome's fit: the recorded set is still the set it was.
   const takeFloorY = useMemo(() => (shape ? recordedFloorY(scene, clips) ?? shape.base.y : null), [clips, scene, shape]);

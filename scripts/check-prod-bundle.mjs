@@ -17,8 +17,9 @@ if (!existsSync(path.join(dist, 'index.html'))) {
   process.exit(2);
 }
 
-// Anywhere in the bundle: test hooks, and the IWSDK dev runtime's own code.
-const FORBIDDEN_ANYWHERE = ['__HOLOIM_XR_VIEWER__', '__HOLOIM_TEST_MODULES__', '__HOLOIM_AR_TEST_OBSERVER__', '__HOLOIM_FEED_TEST_OBSERVER__', '[IWSDK Dev]'];
+// Anywhere in the bundle: test hooks, the IWSDK dev runtime's own code, and the
+// scanned-place chain (Spark, its clip shader, its report: docs/features/splat-place.md).
+const FORBIDDEN_ANYWHERE = ['__HOLOIM_XR_VIEWER__', '__HOLOIM_TEST_MODULES__', '__HOLOIM_AR_TEST_OBSERVER__', '__HOLOIM_FEED_TEST_OBSERVER__', '[IWSDK Dev]', 'SparkRenderer', 'place_clip_fade', '__HOLOIM_PLACE__'];
 // In the startup graph: the IWER emulator itself.
 const FORBIDDEN_AT_STARTUP = ['installSEM', 'installDevUI'];
 

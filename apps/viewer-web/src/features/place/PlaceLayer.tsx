@@ -87,6 +87,8 @@ export function PlaceLayer({ place, shape, shift, takeFloorY, sweep, readFeetY, 
       }
     });
     spark.renderOrder = PLACE_RENDER_ORDER;
+    // Splat colours are display-ready. Spark's shader includes no tone-mapping or colour-space chunk (checked in 2.3.1), so the renderer's tone mapping never touches it; this flag keeps that so if one is ever added.
+    spark.material.toneMapped = false;
     report.splatsKept = cropped.numSplats;
     const band: number[] = [];
     for (let i = 0; i < cropped.numSplats; i += 1) if (Math.abs(cropped.centers[i * 3 + 1]! - placement.at.y) < FLOOR_BAND_METERS) band.push(cropped.centers[i * 3 + 1]!);

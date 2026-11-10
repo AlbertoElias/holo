@@ -43,7 +43,7 @@ import type { PortalStore } from "../portal/portalStore";
 import { usePortalValue } from "../portal/usePortalValue";
 import { DEFAULT_CAMERA_FRAMING_CONFIG, computeDesiredFraming } from "./cameraFraming";
 import { HologramLighting } from "./HologramLighting";
-import { createPlaceGate, PLACE_FIT_WAIT_MS } from "../place/placeGate";
+import { createPlaceGate, PLACE_FIT_WAIT_MS, warnPlaceOnce } from "../place/placeGate";
 import type { PlaceRequest } from "../place/placeRequest";
 import { testHooks } from "../../testHooks";
 
@@ -325,7 +325,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     const timer = window.setTimeout(() => {
       if (placeGate.status !== "loading") return;
       placeGate.status = "timeout";
-      console.warn(`Place ${placeRequest?.url ?? ""} did not load in time; the card shows its recorded set.`);
+      warnPlaceOnce(placeGate, `Place ${placeRequest?.url ?? ""} did not load in time; the card shows its recorded set.`);
       invalidate();
     }, PLACE_FIT_WAIT_MS);
     return () => window.clearTimeout(timer);

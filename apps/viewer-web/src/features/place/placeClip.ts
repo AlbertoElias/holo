@@ -20,11 +20,19 @@ export type DomeShape = {
   exponent: number;
 };
 
+/** The most a per-axis norm of exponent `n` grows by for a unit step along a diagonal of the three axes. */
+export function diagonalFactor(n: number): number {
+  return 3 ** (1 / n);
+}
+
 /**
  * How much of the splat shows, 0 at or past the glass to 1 well inside it.
  * The dome's value `f` is a norm (the exponent is above 2), so moving a
  * point by the splat's extent changes it by at most extent / the dome's
- * smallest radius: a splat with `f` plus that under 1 lies wholly inside.
+ * smallest radius, and by at most `3^(1/n)` times that for a move along a
+ * diagonal in the per-axis norm; the test takes the larger, so a splat with
+ * `f` plus that under 1 lies wholly inside however its extent points. The
+ * GLSL twin below uses the same factor.
  */
 export function placeClipFade(dome: DomeShape, center: { x: number; y: number; z: number }, largestScale: number): number {
   const extent = SPLAT_EXTENT_SIGMA * largestScale;
@@ -35,7 +43,7 @@ export function placeClipFade(dome: DomeShape, center: { x: number; y: number; z
   if (ly < -FLOOR_SLACK_METERS) return 0;
   const n = dome.exponent;
   const f = (Math.abs(lx / dome.radii.x) ** n + Math.abs(Math.max(ly, 0) / dome.radii.y) ** n + Math.abs(lz / dome.radii.z) ** n) ** (1 / n);
-  const value = f + extent / Math.min(dome.radii.x, dome.radii.y, dome.radii.z);
+  const value = f + (extent * diagonalFactor(n)) / Math.min(dome.radii.x, dome.radii.y, dome.radii.z);
   const from = 1 - CLIP_FADE_SHARE;
   const t = Math.min(Math.max((value - from) / CLIP_FADE_SHARE, 0), 1);
   return 1 - t * t * (3 - 2 * t);
@@ -71,7 +79,7 @@ float place_clip_fade(vec3 center, vec3 scales, vec3 base, vec3 radii, float n) 
   if (l.y < -${FLOOR_SLACK_METERS.toFixed(3)}) return 0.0;
   vec3 q = vec3(abs(l.x) / radii.x, max(l.y, 0.0) / radii.y, abs(l.z) / radii.z);
   float f = pow(pow(q.x, n) + pow(q.y, n) + pow(q.z, n), 1.0 / n);
-  float value = f + extent / min(radii.x, min(radii.y, radii.z));
+  float value = f + extent * pow(3.0, 1.0 / n) / min(radii.x, min(radii.y, radii.z));
   float from = ${(1 - CLIP_FADE_SHARE).toFixed(4)};
   float t = clamp((value - from) / ${CLIP_FADE_SHARE.toFixed(4)}, 0.0, 1.0);
   return 1.0 - t * t * (3.0 - 2.0 * t);

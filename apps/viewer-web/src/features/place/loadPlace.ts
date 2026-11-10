@@ -24,6 +24,8 @@ export type LoadedPlace = {
   loadMs: number;
 };
 
+/** Decoded scans kept across remounts: about 36 bytes a splat each. */
+const CACHE_ENTRIES = 2;
 const cache = new Map<string, Promise<LoadedPlace>>();
 
 async function read(request: PlaceRequest): Promise<LoadedPlace> {
@@ -61,16 +63,24 @@ async function read(request: PlaceRequest): Promise<LoadedPlace> {
   };
 }
 
-/** One read per scan and orientation, shared by every mount of the card. A failure is kept too, so it warns once. */
+/** One read per scan and orientation, shared by every mount of the card; the two most recent are kept. A failure is not kept, so a retry reads again. */
 export function loadPlace(request: PlaceRequest): Promise<LoadedPlace> {
   const key = `${request.url}|${request.flip ? 1 : 0}`;
-  let loading = cache.get(key);
-  if (!loading) {
-    loading = read(request);
-    loading.catch((error: unknown) => {
-      console.warn(`Place ${request.url} did not load; the card shows its recorded set.`, error);
-    });
-    cache.set(key, loading);
+  const kept = cache.get(key);
+  if (kept) {
+    // Most recently used last.
+    cache.delete(key);
+    cache.set(key, kept);
+    return kept;
+  }
+  const loading = read(request);
+  cache.set(key, loading);
+  loading.catch(() => {
+    if (cache.get(key) === loading) cache.delete(key);
+  });
+  for (const oldest of cache.keys()) {
+    if (cache.size <= CACHE_ENTRIES) break;
+    cache.delete(oldest);
   }
   return loading;
 }

@@ -5,7 +5,7 @@ import { FLOOR_SLACK_METERS, MAX_SPLAT_EXTENT_METERS, SPLAT_EXTENT_SIGMA, type D
 
 /** Splats kept after the crop (docs/features/splat-place.md, Memory). */
 export const PLACE_SPLAT_CAP = 1_500_000;
-/** The crop keeps this much past the swept dome, metres: it only lowers the count, the shader is the edge. */
+/** The crop keeps this much past the swept dome, plus each splat's own extent, metres: it only lowers the count, the shader is the edge. */
 export const CROP_MARGIN_METERS = 0.3;
 /** Below this a splat adds nothing. */
 const MIN_OPACITY = 0.02;
@@ -66,7 +66,10 @@ export function cropToSweep(place: LoadedPlace, placement: Placement, dome: Dome
     if (place.opacity[i]! < MIN_OPACITY || place.scale[i]! * SPLAT_EXTENT_SIGMA > MAX_SPLAT_EXTENT_METERS) continue;
     // The centre in y up, less the floor middle, then turned by the yaw: the scan in the take's world.
     point.set(place.centers[i * 3]! - place.floor.x, place.centers[i * 3 + 1]! - place.floor.floorY, place.centers[i * 3 + 2]! - place.floor.z).applyQuaternion(yaw).add(placement.at);
-    if (point.x < min.x || point.x > max.x || point.y < min.y || point.y > max.y || point.z < min.z || point.z > max.z) continue;
+    // The splat's reach counts, not just its centre, so the crop is never what ends a splat the shader would show. The floor side keeps the slack only.
+    const reach = place.scale[i]! * SPLAT_EXTENT_SIGMA;
+    // Written as what is kept, so a splat with a non-finite centre is dropped too.
+    if (!(point.x >= min.x - reach && point.x <= max.x + reach && point.y >= min.y && point.y <= max.y + reach && point.z >= min.z - reach && point.z <= max.z + reach)) continue;
     keep.push(i);
   }
   const stride = Math.max(1, Math.ceil(keep.length / cap));

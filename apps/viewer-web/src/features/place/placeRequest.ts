@@ -8,6 +8,8 @@ export type PlaceRequest = {
   flip: boolean;
   /** Hand nudges from the default placement, metres and degrees. */
   nudge: { x: number; y: number; z: number; yawDeg: number };
+  /** `placeY` is in the URL: when the scan's floor cannot be found, it is the floor's height in the scan, metres, y up. */
+  floorGiven: boolean;
 };
 
 /** SPZ is y-up like three; PLY, SPLAT and KSPLAT are as the trainers write them, y down. */
@@ -24,7 +26,8 @@ function number(value: string | null): number {
 /**
  * `?place=<url>` puts a splat around the first card; `placeFor=<id>` picks
  * another. `placeFlip=0|1`, `placeX`, `placeY`, `placeZ` and `placeYaw`
- * correct the fixed orientation and the default placement by hand.
+ * correct the fixed orientation and the default placement by hand. A scan
+ * with no clear floor shows only with `placeY` (its floor's height in the scan).
  */
 export function readPlaceRequest(search: string, card: { id: string; first: boolean }): PlaceRequest | null {
   const params = new URLSearchParams(search);
@@ -36,6 +39,7 @@ export function readPlaceRequest(search: string, card: { id: string; first: bool
   return {
     url,
     flip: flip === null ? placeFlipDefault(url) : flip === "1",
-    nudge: { x: number(params.get("placeX")), y: number(params.get("placeY")), z: number(params.get("placeZ")), yawDeg: number(params.get("placeYaw")) }
+    nudge: { x: number(params.get("placeX")), y: number(params.get("placeY")), z: number(params.get("placeZ")), yawDeg: number(params.get("placeYaw")) },
+    floorGiven: params.has("placeY")
   };
 }
