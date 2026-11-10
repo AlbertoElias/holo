@@ -1,7 +1,7 @@
 import type * as Spark from "@sparkjsdev/spark";
 
 import { readFloor, type FloorReading } from "./placeAnalysis";
-import type { PlaceScan } from "./placeRequest";
+import type { PlaceScan, PlaceSource } from "./placeRequest";
 
 // Loads and reads a scan (docs/features/splat-place.md). Spark arrives by a
 // dynamic import, here and nowhere else, so a build with the test hooks off
@@ -9,9 +9,9 @@ import type { PlaceScan } from "./placeRequest";
 
 export type SparkModule = typeof Spark;
 
+/** A decoded scan as the cache holds it, the same for every placement of that file. */
 export type LoadedPlace = {
   spark: SparkModule;
-  request: PlaceScan;
   /** Spark's packed splats, 4 words each: kept across remounts, so the file is read and decoded once. */
   packedArray: Uint32Array;
   numSplats: number;
@@ -24,11 +24,14 @@ export type LoadedPlace = {
   loadMs: number;
 };
 
+/** A decoded scan with the card's placement for it. */
+export type PlacedScan = LoadedPlace & { request: PlaceScan };
+
 /** Decoded scans kept across remounts: about 36 bytes a splat each. */
 const CACHE_ENTRIES = 2;
 const cache = new Map<string, Promise<LoadedPlace>>();
 
-async function read(request: PlaceScan): Promise<LoadedPlace> {
+async function read(request: PlaceSource): Promise<LoadedPlace> {
   const started = performance.now();
   const spark = await import("@sparkjsdev/spark");
   const response = await fetch(request.url);
@@ -51,7 +54,6 @@ async function read(request: PlaceScan): Promise<LoadedPlace> {
   });
   return {
     spark,
-    request,
     packedArray,
     numSplats,
     encoding: splatEncoding,
@@ -64,7 +66,7 @@ async function read(request: PlaceScan): Promise<LoadedPlace> {
 }
 
 /** One read per scan and orientation, shared by every mount of the card; the two most recent are kept. A failure is not kept, so a retry reads again. */
-export function loadPlace(request: PlaceScan): Promise<LoadedPlace> {
+export function loadPlace(request: PlaceSource): Promise<LoadedPlace> {
   const key = `${request.url}|${request.flip ? 1 : 0}`;
   const kept = cache.get(key);
   if (kept) {

@@ -1,6 +1,6 @@
 import { Euler, Quaternion, Vector3 } from "three";
 
-import type { LoadedPlace } from "./loadPlace";
+import type { PlacedScan } from "./loadPlace";
 import { FLOOR_SLACK_METERS, MAX_SPLAT_EXTENT_METERS, SPLAT_EXTENT_SIGMA, type DomeShape } from "./placeClip";
 
 /** Splats kept after the crop (docs/features/splat-place.md, Memory). */
@@ -27,7 +27,7 @@ export type Placement = {
  * under the dome's foot, nudged by hand. Scale is never touched: a scan is
  * metric.
  */
-export function placeOnFloor(place: LoadedPlace, dome: DomeShape, takeFloorY: number): Placement {
+export function placeOnFloor(place: PlacedScan, dome: DomeShape, takeFloorY: number): Placement {
   const { nudge, flip } = place.request;
   const at = new Vector3(dome.base.x + nudge.x, takeFloorY + nudge.y, dome.base.z + nudge.z);
   const yaw = yawOf(place);
@@ -37,7 +37,7 @@ export function placeOnFloor(place: LoadedPlace, dome: DomeShape, takeFloorY: nu
   return { at, rotation, position };
 }
 
-function yawOf(place: LoadedPlace): Quaternion {
+function yawOf(place: PlacedScan): Quaternion {
   return new Quaternion().setFromEuler(new Euler(0, (place.request.nudge.yawDeg * Math.PI) / 180, 0));
 }
 
@@ -54,7 +54,7 @@ export type CroppedPlace = {
  * sweeps over the take (plus a margin), then every k-th when still over the
  * cap. Splats too big to ever pass the extent test are dropped as background.
  */
-export function cropToSweep(place: LoadedPlace, placement: Placement, dome: DomeShape, sweep: { min: Vector3; max: Vector3 }, cap = PLACE_SPLAT_CAP): CroppedPlace {
+export function cropToSweep(place: PlacedScan, placement: Placement, dome: DomeShape, sweep: { min: Vector3; max: Vector3 }, cap = PLACE_SPLAT_CAP): CroppedPlace {
   const yaw = yawOf(place);
   const min = new Vector3(dome.base.x - dome.radii.x, 0, dome.base.z - dome.radii.z).add(sweep.min).addScalar(-CROP_MARGIN_METERS);
   // Under the scan's own floor are floaters: never drawn, so never kept.

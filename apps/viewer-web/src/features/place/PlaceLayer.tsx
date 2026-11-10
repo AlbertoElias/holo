@@ -5,7 +5,7 @@ import { Vector3 } from "three";
 import type { Object3D } from "three";
 import type { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 
-import type { LoadedPlace } from "./loadPlace";
+import type { PlacedScan } from "./loadPlace";
 import { PLACE_CLIP_GLSL, SPLAT_EXTENT_SIGMA, extentLeavesDome, placeClipFade, type DomeShape } from "./placeClip";
 import type { PlaceReadings, PlaceReport } from "./placeReport";
 import { FLOOR_BAND_METERS } from "./placeAnalysis";
@@ -24,7 +24,7 @@ type Built = { spark: SparkRenderer; mesh: SplatMesh };
  * frame, redrawn on demand when a sort or a regeneration lands.
  */
 export function PlaceLayer({ place, shape, shift, takeFloorY, sweep, readFeetY, report, bind }: {
-  place: LoadedPlace;
+  place: PlacedScan;
   shape: ClocheShape;
   /** The dome's shift since the fit, set each frame before this runs. */
   shift: Vector3;

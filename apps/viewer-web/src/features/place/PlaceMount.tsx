@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AnimationClip, Object3D, Vector3 } from "three";
 
 import { PlaceLayer } from "./PlaceLayer";
-import { loadPlace, type LoadedPlace } from "./loadPlace";
+import { loadPlace, type PlacedScan } from "./loadPlace";
 import { warnPlaceOnce, type PlaceGate } from "./placeGate";
 import { createPlaceReport } from "./placeReport";
 import type { PlaceRequest, PlaceScan } from "./placeRequest";
@@ -29,7 +29,7 @@ export default function PlaceMount({ request, gate, shape, shift, scene, clips, 
 }) {
   const invalidate = useThree((state) => state.invalidate);
   const { report, bind } = useMemo(createPlaceReport, []);
-  const [place, setPlace] = useState<LoadedPlace | null>(null);
+  const [place, setPlace] = useState<PlacedScan | null>(null);
   const { url, flip, nudge } = request;
   const { x, y, z, yawDeg } = nudge;
   const { floorGiven } = request;
@@ -47,7 +47,7 @@ export default function PlaceMount({ request, gate, shape, shift, scene, clips, 
       report.status = "failed";
       invalidate();
     };
-    loadPlace(request).then((loaded) => {
+    loadPlace({ url, flip }).then((loaded) => {
       if (!live) return;
       report.splatsLoaded = loaded.numSplats;
       report.floorFound = loaded.floor.found;

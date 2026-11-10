@@ -110,6 +110,8 @@ Slice 2, which stores a place with a hologram, decides how that is shown.
 | Floor found at a table top or on floaters | Lowest density peak above a threshold, bottom tail ignored; fixture has a table band and floaters; report the found floor; `placeY`; no floor found means the place fails (one warning naming `placeY`) unless `placeY` is given, never a silent guess |
 | The dome moves (walk takes) and a load-time crop goes stale | Clip in the shader from per-frame uniforms; CPU crop is coarse only |
 | While a walk take plays, the clip can lag the dome by a frame (Spark regenerates asynchronously) | Accepted for slice 1; the e2e seeks and waits for `clipStale: false`, so it does not see it |
+| A scan that decodes after the fit's 5 s wait is never shown on that mount | Accepted for slice 1 (the brief's timeout rule); the happy-path checks pass `placeWait=30000` so a loaded test machine does not time out, and only the slow-failure check uses the default; the real scan's load time on the Mac and iPhone is recorded below |
+| A malformed `placeY` or `placeWait` | `placeY` counts as a given floor only when it is a finite number; `placeWait` is clamped to 1 ms–120 s, else 5 s |
 | Large splats drawn past the glass | Extent test (with the per-axis diagonal factor `3^(1/n)`, in the shader and its TS twin) plus edge fade; the crop counts each splat's reach; e2e: a large splat just inside the dome is not drawn |
 | Hiding the set before the fit shrinks the dome by load timing | Fit waits for the place; fit with the set, then hide it |
 | The rim lifts to hidden recorded ground | Rim off when a place shows |

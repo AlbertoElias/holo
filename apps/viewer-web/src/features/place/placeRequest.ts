@@ -16,8 +16,11 @@ export type PlaceRequest = {
   waitMs: number;
 };
 
-/** What is read and placed; the wait belongs to the card's fit. */
+/** What is placed; the wait belongs to the card's fit. */
 export type PlaceScan = Omit<PlaceRequest, "waitMs">;
+
+/** What is read and decoded: the same file, turned the same way, is one cache entry. */
+export type PlaceSource = Pick<PlaceRequest, "url" | "flip">;
 
 /** SPZ is y-up like three; PLY, SPLAT and KSPLAT are as the trainers write them, y down. */
 export function placeFlipDefault(url: string): boolean {
@@ -28,6 +31,12 @@ export function placeFlipDefault(url: string): boolean {
 function number(value: string | null): number {
   const parsed = value === null ? 0 : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/** `placeWait`, ms: a positive number up to two minutes; anything else is the default. */
+function waitOf(value: string | null): number {
+  const wait = number(value);
+  return wait > 0 ? Math.min(wait, 120_000) : PLACE_FIT_WAIT_MS;
 }
 
 /**
@@ -44,11 +53,13 @@ export function readPlaceRequest(search: string, card: { id: string; first: bool
   const only = params.get("placeFor");
   if (only ? only !== card.id : !card.first) return null;
   const flip = params.get("placeFlip");
+  const placeY = params.get("placeY");
   return {
     url,
     flip: flip === null ? placeFlipDefault(url) : flip === "1",
-    nudge: { x: number(params.get("placeX")), y: number(params.get("placeY")), z: number(params.get("placeZ")), yawDeg: number(params.get("placeYaw")) },
-    floorGiven: params.has("placeY"),
-    waitMs: number(params.get("placeWait")) || PLACE_FIT_WAIT_MS
+    nudge: { x: number(params.get("placeX")), y: number(placeY), z: number(params.get("placeZ")), yawDeg: number(params.get("placeYaw")) },
+    // Only a real number stands in for a floor that cannot be found; `placeY=` or `placeY=abc` is no floor at all.
+    floorGiven: placeY !== null && placeY.trim() !== "" && Number.isFinite(Number(placeY)),
+    waitMs: waitOf(params.get("placeWait"))
   };
 }
