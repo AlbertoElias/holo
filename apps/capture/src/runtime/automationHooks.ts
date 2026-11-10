@@ -5,6 +5,7 @@ import type { LocomotionProfile, LocomotionState } from '../animation/Locomotion
 import type { HumanoidBindingReport } from '../avatar/HumanoidSkeleton';
 import type { LandmarkFrame } from '../bodycam/types';
 import type { BodycamSnapshot } from '../bodycam/snapshot';
+import type { TrackerStats } from '../bodycam/BodycamTracker';
 import type { FaceSample } from '../face/faceTypes';
 import type { FaceSnapshot } from '../face/FaceDriver';
 import type { BodySample, HandSample, MockInputState, MockVrPoseInput, SpectatorViewMode, UiViewModel, VrHandSide } from '../types/contracts';
@@ -25,6 +26,13 @@ import type { HaloActionRecord } from './haloActions';
  * Page functions the deterministic XR checks drive. Every one acts through
  * the production pipeline: clock adapters step the same systems and draws.
  */
+/** One landmark frame the tracker fed: when (performance.now), which model made fresh data, and the frame. */
+export interface BodycamLogEntry {
+  nowMs: number;
+  ran: 'pose' | 'hands' | 'all';
+  frame: LandmarkFrame;
+}
+
 export interface AvatarPoseSample {
   readonly bones: Record<string, [number, number, number]>;
   readonly locomotion: { state: LocomotionState; profile: LocomotionProfile; clip: string | null };
@@ -64,6 +72,20 @@ export interface AutomationHooks {
    * release the camera source. Ignored unless the page has `?input=camera` and no XR session presents.
    */
   __setBodycamFrame: (frame: LandmarkFrame | null) => void;
+  /**
+   * The live tracker's measurement tap (the clip report): true starts logging every landmark frame the tracker feeds,
+   * `__drainBodycamLog` returns and clears what was logged, `__sampleBodycamTracker` the delegate and the rates.
+   */
+  __bodycamTap: (on: boolean) => void;
+  /**
+   * The frame-stepped clip report: `Start` loads the clip at `url` into a video element and starts face, pose and hand
+   * tracking on it; `Frame` seeks to clip frame `index` (at `fps`), runs all three models on exactly that frame and feeds
+   * the landmark frame. Every frame is processed however long inference takes.
+   */
+  __bodycamSteppedStart: (url: string) => Promise<{ durationSec: number; width: number; height: number; delegate: 'GPU' | 'CPU'; faceDelegate: 'GPU' | 'CPU' | null }>;
+  __bodycamSteppedFrame: (index: number, fps: number) => Promise<void>;
+  __drainBodycamLog: () => BodycamLogEntry[];
+  __sampleBodycamTracker: () => (TrackerStats & { camera: string; cameraDelegate: 'GPU' | 'CPU' | null; nowMs: number }) | null;
   /** The camera source, both hands' sources and joints (camera and avatar), the head, and the body. */
   __sampleBodycam: (includeRecorded?: boolean) => BodycamSnapshot;
   /** The chrome as drawn: the overlay's view model, the headset chrome's placement, the touch stick (slice 4 reports). */

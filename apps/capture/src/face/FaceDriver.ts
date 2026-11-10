@@ -6,6 +6,12 @@ import { LivenessFace } from './LivenessFace';
 import { VoiceLevel } from './VoiceLevel';
 import { WebcamFace } from './WebcamFace';
 import { XrGaze } from './XrGaze';
+import type { BodycamSource } from '../bodycam/BodycamSource';
+import type { BodycamTracker, TrackerFrameInfo, TrackerStats } from '../bodycam/BodycamTracker';
+import type { LandmarkFrame } from '../bodycam/types';
+
+/** Reads each landmark frame the tracker feeds (the clip report taps it). */
+export type BodycamTap = (frame: LandmarkFrame, info: TrackerFrameInfo) => void;
 
 // A change of source (a face entering or leaving the camera, automation
 // starting) crossfades instead of popping.
@@ -51,8 +57,14 @@ export class FaceDriver {
   private expressionFade = { from: {} as FaceWeights, startedAt: -Infinity };
   private gazeFade = { from: this.outputGaze, startedAt: -Infinity };
   private readonly lookPoint = new THREE.Vector3();
+  private tracker: BodycamTracker | null = null;
+  private trackerGeneration = 0;
+  private tap: BodycamTap | null = null;
+  private turn = 0;
+  private stepped: HTMLVideoElement | null = null;
 
-  constructor(rig: THREE.Object3D, onCameraState: (state: FaceCameraState) => void) {
+  /** `bodycam` is the camera source of a page opened with `?input=camera`; without it the camera drives the face only. */
+  constructor(rig: THREE.Object3D, onCameraState: (state: FaceCameraState) => void, private readonly bodycam?: BodycamSource) {
     this.webcam = new WebcamFace(onCameraState);
     this.xrGaze = new XrGaze(rig);
   }
@@ -67,18 +79,118 @@ export class FaceDriver {
   }
 
   toggleCamera(): void {
-    if (this.webcam.active) this.webcam.stop();
-    else void this.webcam.start();
+    if (this.webcam.active) {
+      this.stopBodycam();
+      this.webcam.stop();
+    } else void this.startCamera();
+  }
+
+  /** Body tracking's rates and delegate, or null while it is not running. */
+  bodycamStats(): TrackerStats | null {
+    return this.tracker?.stats(performance.now()) ?? null;
+  }
+
+  setBodycamTap(tap: BodycamTap | null): void {
+    this.tap = tap;
+  }
+
+  private async startCamera(): Promise<void> {
+    await this.webcam.start();
+    const source = this.bodycam;
+    const video = this.webcam.videoElement;
+    if (!source?.enabled || !video || !this.webcam.active) return;
+    const generation = ++this.trackerGeneration;
+    try {
+      // Loaded only now: a session that never starts the camera fetches neither pose nor hand model.
+      const { BodycamTracker: Tracker } = await import('../bodycam/BodycamTracker');
+      const tracker = await Tracker.create(
+        video,
+        (frame, info) => {
+          source.feed(frame);
+          this.tap?.(frame, info);
+        },
+        () => generation !== this.trackerGeneration || !this.webcam.active
+      );
+      if (!tracker) return;
+      this.tracker = tracker;
+    } catch (error) {
+      if (generation === this.trackerGeneration) console.warn('Body tracking unavailable', error);
+    }
+  }
+
+  /** Frame-stepped clip report (see `__bodycamSteppedStart`): the clip stands in for the camera. */
+  async startStepped(url: string): Promise<{ durationSec: number; width: number; height: number; delegate: 'GPU' | 'CPU'; faceDelegate: 'GPU' | 'CPU' | null }> {
+    const source = this.bodycam;
+    if (!source?.enabled) throw new Error('frame-stepped tracking needs ?input=camera');
+    const blob = await (await fetch(url)).blob();
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    const loaded = new Promise<void>((resolve, reject) => {
+      video.addEventListener('loadeddata', () => resolve(), { once: true });
+      video.addEventListener('error', () => reject(new Error('the page cannot decode the clip')), { once: true });
+    });
+    video.src = URL.createObjectURL(blob);
+    await loaded;
+    this.stepped = video;
+    await this.webcam.startOnVideo(video);
+    const { BodycamTracker: Tracker } = await import('../bodycam/BodycamTracker');
+    const tracker = await Tracker.create(
+      video,
+      (frame, info) => {
+        source.feed(frame);
+        this.tap?.(frame, info);
+      },
+      () => false
+    );
+    if (!tracker) throw new Error('tracker did not start');
+    this.tracker = tracker;
+    return { durationSec: video.duration, width: video.videoWidth, height: video.videoHeight, delegate: tracker.delegate, faceDelegate: this.webcam.delegate };
+  }
+
+  async steppedFrame(index: number, fps: number): Promise<void> {
+    const video = this.stepped;
+    if (!video || !this.tracker) throw new Error('frame-stepped tracking is not started');
+    const seeked = new Promise<void>((resolve) => video.addEventListener('seeked', () => resolve(), { once: true }));
+    video.currentTime = (index + 0.5) / fps;
+    await seeked;
+    // Let the decoded frame be presented before the models read it.
+    await new Promise<void>((resolve) => {
+      const done = (): void => resolve();
+      if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(done);
+      setTimeout(done, 150);
+    });
+    const nowMs = ((index + 1) * 1000) / fps;
+    this.webcam.detectNow(nowMs);
+    this.tracker.runFrame(nowMs, this.webcam.headRotation(nowMs, 0));
+  }
+
+  private stopBodycam(): void {
+    this.stepped = null;
+    this.trackerGeneration += 1;
+    this.tracker?.stop();
+    this.tracker = null;
+    this.bodycam?.release();
   }
 
   update(input: FaceStepInput): void {
     // The camera cannot see a face under a headset: release it on entering VR.
-    if (input.vrActive && this.webcam.active) this.webcam.stop();
+    if (input.vrActive && this.webcam.active) {
+      this.stopBodycam();
+      this.webcam.stop();
+    }
+    if (this.tracker && !this.webcam.active) this.stopBodycam();
+    const now = performance.now();
+    // With body tracking on, steps rotate face, pose, hands: one model per step, never all three on one frame,
+    // whatever the frame rate (a pacing by time alone starves the body models when steps are slow).
+    const faceTurn = !this.tracker || this.turn++ % 3 === 0;
+    const camera = input.vrActive ? null : this.webcam.sample(now, faceTurn && !this.stepped);
+    if (this.tracker && !faceTurn && !this.stepped) this.tracker.step(now, this.webcam.headRotation(now), false);
     const rig = this.rig;
     if (!rig?.hasFace) return;
     if (input.micGranted) void this.voice.start();
 
-    const camera = input.vrActive ? null : this.webcam.sample(performance.now());
     const live = this.liveness.sample(input.timeSec, input.deltaSec, this.automation || camera ? 0 : this.voice.read());
 
     const expression: [FaceExpressionSource, FaceWeights] = this.automation

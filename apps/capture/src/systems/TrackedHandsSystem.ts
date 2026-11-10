@@ -1,5 +1,6 @@
 import { createSystem } from '@iwsdk/core';
 import * as THREE from 'three';
+import { ArmRelease } from '../bodycam/ArmRelease';
 import { BodycamHead } from '../bodycam/BodycamHead';
 import { type CaptureContext, captureContext } from './captureContext';
 
@@ -11,6 +12,7 @@ import { type CaptureContext, captureContext } from './captureContext';
 export class TrackedHandsSystem extends createSystem() {
   private capture!: CaptureContext;
   private readonly head = new BodycamHead();
+  private readonly arms = new ArmRelease();
   private readonly leftShoulder = new THREE.Vector3();
   private readonly rightShoulder = new THREE.Vector3();
   private readonly shoulderMid = new THREE.Vector3();
@@ -31,6 +33,7 @@ export class TrackedHandsSystem extends createSystem() {
         return;
       }
       this.head.apply(c.avatar, null, 0, c.frame.deltaSec);
+      this.arms.fadeOut(c.frame.deltaSec);
       // Desktop has no tracked hands: the point action drives the right arm.
       c.point.update({
         held: c.input.isPointHeld(),
@@ -58,7 +61,9 @@ export class TrackedHandsSystem extends createSystem() {
     if (!avatar.getBoneWorldPosition('leftUpperArm', this.leftShoulder) || !avatar.getBoneWorldPosition('rightUpperArm', this.rightShoulder)) return;
     this.shoulderMid.addVectors(this.leftShoulder, this.rightShoulder).multiplyScalar(0.5);
     tracking.camera.update(c.frame.deltaSec, this.leftShoulder.distanceTo(this.rightShoulder), c.camera.lookYaw);
+    this.arms.capture(avatar);
     c.hands.update((out) => out.copy(this.shoulderMid));
+    for (const side of ['left', 'right'] as const) this.arms.blend(side, tracking.cameraArmWeight[side]);
     this.head.apply(avatar, tracking.camera.current?.head ?? null, c.camera.lookYaw, c.frame.deltaSec);
   }
 }

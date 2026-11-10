@@ -1,7 +1,7 @@
 # Feature brief: Camera-driven avatar (evaluation spike)
 
 **Lead:** Claude (Fable 5)  
-**Status:** Implementing (slice 1 built and re-run independently, 2026-11-10; slice 2 next; the measured numbers wait on the user's clip)
+**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; **hands and pointing are unmeasured until the user's clip exists**; then slice 3)
 **Layer:** event (the author's head, face, arms and hands over time); see
 `docs/product/concepts/what-a-hologram-is.md`
 
@@ -214,8 +214,8 @@ distances. Each pose is held for about 3 seconds, in this order:
 | Follows, mirror, sides, body still | `test:xr:bodycam`: scripted landmark stream through `__setBodycamFrame`, manual clock | Pass (2026-11-10, re-run by a separate check runner): right wrist 111.5 px right of the left on a 960 px screen after the flip; face toward the view camera (dot -0.993); head turns +30 and -30 degrees; root yaw, root move and hips range 0; `vrActive` never true. `output/ci-bodycam/report.json` |
 | Take exports and plays | Same check records and exports | Export: pass (arm tracks travel 175 degrees, fingers 72, head 18). **Playing in `viewer-web`: not run**; only the `RUN_E2E_PIPELINE` specs upload and play a take, so this goes to independent verification |
 | Source value, no spans | Same check reads `handSources` from the recorder's frames and the GLB's `HOLOIM_meaning` | Pass: 1448 driven hand frames, 0 not `camera-hand`; sources in the take are `camera-hand`, `held`, `none`; `HOLOIM_meaning` absent |
-| Hold timeout, VR entry, lazy load | Same check: stream gap; IWER session entry; network log | Hold: pass (frozen 0.533 s, then eases, recovers). Head on a stall: pass (largest step 1.87 degrees). VR entry: pass (source released, canvas unflipped). Lazy load: pending, slice 2 |
-| Measurement report | Report-only run: Chromium with the clip as its camera, real MediaPipe; the live page on a propped phone | Pending |
+| Hold timeout, VR entry, lazy load | Same check: stream gap; IWER session entry; network log | Hold: pass (frozen 0.533 s, then eases, recovers). Head on a stall: pass (largest step 1.87 degrees). VR entry: pass (source released, canvas unflipped). Lazy load: pass (no `.task` request before the camera starts; face, pose and hand models load with status 200 after; with Chromium's test-pattern camera nothing throws and no hand is driven) |
+| Measurement report | `pnpm --filter @holoim/capture run bodycam:report <clip> [config.json]`: every clip frame through the real models (frame-stepped), no assertions; `--realtime --headed` for the rate | Tool built. **No person has been measured.** On the avatar's own video as a stand-in (384 frames): pose found in 378; hands in 3 to 17, so coverage, point score, jitter, pinch and aim are unexercised; face in 0 in these runs. Rate on an M1 Max with a real GPU: 42.7 landmark frames/s (says nothing about a phone) |
 | Headset path unchanged | `pnpm run verify:agent`, `test:xr:hands`, `test:xr:face` | Pass (2026-11-10, same re-run) |
 | Proof video | Screen recording of the clip beside the avatar | Pending: `output/` only |
 
@@ -225,14 +225,38 @@ distances. Each pose is held for about 3 seconds, in this order:
   on: mouse picking, the desktop point aim and screen holds read x from the
   unflipped canvas. Acceptable behind the flag; a designed camera mode needs
   a flip in the projection instead of CSS.
-- **A hand at rest settles with the elbow out**, like a hand on a hip: the
-  rest target is a fixed point below the shoulder. Slice 2 releases a rested
-  arm to the idle animation instead.
-- **The stream is scripted, not a person.** MediaPipe's axis convention and
-  the head rotation's zero are assumptions until slice 2 runs the real
-  models.
+- **A rested arm now fades back to the idle animation** (slice 2); checked
+  only through the scripted lost-hand segment.
+- **Hands have never been seen working on real model output.** A rendered
+  avatar is a poor subject: too few hands were found to verify the hand and
+  pose world axes or the pitch sign. Side assignment by nearest pose wrist
+  was right in 22 of 23 found hands.
+- **Head tracking on real output is unresolved.** An early real-time run
+  found the avatar's face in about half the frames, with yaw signs matching
+  its turns (about -18 and +29 degrees for a 30 degree turn each way) and a
+  zero of about -8 degrees pitch. The later frame-stepped and headed runs
+  found no face at all, unexplained. Check this first on the user's clip.
+- **Headless Chromium runs the models on software GL** at 2 to 6 frames/s,
+  so only the frame-stepped mode gives accuracy numbers, and only a headed
+  run or a device gives a rate.
+- Not compared: `HolisticLandmarker`; a camera request wider than 640 by 480.
 - A page without `?input=camera` is covered only by the unchanged hands and
   face checks.
+
+## Running the report on the clip
+
+From `apps/capture`, with the clip at `../../output/bodycam/clip.mov`:
+
+```
+pnpm run bodycam:report ../../output/bodycam/clip.mov ../../output/bodycam/clip.json --video
+```
+
+`clip.json` holds the three distances and the segment times read from the
+clip: `{ "distances": { "authorToLensM", "leftMarkM", "rightMarkM" },
+"segments": [{ "label", "startSec", "endSec" }] }`. Add `--hflip` if the
+clip was saved as a mirrored selfie preview. The aim-error geometry (marks in
+the lens plane, "left" meaning the author's left) is the implementer's
+reading of the script and has not been exercised.
 
 ## Physical-device limits
 

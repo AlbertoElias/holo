@@ -34,6 +34,8 @@ export interface HandLandmarks {
   world: readonly Point3[];
   /** The wrist in normalised image coordinates; matched to the pose's wrists to pick the side. */
   imageWrist: Point2;
+  /** MediaPipe's own handedness label, kept for the report only: it assumes a mirrored picture, so it reads reversed here. */
+  label?: string;
 }
 
 export interface LandmarkFrame {

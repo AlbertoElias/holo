@@ -27,7 +27,9 @@ import { readGlbJson } from './lib/pointing-score.ts';
 // landmark stream (generated below from a scripted performance, in the shape MediaPipe's pose and hand landmarkers
 // deliver) goes through __setBodycamFrame on a desktop page opened with ?input=camera, under the manual clock. The
 // avatar's wrists, fingers and head follow, the take is recorded and exported, and the GLB is read back. Then an IWER
-// VR session is entered, which must release the camera source. BODYCAM_VIDEO=1 writes frames, a video and a sheet.
+// VR session is entered, which must release the camera source. A last phase starts the live tracker on Chromium's
+// fake camera: both models load only then, and a test pattern drives no hand (what a model detects in a real
+// picture goes to the report-only runner, bodycam-clip-report.ts). BODYCAM_VIDEO=1 writes frames, a video and a sheet.
 
 const STEP_MS = 1000 / 30;
 const DEG = Math.PI / 180;
@@ -200,7 +202,8 @@ const round = (n: number, d = 3): number => Math.round(n * 10 ** d) / 10 ** d;
 await rm(artifactDir, { recursive: true, force: true });
 await mkdir(frameDir, { recursive: true });
 
-const browser = await launchXrBrowser(chromium);
+// Chromium's fake camera (a test pattern, never a person) for the live-tracker phase.
+const browser = await launchXrBrowser(chromium, { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
 const consoleErrors: string[] = [];
 const failures: string[] = [];
 const check = (ok: boolean, message: string) => {
@@ -429,6 +432,9 @@ try {
   check(!vr.canvasFlipped, 'the canvas stayed flipped in VR');
   check(!['camera-hand'].includes(vr.hands.left.source) && !['camera-hand'].includes(vr.hands.right.source), 'a hand still reported camera-hand in VR');
 
+  // ── The live tracker on a fake camera ───────────────────────────────────
+  const live = await liveTrackerPhase(); // its checks add to `failures` themselves
+
   // ── Artifacts ───────────────────────────────────────────────────────────
   if (video) {
     const videoPath = path.join(artifactDir, 'bodycam.mp4');
@@ -451,6 +457,7 @@ try {
     drivenFramesNotCameraHand: badSource.length,
     hold: { frozenSec: round(heldSec), sourcesInGap: gapSources, endDistanceToRestM: round(toRest), recovered },
     export: { ...glb.summary, exportMs },
+    liveTracker: live.summary,
     viewer: 'not run: only the viewer-web pipeline specs (RUN_E2E_PIPELINE) upload a take and play it, and they start their own API, viewer and capture servers',
     vrEntry: { canvasFlipped: vr.canvasFlipped, active: vr.active, cameraDriven: vr.cameraDriven, framesIgnored: vr.frames === framesBefore },
     failures
@@ -464,6 +471,66 @@ try {
   console.log('Bodycam check passed.');
 } finally {
   await browser.close();
+}
+
+/**
+ * Deterministic claims only. Before the camera starts, a camera-input page has fetched neither the pose nor the
+ * hand model; after it starts on Chromium's fake device both load, nothing throws, and the test pattern (no person)
+ * drives no hand. Nothing here asserts what a model detects.
+ */
+async function liveTrackerPhase() {
+  const context = await createXrContext(browser, { viewport: { width: 640, height: 360 }, permissions: ['camera'] });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  wireXrConsoleErrors(page, errors, { label: 'bodycam-live' });
+  const taskResponses = new Map<string, number>();
+  const taskRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('.task')) taskRequests.push(path.basename(new URL(request.url()).pathname));
+  });
+  page.on('response', (response) => {
+    if (response.url().endsWith('.task')) taskResponses.set(path.basename(new URL(response.url()).pathname), response.status());
+  });
+  const url = new URL(baseUrl);
+  url.searchParams.set('input', 'camera');
+  await page.goto(url.href, { waitUntil: 'networkidle' });
+  await waitForPageFunctions(page, ['__toggleFaceCamera', '__sampleBodycam', '__sampleBodycamTracker']);
+  await waitForTextContentPrefix(page, '#status', 'loaded');
+  await page.waitForTimeout(1500);
+  const before = [...taskRequests];
+  check(!before.some((name) => /pose_landmarker|hand_landmarker/.test(name)), `before the camera started the page fetched ${before.join(', ')}`);
+  check((await page.evaluate(() => window.__sampleBodycamTracker())) === null, 'a tracker existed before the camera started');
+
+  await page.evaluate(() => window.__toggleFaceCamera());
+  const started = await page.waitForFunction(() => {
+    const tracker = window.__sampleBodycamTracker();
+    return tracker && tracker.frames > 0 ? { delegate: tracker.delegate, camera: tracker.camera } : null;
+  }, undefined, { timeout: 150_000, polling: 500 }).then((handle) => handle.jsonValue()).catch(() => null);
+  check(Boolean(started), 'the live tracker never produced a frame on the fake camera within 150 s');
+  // A few seconds more of the test pattern.
+  await page.waitForTimeout(3000);
+  const tracker = await page.evaluate(() => window.__sampleBodycamTracker());
+  const snap = await page.evaluate(() => window.__sampleBodycam());
+  const after = [...taskRequests];
+  for (const name of ['pose_landmarker_full.task', 'hand_landmarker.task']) {
+    check(taskResponses.get(name) === 200, `${name} was not loaded after the camera started (status ${taskResponses.get(name)})`);
+  }
+  check(errors.filter((line) => !/INFO: Created TensorFlow Lite/.test(line)).length === 0, `errors while tracking the fake camera: ${errors.join(' | ')}`);
+  check(snap.hands.left.source !== 'camera-hand' && snap.hands.right.source !== 'camera-hand', `the test pattern drove a hand (left ${snap.hands.left.source}, right ${snap.hands.right.source})`);
+  check(!snap.vrActive, 'vrActive turned true under the live tracker');
+  const faceBefore = await page.evaluate(() => window.__sampleFace().camera);
+  check(faceBefore === 'tracking' || faceBefore === 'no-face', `face camera state ${faceBefore} while the tracker ran`);
+
+  // Toggling the camera off stops body tracking too, and releases the source.
+  await page.evaluate(() => window.__toggleFaceCamera());
+  await page.waitForTimeout(500);
+  check((await page.evaluate(() => window.__sampleBodycamTracker())) === null, 'the tracker kept running after the camera was toggled off');
+  const stopped = await page.evaluate(() => window.__sampleBodycam());
+  check(!stopped.active && !stopped.cameraDriven, `the camera source survived the toggle off (active ${stopped.active})`);
+  await context.close();
+  return {
+    summary: { tasksBeforeCamera: before, tasksAfterCamera: after, delegate: tracker?.delegate ?? null, trackerFrames: tracker?.frames ?? 0, feedHz: round(tracker?.feedHz ?? 0, 1), drivenHandSources: [snap.hands.left.source, snap.hands.right.source] }
+  };
 }
 
 function roundAngles(a: { yawDeg: number; pitchDeg: number; rollDeg: number }) {
