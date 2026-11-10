@@ -482,6 +482,7 @@ a gesture zone.
 | Undo / Redo | The Halo's W and E: undo or redo the last held mark or hand trace | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 | Ink | The Halo's NW in a headset: start or end a hand trace while recording (PRD-023) | "Ink" (name); "Tracing 0:03" on the status line while on | A curving path into a fingertip dot (`glyph.path.ink`) |
 | Tray | Open the tray of objects to summon (capture) | "Tray" (name; "Tray · hold T" with a keyboard) | A cube, a cone and a ball on a shelf (`glyph.path.tray`) |
+| Put back | Put the held object back into the tray (capture) | "Put back" | An arrow down onto the tray's shelf, the mirror of Upload (`glyph.path.putBack`) |
 | Squeeze | Beside the tray miniature in reach, with controllers: squeeze to summon it | None | A closed fist, front on, the thumb across the fingers (`glyph.path.squeeze`; after Lucide's hand-fist) |
 | Pinch | The same, with bare hands: pinch to summon it | None | A hand side on, the thumb meeting the index fingertip, two contact ticks (`glyph.path.pinch`; after Iconoven's hand-pinch) |
 | Slot model / image | Inside a filled tray slot until its thumbnail renders | None | A globe for a model; a frame with a sun over a peak for an image (`glyph.path.slotModel` / `slotImage`) |
@@ -701,7 +702,7 @@ object into the event is part of the take: a summon or a pick mid-take is
 recorded from its frame ([tray everywhere](../../features/archive/tray-everywhere.md)). Put back
 (shown only while an object is held, or under the phone AR reticle) stays
 for the same reason: an object leaving is part of the take
-([put back](../../features/tray-remove.md)).
+([put back](../../features/archive/tray-remove.md)).
 
 The state is carried by shape and word, not colour: the record control turns
 from a filled rose circle into a rose rounded square (stop), and

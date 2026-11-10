@@ -132,7 +132,9 @@ integration point only and never takes edits.
 - Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`),
   dev servers, and local databases are still shared, so only one agent runs
   the XR harness or a dev server at a time unless ports are reassigned via
-  `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`.
+  `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`. A parallel `verify:pr` also needs
+  `E2E_BASE_URL`, `E2E_POLYPIZZA_PORT`, `E2E_POLYHAVEN_PORT`,
+  `E2E_CAPTURE_URL` and `KNOWLEDGE_E2E_PORT` moved off their defaults.
 - As soon as your change is working and verified, commit and push your branch.
   You are pre-authorized to commit, push, open a pull request, and merge on
   green CI without asking; do not stop for approval on those steps. After

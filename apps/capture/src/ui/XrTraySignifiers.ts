@@ -23,7 +23,7 @@ const TRAY_SPACING_M = 0.1;
 const BLOCKED_OPACITY = 0.4;
 /** The reachable ring's pinch or squeeze glyph stands this far toward the author from the ring's centre. */
 const GLYPH_TOWARD_M = 0.07;
-/** A miniature's Close ring stands this far above its top (docs/features/tray-remove.md). */
+/** A miniature's Close ring stands this far above its top (docs/features/archive/tray-remove.md). */
 const CLOSE_ABOVE_M = 0.035;
 
 export type SummonGlyph = 'pinch' | 'squeeze';
@@ -36,7 +36,7 @@ export interface TraySignifierSlotProbe {
   glyph: SummonGlyph | null;
   /** The ring's opacity: 1, or 0.4 while blocked; 0 when no ring shows at this slot. */
   opacity: number;
-  /** The Close ring above the miniature shows (docs/features/tray-remove.md): the arc is open and the summoning hand is empty. */
+  /** The Close ring above the miniature shows (docs/features/archive/tray-remove.md): the arc is open and the summoning hand is empty. */
   close: boolean;
   /** A held prop let go now would go back into this slot: it carries the Put back glyph. */
   returning: boolean;
@@ -358,7 +358,7 @@ interface PhoneTrayRowDeps {
   dockTopCss: () => number | null;
   thumbnail: (slot: number) => TrayThumbnail | null;
   onSlot: (slot: number) => void;
-  /** A slot's Close glyph, tapped and lifted on it: the item leaves the tray (docs/features/tray-remove.md). */
+  /** A slot's Close glyph, tapped and lifted on it: the item leaves the tray (docs/features/archive/tray-remove.md). */
   onRemove: (slot: number) => void;
 }
 

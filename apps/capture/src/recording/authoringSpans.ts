@@ -15,7 +15,7 @@ export interface AuthoringFrame {
   summonerNearTray: boolean;
   /** A tray item was summoned into the summoning hand this frame. */
   summoned: boolean;
-  /** A tray item was taken off the tray this frame (docs/features/tray-remove.md): the reach was to the menu too. */
+  /** A tray item was taken off the tray this frame (docs/features/archive/tray-remove.md): the reach was to the menu too. */
   removed?: boolean;
   /** The hand's pose came from tracking (not a held or fallback pose). */
   tracked: Record<VrHandSide, boolean>;

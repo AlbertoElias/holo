@@ -90,7 +90,7 @@ import {
 //                     whose presence starts after 0, at the placement's take time; the hold made before it has no link to
 //                     its node; the hold after does. The open row is photographed to <artifactDir>/phone-tray-row.png.
 //                     Run alone with AR_RECORD_ONLY=phone-tray.
-//   phone-put-back    docs/features/tray-remove.md, phone AR: in a take an item is placed, the row reopened and the reticle aimed
+//   phone-put-back    docs/features/archive/tray-remove.md, phone AR: in a take an item is placed, the row reopened and the reticle aimed
 //                     at it (the dock shows Put back, the probe names the target); a tap on Put back removes it (one put-back,
 //                     object gone) and the export ends its presence at that tap; after Stop, a tap on slot 1's Close ring
 //                     removes the tray item (one slot fewer).
@@ -2012,7 +2012,7 @@ function glbJson(glb: Buffer): { nodes?: Array<{ name?: string }>; extensionsUse
 }
 
 /**
- * Put back and remove on the phone AR author (docs/features/tray-remove.md): a placed item goes back by the dock's
+ * Put back and remove on the phone AR author (docs/features/archive/tray-remove.md): a placed item goes back by the dock's
  * Put back while the reticle is on it, ending its presence in the take; a slot's Close ring removes a tray item.
  */
 async function putBackPhase(run: Run): Promise<PhaseReport> {

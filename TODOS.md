@@ -155,12 +155,11 @@ it from the item below instead of duplicating its status here.
     not assume the shipped rig's rest pose.
   - Prove it end to end: one fixture avatar per standard through the replay
     harness, checking hand fidelity and export → upload → render.
-- [ ] Retarget the locomotion clips (Idle, Walk, Jump, Fall) onto avatars that
+- [x] Retarget the locomotion clips (Idle, Walk, Jump, Fall) onto avatars that
   lack their own, with the per-bone T-pose correction that needs: slice 2 of
   [`docs/features/archive/avatar-formats.md`](docs/features/archive/avatar-formats.md).
-  Until then such an avatar reports "locomotion: off" and walks with the
-  procedural legs (or stands still on desktop), and T-pose rigs, every VRM
-  included, keep their arms out on desktop. Needs its own brief.
+  Delivered 2026-11-10 in
+  [`docs/features/archive/locomotion-retarget.md`](docs/features/archive/locomotion-retarget.md).
 - [x] Face and expressions on avatars, as the foundation for phone-driven
   avatars. Delivered 2026-10-24 in
   [`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md); device validation is listed in `HANDOFF.md`. Define one canonical expression set and map
@@ -175,19 +174,21 @@ it from the item below instead of duplicating its status here.
   tracking drives the rest. Needs a PRD first
   ([IDEA-078](docs/product/IDEAS.md)); depends on the two items above.
 
-- [ ] Capture drops scene triangles the hologram never shows: geometry
-  hidden below the ground's top surface (the underside and buried parts of a
-  hill) and outside the bubble, at export. Follow-up to
-  [`docs/features/archive/cloche-rim-follows-ground.md`](docs/features/archive/cloche-rim-follows-ground.md)
-  (user, 2026-10-27). Preserve export → upload → render compatibility.
-
 ## Later
 
-- [ ] Dismiss a placed object and remove a tray item (raised building the
+- [ ] Capture drops scene triangles the hologram never shows: geometry
+  hidden below the ground's top surface and outside the bubble, at export.
+  Parked (user, 2026-10-29): on `scene.glb` it saves at most ~13% of the
+  set's triangles and under 0.3% of the file, and the buried pass would
+  change what the cut edge and Quick Look show. Revisit only if sets grow
+  large enough to matter. Measurements, review and code (branch
+  `feature/export-trim-hidden`) in
+  [`docs/features/archive/export-trim-hidden.md`](docs/features/archive/export-trim-hidden.md).
+- [x] Dismiss a placed object and remove a tray item (raised building the
   tray everywhere, 2026-10-28). Nothing clears between takes now, so a
   carried object stays in every later take and the tray only grows to its
   five slots; the author needs a way to take one out of the scene or the
-  tray. See [`docs/features/archive/tray-everywhere.md`](docs/features/archive/tray-everywhere.md); brief [`docs/features/tray-remove.md`](docs/features/tray-remove.md).
+  tray. See [`docs/features/archive/tray-everywhere.md`](docs/features/archive/tray-everywhere.md); brief [`docs/features/archive/tray-remove.md`](docs/features/archive/tray-remove.md).
 - [x] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
   `tsconfig.app.json` (src, functions, configs) only, so a spec's missing
   import shows only when Playwright runs it (found in the slice 0 review,

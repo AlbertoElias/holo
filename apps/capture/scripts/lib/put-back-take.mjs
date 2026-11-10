@@ -7,7 +7,7 @@ import { OBJECT_URL, openCapture, readState, saveDownload } from './object-take.
 import { STEP_MS } from './summon-take.mjs';
 import { advance, advanceUntil, readRow, setupFlatPage } from './tray-anytime-take.mjs';
 
-// Put an object back and remove a tray item (docs/features/tray-remove.md),
+// Put an object back and remove a tray item (docs/features/archive/tray-remove.md),
 // through capture's real flat-screen UI:
 //   - desktop-put-back: Backspace, Delete and the dock's Put back send the
 //     held object back; Backspace typed in Find does not; a slot dragged up

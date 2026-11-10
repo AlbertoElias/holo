@@ -24,7 +24,6 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Props collide with the avatar | Complete | [avatar-prop-physics.md](archive/avatar-prop-physics.md) |
 | Resize and move props on every device | Complete | [object-resize-and-move.md](archive/object-resize-and-move.md) |
 | The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
-| Put an object back and remove a tray item | Ready to merge | [tray-remove.md](tray-remove.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |
@@ -34,9 +33,11 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Native IWSDK capture runtime refactor | Complete | [archive/iwsdk-runtime-refactor.md](archive/iwsdk-runtime-refactor.md) |
 | IWSDK runtime prototype (evaluation spike) | Complete | [archive/iwsdk-runtime-prototype.md](archive/iwsdk-runtime-prototype.md) |
 | Knowledge Atlas | Complete | [archive/knowledge-atlas.md](archive/knowledge-atlas.md) |
+| Locomotion clips on every avatar (avatar formats slice 2) | Complete | [archive/locomotion-retarget.md](archive/locomotion-retarget.md) |
 | Natural locomotion and terrain response | Complete | [archive/avatar-locomotion.md](archive/avatar-locomotion.md) |
 | Bubble rendering across feed and XR | Complete | [archive/bubble-rendering.md](archive/bubble-rendering.md) |
 | The cloche's rim follows the ground | Complete | [archive/cloche-rim-follows-ground.md](archive/cloche-rim-follows-ground.md) |
+| Capture drops set triangles the hologram never shows | Parked | [export-trim-hidden.md](archive/export-trim-hidden.md) |
 | Animated Quick Look phone demo | Complete | [archive/quicklook-phone-demo.md](archive/quicklook-phone-demo.md) |
 | XR height refit and visual evidence | Complete | [archive/xr-height-refit.md](archive/xr-height-refit.md) |
 | XR avatar height adaptation | Complete | [archive/xr-height-adaptation.md](archive/xr-height-adaptation.md) |
@@ -45,6 +46,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | MetaVR setup for physical Quest automation | Complete | [archive/metavr-setup.md](archive/metavr-setup.md) |
 | Live deployment (Fly + R2 + async USDZ) | Verifying | [live-deployment.md](live-deployment.md) |
 | Migrate workspace typechecking to tsgo / TypeScript 7 | Complete | [archive/tsgo-typescript7-migration.md](archive/tsgo-typescript7-migration.md) |
+| Put an object back and remove a tray item | Complete | [archive/tray-remove.md](archive/tray-remove.md) |
 | Deterministic, lean CI | Complete | [archive/deterministic-lean-ci.md](archive/deterministic-lean-ci.md) |
 | Development reliability foundation | Complete | [archive/reliability-foundation.md](archive/reliability-foundation.md) |
 
