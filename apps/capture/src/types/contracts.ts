@@ -215,7 +215,7 @@ export interface TrayUiState {
   blocked: boolean;
   /** Headset: the slot the summoning hand would take now, else null. */
   reachableSlot: number | null;
-  /** A prop is held, so it can be put back (docs/features/tray-remove.md). */
+  /** A prop is held, so it can be put back (docs/features/archive/tray-remove.md). */
   holding: boolean;
   /** The slot a held prop would go back into now (headset, over the arc), or one a put-back just went into; else null. */
   returnSlot: number | null;

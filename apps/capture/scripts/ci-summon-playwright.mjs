@@ -44,7 +44,7 @@ try {
     ['desktop-voice', async () => runDesktopVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['desktop-anytime', () => runDesktopAnytimeTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['touch-tray', () => runTouchTrayTake({ browser, baseUrl, artifactDir, consoleErrors })],
-    // Put back and remove a tray item (docs/features/tray-remove.md).
+    // Put back and remove a tray item (docs/features/archive/tray-remove.md).
     ['desktop-put-back', () => runDesktopPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['touch-put-back', () => runTouchPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['tray-budget', () => runTrayBudgetTake({ browser, baseUrl, artifactDir, consoleErrors })],

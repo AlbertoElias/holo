@@ -310,6 +310,11 @@ export const tokens = {
         fill: false,
         linejoin: 'miter'
       },
+      putBack: {
+        d: 'M1.5 13.5h13M8 1.5v10M4.8 8.3 8 11.5l3.2-3.2',
+        fill: false,
+        linejoin: 'round'
+      },
       tray: {
         d: 'M1.5 13.5h13M2.75 9h3v3h-3zM8 8.25l1.9 3.75H6.1zM10.75 10.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0',
         fill: false,

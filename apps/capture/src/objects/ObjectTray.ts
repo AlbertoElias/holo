@@ -38,7 +38,7 @@ export interface TraySnapshot {
   open: boolean;
   items: Array<{ slot: number; name: string; kind: TrayItemKind; position: [number, number, number]; visible: boolean }>;
   summons: Array<{ slot: number; objectId: string; timeSec: number }>;
-  /** Objects put back this take (docs/features/tray-remove.md); `slot` is null when their item had left the tray. */
+  /** Objects put back this take (docs/features/archive/tray-remove.md); `slot` is null when their item had left the tray. */
   putBacks: Array<{ slot: number | null; objectId: string; timeSec: number }>;
 }
 
@@ -101,7 +101,7 @@ export class ObjectTray {
   }
 
   /**
-   * Takes `item` off the tray (docs/features/tray-remove.md). The rest close
+   * Takes `item` off the tray (docs/features/archive/tray-remove.md). The rest close
    * up, so the slots, and the desktop keys, stay 1 to N. Nothing is disposed:
    * objects summoned from it share its geometry, materials and textures.
    */
@@ -174,7 +174,7 @@ export class ObjectTray {
   }
 
   /**
-   * Whether a hand letting go at `point` puts its prop back (docs/features/tray-remove.md):
+   * Whether a hand letting go at `point` puts its prop back (docs/features/archive/tray-remove.md):
    * in the arc itself, tighter than the zone, so a catch beside the open tray stays a catch.
    * An empty open tray still has a place: the arc's centre.
    */
