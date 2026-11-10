@@ -42,7 +42,8 @@ it from the item below instead of duplicating its status here.
   in AR, whether the scan is lined up with the real room it was taken in or
   replaces the passthrough; how the author brings a scan into capture; scan
   size and frame rate on a phone. Slice 1, the viewer's render end, is in
-  [`docs/features/splat-place.md`](docs/features/splat-place.md).
+  [`docs/features/splat-place.md`](docs/features/splat-place.md). Owned by
+  [`docs/features/splat-capture.md`](docs/features/splat-capture.md).
 - [ ] Find an object by asking (PRD-060, built overnight 2026-10-27 on the
   user's request; its provisional decisions await their approval): search
   Poly Haven from capture's tray and carry the credit into the take. Owned by
