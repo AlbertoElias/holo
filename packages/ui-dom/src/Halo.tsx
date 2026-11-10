@@ -23,6 +23,7 @@ import {
 } from "@holoim/xr-ui-core";
 
 import { GlyphSvg, RingSvg } from "./glyphSvg.js";
+import { useHint } from "./Hint.js";
 
 export interface HaloViewState {
   /** The ring and slots are drawn. */
@@ -193,6 +194,8 @@ export interface HaloRingProps {
  */
 export function HaloRing({ layout, highlighted, liftApx = 0, onPick }: HaloRingProps) {
   const [hovered, setHovered] = useState<HaloDirection | null>(null);
+  const hoveredAction = layout.slots.find((slot) => slot.direction === hovered)?.action ?? null;
+  const { handlers: hintOn, hint } = useHint(hoveredAction ? SLOT_LABELS[hoveredAction] ?? hoveredAction : undefined);
   return (
     <div data-halo-ring="" style={{ position: "absolute", left: "50%", top: liftApx ? `calc(50% - ${liftApx}px)` : "50%", width: 0, height: 0, pointerEvents: "none" }}>
       {layout.slots.map((slot) => (
@@ -217,8 +220,10 @@ export function HaloRing({ layout, highlighted, liftApx = 0, onPick }: HaloRingP
               aria-label={SLOT_LABELS[slot.action] ?? slot.action}
               // Kept from the trigger's press handler, which would close the ring first.
               onPointerDown={(event) => event.stopPropagation()}
-              onPointerEnter={() => setHovered(slot.direction)}
-              onPointerLeave={() => setHovered((current) => (current === slot.direction ? null : current))}
+              onPointerEnter={(event) => { setHovered(slot.direction); hintOn.onPointerEnter(event); }}
+              onPointerLeave={() => { setHovered((current) => (current === slot.direction ? null : current)); hintOn.onPointerLeave(); }}
+              onFocus={hintOn.onFocus}
+              onBlur={hintOn.onBlur}
               onClick={() => onPick(slot.direction, slot.action!)}
               style={{ all: "unset", display: "block", cursor: "pointer", pointerEvents: "auto" }}
             >
@@ -231,6 +236,7 @@ export function HaloRing({ layout, highlighted, liftApx = 0, onPick }: HaloRingP
           )}
         </div>
       ))}
+      {hint}
     </div>
   );
 }

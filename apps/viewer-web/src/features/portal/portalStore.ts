@@ -22,10 +22,6 @@ export type PortalState = {
   highlights: boolean;
   /** The recording carries pointing links, so the toggle is worth showing. A fact about the model, not reset. */
   hasHighlights: boolean;
-  /** The viewer's choice to see a fading tail behind each moving hand while playing (PRD-023); resets with the card. */
-  traces: boolean;
-  /** The recording carries recorded hand spans, so the toggle is worth showing. A fact about the model, not reset. */
-  hasTraces: boolean;
 };
 
 /** Per-frame values the canvas writes for the actions to read; not rendered. */
@@ -64,9 +60,7 @@ const INITIAL_STATE: PortalState = {
   tiltYaw: 0,
   tiltPitch: 0,
   highlights: true,
-  hasHighlights: false,
-  traces: false,
-  hasTraces: false
+  hasHighlights: false
 };
 
 export type PortalStore = ReturnType<typeof createPortalStore>;
@@ -107,10 +101,6 @@ export function createPortalStore() {
     setHasHighlights: (hasHighlights: boolean) => {
       if (hasHighlights !== state.hasHighlights) set({ hasHighlights });
     },
-    toggleTraces: () => set({ traces: !state.traces }),
-    setHasTraces: (hasTraces: boolean) => {
-      if (hasTraces !== state.hasTraces) set({ hasTraces });
-    },
     setPaused: (paused: boolean) => {
       if (paused !== state.paused) set({ paused });
     },
@@ -147,7 +137,7 @@ export function createPortalStore() {
     /** Back to playing in Follow, as a card is when it first scrolls into view. */
     reset: () => {
       runtime.returnBlend = 0;
-      state = { ...INITIAL_STATE, hasHighlights: state.hasHighlights, hasTraces: state.hasTraces };
+      state = { ...INITIAL_STATE, hasHighlights: state.hasHighlights };
       listeners.forEach((listener) => listener());
     }
   };

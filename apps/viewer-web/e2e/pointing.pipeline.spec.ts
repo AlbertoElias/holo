@@ -103,9 +103,9 @@ const exportsByLabel = new Map<string, Promise<{ file: string; expected: Expecte
 function expectedFrom(glb: Buffer): Expected[] {
   const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString("utf8")) as {
     nodes: Array<{ name?: string }>;
-    extensions: { HOLOIM_meaning: { marks: Array<{ anchor: { to: { node: number } }; span: { start: number; end: number }; provenance: { value: "recorded" | "inferred" } }> } };
+    extensions: { HOLOIM_meaning: { marks: Array<{ kind: string; anchor: { to: { node: number } }; span: { start: number; end: number }; provenance: { value: "recorded" | "inferred" } }> } };
   };
-  return gltf.extensions.HOLOIM_meaning.marks.map((mark) => ({
+  return gltf.extensions.HOLOIM_meaning.marks.filter((mark) => mark.kind === "link").map((mark) => ({
     referent: gltf.nodes[mark.anchor.to.node]!.name!,
     style: mark.provenance.value,
     start: mark.span.start,

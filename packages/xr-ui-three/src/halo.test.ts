@@ -35,10 +35,10 @@ describe("ThreeHalo directions", () => {
     for (const radius of radii) expect(radius).toBeCloseTo(radii[0]!, 9);
   });
 
-  it("gives objects only to S, W and E for capture's actions; the rest stay reserved and empty (Q20)", () => {
+  it("gives objects only to S, W, E and NW (Ink) for capture's actions; the rest stay reserved and empty (Q20)", () => {
     const h = halo();
     const filled = HALO_DIRECTIONS.filter((direction) => h.slotObject(direction) !== undefined);
-    expect(filled.sort()).toEqual(["e", "s", "w"]);
+    expect(filled.sort()).toEqual(["e", "nw", "s", "w"]);
     expect(h.slotObject("s")!.action).toBe("record");
     expect(h.slotObject("s")!.glyph.id).toBe("record");
     // Undo and redo draw their arrows inside a gold ring of the slot size (6.2).

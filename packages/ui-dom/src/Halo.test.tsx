@@ -60,7 +60,7 @@ describe("a flick (6.2)", () => {
 });
 
 describe("a hold (6.2)", () => {
-  it("draws nothing until the hold delay, then the ring with 8 places of which only S, W and E are drawn", () => {
+  it("draws nothing until the hold delay, then the ring with 8 places of which only S, W, E and NW are drawn", () => {
     const { ring, elapse, press, container } = setup();
     press();
     elapse(tokens.motion.hold.delay - 1);
@@ -69,7 +69,7 @@ describe("a hold (6.2)", () => {
     expect(ring()).not.toBeNull();
     expect(container.querySelectorAll("[data-halo-place]")).toHaveLength(8);
     const drawn = Array.from(container.querySelectorAll("[data-halo-slot]")).map((slot) => slot.getAttribute("data-halo-slot"));
-    expect(drawn.sort()).toEqual(["e", "s", "w"]);
+    expect(drawn.sort()).toEqual(["e", "nw", "s", "w"]);
   });
 
   it("draws Record's glyph at S, and the undo and redo arrows in a gold ring of the slot size at W and E", () => {

@@ -50,6 +50,8 @@ export type PointingReplayOptions = {
   artifactDir: string;
   consoleErrors: string[];
   labelFile: string;
+  /** Runs after each replay step, with the replay's seconds since the first input frame (the hand-traces spec toggles Ink here). */
+  onStep?: (page: Page, timeSec: number) => Promise<void>;
 };
 
 export type PointingReplayReport = {
@@ -101,7 +103,7 @@ const AIM_TOLERANCE_DEG = 6;
  * `captureRoot` is apps/capture (labels and recorded inputs resolve from it);
  * `labelsDir` is relative to it. Returns the report, whose `glb` is the export.
  */
-export async function replayPointingTake({ browser, baseUrl, captureRoot, labelsDir, artifactDir, consoleErrors, labelFile }: PointingReplayOptions): Promise<PointingReplayReport> {
+export async function replayPointingTake({ browser, baseUrl, captureRoot, labelsDir, artifactDir, consoleErrors, labelFile, onStep }: PointingReplayOptions): Promise<PointingReplayReport> {
   const recordingsDir = path.join(captureRoot, 'fixtures');
   const label = path.basename(labelFile, '.json');
   await mkdir(artifactDir, { recursive: true });
@@ -203,6 +205,7 @@ export async function replayPointingTake({ browser, baseUrl, captureRoot, labels
       nextShot += 1;
     }
     const timeMs = await page.evaluate(() => window.__replayPlayer!.currentTime);
+    if (onStep) await onStep(page, timeMs / 1000);
     // Once playback ends IWER returns the hands to their default pose.
     if (timeMs >= durationMs - 1) break;
   }

@@ -294,10 +294,11 @@ export function inspectCameraTake(glb: Buffer): CameraTakeReport {
 
   const meaningVersion = gltf.extensions?.HOLOIM_meaning?.version;
   const meaningLinks = ((gltf.extensions?.HOLOIM_meaning?.marks ?? []) as Array<{
+    kind: string;
     anchor: { from: { camera?: boolean; bone?: string; node: number }; to: { node: number; point?: Vec3; radius?: number } };
     span: { start: number; end: number };
     provenance: { value: string };
-  }>).map((mark): MeaningLinkReport => ({
+  }>).filter((mark) => mark.kind === 'link').map((mark): MeaningLinkReport => ({
     from: { ...mark.anchor.from, nodeName: names[mark.anchor.from.node] ?? '' },
     to: { node: mark.anchor.to.node, nodeName: names[mark.anchor.to.node] ?? '', point: mark.anchor.to.point ?? null, radius: mark.anchor.to.radius ?? null },
     span: mark.span,

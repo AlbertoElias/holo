@@ -8,8 +8,8 @@ export const HOLOIM_MEANING_EXTENSION = "HOLOIM_meaning";
  * Every version a reader accepts. A file's `version` is a feature level: the
  * lowest level whose exact schema accepts it (see `encodeHoloimMeaning`).
  */
-export const HOLOIM_MEANING_VERSIONS = [0, 1] as const;
-export const HOLOIM_MEANING_LATEST_VERSION = 1;
+export const HOLOIM_MEANING_VERSIONS = [0, 1, 2] as const;
+export const HOLOIM_MEANING_LATEST_VERSION = 2;
 
 const finite = z.number().finite();
 const nodeIndex = z.number().int().nonnegative();
@@ -98,6 +98,23 @@ export const meaningLinkMarkSchema = z
     path: ["provenance"]
   });
 
+/**
+ * A hand trace (v2, PRD-023): the author marked this span while recording,
+ * and the trace is the path `anchor` took through it, read from the recorded
+ * motion (the path itself is not stored). `anchor` is the same form as a
+ * link's bone `from`: `<side>IndexDistal`, with `node` the fingertip the
+ * writer resolved (the end site when the rig has one). Only an author marks
+ * a trace, so its provenance is always recorded.
+ */
+export const meaningTraceMarkSchema = z
+  .object({
+    kind: z.literal("trace"),
+    anchor: meaningLinkBoneFromSchema,
+    span: meaningSpanSchema,
+    provenance: recordedProvenance
+  })
+  .strict();
+
 export const meaningMotionSpanSchema = z
   .object({
     kind: z.literal("motion"),
@@ -125,6 +142,16 @@ export const holoimMeaningV1Schema = z
   })
   .strict();
 
+/** Version 2 is exact too: v1 plus `trace` marks. */
+export const holoimMeaningV2Schema = z
+  .object({
+    version: z.literal(2),
+    // A plain union: the link schema carries a refine, which a discriminated union cannot hold.
+    marks: z.array(z.union([meaningLinkMarkSchema, meaningTraceMarkSchema])),
+    spans: z.array(meaningMotionSpanSchema)
+  })
+  .strict();
+
 export type MeaningSpan = z.infer<typeof meaningSpanSchema>;
 export type MeaningProvenance = z.infer<typeof meaningProvenanceSchema>;
 export type MeaningLinkProvenance = z.infer<typeof meaningLinkProvenanceSchema>;
@@ -133,11 +160,49 @@ export type MeaningLinkCameraFrom = z.infer<typeof meaningLinkCameraFromSchema>;
 export type MeaningLinkFrom = MeaningLinkBoneFrom | MeaningLinkCameraFrom;
 export type MeaningLinkTo = z.infer<typeof meaningLinkToSchema>;
 export type MeaningLinkMark = z.infer<typeof meaningLinkMarkSchema>;
+export type MeaningTraceMark = z.infer<typeof meaningTraceMarkSchema>;
+/** Any mark of any version. */
+export type MeaningMark = MeaningLinkMark | MeaningTraceMark;
 export type MeaningMotionSpan = z.infer<typeof meaningMotionSpanSchema>;
 export type HoloimMeaningV0 = z.infer<typeof holoimMeaningV0Schema>;
 export type HoloimMeaningV1 = z.infer<typeof holoimMeaningV1Schema>;
+export type HoloimMeaningV2 = z.infer<typeof holoimMeaningV2Schema>;
 /** What readers return: any supported version. */
-export type HoloimMeaning = HoloimMeaningV0 | HoloimMeaningV1;
+export type HoloimMeaning = HoloimMeaningV0 | HoloimMeaningV1 | HoloimMeaningV2;
+
+/** A pointing link. Readers that draw links filter with this: a v2 record also holds traces. */
+export function isLinkMark(mark: MeaningMark): mark is MeaningLinkMark {
+  return mark.kind === "link";
+}
+
+export function isTraceMark(mark: MeaningMark): mark is MeaningTraceMark {
+  return mark.kind === "trace";
+}
+
+/** A record's pointing links, whatever its version. */
+export function linkMarks(record: HoloimMeaning): MeaningLinkMark[] {
+  return (record.marks as MeaningMark[]).filter(isLinkMark);
+}
+
+/** A record's hand traces (none before v2). */
+export function traceMarks(record: HoloimMeaning): MeaningTraceMark[] {
+  return (record.marks as MeaningMark[]).filter(isTraceMark);
+}
+
+/**
+ * A trace whose path stays within this distance of its own newest point
+ * stood still: no mark is written, and nothing is drawn (PRD-023).
+ */
+export const STILL_EXTENT_METERS = 0.05;
+
+/** The spatial extent of a path: the largest distance of any point from its newest (last) point. */
+export function pathExtent(points: ReadonlyArray<{ x: number; y: number; z: number }>): number {
+  const end = points.at(-1);
+  if (!end) return 0;
+  let extent = 0;
+  for (const p of points) extent = Math.max(extent, Math.hypot(p.x - end.x, p.y - end.y, p.z - end.z));
+  return extent;
+}
 
 export function isCameraFrom(from: MeaningLinkFrom): from is MeaningLinkCameraFrom {
   return "camera" in from;
@@ -165,7 +230,7 @@ export function validateHoloimMeaning(input: unknown): MeaningValidationResult {
     typeof input === "object" && input !== null && !Array.isArray(input)
       ? (input as { version?: unknown }).version
       : undefined;
-  const schema = version === 0 ? holoimMeaningV0Schema : version === 1 ? holoimMeaningV1Schema : undefined;
+  const schema = version === 0 ? holoimMeaningV0Schema : version === 1 ? holoimMeaningV1Schema : version === 2 ? holoimMeaningV2Schema : undefined;
   if (!schema) {
     return {
       ok: false,
@@ -188,14 +253,17 @@ export function assertHoloimMeaning(input: unknown): HoloimMeaning {
 
 /**
  * Writer rule: the version is a feature level. Returns the record at the
- * lowest version whose exact schema accepts it (v0 when it passes, else v1),
- * so takes that need no newer feature stay readable by older viewers. Throws
- * with the newest schema's errors when no version accepts it.
+ * lowest version whose exact schema accepts it (v0 when it passes, else v1,
+ * else v2), so takes that need no newer feature stay readable by older
+ * viewers: only a take with a trace writes v2. Throws with the newest
+ * schema's errors when no version accepts it.
  */
-export function encodeHoloimMeaning(record: { marks: MeaningLinkMark[]; spans: MeaningMotionSpan[] }): HoloimMeaning {
+export function encodeHoloimMeaning(record: { marks: MeaningMark[]; spans: MeaningMotionSpan[] }): HoloimMeaning {
   const v0 = holoimMeaningV0Schema.safeParse({ version: 0, marks: record.marks, spans: record.spans });
   if (v0.success) return v0.data;
   const v1 = holoimMeaningV1Schema.safeParse({ version: 1, marks: record.marks, spans: record.spans });
   if (v1.success) return v1.data;
-  throw new Error(`Invalid ${HOLOIM_MEANING_EXTENSION}: ${formatIssues(v1.error).join("; ")}`);
+  const v2 = holoimMeaningV2Schema.safeParse({ version: 2, marks: record.marks, spans: record.spans });
+  if (v2.success) return v2.data;
+  throw new Error(`Invalid ${HOLOIM_MEANING_EXTENSION}: ${formatIssues(v2.error).join("; ")}`);
 }

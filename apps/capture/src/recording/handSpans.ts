@@ -19,6 +19,21 @@ export function handSpanBones(side: VrHandSide): VrmHumanoidBone[] {
   return [`${side}Hand`, ...FINGER_JOINTS.map((joint) => `${side}${joint}`)] as VrmHumanoidBone[];
 }
 
+/**
+ * Per frame, whether `side`'s hand pose came from real hand tracking
+ * (`xr-hand`) outside its hands-in-menu spans: the frames a recorded motion
+ * span, and a trace's stillness and mark, count.
+ */
+export function recordedHandFrames(frames: readonly RecordingFrame[], menuSpans: readonly AuthoringFrameSpan[], side: VrHandSide): Uint8Array {
+  const inMenu = new Uint8Array(frames.length);
+  for (const span of menuSpans) {
+    if (span.hand === side) inMenu.fill(1, span.first, span.last + 1);
+  }
+  const tracked = new Uint8Array(frames.length);
+  for (let i = 0; i < frames.length; i += 1) tracked[i] = frames[i]!.handSources?.[side] === 'xr-hand' && inMenu[i] === 0 ? 1 : 0;
+  return tracked;
+}
+
 const round = (value: number): number => Math.round(value * 1000) / 1000;
 
 /**
@@ -33,10 +48,7 @@ export function buildRecordedHandSpans(frames: readonly RecordingFrame[], menuSp
   const t0 = frames[0]?.timeSec ?? 0;
   const spans: MeaningMotionSpan[] = [];
   for (const side of ['left', 'right'] as const) {
-    const inMenu = new Uint8Array(frames.length);
-    for (const span of menuSpans) {
-      if (span.hand === side) inMenu.fill(1, span.first, span.last + 1);
-    }
+    const recorded = recordedHandFrames(frames, menuSpans, side);
     let first = -1;
     const close = (last: number): void => {
       if (first < 0) return;
@@ -48,7 +60,7 @@ export function buildRecordedHandSpans(frames: readonly RecordingFrame[], menuSp
       first = -1;
     };
     for (let i = 0; i < frames.length; i += 1) {
-      const tracked = frames[i]!.handSources?.[side] === 'xr-hand' && inMenu[i] === 0;
+      const tracked = recorded[i] === 1;
       if (tracked && first < 0) first = i;
       else if (!tracked) close(i - 1);
     }

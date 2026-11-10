@@ -58,8 +58,8 @@ export interface HeadsetHoldsDeps {
   getHandedness: () => Handedness;
   /** Whether the hand pinches or squeezes to grab, or holds the tray open: the mark and the Halo stay off that hand. */
   isHandBusy: (side: VrHandSide) => boolean;
-  /** Runs a committed Halo action; `at` is where the summoning hand is, for feedback. */
-  onHaloAction: (action: HaloAction, input: Extract<AimInput, 'hands' | 'controllers'>, side: VrHandSide, at: THREE.Vector3) => void;
+  /** Runs a committed Halo action; `at` is where the summoning hand is, for feedback; `pressSec` is when the Halo was summoned, on the simulation clock. */
+  onHaloAction: (action: HaloAction, input: Extract<AimInput, 'hands' | 'controllers'>, side: VrHandSide, at: THREE.Vector3, pressSec: number) => void;
 }
 
 export interface HeadsetHoldsStep {
@@ -404,7 +404,7 @@ export class HeadsetHolds {
     this.haloDrawn = result.ringDrawn;
     if (result.commit) {
       this.log.push({ kind: 'halo', input: summon.input, direction: result.commit.direction, action: result.commit.action, flick: result.commit.flick });
-      if (result.commit.action) this.deps.onHaloAction(result.commit.action, summon.input, summon.side, summon.halo.group.getWorldPosition(new THREE.Vector3()));
+      if (result.commit.action) this.deps.onHaloAction(result.commit.action, summon.input, summon.side, summon.halo.group.getWorldPosition(new THREE.Vector3()), summon.atMs / 1000);
     }
   }
 

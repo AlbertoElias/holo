@@ -196,19 +196,20 @@ export class GltfExportComposer {
       scene.updateMatrixWorld(true);
       const { draft, report } = this.pointResolver.resolve({
         frames,
+        menuSpans: frameSpans,
         store: pointStore,
         avatar,
         exportAvatar: clone,
         sceneMeshes: normalizeRootMotion || !sceneBubble ? [] : [...sceneBubble.clippedBySource.values()]
       });
       this.lastPointReport = report;
-      if (draft.marks.length > 0 || draft.spans.length > 0) meaning = draft;
+      if (draft.marks.length > 0 || draft.traces.length > 0 || draft.spans.length > 0) meaning = draft;
     }
     // Where tracked hands drove the hands (PRD-023), written with or without
     // pointing: every headset take with hand tracking now carries the extension.
     const handSpans = buildRecordedHandSpans(recorded, frameSpans);
     if (handSpans.length > 0) {
-      meaning ??= { marks: [], spans: [] };
+      meaning ??= { marks: [], traces: [], spans: [] };
       meaning.spans = [...meaning.spans, ...handSpans].sort((a, b) => a.span.start - b.span.start);
     }
 

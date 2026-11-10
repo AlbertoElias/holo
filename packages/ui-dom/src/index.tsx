@@ -233,6 +233,7 @@ export { GlyphControl, type GlyphControlProps } from "./GlyphControl.js";
 export { GlyphSvg, type GlyphSvgProps } from "./glyphSvg.js";
 export { Halo, HaloRing, type HaloProps, type HaloRingProps, type HaloViewState } from "./Halo.js";
 export { loadHandedness, saveHandedness, useHandedness } from "./handedness.js";
+export { useHint, type HintHandlers } from "./Hint.js";
 export { HandednessPicker, type HandednessPickerProps } from "./HandednessPicker.js";
 export { defaultHitInput, useReducedMotion } from "./internal.js";
 export { Shade, shadeGradient, type ShadeProps } from "./Shade.js";

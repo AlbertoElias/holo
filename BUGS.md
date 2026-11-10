@@ -7,17 +7,21 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-None.
+### B-040 — The e2e shard check once listed two VR tests at other line numbers
 
-### B-039 — The face XR check fails on `main`: IWER has no gaze device
-
-- **Area:** `apps/capture/scripts/ci-face-playwright.ts` (eye-gaze sweep), IWER device setup
-- **Severity:** P2 (it breaks `verify:pr`'s `test:xr:smoke`)
-- **Observed:** 2026-10-28, while verifying `feature/object-resize`. The check fails the same way on `origin/main` (`69f0795382b9`), in a clean worktree.
-- **Evidence:** `page.evaluate: TypeError: Cannot set properties of undefined (setting 'connected')` at `ci-face-playwright.ts:230`, because `window.IWER_DEVICE.gaze` is undefined. Every other check in `test:xr:smoke` passes.
-- **Intermittent:** the same check passed in a later `test:xr:smoke` run of the same day (ports 5295/5296/3295), so the gaze device is sometimes there.
-- **Expected:** the face check's eye-gaze sweep finds a gaze device, or it sets one up.
-- **Reproduction:** `cd apps/capture && pnpm run test:xr:face`.
+- **Area:** `scripts/check-e2e-shards.mjs` (CI "Quality, unit tests and build")
+- **Severity:** P2 (blocks deploy when it fires)
+- **Observed:** 2026-11-10, CI run 42755796134 on `57d72f0`
+- **Evidence:** the full mocked suite listed `xr-viewer.spec.ts:1574` and
+  `:1690` ("VR locomotion", "VR recenter after moving"), while
+  `test:e2e:xr-viewer-vr:shard2` listed the same titles at `:1831` and `:1964`.
+  At that commit the file has them at 1574 and 1690, so the shard's listing
+  reported other lines.
+- **Expected:** every listing reports source lines, and the check passes.
+- **Reproduction:** not yet. It passes locally and 3 of 3 times in
+  `scripts/ci-emulate.sh` from a cold cache. Suspect: the check lists every
+  shard at once (`Promise.all`), so Playwright's shared transform cache may
+  race on a cold runner.
 
 ## Entry template
 

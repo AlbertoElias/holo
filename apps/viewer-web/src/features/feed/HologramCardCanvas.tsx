@@ -289,10 +289,6 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     portal.setHasHighlights(meaningLinks.length > 0);
     return () => portal.setHasHighlights(false);
   }, [meaningLinks, portal]);
-  useEffect(() => {
-    portal.setHasTraces(traceSource !== null);
-    return () => portal.setHasTraces(false);
-  }, [portal, traceSource]);
   const animatedBoundsRef = useRef(new Box3());
   const fullSceneBoundsRef = useRef(new Box3());
   const scratchBoundsRef = useRef(new Box3());

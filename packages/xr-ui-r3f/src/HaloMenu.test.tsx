@@ -74,7 +74,7 @@ describe("HaloMenu: directions (6.2)", () => {
     await renderer.unmount();
   });
 
-  it.each(["n", "ne", "se", "sw", "nw"] as const)("does not call onCommit for %s, an empty direction reserved for later (Q20)", async (direction) => {
+  it.each(["n", "ne", "se", "sw"] as const)("does not call onCommit for %s, an empty direction reserved for later (Q20)", async (direction) => {
     const ref = createRef<HaloMenuHandle>();
     const onCommit = vi.fn();
     const renderer = await mount(menu(ref as RefObject<HaloMenuHandle>, onCommit));

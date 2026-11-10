@@ -1,24 +1,17 @@
-import { HOLOIM_MEANING_EXTENSION, validateHoloimMeaning } from "@holoim/meaning";
-import type { VrmHumanoidBone } from "@holoim/meaning";
+import { HOLOIM_MEANING_EXTENSION, pathExtent, STILL_EXTENT_METERS, validateHoloimMeaning } from "@holoim/meaning";
 import { Matrix4, PropertyBinding, Quaternion, Vector3 } from "three";
 import type { AnimationClip, Interpolant, Object3D } from "three";
 
-import type { HumanoidAnchors } from "../hologram/humanoidAnchors";
-
-// Hand traces (PRD-023): where each hand's index fingertip went before a
-// moment, read from the take's own primary clip. A trace is drawn only where
-// tracked hands drove the hand (`recorded` motion spans over `<side>Hand`),
-// never while the author travels, and not at all for a hand that stayed put.
+// Author-marked hand traces (PRD-023 v1): where the fingertip a trace mark
+// anchors went across the mark's span, read from the take's own primary clip.
+// A segment is drawn only where tracked hands drove the hand (`recorded`
+// motion spans over `<side>Hand`) and never while the author travels. Capture
+// decided which hands moved enough to be marked; the viewer only suppresses a
+// path that is still anyway (defensive).
 
 export type HandSide = "left" | "right";
 export const HAND_SIDES: readonly HandSide[] = ["left", "right"];
 
-/** Seconds of path behind a paused moment. */
-export const PAUSED_WINDOW_SEC = 3;
-/** Seconds of tail behind each hand while playing with Traces on. */
-export const TAIL_WINDOW_SEC = 1;
-/** A hand whose path stays this close to its newest point stood still: no trace, however much it jittered. */
-export const STILL_EXTENT_METERS = 0.05;
 /** Above this horizontal hip speed the author is travelling, and nothing is drawn. */
 export const TRAVEL_SPEED = 0.3;
 /** The hip speed is the horizontal displacement over this many seconds. */
@@ -57,25 +50,6 @@ export function readRecordedHandSpans(userData: Record<string, unknown> | undefi
   }
   for (const side of HAND_SIDES) out[side].sort((a, b) => a.start - b.start);
   return out;
-}
-
-export type TipSource = "tip" | "distal" | "hand";
-
-/**
- * The index fingertip: capture's rule (the first child bone of `indexDistal`
- * that is not itself a canonical bone, its end site), then the distal bone,
- * then the hand.
- */
-export function resolveIndexTip(anchors: HumanoidAnchors, side: HandSide): { node: Object3D; source: TipSource } | null {
-  const distal = anchors.bones.get(`${side}IndexDistal` as VrmHumanoidBone);
-  if (distal) {
-    const canonical = new Set(anchors.bones.values());
-    const tip = distal.children.find((child) => (child as Object3D & { isBone?: boolean }).isBone === true && !canonical.has(child));
-    if (tip) return { node: tip, source: "tip" };
-    return { node: distal, source: "distal" };
-  }
-  const hand = anchors.bones.get(`${side}Hand` as VrmHumanoidBone);
-  return hand ? { node: hand, source: "hand" } : null;
 }
 
 type NodeTracks = { position?: Interpolant; quaternion?: Interpolant; scale?: Interpolant };
@@ -167,96 +141,103 @@ export class ClipChainSampler {
   }
 }
 
-/** One point of a hand's trace. */
-export type TracePoint = {
-  time: number;
-  position: Vector3;
-  /** 0 at the newest end, 1 at the oldest end of the window. */
-  age: number;
-};
+/** A trace mark as the sampler follows it: the fingertip node, its side and the marked span. */
+export type SamplerMark = { side: HandSide; node: Object3D; span: Span };
 
-export type HandTrace = {
-  points: TracePoint[];
-  /** Pairs of indices into `points` that are drawn. */
-  segments: Array<[number, number]>;
-  /** Largest distance of a drawn point from the newest drawn point. */
+export type SuppressedCounts = { outsideSpan: number; travel: number; jumps: number };
+
+/** A mark's whole path, sampled once: positions at the keyframes inside its span (plus its exact ends). */
+export type MarkPath = {
+  count: number;
+  times: Float32Array;
+  /** xyz per sample. */
+  positions: Float32Array;
+  /** Horizontal hip speed at each sample, m/s. */
+  hipSpeeds: Float32Array;
+  /** Per segment (sample i to i + 1): drawn when its two ends are inside the span and a recorded hand span, not travelling, and not a jump. */
+  usable: Uint8Array;
+  /** Largest distance of a usable point from the newest usable point. */
   extent: number;
-  drawn: boolean;
-  /** Why samples in the window were left out. */
-  suppressed: { outsideSpan: number; travel: number; jumps: number };
+  /** False when the usable path stays within `STILL_EXTENT_METERS`: nothing is drawn. */
+  drawable: boolean;
+  suppressed: SuppressedCounts;
 };
 
-export type TraceFrame = {
-  time: number;
-  windowStart: number;
-  hands: Record<HandSide, HandTrace>;
-  /** Horizontal hip speed at each sample in the window, m/s. */
-  hipSpeeds: number[];
-};
+/** Keyframes ahead of a mark's span that are warmed with it, so its first segment is cached when it starts. */
+const WARM_LEAD_SEC = 0.25;
 
 /**
- * Samples both hands' fingertips and the hips at the clip's keyframe times,
- * caching each keyframe once (a recording never changes), and turns a window
- * ending at a moment into drawable traces.
+ * Samples each trace mark's fingertip node and the hips at the clip's
+ * keyframe times, caching each keyframe once (a recording never changes), and
+ * builds each mark's path once, ahead of its span.
  */
 export class HandTraceSampler {
   private readonly sampler: ClipChainSampler;
+  /** Each distinct fingertip node once, then the hips. */
   private readonly nodes: Object3D[];
+  /** Per mark: its fingertip node's slot in `nodes`, shared by every mark on that node. */
+  private readonly slots: number[];
+  private readonly stride: number;
+  private readonly hipOffset: number;
   private readonly keyed: Uint8Array;
-  /** Per keyframe: left tip, right tip, hips (xyz each). */
+  /** Per keyframe: each fingertip node, then the hips (xyz each). */
   private readonly positions: Float32Array;
-  private readonly hipTurns: Float32Array;
   private readonly hipQuats: Float32Array;
-  private readonly outs = [new Vector3(), new Vector3(), new Vector3()];
-  private readonly outQuats = [new Quaternion(), new Quaternion(), new Quaternion()];
+  private readonly outs: Vector3[];
+  private readonly outQuats: Quaternion[];
   private readonly qa = new Quaternion();
   private readonly qb = new Quaternion();
+  private readonly paths: Array<MarkPath | null>;
+  private warmMark = 0;
+  private warmKey = -1;
 
   constructor(
     root: Object3D,
     clip: AnimationClip,
-    tips: Record<HandSide, Object3D>,
+    readonly marks: readonly SamplerMark[],
     hips: Object3D,
     private readonly spans: Record<HandSide, Span[]>
   ) {
     this.sampler = new ClipChainSampler(root, clip);
-    this.nodes = [tips.left, tips.right, hips];
+    // One slot per distinct node, so the stride stays a few nodes however many marks a file holds.
+    const tips: Object3D[] = [];
+    this.slots = marks.map((mark) => {
+      const found = tips.indexOf(mark.node);
+      if (found >= 0) return found;
+      tips.push(mark.node);
+      return tips.length - 1;
+    });
+    this.nodes = [...tips, hips];
+    this.stride = this.nodes.length * 3;
+    this.hipOffset = tips.length * 3;
     const count = this.sampler.times.length;
     this.keyed = new Uint8Array(count);
-    this.positions = new Float32Array(count * 9);
+    this.positions = new Float32Array(count * this.stride);
     this.hipQuats = new Float32Array(count * 4);
-    this.hipTurns = new Float32Array(count);
+    this.outs = this.nodes.map(() => new Vector3());
+    this.outQuats = this.nodes.map(() => new Quaternion());
+    this.paths = marks.map(() => null);
   }
 
   get times(): Float32Array {
     return this.sampler.times;
   }
 
-  /** The fingertip's world position at a clip time, exactly as the trace samples it. */
-  tipAt(side: HandSide, time: number, out: Vector3): Vector3 {
+  /** The mark's fingertip node's world position at a clip time, exactly as the path samples it. */
+  tipAt(mark: number, time: number, out: Vector3): Vector3 {
     this.sampler.sample(time, this.nodes, this.outs);
-    return out.copy(this.outs[side === "left" ? 0 : 1]!);
+    return out.copy(this.outs[this.slots[mark]!]!);
   }
 
-  private warmed = 0;
-
-  /** Caches keyframes in clip order for up to `budgetMs`; true once all are cached. */
-  warm(budgetMs: number): boolean {
-    const count = this.keyed.length;
-    const until = performance.now() + budgetMs;
-    while (this.warmed < count) {
-      this.key(this.warmed);
-      this.warmed += 1;
-      if ((this.warmed & 7) === 0 && performance.now() > until) break;
-    }
-    return this.warmed >= count;
+  isBuilt(mark: number): boolean {
+    return this.paths[mark] !== null;
   }
 
   private key(index: number): void {
     if (this.keyed[index]) return;
     this.sampler.sample(this.sampler.times[index]!, this.nodes, this.outs, this.outQuats);
-    for (let n = 0; n < 3; n += 1) this.outs[n]!.toArray(this.positions, index * 9 + n * 3);
-    this.outQuats[2]!.toArray(this.hipQuats, index * 4);
+    for (let n = 0; n < this.nodes.length; n += 1) this.outs[n]!.toArray(this.positions, index * this.stride + n * 3);
+    this.outQuats[this.nodes.length - 1]!.toArray(this.hipQuats, index * 4);
     this.keyed[index] = 1;
   }
 
@@ -277,107 +258,148 @@ export class HandTraceSampler {
     return lo;
   }
 
-  /** The traces for the window of `windowSec` ending at clip time `time` (clamped at the clip start; no loop wrap). */
-  trace(time: number, windowSec: number): TraceFrame {
+  /** Keyframes of a mark worth warming: from just before its span to its end. */
+  private warmRange(mark: number): [number, number] {
+    const { start, end } = this.marks[mark]!.span;
+    return [this.lowerBound(start - WARM_LEAD_SEC), this.lowerBound(end + 2e-6)];
+  }
+
+  /**
+   * Caches keyframes and builds paths in time order, mark by mark, for up to
+   * `budgetMs`; true once every mark is built.
+   */
+  warm(budgetMs: number): boolean {
+    const until = performance.now() + budgetMs;
+    let steps = 0;
+    while (this.warmMark < this.marks.length) {
+      if (this.paths[this.warmMark]) {
+        this.warmMark += 1;
+        this.warmKey = -1;
+        continue;
+      }
+      const [from, to] = this.warmRange(this.warmMark);
+      if (this.warmKey < from) this.warmKey = from;
+      if (this.warmKey < to) {
+        this.key(this.warmKey);
+        this.warmKey += 1;
+        steps += 1;
+      } else {
+        this.path(this.warmMark);
+        steps += 4;
+      }
+      if (steps >= 4 && performance.now() > until) break;
+    }
+    return this.warmMark >= this.marks.length;
+  }
+
+  /** The mark's path, built on first use (synchronously, whatever is not yet cached). */
+  path(mark: number): MarkPath {
+    return (this.paths[mark] ??= this.build(mark));
+  }
+
+  private build(markIndex: number): MarkPath {
+    const { side, span } = this.marks[markIndex]!;
     const times = this.sampler.times;
-    const windowStart = Math.max(0, time - windowSec);
-    const first = this.lowerBound(windowStart);
-    // Keyframes inside the window, then the moment itself when it falls between keyframes.
     const sampleTimes: number[] = [];
     const sampleKeys: number[] = [];
-    for (let i = first; i < times.length && times[i]! <= time + 1e-6; i += 1) {
+    for (let i = this.lowerBound(span.start); i < times.length && times[i]! <= span.end + 1e-6; i += 1) {
       sampleTimes.push(times[i]!);
       sampleKeys.push(i);
     }
-    if (sampleTimes.length === 0 || Math.abs(sampleTimes.at(-1)! - time) > 1e-6) {
-      sampleTimes.push(time);
+    if (sampleTimes.length === 0 || sampleTimes[0]! > span.start + 1e-6) {
+      sampleTimes.unshift(span.start);
+      sampleKeys.unshift(-1);
+    }
+    if (sampleTimes.at(-1)! < span.end - 1e-6) {
+      sampleTimes.push(span.end);
       sampleKeys.push(-1);
     }
 
-    // Positions per sample: [left, right, hips].
     const count = sampleTimes.length;
-    const pos = new Float32Array(count * 9);
+    const stride = this.stride;
+    const pos = new Float32Array(count * stride);
     const quats = new Float32Array(count * 4);
+    const hipQuat = this.nodes.length - 1;
     sampleKeys.forEach((key, s) => {
       if (key >= 0) {
         this.key(key);
-        pos.set(this.positions.subarray(key * 9, key * 9 + 9), s * 9);
+        pos.set(this.positions.subarray(key * stride, key * stride + stride), s * stride);
         quats.set(this.hipQuats.subarray(key * 4, key * 4 + 4), s * 4);
       } else {
         this.sampler.sample(sampleTimes[s]!, this.nodes, this.outs, this.outQuats);
-        for (let n = 0; n < 3; n += 1) this.outs[n]!.toArray(pos, s * 9 + n * 3);
-        this.outQuats[2]!.toArray(quats, s * 4);
+        for (let n = 0; n < this.nodes.length; n += 1) this.outs[n]!.toArray(pos, s * stride + n * 3);
+        this.outQuats[hipQuat]!.toArray(quats, s * 4);
       }
     });
 
     // Hip speed: horizontal displacement since the keyframe 0.25 s back (less at the clip start).
-    const hipSpeeds = sampleTimes.map((t, s) => {
+    const hx = this.hipOffset;
+    const hipSpeeds = new Float32Array(count);
+    for (let s = 0; s < count; s += 1) {
+      const t = sampleTimes[s]!;
       const back = this.lowerBound(Math.max(0, t - TRAVEL_SPEED_WINDOW_SEC));
       const dt = back < times.length ? t - times[back]! : 0;
-      if (dt <= 1e-6) return 0;
+      if (dt <= 1e-6) continue;
       this.key(back);
-      const dx = pos[s * 9 + 6]! - this.positions[back * 9 + 6]!;
-      const dz = pos[s * 9 + 8]! - this.positions[back * 9 + 8]!;
-      return Math.hypot(dx, dz) / dt;
+      const dx = pos[s * stride + hx]! - this.positions[back * stride + hx]!;
+      const dz = pos[s * stride + hx + 2]! - this.positions[back * stride + hx + 2]!;
+      hipSpeeds[s] = Math.hypot(dx, dz) / dt;
+    }
+
+    const suppressed: SuppressedCounts = { outsideSpan: 0, travel: 0, jumps: 0 };
+    const ok = sampleTimes.map((t, s) => {
+      if (!this.inSpan(side, t)) {
+        suppressed.outsideSpan += 1;
+        return false;
+      }
+      if (hipSpeeds[s]! > TRAVEL_SPEED) {
+        suppressed.travel += 1;
+        return false;
+      }
+      return true;
     });
-    // A root jump lies between two samples: a hip step or turn no body makes in one frame.
-    const jumpBefore = sampleTimes.map((_, s) => {
-      if (s === 0) return false;
-      const dx = pos[s * 9 + 6]! - pos[(s - 1) * 9 + 6]!;
-      const dz = pos[s * 9 + 8]! - pos[(s - 1) * 9 + 8]!;
-      const step = Math.hypot(dx, dz);
+
+    const tip = this.slots[markIndex]! * 3;
+    const positions = new Float32Array(count * 3);
+    for (let s = 0; s < count; s += 1) {
+      positions[s * 3] = pos[s * stride + tip]!;
+      positions[s * 3 + 1] = pos[s * stride + tip + 1]!;
+      positions[s * 3 + 2] = pos[s * stride + tip + 2]!;
+    }
+    const usable = new Uint8Array(Math.max(0, count - 1));
+    const touched = new Uint8Array(count);
+    for (let s = 1; s < count; s += 1) {
+      if (!ok[s - 1] || !ok[s]) continue;
+      // A root jump lies between two samples: a hip step or turn no body makes in one frame.
       const dt = sampleTimes[s]! - sampleTimes[s - 1]!;
-      if (step > ROOT_JUMP_METERS && step > ROOT_JUMP_SPEED * dt) return true;
+      const hipStep = Math.hypot(pos[s * stride + hx]! - pos[(s - 1) * stride + hx]!, pos[s * stride + hx + 2]! - pos[(s - 1) * stride + hx + 2]!);
       this.qa.fromArray(quats, (s - 1) * 4);
       this.qb.fromArray(quats, s * 4);
-      return this.qa.angleTo(this.qb) > ROOT_JUMP_RADIANS;
-    });
-
-    const hands = {} as Record<HandSide, HandTrace>;
-    HAND_SIDES.forEach((side, h) => {
-      const suppressed = { outsideSpan: 0, travel: 0, jumps: 0 };
-      const usable = sampleTimes.map((t, s) => {
-        if (!this.inSpan(side, t)) {
-          suppressed.outsideSpan += 1;
-          return false;
-        }
-        if (hipSpeeds[s]! > TRAVEL_SPEED) {
-          suppressed.travel += 1;
-          return false;
-        }
-        return true;
-      });
-      const points: TracePoint[] = sampleTimes.map((t, s) => ({
-        time: t,
-        position: new Vector3(pos[s * 9 + h * 3]!, pos[s * 9 + h * 3 + 1]!, pos[s * 9 + h * 3 + 2]!),
-        age: windowSec > 0 ? Math.min(1, Math.max(0, (time - t) / windowSec)) : 0
-      }));
-      const segments: Array<[number, number]> = [];
-      for (let s = 1; s < count; s += 1) {
-        if (!usable[s - 1] || !usable[s]) continue;
-        const step = Math.hypot(
-          pos[s * 9 + h * 3]! - pos[(s - 1) * 9 + h * 3]!,
-          pos[s * 9 + h * 3 + 1]! - pos[(s - 1) * 9 + h * 3 + 1]!,
-          pos[s * 9 + h * 3 + 2]! - pos[(s - 1) * 9 + h * 3 + 2]!
-        );
-        const tipJump = step > TIP_JUMP_METERS && step > TIP_JUMP_SPEED * (sampleTimes[s]! - sampleTimes[s - 1]!);
-        if (jumpBefore[s] || tipJump) {
-          suppressed.jumps += 1;
-          continue;
-        }
-        segments.push([s - 1, s]);
+      const rootJump = (hipStep > ROOT_JUMP_METERS && hipStep > ROOT_JUMP_SPEED * dt) || this.qa.angleTo(this.qb) > ROOT_JUMP_RADIANS;
+      const step = Math.hypot(positions[s * 3]! - positions[(s - 1) * 3]!, positions[s * 3 + 1]! - positions[(s - 1) * 3 + 1]!, positions[s * 3 + 2]! - positions[(s - 1) * 3 + 2]!);
+      const tipJump = step > TIP_JUMP_METERS && step > TIP_JUMP_SPEED * dt;
+      if (rootJump || tipJump) {
+        suppressed.jumps += 1;
+        continue;
       }
-      let extent = 0;
-      const newest = segments.at(-1)?.[1];
-      if (newest !== undefined) {
-        const end = points[newest]!.position;
-        for (const [a, b] of segments) {
-          extent = Math.max(extent, points[a]!.position.distanceTo(end), points[b]!.position.distanceTo(end));
-        }
-      }
-      hands[side] = { points, segments, extent, drawn: segments.length > 0 && extent > STILL_EXTENT_METERS, suppressed };
-    });
-
-    return { time, windowStart, hands, hipSpeeds };
+      usable[s - 1] = 1;
+      touched[s - 1] = 1;
+      touched[s] = 1;
+    }
+    const used: Array<{ x: number; y: number; z: number }> = [];
+    for (let s = 0; s < count; s += 1) {
+      if (touched[s]) used.push({ x: positions[s * 3]!, y: positions[s * 3 + 1]!, z: positions[s * 3 + 2]! });
+    }
+    const extent = pathExtent(used);
+    return {
+      count,
+      times: Float32Array.from(sampleTimes),
+      positions,
+      hipSpeeds,
+      usable,
+      extent,
+      drawable: used.length > 1 && extent > STILL_EXTENT_METERS,
+      suppressed
+    };
   }
 }

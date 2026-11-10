@@ -62,6 +62,7 @@ export class AvatarRecorder {
       return;
     }
 
+    this.pointSamples.noteTime(timeSec);
     this.sceneBubbleSampler.captureSceneBubbleSample(activeCamera, avatarRoot);
     this.frameCaptureStore.captureFrame(timeSec, avatar, avatarRoot, handSources);
     this.objectSamples.capture(avatar, objects);

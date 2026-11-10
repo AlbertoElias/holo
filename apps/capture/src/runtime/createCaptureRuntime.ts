@@ -3,12 +3,13 @@ import { ScreenInputSystem } from '@holoim/xr-ui-iwsdk';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Vector3 } from 'three';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
+import { attachLocomotion, sampleAvatarPose } from '../animation/locomotionLibrary';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { AvatarRig } from '../avatar/AvatarRig';
 import { BodyTracking } from '../body/BodyTracking';
 import { CrouchState } from '../body/crouch';
 import { CameraController } from '../camera/CameraController';
-import { loadRuntimeConfig } from '../config/runtimeConfig';
+import { DEFAULT_AVATAR_URL, loadRuntimeConfig } from '../config/runtimeConfig';
 import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
 import { ChromeProbe } from '../debug/chromeProbe';
 import { DiagnosticViews } from '../debug/DiagnosticViews';
@@ -37,7 +38,7 @@ import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
 import { ScreenHolds } from '../xr/ScreenHolds';
 import { XrTracking } from '../xr/XrTracking';
-import { installAutomationHooks } from './automationHooks';
+import { installAutomationHooks, tracesSnapshot } from './automationHooks';
 import { createHaloActions } from './haloActions';
 import { createCaptureStage, holdXrInputBetweenFrames, syncPlayerToRig } from './captureStage';
 import { renderCaptureTextState } from './captureTextState';
@@ -90,7 +91,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ui,
     recording: { toggle: () => recording.toggle() },
     getPointSamples: () => recording.recorder.pointSamples,
-    getTimeSec: () => capture.frame.elapsedSec
+    getTimeSec: () => capture.frame.elapsedSec,
+    anyTraceDrawn: () => vrChrome.liveTrace.anyDrawn()
   });
   const flatHalo = new FlatHalo((commit) => {
     if (commit.action) haloActions.run(commit.action, 'key');
@@ -151,7 +153,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ownsSelect: (source) => headsetHolds.ownsSelect(source, capture.frame.elapsedSec),
     pickObject: (url) => void objects.loadTrayUrls([url]),
     tray: objects.tray,
-    removeTraySlot: (slot) => void objects.removeTraySlot(slot)
+    removeTraySlot: (slot) => void objects.removeTraySlot(slot),
+    getAvatarRoot: () => avatar.avatarRoot,
+    getOpenTrace: () => recording.recorder.pointSamples.openTrace()
   });
   // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.
   const recenterAr = (): void => {
@@ -192,8 +196,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     getHandedness: () => ui.getState().handedness,
     // A hand grabbing, or holding the tray open, is doing that: no mark or Halo on it.
     isHandBusy: (side) => objects.grabInput.get(side).pressed || (side === nonDominantHand(ui.getState().handedness) && objects.trayGesture.isHeld()),
-    onHaloAction: (action, kind, side, at) => {
-      haloActions.run(action, kind);
+    onHaloAction: (action, kind, side, at, pressSec) => {
+      haloActions.run(action, kind, pressSec, side);
       vrChrome.haloFeedback(side, at, kind);
     }
   });
@@ -295,6 +299,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   const loadAssets = async (): Promise<void> => {
     const load = (url: string): Promise<GLTF> => new Promise((resolve, reject) => stage.loader.load(url, resolve, undefined, reject));
     try {
+      // A non-shipped avatar most likely needs the locomotion library: fetch it alongside.
+      let library: Promise<GLTF> | undefined;
+      const loadLibrary = () => (library ??= load(config.locomotionLibraryUrl));
+      if (config.avatarUrl !== DEFAULT_AVATAR_URL) void loadLibrary().catch(() => undefined);
       const [sceneGltf, avatarGltf] = await Promise.all([load(config.sceneUrl), load(config.avatarUrl)]);
       avatar.applyLoadedModels(sceneGltf.scene, avatarGltf.scene, config, {
         json: avatarGltf.parser.json,
@@ -308,7 +316,12 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       body.measureBindPose();
       const spawned = await motor.init(avatar);
       hands.ensureSensors();
-      if (avatar.avatar) capture.animator.attachClips(avatar.avatar, avatarGltf.animations, avatar.humanoid);
+      if (avatar.avatar) {
+        await attachLocomotion({
+          animator: capture.animator, avatar: avatar.avatar, ownClips: avatarGltf.animations,
+          humanoid: avatar.humanoid, library: loadLibrary
+        });
+      }
       // Bound at bind pose, like the body, before any system writes the eyes.
       if (avatar.avatar && avatar.humanoid) {
         capture.face.attach(avatar.avatar, {
@@ -390,6 +403,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __setFaceInput: (sample) => capture.face.setAutomationInput(sample),
         __sampleFace: () => capture.face.snapshot(),
         __sampleHumanoid: () => avatar.humanoid?.report() ?? null,
+        __poseLocomotion: (state, profile, timeSec) => capture.animator.poseForCheck(state, profile, timeSec),
+        __sampleAvatarPose: () => sampleAvatarPose(avatar, capture.animator),
         __toggleFaceCamera: () => capture.face.toggleCamera(),
         __samplePhoneChrome: () => phoneChrome.probe(),
         __phoneTraySlotPosition: (slot) => phoneChrome.traySlotPosition(slot),
@@ -414,11 +429,15 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __sampleHolds: () => ({
           headset: headsetHolds.snapshot(),
           holds: recording.recorder.pointSamples.holdCounts(),
+          traces: tracesSnapshot(recording.recorder.pointSamples),
+          liveTrace: vrChrome.liveTrace.probe(),
+          simSec: capture.frame.elapsedSec,
           touch: input.touch.snapshot().hold,
           flatHalo: flatHalo.getSnapshot(),
           actions: haloActions.log
         }),
         __toggleRecording: () => recording.toggle(),
+        __runHaloAction: (action, input) => haloActions.run(action, input),
         __lastPointReport: () => recording.cameraRecorder.getLastPointReport() ?? null,
         __arWorldFrame: () => stage.worldGroup.matrixWorld.toArray(),
         __projectToScreen: (point) => {

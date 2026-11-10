@@ -11,6 +11,8 @@
  *   - three.js-sanitized names resolve exactly like raw names;
  *   - skinned bind-pose vertices of exact fixtures equal the shipped avatar's
  *     to 1e-5 m, and every joint's bind world × IBM agrees (bind consistency);
+ *   - the locomotion clip library is in sync with `avatar.glb`, and its clips
+ *     retarget onto every mappable fixture (lib/locomotion-retarget-check.ts);
  *   - generation is deterministic, and no `skeleton.pose()` call exists in
  *     capture or viewer-web sources.
  */
@@ -27,6 +29,7 @@ import {
   resolveGltf,
   type GltfJson
 } from './lib/avatar-fixtures.ts';
+import { checkLocomotionRetarget } from './lib/locomotion-retarget-check.ts';
 
 const APP_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
@@ -346,6 +349,8 @@ async function main(): Promise<void> {
   }
 
   const poseHits = await poseCalls();
+  const retarget = await checkLocomotionRetarget(fixtures);
+  await writeFile(join(OUT_DIR, 'locomotion-retarget.json'), `${JSON.stringify(retarget, null, 2)}\n`);
   printTable(rows);
   const notes = Object.entries(records).flatMap(([name, r]) => {
     const rec = r as { ambiguities: unknown[]; lostVsShipped: string[] };
@@ -357,10 +362,14 @@ async function main(): Promise<void> {
   for (const note of notes) console.log(`  note  ${note}`);
   const globalFailures = [
     ...(nondeterministic.length ? [`non-deterministic fixtures: ${nondeterministic.join(', ')}`] : []),
-    ...(poseHits.length ? [`skeleton.pose() calls: ${poseHits.join(', ')}`] : [])
+    ...(poseHits.length ? [`skeleton.pose() calls: ${poseHits.join(', ')}`] : []),
+    ...retarget.failures.map((f) => `locomotion retarget: ${f}`)
   ];
   console.log(`determinism: ${nondeterministic.length ? 'FAIL' : 'ok'} (${fixtures.length} fixtures generated twice, sha256 equal)`);
   console.log(`pose guard:  ${poseHits.length ? 'FAIL' : 'ok'} (no skeleton.pose() in apps/capture/src, apps/viewer-web/src)`);
+  const worstRetarget = retarget.rows.reduce((w, r) => (r.worstCm > w.worstCm ? r : w), retarget.rows[0]!);
+  console.log(`retarget:    ${retarget.failures.length ? 'FAIL' : 'ok'} (library in sync; ${retarget.rows.length} fixtures, worst ${worstRetarget.worstCm} cm on ${worstRetarget.fixture}; ` +
+    `t-pose arms ${retarget.rows.find((r) => r.fixture === 't-pose')?.correctionDeg.leftUpperArm ?? '-'}°)`);
   const failed = rows.filter((r) => r.failures.length);
   for (const row of failed) for (const f of row.failures) console.log(`  FAIL  ${row.fixture}: ${f}`);
   for (const f of globalFailures) console.log(`  FAIL  ${f}`);

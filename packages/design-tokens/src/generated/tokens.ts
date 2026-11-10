@@ -305,10 +305,20 @@ export const tokens = {
         fill: false,
         linejoin: 'round'
       },
+      ink: {
+        d: 'M1.5 13.5c1.5-4 4-5.5 6-4s4 .5 4.5-3.5M10.7 3.5a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0',
+        fill: false,
+        linejoin: 'round'
+      },
       halo: {
         d: 'M5.25 3.24A5.5 5.5 0 0 1 10.75 3.24M12.76 5.25A5.5 5.5 0 0 1 12.76 10.75M10.75 12.76A5.5 5.5 0 0 1 5.25 12.76M3.24 10.75A5.5 5.5 0 0 1 3.24 5.25M9 8a1 1 0 1 1-2 0 1 1 0 1 1 2 0',
         fill: false,
         linejoin: 'miter'
+      },
+      putBack: {
+        d: 'M1.5 13.5h13M8 1.5v10M4.8 8.3 8 11.5l3.2-3.2',
+        fill: false,
+        linejoin: 'round'
       },
       tray: {
         d: 'M1.5 13.5h13M2.75 9h3v3h-3zM8 8.25l1.9 3.75H6.1zM10.75 10.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0',

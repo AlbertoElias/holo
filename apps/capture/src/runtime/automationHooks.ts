@@ -1,5 +1,7 @@
 import type { XRDevice } from 'iwer';
+import type { HaloAction } from '@holoim/xr-ui-core';
 
+import type { LocomotionProfile, LocomotionState } from '../animation/LocomotionAnimator';
 import type { HumanoidBindingReport } from '../avatar/HumanoidSkeleton';
 import type { FaceSample } from '../face/faceTypes';
 import type { FaceSnapshot } from '../face/FaceDriver';
@@ -7,6 +9,8 @@ import type { BodySample, HandSample, MockInputState, MockVrPoseInput, Spectator
 import type { TouchStick } from '../input/TouchInput';
 import type { FlatHaloView } from '../ui/flatHalo';
 import type { PointResolutionReport } from '../recording/PointResolver';
+import type { PointSampleStore } from '../recording/PointSampleStore';
+import type { LiveTraceProbe } from '../ui/LiveTrace';
 import type { PhoneArChromeProbe } from '../ui/PhoneArChrome';
 import type { ChromeTarget, VrChromeSnapshot } from '../ui/VrChrome';
 import type { prefetchStats } from '../objects/objectSearch';
@@ -19,6 +23,11 @@ import type { HaloActionRecord } from './haloActions';
  * Page functions the deterministic XR checks drive. Every one acts through
  * the production pipeline: clock adapters step the same systems and draws.
  */
+export interface AvatarPoseSample {
+  readonly bones: Record<string, [number, number, number]>;
+  readonly locomotion: { state: LocomotionState; profile: LocomotionProfile; clip: string | null };
+}
+
 export interface AutomationHooks {
   render_game_to_text: () => string;
   advanceTime: (ms: number) => void;
@@ -43,6 +52,10 @@ export interface AutomationHooks {
   __sampleFace: () => FaceSnapshot;
   /** The avatar's canonical humanoid binding (bones, facing, disabled features), or null before load. */
   __sampleHumanoid: () => HumanoidBindingReport | null;
+  /** Poses one locomotion state's clip at a clip time on one profile, for a pose read right after (null: rest, no clip). */
+  __poseLocomotion: (state: LocomotionState, profile: LocomotionProfile, timeSec: number) => string | null;
+  /** Every canonical bone (and finger end sites, as `<bone>Tip`) in the avatar root's frame, plus the animator. */
+  __sampleAvatarPose: () => AvatarPoseSample;
   __toggleFaceCamera: () => void;
   /** The chrome as drawn: the overlay's view model, the headset chrome's placement, the touch stick (slice 4 reports). */
   __sampleChrome: () => { ui: UiViewModel; vr: VrChromeSnapshot; touch: { stick: TouchStick | null; looking: number; hold: string } };
@@ -50,7 +63,7 @@ export interface AutomationHooks {
   __samplePhoneChrome: () => PhoneArChromeProbe;
   /** World position of a phone tray row slot's hit area (1-5), or null while the row is closed: where a check taps it. */
   __phoneTraySlotPosition: (slot: number) => number[] | null;
-  /** World position of a headset tray miniature's Close ring (1-5), or null while it is hidden (docs/features/tray-remove.md). */
+  /** World position of a headset tray miniature's Close ring (1-5), or null while it is hidden (docs/features/archive/tray-remove.md). */
   __trayClosePosition: (slot: number) => number[] | null;
   /** World position of a phone AR tray slot's Close glyph (1-5), or null while the row is closed. */
   __phoneTrayClosePosition: (slot: number) => number[] | null;
@@ -70,6 +83,8 @@ export interface AutomationHooks {
   __sampleHolds: () => HoldsSnapshot;
   /** Record or Stop, through the same `recording.toggle()` the dock, the key and the wrist glyph reach. */
   __toggleRecording: () => void;
+  /** Runs a Halo action as if `input`'s Halo committed it now (no press time, no summoning hand): scripted Ink toggles where the gesture is not the point. */
+  __runHaloAction: (action: HaloAction, input: HaloActionRecord['input']) => boolean;
   /** What point resolution decided at the latest camera take's export (holds, referents, "no referent"), or null. */
   __lastPointReport: () => PointResolutionReport | null;
   /** `worldGroup.matrixWorld` (column-major, 16 numbers): the set's frame in the room, for scripting a camera walk in the set's frame. */
@@ -78,9 +93,30 @@ export interface AutomationHooks {
   __projectToScreen: (point: readonly number[]) => { x: number; y: number } | null;
 }
 
+export interface TracesSnapshot {
+  open: { startSec: number } | null;
+  kept: Array<{ startSec: number; endSec: number; onSide: VrHandSide | null; offSide: VrHandSide | null }>;
+  undone: number;
+}
+
+export function tracesSnapshot(store: PointSampleStore): TracesSnapshot {
+  const open = store.openTrace();
+  return {
+    open: open ? { startSec: open.startSec } : null,
+    kept: store.getTraces().flatMap((trace) => (trace.endSec === undefined ? [] : [{ startSec: trace.startSec, endSec: trace.endSec, onSide: trace.onSide ?? null, offSide: trace.offSide ?? null }])),
+    undone: store.traceCounts().undone
+  };
+}
+
 export interface HoldsSnapshot {
   headset: ReturnType<HeadsetHolds['snapshot']>;
   holds: { kept: number; undone: number };
+  /** Author-marked traces (PRD-023 v1): the open one, the ones kept (take seconds on the simulation clock), how many were undone. */
+  traces: TracesSnapshot;
+  /** The live trace behind each fingertip, per hand. */
+  liveTrace: LiveTraceProbe;
+  /** Capture's simulation clock now, seconds: what trace, hold and frame times are on. */
+  simSec: number;
   touch: string;
   flatHalo: FlatHaloView;
   actions: HaloActionRecord[];

@@ -2,7 +2,7 @@ import { copyFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Browser, CDPSession, Download, Page } from 'playwright';
 
-import { CONTROL_NAMES } from '@holoim/xr-ui-core';
+import { CONTROL_NAMES, type HaloDirection } from '@holoim/xr-ui-core';
 import {
   attachXrEnvironment,
   createXrContext,
@@ -15,8 +15,9 @@ import {
   wireXrConsoleErrors
 } from '@holoim/tooling-testing/xr-env';
 
-import { HOLOIM_MEANING_EXTENSION, meaningFromLabel, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
+import { HOLOIM_MEANING_EXTENSION, linkMarks, meaningFromLabel, validateHoloimMeaning } from '../../../../packages/meaning/src/index.ts';
 import type { HoldsSnapshot } from '../../src/runtime/automationHooks';
+import { HALO_PINCH_STAGES, haloDrag, installMiddlePinchPose } from './iwer-halo.ts';
 import { installHandBlend } from './iwer-hand-blend.ts';
 import { TARGETS, type Vec3 } from './pointing-scene.ts';
 import { calibrateTipShift, installPointingRig, REST } from './pointing-take.ts';
@@ -107,7 +108,7 @@ async function readLinks(run: HeldMarkRun, phase: string, download: Download, fa
     failures.push(`${HOLOIM_MEANING_EXTENSION} fails the schema: ${validation.errors.join('; ')}`);
     return { glb, links: [] };
   }
-  const links = validation.value.marks.map((mark) => ({
+  const links = linkMarks(validation.value).map((mark) => ({
     from: meaningFromLabel(mark.anchor.from),
     to: mark.anchor.to.bone ?? gltf.nodes?.[mark.anchor.to.node]?.name ?? `node ${mark.anchor.to.node}`,
     start: round(mark.span.start),
@@ -348,27 +349,8 @@ async function handsPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   const page = await openHeadset(run, 'hand');
   await page.evaluate(installHandBlend);
   await page.evaluate(installPointingRig);
-  // A thumb–middle pinch per hand: IWER's default pose with the middle
-  // fingertip moved onto the thumb tip; the index stays clear of the thumb.
-  const pinchGap = await page.evaluate(() => {
-    const gaps: Record<string, { middle: number; index: number }> = {};
-    for (const side of ['left', 'right'] as const) {
-      const hand = window.IWER_DEVICE!.hands[side]!;
-      type Pose = { jointTransforms: Record<string, { offsetMatrix: Float32Array; radius: number }>; gripOffsetMatrix?: Float32Array };
-      const internals = hand as unknown as Record<symbol, { poses: Record<string, Pose> } | undefined>;
-      const key = Object.getOwnPropertySymbols(hand).find((symbol) => internals[symbol]?.poses)!;
-      const { poses } = internals[key]!;
-      const base = poses.default!;
-      const jointTransforms = Object.fromEntries(Object.entries(base.jointTransforms).map(([joint, value]) => [joint, { offsetMatrix: new Float32Array(value.offsetMatrix), radius: value.radius }]));
-      const thumb = jointTransforms['thumb-tip']!.offsetMatrix;
-      const middle = jointTransforms['middle-finger-tip']!.offsetMatrix;
-      const index = jointTransforms['index-finger-tip']!.offsetMatrix;
-      for (const i of [12, 13, 14]) middle[i] = thumb[i]!;
-      poses.middlePinch = base.gripOffsetMatrix ? { jointTransforms, gripOffsetMatrix: base.gripOffsetMatrix } : { jointTransforms };
-      gaps[side] = { middle: 0, index: Math.hypot(index[12]! - thumb[12]!, index[13]! - thumb[13]!, index[14]! - thumb[14]!) };
-    }
-    return gaps;
-  });
+  // A thumb–middle pinch per hand; the index stays clear of the thumb.
+  const pinchGap = await page.evaluate(installMiddlePinchPose);
   const TIP: Vec3 = [0.26, 1.3, -0.5];
   await page.evaluate((rest) => window.__applyPointState!({ right: { s: 0, rest: rest.right }, left: { pos: rest.left } }), REST);
   await steps(page, 0.5);
@@ -379,14 +361,7 @@ async function handsPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   const frame = async ({ s, aim, leftPinch, rightPinch }: { s: number; aim: Vec3; leftPinch: LeftPose; rightPinch: boolean }) => {
     await page.evaluate(({ state, leftPinch, rightPinch, rightPos }) => {
       window.__applyPointState!(state);
-      // The hands share IWER's pose table, so its one "blend" pose cannot
-      // hold two shapes; a pinching hand takes the pinch pose by id instead.
-      const pinch = (side: 'left' | 'right', poseId = 'middlePinch') => {
-        const hand = window.IWER_DEVICE!.hands[side]!;
-        hand.poseId = poseId;
-        hand.updatePinchValue(0);
-        hand.updateHandPose();
-      };
+      const pinch = (side: 'left' | 'right', poseId = 'middlePinch') => window.__setHandPoseId!(side, poseId);
       const left = window.IWER_DEVICE!.hands.left!;
       if (left.connected !== (leftPinch !== 'lost')) left.connected = leftPinch !== 'lost';
       if (leftPinch === true || leftPinch === 'lost') pinch('left');
@@ -441,15 +416,16 @@ async function handsPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
     await play(0.6, { s: 0, aim: center(target), leftPinch: false, rightPinch: false });
   };
   // The dominant hand's own thumb–middle pinch, held and dragged.
-  const pinchHalo = async (dx: number, dy: number) => {
+  const pinchHalo = async (direction: HaloDirection) => {
     const origin: Vec3 = [0.18, 1.3, -0.4];
+    const { dx, dy } = haloDrag(direction);
     rightPos = origin;
-    await play(0.5, { s: 0, aim: center('TargetA'), leftPinch: false, rightPinch: true });
-    await play(0.4, (t) => {
-      rightPos = [origin[0] + dx * t, origin[1] + dy * t, origin[2]];
-      return { s: 0, aim: center('TargetA'), leftPinch: false, rightPinch: true };
-    });
-    await play(0.2, { s: 0, aim: center('TargetA'), leftPinch: false, rightPinch: true });
+    for (const stage of HALO_PINCH_STAGES) {
+      await play(stage.sec, (t) => {
+        rightPos = [origin[0] + dx * stage.drag(t), origin[1] + dy * stage.drag(t), origin[2]];
+        return { s: 0, aim: center('TargetA'), leftPinch: false, rightPinch: true };
+      });
+    }
     rightPos = REST.right;
     await play(0.5, { s: 0, aim: center('TargetA'), leftPinch: false, rightPinch: false });
   };
@@ -460,7 +436,7 @@ async function handsPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   const afterA = await holdsOf(page);
   if (afterA.holds.kept !== 1) failures.push(`after the marked point at A: ${JSON.stringify(afterA.holds)}, expected one kept hold (pinch gaps ${JSON.stringify(pinchGap)})`);
   await point('TargetB', true);
-  await pinchHalo(-0.12, 0);
+  await pinchHalo('w');
   const afterUndo = await holdsOf(page);
   if (afterUndo.holds.kept !== 1 || afterUndo.holds.undone !== 1) failures.push(`after the hand's W: ${JSON.stringify(afterUndo.holds)}, expected one kept and one undone`);
   // An ordinary (thumb–index) pinch on the holding hand never marks.
@@ -474,7 +450,7 @@ async function handsPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   if (!lostEnd) failures.push(`no mark ended by tracking loss: ${JSON.stringify(afterLoss.headset.log.filter((entry) => entry.kind === 'mark'))}`);
   if (afterLoss.holds.kept !== 2) failures.push(`after the lost hand: ${JSON.stringify(afterLoss.holds)}, expected two kept holds`);
   const downloaded = page.waitForEvent('download', { timeout: 120_000 });
-  await pinchHalo(0, -0.12);
+  await pinchHalo('s');
   const { glb, links } = await readLinks(run, 'hands', await settleDownload(page, downloaded), failures);
   const holds = await holdsOf(page);
   expectActions(holds, [{ input: 'hands', action: 'undo', done: true }, { input: 'hands', action: 'record', done: true }], failures);
