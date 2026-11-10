@@ -38,8 +38,17 @@ queue item in [`TODOS.md`](TODOS.md).
   https://holoim-viewer.pages.dev; not yet seen in a headset or AR.
   A second set of six was added on the same branch 2026-11-10 (`words`,
   `seasons`, `hearts`, `rain`, `bath`, `strings`; see "Second set" in the
-  concept page), checked in the local viewer feed, and is not on the live
-  feed: that waits for the user's go-ahead. The GLB writer now refuses
+  concept page), checked in the local viewer feed, and uploaded to the live
+  feed the same day at the user's go-ahead: Walk around the year
+  (`cmwamqigc000boeirzhd5khet`), The shape the rain leaves
+  (`cmwamqg2a0009oeir4p2qzv7j`), Who holds the strings
+  (`cmwamqcla0007oeirlm49ifko`), The sea in the bathtub
+  (`cmwamq8k60005oeirnjf01okb`), Three hearts (`cmwamq5wz0003oeirqqn8rwl7`)
+  and From where you stand (`cmwamq2r40001oeirjgjaaau1`). All six render at
+  https://holoim-viewer.pages.dev and the stored files match the local
+  builds byte for byte; their sound is unheard and none has been seen in a
+  headset or AR. None of the ten has a Quick Look preview (`usdzStatus`
+  is `none`; cause not looked into). The GLB writer now refuses
   non-finite values, after a NaN vertex made one piece draw as nothing in
   the viewer while its contact sheet looked right.
 - UI redesign slices 0 to 6 (brief
