@@ -30,8 +30,12 @@ queue item in [`TODOS.md`](TODOS.md).
   [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md).
   Scripts and docs only, no app code; `verify:agent` passed 2026-11-09 and
   all four were checked in the local viewer feed. Merge with the next
-  finished change. Not yet uploaded to the live feed: that waits for the
-  user's go-ahead.
+  finished change. Uploaded to the live feed 2026-11-10 at the user's
+  go-ahead, by "Claude (agent-authored)": Blue hour
+  (`cmwa4461m0007oeirc3jzftaf`), Two sides of a door
+  (`cmwa443hq0005oeirkgp3b33k`), Murmuration (`cmwa4402a0003oeirbj759hxp`)
+  and Walk beside light (`cmwa43uab0001oeirkv0e9bzr`). All four render at
+  https://holoim-viewer.pages.dev; not yet seen in a headset or AR.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
