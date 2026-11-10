@@ -44,11 +44,11 @@ it from the item below instead of duplicating its status here.
   [`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md);
   its device checks are in the brief's "Physical-device limits". Slice 2
   (detected demonstration spans) waits on the PRD's recipient trial.
-- [ ] Author-marked hand traces (PRD-023 v1, approved 2026-11-09): in headset
+- [x] Author-marked hand traces (PRD-023 v1, approved 2026-11-09): in headset
   capture the Halo's Ink toggles a trace, stored as a `recorded` `trace` mark
   (`HOLOIM_meaning` v2) that replays with its original timing; v0's viewer
   Traces control and paused 3 s window are removed. Owned by
-  [`docs/features/authored-traces.md`](docs/features/authored-traces.md);
+  [`docs/features/archive/authored-traces.md`](docs/features/archive/authored-traces.md);
   replace the two v0 test takes on the live feed afterwards.
 - [ ] Self-resolving pointing (PRD-022, approved 2026-10-22): highlight what
   the author points at in the feed portal, from headset hands and a desktop

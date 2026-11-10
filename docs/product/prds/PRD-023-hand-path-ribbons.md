@@ -237,5 +237,5 @@ v0's viewer control and paused window are removed; automatic detection
   [PRD-028 ghost frames](PRD-028-ghost-frames.md)
 - Mockups: none
 - Feature brief: v0 [hand traces](../../features/archive/hand-traces.md);
-  v1 [authored traces](../../features/authored-traces.md)
+  v1 [authored traces](../../features/archive/authored-traces.md)
 - Implementation issue: none

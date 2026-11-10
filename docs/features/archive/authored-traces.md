@@ -1,12 +1,12 @@
 # Feature brief: Author-marked hand traces (PRD-023 v1)
 
 **Lead:** Claude Code (Opus)  
-**Status:** Implementing
+**Status:** Complete (2026-11-10); device checks in "Physical-device limits"
 **Layer:** Meaning (the author marks the span; the recorded body draws the path)
 
-Product decision and trial plan: [PRD-023](../product/prds/PRD-023-hand-path-ribbons.md),
+Product decision and trial plan: [PRD-023](../../product/prds/PRD-023-hand-path-ribbons.md),
 v1 amendment approved 2026-11-09. Builds on v0, shipped 2026-10-29:
-[hand traces](archive/hand-traces.md).
+[hand traces](hand-traces.md).
 
 ## User outcome
 
@@ -48,61 +48,61 @@ And Learning"), which need people and devices.
 
 ## Acceptance criteria
 
-- [ ] **Ink in the ring.** The headset Halo (hands and controllers) draws Ink
+- [x] **Ink in the ring.** The headset Halo (hands and controllers) draws Ink
   at NW; flat capture's Halo does not. Committed while recording, Ink starts a
   trace at the commit; committed again, it ends the trace at the moment that
   Halo was summoned (its press), so the off gesture is not traced. Committed
   while not recording, it changes nothing and says so on the status line.
-- [ ] **Ends.** Stopping the take ends an open trace: at the Halo's press when
+- [x] **Ends.** Stopping the take ends an open trace: at the Halo's press when
   stopped through the Halo's S, else at the stop. A trace never outlives its
   take, and the next take starts with tracing off.
-- [ ] **Status line.** While tracing, the periphery status line reads
+- [x] **Status line.** While tracing, the periphery status line reads
   "Recording 0:12 · Tracing 0:03", the trace time counting from the Ink
   commit; it returns to "Recording 0:12" when tracing ends.
-- [ ] **Live trace.** While tracing, each hand whose avatar index fingertip
+- [x] **Live trace.** While tracing, each hand whose avatar index fingertip
   has moved more than 5 cm (spatial extent) since the trace began draws a
   trace behind that fingertip in the headset, in the trace style; it is
   chrome (never exported, never a referent or scene content), and it clears
   when the trace ends or is undone, or the take stops.
-- [ ] **Marks stored.** On export, each ended trace becomes one `trace` mark
+- [x] **Marks stored.** On export, each ended trace becomes one `trace` mark
   per hand that moved more than 5 cm across its `xr-hand` frames within the
   span; a hand that stayed still, or had no tracked frames, gets none. Each
   mark's span is within one frame of the Ink toggles. The anchor is
   `{ bone: "<side>IndexDistal", node }`, the exported distal bone's node.
   Provenance is `recorded`.
-- [ ] **Undo and Redo.** The Halo's Undo removes the most recent trace or
+- [x] **Undo and Redo.** The Halo's Undo removes the most recent trace or
   held mark, whichever began last; Redo restores the most recently undone
   one. Undo while tracing always ends that trace at the Halo's press and
   removes it, even when a hold began inside it.
   A new trace or hold clears what can be redone. A trace counts as one undo
   step even when it holds marks for both hands.
-- [ ] **Version.** A take with a trace mark writes `HOLOIM_meaning` version 2;
+- [x] **Version.** A take with a trace mark writes `HOLOIM_meaning` version 2;
   a take with none writes exactly what it wrote before (v0 for headset and
   desktop performer takes, v1 for camera takes with links), byte-identical
   meaning JSON on the same input.
-- [ ] **Replay timing.** Playing in the portal, a trace draws nothing before
+- [x] **Replay timing.** Playing in the portal, a trace draws nothing before
   its span starts; during the span its drawn end is at the fingertip at every
   frame; after the span it stays whole until the take loops, where it clears.
   Paused or scrubbed, it shows exactly what playing to that moment shows.
-- [ ] **Recorded only.** A drawn segment's two ends both lie inside the mark's
+- [x] **Recorded only.** A drawn segment's two ends both lie inside the mark's
   span and inside a recorded motion span over that side's hand. A switch to
   controllers or a dropout leaves a gap.
-- [ ] **Fidelity.** Every drawn trace point is within 2 mm of the fingertip
+- [x] **Fidelity.** Every drawn trace point is within 2 mm of the fingertip
   node's world position at the same recording time, and the circle's fitted
   radius matches the avatar fingertip's own circle within 1 cm.
-- [ ] **Untraced motion.** The figure-eight drawn with Ink off leaves no mark
+- [x] **Untraced motion.** The figure-eight drawn with Ink off leaves no mark
   and draws nothing, and nothing outside any trace span is ever drawn.
-- [ ] **No viewer control.** No card shows a Traces control, the portal store
+- [x] **No viewer control.** No card shows a Traces control, the portal store
   carries no traces state, and the styleguide has no Traces row.
-- [ ] **Older and other takes.** v0 headset takes (recorded spans, no trace
+- [x] **Older and other takes.** v0 headset takes (recorded spans, no trace
   marks), desktop takes and files without `HOLOIM_meaning` draw no traces and
   play unchanged. A v2 take loads in a viewer built from `main` before this
   change: the record is ignored and the event plays.
-- [ ] **Style.** The live and replayed traces use v0's ribbon (styleguide 1.1
+- [x] **Style.** The live and replayed traces use v0's ribbon (styleguide 1.1
   and 4): thin, tapering toward the oldest end, never gold, never hollow,
   never under 3 CSS px on a phone card. The Ink slot's glyph follows the
   glyph rules (section 6) and is added to the glyph table and `tokens.json`.
-- [ ] **Cost.** Measured in the card probe: p95 under 0.5 ms per frame while
+- [x] **Cost.** Measured in the card probe: p95 under 0.5 ms per frame while
   a card with traces plays, under 5 ms per pause or scrub (dev machine; CI
   records the costs without failing on them, as in v0).
 
@@ -291,7 +291,7 @@ itself and searches for no child.
 | Style | Cross-vendor screenshot review against the styleguide | Muse verdict (`output/authored-traces/verify/verdict.md`): the replayed ribbon is thin, solid cyan and tapering, legible on the phone card, never gold or hollow, and stronger than v0's inferred style (`authored-1/3/6*.png`); the live arc matches; the Ink glyph is line-drawn with round joins |
 | Cost | Card probe timings in the spec | `authoredViewer.cost`: frame p95 0.1 ms (max 0.2 ms) over 600 frames, pause 0.1 ms, one 0.9 ms warm-up |
 | Undo and Redo across holds and traces | `apps/capture/src/recording/PointSampleStore.test.ts`: nine failure modes of the one history, listed in the file; no scripted take interleaves a hold with a trace | 9 pass; caught the defect fixed below |
-| Whole pipeline | `pnpm run verify:pr` | Pending |
+| Whole pipeline | `pnpm run verify:pr` on the branch merged with `main` | 2026-11-10: doctor, checks, unit tests, builds, shard and knowledge checks pass; the pipeline smoke (28 passed, the five hand-traces tests among them), portal (10) and XR smoke (30) pass with the Poly Pizza fixture on port 3598, since another worktree's dev server held 3198 |
 | Proof video | Real-time recording: Ink on, circle, Ink off, figure-eight, then feed playback and orbit | `output/authored-traces/proof/authored-traces-proof.mp4`: 88 s, H.264 1280×720, watched via its contact sheet (Halo and Ink, live circle with "Tracing 0:03", untraced figure-eight, feed playback, orbit, phone card, viewer from `main`) |
 
 ## Physical-device limits
@@ -320,6 +320,12 @@ trials. Those are Unverified until run on a Quest and phones.
 - *Verifier's run.* Muse's sandbox cannot open ports, so the lead re-ran shard
   7 outside it with freshly recorded takes (`5 passed`,
   `output/authored-traces/verify/shard7-lead.txt`) and Muse judged that output.
+
+## Rollout
+
+After the merge, the two v0 test takes on the live feed ("Test take: hand
+traces (circle and figure-eight)" and "(real headset gestures)") are replaced
+by Ink-marked takes; the old ones are deleted only with the user's OK.
 
 ## Not covered by automation
 

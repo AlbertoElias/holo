@@ -17,8 +17,10 @@ Resize and move props on every device
 ([`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md))
 and the cloche's rim follows the ground
 ([`docs/features/archive/cloche-rim-follows-ground.md`](docs/features/archive/cloche-rim-follows-ground.md))
-are complete and on `main`, as is hand traces v0
-([`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md));
+are complete and on `main`, as are hand traces v0
+([`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md))
+and author-marked hand traces v1
+([`docs/features/archive/authored-traces.md`](docs/features/archive/authored-traces.md));
 their device checks are in each brief's "Physical-device limits". Pick the next
 queue item in [`TODOS.md`](TODOS.md).
 
