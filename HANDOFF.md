@@ -28,6 +28,33 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- Showcase holograms (branch `feature/showcase-holograms`, pushed, not
+  merged): four authored GLBs built by `apps/capture/scripts/showcase/`
+  (`showcase:build`, `showcase:upload`), described in
+  [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md).
+  Scripts and docs only, no app code; `verify:agent` passed 2026-11-09 and
+  all four were checked in the local viewer feed. Merge with the next
+  finished change. Uploaded to the live feed 2026-11-10 at the user's
+  go-ahead, by "Claude (agent-authored)": Blue hour
+  (`cmwa4461m0007oeirc3jzftaf`), Two sides of a door
+  (`cmwa443hq0005oeirkgp3b33k`), Murmuration (`cmwa4402a0003oeirbj759hxp`)
+  and Walk beside light (`cmwa43uab0001oeirkv0e9bzr`). All four render at
+  https://holoim-viewer.pages.dev; not yet seen in a headset or AR.
+  A second set of six was added on the same branch 2026-11-10 (`words`,
+  `seasons`, `hearts`, `rain`, `bath`, `strings`; see "Second set" in the
+  concept page), checked in the local viewer feed, and uploaded to the live
+  feed the same day at the user's go-ahead: Walk around the year
+  (`cmwamqigc000boeirzhd5khet`), The shape the rain leaves
+  (`cmwamqg2a0009oeir4p2qzv7j`), Who holds the strings
+  (`cmwamqcla0007oeirlm49ifko`), The sea in the bathtub
+  (`cmwamq8k60005oeirnjf01okb`), Three hearts (`cmwamq5wz0003oeirqqn8rwl7`)
+  and From where you stand (`cmwamq2r40001oeirjgjaaau1`). All six render at
+  https://holoim-viewer.pages.dev and the stored files match the local
+  builds byte for byte; their sound is unheard and none has been seen in a
+  headset or AR. None of the ten has a Quick Look preview (`usdzStatus`
+  is `none`; cause not looked into). The GLB writer now refuses
+  non-finite values, after a NaN vertex made one piece draw as nothing in
+  the viewer while its contact sheet looked right.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
