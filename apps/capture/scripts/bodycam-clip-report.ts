@@ -354,16 +354,27 @@ function describe(from: number, to: number, side: Side, target?: Segment['target
   const pinch = obs.flatMap((o) => (o.pinchM === null ? [] : [o.pinchM * 100]));
   const raw = jitter(obs.flatMap((o) => (o.ray ? [o.ray] : [])));
   const filtered = jitter(filteredRays(obs));
+  // Mean directions (x image right, y down, z away from the lens), to read the aim error against the picture by eye.
+  let aimRays: { meanIndexRay: Point3 | null; meanFingertipToTarget: Point3 | null } | null = null;
+  const meanDir = (rays: Point3[]): Point3 | null => {
+    if (!rays.length) return null;
+    const sum = rays.reduce((a, r) => add(a, r), { x: 0, y: 0, z: 0 });
+    const n = norm(sum);
+    return { x: round(n.x, 3), y: round(n.y, 3), z: round(n.z, 3) };
+  };
   let aim: { frames: number; medianErrorDeg: number | null; p95ErrorDeg: number | null; note: string } | null = null;
   const d = config.distances;
   if (target && d) {
     const targetPoint: Point3 = target === 'lens' ? { x: 0, y: 0, z: 0 } : { x: target === 'left-mark' ? d.leftMarkM : -d.rightMarkM, y: 0, z: 0 };
     const errors: number[] = [];
+    const used: Array<{ ray: Point3; toTarget: Point3 }> = [];
     for (const o of obs) {
       if (!o.ray || !o.tipPoseWorld || !o.nosePoseWorld || (o.score ?? 0) < 0.35) continue;
       const tip = add({ x: 0, y: 0, z: d.authorToLensM }, sub(o.tipPoseWorld, o.nosePoseWorld));
       errors.push(angleDeg(o.ray, sub(targetPoint, tip)));
+      used.push({ ray: o.ray, toTarget: norm(sub(targetPoint, tip)) });
     }
+    aimRays = { meanIndexRay: meanDir(used.map((u) => u.ray)), meanFingertipToTarget: meanDir(used.map((u) => u.toTarget)) };
     aim = { frames: errors.length, medianErrorDeg: roundOrNull(percentile(errors, 50)), p95ErrorDeg: roundOrNull(percentile(errors, 95)), note: 'index ray (proximal to tip, raw) against fingertip-to-target, frames scoring 0.35 or more' };
   }
   return {
@@ -374,7 +385,9 @@ function describe(from: number, to: number, side: Side, target?: Segment['target
     indexRayJitterRaw: raw,
     indexRayJitterFiltered: filtered,
     thumbToIndexCm: { frames: pinch.length, min: roundOrNull(percentile(pinch, 0)), median: roundOrNull(percentile(pinch, 50)), p10: roundOrNull(percentile(pinch, 10)) },
-    ...(aim ? { aim } : {})
+    meanIndexRayAll: meanDir(obs.flatMap((o) => (o.ray ? [o.ray] : []))),
+    ...(aim ? { aim } : {}),
+    ...(aimRays ? { aimRays } : {})
   };
 }
 
