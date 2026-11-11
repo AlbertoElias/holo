@@ -1,14 +1,14 @@
 # Feature brief: Positional audio in holograms
 
 **Lead:** Claude (Opus), session `feature/positional-audio`
-**Status:** Implementing (design reviewed and product decisions answered 2026-11-10)
+**Status:** Complete (2026-11-11, closed by the user); speaker listening and
+a physical headset unverified, see "Physical-device limits"
 **Layer:** Event (a sound has a place in the recorded event, like a voice or
 an object). Where the ear sits while watching is the view's reading of it.
 
-**Branch:** `feature/positional-audio`, stacked on
-`feature/showcase-holograms` (merged in at `258f58bcc2a1`; that branch is
-pushed and not on `main`, so this branch carries its showcase scripts and
-merges after it, or with it).
+**Branch:** `feature/positional-audio`, merged to `main` at `b180e6aefc40`
+on 2026-11-11 together with `feature/showcase-holograms`, which it was
+stacked on.
 
 ## User outcome
 
@@ -302,10 +302,25 @@ not committed.
 
 ## Physical-device limits
 
-Nobody has listened. Every claim here is a measured gain, not a heard one:
-whether the placement is convincing, how HRTF sounds on laptop and phone
-speakers, the `rain` balance (the layers sum to the old mix, but the point
+On 2026-11-11 the user listened to the live `rain` card in the feed and
+reported "I could tell the difference", on headphones. Every other claim
+here is a measured gain, not a heard one: whether each placement is
+convincing, how HRTF sounds on laptop and phone speakers, the `rain` balance (the layers sum to the old mix, but the point
 sources now fall off with distance) and the voice's 2 m reference distance
 are unverified by ear. The XR
 evidence is IWER emulation; a physical Quest (its browser's HRTF, its
 speakers) is unverified.
+
+The user closed the brief on 2026-11-11 with two checks still open:
+listening on speakers (headphones were heard), and the XR viewer on a
+Quest.
+
+The retrofitted `rain` piece is on the live feed, uploaded 2026-11-11 at the
+user's go-ahead as a new card, `cmwc1glil0001oeiqy1n2s45h`. It is built on
+`main` (`f64690f4c033`), 9,219,760 bytes, with one global emitter (the rain)
+and three positional ones (umbrella, splash, lamp), and the stored file is
+byte-identical to that build. In the live viewer it renders with no page
+errors and builds three HRTF panners (`refDistance` 1.5). Its four 12 s
+sources start, and the panners move under a quarter-turn drag and come
+closer under zoom. The earlier single-mix card, `cmwamqg2a0009oeir4p2qzv7j`,
+is still on the feed. Listening and a headset are unverified there too.

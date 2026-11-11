@@ -15,7 +15,7 @@ import { rankClipsForPlayback } from "../hologram/hologramScene";
 const SECONDARY_CLIP_WEIGHT = 0.35;
 /** Audio further than this from the clip clock is restarted from it (its clock ran slow or fast; well under lip-sync's ~45 ms). */
 const AUDIO_DRIFT_RESYNC_S = 0.03;
-/** In the headset sounds are placed by HRTF: near-ear speakers and headphones carry it (docs/features/positional-audio.md). */
+/** In the headset sounds are placed by HRTF: near-ear speakers and headphones carry it (docs/features/archive/positional-audio.md). */
 export const XR_PANNING_MODEL: PanningModelType = "HRTF";
 
 export interface HologramRuntime {

@@ -13,7 +13,7 @@ import type { EarPose } from "./gltfAudio";
 
 export type PortalEarPlacement = "camera" | "rides-zoom" | "middle";
 
-/** The flat-screen ear (product decision, docs/features/positional-audio.md). */
+/** The flat-screen ear (product decision, docs/features/archive/positional-audio.md). */
 export const PORTAL_EAR: PortalEarPlacement = "rides-zoom";
 
 /** How far from the view's middle the ear stands at Follow. */

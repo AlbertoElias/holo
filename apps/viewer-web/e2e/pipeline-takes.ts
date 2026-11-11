@@ -44,7 +44,7 @@ export type GltfJson = {
 type KhrAudio = { emitters?: Array<{ type?: string; positional?: { refDistance?: number } }> };
 
 /**
- * Where the take's voice is heard from (docs/features/positional-audio.md):
+ * Where the take's voice is heard from (docs/features/archive/positional-audio.md):
  * the node index carrying a positional emitter, or "global" when the scene
  * lists it.
  */
@@ -148,7 +148,7 @@ async function recordWalk(browser: Browser, testInfo: TestInfo): Promise<WalkTak
   const bytes = await readFile(WALK_TAKE_PATH);
   const gltf = readGlbJson(bytes);
   expect(gltf.extensions?.KHR_audio, "real recording embeds audio").toBeDefined();
-  // The author's voice is placed on the avatar's head (docs/features/positional-audio.md).
+  // The author's voice is placed on the avatar's head (docs/features/archive/positional-audio.md).
   const head = (gltf.extensions?.HOLOIM_humanoid as { humanBones?: { head?: { node: number } } } | undefined)?.humanBones?.head?.node;
   const voice = voicePlacement(gltf);
   expect(head, "the take names its head bone").toBeDefined();

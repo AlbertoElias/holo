@@ -8,7 +8,7 @@ import { assertViewerShell, captureEvidence, expect, reachFor, test } from "./bo
 import { cardCenter, installProbe, readPortal, scrollFeedToTop, waitForPortalReady } from "./portal-helpers";
 import { BELL_POSITION, SPATIAL_CLIP_S, spatialAudioGlb, TONE_S } from "./spatial-audio-fixture";
 
-// Positional audio in the feed portal (docs/features/positional-audio.md).
+// Positional audio in the feed portal (docs/features/archive/positional-audio.md).
 // Nobody listens here: each placed sound is measured. Analysers sit on its
 // emitter before the panner and on each ear after it, so a reading is the
 // panner's gain per ear (post RMS over pre RMS, the same whatever the clip
