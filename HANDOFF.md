@@ -5,13 +5,17 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-10-29
-**Baseline:** `main` after the IWSDK runtime refactor merge (`971b076065e2`) — check `git log --oneline -10` before trusting it.
-**Working tree when updated:** clean on `main`. The shared checkout's
-uncommitted Oct 18 device-session edits are superseded by that merge
-(ported as B-015/B-016 and the shoulder IK) and can be discarded there.
+**Updated:** 2026-11-11
+**Baseline:** `main` after the undo and redo merge (`8a7b7a097905`) — check `git log --oneline -10` before trusting it.
+**Working tree when updated:** clean on `main`. Merged branches and their
+worktrees were cleaned up on 2026-11-11; the stale unmerged branches from
+October are still there, pending a review of what they hold.
 
 ## Next action
+
+Hosted CI on `main` has failed on the last three pushes, each time on a
+different browser test, so the three deploys after `2fba1e6` were skipped
+(B-047). Fix that first: production is behind `main` until a push passes.
 
 Resize and move props on every device
 ([`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md))
@@ -26,7 +30,7 @@ the B-039 port fix, tray removal and author-marked hand traces v1
 their device checks are in each brief's "Physical-device limits". Pick the next
 queue item in [`TODOS.md`](TODOS.md).
 
-## Ready to merge (grouped)
+## Recently merged (grouped)
 
 - Undo and redo for every authoring action (brief
   [`docs/features/archive/undo-redo.md`](docs/features/archive/undo-redo.md)),
