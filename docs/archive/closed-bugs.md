@@ -1018,4 +1018,7 @@ bug above.)
      measures a stride only from a foot within a stride of its slot, and steps the foot furthest behind first.
      The prop now touches the avatar for 3–8 steps instead of about 150, and it sleeps.
   Evidence: `test:xr:avatars` passes on all 17 fixtures (762 s, 2026-11-10).
+  Residual, left on purpose: while the rig walks backwards at 3 m/s, about twice a room-scale walk, the feet still
+  trail the body. Each catch-up swing is capped at 3 m/s on average. Thumbstick walking uses the clip-driven legs and
+  is unaffected.
 
