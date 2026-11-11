@@ -304,17 +304,16 @@ not committed.
 ## Physical-device limits
 
 On 2026-11-11 the user listened to the live `rain` card in the feed and
-reported "I could tell the difference". The setup (headphones or speakers,
-which device) is not recorded. Every other claim here is a measured gain,
-not a heard one: whether each placement is convincing, how HRTF sounds on
-whichever of headphones and speakers was not used, the `rain` balance (the layers sum to the old mix, but the point
+reported "I could tell the difference", on headphones. Every other claim
+here is a measured gain, not a heard one: whether each placement is
+convincing, how HRTF sounds on laptop and phone speakers, the `rain` balance (the layers sum to the old mix, but the point
 sources now fall off with distance) and the voice's 2 m reference distance
 are unverified by ear. The XR
 evidence is IWER emulation; a physical Quest (its browser's HRTF, its
 speakers) is unverified.
 
-The brief stays open on these two checks: someone listens on headphones and
-on speakers, and tries the XR viewer on a Quest. Then it closes per step 6
+The brief stays open on two checks: someone listens on speakers (headphones
+were heard 2026-11-11), and tries the XR viewer on a Quest. Then it closes per step 6
 of [`../FEATURE_WORKFLOW.md`](../FEATURE_WORKFLOW.md).
 
 The retrofitted `rain` piece is on the live feed, uploaded 2026-11-11 at the
