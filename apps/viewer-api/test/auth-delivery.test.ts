@@ -12,6 +12,8 @@ const ENV_KEYS = [
   "DATABASE_URL",
   "AUTH_DEV_EXPOSE_MAGIC_LINK",
   "AUTH_EMAIL_FROM",
+  "RESEND_API_KEY",
+  "RESEND_API_ORIGIN",
   "CLOUDFLARE_EMAIL_ACCOUNT_ID",
   "CLOUDFLARE_EMAIL_API_TOKEN",
   "CLOUDFLARE_EMAIL_API_ORIGIN"
@@ -85,6 +87,29 @@ describe("sign-in email delivery", () => {
 
   const requestLink = (app: FastifyInstance) =>
     app.inject({ method: "POST", url: "/api/auth/magic-link", payload: { email: "Ada@Example.com", displayName: "Ada" } });
+
+  it("sends through Resend when its key is set, with the sender as a display-name address", async () => {
+    const mail = await startMailServer(200);
+    const { app, prisma } = await boot({ RESEND_API_KEY: "re_test", RESEND_API_ORIGIN: mail.origin, AUTH_EMAIL_FROM: "login@holoim.example" });
+    const response = await requestLink(app);
+    expect(response.statusCode).toBe(202);
+    expect(mail.received).toHaveLength(1);
+    const sent = mail.received[0]!;
+    expect(sent.url).toBe("/emails");
+    expect(sent.authorization).toBe("Bearer re_test");
+    expect(sent.body.from).toBe("HoloIM <login@holoim.example>");
+    expect(sent.body.to).toEqual(["ada@example.com"]);
+    expect(String(sent.body.text)).toMatch(/\/auth\/verify\?token=/);
+    expect(await prisma.magicLinkToken.count()).toBe(1);
+  });
+
+  it("answers 503 and drops the token when Resend refuses (for example an unverified domain)", async () => {
+    const mail = await startMailServer(403);
+    const { app, prisma } = await boot({ RESEND_API_KEY: "re_test", RESEND_API_ORIGIN: mail.origin, AUTH_EMAIL_FROM: "login@holoim.example" });
+    const response = await requestLink(app);
+    expect(response.statusCode).toBe(503);
+    expect(await prisma.magicLinkToken.count()).toBe(0);
+  });
 
   it("answers 503 and stores no token when no mailer is configured and dev exposure is off", async () => {
     const { app, prisma } = await boot({});

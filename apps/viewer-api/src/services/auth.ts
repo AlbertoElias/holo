@@ -36,32 +36,55 @@ export class MagicLinkDeliveryError extends Error {}
  * on (local development and tests); otherwise delivery fails loudly rather
  * than telling the person to check an inbox nothing was sent to.
  */
+type MailRequest = { endpoint: string; headers: Record<string, string>; body: unknown };
+
+/**
+ * The provider that is configured: Resend (free tier) when RESEND_API_KEY is set, else Cloudflare Email
+ * Service. Both need AUTH_EMAIL_FROM, an address on a domain verified with that provider.
+ */
+function mailRequest(email: string, subject: string, text: string, html: string): MailRequest | null {
+  const from = env.AUTH_EMAIL_FROM;
+  if (!from) return null;
+  if (env.RESEND_API_KEY) {
+    return {
+      endpoint: `${env.RESEND_API_ORIGIN}/emails`,
+      headers: { authorization: `Bearer ${env.RESEND_API_KEY}` },
+      body: { from: `HoloIM <${from}>`, to: [email], subject, text, html }
+    };
+  }
+  const { CLOUDFLARE_EMAIL_ACCOUNT_ID: accountId, CLOUDFLARE_EMAIL_API_TOKEN: apiToken } = env;
+  if (accountId && apiToken) {
+    return {
+      endpoint: `${env.CLOUDFLARE_EMAIL_API_ORIGIN}/accounts/${encodeURIComponent(accountId)}/email/sending/send`,
+      headers: { authorization: `Bearer ${apiToken}` },
+      body: { to: email, from: { address: from, name: "HoloIM" }, subject, text, html }
+    };
+  }
+  return null;
+}
+
 export async function deliverMagicLink(email: string, url: string): Promise<void> {
-  const { CLOUDFLARE_EMAIL_ACCOUNT_ID: accountId, CLOUDFLARE_EMAIL_API_TOKEN: apiToken, AUTH_EMAIL_FROM: from } = env;
-  if (accountId && apiToken && from) {
-    const minutes = Math.round(env.AUTH_MAGIC_LINK_TTL_MS / 60_000);
+  const minutes = Math.round(env.AUTH_MAGIC_LINK_TTL_MS / 60_000);
+  const request = mailRequest(
+    email,
+    "Your HoloIM sign-in link",
+    `Open this link to sign in to HoloIM. It works once and expires in ${minutes} minutes.\n\n${url}\n\nIf you did not ask for it, ignore this email.`,
+    `<p>Open this link to sign in to HoloIM. It works once and expires in ${minutes} minutes.</p><p><a href="${url}">Sign in to HoloIM</a></p><p>If you did not ask for it, ignore this email.</p>`
+  );
+  if (request) {
     let response: Response;
     try {
-      response = await fetch(
-        `${env.CLOUDFLARE_EMAIL_API_ORIGIN}/accounts/${encodeURIComponent(accountId)}/email/sending/send`,
-        {
-          method: "POST",
-          headers: { authorization: `Bearer ${apiToken}`, "content-type": "application/json" },
-          body: JSON.stringify({
-            to: email,
-            from: { address: from, name: "HoloIM" },
-            subject: "Your HoloIM sign-in link",
-            text: `Open this link to sign in to HoloIM. It works once and expires in ${minutes} minutes.\n\n${url}\n\nIf you did not ask for it, ignore this email.`,
-            html: `<p>Open this link to sign in to HoloIM. It works once and expires in ${minutes} minutes.</p><p><a href="${url}">Sign in to HoloIM</a></p><p>If you did not ask for it, ignore this email.</p>`
-          }),
-          signal: AbortSignal.timeout(10_000)
-        }
-      );
+      response = await fetch(request.endpoint, {
+        method: "POST",
+        headers: { ...request.headers, "content-type": "application/json" },
+        body: JSON.stringify(request.body),
+        signal: AbortSignal.timeout(10_000)
+      });
     } catch (error) {
       throw new MagicLinkDeliveryError(`Email service unreachable: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (!response.ok) {
-      // The body names the cause (unverified domain, bad token); it never holds the link.
+      // The body names the cause (unverified domain, bad key); it never holds the link.
       throw new MagicLinkDeliveryError(`Email service answered ${response.status}: ${(await response.text()).slice(0, 300)}`);
     }
     return;
@@ -70,7 +93,7 @@ export async function deliverMagicLink(email: string, url: string): Promise<void
     console.info(`[auth] Magic link for ${email}: ${url}`);
     return;
   }
-  throw new MagicLinkDeliveryError("No email provider is configured (CLOUDFLARE_EMAIL_ACCOUNT_ID, CLOUDFLARE_EMAIL_API_TOKEN, AUTH_EMAIL_FROM).");
+  throw new MagicLinkDeliveryError("No email provider is configured (RESEND_API_KEY, or the CLOUDFLARE_EMAIL_* variables, with AUTH_EMAIL_FROM).");
 }
 
 export async function requestMagicLink(input: {

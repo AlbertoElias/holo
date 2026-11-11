@@ -31,8 +31,8 @@ queue item in [`TODOS.md`](TODOS.md).
 - Creator sign-in sends its email and gates uploads (B-044, branch
   `bug/creator-sign-in`, pushed, not merged). Merging makes the live app refuse
   anonymous uploads and sign-in answer 503 until the operator completes
-  "Sign-in email" in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (onboard the
-  sending domain, token, three Fly secrets), so merge it after that step.
+  "Sign-in email" in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (verify the
+  domain in Resend, API key, two Fly secrets), so merge it after that step.
   Local checks: `verify:agent`, the new `sign-in-email` e2e at desktop and phone
   width, and the full viewer-web e2e; the one remaining failure group (AR
   placement and the XR viewer's IWER planes) also fails on clean `origin/main`.

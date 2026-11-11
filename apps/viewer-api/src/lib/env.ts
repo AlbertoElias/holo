@@ -51,6 +51,8 @@ const envSchema = z.object({
   // Sign-in email: Cloudflare Email Service (REST). Off unless the account,
   // token and a from-address on an onboarded sending domain are all set.
   AUTH_EMAIL_FROM: optionalSecret,
+  RESEND_API_KEY: optionalSecret,
+  RESEND_API_ORIGIN: z.string().url().default("https://api.resend.com"),
   CLOUDFLARE_EMAIL_ACCOUNT_ID: optionalSecret,
   CLOUDFLARE_EMAIL_API_TOKEN: optionalSecret,
   CLOUDFLARE_EMAIL_API_ORIGIN: z.string().url().default("https://api.cloudflare.com/client/v4"),
@@ -96,6 +98,8 @@ const parsed = envSchema.parse({
   AUTH_SESSION_TTL_MS: process.env.AUTH_SESSION_TTL_MS,
   AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK,
   AUTH_EMAIL_FROM: process.env.AUTH_EMAIL_FROM,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  RESEND_API_ORIGIN: process.env.RESEND_API_ORIGIN,
   CLOUDFLARE_EMAIL_ACCOUNT_ID: process.env.CLOUDFLARE_EMAIL_ACCOUNT_ID,
   CLOUDFLARE_EMAIL_API_TOKEN: process.env.CLOUDFLARE_EMAIL_API_TOKEN,
   CLOUDFLARE_EMAIL_API_ORIGIN: process.env.CLOUDFLARE_EMAIL_API_ORIGIN,

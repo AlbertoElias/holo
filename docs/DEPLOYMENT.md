@@ -138,26 +138,34 @@ clients are told apart by Fly's `Fly-Client-IP`, trusted only when
 ### Sign-in email
 
 Creator sign-in (and so every upload) needs the API to send a magic-link
-email. It uses Cloudflare Email Service over REST. One-time operator steps:
+email. It uses Resend's REST API (free tier: 3,000 emails a month, 100 a
+day, which is ample for a few people). One-time operator steps:
 
-1. Onboard a sending domain: Cloudflare dashboard → Email Service → Email
-   Sending → onboard `holostud.io` (adds SPF and DKIM records), or
-   `wrangler email sending enable holostud.io`. Wait for the records to verify.
-2. Create an API token that can send email (Email Sending: Edit on the account).
+1. Create a Resend account and add the sending domain: Resend dashboard →
+   Domains → Add Domain → `holostud.io`. Resend lists the DNS records (SPF,
+   DKIM); add them in the Cloudflare DNS for the zone (as DNS only, not
+   proxied) and wait for the domain to show Verified.
+2. Create an API key: Resend dashboard → API Keys → Create API Key →
+   "Sending access", for that domain.
 3. Set the secrets:
 
 ```sh
 fly secrets set -a holoim-api \
-  CLOUDFLARE_EMAIL_ACCOUNT_ID="<account id>" \
-  CLOUDFLARE_EMAIL_API_TOKEN="<token>" \
+  RESEND_API_KEY="<re_... key>" \
   AUTH_EMAIL_FROM="signin@holostud.io"
 ```
 
-Without all three, `POST /api/auth/magic-link` answers 503 ("We couldn't
-send the sign-in email") and stores no link; it never claims an email went
-out. `AUTH_DEV_EXPOSE_MAGIC_LINK=true` (local development and tests only)
-returns the link in the response instead. Never set it in production: it
-would let anyone sign in as any email address.
+Without a key (or the Cloudflare variables below) and `AUTH_EMAIL_FROM`,
+`POST /api/auth/magic-link` answers 503 ("We couldn't send the sign-in
+email") and stores no link; it never claims an email went out.
+`AUTH_DEV_EXPOSE_MAGIC_LINK=true` (local development and tests only) returns
+the link in the response instead. Never set it in production: it would let
+anyone sign in as any email address.
+
+Alternative provider: Cloudflare Email Service (needs Workers Paid) is used
+when `RESEND_API_KEY` is unset and `CLOUDFLARE_EMAIL_ACCOUNT_ID`,
+`CLOUDFLARE_EMAIL_API_TOKEN` (Email Sending: Edit) and `AUTH_EMAIL_FROM` are
+all set. Resend wins when both are configured.
 
 ## 3. Media on R2 (Phase 2)
 
