@@ -9,6 +9,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 import { createXrContext, launchXrBrowser, waitForPageFunctions, waitForTextContentPrefix, wireXrConsoleErrors } from '@holoim/tooling-testing/xr-env';
 
 import type {} from '../src/runtime/automationHooks';
+import { headYawFromPose } from '../src/bodycam/convert';
 import type { BodycamLogEntry } from '../src/runtime/automationHooks';
 import { assignHandSides } from '../src/bodycam/convert';
 import type { HandLandmarks, Point3, Quat4 } from '../src/bodycam/types';
@@ -634,6 +635,30 @@ const headStat = (pick: (e: { yaw: number; pitch: number; roll: number }) => num
   const values = headFrames.map(pick);
   return { p5: roundOrNull(percentile(values, 5), 1), median: roundOrNull(percentile(values, 50), 1), p95: roundOrNull(percentile(values, 95), 1) };
 };
+// Where the face model loses the face, the avatar takes the head's yaw from the pose's nose and ears instead.
+const poseHeadFrames = entries.flatMap((e) => (!e.frame.head && e.frame.pose ? [{ clipSec: e.clipSec, head: headYawFromPose(e.frame.pose.image) }] : []));
+const poseHeadFallback = {
+  note: 'Frames with no face but a pose: the head yaw then comes from the nose offset from the ear midpoint (convert.ts headYawFromPose), pitch level.',
+  frames: poseHeadFrames.length,
+  framesWithYaw: poseHeadFrames.filter((f) => f.head).length,
+  yawDeg: ((values: number[]) => ({ min: roundOrNull(Math.min(...values), 1), median: roundOrNull(percentile(values, 50), 1), max: roundOrNull(Math.max(...values), 1) }))(poseHeadFrames.flatMap((f) => (f.head ? [eulerYxz(f.head).yaw] : [])))
+};
+// Head angles per segment: what the author's head did, not a lens-facing reference (the author often looks down at the
+// screen or hands). Face frames only, plus the share of the segment the pose fallback covered.
+const headBySegment = (config.segments ?? []).map((s) => {
+  const inSeg = entries.filter((e) => e.clipSec >= s.startSec && e.clipSec < s.endSec);
+  const face = inSeg.flatMap((e) => (e.frame.head ? [eulerYxz(e.frame.head)] : []));
+  const median = (pick: (e: { yaw: number; pitch: number; roll: number }) => number) => roundOrNull(percentile(face.map(pick), 50), 1);
+  return {
+    label: s.label,
+    frames: inSeg.length,
+    faceFrames: face.length,
+    poseFallbackFrames: inSeg.filter((e) => !e.frame.head && e.frame.pose && headYawFromPose(e.frame.pose.image)).length,
+    yawMedianDeg: median((h) => h.yaw),
+    pitchMedianDeg: median((h) => h.pitch),
+    poseFallbackYawMedianDeg: roundOrNull(percentile(inSeg.flatMap((e) => { const h = !e.frame.head && e.frame.pose ? headYawFromPose(e.frame.pose.image) : null; return h ? [eulerYxz(h).yaw] : []; }), 50), 1)
+  };
+});
 
 const intervals: number[] = [];
 for (let i = 1; i < entries.length; i += 1) intervals.push(entries[i]!.nowMs - entries[i - 1]!.nowMs);
@@ -698,7 +723,9 @@ const report = {
     note: 'Rotation of the converted head quaternion (x image right, y down, z away; identity facing the camera), YXZ degrees. Yaw is about +y (down), so a turn to the author\'s left reads negative; pitch about +x.',
     yawDeg: headStat((h) => h.yaw),
     pitchDeg: headStat((h) => h.pitch),
-    rollDeg: headStat((h) => h.roll)
+    rollDeg: headStat((h) => h.roll),
+    poseFallback: poseHeadFallback,
+    bySegment: headBySegment
   },
   wholeClip: whole,
   segments,
@@ -714,6 +741,8 @@ await writeFile(
   )
 );
 console.log(`[bodycam-report] ${mode}: ${entries.length} frames (${report.run.sampledVersusClipFrames}) on ${report.run.poseHandDelegate}/${renderer}; pose ${report.detection.poseDetected}/${report.detection.poseRuns}, hands none/one/two ${handCountHistogram.join('/')}, head ${report.detection.framesWithHeadRotation}`);
+console.log(`[bodycam-report] head: face ${report.detection.framesWithHeadRotation} frames; pose fallback ${poseHeadFallback.framesWithYaw}/${poseHeadFallback.frames} frames, yaw ${poseHeadFallback.yawDeg.min}..${poseHeadFallback.yawDeg.max} (median ${poseHeadFallback.yawDeg.median})`);
+for (const h of headBySegment) console.log(`  ${h.label.padEnd(44)} face ${h.faceFrames}/${h.frames} fallback ${h.poseFallbackFrames}  yaw ${h.yawMedianDeg} pitch ${h.pitchMedianDeg}${h.poseFallbackFrames ? ` (fallback yaw ${h.poseFallbackYawMedianDeg})` : ''}`);
 
 // ── Artifacts ───────────────────────────────────────────────────────────────
 if (sheetCount > 0) {
