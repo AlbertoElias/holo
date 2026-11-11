@@ -30,7 +30,7 @@ queue item in [`TODOS.md`](TODOS.md).
 
 - Undo and redo for every authoring action (brief
   [`docs/features/archive/undo-redo.md`](docs/features/archive/undo-redo.md)),
-  branch `feature/undo-redo`, pushed 2026-11-11, not merged. `verify:pr`
+  branch `feature/undo-redo`, merged to `main` 2026-11-11. `verify:pr`
   passed except `bubble-capture` (B-043, fails on `main` too); the brief's
   test plan lists the evidence and the device checks still open.
 - A scanned place around a take: slice 1 (brief
