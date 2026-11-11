@@ -6,9 +6,11 @@ PRD; this page only orders them. A Draft is not approval to build (see
 one user outcome, the test from [what a hologram is](../concepts/what-a-hologram-is.md),
 a fair comparison, and continue, revise, or park criteria written before any trial.
 
-Ideas without a PRD are either parked by the lens (IDEA-005, 006, 007, 009,
-011, 013, 015, 026, 027, 029, 030, 040) or already covered by a feature brief: IDEA-050 and IDEA-054 by [live deployment](../../features/live-deployment.md),
-IDEA-068 by the [knowledge atlas](../../features/archive/knowledge-atlas.md).
+The ideas the lens parked on 2026-10-18 (IDEA-005, 006, 007, 009, 011, 013, 015,
+026, 027, 029, 030, 040) have Parked PRDs that say what would reopen them.
+IDEA-050 and IDEA-054 have Draft PRDs for the part the [live deployment](../../features/live-deployment.md)
+brief left out. IDEA-068 is delivered by the [knowledge atlas](../../features/archive/knowledge-atlas.md)
+and needs no PRD.
 
 ## Decided
 
@@ -89,6 +91,8 @@ Supporting work. Approve each with the workflow it unblocks; PRD-038 and PRD-039
 | [PRD-040: Know about failures before creators report them](PRD-040-observability.md) | IDEA-056 | Draft |
 | [PRD-038: Report and hide](PRD-038-report-and-hide.md) | IDEA-053 | Draft |
 | [PRD-037: Creator identity and ownership](PRD-037-creator-identity.md) | IDEA-052 | Delivered |
+| [PRD-064: Durable jobs for every derived artifact](PRD-064-artifact-jobs.md) | IDEA-050 | Draft |
+| [PRD-065: Private media access](PRD-065-private-media-access.md) | IDEA-054 | Draft |
 
 ## Conversation and async structure
 
@@ -122,3 +126,22 @@ Each tests one market direction with one bounded outcome; none chooses a market.
 | [PRD-048: Team training and review, one team's trial](PRD-048-team-review-trial.md) | IDEA-065 | Draft |
 | [PRD-049: Commerce, one product explanation trial](PRD-049-commerce-explanation-trial.md) | IDEA-066 | Draft |
 | [PRD-050: API platform, one integrator trial](PRD-050-integration-api-trial.md) | IDEA-067 | Draft |
+
+## Parked by the lens
+
+Parked 2026-10-18 in [what a hologram is](../concepts/what-a-hologram-is.md). Each says what would reopen it, usually evidence from a Draft above.
+
+| PRD | Source | Status |
+| --- | --- | --- |
+| [PRD-052: Claim capsules](PRD-052-claim-capsules.md) | IDEA-005 | Parked |
+| [PRD-053: Understanding Mirror](PRD-053-understanding-mirror.md) | IDEA-006 | Parked |
+| [PRD-054: Grounding signals at a moment](PRD-054-grounding-signals.md) | IDEA-007 | Parked |
+| [PRD-055: Counterfactual theater](PRD-055-counterfactual-theater.md) | IDEA-009 | Parked |
+| [PRD-056: Co-presence portal](PRD-056-co-presence-portal.md) | IDEA-011 | Parked |
+| [PRD-057: Shared attention cone in live sessions](PRD-057-shared-attention-cone.md) | IDEA-013 | Parked |
+| [PRD-058: Notes left on real places](PRD-058-reality-anchored-notes.md) | IDEA-015 | Parked |
+| [PRD-059: Spatial inbox and collections](PRD-059-spatial-inbox.md) | IDEA-026 | Parked |
+| [PRD-066: Decision stamps and task tokens](PRD-066-decision-stamps.md) | IDEA-027 | Parked |
+| [PRD-061: Conversational memory palace](PRD-061-memory-palace.md) | IDEA-029 | Parked |
+| [PRD-062: Audience simulation](PRD-062-audience-simulation.md) | IDEA-030 | Parked |
+| [PRD-063: Follow-along check](PRD-063-follow-along-check.md) | IDEA-040 | Parked |
