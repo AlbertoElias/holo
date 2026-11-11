@@ -393,6 +393,10 @@ class Converter:
                 meshes.add(node.mesh)
             stack.extend(node.children or [])
         varying, palette = [], []
+        # This runs before mesh() counts vertices, so it enforces the same
+        # scene limit itself, from accessor counts before reading any data,
+        # and caps triangle cells at what the largest atlas could hold.
+        vertices, cells = 0, 0
         for mesh_index in sorted(meshes):
             for primitive_index, primitive in enumerate(self.gltf.meshes[mesh_index].primitives):
                 attrs = primitive.attributes
@@ -400,8 +404,11 @@ class Converter:
                     continue
                 if any((target if isinstance(target, dict) else target.__dict__).get("COLOR_0") is not None for target in primitive.targets or []):
                     print(f"Quick Look ignores mesh {mesh_index} primitive {primitive_index}'s morph target colours", file=sys.stderr)
-                colors = np.clip(_accessor_data(self.gltf, attrs.COLOR_0).astype(np.float64), 0, 1)
                 count = self.gltf.accessors[attrs.POSITION].count
+                vertices += count
+                if vertices > MAX_VERTICES:
+                    raise ValueError("Scene exceeds vertex limit")
+                colors = np.clip(_accessor_data(self.gltf, attrs.COLOR_0).astype(np.float64), 0, 1)
                 if colors.ndim != 2 or colors.shape[1] not in (3, 4) or len(colors) != count:
                     raise ValueError("COLOR_0 does not match the primitive's vertices")
                 if colors.shape[1] == 3:
@@ -428,6 +435,9 @@ class Converter:
                     tint = _linear(_srgb8(colors.mean(axis=0)))
                     self.colors[key] = {"kind": "tint" if uniform else "approximated", "tint": tuple(float(v) for v in tint)}
                     continue
+                cells += (self.gltf.accessors[primitive.indices].count if primitive.indices is not None else count) // 3
+                if cells > (MAX_ATLAS_SIDE // 2) ** 2:
+                    raise ValueError("Vertex colours exceed atlas budget")
                 indices = _accessor_data(self.gltf, primitive.indices).astype(np.int64).reshape(-1) if primitive.indices is not None else np.arange(count)
                 if len(indices) % 3 or np.any(indices < 0) or np.any(indices >= count):
                     raise ValueError("Invalid triangle indices")
