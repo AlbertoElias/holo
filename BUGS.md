@@ -75,7 +75,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/place-capture.pipeline.spec.ts`.
   Suspect: the floor band of a scan whose floor is sparse around a table, or the end pose landing mid-step.
 
-### B-045 — The face XR check finds no IWER gaze device
+### B-046 — The face XR check finds no IWER gaze device
 
 - **Area:** `apps/capture` XR checks (`test:xr:smoke` → `test:xr` face, part of `verify:pr`)
 - **Severity:** P2 (fails `verify:pr` locally)
