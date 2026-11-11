@@ -28,8 +28,10 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Showcase holograms (merged to `main` 2026-11-10 together with positional
-  audio, after `verify:pr` on the combined tree): four authored GLBs built by `apps/capture/scripts/showcase/`
+- Showcase holograms (merged to `main` 2026-11-11 together with positional
+  audio; every `verify:pr` step passed on the combined tree, the viewer XR
+  suite on a re-run after its AR placement test timed out once while another
+  agent's tests loaded the machine): four authored GLBs built by `apps/capture/scripts/showcase/`
   (`showcase:build`, `showcase:upload`), described in
   [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md).
   Scripts and docs only, no app code; `verify:agent` passed 2026-11-09 and
@@ -70,7 +72,7 @@ queue item in [`TODOS.md`](TODOS.md).
   change to how the feed frames a card would break them; their sound is
   unheard and none has been seen in a headset or AR. `verify:agent` passed
   on the branch 2026-11-10.
-- Positional audio (merged to `main` 2026-11-10 together with the showcase
+- Positional audio (merged to `main` 2026-11-11 together with the showcase
   holograms; brief [`docs/features/positional-audio.md`](docs/features/positional-audio.md),
   still open). Several placed sounds per hologram in the
   feed and the XR viewer, HRTF on both; new avatar takes place the voice on
