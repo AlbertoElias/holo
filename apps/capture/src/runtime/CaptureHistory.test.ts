@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CaptureHistory, MAX_HISTORY_ENTRIES, type HistoryEntry } from "./CaptureHistory";
 
 /**
- * Regressions the independent verifier reproduced (docs/features/undo-redo.md);
+ * Regressions the independent verifier reproduced (docs/features/archive/undo-redo.md);
  * the e2e phases cover the rest of the history through the real Halo.
  *
  * 1. A redone entry jumped to the top: an open trace undone first (W prefers

@@ -89,7 +89,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   ui.setXrEntry(xrEntry.offers);
   xrEntry.onChange(() => ui.setXrEntry(xrEntry.offers));
   const touchStick = new TouchStickView(container);
-  // Capture's one undo history (docs/features/undo-redo.md): marks and traces join it here, objects and the tray in CaptureObjects.
+  // Capture's one undo history (docs/features/archive/undo-redo.md): marks and traces join it here, objects and the tray in CaptureObjects.
   const history = new CaptureHistory();
   const pointEntries = new WeakMap<PointHistoryEntry, HistoryEntry>();
   // The Halo's actions (slice 5), one runner for every input that summons it.

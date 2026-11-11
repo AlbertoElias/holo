@@ -16,7 +16,7 @@
 ## Undo
 
 <Capture authoring actions this feature adds, and how each joins the
-capture history (`docs/features/undo-redo.md`): its kind (event: undone
+capture history (`docs/features/archive/undo-redo.md`): its kind (event: undone
 forward in time; meaning: undone out of the take; tray), its status word,
 and what undo and redo do. Or "None": why the feature adds no authoring
 action.>

@@ -32,7 +32,7 @@ export interface CaptureObjectsDeps {
   isTakeActive: () => boolean;
   /** The dominant hand: in a headset the other hand holds the tray up and this one summons. */
   getHandedness: () => Handedness;
-  /** Capture's undo history (docs/features/undo-redo.md): every summon, put-back, place, resize and tray change joins it. */
+  /** Capture's undo history (docs/features/archive/undo-redo.md): every summon, put-back, place, resize and tray change joins it. */
   history?: CaptureHistory;
 }
 
@@ -271,7 +271,7 @@ export class CaptureObjects {
   }
 
   /**
-   * An object that left comes back now (docs/features/undo-redo.md): the same
+   * An object that left comes back now (docs/features/archive/undo-redo.md): the same
    * object, so a take's track for it resumes after a gap, at `pose`, at rest,
    * at the size it had.
    */

@@ -126,7 +126,7 @@ function expectActions(holds: HoldsSnapshot, expected: Array<{ input: string; ac
   if (actual.join(',') !== wanted.join(',')) failures.push(`Halo actions ${actual.join(', ') || '(none)'}, expected ${wanted.join(', ')}`);
 }
 
-/** Each committed W/E also went through the one CaptureHistory as a meaning entry (docs/features/undo-redo.md). */
+/** Each committed W/E also went through the one CaptureHistory as a meaning entry (docs/features/archive/undo-redo.md). */
 function expectHistorySteps(holds: HoldsSnapshot, failures: string[]): void {
   const steps = holds.history.log.filter((entry) => entry.op === 'undo' || entry.op === 'redo');
   const done = holds.actions.filter((action) => (action.action === 'undo' || action.action === 'redo') && action.done);

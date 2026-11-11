@@ -11,7 +11,7 @@ export interface HaloActionDeps {
   ui: UIStateStore;
   recording: Pick<RecordingSession, 'toggle'>;
   getPointSamples: () => PointSampleStore;
-  /** Capture's one undo history (docs/features/undo-redo.md): W and E read it. */
+  /** Capture's one undo history (docs/features/archive/undo-redo.md): W and E read it. */
   history: CaptureHistory;
   /** The history entry of a mark or trace, for the open-trace rule. */
   entryFor: (point: PointHistoryEntry) => HistoryEntry | undefined;
@@ -37,7 +37,7 @@ export interface HaloActionRecord {
 /**
  * Capture's Halo (Q20, PRD-023 v1): S records or stops through the Record
  * control's own gate, W undoes the last authoring action of any kind and E
- * restores it (docs/features/undo-redo.md), NW (Ink) toggles a trace while recording. Each says what happened on
+ * restores it (docs/features/archive/undo-redo.md), NW (Ink) toggles a trace while recording. Each says what happened on
  * the status line, since nothing shows a mark live. `pressSec` is when the
  * Halo was summoned (a headset's press, on the simulation clock), so the
  * gesture that turns Ink off or undoes is not itself traced; flat callers

@@ -119,7 +119,7 @@ export class PointSampleStore {
   /** An open hold was undone while its mark is still held: drop its samples until it is released. */
   private droppingUntilRelease = false;
   private readonly motionRuns: InferredMotionRun[] = [];
-  /** A hold or trace began: capture's history (docs/features/undo-redo.md) takes it as a meaning entry. */
+  /** A hold or trace began: capture's history (docs/features/archive/undo-redo.md) takes it as a meaning entry. */
   onEntry: ((entry: PointHistoryEntry) => void) | null = null;
 
   setEnabled(enabled: boolean): void {

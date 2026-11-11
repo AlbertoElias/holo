@@ -9,7 +9,7 @@ import { clickButton, OBJECT_URL, openCapture, PROOF_VIDEO_DIR, proofPace, readS
 import { enterIwer, reach, STEP_MS, stepper, summonedItems, TRAY_URLS } from './summon-take.mjs';
 import { advance, setupFlatPage } from './tray-anytime-take.mjs';
 
-// Undo and redo for every authoring action (docs/features/undo-redo.md),
+// Undo and redo for every authoring action (docs/features/archive/undo-redo.md),
 // through the Halo's W ("Undo") and E ("Redo") buttons on flat screens, and
 // the same Halo committed with a headset's controllers or hands:
 //   - undo-desktop: before a take W/E reach summon, place, resize and tray

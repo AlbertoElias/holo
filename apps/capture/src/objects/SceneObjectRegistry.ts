@@ -78,7 +78,7 @@ export class SceneObjectRegistry {
 
   /**
    * Brings a removed object back as it was (an undone put-back or summon;
-   * docs/features/undo-redo.md): the same object, so a take's track for it
+   * docs/features/archive/undo-redo.md): the same object, so a take's track for it
    * has a gap rather than a second track. Its body is built again on the next
    * physics step. False when it is already here.
    */

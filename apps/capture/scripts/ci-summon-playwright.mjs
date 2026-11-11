@@ -48,7 +48,7 @@ try {
     // Put back and remove a tray item (docs/features/archive/tray-remove.md).
     ['desktop-put-back', () => runDesktopPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['touch-put-back', () => runTouchPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
-    // Undo and redo for every authoring action (docs/features/undo-redo.md).
+    // Undo and redo for every authoring action (docs/features/archive/undo-redo.md).
     ['undo-desktop', () => runDesktopUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['undo-touch', () => runTouchUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['undo-controllers', () => runControllersUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],

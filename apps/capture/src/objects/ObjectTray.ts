@@ -40,7 +40,7 @@ export interface TraySnapshot {
   summons: Array<{ slot: number; objectId: string; timeSec: number }>;
   /** Objects put back this take (docs/features/archive/tray-remove.md); `slot` is null when their item had left the tray. */
   putBacks: Array<{ slot: number | null; objectId: string; timeSec: number }>;
-  /** Objects brought back this take by an undone put-back or summon, or a redone summon (docs/features/undo-redo.md). */
+  /** Objects brought back this take by an undone put-back or summon, or a redone summon (docs/features/archive/undo-redo.md). */
   returns: Array<{ objectId: string; timeSec: number }>;
 }
 
@@ -119,7 +119,7 @@ export class ObjectTray {
 
   /**
    * Puts a removed `item` back at `index` (an undone removal, or a redone
-   * add; docs/features/undo-redo.md): the slots after it renumber. False when
+   * add; docs/features/archive/undo-redo.md): the slots after it renumber. False when
    * it is already on the tray or the tray is full.
    */
   restore(item: TrayItem, index: number): boolean {
@@ -223,7 +223,7 @@ export class ObjectTray {
     return object;
   }
 
-  /** A summon happened (capture's history takes it; docs/features/undo-redo.md). */
+  /** A summon happened (capture's history takes it; docs/features/archive/undo-redo.md). */
   onSummon: ((object: SceneObject) => void) | null = null;
 
   /** The tray item `object` was summoned from, on the tray or not. */

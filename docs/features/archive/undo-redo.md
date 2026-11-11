@@ -1,7 +1,7 @@
 # Feature brief: Undo and redo for every authoring action
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed
+**Status:** Complete (2026-11-11)
 **Layer:** Both event and meaning. The Halo's W and E are chrome. What they
 change stays in the layer of the action being undone.
 
@@ -96,24 +96,24 @@ meaning is what the author says about it.
 
 ## Acceptance criteria
 
-- [ ] On desktop, phone (flat), Quest hands and Quest controllers, W undoes
+- [x] On desktop, phone (flat), Quest hands and Quest controllers, W undoes
       and E redoes the last action of every kind in the table, during a take
       and before one.
-- [ ] During a take, undoing a put-back exports a GLB where the object's
+- [x] During a take, undoing a put-back exports a GLB where the object's
       presence ends at the put-back frame and resumes at the undo frame. The
       object resumes at the put-back pose. The feed and AR viewer render the
       gap, and the USDZ conversion keeps it.
-- [ ] During a take, undoing a place or a resize exports the jump back as
+- [x] During a take, undoing a place or a resize exports the jump back as
       recorded change at the undo frame. Earlier frames are unchanged.
-- [ ] Undoing a mark or a trace leaves no recorded link or trace for it in
+- [x] Undoing a mark or a trace leaves no recorded link or trace for it in
       the GLB, as today.
-- [ ] Interleaved actions undo in reverse order. For example, summon, mark,
+- [x] Interleaved actions undo in reverse order. For example, summon, mark,
       resize, then W W W undoes the resize, then the mark, then the summon.
       A new action after an undo clears redo.
-- [ ] Starting or stopping a take clears the history. W right after Record
+- [x] Starting or stopping a take clears the history. W right after Record
       says "Nothing to undo".
-- [ ] The status line names what each undo and redo did.
-- [ ] Every existing summon, put-back, marks and traces check still passes.
+- [x] The status line names what each undo and redo did.
+- [x] Every existing summon, put-back, marks and traces check still passes.
 
 ## Failure cases considered
 
@@ -204,10 +204,16 @@ Settled with the review:
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Undo and redo of every kind, on every input | New phases in `test:xr:summon` (object kinds) and `test:xr:marks` (interleaved with object actions), desktop, touch, IWER hands, IWER controllers | The checks' JSON reports with the Halo action log and history counts; pending |
-| Put-back undo is forward in the event | The same take exported, then parsed | The object's presence spans in the GLB report; pending |
-| Export → upload → render | `pnpm run verify:pr`, plus the GLB through the feed, the AR viewer and Quick Look | Screenshot of the returned object in the feed; USDZ tool check; pending |
-| Proof | A recording of a desktop take: summon, put back, undo, resize, undo, mark, undo, redo | Proof video under `output/`, sent to the user; pending |
+| Undo and redo of every kind, on every input | `test:xr:summon` phases `undo-desktop`, `undo-touch`, `undo-controllers`, `undo-hands` (`apps/capture/scripts/lib/undo-take.mjs`); history assertions in every `test:xr:marks` phase (`held-mark-takes.ts`) | `output/ci-summon/report.json` (Halo log, history log and counts per take); all 20 summon phases and 4 marks phases pass |
+| Interleaved order, redo clearing, boundaries | `undo-desktop`: summon, mark, resize, then W W W reads "Size undone", "Mark undone", "Summon undone"; E E restores Summon and Mark; a new summon leaves "Nothing to redo"; W right after Record says "Nothing to undo"; a summon held across Record and let go is a Place | Same report; `CaptureHistory.test.ts` holds the two history regressions the verifier reproduced |
+| Put-back undo is forward in the event | `undo-desktop` exports the take | The bracket's presence is [10.42, 11.22] and [12.33, 17.53] s: ends at the put-back, resumes at the undo (within 2 frames) with 0 m offset |
+| Place and resize undo are recorded jumps | `undo-desktop` exports the take | Place: a 3.14 m step at the undo frame, earlier frames unchanged; size: scale 1.6 → 1.0 at the undo frame |
+| Export → upload → render | `summon.pipeline.spec.ts` "an undone put-back: two presence spans survive the feed card and USDZ" | Feed card scale 1 / 0 / 1 mid-span-1, mid-gap, mid-span-2, pose error 0; USDZ visibility inherited / invisible / inherited, minimum scale 1e-4; `output/summon-viewer/undo-put-back-report.json` |
+| `verify:pr` | Run 2026-11-11 with the e2e ports moved (other agents held the defaults) | Every step passed except `bubble-capture` (B-043, fails on `main` too) |
+| Independent verification | Codex (`-p standard`, read-only) against this brief and the tree | Found four defects, all fixed in `eb04a284253b`: redo returned an entry on top instead of to its place in time; the 100-entry cap also cut a take's history; a summon's hold spanning Record never became a Place; a Find load did not recheck the byte budget after an undo restored an item. Its coverage gaps (boundary hold, summon/mark/resize order) are now in `undo-desktop` |
+| Proof | A real-time desktop take (`undo-desktop` with `PROOF_VIDEO_DIR`) | `output/proof/undo-redo.mp4` (ignored, not committed), sent to the user |
+
+Not covered by an automated check: tray-add redo at the five-item or byte limit (the refusal is in `CaptureObjects` but no take fills the tray first), and an undo while a take exports.
 
 ## Physical-device limits
 

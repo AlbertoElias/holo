@@ -479,7 +479,7 @@ a gesture zone.
 | Upload | Open the upload sheet; send the upload | "Upload" | An arrow up out of a tray (`glyph.path.upload`) |
 | Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
 | Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
-| Undo / Redo | The Halo's W and E: undo or redo the last authoring action of any kind (an object summoned, put back, placed or resized, a held mark, a hand trace, a tray change; `docs/features/undo-redo.md`) | "Undo" / "Redo" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
+| Undo / Redo | The Halo's W and E: undo or redo the last authoring action of any kind (an object summoned, put back, placed or resized, a held mark, a hand trace, a tray change; `docs/features/archive/undo-redo.md`) | "Undo" / "Redo" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 | Ink | The Halo's NW in a headset: start or end a hand trace while recording (PRD-023) | "Ink" (name); "Tracing 0:03" on the status line while on | A curving path into a fingertip dot (`glyph.path.ink`) |
 | Tray | Open the tray of objects to summon (capture) | "Tray" (name; "Tray · hold T" with a keyboard) | A cube, a cone and a ball on a shelf (`glyph.path.tray`) |
 | Put back | Put the held object back into the tray (capture) | "Put back" | An arrow down onto the tray's shelf, the mirror of Upload (`glyph.path.putBack`) |

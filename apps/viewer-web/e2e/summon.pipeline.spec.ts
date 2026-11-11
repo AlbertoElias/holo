@@ -318,7 +318,7 @@ test("a 60 s take carrying five objects from before it converts to USDZ, each pr
   await writeFile(path.join(evidenceDir, "long-carry-report.json"), JSON.stringify({ glb: report.glb, export: report.export, usdz: { path: usdzPath, prims: usd } }, null, 2));
 });
 
-// An undone put-back (docs/features/undo-redo.md): the summoned bracket is put
+// An undone put-back (docs/features/archive/undo-redo.md): the summoned bracket is put
 // back on the tray, then W returns it. Its presence has two spans; the feed
 // card hides it in the gap and shows it, where the GLB has it, in both spans;
 // the USDZ hides it with visibility only in the gap, never a zero scale.

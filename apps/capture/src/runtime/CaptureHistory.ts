@@ -1,5 +1,5 @@
 /**
- * What an authoring action changes (docs/features/undo-redo.md): the event is
+ * What an authoring action changes (docs/features/archive/undo-redo.md): the event is
  * undone forward in time (the inverse is performed now and recorded), meaning
  * is undone out of the take, and the tray is simply reversed.
  */

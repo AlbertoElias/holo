@@ -134,7 +134,7 @@ export interface HoldsSnapshot {
   touch: string;
   flatHalo: FlatHaloView;
   actions: HaloActionRecord[];
-  /** Capture's undo history (docs/features/undo-redo.md): what W and E can reach now, and every push, undo, redo and clear. */
+  /** Capture's undo history (docs/features/archive/undo-redo.md): what W and E can reach now, and every push, undo, redo and clear. */
   history: ReturnType<CaptureHistory['counts']> & { log: CaptureHistory['log'] };
 }
 

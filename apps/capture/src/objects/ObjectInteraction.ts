@@ -153,7 +153,7 @@ interface Hold {
   rawSize: number;
   /** A headset's other hand also holds the prop and stretches it: its side, the hands' distance and the raw size when it closed. */
   stretch: { side: VrHandSide; startM: number; startRaw: number } | null;
-  /** The wrapper's local pose when it was grabbed: where an undone place returns it (docs/features/undo-redo.md). */
+  /** The wrapper's local pose when it was grabbed: where an undone place returns it (docs/features/archive/undo-redo.md). */
   before: WrapperPose;
   /** The size since the last committed resize: what an undone resize returns to. */
   sizeBefore: number;
@@ -168,7 +168,7 @@ export interface WrapperPose {
 }
 
 /**
- * What capture's history takes from a hold (docs/features/undo-redo.md): a
+ * What capture's history takes from a hold (docs/features/archive/undo-redo.md): a
  * resize gesture that ended (a stretch let go, or the hold itself), then the
  * hold's end, which is a place unless it came from the tray.
  */
@@ -355,7 +355,7 @@ export class ObjectInteraction {
     return object;
   }
 
-  /** Resizes and releases since the last call, oldest first (docs/features/undo-redo.md). */
+  /** Resizes and releases since the last call, oldest first (docs/features/archive/undo-redo.md). */
   takeHoldChanges(): HoldChange[] {
     return this.changes.splice(0);
   }
