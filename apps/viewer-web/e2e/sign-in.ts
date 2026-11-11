@@ -23,12 +23,13 @@ const sessions = new WeakMap<Page, Promise<E2eSession>>();
 /**
  * Signs a test creator in through the API (the test API exposes the magic
  * link), keeps the session in the page's storage like the viewer does, and
- * returns it for direct API calls. Call before `page.goto`. Memoised per
+ * returns it for direct API calls. Call before `page.goto`. Pass
+ * `persist: false` to keep the page signed out. Memoised per
  * page: later calls return the first session.
  */
 export function signInForUpload(
   page: Page,
-  options: { email?: string; displayName?: string } = {}
+  options: { email?: string; displayName?: string; persist?: boolean } = {}
 ): Promise<E2eSession> {
   // One sign-in per page, however many uploads follow.
   let session = sessions.get(page);
@@ -41,7 +42,11 @@ export function signInForUpload(
 
 async function signIn(
   page: Page,
-  { displayName = "E2E Creator", email = emailFor(displayName) }: { email?: string; displayName?: string }
+  {
+    displayName = "E2E Creator",
+    email = emailFor(displayName),
+    persist = true
+  }: { email?: string; displayName?: string; persist?: boolean }
 ): Promise<E2eSession> {
   const link = await page.request.post("/api/auth/magic-link", { data: { email, displayName } });
   const { devMagicLinkToken } = (await link.json()) as { devMagicLinkToken?: string };
@@ -53,10 +58,14 @@ async function signIn(
     throw new Error(`Test sign-in failed: ${verify.status()}`);
   }
   const { token } = (await verify.json()) as { token: string };
-  await page.addInitScript(
-    ([key, value]) => window.localStorage.setItem(key as string, value as string),
-    [sessionStorageKey, token]
-  );
+  // `persist: false` uploads as the creator without the page being signed in,
+  // so the viewer renders as a visitor does (no owner controls shifting the card).
+  if (persist) {
+    await page.addInitScript(
+      ([key, value]) => window.localStorage.setItem(key as string, value as string),
+      [sessionStorageKey, token]
+    );
+  }
   return { token, headers: { authorization: `Bearer ${token}` } };
 }
 

@@ -130,7 +130,7 @@ type ArReading = SetReading & {
 
 async function upload(page: Page, name: string, glb: Buffer, quickLook: boolean): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
-    headers: (await signInForUpload(page, { displayName: "camera-take-e2e" })).headers,
+    headers: (await signInForUpload(page, { displayName: "camera-take-e2e", persist: false })).headers,
     multipart: {
       hologramName: `${name} ${Date.now()}`,
       submittedBy: "camera-take-e2e",
