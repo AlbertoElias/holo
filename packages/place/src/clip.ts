@@ -1,9 +1,13 @@
-// The cloche's cut through a scanned place (docs/features/splat-place.md,
+// The cloche's cut through a scanned place (docs/features/splat-place.md, now shared by capture and the viewer,
 // Clipping). The dome is the feed's flat one (a place turns the rim off), read
 // from the same shape and shift the cloche is drawn from. A splat is tested by
 // its extent, not its centre, and fades out toward the glass: the GLSL here
 // runs in Spark's shader, and the function below is its twin for the e2e
 // report and the load-time crop.
+
+import { Vector3 } from "three";
+
+import type { SparkModule } from "./decode.js";
 
 /** Spark draws a splat's ellipse out to this many standard deviations (`SparkRenderer.maxStdDev`). */
 export const SPLAT_EXTENT_SIGMA = Math.sqrt(8);
@@ -84,3 +88,41 @@ float place_clip_fade(vec3 center, vec3 scales, vec3 base, vec3 radii, float n) 
   float t = clamp((value - from) / ${CLIP_FADE_SHARE.toFixed(4)}, 0.0, 1.0);
   return 1.0 - t * t * (3.0 - 2.0 * t);
 }`;
+
+/**
+ * The dome's cut as a Spark world modifier: each splat's opacity times
+ * `place_clip_fade`, and no draw at all past the glass. `base`, `radii` and
+ * `exponent` are Spark dyno values, so a caller moves the dome by writing
+ * `base.value` and bumping the mesh's version.
+ */
+export type DomeClip = {
+  modifier: NonNullable<NonNullable<ConstructorParameters<SparkModule["SplatMesh"]>[0]>["worldModifier"]>;
+  base: InstanceType<SparkModule["dyno"]["DynoVec3"]> & { value: Vector3 };
+  radii: InstanceType<SparkModule["dyno"]["DynoVec3"]> & { value: Vector3 };
+  exponent: InstanceType<SparkModule["dyno"]["DynoFloat"]>;
+};
+
+export function domeClipModifier(S: SparkModule, dome: { base: { x: number; y: number; z: number }; radii: { x: number; y: number; z: number }; exponent: number }): DomeClip {
+  const base = S.dyno.dynoVec3(new Vector3(dome.base.x, dome.base.y, dome.base.z));
+  const radii = S.dyno.dynoVec3(new Vector3(dome.radii.x, dome.radii.y, dome.radii.z));
+  const exponent = S.dyno.dynoFloat(dome.exponent);
+  const modifier = S.dyno.dynoBlock({ gsplat: S.dyno.Gsplat }, { gsplat: S.dyno.Gsplat }, ({ gsplat }) => {
+    if (!gsplat) throw new Error("no gsplat input");
+    const cut = new S.dyno.Dyno({
+      inTypes: { gsplat: S.dyno.Gsplat, base: "vec3", radii: "vec3", exponent: "float" },
+      outTypes: { gsplat: S.dyno.Gsplat },
+      inputs: { gsplat, base, radii, exponent },
+      globals: () => [S.dyno.defineGsplat, PLACE_CLIP_GLSL],
+      statements: ({ inputs, outputs }) => S.dyno.unindentLines(`
+        ${outputs.gsplat} = ${inputs.gsplat};
+        {
+          float fade = place_clip_fade(${inputs.gsplat}.center, ${inputs.gsplat}.scales, ${inputs.base}, ${inputs.radii}, ${inputs.exponent});
+          ${outputs.gsplat}.rgba.a *= fade;
+          if (fade <= 0.0) ${outputs.gsplat}.flags = 0u;
+        }
+      `)
+    });
+    return { gsplat: cut.outputs.gsplat };
+  });
+  return { modifier: modifier as DomeClip["modifier"], base: base as DomeClip["base"], radii: radii as DomeClip["radii"], exponent };
+}

@@ -16,16 +16,31 @@ export type FixtureOptions = {
   /** A magenta ring of splats, `radius` around the point `x`, `z` from the middle of the floor; none when the radius is 0. */
   ring: { x: number; z: number; radius: number };
   /** Single splats of one colour, `x` and `z` from the middle of the floor, `height` above it, `scale` their standard deviation, metres. */
-  blobs?: Array<{ x: number; z: number; height: number; scale: number; color: [number, number, number] }>;
+  blobs?: Array<{ x: number; z: number; height: number; scale: number; color: [number, number, number]; opacity?: number }>;
+  /** Splats of clutter scattered through the room; 3000 unless given. */
+  clutter?: number;
   /** Every splat's height is not a number: a scan with no floor to find. */
   noFloor?: boolean;
   /** A ceiling this far above the floor, as dense as the floor: the other strong peak, which the wrong way up is the lowest. */
   ceiling?: number;
   /** Written y up, the other way from the trainers' convention `.ply` is read as by default. */
   yUp?: boolean;
+  /** The floor's grid step, metres (0.06 unless given): a coarser floor is a weaker peak. */
+  floorStep?: number;
+  /** How far the floor's splats stray up and down, metres (1 cm unless given): a phone's floor is a few centimetres thick. */
+  floorJitter?: number;
+  /**
+   * A phone scan of a table: a dense tabletop `height` above the floor, `half` each way around `x`, `z` from the
+   * middle, with `under` splats of legs and chairs between it and the floor and `over` of what stands on it and the
+   * wall behind it, up to 1.2 m above. It outweighs a sparse floor.
+   */
+  table?: { x: number; z: number; half: number; height: number; step: number; under: number; over: number };
 };
 
-export type Fixture = { bytes: Buffer; floorY: number; middle: { x: number; z: number }; count: number };
+/** One written splat, in the y-up room the file was made from, and in the file's own frame. */
+export type FixtureSplat = { room: [number, number, number]; file: [number, number, number]; scale: number; opacity: number };
+
+export type Fixture = { bytes: Buffer; floorY: number; middle: { x: number; z: number }; count: number; splats: FixtureSplat[] };
 
 const SH_C0 = 0.28209479177387814;
 
@@ -41,18 +56,18 @@ function mulberry32(seed: number): () => number {
 
 type Splat = { x: number; y: number; z: number; r: number; g: number; b: number; opacity: number; scale: number };
 
-export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = false, ceiling, yUp = false }: FixtureOptions): Fixture {
+export function makeFixture({ floorY = 0.35, half, ring, blobs = [], clutter = 3000, noFloor = false, ceiling, yUp = false, floorStep = 0.06, floorJitter = 0.01, table }: FixtureOptions): Fixture {
   const rand = mulberry32(0x5ca17);
   const middle = { x: 1, z: -0.5 };
   const splats: Splat[] = [];
   const add = (x: number, y: number, z: number, color: [number, number, number], scale: number, opacity = 0.95) => splats.push({ x, y, z, r: color[0], g: color[1], b: color[2], opacity, scale });
 
   // The floor, a checker of two greys (the one thing in the scan that is everywhere).
-  const step = 0.06;
+  const step = floorStep;
   for (let ix = -Math.round(half / step); ix <= Math.round(half / step); ix += 1) {
     for (let iz = -Math.round(half / step); iz <= Math.round(half / step); iz += 1) {
       const tile = (Math.floor((ix * step + 1000) / 0.5) + Math.floor((iz * step + 1000) / 0.5)) % 2 === 0;
-      add(middle.x + ix * step, floorY + (rand() - 0.5) * 0.01, middle.z + iz * step, tile ? [0.55, 0.56, 0.5] : [0.38, 0.4, 0.36], 0.045);
+      add(middle.x + ix * step, floorY + (rand() - 0.5) * floorJitter, middle.z + iz * step, tile ? [0.55, 0.56, 0.5] : [0.38, 0.4, 0.36], 0.045);
     }
   }
   if (ceiling !== undefined) {
@@ -62,13 +77,26 @@ export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = f
   }
   // A table band, 74 cm up: a smaller peak than the floor's, and higher.
   for (let ix = 0; ix < 20; ix += 1) for (let iz = 0; iz < 12; iz += 1) add(middle.x + 1.4 + ix * 0.05, floorY + 0.74 + rand() * 0.02, middle.z - 0.3 + iz * 0.05, [0.5, 0.33, 0.18], 0.04);
+  if (table) {
+    for (let ix = -Math.round(table.half / table.step); ix <= Math.round(table.half / table.step); ix += 1) {
+      for (let iz = -Math.round(table.half / table.step); iz <= Math.round(table.half / table.step); iz += 1) {
+        add(middle.x + table.x + ix * table.step, floorY + table.height + (rand() - 0.5) * 0.01, middle.z + table.z + iz * table.step, [0.6, 0.45, 0.3], 0.02);
+      }
+    }
+    for (let i = 0; i < table.over; i += 1) {
+      add(middle.x + table.x + (rand() - 0.5) * 2.4 * table.half, floorY + table.height + 0.05 + rand() * 1.15, middle.z + table.z + (rand() - 0.5) * 2.4 * table.half, [0.35, 0.3, 0.3], 0.03);
+    }
+    for (let i = 0; i < table.under; i += 1) {
+      add(middle.x + table.x + (rand() - 0.5) * 2.4 * table.half, floorY + 0.05 + rand() * (table.height - 0.1), middle.z + table.z + (rand() - 0.5) * 2.4 * table.half, [0.3, 0.25, 0.2], 0.03);
+    }
+  }
   // Floaters under the floor and in the air, as a phone scan leaves them.
   for (let i = 0; i < 200; i += 1) add(middle.x + (rand() - 0.5) * 2 * half, floorY - 0.1 - rand() * 2.5, middle.z + (rand() - 0.5) * 2 * half, [0.9, 0.9, 0.95], 0.08, 0.7);
   // Four boxes around the middle, solid.
   const boxes: Array<[number, number, [number, number, number]]> = [[0.9, 0, [0.9, 0.12, 0.1]], [-0.9, 0, [0.15, 0.8, 0.2]], [0, 0.9, [0.15, 0.3, 0.95]], [0, -0.9, [0.95, 0.85, 0.1]]];
   for (const [bx, bz, color] of boxes) for (let ix = 0; ix < 6; ix += 1) for (let iy = 0; iy < 6; iy += 1) for (let iz = 0; iz < 6; iz += 1) add(middle.x + bx - 0.15 + ix * 0.06, floorY + 0.03 + iy * 0.06, middle.z + bz - 0.15 + iz * 0.06, color, 0.04);
   // Clutter in every size, up to ones that could never sit inside a dome.
-  for (let i = 0; i < 3000; i += 1) {
+  for (let i = 0; i < clutter; i += 1) {
     const scale = 0.02 * Math.exp(rand() * Math.log(40));
     add(middle.x + (rand() - 0.5) * 2 * half, floorY + rand() * 2.6, middle.z + (rand() - 0.5) * 2 * half, [0.25 + rand() * 0.4, 0.3 + rand() * 0.4, 0.25 + rand() * 0.4], scale, 0.5 + rand() * 0.5);
   }
@@ -78,7 +106,7 @@ export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = f
       add(middle.x + ring.x + Math.cos(angle) * ring.radius, floorY + 0.05 + rand() * 1.4, middle.z + ring.z + Math.sin(angle) * ring.radius, [1, 0, 1], 0.06);
     }
   }
-  for (const blob of blobs) add(middle.x + blob.x, floorY + blob.height, middle.z + blob.z, blob.color, blob.scale, 0.99);
+  for (const blob of blobs) add(middle.x + blob.x, floorY + blob.height, middle.z + blob.z, blob.color, blob.scale, blob.opacity ?? 0.99);
 
   const names = ["x", "y", "z", "nx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"];
   const header = `ply\nformat binary_little_endian 1.0\nelement vertex ${splats.length}\n${names.map((name) => `property float ${name}`).join("\n")}\nend_header\n`;
@@ -93,7 +121,13 @@ export function makeFixture({ floorY = 0.35, half, ring, blobs = [], noFloor = f
     ];
     values.forEach((value, slot) => body.writeFloatLE(value, (index * names.length + slot) * 4));
   });
-  return { bytes: Buffer.concat([Buffer.from(header, "ascii"), body]), floorY, middle, count: splats.length };
+  const written = splats.map((splat): FixtureSplat => ({
+    room: [splat.x, splat.y, splat.z],
+    file: [splat.x, yUp ? splat.y : -splat.y, yUp ? splat.z : -splat.z],
+    scale: splat.scale,
+    opacity: splat.opacity
+  }));
+  return { bytes: Buffer.concat([Buffer.from(header, "ascii"), body]), floorY, middle, count: splats.length, splats: written };
 }
 
 export async function writeFixture(dir: string, name: string, options: FixtureOptions): Promise<{ file: string } & Fixture> {

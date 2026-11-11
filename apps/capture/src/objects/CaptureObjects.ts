@@ -89,6 +89,14 @@ export class CaptureObjects {
   }
 
   /** Once the scene's collision mesh exists: props get their own world over a copy of it. */
+  /** The set changed: the props' world is dropped, so the next step builds it from the new set (ObjectSystem). */
+  resetPhysics(): void {
+    if (!this.physics) return;
+    this.interaction.setPhysics(null);
+    this.registry.onRemove = null;
+    this.physics = null;
+  }
+
   enablePhysics(trimesh: { vertices: Float32Array; indices: Uint32Array }, gravity: number): void {
     this.physics = new ObjectPhysics(trimesh, gravity);
     this.physics.setAvatar(this.deps.avatar);

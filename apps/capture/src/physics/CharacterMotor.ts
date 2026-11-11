@@ -44,6 +44,7 @@ export class CharacterMotor {
   private characterController: import('@dimforge/rapier3d-compat').KinematicCharacterController | undefined;
   private avatarRigRef: AvatarRig | undefined;
   private worldTrimesh: { vertices: Float32Array; indices: Uint32Array } | undefined;
+  private worldCollider: import('@dimforge/rapier3d-compat').Collider | undefined;
 
   private capsuleRadius = 0.3;
   private capsuleHalfHeight = 0.6;
@@ -75,7 +76,7 @@ export class CharacterMotor {
     this.worldTrimesh = trimesh;
 
     this.rapierWorld = new RAPIER.World({ x: 0, y: gravity, z: 0 });
-    this.rapierWorld.createCollider(RAPIER.ColliderDesc.trimesh(trimesh.vertices, trimesh.indices));
+    this.worldCollider = this.rapierWorld.createCollider(RAPIER.ColliderDesc.trimesh(trimesh.vertices, trimesh.indices));
 
     this.avatarHeight = avatarRig.avatarHeight;
     this.capsuleRadius = avatarRig.avatarHeight * 0.18;
@@ -238,6 +239,25 @@ export class CharacterMotor {
     return this.rapierWorld;
   }
 
+  /**
+   * The set changed at runtime (a scanned place, docs/features/splat-capture.md):
+   * its collider is replaced in the same Rapier world, so the capsule, the
+   * controller and the hands' sensors stay, and the character respawns on it.
+   */
+  replaceWorld(avatarRig: AvatarRig): boolean {
+    if (!this.rapierWorld || !avatarRig.worldModel) return false;
+    const trimesh = this.buildWorldTrimeshData(avatarRig.worldModel);
+    if (!trimesh) return false;
+    if (this.worldCollider) this.rapierWorld.removeCollider(this.worldCollider, false);
+    this.worldTrimesh = trimesh;
+    this.worldCollider = this.rapierWorld.createCollider(RAPIER.ColliderDesc.trimesh(trimesh.vertices, trimesh.indices));
+    this.velocityY = 0;
+    this.spawnResolved = false;
+    const respawned = this.resolveSpawn(avatarRig);
+    if (respawned) this.rebuildCharacterController();
+    return respawned;
+  }
+
   respawn(): boolean {
     if (!this.avatarRigRef || !this.rapierWorld) return false;
     const respawned = this.resolveSpawn(this.avatarRigRef);
@@ -313,6 +333,8 @@ export class CharacterMotor {
 
   private rebuildCharacterController(): void {
     if (!this.rapierWorld) return;
+    // One controller at a time: each set swap and respawn rebuilds it, and Rapier keeps a controller until removed.
+    if (this.characterController) this.rapierWorld.removeCharacterController(this.characterController);
     this.characterController = this.rapierWorld.createCharacterController(this.controllerOffset());
     this.characterController.setUp({ x: 0, y: 1, z: 0 });
     this.characterController.setSlideEnabled(true);

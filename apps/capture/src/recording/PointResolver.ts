@@ -73,6 +73,12 @@ export interface PointResolutionInput {
   exportAvatar: THREE.Object3D;
   /** Clipped bubble meshes as exported, in world space; empty when the take has no world model. */
   sceneMeshes: readonly THREE.Mesh[];
+  /**
+   * Targets cast against through another object (a scanned place's stored
+   * crop, docs/features/splat-capture.md): a hit on `raycast` is a link to
+   * `node`, local to it. Always large, so the link carries a radius.
+   */
+  extraTargets?: ReadonlyArray<{ raycast: THREE.Object3D; node: THREE.Object3D; key: string }>;
 }
 
 /** What a camera take's holds resolve against (docs/features/archive/ar-recording.md), all in the take's exported scene. */
@@ -216,6 +222,7 @@ export class PointResolver {
     // Chrome is never a referent: the scene sampler leaves it out, and these
     // meshes are its clipped copies (GltfExportComposer), so none is chrome.
     this.sceneTargets = new Map(input.sceneMeshes.map((mesh) => [mesh, sceneTarget(mesh)]));
+    for (const extra of input.extraTargets ?? []) this.sceneTargets.set(extra.raycast, { key: extra.key, object: extra.node, large: true });
     this.raycaster.near = RAY_NEAR;
     this.raycaster.far = MAX_RAY_DISTANCE;
 

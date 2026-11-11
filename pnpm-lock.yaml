@@ -90,6 +90,9 @@ importers:
       '@holoim/objects':
         specifier: workspace:*
         version: link:../../packages/objects
+      '@holoim/place':
+        specifier: workspace:*
+        version: link:../../packages/place
       '@holoim/ui-dom':
         specifier: workspace:*
         version: link:../../packages/ui-dom
@@ -117,6 +120,9 @@ importers:
       '@pmndrs/uikit':
         specifier: 1.0.77
         version: 1.0.77(super-three@0.181.0)
+      '@sparkjsdev/spark':
+        specifier: 2.3.1
+        version: 2.3.1(super-three@0.181.0)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -333,6 +339,9 @@ importers:
       '@holoim/objects':
         specifier: workspace:*
         version: link:../../packages/objects
+      '@holoim/place':
+        specifier: workspace:*
+        version: link:../../packages/place
       '@holoim/ui-dom':
         specifier: workspace:*
         version: link:../../packages/ui-dom
@@ -580,6 +589,34 @@ importers:
       '@holoim/config-ts':
         specifier: workspace:*
         version: link:../config-ts
+      eslint:
+        specifier: 'catalog:'
+        version: 9.39.3(jiti@2.6.1)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(jiti@2.6.1)(jsdom@26.1.0)(tsx@4.21.0)
+
+  packages/place:
+    dependencies:
+      '@sparkjsdev/spark':
+        specifier: 2.3.1
+        version: 2.3.1(super-three@0.181.0)
+      three:
+        specifier: npm:super-three@0.181.0
+        version: super-three@0.181.0
+    devDependencies:
+      '@holoim/config-eslint':
+        specifier: workspace:*
+        version: link:../config-eslint
+      '@holoim/config-ts':
+        specifier: workspace:*
+        version: link:../config-ts
+      '@types/three':
+        specifier: 0.173.0
+        version: 0.173.0
       eslint:
         specifier: 'catalog:'
         version: 9.39.3(jiti@2.6.1)

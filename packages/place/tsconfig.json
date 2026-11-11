@@ -1,0 +1,10 @@
+{
+  "extends": "@holoim/config-ts/web.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src"]
+}

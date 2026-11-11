@@ -26,16 +26,6 @@ export type PlaceScan = Omit<PlaceRequest, "waitMs">;
 /** What is read and decoded: the same file, turned the same way, is one cache entry. */
 export type PlaceSource = Pick<PlaceRequest, "url" | "flip">;
 
-/**
- * The format's convention, for a scan that cannot say which way is up: SPZ is
- * written y up by Niantic's library, PLY, SPLAT and KSPLAT as the trainers
- * write them, y down. Producers differ (Spark's example SPZs are y down).
- */
-export function placeFlipDefault(url: string): boolean {
-  const path = url.split(/[?#]/)[0]?.toLowerCase() ?? "";
-  return !path.endsWith(".spz");
-}
-
 function number(value: string | null): number {
   const parsed = value === null ? 0 : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;

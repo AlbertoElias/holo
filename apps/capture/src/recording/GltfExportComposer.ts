@@ -8,6 +8,10 @@ import { GLTFAudioPlugin } from './GLTFAudioPlugin';
 import { GLTFHumanoidPlugin } from './GLTFHumanoidPlugin';
 import { GLTFMeaningPlugin } from './GLTFMeaningPlugin';
 import { GLTFObjectsPlugin } from './GLTFObjectsPlugin';
+import { GLTFPlacePlugin } from './GLTFPlacePlugin';
+import { PLACE_NODE_NAME } from '@holoim/contracts';
+import { createExportFloor } from '../place/placeFloor';
+import type { PlaceExportPayload } from '../place/CapturePlace';
 import { type AuthoringSampleStore, findAuthoringSpans, neutralizeAuthoringSpans, toAuthoringSpans } from './authoringSpans';
 import { AUTHOR_CAMERA_NODE_NAME, type CameraTrackStore } from './CameraTrackStore';
 import { buildObjectExports, type ObjectExport } from './objectExport';
@@ -25,6 +29,17 @@ interface MorphExportBinding {
   influenceNamesByIndex: string[];
 }
 
+/** A scanned place the take was recorded in: asked for its stored crop once the take's path is known. */
+export interface PlaceExportSource {
+  /** The crop for this path; with `maxSpzBytes`, thinned until its SPZ fits in that many bytes. */
+  prepare(path: THREE.Vector3[], maxSpzBytes?: number): Promise<PlaceExportPayload | null>;
+  /** The take's size cap (the upload's 25 MB, lowered only by the automation hook). */
+  glbByteBudget(): number;
+}
+
+/** Room kept under the cap for what changes when the place is written again (the extension JSON, padding). */
+const GLB_BUDGET_MARGIN_BYTES = 4 * 1024;
+
 export class GltfExportComposer {
   private readonly pointResolver = new PointResolver();
   /** What point resolution decided for the latest export; undefined before one or for a take without point samples. */
@@ -38,7 +53,8 @@ export class GltfExportComposer {
     audioData?: { buffer: ArrayBuffer; mimeType: string },
     pointStore?: PointSampleStore,
     objectStore?: ObjectSampleStore,
-    authoringStore?: AuthoringSampleStore
+    authoringStore?: AuthoringSampleStore,
+    place?: PlaceExportSource
   ): Promise<Blob> {
     this.lastPointReport = undefined;
     await nextFrame();
@@ -180,10 +196,29 @@ export class GltfExportComposer {
     const scene = new THREE.Scene();
     scene.add(clone);
     scene.add(bubbleSphere);
-    const sceneBubble = sceneRoot ? bubbleSampler.collectSceneBubbleGroup(sceneRoot) : undefined;
+    // A scanned place (docs/features/splat-capture.md): the set is a plain floor disc over the take's reach, and the
+    // scan's crop rides on `RecordedPlace`. Without one, the set is the world model clipped to the bubble, as ever.
+    const placePath = frames.map((frame) => new THREE.Vector3(frame.rootPosition.x, frame.rootPosition.y, frame.rootPosition.z));
+    const placePayload = place && !normalizeRootMotion ? await place.prepare(placePath) : null;
+    let placeNode: THREE.Object3D | undefined;
+    let sceneBubble: { group: THREE.Group; clippedBySource: Map<THREE.Mesh, THREE.Mesh> } | undefined;
+    if (placePayload) {
+      const group = new THREE.Group();
+      group.name = 'RecordedSceneBubble';
+      const floor = createExportFloor(placePayload.crop.disc.center, placePayload.crop.disc.radius);
+      group.add(floor);
+      sceneBubble = { group, clippedBySource: new Map([[floor, floor]]) };
+      placeNode = new THREE.Object3D();
+      placeNode.name = PLACE_NODE_NAME;
+      placeNode.position.copy(placePayload.position);
+      placeNode.quaternion.copy(placePayload.quaternion);
+    } else {
+      sceneBubble = sceneRoot ? bubbleSampler.collectSceneBubbleGroup(sceneRoot) : undefined;
+    }
     if (sceneBubble) {
       scene.add(sceneBubble.group);
     }
+    if (placeNode) scene.add(placeNode);
     for (const node of objects?.nodes ?? []) scene.add(node);
     this.addRecordedSceneLights(scene);
 
@@ -200,7 +235,9 @@ export class GltfExportComposer {
         store: pointStore,
         avatar,
         exportAvatar: clone,
-        sceneMeshes: normalizeRootMotion || !sceneBubble ? [] : [...sceneBubble.clippedBySource.values()]
+        sceneMeshes: normalizeRootMotion || !sceneBubble ? [] : [...sceneBubble.clippedBySource.values()],
+        // The scan resolves against its stored crop, at the node's transform, so a link plays back where it was made.
+        extraTargets: placePayload && placeNode ? [{ raycast: placePayload.raycast as unknown as THREE.Object3D, node: placeNode, key: `place:${PLACE_NODE_NAME}` }] : []
       });
       this.lastPointReport = report;
       if (draft.marks.length > 0 || draft.traces.length > 0 || draft.spans.length > 0) meaning = draft;
@@ -213,7 +250,7 @@ export class GltfExportComposer {
       meaning.spans = [...meaning.spans, ...handSpans].sort((a, b) => a.span.start - b.span.start);
     }
 
-    return new Promise<Blob>((resolve, reject) => {
+    const write = (stored: PlaceExportPayload | null) => new Promise<Blob>((resolve, reject) => {
       const exporter = new GLTFExporter();
       if (audioData && audioData.buffer.byteLength > 0) {
         exporter.register((writer) => new GLTFAudioPlugin(writer, audioData.buffer, audioData.mimeType));
@@ -226,6 +263,10 @@ export class GltfExportComposer {
       if ((objects && objects.drafts.length > 0) || authoring.length > 0) {
         const drafts = objects?.drafts ?? [];
         exporter.register((writer) => new GLTFObjectsPlugin(writer, drafts, authoring));
+      }
+      if (stored && placeNode) {
+        const place = { node: placeNode, spz: stored.spz, splatCount: stored.crop.numSplats, maxSh: stored.maxSh };
+        exporter.register((writer) => new GLTFPlacePlugin(writer, place));
       }
       exporter.parse(
         scene,
@@ -240,6 +281,22 @@ export class GltfExportComposer {
         { animations: [clip], binary: true, trs: true }
       );
     });
+
+    try {
+      const blob = await write(placePayload);
+      if (!place || !placePayload) return blob;
+      // Sized at Stop (Q5): the place gets what the cap leaves after the rest of the take, thinned to fit, never refused.
+      const budget = place.glbByteBudget();
+      if (blob.size <= budget) return blob;
+      const room = budget - (blob.size - placePayload.spz.byteLength) - GLB_BUDGET_MARGIN_BYTES;
+      if (room <= 0) return blob;
+      const smaller = await place.prepare(placePath, room);
+      if (!smaller) return blob;
+      smaller.raycast.dispose();
+      return await write(smaller);
+    } finally {
+      placePayload?.raycast.dispose();
+    }
   }
 
   /**
