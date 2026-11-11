@@ -104,6 +104,10 @@ jobs:
       - name: Check the production viewer bundle
         if: ${{ !cancelled() }}
         run: node scripts/check-prod-bundle.mjs apps/viewer-web/dist
+      # Spark (the scanned place) loads only when a place does, in either app.
+      - name: Check the production capture bundle
+        if: ${{ !cancelled() }}
+        run: node scripts/check-prod-bundle.mjs apps/capture/dist --capture
       # Listing the specs loads the built workspace packages, so it follows
       # the build.
       - name: Check the browser suites' shards cover each test once
@@ -320,14 +324,15 @@ jobs:
     # included): bubble-capture 112 s, pointing split in two by take (115 s
     # whole, 195 s on a slow runner), camera-take + summon 92 s,
     # avatar-formats + object 86 s, capture-to-viewer + object-search 108 s,
-    # hand traces (four takes of its own) in the seventh
+    # hand traces (four takes of its own) in the seventh, the scanned place
+    # taken in capture (slice 2a: its own room take) in the eighth
     # (apps/viewer-web test:e2e:pipeline:shardN). Each records its own takes;
     # the walk take is shared only within a shard. scripts/check-e2e-shards.mjs
     # (quality) fails unless the shards run each test exactly once.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup

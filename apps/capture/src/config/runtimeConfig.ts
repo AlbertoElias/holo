@@ -23,6 +23,12 @@ export interface RuntimeConfig {
   controllerTrackYawDeg: number;
   controllerTrackRollDeg: number;
   mockVrEnabledFromQuery: boolean;
+  /** `?placeCapture=1`: a scanned place can replace the set (docs/features/splat-capture.md), until 2a and 2b are verified. */
+  placeCapture: boolean;
+  /** `?place=<url>` with `placeCapture`: the scan loaded at start, `.spz` or `.ply`. */
+  placeUrl: string | null;
+  /** `placeFlip=0|1` says which way is up; null lets the scan say. */
+  placeFlip: boolean | null;
 }
 
 export const DEFAULT_AVATAR_URL = '/gltf/models/avatar.glb';
@@ -32,6 +38,7 @@ export function loadRuntimeConfig(search = window.location.search): RuntimeConfi
   const defaultSceneUrl = '/gltf/models/scene.glb';
   const handRetargetModeQuery = (query.get('handRetargetMode') ?? 'hybrid').toLowerCase();
   const handRetargetMode = handRetargetModeQuery === 'legacy' ? 'legacy' : 'hybrid';
+  const placeCapture = query.get('placeCapture') === '1';
 
   return {
     sceneUrl: query.get('scene') ?? defaultSceneUrl,
@@ -54,6 +61,9 @@ export function loadRuntimeConfig(search = window.location.search): RuntimeConfi
     controllerTrackPitchDeg: Number(query.get('controllerTrackPitchDeg') ?? '0'),
     controllerTrackYawDeg: Number(query.get('controllerTrackYawDeg') ?? '180'),
     controllerTrackRollDeg: Number(query.get('controllerTrackRollDeg') ?? '0'),
-    mockVrEnabledFromQuery: query.get('mockVr') === '1'
+    mockVrEnabledFromQuery: query.get('mockVr') === '1',
+    placeCapture,
+    placeUrl: placeCapture ? query.get('place') || null : null,
+    placeFlip: query.get('placeFlip') === '1' ? true : query.get('placeFlip') === '0' ? false : null
   };
 }

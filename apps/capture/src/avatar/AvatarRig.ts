@@ -176,6 +176,8 @@ export class AvatarRig {
   readonly avatarRoot = new THREE.Group();
 
   worldModel: THREE.Object3D | undefined;
+  /** Objects pointing casts against besides the set: a scanned place's splats (docs/features/splat-capture.md). */
+  readonly pointTargets: THREE.Object3D[] = [];
   avatar: THREE.Object3D | undefined;
   /** Canonical bones of the loaded avatar; every system finds bones here, never by name. */
   humanoid: HumanoidSkeleton | undefined;
@@ -688,11 +690,28 @@ export class AvatarRig {
     this.centerModelOnGround(this.worldModel);
   }
 
+  /**
+   * A new set at runtime (a scanned place's floor disc): the old set leaves
+   * the scene, the new one is taken as it is (already metric, its floor at
+   * y = 0, so never centred or scaled), and the terrain bounds are read
+   * again. The motor and the props' physics rebuild from it separately.
+   */
+  replaceWorldModel(model: THREE.Object3D): THREE.Object3D | undefined {
+    const previous = this.worldModel;
+    previous?.removeFromParent();
+    this.worldModel = model;
+    this.worldGroup.add(model);
+    this.refreshWorldBounds();
+    return previous;
+  }
+
   private refreshWorldBounds(): void {
     if (!this.worldModel) return;
     this.tmpBox.setFromObject(this.worldModel);
     this.worldTopRayY = this.tmpBox.max.y + this.avatarHeight * 2 + 5;
-    this.terrainCeilingY = this.tmpBox.min.y + (this.tmpBox.max.y - this.tmpBox.min.y) * 0.85;
+    const height = this.tmpBox.max.y - this.tmpBox.min.y;
+    // A flat set (a place's floor disc) has no height: its ground is its top, which 85% of nothing would put a float's width away.
+    this.terrainCeilingY = height < 0.01 ? this.tmpBox.max.y + 0.01 : this.tmpBox.min.y + height * 0.85;
   }
 
   private classifyFirstPersonHeadMeshes(model: THREE.Object3D): void {

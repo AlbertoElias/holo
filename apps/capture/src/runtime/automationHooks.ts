@@ -1,4 +1,5 @@
 import type { XRDevice } from 'iwer';
+import type { CapturePlace, PlaceCaptureReport } from '../place/CapturePlace';
 import type { HaloAction } from '@holoim/xr-ui-core';
 
 import type { LocomotionProfile, LocomotionState } from '../animation/LocomotionAnimator';
@@ -91,6 +92,18 @@ export interface AutomationHooks {
   __arWorldFrame: () => number[];
   /** CSS px of a world point in the flat-screen view, or null behind the camera: where a check touches to aim at it. */
   __projectToScreen: (point: readonly number[]) => { x: number; y: number } | null;
+  /** The scanned place (docs/features/splat-capture.md), or null without `?placeCapture=1`. */
+  __samplePlace: () => PlaceCaptureReport | null;
+  /** What the set and the rest of the world answer to a cast straight down at each (x, z). */
+  __probePlaceCasts: (points: ReadonlyArray<[number, number]>) => ReturnType<CapturePlace['probeCasts']>;
+  /** Brings a scan in by URL, as `?place=` does at start. */
+  __loadPlaceUrl: (url: string) => Promise<boolean>;
+  /** Lowers the take's size cap (null restores 25 MB), so a check can make the place thin to fit at Stop. */
+  __setPlaceGlbBudget: (bytes: number | null) => void;
+  /** Lowers Spark's draw budget for the next scan loaded (null restores the device's), so a small scan gets a LoD tree. */
+  __setPlaceLodBudget: (splats: number | null) => void;
+  /** Where the desktop point's aim last landed, in the set frame. */
+  __pointLanding: () => { origin: [number, number, number]; point: [number, number, number]; landed: boolean };
 }
 
 export interface TracesSnapshot {

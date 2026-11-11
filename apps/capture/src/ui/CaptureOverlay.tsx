@@ -362,6 +362,19 @@ function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge
         </Section>
       ) : null}
 
+      {state.place.enabled ? (
+        <Section title="Place">
+          <div>
+            <PlacePicker bridge={bridge} place={state.place} disabled={state.recordingState !== 'idle'} input={input} />
+          </div>
+          {state.place.message ? (
+            <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
+              {state.place.message}
+            </Type>
+          ) : null}
+        </Section>
+      ) : null}
+
       <Section title="Props">
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
           <ObjectPicker bridge={bridge} object={state.object} disabled={state.recordingState !== 'idle'} input={input} />
@@ -434,6 +447,21 @@ function ObjectPicker({ bridge, object, disabled, input }: { bridge: CaptureUiBr
       disabled={disabled || object.status === 'loading'}
       input={input}
       onFiles={(files) => bridge.loadObjectFile(files[0]!)}
+    />
+  );
+}
+
+// A scanned place (docs/features/splat-capture.md): one .spz or .ply, chosen before recording, replaces the set.
+function PlacePicker({ bridge, place, disabled, input }: { bridge: CaptureUiBridge; place: UiViewModel['place']; disabled: boolean; input: HitInput }) {
+  const label = place.status === 'loading' ? 'Reading the scan…' : place.status === 'ready' ? `Place: ${place.name}` : 'Choose a scan…';
+  return (
+    <FilePickerWord
+      label={label}
+      ariaLabel="Choose a scanned place (.spz, .ply)"
+      accept=".spz,.ply"
+      disabled={disabled || place.status === 'loading'}
+      input={input}
+      onFiles={(files) => bridge.loadPlaceFile(files[0]!)}
     />
   );
 }

@@ -25,6 +25,8 @@ import { supportsImmersiveVr, type XrFeedState } from "../xr/xrSupport";
 import { resolveMediaUrl } from "./api";
 import { HologramCardCanvas, type FrameRect, type HologramRenderInfo } from "./HologramCardCanvas";
 import { LOAD_TURN_MS, watchDownloadEnd } from "./modelLoadOrder";
+import { readPlaceRequest } from "../place/placeRequest";
+import { testHooks } from "../../testHooks";
 
 type HologramCardProps = {
   item: HologramDTO;
@@ -40,6 +42,8 @@ type HologramCardProps = {
   target: ViewTarget & { kind: "flat" };
   /** The loaded feed and its cursor, carried into XR for the gallery. */
   xrFeed?: () => NonNullable<XrFeedState["feed"]>;
+  /** The first card in the feed: the one `?place=` puts a scanned place around (dev and e2e builds). */
+  first?: boolean;
 };
 
 type CardModelAvailability = ModelAvailability | "queued" | "checking";
@@ -214,8 +218,9 @@ function formatByline(item: HologramDTO): string {
   return `By ${item.submittedBy} · ${new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, onDelete, loadTurn, onModelSettled, target, xrFeed }: HologramCardProps) {
+export function HologramCard({ item, active, muted, onToggleMute, onDelete, loadTurn, onModelSettled, target, xrFeed, first }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
+  const placeRequest = useMemo(() => (testHooks ? readPlaceRequest(window.location.search, { id: item.id, first: first === true }) : null), [first, item.id]);
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
@@ -442,6 +447,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
                 frameRect={frameRect}
                 soot={soot}
                 author={item.submittedBy}
+                placeRequest={placeRequest}
               />
             </ModelRenderBoundary>
           ) : (

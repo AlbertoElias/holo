@@ -44,7 +44,7 @@ const envSchema = z.object({
   UPLOAD_INTENT_GRACE_MS: z.coerce.number().int().nonnegative().default(900_000),
   UPLOAD_INTENT_COMPLETED_RETENTION_MS: z.coerce.number().int().positive().default(86_400_000),
   USDZ_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
-  USDZ_STALE_CLAIM_MS: z.coerce.number().int().positive().default(600_000),
+  USDZ_STALE_CLAIM_MS: z.coerce.number().int().positive().default(1_200_000),
   AUTH_MAGIC_LINK_TTL_MS: z.coerce.number().int().positive().default(900_000),
   AUTH_SESSION_TTL_MS: z.coerce.number().int().positive().default(2_592_000_000),
   AUTH_DEV_EXPOSE_MAGIC_LINK: boolFromEnvFalse,
