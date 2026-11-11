@@ -49,3 +49,18 @@ body {
   outline: 1.5px solid var(--holoim-color-gold) !important;
   outline-offset: 3px;
 }
+
+/* The Find field takes the gold focus ring, 3 apx out (styleguide §6), as every control does. */
+.finder-field:focus-within {
+  outline: 1.5px solid var(--holoim-color-gold);
+  outline-offset: 3px;
+}
+.finder-field input::placeholder {
+  color: var(--holoim-color-text-muted);
+  opacity: 1;
+}
+
+/* The field has its own clear mark: none of the browser's. */
+.finder-field input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}

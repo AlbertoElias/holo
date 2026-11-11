@@ -634,24 +634,24 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     const noObject = { objectNodes: objectNodes(plainTake).length, extension: plainTake.extension !== undefined, extensionsUsed: plainTake.json.extensionsUsed ?? [] };
     if (noObject.objectNodes !== 0 || noObject.extension || noObject.extensionsUsed.includes('HOLOIM_objects')) fail(`a take without an object exported one: ${JSON.stringify(noObject)}`);
 
-    // The picker refuses an unsupported model and keeps capture working.
-    // The pickers live in the settings side sheet.
-    await page.getByRole('button', { name: 'Settings' }).click();
-    const picker = page.getByLabel('Choose an object (.glb)');
+    // The tray refuses an unsupported model and keeps capture working. Files are added from the tray itself.
+    await page.getByTestId('dock-tray').click();
+    await advance(0.5);
+    const picker = page.getByLabel('Add tray items (.glb, .png, .jpg)');
     await picker.setInputFiles(await unsupportedCopy(captureRoot, path.join(artifactDir, `${label}-draco.glb`)));
     await page.getByText('Unsupported in objects: Draco-compressed meshes.').waitFor({ timeout: 10_000 });
     let state = await readState(page);
-    if (state.objects.items.length !== 0) fail('a refused model was added to the scene');
+    if (state.objects.items.length !== 0 || state.objects.tray.items.length !== 0) fail('a refused model was added to the scene or tray');
     const refusal = 'Unsupported in objects: Draco-compressed meshes.';
 
-    // ...and loads the bracket.
-    await picker.setInputFiles(path.join(captureRoot, 'fixtures/objects/bracket.glb'));
-    await page.getByText('Object: bracket.glb').waitFor({ timeout: 10_000 });
+    // ...and the prepared object is the bracket, loaded at runtime like the picker did before objects came from the tray.
     await page.keyboard.press('Escape');
-    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+    await advance(0.5);
+    await page.locator('[data-testid="dock-tray"][data-open="false"]').waitFor();
+    await page.evaluate((url) => window.__loadObjectUrl(url), OBJECT_URL);
     await advance(0.1);
     state = await readState(page);
-    if (state.objects.items[0]?.placed !== true) fail('the picked object was not placed');
+    if (state.objects.items[0]?.placed !== true) fail('the prepared object was not placed');
 
     const keyFor = async (code, seconds) => {
       await page.keyboard.down(code);

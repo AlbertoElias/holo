@@ -481,7 +481,7 @@ a gesture zone.
 | Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
 | Undo / Redo | The Halo's W and E: undo or redo the last held mark or hand trace | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 | Ink | The Halo's NW in a headset: start or end a hand trace while recording (PRD-023) | "Ink" (name); "Tracing 0:03" on the status line while on | A curving path into a fingertip dot (`glyph.path.ink`) |
-| Tray | Open the tray of objects to summon (capture) | "Tray" (name; "Tray · hold T" with a keyboard) | A cube, a cone and a ball on a shelf (`glyph.path.tray`) |
+| Tray | Open the tray of objects to summon (capture) | "Tray" (name; "Tray · hold T" with a keyboard) | A cube over an open tray (`glyph.path.tray`) |
 | Put back | Put the held object back into the tray (capture) | "Put back" | An arrow down onto the tray's shelf, the mirror of Upload (`glyph.path.putBack`) |
 | Squeeze | Beside the tray miniature in reach, with controllers: squeeze to summon it | None | A closed fist, front on, the thumb across the fingers (`glyph.path.squeeze`; after Lucide's hand-fist) |
 | Pinch | The same, with bare hands: pinch to summon it | None | A hand side on, the thumb meeting the index fingertip, two contact ticks (`glyph.path.pinch`; after Iconoven's hand-pinch) |
@@ -504,6 +504,28 @@ every other glyph is a line.
 **States.** On hover the glyph, ring included, brightens from gold to the
 edge's cream highlight `#fff3cf`. Keyboard focus adds a 1.5 apx gold ring
 3 apx outside the glyph. Pressing dims it to 55%. There is never a glow.
+
+**Hints.** A glyph with no word beside it names itself in a hint, in the
+viewer and in capture alike (one component, `useHint`): after a short hover
+or on keyboard focus, a small chip bubble above the glyph with its name and,
+where a keyboard drives it, its key ("Tray · hold T", "Put back · Backspace").
+Never on touch, which has no hover. Icons carry the dock; words appear only
+when a hover or a problem asks for them.
+
+**Choosing one of a few** (hand, face camera). Each option is a ring with the
+words beside it, in a row that wraps; the chosen option's ring holds a gold
+dot (3.5 apx radius in the 16 apx icon box); no sentence repeats it. Selection is never a gold fill (the chip is the only
+container). Options sit two glyph gaps apart (24 apx) and, when they wrap, half
+a gap (6 apx) between lines; keyboard focus rings the option as in section 6
+without crowding its neighbour. One component, `ChoiceGroup`, serves every
+such choice.
+
+**Text only when needed.** A sheet says nothing a control or a placeholder
+already says: a field's placeholder names it, an empty tray shows empty slots,
+a working camera or microphone is not announced (a blocked one is, once, with
+what to do). Long help, such as the keys, folds away until asked for. A
+settings sheet groups its controls in sections with a byline title
+(`SettingsSection`) and never repeats a control the main screen already has.
 
 ### 6.1 Hit sizes per input
 

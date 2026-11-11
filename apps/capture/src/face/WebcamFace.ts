@@ -18,6 +18,18 @@ const SWAP_SIDES = false;
 const HOLD_SEC = 0.2;
 const DETECT_INTERVAL_MS = 1000 / 30;
 
+/**
+ * The camera is on by default: the page asks for it when it loads. `?faceCamera=off`
+ * leaves it off. An automated browser (Playwright, CI) leaves it off unless
+ * `?faceCamera=on`, so a run never waits on a permission prompt or the model download.
+ */
+export function faceCameraOnByDefault(search: string = globalThis.location?.search ?? '', automated: boolean = globalThis.navigator?.webdriver === true): boolean {
+  const asked = new URLSearchParams(search).get('faceCamera');
+  if (asked === 'on') return true;
+  if (asked === 'off') return false;
+  return !automated;
+}
+
 /** ARKit-52 weights and gaze from the desktop or phone camera. */
 export class WebcamFace {
   state: FaceCameraState = 'off';

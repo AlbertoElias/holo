@@ -434,9 +434,9 @@ export async function runDesktopVoiceTake({ browser, baseUrl, captureRoot, artif
     });
     await openCapture(page, baseUrl, {});
     await page.evaluate((ms) => window.advanceTime(ms), 60 * STEP_MS);
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByTestId('dock-find').click();
     const capabilities = await page.getByTestId('find-capabilities').innerText().catch(() => null);
-    const field = page.getByLabel('Find an object');
+    const field = page.getByTestId('find-sheet').getByLabel('Find an object');
 
     // Speech recognition: interim words in the field while listening, then the final phrase searched.
     await page.getByRole('button', { name: 'Speak to find' }).click();

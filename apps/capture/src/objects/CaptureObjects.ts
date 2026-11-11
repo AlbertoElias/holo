@@ -204,10 +204,6 @@ export class CaptureObjects {
     return this.load(() => fetchSuppliedObject(url));
   }
 
-  loadFile(file: File): Promise<boolean> {
-    return this.load(() => readSuppliedObjectFile(file));
-  }
-
   loadTrayUrls(urls: readonly string[]): Promise<boolean> {
     return this.loadTray(urls.map((url) => () => fetchSuppliedObject(url)));
   }
