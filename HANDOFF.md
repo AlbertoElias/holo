@@ -47,14 +47,22 @@ queue item in [`TODOS.md`](TODOS.md).
   and From where you stand (`cmwamq2r40001oeirjgjaaau1`). All six render at
   https://holoim-viewer.pages.dev and the stored files match the local
   builds byte for byte; their sound is unheard and none has been seen in a
-  headset or AR. None of the ten has a Quick Look preview (`usdzStatus`
-  is `none`; cause not looked into). The GLB writer now refuses
+  headset or AR. None of the authored pieces, sixteen with the third set, has a Quick
+  Look preview (`usdzStatus` is `none`; cause not looked into). The GLB writer now refuses
   non-finite values, after a NaN vertex made one piece draw as nothing in
   the viewer while its contact sheet looked right.
   A third set of six was added on the same branch 2026-11-10 (`street`,
   `orion`, `corridor`, `mirror`, `dive`, `stairs`; see "Third set" in the
-  concept page) and checked in the local viewer feed. It is not on the live
-  feed: uploading waits for the user's go-ahead. Three of the six (`street`,
+  concept page), checked in the local viewer feed, and uploaded to the live
+  feed the same day at the user's go-ahead: The other side of the mirror
+  (`cmwbcxce0000boeirl72up7p9`), The corridor is a lie
+  (`cmwbcx8130009oeir3b6yr83b`), Everyone's down is different
+  (`cmwbcx0xq0007oeir69vcjs4n`), Every moment of the dive
+  (`cmwbcwwcz0005oeirzfhyv6xl`), The street that turns to follow you
+  (`cmwbcwqx90003oeir73lzsc4e`) and Orion isn't flat
+  (`cmwbcwkv40001oeir5qh8zuv2`). All six render at
+  https://holoim-viewer.pages.dev and the stored files match the local
+  builds byte for byte. Three of the six (`street`,
   `orion`, `corridor`) are built for the feed's measured first view, so a
   change to how the feed frames a card would break them; their sound is
   unheard and none has been seen in a headset or AR. `verify:agent` passed
