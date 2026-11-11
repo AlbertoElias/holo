@@ -104,7 +104,8 @@ queue item in [`TODOS.md`](TODOS.md).
   new card (`cmwc1glil0001oeiqy1n2s45h`, 9.22 MB, stored file identical to
   the build): it is the only hologram on the live feed with placed sound
   (umbrella, splash and lamp placed, the rain bed unplaced). The earlier
-  single-mix card (`cmwamqg2a0009oeir4p2qzv7j`) is still on the feed. In the
+  single-mix card (`cmwamqg2a0009oeir4p2qzv7j`) was deleted from the feed the
+  same day at the user's request. In the
   live viewer the new card renders with no page errors and builds three HRTF
   panners that move under orbit and come closer under zoom. Listening by ear
   and a physical headset are unverified.
