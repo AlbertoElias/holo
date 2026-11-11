@@ -13,6 +13,7 @@ import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
 import { makeFixture, type Fixture } from "./place-fixture";
+import { shotStats } from "./place-pixels";
 import { waitForUsdzReady } from "./pipeline-takes";
 import { cardCenter, installProbe, readPortal, waitForFrozenTimes, waitForPortalReady } from "./portal-helpers";
 
@@ -72,6 +73,7 @@ type CaptureWindow = Window & {
   __probePlaceCasts: (points: ReadonlyArray<[number, number]>) => Array<{ set: string | null; setY: number | null; world: string[] }>;
   __loadPlaceUrl: (url: string) => Promise<boolean>;
   __pointLanding: () => { origin: Vec3; point: Vec3; landed: boolean };
+  __projectToScreen: (point: readonly number[]) => { x: number; y: number } | null;
 };
 
 type TextState = {
@@ -113,6 +115,8 @@ const GREEN_BOX = { x: -0.9, z: 0 };
 const FAINT_SHEET_X = 0.5;
 const OPAQUE_SHEET_X = -0.5;
 const FAINT_OPACITY = 0.3;
+/** A magenta cluster past the scan's floor and its fade, in view from the spawn: the place's ground must not paint over it. */
+const BEACON = { x: 2.5, z: -8, height: 1.4 };
 
 function sheet(x: number, opacity: number): NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> {
   const blobs: NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> = [];
@@ -122,12 +126,20 @@ function sheet(x: number, opacity: number): NonNullable<Parameters<typeof makeFi
   return blobs;
 }
 
+function beacon(): NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> {
+  const blobs: NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> = [];
+  for (let ix = -3; ix <= 3; ix += 1) for (let iy = -3; iy <= 3; iy += 1) for (let iz = -1; iz <= 1; iz += 1) {
+    blobs.push({ x: BEACON.x + ix * 0.07, z: BEACON.z + iz * 0.07, height: BEACON.height + iy * 0.07, scale: 0.05, color: [1, 0, 1], opacity: 0.99 });
+  }
+  return blobs;
+}
+
 function roomFixture(): Fixture {
   return makeFixture({
     half: 6,
     ring: { x: 0, z: 0, radius: 0 },
     clutter: 0,
-    blobs: [...sheet(FAINT_SHEET_X, FAINT_OPACITY), ...sheet(OPAQUE_SHEET_X, 0.95)]
+    blobs: [...sheet(FAINT_SHEET_X, FAINT_OPACITY), ...sheet(OPAQUE_SHEET_X, 0.95), ...beacon()]
   });
 }
 
@@ -301,6 +313,31 @@ async function holdOn(page: Page, target: Vec3): Promise<{ landing: Vec3; landed
   return { landing: landing.point, landed: landing.landed, origin: landing.origin };
 }
 
+/** Draws a few frames and counts the beacon's magenta pixels where it projects; drawing is off again after. */
+async function drawnBeacon(page: Page, at: Vec3): Promise<number> {
+  await page.evaluate(() => (window as unknown as CaptureWindow).__setManualClock(true, true));
+  let best = 0;
+  try {
+    // Spark sorts in a worker: a few frames until the splats are in order.
+    for (let frame = 0; frame < 8 && best < 60; frame += 1) {
+      await page.evaluate((ms) => (window as unknown as CaptureWindow).advanceTime(ms), STEP_MS);
+      await page.waitForTimeout(250);
+      const screen = await page.evaluate((point) => (window as unknown as CaptureWindow).__projectToScreen(point), at);
+      if (!screen) throw new Error("the beacon is not in view from the spawn");
+      const clip = { x: Math.max(0, screen.x - 20), y: Math.max(0, screen.y - 20), width: 40, height: 40 };
+      const png = await page.screenshot({ clip });
+      best = Math.max(best, (await shotStats(page, png)).magenta);
+      if (frame === 0) {
+        await mkdir(evidenceDir, { recursive: true });
+        await page.screenshot({ path: path.join(evidenceDir, "room-capture-spawn.png") });
+      }
+    }
+  } finally {
+    await page.evaluate(() => (window as unknown as CaptureWindow).__setManualClock(true, false));
+  }
+  return best;
+}
+
 async function recordAndDownload(page: Page, during: () => Promise<void>, file: string): Promise<Buffer> {
   await page.getByRole("button", { name: CONTROL_NAMES.startRecording }).evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible();
@@ -418,6 +455,8 @@ type RoomTake = {
   standingFootY: number;
   holds: { faint: { landing: Vec3; landed: boolean }; opaque: { landing: Vec3; landed: boolean } };
   casts: Array<{ set: string | null; setY: number | null; world: string[] }>;
+  /** Magenta pixels around the beacon past the scan's edge, drawn from the spawn. */
+  beaconMagenta: number;
   errors: string[];
 };
 
@@ -430,6 +469,7 @@ function recordRoomTake(browser: Browser): Promise<RoomTake> {
     try {
       const report = await waitForPlace(page, "ready");
       await advance(page, 3);
+      const beaconMagenta = await drawnBeacon(page, toSet(report, { x: fixture.middle.x + BEACON.x, y: fixture.floorY + BEACON.height, z: fixture.middle.z + BEACON.z }));
       // The 10 m walk: out and back across the scan, the sole read at every step.
       const soles: number[] = [];
       let walked = await walk(page, 0, 5, report.floorBandY, soles);
@@ -460,7 +500,7 @@ function recordRoomTake(browser: Browser): Promise<RoomTake> {
         await advance(page, 1);
         standingFootY = footBoneY(await textState(page)) - report.floorBandY;
       }, path.join(evidenceDir, "room-take.glb"));
-      return { glb, fixture, report: (await placeReport(page))!, soles, walked, standingFootY, holds, casts, errors };
+      return { glb, fixture, report: (await placeReport(page))!, soles, walked, standingFootY, holds, casts, beaconMagenta, errors };
     } finally {
       await context.close();
     }
@@ -488,6 +528,8 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
     expect(report.worldModel, "the set every consumer reads is the scan's floor").toBe("PlaceFloor");
     expect(report.groundVisible, "the stage's ground no longer draws").toBe(false);
     expect(report.previousSetAttached, "the old set is gone from the scene").toBe(false);
+    // Past the scan's edge the place's ground shows, and nothing of the scan is painted over by it.
+    expect(take.beaconMagenta, "the beacon past the scan's floor draws, not covered by the place's ground").toBeGreaterThan(60);
 
     expect(take.walked, "the walk covers 10 m").toBeGreaterThanOrEqual(10);
     const worst = Math.max(...take.soles.map(Math.abs));

@@ -310,7 +310,7 @@ Slice 2a (desktop):
   by the API and refused by the viewer without a crash.
 - [x] No Spark code in either app's first chunk; the place chunk loads only
   for a hologram with `HOLOIM_place` or a capture place.
-- [ ] Proof video: the user's (or the downloaded) scan, a take recorded in it
+- [x] Proof video: the user's (or the downloaded) scan, a take recorded in it
   on the desktop, uploaded and played in the feed.
 
 Slices 2b (Quest VR) and 2c (phone AR), each with its device check:
@@ -429,6 +429,14 @@ XR viewers moved to 2b; numeric acceptance criteria.
 - **The crop** keeps the packed words of every splat in the estimated
   dome's swept box, less splats under the floor's slack, too faint to show
   or too large for any dome; none of those are drawn by the clip.
+- **The place's floor under the splats.** The `PlaceFloor` disc (the ground
+  past the scan, faded at its edge) was transparent and drawn after Spark's
+  splats, which write no depth, so it painted a dark band over the lower
+  half of the scan on the desktop page (seen by the user, missed by the
+  checks, which step without drawing). It now writes depth with a polygon
+  offset and draws before the splats, which test against it. The capture
+  test draws frames from the spawn and requires a magenta beacon past the
+  scan's floor to show.
 - **The backward-compatibility tests** need two older builds served beside
   the run (`E2E_MAIN_VIEWER_URL`, `E2E_BASE_CAPTURE_URL`), so CI skips
   them; they were run locally on 2026-11-11. The downloaded-scan tests run

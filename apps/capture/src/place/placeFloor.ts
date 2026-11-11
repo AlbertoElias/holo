@@ -21,7 +21,13 @@ export function createPlaceFloor(scanRadius: number): THREE.Mesh {
   geometry.rotateX(-Math.PI / 2);
   const material = new THREE.ShaderMaterial({
     transparent: true,
-    depthWrite: false,
+    // Its depth, not its colour, decides what the splats cover: they write none, so a floor drawn after them
+    // painted over every wall and chair past the scan's edge (below the horizon, a dark half-height wall).
+    depthWrite: true,
+    // Pushed back a little, so the scan's own floor splats lying on y = 0 win at the fade.
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 4,
     uniforms: {
       color: { value: new THREE.Color(FLOOR_COLOR) },
       inner: { value: scanRadius },
@@ -49,8 +55,9 @@ export function createPlaceFloor(scanRadius: number): THREE.Mesh {
   });
   const floor = new THREE.Mesh(geometry, material);
   floor.name = PLACE_FLOOR_NAME;
-  // Drawn after the splats' own floor, so it never hides it where they overlap at the edge.
-  floor.renderOrder = 1;
+  // Drawn before the splats (Spark's renderer is transparent at order 0): they depth-test against it, so the room
+  // stands on it and only floaters under the floor are hidden.
+  floor.renderOrder = -1;
   return floor;
 }
 
