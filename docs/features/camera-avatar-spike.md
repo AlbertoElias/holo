@@ -243,6 +243,40 @@ distances. Each pose is held for about 3 seconds, in this order:
 - A page without `?input=camera` is covered only by the unchanged hands and
   face checks.
 
+## Results on the user's clip (2026-11-11)
+
+One 80 s clip (iPhone front camera, portrait, propped; 2,411 frames at 30 fps),
+frame-stepped on an M1 Max GPU. The clip stays in ignored `output/bodycam/`.
+Distances were estimated, not measured (about 1 m, 0.5 m, 0.5 m). The clip has
+no aim at the lens. Report only; nothing here is a check.
+
+| Measure | Result | Bar | Reading |
+|---|---|---|---|
+| Body found | 2,411 of 2,411 frames | - | Good |
+| Hand coverage while the hand is in view | 1.00 in every pose segment, longest gap 0.03 s | 0.9 | Meets |
+| Sides (step 2) | right hand 66 of 66 frames, left 0 | - | Right, if the clip is unmirrored (not confirmed) |
+| Pose model against the hand model's own label | agree on 2,127 of 2,211 hands | - | The "label reads the opposite" note in the report is wrong on this clip |
+| Point score while pointing | median 1.0; 0.6 or more in 95 to 100% of frames | 0.6 enter | Meets |
+| Point score on open hands, fists, pinch | 0 | under 0.35 | Meets |
+| Pinch distance | median 1.8 cm, min 1.3 cm (open hand 6.6 to 9.7 cm) | 3 cm | Meets |
+| Index ray jitter while pointing | p50 2.1 to 5.3 deg, p95 5.7 to 20 deg | 3.5 deg tolerance | Misses |
+| Index ray jitter, open hand at rest | right p50 1.4, p95 3.1 deg; left (wrist brace) p50 3.0, p95 8.6 deg | 3.5 deg | Borderline |
+| Aim error | 26, 41 and 46 deg median on the three aims | 3.5 deg | Not established: far beyond what rough distances explain, so either the ray axes or geometry in the report are wrong or the pointing did not follow the assumed mark layout |
+| Head found | 2,242 of 2,411 frames | - | Lost for the whole turn to the author's left (3.7 s) and while a hand crossed the face (2 s) |
+| Head rotation | turn to the author's right reads +62 deg yaw; facing the lens reads 6 to 11 deg yaw and 16 to 24 deg pitch | - | Zero offset and the left-turn loss are unexplained |
+| Hand leaves and returns | lost within the segment, back at 0.92 coverage, 0.2 s gap | - | Works |
+
+Tracking rate was not measured on this clip (frame-stepped). Open after this
+run: the aim geometry and ray axes (an aim at the lens is the clean test), the
+head zero and left-turn loss, jitter filtering, and anything on a phone.
+
+Two script faults found on this first long clip: a whole clip handed to the
+browser through `route.fulfill` exceeded the 100 MB control-pipe limit and
+killed the browser (fixed: the capture server now serves the clip from its
+build directory), and the script's own server start timed out in
+`waitForServer` although the server was up (not fixed; worked around with
+`BASE_URL=https://127.0.0.1:<port> NODE_TLS_REJECT_UNAUTHORIZED=0`).
+
 ## Running the report on the clip
 
 From `apps/capture`, with the clip at `../../output/bodycam/clip.mov`:
