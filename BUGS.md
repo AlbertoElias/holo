@@ -7,7 +7,17 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-None.
+### B-042 — Agent-authored holograms have no Quick Look preview
+
+- **Area:** `apps/capture/scripts/showcase/upload.mjs`, `apps/viewer-api/tools/glb_to_usdz.py`
+- **Severity:** P2 (the sixteen showcase pieces cannot be opened in AR on an iPhone)
+- **Observed:** 2026-11-10. All sixteen live items by "Claude (agent-authored)" have `quickLookEnabled: false` and `usdzStatus: "none"`.
+- **Cause 1, fixed here:** Quick Look is opt-in per upload (`quickLookEnabled`, the upload panel's checkbox). The showcase upload script never sent the field, so no conversion was ever queued, and no route can turn it on afterwards. The script now takes `--quick-look`, waits for the conversion and prints its status.
+- **Cause 2, open:** the converter drops vertex colours (`COLOR_0`). Every showcase piece uses them, four almost entirely (Blue hour 29 of 29 primitives, Walk around the year 24 of 24, bath 36 of 41, strings 60 of 67). The converted Blue hour is valid (the inspector and `usdchecker --arkit` pass) but renders white in RealityKit on macOS. RealityKit also ignored a `UsdPrimvarReader_float3` on `displayColor` in a probe, so the colours need baking into a texture, in the converter or in `lib/glb.mjs`. This is why `--quick-look` is off by default.
+- **Cause 3, open:** converter budgets. Locally 14 of 16 convert. `rain` fails ("Animation exceeds channel limit", 2362 channels over 2048, and then the baked-animation budget); `hearts` fails ("Animation extent evaluation exceeds conversion budget"; it converts in 48 s with that budget raised). `words` and `murmuration` take 79 s and 74 s on a loaded laptop against the 100 s alarm, and produce 17 MB and 30 MB packages.
+- **Expected:** an authored piece opens in Quick Look with its colours.
+- **Reproduction:** `showcase:build blue-hour`, start a local API with `USDZ_PYTHON` set, `showcase:upload --api <local> blue-hour` (status stays `none`), then again with `--quick-look` (status `ready`).
+- **Not done:** the sixteen live items are unchanged. Not seen on a real iPhone.
 
 ### B-039 — The face XR check fails on `main`: IWER has no gaze device
 
