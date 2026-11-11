@@ -33,6 +33,23 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Record a take inside a scanned place (split capture slice 2, the
+  user's direction on 2026-11-10): capture loads a scan (SPZ or PLY) as the
+  take's set, and the place is stored with the hologram through export →
+  upload → render (a contract change: `KHR_gaussian_splatting` in the GLB or a
+  file it points to). It must work on every capture device: Quest VR, Quest
+  passthrough AR, phone AR and the desktop capture page. Open for the brief:
+  in AR, whether the scan is lined up with the real room it was taken in or
+  replaces the passthrough; how the author brings a scan into capture; scan
+  size and frame rate on a phone. Slice 1, the viewer's render end, is in
+  [`docs/features/archive/splat-place.md`](docs/features/archive/splat-place.md). Owned by
+  [`docs/features/splat-capture.md`](docs/features/splat-capture.md).
+- [ ] Record a performer in Quest passthrough AR: today any non-handheld AR
+  session is a spectator (`frame.arSpectator`), so a headset in passthrough
+  records nothing. Needs its own brief (the body, the floor and the
+  microphone in passthrough). Split capture's slice 2d, the place in
+  passthrough, waits on it (the user, 2026-11-10, Q1 of
+  [`docs/features/splat-capture.md`](docs/features/splat-capture.md)).
 - [ ] Only one `verify:pr` runs at a time across worktrees (user, 2026-11-10).
   Parallel sessions collided on hardcoded default ports and on CPU: B-039's
   `verify:pr` passed only on its eighth run, every earlier failure a port

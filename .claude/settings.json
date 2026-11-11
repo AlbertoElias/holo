@@ -20,9 +20,10 @@
     ]
   },
   "enabledPlugins": {
-    "vercel@claude-plugins-official": false
+    "vercel@claude-plugins-official": false,
+    "Notion@claude-plugins-official": false
   },
-  "autoCompactWindow": 400000,
+  "autoCompactWindow": 250000,
   "hooks": {
     "SessionStart": [
       {
@@ -35,5 +36,43 @@
       }
     ]
   },
-  "model": "sonnet"
+  "model": "sonnet",
+  "skillOverrides": {
+    "anthropic-skills:canvas-design": "user-invocable-only",
+    "anthropic-skills:doc-coauthoring": "user-invocable-only",
+    "anthropic-skills:google-workspace": "user-invocable-only",
+    "anthropic-skills:morning": "user-invocable-only",
+    "anthropic-skills:setup-claude": "user-invocable-only",
+    "anthropic-skills:skill-creator": "user-invocable-only",
+    "anthropic-skills:web-artifacts-builder": "user-invocable-only",
+    "anthropic-skills:deep-research": "user-invocable-only",
+    "anthropic-skills:import-memory": "user-invocable-only",
+    "anthropic-skills:docs": "name-only",
+    "anthropic-skills:docx": "name-only",
+    "anthropic-skills:pdf": "name-only",
+    "anthropic-skills:pptx": "name-only",
+    "anthropic-skills:xlsx": "name-only",
+    "claude-api": "user-invocable-only",
+    "plugin-authoring": "user-invocable-only",
+    "keybindings-help": "user-invocable-only",
+    "fewer-permission-prompts": "user-invocable-only",
+    "dataviz": "user-invocable-only",
+    "init": "user-invocable-only",
+    "security-review": "user-invocable-only",
+    "browse": "name-only",
+    "gstack": "name-only",
+    "gstack-upgrade": "name-only",
+    "plan-ceo-review": "name-only",
+    "plan-eng-review": "name-only",
+    "qa": "name-only",
+    "retro": "name-only",
+    "review": "name-only",
+    "setup-browser-cookies": "name-only",
+    "ship": "name-only"
+  },
+  "env": {
+    "ENABLE_STOP_REVIEW": "0",
+    "SECURITY_REVIEW_MODEL": "claude-sonnet-5-5",
+    "SG_AGENTIC_MODEL": "claude-sonnet-5-5"
+  }
 }

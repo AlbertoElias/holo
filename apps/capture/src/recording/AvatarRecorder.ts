@@ -7,7 +7,7 @@ import type { HeadsetMarkStep } from '../xr/HeadsetHolds';
 import { PointDetector, type TrackedHandJointReader } from '../xr/PointDetector';
 import type { HandPointSample } from './PointSampleStore';
 import { FrameCaptureStore } from './FrameCaptureStore';
-import { GltfExportComposer } from './GltfExportComposer';
+import { GltfExportComposer, type PlaceExportSource } from './GltfExportComposer';
 import { ObjectSampleStore } from './ObjectSampleStore';
 import { PointSampleStore } from './PointSampleStore';
 import type { PointResolutionReport } from './PointResolver';
@@ -103,7 +103,8 @@ export class AvatarRecorder {
   async exportToGlbBlob(
     avatar: THREE.Object3D,
     sceneRoot?: THREE.Object3D,
-    audioData?: { buffer: ArrayBuffer; mimeType: string }
+    audioData?: { buffer: ArrayBuffer; mimeType: string },
+    place?: PlaceExportSource
   ): Promise<Blob> {
     return this.gltfExportComposer.exportToGlbBlob(
       avatar,
@@ -113,7 +114,8 @@ export class AvatarRecorder {
       audioData,
       this.pointSamples,
       this.objectSamples,
-      this.authoringSamples
+      this.authoringSamples,
+      place
     );
   }
 }

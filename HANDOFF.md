@@ -28,6 +28,19 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- A scanned place around a take: slice 1 (brief
+  [`docs/features/archive/splat-place.md`](docs/features/archive/splat-place.md)),
+  split capture slice 2's brief and slice 2a, a take recorded inside a scanned
+  place on the desktop page behind `?placeCapture=1` (brief
+  [`docs/features/splat-capture.md`](docs/features/splat-capture.md)), merged
+  to `main` together 2026-11-11. On the merged tree every `verify:pr` step
+  passed except two pipeline tests: `bubble-capture` (B-043, which fails on
+  `main` too) and one `place-capture` link check that read the previous link's
+  fading line under load (the test now waits for one line; it passed after).
+  The user's table scan leaves the author's feet 0.030 m off its floor in 2 of
+  3 runs (B-044; that case runs only where the scan is on disk).
+  Open: slices 2b (Quest VR) and 2c (phone AR); the viewer finds
+  `RecordedPlace` by name rather than the extension's node index.
 - Showcase holograms (merged to `main` 2026-11-11 together with positional
   audio; every `verify:pr` step passed on the combined tree, the viewer XR
   suite on a re-run after its AR placement test timed out once while another
@@ -103,6 +116,9 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Unverified / device-only
 
+- Scanned places (slices 1 and 2a): the user's real scan ran only headless on
+  the Mac; the phone portal and capture on a phone or Quest are unchecked
+  (slice 2c and 2b in [`docs/features/splat-capture.md`](docs/features/splat-capture.md)).
 - Hand traces (brief
   [`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md)):
   IWER only. On a Quest, record real demonstrations and check how hand jitter
