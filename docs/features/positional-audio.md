@@ -312,6 +312,14 @@ speakers) is unverified.
 
 The brief stays open on these two checks: someone listens on headphones and
 on speakers, and tries the XR viewer on a Quest. Then it closes per step 6
-of [`../FEATURE_WORKFLOW.md`](../FEATURE_WORKFLOW.md). The live feed's
-`rain` piece is still the old single-mix build; re-uploading the retrofitted
-one is the user's decision.
+of [`../FEATURE_WORKFLOW.md`](../FEATURE_WORKFLOW.md).
+
+The retrofitted `rain` piece is on the live feed, uploaded 2026-11-11 at the
+user's go-ahead as a new card, `cmwc1glil0001oeiqy1n2s45h`. It is built on
+`main` (`f64690f4c033`), 9,219,760 bytes, with one global emitter (the rain)
+and three positional ones (umbrella, splash, lamp), and the stored file is
+byte-identical to that build. In the live viewer it renders with no page
+errors and builds three HRTF panners (`refDistance` 1.5). Its four 12 s
+sources start, and the panners move under a quarter-turn drag and come
+closer under zoom. The earlier single-mix card, `cmwamqg2a0009oeir4p2qzv7j`,
+is still on the feed. Listening and a headset are unverified there too.
