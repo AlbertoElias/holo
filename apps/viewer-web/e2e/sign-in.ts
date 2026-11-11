@@ -8,6 +8,16 @@ export type E2eSession = {
   headers: { authorization: string };
 };
 
+/**
+ * One account per name: the API keeps the name an account was created with, so
+ * specs that share a database and a different name would otherwise get
+ * whichever name signed in first.
+ */
+function emailFor(displayName: string): string {
+  const slug = displayName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `${slug}@example.com`;
+}
+
 const sessions = new WeakMap<Page, Promise<E2eSession>>();
 
 /**
@@ -31,7 +41,7 @@ export function signInForUpload(
 
 async function signIn(
   page: Page,
-  { email = "e2e-creator@example.com", displayName = "E2E Creator" }: { email?: string; displayName?: string }
+  { displayName = "E2E Creator", email = emailFor(displayName) }: { email?: string; displayName?: string }
 ): Promise<E2eSession> {
   const link = await page.request.post("/api/auth/magic-link", { data: { email, displayName } });
   const { devMagicLinkToken } = (await link.json()) as { devMagicLinkToken?: string };
