@@ -122,6 +122,12 @@ Routing is the agent's job, not the user's. Do it automatically:
   another lead session, read the 5-hour percentage with `get_usage` and
   hold off above about 70%.
 
+- Codex usage is scarce: the user runs out of it fast. Spend it only on the
+  independent verifier and design-screenshot validation, never on routine
+  implementation or searches (Claude subagents do those). Apply the same
+  tier check: `-p light` for a bounded diff or log read, `-p standard` for
+  verifier and design reviews, `-p deep` only when the user approves it in
+  that task. Prefer Muse or a Claude subagent when either fits.
 - The independent verifier in `docs/FEATURE_WORKFLOW.md` uses a different
   vendor from the implementer (for example Codex implements, Claude verifies);
   same-model review shares the implementer's blind spots.
