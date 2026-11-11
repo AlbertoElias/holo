@@ -984,3 +984,38 @@ bug above.)
   shards then list in parallel as before.
 - **Evidence:** 14 of 14 cold-cache runs pass with the fix (each with a new
   `PWTEST_CACHE_DIR`). Not yet watched over several hosted CI runs.
+
+### B-041 — Avatar object checks release props just over the 3 cm limit on `unreal-cm`
+
+- **Area:** `apps/capture` avatar-formats suite (`scripts/ci-avatar-formats-playwright.ts`, `test:xr:avatars`)
+- **Severity:** P2 (local suite only; hosted CI does not run `avatars`, so it fails on `main` unnoticed)
+- **Observed:** 2026-11-10 on `main` `623e4645f986`; first seen by the locomotion retarget session, which also saw `reoriented-axes` and `no-fingers` fail their object checks
+- **Evidence:** 3 of 3 runs fail with identical numbers, `unreal-cm: object check failed`:
+  `desktop-object-bracket` "the put-down object was let go 0.0322 m above the floor (limit 0.03 m)",
+  plus "walking into the resting object moved it only -0.0001 m along the walk (expected at least 0.1 m)";
+  `desktop-mouse-object` 0.0324 m; `phone-touch-object` 0.0306 m. The other object checks pass.
+  Report and frames in `apps/capture/output/ci-avatars/unreal-cm/object/`.
+- **Expected:** a still release puts the prop down within 3 cm of the surface on every fixture, and walking into it moves it.
+- **Reproduction:** `XR_AVATAR_ONLY=unreal-cm pnpm --filter @holoim/capture run test:xr:avatars` (about 160 s). Not yet rerun for `reoriented-axes` and `no-fingers`. Suspect: the palm-derived grip offset (`OBJECT_ON`) sits 0.3–2 mm too high on centimetre-scaled rigs, or the limit is too tight; the failed walk-into suggests the prop was not at rest.
+- **Fix:** five causes, none of them the 3 cm limit (`ca93cf80fc3d`, `54dfc07eb5e6`):
+  1. `unreal-cm` drop height: every rig's squat hand bottoms out and the prop is let go by timeout. The crouch bent only
+     mapped spine bones, and `unreal-cm` maps chest to the inserted `spine_03` (4 cm above the default chest), so its
+     unmapped `spine_02` stayed straight (torso 40.5° vs 42.2°). `AvatarRig` now shares each mapped bone's bend with
+     the unmapped joints below it: drop 0.0233 m, still release 0.0234 m.
+  2. Walk-into: the take lined the root up 9 cm left of the prop, so a shin 7.5 cm off centre missed it. It now aims
+     the rig's own right shin. That exposed a character-controller snag. Rapier's combined down-and-across shape cast
+     sometimes hit flat floor at time zero and stopped the avatar for a step. `CharacterMotor` retries a move
+     cancelled on walkable floor only as across, then down. Contact speed now holds at 3.18 m/s, and the prop is
+     shoved 1.2–1.6 m on every rig, including the default.
+  3. `no-fingers` bat: a hand with unnamed finger joints had no palm collider. `AvatarColliders` now ends the palm at
+     the centroid of the hand's child joints: 0.237 → 0.857 m/s.
+  4. `no-fingers` throw: the harness sometimes runs two frames on one pose, and the newest-weighted release fit read
+     the repeated last pose as a stop (2.40 vs 3.07 m/s). `ObjectPhysics.fitVelocity` drops a stalled last pose:
+     3.02 vs 3.07.
+  5. `reoriented-axes` surface "not at rest": the scenario's 3 m/s rig walk left the VR body solver's feet 3–4 m
+     behind. Strides were clamped to the other, stranded foot, and the urgent step always picked the right foot,
+     so the legs lay level behind the body at hip height and the dropped prop rested on them. `VrBodySolver` now
+     measures a stride only from a foot within a stride of its slot, and steps the foot furthest behind first.
+     The prop now touches the avatar for 3–8 steps instead of about 150, and it sleeps.
+  Evidence: `test:xr:avatars` passes on all 17 fixtures (762 s, 2026-11-10).
+
