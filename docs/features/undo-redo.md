@@ -155,12 +155,15 @@ Alternatives considered:
   Rejected by the user. It would also mean editing already-recorded object
   tracks mid-take.
 
+The user approved this brief on 2026-11-11, including three choices: the
+history is cleared at take start and stop, undoing a place returns the
+object to its pose before the grab, and the tray actions (Find, removing a
+slot) are undoable.
+
 For design review:
 
 1. A gap in the track, or a new track, for an object that returns?
 2. A jump or a short ease when a place is undone?
-3. Clearing the history at take start: is it right, or should arranging
-   carry into the take?
 
 ## Test plan and evidence
 
