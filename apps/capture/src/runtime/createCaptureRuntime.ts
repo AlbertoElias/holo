@@ -133,6 +133,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     onTakeStart: () => {
       objects.startTake();
       history.clear();
+      history.capped = false;
     },
     isCameraAuthor: () => capture.frame.arCameraAuthor,
     recordRefusal: () => (capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
@@ -156,7 +157,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   // A finished take's meaning can no longer change: its history goes when it stops.
   let lastRecordingState = ui.getState().recordingState;
   ui.subscribe((state) => {
-    if (lastRecordingState === 'recording' && state.recordingState !== 'recording') history.clear();
+    if (lastRecordingState === 'recording' && state.recordingState !== 'recording') {
+      history.clear();
+      history.capped = true;
+    }
     lastRecordingState = state.recordingState;
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);

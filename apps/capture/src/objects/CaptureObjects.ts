@@ -555,6 +555,9 @@ export class CaptureObjects {
         prepared.push({ ...entry, name, thumbnail });
       }
       if (this.tray.getItems().length + prepared.length > MAX_TRAY_ITEMS) throw new SuppliedObjectError(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
+      // An undo may have brought an item back while this one prepared.
+      const after = this.budgetBytes() + prepared.reduce((sum, entry) => sum + entry.input.bytes.byteLength, 0);
+      if (after > MAX_TRAY_BYTES) throw new SuppliedObjectError(`The tray would be ${(after / 1048576).toFixed(1)} MB; the limit is ${MAX_TRAY_BYTES / 1048576} MB.`);
       const addedItems: TrayItem[] = [];
       for (const { input, item, name, thumbnail } of prepared) {
         const added = this.tray.add(item.model, { name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });

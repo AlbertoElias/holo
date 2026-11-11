@@ -48,12 +48,18 @@ export class CaptureHistory {
   private readonly undone: HistoryEntry[] = [];
   private readonly flushers: Array<() => void> = [];
   private readonly clearers: Array<() => void> = [];
+  /** Push order: a redone entry goes back to its place in time, not on top (an open trace undone first, then redone, stays older than the mark made inside it). */
+  private readonly order = new WeakMap<HistoryEntry, number>();
+  private pushes = 0;
+  /** Whether the oldest entries go past MAX_HISTORY_ENTRIES: only before a take; a take keeps every one (and its open trace). */
+  capped = true;
   /** Every push, undo and redo since load, in order, for checks. */
   readonly log: Array<{ op: 'push' | 'undo' | 'redo' | 'clear'; kind?: HistoryKind; word?: string; done?: boolean }> = [];
 
   push(entry: HistoryEntry): void {
+    this.order.set(entry, ++this.pushes);
     this.done.push(entry);
-    if (this.done.length > MAX_HISTORY_ENTRIES) this.done.shift();
+    if (this.capped && this.done.length > MAX_HISTORY_ENTRIES) this.done.shift();
     this.dropUndone();
     this.log.push({ op: 'push', kind: entry.kind, word: entry.word });
   }
@@ -99,7 +105,10 @@ export class CaptureHistory {
     const done = result === true;
     if (done) {
       this.undone.pop();
-      this.done.push(entry);
+      const at = this.order.get(entry) ?? Infinity;
+      const index = this.done.findIndex((other) => (this.order.get(other) ?? 0) > at);
+      if (index < 0) this.done.push(entry);
+      else this.done.splice(index, 0, entry);
     }
     this.log.push({ op: 'redo', kind: entry.kind, word: entry.word, done });
     return { action: 'redo', entry, done, text: done ? `${entry.word} restored` : refusal(result, 'redo') };

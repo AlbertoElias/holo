@@ -373,9 +373,10 @@ export class ObjectInteraction {
     return out;
   }
 
-  /** The history was cleared: the held prop's place and resize start from now. */
+  /** The history was cleared: the held prop's place and resize start from now (a summon's hold becomes a place, its summon gone). */
   rebaseHold(): void {
     if (!this.hold) return;
+    this.hold.fromTray = false;
     this.hold.before = wrapperPose(this.hold.object);
     this.hold.sizeBefore = this.hold.object.size;
   }
