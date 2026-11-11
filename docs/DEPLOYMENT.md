@@ -142,17 +142,20 @@ email. It uses Resend's REST API (free tier: 3,000 emails a month, 100 a
 day, which is ample for a few people). One-time operator steps:
 
 1. Create a Resend account and add the sending domain: Resend dashboard →
-   Domains → Add Domain → `holostud.io`. Resend lists the DNS records (SPF,
-   DKIM); add them in the Cloudflare DNS for the zone (as DNS only, not
-   proxied) and wait for the domain to show Verified.
+   Domains → Add Domain → `mail.holostud.io` (a subdomain, so the sending
+   records never touch the apex's mail). Resend lists the DNS records (SPF,
+   DKIM, MX for bounces); add them in the Cloudflare DNS for the zone (DNS
+   only, not proxied) and wait for the domain to show Verified. Done on
+   2026-11-11 (Resend domain id `6ba19e65-05b6-4e46-91d4-5b09c3f7a858`).
 2. Create an API key: Resend dashboard → API Keys → Create API Key →
-   "Sending access", for that domain.
+   "Sending access", for that domain (the production key is named for HoloIM
+   sign-in; never write its value down).
 3. Set the secrets:
 
 ```sh
 fly secrets set -a holoim-api \
   RESEND_API_KEY="<re_... key>" \
-  AUTH_EMAIL_FROM="signin@holostud.io"
+  AUTH_EMAIL_FROM="signin@mail.holostud.io"
 ```
 
 Without a key (or the Cloudflare variables below) and `AUTH_EMAIL_FROM`,
