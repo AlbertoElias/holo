@@ -1,10 +1,10 @@
 import { spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { createHttpsBaseUrl, findAvailablePort, startTestBuildServer, stopProcess, waitForServer } from '@holoim/tooling-testing/dev-server';
-import { ensureTestBuild } from '@holoim/tooling-testing/test-build';
+import { ensureTestBuild, testBuildDir } from '@holoim/tooling-testing/test-build';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 import { createXrContext, launchXrBrowser, waitForPageFunctions, waitForTextContentPrefix, wireXrConsoleErrors } from '@holoim/tooling-testing/xr-env';
 
@@ -104,6 +104,7 @@ const [num, den] = (info.streams[0]?.r_frame_rate ?? '30/1').split('/').map(Numb
 const clipFps = Math.min(30, Math.round(((num ?? 30) / (den || 1)) * 100) / 100);
 const clipFrames = Math.round(clipSec * clipFps);
 const steppedClip = path.join(outDir, 'stepped-clip.webm');
+const servedClip = path.join(testBuildDir('capture', { ...process.env }), '__bodycam-clip.webm');
 const avatarSources: Array<{ left: string; right: string }> = [];
 const fakeCamera = path.join(outDir, 'fake-camera.mjpeg');
 // --crop43 (frame-stepped): what the app's own 640 by 480 camera request delivers from a wider clip, a centre crop; it
@@ -157,7 +158,9 @@ try {
   url.searchParams.set('input', 'camera');
   if (!realtime) url.searchParams.set('manualClock', '1');
   if (flag('--cpu')) url.searchParams.set('mpDelegate', 'cpu');
-  if (!realtime) await page.route('**/__bodycam-clip.webm', (route) => route.fulfill({ path: steppedClip, contentType: 'video/webm' }));
+  // Served by the capture server itself, from its build directory: one reply with a whole long clip exceeds the 100 MB
+  // message limit of the browser's control pipe (route.fulfill) and kills the browser. A BASE_URL server must serve that directory.
+  if (!realtime) await copyFile(steppedClip, servedClip);
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['__toggleFaceCamera', '__bodycamTap', '__drainBodycamLog', '__sampleBodycamTracker', ...(realtime ? [] : ['advanceTime', '__setManualClock', '__bodycamSteppedStart'])]);
   await waitForTextContentPrefix(page, '#status', 'loaded');
@@ -251,6 +254,7 @@ try {
     }
   }
 } finally {
+  await rm(servedClip, { force: true });
   await browser.close();
   await stopProcess(server);
 }
