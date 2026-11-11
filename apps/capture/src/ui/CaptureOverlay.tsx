@@ -380,12 +380,6 @@ function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge
         </SettingsSection>
       ) : null}
 
-      <SettingsSection title="Props">
-        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-          <ObjectPicker bridge={bridge} object={state.object} disabled={state.recordingState !== 'idle'} input={input} />
-        </div>
-      </SettingsSection>
-
       <details data-testid="controls-help">
         <summary style={{ ...typeRoleStyle('byline'), cursor: 'pointer', color: 'var(--holoim-color-gold)' }}>{touch ? 'Touch controls' : 'Keys'}</summary>
         <div style={{ display: 'grid', gap: glyphMetrics({ headset: false }).gapApx, paddingTop: glyphMetrics({ headset: false }).gapApx }}>
@@ -429,21 +423,6 @@ function FilePickerWord({ label, ariaLabel, accept, multiple, disabled, input, o
         }}
       />
     </label>
-  );
-}
-
-// The supplied object (PRD-043): one GLB, chosen before recording.
-function ObjectPicker({ bridge, object, disabled, input }: { bridge: CaptureUiBridge; object: UiViewModel['object']; disabled: boolean; input: HitInput }) {
-  const label = object.status === 'ready' ? `Object: ${object.name}` : object.status === 'loading' ? 'Loading object…' : 'Choose object…';
-  return (
-    <FilePickerWord
-      label={label}
-      ariaLabel="Choose an object (.glb)"
-      accept=".glb,model/gltf-binary"
-      disabled={disabled || object.status === 'loading'}
-      input={input}
-      onFiles={(files) => bridge.loadObjectFile(files[0]!)}
-    />
   );
 }
 

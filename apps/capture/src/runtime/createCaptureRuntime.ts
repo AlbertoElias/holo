@@ -364,7 +364,6 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       runHaloAction: (action, kind) => {
         haloActions.run(action, kind);
       },
-      loadObjectFile: (file) => void objects.loadFile(file),
       loadPlaceFile: (file) => void place?.load({ kind: 'file', file }),
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       loadTrayUrls: (urls) => void objects.loadTrayUrls(urls),

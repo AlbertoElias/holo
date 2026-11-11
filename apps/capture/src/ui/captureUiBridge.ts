@@ -13,7 +13,6 @@ export interface CaptureUiBridge {
   /** The dock's Halo glyph committed an action. */
   runHaloAction: (action: HaloAction, input: "mouse" | "touch") => void;
   recenterAr: () => void;
-  loadObjectFile: (file: File) => void;
   /** A scanned place (`.spz` or `.ply`) replaces the set (docs/features/splat-capture.md). */
   loadPlaceFile: (file: File) => void;
   loadTrayFiles: (files: File[]) => void;
