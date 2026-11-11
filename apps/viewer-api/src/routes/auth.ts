@@ -13,6 +13,7 @@ import { env } from "../lib/env.js";
 import {
   bearerToken,
   getSessionUser,
+  MagicLinkDeliveryError,
   requestMagicLink,
   revokeSession,
   toUserDto,
@@ -41,10 +42,19 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: "A valid email is required." });
     }
 
-    const { token } = await requestMagicLink({
-      email: parsed.data.email,
-      ...(parsed.data.displayName ? { displayName: parsed.data.displayName } : {})
-    });
+    let token: string;
+    try {
+      ({ token } = await requestMagicLink({
+        email: parsed.data.email,
+        ...(parsed.data.displayName ? { displayName: parsed.data.displayName } : {})
+      }));
+    } catch (error) {
+      if (error instanceof MagicLinkDeliveryError) {
+        request.log.error({ err: error }, "sign-in email not delivered");
+        return reply.status(503).send({ error: "We couldn't send the sign-in email. Try again in a minute." });
+      }
+      throw error;
+    }
 
     // Same response whether or not the email already has an account.
     return reply.status(202).send(

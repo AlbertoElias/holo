@@ -9,6 +9,7 @@ import { assertViewerShell, expect, reachFor, test } from "./bootstrap";
 import { animationFrames, cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
 import { MARKS, MIDPOINTS, OUTSIDE_TIMES, buildPointingGlb } from "./pointing-fixture";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
+import { signInForUpload } from "./sign-in";
 
 // Self-resolving pointing in the viewer (PRD-022): the referent lights up while
 // the author points. Two kinds of take go through the real upload → feed → render
@@ -37,6 +38,7 @@ type LinkReading = {
 
 async function upload(page: Page, name: string, glb: Buffer): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
+    headers: (await signInForUpload(page)).headers,
     multipart: {
       hologramName: `${name} ${Date.now()}`,
       submittedBy: "pointing-e2e",

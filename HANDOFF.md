@@ -28,6 +28,15 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
+- Creator sign-in sends its email and gates uploads (B-044, branch
+  `bug/creator-sign-in`, pushed, not merged). Merging makes the live app refuse
+  anonymous uploads and sign-in answer 503 until the operator completes
+  "Sign-in email" in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (onboard the
+  sending domain, token, three Fly secrets), so merge it after that step.
+  Local checks: `verify:agent`, the new `sign-in-email` e2e at desktop and phone
+  width, and the full viewer-web e2e; the one remaining failure group (AR
+  placement and the XR viewer's IWER planes) also fails on clean `origin/main`.
+
 - Showcase holograms (merged to `main` 2026-11-11 together with positional
   audio; every `verify:pr` step passed on the combined tree, the viewer XR
   suite on a re-run after its AR placement test timed out once while another

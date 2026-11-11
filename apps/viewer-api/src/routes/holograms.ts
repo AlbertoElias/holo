@@ -34,6 +34,8 @@ import { saveUploadedGlb, UploadValidationError, validateGlbMeta } from "../serv
 import type { MediaStorage } from "../services/media-storage.js";
 import { usdzFilenameFor, usdzFilenamesFor, withHologramLock } from "../services/usdz-converter.js";
 
+const SIGN_IN_TO_UPLOAD = "Sign in to upload a hologram.";
+
 const listQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(20).default(10)
@@ -101,6 +103,9 @@ export async function registerHologramRoutes(
   void refreshFeedSnapshot();
 
   app.post("/holograms/uploads/initiate", async (request, reply) => {
+    if (!(await optionalAuthUser(request.headers))) {
+      return reply.status(401).send({ error: SIGN_IN_TO_UPLOAD });
+    }
     const parsed = initiateUploadRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid upload request." });
@@ -160,6 +165,9 @@ export async function registerHologramRoutes(
   });
 
   app.post("/holograms/uploads/complete", async (request, reply) => {
+    if (!(await optionalAuthUser(request.headers))) {
+      return reply.status(401).send({ error: SIGN_IN_TO_UPLOAD });
+    }
     const parsed = completeUploadRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid complete request." });
@@ -216,6 +224,10 @@ export async function registerHologramRoutes(
   });
 
   app.post("/holograms", async (request, reply) => {
+    // Checked before the body is read, so an anonymous caller streams nothing to disk.
+    if (!(await optionalAuthUser(request.headers))) {
+      return reply.status(401).send({ error: SIGN_IN_TO_UPLOAD });
+    }
     let tempRoot: string | undefined;
     try {
       const parts = request.parts({

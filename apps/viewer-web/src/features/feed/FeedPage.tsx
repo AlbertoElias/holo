@@ -11,6 +11,7 @@ import { resumeAudioContext } from "../hologram/useGltfAudio";
 import type { HologramDTO } from "@holoim/contracts";
 
 import { AuthPanel } from "../auth/AuthPanel";
+import { SignInForm } from "../auth/SignInForm";
 import { useCurrentUser } from "../auth/useCurrentUser";
 import { UploadPanel, type UploadStatus } from "../upload/UploadPanel";
 import { deleteHologram } from "./api";
@@ -102,7 +103,7 @@ function uploadNotice(status: UploadStatus): FeedNoticeContent {
 
 export function FeedPage() {
   const { items, isLoading, error, canLoadMore, nextCursor, loadMore, addToTop, removeItem, retry } = useFeed();
-  const { user, logout } = useCurrentUser();
+  const { user, isLoading: isUserLoading, logout } = useCurrentUser();
   const userId = user?.id ?? null;
 
   useEffect(() => {
@@ -208,8 +209,8 @@ export function FeedPage() {
         ? { kind: "error", text: error, action: { label: VIEWER_CONTROL_NAMES.retry, onPress: () => void retry() } }
         : isLoading && items.length === 0
           ? { kind: "loading", text: "Loading holograms…" }
-          : !isLoading && items.length === 0 && !uploadOpen
-            ? // Upload's own sheet already answers the empty feed; the notice would sit on its title.
+          : !isLoading && items.length === 0 && !uploadOpen && !settingsOpen
+            ? // A sheet already answers the empty feed; the notice would sit on its title.
               { kind: "empty", text: "No holograms yet. Upload one to start the feed." }
             : null;
 
@@ -252,7 +253,11 @@ export function FeedPage() {
         <AuthPanel user={user} onSignOut={logout} />
       </SideSheet>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
-        <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} currentUser={user} />
+        {user ? (
+          <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} currentUser={user} />
+        ) : isUserLoading ? null : (
+          <SignInForm intro="Sign in to upload. Your holograms are credited to your name, and only you can delete them." />
+        )}
       </SideSheet>
       <FeedNotice notice={notice} target={target} />
     </main>

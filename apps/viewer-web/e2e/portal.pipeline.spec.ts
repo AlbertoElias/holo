@@ -6,6 +6,7 @@ import { waitForTextContentPrefix } from "@holoim/tooling-testing/xr-env";
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
 import { cardCenter, installProbe, readPortal, waitForFrozenTimes, waitForPortalReady } from "./portal-helpers";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
+import { signInForUpload } from "./sign-in";
 
 // Portal view (PRD-002) on a real capture export: only the checks that need
 // the recorded bubble, head, and motion. Gesture logic across variants and
@@ -62,6 +63,7 @@ test("portal view on a real capture: freeze, orbit, zoom inside the bubble, Retu
 
   const glb = await recordCaptureGlb(context, testInfo);
   const response = await page.request.post("/api/holograms", {
+    headers: (await signInForUpload(page)).headers,
     multipart: {
       hologramName: `Portal ${testInfo.testId.slice(0, 6)}-${Date.now()}`,
       submittedBy: "portal-e2e",

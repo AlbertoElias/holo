@@ -9,6 +9,7 @@ import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, expect, test } from "./bootstrap";
 import { cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
+import { signInForUpload } from "./sign-in";
 
 // Explain with an object (PRD-043) in the viewer. Capture's own IWER take
 // (lib/object-take.mjs: grab the bracket, move and turn it, put it down) is
@@ -279,6 +280,7 @@ async function readSizeAt(page: Page, modelPath: string, seconds: number): Promi
 
 async function upload(page: Page, glb: Buffer): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
+    headers: (await signInForUpload(page)).headers,
     multipart: {
       hologramName: `Object ${Date.now()}`,
       submittedBy: "object-e2e",

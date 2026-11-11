@@ -18,14 +18,14 @@ export type UploadStatus =
 type UploadPanelProps = {
   onUploaded: (item: HologramDTO) => void;
   onStatus?: (status: UploadStatus | null) => void;
-  currentUser?: UserDTO | null;
+  /** Uploads are credited to the signed-in account; the sheet shows sign-in until there is one. */
+  currentUser: UserDTO;
 };
 
 const UPLOAD_DRAWING = glyphDrawing("upload");
 const DROP_APPEARANCE = glyphAppearance({}, { headset: false });
-const submittedByStorageKey = "holoim.upload.submittedBy";
 
-export function UploadPanel({ onUploaded, onStatus, currentUser = null }: UploadPanelProps) {
+export function UploadPanel({ onUploaded, onStatus, currentUser }: UploadPanelProps) {
   const formId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -33,23 +33,9 @@ export function UploadPanel({ onUploaded, onStatus, currentUser = null }: Upload
   const [hologramName, setHologramName] = useState("");
   const [quickLookEnabled, setQuickLookEnabled] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [submittedBy, setSubmittedBy] = useState(() => {
-    if (typeof window === "undefined") {
-      return "";
-    }
-
-    return window.localStorage.getItem(submittedByStorageKey) ?? "";
-  });
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     chooseFile(event.target.files?.[0]);
-  }
-
-  function onSubmittedByChange(event: ChangeEvent<HTMLInputElement>) {
-    const value = event.target.value;
-    onStatus?.(null);
-    setSubmittedBy(value);
-    window.localStorage.setItem(submittedByStorageKey, value);
   }
 
   async function submit() {
@@ -60,9 +46,8 @@ export function UploadPanel({ onUploaded, onStatus, currentUser = null }: Upload
     }
 
     const trimmedName = hologramName.trim();
-    const trimmedSubmittedBy = currentUser?.displayName ?? submittedBy.trim();
-    if (!trimmedName || !trimmedSubmittedBy) {
-      onStatus?.({ kind: "error", message: "A hologram name and who submitted it are both needed." });
+    if (!trimmedName) {
+      onStatus?.({ kind: "error", message: "A hologram name is needed." });
       return;
     }
 
@@ -72,7 +57,7 @@ export function UploadPanel({ onUploaded, onStatus, currentUser = null }: Upload
       const uploaded = await uploadHologram({
         file: selectedFile,
         hologramName: trimmedName,
-        submittedBy: trimmedSubmittedBy,
+        submittedBy: currentUser.displayName,
         quickLookEnabled
       });
       onUploaded(uploaded);
@@ -170,17 +155,7 @@ export function UploadPanel({ onUploaded, onStatus, currentUser = null }: Upload
           disabled={isUploading}
         />
       </label>
-      <label className="upload-field">
-        <Type variant="byline">Submitted by</Type>
-        <input
-          className="upload-input"
-          value={currentUser ? currentUser.displayName : submittedBy}
-          onChange={onSubmittedByChange}
-          maxLength={80}
-          disabled={isUploading || Boolean(currentUser)}
-        />
-      </label>
-      {currentUser ? <p className="upload-caption">Uploads are credited to your verified account name.</p> : null}
+      <Type variant="byline" as="p">{`Credited to ${currentUser.displayName}, your verified account name.`}</Type>
       <div className="upload-quicklook">
         <label htmlFor="quicklook-enabled" className="upload-quicklook-toggle">
           <Type variant="captionUnderCard">iOS Quick Look</Type>

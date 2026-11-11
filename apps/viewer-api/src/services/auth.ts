@@ -27,18 +27,50 @@ export function toUserDto(user: AuthUser) {
   };
 }
 
+/** Why a sign-in email could not go out; the route turns it into a 503. */
+export class MagicLinkDeliveryError extends Error {}
+
 /**
- * Email delivery seam. No provider is configured in this repo, so a local
- * operator reads the link from the log only when dev exposure is enabled;
- * a real provider replaces this function without touching routes or
- * contracts. The token is never logged otherwise.
+ * Sends the sign-in email through Cloudflare Email Service. Without a
+ * configured mailer the link is only logged, and only when dev exposure is
+ * on (local development and tests); otherwise delivery fails loudly rather
+ * than telling the person to check an inbox nothing was sent to.
  */
-export function deliverMagicLink(email: string, url: string): void {
+export async function deliverMagicLink(email: string, url: string): Promise<void> {
+  const { CLOUDFLARE_EMAIL_ACCOUNT_ID: accountId, CLOUDFLARE_EMAIL_API_TOKEN: apiToken, AUTH_EMAIL_FROM: from } = env;
+  if (accountId && apiToken && from) {
+    const minutes = Math.round(env.AUTH_MAGIC_LINK_TTL_MS / 60_000);
+    let response: Response;
+    try {
+      response = await fetch(
+        `${env.CLOUDFLARE_EMAIL_API_ORIGIN}/accounts/${encodeURIComponent(accountId)}/email/sending/send`,
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${apiToken}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            to: email,
+            from: { address: from, name: "HoloIM" },
+            subject: "Your HoloIM sign-in link",
+            text: `Open this link to sign in to HoloIM. It works once and expires in ${minutes} minutes.\n\n${url}\n\nIf you did not ask for it, ignore this email.`,
+            html: `<p>Open this link to sign in to HoloIM. It works once and expires in ${minutes} minutes.</p><p><a href="${url}">Sign in to HoloIM</a></p><p>If you did not ask for it, ignore this email.</p>`
+          }),
+          signal: AbortSignal.timeout(10_000)
+        }
+      );
+    } catch (error) {
+      throw new MagicLinkDeliveryError(`Email service unreachable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!response.ok) {
+      // The body names the cause (unverified domain, bad token); it never holds the link.
+      throw new MagicLinkDeliveryError(`Email service answered ${response.status}: ${(await response.text()).slice(0, 300)}`);
+    }
+    return;
+  }
   if (env.AUTH_DEV_EXPOSE_MAGIC_LINK) {
     console.info(`[auth] Magic link for ${email}: ${url}`);
     return;
   }
-  console.info(`[auth] Magic link sent to ${email}`);
+  throw new MagicLinkDeliveryError("No email provider is configured (CLOUDFLARE_EMAIL_ACCOUNT_ID, CLOUDFLARE_EMAIL_API_TOKEN, AUTH_EMAIL_FROM).");
 }
 
 export async function requestMagicLink(input: {
@@ -47,7 +79,7 @@ export async function requestMagicLink(input: {
 }): Promise<{ token: string; url: string }> {
   const token = newToken();
   const email = input.email.toLowerCase();
-  await prisma.magicLinkToken.create({
+  const record = await prisma.magicLinkToken.create({
     data: {
       email,
       displayName: input.displayName ?? null,
@@ -56,7 +88,13 @@ export async function requestMagicLink(input: {
     }
   });
   const url = `${env.WEB_ORIGIN}/auth/verify?token=${encodeURIComponent(token)}`;
-  deliverMagicLink(email, url);
+  try {
+    await deliverMagicLink(email, url);
+  } catch (error) {
+    // An undelivered link must not stay redeemable.
+    await prisma.magicLinkToken.delete({ where: { id: record.id } });
+    throw error;
+  }
   return { token, url };
 }
 

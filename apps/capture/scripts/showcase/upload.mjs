@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url';
 //   node scripts/showcase/upload.mjs --api http://127.0.0.1:3001 <scene> [<scene> ...] [--no-quick-look]
 //
 // Build first (build.mjs). `--api` is required: there is no default target,
-// so nothing is published anywhere by accident.
+// so nothing is published anywhere by accident. Uploads need a signed-in
+// creator: set HOLOIM_SESSION to a session token (the `token` that
+// POST /api/auth/verify returns for an emailed sign-in link).
 //
 // Quick Look (the iPhone AR preview) is opt-in per upload, like the upload
 // panel's checkbox: the API converts a GLB to USDZ only when the upload asks
@@ -31,6 +33,7 @@ const args = process.argv.slice(2);
 const apiIndex = args.indexOf('--api');
 const api = apiIndex >= 0 ? args[apiIndex + 1] : undefined;
 const quickLook = !args.includes('--no-quick-look');
+const sessionToken = process.env.HOLOIM_SESSION;
 const names = args.filter((arg, index) => !arg.startsWith('--') && index !== apiIndex + 1);
 if (!api || names.length === 0) {
   console.error('usage: upload.mjs --api <origin> <scene> [<scene> ...] [--no-quick-look]');
@@ -58,7 +61,11 @@ for (const name of names) {
   form.set('submittedBy', meta.submittedBy);
   form.set('quickLookEnabled', String(quickLook));
   form.set('file', new Blob([bytes], { type: 'model/gltf-binary' }), `${meta.slug}.glb`);
-  const response = await fetch(new URL('/api/holograms', api), { method: 'POST', body: form });
+  const response = await fetch(new URL('/api/holograms', api), {
+    method: 'POST',
+    body: form,
+    headers: sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}
+  });
   const body = await response.text();
   if (!response.ok) {
     console.error(`${name}: ${response.status} ${body}`);
