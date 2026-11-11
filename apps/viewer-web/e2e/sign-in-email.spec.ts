@@ -21,11 +21,23 @@ const shotDir = process.env.E2E_SHOT_DIR;
 const glbPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../capture/public/gltf/models/avatar.glb");
 
 // A sheet unfolds over a moment (the first one can start late while the page warms up); the proof frames wait
-// until it has arrived.
+// until it has stopped moving, wherever it comes to rest.
 const settle = async (page: Page) => {
   if (!shotDir) return;
-  await expect.poll(async () => (await page.getByRole("dialog").boundingBox())?.x ?? 9999, { timeout: 10_000 }).toBeLessThan(60);
-  await page.waitForTimeout(700);
+  const sheet = page.getByRole("dialog");
+  let last = Number.NaN;
+  await expect
+    .poll(
+      async () => {
+        const x = (await sheet.boundingBox())?.x ?? Number.NaN;
+        const still = x === last;
+        last = x;
+        return still;
+      },
+      { timeout: 10_000, intervals: [250] }
+    )
+    .toBe(true);
+  await page.waitForTimeout(500);
 };
 
 type SentMail = { authorization: string | undefined; body: { to: string; from: { address: string }; subject: string; text: string } };

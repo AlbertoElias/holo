@@ -253,7 +253,9 @@ export function FeedPage() {
         <SettingsSection title="Hand">
           <HandednessPicker value={handedness} onChange={setHandedness} />
         </SettingsSection>
-        <AuthPanel user={user} onSignOut={logout} />
+        <SettingsSection title="Account">
+          <AuthPanel user={user} onSignOut={logout} />
+        </SettingsSection>
       </SideSheet>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
         {user ? (

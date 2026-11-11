@@ -9,29 +9,23 @@ type AuthPanelProps = {
   onSignOut: () => Promise<void> | void;
 };
 
-// The account block of the Settings sheet, set below the handedness choice.
+// The contents of the Settings sheet's Account section; the section and its heading come from the sheet.
 export function AuthPanel({ user, onSignOut }: AuthPanelProps) {
   if (!user) {
-    return (
-      <section className="auth-panel" aria-label="Account">
-        <SignInForm intro="Sign in to upload holograms under your name and delete your own." />
-      </section>
-    );
+    return <SignInForm intro="Sign in to upload holograms under your name and delete your own." />;
   }
 
   return (
-    <section className="auth-panel" aria-label="Account">
-      <div className="upload-form">
-        <Type variant="captionUnderCard" as="p">Creator account</Type>
-        <Type variant="byline" as="p">
-          Signed in as <strong>{user.displayName}</strong>
-          <span className="verified-badge">Verified creator</span>
-        </Type>
-        <Type variant="byline" as="p">{user.email}</Type>
-        <div className="upload-actions">
-          <GlyphControl glyph={null} showLabel label={VIEWER_CONTROL_NAMES.signOut} onPress={() => void onSignOut()} />
-        </div>
+    <div className="upload-form">
+      <Type variant="captionUnderCard" as="p">Creator account</Type>
+      <Type variant="byline" as="p">
+        Signed in as <strong>{user.displayName}</strong>
+        <span className="verified-badge">Verified creator</span>
+      </Type>
+      <Type variant="byline" as="p">{user.email}</Type>
+      <div className="upload-actions">
+        <GlyphControl glyph={null} showLabel label={VIEWER_CONTROL_NAMES.signOut} onPress={() => void onSignOut()} />
       </div>
-    </section>
+    </div>
   );
 }

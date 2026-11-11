@@ -191,13 +191,6 @@ body::before {
   border-radius: var(--holoim-chip-radius);
 }
 
-/* The account block under the handedness choice: set apart by one rule, in the sheet's own fields. */
-.auth-panel {
-  margin-top: calc(2 * var(--holoim-glyph-gap));
-  padding-top: calc(2 * var(--holoim-glyph-gap));
-  border-top: 1px solid rgb(var(--holoim-color-text-muted-rgb) / 0.2);
-}
-
 .verified-badge {
   margin-left: 0.45rem;
   padding: 0.08rem 0.45rem;
