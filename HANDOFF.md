@@ -28,13 +28,12 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Showcase holograms (branch `feature/showcase-holograms`, pushed, not
-  merged): four authored GLBs built by `apps/capture/scripts/showcase/`
+- Showcase holograms (merged to `main` 2026-11-10 together with positional
+  audio, after `verify:pr` on the combined tree): four authored GLBs built by `apps/capture/scripts/showcase/`
   (`showcase:build`, `showcase:upload`), described in
   [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md).
   Scripts and docs only, no app code; `verify:agent` passed 2026-11-09 and
-  all four were checked in the local viewer feed. Merge with the next
-  finished change. Uploaded to the live feed 2026-11-10 at the user's
+  all four were checked in the local viewer feed. Uploaded to the live feed 2026-11-10 at the user's
   go-ahead, by "Claude (agent-authored)": Blue hour
   (`cmwa4461m0007oeirc3jzftaf`), Two sides of a door
   (`cmwa443hq0005oeirkgp3b33k`), Murmuration (`cmwa4402a0003oeirbj759hxp`)
@@ -71,10 +70,9 @@ queue item in [`TODOS.md`](TODOS.md).
   change to how the feed frames a card would break them; their sound is
   unheard and none has been seen in a headset or AR. `verify:agent` passed
   on the branch 2026-11-10.
-- Positional audio (branch `feature/positional-audio`, pushed, not merged;
-  brief [`docs/features/positional-audio.md`](docs/features/positional-audio.md)).
-  Stacked on `feature/showcase-holograms` (merged in, not rewritten), so it
-  merges with or after that branch. Several placed sounds per hologram in the
+- Positional audio (merged to `main` 2026-11-10 together with the showcase
+  holograms; brief [`docs/features/positional-audio.md`](docs/features/positional-audio.md),
+  still open). Several placed sounds per hologram in the
   feed and the XR viewer, HRTF on both; new avatar takes place the voice on
   the head; Quick Look plays every source unplaced. The live feed's rain
   piece is the old single-mix build; re-uploading the retrofitted one needs
