@@ -19,6 +19,10 @@ import { type FingerChain, scorePointPose } from '../src/xr/pointPose';
 // tracker made of it. It asserts nothing about model output and is not part of test:xr.
 //
 //   pnpm --filter @holoim/capture run bodycam:report <clip> [config.json] [--video] [--hflip] [--cpu] [--headed] [--crop43] [--realtime [--offset <sec>]] [--out <dir>]
+//   pnpm --filter @holoim/capture run bodycam:report <clip> [config.json] --from-landmarks <dir>/landmarks.json --out <other dir>
+//
+// Every run writes landmarks.json: the models' per-frame output and the run's facts. --from-landmarks re-measures that
+// file in seconds without the browser or the models, so a filter or ray change can be tried without a new 12-minute run.
 //
 // config.json (all optional): { distances: { authorToLensM, leftMarkM, rightMarkM },
 //   segments: [{ label, startSec, endSec, hand?: 'left'|'right' (default right), target?: 'left-mark'|'right-mark'|'lens' }] }
@@ -32,14 +36,31 @@ const DEG = 180 / Math.PI;
 const args = process.argv.slice(2);
 const flag = (name: string): boolean => args.includes(name);
 const option = (name: string): string | undefined => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--out', '--offset'].includes(args[i - 1]!)));
+const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--out', '--offset', '--from-landmarks'].includes(args[i - 1]!)));
 const clipPath = positional[0] ? path.resolve(positional[0]) : '';
 const configPath = positional[1] ? path.resolve(positional[1]) : null;
 const outDir = path.resolve(option('--out') ?? 'output/bodycam');
-const wantVideo = flag('--video') || process.env.BODYCAM_VIDEO === '1';
+/** What a run saves for --from-landmarks: the models' output per frame and the run facts the report prints. */
+interface SavedRun {
+  realtime: boolean;
+  headed: boolean;
+  filters: string;
+  renderer: string;
+  faceDelegate: 'GPU' | 'CPU' | null;
+  tracker: { delegate: 'GPU' | 'CPU'; feedHz: number; poseHz: number; handHz: number } | null;
+  steppedWallSec: number;
+  windowSecs: { start: number; end: number };
+  consoleErrors: string[];
+  avatarSources: Array<{ left: string; right: string }>;
+  entries: Array<BodycamLogEntry & { clipSec: number }>;
+}
+const fromLandmarks = option('--from-landmarks');
+// Read before the output directory is cleared, in case it is the same directory.
+const saved: SavedRun | null = fromLandmarks ? (JSON.parse(await readFile(path.resolve(fromLandmarks), 'utf8')) as SavedRun) : null;
+const wantVideo = (flag('--video') || process.env.BODYCAM_VIDEO === '1') && !saved;
 const hflip = flag('--hflip');
-const realtime = flag('--realtime');
-const headed = flag('--headed');
+const realtime = saved ? saved.realtime : flag('--realtime');
+const headed = saved ? saved.headed : flag('--headed');
 const mode = realtime ? 'realtime' : 'frame-stepped';
 // The fake camera's clip phase against the page clock is good to a few seconds, not a fraction of one (the avatar clip ran
 // about 3 s ahead of the call that opened the camera): read samples.json against the clip and pass the shift to line segments up.
@@ -79,6 +100,7 @@ const norm = (a: Point3): Point3 => {
 const dot = (a: Point3, b: Point3): number => a.x * b.x + a.y * b.y + a.z * b.z;
 const angleDeg = (a: Point3, b: Point3): number => Math.acos(Math.min(1, Math.max(-1, dot(norm(a), norm(b))))) * DEG;
 
+const scaleHalf = (a: Point3): Point3 => ({ x: a.x / 2, y: a.y / 2, z: a.z / 2 });
 const chain = (hand: HandLandmarks, base: number): FingerChain => ({ proximal: hand.world[base], intermediate: hand.world[base + 1], distal: hand.world[base + 2], tip: hand.world[base + 3] });
 const scoreHand = (hand: HandLandmarks) => scorePointPose({ thumbTip: hand.world[4], index: chain(hand, 5), middle: chain(hand, 9), ring: chain(hand, 13), pinky: chain(hand, 17) });
 
@@ -111,20 +133,25 @@ const fakeCamera = path.join(outDir, 'fake-camera.mjpeg');
 // enlarges a small face (the face model misses the whole avatar clip at full frame) and can crop hands at the edges.
 const portrait = (info.streams[0]?.height ?? 0) > (info.streams[0]?.width ?? 0);
 const crop = portrait ? '480:640' : '640:480';
-const filters = [...(hflip ? ['hflip'] : []), `fps=${realtime ? 30 : clipFps}`, ...(flag('--crop43') && !realtime ? [`scale=${crop}:force_original_aspect_ratio=increase`, `crop=${crop}`] : ['scale=-2:640'])].join(',');
+const filters = saved?.filters ?? [...(hflip ? ['hflip'] : []), `fps=${realtime ? 30 : clipFps}`, ...(flag('--crop43') && !realtime ? [`scale=${crop}:force_original_aspect_ratio=increase`, `crop=${crop}`] : ['scale=-2:640'])].join(',');
 // Real time: MJPEG for Chromium's fake capture. Frame-stepped: VP8 WebM, which Playwright's Chromium decodes (it has no H.264).
-const converted = realtime
+const converted = saved
+  ? { status: 0 }
+  : realtime
   ? spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', clipPath, '-an', '-vf', filters, '-q:v', '3', '-f', 'mjpeg', fakeCamera], { stdio: 'inherit' })
   : spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', clipPath, '-an', '-vf', filters, '-c:v', 'libvpx', '-b:v', '8M', '-crf', '6', '-g', '1', steppedClip], { stdio: 'inherit' });
 if (converted.status !== 0) throw new Error('ffmpeg could not convert the clip');
-console.log(`[bodycam-report] clip ${path.basename(clipPath)}: ${round(clipSec)} s, ${mode}, converted with ${filters}`);
+console.log(`[bodycam-report] clip ${path.basename(clipPath)}: ${round(clipSec)} s, ${mode}, ${saved ? `re-measured from ${fromLandmarks}` : `converted with ${filters}`}`);
 
 // ── A capture server (or the one BASE_URL names) ────────────────────────────
 const host = process.env.DEV_HOST ?? '127.0.0.1';
 let server: ChildProcess | null = null;
 let baseUrl = process.env.BASE_URL ?? '';
-if (!baseUrl) {
+if (!baseUrl && !saved) {
   ensureTestBuild('capture', { ...process.env });
+  // The test build serves HTTPS with a self-signed certificate; waitForServer polls it with this process's own fetch,
+  // which refuses that certificate unless this is set here too (as run-xr-checks.ts does), not only on the server's env.
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   const port = await findAvailablePort(host, Number(process.env.DEV_PORT ?? '5174'), 40);
   server = startTestBuildServer({ app: 'capture', host, port, cwd: process.cwd(), env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' } });
   baseUrl = createHttpsBaseUrl(host, port);
@@ -138,13 +165,23 @@ let tracker: { delegate: 'GPU' | 'CPU'; feedHz: number; poseHz: number; handHz: 
 let windowSecs = { start: 0, end: 0 };
 let sheetCount = 0;
 let videoRel: { avatarVideo: string; avatarStartSec: number } | null = null;
-const fakeArgs = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${fakeCamera}`];
-// Headed Chromium keeps the real GPU; the shared XR launch options force software GL (SwiftShader).
-const browser = headed ? await chromium.launch({ headless: false, args: realtime ? fakeArgs : [] }) : await launchXrBrowser(chromium, { args: realtime ? fakeArgs : [] });
 let renderer = 'unknown';
 let faceDelegate: 'GPU' | 'CPU' | null = null;
 let steppedWallSec = 0;
 const stepped: { frames: number; fps: number; width: number; height: number } | null = realtime ? null : { frames: clipFrames, fps: clipFps, width: 0, height: 0 };
+if (saved) {
+  entries.push(...saved.entries);
+  avatarSources.push(...saved.avatarSources);
+  consoleErrors.push(...saved.consoleErrors);
+  renderer = saved.renderer;
+  faceDelegate = saved.faceDelegate;
+  tracker = saved.tracker;
+  steppedWallSec = saved.steppedWallSec;
+  windowSecs = saved.windowSecs;
+} else {
+const fakeArgs = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${fakeCamera}`];
+// Headed Chromium keeps the real GPU; the shared XR launch options force software GL (SwiftShader).
+const browser = headed ? await chromium.launch({ headless: false, args: realtime ? fakeArgs : [] }) : await launchXrBrowser(chromium, { args: realtime ? fakeArgs : [] });
 try {
   const context = await createXrContext(browser, {
     viewport: { width: 640, height: 480 },
@@ -258,6 +295,10 @@ try {
   await browser.close();
   await stopProcess(server);
 }
+const savedRun: SavedRun = { realtime, headed, filters, renderer, faceDelegate, tracker, steppedWallSec, windowSecs, consoleErrors, avatarSources, entries };
+await writeFile(path.join(outDir, 'landmarks.json'), JSON.stringify(savedRun));
+console.log(`[bodycam-report] landmarks for --from-landmarks: ${path.join(outDir, 'landmarks.json')}`);
+}
 
 // ── Measure ─────────────────────────────────────────────────────────────────
 type Side = 'left' | 'right';
@@ -270,6 +311,8 @@ interface HandObs {
   ray: Point3 | null;
   tipPoseWorld: Point3 | null;
   nosePoseWorld: Point3 | null;
+  /** Midpoint of the pose model's two eyes (landmarks 2 and 5). */
+  eyesPoseWorld: Point3 | null;
 }
 const handEntries = entries.filter((e) => e.ran !== 'pose');
 const poseEntries = entries.filter((e) => e.ran !== 'hands');
@@ -307,7 +350,8 @@ for (const entry of handEntries) {
       pinchM: score?.pinchDistance ?? null,
       ray,
       tipPoseWorld,
-      nosePoseWorld: pose?.world[0] ?? null
+      nosePoseWorld: pose?.world[0] ?? null,
+      eyesPoseWorld: pose?.world[2] && pose.world[5] ? scaleHalf(add(pose.world[2], pose.world[5])) : null
     });
   }
 }
@@ -391,6 +435,199 @@ function describe(from: number, to: number, side: Side, target?: Segment['target
   };
 }
 
+// ── Ray jitter study (brief, next step "ray jitter") ────────────────────────
+// Which ray and which filter hold still enough for POINT_ANGULAR_TOLERANCE_DEG (3.5 deg), and what each costs in lag.
+// Jitter here is deviation from the ray's own centred 1 s moving mean, inside the held middle of a segment (0.3 s
+// trimmed at each end), so the hand moving into the pose and slow drift of the aim are not counted as noise.
+// eye-tip: from between the eyes through the fingertip, both from the pose model's world frame (the fingertip placed as
+// the pose wrist plus the hand model's wrist-to-tip offset, as the aim measure does); people aim by sighting past the tip.
+type RayKind = 'mcp-tip' | 'wrist-tip' | 'fit-5-8' | 'eye-tip';
+type RayFilter = { name: string; kind: 'none' } | { name: string; kind: 'lowpass'; tauSec: number } | { name: string; kind: 'one-euro'; minCutoffHz: number; beta: number; dCutoffHz: number };
+const RAY_KINDS: RayKind[] = ['mcp-tip', 'wrist-tip', 'fit-5-8', 'eye-tip'];
+const RAY_FILTERS: RayFilter[] = [
+  { name: 'none', kind: 'none' },
+  { name: 'lowpass 0.09 s (current)', kind: 'lowpass', tauSec: 0.09 },
+  { name: 'lowpass 0.15 s', kind: 'lowpass', tauSec: 0.15 },
+  { name: 'lowpass 0.25 s', kind: 'lowpass', tauSec: 0.25 },
+  { name: 'lowpass 0.4 s', kind: 'lowpass', tauSec: 0.4 },
+  { name: 'one-euro 0.3 Hz b1', kind: 'one-euro', minCutoffHz: 0.3, beta: 1, dCutoffHz: 1 },
+  { name: 'one-euro 0.5 Hz b0.5', kind: 'one-euro', minCutoffHz: 0.5, beta: 0.5, dCutoffHz: 1 },
+  { name: 'one-euro 0.5 Hz b2', kind: 'one-euro', minCutoffHz: 0.5, beta: 2, dCutoffHz: 1 },
+  { name: 'one-euro 1 Hz b0.5', kind: 'one-euro', minCutoffHz: 1, beta: 0.5, dCutoffHz: 1 },
+  { name: 'one-euro 1 Hz b2', kind: 'one-euro', minCutoffHz: 1, beta: 2, dCutoffHz: 1 }
+];
+const scale = (a: Point3, k: number): Point3 => ({ x: a.x * k, y: a.y * k, z: a.z * k });
+const lerp3 = (a: Point3, b: Point3, t: number): Point3 => add(a, scale(sub(b, a), t));
+
+/** The index ray of one kind, in the hand model's world frame. */
+function rayOf(o: HandObs, kind: RayKind): Point3 | null {
+  if (kind === 'eye-tip') return o.eyesPoseWorld && o.tipPoseWorld ? norm(sub(o.tipPoseWorld, o.eyesPoseWorld)) : null;
+  const w = o.hand.world;
+  if (kind === 'mcp-tip') return w[5] && w[8] ? norm(sub(w[8], w[5])) : null;
+  if (kind === 'wrist-tip') return w[0] && w[8] ? norm(sub(w[8], w[0])) : null;
+  // Principal axis of the four index points (power iteration on their covariance), oriented knuckle to tip.
+  const pts = [w[5], w[6], w[7], w[8]];
+  if (pts.some((q) => !q)) return null;
+  const c = scale(pts.reduce((acc: Point3, q) => add(acc, q!), { x: 0, y: 0, z: 0 }), 1 / 4);
+  const d = pts.map((q) => sub(q!, c));
+  let v = norm(sub(w[8]!, w[5]!));
+  for (let i = 0; i < 20; i += 1) v = norm(d.reduce((acc: Point3, q) => add(acc, scale(q, dot(q, v))), { x: 0, y: 0, z: 0 }));
+  return dot(v, sub(w[8]!, w[5]!)) < 0 ? scale(v, -1) : v;
+}
+
+/** Runs one filter over a time-ordered ray sequence; a gap over 0.25 s restarts it, as the existing path does. */
+function runFilter(samples: Array<{ t: number; ray: Point3 }>, filter: RayFilter): Point3[] {
+  const out: Point3[] = [];
+  let current: Point3 | null = null;
+  let dHat: Point3 = { x: 0, y: 0, z: 0 };
+  let lastRaw: Point3 | null = null;
+  let last = 0;
+  const smoothing = (cutoffHz: number, dt: number) => 1 / (1 + 1 / (2 * Math.PI * cutoffHz * dt));
+  for (const { t, ray } of samples) {
+    const dt = t - last;
+    if (!current || !lastRaw || dt > 0.25 || dt <= 0) {
+      current = ray;
+      dHat = { x: 0, y: 0, z: 0 };
+    } else if (filter.kind === 'lowpass') {
+      current = norm(lerp3(current, ray, 1 - Math.exp(-dt / filter.tauSec)));
+    } else if (filter.kind === 'one-euro') {
+      dHat = lerp3(dHat, scale(sub(ray, lastRaw), 1 / dt), smoothing(filter.dCutoffHz, dt));
+      const cutoff = filter.minCutoffHz + filter.beta * Math.hypot(dHat.x, dHat.y, dHat.z);
+      current = norm(lerp3(current, ray, smoothing(cutoff, dt)));
+    } else {
+      current = ray;
+    }
+    lastRaw = ray;
+    last = t;
+    out.push(current);
+  }
+  return out;
+}
+
+/** Time a filter takes to come within 3.5 deg of a 40 deg aim change and stay there, at 30 frames per second. */
+function stepLagSec(filter: RayFilter): number | null {
+  const fps = 30;
+  const from = { x: 0, y: 0, z: 1 };
+  const to = { x: Math.sin(40 / DEG), y: 0, z: Math.cos(40 / DEG) };
+  const samples = Array.from({ length: fps * 3 }, (_, i) => ({ t: (i + 1) / fps, ray: i < fps ? from : to }));
+  const out = runFilter(samples, filter);
+  let settled: number | null = null;
+  for (let i = fps; i < out.length; i += 1) {
+    if (angleDeg(out[i]!, to) <= 3.5) settled ??= samples[i]!.t - samples[fps]!.t;
+    else settled = null;
+  }
+  return roundOrNull(settled, 3);
+}
+
+function rayStudySegment(seg: Segment, kind: RayKind, filter: RayFilter) {
+  const side = seg.hand ?? 'right';
+  // Filter across the segment and the 1 s before it, so the filter is warm when the held window starts.
+  const samples = observations
+    .filter((o) => o.side === side && o.clipSec >= seg.startSec - 1 && o.clipSec < seg.endSec)
+    .flatMap((o) => {
+      const ray = rayOf(o, kind);
+      return ray ? [{ t: o.clipSec, ray, o }] : [];
+    });
+  const filtered = runFilter(samples, filter);
+  // Aim error against the brief's assumed mark layout, as describe() reads it (marks in the lens plane, rough distances).
+  const d = config.distances;
+  const targetPoint: Point3 | null = seg.target && d ? (seg.target === 'lens' ? { x: 0, y: 0, z: 0 } : { x: seg.target === 'left-mark' ? d.leftMarkM : -d.rightMarkM, y: 0, z: 0 }) : null;
+  const aimErrors: number[] = [];
+  const from = seg.startSec + 0.3;
+  const to = seg.endSec - 0.3;
+  const holdDev: number[] = [];
+  const steps: number[] = [];
+  const held: Point3[] = [];
+  for (let i = 0; i < samples.length; i += 1) {
+    const t = samples[i]!.t;
+    if (t < from || t >= to) continue;
+    const near = samples.filter((q) => Math.abs(q.t - t) <= 0.5).map((q) => q.ray);
+    const slow = norm(near.reduce((acc, r) => add(acc, r), { x: 0, y: 0, z: 0 }));
+    holdDev.push(angleDeg(filtered[i]!, slow));
+    held.push(filtered[i]!);
+    const o = samples[i]!.o;
+    if (targetPoint && d && o.tipPoseWorld && o.nosePoseWorld && (o.score ?? 0) >= 0.35) {
+      const tip = add({ x: 0, y: 0, z: d.authorToLensM }, sub(o.tipPoseWorld, o.nosePoseWorld));
+      aimErrors.push(angleDeg(filtered[i]!, sub(targetPoint, tip)));
+    }
+    if (i > 0 && t - samples[i - 1]!.t < 0.1) steps.push(angleDeg(filtered[i]!, filtered[i - 1]!));
+  }
+  const mean = held.length ? norm(held.reduce((acc, r) => add(acc, r), { x: 0, y: 0, z: 0 })) : null;
+  return {
+    frames: holdDev.length,
+    holdP50Deg: roundOrNull(percentile(holdDev, 50)),
+    holdP95Deg: roundOrNull(percentile(holdDev, 95)),
+    meanDevP95Deg: mean ? roundOrNull(percentile(held.map((r) => angleDeg(r, mean)), 95)) : null,
+    stepP95Deg: roundOrNull(percentile(steps, 95)),
+    aimMedianErrorDeg: targetPoint ? roundOrNull(percentile(aimErrors, 50), 1) : null,
+    mean
+  };
+}
+
+/** From the end of one held segment, how long until the ray stays within 5 deg of the next segment's held mean for 0.3 s. */
+function settleSec(prev: Segment, next: Segment, kind: RayKind, filter: RayFilter, target: Point3): number | null {
+  const side = next.hand ?? 'right';
+  const samples = observations
+    .filter((o) => o.side === side && o.clipSec >= prev.startSec && o.clipSec < next.endSec)
+    .flatMap((o) => {
+      const ray = rayOf(o, kind);
+      return ray ? [{ t: o.clipSec, ray }] : [];
+    });
+  const out = runFilter(samples, filter);
+  let since: number | null = null;
+  for (let i = 0; i < samples.length; i += 1) {
+    const t = samples[i]!.t;
+    if (t < prev.endSec) continue;
+    if (angleDeg(out[i]!, target) <= 5) {
+      since ??= t;
+      if (t - since >= 0.3) return round(since - prev.endSec, 2);
+    } else since = null;
+  }
+  return null;
+}
+
+const studySegments = config.segments ?? [];
+const pointingSegs = studySegments.filter((s) => s.target);
+const restSegs = studySegments.filter((s) => /at rest|raised alone \(right\)/.test(s.label));
+const transitions = pointingSegs.slice(1).flatMap((next, i) => (pointingSegs[i]!.hand === next.hand ? [{ prev: pointingSegs[i]!, next }] : []));
+const rayJitterStudy = studySegments.length
+  ? {
+      note: 'holdP95Deg: p95 deviation of the filtered ray from the raw ray\'s centred 1 s moving mean, in the segment trimmed by 0.3 s at each end; the bar is 3.5 deg (POINT_ANGULAR_TOLERANCE_DEG). stepLagSec: a 40 deg aim change to within 3.5 deg, synthetic, 30 fps. settleSec: from the end of one pointing segment until the ray holds within 5 deg of the next one\'s held mean (the same ray, unfiltered) for 0.3 s. shiftFromCurrentDeg: angle between this ray\'s held mean and the mcp-tip ray\'s, per pointing segment.',
+      pointingSegments: pointingSegs.map((s) => s.label),
+      restSegments: restSegs.map((s) => s.label),
+      variants: RAY_KINDS.flatMap((kind) =>
+        RAY_FILTERS.map((filter) => {
+          const pointing = pointingSegs.map((s) => ({ label: s.label, ...rayStudySegment(s, kind, filter) }));
+          const rest = restSegs.map((s) => ({ label: s.label, ...rayStudySegment(s, kind, filter) }));
+          const pointingP95 = pointing.flatMap((r) => (r.holdP95Deg === null ? [] : [r.holdP95Deg]));
+          return {
+            ray: kind,
+            filter: filter.name,
+            worstPointingHoldP95Deg: pointingP95.length ? Math.max(...pointingP95) : null,
+            worstRestHoldP95Deg: ((v) => (v.length ? Math.max(...v) : null))(rest.flatMap((r) => (r.holdP95Deg === null ? [] : [r.holdP95Deg]))),
+            stepLagSec: stepLagSec(filter),
+            settleSec: transitions.map(({ prev, next }) => {
+              const target = rayStudySegment(next, kind, RAY_FILTERS[0]!).mean;
+              return { from: prev.label, to: next.label, sec: target ? settleSec(prev, next, kind, filter, target) : null };
+            }),
+            shiftFromCurrentDeg: pointing.map((r, i) => {
+              const ref = rayStudySegment(pointingSegs[i]!, 'mcp-tip', RAY_FILTERS[0]!).mean;
+              return r.mean && ref ? round(angleDeg(r.mean, ref), 1) : null;
+            }),
+            pointing: pointing.map(({ mean: _mean, ...r }) => r),
+            rest: rest.map(({ mean: _mean, ...r }) => r)
+          };
+        })
+      )
+    }
+  : null;
+if (rayJitterStudy) {
+  console.log('[bodycam-report] ray jitter study (hold p95 deg; worst pointing segment | per pointing segment | worst rest | step lag s | settle s | shift deg | aim median deg)');
+  for (const v of rayJitterStudy.variants) {
+    console.log(`  ${v.ray.padEnd(9)} ${v.filter.padEnd(26)} ${String(v.worstPointingHoldP95Deg).padStart(6)} | ${v.pointing.map((r) => r.holdP95Deg).join(' ')} | ${v.worstRestHoldP95Deg} | ${v.stepLagSec} | ${v.settleSec.map((x) => x.sec).join(' ')} | ${v.shiftFromCurrentDeg.join(' ')} | ${v.pointing.map((r) => r.aimMedianErrorDeg).join(' ')}`);
+  }
+}
+
 // Head, from every frame's head rotation.
 const headFrames = entries.flatMap((e) => (e.frame.head ? [eulerYxz(e.frame.head)] : []));
 const headStat = (pick: (e: { yaw: number; pitch: number; roll: number }) => number) => {
@@ -465,6 +702,7 @@ const report = {
   },
   wholeClip: whole,
   segments,
+  rayJitterStudy,
   geometry: config.distances ?? null
 };
 await writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));

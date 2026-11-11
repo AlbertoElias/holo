@@ -1,7 +1,7 @@
 # Feature brief: Camera-driven avatar (evaluation spike)
 
 **Lead:** Claude (Fable 5)  
-**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars, ray jitter misses, **aim error and head zero are unresolved**; then slice 3)
+**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars; ray jitter meets the bar only with a wrist-to-tip ray, which the aim clip must confirm; **aim error and head zero are unresolved**; then slice 3)
 **Layer:** event (the author's head, face, arms and hands over time); see
 `docs/product/concepts/what-a-hologram-is.md`
 
@@ -282,28 +282,77 @@ reads 34 to 67 deg off the lens axis where the assumed layout expects 17 to
 beside the lens at 1 m, or the hand model flattening depth on a hand seen
 side-on; this clip cannot tell them apart.
 
-**Next steps, in order** (a fresh session on a standard-tier model can take
-these from this brief; the clip and `clip.json` are in `output/bodycam/`):
+### Ray jitter study (2026-11-11)
 
-1. Settle aim with measured ground truth: a short clip with taped, measured
+The report's `rayJitterStudy` section, re-measured on the same clip's saved
+landmarks (`--from-landmarks`). Jitter here is the p95 deviation of the
+filtered ray from the raw ray's own centred 1 s moving mean, inside each
+segment trimmed by 0.3 s at each end. The old figure (deviation from the
+whole segment's mean) also counted the hand still moving into the pose and
+its slow drift; it stays in the report beside the new one. Lag still counts
+as error, so very long filters score worse. Step lag is a synthetic 40 degree
+aim change settling to within 3.5 degrees at 30 frames per second. Aim uses
+the clip's rough, unmeasured mark layout, so it only ranks the rays.
+
+| Ray, filter | Worst pointing hold p95 | 3a / 3b / 4 | Worst open-hand rest | Step lag | Aim median 3a / 3b / 4 |
+|---|---|---|---|---|---|
+| knuckle to tip, none | 7.9 | 7.9 / 4.7 / 3.6 | 8.9 | 0 s | 26 / 41 / 46 |
+| knuckle to tip, 0.09 s (the headset path today) | 5.2 | 5.2 / 5.0 / 2.4 | 7.0 | 0.20 s | 26 / 41 / 46 |
+| knuckle to tip, 0.25 s (best of its ray) | 4.7 | 4.7 / 3.5 / 2.3 | 4.3 | 0.60 s | 25 / 41 / 46 |
+| line fitted through the four index points, 0.25 s | 3.9 | 3.9 / 3.5 / 2.4 | 4.3 | 0.60 s | 26 / 43 / 47 |
+| **wrist to tip, 0.09 s** | **3.4** | 3.4 / 2.8 / 1.1 | 2.2 | 0.20 s | 9 / 30 / 30 |
+| wrist to tip, One Euro 1 Hz, beta 0.5 | 3.3 | 2.4 / 3.3 / 0.9 | 1.7 | 0.20 s | 9 / 30 / 30 |
+| wrist to tip, 0.25 s | 2.6 | 2.6 / 2.0 / 1.1 | 2.0 | 0.60 s | 9 / 30 / 30 |
+| eyes to tip (pose model), 0.15 s | 3.9 | 2.3 / 3.9 / 3.9 | 6.8 | 0.37 s | 59 / 54 / 44 |
+
+Reading:
+
+- **Jitter can meet the bar, but not with the headset's ray.** Knuckle to
+  tip misses with every filter tried, at best 4.7 degrees at three times
+  today's lag; a fitted line is no better. Wrist to tip meets 3.5 degrees
+  with today's 0.09 s filter and lag, and holds at 2.6 at 0.25 s.
+- **Wrist to tip is a different direction**, 18 to 24 degrees from the
+  knuckle ray. In the overlay it tilts up from the visible finger. The marks
+  sit at lens height, above the hand, so that may be nearer the real aim. On
+  the rough layout it reads 9 to 30 degrees of aim error against 26 to 46
+  for knuckle to tip. Which ray is right is the aim question, so the measured
+  clip decides between them and the report measures both on it.
+- Low-pass longer than 0.25 s gets worse (lag behind the hand's drift).
+  One Euro is no better than a plain low-pass here. A ray from the eyes
+  through the fingertip rests on the pose model's depth, its weakest axis,
+  and is worse at both jitter and aim.
+- Settling from the right mark to the left mark takes 1.5 to 1.8 s with
+  every ray and filter, mostly the hand's own move (1.53 s unfiltered); a
+  0.25 s filter adds 0.1 to 0.25 s.
+- Limits: one author, one clip, every frame through the models at 30 fps on
+  an M1 Max GPU. A phone runs the hand model less often, which this does not
+  test. A different ray for camera hands would be a PRD decision; the
+  headset path is unchanged.
+
+**Next steps, in order** (a fresh session on a standard-tier model can take
+these from this brief; the clip and `clip.json` are in `output/bodycam/`, the
+saved landmarks in `apps/capture/output/bodycam-jitter/landmarks.json`):
+
+1. Head: the 16 to 24 deg pitch and 6 to 11 deg yaw read while facing the
+   lens, and the loss on a turn to the author's left. Re-measure from the
+   saved landmarks first; only a change to the models' input needs a new run.
+2. Settle aim with measured ground truth: a short clip with taped, measured
    marks and aims at the lens, the two marks and one mark above the lens;
-   judge depth flattening from the side-on aims.
-2. Ray jitter (p50 2 to 5 deg against a 3.5 deg tolerance): try a longer
-   low-pass, or a ray from wrist or knuckle through the fingertip, and
-   re-measure on the same clip.
-3. Head: the 16 to 24 deg pitch and 6 to 11 deg yaw read while facing the
-   lens, and the loss on a turn to the author's left.
-4. Fix the script's own server start (`waitForServer` times out unless
-   `NODE_TLS_REJECT_UNAUTHORIZED=0` is set on the command).
-5. Real-time rate and a trial on a phone, independent verification, then the
+   judge depth flattening from the side-on aims, and pick between the
+   knuckle and wrist rays on it.
+3. Real-time rate and a trial on a phone, independent verification, then the
    go/no-go.
 
-Two script faults found on this first long clip: a whole clip handed to the
-browser through `route.fulfill` exceeded the 100 MB control-pipe limit and
-killed the browser (fixed: the capture server now serves the clip from its
-build directory), and the script's own server start timed out in
-`waitForServer` although the server was up (not fixed; setting `NODE_TLS_REJECT_UNAUTHORIZED=0` on the command
-lets the script start its own server).
+Done on 2026-11-11: ray jitter (above), and the script's own server start.
+Two script faults found on this first long clip are both fixed. A whole clip
+handed to the browser through `route.fulfill` exceeded the 100 MB
+control-pipe limit and killed the browser; the capture server now serves the
+clip from its build directory. The script's own server start timed out in
+`waitForServer` although the server was up, because the poll's own `fetch`
+refused the test build's self-signed certificate. The script now sets
+`NODE_TLS_REJECT_UNAUTHORIZED=0` in its own process, as `run-xr-checks.ts`
+does, and a run with the variable unset started its server and measured
+every frame.
 
 ## Running the report on the clip
 
@@ -319,6 +368,14 @@ clip: `{ "distances": { "authorToLensM", "leftMarkM", "rightMarkM" },
 clip was saved as a mirrored selfie preview. The aim-error geometry (marks in
 the lens plane, "left" meaning the author's left) is the implementer's
 reading of the script and has not been exercised.
+
+Every run writes `landmarks.json` beside `report.json`: the models' output
+for every frame. Re-measure it in about 2 s, without the browser or the
+models, after changing only the measuring code:
+
+```
+pnpm run bodycam:report ../../output/bodycam/clip.mov ../../output/bodycam/clip.json --from-landmarks output/bodycam-jitter/landmarks.json --out output/bodycam-remeasure
+```
 
 ## Physical-device limits
 
