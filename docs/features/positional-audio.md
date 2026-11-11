@@ -1,8 +1,9 @@
 # Feature brief: Positional audio in holograms
 
 **Lead:** Claude (Opus), session `feature/positional-audio`
-**Status:** Delivered (merged to `main` 2026-11-11); listening by ear and a
-physical headset unverified, see "Physical-device limits"
+**Status:** Delivered (merged to `main` 2026-11-11); the user heard the
+difference in the live feed; a physical headset is unverified, see
+"Physical-device limits"
 **Layer:** Event (a sound has a place in the recorded event, like a voice or
 an object). Where the ear sits while watching is the view's reading of it.
 
@@ -302,9 +303,11 @@ not committed.
 
 ## Physical-device limits
 
-Nobody has listened. Every claim here is a measured gain, not a heard one:
-whether the placement is convincing, how HRTF sounds on laptop and phone
-speakers, the `rain` balance (the layers sum to the old mix, but the point
+On 2026-11-11 the user listened to the live `rain` card in the feed and
+reported "I could tell the difference". The setup (headphones or speakers,
+which device) is not recorded. Every other claim here is a measured gain,
+not a heard one: whether each placement is convincing, how HRTF sounds on
+whichever of headphones and speakers was not used, the `rain` balance (the layers sum to the old mix, but the point
 sources now fall off with distance) and the voice's 2 m reference distance
 are unverified by ear. The XR
 evidence is IWER emulation; a physical Quest (its browser's HRTF, its
