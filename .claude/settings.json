@@ -69,5 +69,10 @@
     "review": "name-only",
     "setup-browser-cookies": "name-only",
     "ship": "name-only"
+  },
+  "env": {
+    "ENABLE_STOP_REVIEW": "0",
+    "SECURITY_REVIEW_MODEL": "claude-sonnet-5-5",
+    "SG_AGENTIC_MODEL": "claude-sonnet-5-5"
   }
 }
