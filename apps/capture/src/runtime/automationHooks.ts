@@ -18,6 +18,7 @@ import type { prefetchStats } from '../objects/objectSearch';
 import type { ObjectSearchState } from '../objects/objectSearchSession';
 import type { voiceLog } from '../objects/voiceInput';
 import type { HeadsetHolds } from '../xr/HeadsetHolds';
+import type { CaptureHistory } from './CaptureHistory';
 import type { HaloActionRecord } from './haloActions';
 
 /**
@@ -133,6 +134,8 @@ export interface HoldsSnapshot {
   touch: string;
   flatHalo: FlatHaloView;
   actions: HaloActionRecord[];
+  /** Capture's undo history (docs/features/undo-redo.md): what W and E can reach now, and every push, undo, redo and clear. */
+  history: ReturnType<CaptureHistory['counts']> & { log: CaptureHistory['log'] };
 }
 
 /**

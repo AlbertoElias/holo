@@ -1,7 +1,7 @@
 # Feature brief: Undo and redo for every authoring action
 
 **Lead:** Claude (Opus)  
-**Status:** Draft
+**Status:** Reviewed
 **Layer:** Both event and meaning. The Halo's W and E are chrome. What they
 change stays in the layer of the action being undone.
 
@@ -120,7 +120,7 @@ meaning is what the author says about it.
 | Failure case | Prevention or evidence |
 |---|---|
 | Undo targets an object that is held by the author | Release it first, then apply the inverse; checked on controllers and desktop |
-| Undo of a put-back after its tray slot was removed | The entry keeps its own clone, so the object returns even with no slot |
+| Undo of a put-back after its tray slot was removed | The entry keeps the same object (nothing is disposed), so it returns even with no slot, and its bytes count toward the budget again |
 | Undo of a summon or put-back would exceed the tray or scene budget | The budget counts objects in the scene, and undo restores one that was counted before; check it at the five-item limit |
 | An object track with a gap, or a second track for the same object, breaks export, viewer or USDZ | Design review decides gap or new track; the acceptance check runs the GLB through upload, feed, AR and Quick Look |
 | Undo while a mark or trace is still held | Keep today's rule: end it and drop samples until release |
@@ -160,10 +160,45 @@ history is cleared at take start and stop, undoing a place returns the
 object to its pose before the grab, and the tray actions (Find, removing a
 slot) are undoable.
 
-For design review:
+### Design review (2026-11-11, `design-reviewer` agent)
 
-1. A gap in the track, or a new track, for an object that returns?
-2. A jump or a short ease when a place is undone?
+1. **A returning object keeps its track, with a gap.** The undo brings back
+   the same `SceneObject` (`SceneObjectRegistry.restore`), so
+   `ObjectSampleStore` writes null frames between its presence spans and
+   `buildObjectExports` writes `presence` with two spans and a STEP scale of
+   0 in the gap. `HOLOIM_objects` already allows several spans, the viewer
+   plays the clip without reading `presence`, and `glb_to_usdz.py` turns any
+   scale-0 step into visibility samples. No format or API change. No fixture
+   had two spans yet: the summon check now exports one, and the pipeline
+   check reads every span.
+2. **An undone place jumps.** An ease would record motion the author never
+   made, as a shrink on put-back would record a resize. The export's linear
+   position track makes the jump a one-frame change. Physics must not sweep
+   the object through others: its body is dropped and built again, at rest,
+   where it lands (the same path a returning object takes).
+
+Settled with the review:
+
+- A summon's own hold (into the hand, then let go) is part of the summon,
+  not a place. Undoing a summon puts the object back now; redoing it brings
+  the same object back where it was when undone, without a new summon (no
+  arm authoring span ends with it). Such returns are logged in the tray
+  snapshot's `returns`.
+- One hold's resizes are one Size entry: committed when a headset stretch is
+  let go, when the hold ends, or just before W or E reads the history. A
+  free object keeps its base where it rests when its size is undone.
+- The redo of a place puts the object where it was when the place was
+  undone. Undoing a throw while the object is still in the air makes the
+  redo land it there, at rest. Accepted: it is what the author saw.
+- Every tray add joins the history (Find, a file pick, the headset's Find),
+  except the tray the page opens with. A restore that would pass five items
+  or the byte budget is refused with "The tray is full", and the entry stays.
+- Loading a new prepared object clears the history, because the object it
+  replaced can no longer come back. A hold that spans Record or Stop starts
+  its place and resize from the boundary.
+- While a trace is open, W undoes it first (today's rule), even if newer
+  entries follow it.
+- Undo and redo are refused while a take exports ("Wait for the export").
 
 ## Test plan and evidence
 

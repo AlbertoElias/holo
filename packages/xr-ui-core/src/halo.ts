@@ -21,7 +21,7 @@ export const HALO_ACTIONS = {
 } as const satisfies Record<HaloDirection, string>;
 export type HaloAction = (typeof HALO_ACTIONS)[HaloDirection];
 
-/** Capture's headset Halo (Q20, PRD-023 v1): S record/stop, W undo the last mark or trace, E redo it, NW Ink toggles tracing. */
+/** Capture's headset Halo (Q20, PRD-023 v1): S record/stop, W undo the last authoring action, E redo it, NW Ink toggles tracing. */
 export const CAPTURE_HALO_ACTIONS: readonly HaloAction[] = ["record", "undo", "redo", "ink"];
 
 /** Capture's Halo on a flat screen: the dock already carries Record, so S stays empty there. */

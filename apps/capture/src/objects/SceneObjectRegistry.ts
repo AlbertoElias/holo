@@ -76,6 +76,20 @@ export class SceneObjectRegistry {
     object.wrapper.removeFromParent();
   }
 
+  /**
+   * Brings a removed object back as it was (an undone put-back or summon;
+   * docs/features/undo-redo.md): the same object, so a take's track for it
+   * has a gap rather than a second track. Its body is built again on the next
+   * physics step. False when it is already here.
+   */
+  restore(object: SceneObject): boolean {
+    if (this.objects.includes(object)) return false;
+    this.objects.push(object);
+    this.parent.add(object.wrapper);
+    object.heldBy = null;
+    return true;
+  }
+
   /** Removes every prepared event object: the single-object picker replaces its object. Tray items stay. */
   clearPrepared(): void {
     for (const object of this.objects.filter((o) => o.origin === 'prepared' && o.layer === 'event')) this.remove(object);

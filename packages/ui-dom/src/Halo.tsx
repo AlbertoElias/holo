@@ -47,7 +47,7 @@ export interface HaloProps {
 
 const CLOSED_VIEW: HaloViewState = { ringDrawn: false, highlighted: null, pinned: false };
 
-const SLOT_LABELS: Partial<Record<HaloAction, string>> = { record: "Record", undo: "Undo mark", redo: "Redo mark" };
+const SLOT_LABELS: Partial<Record<HaloAction, string>> = { record: "Record", undo: "Undo", redo: "Redo" };
 
 export function Halo({ actions, onCommit, trigger, ringLiftApx = 0 }: HaloProps) {
   const layout = useMemo(() => haloLayout(actions, { headset: false }), [actions]);

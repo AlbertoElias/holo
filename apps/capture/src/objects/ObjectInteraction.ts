@@ -153,6 +153,32 @@ interface Hold {
   rawSize: number;
   /** A headset's other hand also holds the prop and stretches it: its side, the hands' distance and the raw size when it closed. */
   stretch: { side: VrHandSide; startM: number; startRaw: number } | null;
+  /** The wrapper's local pose when it was grabbed: where an undone place returns it (docs/features/undo-redo.md). */
+  before: WrapperPose;
+  /** The size since the last committed resize: what an undone resize returns to. */
+  sizeBefore: number;
+  /** Summoned into the hand from the tray: its release is part of the summon, not a place. */
+  fromTray: boolean;
+}
+
+/** A wrapper's pose in its parent (the world group). */
+export interface WrapperPose {
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+}
+
+/**
+ * What capture's history takes from a hold (docs/features/undo-redo.md): a
+ * resize gesture that ended (a stretch let go, or the hold itself), then the
+ * hold's end, which is a place unless it came from the tray.
+ */
+export type HoldChange =
+  | { type: 'resize'; object: SceneObject; from: number; to: number }
+  | { type: 'release'; object: SceneObject; before: WrapperPose; fromTray: boolean };
+
+/** Reads `object`'s wrapper pose in its parent. */
+export function wrapperPose(object: SceneObject): WrapperPose {
+  return { position: object.wrapper.position.clone(), quaternion: object.wrapper.quaternion.clone() };
 }
 
 /**
@@ -165,6 +191,7 @@ interface Hold {
 export class ObjectInteraction {
   private hold: Hold | null = null;
   private putBackQueued: SceneObject | null = null;
+  private readonly changes: HoldChange[] = [];
   private readonly reach = new DesktopReach();
   /** The step in a reach asked for this frame; the movement system takes it, as a displacement that is not input. */
   private readonly pendingStep = { x: 0, z: 0 };
@@ -328,6 +355,44 @@ export class ObjectInteraction {
     return object;
   }
 
+  /** Resizes and releases since the last call, oldest first (docs/features/undo-redo.md). */
+  takeHoldChanges(): HoldChange[] {
+    return this.changes.splice(0);
+  }
+
+  /**
+   * The held prop's resize so far, committed: W or E is about to read the
+   * history, so a resize in progress becomes its own entry. Null when the
+   * held prop's size has not changed since the last commit.
+   */
+  commitResize(): { object: SceneObject; from: number; to: number } | null {
+    const hold = this.hold;
+    if (!hold || hold.sizeBefore === hold.object.size) return null;
+    const out = { object: hold.object, from: hold.sizeBefore, to: hold.object.size };
+    hold.sizeBefore = hold.object.size;
+    return out;
+  }
+
+  /** The history was cleared: the held prop's place and resize start from now. */
+  rebaseHold(): void {
+    if (!this.hold) return;
+    this.hold.before = wrapperPose(this.hold.object);
+    this.hold.sizeBefore = this.hold.object.size;
+  }
+
+  /** Sets `object`'s size (an undone or redone resize): a held prop's next resize goes on from it. */
+  setSize(object: SceneObject, size: number): void {
+    object.size = size;
+    object.sizer.scale.setScalar(size);
+    object.wrapper.updateMatrixWorld(true);
+    if (this.hold?.object === object) {
+      this.hold.rawSize = size;
+      this.hold.sizeBefore = size;
+      this.hold.stretch = null;
+    }
+    this.physics?.resize(object, true);
+  }
+
   /** `object` is leaving the scene: let go of it, and stop reaching or gliding for it. */
   forget(object: SceneObject): void {
     if (this.putBackQueued === object) this.putBackQueued = null;
@@ -410,6 +475,9 @@ export class ObjectInteraction {
       // The other hand lets go of a stretch: the prop stays in the first hand at its new size.
       if (this.hold?.stretch?.side === side && (intent.switched || !intent.pressed)) {
         this.hold.stretch = null;
+        // One stretch is one resize.
+        const resize = this.commitResize();
+        if (resize) this.changes.push({ type: 'resize', ...resize });
         continue;
       }
       // The other hand closing on the held prop stretches it, ahead of an open tray's miniature.
@@ -434,6 +502,7 @@ export class ObjectInteraction {
         this.writeWorld(summoned, this.deps.tray.miniaturePose(item, this.world));
         summoned.placed = true;
         this.grab(summoned, side, false);
+        this.hold!.fromTray = true;
         continue;
       }
       const target = registry.eventObjects().find((object) => this.distanceToObject(object, palm) <= VR_REACH_M);
@@ -486,6 +555,7 @@ export class ObjectInteraction {
       this.grab(summoned, 'right', false);
       this.hold!.desktop = true;
       this.hold!.summoned = true;
+      this.hold!.fromTray = true;
     } else if (step.desktop.toggle) {
       if (reach.isReaching()) {
         // G again while reaching: stand back up, nothing grabbed.
@@ -820,7 +890,7 @@ export class ObjectInteraction {
     object.wrapper.updateWorldMatrix(true, false);
     this.world.copy(object.wrapper.matrixWorld);
     const offset = this.anchor.clone().invert().multiply(this.world);
-    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null, rawSize: object.size, stretch: null, pushM: 0, pushedM: 0, dropM: 0, glide: null };
+    this.hold = { object, side, desktop, offset, lostSec: 0, pointer: false, reached: false, settle: null, rawSize: object.size, stretch: null, pushM: 0, pushedM: 0, dropM: 0, glide: null, before: wrapperPose(object), sizeBefore: object.size, fromTray: false };
     object.heldBy = side;
     this.physics?.hold(object);
   }
@@ -927,6 +997,9 @@ export class ObjectInteraction {
   /** A deliberate let-go throws with the fitted velocity; every other release drops with none. */
   private release(throwIt: boolean): void {
     if (!this.hold) return;
+    const resize = this.commitResize();
+    if (resize) this.changes.push({ type: 'resize', ...resize });
+    this.changes.push({ type: 'release', object: this.hold.object, before: this.hold.before, fromTray: this.hold.fromTray });
     if (this.hold.glide) this.physics?.ghost(this.hold.object, false);
     this.physics?.release(this.hold.object, throwIt, this.hold.side, this.hold.desktop);
     this.hold.object.heldBy = null;

@@ -7,11 +7,12 @@ import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
 import { ObjectPhysics, type ObjectPhysicsStats, prepareHull } from '../physics/ObjectPhysics';
+import type { CaptureHistory, HistoryEntry } from '../runtime/CaptureHistory';
 import type { UIStateStore } from '../ui/UIStateStore';
 import type { XrTracking } from '../xr/XrTracking';
 import { DesktopCarryPose } from './DesktopCarryPose';
 import { ObjectGrabInput } from './ObjectGrabInput';
-import { ObjectInteraction, type ObjectStep, VR_REACH_M } from './ObjectInteraction';
+import { ObjectInteraction, type ObjectStep, VR_REACH_M, type WrapperPose, wrapperPose } from './ObjectInteraction';
 import { MAX_TRAY_BYTES, MAX_TRAY_ITEMS, ObjectTray, type TrayItem } from './ObjectTray';
 import { SceneObjectRegistry, type SceneObject } from './SceneObjectRegistry';
 import { fetchSuppliedObject, parseSuppliedObject, readSuppliedObjectFile, type SuppliedObjectInput, SuppliedObjectError } from './suppliedObject';
@@ -31,7 +32,13 @@ export interface CaptureObjectsDeps {
   isTakeActive: () => boolean;
   /** The dominant hand: in a headset the other hand holds the tray up and this one summons. */
   getHandedness: () => Handedness;
+  /** Capture's undo history (docs/features/undo-redo.md): every summon, put-back, place, resize and tray change joins it. */
+  history?: CaptureHistory;
 }
+
+// A release this close to where the grab began is no place.
+const PLACE_MIN_M = 1e-3;
+const PLACE_MIN_RAD = 1e-3;
 
 const TRACKED_SOURCES: ReadonlySet<HandPoseSource> = new Set(['xr-hand', 'controller', 'mock']);
 /** How long a slot stays lit after an object is put back into it. */
@@ -52,8 +59,6 @@ export class CaptureObjects {
   private readonly thumbnailer: TrayThumbnailer;
   private readonly thumbnails = new Map<TrayItem, TrayThumbnail>();
   private lastTimeSec = 0;
-  /** Items taken off the tray: their bytes count toward the budget while a copy of them is in the scene. */
-  private removedItems: TrayItem[] = [];
   /** A tray item left the tray since the last authoring frame. */
   private removedSinceFrame = false;
   /** The slot a put-back just went into, lit until `returnFlashUntil` (performance.now ms). */
@@ -63,6 +68,8 @@ export class CaptureObjects {
   private trayLoadsPending = 0;
   private trayLive = { open: false, blocked: false, reachableSlot: null as number | null, holding: false, returnSlot: null as number | null };
   private readonly palm = new THREE.Vector3();
+  private readonly box = new THREE.Box3();
+  private readonly liftScale = new THREE.Vector3();
   private readonly pickRay = new THREE.Raycaster();
   private readonly pickNdc = new THREE.Vector2();
 
@@ -81,6 +88,13 @@ export class CaptureObjects {
       carry: this.carry,
       tray: this.tray,
       embodyOffset: deps.embodyOffset
+    });
+    this.tray.onSummon = (object) => this.record(this.summonEntry(object));
+    deps.history?.onFlush(() => this.commitHoldChanges(true));
+    // A hold that spans Record or Stop: only what it does after the boundary can be undone.
+    deps.history?.onClear(() => {
+      this.interaction.takeHoldChanges();
+      this.interaction.rebaseHold();
     });
   }
 
@@ -167,6 +181,7 @@ export class CaptureObjects {
     this.interaction.update({ ...step, summoner });
     const letGoOverTray = this.interaction.takePutBack();
     if (letGoOverTray) this.putBack(letGoOverTray);
+    this.commitHoldChanges(false);
     this.interaction.stepPhysics(step.deltaSec);
     // A grab by the holding hand closes the tray at once.
     if (this.interaction.isHolding(holder) && this.tray.isOpen()) this.tray.update(false, { vrActive, bodyYaw: step.bodyYaw, hand: holder });
@@ -208,8 +223,9 @@ export class CaptureObjects {
     return this.load(() => readSuppliedObjectFile(file));
   }
 
-  loadTrayUrls(urls: readonly string[]): Promise<boolean> {
-    return this.loadTray(urls.map((url) => () => fetchSuppliedObject(url)));
+  /** `undoable`: false for the tray the page was opened with, which is set up rather than authored. */
+  loadTrayUrls(urls: readonly string[], undoable = true): Promise<boolean> {
+    return this.loadTray(urls.map((url) => () => fetchSuppliedObject(url)), undoable);
   }
 
   loadTrayFiles(files: readonly File[]): Promise<boolean> {
@@ -223,7 +239,25 @@ export class CaptureObjects {
    * shrink would be recorded as a resize. False when it is not in the scene.
    */
   putBack(object: SceneObject, timeSec = this.lastTimeSec): boolean {
-    if (object.layer !== 'event' || this.exporting() || !this.registry.all().includes(object)) return false;
+    const from = this.inScene(object) ? wrapperPose(object) : null;
+    if (!this.takeOut(object, timeSec) || !from) return false;
+    this.record({
+      kind: 'event',
+      word: 'Put back',
+      undo: () => this.bringBack(object, from),
+      redo: () => this.takeOut(object, this.lastTimeSec)
+    });
+    return true;
+  }
+
+  /** Whether `object` is in the scene now. */
+  private inScene(object: SceneObject): boolean {
+    return this.registry.all().includes(object);
+  }
+
+  /** The put-back itself, without the history: an undone summon goes back the same way. */
+  private takeOut(object: SceneObject, timeSec: number): boolean {
+    if (object.layer !== 'event' || this.exporting() || !this.inScene(object)) return false;
     const slot = this.tray.logPutBack(object, timeSec);
     this.interaction.forget(object);
     this.registry.remove(object);
@@ -231,7 +265,115 @@ export class CaptureObjects {
     if (object.origin === 'prepared') this.deps.ui.setObjectState({ status: 'none', name: null, message: null });
     if (slot !== null) this.returnFlash = { slot, untilMs: performance.now() + RETURN_FLASH_MS };
     this.publishTray();
+    // A hold that ended in this put-back is no place.
+    this.commitHoldChanges(false);
     return true;
+  }
+
+  /**
+   * An object that left comes back now (docs/features/undo-redo.md): the same
+   * object, so a take's track for it resumes after a gap, at `pose`, at rest,
+   * at the size it had.
+   */
+  private bringBack(object: SceneObject, pose: WrapperPose): boolean {
+    if (this.exporting() || !this.registry.restore(object)) return false;
+    object.placed = true;
+    this.setPose(object, pose);
+    this.tray.logReturn(object, this.lastTimeSec);
+    if (object.origin === 'prepared') this.deps.ui.setObjectState({ status: 'ready', name: object.name, message: null });
+    this.publishTray();
+    return true;
+  }
+
+  /** Writes `pose` to `object`'s wrapper, let go and at rest: its body is built again there, hovering, on the next step. */
+  private setPose(object: SceneObject, pose: WrapperPose): void {
+    this.interaction.forget(object);
+    object.wrapper.position.copy(pose.position);
+    object.wrapper.quaternion.copy(pose.quaternion);
+    object.wrapper.updateMatrixWorld(true);
+    this.physics?.remove(object);
+    // A hold W just let go of is no place.
+    this.interaction.takeHoldChanges();
+  }
+
+  private record(entry: HistoryEntry): void {
+    this.deps.history?.push(entry);
+  }
+
+  /** A summon: undone, the object goes back to the tray now; redone, it comes back where it was. */
+  private summonEntry(object: SceneObject): HistoryEntry {
+    let back: WrapperPose | null = null;
+    return {
+      kind: 'event',
+      word: 'Summon',
+      undo: () => {
+        if (!this.inScene(object)) return false;
+        back = wrapperPose(object);
+        return this.takeOut(object, this.lastTimeSec);
+      },
+      redo: () => (back ? this.bringBack(object, back) : false)
+    };
+  }
+
+  /**
+   * The hand's resizes and releases become history entries: a resize, and a
+   * place for a prop that was in the scene before the grab and is still in it.
+   * `flushing`: W or E is about to read the history, so a resize in progress commits too.
+   */
+  private commitHoldChanges(flushing: boolean): void {
+    if (flushing) {
+      const open = this.interaction.commitResize();
+      if (open) this.recordResize(open.object, open.from, open.to);
+    }
+    for (const change of this.interaction.takeHoldChanges()) {
+      if (!this.inScene(change.object)) continue;
+      if (change.type === 'resize') this.recordResize(change.object, change.from, change.to);
+      else if (!change.fromTray) this.recordPlace(change.object, change.before);
+    }
+  }
+
+  private recordResize(object: SceneObject, from: number, to: number): void {
+    const apply = (size: number) => {
+      if (!this.inScene(object) || this.exporting()) return false;
+      if (this.interaction.isHeld(object)) {
+        this.interaction.setSize(object, size);
+        return true;
+      }
+      // A free prop keeps its base where it rests, so growing it never sinks it into the floor; it stays there at rest.
+      const bottom = this.box.setFromObject(object.model).min.y;
+      this.interaction.setSize(object, size);
+      object.wrapper.updateMatrixWorld(true);
+      const lift = bottom - this.box.setFromObject(object.model).min.y;
+      const pose = wrapperPose(object);
+      object.wrapper.parent?.updateWorldMatrix(true, false);
+      const scale = object.wrapper.parent ? object.wrapper.parent.getWorldScale(this.liftScale).y : 1;
+      pose.position.y += lift / scale;
+      this.setPose(object, pose);
+      return true;
+    };
+    this.record({ kind: 'event', word: 'Size', undo: () => apply(from), redo: () => apply(to) });
+  }
+
+  private recordPlace(object: SceneObject, before: WrapperPose): void {
+    const now = object.wrapper;
+    if (now.position.distanceTo(before.position) < PLACE_MIN_M && now.quaternion.angleTo(before.quaternion) < PLACE_MIN_RAD) return;
+    let after: WrapperPose | null = null;
+    this.record({
+      kind: 'event',
+      word: 'Place',
+      undo: () => {
+        if (!this.inScene(object) || this.exporting()) return false;
+        // Where it came to rest (or is now, if it is still moving or held again): where a redo returns it.
+        after = wrapperPose(object);
+        this.setPose(object, before);
+        return true;
+      },
+      redo: () => {
+        if (!after || !this.inScene(object) || this.exporting()) return false;
+        this.setPose(object, after);
+        return true;
+      }
+    });
   }
 
   /** Puts back the prop in the hand (Backspace, the dock's Put back); false when nothing is held. */
@@ -247,11 +389,39 @@ export class CaptureObjects {
    */
   removeTraySlot(slot: number): boolean {
     const item = this.tray.getItems().find((candidate) => candidate.slot === slot);
-    if (!item || this.exporting() || !this.tray.remove(item)) return false;
+    if (!item) return false;
+    const index = this.tray.indexOf(item);
+    const thumbnail = this.thumbnails.get(item);
+    if (!this.takeOffTray(item)) return false;
+    this.record({
+      kind: 'tray',
+      word: 'Tray removal',
+      undo: () => this.backOnTray(item, index, thumbnail),
+      redo: () => this.takeOffTray(item)
+    });
+    return true;
+  }
+
+  /** A slot's removal, without the history. */
+  private takeOffTray(item: TrayItem): boolean {
+    const slot = item.slot;
+    if (this.exporting() || !this.tray.remove(item)) return false;
     this.thumbnails.delete(item);
-    this.removedItems.push(item);
     this.removedSinceFrame = true;
     if (this.returnFlash?.slot === slot) this.returnFlash = null;
+    this.publishTray();
+    this.onTrayChanged?.();
+    return true;
+  }
+
+  /** A removed item goes back on the tray at `index`, with its thumbnail; refused while the tray is full. */
+  private backOnTray(item: TrayItem, index: number, thumbnail: TrayThumbnail | undefined): boolean | { refused: string } {
+    if (this.exporting()) return false;
+    if (this.tray.getItems().length >= MAX_TRAY_ITEMS) return { refused: 'The tray is full' };
+    // Off the tray, its bytes count only while a copy of it is in the scene.
+    if (!this.inSceneItems().has(item) && this.budgetBytes() + item.bytes > MAX_TRAY_BYTES) return { refused: 'The tray is full' };
+    if (!this.tray.restore(item, index)) return false;
+    if (thumbnail) this.thumbnails.set(item, thumbnail);
     this.publishTray();
     this.onTrayChanged?.();
     return true;
@@ -269,9 +439,18 @@ export class CaptureObjects {
    * whose copies are still in the scene (they share the item's model).
    */
   private budgetBytes(): number {
-    const inScene = new Set(this.registry.eventObjects().map((object) => this.tray.originOf(object)));
-    this.removedItems = this.removedItems.filter((item) => inScene.has(item));
-    return this.tray.totalBytes() + this.removedItems.reduce((sum, item) => sum + item.bytes, 0);
+    const offTray = [...this.inSceneItems()].filter((item) => this.tray.indexOf(item) < 0);
+    return this.tray.totalBytes() + offTray.reduce((sum, item) => sum + item.bytes, 0);
+  }
+
+  /** The tray items (on the tray or not) that some object in the scene was summoned from. */
+  private inSceneItems(): Set<TrayItem> {
+    const items = new Set<TrayItem>();
+    for (const object of this.registry.eventObjects()) {
+      const item = this.tray.originOf(object);
+      if (item) items.add(item);
+    }
+    return items;
   }
 
   /** The tray's slots changed outside a load. */
@@ -332,9 +511,9 @@ export class CaptureObjects {
    * together when it would pass five items or the size budget, or when any
    * item is refused; capture, and a take, keep going with the tray it had.
    */
-  private loadTray(reads: Array<() => Promise<SuppliedObjectInput>>): Promise<boolean> {
+  private loadTray(reads: Array<() => Promise<SuppliedObjectInput>>, undoable = true): Promise<boolean> {
     this.trayLoadsPending += 1;
-    const run = this.trayLoads.then(() => this.loadTrayNow(reads)).finally(() => {
+    const run = this.trayLoads.then(() => this.loadTrayNow(reads, undoable)).finally(() => {
       this.trayLoadsPending -= 1;
       this.deps.ui.setTrayState({ ...this.deps.ui.getState().tray, loading: this.trayLoadsPending > 0 });
     });
@@ -342,7 +521,7 @@ export class CaptureObjects {
     return run;
   }
 
-  private async loadTrayNow(reads: Array<() => Promise<SuppliedObjectInput>>): Promise<boolean> {
+  private async loadTrayNow(reads: Array<() => Promise<SuppliedObjectInput>>, undoable: boolean): Promise<boolean> {
     const { ui } = this.deps;
     const fail = (message: string) => {
       console.warn(message);
@@ -376,17 +555,42 @@ export class CaptureObjects {
         prepared.push({ ...entry, name, thumbnail });
       }
       if (this.tray.getItems().length + prepared.length > MAX_TRAY_ITEMS) throw new SuppliedObjectError(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
+      const addedItems: TrayItem[] = [];
       for (const { input, item, name, thumbnail } of prepared) {
         const added = this.tray.add(item.model, { name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });
         if (thumbnail) this.thumbnails.set(added, thumbnail);
+        addedItems.push(added);
       }
       ui.setTrayState({ ...this.trayState(), message: null });
+      if (undoable) this.recordTrayAdd(addedItems);
       return true;
     } catch (error) {
       if (seq !== this.trayLoadSeq) return false;
       ui.setTrayState({ ...this.trayState(), loading: false });
       return fail(error instanceof SuppliedObjectError ? error.message : `Could not load the tray: ${(error as Error).message}`);
     }
+  }
+
+  /** One pick (a Find result, or the files chosen together) is one entry: undone, its slots leave; redone, they come back at the end. */
+  private recordTrayAdd(items: readonly TrayItem[]): void {
+    const thumbnails = new Map(items.map((item) => [item, this.thumbnails.get(item)] as const));
+    this.record({
+      kind: 'tray',
+      word: 'Tray addition',
+      undo: () => {
+        const here = items.filter((item) => this.tray.indexOf(item) >= 0);
+        if (here.length === 0 || this.exporting()) return false;
+        for (const item of here) this.takeOffTray(item);
+        return true;
+      },
+      redo: () => {
+        if (this.exporting()) return false;
+        const away = items.filter((item) => this.tray.indexOf(item) < 0);
+        if (this.tray.getItems().length + away.length > MAX_TRAY_ITEMS) return { refused: 'The tray is full' };
+        for (const item of away) this.backOnTray(item, this.tray.getItems().length, thumbnails.get(item));
+        return true;
+      }
+    });
   }
 
   private trayState(): TrayUiState {
@@ -436,6 +640,8 @@ export class CaptureObjects {
       if (seq !== this.loadSeq) return false;
       if (this.deps.isTakeActive()) throw new SuppliedObjectError('Choose the object before recording.');
       this.registry.clearPrepared();
+      // The objects it replaced can no longer come back.
+      this.deps.history?.clear();
       this.registry.add(loaded.model, { name: loaded.source.name, source: loaded.source, credit: loaded.credit, origin: 'prepared', layer: 'event' });
       ui.setObjectState({ status: 'ready', name: loaded.source.name, message: null });
       return true;

@@ -479,7 +479,7 @@ a gesture zone.
 | Upload | Open the upload sheet; send the upload | "Upload" | An arrow up out of a tray (`glyph.path.upload`) |
 | Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
 | Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
-| Undo / Redo | The Halo's W and E: undo or redo the last held mark or hand trace | "Undo mark" / "Redo mark" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
+| Undo / Redo | The Halo's W and E: undo or redo the last authoring action of any kind (an object summoned, put back, placed or resized, a held mark, a hand trace, a tray change; `docs/features/undo-redo.md`) | "Undo" / "Redo" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 | Ink | The Halo's NW in a headset: start or end a hand trace while recording (PRD-023) | "Ink" (name); "Tracing 0:03" on the status line while on | A curving path into a fingertip dot (`glyph.path.ink`) |
 | Tray | Open the tray of objects to summon (capture) | "Tray" (name; "Tray · hold T" with a keyboard) | A cube, a cone and a ball on a shelf (`glyph.path.tray`) |
 | Put back | Put the held object back into the tray (capture) | "Put back" | An arrow down onto the tray's shelf, the mirror of Upload (`glyph.path.putBack`) |
@@ -555,8 +555,8 @@ One radial menu with eight directions that never change, on every device:
   (12 apx) apart, so the ring's radius is about 63 apx. Headset values are
   2.5× these.
 - A direction with no action draws nothing, and its place stays reserved.
-  Capture's Halo carries S, W (undo the last held mark or hand trace), E
-  (redo it) and, in a headset, NW (Ink: trace the hands while recording,
+  Capture's Halo carries S, W (undo the last authoring action: an object,
+  a mark, a trace or the tray), E (redo it) and, in a headset, NW (Ink: trace the hands while recording,
   PRD-023). On a flat screen S and NW stay empty: the dock carries Record,
   and a flat take has no tracked hands to trace.
 - Summoned, per input: on desktop hold **B** and move the mouse, or click
@@ -693,7 +693,7 @@ hologram.
 **Chrome while recording:** everything but the stop control,
 "Recording 0:12", the Halo glyph, the Tray glyph, Find and Put back hides
 until the take ends. The Halo stays because it carries the take's own actions: stop,
-undo or redo the held mark or trace, and, in a headset, Ink. While Ink is on
+undo or redo the last action, and, in a headset, Ink. While Ink is on
 the status line reads "Recording 0:12 · Tracing 0:03", and the trace draws
 live behind each moving fingertip in the trace style
 ([section 4](#4-viewpoints-scale-and-provenance)): the one mark a headset

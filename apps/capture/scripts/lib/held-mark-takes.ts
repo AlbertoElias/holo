@@ -209,9 +209,9 @@ async function desktopPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   await page.keyboard.press('Escape');
   const afterEscape = await pinnedPlaces();
   if (afterEscape.length !== 0) failures.push(`Escape left the clicked ring open: ${JSON.stringify(afterEscape)}`);
-  for (const label of ['Redo mark', 'Undo mark']) {
+  for (const label of ['Redo', 'Undo']) {
     await haloGlyph.click();
-    await page.getByRole('button', { name: label }).click();
+    await page.getByRole('button', { name: label, exact: true }).click();
     await advance(0.2);
   }
   const afterPicks = await pinnedPlaces();
@@ -290,7 +290,7 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   await touch(cdp, 'touchStart', [start]);
   await touch(cdp, 'touchEnd', []);
   await advance(0.2);
-  await page.getByRole('button', { name: 'Redo mark' }).tap();
+  await page.getByRole('button', { name: 'Redo', exact: true }).tap();
   await advance(0.2);
   const download = page.waitForEvent('download', { timeout: 120_000 });
   await page.getByRole('button', { name: CONTROL_NAMES.stopRecording }).tap();

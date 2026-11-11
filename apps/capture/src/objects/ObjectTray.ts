@@ -40,6 +40,8 @@ export interface TraySnapshot {
   summons: Array<{ slot: number; objectId: string; timeSec: number }>;
   /** Objects put back this take (docs/features/archive/tray-remove.md); `slot` is null when their item had left the tray. */
   putBacks: Array<{ slot: number | null; objectId: string; timeSec: number }>;
+  /** Objects brought back this take by an undone put-back or summon, or a redone summon (docs/features/undo-redo.md). */
+  returns: Array<{ objectId: string; timeSec: number }>;
 }
 
 /**
@@ -56,6 +58,7 @@ export class ObjectTray {
   private open = false;
   private readonly summonLog: TraySnapshot['summons'] = [];
   private readonly putBackLog: TraySnapshot['putBacks'] = [];
+  private readonly returnLog: TraySnapshot['returns'] = [];
   /** The item each summoned object came from, so putting it back knows its slot. */
   private readonly sources = new WeakMap<SceneObject, TrayItem>();
   private readonly palm = new THREE.Vector3();
@@ -112,6 +115,25 @@ export class ObjectTray {
     this.registry.remove(item.object);
     this.items.forEach((rest, i) => (rest.slot = i + 1));
     return true;
+  }
+
+  /**
+   * Puts a removed `item` back at `index` (an undone removal, or a redone
+   * add; docs/features/undo-redo.md): the slots after it renumber. False when
+   * it is already on the tray or the tray is full.
+   */
+  restore(item: TrayItem, index: number): boolean {
+    if (this.items.includes(item) || this.items.length >= MAX_TRAY_ITEMS) return false;
+    this.registry.restore(item.object);
+    item.object.wrapper.visible = false;
+    this.items.splice(Math.min(index, this.items.length), 0, item);
+    this.items.forEach((rest, i) => (rest.slot = i + 1));
+    return true;
+  }
+
+  /** Where `item` is on the tray (0-based), or -1. */
+  indexOf(item: TrayItem): number {
+    return this.items.indexOf(item);
   }
 
   isOpen(): boolean {
@@ -197,8 +219,12 @@ export class ObjectTray {
     const object = this.registry.summon(item.object);
     this.sources.set(object, item);
     this.summonLog.push({ slot: item.slot, objectId: object.id, timeSec });
+    this.onSummon?.(object);
     return object;
   }
+
+  /** A summon happened (capture's history takes it; docs/features/undo-redo.md). */
+  onSummon: ((object: SceneObject) => void) | null = null;
 
   /** The tray item `object` was summoned from, on the tray or not. */
   originOf(object: SceneObject): TrayItem | null {
@@ -215,6 +241,7 @@ export class ObjectTray {
   resetSummonLog(): void {
     this.summonLog.length = 0;
     this.putBackLog.length = 0;
+    this.returnLog.length = 0;
   }
 
   /** `object` was put back: logged against the slot it came from, if that item is still here. */
@@ -222,6 +249,11 @@ export class ObjectTray {
     const slot = this.sourceOf(object)?.slot ?? null;
     this.putBackLog.push({ slot, objectId: object.id, timeSec });
     return slot;
+  }
+
+  /** `object` came back into the scene (not a summon: no arm span ends with it). */
+  logReturn(object: SceneObject, timeSec: number): void {
+    this.returnLog.push({ objectId: object.id, timeSec });
   }
 
   snapshot(): TraySnapshot {
@@ -233,7 +265,8 @@ export class ObjectTray {
         return { slot: item.slot, name: item.object.name, kind: item.kind, position: [this.pos.x, this.pos.y, this.pos.z], visible: item.object.wrapper.visible };
       }),
       summons: [...this.summonLog],
-      putBacks: [...this.putBackLog]
+      putBacks: [...this.putBackLog],
+      returns: [...this.returnLog]
     };
   }
 

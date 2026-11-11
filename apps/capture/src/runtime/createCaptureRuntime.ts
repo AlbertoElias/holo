@@ -40,7 +40,9 @@ import { HeightFit } from '../xr/HeightFit';
 import { ScreenHolds } from '../xr/ScreenHolds';
 import { XrTracking } from '../xr/XrTracking';
 import { installAutomationHooks, tracesSnapshot } from './automationHooks';
+import { CaptureHistory, type HistoryEntry } from './CaptureHistory';
 import { createHaloActions } from './haloActions';
+import type { PointHistoryEntry } from '../recording/PointSampleStore';
 import { createCaptureStage, holdXrInputBetweenFrames, syncPlayerToRig } from './captureStage';
 import { renderCaptureTextState } from './captureTextState';
 import { FrameLoop } from './FrameLoop';
@@ -87,11 +89,16 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   ui.setXrEntry(xrEntry.offers);
   xrEntry.onChange(() => ui.setXrEntry(xrEntry.offers));
   const touchStick = new TouchStickView(container);
+  // Capture's one undo history (docs/features/undo-redo.md): marks and traces join it here, objects and the tray in CaptureObjects.
+  const history = new CaptureHistory();
+  const pointEntries = new WeakMap<PointHistoryEntry, HistoryEntry>();
   // The Halo's actions (slice 5), one runner for every input that summons it.
   const haloActions = createHaloActions({
     ui,
     recording: { toggle: () => recording.toggle() },
     getPointSamples: () => recording.recorder.pointSamples,
+    history,
+    entryFor: (point) => pointEntries.get(point),
     getTimeSec: () => capture.frame.elapsedSec,
     anyTraceDrawn: () => vrChrome.liveTrace.anyDrawn()
   });
@@ -123,12 +130,34 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     renderer,
     getAvatar: () => ({ avatar: avatar.avatar, worldModel: avatar.worldModel }),
     onSizeLocked: () => heightFit.calibration.interrupt(),
-    onTakeStart: () => objects.startTake(),
+    onTakeStart: () => {
+      objects.startTake();
+      history.clear();
+    },
     isCameraAuthor: () => capture.frame.arCameraAuthor,
     recordRefusal: () => (capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
     isPlacementSettled: () => capture.ar.isSettled(),
     setFrame: stage.worldGroup,
     getPlace: () => (place?.current ? { prepare: (path, maxSpzBytes) => place.prepareExport(path, maxSpzBytes), glbByteBudget: () => place.glbByteBudget() } : undefined)
+  });
+  // A mark or trace that began is a meaning entry: undone, it leaves the take as if it never happened.
+  recording.recorder.pointSamples.onEntry = (point) => {
+    const samples = recording.recorder.pointSamples;
+    const entry: HistoryEntry = {
+      kind: 'meaning',
+      word: point.kind === 'hold' ? 'Mark' : 'Trace',
+      undo: (at) => samples.undoEntry(point, at.timeSec),
+      redo: () => samples.redoEntry(point),
+      discard: () => samples.discardUndone(point)
+    };
+    pointEntries.set(point, entry);
+    history.push(entry);
+  };
+  // A finished take's meaning can no longer change: its history goes when it stops.
+  let lastRecordingState = ui.getState().recordingState;
+  ui.subscribe((state) => {
+    if (lastRecordingState === 'recording' && state.recordingState !== 'recording') history.clear();
+    lastRecordingState = state.recordingState;
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
   const objects = new CaptureObjects({
@@ -140,7 +169,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     ui,
     embodyOffset: config.embodyOffset,
     isTakeActive: () => ui.getState().recordingState !== 'idle',
-    getHandedness: () => ui.getState().handedness
+    getHandedness: () => ui.getState().handedness,
+    history
   });
   // A scanned place as the set (docs/features/splat-capture.md), behind `?placeCapture=1` until 2a and 2b are verified.
   // Its own chunk, with Spark's: a capture page without a place never loads either.
@@ -339,7 +369,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       }
       // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
       if (config.objectUrl) await objects.loadUrl(config.objectUrl);
-      if (config.trayUrls.length > 0) await objects.loadTrayUrls(config.trayUrls);
+      if (config.trayUrls.length > 0) await objects.loadTrayUrls(config.trayUrls, false);
       // The scan replaces the set once the set, the avatar and the motor are up; a failure keeps the set.
       if (place && config.placeUrl) await place.load({ kind: 'url', url: config.placeUrl });
       ui.setLoadState(spawned ? 'ready' : 'warning', spawned ? null : 'Loaded with warnings: spawn/physics setup incomplete.');
@@ -445,7 +475,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           simSec: capture.frame.elapsedSec,
           touch: input.touch.snapshot().hold,
           flatHalo: flatHalo.getSnapshot(),
-          actions: haloActions.log
+          actions: haloActions.log,
+          history: { ...history.counts(), log: history.log }
         }),
         __toggleRecording: () => recording.toggle(),
         __runHaloAction: (action, input) => haloActions.run(action, input),
