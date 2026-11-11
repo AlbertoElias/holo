@@ -37,6 +37,8 @@ interface PartSpec {
   to: HumanoidBoneRef[];
   radius: number;
   sphere?: boolean;
+  /** With none of `to`, end at the centroid of `from`'s child joints (a hand whose finger joints have no humanoid names). */
+  toChildren?: boolean;
 }
 
 const SPECS: PartSpec[] = [
@@ -45,7 +47,7 @@ const SPECS: PartSpec[] = [
   ...(['left', 'right'] as const).flatMap((side): PartSpec[] => [
     { side, arm: true, from: `${side}UpperArm`, to: [`${side}LowerArm`], radius: UPPER_ARM_R },
     { side, arm: true, from: `${side}LowerArm`, to: [`${side}Hand`], radius: FOREARM_R },
-    { side, arm: true, from: `${side}Hand`, to: [`${side}MiddleProximal`], radius: PALM_R, sphere: true },
+    { side, arm: true, from: `${side}Hand`, to: [`${side}MiddleProximal`], radius: PALM_R, sphere: true, toChildren: true },
     { side, leg: true, from: `${side}UpperLeg`, to: [`${side}LowerLeg`], radius: UPPER_LEG_R },
     { side, leg: true, from: `${side}LowerLeg`, to: [`${side}Foot`], radius: LOWER_LEG_R },
     { side, leg: true, from: `${side}Foot`, to: [`${side}Toes`, `${side}FootTip`], radius: FOOT_R }
@@ -88,6 +90,7 @@ export class AvatarColliders {
   private hipsYaw: number | null = null;
   private readonly a = new THREE.Vector3();
   private readonly b = new THREE.Vector3();
+  private readonly c = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
   private readonly q = new THREE.Quaternion();
   private readonly up = new THREE.Vector3(0, 1, 0);
@@ -233,9 +236,17 @@ export class AvatarColliders {
   private segment(spec: PartSpec): boolean {
     const from = this.bones.bone(spec.from);
     const to = spec.to.map((ref) => this.bones.bone(ref)).find(Boolean);
-    if (!from || !to) return false;
+    if (!from) return false;
     from.getWorldPosition(this.a);
-    to.getWorldPosition(this.b);
+    if (to) to.getWorldPosition(this.b);
+    else {
+      // Unnamed fingers still shape the palm: without one, a fingerless hand had no palm collider to bat or throw with (B-041).
+      const joints = spec.toChildren ? from.children.filter((c) => (c as THREE.Bone).isBone) : [];
+      if (joints.length === 0) return false;
+      this.b.set(0, 0, 0);
+      for (const joint of joints) this.b.add(joint.getWorldPosition(this.c));
+      this.b.divideScalar(joints.length);
+    }
     return Number.isFinite(this.a.x + this.a.y + this.a.z + this.b.x + this.b.y + this.b.z);
   }
 }

@@ -87,3 +87,119 @@ typing a prompt in the app uses the same tool.
   performance?
 - What is the smallest plan format an agent can reliably write and a person
   can edit?
+
+## First authored pieces (2026-11-09)
+
+Four showcase holograms now exist as scene scripts in
+`apps/capture/scripts/showcase/`. An agent wrote each scene by hand; this is
+not the prompt, plan, compose flow above, and nobody speaks in them. They
+were chosen to fail test 5 as hard as possible: each loses its point as a
+video.
+
+| Piece | Feeling | What a video would lose |
+| --- | --- | --- |
+| Walk beside light | Awe, loneliness | The Earth and Moon at 1 : 100,000,000 are a true 3.84 m apart, and light crosses at its real speed, 3 m/s at that scale. A frame shrinks the gap; here the gap is the room. |
+| Two sides of a door | Ache | One person on each side of a closed door. Each side shows one; the viewer's own step finds the other. |
+| Murmuration | Wonder | 480 starlings at true size. Outside it is one shape; at the standing spot it passes around your head. |
+| Blue hour | Coziness | A miniature house at dusk. Each side hides something: a reader, a cat, a sleeper, lit roots. |
+
+Build one with `pnpm --filter @holoim/capture run showcase:build <scene>`
+(`light`, `door`, `murmuration`, `blue-hour`, and the later sets' scenes
+below); the GLB and a contact sheet
+land in the ignored `output/showcase/`. `showcase:upload --api <origin>
+<scene>` sends it through the normal upload route.
+
+What building them showed:
+
+- **Provenance has nowhere to show.** Each file says
+  `asset.extras.holoim.authored = "synthetic"` and uploads as "Claude
+  (agent-authored)", but the byline is the only place a viewer sees it. The
+  authenticity rule above needs a visible mark (IDEA-024).
+- **The portal cannot lean in.** Its closest view is 1.6 m from the anchor,
+  made for a life-size author. A tabletop miniature cannot be inspected on a
+  flat screen, so Blue hour is shown at 1:8 instead of its modelled 1:12.
+- **True scale can read as empty on a card.** A file with no avatar is framed
+  on its whole bounds, so the 12.7 cm Earth in a 3.84 m scene is a few
+  pixels until the viewer zooms. The piece is made for a headset or AR.
+- **Restraint held up.** The door's two figures are jointed mannequins of
+  light with no faces, and the scene still reads; the open question about
+  needing a lifelike presenter leans toward "not at first".
+
+## Second set (2026-11-10)
+
+Six more, pushed further from anything a camera could have recorded. Each
+is built around one thing only the viewer's own position can do.
+
+| Piece | Scene | Feeling | What the viewer's position does |
+| --- | --- | --- | --- |
+| From where you stand | `words` | A turn from loneliness to warmth | One sculpture of 895 bricks reads ALONE from the first view and LOVED a quarter turn to the right. |
+| Walk around the year | `seasons` | Time passing through one place | One apple tree in all four seasons at once, a quarter each. Walking round it is walking through the year; a red scarf carries the story from the autumn branch to the snowman to the spring melt. |
+| Three hearts | `hearts` | Awe, tenderness | A blue whale's heart (1.5 m), a person's and a hummingbird's at true size, beating at 4, 64 and 1,200 a minute. The whale's beat comes twice in the 30 s loop; the waiting is the point. |
+| The shape the rain leaves | `rain` | Presence made of absence | Rain on an adult and a child with a red umbrella, neither of them drawn. Water stopping, clinging and running off shows them; from above, the dry ground does. |
+| The sea in the bathtub | `bath` | Delight | A true-size clawfoot tub holding a storm: a paper boat, a kraken with the plug, a lighthouse tap, a thundercloud under the shower head. |
+| Who holds the strings | `strings` | Vertigo | A puppet theatre from the front. Behind it the puppeteer; above the puppeteer, strings to a giant hand. One gesture passes down four levels, and at 9 s each one looks up at whoever holds it. |
+
+What this set added to the findings above:
+
+- **A piece that depends on the viewpoint must be built for the feed's
+  exact first view.** The feed opens at yaw 18°, pitch 16°. The word
+  sculpture is turned 18° and each brick is raised by `(u − w) · cell ·
+  tan 16°`, so rows at different depths land on the same screen row from
+  that tilt. Built for a level view, the letters broke.
+- **Nothing can hide underneath.** The portal's pitch stops at −8°, so every
+  reveal in this set is behind, above, inside or on the far side.
+- **Compact and dense reads on a card.** All six stay within about 3.5 m and
+  are filled; none has the empty-frame problem of Walk beside light.
+- **An invisible subject needs help at card size.** Rain stopping in mid-air
+  was not enough to show two people in a 300 px view; droplets clinging to
+  the unseen bodies were added, which is closer to drawing them than the
+  idea first intended.
+- **The sound is one track for the whole piece.** It cannot follow the
+  viewer, so Walk around the year plays one phrase per season in turn
+  instead of the season being faced.
+
+## Third set (2026-11-10)
+
+Six more. Three are tricks that only work from one place: they are built
+for the feed's first view and give themselves away when the viewer moves.
+Three give a shape to something that has none: depth in the sky, a second
+of time, the direction called down.
+
+| Piece | Scene | Feeling | What the viewer's position does |
+| --- | --- | --- | --- |
+| The street that turns to follow you | `street` | Unease, then delight | A painted street on an easel, in reverse perspective: three blunt pyramids point at the viewer, each painted as a street running away. From the first view it is a flat picture. When the easel sways or the viewer steps aside, the street swings the wrong way; from the side the trick is plain. |
+| Orion isn't flat | `orion` | Awe | Ten stars of Orion sit on the sight lines from the first view, at depths true to scale along a ruler from 0 to 2,000 light-years. From the first view it is the constellation; a quarter turn pulls it apart. |
+| The corridor is a lie | `corridor` | Delight at being fooled | Through an arch, a colonnade 38 m long with a statue at the far end. It is a wedge 1.7 m deep, squeezed toward the first-view eye so that it looks right from there. A true-size cat walks in and is a tiger beside the statue; from the side it is a cat beside a figurine. |
+| The other side of the mirror | `mirror` | A shiver, then complicity | Someone dresses at a mirror. The mirror is a hole in a wall and the reflection is a second person in a second room. When the first turns away, the second steps to the glass, looks at the viewer and lifts a finger to its lips. Behind the wall are its own coat and mug. |
+| Every moment of the dive | `dive` | The hush before a jump | One dive from a 1 m board, 1.03 s in the air, as 26 line figures: one for every 1/14 s, each where the diver was. A living diver passes through them in slow motion, then time rewinds. The gold line is the centre of mass, a parabola whatever the body does. |
+| Everyone's down is different | `stairs` | Playful vertigo | Three staircases and three peoples whose downs are at right angles. Gold people climb the treads; cyan and rose people walk level out of the risers of the same flights. Their steps tick at 3, 4 and 5 to every 2 s. |
+
+What this set added to the findings above:
+
+- **The first view, measured.** The feed camera has a 38° vertical field of
+  view and stands at `T + (0.297, 0.276, 0.914) × D`. `T` is the middle of
+  the footprint at 0.53 to 0.69 of the piece's height; `D` is 2.9 to 4.1
+  times the height, more when the piece is wide or has wide things high up.
+  A piece built for one viewpoint was built, uploaded to a local feed,
+  measured through the viewer's test observer
+  (`__HOLOIM_FEED_TEST_OBSERVER__`), and rebuilt around the measured eye;
+  two rounds brought each within about 5%. A guess from the bounds alone was
+  off by up to 40%.
+- **Everything inside the bounds moves the camera.** Decorative dust and a
+  wide floor slab pushed Orion's first view back by about 20%. An outline
+  cube and a lip on the floor slab pushed the stairs' back by 28%. A piece
+  meant to read on a card keeps its bounds tight around its subject.
+- **A flat screen is one eye.** The street and the corridor rely on that.
+  Two eyes in a headset should partly give them away; this is not checked.
+- **Dense motion needs a hierarchy.** 26 solid statues at true spacing made
+  a hedgehog. Line figures with one loud line (the centre of mass), the
+  heads second and the limbs quiet read at card size.
+- **Strangeness needs something normal beside it.** The stairs first stood
+  on a corner so that all three peoples leaned alike. Nobody looked upright
+  from anywhere and it read as noise. With one people upright, the other two
+  read as walking on walls.
+- **A mirror is a negative scale.** The second room is the first one's
+  meshes under a parent scaled by −1 on one axis, in materials that carry
+  their own light so both sides shade alike.
+- **The punchline can be too small.** The finger to the lips reads only
+  when the viewer zooms to about half the first distance.

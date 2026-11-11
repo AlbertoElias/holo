@@ -862,7 +862,21 @@ export class AvatarRig {
     // shorter spine takes the whole 39° over the bones it has.
     const spineBones = [spine, chest, upperChest].filter((b): b is THREE.Bone => b !== undefined);
     const spinePitch = spineBones.length === 3 ? [16, 13, 10] : spineBones.length === 2 ? [21, 18] : [39];
-    spineBones.forEach((bone, i) => this.crouchSpine.push(this.createCrouchBinding(bone, spinePitch[i]!, 1)));
+    // Unmapped joints between two mapped ones (a UE5 spine_02 below chest = spine_03) share that bone's bend:
+    // left out, the bend pivots higher than the shipped rig's, and the squat's shoulder and hand stay higher (B-041).
+    let below: THREE.Object3D = hips;
+    spineBones.forEach((bone, i) => {
+      const joints: THREE.Bone[] = [];
+      for (let joint: THREE.Object3D | null = bone; joint && joint !== below; joint = joint.parent) {
+        if (!(joint as THREE.Bone).isBone) break;
+        joints.push(joint as THREE.Bone);
+      }
+      // Not under the previous one after all: the mapped bone takes its whole bend, as before.
+      const shared = joints.at(-1)?.parent === below ? joints.reverse() : [bone];
+      // Root to tip, so a parent's bend is applied (and its matrix updated) before its child's.
+      for (const joint of shared) this.crouchSpine.push(this.createCrouchBinding(joint, spinePitch[i]! / shared.length, 1));
+      below = bone;
+    });
     this.crouchUpperLegs.push(this.createCrouchBinding(leftUpLeg, 68, -1), this.createCrouchBinding(rightUpLeg, 68, -1));
     this.crouchLowerLegs.push(this.createCrouchBinding(leftLeg, -110, -1), this.createCrouchBinding(rightLeg, -110, -1));
     this.crouchLeftFoot = leftFoot;

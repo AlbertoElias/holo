@@ -51,6 +51,63 @@ queue item in [`TODOS.md`](TODOS.md).
   same time (it passed on this branch earlier the same day). Re-run
   `test:portal` on a quiet machine before merging. Open: the viewer finds `RecordedPlace` by name rather than the
   extension's node index (follow-up); slices 2b (Quest VR) and 2c (phone AR).
+- Showcase holograms (merged to `main` 2026-11-11 together with positional
+  audio; every `verify:pr` step passed on the combined tree, the viewer XR
+  suite on a re-run after its AR placement test timed out once while another
+  agent's tests loaded the machine): four authored GLBs built by `apps/capture/scripts/showcase/`
+  (`showcase:build`, `showcase:upload`), described in
+  [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md).
+  Scripts and docs only, no app code; `verify:agent` passed 2026-11-09 and
+  all four were checked in the local viewer feed. Uploaded to the live feed 2026-11-10 at the user's
+  go-ahead, by "Claude (agent-authored)": Blue hour
+  (`cmwa4461m0007oeirc3jzftaf`), Two sides of a door
+  (`cmwa443hq0005oeirkgp3b33k`), Murmuration (`cmwa4402a0003oeirbj759hxp`)
+  and Walk beside light (`cmwa43uab0001oeirkv0e9bzr`). All four render at
+  https://holoim-viewer.pages.dev; not yet seen in a headset or AR.
+  A second set of six was added on the same branch 2026-11-10 (`words`,
+  `seasons`, `hearts`, `rain`, `bath`, `strings`; see "Second set" in the
+  concept page), checked in the local viewer feed, and uploaded to the live
+  feed the same day at the user's go-ahead: Walk around the year
+  (`cmwamqigc000boeirzhd5khet`), The shape the rain leaves
+  (`cmwamqg2a0009oeir4p2qzv7j`), Who holds the strings
+  (`cmwamqcla0007oeirlm49ifko`), The sea in the bathtub
+  (`cmwamq8k60005oeirnjf01okb`), Three hearts (`cmwamq5wz0003oeirqqn8rwl7`)
+  and From where you stand (`cmwamq2r40001oeirjgjaaau1`). All six render at
+  https://holoim-viewer.pages.dev and the stored files match the local
+  builds byte for byte; their sound is unheard and none has been seen in a
+  headset or AR. None of the authored pieces, sixteen with the third set, has a Quick
+  Look preview (`usdzStatus` is `none`; cause not looked into). The GLB writer now refuses
+  non-finite values, after a NaN vertex made one piece draw as nothing in
+  the viewer while its contact sheet looked right.
+  A third set of six was added on the same branch 2026-11-10 (`street`,
+  `orion`, `corridor`, `mirror`, `dive`, `stairs`; see "Third set" in the
+  concept page), checked in the local viewer feed, and uploaded to the live
+  feed the same day at the user's go-ahead: The other side of the mirror
+  (`cmwbcxce0000boeirl72up7p9`), The corridor is a lie
+  (`cmwbcx8130009oeir3b6yr83b`), Everyone's down is different
+  (`cmwbcx0xq0007oeir69vcjs4n`), Every moment of the dive
+  (`cmwbcwwcz0005oeirzfhyv6xl`), The street that turns to follow you
+  (`cmwbcwqx90003oeir73lzsc4e`) and Orion isn't flat
+  (`cmwbcwkv40001oeir5qh8zuv2`). All six render at
+  https://holoim-viewer.pages.dev and the stored files match the local
+  builds byte for byte. Three of the six (`street`,
+  `orion`, `corridor`) are built for the feed's measured first view, so a
+  change to how the feed frames a card would break them; their sound is
+  unheard and none has been seen in a headset or AR. `verify:agent` passed
+  on the branch 2026-11-10.
+- Positional audio (merged to `main` 2026-11-11 together with the showcase
+  holograms; brief [`docs/features/archive/positional-audio.md`](docs/features/archive/positional-audio.md),
+  closed 2026-11-11). Several placed sounds per hologram in the
+  feed and the XR viewer, HRTF on both; new avatar takes place the voice on
+  the head; Quick Look plays every source unplaced. The retrofitted rain
+  piece was uploaded to the live feed 2026-11-11 at the user's go-ahead as a
+  new card (`cmwc1glil0001oeiqy1n2s45h`, 9.22 MB, stored file identical to
+  the build): it is the only hologram on the live feed with placed sound
+  (umbrella, splash and lamp placed, the rain bed unplaced). The earlier
+  single-mix card (`cmwamqg2a0009oeir4p2qzv7j`) is still on the feed. In the
+  live viewer the new card renders with no page errors and builds three HRTF
+  panners that move under orbit and come closer under zoom. Listening by ear
+  and a physical headset are unverified.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

@@ -2,18 +2,21 @@ import { createComponent, createSystem, Types, type Entity } from "@iwsdk/core";
 import { AnimationMixer, LoopRepeat } from "three";
 import type { AnimationAction, AnimationClip, Object3D } from "three";
 
-import { ScheduledGltfAudio, type DecodedGltfAudio } from "../hologram/gltfAudio";
+import { createEarPose, earFromObject, ScheduledGltfAudio, type DecodedGltfAudio } from "../hologram/gltfAudio";
 import { rankClipsForPlayback } from "../hologram/hologramScene";
 
 // IWSDK has no animation system and its AudioSystem cannot seek, so each
 // hologram's clip clock, mixer and audio live here. The clock is the single
 // source of truth: every frame the actions are set to it, and audio is
 // (re)started from it whenever play, seek, restart or a loop wrap happens,
-// or when the audio's own clock has drifted from it.
+// or when the audio's own clock has drifted from it. Placed sounds follow
+// their objects, heard from the head.
 
 const SECONDARY_CLIP_WEIGHT = 0.35;
 /** Audio further than this from the clip clock is restarted from it (its clock ran slow or fast; well under lip-sync's ~45 ms). */
 const AUDIO_DRIFT_RESYNC_S = 0.03;
+/** In the headset sounds are placed by HRTF: near-ear speakers and headphones carry it (docs/features/archive/positional-audio.md). */
+export const XR_PANNING_MODEL: PanningModelType = "HRTF";
 
 export interface HologramRuntime {
   mixer: AnimationMixer;
@@ -51,7 +54,7 @@ export function createHologramRuntime(
     return action;
   });
   const duration = ranked[0]?.duration ?? 0;
-  return { runtime: { mixer, actions, audio: audio ? new ScheduledGltfAudio(audio) : null, audioOffset: null }, duration };
+  return { runtime: { mixer, actions, audio: audio ? new ScheduledGltfAudio(audio, root, { panningModel: XR_PANNING_MODEL }) : null, audioOffset: null }, duration };
 }
 
 export function disposeHologramRuntime(runtime: HologramRuntime): void {
@@ -79,7 +82,23 @@ export function restartHologram(entity: Entity): void {
 export class HologramPlaybackSystem extends createSystem({
   holograms: { required: [HologramPlayback] }
 }) {
+  private readonly ear = createEarPose();
+  private earSet = false;
+
+  /**
+   * The ear is the head: in a session, the player rig's head, which the
+   * input system set from this frame's viewer pose before this system runs
+   * (three's XR camera gets it only when the frame is drawn, after the
+   * systems); outside one, the camera.
+   */
+  private hear(): void {
+    const head = this.world.renderer.xr.isPresenting ? this.player.head : this.camera;
+    head.updateWorldMatrix(true, false);
+    earFromObject(head, this.ear);
+  }
+
   update(delta: number): void {
+    this.earSet = false;
     for (const entity of this.queries.holograms.entities) {
       const runtime = entity.getValue(HologramPlayback, "runtime") as HologramRuntime | undefined;
       if (!runtime) continue;
@@ -119,6 +138,11 @@ export class HologramPlaybackSystem extends createSystem({
           audio.stop();
         } else if (resync || !audio.playing || audioDrift(audio, clipTime) > AUDIO_DRIFT_RESYNC_S) {
           audio.start(clipTime);
+        }
+        if (shouldPlay && audio.spatial) {
+          if (!this.earSet) this.hear();
+          this.earSet = true;
+          audio.place(this.ear, delta);
         }
         runtime.audioOffset = audio.scheduledOffset();
       }

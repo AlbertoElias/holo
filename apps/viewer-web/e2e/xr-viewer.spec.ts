@@ -23,6 +23,7 @@ import { emulatePhone, phoneScreenPoint } from "@holoim/tooling-testing/iwer-pho
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
 import { settleScroll } from "./portal-helpers";
+import { spatialAudioGlb } from "./spatial-audio-fixture";
 
 // The IWSDK immersive viewer (docs/features/archive/viewer-xr-interface.md, steps 2-4):
 // `/vr/:id` and `/ar/:id` mount one IWSDK World with the opened
@@ -698,6 +699,117 @@ test("VR: Step inside shows the hologram at recorded scale on the floor ahead, p
     });
   }
   report.vr = { visits, timeline: marks };
+});
+
+type SpatialTap = { node: string; leftDb: number; rightDb: number; preRms: number };
+type SpatialPlacement = { emitter: number; node: string; nodeWorld: Vec3; placedWorld: Vec3; sent: Vec3; panner: Vec3; refDistance: number; panningModel: string };
+type SpatialAudio = { voices: Array<{ playing: boolean; gain: number }>; placements: SpatialPlacement[]; ear: { position: Vec3; forward: Vec3; up: Vec3 } };
+
+/** The focused hologram's placed sounds: the ear, the panners, and each tap's gain per ear after `settleMs` of real time (the audio clock is not the page's). */
+async function readSpatial(page: Page, settleMs = 700): Promise<SpatialAudio & { taps: SpatialTap[] }> {
+  await page.waitForTimeout(settleMs);
+  return page.evaluate(() => {
+    const hooks = window as unknown as {
+      __HOLOIM_XR_VIEWER__: { snapshot(): { hologram: { audio: SpatialAudio } } };
+      __xrSpatialTaps: Array<{ node: string; read(): { leftDb: number; rightDb: number; preRms: number } }>;
+    };
+    const audio = hooks.__HOLOIM_XR_VIEWER__.snapshot().hologram.audio;
+    return { ...audio, taps: (hooks.__xrSpatialTaps ?? []).map((tap) => ({ node: tap.node, ...tap.read() })) };
+  });
+}
+
+test("VR spatial audio: the head is the ear, placed sounds stay on their nodes, turning the head swaps the bell between the ears and stepping toward it makes it louder", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  await mockFeed(page, spatialAudioGlb());
+  await page.goto("/");
+  await assertViewerShell(page);
+  await waitForIwerRuntime(page);
+  await expect(page.locator('[data-card-id="mock-1"]')).toHaveAttribute("data-model-state", "rendered", { timeout: 15_000 });
+  await reachFor(page.locator(".feed-card").first());
+  await page.locator(".vr-trigger-button").click();
+  await enterSession(page, "Step inside", "opaque");
+  await setPose(page, "head", null, null);
+  await waitForSnapshot(page, (s) => s.placement.stage === "placed" && s.hologram.visible && Boolean(s.hologram.audio?.playing));
+  await page.evaluate(() => {
+    const hooks = window as unknown as { __HOLOIM_XR_VIEWER__: { tapSound(): unknown }; __xrSpatialTaps: unknown };
+    hooks.__xrSpatialTaps = hooks.__HOLOIM_XR_VIEWER__.tapSound();
+  });
+  await nextFrames(page, 4);
+  const first = await readSpatial(page, 0);
+  expect(first.placements.map((p) => p.node).sort(), "one panner per placed node").toEqual(["Bell", "Orbiter"]);
+  expect(first.placements.every((p) => p.panningModel === "HRTF"), "the headset pans by HRTF").toBe(true);
+  expect(first.voices.every((voice) => voice.playing), "every source plays").toBe(true);
+  const bellAt = first.placements.find((p) => p.node === "Bell")!.nodeWorld;
+
+  /** Faces the head along `forward` (horizontal) from `position`, then reads once the ramps and analysers settle. */
+  const face = async (position: Vec3, forward: Vec3) => {
+    await setPose(page, "head", position, [position[0] + forward[0], position[1] + forward[1], position[2] + forward[2]], 6);
+    const reading = await readSpatial(page);
+    const head = await readHeadPose(page);
+    const bell = reading.taps.find((tap) => tap.node === "Bell")!;
+    const placement = reading.placements.find((p) => p.node === "Bell")!;
+    // The panner holds the bell as the ear sees it: its distance from the (unmoved) listener is the ear's from the bell.
+    return { reading, head, bell: { ...bell, sideDb: bell.rightDb - bell.leftDb, levelDb: (bell.leftDb + bell.rightDb) / 2 }, placement, distance: Math.hypot(...placement.panner) };
+  };
+  const eye: Vec3 = [0, 1.6, 0];
+  const toBell = (from: Vec3): Vec3 => {
+    const d: Vec3 = [bellAt[0] - from[0], 0, bellAt[2] - from[2]];
+    const l = Math.hypot(d[0], d[2]);
+    return [d[0] / l, 0, d[2] / l];
+  };
+  const d = toBell(eye);
+  // Facing up × d = (dz, 0, -dx) puts the bell on the right (the listener's right is forward × up); d × up on the left.
+  const bellRight = await face(eye, [d[2], 0, -d[0]]);
+  const bellLeft = await face(eye, [-d[2], 0, d[0]]);
+  for (const view of [bellRight, bellLeft]) {
+    const [hx, hy, hz] = view.head.position;
+    const [ex, ey, ez] = view.reading.ear.position;
+    expect(Math.hypot(ex - hx, ey - hy, ez - hz), "the ear is at the head").toBeLessThan(0.01);
+    const f = view.reading.ear.forward;
+    const g = view.head.forward;
+    expect(f[0] * g[0] + f[1] * g[1] + f[2] * g[2], "and faces the head's way").toBeGreaterThan(Math.cos((1 * Math.PI) / 180));
+  }
+  expect(bellRight.bell.sideDb, `bell on the right: ${bellRight.bell.leftDb.toFixed(1)}/${bellRight.bell.rightDb.toFixed(1)} dB`).toBeGreaterThan(3);
+  expect(bellLeft.bell.sideDb, `bell on the left: ${bellLeft.bell.leftDb.toFixed(1)}/${bellLeft.bell.rightDb.toFixed(1)} dB`).toBeLessThan(-3);
+
+  // Facing the bell, then a step toward it: the inverse model's gain, HRTF's colouring the same both times.
+  const far = await face(eye, d);
+  const near: Vec3 = [eye[0] + d[0] * 0.8, eye[1], eye[2] + d[2] * 0.8];
+  const close = await face(near, toBell(near));
+  const ref = close.placement.refDistance;
+  const predictedGainDb = 20 * Math.log10((ref / (ref + Math.max(close.distance, ref) - ref)) / (ref / (ref + Math.max(far.distance, ref) - ref)));
+  expect(close.distance, "the step brought the ear nearer the bell").toBeLessThan(far.distance - 0.5);
+  expect(close.bell.levelDb - far.bell.levelDb, `louder by ${(close.bell.levelDb - far.bell.levelDb).toFixed(2)} dB, predicted ${predictedGainDb.toFixed(2)} dB`).toBeGreaterThan(1);
+  expect(Math.abs(close.bell.levelDb - far.bell.levelDb - predictedGainDb), "by the distance model's amount").toBeLessThan(1.5);
+
+  // The orbiter's panner is sent its node, as the head sees it, on every frame while the clip moves it (the
+  // node's world position put into the ear's coordinates here, not by the viewer).
+  const gaps: number[] = [];
+  for (let i = 0; i < 12; i++) {
+    await nextFrames(page, 3);
+    const reading = await readSpatial(page, 0);
+    const orbiter = reading.placements.find((p) => p.node === "Orbiter")!;
+    const { position, forward: f, up: u } = reading.ear;
+    const fl = Math.hypot(...f);
+    const fw: Vec3 = [f[0] / fl, f[1] / fl, f[2] / fl];
+    const r0: Vec3 = [fw[1] * u[2] - fw[2] * u[1], fw[2] * u[0] - fw[0] * u[2], fw[0] * u[1] - fw[1] * u[0]];
+    const rl = Math.hypot(...r0);
+    const right: Vec3 = [r0[0] / rl, r0[1] / rl, r0[2] / rl];
+    const up: Vec3 = [right[1] * fw[2] - right[2] * fw[1], right[2] * fw[0] - right[0] * fw[2], right[0] * fw[1] - right[1] * fw[0]];
+    const d: Vec3 = [orbiter.nodeWorld[0] - position[0], orbiter.nodeWorld[1] - position[1], orbiter.nodeWorld[2] - position[2]];
+    const dotted = (a: Vec3) => a[0] * d[0] + a[1] * d[1] + a[2] * d[2];
+    const expected: Vec3 = [dotted(right), dotted(up), -dotted(fw)];
+    gaps.push(Math.hypot(orbiter.sent[0] - expected[0], orbiter.sent[1] - expected[1], orbiter.sent[2] - expected[2]));
+  }
+  expect(Math.max(...gaps), "the orbiter's panner is sent its node as the head sees it").toBeLessThan(0.01);
+  await captureEvidence(page, testInfo, "vr-spatial-audio");
+  report.vrSpatialAudio = {
+    bellRight: { bell: bellRight.bell, ear: bellRight.reading.ear, head: bellRight.head },
+    bellLeft: { bell: bellLeft.bell, ear: bellLeft.reading.ear, head: bellLeft.head },
+    step: { farM: far.distance, nearM: close.distance, measuredDb: close.bell.levelDb - far.bell.levelDb, predictedDb: predictedGainDb },
+    orbiterMaxGapM: Math.max(...gaps)
+  };
+  await endSession(page);
 });
 
 test("VR foot controls: dim and reach, play/pause, scrub, restart, two-hand grab with the scale chip, life-size reset, recenter, and exit from the hand dock", async ({ page }, testInfo) => {

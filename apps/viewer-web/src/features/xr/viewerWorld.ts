@@ -351,7 +351,14 @@ function hologramReading(world: World, record: PlacedHologram) {
     actionTimes: runtime?.actions.map((action) => action.time) ?? [],
     audio: runtime?.audio
       ? // Sampled on the frame, with the clip clock: a later read would count the time since as drift.
-        { playing: runtime.audio.playing, scheduledOffset: runtime.audioOffset, duration: runtime.audio.duration }
+        {
+            playing: runtime.audio.playing,
+            scheduledOffset: runtime.audioOffset,
+            duration: runtime.audio.duration,
+            voices: runtime.audio.readVoices(),
+            placements: runtime.audio.readPlacements(),
+            ear: runtime.audio.readEar()
+          }
       : null
   };
 }
@@ -396,6 +403,12 @@ function installXrViewerProbe(world: World, cache: HologramAssetCache, space: Ho
       seekHologram(focused, clipTime);
     },
     takeFadeLog: () => world.getSystem(HologramControlsSystem)?.takeFadeLog() ?? [],
+    /** Analysers on the focused hologram's placed sounds, before and after each panner (positional-audio check). */
+    tapSound: () => {
+      const focused = viewerContext(world).focused;
+      const runtime = focused?.getValue(HologramPlayback, "runtime") as HologramRuntime | undefined;
+      return runtime?.audio?.tap() ?? [];
+    },
     /** XR frames drawn so far: emulated input is held for frames, not for wall-clock time. */
     xrFrames: () => xrFrames,
     snapshot: () => {

@@ -107,8 +107,14 @@ def challenge(doc, binary):
 
 def silent(doc):
     doc.get("extensions", {}).pop("KHR_audio", None)
-    for scene in doc["scenes"]:
-        scene.get("extensions", {}).pop("KHR_audio", None)
+    # A placed sound names its emitter from a node (a take's voice sits on the
+    # head), so a silent take loses those references along with the scene's.
+    for holder in [*doc["scenes"], *doc.get("nodes", [])]:
+        extensions = holder.get("extensions")
+        if extensions is not None:
+            extensions.pop("KHR_audio", None)
+            if not extensions:
+                del holder["extensions"]
     for key in ("extensionsRequired", "extensionsUsed"):
         doc[key] = [name for name in doc.get(key, []) if name != "KHR_audio"]
 

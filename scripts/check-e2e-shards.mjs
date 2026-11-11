@@ -34,7 +34,13 @@ async function listTests(script) {
 let failed = false;
 for (const [full, patterns] of Object.entries(suites)) {
   const shards = Object.keys(scripts).filter((name) => patterns.some((pattern) => pattern.test(name)));
-  const [expected, ...listed] = await Promise.all([full, ...shards].map(listTests));
+  // The full suite lists alone first. Listing compiles the specs into
+  // Playwright's transform cache, and when every script listed at once on a
+  // cold cache, one of them sometimes reported a spec's tests at other line
+  // numbers, so the check failed on tests that only differed by line (B-040).
+  // After this listing the cache is warm, and the shards list in parallel.
+  const expected = await listTests(full);
+  const listed = await Promise.all(shards.map(listTests));
   const seen = new Map();
   for (const [i, shard] of shards.entries()) {
     for (const test of listed[i]) seen.set(test, [...(seen.get(test) ?? []), shard]);
