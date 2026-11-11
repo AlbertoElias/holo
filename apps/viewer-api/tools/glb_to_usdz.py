@@ -420,6 +420,9 @@ class Converter:
                 vertices += count
                 if vertices > MAX_VERTICES:
                     raise ValueError("Scene exceeds vertex limit")
+                # Checked from the accessor's count, before its data is read.
+                if self.gltf.accessors[attrs.COLOR_0].count != count:
+                    raise ValueError("COLOR_0 does not match the primitive's vertices")
                 colors = np.clip(_accessor_data(self.gltf, attrs.COLOR_0).astype(np.float64), 0, 1)
                 if colors.ndim != 2 or colors.shape[1] not in (3, 4) or len(colors) != count:
                     raise ValueError("COLOR_0 does not match the primitive's vertices")
