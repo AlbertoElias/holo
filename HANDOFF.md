@@ -76,10 +76,15 @@ queue item in [`TODOS.md`](TODOS.md).
   holograms; brief [`docs/features/positional-audio.md`](docs/features/positional-audio.md),
   still open). Several placed sounds per hologram in the
   feed and the XR viewer, HRTF on both; new avatar takes place the voice on
-  the head; Quick Look plays every source unplaced. The live feed's rain
-  piece is the old single-mix build; re-uploading the retrofitted one needs
-  the user's go-ahead. Listening by ear and a physical headset are
-  unverified.
+  the head; Quick Look plays every source unplaced. The retrofitted rain
+  piece was uploaded to the live feed 2026-11-11 at the user's go-ahead as a
+  new card (`cmwc1glil0001oeiqy1n2s45h`, 9.22 MB, stored file identical to
+  the build): it is the only hologram on the live feed with placed sound
+  (umbrella, splash and lamp placed, the rain bed unplaced). The earlier
+  single-mix card (`cmwamqg2a0009oeir4p2qzv7j`) is still on the feed. In the
+  live viewer the new card renders with no page errors and builds three HRTF
+  panners that move under orbit and come closer under zoom. Listening by ear
+  and a physical headset are unverified.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe
