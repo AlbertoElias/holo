@@ -34,6 +34,11 @@ queue item in [`TODOS.md`](TODOS.md).
   merged with the next finished change. The way-up reading has no cross-vendor
   review yet, and the user's own Scaniverse scan and the iPhone checks are
   still open (the brief's test plan).
+- Split capture slice 2's approved brief
+  ([`docs/features/splat-capture.md`](docs/features/splat-capture.md),
+  documentation only): pushed on `docs/splat-capture-brief`, based on
+  `feature/splat-place`; merge it with slice 1. Slice 2a (desktop) is the
+  next implementation step, in a fresh session.
 - UI redesign slices 0 to 6 (brief
   [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md)) are on
   `main`: slices 5 (hold to mark "this" and the Halo) and 6 (the burnt globe

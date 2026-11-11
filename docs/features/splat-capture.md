@@ -1,7 +1,7 @@
 # Feature brief: Record a take inside a scanned place (split capture, slice 2)
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed (design review 2026-11-10); awaiting the user's answers to Q1 to Q7
+**Status:** Approved (the user, 2026-11-10, the recommended answer A to Q1 to Q7); slice 2a not started
 **Layer:** event: a scanned place used as the take's set. The take happened
 in the scanned place itself only when the scan is lined up with the real
 room (*here*, Q2). See `docs/product/concepts/what-a-hologram-is.md`.
@@ -76,9 +76,10 @@ touch on an iPhone), Quest VR, Quest passthrough AR and phone AR.
   budgets: Quest 500 k, Vision Pro 750 k, Android 1 M, iOS 1.5 M, else
   2.5 M), `raycastable` splat meshes and `SparkXr`.
 
-## Questions for the user
+## Questions for the user (decided 2026-11-10)
 
-Each has a recommendation (marked) and the others it was weighed against.
+The user chose the recommended option, A, for every question. The other
+options are kept for the record.
 
 ### Q1. Quest passthrough AR does not record today. How does this brief cover it?
 
@@ -210,7 +211,7 @@ outside of the ceiling and the backs of the near walls, not the take.
   renderer behaviour on every viewer.
 - (C) Today's 6 m dome, as is: walls and ceiling block the view indoors.
 
-## Scope (assuming the recommended answers)
+## Scope
 
 **Included (slices 2a to 2c):**
 
@@ -366,7 +367,12 @@ Slices 2b (Quest VR) and 2c (phone AR), each with its device check:
 
 ## Design decision
 
-Pending the user's answers. The recommended path keeps one self-contained
+Approved by the user on 2026-11-10 with answer A to Q1 to Q7: one GLB
+with a `RecordedPlace` node and `HOLOIM_place` v1 (Q4), a dome that hugs
+the take (Q7), the dome-cut diorama in AR before alignment (Q2), Quest
+passthrough sequenced after a performer-in-passthrough feature (Q1), a file
+picker (Q3), Spark's per-device budgets (Q5), and desktop first (Q6). The
+path keeps one self-contained
 GLB and no DTO change, puts the risky part (the contract and its backward
 compatibility) on the most testable device first, and reuses slice 1's
 reading of a scan, now in a shared package, at load time only.
