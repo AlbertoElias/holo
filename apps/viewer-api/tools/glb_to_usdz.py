@@ -42,6 +42,25 @@ MAX_TOTAL_TEXTURE_PIXELS = 64 * 1024 * 1024
 MAX_OUTPUT_VERTICES = 4_000_000
 Image.MAX_IMAGE_PIXELS = MAX_TEXTURE_PIXELS
 SUPPORTED_EXTENSIONS = {"KHR_audio", "KHR_texture_transform", "KHR_materials_unlit", "KHR_materials_emissive_strength"}
+# Vertex colours (COLOR_0) within this of one value count as one colour.
+COLOR_TOLERANCE = 0.5 / 255
+MAX_ATLAS_SIDE = 4096
+VERTEX_COLOR_ATLAS = "textures/vertex_colors.png"
+
+
+def _srgb8(linear):
+    """Linear [0, 1] RGBA rows as 8-bit sRGB colour with linear alpha."""
+    values = np.clip(np.asarray(linear, dtype=np.float64), 0, 1)
+    rgb = values[..., :3]
+    encoded = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * rgb ** (1 / 2.4) - 0.055)
+    return np.round(np.concatenate([encoded, values[..., 3:]], axis=-1) * 255).astype(np.uint8)
+
+
+def _linear(srgb8):
+    values = np.asarray(srgb8, dtype=np.float64) / 255
+    rgb = values[..., :3]
+    decoded = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    return np.concatenate([decoded, values[..., 3:]], axis=-1)
 
 
 def _audio_emitters(gltf, scene):
@@ -200,6 +219,8 @@ class Converter:
         self.vertex_count = 0
         self.paths, self.ops, self.worlds, self.materials, self.images = {}, {}, {}, {}, {}
         self.skins, self.morphs = {}, {}
+        # (mesh, primitive) -> how its COLOR_0 is carried; see vertex_colors.
+        self.colors, self.tints, self.atlas = {}, {}, None
         self.skin_spaces = {}
         self.animated = set()
         self.bubble_index = next((i for i, n in enumerate(gltf.nodes) if n.name == "RecordedBubbleSphere"), None)
@@ -361,6 +382,156 @@ class Converter:
             remap = np.array([ordered.index(joint) for joint in skin.joints])
             self.skins[skin_index] = (skeleton, ordered, remap)
 
+    def vertex_colors(self, scene):
+        """Carry glTF vertex colours (COLOR_0), which RealityKit cannot read
+        from a primvar, into what it can. Base colour is baseColorFactor x
+        base texture x COLOR_0, interpolated linearly across each triangle.
+        A primitive whose COLOR_0 is all white keeps its material untouched.
+        One colour throughout (or any colour over a base texture, then its
+        mean) becomes a tinted copy of its material. Varying colours are baked
+        into one atlas per package: each triangle gets a 4x4 texel cell, a 2x2
+        core with a 1-texel edge-replicated guard so mip levels 1 and 2 stay
+        inside the cell. The triangle's UVs sit on three core texel centres
+        and the fourth core texel is p10 + p01 - p00, so bilinear filtering is
+        affine across the triangle: exactly glTF's interpolation, but for
+        8-bit quantisation and where that fourth texel clamps to [0, 1].
+        Triangles of one colour share deduplicated solid blocks. Factors
+        are baked per primitive, so all atlas materials share the one file."""
+        meshes, stack = set(), list(scene.nodes or [])
+        while stack:
+            index = stack.pop()
+            node = self.gltf.nodes[index]
+            if node.mesh is not None and index != self.bubble_index:
+                meshes.add(node.mesh)
+            stack.extend(node.children or [])
+        varying, palette = [], []
+        # This runs before mesh() counts vertices, so it enforces the same
+        # scene limit itself, from accessor counts before reading any data,
+        # and caps triangle cells at what the largest atlas could hold.
+        vertices, cells = 0, 0
+        for mesh_index in sorted(meshes):
+            for primitive_index, primitive in enumerate(self.gltf.meshes[mesh_index].primitives):
+                attrs = primitive.attributes
+                if getattr(attrs, "COLOR_0", None) is None or primitive.mode not in (None, 4) or attrs.POSITION is None:
+                    continue
+                if any((target if isinstance(target, dict) else target.__dict__).get("COLOR_0") is not None for target in primitive.targets or []):
+                    print(f"Quick Look ignores mesh {mesh_index} primitive {primitive_index}'s morph target colours", file=sys.stderr)
+                count = self.gltf.accessors[attrs.POSITION].count
+                vertices += count
+                if vertices > MAX_VERTICES:
+                    raise ValueError("Scene exceeds vertex limit")
+                colors = np.clip(_accessor_data(self.gltf, attrs.COLOR_0).astype(np.float64), 0, 1)
+                if colors.ndim != 2 or colors.shape[1] not in (3, 4) or len(colors) != count:
+                    raise ValueError("COLOR_0 does not match the primitive's vertices")
+                if colors.shape[1] == 3:
+                    colors = np.column_stack([colors, np.ones(len(colors))])
+                material = self.gltf_material(primitive.material)
+                pbr = material.pbrMetallicRoughness
+                factor = np.asarray(pbr.baseColorFactor if pbr and pbr.baseColorFactor else [1, 1, 1, 1], dtype=np.float64)
+                # glTF ignores alpha on OPAQUE materials.
+                if material.alphaMode not in {"BLEND", "MASK"}:
+                    colors[:, 3] = 1
+                key = (mesh_index, primitive_index)
+                # Colours compare as the 8-bit sRGB they are stored as.
+                quantised = _srgb8(colors)
+                if np.all(quantised == 255):
+                    self.colors[key] = {"kind": "white"}
+                    continue
+                textured = bool(pbr and pbr.baseColorTexture)
+                uniform = bool(np.all(quantised == quantised[0]))
+                if textured or uniform:
+                    # A base texture and a varying COLOR_0 would need the
+                    # texture re-rendered per triangle; its mean tint is kept.
+                    if not uniform:
+                        print(f"Quick Look approximates mesh {mesh_index} primitive {primitive_index}'s vertex colours over a base texture with their mean", file=sys.stderr)
+                    tint = _linear(_srgb8(colors.mean(axis=0)))
+                    self.colors[key] = {"kind": "tint" if uniform else "approximated", "tint": tuple(float(v) for v in tint)}
+                    continue
+                cells += (self.gltf.accessors[primitive.indices].count if primitive.indices is not None else count) // 3
+                if cells > (MAX_ATLAS_SIDE // 2) ** 2:
+                    raise ValueError("Vertex colours exceed atlas budget")
+                indices = _accessor_data(self.gltf, primitive.indices).astype(np.int64).reshape(-1) if primitive.indices is not None else np.arange(count)
+                if len(indices) % 3 or np.any(indices < 0) or np.any(indices >= count):
+                    raise ValueError("Invalid triangle indices")
+                corners = (colors * factor)[indices.reshape(-1, 3)]
+                if material.alphaMode not in {"BLEND", "MASK"}:
+                    corners[..., 3] = 1
+                packed_corners = _srgb8(corners)
+                solid = np.all(packed_corners == packed_corners[:, :1], axis=(1, 2))
+                # Pick the corner opposite the fourth texel per triangle: the
+                # rotation whose p10 + p01 - p00 leaves [0, 1] least.
+                overflow = []
+                for r in range(3):
+                    fourth = corners[:, (r+1) % 3] + corners[:, (r+2) % 3] - corners[:, r]
+                    overflow.append((np.maximum(fourth - 1, 0) + np.maximum(-fourth, 0)).sum(axis=1))
+                rotation = np.stack(overflow, axis=1).argmin(axis=1)
+                self.colors[key] = {"kind": "atlas", "indices": indices, "solid": solid, "rotation": rotation}
+                varying.append((key, corners[~solid], rotation[~solid]))
+                palette.append(packed_corners[solid, 0])
+        if not varying:
+            return
+        keys = np.concatenate(palette) if palette else np.empty((0, 4), np.uint8)
+        packed = keys.astype(np.uint32) @ np.array([1 << 24, 1 << 16, 1 << 8, 1], dtype=np.uint32)
+        unique, inverse = np.unique(packed, return_inverse=True)
+        cells = len(unique) + sum(len(corners) for _, corners, _ in varying)
+        layout = None
+        for size in (4, 2):
+            width = height = size
+            while width <= MAX_ATLAS_SIDE and (width // size) * (height // size) < cells:
+                width, height = (width * 2, height) if width == height else (width, height * 2)
+            if width <= MAX_ATLAS_SIDE:
+                layout = size, width, height
+                break
+        if layout is None:
+            raise ValueError("Vertex colours exceed atlas budget")
+        size, width, height = layout
+        self.texture_pixels += width * height
+        if self.texture_pixels > MAX_TOTAL_TEXTURE_PIXELS:
+            raise ValueError("Total textures exceed pixel limit")
+        columns, guard = width // size, (size - 2) // 2
+        atlas = np.zeros((height, width, 4), dtype=np.uint8)
+        def place(first, blocks):
+            # Write (n, size, size, 4) texel blocks to cells first.. and return their origins.
+            cell = first + np.arange(len(blocks))
+            x, y = (cell % columns) * size, (cell // columns) * size
+            rows = y[:, None, None] + np.arange(size)[None, :, None]
+            cols = x[:, None, None] + np.arange(size)[None, None, :]
+            atlas[rows, cols] = blocks
+            return x, y
+        def uv(x, y):
+            # USD st has t = 0 at the image's bottom row; x, y are in texels.
+            return np.stack([x / width, 1 - y / height], axis=-1).astype(np.float32)
+        solid_colors = np.stack([(unique >> shift) & 255 for shift in (24, 16, 8, 0)], axis=1).astype(np.uint8)
+        x, y = place(0, np.broadcast_to(solid_colors[:, None, None, :], (len(unique), size, size, 4)))
+        solid_uv = uv(x + size / 2, y + size / 2)
+        first, offset = len(unique), 0
+        spread = np.minimum(np.maximum(np.arange(size) - guard, 0), 1)
+        for key, corners, rotation in varying:
+            info = self.colors[key]
+            n = len(corners)
+            # Core texel [row][column]: p00 (0,0), p10 (0,1), p01 (1,0), p11 (1,1).
+            order = np.stack([rotation, (rotation + 1) % 3, (rotation + 2) % 3], axis=1)
+            p00, p10, p01 = (corners[np.arange(n), order[:, k]] for k in range(3))
+            core = _srgb8(np.stack([np.stack([p00, p10], axis=1), np.stack([p01, p10 + p01 - p00], axis=1)], axis=1))
+            x, y = place(first, core[:, spread][:, :, spread])
+            first += n
+            corner_uv = np.stack([uv(x + guard + 0.5, y + guard + 0.5), uv(x + guard + 1.5, y + guard + 0.5), uv(x + guard + 0.5, y + guard + 1.5)], axis=1)
+            solid = info["solid"]
+            uvs = np.empty((len(solid), 3, 2), dtype=np.float32)
+            uvs[solid] = solid_uv[inverse[offset:offset + int(solid.sum())]][:, None, :]
+            offset += int(solid.sum())
+            # Corner k of the triangle reads core texel position where order == k.
+            placed = np.empty((n, 3, 2), dtype=np.float32)
+            placed[np.arange(n)[:, None], order] = corner_uv
+            uvs[~solid] = placed
+            info["uv"] = uvs.reshape(-1, 2)
+            for scratch in ("rotation", "indices", "solid"):
+                info.pop(scratch)
+        target = Path(self.directory, VERTEX_COLOR_ATLAS)
+        target.parent.mkdir(exist_ok=True)
+        Image.fromarray(atlas, "RGBA").save(target)
+        self.atlas = {"size": [width, height], "cell": size, "cells": cells, "solidBlocks": len(unique)}
+
     def image(self, index):
         if index in self.images:
             return self.images[index]
@@ -444,17 +615,59 @@ class Converter:
         shader.CreateOutput("rgb", Sdf.ValueTypeNames.Float3)
         return shader
 
-    def material(self, index):
-        if index in self.materials:
-            return self.materials[index]
-        material = self.gltf.materials[index]
-        path = f"/Root/Materials/m{index}_{_name(material.name)}"
+    def atlas_texture(self, parent, varname):
+        shader = UsdShade.Shader.Define(self.stage, f"{parent}/VertexColor")
+        shader.CreateIdAttr("UsdUVTexture")
+        shader.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(VERTEX_COLOR_ATLAS))
+        shader.CreateInput("sourceColorSpace", Sdf.ValueTypeNames.Token).Set("sRGB")
+        for wrap in ("wrapS", "wrapT"):
+            shader.CreateInput(wrap, Sdf.ValueTypeNames.Token).Set("clamp")
+        reader = UsdShade.Shader.Define(self.stage, f"{parent}/VertexColor_UV")
+        reader.CreateIdAttr("UsdPrimvarReader_float2")
+        reader.CreateInput("varname", Sdf.ValueTypeNames.String).Set(varname)
+        reader.CreateOutput("result", Sdf.ValueTypeNames.Float2)
+        shader.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(reader.ConnectableAPI(), "result")
+        shader.CreateOutput("rgb", Sdf.ValueTypeNames.Float3)
+        shader.CreateOutput("a", Sdf.ValueTypeNames.Float)
+        return shader
+
+    def gltf_material(self, index):
+        # A primitive without a material uses glTF's default one (white, lit,
+        # metallic and roughness 1); it is authored only to carry COLOR_0.
+        return self.gltf.materials[index] if index is not None else pygltflib.Material()
+
+    def material(self, index, variant=None):
+        """variant: None, ("atlas", uv primvar name) or ("tint", rgba); see vertex_colors."""
+        if (index, variant) in self.materials:
+            return self.materials[index, variant]
+        material = self.gltf_material(index)
+        suffix = ""
+        if variant and variant[0] == "atlas":
+            suffix = "_vcAtlas" + ("" if variant[1] == "st" else "_" + variant[1])
+        elif variant:
+            self.tints.setdefault(index, []).append(variant[1])
+            suffix = f"_vcTint{len(self.tints[index]) - 1}"
+        path = f"/Root/Materials/m{index}_{_name(material.name)}{suffix}" if index is not None else f"/Root/Materials/default{suffix}"
         result = UsdShade.Material.Define(self.stage, path)
-        result.GetPrim().SetCustomDataByKey("gltfMaterialIndex", index)
+        result.GetPrim().SetCustomDataByKey("gltfMaterialIndex", index if index is not None else -1)
+        if variant:
+            result.GetPrim().SetCustomDataByKey("quickLookVertexColors", variant[0])
+            if variant[0] == "tint":
+                result.GetPrim().SetCustomDataByKey("quickLookVertexColorTint", Gf.Vec4f(*variant[1]))
         shader = UsdShade.Shader.Define(self.stage, path + "/Surface")
         shader.CreateIdAttr("UsdPreviewSurface")
         pbr = material.pbrMetallicRoughness
         color = pbr.baseColorFactor if pbr and pbr.baseColorFactor else [1, 1, 1, 1]
+        if variant and variant[0] == "tint":
+            color = [float(c) * float(t) for c, t in zip(color, variant[1])]
+            if pbr and pbr.baseColorTexture:
+                # The tint is baked into a copy of the base texture; count it.
+                source = self.gltf.textures[pbr.baseColorTexture.index].source
+                if source is not None:
+                    with Image.open(Path(self.directory, self.image(source))) as image:
+                        self.texture_pixels += image.width * image.height
+                    if self.texture_pixels > MAX_TOTAL_TEXTURE_PIXELS:
+                        raise ValueError("Total textures exceed pixel limit")
         unlit = "KHR_materials_unlit" in (material.extensions or {})
         shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*color[:3]))
         shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(0.0 if unlit else float(pbr.metallicFactor if pbr and pbr.metallicFactor is not None else 1))
@@ -496,9 +709,15 @@ class Converter:
             strength = material.occlusionTexture.strength if material.occlusionTexture.strength is not None else 1
             texture = self.texture(material.occlusionTexture, path, "Occlusion", scale=(strength, 1, 1, 1), bias=(1-strength, 0, 0, 0))
             shader.CreateInput("occlusion", Sdf.ValueTypeNames.Float).ConnectToSource(texture.ConnectableAPI(), "r")
+        if variant and variant[0] == "atlas":
+            # The atlas holds COLOR_0 x baseColorFactor; never a base texture.
+            atlas = self.atlas_texture(path, variant[1])
+            shader.GetInput("emissiveColor" if unlit else "diffuseColor").ConnectToSource(atlas.ConnectableAPI(), "rgb")
+            if material.alphaMode in {"BLEND", "MASK"}:
+                shader.GetInput("opacity").ConnectToSource(atlas.ConnectableAPI(), "a")
         shader.CreateOutput("surface", Sdf.ValueTypeNames.Token)
         result.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
-        self.materials[index] = result
+        self.materials[index, variant] = result
         return result
 
     def mesh(self, node_index, primitive_index, primitive, parent):
@@ -514,9 +733,13 @@ class Converter:
         indices = _accessor_data(self.gltf, primitive.indices).astype(int).reshape(-1) if primitive.indices is not None else np.arange(len(points))
         if len(indices) % 3 or np.any(indices < 0) or np.any(indices >= len(points)):
             raise ValueError("Invalid triangle indices")
+        node = self.gltf.nodes[node_index]
+        colors = self.colors.get((node.mesh, primitive_index)) if node_index != self.bubble_index else None
         mesh = UsdGeom.Mesh.Define(self.stage, f"{parent}/primitive_{primitive_index}")
         mesh.GetPrim().SetCustomDataByKey("gltfNodeIndex", node_index)
         mesh.GetPrim().SetCustomDataByKey("gltfPrimitiveIndex", primitive_index)
+        if colors:
+            mesh.GetPrim().SetCustomDataByKey("quickLookVertexColors", colors["kind"])
         mesh.CreatePointsAttr().Set(Vt.Vec3fArray.FromNumpy(points.astype(np.float32)))
         mesh.CreateFaceVertexIndicesAttr().Set(Vt.IntArray(indices.tolist()))
         mesh.CreateFaceVertexCountsAttr().Set(Vt.IntArray([3]*(len(indices)//3)))
@@ -525,15 +748,29 @@ class Converter:
             mesh.CreateNormalsAttr().Set(Vt.Vec3fArray.FromNumpy(_accessor_data(self.gltf, attrs.NORMAL).astype(np.float32)))
             mesh.SetNormalsInterpolation("vertex")
         primvars = UsdGeom.PrimvarsAPI(mesh)
+        uv_sets = set()
         for key, value in attrs.__dict__.items():
             if key.startswith("TEXCOORD_") and value is not None:
                 uv = _accessor_data(self.gltf, value).astype(np.float32)
                 uv[:, 1] = 1 - uv[:, 1]
                 number = int(key.split("_")[-1])
+                uv_sets.add(number)
                 primvars.CreatePrimvar("st" if number == 0 else f"st{number}", Sdf.ValueTypeNames.TexCoord2fArray, "vertex").Set(Vt.Vec2fArray.FromNumpy(uv))
-        if primitive.material is not None:
-            UsdShade.MaterialBindingAPI.Apply(mesh.GetPrim()).Bind(self.material(primitive.material))
-            mesh.CreateDoubleSidedAttr().Set(bool(self.gltf.materials[primitive.material].doubleSided))
+        variant = None
+        if colors and colors["kind"] == "atlas":
+            # faceVarying, one UV per triangle corner, so the welded points,
+            # normals, skin and morph data stay as authored (RealityKit
+            # honours faceVarying st and a second set such as st1).
+            varname = "st" if not uv_sets else f"st{max(uv_sets) + 1}"
+            atlas_uv = primvars.CreatePrimvar(varname, Sdf.ValueTypeNames.TexCoord2fArray, "faceVarying")
+            atlas_uv.Set(Vt.Vec2fArray.FromNumpy(colors["uv"]))
+            atlas_uv.GetAttr().SetCustomDataByKey("quickLookVertexColorAtlas", True)
+            variant = ("atlas", varname)
+        elif colors and colors["kind"] in {"tint", "approximated"}:
+            variant = ("tint", colors["tint"])
+        if primitive.material is not None or variant:
+            UsdShade.MaterialBindingAPI.Apply(mesh.GetPrim()).Bind(self.material(primitive.material, variant))
+            mesh.CreateDoubleSidedAttr().Set(bool(self.gltf_material(primitive.material).doubleSided))
         if node_index == self.bubble_index:
             # A subtle, fixed matte-blue shell replaces the browser's view/time
             # dependent shader. Static scenery is separately trimmed below.
@@ -621,18 +858,25 @@ class Converter:
                 world_points = np.array([world.Transform(Gf.Vec3d(*point)) for point in points])
                 relative = world_points - self.bubble_center
                 normals = mesh.GetNormalsAttr().Get()
-                uv_vars = [uv for uv in UsdGeom.PrimvarsAPI(mesh).GetPrimvars() if uv.GetPrimvarName().startswith("st") and uv.Get() is not None]
+                st_vars = [uv for uv in UsdGeom.PrimvarsAPI(mesh).GetPrimvars() if uv.GetPrimvarName().startswith("st") and uv.Get() is not None]
+                uv_vars = [uv for uv in st_vars if uv.GetInterpolation() != "faceVarying"]
+                # The colour atlas UV is per triangle corner: clip it as a corner column.
+                corner_vars = [uv for uv in st_vars if uv.GetInterpolation() == "faceVarying"]
                 columns, widths = [relative], [3]
                 if normals:
                     columns.append(np.asarray(normals)); widths.append(3)
                 for uv in uv_vars:
                     columns.append(np.asarray(uv.Get())); widths.append(2)
                 vertices = np.concatenate(columns, axis=1)
+                faces = np.asarray(mesh.GetFaceVertexIndicesAttr().Get()).reshape(-1, 3)
+                corner_columns = np.concatenate([np.asarray(uv.Get()).reshape(-1, 3, 2) for uv in corner_vars], axis=2) if corner_vars else None
+                width = vertices.shape[1] + 2 * len(corner_vars)
                 output = []
                 radius = self.bubble_radius
-                faces = np.asarray(mesh.GetFaceVertexIndicesAttr().Get()).reshape(-1, 3)
-                for face in faces:
+                for face_index, face in enumerate(faces):
                     polygon = vertices[face]
+                    if corner_columns is not None:
+                        polygon = np.concatenate([polygon, corner_columns[face_index]], axis=1)
                     if np.all(np.linalg.norm(polygon[:, :3], axis=1) <= radius):
                         output.extend(polygon)
                         continue
@@ -652,7 +896,7 @@ class Converter:
                             if dc <= 0:
                                 clipped.append(current)
                         if len(clipped) < 3:
-                            polygon = np.empty((0, vertices.shape[1]))
+                            polygon = np.empty((0, width))
                             break
                         polygon = np.asarray(clipped)
                     for i in range(1, len(polygon)-1):
@@ -671,7 +915,7 @@ class Converter:
                         normal_values /= np.maximum(np.linalg.norm(normal_values, axis=1), 1e-12)[:, None]
                         mesh.GetNormalsAttr().Set(Vt.Vec3fArray.FromNumpy(normal_values.astype(np.float32)))
                         cursor += 3
-                    for uv in uv_vars:
+                    for uv in uv_vars + corner_vars:
                         uv.Set(Vt.Vec2fArray.FromNumpy(output[:, cursor:cursor+2].astype(np.float32)))
                         cursor += 2
                     mesh.GetFaceVertexIndicesAttr().Set(Vt.IntArray(list(range(len(output)))))
@@ -682,7 +926,7 @@ class Converter:
                     mesh.GetFaceVertexCountsAttr().Set(Vt.IntArray())
                     if normals:
                         mesh.GetNormalsAttr().Set(Vt.Vec3fArray())
-                    for uv in uv_vars:
+                    for uv in uv_vars + corner_vars:
                         uv.Set(Vt.Vec2fArray())
                     mesh.CreateVisibilityAttr().Set("invisible")
                 prim.SetCustomDataByKey("quickLookClippedEnvironment", True)
@@ -698,6 +942,11 @@ class Converter:
                 normals = mesh.GetNormalsAttr().Get()
                 if normals:
                     back.GetNormalsAttr().Set(Vt.Vec3fArray.FromNumpy(-np.asarray(normals, dtype=np.float32)))
+                for uv in UsdGeom.PrimvarsAPI(mesh).GetPrimvars():
+                    # Per-corner values follow the reversed corner order.
+                    if uv.GetInterpolation() == "faceVarying" and uv.Get() is not None:
+                        reversed_uv = np.asarray(uv.Get(), dtype=np.float32).reshape(-1, 3, 2)[:, ::-1].reshape(-1, 2)
+                        UsdGeom.PrimvarsAPI(back).GetPrimvar(uv.GetPrimvarName()).Set(Vt.Vec2fArray.FromNumpy(np.ascontiguousarray(reversed_uv)))
                 back.GetDoubleSidedAttr().Set(False)
                 mesh.GetDoubleSidedAttr().Set(False)
                 for child in back.GetPrim().GetChildren():
@@ -1101,6 +1350,7 @@ def _convert_glb_to_usdz(input_path, output_path, seed):
         converter = Converter(gltf, stage, directory)
         converter.skeletons()
         scene = gltf.scenes[scene_index]
+        converter.vertex_colors(scene)
         for index in scene.nodes:
             converter.node(index, "/Root")
         converter.finish_geometry()
