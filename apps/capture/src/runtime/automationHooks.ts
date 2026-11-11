@@ -1,4 +1,5 @@
 import type { XRDevice } from 'iwer';
+import type { CapturePlace, PlaceCaptureReport } from '../place/CapturePlace';
 import type { HaloAction } from '@holoim/xr-ui-core';
 
 import type { LocomotionProfile, LocomotionState } from '../animation/LocomotionAnimator';
@@ -91,6 +92,14 @@ export interface AutomationHooks {
   __arWorldFrame: () => number[];
   /** CSS px of a world point in the flat-screen view, or null behind the camera: where a check touches to aim at it. */
   __projectToScreen: (point: readonly number[]) => { x: number; y: number } | null;
+  /** The scanned place (docs/features/splat-capture.md), or null without `?placeCapture=1`. */
+  __samplePlace: () => PlaceCaptureReport | null;
+  /** What the set and the rest of the world answer to a cast straight down at each (x, z). */
+  __probePlaceCasts: (points: ReadonlyArray<[number, number]>) => ReturnType<CapturePlace['probeCasts']>;
+  /** Brings a scan in by URL, as `?place=` does at start. */
+  __loadPlaceUrl: (url: string) => Promise<boolean>;
+  /** Where the desktop point's aim last landed, in the set frame. */
+  __pointLanding: () => { point: [number, number, number]; landed: boolean };
 }
 
 export interface TracesSnapshot {

@@ -19,6 +19,7 @@ import { InputController } from '../input/InputController';
 import { VrLocomotion } from '../input/VrLocomotion';
 import { CaptureObjects } from '../objects/CaptureObjects';
 import { CharacterMotor } from '../physics/CharacterMotor';
+import { CapturePlace } from '../place/CapturePlace';
 import { RecordingSession } from '../recording/RecordingSession';
 import { activeCamera, type CaptureContext } from '../systems/captureContext';
 import { registerCaptureSystems } from '../systems';
@@ -126,7 +127,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     isCameraAuthor: () => capture.frame.arCameraAuthor,
     recordRefusal: () => (capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
     isPlacementSettled: () => capture.ar.isSettled(),
-    setFrame: stage.worldGroup
+    setFrame: stage.worldGroup,
+    getPlace: () => (place?.current ? { prepare: (path) => place.prepareExport(path) } : undefined)
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
   const objects = new CaptureObjects({
@@ -140,6 +142,11 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     isTakeActive: () => ui.getState().recordingState !== 'idle',
     getHandedness: () => ui.getState().handedness
   });
+  // A scanned place as the set (docs/features/splat-capture.md), behind `?placeCapture=1` until 2a and 2b are verified.
+  const place = config.placeCapture
+    ? new CapturePlace({ stage, avatar, motor, objects, ui, flip: config.placeFlip, isTakeBusy: () => recording.isTakeBusy() })
+    : null;
+  if (place) ui.setPlaceState({ enabled: true, status: 'none', name: null, message: null });
   const vrChrome = new VrChrome({
     world,
     xrCamera: stage.xrCamera,
@@ -332,6 +339,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
       if (config.objectUrl) await objects.loadUrl(config.objectUrl);
       if (config.trayUrls.length > 0) await objects.loadTrayUrls(config.trayUrls);
+      // The scan replaces the set once the set, the avatar and the motor are up; a failure keeps the set.
+      if (place && config.placeUrl) await place.load({ kind: 'url', url: config.placeUrl });
       ui.setLoadState(spawned ? 'ready' : 'warning', spawned ? null : 'Loaded with warnings: spawn/physics setup incomplete.');
       registerCaptureSystems(world);
       started = true;
@@ -352,6 +361,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         haloActions.run(action, kind);
       },
       loadObjectFile: (file) => void objects.loadFile(file),
+      loadPlaceFile: (file) => void place?.load({ kind: 'file', file }),
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       loadTrayUrls: (urls) => void objects.loadTrayUrls(urls),
       setTrayOpen: (open) => input.setTrayOpenFromUi(open),
@@ -440,6 +450,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __runHaloAction: (action, input) => haloActions.run(action, input),
         __lastPointReport: () => recording.cameraRecorder.getLastPointReport() ?? null,
         __arWorldFrame: () => stage.worldGroup.matrixWorld.toArray(),
+        __samplePlace: () => place?.report() ?? null,
+        __probePlaceCasts: (points) => place?.probeCasts(points) ?? [],
+        __loadPlaceUrl: (url) => place?.load({ kind: 'url', url }) ?? Promise.resolve(false),
+        __pointLanding: () => capture.point.lastLanding(),
         __projectToScreen: (point) => {
           const ndc = new Vector3(point[0], point[1], point[2]).project(stage.desktopCamera);
           if (ndc.z > 1) return null;

@@ -204,6 +204,11 @@ export class DesktopPointAction {
     else this.deps.crosshair.hide();
   }
 
+  /** Where the last aim landed and whether it hit anything: checks compare a link's end with it. */
+  lastLanding(): { point: [number, number, number]; landed: boolean } {
+    return { point: [this.landing.x, this.landing.y, this.landing.z], landed: this.landed };
+  }
+
   private computeRay(step: DesktopPointStep): void {
     const { avatar, embodyOffset, desktopCamera } = this.deps;
     if (step.screenAim) {
@@ -221,7 +226,8 @@ export class DesktopPointAction {
     if (avatar.worldModel) {
       this.raycaster.set(this.origin, this.direction);
       this.raycaster.far = FAR_M;
-      const hit = this.raycaster.intersectObject(avatar.worldModel, true)[0];
+      // A scanned place's splats are pointed at on purpose, never part of the set (docs/features/splat-capture.md).
+      const hit = this.raycaster.intersectObjects([avatar.worldModel, ...avatar.pointTargets], true)[0];
       if (hit) {
         this.landing.copy(hit.point);
         this.landed = true;

@@ -152,3 +152,4 @@ export const objectTranscribeResponseSchema = z.object({
   text: z.string().max(OBJECT_SEARCH_MAX_QUERY_LENGTH)
 });
 export type ObjectTranscribeResponse = z.infer<typeof objectTranscribeResponseSchema>;
+export * from "./place.js";

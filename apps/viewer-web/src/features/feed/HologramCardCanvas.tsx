@@ -45,12 +45,15 @@ import { DEFAULT_CAMERA_FRAMING_CONFIG, computeDesiredFraming } from "./cameraFr
 import { HologramLighting } from "./HologramLighting";
 import { createPlaceGate, PLACE_FIT_WAIT_MS, warnPlaceOnce } from "../place/placeGate";
 import type { PlaceRequest } from "../place/placeRequest";
+import { findStoredPlace } from "../place/storedPlace";
 import { testHooks } from "../../testHooks";
 
 // A scanned place around the take (docs/features/splat-place.md): Spark and
 // everything that touches it load by this one dynamic import, which only the
 // dev and e2e builds keep.
 const PlaceMount = testHooks ? lazy(() => import("../place/PlaceMount")) : null;
+// A take's own stored place (docs/features/splat-capture.md) ships in production, in a chunk loaded only for a take that has one.
+const StoredPlaceMount = lazy(() => import("../place/StoredPlaceMount"));
 
 export type HologramRenderInfo = {
   animationCount: number;
@@ -235,6 +238,13 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
 }) {
   const gltf = useGLTF(url);
   const { scene, animations } = gltf;
+  // The take's own place, read from the GLB's JSON (Spark-free); a malformed one leaves the take on its floor disc.
+  const storedPlace = useMemo(() => {
+    const found = findStoredPlace(gltf.parser.json);
+    if (found.error) console.warn(`The hologram's stored place is malformed; it plays on its floor: ${found.error}`);
+    return found.place;
+  }, [gltf]);
+  const storedPlaceShows = useRef(false);
   const paused = usePortalValue(portal, (state) => state.paused);
   const primaryActionRef = useRef<AnimationAction | null>(null);
   const getPlaybackTime = useCallback(() => primaryActionRef.current?.time ?? 0, []);
@@ -477,7 +487,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
       });
       raycaster.setFromCamera(ndc, camera);
       // With a place the recorded set is hidden, so the glass over the scan counts as the hologram.
-      if ((options?.glass || placeGate.shows) && throughGlass()) return true;
+      if ((options?.glass || placeGate.shows || storedPlaceShows.current) && throughGlass()) return true;
       return raycaster.intersectObject(clonedScene, true).some((hit) => (
         (hit.object as Mesh).isMesh === true
         && drawn(hit.object)
@@ -852,6 +862,21 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     return lowest;
   }, [clonedScene]);
 
+  // The stored place's bytes, from the loader's own parse; the disc it replaces hides once its splats draw.
+  const readStoredPlaceBytes = useCallback(
+    () => gltf.parser.getDependency("bufferView", storedPlace?.extension.bufferView ?? -1) as Promise<ArrayBuffer>,
+    [gltf, storedPlace]
+  );
+  const onStoredPlaceShown = useCallback(() => {
+    const disc = clonedScene.getObjectByName("RecordedSceneBubble");
+    if (disc) disc.visible = false;
+    storedPlaceShows.current = true;
+    invalidate();
+  }, [clonedScene, invalidate]);
+  const onStoredPlaceFailed = useCallback((error: unknown) => {
+    console.warn("The hologram's stored place did not load; it plays on its floor.", error);
+  }, []);
+
   // SkeletonUtils clones share the loader cache's geometry and source materials.
   // useSphereClipping owns/disposes its material clones; leave cached assets alive.
 
@@ -879,6 +904,20 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
         <HandTraces source={traceSource} portal={portal} active={active} getPlaybackTime={getPlaybackTime} probe={tracesProbe} />
       )}
       <AuthorCameraMark scene={clonedScene} author={author} probe={presenceProbe} />
+      {storedPlace && !placeRequest && (
+        <Suspense fallback={null}>
+          <StoredPlaceMount
+            place={storedPlace}
+            readBytes={readStoredPlaceBytes}
+            scene={clonedScene}
+            shape={cloche}
+            shift={clocheShift}
+            readFeetY={readFeetY}
+            onShown={onStoredPlaceShown}
+            onFailed={onStoredPlaceFailed}
+          />
+        </Suspense>
+      )}
       {PlaceMount && placeRequest && (
         <Suspense fallback={null}>
           <PlaceMount request={placeRequest} gate={placeGate} shape={cloche} shift={clocheShift} scene={clonedScene} clips={animations} sweep={placeSweep} readFeetY={readFeetY} />

@@ -16,6 +16,7 @@ apps/viewer-api/prisma/**/*.db*
 apps/viewer-web/.cert/
 # personal Gaussian-splat scans for ?place= (docs/features/splat-place.md)
 apps/viewer-web/public/local-places/
+apps/capture/public/local-places/
 
 # env and logs
 .env

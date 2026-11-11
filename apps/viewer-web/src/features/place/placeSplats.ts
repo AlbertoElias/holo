@@ -1,7 +1,7 @@
 import { Euler, Quaternion, Vector3 } from "three";
 
 import type { PlacedScan } from "./loadPlace";
-import { FLOOR_SLACK_METERS, MAX_SPLAT_EXTENT_METERS, SPLAT_EXTENT_SIGMA, type DomeShape } from "./placeClip";
+import { FLOOR_SLACK_METERS, MAX_SPLAT_EXTENT_METERS, SPLAT_EXTENT_SIGMA, type DomeShape } from "@holoim/place";
 
 /** Splats kept after the crop (docs/features/splat-place.md, Memory). */
 export const PLACE_SPLAT_CAP = 1_500_000;

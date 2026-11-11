@@ -18,6 +18,8 @@ export interface CaptureStage {
   cameraRig: THREE.Group;
   xrCamera: THREE.PerspectiveCamera;
   desktopCamera: THREE.PerspectiveCamera;
+  /** The stage's own ground disc, outside the set: a scanned place hides it, since its floor is the scan's. */
+  ground: THREE.Mesh;
   loader: GLTFLoader;
 }
 
@@ -71,7 +73,7 @@ export async function createCaptureStage(container: HTMLElement): Promise<Captur
   ground.rotation.x = -Math.PI / 2;
   worldGroup.add(ground);
 
-  return { world, scene, renderer, worldGroup, cameraRig, xrCamera, desktopCamera, loader: new GLTFLoader() };
+  return { world, scene, renderer, worldGroup, cameraRig, xrCamera, desktopCamera, ground, loader: new GLTFLoader() };
 }
 
 function createCamera(): THREE.PerspectiveCamera {

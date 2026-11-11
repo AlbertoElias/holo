@@ -8,6 +8,10 @@ import { GLTFAudioPlugin } from './GLTFAudioPlugin';
 import { GLTFHumanoidPlugin } from './GLTFHumanoidPlugin';
 import { GLTFMeaningPlugin } from './GLTFMeaningPlugin';
 import { GLTFObjectsPlugin } from './GLTFObjectsPlugin';
+import { GLTFPlacePlugin } from './GLTFPlacePlugin';
+import { PLACE_NODE_NAME } from '@holoim/contracts';
+import { createExportFloor } from '../place/placeFloor';
+import type { PlaceExportPayload } from '../place/CapturePlace';
 import { type AuthoringSampleStore, findAuthoringSpans, neutralizeAuthoringSpans, toAuthoringSpans } from './authoringSpans';
 import { AUTHOR_CAMERA_NODE_NAME, type CameraTrackStore } from './CameraTrackStore';
 import { buildObjectExports, type ObjectExport } from './objectExport';
@@ -25,6 +29,11 @@ interface MorphExportBinding {
   influenceNamesByIndex: string[];
 }
 
+/** A scanned place the take was recorded in: asked for its stored crop once the take's path is known. */
+export interface PlaceExportSource {
+  prepare(path: THREE.Vector3[]): Promise<PlaceExportPayload | null>;
+}
+
 export class GltfExportComposer {
   private readonly pointResolver = new PointResolver();
   /** What point resolution decided for the latest export; undefined before one or for a take without point samples. */
@@ -38,7 +47,8 @@ export class GltfExportComposer {
     audioData?: { buffer: ArrayBuffer; mimeType: string },
     pointStore?: PointSampleStore,
     objectStore?: ObjectSampleStore,
-    authoringStore?: AuthoringSampleStore
+    authoringStore?: AuthoringSampleStore,
+    place?: PlaceExportSource
   ): Promise<Blob> {
     this.lastPointReport = undefined;
     await nextFrame();
@@ -180,10 +190,30 @@ export class GltfExportComposer {
     const scene = new THREE.Scene();
     scene.add(clone);
     scene.add(bubbleSphere);
-    const sceneBubble = sceneRoot ? bubbleSampler.collectSceneBubbleGroup(sceneRoot) : undefined;
+    // A scanned place (docs/features/splat-capture.md): the set is a plain floor disc over the take's reach, and the
+    // scan's crop rides on `RecordedPlace`. Without one, the set is the world model clipped to the bubble, as ever.
+    const placePayload = place && !normalizeRootMotion
+      ? await place.prepare(frames.map((frame) => new THREE.Vector3(frame.rootPosition.x, frame.rootPosition.y, frame.rootPosition.z)))
+      : null;
+    let placeNode: THREE.Object3D | undefined;
+    let sceneBubble: { group: THREE.Group; clippedBySource: Map<THREE.Mesh, THREE.Mesh> } | undefined;
+    if (placePayload) {
+      const group = new THREE.Group();
+      group.name = 'RecordedSceneBubble';
+      const floor = createExportFloor(placePayload.crop.disc.center, placePayload.crop.disc.radius);
+      group.add(floor);
+      sceneBubble = { group, clippedBySource: new Map([[floor, floor]]) };
+      placeNode = new THREE.Object3D();
+      placeNode.name = PLACE_NODE_NAME;
+      placeNode.position.copy(placePayload.position);
+      placeNode.quaternion.copy(placePayload.quaternion);
+    } else {
+      sceneBubble = sceneRoot ? bubbleSampler.collectSceneBubbleGroup(sceneRoot) : undefined;
+    }
     if (sceneBubble) {
       scene.add(sceneBubble.group);
     }
+    if (placeNode) scene.add(placeNode);
     for (const node of objects?.nodes ?? []) scene.add(node);
     this.addRecordedSceneLights(scene);
 
@@ -200,7 +230,9 @@ export class GltfExportComposer {
         store: pointStore,
         avatar,
         exportAvatar: clone,
-        sceneMeshes: normalizeRootMotion || !sceneBubble ? [] : [...sceneBubble.clippedBySource.values()]
+        sceneMeshes: normalizeRootMotion || !sceneBubble ? [] : [...sceneBubble.clippedBySource.values()],
+        // The scan resolves against its stored crop, at the node's transform, so a link plays back where it was made.
+        extraTargets: placePayload && placeNode ? [{ raycast: placePayload.raycast as unknown as THREE.Object3D, node: placeNode, key: `place:${PLACE_NODE_NAME}` }] : []
       });
       this.lastPointReport = report;
       if (draft.marks.length > 0 || draft.traces.length > 0 || draft.spans.length > 0) meaning = draft;
@@ -226,6 +258,10 @@ export class GltfExportComposer {
       if ((objects && objects.drafts.length > 0) || authoring.length > 0) {
         const drafts = objects?.drafts ?? [];
         exporter.register((writer) => new GLTFObjectsPlugin(writer, drafts, authoring));
+      }
+      if (placePayload && placeNode) {
+        const stored = { node: placeNode, spz: placePayload.spz, splatCount: placePayload.crop.numSplats, maxSh: placePayload.maxSh };
+        exporter.register((writer) => new GLTFPlacePlugin(writer, stored));
       }
       exporter.parse(
         scene,

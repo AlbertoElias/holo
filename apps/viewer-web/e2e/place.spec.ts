@@ -8,7 +8,7 @@ import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, expectConsoleErrors, test } from "./bootstrap";
 import { measureFloor } from "./floor-proof";
-import { diagonalFactor, extentLeavesDome, SPLAT_EXTENT_SIGMA } from "../src/features/place/placeClip";
+import { diagonalFactor, extentLeavesDome, SPLAT_EXTENT_SIGMA } from "@holoim/place";
 import { writeFixture } from "./place-fixture";
 import { shotDifference, shotStats } from "./place-pixels";
 import { animationFrames, cardCenter, readPortal, waitForPortalReady } from "./portal-helpers";

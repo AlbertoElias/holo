@@ -36,6 +36,7 @@
     "@holoim/design-tokens": "workspace:*",
     "@holoim/meaning": "workspace:*",
     "@holoim/objects": "workspace:*",
+    "@holoim/place": "workspace:*",
     "@holoim/ui-dom": "workspace:*",
     "@holoim/xr-runtime": "workspace:*",
     "@holoim/xr-ui-core": "workspace:*",

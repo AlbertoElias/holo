@@ -4,7 +4,8 @@ import { isInChrome } from '@holoim/xr-ui-core';
 import { isThreeMesh, isThreeSkinnedMesh } from '../shared/threeTypeGuards';
 import { isFiniteVector3Like } from '../shared/math';
 
-const RECORDING_SCENE_BUBBLE_RADIUS = 6;
+/** The recorded bubble's radius, metres: what a take's set is clipped to, and what a viewer draws. */
+export const RECORDING_SCENE_BUBBLE_RADIUS = 6;
 const MIN_SCENE_SAMPLE_DISTANCE = 0.08;
 const MAX_SCENE_SAMPLES = 480;
 const OCCLUSION_TEST_MIN_NORMAL_Y_ABS = 0.6;

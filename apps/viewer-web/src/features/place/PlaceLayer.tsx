@@ -6,9 +6,8 @@ import type { Object3D } from "three";
 import type { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 
 import type { PlacedScan } from "./loadPlace";
-import { PLACE_CLIP_GLSL, SPLAT_EXTENT_SIGMA, extentLeavesDome, placeClipFade, type DomeShape } from "./placeClip";
+import { FLOOR_BAND_METERS, SPLAT_EXTENT_SIGMA, domeClipModifier, extentLeavesDome, placeClipFade, type DomeShape } from "@holoim/place";
 import type { PlaceReadings, PlaceReport } from "./placeReport";
-import { FLOOR_BAND_METERS } from "./placeAnalysis";
 import { cropToSweep, placeOnFloor } from "./placeSplats";
 
 /** The shader's dome follows the card's dome by at least this much, metres; a finer move is not worth a regeneration. */
@@ -45,27 +44,7 @@ export function PlaceLayer({ place, shape, shift, takeFloorY, sweep, readFeetY, 
     const dome: DomeShape = { base: { ...shape.base }, radii: { ...shape.radii }, exponent: shape.exponent };
     const placement = placeOnFloor(place, dome, takeFloorY);
     const cropped = cropToSweep(place, placement, dome, sweep);
-    const base = S.dyno.dynoVec3(new Vector3(shape.base.x, shape.base.y, shape.base.z).add(shift));
-    const radii = S.dyno.dynoVec3(new Vector3(shape.radii.x, shape.radii.y, shape.radii.z));
-    const exponent = S.dyno.dynoFloat(shape.exponent);
-    const modifier = S.dyno.dynoBlock({ gsplat: S.dyno.Gsplat }, { gsplat: S.dyno.Gsplat }, ({ gsplat }) => {
-      if (!gsplat) throw new Error("no gsplat input");
-      const cut = new S.dyno.Dyno({
-        inTypes: { gsplat: S.dyno.Gsplat, base: "vec3", radii: "vec3", exponent: "float" },
-        outTypes: { gsplat: S.dyno.Gsplat },
-        inputs: { gsplat, base, radii, exponent },
-        globals: () => [S.dyno.defineGsplat, PLACE_CLIP_GLSL],
-        statements: ({ inputs, outputs }) => S.dyno.unindentLines(`
-          ${outputs.gsplat} = ${inputs.gsplat};
-          {
-            float fade = place_clip_fade(${inputs.gsplat}.center, ${inputs.gsplat}.scales, ${inputs.base}, ${inputs.radii}, ${inputs.exponent});
-            ${outputs.gsplat}.rgba.a *= fade;
-            if (fade <= 0.0) ${outputs.gsplat}.flags = 0u;
-          }
-        `)
-      });
-      return { gsplat: cut.outputs.gsplat };
-    });
+    const { modifier, base, radii } = domeClipModifier(S, { base: new Vector3(shape.base.x, shape.base.y, shape.base.z).add(shift), radii: shape.radii, exponent: shape.exponent });
     const packedSplats = new S.PackedSplats({ packedArray: cropped.packedArray, numSplats: cropped.numSplats, splatEncoding: place.encoding });
     const state = { base: base.value, radii: radii.value, exponent: shape.exponent, applied: { base: { x: base.value.x, y: base.value.y, z: base.value.z }, radii: { ...dome.radii }, exponent: dome.exponent }, pushed: 0, generated: 0 };
     clip.current = state;

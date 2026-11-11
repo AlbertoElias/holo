@@ -98,6 +98,8 @@ export interface UiViewModel {
   micPermission: 'pending' | 'granted' | 'denied';
   /** The supplied object, chosen before recording. */
   object: { status: 'none' | 'loading' | 'ready' | 'error'; name: string | null; message: string | null };
+  /** A scanned place as the set (docs/features/splat-capture.md); `enabled` only with `?placeCapture=1`. */
+  place: { enabled: boolean; status: 'none' | 'loading' | 'ready' | 'error'; name: string | null; message: string | null };
   /** The prepared tray (PRD-045): item names in slot order. */
   tray: TrayUiState;
   faceCamera: 'off' | 'starting' | 'tracking' | 'no-face' | 'denied' | 'unavailable';
