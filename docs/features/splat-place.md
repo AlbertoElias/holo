@@ -203,6 +203,17 @@ SPZ is covered only by the real scan; the spec writes PLY.
 - In software WebGL (headless checks under load) Spark rarely finishes a
   sort while a walk take moves the clip every frame; on the Mac's GPU it
   keeps up. The checks pause or seek before reading pixels.
+- **A table read as the floor turns the scan upside down (the user's first
+  scan, 2026-11-11).** Scaniverse on the user's iPhone gave a table, not a
+  room: 472,273 splats (11.7 MB SPZ), y up, with the table top holding 45%
+  of the opacity and the room floor under it only about 10%, 0.75 m lower. The
+  floor reading takes the table top as the floor both ways up. More of the scan
+  sits in the 1.2 m under a table than on it, so the scan is turned
+  (`upright: "read"`, `flipped: true`), and the take stands on the table's
+  underside. Tabletops are out of scope, but the failure is general: a strong
+  plane above a weak real floor. `placeFlip=0` puts it right. Not fixed in
+  slice 1; slice 2's floor reading should prefer the lowest broad plane.
+  Decode 1.1 s on software GL; 340,081 splats kept by the crop.
 - **The place belongs to capture, on every capture device (the user,
   2026-11-10).** Slice 1 adds a scan of a different place in the viewer; the
   next slice records the take inside the scan and stores it with the
