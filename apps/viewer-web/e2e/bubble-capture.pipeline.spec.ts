@@ -9,6 +9,7 @@ import { measureFloor, measureGlass, measureRim, mergeGlass, snapshotNeighbourEx
 
 import { assertViewerShell, captureEvidence, expect, test, pressViewInAr } from "./bootstrap";
 import { RECORDED_SECONDS, recordWalkTake } from "./pipeline-takes";
+import { signInForUpload } from "./sign-in";
 
 // Whole-product check: record in capture, export the real GLB, upload it
 // through the viewer UI to a real API, and render it in the feed. Nothing in
@@ -56,12 +57,12 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const glbBytes = take.bytes;
 
   const hologramName = `Pipeline ${testInfo.testId.slice(0, 8)}-${Date.now()}`;
+  await signInForUpload(page, { displayName: "pipeline-e2e" });
   await page.goto("/");
   await assertViewerShell(page);
   // Upload lives in the dock and opens the side sheet (Q11).
   await page.getByRole("button", { name: "Upload a hologram" }).click();
   await page.getByLabel("Hologram name").fill(hologramName);
-  await page.getByLabel("Submitted by").fill("pipeline-e2e");
   await page.locator("#glb-upload").setInputFiles(glbPath);
   const uploadResponse = page.waitForResponse((response) => (
     response.request().method() === "POST" && new URL(response.url()).pathname === "/api/holograms"

@@ -9,6 +9,7 @@ import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, expect, test } from "./bootstrap";
 import { installProbe, waitForPortalReady } from "./portal-helpers";
+import { signInForUpload } from "./sign-in";
 
 // Find an object by asking (PRD-060), the real chain with no fakes of ours:
 // capture's Find field -> viewer-api search and GLB packing (against the
@@ -73,6 +74,7 @@ print(json.dumps(dict(stage.GetRootLayer().customLayerData)))
 
 async function upload(page: Page, glb: Buffer): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
+    headers: (await signInForUpload(page)).headers,
     multipart: {
       hologramName: `Find ${Date.now()}`,
       submittedBy: "object-search-e2e",

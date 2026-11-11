@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
 import { recordWalkTake, waitForUsdzReady } from "./pipeline-takes";
+import { signInForUpload } from "./sign-in";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,12 +27,12 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   const glbBytes = take.bytes;
 
   const hologramName = `Pipeline ${testInfo.testId.slice(0, 8)}-${Date.now()}`;
+  await signInForUpload(page, { displayName: "pipeline-e2e" });
   await page.goto("/");
   await assertViewerShell(page);
   // Upload lives in the dock and opens the side sheet (Q11).
   await page.getByRole("button", { name: "Upload a hologram" }).click();
   await page.getByLabel("Hologram name").fill(hologramName);
-  await page.getByLabel("Submitted by").fill("pipeline-e2e");
   // This pipeline is the Quick Look demo path, so it opts in to USDZ generation.
   await page.locator("#quicklook-enabled").check();
   await page.locator("#glb-upload").setInputFiles(glbPath);

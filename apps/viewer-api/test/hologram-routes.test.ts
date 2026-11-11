@@ -6,6 +6,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { bearer, createAuthTables, exposeMagicLinksForTests, signIn, type SessionBody } from "./fixtures/auth.js";
 
 type HologramDto = {
   id: string;
@@ -82,6 +83,7 @@ async function feedSnapshotIds(root: string): Promise<string[]> {
 
 async function uploadHologram(
   app: FastifyInstance,
+  session: SessionBody,
   input: { hologramName: string; submittedBy?: string; file?: Buffer; quickLookEnabled?: boolean }
 ): Promise<HologramDto> {
   const multipart = multipartUpload({
@@ -94,13 +96,53 @@ async function uploadHologram(
     method: "POST",
     url: "/api/holograms",
     headers: {
-      "content-type": `multipart/form-data; boundary=${multipart.boundary}`
+      "content-type": `multipart/form-data; boundary=${multipart.boundary}`,
+      ...bearer(session)
     },
     payload: multipart.payload
   });
 
   expect(response.statusCode).toBe(201);
   return response.json<HologramDto>();
+}
+
+// An in-memory S3-style store, enough for the direct-upload routes.
+function fakeObjectStorage() {
+  const objects = new Map<string, Buffer>();
+  const storage = {
+    kind: "s3" as const,
+    publicUrl: (key: string) => `https://media.test/${key}`,
+    putFile: async (key: string, absolutePath: string) => {
+      objects.set(key, await readFile(absolutePath));
+    },
+    putBuffer: async (key: string, body: Buffer) => {
+      objects.set(key, Buffer.from(body));
+    },
+    head: async (key: string) => {
+      const body = objects.get(key);
+      return body ? { sizeBytes: body.length, contentType: "model/gltf-binary" } : null;
+    },
+    readPrefix: async (key: string, length: number) => {
+      const body = objects.get(key);
+      return body ? body.subarray(0, length) : null;
+    },
+    copy: async (sourceKey: string, destKey: string) => {
+      const body = objects.get(sourceKey);
+      if (!body) throw new Error("missing source");
+      objects.set(destKey, body);
+    },
+    delete: async (key: string) => objects.delete(key),
+    downloadToFile: async (key: string, absolutePath: string) => {
+      const body = objects.get(key);
+      if (!body) throw new Error("missing object");
+      await writeFile(absolutePath, body);
+    },
+    createPresignedPost: async (key: string) => ({
+      url: "https://storage.test/upload",
+      fields: { key }
+    })
+  };
+  return { objects, storage };
 }
 
 describe("hologram routes", () => {
@@ -110,6 +152,8 @@ describe("hologram routes", () => {
   let uploadsRoot: string;
   let previousDatabaseUrl: string | undefined;
   let previousUsdzPython: string | undefined;
+  let restoreExpose: () => void;
+  let session: SessionBody;
   let converterControl: string;
   let usdzFilenameFor: (filename: string) => string;
   let processNextUsdzConversion: (options: { storage: never }) => Promise<boolean>;
@@ -149,6 +193,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 })().catch((error) => { console.error(error); process.exitCode = 1; });
 `, { mode: 0o755 });
     process.env.USDZ_PYTHON = converterExecutable;
+    restoreExpose = exposeMagicLinksForTests();
 
     vi.resetModules();
     ({ usdzFilenameFor } = await import("../src/services/usdz-converter.js"));
@@ -156,6 +201,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     ({ LocalMediaStorage } = await import("../src/services/media-storage.js"));
     const prismaModule = await import("../src/lib/prisma.js");
     prisma = prismaModule.prisma;
+    await createAuthTables(prisma);
     await prisma.$executeRawUnsafe(`
       CREATE TABLE "Hologram" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -205,10 +251,12 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     buildAppFn = buildApp as never;
     app = buildApp({ logger: false, uploadsRoot });
     await app.ready();
+    session = await signIn(app, "route-tester@example.com", "Route Tester");
   });
 
   beforeEach(async () => {
     await prisma.hologram.deleteMany();
+    await prisma.uploadIntent.deleteMany();
     await rm(uploadsRoot, { recursive: true, force: true });
     await mkdir(uploadsRoot, { recursive: true });
     await rm(converterControl, { recursive: true, force: true });
@@ -219,6 +267,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     await app?.close();
     await prisma?.$disconnect();
     await rm(testRoot, { recursive: true, force: true });
+    restoreExpose?.();
 
     if (previousDatabaseUrl === undefined) {
       delete process.env.DATABASE_URL;
@@ -234,16 +283,16 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 
   it("uploads a GLB and serves the stored bytes", async () => {
     const file = Buffer.from("inspectable-glb-route-artifact");
-    const created = await uploadHologram(app, {
+    const created = await uploadHologram(app, session, {
       hologramName: "Route upload",
-      submittedBy: "API route test",
+      submittedBy: "Route Tester",
       file
     });
 
     expect(created).toMatchObject({
       filenameOriginal: "avatar.glb",
       hologramName: "Route upload",
-      submittedBy: "API route test",
+      submittedBy: "Route Tester",
       sizeBytes: file.length,
       usdzUrl: null,
       quickLookEnabled: false
@@ -256,7 +305,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("does not generate USDZ when Quick Look was not enabled at upload", async () => {
-    const created = await uploadHologram(app, { hologramName: "No Quick Look" });
+    const created = await uploadHologram(app, session, { hologramName: "No Quick Look" });
     expect(created.quickLookEnabled).toBe(false);
     expect(created.usdzUrl).toBeNull();
 
@@ -274,7 +323,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 
   it("converts after an opted-in upload, stores the USDZ, and reuses it without reconverting", async () => {
     const source = Buffer.from("quicklook-enabled-capture");
-    const created = await uploadHologram(app, {
+    const created = await uploadHologram(app, session, {
       hologramName: "Quick Look demo",
       file: source,
       quickLookEnabled: true
@@ -332,14 +381,14 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     const response = await app.inject({
       method: "POST",
       url: "/api/holograms",
-      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}`, ...bearer(session) },
       payload: Readable.from(chunks())
     });
     expect(response.statusCode, response.body).toBe(201);
     const created = response.json<HologramDto>();
     expect(created).toMatchObject({
       hologramName: "File-first streaming upload",
-      submittedBy: "Pipeline upload transport",
+      submittedBy: "Route Tester",
       sizeBytes: file.length
     });
     expect((await readFile(path.join(uploadsRoot, path.basename(created.url)))).equals(file)).toBe(true);
@@ -348,7 +397,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   it("paginates without duplicates and returns a stable end cursor", async () => {
     const created = [];
     for (const name of ["Pagination one", "Pagination two", "Pagination three"]) {
-      created.push(await uploadHologram(app, { hologramName: name }));
+      created.push(await uploadHologram(app, session, { hologramName: name }));
     }
 
     const firstResponse = await app.inject({
@@ -374,7 +423,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("deletes the database record and both stored representations", async () => {
-    const created = await uploadHologram(app, { hologramName: "Delete route", quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Delete route", quickLookEnabled: true });
     expect(await feedSnapshotIds(uploadsRoot), "an upload is in the feed snapshot at once").toEqual([created.id]);
     await runWorkerOnce();
     const glbPath = path.join(uploadsRoot, path.basename(created.url));
@@ -382,7 +431,8 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 
     const response = await app.inject({
       method: "DELETE",
-      url: `/api/holograms/${created.id}`
+      url: `/api/holograms/${created.id}`,
+      headers: bearer(session)
     });
 
     expect(response.statusCode).toBe(200);
@@ -402,7 +452,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 
   it("converts asynchronously: upload is pending, worker publishes, endpoint redirects", async () => {
     const source = Buffer.from("async-capture-for-conversion");
-    const created = await uploadHologram(app, { hologramName: "Async lifecycle", file: source, quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Async lifecycle", file: source, quickLookEnabled: true });
     expect(created.usdzStatus).toBe("pending");
     expect(created.usdzUrl).toBeNull();
     const glbFilename = path.basename(created.url);
@@ -444,7 +494,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 
   it("marks failed conversions, preserves the GLB, and re-enqueues on request", async () => {
     const source = Buffer.from("retryable-original-capture");
-    const created = await uploadHologram(app, { hologramName: "Conversion failure", file: source, quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Conversion failure", file: source, quickLookEnabled: true });
     const glbFilename = path.basename(created.url);
     await writeFile(path.join(converterControl, "fail"), "fail after writing partial output");
 
@@ -468,7 +518,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 
   it("defers timed-out conversions for a later retry instead of failing them", async () => {
     const source = Buffer.from("throttled-cpu-capture");
-    const created = await uploadHologram(app, { hologramName: "Conversion timeout", file: source, quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Conversion timeout", file: source, quickLookEnabled: true });
     const glbFilename = path.basename(created.url);
     await writeFile(path.join(converterControl, "timeout"), "simulate slow CPU");
 
@@ -489,7 +539,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("fails a conversion that keeps timing out; a request retries it once", async () => {
-    const created = await uploadHologram(app, { hologramName: "Endless timeout", quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Endless timeout", quickLookEnabled: true });
     await writeFile(path.join(converterControl, "timeout"), "simulate slow CPU");
 
     for (const status of ["processing", "processing", "failed"]) {
@@ -512,7 +562,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("fails a conversion over its CPU budget at once instead of retrying it", async () => {
-    const created = await uploadHologram(app, { hologramName: "Too costly", quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Too costly", quickLookEnabled: true });
     await writeFile(path.join(converterControl, "budget"), "scene too costly");
     await runWorkerOnce();
     const failed = await prisma.hologram.findUnique({ where: { id: created.id } });
@@ -522,9 +572,9 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("deleting during conversion does not resurrect the record or leave objects", async () => {
-    const created = await uploadHologram(app, { hologramName: "Delete during conversion", quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Delete during conversion", quickLookEnabled: true });
     const workerRun = runWorkerOnce();
-    const deletion = await app.inject({ method: "DELETE", url: `/api/holograms/${created.id}` });
+    const deletion = await app.inject({ method: "DELETE", url: `/api/holograms/${created.id}`, headers: bearer(session) });
     expect(deletion.statusCode).toBe(200);
     await workerRun;
     await delay(50);
@@ -534,7 +584,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("Quick Look is opt-in: disabled holograms never convert and the endpoint 404s", async () => {
-    const created = await uploadHologram(app, { hologramName: "No Quick Look" });
+    const created = await uploadHologram(app, session, { hologramName: "No Quick Look" });
     expect(created.quickLookEnabled).toBe(false);
     expect(created.usdzStatus).toBe("none");
     expect(created.usdzUrl).toBeNull();
@@ -555,6 +605,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     const initiateLocal = await app.inject({
       method: "POST",
       url: "/api/holograms/uploads/initiate",
+      headers: bearer(session),
       payload: {
         filenameOriginal: "avatar.glb",
         hologramName: "Direct local",
@@ -568,40 +619,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("direct upload via object storage validates, completes, and replays idempotently", async () => {
-    const objects = new Map<string, Buffer>();
-    const fakeStorage = {
-      kind: "s3" as const,
-      publicUrl: (key: string) => `https://media.test/${key}`,
-      putFile: async (key: string, absolutePath: string) => {
-        objects.set(key, await readFile(absolutePath));
-      },
-      putBuffer: async (key: string, body: Buffer) => {
-        objects.set(key, Buffer.from(body));
-      },
-      head: async (key: string) => {
-        const body = objects.get(key);
-        return body ? { sizeBytes: body.length, contentType: "model/gltf-binary" } : null;
-      },
-      readPrefix: async (key: string, length: number) => {
-        const body = objects.get(key);
-        return body ? body.subarray(0, length) : null;
-      },
-      copy: async (sourceKey: string, destKey: string) => {
-        const body = objects.get(sourceKey);
-        if (!body) throw new Error("missing source");
-        objects.set(destKey, body);
-      },
-      delete: async (key: string) => objects.delete(key),
-      downloadToFile: async (key: string, absolutePath: string) => {
-        const body = objects.get(key);
-        if (!body) throw new Error("missing object");
-        await writeFile(absolutePath, body);
-      },
-      createPresignedPost: async (key: string) => ({
-        url: "https://storage.test/upload",
-        fields: { key }
-      })
-    };
+    const { objects, storage: fakeStorage } = fakeObjectStorage();
     const fakeApp = buildAppFn({ logger: false, uploadsRoot, storage: fakeStorage });
     await fakeApp.ready();
     try {
@@ -609,6 +627,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       const initiate = await fakeApp.inject({
         method: "POST",
         url: "/api/holograms/uploads/initiate",
+        headers: bearer(session),
         payload: {
           filenameOriginal: "avatar.glb",
           hologramName: "Direct upload",
@@ -626,6 +645,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       const early = await fakeApp.inject({
         method: "POST",
         url: "/api/holograms/uploads/complete",
+        headers: bearer(session),
         payload: { intentId: intent.intentId }
       });
       expect(early.statusCode).toBe(409);
@@ -634,6 +654,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       const complete = await fakeApp.inject({
         method: "POST",
         url: "/api/holograms/uploads/complete",
+        headers: bearer(session),
         payload: { intentId: intent.intentId }
       });
       expect(complete.statusCode, complete.body).toBe(201);
@@ -645,6 +666,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       const replay = await fakeApp.inject({
         method: "POST",
         url: "/api/holograms/uploads/complete",
+        headers: bearer(session),
         payload: { intentId: intent.intentId }
       });
       expect(replay.statusCode).toBe(200);
@@ -654,6 +676,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       const badInitiate = await fakeApp.inject({
         method: "POST",
         url: "/api/holograms/uploads/initiate",
+        headers: bearer(session),
         payload: {
           filenameOriginal: "evil.glb",
           hologramName: "Bad bytes",
@@ -667,6 +690,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       const badComplete = await fakeApp.inject({
         method: "POST",
         url: "/api/holograms/uploads/complete",
+        headers: bearer(session),
         payload: { intentId: badIntent.intentId }
       });
       expect(badComplete.statusCode).toBe(422);
@@ -675,5 +699,66 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
       await fakeApp.close();
     }
   });
-});
 
+  it("refuses every upload route without a valid session and creates nothing", async () => {
+    const { objects, storage } = fakeObjectStorage();
+    const directApp = buildAppFn({ logger: false, uploadsRoot, storage });
+    await directApp.ready();
+    try {
+      // A real intent made by a signed-in user, with its object already stored,
+      // so an anonymous complete would succeed if the route let it through.
+      const glb = Buffer.concat([Buffer.from("glTF"), Buffer.from("anon-bytes")]);
+      const initiatePayload = {
+        filenameOriginal: "avatar.glb",
+        hologramName: "Anonymous try",
+        submittedBy: "Nobody",
+        sizeBytes: glb.length,
+        mimeType: "model/gltf-binary"
+      };
+      const signedIn = await directApp.inject({
+        method: "POST",
+        url: "/api/holograms/uploads/initiate",
+        headers: bearer(session),
+        payload: initiatePayload
+      });
+      expect(signedIn.statusCode, signedIn.body).toBe(200);
+      const intent = signedIn.json<{ intentId: string; storageKey: string }>();
+      await storage.putBuffer(intent.storageKey, glb);
+      const intentsBefore = await prisma.uploadIntent.count();
+      expect(intentsBefore).toBe(1);
+
+      const multipart = multipartUpload({ hologramName: "Anonymous try", submittedBy: "Nobody", file: glb });
+      const attempts = (headers: Record<string, string>) => [
+        directApp.inject({
+          method: "POST",
+          url: "/api/holograms",
+          headers: { "content-type": `multipart/form-data; boundary=${multipart.boundary}`, ...headers },
+          payload: multipart.payload
+        }),
+        directApp.inject({ method: "POST", url: "/api/holograms/uploads/initiate", headers, payload: initiatePayload }),
+        directApp.inject({
+          method: "POST",
+          url: "/api/holograms/uploads/complete",
+          headers,
+          payload: { intentId: intent.intentId }
+        })
+      ];
+      for (const headers of [{}, { authorization: "Bearer not-a-real-session-token" }]) {
+        for (const response of await Promise.all(attempts(headers))) {
+          expect(response.statusCode, response.body).toBe(401);
+          expect(response.json()).toEqual({ error: "Sign in to upload a hologram." });
+        }
+      }
+
+      expect(await prisma.hologram.count()).toBe(0);
+      expect(await prisma.uploadIntent.count()).toBe(intentsBefore);
+      await expect(prisma.uploadIntent.findUniqueOrThrow({ where: { id: intent.intentId } })).resolves.toMatchObject({
+        completedHologramId: null
+      });
+      expect([...objects.keys()].filter((key) => !key.startsWith("feed/")), "the refused complete left the stored object alone").toEqual([intent.storageKey]);
+      expect(await mediaObjects(uploadsRoot), "nothing reached local storage").toEqual([]);
+    } finally {
+      await directApp.close();
+    }
+  });
+});

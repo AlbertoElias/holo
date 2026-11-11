@@ -371,12 +371,29 @@ async function webcamFallbacks() {
     });
     // The face camera control lives in the settings side sheet.
     if (!(await page.getByRole('dialog', { name: 'Settings' }).isVisible())) await page.getByRole('button', { name: 'Settings' }).click();
-    const label = await page.getByRole('button', { name: /^Face camera/ }).textContent().catch(() => null);
+    const label = await page.getByTestId('face-camera-status').textContent().catch(() => null);
+    // On speaks for itself; a blocked camera shows Off chosen and says why.
+    const onChosen = await page.getByRole('radio', { name: 'On' }).getAttribute('aria-checked').catch(() => null);
+    check(onChosen === (mode === 'denied' ? 'false' : 'true'), `webcam ${mode}: the Face camera choice shows ${mode === 'denied' ? 'Off' : 'On'} (On is ${onChosen})`);
+    check(mode !== 'denied' || /blocked/.test(label ?? ''), `webcam ${mode}: a blocked camera says so (${label})`);
     check(settled.camera === mode, `webcam ${mode}: camera state ${settled.camera}`);
     check(after.expressionSource === 'liveness' && after.gazeSource === 'liveness', `webcam ${mode}: face driven by ${after.expressionSource}/${after.gazeSource}, want liveness`);
     outcomes[mode] = { ...settled, after, buttonLabel: label?.trim() ?? null };
     await context.close();
   }
+  // On by default: a person who never opens Settings still starts the camera (automation opts in with ?faceCamera=on).
+  const context = await createXrContext(browser, { viewport: { width: 960, height: 540 }, permissions: ['camera'] });
+  const page = await context.newPage();
+  wireXrConsoleErrors(page, consoleErrors, { label: 'webcam-default' });
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
+  });
+  await page.goto(`${baseUrl}${baseUrl.includes('?') ? '&' : '?'}faceCamera=on`, { waitUntil: 'networkidle' });
+  await waitForPageFunctions(page, ['__sampleFace']);
+  await waitForTextContentPrefix(page, '#status', 'loaded');
+  const started = await page.waitForFunction(() => window.__sampleFace().camera === 'denied', null, { timeout: 45_000, polling: 250 }).then(() => true).catch(() => false);
+  check(started, 'webcam default: the camera started without anyone toggling it');
+  await context.close();
   return outcomes;
 }
 

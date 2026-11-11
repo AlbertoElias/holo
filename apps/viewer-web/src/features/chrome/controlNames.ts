@@ -18,6 +18,8 @@ export const VIEWER_CONTROL_NAMES = {
   openUpload: "Upload a hologram",
   openSettings: "Settings",
   submitUpload: "Upload",
+  emailSignInLink: "Email me a sign-in link",
+  signOut: "Sign out",
   retry: "Try again",
   exitAr: "Exit AR",
   recenter: "Recenter Model",

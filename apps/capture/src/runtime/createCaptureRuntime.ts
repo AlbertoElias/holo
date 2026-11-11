@@ -14,6 +14,7 @@ import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
 import { ChromeProbe } from '../debug/chromeProbe';
 import { DiagnosticViews } from '../debug/DiagnosticViews';
 import { FaceDriver } from '../face/FaceDriver';
+import { faceCameraOnByDefault } from '../face/WebcamFace';
 import { DesktopPointAction } from '../input/DesktopPointAction';
 import { InputController } from '../input/InputController';
 import { VrLocomotion } from '../input/VrLocomotion';
@@ -370,6 +371,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           head: avatar.bone('head'), leftEye: avatar.bone('leftEye'), rightEye: avatar.bone('rightEye')
         });
         avatar.humanoid.warnOnce();
+        // On by default: a refusal or a missing camera only changes the state the settings sheet shows.
+        if (faceCameraOnByDefault()) void capture.face.webcam.start();
       }
       // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
       if (config.objectUrl) await objects.loadUrl(config.objectUrl);
@@ -395,7 +398,6 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       runHaloAction: (action, kind) => {
         haloActions.run(action, kind);
       },
-      loadObjectFile: (file) => void objects.loadFile(file),
       loadPlaceFile: (file) => void place?.load({ kind: 'file', file }),
       loadTrayFiles: (files) => void objects.loadTrayFiles(files),
       loadTrayUrls: (urls) => void objects.loadTrayUrls(urls),

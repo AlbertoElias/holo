@@ -219,10 +219,6 @@ export class CaptureObjects {
     return this.load(() => fetchSuppliedObject(url));
   }
 
-  loadFile(file: File): Promise<boolean> {
-    return this.load(() => readSuppliedObjectFile(file));
-  }
-
   /** `undoable`: false for the tray the page was opened with, which is set up rather than authored. */
   loadTrayUrls(urls: readonly string[], undoable = true): Promise<boolean> {
     return this.loadTray(urls.map((url) => () => fetchSuppliedObject(url)), undoable);

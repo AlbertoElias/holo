@@ -11,6 +11,7 @@ import {
   waitForXrFrames
 } from "@holoim/tooling-testing/xr-env";
 
+import { stubSignedInCreator } from "./sign-in";
 import { assertViewerShell, captureEvidence, expect, FEED_CARD_RENDERED_TIMEOUT_MS, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
@@ -520,6 +521,8 @@ for (const viewport of [
   test(`mobile feed metadata clears Upload at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
     await mockFeed(page, { hologramName: "A recorded hologram", submittedBy: "Alberto Elias" });
+    // The 390-wide pass opens the Upload sheet, which shows its form only to a signed-in creator.
+    await stubSignedInCreator(page);
     await page.goto("/");
     await assertViewerShell(page);
     const card = page.locator(".feed-card").first();

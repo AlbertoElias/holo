@@ -321,7 +321,7 @@ export const tokens = {
         linejoin: 'round'
       },
       tray: {
-        d: 'M1.5 13.5h13M2.75 9h3v3h-3zM8 8.25l1.9 3.75H6.1zM10.75 10.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0',
+        d: 'M1.5 9.75v3.5a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-3.5M8 1.5l4 2.25v4.5L8 10.5L4 8.25v-4.5zM8 6v4.5M8 6l-4-2.25M8 6l4-2.25',
         fill: false,
         linejoin: 'round'
       },

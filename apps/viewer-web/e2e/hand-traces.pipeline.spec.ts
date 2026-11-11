@@ -12,6 +12,7 @@ import { assertViewerShell, expect, reachFor, test } from "./bootstrap";
 import { animationFrames, installProbe, waitForPortalReady } from "./portal-helpers";
 import { recordWalkTake } from "./pipeline-takes";
 import type { HandTraceTake } from "../../capture/scripts/lib/hand-trace-takes";
+import { signInForUpload } from "./sign-in";
 
 // Author-marked hand traces (PRD-023 v1, docs/features/authored-traces.md).
 // The author turns the headset Halo's Ink on and off while recording; each
@@ -301,6 +302,7 @@ async function mainMeaning(): Promise<null | { validateHoloimMeaning: typeof val
 
 async function upload(page: Page, name: string, glb: Buffer): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
+    headers: (await signInForUpload(page, { displayName: "hand-traces-e2e" })).headers,
     multipart: {
       hologramName: `${name} ${Date.now()}`,
       submittedBy: "hand-traces-e2e",
@@ -500,7 +502,7 @@ async function shot(page: Page, id: string, name: string): Promise<string> {
 async function noTracesControl(page: Page, modelPath: string, id: string): Promise<{ control: number; storeKeys: string[] }> {
   const card = page.locator(`.feed-card[data-card-id="${id}"]`);
   await reachFor(card);
-  const control = await card.getByRole("button", { name: /trace/i }).count();
+  const control = await card.getByRole("button", { name: /trace/i }).filter({ hasNotText: /^Delete/ }).count();
   const storeKeys = await page.evaluate((target) => {
     const probes = (window as unknown as { __portalProbes: Record<string, { portal: { getState: () => Record<string, unknown> } }> }).__portalProbes;
     const state = Object.entries(probes).find(([u]) => u.endsWith(target))![1].portal.getState();

@@ -24,11 +24,11 @@ describe("AuthPanel", () => {
     render(<AuthPanel user={null} onSignOut={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.change(screen.getByLabelText("Display name (first sign-in)"), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("Your name, if you are new"), { target: { value: "Ada" } });
     fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
 
     await waitFor(() =>
-      expect(screen.getByText(/Check your inbox for a sign-in link/)).toBeInTheDocument()
+      expect(screen.getByText(/We emailed a sign-in link to ada@example.com/)).toBeInTheDocument()
     );
     expect(mockedRequest).toHaveBeenCalledWith({ email: "ada@example.com", displayName: "Ada" });
   });

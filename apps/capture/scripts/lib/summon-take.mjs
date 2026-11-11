@@ -652,6 +652,13 @@ export async function runIwerHandsSummonTake({ browser, baseUrl, artifactDir, co
 }
 
 /** Desktop: the overlay tray picker and its refusal, 1–5 without T, then T + 1 summons into the right hand and G places. */
+/** Resolves when the tray holds `count` items (the settings sheet no longer says "Tray: N"). */
+const trayHolds = (page, count, timeout = 10_000) =>
+  page.waitForFunction((n) => {
+    window.advanceTime(50); // the page clock is manual: state reaches the text only on a step
+    return JSON.parse(window.render_game_to_text()).objects.tray.items.length === n;
+  }, count, { timeout, polling: 100 });
+
 export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, artifactDir, consoleErrors }) {
   const label = 'desktop-summon';
   const failures = [];
@@ -663,11 +670,12 @@ export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, arti
     const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
     await advance(1);
     const fixtures = ['bracket.glb', 'diagram.png'].map((name) => path.join(captureRoot, 'fixtures/objects', name));
-    // The pickers live in the settings side sheet.
-    await page.getByRole('button', { name: 'Settings' }).click();
+    // Files are added from the tray itself.
+    await page.getByTestId('dock-tray').click();
+    await advance(0.5);
     const picker = page.getByLabel('Add tray items (.glb, .png, .jpg)');
     await picker.setInputFiles(fixtures);
-    await page.getByText('Tray: 2').waitFor({ timeout: 10_000 });
+    await trayHolds(page, 2);
     // Four more would make six: refused together, the tray keeps its two.
     await picker.setInputFiles([...fixtures, ...fixtures]);
     await page.getByText('The tray holds at most 5 items.').waitFor({ timeout: 10_000 });
@@ -675,7 +683,8 @@ export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, arti
     const refusal = { items: state.objects.tray.items.length, message: 'The tray holds at most 5 items.' };
     if (refusal.items !== 2) fail(`a refused pick changed the tray (${refusal.items} items)`);
     await page.keyboard.press('Escape');
-    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+    await advance(0.5);
+    await page.locator('[data-testid="dock-tray"][data-open="false"]').waitFor();
 
     await page.locator('canvas').first().focus();
     let withoutT;
@@ -765,17 +774,17 @@ export async function runDesktopFindTake({ browser, baseUrl, captureRoot, artifa
     await openCapture(page, baseUrl, {});
     const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
     await advance(1);
-    await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByLabel('Find an object').fill('bracket');
+    await page.getByTestId('dock-find').click();
+    await page.getByTestId('find-sheet').getByLabel('Find an object').fill('bracket');
     await page.keyboard.press('Enter');
     const pick = page.getByRole('button', { name: `Add ${credit.title} to the tray` });
     await pick.waitFor({ timeout: 10_000 });
     const shown = (await pick.innerText()).replace(/\s+/g, ' ');
     if (!shown.includes('Test Author · Poly Haven · CC0') || !shown.includes('85 × 77 × 107 cm')) fail(`result text: ${shown}`);
     await pick.click();
-    await page.getByText('Tray: 1').waitFor({ timeout: 10_000 });
+    await trayHolds(page, 1);
     await page.keyboard.press('Escape');
-    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+    await page.getByTestId('find-sheet').waitFor({ state: 'detached' });
 
     await page.locator('canvas').first().focus();
     await page.getByRole('button', { name: 'Start Recording' }).click();
@@ -829,8 +838,8 @@ export async function runDesktopFindApiTake({ browser, baseUrl, captureRoot, art
     await openCapture(page, baseUrl, {});
     const advance = (seconds) => page.evaluate((ms) => window.advanceTime(ms), Math.round(seconds * 60) * STEP_MS);
     await advance(1);
-    await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByLabel('Find an object').fill(query);
+    await page.getByTestId('dock-find').click();
+    await page.getByTestId('find-sheet').getByLabel('Find an object').fill(query);
     await page.keyboard.press('Enter');
     const picks = page.getByRole('button', { name: /^Add .* to the tray$/ });
     await picks.first().waitFor({ timeout: 15_000 });
@@ -838,11 +847,16 @@ export async function runDesktopFindApiTake({ browser, baseUrl, captureRoot, art
     const pick = picks.first();
     const shown = (await pick.innerText()).replace(/\s+/g, ' ');
     await pick.click();
-    await page.getByText('Tray: 1').waitFor({ timeout: 20_000 });
-    await page.getByLabel('Add tray items (.glb, .png, .jpg)').setInputFiles([path.join(captureRoot, 'fixtures/objects/bracket.glb')]);
-    await page.getByText('Tray: 2').waitFor({ timeout: 10_000 });
+    await trayHolds(page, 1, 20_000);
     await page.keyboard.press('Escape');
-    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+    await page.getByTestId('find-sheet').waitFor({ state: 'detached' });
+    await page.getByTestId('dock-tray').click();
+    await advance(0.5);
+    await page.getByLabel('Add tray items (.glb, .png, .jpg)').setInputFiles([path.join(captureRoot, 'fixtures/objects/bracket.glb')]);
+    await trayHolds(page, 2);
+    await page.keyboard.press('Escape');
+    await advance(0.5);
+    await page.locator('[data-testid="dock-tray"][data-open="false"]').waitFor();
 
     await page.locator('canvas').first().focus();
     await page.getByRole('button', { name: 'Start Recording' }).click();

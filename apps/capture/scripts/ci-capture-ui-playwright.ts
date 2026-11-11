@@ -118,7 +118,7 @@ async function desktopPhase(): Promise<void> {
   await page.keyboard.press('Space');
   assert.equal(await page.getByRole('radio', { name: 'Left-handed' }).getAttribute('aria-checked'), 'true', 'desktop: Space chooses a handedness radio');
   assert.equal(await page.getByRole('radio', { name: 'Right-handed' }).getAttribute('aria-checked'), 'false');
-  assert(keysText !== null && (await page.getByRole('dialog').textContent())?.includes('Left-handed: in a headset, Record sits on your right wrist'), 'desktop: the choice is said in words');
+  assert(!(await page.getByRole('dialog').textContent())?.includes('in a headset'), 'desktop: the hand choice needs no sentence');
   assert.equal(await page.evaluate(() => localStorage.getItem('holoim.handedness')), 'left', 'desktop: handedness stored per device');
   await page.reload({ waitUntil: 'networkidle' });
   await waitForTextContentPrefix(page, '#status', 'loaded');

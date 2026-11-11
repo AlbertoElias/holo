@@ -191,19 +191,6 @@ body::before {
   border-radius: var(--holoim-chip-radius);
 }
 
-.auth-panel {
-  margin-top: 1rem;
-  background: rgb(4 10 15 / 86%);
-  border: 1px solid rgb(139 194 255 / 24%);
-  border-radius: 14px;
-  padding: 0.85rem;
-}
-
-.auth-signed-in {
-  margin: 0;
-  font-size: 0.85rem;
-}
-
 .verified-badge {
   margin-left: 0.45rem;
   padding: 0.08rem 0.45rem;
@@ -480,7 +467,8 @@ body::before {
   left: 50%;
   transform: translateX(-50%);
   width: max-content;
-  max-width: calc(100vw - 2 * var(--holoim-hit-phone-side-edge));
+  /* Leaves the Settings chip's corner free, so a long notice never covers it. */
+  max-width: calc(100vw - 2 * var(--feed-settings-clearance));
 }
 
 .feed-notice-chip {

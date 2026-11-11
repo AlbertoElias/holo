@@ -12,6 +12,8 @@ vi.mock("../feed/api", () => ({
 
 const mockedUpload = vi.mocked(uploadHologram);
 
+const tester = { id: "user-1", email: "t@example.com", displayName: "Tester", createdAt: "2026-02-10T00:00:00.000Z" };
+
 function fakeDto(quickLookEnabled: boolean): HologramDTO {
   return {
     id: "holo-1",
@@ -31,7 +33,6 @@ function fakeDto(quickLookEnabled: boolean): HologramDTO {
 
 async function fillAndSelectFile(container: HTMLElement) {
   fireEvent.change(screen.getByLabelText("Hologram name"), { target: { value: "Demo" } });
-  fireEvent.change(screen.getByLabelText("Submitted by"), { target: { value: "Tester" } });
   const fileInput = container.querySelector<HTMLInputElement>("#glb-upload");
   expect(fileInput).not.toBeNull();
   fireEvent.change(fileInput!, {
@@ -52,7 +53,7 @@ describe("UploadPanel Quick Look opt-in", () => {
   it("is unchecked by default and uploads with Quick Look disabled", async () => {
     mockedUpload.mockResolvedValue(fakeDto(false));
     const onUploaded = vi.fn();
-    const { container } = render(<UploadPanel onUploaded={onUploaded} />);
+    const { container } = render(<UploadPanel onUploaded={onUploaded} currentUser={tester} />);
 
     const checkbox = screen.getByLabelText("iOS Quick Look") as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
@@ -67,7 +68,7 @@ describe("UploadPanel Quick Look opt-in", () => {
   it("uploads with Quick Look enabled when checked and resets to unchecked after upload", async () => {
     mockedUpload.mockResolvedValue(fakeDto(true));
     const onUploaded = vi.fn();
-    const { container } = render(<UploadPanel onUploaded={onUploaded} />);
+    const { container } = render(<UploadPanel onUploaded={onUploaded} currentUser={tester} />);
 
     const checkbox = screen.getByLabelText("iOS Quick Look") as HTMLInputElement;
     fireEvent.click(checkbox);

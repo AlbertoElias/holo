@@ -5,8 +5,15 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  bearer,
+  createAuthTables,
+  exposeMagicLinksForTests,
+  requestMagicToken as requestToken,
+  signIn as signInAs,
+  type SessionBody
+} from "./fixtures/auth.js";
 
-type SessionBody = { token: string; user: { id: string; email: string; displayName: string } };
 type HologramDto = {
   id: string;
   hologramName: string;
@@ -24,33 +31,12 @@ describe("auth and ownership routes", () => {
   let prisma: PrismaClient;
   let testRoot: string;
   let previousDatabaseUrl: string | undefined;
-  let previousExpose: string | undefined;
+  let restoreExpose: () => void;
 
-  async function requestMagicToken(email: string, displayName?: string): Promise<string> {
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/auth/magic-link",
-      payload: { email, ...(displayName ? { displayName } : {}) }
-    });
-    expect(response.statusCode).toBe(202);
-    const body = response.json<{ sent: boolean; devMagicLinkToken?: string }>();
-    expect(body.sent).toBe(true);
-    expect(body.devMagicLinkToken).toBeTruthy();
-    return body.devMagicLinkToken!;
-  }
+  const requestMagicToken = (email: string, displayName?: string) => requestToken(app, email, displayName);
+  const signIn = (email: string, displayName?: string) => signInAs(app, email, displayName);
 
-  async function signIn(email: string, displayName?: string): Promise<SessionBody> {
-    const token = await requestMagicToken(email, displayName);
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/auth/verify",
-      payload: { token }
-    });
-    expect(response.statusCode).toBe(200);
-    return response.json<SessionBody>();
-  }
-
-  async function upload(sessionToken: string | null, submittedBy = "Spoofed Name"): Promise<HologramDto> {
+  async function upload(session: SessionBody, submittedBy = "Spoofed Name"): Promise<HologramDto> {
     const boundary = `auth-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const payload = Buffer.concat([
       Buffer.from(
@@ -67,7 +53,7 @@ describe("auth and ownership routes", () => {
       url: "/api/holograms",
       headers: {
         "content-type": `multipart/form-data; boundary=${boundary}`,
-        ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {})
+        ...bearer(session)
       },
       payload
     });
@@ -80,45 +66,14 @@ describe("auth and ownership routes", () => {
     const uploadsRoot = path.join(testRoot, "uploads");
     await mkdir(uploadsRoot, { recursive: true });
     previousDatabaseUrl = process.env.DATABASE_URL;
-    previousExpose = process.env.AUTH_DEV_EXPOSE_MAGIC_LINK;
     process.env.DATABASE_URL = `file:${path.join(testRoot, "auth.db")}`;
-    process.env.AUTH_DEV_EXPOSE_MAGIC_LINK = "true";
+    restoreExpose = exposeMagicLinksForTests();
 
     vi.resetModules();
     const prismaModule = await import("../src/lib/prisma.js");
     prisma = prismaModule.prisma;
 
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE "User" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "email" TEXT NOT NULL,
-        "displayName" TEXT NOT NULL,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`);
-    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX "User_email_key" ON "User"("email")`);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE "MagicLinkToken" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "email" TEXT NOT NULL,
-        "displayName" TEXT,
-        "tokenHash" TEXT NOT NULL,
-        "expiresAt" DATETIME NOT NULL,
-        "usedAt" DATETIME,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`);
-    await prisma.$executeRawUnsafe(
-      `CREATE UNIQUE INDEX "MagicLinkToken_tokenHash_key" ON "MagicLinkToken"("tokenHash")`
-    );
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE "Session" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "tokenHash" TEXT NOT NULL,
-        "userId" TEXT NOT NULL,
-        "expiresAt" DATETIME NOT NULL,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`);
-    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX "Session_tokenHash_key" ON "Session"("tokenHash")`);
+    await createAuthTables(prisma);
     await prisma.$executeRawUnsafe(`
       CREATE TABLE "Hologram" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -174,8 +129,7 @@ describe("auth and ownership routes", () => {
     await rm(testRoot, { recursive: true, force: true });
     if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previousDatabaseUrl;
-    if (previousExpose === undefined) delete process.env.AUTH_DEV_EXPOSE_MAGIC_LINK;
-    else process.env.AUTH_DEV_EXPOSE_MAGIC_LINK = previousExpose;
+    restoreExpose();
   });
 
   it("creates the account on verify, stores only token hashes, and revokes on logout", async () => {
@@ -199,7 +153,7 @@ describe("auth and ownership routes", () => {
     const me = await app.inject({
       method: "GET",
       url: "/api/auth/me",
-      headers: { authorization: `Bearer ${session.token}` }
+      headers: bearer(session)
     });
     expect(me.statusCode).toBe(200);
     expect(me.json()).toMatchObject({ email: "ada@example.com", displayName: "Ada" });
@@ -207,14 +161,14 @@ describe("auth and ownership routes", () => {
     const logout = await app.inject({
       method: "POST",
       url: "/api/auth/logout",
-      headers: { authorization: `Bearer ${session.token}` }
+      headers: bearer(session)
     });
     expect(logout.statusCode).toBe(204);
 
     const afterLogout = await app.inject({
       method: "GET",
       url: "/api/auth/me",
-      headers: { authorization: `Bearer ${session.token}` }
+      headers: bearer(session)
     });
     expect(afterLogout.statusCode).toBe(401);
   });
@@ -231,7 +185,7 @@ describe("auth and ownership routes", () => {
     const owner = await signIn("owner@example.com", "Owner Name");
     const other = await signIn("other@example.com", "Other Name");
 
-    const created = await upload(owner.token);
+    const created = await upload(owner);
     expect(created.submittedBy).toBe("Owner Name");
     expect(created.submittedByVerified).toBe(true);
     expect(created.ownedByViewer).toBe(true);
@@ -239,7 +193,7 @@ describe("auth and ownership routes", () => {
     const asOther = await app.inject({
       method: "GET",
       url: `/api/holograms/${created.id}`,
-      headers: { authorization: `Bearer ${other.token}` }
+      headers: bearer(other)
     });
     expect(asOther.json<HologramDto>().ownedByViewer).toBe(false);
     expect(asOther.json<HologramDto>().submittedByVerified).toBe(true);
@@ -250,7 +204,7 @@ describe("auth and ownership routes", () => {
     const nonOwnerDelete = await app.inject({
       method: "DELETE",
       url: `/api/holograms/${created.id}`,
-      headers: { authorization: `Bearer ${other.token}` }
+      headers: bearer(other)
     });
     expect(nonOwnerDelete.statusCode).toBe(403);
     expect(await prisma.hologram.count()).toBe(1);
@@ -258,20 +212,21 @@ describe("auth and ownership routes", () => {
     const ownerDelete = await app.inject({
       method: "DELETE",
       url: `/api/holograms/${created.id}`,
-      headers: { authorization: `Bearer ${owner.token}` }
+      headers: bearer(owner)
     });
     expect(ownerDelete.statusCode).toBe(200);
     expect(await prisma.hologram.count()).toBe(0);
   });
 
-  it("keeps anonymous legacy uploads and deletes working with no verified name", async () => {
-    const created = await upload(null, "Free Text Name");
-    expect(created.submittedBy).toBe("Free Text Name");
-    expect(created.submittedByVerified).toBe(false);
-    expect(created.ownedByViewer).toBe(false);
-
-    const deleted = await app.inject({ method: "DELETE", url: `/api/holograms/${created.id}` });
-    expect(deleted.statusCode).toBe(200);
-    expect(await prisma.hologram.count()).toBe(0);
+  it("credits an authenticated upload to the account name whatever submittedBy says", async () => {
+    const ada = await signIn("ada.upload@example.com", "Ada Lovelace");
+    const created = await upload(ada, "Free Text Name");
+    expect(created.submittedBy).toBe("Ada Lovelace");
+    expect(created.submittedByVerified).toBe(true);
+    expect(created.ownedByViewer).toBe(true);
+    await expect(prisma.hologram.findUniqueOrThrow({ where: { id: created.id } })).resolves.toMatchObject({
+      ownerId: ada.user.id,
+      submittedBy: "Ada Lovelace"
+    });
   });
 });

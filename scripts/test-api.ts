@@ -184,7 +184,9 @@ export async function launchTestApi(options: TestApiOptions = {}): Promise<TestA
         ...process.env,
         DATABASE_URL: databaseUrl(databasePath),
         PORT: String(port),
-        WEB_ORIGIN: webOrigin
+        WEB_ORIGIN: webOrigin,
+        // Uploads need a signed-in creator; tests sign in through the API (e2e/sign-in.ts).
+        AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK ?? "true"
       },
       stdio: "inherit"
     });

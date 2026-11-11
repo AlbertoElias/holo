@@ -9,6 +9,7 @@ import { tokens } from "@holoim/design-tokens";
 import { arCompositorFromUserAgent, chipOpacity, CONTROL_NAMES, hitAreaApx, PHONE_EDGES, VIEW_TARGETS } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, observeFeedCardRenderer, test, waitForFeedCardPresented, pressViewInAr } from "./bootstrap";
+import { stubSignedInCreator } from "./sign-in";
 import { pinch } from "./ar-gestures";
 import { animationFrames, installProbe, readPortal, scrollFeedToTop, touchPinch, waitForPortalReady } from "./portal-helpers";
 
@@ -107,6 +108,8 @@ async function openFeed(page: Page): Promise<void> {
 for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
   test(`${label}: the feed card in the new look`, async ({ page }) => {
     await page.setViewportSize(viewport);
+    // The card's pass opens the Upload sheet, which shows its form only to a signed-in creator.
+    await stubSignedInCreator(page);
     await openFeed(page);
     await page.mouse.move(2, 2);
     // Away from the card its reach controls fold.
@@ -545,7 +548,7 @@ test("left-handed, set in the feed's settings: kept on this device, and AR puts 
   const sheet = page.getByRole("dialog", { name: "Settings" });
   await expect(sheet.getByRole("radio", { name: "Right-handed" }), "right-handed by default").toHaveAttribute("aria-checked", "true");
   await sheet.getByRole("radio", { name: "Left-handed" }).click();
-  await expect(sheet.getByText("Left-handed: in a headset, Exit AR sits on your right wrist.")).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: "Left-handed" }), "the choice is marked").toHaveAttribute("aria-checked", "true");
   await shot(page, "settings-left-handed");
   await page.reload();
   await waitForFeedCardPresented(page);

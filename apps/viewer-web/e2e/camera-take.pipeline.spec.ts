@@ -17,6 +17,7 @@ import { assertViewerShell, expect, pressViewInAr, reachFor, test } from "./boot
 import { voicePlacement, type GltfJson as PipelineGltf } from "./pipeline-takes";
 import { installProbe, waitForPortalReady } from "./portal-helpers";
 import { buildPointingGlb } from "./pointing-fixture";
+import { signInForUpload } from "./sign-in";
 
 // A camera take (AR recording, slice 2b): a phone's handheld AR export has no
 // skin and no RecordedAvatar. Its author is a camera node, RecordedAuthorCamera,
@@ -129,6 +130,7 @@ type ArReading = SetReading & {
 
 async function upload(page: Page, name: string, glb: Buffer, quickLook: boolean): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
+    headers: (await signInForUpload(page, { displayName: "camera-take-e2e" })).headers,
     multipart: {
       hologramName: `${name} ${Date.now()}`,
       submittedBy: "camera-take-e2e",

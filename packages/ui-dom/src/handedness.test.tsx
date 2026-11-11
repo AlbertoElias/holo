@@ -44,17 +44,15 @@ describe("handedness, stored per device (Q8)", () => {
 });
 
 describe("the handedness pair", () => {
-  it("is a radio group with the choice checked, and says which wrist holds the control", () => {
+  it("is a radio group with the choice checked", () => {
     const onChange = vi.fn();
-    const { rerender } = render(<HandednessPicker value="right" onChange={onChange} wristControl="Exit AR" />);
+    const { rerender } = render(<HandednessPicker value="right" onChange={onChange} />);
     expect(screen.getByRole("radiogroup", { name: "Dominant hand" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "Right-handed" }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByRole("radio", { name: "Left-handed" }).getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByText("Right-handed: in a headset, Exit AR sits on your left wrist.")).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: "Left-handed" }));
     expect(onChange).toHaveBeenCalledWith("left");
-    rerender(<HandednessPicker value="left" onChange={onChange} wristControl="Exit AR" />);
+    rerender(<HandednessPicker value="left" onChange={onChange} />);
     expect(screen.getByRole("radio", { name: "Left-handed" }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText("Left-handed: in a headset, Exit AR sits on your right wrist.")).toBeTruthy();
   });
 });
