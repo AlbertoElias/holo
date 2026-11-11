@@ -379,8 +379,7 @@ export async function registerHologramRoutes(
       await transitionUsdzStatus(item.id, ["none", "failed", "ready"], {
         usdzStatus: "pending",
         usdzClaimedAt: null,
-        usdzClaimToken: null,
-        usdzAttempts: 0
+        usdzClaimToken: null
       });
     }
 

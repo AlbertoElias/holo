@@ -57,8 +57,9 @@ Rules that keep this topology correct:
 - A stop can interrupt a USDZ conversion; the worker reclaims it after
   `USDZ_STALE_CLAIM_MS` (20 minutes by default, longer than the converter's
   15-minute wall limit) once the machine runs again. A conversion that times
-  out is retried the same way, up to three attempts, then marked failed;
-  asking for the hologram's Quick Look again starts a new run of attempts.
+  out is retried the same way, up to three attempts, then marked failed.
+  Asking for the hologram's Quick Look again re-queues it for one more
+  attempt; the count is never reset by a request.
 - The embedded USDZ worker runs in the same process (SQLite phase). The
   machine is sized `shared-cpu-2x` / 2 GB for the Python converter.
 - Volumes are billed at $0.15/GB-month with no free allowance on new

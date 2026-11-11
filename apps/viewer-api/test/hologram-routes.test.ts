@@ -488,7 +488,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     });
   });
 
-  it("fails a conversion that keeps timing out, and a fresh request retries it", async () => {
+  it("fails a conversion that keeps timing out; a request retries it once", async () => {
     const created = await uploadHologram(app, { hologramName: "Endless timeout", quickLookEnabled: true });
     await writeFile(path.join(converterControl, "timeout"), "simulate slow CPU");
 
@@ -499,12 +499,16 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     }
     expect((await prisma.hologram.findUnique({ where: { id: created.id } }))?.usdzAttempts).toBe(3);
 
-    // A viewer asking again starts a new run of attempts.
+    // An anonymous request re-queues it, but the attempts are not reset: a
+    // further timeout fails at once, so each request costs one conversion.
+    expect((await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` })).statusCode).toBe(202);
+    await runWorkerOnce();
+    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({ usdzStatus: "failed", usdzAttempts: 4 });
+
     await rm(path.join(converterControl, "timeout"));
     expect((await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` })).statusCode).toBe(202);
-    expect((await prisma.hologram.findUnique({ where: { id: created.id } }))?.usdzAttempts).toBe(0);
     await runWorkerOnce();
-    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({ usdzStatus: "ready", usdzAttempts: 1 });
+    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({ usdzStatus: "ready", usdzAttempts: 5 });
   });
 
   it("fails a conversion over its CPU budget at once instead of retrying it", async () => {
