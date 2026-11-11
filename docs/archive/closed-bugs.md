@@ -1022,3 +1022,12 @@ bug above.)
   trail the body. Each catch-up swing is capped at 3 m/s on average. Thumbstick walking uses the clip-driven legs and
   is unaffected.
 
+### B-045 — Creator sign-in never sends its email, and uploads do not need it
+
+- **Area:** `apps/viewer-api/src/services/auth.ts`, `apps/viewer-web/src/features/auth`, `apps/viewer-web/src/features/upload`
+- **Severity:** P1 (nobody can sign in on the live app)
+- **Observed:** 2026-11-11, live viewer. Settings → "Email me a sign-in link" shows "Check your inbox", and nothing arrives.
+- **Cause:** creator accounts shipped with a mailer seam and no mailer (`deliverMagicLink` only logged). Production sets no `AUTH_*` secret, so the request succeeded and the link went nowhere. The form also boxed one panel inside another, off the Upload sheet's fields.
+- **Fix (`bug/creator-sign-in`):** `deliverMagicLink` sends through Resend (free tier) or Cloudflare Email Service and throws when it cannot, so the route answers 503 and drops the unsent token; the form says "sent" only after a send. The form reuses the Upload sheet's fields and word-and-glyph control. Uploads now need a signed-in account (API 401 otherwise; the Upload sheet shows sign-in), and are always credited to the account name. `showcase:upload` reads a session token from `HOLOIM_SESSION`. On a phone, a long feed notice (the empty feed) no longer covers the Settings chip, and the empty notice stays off Settings' sheet.
+- **Closed 2026-11-11:** merged to `main` (`0e20b8c`) and deployed (API, viewer, capture). On the live app an anonymous upload answers 401, and a sign-in request for the user's address answered 202 and arrived in the inbox from `signin@mail.holostud.io` (not spam). CI's gate was red only for B-043's `bubble-capture` shard.
+- **Operator setup (done 2026-11-11):** sending domain `mail.holostud.io` verified in Resend, `RESEND_API_KEY` and `AUTH_EMAIL_FROM` set as Fly secrets (`docs/DEPLOYMENT.md`, "Sign-in email").

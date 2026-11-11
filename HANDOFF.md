@@ -46,11 +46,11 @@ queue item in [`TODOS.md`](TODOS.md).
   3 runs (B-044; that case runs only where the scan is on disk).
   Open: slices 2b (Quest VR) and 2c (phone AR); the viewer finds
   `RecordedPlace` by name rather than the extension's node index.
-- Creator sign-in sends its email and gates uploads (B-045, branch
-  `bug/creator-sign-in`). The operator steps in
+- Creator sign-in sends its email and gates uploads (B-045, closed
+  2026-11-11, on `main` and deployed). The operator steps in
   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) "Sign-in email" are done (Resend
-  domain `mail.holostud.io`, Fly secrets set 2026-11-11). Open until a real
-  emailed link arrives from the live app after the deploy.
+  domain `mail.holostud.io`, Fly secrets). A real emailed link arrived from the
+  live app.
 - Showcase holograms (merged to `main` 2026-11-11 together with positional
   audio; every `verify:pr` step passed on the combined tree, the viewer XR
   suite on a re-run after its AR placement test timed out once while another
