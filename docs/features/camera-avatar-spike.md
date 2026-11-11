@@ -254,7 +254,7 @@ no aim at the lens. Report only; nothing here is a check.
 |---|---|---|---|
 | Body found | 2,411 of 2,411 frames | - | Good |
 | Hand coverage while the hand is in view | 1.00 in every pose segment, longest gap 0.03 s | 0.9 | Meets |
-| Sides (step 2) | right hand 66 of 66 frames, left 0 | - | Right, if the clip is unmirrored (not confirmed) |
+| Sides (step 2) | right hand 66 of 66 frames, left 0 | - | Right: the user confirmed the brace is on the left wrist, so the clip is unmirrored |
 | Pose model against the hand model's own label | agree on 2,127 of 2,211 hands | - | The "label reads the opposite" note in the report is wrong on this clip |
 | Point score while pointing | median 1.0; 0.6 or more in 95 to 100% of frames | 0.6 enter | Meets |
 | Point score on open hands, fists, pinch | 0 | under 0.35 | Meets |
