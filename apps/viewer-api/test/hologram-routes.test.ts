@@ -142,7 +142,8 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   await fs.appendFile(path.join(control, "calls"), "convert\\n");
   await fs.writeFile(path.join(control, "started"), "started");
   while (await exists("hold")) await new Promise((resolve) => setTimeout(resolve, 10));
-  if (await exists("timeout")) { console.error("Quick Look conversion failed: Quick Look conversion exceeded 100 seconds"); process.exit(1); }
+  if (await exists("timeout")) { console.error("Quick Look conversion failed: Quick Look conversion exceeded 900 seconds"); process.exit(1); }
+  if (await exists("budget")) { console.error("Quick Look conversion failed: Quick Look conversion used more than its 100-second CPU budget"); process.exit(1); }
   await fs.writeFile(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), source]));
   if (await exists("fail")) process.exitCode = 1;
 })().catch((error) => { console.error(error); process.exitCode = 1; });
@@ -474,17 +475,46 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     await runWorkerOnce();
     const deferred = await prisma.hologram.findUnique({ where: { id: created.id } });
     expect(deferred).toMatchObject({ usdzStatus: "processing", usdzPath: null });
-    expect(deferred?.usdzError).toContain("exceeded 100 seconds");
+    expect(deferred?.usdzError).toContain("exceeded 900 seconds");
     expect(await readFile(path.join(uploadsRoot, glbFilename))).toEqual(source);
 
     // Once the stale-claim window passes, the worker retries and succeeds.
     await rm(path.join(converterControl, "timeout"));
-    await prisma.hologram.update({ where: { id: created.id }, data: { usdzClaimedAt: new Date(Date.now() - 601_000) } });
+    await prisma.hologram.update({ where: { id: created.id }, data: { usdzClaimedAt: new Date(Date.now() - 1_201_000) } });
     await runWorkerOnce();
     await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({
       usdzStatus: "ready",
       usdzPath: `uploads/${usdzFilenameFor(glbFilename)}`
     });
+  });
+
+  it("fails a conversion that keeps timing out, and a fresh request retries it", async () => {
+    const created = await uploadHologram(app, { hologramName: "Endless timeout", quickLookEnabled: true });
+    await writeFile(path.join(converterControl, "timeout"), "simulate slow CPU");
+
+    for (const status of ["processing", "processing", "failed"]) {
+      await prisma.hologram.updateMany({ where: { id: created.id, usdzStatus: "processing" }, data: { usdzClaimedAt: new Date(Date.now() - 1_201_000) } });
+      await runWorkerOnce();
+      await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({ usdzStatus: status });
+    }
+    expect((await prisma.hologram.findUnique({ where: { id: created.id } }))?.usdzAttempts).toBe(3);
+
+    // A viewer asking again starts a new run of attempts.
+    await rm(path.join(converterControl, "timeout"));
+    expect((await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` })).statusCode).toBe(202);
+    expect((await prisma.hologram.findUnique({ where: { id: created.id } }))?.usdzAttempts).toBe(0);
+    await runWorkerOnce();
+    await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({ usdzStatus: "ready", usdzAttempts: 1 });
+  });
+
+  it("fails a conversion over its CPU budget at once instead of retrying it", async () => {
+    const created = await uploadHologram(app, { hologramName: "Too costly", quickLookEnabled: true });
+    await writeFile(path.join(converterControl, "budget"), "scene too costly");
+    await runWorkerOnce();
+    const failed = await prisma.hologram.findUnique({ where: { id: created.id } });
+    expect(failed).toMatchObject({ usdzStatus: "failed", usdzAttempts: 1, usdzClaimedAt: null });
+    expect(failed?.usdzError).toContain("CPU budget");
+    await rm(path.join(converterControl, "budget"));
   });
 
   it("deleting during conversion does not resurrect the record or leave objects", async () => {

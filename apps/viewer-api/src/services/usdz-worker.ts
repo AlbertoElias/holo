@@ -19,6 +19,9 @@ export type UsdzWorkerOptions = {
 
 const silentLogger = { info: () => undefined, error: () => undefined };
 
+/** Timed-out attempts allowed before a conversion counts as failed. */
+export const MAX_USDZ_TIMEOUT_ATTEMPTS = 3;
+
 async function claimNext(options: UsdzWorkerOptions): Promise<{ id: string; claimToken: string } | null> {
   const staleBefore = new Date(Date.now() - (options.staleClaimMs ?? env.USDZ_STALE_CLAIM_MS));
   const candidates = await prisma.hologram.findMany({
@@ -93,11 +96,13 @@ export async function processNextUsdzConversion(options: UsdzWorkerOptions): Pro
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "USDZ conversion failed";
-    if (isUsdzConversionTimeout(error)) {
+    if (isUsdzConversionTimeout(error) && record.usdzAttempts < MAX_USDZ_TIMEOUT_ATTEMPTS) {
       // A timeout on a throttled shared CPU says nothing about the GLB.
       // Stay claimed with a fresh claim time, so claimNext reclaims the
       // record once the stale-claim window passes and retries it then,
       // instead of marking it failed until someone asks again (BUGS B-022).
+      // After MAX_USDZ_TIMEOUT_ATTEMPTS it fails like any other error, so a
+      // scene the machine cannot finish stops taking the worker's turns.
       await prisma.hologram
         .updateMany({
           where: { id: claimed.id, usdzStatus: "processing", usdzClaimToken: claimed.claimToken },

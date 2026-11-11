@@ -128,7 +128,10 @@ All resources must be embedded. The converter rejects external buffers/images,
 unsupported audio demuxers, excessive object/accessor/pixel/sample counts,
 recordings longer than 600 seconds, and excessive geometry/baking work. The CLI
 limits input to 100 MB (the API upload limit remains 25 MB), output to 400 MB,
-conversion to 100 seconds and ffmpeg to 30 seconds. ffmpeg uses only local
+conversion to 100 CPU-seconds (a permanent failure) and 900 wall seconds (a
+timeout, which the API worker retries up to three times), and ffmpeg to 30
+seconds. The wall limit is long because Fly's shared CPU is throttled to a
+fraction of a core once its burst balance is spent. ffmpeg uses only local
 file/pipe protocols and is killed as a process group on interruption. Conversion
 writes private temporary assets and atomically replaces the destination after a
 complete, uncompressed, aligned USDZ is packaged. The API also uses a private

@@ -196,6 +196,63 @@ def _sample(times, values, interpolation, time, rotation=False):
     return result
 
 
+def _sample_all(times, values, interpolation, samples, rotation=False):
+    """`_sample` at every time in `samples`, as one array with a row per time.
+
+    It follows numpy 2's handling of `_sample`'s Python-float time: the key
+    search compares it as a double, while the end tests and the arithmetic
+    convert it to the keys' dtype. So the rows match `_sample` up to the
+    rounding of the slerp's dot product and of the final normalisation."""
+    count = len(times)
+    if interpolation == "CUBICSPLINE":
+        values = values.reshape(count, 3, -1)
+        keys = values[:, 1]
+    else:
+        keys = values
+    exact = np.asarray(samples, dtype=float)
+    at = exact.astype(times.dtype)
+    result = np.where((at <= times[0])[:, None], keys[0], keys[-1]).astype(keys.dtype)
+    inside = (at > times[0]) & (at < times[-1])
+    if inside.any():
+        time = at[inside]
+        right = np.searchsorted(times, exact[inside], side="right")
+        left = right - 1
+        dt = times[right] - times[left]
+        a = ((time - times[left]) / dt)[:, None]
+        if interpolation == "STEP":
+            part = keys[left]
+        elif interpolation == "CUBICSPLINE":
+            dt = dt[:, None]
+            part = (2*a**3 - 3*a**2 + 1)*values[left, 1] + (a**3 - 2*a**2 + a)*dt*values[left, 2] + (-2*a**3 + 3*a**2)*values[right, 1] + (a**3 - a**2)*dt*values[right, 0]
+        elif rotation:
+            q0, q1 = keys[left], keys[right]
+            dot = np.sum(q0 * q1, axis=1)
+            flip = dot < 0
+            q1 = np.where(flip[:, None], -q1, q1)
+            dot = np.where(flip, -dot, dot)
+            theta = np.arccos(np.clip(dot, -1, 1))[:, None]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                slerp = (np.sin((1-a)*theta)*q0 + np.sin(a*theta)*q1) / np.sin(theta)
+            part = np.where((dot > 0.9995)[:, None], q0 + a*(q1-q0), slerp)
+        else:
+            part = keys[left]*(1-a) + keys[right]*a
+        result = result.astype(np.result_type(result, part))
+        result[inside] = part
+    if rotation:
+        result = result / np.linalg.norm(result, axis=1, keepdims=True)
+    return result
+
+
+def _quats(values):
+    """`_quat` for each row of `values`, normalised once for the whole array."""
+    values = np.asarray(values, dtype=float)
+    norms = np.linalg.norm(values, axis=1)
+    if not np.all(np.isfinite(values)) or np.any(norms < 1e-8):
+        raise ValueError("Invalid rotation quaternion")
+    values = values / norms[:, None]
+    return [Gf.Quatf(w, Gf.Vec3f(x, y, z)) for x, y, z, w in values.tolist()]
+
+
 class Converter:
     def __init__(self, gltf, stage, directory):
         self.gltf, self.stage, self.directory = gltf, stage, directory
@@ -999,55 +1056,88 @@ class Converter:
                 index for (index, path), (_, source_values, _) in channels.items()
                 if path == "scale" and index in self.ops and np.abs(np.asarray(source_values, dtype=float)).reshape(-1, 3).max(axis=1).min() < 1e-9
             }
-            for time in sorted(times):
-                frame = (offset + time)*FPS
-                values = {key: _sample(*channel, time, rotation=key[1] == "rotation") for key, channel in channels.items()}
-                animated_worlds = {}
-                def animated_world(index):
-                    if index not in animated_worlds:
-                        node = self.gltf.nodes[index]
-                        if not any((index, path) in values for path in ("translation", "rotation", "scale")):
-                            local = _local(node)
-                        else:
-                            t, r, s = _node_trs(node)
-                            local = _trs(values.get((index, "translation"), t), values.get((index, "rotation"), r), values.get((index, "scale"), s))
-                        animated_worlds[index] = local * (animated_world(self.parents[index]) if index in self.parents else Gf.Matrix4d(1))
-                    return animated_worlds[index]
-                for ancestor, op, _ in {str(space[1].GetAttr().GetPath()): space for space in self.skin_spaces.values()}.values():
-                    if ancestor is not None:
-                        op.Set(animated_world(ancestor), frame)
-                for index, ops in self.ops.items():
-                    if index not in self.animated:
-                        continue
-                    t, r, s = _node_trs(self.gltf.nodes[index])
-                    ops[0].Set(Gf.Vec3d(*map(float, values.get((index, "translation"), t))), frame)
-                    ops[1].Set(_quat(values.get((index, "rotation"), r)), frame)
-                    scale = list(map(float, values.get((index, "scale"), s)))
-                    if index in hideable:
-                        hidden = max(abs(v) for v in scale) < 1e-9
-                        UsdGeom.Imageable(ops[0].GetAttr().GetPrim()).CreateVisibilityAttr().Set("invisible" if hidden else "inherited", frame)
-                        if hidden:
-                            scale = [HIDDEN_SCALE] * 3
-                    ops[2].Set(Gf.Vec3d(*scale), frame)
-                weights = []
-                for index, (names, default) in self.morphs.items():
-                    value = values.get((index, "weights"), default)
-                    if len(value) != len(names):
-                        raise ValueError("Animation morph weights do not match mesh targets")
-                    weights.extend(map(float, value))
-                for animation, ordered in animations:
-                    if ordered:
-                        translations, rotations, scales = [], [], []
-                        for index in ordered:
-                            t, r, s = _node_trs(self.gltf.nodes[index])
-                            translations.append(Gf.Vec3f(*map(float, values.get((index, "translation"), t))))
-                            rotations.append(_quat(values.get((index, "rotation"), r)))
-                            scales.append(Gf.Vec3h(*map(float, values.get((index, "scale"), s))))
-                        animation.CreateTranslationsAttr().Set(Vt.Vec3fArray(translations), frame)
-                        animation.CreateRotationsAttr().Set(Vt.QuatfArray(rotations), frame)
-                        animation.CreateScalesAttr().Set(Vt.Vec3hArray(scales), frame)
-                    if morph_names:
-                        animation.GetBlendShapeWeightsAttr().Set(Vt.FloatArray(weights), frame)
+            # Sample each channel at every time in one pass, make each
+            # quaternion once, and resolve each node's tracks before the frame
+            # loop, instead of per channel per frame.
+            ordered_times = sorted(times)
+            raw, quats = {}, {}
+            for key, channel in channels.items():
+                rows = _sample_all(*channel, ordered_times, rotation=key[1] == "rotation")
+                raw[key] = rows.tolist()
+                if key[1] == "rotation":
+                    quats[key[0]] = _quats(rows)
+            rest = {}
+
+            def rest_trs(index):
+                if index not in rest:
+                    rest[index] = _node_trs(self.gltf.nodes[index])
+                return rest[index]
+
+            def tracks(index):
+                # (sampled rows or None, rest value) for translation, rotation, scale.
+                t, r, s = rest_trs(index)
+                return (
+                    (raw.get((index, "translation")), list(map(float, t))),
+                    (quats.get(index), None if index in quats else _quat(r)),
+                    (raw.get((index, "scale")), list(map(float, s))),
+                )
+            nodes = []
+            for index, ops in self.ops.items():
+                if index in self.animated:
+                    visibility = UsdGeom.Imageable(ops[0].GetAttr().GetPrim()).CreateVisibilityAttr() if index in hideable else None
+                    nodes.append((ops, tracks(index), visibility))
+            skins = [
+                (animation.CreateTranslationsAttr(), animation.CreateRotationsAttr(), animation.CreateScalesAttr(), [tracks(index) for index in ordered])
+                for animation, ordered in animations if ordered
+            ]
+            spaces = [space for space in {str(space[1].GetAttr().GetPath()): space for space in self.skin_spaces.values()}.values() if space[0] is not None]
+            weight_attributes = [animation.GetBlendShapeWeightsAttr() for animation, _ in animations] if morph_names else []
+            with Sdf.ChangeBlock():
+                for frame_index, time in enumerate(ordered_times):
+                    frame = (offset + time)*FPS
+                    if spaces:
+                        self.animate_spaces(raw, rest_trs, frame_index, frame, spaces)
+                    for ops, ((translations, t), (rotations, r), (scales, s)), visibility in nodes:
+                        ops[0].Set(Gf.Vec3d(*(translations[frame_index] if translations else t)), frame)
+                        ops[1].Set(rotations[frame_index] if rotations else r, frame)
+                        scale = scales[frame_index] if scales else s
+                        if visibility is not None:
+                            hidden = max(abs(v) for v in scale) < 1e-9
+                            visibility.Set("invisible" if hidden else "inherited", frame)
+                            if hidden:
+                                scale = [HIDDEN_SCALE] * 3
+                        ops[2].Set(Gf.Vec3d(*scale), frame)
+                    if weight_attributes:
+                        weights = []
+                        for index, (names, default) in self.morphs.items():
+                            rows = raw.get((index, "weights"))
+                            value = rows[frame_index] if rows else default
+                            if len(value) != len(names):
+                                raise ValueError("Animation morph weights do not match mesh targets")
+                            weights.extend(map(float, value))
+                        weights = Vt.FloatArray(weights)
+                        for attribute in weight_attributes:
+                            attribute.Set(weights, frame)
+                    for translations_attribute, rotations_attribute, scales_attribute, joints in skins:
+                        translations_attribute.Set(Vt.Vec3fArray([Gf.Vec3f(*(rows[frame_index] if rows else t)) for (rows, t), _, _ in joints]), frame)
+                        rotations_attribute.Set(Vt.QuatfArray([rows[frame_index] if rows else r for _, (rows, r), _ in joints]), frame)
+                        scales_attribute.Set(Vt.Vec3hArray([Gf.Vec3h(*(rows[frame_index] if rows else s)) for _, _, (rows, s) in joints]), frame)
+
+    def animate_spaces(self, raw, rest_trs, frame_index, frame, spaces):
+        """Author the skinned meshes' animated ancestor transforms at one frame."""
+        worlds = {}
+
+        def world(index):
+            if index not in worlds:
+                sampled = [raw.get((index, path)) for path in ("translation", "rotation", "scale")]
+                if not any(sampled):
+                    local = _local(self.gltf.nodes[index])
+                else:
+                    local = _trs(*[rows[frame_index] if rows else value for rows, value in zip(sampled, rest_trs(index))])
+                worlds[index] = local * (world(self.parents[index]) if index in self.parents else Gf.Matrix4d(1))
+            return worlds[index]
+        for ancestor, op, _ in spaces:
+            op.Set(world(ancestor), frame)
 
     def audio(self, scene):
         extension = (self.gltf.extensions or {}).get("KHR_audio")
@@ -1250,9 +1340,28 @@ class Converter:
         if sum(len(entry[1]) * (len(frames) if entry[8] else 1) for entry in meshes) > 100_000_000:
             raise ValueError("Animation extent evaluation exceeds conversion budget")
         lower, upper = np.full(3, np.inf), np.full(3, -np.inf)
+        # Rigid meshes (no skin, no morphs) take one batched transform of all
+        # their points per frame; the static ones only on the first frame.
+        rigid = [entry for entry in meshes if not entry[4] and not entry[6]]
+        deformed = [entry for entry in meshes if entry[4] or entry[6]]
+
+        def batch(entries):
+            if not entries:
+                return [], None, None
+            points = np.concatenate([np.asarray(entry[1]) for entry in entries])
+            owners = np.repeat(np.arange(len(entries)), [len(entry[1]) for entry in entries])
+            return [entry[0] for entry in entries], points, owners
+        first_frame = batch(rigid)
+        later_frames = batch([entry for entry in rigid if entry[8]])
         for index, frame in enumerate(sorted(frames)):
             xforms = UsdGeom.XformCache(frame)
-            for prim, original, skeleton, query, skinning, names, blend, animation, moving in meshes:
+            prims, points, owners = later_frames if index else first_frame
+            if prims:
+                matrices = np.array([xforms.GetLocalToWorldTransform(prim) for prim in prims])
+                world = np.einsum("ki,kij->kj", points, matrices[:, :3, :3][owners]) + matrices[:, 3, :3][owners]
+                lower = np.minimum(lower, world.min(axis=0))
+                upper = np.maximum(upper, world.max(axis=0))
+            for prim, original, skeleton, query, skinning, names, blend, animation, moving in deformed:
                 if index and not moving:
                     continue
                 points = Vt.Vec3fArray(original)
@@ -1381,20 +1490,41 @@ def _convert_glb_to_usdz(input_path, output_path, seed):
     print(f"Successfully converted {input_path} -> {output_path}")
 
 
+CPU_BUDGET_SECONDS = 100
+WALL_LIMIT_SECONDS = 900
+
+
+class ConversionBudgetError(RuntimeError):
+    """The scene needs more work than a Quick Look package may cost."""
+
+
 def convert_glb_to_usdz(input_path, output_path, seed=None):
-    # Finish cleanup before the API's 120-second process deadline. The ffmpeg
-    # finally block also kills its process group if this alarm interrupts it.
+    # Two limits (B-042). The CPU budget bounds the work a scene may cost and
+    # is a permanent failure; its message must not read as a timeout. The wall
+    # limit only guards against a stuck process: Fly's shared CPU drops to a
+    # fraction of a core once its burst balance is spent (B-030), so a scene
+    # well inside its budget can take many minutes of wall time. It stays
+    # under the API's process deadline, and the ffmpeg finally block kills
+    # its process group if either limit interrupts it.
+    def over_budget(_number, _frame):
+        raise ConversionBudgetError(f"Quick Look conversion used more than its {CPU_BUDGET_SECONDS}-second CPU budget")
+
     def deadline(_number, _frame):
-        raise TimeoutError("Quick Look conversion exceeded 100 seconds")
-    previous = signal.signal(signal.SIGALRM, deadline)
-    signal.alarm(100)
+        raise TimeoutError(f"Quick Look conversion exceeded {WALL_LIMIT_SECONDS} seconds")
+
+    previous_budget = signal.signal(signal.SIGPROF, over_budget)
+    previous_deadline = signal.signal(signal.SIGALRM, deadline)
+    signal.setitimer(signal.ITIMER_PROF, CPU_BUDGET_SECONDS)
+    signal.alarm(WALL_LIMIT_SECONDS)
     try:
         # The hologram's id seeds its cloche's burns (Q10); a file converted on
         # its own is seeded by its name, as the stored GLB's name.
         _convert_glb_to_usdz(input_path, output_path, seed if seed is not None else Path(input_path).stem)
     finally:
         signal.alarm(0)
-        signal.signal(signal.SIGALRM, previous)
+        signal.setitimer(signal.ITIMER_PROF, 0)
+        signal.signal(signal.SIGALRM, previous_deadline)
+        signal.signal(signal.SIGPROF, previous_budget)
 
 
 if __name__ == "__main__":

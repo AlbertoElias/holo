@@ -6,7 +6,11 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const CONVERSION_TIMEOUT_MS = 120_000;
+// The Python converter caps a conversion at 100 CPU-seconds (a permanent
+// failure) and 900 wall seconds (a timeout). Wall time on Fly's throttled
+// shared CPU runs far past CPU time (B-030), so this deadline only backs up
+// the converter's own wall limit.
+const CONVERSION_TIMEOUT_MS = 960_000;
 // Bump whenever conversion changes: new uploads store a new versioned package,
 // and scripts/rebuild-usdz.ts moves stored ones onto it (ql3: the baked cloche).
 export const USDZ_CONVERTER_VERSION = "ql3";
@@ -75,9 +79,11 @@ export type ConversionOptions = {
 
 /**
  * True when a conversion died only because it ran out of wall-clock time:
- * the Python converter's 100 s alarm (its message rides on stderr), or the
- * 120 s process deadline killing it (ETIMEDOUT / SIGTERM). Such failures say
+ * the Python converter's 900 s wall limit (its message rides on stderr), or
+ * the 960 s process deadline killing it (ETIMEDOUT / SIGTERM). Such failures say
  * the CPU was slow, not that the GLB is bad, so callers retry them later.
+ * Running out of the 100 s CPU budget is not a timeout: that scene costs too
+ * much to convert, and retrying cannot help.
  */
 export function isUsdzConversionTimeout(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
