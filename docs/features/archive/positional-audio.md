@@ -1,9 +1,8 @@
 # Feature brief: Positional audio in holograms
 
 **Lead:** Claude (Opus), session `feature/positional-audio`
-**Status:** Delivered (merged to `main` 2026-11-11); the user heard the
-difference in the live feed; a physical headset is unverified, see
-"Physical-device limits"
+**Status:** Complete (2026-11-11, closed by the user); speaker listening and
+a physical headset unverified, see "Physical-device limits"
 **Layer:** Event (a sound has a place in the recorded event, like a voice or
 an object). Where the ear sits while watching is the view's reading of it.
 
@@ -312,9 +311,9 @@ are unverified by ear. The XR
 evidence is IWER emulation; a physical Quest (its browser's HRTF, its
 speakers) is unverified.
 
-The brief stays open on two checks: someone listens on speakers (headphones
-were heard 2026-11-11), and tries the XR viewer on a Quest. Then it closes per step 6
-of [`../FEATURE_WORKFLOW.md`](../FEATURE_WORKFLOW.md).
+The user closed the brief on 2026-11-11 with two checks still open:
+listening on speakers (headphones were heard), and the XR viewer on a
+Quest.
 
 The retrofitted `rain` piece is on the live feed, uploaded 2026-11-11 at the
 user's go-ahead as a new card, `cmwc1glil0001oeiqy1n2s45h`. It is built on

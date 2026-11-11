@@ -73,8 +73,8 @@ queue item in [`TODOS.md`](TODOS.md).
   unheard and none has been seen in a headset or AR. `verify:agent` passed
   on the branch 2026-11-10.
 - Positional audio (merged to `main` 2026-11-11 together with the showcase
-  holograms; brief [`docs/features/positional-audio.md`](docs/features/positional-audio.md),
-  still open). Several placed sounds per hologram in the
+  holograms; brief [`docs/features/archive/positional-audio.md`](docs/features/archive/positional-audio.md),
+  closed 2026-11-11). Several placed sounds per hologram in the
   feed and the XR viewer, HRTF on both; new avatar takes place the voice on
   the head; Quick Look plays every source unplaced. The live feed's rain
   piece is the old single-mix build; re-uploading the retrofitted one needs

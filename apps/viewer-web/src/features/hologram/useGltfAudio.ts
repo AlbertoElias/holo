@@ -16,7 +16,7 @@ const WRAP_BACK_SEC = 0.05;
 
 /**
  * Flat screens pan HRTF too, the user's pick of 2026-11-10
- * (docs/features/positional-audio.md): 3D cues on headphones, at the cost of
+ * (docs/features/archive/positional-audio.md): 3D cues on headphones, at the cost of
  * some colouring on speakers.
  */
 export const FEED_PANNING_MODEL: PanningModelType = "HRTF";

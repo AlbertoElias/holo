@@ -1,6 +1,6 @@
 import { CylinderGeometry, SphereGeometry, type BufferGeometry } from "three";
 
-// A small hologram whose sounds have places (docs/features/positional-audio.md):
+// A small hologram whose sounds have places (docs/features/archive/positional-audio.md):
 // a floor, a still sphere to the left ("Bell") and a sphere circling the
 // middle ("Orbiter"), each with a positional KHR_audio emitter on its node,
 // and a global tone under them. Every sound is steady, so a level read over

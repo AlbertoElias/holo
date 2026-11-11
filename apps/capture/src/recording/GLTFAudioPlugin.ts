@@ -24,7 +24,7 @@ interface GLTFWriterInternal {
 
 /**
  * How the voice placed on the head fades with distance
- * (docs/features/positional-audio.md). Within `refDistance` it plays at the
+ * (docs/features/archive/positional-audio.md). Within `refDistance` it plays at the
  * level a take plays at today; beyond, it falls off with inverse distance.
  * Two metres keeps the feed's first view within about 2 dB of today.
  */
