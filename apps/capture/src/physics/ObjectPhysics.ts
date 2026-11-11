@@ -83,6 +83,9 @@ const MAX_SUBSTEPS = 6;
 // Release velocity is fitted over this window of the object's own poses, from at least 3 samples.
 const FIT_WINDOW_SEC = 0.1;
 const MIN_FIT_SAMPLES = 3;
+// A last pose that moved under this fraction of a step longer than this (0.3 m/s at 60 Hz) is a missed tracking update.
+const STALL_FRACTION = 0.1;
+const STALL_MIN_STEP_M = 0.005;
 const MAX_HISTORY = 12;
 const MAX_LINEAR_MPS = 12;
 // Keeps the turn between 60 Hz keys under 180°, so replay interpolation can't spin the wrong way.
@@ -611,7 +614,14 @@ export class ObjectPhysics {
    * covers whatever moved the object: the hand's swing (ω×r from the
    * offset), the pickup glide and the turn keys. Needs 3 samples.
    */
-  private fitVelocity(history: readonly PoseSample[]): { linear: THREE.Vector3; angular: THREE.Vector3 } | null {
+  private fitVelocity(poses: readonly PoseSample[]): { linear: THREE.Vector3; angular: THREE.Vector3 } | null {
+    // A last pose that all but stood still right after a moving step is a tracking update that did not come (the
+    // frame reused the hand's pose), not a stop, which holds for frames: weighted newest, it cut a fast throw by a
+    // fifth (B-041). Fit without it.
+    const [a, b, c] = [poses.at(-3), poses.at(-2), poses.at(-1)];
+    const stepM = a && b ? b.position.distanceTo(a.position) : 0;
+    const stalled = b && c && stepM > STALL_MIN_STEP_M && c.position.distanceTo(b.position) < stepM * STALL_FRACTION;
+    const history = stalled ? poses.slice(0, -1) : poses;
     const last = history.at(-1);
     if (!last || history.length < MIN_FIT_SAMPLES) return null;
     let first = history.length - 1;

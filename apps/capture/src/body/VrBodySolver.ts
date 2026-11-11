@@ -277,6 +277,7 @@ export class VrBodySolver {
   private readonly stepSlot = new THREE.Vector3();
   private readonly stepTarget = new THREE.Vector3();
   private readonly stepOther = new THREE.Vector3();
+  private readonly stepOtherSlot = new THREE.Vector3();
   private readonly stepNormal = new THREE.Vector3();
   private readonly aimTarget = new THREE.Vector3();
   private readonly footBall = new THREE.Vector3();
@@ -804,14 +805,17 @@ export class VrBodySolver {
       if (this.sinceLastLanding < MIN_STANCE_SEC * 0.5) return;
       let side = this.nextGaitSide;
       let urgent = false;
-      // Urgent only for a foot left behind, never one planted ahead.
+      let mostBehind = -Infinity;
+      // Urgent only for a foot left behind, never one planted ahead. With both left behind the further one goes
+      // first: taking the last one checked, the right foot took every step and the left stayed planted (B-041).
       for (const candidate of ['left', 'right'] as const) {
         const slot = this.slotWorld(candidate, rootPosition, this.bodyYawValue, this.stepSlot);
         const planted = this.feet[candidate].planted;
         const behind = ((slot.x - planted.x) * gaitVelocity.x + (slot.z - planted.z) * gaitVelocity.z) / Math.max(speed, 1e-6);
-        if (behind > URGENT_STEP_DISTANCE * leg || this.feet[candidate].strain >= 1) {
+        if ((behind > URGENT_STEP_DISTANCE * leg || this.feet[candidate].strain >= 1) && behind > mostBehind) {
           side = candidate;
           urgent = true;
+          mostBehind = behind;
         }
       }
       if (!urgent && this.sinceLastStepStart < period * (this.gaitSteps < 2 ? 0.7 : 1)) return;
@@ -915,7 +919,12 @@ export class VrBodySolver {
       target.z += rightZ * sign * (minGap - gap);
     }
     const reach = Math.hypot(target.x - other.x, target.z - other.z);
-    if (reach > MAX_STEP_LENGTH * leg) {
+    // A stride is measured from a foot that holds the body up. One left more than a stride from its own slot (the
+    // body moved faster than the feet could follow) holds nothing: measured from it, both feet leapfrog back a stride
+    // at a time with the legs stretched out level behind the body for seconds (B-041).
+    const otherSlot = this.slotWorld(otherSide, rootPosition, this.bodyYawValue, this.stepOtherSlot);
+    const otherStranded = Math.hypot(otherSlot.x - other.x, otherSlot.z - other.z) > MAX_STEP_LENGTH * leg;
+    if (reach > MAX_STEP_LENGTH * leg && !otherStranded) {
       const keep = (MAX_STEP_LENGTH * leg) / reach;
       target.x = other.x + (target.x - other.x) * keep;
       target.z = other.z + (target.z - other.z) * keep;

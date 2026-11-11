@@ -767,9 +767,11 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     // Walking into the resting object shoves it along (props collide with the avatar), and the avatar walks on at the same speed: props never push it.
     state = await readState(page);
     const restAt = state.objects.items[0].position;
-    // Line the right foot up with it first (the avatar faces -z, so its right is +x): a prop dead centre passes between the feet.
-    const lineUpX = restAt[0] - 0.09;
-    for (let i = 0; i < 120 && Math.abs(state.avatar.x - lineUpX) > 0.02; i += 1) {
+    // Line the right shin up with it first (the avatar faces -z, so its right is +x): a prop dead centre passes between the feet.
+    // Aim the rig's own shin, not a fixed offset from the root: a shin 7.5 cm to the side brushes past the prop (B-041).
+    const shinOffsetX = (state.pose?.knees?.[1]?.x ?? state.avatar.x + 0.09) - state.avatar.x;
+    const lineUpX = restAt[0] - shinOffsetX;
+    for (let i = 0; i < 240 && Math.abs(state.avatar.x - lineUpX) > 0.005; i += 1) {
       const side = lineUpX > state.avatar.x ? 'KeyD' : 'KeyA';
       await page.keyboard.down(side);
       await advance(1 / 60);
@@ -784,7 +786,7 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
     for (let i = 0; i < 300; i += 1) {
       await advance(1 / 30);
       state = await readState(page);
-      walk.push({ z: state.avatar.z, gapM: Math.hypot(state.avatar.x - restAt[0], state.avatar.z - restAt[2]), prop: state.objects.items[0].position, body: state.objects.items[0].body });
+      walk.push({ z: state.avatar.z, gapM: Math.hypot(state.avatar.x - restAt[0], state.avatar.z - restAt[2]), shinX: state.pose?.knees?.[1]?.x ?? null, shinZ: state.pose?.knees?.[1]?.z ?? null, prop: state.objects.items[0].position, body: state.objects.items[0].body });
       // On until the avatar is 0.5 m past where the prop was.
       if ((state.avatar.z - restAt[2]) * heading > 0.5) break;
     }
@@ -805,6 +807,11 @@ export async function runDesktopObjectTake({ browser, baseUrl, captureRoot, arti
       approachSpeedMps: approach === null ? null : round(approach, 3),
       contactSpeedMps: pushed === null ? null : round(pushed, 3),
       wokeBody: walk.find((w) => w.body === 'dynamic') ? 'dynamic' : walk[0]?.body,
+      // Where the right shin crossed the prop's line, sideways from the prop's centre (positive: to the avatar's right).
+      shinSideOfPropM: (() => {
+        const at = walk.filter((w) => w.shinZ !== null).reduce((best, w) => (!best || Math.abs(w.shinZ - restAt[2]) < Math.abs(best.shinZ - restAt[2]) ? w : best), null);
+        return at ? round(at.shinX - restAt[0], 3) : null;
+      })(),
       body: final.body
     };
     if (walkThrough.walkedPastM < 0.5) fail(`the avatar did not walk past the resting object (${walkThrough.walkedPastM} m past)`);

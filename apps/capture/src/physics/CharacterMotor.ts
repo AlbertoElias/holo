@@ -9,6 +9,10 @@ import type { AvatarRig } from '../avatar/AvatarRig';
 
 export const gravity = -9.81;
 const groundedStickVelocity = -0.5;
+// A move cut below this fraction of the input, on walkable floor only, is a snag (see `snagged`).
+const SNAG_FRACTION = 0.5;
+// Collision normals at least this vertical are floor (or ceiling), not walls: cos 40°, the steepest walkable slope.
+const SNAG_FLOOR_NORMAL_Y = Math.cos(THREE.MathUtils.degToRad(40));
 const CROUCH_TERRAIN_GUARD_CLEARANCE = 0.02;
 const CROUCH_TERRAIN_GUARD_SAMPLE_RADIUS_RATIO = 0.04;
 const CROUCH_TERRAIN_GUARD_OFFSETS: readonly Readonly<[number, number]>[] = [
@@ -154,7 +158,8 @@ export class CharacterMotor {
       y: this.velocityY * deltaSec,
       z: this.tmpMove.z
     }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
-    const corrected = this.characterController.computedMovement();
+    let corrected: RAPIER.Vector = this.characterController.computedMovement();
+    if (isFiniteVector3Like(corrected) && this.snagged(corrected)) corrected = this.moveSplit(corrected, this.velocityY * deltaSec);
     if (!isFiniteVector3Like(corrected)) {
       this.horizontalSpeed = 0;
       this.lastInputMovement.set(0, 0, 0);
@@ -305,6 +310,47 @@ export class CharacterMotor {
     this.characterBody.setTranslation({ x: position.x, y: position.y, z: position.z }, true);
     this.characterBody.setNextKinematicTranslation({ x: position.x, y: position.y, z: position.z });
     this.rapierWorld.propagateModifiedBodyPositionsToColliders();
+  }
+
+  /**
+   * Whether the controller stopped an input move on nothing but walkable floor. A floor's normal is vertical, so it
+   * cannot stop horizontal motion: Rapier's shape cast, moving down (gravity) and across at once, sometimes hits a
+   * flat trimesh at time zero and cancels the whole move for that step — a stop mid-walk on level ground (B-041).
+   */
+  private snagged(corrected: RAPIER.Vector): boolean {
+    const controller = this.characterController;
+    if (!controller) return false;
+    const wanted = Math.hypot(this.tmpMove.x, this.tmpMove.z);
+    if (wanted === 0 || Math.hypot(corrected.x, corrected.z) >= wanted * SNAG_FRACTION) return false;
+    const count = controller.numComputedCollisions();
+    if (count === 0) return false;
+    for (let i = 0; i < count; i += 1) {
+      const hit = controller.computedCollision(i);
+      if (!hit || Math.abs(hit.normal2.y) < SNAG_FLOOR_NORMAL_Y) return false;
+    }
+    return true;
+  }
+
+  /** The snagged move again as two: across the floor, then gravity from there. */
+  private moveSplit(snagged: RAPIER.Vector, fallY: number): RAPIER.Vector {
+    const { characterController: controller, characterCollider: collider, characterBody: body, rapierWorld: world } = this;
+    if (!controller || !collider || !body || !world) return snagged;
+    const filter = RAPIER.QueryFilterFlags.EXCLUDE_SENSORS;
+    controller.computeColliderMovement(collider, { x: this.tmpMove.x, y: 0, z: this.tmpMove.z }, filter);
+    const across = { ...controller.computedMovement() };
+    if (!isFiniteVector3Like(across) || Math.hypot(across.x, across.z) <= Math.hypot(snagged.x, snagged.z)) {
+      // Recompute the original move so the controller's grounded state matches the move that is used.
+      controller.computeColliderMovement(collider, { x: this.tmpMove.x, y: fallY, z: this.tmpMove.z }, filter);
+      return snagged;
+    }
+    const current = body.translation();
+    body.setTranslation({ x: current.x + across.x, y: current.y + across.y, z: current.z + across.z }, false);
+    world.propagateModifiedBodyPositionsToColliders();
+    controller.computeColliderMovement(collider, { x: 0, y: fallY, z: 0 }, filter);
+    const down = controller.computedMovement();
+    body.setTranslation(current, false);
+    world.propagateModifiedBodyPositionsToColliders();
+    return isFiniteVector3Like(down) ? { x: across.x + down.x, y: across.y + down.y, z: across.z + down.z } : across;
   }
 
   private controllerOffset(): number {
