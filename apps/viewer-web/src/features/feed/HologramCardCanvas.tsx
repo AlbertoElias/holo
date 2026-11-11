@@ -25,6 +25,8 @@ import type { DomeClip, SphereClipResult } from "../hologram/useSphereClipping";
 import { useTakeAnimations } from "../hologram/useTakeAnimations";
 import { buildGroundField, cachedGroundField, groundFieldBudget, readRimTake, RimMotion, takeSamples, type RimTake } from "../hologram/groundField";
 import { useGltfAudio } from "../hologram/useGltfAudio";
+import { createEarPose, earFromObject, type ScheduledGltfAudio } from "../hologram/gltfAudio";
+import { portalEar } from "../hologram/portalEar";
 import { drawnBounds, drawnPoints, motionPoints } from "../hologram/drawnPoints";
 import { isCameraTake } from "../hologram/hologramScene";
 import { type HumanoidGltf, resolveHumanoidAnchors } from "../hologram/humanoidAnchors";
@@ -228,7 +230,6 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   const paused = usePortalValue(portal, (state) => state.paused);
   const primaryActionRef = useRef<AnimationAction | null>(null);
   const getPlaybackTime = useCallback(() => primaryActionRef.current?.time ?? 0, []);
-  const audioState = useGltfAudio(gltf, active && !paused, muted, getPlaybackTime);
   const poseRef = useRef({
     followPosition: new Vector3(),
     followTarget: new Vector3(),
@@ -246,11 +247,16 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   // The portal's own stage light (8.1): warm light from the hologram's foot.
   const stageLightRef = useRef<PointLight>(null);
 
+  const { camera, invalidate, gl: renderer, scene: renderScene } = useThree();
+  const clonedScene = useMemo(() => cloneSkeleton(scene), [scene]);
+  const audioState = useGltfAudio(gltf, clonedScene, active && !paused, muted, getPlaybackTime);
+  // The card's sound for the probe: decoded after mount, so read through a ref.
+  const soundRef = useRef<ScheduledGltfAudio | null>(null);
+  soundRef.current = audioState.audio;
+  const earRef = useRef({ camera: createEarPose(), ear: createEarPose() });
   useEffect(() => {
     onHasAudio(audioState.hasAudio);
   }, [audioState.hasAudio, onHasAudio]);
-  const { camera, invalidate, gl: renderer, scene: renderScene } = useThree();
-  const clonedScene = useMemo(() => cloneSkeleton(scene), [scene]);
   // The feed clips a take whose rim lifts by the bent dome (3.4); its uniforms are set once the cloche is fitted.
   const domeRim = useMemo(() => new ClocheRimTexture(), []);
   useEffect(() => () => domeRim.dispose(), [domeRim]);
@@ -398,7 +404,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   useEffect(() => {
     if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip });
+      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip, sound: soundRef });
     }
   }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, rimProbe, domeClip, sphereClip, tracesProbe, url]);
 
@@ -794,6 +800,15 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
       camera.far = preferred.far;
     }
     camera.updateProjectionMatrix();
+
+    // The playing card's sounds sit where their objects are, heard from the portal's ear.
+    const sound = audioState.audio;
+    if (sound?.playing && sound.spatial) {
+      camera.updateMatrixWorld();
+      const { camera: cameraEar, ear } = earRef.current;
+      portalEar(earFromObject(camera, cameraEar), pose.target, insideDistance, outsideDistance, ear);
+      sound.place(ear, delta);
+    }
   });
 
   // SkeletonUtils clones share the loader cache's geometry and source materials.

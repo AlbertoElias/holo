@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| Positional audio in holograms | Implementing (stacked on `feature/showcase-holograms`) | [positional-audio.md](positional-audio.md) |
 | Author-marked hand traces (PRD-023 v1) | Complete | [authored-traces.md](archive/authored-traces.md) |
 | Hand traces (PRD-023 v0) | Complete | [hand-traces.md](archive/hand-traces.md) |
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |

@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, CatmullRomCurve3, Color, ConeGeometry, CylinderGeometry, IcosahedronGeometry, Quaternion, RingGeometry, SphereGeometry, TubeGeometry, Vector3 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-import { add, lowpass, noise, normalize, pluck, sine, toWav, track, SAMPLE_RATE } from './lib/audio.mjs';
+import { add, lowpass, noise, pluck, sine, toWav, track, SAMPLE_RATE } from './lib/audio.mjs';
 import { Glb, sample } from './lib/glb.mjs';
 import { fbm3, noise3, quat, rng } from './lib/parts.mjs';
 import { T as TOKEN } from './lib/tokens.mjs';
@@ -1114,13 +1114,24 @@ export async function build() {
     }
   });
 
-  glb.audio(sound());
+  // The sound in four layers: the rain everywhere, the rest where it happens.
+  const layers = sound();
+  const splashSound = glb.node({ name: 'SplashSound', translation: mid(CHILD_FEET[0], CHILD_FEET[1]), parent: childFrame });
+  const lampHum = glb.node({ name: 'LampHum', translation: LAMP, parent: root });
+  glb.sound(layers.rain, { name: 'rain' });
+  glb.sound(layers.umbrella, { node: umbrella, name: 'umbrella', refDistance: 1.5 });
+  glb.sound(layers.splash, { node: splashSound, name: 'splash', refDistance: 1.5 });
+  glb.sound(layers.lamp, { node: lampHum, name: 'lamp', refDistance: 1.5 });
   build.stats = { streaks: streakCount, rainTracks: tracks.size, splashes: splashSpots.length, bodyBeads, umbrellaBeads, ripples: rippleSpots.length };
   return glb;
 }
 
 // ---------------------------------------------------------------- sound
 
+const mid = (a, b) => a.map((v, i) => (v + b[i]) / 2);
+
+// Four loop-length layers, scaled together so their levels against each
+// other are those of one mix peaking at 0.6.
 function sound() {
   const N = track(LOOP).length;
   const out = new Float32Array(N);
@@ -1142,31 +1153,39 @@ function sound() {
   // The umbrella's patter: light, soft taps, a little pitched like stretched cloth.
   const random = rng(77);
   const tick = noise(5);
+  const patter = track(LOOP);
   for (let k = 0; k < LOOP * 22; k += 1) {
     const at = random() * LOOP;
     const hz = 900 + random() * 700;
     const gain = 0.03 + random() * 0.035;
-    add(out, at, 0.05, (t) => sine(hz)(t) * 0.7 + tick() * 0.3, (t) => gain * pluck(0.0015, 0.011)(t));
+    add(patter, at, 0.05, (t) => sine(hz)(t) * 0.7 + tick() * 0.3, (t) => gain * pluck(0.0015, 0.011)(t));
   }
 
   // The double splash at the landing: two soft thumps of water, then a few droplets.
+  const splash = track(LOOP);
   const splashNoise = noise(23);
   const burst = new Float32Array(Math.round(0.45 * SAMPLE_RATE));
   for (let i = 0; i < burst.length; i += 1) burst[i] = splashNoise() * pluck(0.004, 0.085)(i / SAMPLE_RATE);
   lowpass(burst, 1200);
   lowpass(burst, 1500);
   const play = (buffer, gain) => (t) => gain * (buffer[Math.min(buffer.length - 1, Math.floor(t * SAMPLE_RATE))] ?? 0);
-  add(out, HOP_LAND, 0.45, play(burst, 3.2));
-  add(out, HOP_LAND + 0.04, 0.45, play(burst, 2.4));
+  add(splash, HOP_LAND, 0.45, play(burst, 3.2));
+  add(splash, HOP_LAND + 0.04, 0.45, play(burst, 2.4));
   for (let k = 0; k < 7; k += 1) {
     const at = HOP_LAND + 0.25 + random() * 0.45;
     const hz = 600 + random() * 500;
-    add(out, at, 0.06, sine(hz), (t) => 0.05 * pluck(0.002, 0.016)(t));
+    add(splash, at, 0.06, sine(hz), (t) => 0.05 * pluck(0.002, 0.016)(t));
   }
 
   // The lamp: a low warm hum, whole cycles per loop.
-  add(out, 0, LOOP, (t) => (0.018 * sine(60)(t) + 0.01 * sine(120)(t) + 0.003 * sine(180)(t)) * (0.8 + 0.2 * sine(0.25)(t)));
-  return toWav(normalize(out, 0.6));
+  const lamp = track(LOOP);
+  add(lamp, 0, LOOP, (t) => (0.018 * sine(60)(t) + 0.01 * sine(120)(t) + 0.003 * sine(180)(t)) * (0.8 + 0.2 * sine(0.25)(t)));
+  const sum = out.map((v, i) => v + patter[i] + splash[i] + lamp[i]);
+  let max = 0;
+  for (const v of sum) max = Math.max(max, Math.abs(v));
+  const scale = max > 0 ? 0.6 / max : 1;
+  const wav = (layer) => toWav(layer.map((v) => v * scale));
+  return { rain: wav(out), umbrella: wav(patter), splash: wav(splash), lamp: wav(lamp) };
 }
 
 // ---------------------------------------------------------------- contact sheet

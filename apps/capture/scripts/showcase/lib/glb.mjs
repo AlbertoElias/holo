@@ -5,7 +5,8 @@ import { Color } from 'three';
 
 // A small glTF 2.0 binary writer for authored showcase holograms. It takes
 // three.js BufferGeometry for shapes and writes exactly what the viewer
-// reads: meshes, PBR materials, one animation clip, and one KHR_audio track.
+// reads: meshes, PBR materials, one animation clip, and KHR_audio sounds
+// (one for the whole take, or several, each from a node).
 // Meters, +Y up, the floor at y = 0.
 
 /** sRGB hex ("#ffc872") to the linear RGB factors glTF stores. */
@@ -197,16 +198,47 @@ export class Glb {
    * Keep its length equal to the clip's so the loop stays in step.
    */
   audio(bytes, mimeType = 'audio/wav') {
-    this.json.extensions = {
-      ...this.json.extensions,
-      KHR_audio: {
-        audio: [{ bufferView: this.bufferView(bytes), mimeType }],
-        sources: [{ audio: 0, autoPlay: false, loop: true }],
-        emitters: [{ type: 'global', sources: [0], gain: 1.0 }]
-      }
-    };
-    this.json.scenes[0].extensions = { KHR_audio: { emitters: [0] } };
+    this.sound(bytes, { mimeType });
+  }
+
+  /**
+   * A looping sound (KHR_audio). With `node`, it comes from that node: a
+   * positional emitter on it, heard from wherever the node is as the clip
+   * moves it, fainter with distance by `distanceModel` ('inverse', 'linear'
+   * or 'exponential'), `refDistance`, `maxDistance` and `rolloffFactor`
+   * (metres; Web Audio's meaning and defaults). Without `node`, it is heard
+   * the same from everywhere (a global emitter on the scene). Every sound
+   * starts with the clip and restarts at each loop: keep each one's length
+   * the clip's. Returns the emitter's index.
+   */
+  sound(bytes, { node, name, gain = 1.0, mimeType = 'audio/wav', distanceModel, refDistance, maxDistance, rolloffFactor } = {}) {
+    if (node !== undefined && !this.json.nodes[node]) throw new Error(`sound: no node ${node}`);
+    const audio = this.json.extensions?.KHR_audio ?? { audio: [], sources: [], emitters: [] };
+    const clip = audio.audio.push({ bufferView: this.bufferView(bytes), mimeType }) - 1;
+    const source = audio.sources.push({ audio: clip, autoPlay: false, loop: true }) - 1;
+    const emitter = node === undefined ? { type: 'global', sources: [source], gain } : { type: 'positional', sources: [source], gain };
+    if (name) emitter.name = name;
+    if (node !== undefined) {
+      const positional = {};
+      if (distanceModel !== undefined) positional.distanceModel = distanceModel;
+      if (refDistance !== undefined) positional.refDistance = refDistance;
+      if (maxDistance !== undefined) positional.maxDistance = maxDistance;
+      if (rolloffFactor !== undefined) positional.rolloffFactor = rolloffFactor;
+      emitter.positional = positional;
+    }
+    const index = audio.emitters.push(emitter) - 1;
+    this.json.extensions = { ...this.json.extensions, KHR_audio: audio };
+    if (node === undefined) {
+      const scene = this.json.scenes[0];
+      const emitters = scene.extensions?.KHR_audio?.emitters ?? [];
+      scene.extensions = { ...scene.extensions, KHR_audio: { emitters: [...emitters, index] } };
+    } else {
+      const target = this.json.nodes[node];
+      if (target.extensions?.KHR_audio) throw new Error(`sound: node ${node} already has a sound`);
+      target.extensions = { ...target.extensions, KHR_audio: { emitter: index } };
+    }
     this.extensionsUsed.add('KHR_audio');
+    return index;
   }
 
   /** Free-form provenance on the asset: who authored it and how. */

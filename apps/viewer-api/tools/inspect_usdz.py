@@ -617,7 +617,13 @@ class Inspection:
         extension = source.doc.get("extensions", {}).get("KHR_audio", {})
         scene = source.doc["scenes"][source.doc.get("scene", 0)]
         expected = []
-        for e in scene.get("extensions", {}).get("KHR_audio", {}).get("emitters", []):
+        # The scene's emitters, then each one a node names (placed sounds, heard unplaced in Quick Look).
+        emitters = list(scene.get("extensions", {}).get("KHR_audio", {}).get("emitters", []))
+        for node in source.doc.get("nodes", []):
+            e = node.get("extensions", {}).get("KHR_audio", {}).get("emitter")
+            if isinstance(e, int) and e not in emitters:
+                emitters.append(e)
+        for e in emitters:
             emitter = extension["emitters"][e]
             for s in emitter["sources"]:
                 expected.append((e, s, emitter, extension["sources"][s]))
@@ -666,7 +672,7 @@ class Inspection:
                 self.check(audio.GetAuralModeAttr().Get() == "nonSpatial", "Recorded audio must remain global")
                 self.check(audio.GetPlaybackModeAttr().Get() == ("loopFromStage" if sound.get("loop") else "onceFromStart"), "Audio loop behavior differs from source")
                 self.close(float(audio.GetStartTimeAttr().Get().GetValue()), 0, 1e-6, "audio start time")
-                self.close(audio.GetGainAttr().Get(), emitter.get("gain", 1), 1e-6, "audio gain")
+                self.close(audio.GetGainAttr().Get(), float(emitter.get("gain", 1)) * float(sound.get("gain", 1)), 1e-6, "audio gain (emitter times source)")
                 stage_duration = (self.stage.GetEndTimeCode()-self.stage.GetStartTimeCode())/self.stage.GetTimeCodesPerSecond()
                 entry = {"file": audio.GetFilePathAttr().Get().path, "bytes": len(data), "mode": audio.GetPlaybackModeAttr().Get(), "probe": details, "stageDurationSeconds": stage_duration}
                 if probe:
