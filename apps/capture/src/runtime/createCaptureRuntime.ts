@@ -19,7 +19,7 @@ import { InputController } from '../input/InputController';
 import { VrLocomotion } from '../input/VrLocomotion';
 import { CaptureObjects } from '../objects/CaptureObjects';
 import { CharacterMotor } from '../physics/CharacterMotor';
-import { CapturePlace } from '../place/CapturePlace';
+import type { CapturePlace } from '../place/CapturePlace';
 import { RecordingSession } from '../recording/RecordingSession';
 import { activeCamera, type CaptureContext } from '../systems/captureContext';
 import { registerCaptureSystems } from '../systems';
@@ -143,8 +143,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     getHandedness: () => ui.getState().handedness
   });
   // A scanned place as the set (docs/features/splat-capture.md), behind `?placeCapture=1` until 2a and 2b are verified.
-  const place = config.placeCapture
-    ? new CapturePlace({ stage, avatar, motor, objects, ui, flip: config.placeFlip, isTakeBusy: () => recording.isTakeBusy() })
+  // Its own chunk, with Spark's: a capture page without a place never loads either.
+  const place: CapturePlace | null = config.placeCapture
+    ? new (await import('../place/CapturePlace')).CapturePlace({ stage, avatar, motor, objects, ui, flip: config.placeFlip, isTakeBusy: () => recording.isTakeBusy() })
     : null;
   if (place) ui.setPlaceState({ enabled: true, status: 'none', name: null, message: null });
   const vrChrome = new VrChrome({

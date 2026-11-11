@@ -1,7 +1,7 @@
 # Feature brief: Record a take inside a scanned place (split capture, slice 2)
 
 **Lead:** Claude (Opus)  
-**Status:** Approved (the user, 2026-11-10, the recommended answer A to Q1 to Q7); slice 2a not started
+**Status:** Approved (the user, 2026-11-10, the recommended answer A to Q1 to Q7); slice 2a implemented and verified on `feature/splat-capture-desktop` (2026-11-11), to merge with slice 1; 2b and 2c not started
 **Layer:** event: a scanned place used as the take's set. The take happened
 in the scanned place itself only when the scan is lined up with the real
 room (*here*, Q2). See `docs/product/concepts/what-a-hologram-is.md`.
@@ -286,29 +286,29 @@ outside of the ceiling and the backs of the near walls, not the take.
 
 Slice 2a (desktop):
 
-- [ ] With `?placeCapture=1`, the desktop page takes a `.spz` or `.ply` from
+- [x] With `?placeCapture=1`, the desktop page takes a `.spz` or `.ply` from
   its file picker or `?place=`; the scan replaces the set at true scale,
   upright; over a 10 m walk the avatar's feet stay within 2 cm of the scan's
   floor, and no cast lands on the old set.
-- [ ] A take recorded in it exports a GLB with `RecordedPlace` and
+- [x] A take recorded in it exports a GLB with `RecordedPlace` and
   `HOLOIM_place` v1 in `extensionsUsed` only, SPZ bytes that Spark decodes,
   and the floor disc in `RecordedSceneBubble`; every live-scan splat inside
   the viewer's fitted dome is in the stored crop unless thinned (the thinned
   count reported); the GLB is under 25 MB.
-- [ ] That GLB uploads through the real API and plays in the feed card and
+- [x] That GLB uploads through the real API and plays in the feed card and
   portal with the stored place at the node's transform, the disc hidden, the
   avatar's feet within 2 cm of the scan's floor, cut by the cloche; Follow,
   Free, pause and zoom work.
-- [ ] Pointing at the scan on the desktop makes a link whose end plays back
+- [x] Pointing at the scan on the desktop makes a link whose end plays back
   within 2 cm of the hit; a hold behind a floater is checked.
-- [ ] Backward compatibility: the same GLB in `main`'s viewer build gives a
+- [x] Backward compatibility: the same GLB in `main`'s viewer build gives a
   dome whose base and radii are within 1 cm of this viewer's, plays on the
   disc, with no error; the USDZ converter converts it; a GLB without a place
   exports and renders as today (plugin JSON and counts compared).
-- [ ] A broken, oversized or unreadable scan leaves today's set with one
+- [x] A broken, oversized or unreadable scan leaves today's set with one
   message, and Record still works; a GLB whose SPZ header lies is rejected
   by the API and refused by the viewer without a crash.
-- [ ] No Spark code in either app's first chunk; the place chunk loads only
+- [x] No Spark code in either app's first chunk; the place chunk loads only
   for a hologram with `HOLOIM_place` or a capture place.
 - [ ] Proof video: the user's (or the downloaded) scan, a take recorded in it
   on the desktop, uploaded and played in the feed.
@@ -393,17 +393,46 @@ XR viewers moved to 2b; numeric acceptance criteria.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Scan as the set, floor, walking (2a) | New capture desktop check: a PLY written by the spec (floor, table band, floaters, ceiling), loaded by `?place=` and the picker; a 10 m walk | Report: floor found, feet height over the walk, casts on the old set (0), splats drawn; screenshot. Pending |
-| Export contract (2a) | Same check: Record, Stop, inspect the GLB | Extension and node JSON, decoded count, bytes, thinned count, dome coverage, disc present. Pending |
-| Upload and play (2a) | Pipeline e2e: the exported GLB through the real API into the feed card and portal | Screenshots in Follow and Free; viewer place report (floor, feet, clip). Pending |
-| Pointing on the scan (2a) | Desktop check: point at a box in the scan, and behind a floater | Link end vs hit distance. Pending |
-| Backward compatibility (2a) | The place GLB in `main`'s viewer build and the USDZ converter; a no-place take's plugin JSON and counts against today's | Dome base and radii diff, screenshots, converter log, JSON diff. Pending |
-| Failure paths (2a) | 404, oversized, NaN and lying-header scans, in capture, the API and the viewer | One message each, set kept, Record works, upload rejected, no crash. Pending |
-| Bundles (2a) | Builds of both apps, bundle search | No Spark in first chunks. Pending |
+| Scan as the set, floor, walking (2a) | `apps/viewer-web/e2e/place-capture.pipeline.spec.ts` (pipeline shard 8): a PLY written by the spec (floor off the origin, boxes, floaters under the floor, a faint and an opaque sheet), loaded by `?place=` and by the picker; a 10 m walk | Pass, 2026-11-11: 43,627 splats, floor found at 0.3501 (written at 0.35), floor band at the set's y = 0 within 0.03 mm, set = `PlaceFloor`, stage ground hidden, old set detached; 10.8 m walked, sole at most 7.8 mm off the floor; casts down an 81-point grid over and past the scan hit only `PlaceFloor` at y = 0 (and the hidden ground). The downloaded `fireplace.spz` and `snow-street.spz` load, stand upright and are walked on (sole within 2 cm) |
+| Export contract (2a) | Same spec: Record, Stop, the GLB read with `readStoredPlace` | Pass: `HOLOIM_place` v1 in `extensionsUsed` only, `RecordedPlace` with the scan-to-set TRS, SPZ header = extension count, Spark decodes all 19,210 stored splats, `RecordedPlaceFloor` in `RecordedSceneBubble`, 3.3 MB, 0 thinned. Dome coverage against the scan's own splats: at nine times over the take the viewer's fitted dome showed 56,678 splat-times, all of them in the stored crop, while it swept 2.17 m. `fireplace.spz`: 161,364 stored, 4.87 MB; `snow-street.spz`: 45,891, 3.07 MB; at seven times over each take the fitted dome lies inside the crop's box (thinned counts reported as annotations) |
+| Upload and play (2a) | Same spec: the GLB through the real API (Quick Look on) into the feed card and portal | Pass: stored place ready, disc hidden, stored floor on the disc within 0.03 mm, the author's foot bones at the height they stood at in capture within 2 cm, no shown splat leaving the dome at any time checked; pause, Free orbit, zoom inside (cut holds), Return, Play; screenshots `output/place-capture/room-*.png` |
+| Pointing on the scan (2a) | Same spec: holds on a red box behind a faint (opacity 0.3) sheet and on an opaque sheet in front of a green box | Pass: the faint sheet lets the ray through to the box (x 0.80, sheet at 0.5), the opaque sheet catches it (within 3 cm of its plane); both links have `to.node` = `RecordedPlace`, stored ends within 2 cm of the hits, and the drawn ink ends within 2 cm of the hits in the feed |
+| Backward compatibility (2a) | Same spec with `E2E_MAIN_VIEWER_URL` (`main`'s viewer test build at `f64690f`, served against the run's API) and `E2E_BASE_CAPTURE_URL` (capture at this branch's base, `origin/docs/splat-capture-brief`); the Quick Look converter on the place take | Pass: `main`'s dome base and radii equal this viewer's (difference 0), `main` draws the take on the disc with no error (`compat-*.png`); the converter reaches ready; a no-place take's extensions, node names, counts and plugin JSON shapes equal the base capture's, with and without `?placeCapture=1`. Against `main`'s capture the only difference is `main`'s newer positional audio (`KHR_audio` emitters), which this branch predates |
+| Failure paths (2a) | Same spec: a 404, a PLY header over 3 M, a PLY whose comment claims a smaller count, a scan with no floor, a gzip that is not SPZ, a gzip bomb (10 splats over 8 MB), an `.obj`; GLBs whose SPZ header claims one splat more and 50 M | Pass: one message each, today's set and ground kept, Record exports a take without a place, the picker then places the scan; the API answers 422 to both lying GLBs, and the viewer served one anyway refuses it (status failed) without a page error |
+| Bundles (2a) | Production builds of both apps, `node scripts/check-prod-bundle.mjs apps/viewer-web/dist` and `… apps/capture/dist --capture` (now in CI) | Pass: no Spark in either app's startup graph (viewer 3 startup chunks, 2 lazy with Spark; capture 6 startup, 2 lazy), no place report in the viewer's bundle. Capture's place code is its own chunk, loaded only with `?placeCapture=1` |
 | Quest VR (2b) | IWER body check with a place; then the Quest via MetaVR | IWER report; on the Quest: frame times, drawn splats, LoD build time, heap. Pending |
 | Quest passthrough and XR viewers (2b) | IWER `ar-record` quest-passthrough with a place; `test:xr:viewer` with a place GLB | Diorama cut by the dome; recording off; stored place rendered. Pending |
 | Phone AR (2c) | IWER phone `ar-record` with a place and a hold on the scan; then an Android phone | Floor y = 0, link end vs hit; on the phone: fps. Pending |
 | Proof video (each slice) | Real workflow, recorded under ignored `output/` | Sent to the user; not committed |
+
+## Implementation notes (slice 2a)
+
+- **What moved into `@holoim/place`:** `readFloor` and `readUpright`
+  (`analysis.ts`), the dome clip and its GLSL twin (`clip.ts`) and the
+  decode (`decode.ts`, the only `import()` of Spark). `placeOnFloor` and
+  `cropToSweep` stay in the viewer's `placeSplats.ts` beside `PlaceLayer`
+  and `takeFloor`: slice 1's live overlay is their only user, and capture
+  crops by the take's path (`apps/capture/src/place/placeExport.ts`)
+  instead.
+- **Capture's place is its own chunk.** `CapturePlace` is imported only with
+  `?placeCapture=1`, so a capture page without it never loads the place
+  code or Spark; the widened bundle check caught the first version, which
+  imported it statically.
+- **Spark's raycast and meshes that never draw.** Spark counts the splats a
+  render last updated, so the export's crop (never drawn) and a scan loaded
+  while nothing draws gave no hits and every link fell to the disc. Both
+  place meshes now carry their count (`raycastIndices`, LoD off).
+- **The input checks.** A PLY's count is read from its header's own lines
+  (a comment cannot claim a smaller one; found by the security review). The
+  SPZ check no longer awaits the cancel of a stream it has refused:
+  Chromium never settled it for a gzip bomb, which hung the load.
+- **The crop** keeps the packed words of every splat in the estimated
+  dome's swept box, less splats under the floor's slack, too faint to show
+  or too large for any dome; none of those are drawn by the clip.
+- **The backward-compatibility tests** need two older builds served beside
+  the run (`E2E_MAIN_VIEWER_URL`, `E2E_BASE_CAPTURE_URL`), so CI skips
+  them; they were run locally on 2026-11-11. The downloaded-scan tests run
+  only where `apps/viewer-web/public/local-places/` holds the scans.
 
 ## Physical-device limits
 

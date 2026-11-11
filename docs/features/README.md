@@ -9,7 +9,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Feature | Status | Brief |
 | --- | --- | --- |
 | A scanned place around a take (split capture, first attempt) | Implementing | [splat-place.md](splat-place.md) |
-| Record a take inside a scanned place (split capture, slice 2) | Approved; 2a not started | [splat-capture.md](splat-capture.md) |
+| Record a take inside a scanned place (split capture, slice 2) | 2a verified on `feature/splat-capture-desktop`, to merge with slice 1; 2b, 2c not started | [splat-capture.md](splat-capture.md) |
 | Author-marked hand traces (PRD-023 v1) | Complete | [authored-traces.md](archive/authored-traces.md) |
 | Hand traces (PRD-023 v0) | Complete | [hand-traces.md](archive/hand-traces.md) |
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |

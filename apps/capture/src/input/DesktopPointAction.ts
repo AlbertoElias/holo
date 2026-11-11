@@ -205,8 +205,8 @@ export class DesktopPointAction {
   }
 
   /** Where the last aim landed and whether it hit anything: checks compare a link's end with it. */
-  lastLanding(): { point: [number, number, number]; landed: boolean } {
-    return { point: [this.landing.x, this.landing.y, this.landing.z], landed: this.landed };
+  lastLanding(): { origin: [number, number, number]; point: [number, number, number]; landed: boolean } {
+    return { origin: [this.origin.x, this.origin.y, this.origin.z], point: [this.landing.x, this.landing.y, this.landing.z], landed: this.landed };
   }
 
   private computeRay(step: DesktopPointStep): void {

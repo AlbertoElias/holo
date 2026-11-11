@@ -99,7 +99,7 @@ export interface AutomationHooks {
   /** Brings a scan in by URL, as `?place=` does at start. */
   __loadPlaceUrl: (url: string) => Promise<boolean>;
   /** Where the desktop point's aim last landed, in the set frame. */
-  __pointLanding: () => { point: [number, number, number]; landed: boolean };
+  __pointLanding: () => { origin: [number, number, number]; point: [number, number, number]; landed: boolean };
 }
 
 export interface TracesSnapshot {

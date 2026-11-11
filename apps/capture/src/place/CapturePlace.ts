@@ -62,6 +62,8 @@ export type PlaceCaptureReport = {
   /** The floor's height in the scan's own y-up frame. */
   floorFoundY: number;
   floorBandY: number;
+  /** The floor band's middle in the scan's own y-up frame: what stands on the set's origin. */
+  floorMiddle: { x: number; z: number } | null;
   scanRadius: number;
   decodeMs: number;
   loads: number;
@@ -114,6 +116,17 @@ async function checkDeclaredSize(bytes: Uint8Array, name: string): Promise<void>
     return;
   }
   throw new Error('a place is a .spz or .ply scan');
+}
+
+/**
+ * Spark's raycast counts the splats a render last updated: none for a mesh
+ * that has not drawn (the export's crop never does, and the checks step
+ * without drawing). Given the count alone it casts against every splat of
+ * its own packed array; indices would make it read a LoD array these meshes
+ * do not build (they are made with `enableLod: false`).
+ */
+function castsEverySplat(mesh: SplatMesh, numSplats: number): void {
+  mesh.raycastIndices = { numSplats, indices: null as unknown as Uint32Array };
 }
 
 function median(values: number[]): number {
@@ -191,8 +204,9 @@ export class CapturePlace {
     distances.sort((a, b) => a - b);
     const scanRadius = Math.max(1, distances[Math.floor(distances.length * SCAN_EDGE_QUANTILE)] ?? 1);
     const packedSplats = new S.PackedSplats({ packedArray: scan.packedArray, numSplats: scan.numSplats, splatEncoding: scan.encoding });
-    const mesh = new S.SplatMesh({ packedSplats, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY });
+    const mesh = new S.SplatMesh({ packedSplats, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY, enableLod: false });
     await mesh.initialized;
+    castsEverySplat(mesh, scan.numSplats);
     mesh.name = 'PlaceSplats';
     mesh.position.copy(position);
     mesh.quaternion.copy(quaternion);
@@ -241,8 +255,9 @@ export class CapturePlace {
     const packed = new S.PackedSplats({ packedArray: crop.packedArray, numSplats: crop.numSplats, splatEncoding: live.scan.encoding });
     const { fileBytes } = await S.writeSpz(packed, { maxSh: 0 });
     const writeMs = performance.now() - started;
-    const raycast = new S.SplatMesh({ packedSplats: packed, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY });
+    const raycast = new S.SplatMesh({ packedSplats: packed, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY, enableLod: false });
     await raycast.initialized;
+    castsEverySplat(raycast, crop.numSplats);
     raycast.position.copy(live.position);
     raycast.quaternion.copy(live.quaternion);
     raycast.updateMatrixWorld(true);
@@ -274,6 +289,7 @@ export class CapturePlace {
       floorFound: live?.scan.floor.found ?? false,
       floorFoundY: live?.scan.floor.floorY ?? Number.NaN,
       floorBandY: live?.floorBandY ?? Number.NaN,
+      floorMiddle: live ? { x: live.scan.floor.x, z: live.scan.floor.z } : null,
       scanRadius: live?.scanRadius ?? 0,
       decodeMs: live?.scan.decodeMs ?? 0,
       loads: this.loads,

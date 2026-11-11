@@ -45,10 +45,20 @@ export function placeFlipDefault(fileName: string): boolean {
 /** The splat count a PLY's header declares, read before decoding; null when the bytes are not a PLY header. */
 export function plyVertexCount(bytes: Uint8Array): number | null {
   const head = new TextDecoder("latin1").decode(bytes.subarray(0, Math.min(bytes.byteLength, 4096)));
-  if (!head.startsWith("ply")) return null;
-  const end = head.indexOf("end_header");
-  const match = /element vertex (\d+)/.exec(end < 0 ? head : head.slice(0, end));
-  return match ? Number(match[1]) : null;
+  const lines = head.split(/\r?\n/);
+  if (lines[0]?.trim() !== "ply") return null;
+  // Read as the header's own lines, so a comment cannot claim a count the decoder will not use.
+  let count: number | null = null;
+  for (const raw of lines.slice(1)) {
+    const line = raw.trim();
+    if (line === "end_header") return count;
+    const words = line.split(/\s+/);
+    if (words[0] !== "element" || words[1] !== "vertex") continue;
+    if (count !== null || words.length !== 3 || !/^\d+$/.test(words[2]!)) return null;
+    count = Number(words[2]);
+  }
+  // No end of header in the window: not a scan this checks.
+  return null;
 }
 
 /**

@@ -70,6 +70,7 @@ export async function createCaptureStage(container: HTMLElement): Promise<Captur
     new THREE.CircleGeometry(20, 64),
     new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.95, metalness: 0 })
   );
+  ground.name = 'StageGround';
   ground.rotation.x = -Math.PI / 2;
   worldGroup.add(ground);
 

@@ -85,7 +85,8 @@ export async function checkSpzBytes(bytes: Uint8Array, maxPoints: number): Promi
       if (total > limit) throw new Error("the SPZ decompresses past what its header allows");
     }
   } catch (error) {
-    await reader.cancel().catch(() => undefined);
+    // Not awaited: a stream cancelled mid-inflate may never settle its cancel (Chromium), and the answer is already known.
+    void reader.cancel().catch(() => undefined);
     throw error instanceof Error ? error : new Error(String(error));
   }
   if (!header) throw new Error("the SPZ stream ends inside its header");
