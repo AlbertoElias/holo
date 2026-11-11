@@ -1,7 +1,7 @@
 # Feature brief: Camera-driven avatar (evaluation spike)
 
 **Lead:** Claude (Fable 5)  
-**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; **hands and pointing are unmeasured until the user's clip exists**; then slice 3)
+**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars, ray jitter misses, **aim error and head zero are unresolved**; then slice 3)
 **Layer:** event (the author's head, face, arms and hands over time); see
 `docs/product/concepts/what-a-hologram-is.md`
 
