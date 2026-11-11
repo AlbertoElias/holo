@@ -5,7 +5,7 @@ import * as THREE from 'three';
 
 import { HALO_PINCH_STAGES, haloDrag, installMiddlePinchPose } from './iwer-halo.ts';
 import { loadTake, objectNodes, rigidPose, worldAt } from './object-glb.mjs';
-import { clickButton, OBJECT_URL, openCapture, readState, saveDownload, setupPage } from './object-take.mjs';
+import { clickButton, OBJECT_URL, openCapture, PROOF_VIDEO_DIR, proofPace, readState, saveDownload, setupPage } from './object-take.mjs';
 import { enterIwer, reach, STEP_MS, stepper, summonedItems, TRAY_URLS } from './summon-take.mjs';
 import { advance, setupFlatPage } from './tray-anytime-take.mjs';
 
@@ -136,6 +136,20 @@ async function liftSlot(page, adv, slot) {
   await adv(0.2);
 }
 
+/** F held with the view on the world ahead: a held mark (the same input held-mark-takes.ts uses), kept on release. */
+async function holdMark(page, adv, pitch = -0.35) {
+  await page.evaluate((arg) => window.__setMockInput(arg), { lookYaw: 0, aimPitch: pitch });
+  await adv(0.4);
+  await page.keyboard.down('KeyF');
+  await adv(0.3);
+  await proofPace(page, 600);
+  await adv(1.0);
+  await page.keyboard.up('KeyF');
+  await adv(0.6);
+  await page.evaluate((arg) => window.__setMockInput(arg), { lookYaw: 0, aimPitch: 0 });
+  await adv(0.2);
+}
+
 const dbg = (...args) => (process.env.UNDO_DEBUG ? console.log('[undo]', ...args) : undefined);
 const wordsOf = (h) => h.words.join(',');
 
@@ -146,7 +160,7 @@ export async function runDesktopUndoTake({ browser, baseUrl, artifactDir, consol
   await mkdir(artifactDir, { recursive: true });
   const { context, page } = await setupFlatPage(browser, { consoleErrors, label });
   const k = kit(page);
-  const { adv, read, halo } = k;
+  const { adv, read, halo, release } = k;
   const report = { steps: {} };
   const expectText = (step, got, want) => {
     if (got.text !== want) fail(`${step}: the status line says ${JSON.stringify(got.text)}, expected ${JSON.stringify(want)}`);
@@ -154,6 +168,12 @@ export async function runDesktopUndoTake({ browser, baseUrl, artifactDir, consol
   };
   try {
     await openCapture(page, baseUrl, { tray: TRAY });
+    // The dev tooling's Enter XR button (a shadow-DOM overlay) sits over the status line's centre; a proof video hides it so each status reads whole.
+    if (PROOF_VIDEO_DIR) {
+      await page.evaluate(() => {
+        for (const host of document.querySelectorAll('*')) if (host.shadowRoot?.textContent?.includes('Enter XR')) host.style.display = 'none';
+      });
+    }
     await adv(1);
     let state = await read();
     for (let i = 0; i < 600 && state.objects.tray.items.length !== 3; i += 1) {
@@ -277,12 +297,44 @@ export async function runDesktopUndoTake({ browser, baseUrl, artifactDir, consol
     await adv(0.3);
 
     // --- During a take ---
+    // A summon still held when Record is pressed: its release is a Place, not a put-back.
+    const edge = await k.summon(2);
+    const edgeId = heldNow(edge.state)?.id;
+    if (!edgeId) fail('T + 2 before Record did not summon into the hand');
     await page.getByRole('button', { name: 'Start Recording' }).click();
     await page.getByRole('button', { name: 'Stop Recording' }).waitFor();
-    await adv(0.5);
+    await adv(0.1);
+    state = await read();
+    const edgeAtRecord = byId(state, edgeId)?.position ?? [9, 9, 9];
+    await adv(0.4);
     const cleared = await history(page);
     if (cleared.done !== 0 || cleared.undone !== 0) fail(`Record did not clear the history (${wordsOf(cleared)})`);
     expectText('undo right after Record', await halo('Undo'), 'Nothing to undo');
+    await k.focusCanvas();
+    // Move the still-held object, let go: one Place; W returns it to its pose at Record, E restores.
+    state = await read();
+    if (byId(state, edgeId)?.heldBy == null) fail('the summon was not still held across Record');
+    await page.keyboard.down('KeyW');
+    await adv(0.6);
+    await page.keyboard.up('KeyW');
+    await adv(0.1);
+    state = await release(edgeId);
+    const edgeRest = byId(state, edgeId)?.position ?? [9, 9, 9];
+    const edgeHist = await history(page);
+    report.steps.boundary = { words: edgeHist.words, moved: round(dist(edgeAtRecord, edgeRest)) };
+    if (edgeHist.words.join() !== 'Place') fail(`the held-across-Record release pushed ${wordsOf(edgeHist)}, expected Place`);
+    if (dist(edgeAtRecord, edgeRest) < 0.1) fail(`the boundary object barely moved (${dist(edgeAtRecord, edgeRest).toFixed(3)} m)`);
+    expectText('undo the boundary place', await halo('Undo'), 'Place undone');
+    state = await read();
+    const edgeBack = dist(byId(state, edgeId)?.position ?? [9, 9, 9], edgeAtRecord);
+    report.steps.boundary.backToRecordPose = round(edgeBack);
+    if (edgeBack > 0.08) fail(`W did not return the boundary object to its pose at Record (${edgeBack.toFixed(3)} m off)`);
+    expectText('redo the boundary place', await halo('Redo'), 'Place restored');
+    state = await k.settle(edgeId);
+    const edgeAgain = dist(byId(state, edgeId)?.position ?? [9, 9, 9], edgeRest);
+    report.steps.boundary.redoError = round(edgeAgain);
+    if (edgeAgain > 0.1) fail(`E did not put the boundary object back where it came to rest (${edgeAgain.toFixed(3)} m off)`);
+    await adv(0.5);
     await k.focusCanvas();
 
     // A persistent object (Test Bracket): grown, then placed; W undoes the place, then the size.
@@ -336,7 +388,9 @@ export async function runDesktopUndoTake({ browser, baseUrl, artifactDir, consol
     const putBack = state.objects.tray.putBacks.find((entry) => entry.objectId === bracketId);
     if (!putBack) fail('Backspace did not put the bracket back');
     await adv(1.0);
+    await proofPace(page, 600);
     expectText('undo put back', await halo('Undo'), 'Put back undone');
+    await proofPace(page, 1200);
     state = await read();
     const returned = state.objects.tray.returns.find((entry) => entry.objectId === bracketId);
     if (!byId(state, bracketId) || !returned) fail(`W did not bring the put-back object back (${JSON.stringify(returned)})`);
@@ -366,6 +420,50 @@ export async function runDesktopUndoTake({ browser, baseUrl, artifactDir, consol
     state = await read();
     if (byId(state, diaId)) fail('undoing the interleaved summon left the diagram in the scene');
     await adv(0.5);
+    await k.focusCanvas();
+
+    // The brief's order: summon, a held mark, resize (all while the summon is still held), then W W W.
+    const dia2 = await k.summon(2);
+    const dia2Id = heldNow(dia2.state)?.id;
+    await holdMark(page, adv);
+    await page.keyboard.down('Equal');
+    await adv(0.8);
+    await page.keyboard.up('Equal');
+    await adv(0.1);
+    const orderStack = await history(page);
+    // The held resize joins the history as the Halo is used, so the stack is judged by what W undoes.
+    report.steps.order = { words: orderStack.words };
+    const orderTexts = [];
+    const orderSteps = [];
+    for (let i = 0; i < 3; i += 1) {
+      const step = await halo('Undo');
+      orderTexts.push(step.text);
+      orderSteps.push(step.step?.word ?? null);
+      await proofPace(page, 800);
+    }
+    report.steps.order.texts = orderTexts;
+    report.steps.order.undone = orderSteps;
+    if (orderTexts.join() !== 'Size undone,Mark undone,Summon undone') fail(`W W W said ${JSON.stringify(orderTexts)}, expected Size, Mark, Summon undone in that order`);
+    if (orderSteps.join() !== 'Size,Mark,Summon') fail(`the history log undid ${orderSteps}, expected Size,Mark,Summon`);
+    state = await read();
+    if (byId(state, dia2Id)) fail('the third W left the summoned object in the scene');
+    if ((await history(page)).undone < 3) fail('three actions were not left to redo');
+    // E restores in the same order; the resize is left to redo, then a new action clears it.
+    const orderRedo = [];
+    for (let i = 0; i < 2; i += 1) {
+      orderRedo.push((await halo('Redo')).text);
+      await proofPace(page, 800);
+    }
+    report.steps.order.redoTexts = orderRedo;
+    if (orderRedo.join() !== 'Summon restored,Mark restored') fail(`E E said ${JSON.stringify(orderRedo)}, expected Summon restored, Mark restored`);
+    if ((await history(page)).undone !== 1) fail('the resize is not left to redo');
+    await k.focusCanvas();
+    await k.summon(2);
+    await proofPace(page, 600);
+    expectText('redo after a new action in the take', await halo('Redo'), 'Nothing to redo');
+    await k.focusCanvas();
+    await page.keyboard.press('Backspace');
+    await adv(0.3);
 
     const glb = await saveDownload(page, () => page.getByRole('button', { name: 'Stop Recording' }).click(), path.join(artifactDir, `${label}.glb`));
     await adv(0.5);
