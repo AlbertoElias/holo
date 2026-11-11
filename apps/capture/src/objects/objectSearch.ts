@@ -13,7 +13,10 @@ async function failure(response: Response, fallback: string): Promise<Error> {
 export async function searchObjects(q: string, signal?: AbortSignal | null): Promise<ObjectSearchResult[]> {
   const response = await fetch(`${apiBase}/objects/search?q=${encodeURIComponent(q)}`, { signal: signal ?? null });
   if (!response.ok) throw await failure(response, 'Search failed');
-  return objectSearchResponseSchema.parse(await response.json()).results;
+  // A reply the schema refuses is the server's fault, never something to show as raw validation text.
+  const parsed = objectSearchResponseSchema.safeParse(await response.json().catch(() => null));
+  if (!parsed.success) throw new Error('Search gave an answer capture could not read. Try again.');
+  return parsed.data.results;
 }
 
 /** A transcription the server cannot make (not configured, upstream down): the caller falls back to typing. */

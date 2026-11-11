@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 
 import { tokens } from '@holoim/design-tokens';
-import { GlyphSvg, Type, fontStack, useReducedMotion } from '@holoim/ui-dom';
+import { GlyphSvg, fontStack, useHint, useReducedMotion } from '@holoim/ui-dom';
 import {
   PHONE_EDGES,
   PROVISIONAL_GLYPHS,
@@ -73,11 +73,15 @@ function drawingOf(name: DockTrayGlyph): GlyphDrawing {
 /** The dock's Tray and Find: Tray and Put back are drawn from tokens.json, Find's lens is still provisional. */
 type DockTrayGlyph = 'tray' | 'putBack' | ProvisionalGlyphName;
 
-/** A dock glyph action that may carry a provisional drawing (GlyphControl takes only decided drawings). */
+/**
+ * A dock glyph action that may carry a provisional drawing (GlyphControl takes
+ * only decided drawings). The word stands beside the drawing, so what it is
+ * never has to be guessed; the shared hint adds the key.
+ */
 export function DockGlyphButton({
   glyph,
   label,
-  title,
+  hint,
   highlighted = false,
   expanded,
   input,
@@ -86,8 +90,10 @@ export function DockGlyphButton({
   testId
 }: {
   glyph: DockTrayGlyph;
+  /** The control's name: its drawing's word, shown beside it, and its accessible name. */
   label: string;
-  title?: string;
+  /** What the shared hover hint adds to the name (a key), shown to a mouse or keyboard; none on touch. */
+  hint?: string | undefined;
   highlighted?: boolean;
   expanded?: boolean;
   input: HitInput;
@@ -108,23 +114,23 @@ export function DockGlyphButton({
   const appearance = highlighted ? { ...base, color: tokens.color.highlight } : base;
   const hit = hitAreaApx(input, tokens.glyph.icon);
   const ring = appearance.focusRing;
+  const { handlers: hintOn, hint: hintBubble } = useHint(hint);
   return (
     <button
       type="button"
       aria-label={label}
-      title={title ?? label}
       aria-pressed={expanded}
       data-testid={testId}
       data-open={highlighted ? 'true' : 'false'}
       onClick={onPress}
-      onPointerEnter={(event) => { if (event.pointerType !== 'touch') setHovered(true); }}
-      onPointerLeave={() => { setHovered(false); setPressed(false); }}
-      onPointerDown={(event) => { setPressed(true); pointerHandlers?.onPointerDown?.(event); }}
+      onPointerEnter={(event) => { if (event.pointerType !== 'touch') setHovered(true); hintOn.onPointerEnter(event); }}
+      onPointerLeave={() => { setHovered(false); setPressed(false); hintOn.onPointerLeave(); }}
+      onPointerDown={(event) => { setPressed(true); hintOn.onPointerDown(); pointerHandlers?.onPointerDown?.(event); }}
       onPointerMove={pointerHandlers?.onPointerMove}
       onPointerUp={(event) => { setPressed(false); pointerHandlers?.onPointerUp?.(event); }}
       onPointerCancel={(event) => { setPressed(false); pointerHandlers?.onPointerCancel?.(event); }}
-      onFocus={(event) => setFocusVisible(event.currentTarget.matches(':focus-visible'))}
-      onBlur={() => { setFocusVisible(false); setPressed(false); }}
+      onFocus={(event) => { setFocusVisible(event.currentTarget.matches(':focus-visible')); hintOn.onFocus(event); }}
+      onBlur={() => { setFocusVisible(false); setPressed(false); hintOn.onBlur(); }}
       style={{
         boxSizing: 'border-box',
         display: 'inline-flex',
@@ -157,6 +163,7 @@ export function DockGlyphButton({
       >
         <GlyphSvg drawing={drawingOf(glyph)} appearance={appearance} />
       </span>
+      {hintBubble}
     </button>
   );
 }
@@ -453,6 +460,7 @@ export function TrayRow({
   input,
   armedSlot,
   bottom,
+  addFiles,
   onSummon,
   onRemove
 }: {
@@ -461,6 +469,8 @@ export function TrayRow({
   input: HitInput;
   armedSlot: number | null;
   bottom: string;
+  /** The control that adds the user's own files to the tray, drawn under the slots. */
+  addFiles?: ReactNode;
   onSummon: (slot: number) => void;
   onRemove: (slot: number) => void;
 }) {
@@ -489,7 +499,6 @@ export function TrayRow({
   const rowGap = touch ? 4 : gap;
   const bySlot = new Map(tray.slots.map((item) => [item.slot, item]));
   const firstEmpty = tray.slots.length + 1;
-  const empty = tray.slots.length === 0;
 
   return (
     <div
@@ -537,11 +546,9 @@ export function TrayRow({
           );
         })}
       </div>
-      {empty ? (
-        <Type variant="captionUnderCard" as="p" data-testid="tray-empty-caption" style={{ margin: 0, color: 'var(--holoim-color-text-muted)' }}>
-          Empty: search with Find
-        </Type>
-      ) : null}
+      <div style={{ display: 'flex', alignItems: 'center', gap: rowGap, pointerEvents: tray.open ? 'auto' : 'none' }}>
+        {addFiles}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react';
 
 import { tokens } from '@holoim/design-tokens';
-import { Chip, defaultHitInput, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, HandednessPicker, SideSheet, Type } from '@holoim/ui-dom';
+import { Chip, ChoiceGroup, defaultHitInput, Dock, GlyphControl, GlyphSvg, Halo, HaloRing, HandednessPicker, SettingsSection, SideSheet, Type, typeRoleStyle, useHint } from '@holoim/ui-dom';
 import {
   FLAT_CAPTURE_HALO_ACTIONS,
   PHONE_EDGES,
@@ -192,7 +192,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
         </div>
       ) : null}
 
-      <Dock input={input} unfold aria-label="Capture" data-capture-dock="" onClickCapture={returnFocusToScene} style={{ pointerEvents: 'none' }}>
+      <Dock input={input} unfold aria-label="Capture" data-capture-dock="" onClickCapture={returnFocusToScene} style={{ pointerEvents: 'none', ...(settingsOpen ? { visibility: 'hidden' } : null) }}>
         {show('settings') ? (
           <GlyphControl
             glyph={null}
@@ -224,7 +224,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
           <DockGlyphButton
             glyph="tray"
             label="Tray"
-            title={touch ? 'Tray' : 'Tray · hold T'}
+            hint={touch ? undefined : 'Tray · hold T'}
             testId="dock-tray"
             input={input}
             highlighted={trayOpen}
@@ -234,7 +234,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
           />
         ) : null}
         {flat && show('putBack') && state.tray.holding && state.recordingState !== 'exporting' ? (
-          <DockGlyphButton glyph="putBack" label="Put back" title={touch ? 'Put back' : 'Put back · Backspace'} testId="dock-put-back" input={input} onPress={() => bridge.putBackHeld()} />
+          <DockGlyphButton glyph="putBack" label="Put back" hint={touch ? undefined : 'Put back · Backspace'} testId="dock-put-back" input={input} onPress={() => bridge.putBackHeld()} />
         ) : null}
         {flat && show('find') ? (
           <DockGlyphButton glyph="find" label="Find" testId="dock-find" input={input} highlighted={findOpen} expanded={findOpen} onPress={() => (findOpen ? setFindOpen(false) : openFind())} />
@@ -249,7 +249,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
       <KeyHaloRing bridge={bridge} />
 
-      {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} onSummon={summonSlot} onRemove={(slot) => bridge.removeTraySlot(slot)} /> : null}
+      {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} addFiles={<TrayFilesPicker bridge={bridge} tray={state.tray} input={input} />} onSummon={summonSlot} onRemove={(slot) => bridge.removeTraySlot(slot)} /> : null}
 
       {flat && findOpen ? (
         <FindSheet
@@ -259,7 +259,6 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
           raised={trayOpen}
           loading={state.tray.loading}
           onPick={(url) => bridge.loadTrayUrls([url])}
-          onClose={() => setFindOpen(false)}
         />
       ) : null}
 
@@ -274,18 +273,12 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
 // Find on a flat screen: the object finder in a small sheet above the dock, so
 // it stays reachable during a take, when the Settings sheet is closed.
-function FindSheet({ input, target, bottom, raised, loading, onPick, onClose }: { input: HitInput; target: ViewTarget; bottom: string; raised: boolean; loading: boolean; onPick: (url: string) => void; onClose: () => void }) {
+function FindSheet({ input, target, bottom, raised, loading, onPick }: { input: HitInput; target: ViewTarget; bottom: string; raised: boolean; loading: boolean; onPick: (url: string) => void }) {
   const gap = glyphMetrics({ headset: false }).gapApx;
   return (
     <div style={{ position: 'absolute', left: 0, right: 0, bottom: raised ? `calc(${bottom} + 96px)` : bottom, display: 'flex', justifyContent: 'center', paddingInline: `max(env(safe-area-inset-left), ${PHONE_EDGES.side}px)`, pointerEvents: 'none' }}>
-      <div style={{ pointerEvents: 'auto', width: 'min(100%, 26rem)', maxHeight: '50vh', overflowY: 'auto' }}>
-        <Chip target={target} role="dialog" aria-label="Find an object" data-testid="find-sheet" style={{ display: 'grid', gap, padding: gap }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap }}>
-            <Type variant="byline" as="h3" style={{ margin: 0 }}>
-              Find
-            </Type>
-            <GlyphControl glyph="close" label="Close" input={input} onPress={onClose} />
-          </div>
+      <div style={{ pointerEvents: 'auto', width: 'min(100%, 28rem)', maxHeight: '60vh', overflowY: 'auto', borderRadius: tokens.chip.radius }}>
+        <Chip target={target} role="dialog" aria-label="Find an object" data-testid="find-sheet" style={{ display: 'grid', gap, padding: gap * 1.5 }}>
           <ObjectFinder disabled={loading} input={input} onPick={onPick} />
         </Chip>
       </div>
@@ -299,19 +292,32 @@ function FindSheet({ input, target, bottom, raised, loading, onPick, onClose }: 
 function DockHalo({ bridge, input, touch }: { bridge: CaptureUiBridge; input: HitInput; touch: boolean }) {
   const { layout } = bridge.halo;
   const hit = hitAreaApx(input, glyphMetrics({ headset: false }).iconApx);
+  // The shared hover hint names the key, as on Tray; touch has no hover and no key.
+  const { handlers: hintOn, hint } = useHint(touch ? undefined : 'Halo · hold B');
   return (
     <span data-capture-halo="" style={{ pointerEvents: 'auto', display: 'inline-flex' }}>
+      {hint}
       <Halo
         actions={FLAT_CAPTURE_HALO_ACTIONS}
         ringLiftApx={layout.radiusApx + layout.slotApx / 2 + glyphMetrics({ headset: false }).gapApx}
         onCommit={(commit) => {
           if (commit.action) bridge.runHaloAction(commit.action, touch ? 'touch' : 'mouse');
         }}
-        trigger={(view) => (
-          <span role="img" aria-label="Halo: click, or hold and move to a direction" style={{ display: 'inline-grid', placeItems: 'center', width: hit, height: hit, cursor: 'pointer' }}>
-            <GlyphSvg drawing={glyphDrawing('halo')} appearance={glyphAppearance({ hovered: view.ringDrawn }, { headset: false })} />
-          </span>
-        )}
+        trigger={(view) => {
+          const appearance = glyphAppearance({ hovered: view.ringDrawn }, { headset: false });
+          return (
+            <span
+              role="img"
+              aria-label="Halo: click, or hold and move to a direction"
+              {...hintOn}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: hit, minHeight: hit, cursor: 'pointer' }}
+            >
+              <span style={{ display: 'inline-flex', width: tokens.glyph.icon, height: tokens.glyph.icon }}>
+                <GlyphSvg drawing={glyphDrawing('halo')} appearance={appearance} />
+              </span>
+            </span>
+          );
+        }}
       />
     </span>
   );
@@ -334,36 +340,35 @@ function XrEntryControl({ id, mode, offer, input, onPress }: { id: string; mode:
   return <GlyphControl glyph={null} id={id} label={`${offer === 'active' ? 'Exit' : 'Enter'} ${mode}`} input={input} onPress={onPress} />;
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  const gap = glyphMetrics({ headset: false }).gapApx;
-  return (
-    <section style={{ display: 'grid', gap: gap / 2, marginTop: gap * 2 }}>
-      <Type variant="byline" as="h3" style={{ margin: 0 }}>
-        {title}
-      </Type>
-      {children}
-    </section>
-  );
-}
-
 function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge; state: UiViewModel; touch: boolean; input: HitInput }) {
   const desktop = state.mode === 'desktop-third' || state.mode === 'desktop-first';
   return (
     <>
-      <Section title="Hand">
-        <HandednessPicker value={state.handedness} onChange={(handedness) => bridge.setHandedness(handedness)} wristControl="Record" input={input} />
-      </Section>
+      <SettingsSection title="Hand">
+        <HandednessPicker value={state.handedness} onChange={(handedness) => bridge.setHandedness(handedness)} input={input} />
+      </SettingsSection>
 
       {desktop ? (
-        <Section title="Face">
-          <div>
-            <GlyphControl glyph={null} label={faceCameraLabel(state.faceCamera)} input={input} onPress={() => bridge.toggleFaceCamera()} />
-          </div>
-        </Section>
+        <SettingsSection title="Face camera">
+          <ChoiceGroup
+            label="Face camera"
+            value={faceCameraOn(state.faceCamera) ? 'on' : 'off'}
+            options={FACE_CAMERA_OPTIONS}
+            input={input}
+            onChange={(next) => {
+              if ((next === 'on') !== faceCameraOn(state.faceCamera)) bridge.toggleFaceCamera();
+            }}
+          />
+          {faceCameraProblem(state.faceCamera) ? (
+            <Type variant="captionUnderCard" as="p" data-testid="face-camera-status" style={{ margin: 0 }}>
+              {faceCameraProblem(state.faceCamera)}
+            </Type>
+          ) : null}
+        </SettingsSection>
       ) : null}
 
       {state.place.enabled ? (
-        <Section title="Place">
+        <SettingsSection title="Place">
           <div>
             <PlacePicker bridge={bridge} place={state.place} disabled={state.recordingState !== 'idle'} input={input} />
           </div>
@@ -372,39 +377,30 @@ function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge
               {state.place.message}
             </Type>
           ) : null}
-        </Section>
+        </SettingsSection>
       ) : null}
 
-      <Section title="Props">
+      <SettingsSection title="Props">
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
           <ObjectPicker bridge={bridge} object={state.object} disabled={state.recordingState !== 'idle'} input={input} />
-          <TrayPicker bridge={bridge} tray={state.tray} disabled={false} input={input} />
         </div>
-        <ObjectFinder disabled={state.tray.loading} input={input} onPick={(url) => bridge.loadTrayUrls([url])} />
-      </Section>
+      </SettingsSection>
 
-      <Section title="Microphone">
-        <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
-          {state.micPermission === 'granted'
-            ? 'On: takes save with sound.'
-            : state.micPermission === 'denied'
-              ? 'Off: takes save without sound.'
-              : 'Waiting for permission.'}
-        </Type>
-      </Section>
-
-      <Section title={touch ? 'Touch' : 'Keys'}>
-        {captureHelp(state.mode, touch).map((line) => (
-          <Type key={line} variant="captionUnderCard" as="p" style={{ margin: 0 }}>
-            {line}
-          </Type>
-        ))}
-        {typeof window !== 'undefined' && window.isSecureContext === false ? (
-          <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
-            VR and AR need HTTPS.
-          </Type>
-        ) : null}
-      </Section>
+      <details data-testid="controls-help">
+        <summary style={{ ...typeRoleStyle('byline'), cursor: 'pointer', color: 'var(--holoim-color-gold)' }}>{touch ? 'Touch controls' : 'Keys'}</summary>
+        <div style={{ display: 'grid', gap: glyphMetrics({ headset: false }).gapApx, paddingTop: glyphMetrics({ headset: false }).gapApx }}>
+          {captureHelp(state.mode, touch).map((line) => (
+            <Type key={line} variant="captionUnderCard" as="p" style={{ margin: 0 }}>
+              {line}
+            </Type>
+          ))}
+          {typeof window !== 'undefined' && window.isSecureContext === false ? (
+            <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
+              VR and AR need HTTPS.
+            </Type>
+          ) : null}
+        </div>
+      </details>
     </>
   );
 }
@@ -466,35 +462,66 @@ function PlacePicker({ bridge, place, disabled, input }: { bridge: CaptureUiBrid
   );
 }
 
-// The prepared tray (PRD-045): up to five GLBs or images, before recording.
-function TrayPicker({ bridge, tray, disabled, input }: { bridge: CaptureUiBridge; tray: UiViewModel['tray']; disabled: boolean; input: HitInput }) {
-  const label = tray.loading ? 'Loading tray…' : tray.names.length > 0 ? `Tray: ${tray.names.length}` : 'Tray…';
+const FACE_CAMERA_OPTIONS = [
+  { value: 'on', label: 'On' },
+  { value: 'off', label: 'Off' }
+] as const;
+
+// A file input under a glyph: the input is the control (one tab stop, named for assistive tech), the glyph its drawing, a hint its name.
+function FilePickerGlyph({ hint, ariaLabel, accept, multiple, disabled, input, onFiles }: { hint: string; ariaLabel: string; accept: string; multiple?: boolean; disabled: boolean; input: HitInput; onFiles: (files: File[]) => void }) {
+  const hit = hitAreaApx(input, tokens.glyph.icon);
+  const { handlers, hint: bubble } = useHint(input === 'touch' ? undefined : hint);
+  const appearance = glyphAppearance({}, { headset: false });
   return (
-    <FilePickerWord
-      label={label}
+    <label {...handlers} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: hit, minHeight: hit, opacity: disabled ? tokens.glyph.idleOpacity : 1 }}>
+      <span style={{ display: 'inline-flex', width: tokens.glyph.icon, height: tokens.glyph.icon }}>
+        <GlyphSvg drawing={glyphDrawing('upload')} appearance={appearance} />
+      </span>
+      <input
+        aria-label={ariaLabel}
+        type="file"
+        multiple={multiple}
+        accept={accept}
+        disabled={disabled}
+        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: disabled ? 'default' : 'pointer' }}
+        onChange={(event) => {
+          const files = [...(event.currentTarget.files ?? [])];
+          if (files.length > 0) onFiles(files);
+          event.currentTarget.value = '';
+        }}
+      />
+      {bubble}
+    </label>
+  );
+}
+
+// The prepared tray (PRD-045): up to five GLBs or images, added from the tray itself.
+function TrayFilesPicker({ bridge, tray, input }: { bridge: CaptureUiBridge; tray: UiViewModel['tray']; input: HitInput }) {
+  return (
+    <FilePickerGlyph
+      hint="Add files"
       ariaLabel="Add tray items (.glb, .png, .jpg)"
       accept=".glb,model/gltf-binary,.png,image/png,.jpg,.jpeg,image/jpeg"
       multiple
-      disabled={disabled || tray.loading}
+      disabled={tray.loading}
       input={input}
       onFiles={(files) => bridge.loadTrayFiles(files)}
     />
   );
 }
 
-function faceCameraLabel(state: UiViewModel['faceCamera']): string {
+function faceCameraOn(state: UiViewModel['faceCamera']): boolean {
+  return state === 'starting' || state === 'tracking' || state === 'no-face';
+}
+
+/** Said only when the camera needs attention: on and off speak for themselves. */
+function faceCameraProblem(state: UiViewModel['faceCamera']): string | null {
   switch (state) {
-    case 'off':
-      return 'Face camera: off';
-    case 'starting':
-      return 'Face camera: starting…';
-    case 'tracking':
-      return 'Face camera: tracking';
-    case 'no-face':
-      return 'Face camera: no face in view';
     case 'denied':
-      return 'Face camera: permission denied';
+      return 'The camera is blocked. Allow it in the browser.';
     case 'unavailable':
-      return 'Face camera: unavailable';
+      return 'No camera found.';
+    default:
+      return null;
   }
 }

@@ -10,7 +10,7 @@ import { objectGlbUrl } from '../objects/objectSearch';
 import { ObjectSearchSession } from '../objects/objectSearchSession';
 import { SHOW_CAPABILITIES, capabilityLine } from '../objects/findCapabilities';
 
-const THUMBNAIL_APX = 48;
+const THUMBNAIL_APX = 56;
 
 function sizeLabel(dimensionsM: ObjectSearchResult['dimensionsM']): string | null {
   if (!dimensionsM) return null;
@@ -46,7 +46,7 @@ function ResultButton({ label, disabled, hit, gap, onPress, children }: { label:
         alignItems: 'center',
         gap,
         width: '100%',
-        minHeight: hit,
+        minHeight: Math.max(hit, THUMBNAIL_APX),
         padding: 0,
         background: 'transparent',
         border: 0,
@@ -93,22 +93,41 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
     else if (voice === 'idle' && !disabled) session.startVoice();
   };
 
+  const note = (text: string, role?: 'status' | 'alert') => (
+    <Type variant="captionUnderCard" as="p" role={role} style={{ margin: 0, color: 'var(--holoim-color-text-muted)' }}>
+      {text}
+    </Type>
+  );
+
   return (
-    <div style={{ display: 'grid', gap: gap / 2 }}>
+    <div style={{ display: 'grid', gap }}>
       <form onSubmit={submit} style={{ display: 'flex', alignItems: 'center', gap }}>
-        <input
-          type="search"
-          aria-label="Find an object"
-          placeholder="Find an object…"
-          maxLength={100}
-          value={query}
-          disabled={disabled}
-          onChange={(event) => session.setQuery(event.currentTarget.value)}
+        <label
+          className="finder-field"
           style={{
-            // The controls beside it dim themselves; only the field takes the disabled 55% here, so nothing dims twice.
-            flex: 1, minWidth: 0, minHeight: hit, background: 'transparent', border: 0, borderBottom: '1px solid var(--holoim-color-gold)', color: 'var(--holoim-color-text)', font: 'inherit', opacity: disabled ? tokens.glyph.states.pressedOpacity : 1
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            alignItems: 'center',
+            minHeight: hit,
+            boxSizing: 'border-box',
+            paddingInline: gap,
+            border: '1px solid rgb(var(--holoim-color-text-muted-rgb) / 55%)',
+            borderRadius: tokens.chip.radius / 1.5,
+            opacity: disabled ? tokens.glyph.states.pressedOpacity : 1
           }}
-        />
+        >
+          <input
+            type="search"
+            aria-label="Find an object"
+            placeholder="Find an object…"
+            maxLength={100}
+            value={query}
+            disabled={disabled}
+            onChange={(event) => session.setQuery(event.currentTarget.value)}
+            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 0, outline: 'none', color: 'var(--holoim-color-text)', font: 'inherit', padding: 0 }}
+          />
+        </label>
         <GlyphControl glyph={null} label="Find" input={input} disabled={disabled || query.trim() === '' || voice !== 'idle'} onPress={() => run()} />
         <GlyphControl
           glyph={null}
@@ -120,45 +139,25 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
           onPress={toggleVoice}
         />
       </form>
-      {voice === 'listening' ? (
-        <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
-          Listening…
-        </Type>
-      ) : null}
-      {notice ? (
-        <Type variant="captionUnderCard" as="p" role="status" style={{ margin: 0 }}>
-          {notice}
-        </Type>
-      ) : null}
+      {voice === 'listening' ? note('Listening…') : null}
+      {notice ? note(notice, 'status') : null}
       {SHOW_CAPABILITIES ? (
         <Type variant="byline" as="p" data-testid="find-capabilities" style={{ margin: 0 }}>
           {capabilityLine(null)}
         </Type>
       ) : null}
-      {finding.status === 'loading' ? (
-        <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
-          Searching…
-        </Type>
-      ) : null}
-      {finding.status === 'error' ? (
-        <Type variant="captionUnderCard" as="p" role="alert" style={{ margin: 0 }}>
-          {finding.message}
-        </Type>
-      ) : null}
-      {finding.status === 'done' && finding.results.length === 0 ? (
-        <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
-          No models found
-        </Type>
-      ) : null}
+      {finding.status === 'loading' ? note('Searching…') : null}
+      {finding.status === 'error' ? note(finding.message, 'alert') : null}
+      {finding.status === 'done' && finding.results.length === 0 ? note('No models found. Try another word.') : null}
       {finding.status === 'done' ? (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: gap / 2 }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap }}>
           {finding.results.map((result) => {
             const size = sizeLabel(result.dimensionsM);
             return (
               <li key={result.id}>
                 <ResultButton label={`Add ${result.title} to the tray`} disabled={disabled} hit={hit} gap={gap} onPress={() => onPick(objectGlbUrl(result))}>
-                  <img src={result.thumbnailUrl} alt="" loading="lazy" width={THUMBNAIL_APX} height={THUMBNAIL_APX} style={{ objectFit: 'cover', flex: 'none' }} />
-                  <span style={{ display: 'grid', minWidth: 0 }}>
+                  <img src={result.thumbnailUrl} alt="" loading="lazy" width={THUMBNAIL_APX} height={THUMBNAIL_APX} style={{ objectFit: 'cover', flex: 'none', borderRadius: tokens.chip.radius / 2 }} />
+                  <span style={{ display: 'grid', minWidth: 0, gap: 2 }}>
                     <Type variant="controlLabel" style={{ color: 'inherit' }}>
                       {result.title}
                     </Type>

@@ -545,7 +545,7 @@ test("left-handed, set in the feed's settings: kept on this device, and AR puts 
   const sheet = page.getByRole("dialog", { name: "Settings" });
   await expect(sheet.getByRole("radio", { name: "Right-handed" }), "right-handed by default").toHaveAttribute("aria-checked", "true");
   await sheet.getByRole("radio", { name: "Left-handed" }).click();
-  await expect(sheet.getByText("Left-handed: in a headset, Exit AR sits on your right wrist.")).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: "Left-handed" }), "the choice is marked").toHaveAttribute("aria-checked", "true");
   await shot(page, "settings-left-handed");
   await page.reload();
   await waitForFeedCardPresented(page);

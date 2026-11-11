@@ -226,6 +226,7 @@ export function UiActionRow({
 
 // The redesigned components (docs/features/ui-redesign.md, slice 2): each
 // renders a contract of @holoim/xr-ui-core.
+export { ChoiceGroup, type ChoiceGroupProps, type ChoiceOption } from "./ChoiceGroup.js";
 export { Chip, chipSurfaceStyle, type ChipProps } from "./Chip.js";
 export { Dock, type DockProps } from "./Dock.js";
 export { EdgeSvg, RESTING_EDGE_FRAME, type EdgeSvgProps } from "./EdgeSvg.js";
@@ -236,6 +237,7 @@ export { loadHandedness, saveHandedness, useHandedness } from "./handedness.js";
 export { useHint, type HintHandlers } from "./Hint.js";
 export { HandednessPicker, type HandednessPickerProps } from "./HandednessPicker.js";
 export { defaultHitInput, useReducedMotion } from "./internal.js";
+export { SettingsSection } from "./SettingsSection.js";
 export { Shade, shadeGradient, type ShadeProps } from "./Shade.js";
 export { SideSheet, type SideSheetProps } from "./SideSheet.js";
 export { Type, fontStack, typeRoleStyle, type TypeElement, type TypeProps, type TypeRole } from "./typeRoles.js";

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation } from "react-router-dom";
 
 import { tokens } from "@holoim/design-tokens";
-import { Chip, Dock, GlyphControl, HandednessPicker, SideSheet, useHandedness } from "@holoim/ui-dom";
+import { Chip, Dock, GlyphControl, HandednessPicker, SettingsSection, SideSheet, useHandedness } from "@holoim/ui-dom";
 import { nearestToMiddle } from "@holoim/xr-ui-core";
 
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
@@ -249,7 +249,9 @@ export function FeedPage() {
         <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
       </Chip>
       <SideSheet open={settingsOpen} title="Settings" onClose={() => setSettingsOpen(false)} target={target}>
-        <HandednessPicker value={handedness} onChange={setHandedness} wristControl={VIEWER_CONTROL_NAMES.exitAr} />
+        <SettingsSection title="Hand">
+          <HandednessPicker value={handedness} onChange={setHandedness} />
+        </SettingsSection>
         <AuthPanel user={user} onSignOut={logout} />
       </SideSheet>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
