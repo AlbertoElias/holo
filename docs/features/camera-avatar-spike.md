@@ -1,7 +1,7 @@
 # Feature brief: Camera-driven avatar (evaluation spike)
 
 **Lead:** Claude (Fable 5)  
-**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars; ray jitter meets the bar only with a wrist-to-tip ray, which the aim clip must confirm; **aim error and head zero are unresolved**; then slice 3)
+**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars; ray jitter meets the bar only with a wrist-to-tip ray, which the aim clip must confirm; head readings are correct, and a turn past the face model's range now keeps its yaw from the pose; **aim error is unresolved**; then slice 3)
 **Layer:** event (the author's head, face, arms and hands over time); see
 `docs/product/concepts/what-a-hologram-is.md`
 
@@ -262,8 +262,8 @@ no aim at the lens. Report only; nothing here is a check.
 | Index ray jitter while pointing | p50 2.1 to 5.3 deg, p95 5.7 to 20 deg | 3.5 deg tolerance | Misses |
 | Index ray jitter, open hand at rest | right p50 1.4, p95 3.1 deg; left (wrist brace) p50 3.0, p95 8.6 deg | 3.5 deg | Borderline |
 | Aim error | 26, 41 and 46 deg median on the three aims | 3.5 deg | Not established: far beyond what rough distances explain, so either the ray axes or geometry in the report are wrong or the pointing did not follow the assumed mark layout |
-| Head found | 2,242 of 2,411 frames | - | Lost for the whole turn to the author's left (3.7 s) and while a hand crossed the face (2 s) |
-| Head rotation | turn to the author's right reads +62 deg yaw; facing the lens reads 6 to 11 deg yaw and 16 to 24 deg pitch | - | Zero offset and the left-turn loss are unexplained |
+| Head found | face 2,242 of 2,411 frames; the other 169 by the pose fallback (2026-11-11) | - | The face model lost the turn to the author's left (3.7 s, a full profile) and a hand crossing the face (2 s); see Head below |
+| Head rotation | turn to the author's right reads +62 deg yaw; facing the lens (66 to 68 s) reads yaw -2, pitch -1 to +1 | - | Correct: the 16 to 24 deg pitch seen elsewhere is the author looking down at the screen or hands; see Head below |
 | Hand leaves and returns | lost within the segment, back at 0.92 coverage, 0.2 s gap | - | Works |
 
 Tracking rate was not measured on this clip (frame-stepped). Open after this
@@ -329,21 +329,52 @@ Reading:
   test. A different ray for camera hands would be a PRD decision; the
   headset path is unchanged.
 
+### Head (2026-11-11)
+
+Re-measured from the saved landmarks (`--from-landmarks`), with face crops of
+the clip checked by eye.
+
+- **No zero offset.** The report's "facing the lens" figures came from
+  segments where the author was not facing the lens. Crops at the frames with
+  16 to 28 deg pitch show the author looking down at the screen or the hands;
+  where the author does face the lens (66 to 68 s) the face model reads yaw
+  -2 and pitch -1 to +1. The yaw differences between segments are real head
+  turns. An off-axis perspective error was ruled out too: the nose sits 1 to
+  3 deg from the image centre. The report now gives the head's median yaw and
+  pitch per segment instead of one "facing" figure.
+- **The left-turn loss was a turn past the face model's range.** The face
+  is tracked down to -54 deg yaw at 55.9 s, lost from 55.93 to 59.57 s, and
+  back at -42 deg. The pose kept the nose and ears throughout: the nose sat 1.3
+  to 2.4 ear spans from the ear midpoint (a full profile), against 1.0 to 1.3
+  on the right turn that the face model held at +62 deg. Nothing covered the
+  face (no hand in frame).
+- **Fix: head yaw from the pose when the face is lost.**
+  `headYawFromPose` in `convert.ts` reads yaw from the nose's offset from the
+  ear midpoint over the ear span (-53 deg per span, clamped to 90 deg), with
+  pitch and roll level. Against the face model on all 2,242 face-tracked
+  frames it fits with r 0.96, a median error of 2.4 deg and a p95 of 8.2 deg.
+  It joins the face model's reading without a jump: -54 then -52 deg as the
+  face is lost, and -44 then -42 deg as it returns. All 169 face-lost frames
+  get a yaw: -90 deg for the left turn, 3 to 15 deg while the hand crossed the
+  face. Before this, the avatar's head eased back to straight ahead within
+  0.4 s and stayed there for the rest of the turn.
+- Limits: the slope was fitted on this author and clip. Pitch is not read
+  from the pose, so a lost face holds the head level. The fallback runs only
+  when the face model finds no face, so the face model's own range is
+  unchanged.
+
 **Next steps, in order** (a fresh session on a standard-tier model can take
 these from this brief; the clip and `clip.json` are in `output/bodycam/`, the
 saved landmarks in `apps/capture/output/bodycam-jitter/landmarks.json`):
 
-1. Head: the 16 to 24 deg pitch and 6 to 11 deg yaw read while facing the
-   lens, and the loss on a turn to the author's left. Re-measure from the
-   saved landmarks first; only a change to the models' input needs a new run.
-2. Settle aim with measured ground truth: a short clip with taped, measured
+1. Settle aim with measured ground truth: a short clip with taped, measured
    marks and aims at the lens, the two marks and one mark above the lens;
    judge depth flattening from the side-on aims, and pick between the
    knuckle and wrist rays on it.
-3. Real-time rate and a trial on a phone, independent verification, then the
+2. Real-time rate and a trial on a phone, independent verification, then the
    go/no-go.
 
-Done on 2026-11-11: ray jitter (above), and the script's own server start.
+Done on 2026-11-11: ray jitter and the head (above), and the script's own server start.
 Two script faults found on this first long clip are both fixed. A whole clip
 handed to the browser through `route.fulfill` exceeded the 100 MB
 control-pipe limit and killed the browser; the capture server now serves the
