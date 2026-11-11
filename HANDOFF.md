@@ -28,15 +28,24 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Ready to merge (grouped)
 
-- Creator sign-in sends its email and gates uploads (B-044, branch
-  `bug/creator-sign-in`, pushed, not merged). Merging makes the live app refuse
-  anonymous uploads and sign-in answer 503 until the operator completes
-  "Sign-in email" in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (verify the
-  domain in Resend, API key, two Fly secrets), so merge it after that step.
-  Local checks: `verify:agent`, the new `sign-in-email` e2e at desktop and phone
-  width, and the full viewer-web e2e; the one remaining failure group (AR
-  placement and the XR viewer's IWER planes) also fails on clean `origin/main`.
-
+- A scanned place around a take: slice 1 (brief
+  [`docs/features/archive/splat-place.md`](docs/features/archive/splat-place.md)),
+  split capture slice 2's brief and slice 2a, a take recorded inside a scanned
+  place on the desktop page behind `?placeCapture=1` (brief
+  [`docs/features/splat-capture.md`](docs/features/splat-capture.md)), merged
+  to `main` together 2026-11-11. On the merged tree every `verify:pr` step
+  passed except two pipeline tests: `bubble-capture` (B-043, which fails on
+  `main` too) and one `place-capture` link check that read the previous link's
+  fading line under load (the test now waits for one line; it passed after).
+  The user's table scan leaves the author's feet 0.030 m off its floor in 2 of
+  3 runs (B-044; that case runs only where the scan is on disk).
+  Open: slices 2b (Quest VR) and 2c (phone AR); the viewer finds
+  `RecordedPlace` by name rather than the extension's node index.
+- Creator sign-in sends its email and gates uploads (B-045, branch
+  `bug/creator-sign-in`). The operator steps in
+  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) "Sign-in email" are done (Resend
+  domain `mail.holostud.io`, Fly secrets set 2026-11-11). Open until a real
+  emailed link arrives from the live app after the deploy.
 - Showcase holograms (merged to `main` 2026-11-11 together with positional
   audio; every `verify:pr` step passed on the combined tree, the viewer XR
   suite on a re-run after its AR placement test timed out once while another
@@ -112,6 +121,9 @@ queue item in [`TODOS.md`](TODOS.md).
 
 ## Unverified / device-only
 
+- Scanned places (slices 1 and 2a): the user's real scan ran only headless on
+  the Mac; the phone portal and capture on a phone or Quest are unchecked
+  (slice 2c and 2b in [`docs/features/splat-capture.md`](docs/features/splat-capture.md)).
 - Hand traces (brief
   [`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md)):
   IWER only. On a Quest, record real demonstrations and check how hand jitter

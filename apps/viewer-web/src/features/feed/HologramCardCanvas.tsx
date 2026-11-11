@@ -1,6 +1,6 @@
 import { useGLTF } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ACESFilmicToneMapping,
   Box3,
@@ -45,7 +45,17 @@ import type { PortalStore } from "../portal/portalStore";
 import { usePortalValue } from "../portal/usePortalValue";
 import { DEFAULT_CAMERA_FRAMING_CONFIG, computeDesiredFraming } from "./cameraFraming";
 import { HologramLighting } from "./HologramLighting";
+import { createPlaceGate, PLACE_FIT_WAIT_MS, warnPlaceOnce } from "../place/placeGate";
+import type { PlaceRequest } from "../place/placeRequest";
+import { findStoredPlace } from "../place/storedPlace";
 import { testHooks } from "../../testHooks";
+
+// A scanned place around the take (docs/features/archive/splat-place.md): Spark and
+// everything that touches it load by this one dynamic import, which only the
+// dev and e2e builds keep.
+const PlaceMount = testHooks ? lazy(() => import("../place/PlaceMount")) : null;
+// A take's own stored place (docs/features/splat-capture.md) ships in production, in a chunk loaded only for a take that has one.
+const StoredPlaceMount = lazy(() => import("../place/StoredPlaceMount"));
 
 export type HologramRenderInfo = {
   animationCount: number;
@@ -76,6 +86,8 @@ type HologramCardCanvasProps = {
   soot: SootInput;
   /** Who made the take: a camera take's mark is in their identity hue, with their initial (2.4). */
   author: string;
+  /** A scanned place to show around the take (dev and e2e builds only; see `?place=`). */
+  placeRequest?: PlaceRequest | null | undefined;
 };
 
 export type FrameRect = { left: number; top: number; width: number; height: number };
@@ -210,8 +222,9 @@ function FrameFirst({ run }: { run: (delta: number) => void }) {
   return null;
 }
 
-function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author }: {
+function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author, placeRequest }: {
   url: string;
+  placeRequest: PlaceRequest | null;
   author: string;
   seed: string;
   frameRect?: FrameRect | null | undefined;
@@ -227,6 +240,13 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
 }) {
   const gltf = useGLTF(url);
   const { scene, animations } = gltf;
+  // The take's own place, read from the GLB's JSON (Spark-free); a malformed one leaves the take on its floor disc.
+  const storedPlace = useMemo(() => {
+    const found = findStoredPlace(gltf.parser.json);
+    if (found.error) console.warn(`The hologram's stored place is malformed; it plays on its floor: ${found.error}`);
+    return found.place;
+  }, [gltf]);
+  const storedPlaceShows = useRef(false);
   const paused = usePortalValue(portal, (state) => state.paused);
   const primaryActionRef = useRef<AnimationAction | null>(null);
   const getPlaybackTime = useCallback(() => primaryActionRef.current?.time ?? 0, []);
@@ -310,6 +330,18 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   const rimPending = useRef(false);
   const rimProp = useRef<{ heights: Float32Array | null; shade: boolean }>({ heights: null, shade: true }).current;
   const rimProbe = useRef<RimProbe>({ gated: false, rimReady: false, lifts: false, maxLift: 0, buildMs: null, candidates: 0, heights: null, target: null, raw: null, framing: null, timing: null, groundAt: null, insideDome: null }).current;
+  // A scanned place (testHooks only): the fit waits for it, with a timeout, then hides the recorded set.
+  const placeGate = useMemo(() => createPlaceGate(testHooks && placeRequest !== null), [placeRequest]);
+  useEffect(() => {
+    if (placeGate.status !== "loading") return undefined;
+    const timer = window.setTimeout(() => {
+      if (placeGate.status !== "loading") return;
+      placeGate.status = "timeout";
+      warnPlaceOnce(placeGate, `Place ${placeRequest?.url ?? ""} did not load in time; the card shows its recorded set.`);
+      invalidate();
+    }, placeRequest?.waitMs ?? PLACE_FIT_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [invalidate, placeGate, placeRequest]);
   const buildRimNow = useCallback((shape: ClocheShape) => {
     rimPending.current = false;
     const sceneBubble = clonedScene.getObjectByName("RecordedSceneBubble");
@@ -352,8 +384,15 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     fittedCentre.current = bubble ? bubble.center : null;
     clocheRef.current = shape;
     setCloche(shape);
-    // A performer's take with its recorded scene; a camera take and an old export keep today's dome.
-    rimProbe.gated = Boolean(bubble) && !isCameraTake(clonedScene) && Boolean(clonedScene.getObjectByName("RecordedAvatar")) && Boolean(clonedScene.getObjectByName("RecordedSceneBubble"));
+    // A scanned place replaces the recorded set: the dome was fitted with the set in, so it is the same dome, and the set is hidden after.
+    const showsPlace = placeGate.status === "ready";
+    // A performer's take with its recorded scene; a camera take and an old export keep today's dome. A place has no ground to lift to.
+    rimProbe.gated = !showsPlace && Boolean(bubble) && !isCameraTake(clonedScene) && Boolean(clonedScene.getObjectByName("RecordedAvatar")) && Boolean(clonedScene.getObjectByName("RecordedSceneBubble"));
+    if (showsPlace) {
+      const recordedSet = clonedScene.getObjectByName("RecordedSceneBubble");
+      if (recordedSet) recordedSet.visible = false;
+      placeGate.shows = true;
+    }
     if (rimProbe.gated) {
       if (groundFieldBudget()) buildRimNow(shape);
       else rimPending.current = true;
@@ -362,15 +401,16 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     clonedScene.traverse((child) => {
       if (child.name === "RecordedBubbleSphere") child.visible = false;
     });
-  }, [animations, buildRimNow, clonedScene, rimProbe, sphereClip]);
+  }, [animations, buildRimNow, clonedScene, placeGate, rimProbe, sphereClip]);
 
   // The dome's shift and rim for this frame, set before the cloche paints
   // (FrameFirst), so the shell and the scene's clip always agree.
   const bubbleNode = useMemo(() => clonedScene.getObjectByName("RecordedBubbleSphere") ?? null, [clonedScene]);
   const bubbleNow = useRef(new Vector3()).current;
   const driveCloche = useCallback((delta: number) => {
-    // The take advances first: everything after reads this frame's pose.
-    mixer.update(delta);
+    // The take advances first: everything after reads this frame's pose. While a scan is awaited the take holds at its first pose,
+    // so the dome fitted after the wait is the dome fitted without one.
+    mixer.update(placeGate.status === "off" || clocheRef.current ? delta : 0);
     // The bubble where it is now (a seek between frames included), not where the last draw synced it.
     if (fittedCentre.current && sphereClip.active && bubbleNode) clocheShift.copy(bubbleNode.getWorldPosition(bubbleNow)).sub(fittedCentre.current);
     const rim = rimRef.current;
@@ -390,7 +430,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
       rimProbe.raw = rim.motion.raw;
       rimProbe.timing = rim.motion.timing;
     }
-  }, [bubbleNode, bubbleNow, clocheShift, domeClip, domeRim, mixer, reducedMotion, rimProbe, rimProp, sphereClip]);
+  }, [bubbleNode, bubbleNow, clocheShift, domeClip, domeRim, mixer, placeGate, reducedMotion, rimProbe, rimProp, sphereClip]);
 
   /** Whether a world point is under the glass where the dome is now, bent onto the rim of a take that lifts. */
   const insideDome = useCallback((point: Vector3): boolean | null => {
@@ -452,7 +492,8 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
         if (skinned.boundingBox) skinned.computeBoundingBox();
       });
       raycaster.setFromCamera(ndc, camera);
-      if (options?.glass && throughGlass()) return true;
+      // With a place the recorded set is hidden, so the glass over the scan counts as the hologram.
+      if ((options?.glass || placeGate.shows || storedPlaceShows.current) && throughGlass()) return true;
       return raycaster.intersectObject(clonedScene, true).some((hit) => (
         (hit.object as Mesh).isMesh === true
         && drawn(hit.object)
@@ -470,7 +511,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     return () => {
       if (portal.runtime.hitTest === hitTest) portal.runtime.hitTest = null;
     };
-  }, [camera, clocheShift, clonedScene, insideDome, portal, renderer, rimProp, sphereClip]);
+  }, [camera, clocheShift, clonedScene, insideDome, placeGate, portal, renderer, rimProp, sphereClip]);
 
   // Mounting means the GLTF resolved and its scene is in the canvas.
   useEffect(() => {
@@ -688,7 +729,10 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
 
   useFrame((frameState, delta) => {
     portal.runtime.playbackSeconds = primaryActionRef.current?.time ?? 0;
-    if (!clocheRef.current) fitClocheNow();
+    if (!clocheRef.current) {
+      // The scan is read before the dome is fitted, so the set it replaces is still in the fit.
+      if (placeGate.status !== "loading") fitClocheNow();
+    }
     else if (rimPending.current && groundFieldBudget()) buildRimNow(clocheRef.current);
     if (!(camera instanceof PerspectiveCamera)) {
       return;
@@ -811,6 +855,43 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     }
   });
 
+  // Where the bubble's centre goes over the take, relative to the fit: the box the place's coarse crop keeps.
+  const placeSweep = useMemo(() => {
+    const sweep = { min: new Vector3(), max: new Vector3() };
+    const fitted = fittedCentre.current;
+    if (!cloche || !placeRequest || !fitted) return sweep;
+    for (const sample of takeSamples(clonedScene, animations, RIM.framingSamples)) {
+      sweep.min.min(sample.bubble.clone().sub(fitted));
+      sweep.max.max(sample.bubble.clone().sub(fitted));
+    }
+    return sweep;
+  }, [animations, cloche, clonedScene, placeRequest]);
+  // The lowest foot bone of the author now, for the place report.
+  const readFeetY = useCallback(() => {
+    const avatar = clonedScene.getObjectByName("RecordedAvatar");
+    let lowest = Number.NaN;
+    const at = new Vector3();
+    avatar?.traverse((node) => {
+      if ((node as Mesh & { isBone?: boolean }).isBone && /(Left|Right)(Foot|ToeBase)$/.test(node.name)) lowest = Math.min(Number.isNaN(lowest) ? Infinity : lowest, node.getWorldPosition(at).y);
+    });
+    return lowest;
+  }, [clonedScene]);
+
+  // The stored place's bytes, from the loader's own parse; the disc it replaces hides once its splats draw.
+  const readStoredPlaceBytes = useCallback(
+    () => gltf.parser.getDependency("bufferView", storedPlace?.extension.bufferView ?? -1) as Promise<ArrayBuffer>,
+    [gltf, storedPlace]
+  );
+  const onStoredPlaceShown = useCallback(() => {
+    const disc = clonedScene.getObjectByName("RecordedSceneBubble");
+    if (disc) disc.visible = false;
+    storedPlaceShows.current = true;
+    invalidate();
+  }, [clonedScene, invalidate]);
+  const onStoredPlaceFailed = useCallback((error: unknown) => {
+    console.warn("The hologram's stored place did not load; it plays on its floor.", error);
+  }, []);
+
   // SkeletonUtils clones share the loader cache's geometry and source materials.
   // useSphereClipping owns/disposes its material clones; leave cached assets alive.
 
@@ -838,6 +919,25 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
         <HandTraces source={traceSource} portal={portal} active={active} getPlaybackTime={getPlaybackTime} probe={tracesProbe} />
       )}
       <AuthorCameraMark scene={clonedScene} author={author} probe={presenceProbe} />
+      {storedPlace && !placeRequest && (
+        <Suspense fallback={null}>
+          <StoredPlaceMount
+            place={storedPlace}
+            readBytes={readStoredPlaceBytes}
+            scene={clonedScene}
+            shape={cloche}
+            shift={clocheShift}
+            readFeetY={readFeetY}
+            onShown={onStoredPlaceShown}
+            onFailed={onStoredPlaceFailed}
+          />
+        </Suspense>
+      )}
+      {PlaceMount && placeRequest && (
+        <Suspense fallback={null}>
+          <PlaceMount request={placeRequest} gate={placeGate} shape={cloche} shift={clocheShift} scene={clonedScene} clips={animations} sweep={placeSweep} readFeetY={readFeetY} />
+        </Suspense>
+      )}
     </>
   );
 }
@@ -856,7 +956,8 @@ export function HologramCardCanvas({
   seed,
   frameRect,
   soot,
-  author
+  author,
+  placeRequest
 }: HologramCardCanvasProps) {
   return (
     <Canvas
@@ -871,7 +972,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} />
+      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} placeRequest={placeRequest ?? null} />
     </Canvas>
   );
 }

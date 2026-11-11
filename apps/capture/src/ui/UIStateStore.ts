@@ -16,6 +16,7 @@ export class UIStateStore {
     heightFit: { enabled: false, pending: false, eyeHeight: null },
     micPermission: 'pending',
     object: { status: 'none', name: null, message: null },
+    place: { enabled: false, status: 'none', name: null, message: null },
     tray: { names: [], slots: [], loading: false, message: null, open: false, blocked: false, reachableSlot: null, holding: false, returnSlot: null },
     faceCamera: 'off',
     handedness: loadHandedness(),
@@ -110,6 +111,11 @@ export class UIStateStore {
 
   setObjectState(object: UiViewModel['object']): void {
     this.value = { ...this.value, object };
+    this.emit();
+  }
+
+  setPlaceState(place: UiViewModel['place']): void {
+    this.value = { ...this.value, place };
     this.emit();
   }
 

@@ -32,6 +32,7 @@ import { optionalAuthUser } from "../services/auth.js";
 import { createFeedSnapshotWriter } from "../services/feed-snapshot.js";
 import { saveUploadedGlb, UploadValidationError, validateGlbMeta } from "../services/hologram-storage.js";
 import type { MediaStorage } from "../services/media-storage.js";
+import { storedPlaceProblem } from "../services/place-check.js";
 import { usdzFilenameFor, usdzFilenamesFor, withHologramLock } from "../services/usdz-converter.js";
 
 const SIGN_IN_TO_UPLOAD = "Sign in to upload a hologram.";
@@ -200,6 +201,12 @@ export async function registerHologramRoutes(
     if (!prefix || prefix.toString("ascii") !== "glTF") {
       await storage.delete(intent.storageKey).catch(() => undefined);
       return reply.status(422).send({ error: "Uploaded object is not a GLB file." });
+    }
+    const whole = await storage.readPrefix(intent.storageKey, head.sizeBytes);
+    const placeProblem = whole ? await storedPlaceProblem(new Uint8Array(whole)) : "The uploaded object could not be read.";
+    if (placeProblem) {
+      await storage.delete(intent.storageKey).catch(() => undefined);
+      return reply.status(422).send({ error: placeProblem });
     }
 
     const filenameStored = `${createId()}.glb`;

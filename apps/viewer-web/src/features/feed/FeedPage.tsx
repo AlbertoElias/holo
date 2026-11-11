@@ -216,9 +216,10 @@ export function FeedPage() {
 
   const cards = useMemo(
     () =>
-      items.map((item) => (
+      items.map((item, index) => (
         <HologramCard
           key={item.id}
+          first={index === 0}
           item={item}
           active={item.id === resolvedFocusId}
           muted={audioMuted}

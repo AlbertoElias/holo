@@ -14,6 +14,8 @@ export interface CaptureUiBridge {
   runHaloAction: (action: HaloAction, input: "mouse" | "touch") => void;
   recenterAr: () => void;
   loadObjectFile: (file: File) => void;
+  /** A scanned place (`.spz` or `.ply`) replaces the set (docs/features/splat-capture.md). */
+  loadPlaceFile: (file: File) => void;
   loadTrayFiles: (files: File[]) => void;
   loadTrayUrls: (urls: string[]) => void;
   /** The dock's Tray glyph opened or closed the tray (flat screens). */

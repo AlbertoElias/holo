@@ -6,6 +6,7 @@ import { AudioRecorder } from './AudioRecorder';
 import { AvatarRecorder } from './AvatarRecorder';
 import { CameraRecorder } from './CameraRecorder';
 import { testHooks } from '../testHooks';
+import type { PlaceExportSource } from './GltfExportComposer';
 
 interface RecordingSessionDeps {
   ui: UIStateStore;
@@ -27,6 +28,8 @@ interface RecordingSessionDeps {
   isPlacementSettled: () => boolean;
   /** The group whose local frame a camera take is recorded in. */
   setFrame: THREE.Object3D;
+  /** The scanned place the take stands in, when there is one (docs/features/splat-capture.md). */
+  getPlace?: () => PlaceExportSource | undefined;
 }
 
 /** What a take records: a performer (avatar, today) or the phone as a camera. */
@@ -53,7 +56,7 @@ export class RecordingSession {
   // Checks re-export the last take to compare bytes (chrome visible or not);
   // off in production, where a take's samples are freed once it downloads.
   private retainLastTake = false;
-  private lastTake: { avatar: THREE.Object3D; worldModel: THREE.Object3D | undefined; audioData: { buffer: ArrayBuffer; mimeType: string } | undefined } | null = null;
+  private lastTake: { avatar: THREE.Object3D; worldModel: THREE.Object3D | undefined; audioData: { buffer: ArrayBuffer; mimeType: string } | undefined; place: PlaceExportSource | undefined } | null = null;
 
   constructor(private readonly deps: RecordingSessionDeps) {
     // A hidden page is a mid-take exit: stop and export it as Stop does.
@@ -135,7 +138,7 @@ export class RecordingSession {
   async reexportLastTake(): Promise<ArrayBuffer | null> {
     const take = this.lastTake;
     if (!take) return null;
-    const blob = await this.recorder.exportToGlbBlob(take.avatar, take.worldModel, take.audioData);
+    const blob = await this.recorder.exportToGlbBlob(take.avatar, take.worldModel, take.audioData, take.place);
     return blob.arrayBuffer();
   }
 
@@ -281,9 +284,10 @@ export class RecordingSession {
       // Frames stop when the headset sleeps or the session ends; an
       // unbounded wait here once froze the UI in "exporting" (B-010).
       await nextFrame();
-      const blob = await withTimeout(this.recorder.exportToGlbBlob(avatar, worldModel, audioData), EXPORT_TIMEOUT_MS, 'GLB export timed out after 60s');
+      const place = this.deps.getPlace?.();
+      const blob = await withTimeout(this.recorder.exportToGlbBlob(avatar, worldModel, audioData, place), EXPORT_TIMEOUT_MS, 'GLB export timed out after 60s');
       this.download(blob, `${baseName}.glb`);
-      if (this.retainLastTake) this.lastTake = { avatar, worldModel, audioData };
+      if (this.retainLastTake) this.lastTake = { avatar, worldModel, audioData, place };
       else this.recorder.clear();
       ui.setRecordingState('idle');
     } catch (err) {
