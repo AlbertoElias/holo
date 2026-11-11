@@ -539,7 +539,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("fails a conversion that keeps timing out; a request retries it once", async () => {
-    const created = await uploadHologram(app, { hologramName: "Endless timeout", quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Endless timeout", quickLookEnabled: true });
     await writeFile(path.join(converterControl, "timeout"), "simulate slow CPU");
 
     for (const status of ["processing", "processing", "failed"]) {
@@ -562,7 +562,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
   });
 
   it("fails a conversion over its CPU budget at once instead of retrying it", async () => {
-    const created = await uploadHologram(app, { hologramName: "Too costly", quickLookEnabled: true });
+    const created = await uploadHologram(app, session, { hologramName: "Too costly", quickLookEnabled: true });
     await writeFile(path.join(converterControl, "budget"), "scene too costly");
     await runWorkerOnce();
     const failed = await prisma.hologram.findUnique({ where: { id: created.id } });
