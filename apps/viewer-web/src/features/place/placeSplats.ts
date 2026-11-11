@@ -3,7 +3,7 @@ import { Euler, Quaternion, Vector3 } from "three";
 import type { PlacedScan } from "./loadPlace";
 import { FLOOR_SLACK_METERS, MAX_SPLAT_EXTENT_METERS, SPLAT_EXTENT_SIGMA, type DomeShape } from "@holoim/place";
 
-/** Splats kept after the crop (docs/features/splat-place.md, Memory). */
+/** Splats kept after the crop (docs/features/archive/splat-place.md, Memory). */
 export const PLACE_SPLAT_CAP = 1_500_000;
 /** The crop keeps this much past the swept dome, plus each splat's own extent, metres: it only lowers the count, the shader is the edge. */
 export const CROP_MARGIN_METERS = 0.3;

@@ -703,7 +703,8 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
       const hit = new Vector3(...landings[index]!);
       expect(stored.distanceTo(hit), `link ${index}: the stored end is the hit`).toBeLessThan(LINK_TOLERANCE);
       await seek(page, uploaded.url, (mark.span.start + mark.span.end) / 2);
-      await expect.poll(async () => (await inks(page, uploaded.url)).filter((link) => link.ink).length, { timeout: 15_000 }).toBeGreaterThan(0);
+      // The previous link's line fades out after the seek; read this one's once it draws alone.
+      await expect.poll(async () => (await inks(page, uploaded.url)).filter((link) => link.ink).length, { timeout: 15_000 }).toBe(1);
       const drawn = (await inks(page, uploaded.url)).find((link) => link.ink)!;
       const played = new Vector3(...drawn.ink!.to);
       const expected = hit.clone().applyMatrix4(modelWorld);

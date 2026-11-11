@@ -25,7 +25,7 @@ if (!existsSync(path.join(dist, 'index.html'))) {
 }
 
 // Anywhere in the bundle: test hooks, the IWSDK dev runtime's own code, and the
-// scanned places' reports (docs/features/splat-place.md, splat-capture.md).
+// scanned places' reports (docs/features/archive/splat-place.md, splat-capture.md).
 const FORBIDDEN_ANYWHERE = capture
   ? []
   : ['__HOLOIM_XR_VIEWER__', '__HOLOIM_TEST_MODULES__', '__HOLOIM_AR_TEST_OBSERVER__', '__HOLOIM_FEED_TEST_OBSERVER__', '[IWSDK Dev]', '__HOLOIM_PLACE__', '__HOLOIM_STORED_PLACE__'];

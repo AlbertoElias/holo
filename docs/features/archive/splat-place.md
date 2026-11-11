@@ -1,11 +1,11 @@
 # Feature brief: A scanned place around a take (split capture, first attempt)
 
 **Lead:** Claude (Opus)  
-**Status:** Implementing
+**Status:** Complete (merged to `main` 2026-11-11 with slice 2a; the iPhone check Unverified)
 **Layer:** event (the place, recorded by a scan) and view (how the portal
 shows it); see `docs/product/concepts/what-a-hologram-is.md`
 
-Source idea: IDEA-077, [phone reality capture](../product/concepts/phone-reality-capture.md).
+Source idea: IDEA-077, [phone reality capture](../../product/concepts/phone-reality-capture.md).
 This is slice 1 of "split capture": the place is a Gaussian splat scanned
 once, and the person stays the recorded skeleton on today's avatar. A
 photoreal look for the person comes later and is not part of this brief.
@@ -174,7 +174,7 @@ and zoom details; tabletops and camera takes out of scope. All taken.
 | First card, and `placeFor` | `place.spec.ts`: a faked two-card feed, pixels of each card with and without the place | Pass: `?place=` changes the first card only; `placeFor=<id>` changes the second only |
 | A large splat's extent never spills | `place.spec.ts`: one large splat just inside the dome on its upper front diagonal, whose extent (checked) reaches past the glass, against a control of small splats at the same point | Pass: control drawn (magenta pixels), large splat 0 magenta pixels, `outside` 0 |
 | Real scan, downloaded (SPZ, 2026-11-10) | Spark's example `fireplace.spz` (a captured room, 301,000 splats, 4.4 MB), git-ignored under `public/local-places/`, around capture's avatar; headed Chromium on the Mac (Metal) | Decoded 0.39 s, ready 0.9 s, sorted 1.1 s after load; 120 fps; 28,179 splats kept by the crop, 5,047 drawn inside the dome, 0 outside. First run needed `placeFlip=1`; since the way up is read, no flag (decode 0.48 s). Placed by hand at the hearth with `placeX=2.37&placeZ=0.95&placeYaw=90`; proof video seen by the lead (not committed). `snow-street.spz`, a street scan whose content sits 8–28 m from its origin, shows only a patch of its ground around the take: not a usable place without hand placement |
-| Real scan (SPZ), the user's | User's Scaniverse export on the dev server, Mac and iPhone | Not done: needs the user's scan and iPhone |
+| Real scan (SPZ), the user's (2026-11-11) | The user's first Scaniverse export, a table rather than a room (472,273 splats, 11.7 MB), headless software GL on the Mac | Decoded 1.1 s; 340,081 splats kept by the crop, 0 outside. Turned upside down by the way-up reading (see Findings), fixed in slice 2a (`697b15c`, `packages/place`): not turned, floor at y −0.753. On the iPhone: Unverified |
 | Real GPU, generated scan (2026-11-09) | Headed Chromium on the Mac (Metal), real walk take, the spec's PLY | About 120 fps while playing; ready 1.8 s, first drawn 2.5 s after load (nothing draws before Spark's first sort); the scan draws in every sample while the dome is on its floor; proof video seen by the lead (not committed) |
 
 SPZ is covered only by the real scan; the spec writes PLY.
@@ -220,9 +220,13 @@ SPZ is covered only by the real scan; the spec writes PLY.
   hologram. It must work wherever capture runs: Quest VR, Quest passthrough
   AR, phone AR and the desktop capture page. This slice's loader, crop,
   floor and way-up reading are that flow's render end. Queued in
-  [`TODOS.md`](../../TODOS.md).
+  [`TODOS.md`](../../../TODOS.md).
 
 ## Physical-device limits
 
 The user's iPhone is the device for the real scan and the phone portal check.
+Unverified: the user's scan ran only on the Mac; the phone portal with a
+real scan was not checked on the iPhone before closing (2026-11-11, at the
+user's request to wrap up). Slice 2c, phone AR in
+[`splat-capture.md`](../splat-capture.md), checks a scan on a phone.
 Android and Quest are not covered: the AR and VR viewers are out of scope.

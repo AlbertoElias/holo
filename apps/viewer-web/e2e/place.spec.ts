@@ -14,7 +14,7 @@ import { shotDifference, shotStats } from "./place-pixels";
 import { animationFrames, cardCenter, readPortal, waitForPortalReady } from "./portal-helpers";
 import { recordWalkTake } from "./pipeline-takes";
 
-// A scanned place around a take (docs/features/splat-place.md). The scan is
+// A scanned place around a take (docs/features/archive/splat-place.md). The scan is
 // a PLY this spec writes at runtime: a floor off the origin, a table band,
 // floaters under the floor, coloured boxes, clutter of every size and a
 // magenta ring placed just past the glass of the dome the baseline run

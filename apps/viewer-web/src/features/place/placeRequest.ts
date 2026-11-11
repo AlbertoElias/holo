@@ -1,4 +1,4 @@
-// A scanned place around a take (docs/features/splat-place.md): which splat
+// A scanned place around a take (docs/features/archive/splat-place.md): which splat
 // the feed card shows, read from the page URL. Dev and e2e builds only; the
 // caller gates on `testHooks`, so the production bundle never asks.
 

@@ -1,4 +1,4 @@
-// The small part of the place the card itself reads (docs/features/splat-place.md,
+// The small part of the place the card itself reads (docs/features/archive/splat-place.md,
 // Load order): whether its cloche fit should wait, and whether a place shows.
 // Spark-free, so the card needs nothing from the lazily loaded rest.
 

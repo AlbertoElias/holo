@@ -1,5 +1,5 @@
 // What a scan's splats say about the room, read from their centres and
-// opacities (docs/features/splat-place.md, Placement). Pure arrays in, numbers
+// opacities (docs/features/archive/splat-place.md, Placement). Pure arrays in, numbers
 // out: the loader feeds it, and nothing here knows Spark.
 
 /** Height histogram bin, metres. */

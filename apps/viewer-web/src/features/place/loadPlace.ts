@@ -2,7 +2,7 @@ import { decodeScan, type DecodedScan } from "@holoim/place";
 
 import type { PlaceScan, PlaceSource } from "./placeRequest";
 
-// Loads and reads a scan (docs/features/splat-place.md). Spark arrives by
+// Loads and reads a scan (docs/features/archive/splat-place.md). Spark arrives by
 // `@holoim/place`'s dynamic import, so a build with the test hooks off drops
 // this whole directory with its only caller.
 

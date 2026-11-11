@@ -49,6 +49,21 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   `apps/viewer-web`, 57 s), so it depends on the three `avatar-formats` uploads that run before it. Suspect: a
   portal-controls overlay marked `data-reach="hidden"` still takes pointer events over the neighbouring card.
 
+### B-044 — On the user's table scan, the author's feet end 3 cm off the scan's floor
+
+- **Area:** `apps/viewer-web` e2e and `packages/place` (split capture slice 2a)
+- **Severity:** P3 (the case runs only where the user's own scan is on disk, an ignored file; the
+  committed fixtures pass)
+- **Observed:** 2026-11-11 on the merged slice 1 + 2a tree
+- **Evidence:** `e2e/place-capture.pipeline.spec.ts:1042` "the downloaded scan table.spz", "the author's feet on the
+  scan's floor": 0.029969515228847526 m against the 0.02 m limit, the same value in 2 of 3 runs (the third passed).
+  The scan is a table rather than a room, 472,273 splats, from Scaniverse.
+- **Expected:** the author stands on the scan's floor within 0.02 m, as on the committed fixtures.
+- **Reproduction:** put the scan at `apps/viewer-web/public/local-places/table.spz` (and in the cached e2e build's
+  `local-places/`), then in `apps/viewer-web` run
+  `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/place-capture.pipeline.spec.ts`.
+  Suspect: the floor band of a scan whose floor is sparse around a table, or the end pose landing mid-step.
+
 ## Entry template
 
 ```md

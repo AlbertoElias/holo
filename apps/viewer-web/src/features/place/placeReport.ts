@@ -1,4 +1,4 @@
-// What the e2e check reads about the place (docs/features/splat-place.md):
+// What the e2e check reads about the place (docs/features/archive/splat-place.md):
 // `window.__HOLOIM_PLACE__`, installed only where the test hooks are on.
 
 export type PlaceStatus = "off" | "loading" | "ready" | "failed" | "timeout";

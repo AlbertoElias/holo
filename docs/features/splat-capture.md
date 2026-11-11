@@ -7,7 +7,7 @@ in the scanned place itself only when the scan is lined up with the real
 room (*here*, Q2). See `docs/product/concepts/what-a-hologram-is.md`.
 
 Source idea: IDEA-077, [phone reality capture](../product/concepts/phone-reality-capture.md).
-Slice 1, [`splat-place.md`](splat-place.md), is the render end: a dev-only
+Slice 1, [`splat-place.md`](archive/splat-place.md), is the render end: a dev-only
 `?place=<url>` shows a splat around an existing take in the feed card. The
 user's direction on 2026-11-10: the place belongs to capture, because a
 hologram is a recorded event, and it must work on every capture device.

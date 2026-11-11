@@ -50,7 +50,7 @@ import type { PlaceRequest } from "../place/placeRequest";
 import { findStoredPlace } from "../place/storedPlace";
 import { testHooks } from "../../testHooks";
 
-// A scanned place around the take (docs/features/splat-place.md): Spark and
+// A scanned place around the take (docs/features/archive/splat-place.md): Spark and
 // everything that touches it load by this one dynamic import, which only the
 // dev and e2e builds keep.
 const PlaceMount = testHooks ? lazy(() => import("../place/PlaceMount")) : null;

@@ -2,7 +2,7 @@ import type * as Spark from "@sparkjsdev/spark";
 
 import { readFloor, readUpright, turnCenters, type FloorReading } from "./analysis.js";
 
-// Decodes a scan and reads it (docs/features/splat-place.md, splat-capture.md).
+// Decodes a scan and reads it (docs/features/archive/splat-place.md, splat-capture.md).
 // Spark arrives by a dynamic import, here and nowhere else in the package, so
 // an app's first chunk never carries it: the import is reached only once a
 // scan is asked for.

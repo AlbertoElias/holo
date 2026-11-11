@@ -1,4 +1,4 @@
-// The cloche's cut through a scanned place (docs/features/splat-place.md, now shared by capture and the viewer,
+// The cloche's cut through a scanned place (docs/features/archive/splat-place.md, now shared by capture and the viewer,
 // Clipping). The dome is the feed's flat one (a place turns the rim off), read
 // from the same shape and shift the cloche is drawn from. A splat is tested by
 // its extent, not its centre, and fades out toward the glass: the GLSL here
