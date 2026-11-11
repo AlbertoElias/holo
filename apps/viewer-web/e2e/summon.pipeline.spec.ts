@@ -343,9 +343,11 @@ test("an undone put-back: two presence spans survive the feed card and USDZ", as
   const buffer = await readFile(capture.glb);
   const parsed = glbLib.loadTake(buffer) as { times: number[]; validation: { value: { objects: Array<{ node: number; name: string; origin: string; presence: Array<{ start: number; end: number }> }> } } };
   const all = parsed.validation.value.objects;
-  const twoSpans = all.filter((entry) => entry.presence.length === 2);
-  expect(twoSpans.length, "exactly one object has two presence spans").toBe(1);
-  const entry = twoSpans[0]!;
+  // The summoned bracket is the one put back and undone (other objects in the take may also leave and return).
+  const found = all.find((candidate) => candidate.origin === "summoned" && candidate.name === "bracket.glb");
+  expect(found, "the summoned bracket is in the take").toBeTruthy();
+  const entry = found!;
+  expect(entry.presence.length, "the put-back then undone bracket has two presence spans").toBe(2);
   const index = all.indexOf(entry);
   const [first, second] = entry.presence as [{ start: number; end: number }, { start: number; end: number }];
   const gap = second.start - first.end;
