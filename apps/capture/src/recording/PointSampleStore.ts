@@ -68,7 +68,9 @@ export interface TraceSpan {
 /** What `undoLast` or `redoLast` took out or put back. */
 export type HistoryKind = 'hold' | 'trace';
 
-type HistoryEntry = { kind: 'hold'; hold: AimHold } | { kind: 'trace'; trace: TraceSpan };
+/** One hold or trace the take keeps: what capture's history undoes out of the take and restores. */
+export type PointHistoryEntry = { kind: 'hold'; hold: AimHold } | { kind: 'trace'; trace: TraceSpan };
+type HistoryEntry = PointHistoryEntry;
 
 const entryStart = (entry: HistoryEntry): number => (entry.kind === 'hold' ? entry.hold.samples[0]!.timeSec : entry.trace.startSec);
 
@@ -117,6 +119,8 @@ export class PointSampleStore {
   /** An open hold was undone while its mark is still held: drop its samples until it is released. */
   private droppingUntilRelease = false;
   private readonly motionRuns: InferredMotionRun[] = [];
+  /** A hold or trace began: capture's history (docs/features/archive/undo-redo.md) takes it as a meaning entry. */
+  onEntry: ((entry: PointHistoryEntry) => void) | null = null;
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -171,7 +175,7 @@ export class PointSampleStore {
     this.undone.length = 0;
     const hold: AimHold = { side: sample.side, input, samples: [copyRaySample(sample)], endSec: undefined };
     this.aimHolds.push(hold);
-    this.history.push({ kind: 'hold', hold });
+    this.addEntry({ kind: 'hold', hold });
   }
 
   /** The hold ended on this step. Safe to call when no hold is open. */
@@ -196,7 +200,7 @@ export class PointSampleStore {
     this.undone.length = 0;
     const trace: TraceSpan = { startSec: sec, endSec: undefined, ...(side ? { onSide: side } : {}) };
     this.traces.push(trace);
-    this.history.push({ kind: 'trace', trace });
+    this.addEntry({ kind: 'trace', trace });
     return true;
   }
 
@@ -210,35 +214,65 @@ export class PointSampleStore {
     return open;
   }
 
-  /**
-   * The Halo's W. While a trace is open it is ended at `pressSec` and removed,
-   * even if a hold began inside it. Otherwise the entry that began last goes:
-   * a hold (ended first if still held, ignoring the rest of that hold) or a
-   * trace. Null when there is nothing.
-   */
-  undoLast(pressSec: number): HistoryKind | null {
-    if (!this.enabled) return null;
+  /** The entry of the trace still being drawn: W takes it first, even if a hold began inside it. */
+  openTraceEntry(): PointHistoryEntry | null {
     const open = this.openTrace();
-    if (open) {
-      open.endSec = Math.max(pressSec, open.startSec);
-      // Its own entry, which a hold begun inside the trace may follow in the history.
-      const entry = this.history.find((kept) => kept.kind === 'trace' && kept.trace === open)!;
-      return this.take(entry);
-    }
-    const last = this.history.at(-1);
-    if (!last) return null;
-    if (last.kind === 'hold' && last.hold.endSec === undefined) {
-      last.hold.endSec = Math.max(pressSec, last.hold.samples.at(-1)!.timeSec);
-      this.droppingUntilRelease = true;
-    }
-    return this.take(last);
+    return open ? (this.history.find((kept) => kept.kind === 'trace' && kept.trace === open) ?? null) : null;
   }
 
-  /** The Halo's E: puts the most recently undone hold or trace back. Null when there is none. */
+  /**
+   * Takes `entry` out of the take. An open trace ends at `pressSec`; a hold
+   * still held ends there too, and the rest of it is ignored until release.
+   * False when it is not kept (already undone, or cleared).
+   */
+  undoEntry(entry: PointHistoryEntry, pressSec: number): boolean {
+    if (!this.enabled || !this.history.includes(entry)) return false;
+    if (entry.kind === 'trace' && entry.trace.endSec === undefined) entry.trace.endSec = Math.max(pressSec, entry.trace.startSec);
+    if (entry.kind === 'hold' && entry.hold.endSec === undefined) {
+      entry.hold.endSec = Math.max(pressSec, entry.hold.samples.at(-1)!.timeSec);
+      this.droppingUntilRelease = true;
+    }
+    this.take(entry);
+    return true;
+  }
+
+  /** Puts an undone `entry` back, in the order it began. False when it is not undone. */
+  redoEntry(entry: PointHistoryEntry): boolean {
+    if (!this.enabled) return false;
+    const index = this.undone.indexOf(entry);
+    if (index < 0) return false;
+    this.undone.splice(index, 1);
+    this.restore(entry);
+    return true;
+  }
+
+  /** An undone entry can no longer be redone (a newer action came): it stops counting as undone. */
+  discardUndone(entry: PointHistoryEntry): void {
+    const index = this.undone.indexOf(entry);
+    if (index >= 0) this.undone.splice(index, 1);
+  }
+
+  /**
+   * The take's own last-in order, without capture's history: the open trace,
+   * else the entry that began last. Null when there is nothing.
+   */
+  undoLast(pressSec: number): HistoryKind | null {
+    const entry = this.openTraceEntry() ?? this.history.at(-1);
+    return entry && this.undoEntry(entry, pressSec) ? entry.kind : null;
+  }
+
+  /** Puts the most recently undone hold or trace back. Null when there is none. */
   redoLast(): HistoryKind | null {
-    if (!this.enabled) return null;
-    const entry = this.undone.pop();
-    if (!entry) return null;
+    const entry = this.undone.at(-1);
+    return entry && this.redoEntry(entry) ? entry.kind : null;
+  }
+
+  private addEntry(entry: PointHistoryEntry): void {
+    this.history.push(entry);
+    this.onEntry?.(entry);
+  }
+
+  private restore(entry: HistoryEntry): void {
     // Kept in the order they began, so an undone trace that held a later hold returns before it.
     const at = this.history.findIndex((kept) => entryStart(kept) > entryStart(entry));
     this.history.splice(at < 0 ? this.history.length : at, 0, entry);
@@ -247,16 +281,14 @@ export class PointSampleStore {
     const start = (x: AimHold | TraceSpan): number => ('samples' in x ? x.samples[0]!.timeSec : x.startSec);
     const index = list.findIndex((kept) => start(kept) > start(item));
     list.splice(index < 0 ? list.length : index, 0, item);
-    return entry.kind;
   }
 
-  private take(entry: HistoryEntry): HistoryKind {
+  private take(entry: HistoryEntry): void {
     const from: Array<AimHold | TraceSpan> = entry.kind === 'hold' ? this.aimHolds : this.traces;
     const item = entry.kind === 'hold' ? entry.hold : entry.trace;
     from.splice(from.indexOf(item), 1);
     this.history.splice(this.history.indexOf(entry), 1);
     this.undone.push(entry);
-    return entry.kind;
   }
 
   /** How many holds the take keeps and how many holds and traces can be redone. */

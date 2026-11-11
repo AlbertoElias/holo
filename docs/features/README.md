@@ -50,6 +50,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Live deployment (Fly + R2 + async USDZ) | Verifying | [live-deployment.md](live-deployment.md) |
 | Migrate workspace typechecking to tsgo / TypeScript 7 | Complete | [archive/tsgo-typescript7-migration.md](archive/tsgo-typescript7-migration.md) |
 | Put an object back and remove a tray item | Complete | [archive/tray-remove.md](archive/tray-remove.md) |
+| Undo and redo for every authoring action | Complete | [archive/undo-redo.md](archive/undo-redo.md) |
 | Deterministic, lean CI | Complete | [archive/deterministic-lean-ci.md](archive/deterministic-lean-ci.md) |
 | Development reliability foundation | Complete | [archive/reliability-foundation.md](archive/reliability-foundation.md) |
 

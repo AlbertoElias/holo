@@ -75,6 +75,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/place-capture.pipeline.spec.ts`.
   Suspect: the floor band of a scan whose floor is sparse around a table, or the end pose landing mid-step.
 
+### B-046 — The face XR check finds no IWER gaze device
+
+- **Area:** `apps/capture` XR checks (`test:xr:smoke` → `test:xr` face, part of `verify:pr`)
+- **Severity:** P2 (fails `verify:pr` locally)
+- **Observed:** 2026-11-11 on `origin/main` `1f4ec3a02077` (clean worktree) and on `feature/undo-redo`
+- **Evidence:** `node --import tsx scripts/run-xr-checks.ts face` fails after about 17 s:
+  `page.evaluate: TypeError: Cannot set properties of undefined (setting 'connected')`, from
+  `window.IWER_DEVICE!.gaze!.connected = true` (`scripts/ci-face-playwright.ts:232`). 3 of 3 runs; every other
+  XR check passes.
+- **Expected:** the face check gets the IWER device with eye gaze and passes.
+- **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
+  5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
+
 ## Entry template
 
 ```md

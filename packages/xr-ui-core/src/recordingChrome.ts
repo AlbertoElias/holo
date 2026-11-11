@@ -1,7 +1,7 @@
 // Chrome while recording (styleguide 8.5): everything but the stop control,
 // the running time and the Halo hides until the take ends, and the state is
 // carried by shape and word, never by red alone. The Halo stays because it
-// carries the take's own actions: stop, and undo or redo the held mark. The
+// carries the take's own actions: stop, and undo or redo the last action. The
 // tray and Find stay too (the user, 2026-10-28): objects are summoned, and
 // searched for, mid-take. Put back stays with them: an object leaving is part
 // of the take as well (docs/features/archive/tray-remove.md).

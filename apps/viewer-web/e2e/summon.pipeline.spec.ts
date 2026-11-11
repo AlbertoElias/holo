@@ -319,3 +319,92 @@ test("a 60 s take carrying five objects from before it converts to USDZ, each pr
   });
   await writeFile(path.join(evidenceDir, "long-carry-report.json"), JSON.stringify({ glb: report.glb, export: report.export, usdz: { path: usdzPath, prims: usd } }, null, 2));
 });
+
+// An undone put-back (docs/features/archive/undo-redo.md): the summoned bracket is put
+// back on the tray, then W returns it. Its presence has two spans; the feed
+// card hides it in the gap and shows it, where the GLB has it, in both spans;
+// the USDZ hides it with visibility only in the gap, never a zero scale.
+test("an undone put-back: two presence spans survive the feed card and USDZ", async ({ page }) => {
+  test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
+  test.setTimeout(420_000);
+  // @ts-expect-error capture's .mjs scripts are untyped
+  const { runDesktopUndoTake } = await import("../../capture/scripts/lib/undo-take.mjs");
+  // @ts-expect-error capture's .mjs scripts are untyped
+  const glbLib = await import("../../capture/scripts/lib/object-glb.mjs");
+  const browser = await launchXrBrowser(chromium);
+  const consoleErrors: string[] = [];
+  let capture: { failures: string[]; glb: string };
+  try {
+    capture = await runDesktopUndoTake({ browser, baseUrl: captureUrl, artifactDir: path.join(evidenceDir, "undo-take"), consoleErrors });
+  } finally {
+    await browser.close();
+  }
+  expect(capture.failures, "capture take").toEqual([]);
+  expect(consoleErrors, "capture runtime errors").toEqual([]);
+
+  const buffer = await readFile(capture.glb);
+  const parsed = glbLib.loadTake(buffer) as { times: number[]; validation: { value: { objects: Array<{ node: number; name: string; origin: string; presence: Array<{ start: number; end: number }> }> } } };
+  const all = parsed.validation.value.objects;
+  // The summoned bracket is the one put back and undone (other objects in the take may also leave and return).
+  const found = all.find((candidate) => candidate.origin === "summoned" && candidate.name === "bracket.glb");
+  expect(found, "the summoned bracket is in the take").toBeTruthy();
+  const entry = found!;
+  expect(entry.presence.length, "the put-back then undone bracket has two presence spans").toBe(2);
+  const index = all.indexOf(entry);
+  const [first, second] = entry.presence as [{ start: number; end: number }, { start: number; end: number }];
+  const gap = second.start - first.end;
+  expect(gap, "the put-back gap").toBeGreaterThan(0.5);
+  const mid1 = (first.start + first.end) / 2;
+  const midGap = (first.end + second.start) / 2;
+  const mid2 = (second.start + second.end) / 2;
+  const keyAt = (time: number) => parsed.times.reduce((best, t, i) => (Math.abs(t - time) < Math.abs(parsed.times[best]! - time) ? i : best), 0);
+  const key2 = keyAt(mid2);
+  const time2 = parsed.times[key2]!;
+  const pose2 = glbLib.rigidPose(glbLib.worldAt(parsed, entry.node, key2)) as { position: { toArray: () => number[] }; quaternion: { toArray: () => number[] } };
+  const glbPosition = pose2.position.toArray() as [number, number, number];
+  const glbQuaternion = pose2.quaternion.toArray() as [number, number, number, number];
+
+  const uploaded = await upload(page, buffer);
+  await page.setViewportSize(DESKTOP);
+  await installProbe(page);
+  await showOnly(page, uploaded.id);
+  await page.goto("/");
+  await assertViewerShell(page);
+  const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
+  await waitForPortalReady(page, uploaded.id, uploaded.url);
+  await card.getByRole("button", { name: "Pause" }).click();
+  await expect(card).toHaveAttribute("data-portal-paused", "true");
+
+  const feed: Record<string, unknown> = {};
+  const total = (await readAt(page, uploaded.url, mid1)).objects;
+  expect(total, "the extension names every object").toBe(all.length);
+  const read1 = (await readAt(page, uploaded.url, mid1)).poses[index]!;
+  const readGap = (await readAt(page, uploaded.url, midGap)).poses[index]!;
+  const read2 = (await readAt(page, uploaded.url, time2)).poses[index]!;
+  expect(read1.scale, "visible mid-span-1").toBeGreaterThan(0.5);
+  expect(readGap.scale, "hidden mid-gap").toBeLessThan(1e-6);
+  expect(read2.scale, "visible mid-span-2").toBeGreaterThan(0.5);
+  const positionM = distance(read2.pose.position, glbPosition);
+  const angle = angleDeg(read2.pose.quaternion, glbQuaternion);
+  expect(positionM, "span-2 position against the GLB").toBeLessThanOrEqual(POSITION_TOLERANCE_M);
+  expect(angle, "span-2 rotation against the GLB").toBeLessThanOrEqual(ANGLE_TOLERANCE_DEG);
+  Object.assign(feed, { span1Scale: read1.scale, gapScale: readGap.scale, span2Scale: read2.scale, span2PositionErrorM: positionM, span2AngleErrorDeg: angle });
+
+  const quickLookUrl = `/api/holograms/${uploaded.id}/usdz`;
+  await expect.poll(async () => (await page.request.get(quickLookUrl, { timeout: 30_000 })).status(), { timeout: 240_000, intervals: [2_000] }).toBe(200);
+  await mkdir(evidenceDir, { recursive: true });
+  const usdzPath = path.join(evidenceDir, "undo-put-back.usdz");
+  await writeFile(usdzPath, await (await page.request.get(quickLookUrl, { timeout: 120_000 })).body());
+  const times = [mid1, midGap, mid2];
+  const { stdout } = await execFileAsync(process.env.USDZ_PYTHON ?? "python3", ["-c", USD_PROBE, usdzPath, JSON.stringify([entry.node]), JSON.stringify(times)], { timeout: 60_000, maxBuffer: 1024 * 1024 });
+  const usd = JSON.parse(stdout) as Array<{ found: boolean; minScale: number | null; samples: Array<{ time: number; visibility: string; scale: number }> }>;
+  const prim = usd[0]!;
+  expect(prim.found, "the put-back prim is in the USDZ").toBe(true);
+  expect(prim.minScale ?? 1, "never a zero scale").toBeGreaterThan(0);
+  expect(prim.samples.map((sample) => sample.visibility), "USDZ visibility mid-span-1, mid-gap, mid-span-2").toEqual(["inherited", "invisible", "inherited"]);
+
+  await writeFile(
+    path.join(evidenceDir, "undo-put-back-report.json"),
+    JSON.stringify({ glb: capture.glb, hologram: uploaded.id, object: { node: entry.node, name: entry.name, presence: entry.presence, gapSec: gap }, times: { mid1, midGap, mid2: time2 }, feed, usdz: { path: usdzPath, prim } }, null, 2)
+  );
+});

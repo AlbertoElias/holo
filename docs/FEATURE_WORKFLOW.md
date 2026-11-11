@@ -39,7 +39,9 @@ consume the agreed contract.
 ## Delivery sequence
 
 1. **Brief.** State the user outcome, explicit exclusions, observable acceptance
-   criteria, plausible failure cases, ownership, and validation plan.
+   criteria, plausible failure cases, ownership, and validation plan. A new
+   authoring action in capture joins the undo history: the brief's Undo
+   section says how, and its acceptance criteria cover undo and redo.
 2. **Design review.** Challenge boundary behavior and the simplest implementation
    that preserves capture -> upload -> render compatibility. Update the brief with
    the decision.
