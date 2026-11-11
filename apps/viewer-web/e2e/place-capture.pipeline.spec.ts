@@ -963,7 +963,9 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
     expect(flagged, "and so with ?placeCapture=1 but no place chosen").toEqual(today);
   });
 
-  for (const scan of ["fireplace.spz", "snow-street.spz"]) {
+  // The user's first phone scan, of a table: its tabletop outweighs its floor, which once turned it upside down.
+  const knownWayUp: Record<string, { flipped: boolean; floorFoundY: number }> = { "table.spz": { flipped: false, floorFoundY: -0.75 } };
+  for (const scan of ["fireplace.spz", "snow-street.spz", "table.spz"]) {
     test(`the downloaded scan ${scan}: recorded in, uploaded and played with its place`, async ({ browser, page }, testInfo) => {
       const file = path.join(localPlaces, scan);
       test.skip(!existsSync(file), `${scan} is not on disk (never committed): see docs/features/splat-capture.md`);
@@ -977,6 +979,11 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
       try {
         report = await waitForPlace(capture, "ready");
         expect(report.upright).not.toBe("unknown");
+        const known = knownWayUp[scan];
+        if (known) {
+          expect(report.flipped, `${scan}: the way up the scan was made`).toBe(known.flipped);
+          expect(Math.abs(report.floorFoundY - known.floorFoundY), `${scan}: the floor found is the room's floor (${report.floorFoundY.toFixed(3)})`).toBeLessThan(0.05);
+        }
         expect(report.floorFound).toBe(true);
         expect(report.worldModel).toBe("PlaceFloor");
         await advance(capture, 3);

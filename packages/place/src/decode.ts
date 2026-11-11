@@ -103,7 +103,7 @@ export async function decodeScan(input: { bytes: Uint8Array; fileName: string; f
     centers: upCenters,
     scale,
     opacity,
-    floor: floor ?? readFloor(upCenters, opacity, numSplats),
+    floor: floor?.found ? floor : readFloor(upCenters, opacity, numSplats, true),
     flip,
     upright,
     decodeMs: performance.now() - started

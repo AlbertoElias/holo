@@ -32,6 +32,12 @@ const SCAN_PATH = "/place-fixtures/room.ply";
 const WAIT = "&placeWait=30000";
 /** The scan's floor, put on the take's floor, within this, metres. */
 const FLOOR_TOLERANCE_METERS = 0.02;
+/**
+ * Shaped like the user's first phone scan, of a table (its numbers in brackets): a floor peak 0.16 of the tabletop's
+ * (0.18), 38% of the opacity in the 1.2 m under the tabletop (40%) and 12% in the 1.2 m over it (14%). Its own size,
+ * so the floor's weight does not follow the dome's.
+ */
+const TABLE_SCAN = { half: 3.3, floorStep: 0.12, floorJitter: 0.06, table: { x: 1.2, z: 0, half: 0.4, height: 0.75, step: 0.006, under: 9000, over: 3000 } };
 /** The author's foot bone is the ankle, this far above the floor at most; never under it by more than the floor's tolerance. */
 const ANKLE_HEIGHT_METERS = 0.2;
 /** The playback time the dome is checked at again: part way through the walk, where it has moved along the hillside. */
@@ -335,7 +341,11 @@ test.describe("a scanned place around a take", () => {
     const cases = [
       { name: "y up, against the PLY convention", options: { yUp: true }, upright: "read", flipped: false },
       { name: "y down, with a ceiling", options: { ceiling: 2.7 }, upright: "read", flipped: true },
-      { name: "y up, with a ceiling", options: { yUp: true, ceiling: 2.7 }, upright: "read", flipped: false }
+      { name: "y up, with a ceiling", options: { yUp: true, ceiling: 2.7 }, upright: "read", flipped: false },
+      // A phone scan of a table: the tabletop outweighs the floor, so it was the lowest strong peak both ways up, and
+      // the legs under it outweighed what stands on it; the floor is the lowest peak with little beneath it.
+      { name: "y up, a dense table over a sparse floor", options: { yUp: true, ...TABLE_SCAN }, upright: "read", flipped: false },
+      { name: "y down, a dense table over a sparse floor", options: TABLE_SCAN, upright: "read", flipped: true }
     ] as const;
     // Each case serves its own file at the scan's path: the route added last answers.
     for (const [index, entry] of cases.entries()) {
@@ -347,7 +357,7 @@ test.describe("a scanned place around a take", () => {
       await seek(page, 0, true);
       const place = await readPlace(page);
       const stats = await shotStats(page, await cardShot(page, item.id, `upright-${index}.png`));
-      expect([place.upright, place.flipped], `${entry.name}: who decided, and the turn`).toEqual([entry.upright, entry.flipped]);
+      expect([place.upright, place.flipped], `${entry.name}: who decided, and the turn (${JSON.stringify(place)})`).toEqual([entry.upright, entry.flipped]);
       expect(Math.abs(place.floorFoundY - fixture.floorY), `${entry.name}: the floor found is the floor, not the ceiling`).toBeLessThan(FLOOR_TOLERANCE_METERS);
       expect(Math.abs(place.floorBandY - place.takeFloor), `${entry.name}: placed on the take's floor`).toBeLessThan(FLOOR_TOLERANCE_METERS);
       expect(place.shown, `${entry.name}: splats are drawn`).toBeGreaterThan(500);

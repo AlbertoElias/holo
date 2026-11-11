@@ -393,7 +393,7 @@ XR viewers moved to 2b; numeric acceptance criteria.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Scan as the set, floor, walking (2a) | `apps/viewer-web/e2e/place-capture.pipeline.spec.ts` (pipeline shard 8): a PLY written by the spec (floor off the origin, boxes, floaters under the floor, a faint and an opaque sheet), loaded by `?place=` and by the picker; a 10 m walk | Pass, 2026-11-11: 44,606 splats, floor found at 0.3501 (written at 0.35), floor band at the set's y = 0 within 0.03 mm, set = `PlaceFloor`, stage ground hidden, old set detached; 10.8 m walked, sole at most 7.8 mm off the floor; casts down an 81-point grid over and past the scan hit only `PlaceFloor` at y = 0 (and the hidden ground). The downloaded `fireplace.spz` and `snow-street.spz` load, stand upright and are walked on (sole within 2 cm). Drawn from the spawn, a magenta beacon past the scan's floor shows (0 px with the old floor, which painted over the scan). Under Spark's budget no LoD tree is built; over a lowered budget the tree builds in the background (`snow-street.spz`, 982 k splats over the harness's Quest budget, records while it builds) and a hold through the faint sheet still lands on the red box |
+| Scan as the set, floor, walking (2a) | `apps/viewer-web/e2e/place-capture.pipeline.spec.ts` (pipeline shard 8): a PLY written by the spec (floor off the origin, boxes, floaters under the floor, a faint and an opaque sheet), loaded by `?place=` and by the picker; a 10 m walk | Pass, 2026-11-11: 44,606 splats, floor found at 0.3501 (written at 0.35), floor band at the set's y = 0 within 0.03 mm, set = `PlaceFloor`, stage ground hidden, old set detached; 10.8 m walked, sole at most 7.8 mm off the floor; casts down an 81-point grid over and past the scan hit only `PlaceFloor` at y = 0 (and the hidden ground). The downloaded `fireplace.spz` and `snow-street.spz` load, stand upright and are walked on (sole within 2 cm). Drawn from the spawn, a magenta beacon past the scan's floor shows (0 px with the old floor, which painted over the scan). Under Spark's budget no LoD tree is built; over a lowered budget the tree builds in the background (`snow-street.spz`, 982 k splats over the harness's Quest budget, records while it builds) and a hold through the faint sheet still lands on the red box. The user's own phone scan of a table (`table.spz`, 472,273 splats) reads not turned with its floor within 5 cm of y -0.75 as stored, and a take recorded in it stores 200,000 splats (thinned from 435,210 by the stored cap), 5.52 MB; the way-up e2e's table fixture, shaped like it, reads right both ways up and fails with the old reading |
 | Export contract (2a) | Same spec: Record, Stop, the GLB read with `readStoredPlace` | Pass: `HOLOIM_place` v1 in `extensionsUsed` only, `RecordedPlace` with the scan-to-set TRS, SPZ header = extension count, Spark decodes all 20,042 stored splats, `RecordedPlaceFloor` in `RecordedSceneBubble`, 3.3 MB, 0 thinned. Dome coverage against the scan's own splats: at nine times over the take the viewer's fitted dome showed 60,710 splat-times, all of them in the stored crop, while it swept 2.17 m. Sized at Stop: under a cap lowered to leave the place half its SPZ, a short take came out at 2,463,264 bytes, within the cap, its place thinned and stored whole (header = kept). `fireplace.spz`: 161,287 stored, 4.87 MB; `snow-street.spz`: 45,891, 3.07 MB; at seven times over each take the fitted dome lies inside the crop's box (thinned counts reported as annotations) |
 | Upload and play (2a) | Same spec: the GLB through the real API (Quick Look on) into the feed card and portal | Pass: stored place ready, disc hidden, stored floor on the disc within 0.03 mm, the author's foot bones at the height they stood at in capture within 2 cm, no shown splat leaving the dome at any time checked; in the card's pixels the scan's red pillar draws at the start and a magenta patch stored in the crop above every dome draws 0 px at all nine times (the shader's cut, not only its CPU twin); pause, Free orbit, zoom inside (cut holds), Return, Play; screenshots `output/place-capture/room-*.png` |
 | Pointing on the scan (2a) | Same spec: holds on a red box behind a faint (opacity 0.3) sheet and on an opaque sheet in front of a green box | Pass: the faint sheet lets the ray through to the box (x 0.80, sheet at 0.5), the opaque sheet catches it (within 3 cm of its plane); both links have `to.node` = `RecordedPlace`, stored ends within 2 cm of the hits, and the drawn ink ends within 2 cm of the hits in the feed |
@@ -446,6 +446,25 @@ XR viewers moved to 2b; numeric acceptance criteria.
   the header's version and SH degree name, whole (exactly the length of
   both downloaded scans); before, a version-99 stream or one missing its
   rotations passed when the extension agreed with its header.
+- **A tabletop over a weak floor.** The user's first phone scan (Scaniverse,
+  iPhone, a table: 472,273 splats, SPZ v3, y up as stored) was turned upside
+  down. Its tabletop holds about 45% of the opacity, the floor 0.75 m under
+  it about 10% (a peak 0.18 of the tabletop's, under the old 0.2 cut), so
+  the tabletop was the floor both ways up, and the legs under it outweighed
+  what stands on it. The floor is now the lowest peak of at least 0.1 of the
+  densest with at most 10% of the scan's opacity in the 1.2 m beneath it;
+  reading the way up, a way with no such peak has no floor. Once the way is
+  decided (`placeFlip`, or the format's convention when the scan cannot
+  say) the lowest peak is taken even with the room under it, as before.
+  The scan, before: turned, floor at the tabletop (y 0.032 as stored),
+  standing 13.5% against 39.7% turned. After: not turned, floor y -0.753,
+  standing 74.6%, and the turned reading finds no floor. `fireplace.spz`
+  keeps its reading (turned, floor -0.733, standing 25.3%; as stored it now
+  has no floor where it had one at 0.733 with 4.1%); `snow-street.spz` is
+  unchanged.
+  The way-up e2e (`place.spec.ts`) has a fixture shaped like it, both ways
+  up, which the old reading turned wrong; the downloaded-scan e2e records a
+  take in the scan itself where it is on disk.
 - **The independent verifier** (Codex `-p standard`, read-only, 2026-11-11)
   answered "ship after must-fixes": the five were the 25 MB sizing, the
   SPZ check, no pixel proof in the viewer, LoD off while drawing, and a

@@ -25,6 +25,16 @@ export type FixtureOptions = {
   ceiling?: number;
   /** Written y up, the other way from the trainers' convention `.ply` is read as by default. */
   yUp?: boolean;
+  /** The floor's grid step, metres (0.06 unless given): a coarser floor is a weaker peak. */
+  floorStep?: number;
+  /** How far the floor's splats stray up and down, metres (1 cm unless given): a phone's floor is a few centimetres thick. */
+  floorJitter?: number;
+  /**
+   * A phone scan of a table: a dense tabletop `height` above the floor, `half` each way around `x`, `z` from the
+   * middle, with `under` splats of legs and chairs between it and the floor and `over` of what stands on it and the
+   * wall behind it, up to 1.2 m above. It outweighs a sparse floor.
+   */
+  table?: { x: number; z: number; half: number; height: number; step: number; under: number; over: number };
 };
 
 /** One written splat, in the y-up room the file was made from, and in the file's own frame. */
@@ -46,18 +56,18 @@ function mulberry32(seed: number): () => number {
 
 type Splat = { x: number; y: number; z: number; r: number; g: number; b: number; opacity: number; scale: number };
 
-export function makeFixture({ floorY = 0.35, half, ring, blobs = [], clutter = 3000, noFloor = false, ceiling, yUp = false }: FixtureOptions): Fixture {
+export function makeFixture({ floorY = 0.35, half, ring, blobs = [], clutter = 3000, noFloor = false, ceiling, yUp = false, floorStep = 0.06, floorJitter = 0.01, table }: FixtureOptions): Fixture {
   const rand = mulberry32(0x5ca17);
   const middle = { x: 1, z: -0.5 };
   const splats: Splat[] = [];
   const add = (x: number, y: number, z: number, color: [number, number, number], scale: number, opacity = 0.95) => splats.push({ x, y, z, r: color[0], g: color[1], b: color[2], opacity, scale });
 
   // The floor, a checker of two greys (the one thing in the scan that is everywhere).
-  const step = 0.06;
+  const step = floorStep;
   for (let ix = -Math.round(half / step); ix <= Math.round(half / step); ix += 1) {
     for (let iz = -Math.round(half / step); iz <= Math.round(half / step); iz += 1) {
       const tile = (Math.floor((ix * step + 1000) / 0.5) + Math.floor((iz * step + 1000) / 0.5)) % 2 === 0;
-      add(middle.x + ix * step, floorY + (rand() - 0.5) * 0.01, middle.z + iz * step, tile ? [0.55, 0.56, 0.5] : [0.38, 0.4, 0.36], 0.045);
+      add(middle.x + ix * step, floorY + (rand() - 0.5) * floorJitter, middle.z + iz * step, tile ? [0.55, 0.56, 0.5] : [0.38, 0.4, 0.36], 0.045);
     }
   }
   if (ceiling !== undefined) {
@@ -67,6 +77,19 @@ export function makeFixture({ floorY = 0.35, half, ring, blobs = [], clutter = 3
   }
   // A table band, 74 cm up: a smaller peak than the floor's, and higher.
   for (let ix = 0; ix < 20; ix += 1) for (let iz = 0; iz < 12; iz += 1) add(middle.x + 1.4 + ix * 0.05, floorY + 0.74 + rand() * 0.02, middle.z - 0.3 + iz * 0.05, [0.5, 0.33, 0.18], 0.04);
+  if (table) {
+    for (let ix = -Math.round(table.half / table.step); ix <= Math.round(table.half / table.step); ix += 1) {
+      for (let iz = -Math.round(table.half / table.step); iz <= Math.round(table.half / table.step); iz += 1) {
+        add(middle.x + table.x + ix * table.step, floorY + table.height + (rand() - 0.5) * 0.01, middle.z + table.z + iz * table.step, [0.6, 0.45, 0.3], 0.02);
+      }
+    }
+    for (let i = 0; i < table.over; i += 1) {
+      add(middle.x + table.x + (rand() - 0.5) * 2.4 * table.half, floorY + table.height + 0.05 + rand() * 1.15, middle.z + table.z + (rand() - 0.5) * 2.4 * table.half, [0.35, 0.3, 0.3], 0.03);
+    }
+    for (let i = 0; i < table.under; i += 1) {
+      add(middle.x + table.x + (rand() - 0.5) * 2.4 * table.half, floorY + 0.05 + rand() * (table.height - 0.1), middle.z + table.z + (rand() - 0.5) * 2.4 * table.half, [0.3, 0.25, 0.2], 0.03);
+    }
+  }
   // Floaters under the floor and in the air, as a phone scan leaves them.
   for (let i = 0; i < 200; i += 1) add(middle.x + (rand() - 0.5) * 2 * half, floorY - 0.1 - rand() * 2.5, middle.z + (rand() - 0.5) * 2 * half, [0.9, 0.9, 0.95], 0.08, 0.7);
   // Four boxes around the middle, solid.

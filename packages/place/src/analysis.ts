@@ -4,8 +4,17 @@
 
 /** Height histogram bin, metres. */
 export const FLOOR_BIN_METERS = 0.02;
-/** A floor peak holds at least this share of the densest bin; a table is a peak too, but floaters below the floor are not. */
-export const FLOOR_PEAK_SHARE = 0.2;
+/**
+ * A floor peak holds at least this share of the densest bin; a table is a peak too, but floaters below the floor are
+ * not. A phone scan of a table holds most of its opacity on the tabletop: its real floor was 0.18 of it.
+ */
+export const FLOOR_PEAK_SHARE = 0.1;
+/**
+ * A floor has little of the scan in the metre or so beneath it (floaters only): a peak with more than this share of
+ * the scan's opacity there is a tabletop, a bed or a counter with the room's floor and their legs under it, or the
+ * underside of one seen the wrong way up, never the floor.
+ */
+export const FLOOR_MAX_BELOW_SHARE = 0.1;
 /** Splats this close to the floor make up its band, metres. */
 export const FLOOR_BAND_METERS = 0.05;
 
@@ -20,41 +29,63 @@ export type FloorReading = {
 
 /**
  * The floor is the lowest density peak of the opacity-weighted height
- * histogram: the floor and a ceiling are the big peaks, a table or shelf a
- * smaller one higher up, and floaters under the floor a thin tail below the
- * threshold. `centers` is x, y, z per splat with y up.
+ * histogram with little beneath it: the floor and a ceiling are the big peaks,
+ * a table or shelf a smaller one higher up (the biggest, in a scan of a table),
+ * and floaters under the floor a thin tail below the threshold. A peak with
+ * much of the scan under it is furniture over the floor (or, the wrong way up,
+ * a surface with the room hanging under it), so it is passed over.
+ * `centers` is x, y, z per splat with y up.
  */
-export function readFloor(centers: Float32Array, opacity: Float32Array, count: number): FloorReading {
+export function readFloor(centers: Float32Array, opacity: Float32Array, count: number, lenient = false): FloorReading {
   const none: FloorReading = { found: false, floorY: 0, x: 0, z: 0 };
   if (count === 0) return none;
   const bins = new Map<number, number>();
+  let total = 0;
   for (let i = 0; i < count; i += 1) {
     const y = centers[i * 3 + 1]!;
     if (!Number.isFinite(y)) continue;
     const bin = Math.floor(y / FLOOR_BIN_METERS);
     bins.set(bin, (bins.get(bin) ?? 0) + opacity[i]!);
+    total += opacity[i]!;
   }
   const smooth = (bin: number) => ((bins.get(bin - 1) ?? 0) + 2 * (bins.get(bin) ?? 0) + (bins.get(bin + 1) ?? 0)) / 4;
   let densest = 0;
   for (const bin of bins.keys()) densest = Math.max(densest, smooth(bin));
   if (densest <= 0) return none;
   const threshold = densest * FLOOR_PEAK_SHARE;
-  let peak: number | null = null;
+  const peaks: number[] = [];
   for (const bin of bins.keys()) {
     const here = smooth(bin);
     if (here < threshold || here < smooth(bin - 1) || here <= smooth(bin + 1)) continue;
-    if (peak === null || bin < peak) peak = bin;
+    peaks.push(bin);
   }
-  if (peak === null) return none;
+  peaks.sort((a, b) => a - b);
   // The peak's weighted height over its neighbours, not the bin edge.
-  let weight = 0;
-  let sum = 0;
-  for (let bin = peak - 2; bin <= peak + 2; bin += 1) {
-    const w = bins.get(bin) ?? 0;
-    weight += w;
-    sum += w * (bin + 0.5) * FLOOR_BIN_METERS;
-  }
-  const floorY = weight > 0 ? sum / weight : (peak + 0.5) * FLOOR_BIN_METERS;
+  const heightOf = (peak: number) => {
+    let weight = 0;
+    let sum = 0;
+    for (let bin = peak - 2; bin <= peak + 2; bin += 1) {
+      const w = bins.get(bin) ?? 0;
+      weight += w;
+      sum += w * (bin + 0.5) * FLOOR_BIN_METERS;
+    }
+    return weight > 0 ? sum / weight : (peak + 0.5) * FLOOR_BIN_METERS;
+  };
+  const beneath = (y: number) => {
+    const from = Math.floor((y - UPRIGHT_BAND_METERS) / FLOOR_BIN_METERS);
+    const to = Math.floor((y - FLOOR_BAND_METERS) / FLOOR_BIN_METERS);
+    let mass = 0;
+    for (let bin = from; bin < to; bin += 1) mass += bins.get(bin) ?? 0;
+    return mass;
+  };
+  if (peaks.length === 0) return none;
+  const heights = peaks.map(heightOf);
+  const clear = heights.find((y) => beneath(y) <= total * FLOOR_MAX_BELOW_SHARE);
+  // Reading the way up, a way with no clear floor is not up. Once the way is decided (`placeFlip`, or the format's
+  // convention when the scan cannot say), `lenient` takes the lowest peak: a room turned by hand stands on its floor
+  // seen from under it.
+  const floorY = clear ?? (lenient ? heights[0] : undefined);
+  if (floorY === undefined) return none;
   const xs: number[] = [];
   const zs: number[] = [];
   for (let i = 0; i < count; i += 1) {
