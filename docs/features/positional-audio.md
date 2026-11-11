@@ -1,14 +1,14 @@
 # Feature brief: Positional audio in holograms
 
 **Lead:** Claude (Opus), session `feature/positional-audio`
-**Status:** Implementing (design reviewed and product decisions answered 2026-11-10)
+**Status:** Delivered (merged to `main` 2026-11-11); listening by ear and a
+physical headset unverified, see "Physical-device limits"
 **Layer:** Event (a sound has a place in the recorded event, like a voice or
 an object). Where the ear sits while watching is the view's reading of it.
 
-**Branch:** `feature/positional-audio`, stacked on
-`feature/showcase-holograms` (merged in at `258f58bcc2a1`; that branch is
-pushed and not on `main`, so this branch carries its showcase scripts and
-merges after it, or with it).
+**Branch:** `feature/positional-audio`, merged to `main` at `b180e6aefc40`
+on 2026-11-11 together with `feature/showcase-holograms`, which it was
+stacked on.
 
 ## User outcome
 
@@ -309,3 +309,9 @@ sources now fall off with distance) and the voice's 2 m reference distance
 are unverified by ear. The XR
 evidence is IWER emulation; a physical Quest (its browser's HRTF, its
 speakers) is unverified.
+
+The brief stays open on these two checks: someone listens on headphones and
+on speakers, and tries the XR viewer on a Quest. Then it closes per step 6
+of [`../FEATURE_WORKFLOW.md`](../FEATURE_WORKFLOW.md). The live feed's
+`rain` piece is still the old single-mix build; re-uploading the retrofitted
+one is the user's decision.
