@@ -367,12 +367,38 @@ the clip checked by eye.
 these from this brief; the clip and `clip.json` are in `output/bodycam/`, the
 saved landmarks in `apps/capture/output/bodycam-jitter/landmarks.json`):
 
-1. Settle aim with measured ground truth: a short clip with taped, measured
-   marks and aims at the lens, the two marks and one mark above the lens;
-   judge depth flattening from the side-on aims, and pick between the
-   knuckle and wrist rays on it.
+1. Settle aim with measured ground truth: the aim clip below. The report's
+   aim study (2026-11-11) measures the knuckle and wrist rays, each as the
+   hand model gives it and perspective-corrected (turned by the line of sight
+   to the hand in the picture, in case the model reads the finger relative
+   to its own view of the hand). On the first clip's rough layout the
+   correction helps the knuckle ray on one aim (26 to 15 deg) and hurts the
+   wrist ray (10 to 20 deg); the two crossing aims miss by 29 to 45 deg,
+   almost all of it in yaw. Only measured geometry can tell tracking error
+   from layout error. Pick the ray, and whether to correct it, on the new
+   clip.
 2. Real-time rate and a trial on a phone, independent verification, then the
    go/no-go.
+
+**Aim clip protocol.** One take, about 2 minutes. Rear main camera at 1x,
+4K 30 fps, phone upright (portrait), fixed and level (screen vertical), not
+handheld. The phone's screen faces a wall; tape three marks on that wall,
+measured from the spot on the wall straight behind the lens with a level:
+`left` 0.6 m to the author's left (as they face the phone), `right` 0.6 m to
+their right, both at lens height, and `above` 0.5 m straight above. Put the
+lens at about nose height. Measure: the lens's distance from the wall
+(`behindLensM`), the distance from the lens to a floor line straight in
+front of it where the author stands toes on the line, about where the first
+clip was framed (`authorToLensM`), and nose height minus lens height
+(`noseAboveLensM`). Then, each aim held 4 s with the hand dropped to the side
+for 2 s between: 0) hands down facing the lens 3 s; A) right arm straight,
+sighting along the arm, at the lens, left, right, above; B) the same with
+the left arm; C) right hand pointing naturally (elbow bent, hand at chest
+height) at the same four. The config template is
+`output/bodycam/aim-template.json` (ignored): fill the measurements and each
+hold's start and end, then run the report on the clip with it. Straight arms
+put the knuckle, wrist and arm rays on one line, so their spread is tracking
+error alone; the natural set is what the product sees.
 
 Done on 2026-11-11: ray jitter and the head (above), and the script's own server start.
 Two script faults found on this first long clip are both fixed. A whole clip

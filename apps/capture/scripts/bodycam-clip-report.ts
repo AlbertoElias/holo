@@ -25,10 +25,14 @@ import { type FingerChain, scorePointPose } from '../src/xr/pointPose';
 // Every run writes landmarks.json: the models' per-frame output and the run's facts. --from-landmarks re-measures that
 // file in seconds without the browser or the models, so a filter or ray change can be tried without a new 12-minute run.
 //
-// config.json (all optional): { distances: { authorToLensM, leftMarkM, rightMarkM },
-//   segments: [{ label, startSec, endSec, hand?: 'left'|'right' (default right), target?: 'left-mark'|'right-mark'|'lens' }] }
-// Without it only whole-clip measures are reported. Marks lie in the lens plane at lens height, leftMarkM and
-// rightMarkM to the author's left and right of the lens; the author's head is authorToLensM straight in front of the lens.
+// config.json (all optional): { distances: { authorToLensM, leftMarkM?, rightMarkM?, noseAboveLensM? },
+//   marks?: { <name>: { leftM?, upM?, behindLensM? } }, camera?: { imageXFovDeg, imageYFovDeg },
+//   segments: [{ label, startSec, endSec, hand?: 'left'|'right' (default right), target?: 'lens'|'left-mark'|'right-mark'|<mark name> }] }
+// Without it only whole-clip measures are reported. leftMarkM and rightMarkM are marks at lens height in the lens
+// plane, to the author's left and right of the lens. A named mark sits leftM to the author's left of the lens, upM above
+// it and behindLensM behind the lens plane (all default 0). The author's nose is authorToLensM straight in front of the
+// lens and noseAboveLensM above it (default 0). camera is the recorded picture's field of view, for the
+// perspective-corrected rays (default: iPhone 15 Pro main camera, 1x, 4K held upright).
 //
 // The clip is converted to the format Chromium's fake capture reads (MJPEG, 30 fps, 640 px high); --hflip mirrors
 // it first, for a clip recorded as a selfie preview (MediaPipe wants the unmirrored picture).
@@ -76,10 +80,12 @@ interface Segment {
   startSec: number;
   endSec: number;
   hand?: 'left' | 'right';
-  target?: 'left-mark' | 'right-mark' | 'lens';
+  target?: string;
 }
 interface Config {
-  distances?: { authorToLensM: number; leftMarkM: number; rightMarkM: number };
+  distances?: { authorToLensM: number; leftMarkM?: number; rightMarkM?: number; noseAboveLensM?: number };
+  marks?: Record<string, { leftM?: number; upM?: number; behindLensM?: number }>;
+  camera?: { imageXFovDeg: number; imageYFovDeg: number };
   segments?: Segment[];
 }
 const config: Config = configPath ? (JSON.parse(await readFile(configPath, 'utf8')) as Config) : {};
@@ -393,6 +399,24 @@ function jitter(rays: Point3[]) {
   return { frames: rays.length, p50Deg: roundOrNull(percentile(deviations, 50)), p95Deg: roundOrNull(percentile(deviations, 95)) };
 }
 
+/** A segment's target in the lens frame (x image right = the author's left, y down, z away from the lens), or null. */
+function targetPointOf(target: string | undefined): Point3 | null {
+  const d = config.distances;
+  if (!target || !d) return null;
+  if (target === 'lens') return { x: 0, y: 0, z: 0 };
+  if (target === 'left-mark' && d.leftMarkM !== undefined) return { x: d.leftMarkM, y: 0, z: 0 };
+  if (target === 'right-mark' && d.rightMarkM !== undefined) return { x: -d.rightMarkM, y: 0, z: 0 };
+  const mark = config.marks?.[target];
+  return mark ? { x: mark.leftM ?? 0, y: -(mark.upM ?? 0), z: -(mark.behindLensM ?? 0) } : null;
+}
+
+/** The fingertip in the lens frame: the pose's fingertip relative to its nose, from where the nose stands. */
+function fingertipInLensFrame(o: HandObs): Point3 | null {
+  const d = config.distances;
+  if (!d || !o.tipPoseWorld || !o.nosePoseWorld) return null;
+  return add({ x: 0, y: -(d.noseAboveLensM ?? 0), z: d.authorToLensM }, sub(o.tipPoseWorld, o.nosePoseWorld));
+}
+
 function describe(from: number, to: number, side: Side, target?: Segment['target']) {
   const obs = observations.filter((o) => o.side === side && o.clipSec >= from && o.clipSec < to);
   const scores = obs.flatMap((o) => (o.score === null ? [] : [o.score]));
@@ -408,14 +432,13 @@ function describe(from: number, to: number, side: Side, target?: Segment['target
     return { x: round(n.x, 3), y: round(n.y, 3), z: round(n.z, 3) };
   };
   let aim: { frames: number; medianErrorDeg: number | null; p95ErrorDeg: number | null; note: string } | null = null;
-  const d = config.distances;
-  if (target && d) {
-    const targetPoint: Point3 = target === 'lens' ? { x: 0, y: 0, z: 0 } : { x: target === 'left-mark' ? d.leftMarkM : -d.rightMarkM, y: 0, z: 0 };
+  const targetPoint = targetPointOf(target);
+  if (targetPoint) {
     const errors: number[] = [];
     const used: Array<{ ray: Point3; toTarget: Point3 }> = [];
     for (const o of obs) {
-      if (!o.ray || !o.tipPoseWorld || !o.nosePoseWorld || (o.score ?? 0) < 0.35) continue;
-      const tip = add({ x: 0, y: 0, z: d.authorToLensM }, sub(o.tipPoseWorld, o.nosePoseWorld));
+      const tip = fingertipInLensFrame(o);
+      if (!o.ray || !tip || (o.score ?? 0) < 0.35) continue;
       errors.push(angleDeg(o.ray, sub(targetPoint, tip)));
       used.push({ ray: o.ray, toTarget: norm(sub(targetPoint, tip)) });
     }
@@ -531,8 +554,7 @@ function rayStudySegment(seg: Segment, kind: RayKind, filter: RayFilter) {
     });
   const filtered = runFilter(samples, filter);
   // Aim error against the brief's assumed mark layout, as describe() reads it (marks in the lens plane, rough distances).
-  const d = config.distances;
-  const targetPoint: Point3 | null = seg.target && d ? (seg.target === 'lens' ? { x: 0, y: 0, z: 0 } : { x: seg.target === 'left-mark' ? d.leftMarkM : -d.rightMarkM, y: 0, z: 0 }) : null;
+  const targetPoint = targetPointOf(seg.target);
   const aimErrors: number[] = [];
   const from = seg.startSec + 0.3;
   const to = seg.endSec - 0.3;
@@ -547,10 +569,8 @@ function rayStudySegment(seg: Segment, kind: RayKind, filter: RayFilter) {
     holdDev.push(angleDeg(filtered[i]!, slow));
     held.push(filtered[i]!);
     const o = samples[i]!.o;
-    if (targetPoint && d && o.tipPoseWorld && o.nosePoseWorld && (o.score ?? 0) >= 0.35) {
-      const tip = add({ x: 0, y: 0, z: d.authorToLensM }, sub(o.tipPoseWorld, o.nosePoseWorld));
-      aimErrors.push(angleDeg(filtered[i]!, sub(targetPoint, tip)));
-    }
+    const tip = fingertipInLensFrame(o);
+    if (targetPoint && tip && (o.score ?? 0) >= 0.35) aimErrors.push(angleDeg(filtered[i]!, sub(targetPoint, tip)));
     if (i > 0 && t - samples[i - 1]!.t < 0.1) steps.push(angleDeg(filtered[i]!, filtered[i - 1]!));
   }
   const mean = held.length ? norm(held.reduce((acc, r) => add(acc, r), { x: 0, y: 0, z: 0 })) : null;
@@ -627,6 +647,70 @@ if (rayJitterStudy) {
   for (const v of rayJitterStudy.variants) {
     console.log(`  ${v.ray.padEnd(9)} ${v.filter.padEnd(26)} ${String(v.worstPointingHoldP95Deg).padStart(6)} | ${v.pointing.map((r) => r.holdP95Deg).join(' ')} | ${v.worstRestHoldP95Deg} | ${v.stepLagSec} | ${v.settleSec.map((x) => x.sec).join(' ')} | ${v.shiftFromCurrentDeg.join(' ')} | ${v.pointing.map((r) => r.aimMedianErrorDeg).join(' ')}`);
   }
+}
+
+// ── Aim study ───────────────────────────────────────────────────────────────
+// Each aim segment against its measured target, for the knuckle and wrist rays, as the hand model gives them and
+// perspective-corrected. The hand model sees a crop around the hand and may give the finger's direction relative to
+// its own line of sight rather than the lens's axis; the corrected ray turns it by the angle between the lens axis and
+// the line of sight to the hand's wrist in the picture. Raw rays (no filter) over the segment trimmed by 0.3 s at each
+// end, frames scoring 0.35 or more. Signed errors: ray minus target direction, yaw positive toward the author's left
+// (image right), pitch positive up.
+const camera = config.camera ?? { imageXFovDeg: 45.7, imageYFovDeg: 73.7 };
+function lineOfSight(o: HandObs): Point3 {
+  const w = o.hand.imageWrist;
+  return norm({ x: Math.tan(camera.imageXFovDeg / 2 / DEG) * (2 * w.x - 1), y: Math.tan(camera.imageYFovDeg / 2 / DEG) * (2 * w.y - 1), z: 1 });
+}
+/** Rotates v by the rotation that takes the lens axis (0, 0, 1) onto the unit vector to. */
+function fromLensAxis(to: Point3, v: Point3): Point3 {
+  const axis = { x: -to.y, y: to.x, z: 0 };
+  const s = Math.hypot(axis.x, axis.y);
+  if (s < 1e-9) return v;
+  const k = scale(axis, 1 / s);
+  const theta = Math.atan2(s, to.z);
+  const cross = { x: k.y * v.z - k.z * v.y, y: k.z * v.x - k.x * v.z, z: k.x * v.y - k.y * v.x };
+  return add(add(scale(v, Math.cos(theta)), scale(cross, Math.sin(theta))), scale(k, dot(k, v) * (1 - Math.cos(theta))));
+}
+const yawDeg = (v: Point3): number => Math.atan2(v.x, v.z) * DEG;
+const pitchDeg = (v: Point3): number => Math.atan2(-v.y, Math.hypot(v.x, v.z)) * DEG;
+const AIM_RAYS: Array<{ name: string; kind: RayKind; perspective: boolean }> = [
+  { name: 'knuckle-tip', kind: 'mcp-tip', perspective: false },
+  { name: 'knuckle-tip corrected', kind: 'mcp-tip', perspective: true },
+  { name: 'wrist-tip', kind: 'wrist-tip', perspective: false },
+  { name: 'wrist-tip corrected', kind: 'wrist-tip', perspective: true }
+];
+const aimStudy = {
+  note: 'Raw rays against fingertip-to-target over each aim segment (trimmed 0.3 s each end, score 0.35 or more). Signed: ray minus target, yaw + toward the author\'s left (image right), pitch + up. Corrected: turned by the line of sight to the hand in the picture.',
+  camera,
+  segments: (config.segments ?? []).flatMap((seg) => {
+    const targetPoint = targetPointOf(seg.target);
+    if (!targetPoint) return [];
+    const obs = observations.filter((o) => o.side === (seg.hand ?? 'right') && o.clipSec >= seg.startSec + 0.3 && o.clipSec < seg.endSec - 0.3 && (o.score ?? 0) >= 0.35);
+    return [{
+      label: seg.label,
+      target: seg.target,
+      rays: AIM_RAYS.map((r) => {
+        const errors: number[] = [];
+        const yaws: number[] = [];
+        const pitches: number[] = [];
+        for (const o of obs) {
+          const tip = fingertipInLensFrame(o);
+          const raw = rayOf(o, r.kind);
+          if (!tip || !raw) continue;
+          const ray = r.perspective ? norm(fromLensAxis(lineOfSight(o), raw)) : raw;
+          const toTarget = norm(sub(targetPoint, tip));
+          errors.push(angleDeg(ray, toTarget));
+          yaws.push(yawDeg(ray) - yawDeg(toTarget));
+          pitches.push(pitchDeg(ray) - pitchDeg(toTarget));
+        }
+        return { ray: r.name, frames: errors.length, medianErrorDeg: roundOrNull(percentile(errors, 50), 1), p95ErrorDeg: roundOrNull(percentile(errors, 95), 1), medianYawErrorDeg: roundOrNull(percentile(yaws, 50), 1), medianPitchErrorDeg: roundOrNull(percentile(pitches, 50), 1) };
+      })
+    }];
+  })
+};
+if (aimStudy.segments.length) {
+  console.log('[bodycam-report] aim study (median error deg, signed yaw/pitch deg; frames)');
+  for (const seg of aimStudy.segments) console.log(`  ${seg.label.padEnd(36)} ${seg.rays.map((r) => `${r.ray} ${r.medianErrorDeg} (${r.medianYawErrorDeg}/${r.medianPitchErrorDeg}) n${r.frames}`).join(' | ')}`);
 }
 
 // Head, from every frame's head rotation.
@@ -730,7 +814,8 @@ const report = {
   wholeClip: whole,
   segments,
   rayJitterStudy,
-  geometry: config.distances ?? null
+  geometry: config.distances ? { ...config.distances, marks: config.marks ?? null, camera } : null,
+  aimStudy
 };
 await writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 // Every sampled frame in brief, for reading a segment by eye: clip time, which model ran, detections, head angles.
