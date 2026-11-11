@@ -126,6 +126,16 @@ function expectActions(holds: HoldsSnapshot, expected: Array<{ input: string; ac
   if (actual.join(',') !== wanted.join(',')) failures.push(`Halo actions ${actual.join(', ') || '(none)'}, expected ${wanted.join(', ')}`);
 }
 
+/** Each committed W/E also went through the one CaptureHistory as a meaning entry (docs/features/undo-redo.md). */
+function expectHistorySteps(holds: HoldsSnapshot, failures: string[]): void {
+  const steps = holds.history.log.filter((entry) => entry.op === 'undo' || entry.op === 'redo');
+  const done = holds.actions.filter((action) => (action.action === 'undo' || action.action === 'redo') && action.done);
+  if (steps.length !== done.length) failures.push(`history log has ${steps.length} undo/redo steps, the Halo committed ${done.length}`);
+  for (const entry of steps) {
+    if (entry.kind !== 'meaning' || (entry.word !== 'Mark' && entry.word !== 'Trace')) failures.push(`history ${entry.op} is ${JSON.stringify(entry)}, expected a meaning entry worded Mark or Trace`);
+  }
+}
+
 // --- Desktop ---
 
 async function desktopPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
@@ -228,6 +238,7 @@ async function desktopPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
     { input: 'mouse', action: 'redo', done: true },
     { input: 'mouse', action: 'undo', done: true }
   ], failures);
+  expectHistorySteps(holds, failures);
   if (links.length !== 1 || !onTarget(links[0]!, 'TargetA') || links[0]!.provenance !== 'recorded') failures.push(`links ${JSON.stringify(links)}, expected one recorded link on TargetA`);
   await page.context().close();
   return { phase: 'desktop', glb, links, holds, failures, notes: { ringDrawnWhileHeld: ringDrawn, flickDrewRing: flickDrawn, ringBoxAtBottomEdge: ringBox, statusAfterUndo: said, clickedOpen } };
@@ -298,6 +309,7 @@ async function phonePhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   const { glb, links } = await readLinks(run, 'phone', await download, failures);
   const holds = await holdsOf(page);
   expectActions(holds, [{ input: 'touch', action: 'undo', done: true }, { input: 'touch', action: 'redo', done: true }], failures);
+  expectHistorySteps(holds, failures);
   if (links.length !== 1 || !onTarget(links[0]!, 'TargetA') || links[0]!.provenance !== 'recorded') failures.push(`links ${JSON.stringify(links)}, expected one recorded link on TargetA`);
   await page.context().close();
   return { phase: 'phone', glb, links, holds, failures, notes: { touchAt: at, haloGlyph: start, ringElements: ringShown } };
@@ -454,6 +466,7 @@ async function handsPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
   const { glb, links } = await readLinks(run, 'hands', await settleDownload(page, downloaded), failures);
   const holds = await holdsOf(page);
   expectActions(holds, [{ input: 'hands', action: 'undo', done: true }, { input: 'hands', action: 'record', done: true }], failures);
+  expectHistorySteps(holds, failures);
   const recordedA = links.filter((link) => onTarget(link, 'TargetA') && link.provenance === 'recorded');
   if (recordedA.length !== 2) failures.push(`${recordedA.length} recorded link(s) on TargetA, expected 2`);
   for (const held of recordedA) {
@@ -536,6 +549,7 @@ async function controllersPhase(run: HeldMarkRun): Promise<HeldMarkReport> {
     { input: 'controllers', action: 'redo', done: true },
     { input: 'controllers', action: 'record', done: true }
   ], failures);
+  expectHistorySteps(holds, failures);
   if (links.length !== 1 || !onTarget(links[0]!, 'TargetA') || links[0]!.provenance !== 'recorded') failures.push(`links ${JSON.stringify(links)}, expected one recorded link on TargetA`);
   await page.context().close();
   return { phase: 'controllers', glb, links, holds, failures, notes: {} };

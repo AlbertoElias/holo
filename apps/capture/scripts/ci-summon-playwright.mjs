@@ -9,6 +9,7 @@ import { VOICE_BROWSER_ARGS, runDesktopVoiceTake, runIwerFindTake, runIwerVoiceT
 import { runDesktopFindTake, runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
 import { runIwerHandsPutBackTake, runIwerPutBackTake } from './lib/put-back-xr-take.mjs';
 import { runDesktopAnytimeTake, runLongCarryTake, runTouchTrayTake, runTrayHitchTake } from './lib/tray-anytime-take.mjs';
+import { runControllersUndoTake, runDesktopUndoTake, runHandsUndoTake, runTouchUndoTake } from './lib/undo-take.mjs';
 import { runDesktopPutBackTake, runTouchPutBackTake, runTrayBudgetTake } from './lib/put-back-take.mjs';
 
 // Summon and place while speaking (PRD-045): IWER controller, IWER hands and
@@ -47,6 +48,11 @@ try {
     // Put back and remove a tray item (docs/features/archive/tray-remove.md).
     ['desktop-put-back', () => runDesktopPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['touch-put-back', () => runTouchPutBackTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    // Undo and redo for every authoring action (docs/features/undo-redo.md).
+    ['undo-desktop', () => runDesktopUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['undo-touch', () => runTouchUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['undo-controllers', () => runControllersUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    ['undo-hands', () => runHandsUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['tray-budget', () => runTrayBudgetTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['long-carry', () => runLongCarryTake({ browser, baseUrl, artifactDir, consoleErrors })],
     // Timed: a browser of its own, so no earlier phase's GPU work is still draining.
