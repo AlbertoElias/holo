@@ -101,6 +101,33 @@ integration, and decisions. Smaller tasks keep each context short.
 | Standard | Implementing a settled brief; routine bugs | default (Sonnet) | `-p standard` (gpt-6.1-sol, medium) | default |
 | Light | Searches, running checks or CI and summarizing, doc and queue bookkeeping | `searcher` / `check-runner` subagents | `-p light` (gpt-6-luna, low) | `--effort low` |
 
+Routing is the agent's job, not the user's. Do it automatically:
+
+- Before the first action of a task, and again when the kind of work changes,
+  classify it against the table. If the current model is not the matching
+  tier, say so in one line and keep going: `Model check: <task> is <tier>;
+  I'm on <model>. <Cheaper|Stronger> option: <model or subagent> (<why>).`
+  Say nothing when the model already fits.
+- Warn in both directions. Opus on Standard or Light work wastes budget:
+  delegate it to a pinned subagent. Sonnet on Deep work risks a wrong
+  design: tell the user and recommend a fresh Opus session before starting.
+- Escalate instead of looping: when a Standard model fails the same check
+  twice, stop, report the failure, and recommend Opus (as a subagent for
+  one hard step, or a fresh session for the whole task).
+- Never inherit a model by default. Every `Agent` and `start_session` call
+  sets `model` explicitly from the table; the app's model picker or
+  `set_session_model` changes a running session only at a task boundary,
+  because a model change discards the prompt cache of the whole context.
+- Parallel sessions are fine; going past the limit is not. Before starting
+  another lead session, read the 5-hour percentage with `get_usage` and
+  hold off above about 70%.
+
+- Codex usage is scarce: the user runs out of it fast. Spend it only on the
+  independent verifier and design-screenshot validation, never on routine
+  implementation or searches (Claude subagents do those). Apply the same
+  tier check: `-p light` for a bounded diff or log read, `-p standard` for
+  verifier and design reviews, `-p deep` only when the user approves it in
+  that task. Prefer Muse or a Claude subagent when either fits.
 - The independent verifier in `docs/FEATURE_WORKFLOW.md` uses a different
   vendor from the implementer (for example Codex implements, Claude verifies);
   same-model review shares the implementer's blind spots.
