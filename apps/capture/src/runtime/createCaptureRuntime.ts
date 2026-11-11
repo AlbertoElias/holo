@@ -128,7 +128,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     recordRefusal: () => (capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
     isPlacementSettled: () => capture.ar.isSettled(),
     setFrame: stage.worldGroup,
-    getPlace: () => (place?.current ? { prepare: (path) => place.prepareExport(path) } : undefined)
+    getPlace: () => (place?.current ? { prepare: (path, maxSpzBytes) => place.prepareExport(path, maxSpzBytes), glbByteBudget: () => place.glbByteBudget() } : undefined)
   });
   const hands = new HandEmbodiment(tracking, avatar, () => motor.getWorld(), config);
   const objects = new CaptureObjects({
@@ -454,6 +454,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __samplePlace: () => place?.report() ?? null,
         __probePlaceCasts: (points) => place?.probeCasts(points) ?? [],
         __loadPlaceUrl: (url) => place?.load({ kind: 'url', url }) ?? Promise.resolve(false),
+        __setPlaceGlbBudget: (bytes) => place?.setGlbByteBudget(bytes),
+        __setPlaceLodBudget: (splats) => place?.setLodBudget(splats),
         __pointLanding: () => capture.point.lastLanding(),
         __projectToScreen: (point) => {
           const ndc = new Vector3(point[0], point[1], point[2]).project(stage.desktopCamera);

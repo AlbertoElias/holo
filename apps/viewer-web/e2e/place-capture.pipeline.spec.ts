@@ -49,6 +49,11 @@ type PlaceReport = {
   name: string | null;
   message: string | null;
   splatsLoaded: number;
+  drawnWithLod: boolean;
+  lodState: "none" | "building" | "ready" | "failed";
+  lodMs: number;
+  lodBudget: number;
+  castAtFullResolution: boolean;
   flipped: boolean;
   upright: string;
   floorFound: boolean;
@@ -61,11 +66,13 @@ type PlaceReport = {
   worldModel: string | null;
   groundVisible: boolean;
   previousSetAttached: boolean;
-  lastExport: { kept: number; inBox: number; thinned: number; spzBytes: number; cropMs: number; writeMs: number; box: { min: number[]; max: number[] }; disc: { center: { x: number; z: number }; radius: number } } | null;
+  lastExport: { kept: number; inBox: number; thinned: number; spzBytes: number; maxSpzBytes: number | null; cropMs: number; writeMs: number; box: { min: number[]; max: number[] }; disc: { center: { x: number; z: number }; radius: number } } | null;
 };
 
 type CaptureWindow = Window & {
   __setManualClock: (enabled: boolean, draw?: boolean) => void;
+  __setPlaceGlbBudget: (bytes: number | null) => void;
+  __setPlaceLodBudget: (splats: number | null) => void;
   __setMockInput: (input: { forward?: boolean; point?: boolean; lookYaw?: number; aimPitch?: number }) => void;
   advanceTime: (ms: number) => void;
   render_game_to_text: () => string;
@@ -117,6 +124,10 @@ const OPAQUE_SHEET_X = -0.5;
 const FAINT_OPACITY = 0.3;
 /** A magenta cluster past the scan's floor and its fade, in view from the spawn: the place's ground must not paint over it. */
 const BEACON = { x: 2.5, z: -8, height: 1.4 };
+/** A magenta patch over the scan's middle, above every dome: in the stored crop's box, and never drawn by the viewer's cut. */
+const CEILING = { height: 3.0, half: 0.75 };
+/** A red pillar inside the dome at the take's start, large enough to count on a feed card. */
+const PILLAR = { x: -1.5, z: 0, half: 0.15, from: 0.3, to: 1.2 };
 
 function sheet(x: number, opacity: number): NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> {
   const blobs: NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> = [];
@@ -134,12 +145,28 @@ function beacon(): NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> {
   return blobs;
 }
 
+function ceiling(): NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> {
+  const blobs: NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> = [];
+  for (let x = -CEILING.half; x <= CEILING.half + 1e-6; x += 0.1) for (let z = -CEILING.half; z <= CEILING.half + 1e-6; z += 0.1) {
+    blobs.push({ x, z, height: CEILING.height, scale: 0.05, color: [1, 0, 1], opacity: 0.99 });
+  }
+  return blobs;
+}
+
+function pillar(): NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> {
+  const blobs: NonNullable<Parameters<typeof makeFixture>[0]["blobs"]> = [];
+  for (let x = -PILLAR.half; x <= PILLAR.half + 1e-6; x += 0.06) for (let z = -PILLAR.half; z <= PILLAR.half + 1e-6; z += 0.06) {
+    for (let height = PILLAR.from; height <= PILLAR.to + 1e-6; height += 0.06) blobs.push({ x: PILLAR.x + x, z: PILLAR.z + z, height, scale: 0.04, color: [1, 0, 0], opacity: 0.99 });
+  }
+  return blobs;
+}
+
 function roomFixture(): Fixture {
   return makeFixture({
     half: 6,
     ring: { x: 0, z: 0, radius: 0 },
     clutter: 0,
-    blobs: [...sheet(FAINT_SHEET_X, FAINT_OPACITY), ...sheet(OPAQUE_SHEET_X, 0.95), ...beacon()]
+    blobs: [...sheet(FAINT_SHEET_X, FAINT_OPACITY), ...sheet(OPAQUE_SHEET_X, 0.95), ...beacon(), ...ceiling(), ...pillar()]
   });
 }
 
@@ -190,14 +217,33 @@ function centreIndex(centers: Float32Array, cell: number): (point: Vec3) => bool
 
 /** The GLB with its stored SPZ's header claiming `numPoints` splats: the buffer view is rewritten in place, so the chunk stays the same length when the gzip does. */
 function withLyingHeader(glb: Buffer, numPoints: number): Buffer {
+  return withStoredSpz(glb, (spz) => {
+    spz.writeUInt32LE(numPoints, 8);
+    return spz;
+  });
+}
+
+/**
+ * The take with its stored SPZ replaced by `edit`'s (decompressed) bytes; the
+ * extension's count and SH are set to the new header's, so only the stream
+ * itself can be wrong.
+ */
+function withHonestMalformedSpz(glb: Buffer, edit: (spz: Buffer) => Buffer): Buffer {
+  return withStoredSpz(glb, edit, true);
+}
+
+function withStoredSpz(glb: Buffer, edit: (spz: Buffer) => Buffer, matchExtension = false): Buffer {
   const chunks = readGlbChunks(new Uint8Array(glb));
   const json = readJson(glb) as GltfJson & { bufferViews: Array<{ byteOffset?: number; byteLength: number }>; buffers: Array<{ byteLength: number }> };
   const holder = json.nodes.find((node) => node.extensions?.[PLACE_EXTENSION])!;
-  const extension = holder.extensions![PLACE_EXTENSION] as { bufferView: number };
+  const extension = holder.extensions![PLACE_EXTENSION] as { bufferView: number; splatCount: number; maxSh: number };
   const view = json.bufferViews[extension.bufferView]!;
   const bin = Buffer.from(chunks.bin!);
-  const spz = gunzipSync(bin.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength));
-  spz.writeUInt32LE(numPoints, 8);
+  const spz = edit(gunzipSync(bin.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength)));
+  if (matchExtension) {
+    extension.splatCount = spz.readUInt32LE(8);
+    extension.maxSh = spz.readUInt8(12);
+  }
   const lying = gzipSync(spz);
   // Append the lying SPZ at the end of BIN and point the view at it: the original bytes stay, unreferenced.
   const offset = Math.ceil(bin.byteLength / 4) * 4;
@@ -224,7 +270,7 @@ function withLyingHeader(glb: Buffer, numPoints: number): Buffer {
 
 // ---------------------------------------------------------------- capture
 
-async function openCapture(browser: Browser, files: Record<string, Buffer>, query: string, base = captureUrl): Promise<{ context: BrowserContext; page: Page; errors: string[] }> {
+async function openCapture(browser: Browser, files: Record<string, Buffer>, query: string, base = captureUrl, loadTimeout = 20_000): Promise<{ context: BrowserContext; page: Page; errors: string[] }> {
   const context = await createXrContext(browser);
   const page = await context.newPage();
   await page.setViewportSize(CAPTURE_VIEWPORT);
@@ -241,7 +287,7 @@ async function openCapture(browser: Browser, files: Record<string, Buffer>, quer
     else await route.fulfill({ status: 404, body: "not found" });
   });
   await page.goto(new URL(`?${query}`, base).href, { waitUntil: "networkidle" });
-  await waitForTextContentPrefix(page, "#status", "loaded");
+  await waitForTextContentPrefix(page, "#status", "loaded", { timeout: loadTimeout });
   // Logic only, no drawing: software WebGL draws a scan far slower than the checks step it.
   await page.evaluate(() => (window as unknown as CaptureWindow).__setManualClock(true, false));
   return { context, page, errors };
@@ -513,12 +559,17 @@ function recordRoomTake(browser: Browser): Promise<RoomTake> {
 test.describe("slice 2a: a take recorded inside a scanned place on the desktop", () => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture server and a live API.");
 
-  test("capture: the scan replaces the set at true scale, upright, and the avatar walks on its floor", async ({ browser }) => {
+  test("capture: the scan replaces the set at true scale, upright, and the avatar walks on its floor", async ({ browser }, testInfo) => {
     test.setTimeout(240_000);
     const take = await recordRoomTake(browser);
     const { report, fixture } = take;
     expect(report.status).toBe("ready");
     expect(report.splatsLoaded, "every splat of the scan").toBe(fixture.count);
+    // Spark's budget is the device's (500 k here: the IWER harness presents a Quest); under it the scan draws whole, with no tree to build.
+    expect(report.lodBudget, "Spark's per-device budget").toBeGreaterThanOrEqual(500_000);
+    expect(report.lodState, "under the budget, no LoD tree is built").toBe("none");
+    expect(report.drawnWithLod).toBe(false);
+    expect(report.castAtFullResolution, "pointing casts against every splat, on a mesh never drawn").toBe(true);
     expect(report.flipped, "a .ply is read in the trainers' y-down convention").toBe(true);
     expect(report.upright).toBe("read");
     expect(report.floorFound).toBe(true);
@@ -533,6 +584,8 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
 
     expect(take.walked, "the walk covers 10 m").toBeGreaterThanOrEqual(10);
     const worst = Math.max(...take.soles.map(Math.abs));
+    const worstAt = take.soles.findIndex((sole) => Math.abs(sole) === worst);
+    testInfo.annotations.push({ type: "soles", description: `worst ${worst.toFixed(4)} m at step ${worstAt} of ${take.soles.length}` });
     expect(worst, `the sole stays within ${FEET_TOLERANCE} m of the scan's floor over the walk`).toBeLessThanOrEqual(FEET_TOLERANCE);
 
     // No cast lands on the old set: down every point of a grid over and past the scan, the set is the floor at y = 0 and nothing else is hit but it and the hidden ground.
@@ -613,6 +666,12 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
       const { outside, shown } = await outsideNow(page);
       expect(outside, `no stored splat shown at ${t.toFixed(2)} s leaves the dome`).toBe(0);
       expect(shown, `the place shows at ${t.toFixed(2)} s`).toBeGreaterThan(0);
+      // What the card draws, not only what the clip's CPU twin says: the scan's red box shows at the start, and the
+      // stored magenta patch above every dome never does.
+      const pixels = () => card.screenshot().then((png) => shotStats(page, png));
+      if (i === 0) await expect.poll(async () => (await pixels()).red, { timeout: 20_000, message: "the scan's red pillar draws in the card" }).toBeGreaterThan(30);
+      const drawn = await pixels();
+      expect(drawn.magenta, `${t.toFixed(2)} s: the stored patch above the dome is cut by the shader`).toBe(0);
       for (const splat of fixture.splats) {
         world.set(...splat.file).applyMatrix4(nodeWorld);
         if (placeClipFade(dome, world, splat.scale) <= 0.001) continue;
@@ -621,6 +680,8 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
       }
     }
     expect(shownByScan, "the dome shows scan splats").toBeGreaterThan(1000);
+    const patch = fixture.splats.filter((splat) => splat.room[1] - fixture.floorY > CEILING.height - 0.1);
+    expect(patch.filter((splat) => has(splat.file)).length, "the magenta patch is in the stored crop, so only the cut keeps it from drawing").toBeGreaterThan(patch.length / 2);
     expect(missing.slice(0, 10), `every scan splat inside the fitted dome is stored (${missing.length} missing)`).toEqual([]);
     const sweep = Math.max(...domeBases.map((b) => Math.hypot(b[0] - domeBases[0]![0], b[2] - domeBases[0]![2])));
     expect(sweep, "the dome moves with the take").toBeGreaterThan(0.5);
@@ -676,12 +737,65 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
     await writeFile(path.join(evidenceDir, "room-report.json"), JSON.stringify({ capture: report, walked: take.walked, worstSole: Math.max(...take.soles.map(Math.abs)), holds: take.holds, viewer: end, shownByScan, sweep, glbBytes: glb.byteLength }, null, 2));
   });
 
+  test("export: over the take's size cap, the place is thinned to fit what the rest of the take leaves, not refused; over Spark's budget the scan draws with LoD", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const fixture = roomFixture();
+    const { context, page, errors } = await openCapture(browser, { "room.ply": fixture.bytes }, "placeCapture=1");
+    try {
+      // Over Spark's draw budget (lowered here) the scan gets a LoD tree, and pointing still casts against every splat.
+      await page.evaluate((splats) => (window as unknown as CaptureWindow).__setPlaceLodBudget(splats), 10_000);
+      await page.evaluate((url) => (window as unknown as CaptureWindow).__loadPlaceUrl(url), `${PLACE_ROUTE}room.ply`);
+      const report = await waitForPlace(page, "ready");
+      // Built in the background: the scan is ready (and draws whole) before its tree is.
+      await expect.poll(async () => (await placeReport(page))!.lodState, { timeout: 60_000, message: "the LoD tree builds" }).toBe("ready");
+      expect((await placeReport(page))!.drawnWithLod, "over the budget the drawn scan has a LoD tree").toBe(true);
+      expect(report.castAtFullResolution, "and casts stay on every splat").toBe(true);
+      await advance(page, 1);
+      const red = toSet(report, { x: fixture.middle.x + RED_BOX.x, y: fixture.floorY + 0.18, z: fixture.middle.z + RED_BOX.z });
+      const faint = await holdOn(page, red);
+      expect(faint.landed && Math.abs(faint.landing[0] - red[0]) < 0.12, `a hold through the faint sheet lands on the red box (${faint.landing.map((v) => v.toFixed(2)).join(", ")})`).toBe(true);
+      // The same short take twice: the first sets the sizes, the second is made under a cap that leaves the place half its bytes.
+      const full = await recordAndDownload(page, () => advance(page, 1.5), path.join(evidenceDir, "budget-full.glb"));
+      const before = (await placeReport(page))!.lastExport!;
+      expect(before.thinned, "under 25 MB nothing is thinned").toBe(0);
+      const budget = full.byteLength - Math.floor(before.spzBytes / 2);
+      await page.evaluate((bytes) => (window as unknown as CaptureWindow).__setPlaceGlbBudget(bytes), budget);
+      const fitted = await recordAndDownload(page, () => advance(page, 1.5), path.join(evidenceDir, "budget-fitted.glb"));
+      const after = (await placeReport(page))!.lastExport!;
+      expect(fitted.byteLength, "the take fits its cap").toBeLessThanOrEqual(budget);
+      expect(after.maxSpzBytes, "the place was sized to what the take left").not.toBeNull();
+      expect(after.spzBytes).toBeLessThanOrEqual(after.maxSpzBytes!);
+      expect(after.thinned, "thinned, not refused").toBeGreaterThan(0);
+      expect(after.kept).toBeLessThan(before.kept);
+      const stored = (await readStoredPlace(new Uint8Array(fitted), readGlbChunks(new Uint8Array(fitted))))!;
+      expect(stored.header.numPoints, "the thinned crop is what is stored").toBe(after.kept);
+      expect(errors, "no page error").toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("a GLB whose stored SPZ header lies is rejected by the API and refused by the viewer without a crash", async ({ browser, page }) => {
     test.setTimeout(240_000);
     const take = await recordRoomTake(browser);
     for (const numPoints of [take.report.lastExport!.kept + 1, 50_000_000]) {
       const rejected = await upload(page, "Place lying", withLyingHeader(take.glb, numPoints));
       expect(rejected.status, `a header claiming ${numPoints} splats is refused: ${rejected.body}`).toBe(422);
+    }
+    // Streams whose extension agrees with their header but which no reader can decode (found by the verifier).
+    const malformed: Array<[string, (spz: Buffer) => Buffer]> = [
+      ["a version no reader decodes", (spz) => {
+        const one = Buffer.alloc(32);
+        spz.copy(one, 0, 0, 16);
+        one.writeUInt32LE(99, 4);
+        one.writeUInt32LE(1, 8);
+        return one;
+      }],
+      ["a stream missing its rotations and colours", (spz) => spz.subarray(0, 16 + spz.readUInt32LE(8) * 16)]
+    ];
+    for (const [name, edit] of malformed) {
+      const rejected = await upload(page, "Place malformed", withHonestMalformedSpz(take.glb, edit));
+      expect(rejected.status, `${name} is refused: ${rejected.body}`).toBe(422);
     }
     // The viewer meets one anyway (a GLB stored before the check): an honest upload served with lying bytes.
     const honest = await upload(page, "Place honest", take.glb);
@@ -855,7 +969,7 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
       test.skip(!existsSync(file), `${scan} is not on disk (never committed): see docs/features/splat-capture.md`);
       test.setTimeout(420_000);
       const bytes = await readFile(file);
-      const { context, page: capture, errors } = await openCapture(browser, { [scan]: bytes }, `placeCapture=1&place=${PLACE_ROUTE}${scan}`);
+      const { context, page: capture, errors } = await openCapture(browser, { [scan]: bytes }, `placeCapture=1&place=${PLACE_ROUTE}${scan}`, captureUrl, 60_000);
       let glb: Buffer;
       let report: PlaceReport;
       const soles: number[] = [];
@@ -880,7 +994,10 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
       expect(glb.byteLength, "under 25 MB").toBeLessThan(MAX_GLB_BYTES);
       const stored = (await readStoredPlace(new Uint8Array(glb), readGlbChunks(new Uint8Array(glb))))!;
       expect(stored.extension.splatCount).toBe(report.lastExport!.kept);
-      testInfo.annotations.push({ type: "crop", description: `${scan}: kept ${report.lastExport!.kept}, in box ${report.lastExport!.inBox}, thinned ${report.lastExport!.thinned}, ${(glb.byteLength / 1e6).toFixed(2)} MB` });
+      testInfo.annotations.push({ type: "crop", description: `${scan}: kept ${report.lastExport!.kept}, in box ${report.lastExport!.inBox}, thinned ${report.lastExport!.thinned}, ${(glb.byteLength / 1e6).toFixed(2)} MB; ${report.splatsLoaded} splats, LoD ${report.lodState}${report.lodState === "ready" ? ` in ${(report.lodMs / 1000).toFixed(1)} s` : ""} (budget ${report.lodBudget})` });
+      expect(report.lodState === "none", "a LoD tree is built for a scan over the device's budget, and only then").toBe(report.splatsLoaded <= report.lodBudget);
+      expect(report.lodState, "the tree never fails").not.toBe("failed");
+      expect(report.castAtFullResolution).toBe(true);
 
       const uploaded = await upload(page, `Place ${scan}`, glb);
       expect(uploaded.status, uploaded.body).toBe(201);

@@ -10,6 +10,8 @@ export type ShotStats = {
   magenta: number;
   /** Pixels that are the fixture's red, green, blue or yellow boxes. */
   boxes: number;
+  /** Of those, the red box's pixels alone. */
+  red: number;
 };
 
 /** Counts the fixture's saturated colours in a PNG. */
@@ -22,12 +24,14 @@ export async function shotStats(page: Page, png: Buffer): Promise<ShotStats> {
     const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
     let magenta = 0;
     let boxes = 0;
+    let red = 0;
     for (let i = 0; i < data.length; i += 4) {
       const [r, g, b] = [data[i]!, data[i + 1]!, data[i + 2]!];
+      if (r > 170 && g < 90 && b < 90) red += 1;
       if (r > 170 && b > 170 && g < 90) magenta += 1;
       else if ((r > 170 && g < 90 && b < 90) || (g > 140 && r < 90 && b < 110) || (b > 170 && r < 90 && g < 110) || (r > 190 && g > 170 && b < 90)) boxes += 1;
     }
-    return { width: bitmap.width, height: bitmap.height, magenta, boxes };
+    return { width: bitmap.width, height: bitmap.height, magenta, boxes, red };
   }, png.toString("base64"));
 }
 

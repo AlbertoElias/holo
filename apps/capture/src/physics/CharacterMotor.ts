@@ -333,6 +333,8 @@ export class CharacterMotor {
 
   private rebuildCharacterController(): void {
     if (!this.rapierWorld) return;
+    // One controller at a time: each set swap and respawn rebuilds it, and Rapier keeps a controller until removed.
+    if (this.characterController) this.rapierWorld.removeCharacterController(this.characterController);
     this.characterController = this.rapierWorld.createCharacterController(this.controllerOffset());
     this.characterController.setUp({ x: 0, y: 1, z: 0 });
     this.characterController.setSlideEnabled(true);

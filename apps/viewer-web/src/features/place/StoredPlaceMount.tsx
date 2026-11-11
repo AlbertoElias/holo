@@ -96,6 +96,7 @@ export default function StoredPlaceMount({ place, readBytes, scene, shape, shift
       // A gzip bomb or a lying count is refused here, before Spark allocates anything for it.
       const header = await checkSpzBytes(spz, PLACE_STORED_SPLAT_CAP);
       if (header.numPoints !== place.extension.splatCount) throw new Error(`the SPZ header says ${header.numPoints} splats, the extension ${place.extension.splatCount}`);
+      if (header.shDegree !== place.extension.maxSh) throw new Error(`the SPZ header's SH degree is ${header.shDegree}, the extension's ${place.extension.maxSh}`);
       const S = await loadSpark();
       if (!live) return;
       const packedSplats = new S.PackedSplats({ fileBytes: spz, fileType: S.SplatFileType.SPZ });

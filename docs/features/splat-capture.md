@@ -340,7 +340,7 @@ Slices 2b (Quest VR) and 2c (phone AR), each with its device check:
 | Old viewers or the converter meet the place | Optional extension, no primitive to draw, the `KHR_audio` precedent; e2e on `main`'s viewer build and the converter |
 | A gzip bomb or lying `splatCount` in a public GLB | SPZ header checked by the API at upload and by the viewer before decoding |
 | The stored crop misses where the take went | Crop to the take's reach over the whole take; the dome-coverage criterion |
-| Stored scan too large for 25 MB | SH 0 or 1, thin by distance from the path to what 25 MB leaves; e2e with a 3 M splat fixture |
+| Stored scan too large for 25 MB | SH 0 or 1, thin by distance from the path to what 25 MB leaves; e2e with the cap lowered by an automation hook |
 | Crop and `writeSpz` exceed the 60 s export timeout on a phone or Quest | Timed on each device; the crop runs before `writeSpz` |
 | Every feed card pays the place's download | Size cap, measured; noted in Q5 |
 | A VR author walks off the scan's floor and falls | Unbounded floor plane, visible fade at the scan's edge |
@@ -393,12 +393,12 @@ XR viewers moved to 2b; numeric acceptance criteria.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Scan as the set, floor, walking (2a) | `apps/viewer-web/e2e/place-capture.pipeline.spec.ts` (pipeline shard 8): a PLY written by the spec (floor off the origin, boxes, floaters under the floor, a faint and an opaque sheet), loaded by `?place=` and by the picker; a 10 m walk | Pass, 2026-11-11: 43,627 splats, floor found at 0.3501 (written at 0.35), floor band at the set's y = 0 within 0.03 mm, set = `PlaceFloor`, stage ground hidden, old set detached; 10.8 m walked, sole at most 7.8 mm off the floor; casts down an 81-point grid over and past the scan hit only `PlaceFloor` at y = 0 (and the hidden ground). The downloaded `fireplace.spz` and `snow-street.spz` load, stand upright and are walked on (sole within 2 cm) |
-| Export contract (2a) | Same spec: Record, Stop, the GLB read with `readStoredPlace` | Pass: `HOLOIM_place` v1 in `extensionsUsed` only, `RecordedPlace` with the scan-to-set TRS, SPZ header = extension count, Spark decodes all 19,210 stored splats, `RecordedPlaceFloor` in `RecordedSceneBubble`, 3.3 MB, 0 thinned. Dome coverage against the scan's own splats: at nine times over the take the viewer's fitted dome showed 56,678 splat-times, all of them in the stored crop, while it swept 2.17 m. `fireplace.spz`: 161,364 stored, 4.87 MB; `snow-street.spz`: 45,891, 3.07 MB; at seven times over each take the fitted dome lies inside the crop's box (thinned counts reported as annotations) |
-| Upload and play (2a) | Same spec: the GLB through the real API (Quick Look on) into the feed card and portal | Pass: stored place ready, disc hidden, stored floor on the disc within 0.03 mm, the author's foot bones at the height they stood at in capture within 2 cm, no shown splat leaving the dome at any time checked; pause, Free orbit, zoom inside (cut holds), Return, Play; screenshots `output/place-capture/room-*.png` |
+| Scan as the set, floor, walking (2a) | `apps/viewer-web/e2e/place-capture.pipeline.spec.ts` (pipeline shard 8): a PLY written by the spec (floor off the origin, boxes, floaters under the floor, a faint and an opaque sheet), loaded by `?place=` and by the picker; a 10 m walk | Pass, 2026-11-11: 44,606 splats, floor found at 0.3501 (written at 0.35), floor band at the set's y = 0 within 0.03 mm, set = `PlaceFloor`, stage ground hidden, old set detached; 10.8 m walked, sole at most 7.8 mm off the floor; casts down an 81-point grid over and past the scan hit only `PlaceFloor` at y = 0 (and the hidden ground). The downloaded `fireplace.spz` and `snow-street.spz` load, stand upright and are walked on (sole within 2 cm). Drawn from the spawn, a magenta beacon past the scan's floor shows (0 px with the old floor, which painted over the scan). Under Spark's budget no LoD tree is built; over a lowered budget the tree builds in the background (`snow-street.spz`, 982 k splats over the harness's Quest budget, records while it builds) and a hold through the faint sheet still lands on the red box |
+| Export contract (2a) | Same spec: Record, Stop, the GLB read with `readStoredPlace` | Pass: `HOLOIM_place` v1 in `extensionsUsed` only, `RecordedPlace` with the scan-to-set TRS, SPZ header = extension count, Spark decodes all 20,042 stored splats, `RecordedPlaceFloor` in `RecordedSceneBubble`, 3.3 MB, 0 thinned. Dome coverage against the scan's own splats: at nine times over the take the viewer's fitted dome showed 60,710 splat-times, all of them in the stored crop, while it swept 2.17 m. Sized at Stop: under a cap lowered to leave the place half its SPZ, a short take came out at 2,463,264 bytes, within the cap, its place thinned and stored whole (header = kept). `fireplace.spz`: 161,287 stored, 4.87 MB; `snow-street.spz`: 45,891, 3.07 MB; at seven times over each take the fitted dome lies inside the crop's box (thinned counts reported as annotations) |
+| Upload and play (2a) | Same spec: the GLB through the real API (Quick Look on) into the feed card and portal | Pass: stored place ready, disc hidden, stored floor on the disc within 0.03 mm, the author's foot bones at the height they stood at in capture within 2 cm, no shown splat leaving the dome at any time checked; in the card's pixels the scan's red pillar draws at the start and a magenta patch stored in the crop above every dome draws 0 px at all nine times (the shader's cut, not only its CPU twin); pause, Free orbit, zoom inside (cut holds), Return, Play; screenshots `output/place-capture/room-*.png` |
 | Pointing on the scan (2a) | Same spec: holds on a red box behind a faint (opacity 0.3) sheet and on an opaque sheet in front of a green box | Pass: the faint sheet lets the ray through to the box (x 0.80, sheet at 0.5), the opaque sheet catches it (within 3 cm of its plane); both links have `to.node` = `RecordedPlace`, stored ends within 2 cm of the hits, and the drawn ink ends within 2 cm of the hits in the feed |
 | Backward compatibility (2a) | Same spec with `E2E_MAIN_VIEWER_URL` (`main`'s viewer test build at `f64690f`, served against the run's API) and `E2E_BASE_CAPTURE_URL` (capture at this branch's base, `origin/docs/splat-capture-brief`); the Quick Look converter on the place take | Pass: `main`'s dome base and radii equal this viewer's (difference 0), `main` draws the take on the disc with no error (`compat-*.png`); the converter reaches ready; a no-place take's extensions, node names, counts and plugin JSON shapes equal the base capture's, with and without `?placeCapture=1`. Against `main`'s capture the only difference is `main`'s newer positional audio (`KHR_audio` emitters), which this branch predates |
-| Failure paths (2a) | Same spec: a 404, a PLY header over 3 M, a PLY whose comment claims a smaller count, a scan with no floor, a gzip that is not SPZ, a gzip bomb (10 splats over 8 MB), an `.obj`; GLBs whose SPZ header claims one splat more and 50 M | Pass: one message each, today's set and ground kept, Record exports a take without a place, the picker then places the scan; the API answers 422 to both lying GLBs, and the viewer served one anyway refuses it (status failed) without a page error |
+| Failure paths (2a) | Same spec: a 404, a PLY header over 3 M, a PLY whose comment claims a smaller count, a scan with no floor, a gzip that is not SPZ, a gzip bomb (10 splats over 8 MB), an `.obj`; GLBs whose SPZ header claims one splat more and 50 M; GLBs whose extension agrees with an SPZ of version 99 or one missing its rotations and colours | Pass: one message each, today's set and ground kept, Record exports a take without a place, the picker then places the scan; the API answers 422 to both lying GLBs and both malformed ones, and the viewer served one anyway refuses it (status failed) without a page error |
 | Bundles (2a) | Production builds of both apps, `node scripts/check-prod-bundle.mjs apps/viewer-web/dist` and `… apps/capture/dist --capture` (now in CI) | Pass: no Spark in either app's startup graph (viewer 3 startup chunks, 2 lazy with Spark; capture 6 startup, 2 lazy), no place report in the viewer's bundle. Capture's place code is its own chunk, loaded only with `?placeCapture=1` |
 | Quest VR (2b) | IWER body check with a place; then the Quest via MetaVR | IWER report; on the Quest: frame times, drawn splats, LoD build time, heap. Pending |
 | Quest passthrough and XR viewers (2b) | IWER `ar-record` quest-passthrough with a place; `test:xr:viewer` with a place GLB | Diorama cut by the dome; recording off; stored place rendered. Pending |
@@ -429,6 +429,32 @@ XR viewers moved to 2b; numeric acceptance criteria.
 - **The crop** keeps the packed words of every splat in the estimated
   dome's swept box, less splats under the floor's slack, too faint to show
   or too large for any dome; none of those are drawn by the clip.
+- **Spark's draw budget.** The drawn scan gets a LoD tree only over the
+  device's budget (Spark's own `defaultSplatTarget`: desktop 2.5 M, Quest
+  500 k), built in the background: a 982 k splat scan at SH 2 did not finish
+  its tree in minutes in headless Chromium (the IWER harness presents a
+  Quest), and the page waited on it. The scan draws whole until Spark finds
+  the tree. Pointing casts against a second, hidden mesh over the same
+  splats with LoD off, since Spark's raycast on a LoD mesh reads the
+  renderer's per-frame LoD indices.
+- **Sized at Stop.** If the take comes out over 25 MB, the place gets what
+  the rest of the take leaves (less 4 KiB) and is thinned again by distance
+  from the path until its SPZ fits; the take is written a second time. The
+  e2e lowers the cap through an automation hook instead of a 3 M splat
+  fixture.
+- **The SPZ check** accepts versions 1 to 3 only and requires every array
+  the header's version and SH degree name, whole (exactly the length of
+  both downloaded scans); before, a version-99 stream or one missing its
+  rotations passed when the extension agreed with its header.
+- **The independent verifier** (Codex `-p standard`, read-only, 2026-11-11)
+  answered "ship after must-fixes": the five were the 25 MB sizing, the
+  SPZ check, no pixel proof in the viewer, LoD off while drawing, and a
+  Rapier character controller leaked on every set swap. All five are fixed
+  and covered by the e2e above (the controller is removed before it is
+  rebuilt). Its lesser notes: the viewer finds `RecordedPlace` by name, not
+  by the extension's node index (a follow-up), and the picker reads the
+  whole file before its count check (the count is read from the header
+  first; the file's size is not capped).
 - **The place's floor under the splats.** The `PlaceFloor` disc (the ground
   past the scan, faded at its edge) was transparent and drawn after Spark's
   splats, which write no depth, so it painted a dark band over the lower

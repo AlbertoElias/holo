@@ -32,7 +32,12 @@ export type LivePlace = {
   scan: DecodedScan;
   quaternion: THREE.Quaternion;
   position: THREE.Vector3;
+  /** What is drawn: Spark's LoD keeps it within the device's splat budget. */
   mesh: SplatMesh;
+  /** What pointing casts against: every splat of the scan, never drawn (hidden). */
+  cast: SplatMesh;
+  /** The scan's LoD tree: built in the background only for a scan over Spark's budget. `released` once swapped out. */
+  lod: { state: 'none' | 'building' | 'ready' | 'failed'; ms: number; released: boolean };
   floor: THREE.Mesh;
   scanRadius: number;
   /** The set's floor band as placed: the median height of the scan's floor splats, world y (0 when placed right). */
@@ -56,6 +61,14 @@ export type PlaceCaptureReport = {
   name: string | null;
   message: string | null;
   splatsLoaded: number;
+  /** The drawn mesh has a LoD tree, so Spark's per-device budget caps what it draws. */
+  drawnWithLod: boolean;
+  lodState: LivePlace['lod']['state'];
+  lodMs: number;
+  /** The splats Spark draws at most on this device; a scan over it gets a LoD tree. */
+  lodBudget: number;
+  /** Pointing casts against every splat of the scan, on a mesh that is never drawn. */
+  castAtFullResolution: boolean;
   flipped: boolean;
   upright: string;
   floorFound: boolean;
@@ -71,7 +84,7 @@ export type PlaceCaptureReport = {
   worldModel: string | null;
   groundVisible: boolean;
   previousSetAttached: boolean;
-  lastExport: { kept: number; inBox: number; thinned: number; spzBytes: number; cropMs: number; writeMs: number; box: { min: number[]; max: number[] }; disc: { center: { x: number; z: number }; radius: number }; dome: unknown } | null;
+  lastExport: { kept: number; inBox: number; thinned: number; spzBytes: number; maxSpzBytes: number | null; cropMs: number; writeMs: number; box: { min: number[]; max: number[] }; disc: { center: { x: number; z: number }; radius: number }; dome: unknown } | null;
 };
 
 export interface CapturePlaceDeps {
@@ -120,11 +133,19 @@ async function checkDeclaredSize(bytes: Uint8Array, name: string): Promise<void>
 
 /**
  * Spark's raycast counts the splats a render last updated: none for a mesh
- * that has not drawn (the export's crop never does, and the checks step
- * without drawing). Given the count alone it casts against every splat of
- * its own packed array; indices would make it read a LoD array these meshes
- * do not build (they are made with `enableLod: false`).
+ * that has not drawn (the export's crop and the hidden cast mesh never do,
+ * and the checks step without drawing). Given the count alone it casts
+ * against every splat of its own packed array. On a LoD mesh it would read
+ * the LoD's indices instead (and the renderer rewrites them every frame), so
+ * the meshes cast against are made with `enableLod: false` and never drawn.
  */
+/** Thinning passes at Stop before the place is written as it is: SPZ size is close to linear in splats. */
+const MAX_FIT_PASSES = 4;
+/** Each pass aims a little under the bytes left, so one pass usually fits. */
+const FIT_SHRINK = 0.95;
+/** The upload's cap (`viewer-api`'s `MAX_GLB_BYTES`). */
+const GLB_BYTE_BUDGET = 25 * 1024 * 1024;
+
 function castsEverySplat(mesh: SplatMesh, numSplats: number): void {
   mesh.raycastIndices = { numSplats, indices: null as unknown as Uint32Array };
 }
@@ -142,6 +163,8 @@ export class CapturePlace {
   private loading = false;
   private loads = 0;
   private lastExport: PlaceCaptureReport['lastExport'] = null;
+  private byteBudget = GLB_BYTE_BUDGET;
+  private lodBudgetOverride: number | null = null;
 
   constructor(private readonly deps: CapturePlaceDeps) {}
 
@@ -204,13 +227,39 @@ export class CapturePlace {
     distances.sort((a, b) => a - b);
     const scanRadius = Math.max(1, distances[Math.floor(distances.length * SCAN_EDGE_QUANTILE)] ?? 1);
     const packedSplats = new S.PackedSplats({ packedArray: scan.packedArray, numSplats: scan.numSplats, splatEncoding: scan.encoding });
-    const mesh = new S.SplatMesh({ packedSplats, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY, enableLod: false });
-    await mesh.initialized;
-    castsEverySplat(mesh, scan.numSplats);
+    // Drawn with Spark's LoD (its per-device budget caps the splats drawn); cast against at full resolution by a
+    // second mesh over the same packed splats, hidden so the renderer never draws or re-indexes it.
+    // Spark's budgets (desktop 2.5 M, Quest 500 k) only cap a mesh with a LoD tree. A scan under the budget draws
+    // whole either way, so the tree is built only above it, and in the background: it can take minutes of worker
+    // time for a million splats with SH, and the scan draws whole until Spark finds the tree on the mesh.
+    const lod: LivePlace['lod'] = { state: 'none', ms: 0, released: false };
+    if (scan.numSplats > this.lodBudget(S)) {
+      lod.state = 'building';
+      const lodStarted = performance.now();
+      packedSplats.createLodSplats().then(
+        () => {
+          lod.ms = performance.now() - lodStarted;
+          lod.state = 'ready';
+          if (lod.released) packedSplats.disposeLodSplats();
+        },
+        (error: unknown) => {
+          lod.state = 'failed';
+          console.warn('[place] the LoD tree was not built; the scan draws whole', error);
+        }
+      );
+    }
+    const mesh = new S.SplatMesh({ packedSplats, raycastable: false });
+    const cast = new S.SplatMesh({ packedSplats, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY, enableLod: false });
+    await Promise.all([mesh.initialized, cast.initialized]);
+    castsEverySplat(cast, scan.numSplats);
     mesh.name = 'PlaceSplats';
-    mesh.position.copy(position);
-    mesh.quaternion.copy(quaternion);
-    return { name, scan, quaternion, position, mesh: mesh as SplatMesh, floor: createPlaceFloor(scanRadius), scanRadius, floorBandY: median(band) };
+    cast.name = 'PlaceSplatsCast';
+    cast.visible = false;
+    for (const splats of [mesh, cast]) {
+      splats.position.copy(position);
+      splats.quaternion.copy(quaternion);
+    }
+    return { name, scan, quaternion, position, mesh: mesh as SplatMesh, cast: cast as SplatMesh, lod, floor: createPlaceFloor(scanRadius), scanRadius, floorBandY: median(band) };
   }
 
   /** The swap: the disc becomes the set, the scan is drawn, the motor and props rebuild. */
@@ -222,18 +271,21 @@ export class CapturePlace {
       this.sparkRenderer = new S.SparkRenderer({ renderer: stage.renderer, maxStdDev: SPLAT_EXTENT_SIGMA });
       stage.scene.add(this.sparkRenderer as unknown as THREE.Object3D);
     }
-    stage.worldGroup.add(next.mesh as unknown as THREE.Object3D);
+    stage.worldGroup.add(next.mesh as unknown as THREE.Object3D, next.cast as unknown as THREE.Object3D);
     const replaced = avatar.replaceWorldModel(next.floor);
     // The first scan replaces the loaded set; a later one replaces the earlier scan's disc.
     if (!old) this.previousSet = replaced;
     stage.ground.visible = false;
     avatar.pointTargets.length = 0;
-    avatar.pointTargets.push(next.mesh as unknown as THREE.Object3D);
+    avatar.pointTargets.push(next.cast as unknown as THREE.Object3D);
     motor.replaceWorld(avatar);
     objects.resetPhysics();
     if (old) {
-      (old.mesh as unknown as THREE.Object3D).removeFromParent();
-      old.mesh.dispose();
+      old.lod.released = true;
+      for (const splats of [old.mesh, old.cast]) {
+        (splats as unknown as THREE.Object3D).removeFromParent();
+        splats.dispose();
+      }
       old.floor.geometry.dispose();
       (old.floor.material as THREE.Material).dispose();
     }
@@ -245,15 +297,23 @@ export class CapturePlace {
    * take's reach (Q7), thinned to the cap (Q5), written as SPZ with SH 0.
    * `path` is the avatar root over the take, in the set frame.
    */
-  async prepareExport(path: readonly THREE.Vector3[]): Promise<PlaceExportPayload | null> {
+  async prepareExport(path: readonly THREE.Vector3[], maxSpzBytes = Number.POSITIVE_INFINITY): Promise<PlaceExportPayload | null> {
     const live = this.live;
     if (!live) return null;
     const S = live.scan.spark;
-    const crop = cropScanToTake(live.scan, path, this.deps.avatar.avatarHeight);
+    let crop = cropScanToTake(live.scan, path, this.deps.avatar.avatarHeight);
     if (crop.numSplats === 0) throw new Error('No part of the place lies within the take\'s reach.');
     const started = performance.now();
-    const packed = new S.PackedSplats({ packedArray: crop.packedArray, numSplats: crop.numSplats, splatEncoding: live.scan.encoding });
-    const { fileBytes } = await S.writeSpz(packed, { maxSh: 0 });
+    let packed = new S.PackedSplats({ packedArray: crop.packedArray, numSplats: crop.numSplats, splatEncoding: live.scan.encoding });
+    let { fileBytes } = await S.writeSpz(packed, { maxSh: 0 });
+    // Over the bytes the take leaves, thinned again by distance from the path (from the scan's own splats) until it fits.
+    for (let pass = 0; fileBytes.byteLength > maxSpzBytes && pass < MAX_FIT_PASSES; pass += 1) {
+      const cap = Math.max(1, Math.floor(crop.numSplats * (maxSpzBytes / fileBytes.byteLength) * FIT_SHRINK));
+      crop = cropScanToTake(live.scan, path, this.deps.avatar.avatarHeight, cap);
+      packed.dispose();
+      packed = new S.PackedSplats({ packedArray: crop.packedArray, numSplats: crop.numSplats, splatEncoding: live.scan.encoding });
+      ({ fileBytes } = await S.writeSpz(packed, { maxSh: 0 }));
+    }
     const writeMs = performance.now() - started;
     const raycast = new S.SplatMesh({ packedSplats: packed, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY, enableLod: false });
     await raycast.initialized;
@@ -266,6 +326,7 @@ export class CapturePlace {
       inBox: crop.inBox,
       thinned: crop.thinned,
       spzBytes: fileBytes.byteLength,
+      maxSpzBytes: Number.isFinite(maxSpzBytes) ? maxSpzBytes : null,
       cropMs: crop.cropMs,
       writeMs,
       box: { min: crop.box.min.toArray(), max: crop.box.max.toArray() },
@@ -273,6 +334,27 @@ export class CapturePlace {
       dome: crop.dome
     };
     return { crop, spz: fileBytes, maxSh: 0, position: live.position.clone(), quaternion: live.quaternion.clone(), raycast: raycast as SplatMesh, writeMs };
+  }
+
+  /** Spark's own per-device draw budget (`SparkRenderer.defaultSplatTarget`), or the automation hook's. */
+  private lodBudget(S: DecodedScan['spark']): number {
+    if (this.lodBudgetOverride !== null) return this.lodBudgetOverride;
+    return S.isOculus() ? 500_000 : S.isVisionPro() ? 750_000 : S.isAndroid() ? 1_000_000 : S.isIos() ? 1_500_000 : 2_500_000;
+  }
+
+  /** Automation only: a lower LoD budget for the next load, so a check can draw a small scan through Spark's LoD. */
+  setLodBudget(splats: number | null): void {
+    this.lodBudgetOverride = splats;
+  }
+
+  /** The take's size cap, which the place is thinned to fit at Stop. */
+  glbByteBudget(): number {
+    return this.byteBudget;
+  }
+
+  /** Automation only: a lower cap, so a check can make a take's place thin to fit without a 25 MB take. */
+  setGlbByteBudget(bytes: number | null): void {
+    this.byteBudget = bytes === null ? GLB_BYTE_BUDGET : Math.min(GLB_BYTE_BUDGET, Math.max(0, bytes));
   }
 
   report(): PlaceCaptureReport {
@@ -284,6 +366,11 @@ export class CapturePlace {
       name: state.name,
       message: state.message,
       splatsLoaded: live?.scan.numSplats ?? 0,
+      drawnWithLod: live ? Boolean(live.mesh.packedSplats?.lodSplats) && live.mesh.enableLod !== false && !live.mesh.raycastable : false,
+      lodState: live?.lod.state ?? 'none',
+      lodMs: live?.lod.ms ?? 0,
+      lodBudget: live ? this.lodBudget(live.scan.spark) : 0,
+      castAtFullResolution: live ? live.cast.enableLod === false && !live.cast.visible && live.cast.raycastIndices?.numSplats === live.scan.numSplats : false,
       flipped: live?.scan.flip ?? false,
       upright: live?.scan.upright ?? '',
       floorFound: live?.scan.floor.found ?? false,
@@ -311,7 +398,8 @@ export class CapturePlace {
     const raycaster = new THREE.Raycaster();
     const down = new THREE.Vector3(0, -1, 0);
     stage.worldGroup.updateMatrixWorld(true);
-    const others = stage.worldGroup.children.filter((child) => child !== avatar.avatarRoot && child !== (this.live?.mesh as unknown as THREE.Object3D | undefined));
+    const splats = new Set<unknown>([this.live?.mesh, this.live?.cast]);
+    const others = stage.worldGroup.children.filter((child) => child !== avatar.avatarRoot && !splats.has(child));
     return points.map(([x, z]) => {
       raycaster.set(new THREE.Vector3(x, 50, z), down);
       const setHit = avatar.worldModel ? raycaster.intersectObject(avatar.worldModel, true)[0] : undefined;

@@ -37,10 +37,24 @@ const SH_COEFFICIENTS = [0, 3, 8, 15] as const;
 
 export type SpzHeader = { version: number; numPoints: number; shDegree: number; fractionalBits: number; flags: number };
 
-/** The most a valid SPZ of this header decompresses to: positions at 24 bits, a 4-byte rotation (v3), and its SH. */
-export function spzMaxDecodedBytes(header: Pick<SpzHeader, "numPoints" | "shDegree">): number {
+/** The SPZ versions a reader decodes: 1 (16-bit float positions), 2 (24-bit fixed point) and 3 (a 4-byte rotation). */
+export const SPZ_VERSIONS = [1, 2, 3] as const;
+
+/**
+ * The bytes a valid SPZ of this header decompresses to, its splats' own arrays
+ * after the header: positions (6 bytes in v1, 9 after), alpha, colour, scale,
+ * rotation (3 bytes, 4 in v3) and the SH.
+ */
+export function spzDecodedBytes(header: Pick<SpzHeader, "version" | "numPoints" | "shDegree">): number {
   const coefficients = SH_COEFFICIENTS[header.shDegree as 0 | 1 | 2 | 3] ?? 15;
-  return SPZ_HEADER_BYTES + header.numPoints * (9 + 1 + 3 + 3 + 4 + coefficients * 3) + SPZ_SLACK_BYTES;
+  const position = header.version === 1 ? 6 : 9;
+  const rotation = header.version >= 3 ? 4 : 3;
+  return SPZ_HEADER_BYTES + header.numPoints * (position + 1 + 3 + 3 + rotation + coefficients * 3);
+}
+
+/** The most a valid SPZ of this header decompresses to: its splats and room for extensions (v3) or trailing bytes. */
+export function spzMaxDecodedBytes(header: Pick<SpzHeader, "version" | "numPoints" | "shDegree">): number {
+  return spzDecodedBytes(header) + SPZ_SLACK_BYTES;
 }
 
 function parseHeader(bytes: Uint8Array): SpzHeader {
@@ -77,6 +91,7 @@ export async function checkSpzBytes(bytes: Uint8Array, maxPoints: number): Promi
       total += value.byteLength;
       if (!header && total >= SPZ_HEADER_BYTES) {
         header = parseHeader(head);
+        if (!(SPZ_VERSIONS as readonly number[]).includes(header.version)) throw new Error(`the SPZ's version ${header.version} is not one this reader decodes`);
         if (header.numPoints === 0) throw new Error("the SPZ holds no splats");
         if (header.numPoints > maxPoints) throw new Error(`the SPZ holds ${header.numPoints} splats, over the cap of ${maxPoints}`);
         if (header.shDegree > 3) throw new Error(`the SPZ's SH degree ${header.shDegree} is not one SPZ defines`);
@@ -90,8 +105,8 @@ export async function checkSpzBytes(bytes: Uint8Array, maxPoints: number): Promi
     throw error instanceof Error ? error : new Error(String(error));
   }
   if (!header) throw new Error("the SPZ stream ends inside its header");
-  // The splats' own bytes, without the SH and the rotation's fourth byte, are a floor no valid file goes under.
-  if (total < SPZ_HEADER_BYTES + header.numPoints * (6 + 1 + 3 + 3 + 3)) throw new Error("the SPZ stream is shorter than its header's splats");
+  // Every array the header's version and SH degree name, whole: a shorter stream would leave the decoder reading past it.
+  if (total < spzDecodedBytes(header)) throw new Error("the SPZ stream is shorter than its header's splats");
   return header;
 }
 
