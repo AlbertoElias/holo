@@ -6,18 +6,19 @@ import { fileURLToPath } from 'node:url';
 // Uploads built showcase holograms through the viewer API's normal upload
 // route, so they appear in the feed like any recorded take.
 //
-//   node scripts/showcase/upload.mjs --api http://127.0.0.1:3001 <scene> [<scene> ...] [--quick-look]
+//   node scripts/showcase/upload.mjs --api http://127.0.0.1:3001 <scene> [<scene> ...] [--no-quick-look]
 //
 // Build first (build.mjs). `--api` is required: there is no default target,
 // so nothing is published anywhere by accident.
 //
 // Quick Look (the iPhone AR preview) is opt-in per upload, like the upload
 // panel's checkbox: the API converts a GLB to USDZ only when the upload asks
-// for it, and nothing can turn it on afterwards. `--quick-look` asks for it,
-// waits for the conversion and prints how it ended. It is off by default
-// because the converter drops vertex colours, so most of these pieces come
-// out white (BUGS B-042). A piece whose preview fails is still uploaded; the
-// script then exits 2, and uploading it again would only add a duplicate.
+// for it, and nothing can turn it on afterwards. This script asks for it by
+// default (`--no-quick-look` does not), waits for the conversion and prints
+// how it ended. The converter carries these pieces' vertex colours since
+// B-042; an API whose converter predates that converts them white. A piece
+// whose preview fails is still uploaded; the script then exits 2, and
+// uploading it again would only add a duplicate.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(here, '../../../../output/showcase');
@@ -29,10 +30,10 @@ const PREVIEW_POLL_MS = 2_000;
 const args = process.argv.slice(2);
 const apiIndex = args.indexOf('--api');
 const api = apiIndex >= 0 ? args[apiIndex + 1] : undefined;
-const quickLook = args.includes('--quick-look');
+const quickLook = !args.includes('--no-quick-look');
 const names = args.filter((arg, index) => !arg.startsWith('--') && index !== apiIndex + 1);
 if (!api || names.length === 0) {
-  console.error('usage: upload.mjs --api <origin> <scene> [<scene> ...] [--quick-look]');
+  console.error('usage: upload.mjs --api <origin> <scene> [<scene> ...] [--no-quick-look]');
   process.exit(1);
 }
 

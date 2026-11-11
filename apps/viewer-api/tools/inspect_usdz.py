@@ -181,6 +181,20 @@ class Source:
         return self.view(image["bufferView"]) if "bufferView" in image else base64.b64decode(image["uri"].split(",", 1)[1])
 
 
+def _encode(linear):
+    """Linear [0, 1] colour to sRGB in 0..255 units (unrounded); alpha stays linear."""
+    values = np.clip(np.asarray(linear, dtype=float), 0, 1)
+    rgb = values[..., :3]
+    out = np.where(rgb <= .0031308, rgb*12.92, 1.055*rgb**(1/2.4)-.055)
+    return np.concatenate([out, values[..., 3:]], axis=-1)*255
+
+
+def _decode(srgb8):
+    values = np.asarray(srgb8, dtype=float)/255
+    rgb = values[..., :3]
+    return np.concatenate([np.where(rgb <= .04045, rgb/12.92, ((rgb+.055)/1.055)**2.4), values[..., 3:]], axis=-1)
+
+
 def _ancestors(prim):
     while prim:
         yield prim
@@ -523,12 +537,18 @@ class Inspection:
             index = prim.GetCustomDataByKey("gltfMaterialIndex")
             if index is None:
                 continue
-            material = source.doc["materials"][index]
+            # -1: glTF's default material, authored only to carry COLOR_0.
+            material = source.doc["materials"][index] if index >= 0 else {}
             pbr = material.get("pbrMetallicRoughness", {})
             surface = UsdShade.Shader(self.stage.GetPrimAtPath(str(prim.GetPath()) + "/Surface"))
             self.check(surface.GetIdAttr().Get() == "UsdPreviewSurface", f"material {index} has no PreviewSurface")
             unlit = "KHR_materials_unlit" in material.get("extensions", {})
             color = pbr.get("baseColorFactor", [1]*4)
+            # Vertex-colour variants (checked against COLOR_0 in vertex_colors):
+            # a tint multiplies the factor; the atlas replaces factor and alpha.
+            variant = prim.GetCustomDataByKey("quickLookVertexColors")
+            if variant == "tint":
+                color = list(np.array(color, dtype=float)*np.array(prim.GetCustomDataByKey("quickLookVertexColorTint"), dtype=float))
             slots = [("BaseColor", pbr.get("baseColorTexture"), True, color, [0]*4)]
             if not unlit:
                 slots.extend([("MetalRough", pbr.get("metallicRoughnessTexture"), False, [1, pbr.get("roughnessFactor", 1), pbr.get("metallicFactor", 1), 1], [0]*4), ("Normal", material.get("normalTexture"), False, None, None), ("Occlusion", material.get("occlusionTexture"), False, [material.get("occlusionTexture", {}).get("strength", 1), 1, 1, 1], [1-material.get("occlusionTexture", {}).get("strength", 1), 0, 0, 0])])
@@ -595,7 +615,9 @@ class Inspection:
                 entry["textures"].append({"slot": slot, "sourceImage": image_index, "packageFile": shader.GetInput("file").Get().path, "maximumPixelError": error, "sha256": hashlib.sha256(packaged).hexdigest()})
             if material.get("alphaMode") in ("MASK", "BLEND"):
                 opacity = surface.GetInput("opacity")
-                if pbr.get("baseColorTexture"):
+                if variant == "atlas":
+                    pass
+                elif pbr.get("baseColorTexture"):
                     connected = opacity.GetConnectedSource() if opacity else None
                     self.check(connected is not None and str(connected[0].GetPrim().GetPath()) == str(prim.GetPath())+"/BaseColor" and connected[1] == "a", f"material {index} lost alpha texture connection")
                 else:
@@ -605,12 +627,129 @@ class Inspection:
                 else:
                     threshold = surface.GetInput("opacityThreshold")
                     self.check(not threshold or not threshold.Get() or threshold.Get() == 0, f"material {index} BLEND incorrectly uses an alpha cutoff")
-            if not pbr.get("baseColorTexture"):
+            if not pbr.get("baseColorTexture") and variant != "atlas":
                 self.close(surface.GetInput("emissiveColor" if unlit else "diffuseColor").Get(), color[:3], 1e-6, f"material {index} base color factor")
             if not pbr.get("metallicRoughnessTexture"):
                 self.close(surface.GetInput("metallic").Get(), 0 if unlit else pbr.get("metallicFactor", 1), 1e-6, f"material {index} metallic factor")
                 self.close(surface.GetInput("roughness").Get(), 1 if unlit else pbr.get("roughnessFactor", 1), 1e-6, f"material {index} roughness factor")
             self.report["materials"].append(entry)
+
+    def vertex_colors(self):
+        """COLOR_0 against what RealityKit samples. glTF base colour is
+        factor x COLOR_0, interpolated linearly per triangle; the package bakes
+        it into an sRGB atlas read through a faceVarying UV with bilinear
+        filtering after sRGB decode (what RealityKit does, by probe). The
+        sampler is emulated here from the atlas file and the UVs alone."""
+        source = self.source
+        atlases, entries = {}, []
+        for prim in self.stage.Traverse():
+            if not prim.IsA(UsdGeom.Mesh) or prim.GetCustomDataByKey("quickLookBackFaces") or prim.GetCustomDataByKey("quickLookCloche"):
+                continue
+            index, pindex = prim.GetCustomDataByKey("gltfNodeIndex"), prim.GetCustomDataByKey("gltfPrimitiveIndex")
+            if index is None or index == source.bubble:
+                continue
+            node = source.doc["nodes"][index]
+            primitive = source.doc["meshes"][node["mesh"]]["primitives"][pindex]
+            kind = prim.GetCustomDataByKey("quickLookVertexColors")
+            if "COLOR_0" not in primitive["attributes"]:
+                self.check(kind is None, f"mesh {index}/{pindex} has vertex-colour handling but no COLOR_0")
+                continue
+            label = f"mesh {index}/{pindex} vertex colours"
+            material = source.doc["materials"][primitive["material"]] if "material" in primitive else {}
+            pbr = material.get("pbrMetallicRoughness", {})
+            factor = np.array(pbr.get("baseColorFactor", [1]*4), dtype=float)
+            alpha = material.get("alphaMode", "OPAQUE") in ("BLEND", "MASK")
+            colors = np.clip(source.accessor(primitive["attributes"]["COLOR_0"]).astype(float), 0, 1)
+            if colors.shape[1] == 3:
+                colors = np.column_stack([colors, np.ones(len(colors))])
+            if not alpha:
+                colors[:, 3] = 1
+            stored = np.round(_encode(colors)).astype(int)
+            uniform = bool(np.all(stored == stored[0]))
+            expected_kind = "white" if np.all(stored == 255) else "tint" if uniform else "approximated" if pbr.get("baseColorTexture") else "atlas"
+            self.check(kind == expected_kind, f"{label}: carried as {kind}, expected {expected_kind}")
+            bound, _ = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial()
+            variant = bound.GetPrim().GetCustomDataByKey("quickLookVertexColors") if bound else None
+            entry = {"node": index, "primitive": pindex, "kind": kind, "vertices": len(colors)}
+            entries.append(entry)
+            if expected_kind == "white":
+                self.check(bool(bound) and variant is None, f"{label}: white COLOR_0 must keep the plain material")
+                continue
+            self.check(bool(bound) and bound.GetPrim().GetCustomDataByKey("gltfMaterialIndex") == primitive.get("material", -1), f"{label}: bound to another source material")
+            if expected_kind in ("tint", "approximated"):
+                tint = bound.GetPrim().GetCustomDataByKey("quickLookVertexColorTint") if bound else None
+                self.check(variant == "tint" and tint is not None, f"{label}: no tinted material")
+                if tint is not None:
+                    entry["tintErrorSrgb"] = self.close(_encode(np.array(tint)), _encode(colors.mean(axis=0)), 1.0, f"{label} tint (sRGB units)")
+                continue
+            surface = UsdShade.Shader(self.stage.GetPrimAtPath(str(bound.GetPath()) + "/Surface")) if bound else None
+            unlit = "KHR_materials_unlit" in material.get("extensions", {})
+            connection = surface.GetInput("emissiveColor" if unlit else "diffuseColor").GetConnectedSource() if surface else None
+            self.check(variant == "atlas" and connection is not None and connection[1] == "rgb", f"{label}: atlas not connected to {'emissive' if unlit else 'diffuse'} colour")
+            if not connection:
+                continue
+            texture = UsdShade.Shader(connection[0].GetPrim())
+            if alpha:
+                opacity = surface.GetInput("opacity").GetConnectedSource()
+                self.check(opacity is not None and opacity[0].GetPrim() == texture.GetPrim() and opacity[1] == "a", f"{label}: opacity not read from the atlas alpha")
+            if unlit:
+                self.close(surface.GetInput("diffuseColor").Get(), [0, 0, 0], 0, f"{label} unlit diffuse")
+            self.check(texture.GetInput("sourceColorSpace").Get() == "sRGB", f"{label}: atlas is not sRGB")
+            reader = texture.GetInput("st").GetConnectedSource()
+            varname = UsdShade.Shader(reader[0].GetPrim()).GetInput("varname").Get() if reader else None
+            primvar = UsdGeom.PrimvarsAPI(prim).GetPrimvar(varname) if varname else None
+            uv = np.array(primvar.Get(), dtype=float) if primvar and primvar.Get() is not None else None
+            indices = source.accessor(primitive["indices"]).reshape(-1).astype(int) if "indices" in primitive else np.arange(len(colors))
+            if prim.GetCustomDataByKey("quickLookClippedEnvironment"):
+                # Clipping re-cuts the triangles; the UV only has to follow the new corners.
+                self.check(primvar is not None and primvar.GetInterpolation() == "faceVarying" and uv is not None and len(uv) == len(prim.GetAttribute("faceVertexIndices").Get() or []) and np.all(np.isfinite(uv)), f"{label}: clipped environment lost its atlas UV")
+                entry["clippedEnvironment"] = True
+                continue
+            self.check(primvar is not None and primvar.GetInterpolation() == "faceVarying" and uv is not None and len(uv) == len(indices), f"{label}: atlas UV is not one faceVarying value per triangle corner")
+            taken = {f"st{n}" if n else "st" for n in (int(s.split("_")[1]) for s in primitive["attributes"] if s.startswith("TEXCOORD_"))}
+            self.check(varname not in taken, f"{label}: atlas UV {varname} overwrites a source TEXCOORD")
+            if uv is None or len(uv) != len(indices):
+                continue
+            name = texture.GetInput("file").Get().path
+            if name not in atlases:
+                atlases[name] = np.array(Image.open(io.BytesIO(self.asset(name))).convert("RGBA"), dtype=np.uint8)
+            atlas = atlases[name]
+            height, width = atlas.shape[:2]
+            corners = (colors*factor)[indices.reshape(-1, 3)]
+            if not alpha:
+                corners[..., 3] = 1
+            uv = uv.reshape(-1, 3, 2)
+            def sample(st):
+                # Bilinear on decoded texels, clamped at the edges; USD t = 0 is the bottom row.
+                x, y = st[:, 0]*width - .5, (1-st[:, 1])*height - .5
+                x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+                fx, fy = (x-x0)[:, None], (y-y0)[:, None]
+                def texel(i, j):
+                    return _decode(atlas[np.clip(j, 0, height-1), np.clip(i, 0, width-1)])
+                return (texel(x0, y0)*(1-fx) + texel(x0+1, y0)*fx)*(1-fy) + (texel(x0, y0+1)*(1-fx) + texel(x0+1, y0+1)*fx)*fy
+            corner_error = self.close(_encode(sample(uv.reshape(-1, 2))), _encode(corners.reshape(-1, 4)), 1.0, f"{label} at triangle corners (sRGB units)")
+            # Interior samples: the centroid and edge midpoints. Clamping the
+            # fourth texel (p10 + p01 - p00 outside [0, 1]) is the only error
+            # besides quantisation, at most a quarter of that overflow; the
+            # p00 corner is the one whose UV is lowest in u and highest in t.
+            bary = np.array([[1/3, 1/3, 1/3], [.5, .5, 0], [0, .5, .5], [.5, 0, .5]])
+            interior_uv = np.einsum("sk,tkc->tsc", bary, uv)
+            expected = np.einsum("sk,tkc->tsc", bary, corners)
+            actual = sample(interior_uv.reshape(-1, 2)).reshape(expected.shape)
+            first = np.argmin(uv[:, :, 0] - uv[:, :, 1], axis=1)
+            others = corners.sum(axis=1) - corners[np.arange(len(corners)), first]
+            fourth = others - corners[np.arange(len(corners)), first]
+            overflow = (np.maximum(fourth-1, 0) + np.maximum(-fourth, 0)).max(axis=1)
+            solid = np.ptp(uv, axis=1).max(axis=1) < 1e-9
+            overflow[solid] = 0
+            excess = np.abs(actual-expected).max(axis=(1, 2)) - (6e-3 + .25*overflow)
+            self.check(np.all(excess <= 0), f"{label}: interior colour exceeds quantisation plus clamped-overflow bound")
+            entry.update({"triangles": len(corners), "solidTriangles": int(solid.sum()), "overflowTriangles": int((overflow > 0).sum()), "maximumCornerErrorSrgb": corner_error, "maximumInteriorErrorLinear": float(np.abs(actual-expected).max()), "maximumInteriorExcess": float(excess.max()) if len(excess) else 0.0, "uv": varname, "atlas": name})
+            back = self.stage.GetPrimAtPath(str(prim.GetPath()) + "_back")
+            if back:
+                back_uv = UsdGeom.PrimvarsAPI(back).GetPrimvar(varname).Get()
+                self.check(back_uv is not None and np.array_equal(np.array(back_uv).reshape(-1, 3, 2), uv[:, ::-1].astype(np.float32)), f"{label}: back faces do not reverse the atlas UVs")
+        self.report["vertexColors"] = {"meshes": entries, "atlases": {name: list(atlas.shape[1::-1]) for name, atlas in atlases.items()}}
 
     def audio(self):
         source = self.source
@@ -693,6 +832,7 @@ class Inspection:
         self.cloche()
         self.framing()
         self.materials()
+        self.vertex_colors()
         self.audio()
         self.report["passed"] = not self.report["failures"]
         return self.report
