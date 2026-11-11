@@ -270,12 +270,40 @@ Tracking rate was not measured on this clip (frame-stepped). Open after this
 run: the aim geometry and ray axes (an aim at the lens is the clean test), the
 head zero and left-turn loss, jitter filtering, and anything on a phone.
 
+**Ray axes checked (2026-11-11).** The report now prints each aim's mean index
+ray and mean fingertip-to-target direction (x image right, y down, z away from
+the lens). The ray's signs match the picture on every pose: toward the author's
+right for the right mark (x -0.57), toward the left for the left mark
+(x +0.88), up for open hands (y -0.83), toward the lens for the pinch facing it
+(z -0.99, about 8 deg off the lens axis). So the axes are right, and the model
+can report a ray along the lens axis. The aim error is all one way: the finger
+reads 34 to 67 deg off the lens axis where the assumed layout expects 17 to
+22 deg. That is either the author pointing more sideways than marks 0.5 m
+beside the lens at 1 m, or the hand model flattening depth on a hand seen
+side-on; this clip cannot tell them apart.
+
+**Next steps, in order** (a fresh session on a standard-tier model can take
+these from this brief; the clip and `clip.json` are in `output/bodycam/`):
+
+1. Settle aim with measured ground truth: a short clip with taped, measured
+   marks and aims at the lens, the two marks and one mark above the lens;
+   judge depth flattening from the side-on aims.
+2. Ray jitter (p50 2 to 5 deg against a 3.5 deg tolerance): try a longer
+   low-pass, or a ray from wrist or knuckle through the fingertip, and
+   re-measure on the same clip.
+3. Head: the 16 to 24 deg pitch and 6 to 11 deg yaw read while facing the
+   lens, and the loss on a turn to the author's left.
+4. Fix the script's own server start (`waitForServer` times out unless
+   `NODE_TLS_REJECT_UNAUTHORIZED=0` is set on the command).
+5. Real-time rate and a trial on a phone, independent verification, then the
+   go/no-go.
+
 Two script faults found on this first long clip: a whole clip handed to the
 browser through `route.fulfill` exceeded the 100 MB control-pipe limit and
 killed the browser (fixed: the capture server now serves the clip from its
 build directory), and the script's own server start timed out in
-`waitForServer` although the server was up (not fixed; worked around with
-`BASE_URL=https://127.0.0.1:<port> NODE_TLS_REJECT_UNAUTHORIZED=0`).
+`waitForServer` although the server was up (not fixed; setting `NODE_TLS_REJECT_UNAUTHORIZED=0` on the command
+lets the script start its own server).
 
 ## Running the report on the clip
 
