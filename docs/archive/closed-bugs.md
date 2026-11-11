@@ -956,3 +956,31 @@ bug above.)
   match never fired; local runs print it plain. The match now strips colour
   codes first. Reproduced and fixed locally with `CI=1`: `test:xr` on capture
   passes in both modes.
+
+### B-040 — The e2e shard check once listed two VR tests at other line numbers
+
+- **Area:** `scripts/check-e2e-shards.mjs` (CI "Quality, unit tests and build")
+- **Severity:** P2 (blocks deploy when it fires)
+- **Observed:** 2026-11-10, CI run 42755796134 on `57d72f0`
+- **Evidence:** the full mocked suite listed `xr-viewer.spec.ts:1574` and
+  `:1690` ("VR locomotion", "VR recenter after moving"), while
+  `test:e2e:xr-viewer-vr:shard2` listed the same titles at `:1831` and `:1964`.
+  At that commit the file has them at 1574 and 1690, so the shard's listing
+  reported other lines.
+- **Expected:** every listing reports source lines, and the check passes.
+- **Reproduction:** `PWTEST_CACHE_DIR=<a new empty directory> pnpm run
+  check:e2e-shards` after a build, repeated. It failed 2 of 5 times from a
+  cold cache on the merge of `feature/positional-audio` (once naming
+  `spatial-audio.spec.ts:249` for a test at line 236, once 18 lines about
+  `redesign.spec.ts`), and passed every time on a warm cache.
+- **Closed:** 2026-11-10
+- **Cause:** the check listed the full suite and every shard at once. On a
+  cold transform cache one listing reported a spec's tests at other line
+  numbers, most likely because it read a spec another listing had just
+  compiled before its source map was there (inferred from when it happens;
+  the cache files were not inspected). The check matches tests by
+  `file:line:col › title`, so the same tests no longer matched.
+- **Fix:** the full suite lists alone first, which fills the cache; the
+  shards then list in parallel as before.
+- **Evidence:** 14 of 14 cold-cache runs pass with the fix (each with a new
+  `PWTEST_CACHE_DIR`). Not yet watched over several hosted CI runs.
