@@ -76,6 +76,14 @@ function checkAgentConfigParity() {
   }
 }
 
+// The pre-push hook (scripts/hooks/pre-push-checks.mjs) is installed through core.hooksPath.
+function checkPrePushHook() {
+  const configured = spawnSync("git", ["config", "--get", "core.hooksPath"], { cwd: rootDir, encoding: "utf8" }).stdout.trim();
+  if (configured !== "scripts/hooks/git") {
+    reporter.fail(`Pre-push hook is not installed (core.hooksPath is "${configured || "unset"}"); run "pnpm run hooks:install".`);
+  }
+}
+
 async function checkPorts() {
   const checks = [
     { label: "viewer-api", port: 3001 },
@@ -104,6 +112,7 @@ async function main() {
 
   checkPackageManagerAlignment();
   checkAgentConfigParity();
+  checkPrePushHook();
   await checkPorts();
 
   printDoctorResult(reporter, "workspace");

@@ -65,6 +65,10 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - Default during implementation: run `pnpm run verify:agent`. It derives affected
   workspaces and reverse dependents from package manifests, then fails closed to the
   comprehensive workspace checks if it cannot classify a change safely.
+- Pre-push hook: `core.hooksPath` points at `scripts/hooks/git` (set by `pnpm install`
+  or `pnpm run hooks:install`; `pnpm run doctor` fails if missing). Each push runs the
+  changed packages' `lint`, and `typecheck` of those packages and their dependents, in parallel;
+  docs-only pushes skip. Bypass only with `git push --no-verify`.
 - For documentation-only changes, check the edited content and references; do not
   run application suites solely because a Markdown file changed.
 - Required before merging into `main`: run `pnpm run verify:pr` locally. Hosted

@@ -41,6 +41,9 @@ suites relevant to the merged files) and on manual dispatch; it never runs
 on branches, so local verification is the pre-merge gate.
 Documentation-only edits need documentation checks, not every application test.
 Complete relevant checks and fixes before handoff.
+A pre-push git hook (`scripts/hooks/pre-push-checks.mjs`, installed by `pnpm install`
+or `pnpm run hooks:install`, verified by `pnpm run doctor`) lints and typechecks only
+the packages a push changes, and skips docs-only pushes. Bypass: `git push --no-verify`.
 
 For feature requests or substantial behavior changes, follow the canonical
 process in `docs/FEATURE_WORKFLOW.md` (via the `feature-delivery` skill in
