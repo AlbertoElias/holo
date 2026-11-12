@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { gunzipSync } from "node:zlib";
+import { deflateSync, gunzipSync } from "node:zlib";
 
 import type { Browser, BrowserContext, Page } from "@playwright/test";
 
@@ -45,6 +45,8 @@ type CaptureWindow = Window & {
 
 type DetailReport = { status: string; error: string | null; storedCount: number; shDegree: number; drawnCount: number; budget: number; floorBandY: number; nodeWorld: number[]; loadMs: number };
 type StoredPlaceReport = { status: string; error: string | null; splatCount: number; nodeWorld: number[]; floorBandY: number; discY: number; detail: DetailReport | null };
+type TextureReport = { status: string; error: string | null; swapped: number; lightMaxWidth: number; fullMaxWidth: number; loadMs: number };
+type TextureWindow = Window & { __HOLOIM_TEXTURE_DETAIL__?: TextureReport };
 type HologramDto = { id: string; url: string; placeDetailUrl?: string | null; textureDetailUrl?: string | null; sizeBytes?: number };
 
 // ---------------------------------------------------------------- capture
@@ -119,7 +121,8 @@ async function levels(glb: Buffer) {
   const bytes = new Uint8Array(glb);
   const stored = await readStoredPlace(bytes, readGlbChunks(bytes));
   if (!stored) throw new Error("the take carries no place");
-  const lightInsideDetail = stored.detail ? [...positions(stored.spz)].every((key) => positions(stored.detail!.spz).has(key)) : null;
+  const detailKeys = stored.detail ? positions(stored.detail.spz) : null;
+  const lightInsideDetail = detailKeys ? [...positions(stored.spz)].every((key) => detailKeys.has(key)) : null;
   return {
     stored,
     summary: {
@@ -232,6 +235,72 @@ function paddedGlb(glb: Buffer, size: number): Buffer {
   throw new Error(`could not pad the GLB to ${size} bytes`);
 }
 
+/** An RGB PNG of `size`², a gradient (so it is not trivially compressible), unfiltered rows. */
+function gradientPng(size: number): Buffer {
+  const row = 1 + size * 3;
+  const raw = Buffer.alloc(row * size);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const at = y * row + 1 + x * 3;
+      raw[at] = (x * 255) / size;
+      raw[at + 1] = (y * 255) / size;
+      raw[at + 2] = ((x ^ y) & 0xff);
+    }
+  }
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (bytes: Buffer) => {
+    let c = 0xffffffff;
+    for (const byte of bytes) c = crcTable[(c ^ byte) & 0xff]! ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(data.byteLength, 0);
+    head.write(type, 4, "ascii");
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE(crc(Buffer.concat([head.subarray(4), data])), 0);
+    return Buffer.concat([head, data, tail]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw, { level: 1 })), chunk("IEND", Buffer.alloc(0))]);
+}
+
+/** `glb` with the image behind texture `index` replaced by `png`, appended as a buffer view of its own. */
+function withTexture(glb: Buffer, index: number, png: Buffer): Buffer {
+  const jsonLength = glb.readUInt32LE(12);
+  const json = JSON.parse(glb.subarray(20, 20 + jsonLength).toString("utf8").trimEnd()) as { buffers: Array<{ byteLength: number }>; bufferViews: Array<Record<string, number>>; textures: Array<{ source: number }>; images: Array<Record<string, unknown>> };
+  const binStart = 20 + jsonLength;
+  const bin = glb.subarray(binStart + 8, binStart + 8 + glb.readUInt32LE(binStart));
+  const padded = Buffer.concat([png, Buffer.alloc((4 - (png.byteLength % 4)) % 4)]);
+  json.bufferViews.push({ buffer: 0, byteOffset: bin.byteLength, byteLength: png.byteLength });
+  json.buffers[0]!.byteLength = bin.byteLength + padded.byteLength;
+  json.images.push({ bufferView: json.bufferViews.length - 1, mimeType: "image/png" });
+  json.textures[index]!.source = json.images.length - 1;
+  let text = JSON.stringify(json);
+  text += " ".repeat((4 - (Buffer.byteLength(text) % 4)) % 4);
+  const jsonBytes = Buffer.from(text, "utf8");
+  const binBytes = Buffer.concat([bin, padded]);
+  const header = Buffer.alloc(20);
+  header.writeUInt32LE(0x46546c67, 0);
+  header.writeUInt32LE(2, 4);
+  header.writeUInt32LE(20 + jsonBytes.byteLength + 8 + binBytes.byteLength, 8);
+  header.writeUInt32LE(jsonBytes.byteLength, 12);
+  header.writeUInt32LE(0x4e4f534a, 16);
+  const binHeader = Buffer.alloc(8);
+  binHeader.writeUInt32LE(binBytes.byteLength, 0);
+  binHeader.writeUInt32LE(0x004e4942, 4);
+  return Buffer.concat([header, jsonBytes, binHeader, binBytes]);
+}
+
+const gltfJson = (glb: Buffer) => JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString("utf8").trimEnd()) as { extensionsUsed?: string[]; animations?: unknown[] };
+
 // ---------------------------------------------------------------- the tests
 
 test.describe("hologram budgets: two levels of the place, the 100 MB cap", () => {
@@ -324,6 +393,40 @@ test.describe("hologram budgets: two levels of the place, the 100 MB cap", () =>
     expect(deleted.status(), await deleted.text()).toBe(200);
     expect(((await deleted.json()) as { deletedDetail?: boolean }).deletedDetail).toBe(true);
     expect((await page.request.get(dto.placeDetailUrl!)).status(), "the detail object is gone").toBe(404);
+  });
+
+  test("a 4096 px texture is served as KTX2 at 1024 px with reduced animation, and the focused card swaps in the full size", async ({ browser, page }) => {
+    test.setTimeout(600_000);
+    const small = await recordTake(browser, makeFixture(BASE).bytes, "sh0-small-texture");
+    // The avatar's skin (texture 1) at 4096 px, as a heavy prop would bring.
+    const heavy = withTexture(small.glb, 1, gradientPng(4096));
+    const uploaded = await upload(page, "Budgets texture", heavy);
+    expect(uploaded.status, uploaded.body).toBe(201);
+    const id = uploaded.dto!.id;
+    // Processing is queued: the DTO names the light GLB and the full textures once it finishes.
+    let dto = uploaded.dto!;
+    await expect.poll(async () => {
+      dto = (await (await page.request.get(`/api/holograms/${id}`)).json()) as HologramDto;
+      return Boolean(dto.textureDetailUrl);
+    }, { timeout: 240_000, intervals: [2000] }).toBe(true);
+    const served = Buffer.from(await (await page.request.get(dto.url)).body());
+    const servedJson = gltfJson(served);
+    expect(servedJson.extensionsUsed ?? [], "the served textures are KTX2").toContain("KHR_texture_basisu");
+    expect(served.byteLength, "the light GLB is smaller than the upload").toBeLessThan(heavy.byteLength);
+    expect((servedJson.animations ?? []).length, "the animation is still there").toBe((gltfJson(heavy).animations ?? []).length);
+
+    await openFeed(page, [id], dto);
+    // Poll the whole report so a failure shows the loader's error.
+    await expect
+      .poll(() => page.evaluate(() => { const r = (window as unknown as TextureWindow).__HOLOIM_TEXTURE_DETAIL__; return r ? { status: r.status, error: r.error } : null; }), { timeout: 120_000 })
+      .toEqual({ status: "ready", error: null });
+    const report = (await page.evaluate(() => JSON.parse(JSON.stringify((window as unknown as TextureWindow).__HOLOIM_TEXTURE_DETAIL__)) as TextureReport))!;
+    await page.locator(`.feed-card[data-card-id="${id}"]`).screenshot({ path: path.join(evidenceDir, "texture-swapped.png") });
+    await evidence("texture-detail", { uploadBytes: heavy.byteLength, servedBytes: served.byteLength, dto, report, extensionsUsed: servedJson.extensionsUsed });
+    expect(report.swapped, "slots swapped to the full texture").toBeGreaterThan(0);
+    expect(report.lightMaxWidth, "the light texture is 1024 px").toBe(1024);
+    expect(report.fullMaxWidth, "the full texture is 4096 px").toBe(4096);
+    expect(await page.locator(`.feed-card[data-card-id="${id}"]`).getAttribute("data-model-state")).toBe("rendered");
   });
 
   test("caps: a 100 MB take uploads and plays; one byte over is refused with the cap in the message", async ({ browser, page }) => {
