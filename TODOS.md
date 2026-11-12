@@ -33,6 +33,20 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] "The way down", version 2 (agent-authored, 2026-11-12): the same
+  introspection, made to go inside and hit harder. Version 1 (scene
+  `introspection`, live as `cmwcte5x20005oeiqsmobz8mf`) reads as a diorama
+  seen from outside, with even pacing and a traveller as large in every layer.
+  Version 2: the world grows around the feed's target so the viewer descends
+  into the man's chest through nested layers (gas inside him, liquid inside
+  the gas, the dark at the core); a traveller about 4 cm tall against the 1.8 m
+  man, the only light in the dark; a beat sheet with an intensity curve
+  approved before building; one heartbeat motif across all layers; the agent
+  animates both figures (the user chose this over captured performances).
+  First prove the feed's framing survives an animated world scale. Keep its
+  moving vertices × frames under the Quick Look extent budget (B-048).
+  Lessons go to `docs/product/concepts/agent-authored-holograms.md`.
+
 - [ ] Record a take inside a scanned place (split capture slice 2, the
   user's direction on 2026-11-10): capture loads a scan (SPZ or PLY) as the
   take's set, and the place is stored with the hologram through export →
