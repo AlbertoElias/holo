@@ -26,7 +26,8 @@
   handoff. Durable evidence stays in the e2e checks and their reports.
 
 This pnpm monorepo contains `apps/capture` (WebXR recording and GLTF export),
-`apps/viewer-api` (upload and storage), and `apps/viewer-web` (feed and AR viewer).
+`apps/viewer-api` (upload and storage), `apps/viewer-web` (feed and AR viewer),
+and `apps/knowledge` (read-only Markdown atlas).
 Shared contracts, configuration, and tooling live in `packages/`.
 
 Use TypeScript and existing shared configuration. Keep app-specific logic local;
@@ -141,7 +142,8 @@ Routing is the agent's job, not the user's. Do it automatically:
 ## Sharing work between agents
 
 Multiple agents share this repo, so uncommitted work is invisible to the others.
-Always work in your own worktree under `.worktrees/`; the main checkout is the
+Always work in your own worktree under `.worktrees/` (a Claude Code session
+worktree under `.claude/worktrees/` is also fine); the main checkout is the
 integration point only and never takes edits.
 
 - Before starting, run `git fetch` and check `git status`; read any in-flight
@@ -156,17 +158,18 @@ integration point only and never takes edits.
   by change type, never by agent: `feature/`, `bug/`, `docs/`, `infra/`
   (e.g. `feature/ar-recenter`, `infra/metavr-setup`). Never edit files another
   agent has modified in a shared tree.
-- Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`),
-  dev servers, and local databases are still shared, so only one agent runs
+- Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`,
+  `5175`, `4176`), dev servers, and local databases are still shared, so only one agent runs
   the XR harness or a dev server at a time unless ports are reassigned via
   `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`. A parallel `verify:pr` also needs
   `E2E_BASE_URL`, `E2E_POLYPIZZA_PORT`, `E2E_POLYHAVEN_PORT`,
   `E2E_CAPTURE_URL` and `KNOWLEDGE_E2E_PORT` moved off their defaults.
 - As soon as your change is working and verified, commit and push your branch.
-  You are pre-authorized to commit, push, open a pull request, and merge on
-  green CI without asking; do not stop for approval on those steps. After
-  merge, confirm the automated deploy health checks passed and report the
-  live URLs. Still ask before product or scope decisions, secret or billing
+  You are pre-authorized to commit, push your branch, and merge it into
+  `main` locally once `pnpm run verify:pr` passes, without asking; do not stop
+  for approval on those steps. Do not open pull requests unless the user asks
+  (CI never runs on them). After the push to `main`, confirm the automated
+  deploy health checks passed and report the live URLs. Still ask before product or scope decisions, secret or billing
   changes, and destructive operations (force-push, volume or snapshot
   actions). Stage only the files you changed by name — never commit another
   agent's in-progress work, and never use a broad `git add`.
@@ -176,7 +179,8 @@ integration point only and never takes edits.
   sandbox blocks the user-database lookup SSH requires); HTTPS through `gh`
   works with no approval. Do not switch the remote back to SSH.
 - The lead merges the verified branch into `main`, pushes, then removes the
-  worktree (`git worktree remove`) and deletes the merged branch. If a push is
+  worktree (`git worktree remove`) and deletes the merged branch (check
+  `git branch --merged main` afterwards). If a push is
   rejected because another agent landed first, pull with rebase, re-run the
   affected check, and push again. Do not force-push.
 - Every push to `main` runs CI and a deploy, so merge to `main` as rarely as
@@ -184,15 +188,25 @@ integration point only and never takes edits.
   changes into one merge: push the verified branch, record it as ready in
   `HANDOFF.md`, and merge it together with the next finished change rather
   than on its own. Documentation-only changes ride along with the next merge
-  unless the user asks for them on `main` sooner. CI also cancels a run when
-  a newer push lands, and the cancelled run's minutes are lost.
+  unless the user asks for them on `main` sooner. A newer push also cancels
+  in-flight CI test jobs (never deploys), and the cancelled run's minutes are
+  lost.
 
 ## Agent configuration (Codex and Claude Code)
 
-Keep one source of truth for both agents; `pnpm run doctor` enforces this layout.
+Keep one source of truth for both agents; `pnpm run doctor` checks the
+`CLAUDE.md` and `.claude/skills` symlinks and that `.mcp.json` and
+`.codex/config.toml` register the same MCP server names. Everything else here
+is convention.
 
 - Instructions: edit `AGENTS.md` files only. Each `CLAUDE.md` is a symlink to the
   `AGENTS.md` beside it; add the same symlink when creating a new nested guide.
+  The exception is `.agents/skills/gstack/CLAUDE.md`, which is upstream-owned
+  and exempt from the symlink rule (its browser rules apply under that directory).
+- When an instruction file and the code disagree, follow the code and report the
+  mismatch in your final reply; then fix the stale line in the owning file.
+- Typecheck with each package's own `typecheck` script (root uses `tsc`;
+  `apps/knowledge` uses `tsgo`).
 - Skills: add skill directories under `.agents/skills/`. `.claude/skills` is a
   symlink to that directory, so never create files inside `.claude/skills` directly.
 - MCP servers: put launch logic in an executable `scripts/mcp/<name>.sh`, then
