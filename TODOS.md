@@ -197,6 +197,32 @@ it from the item below instead of duplicating its status here.
   tracking drives the rest. Needs a PRD first
   ([IDEA-078](docs/product/IDEAS.md)); depends on the two items above.
 
+- [ ] Replay the implicit state machines `/find-implicit-state-machines`
+  found but did not yet model (2026-11-12). Each is a hypothesis from a
+  read of the code, not a verified defect: model it, replay the bug path
+  against the real code, and record a defect in [`BUGS.md`](BUGS.md) only
+  when every step can happen. One session per machine, ranked by user harm:
+  1. Capture take lifecycle (`apps/capture/src/recording/RecordingSession.ts`
+     `endCameraTake`, `isTakeBusy`, `start`): size lock while idle, and a page
+     hide that ignores performer takes.
+  2. Default AR shell anchor adoption (`placementSystems.ts` `adoptAnchor`):
+     B-048 fixed the `?shell=r3f` fallback only.
+  3. Place gate (`apps/viewer-web/src/features/place/PlaceMount.tsx`): place
+     mounts after the gate timeout, and `fail()` overwrites `timeout`.
+  4. Portal tilt permission (`usePortalTriggers.ts`): a pending `enableTilt`
+     writes `on` after `reset()`.
+  5. Upload panel (`UploadPanel.tsx`): file picker stays enabled mid-upload and
+     is cleared by the success reset.
+  6. XR session mode (`apps/capture/src/runtime/xrEntry.ts`): stale
+     `requestedMode`.
+  7. Mic permission: independent promise writers and mismatched unions
+     (`apps/capture/src/types/contracts.ts` vs `packages/xr-ui-core/src/index.ts`).
+  8. Voice input (`apps/capture/src/objects/voiceInput.ts`), locomotion,
+     desktop reach and held modes (`packages/xr-ui-core/src/heldMode.ts`,
+     `apps/capture/src/xr/HeadsetHolds.ts`): not yet modeled.
+  The skill and its rules live in
+  [`.agents/skills/find-implicit-state-machines/SKILL.md`](.agents/skills/find-implicit-state-machines/SKILL.md).
+
 ## Later
 
 - [ ] Capture drops scene triangles the hologram never shows: geometry
