@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import { MAX_HOLOGRAM_BYTES } from '@holoim/contracts';
 import type { InputRecordingSession } from '../debug/inputRecording';
 import { nextFrame, withTimeout } from '../shared/async';
 import type { UIStateStore } from '../ui/UIStateStore';
@@ -238,7 +239,7 @@ export class RecordingSession {
       const blob = await withTimeout(this.cameraRecorder.exportToGlbBlob(this.deps.setFrame, worldModel, audioData), EXPORT_TIMEOUT_MS, 'GLB export timed out after 60s');
       this.download(blob, `${baseName}.glb`);
       this.cameraRecorder.clear();
-      ui.setRecordingState('idle');
+      ui.setRecordingState('idle', overCapNotice(blob));
     } catch (err) {
       console.error(err);
       ui.setRecordingState('idle', (err as Error).message);
@@ -289,7 +290,7 @@ export class RecordingSession {
       this.download(blob, `${baseName}.glb`);
       if (this.retainLastTake) this.lastTake = { avatar, worldModel, audioData, place };
       else this.recorder.clear();
-      ui.setRecordingState('idle');
+      ui.setRecordingState('idle', overCapNotice(blob));
     } catch (err) {
       console.error(err);
       ui.setRecordingState('idle', (err as Error).message);
@@ -325,4 +326,14 @@ export class RecordingSession {
       console.warn('Saving input recording failed.', error);
     }
   }
+}
+
+/**
+ * The notice for a take over the upload cap (hologram-budgets): the file still
+ * downloads, so nothing recorded is lost, but the viewer would refuse it.
+ */
+export function overCapNotice(blob: Blob): string | undefined {
+  if (blob.size <= MAX_HOLOGRAM_BYTES) return undefined;
+  const mb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+  return `This take is ${mb(blob.size)} MB, over the ${MAX_HOLOGRAM_BYTES / (1024 * 1024)} MB upload limit; it will not upload.`;
 }

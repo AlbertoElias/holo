@@ -138,7 +138,7 @@ export function UploadPanel({ onUploaded, onStatus, currentUser }: UploadPanelPr
         ) : (
           <>
             <Type variant="captionUnderCard">Choose a GLB file</Type>
-            <Type variant="byline">or drop it here · up to 25 MB</Type>
+            <Type variant="byline">or drop it here · up to 100 MB</Type>
           </>
         )}
       </label>

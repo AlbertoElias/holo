@@ -99,7 +99,7 @@ export interface AutomationHooks {
   __probePlaceCasts: (points: ReadonlyArray<[number, number]>) => ReturnType<CapturePlace['probeCasts']>;
   /** Brings a scan in by URL, as `?place=` does at start. */
   __loadPlaceUrl: (url: string) => Promise<boolean>;
-  /** Lowers the take's size cap (null restores 25 MB), so a check can make the place thin to fit at Stop. */
+  /** Lowers the take's size cap (null restores `MAX_HOLOGRAM_BYTES`), so a check can make the place thin to fit at Stop. */
   __setPlaceGlbBudget: (bytes: number | null) => void;
   /** Lowers Spark's draw budget for the next scan loaded (null restores the device's), so a small scan gets a LoD tree. */
   __setPlaceLodBudget: (splats: number | null) => void;

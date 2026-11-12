@@ -3,6 +3,12 @@ import { z } from "zod";
 export const usdzStatusSchema = z.enum(["none", "pending", "processing", "ready", "failed"]);
 export type UsdzStatus = z.infer<typeof usdzStatusSchema>;
 
+/**
+ * The most bytes one hologram upload may hold (docs/features/hologram-budgets.md):
+ * capture fits its export under it and the API refuses anything larger.
+ */
+export const MAX_HOLOGRAM_BYTES = 100 * 1024 * 1024;
+
 export const hologramDtoSchema = z.object({
   id: z.string(),
   url: z.string(),
@@ -17,7 +23,12 @@ export const hologramDtoSchema = z.object({
   submittedBy: z.string(),
   // Defaults keep older fixtures/mocks parseable; the API always sends them.
   submittedByVerified: z.boolean().default(false),
-  ownedByViewer: z.boolean().default(false)
+  ownedByViewer: z.boolean().default(false),
+  // The detail level split from the upload (hologram-budgets): the place's
+  // detail SPZ and the full-size textures. Absent on older holograms and on
+  // takes that had no detail.
+  placeDetailUrl: z.string().nullable().optional(),
+  textureDetailUrl: z.string().nullable().optional()
 });
 
 export const userDtoSchema = z.object({
@@ -59,7 +70,8 @@ export const paginatedHologramsSchema = z.object({
 export const deleteHologramResponseSchema = z.object({
   id: z.string(),
   deletedFile: z.boolean(),
-  deletedUsdz: z.boolean()
+  deletedUsdz: z.boolean(),
+  deletedDetail: z.boolean().optional()
 });
 
 export const usdzStatusResponseSchema = z.object({

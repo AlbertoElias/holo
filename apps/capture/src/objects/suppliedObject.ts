@@ -7,11 +7,11 @@ import { takePrefetchedGlb } from './objectSearch';
 
 /**
  * Refusal limits for a supplied model. Exported textures are re-encoded as
- * PNG, so a heavy model can push a take past the 25 MB upload limit; capture
+ * PNG, so a heavy model can push a take past the 100 MB upload limit; capture
  * has no Draco, meshopt or KTX2 decoders; a skinned model would export as a
  * second skeleton.
  */
-export const MAX_SUPPLIED_OBJECT_BYTES = 8 * 1024 * 1024;
+export const MAX_SUPPLIED_OBJECT_BYTES = 40 * 1024 * 1024;
 const UNSUPPORTED_EXTENSIONS: Record<string, string> = {
   KHR_draco_mesh_compression: 'Draco-compressed meshes',
   EXT_meshopt_compression: 'meshopt-compressed meshes',

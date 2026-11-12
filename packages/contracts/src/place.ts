@@ -15,16 +15,26 @@ export const PLACE_EXTENSION_VERSION = 1;
 export const PLACE_STORED_SPLAT_CAP = 200_000;
 /** Splats a scan brought into capture may hold, decoded (Q5). */
 export const PLACE_INPUT_SPLAT_CAP = 3_000_000;
+/** Splats a stored place's detail level may hold (hologram-budgets): the input cap. */
+export const PLACE_DETAIL_SPLAT_CAP = PLACE_INPUT_SPLAT_CAP;
 /** The highest spherical-harmonics degree a stored place carries (Q5). */
 export const PLACE_STORED_MAX_SH = 1;
 
 export type PlaceRelation = "set" | "site";
+
+/**
+ * The detail level of a place in an upload (hologram-budgets): a second SPZ in
+ * the same GLB. The API moves it to its own object and drops this field from
+ * the GLB it stores, so a served GLB never carries it.
+ */
+export type PlaceDetail = { bufferView: number; splatCount: number; maxSh: number };
 
 export type PlaceExtension = {
   version: 1;
   bufferView: number;
   splatCount: number;
   maxSh: number;
+  detail?: PlaceDetail;
   provenance: { kind: "reconstruction"; relation: PlaceRelation; app?: string; scannedAt?: string };
 };
 
@@ -137,7 +147,14 @@ export function readGlbChunks(glb: Uint8Array): GlbChunks {
   return { json, bin };
 }
 
-export type StoredPlace = { nodeIndex: number; extension: PlaceExtension; spz: Uint8Array; header: SpzHeader };
+export type StoredPlace = {
+  nodeIndex: number;
+  extension: PlaceExtension;
+  spz: Uint8Array;
+  header: SpzHeader;
+  /** The detail level's SPZ, checked, when the GLB still carries one (an upload, before the API splits it). */
+  detail: { spz: Uint8Array; header: SpzHeader } | null;
+};
 
 function isInteger(value: unknown, min: number, max: number): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
@@ -154,6 +171,14 @@ export function parsePlaceExtension(value: unknown): PlaceExtension {
   const provenance = ext.provenance as Record<string, unknown> | undefined;
   if (!provenance || provenance.kind !== "reconstruction" || (provenance.relation !== "set" && provenance.relation !== "site")) {
     throw new Error(`${PLACE_EXTENSION}.provenance is not a reconstruction used as a set or a site`);
+  }
+  if (ext.detail !== undefined) {
+    const detail = ext.detail as Record<string, unknown> | null;
+    if (!detail || typeof detail !== "object") throw new Error(`${PLACE_EXTENSION}.detail is not an object`);
+    if (!isInteger(detail.bufferView, 0, Number.MAX_SAFE_INTEGER)) throw new Error(`${PLACE_EXTENSION}.detail.bufferView is not an index`);
+    if (detail.bufferView === ext.bufferView) throw new Error(`${PLACE_EXTENSION}.detail shares the light level's buffer view`);
+    if (!isInteger(detail.splatCount, 1, PLACE_DETAIL_SPLAT_CAP)) throw new Error(`${PLACE_EXTENSION}.detail.splatCount is not between 1 and ${PLACE_DETAIL_SPLAT_CAP}`);
+    if (!isInteger(detail.maxSh, 0, PLACE_STORED_MAX_SH)) throw new Error(`${PLACE_EXTENSION}.detail.maxSh is not between 0 and ${PLACE_STORED_MAX_SH}`);
   }
   return value as PlaceExtension;
 }
@@ -176,16 +201,31 @@ export async function readStoredPlace(glb: Uint8Array, chunks: GlbChunks = readG
   if (!json.extensionsUsed?.includes(PLACE_EXTENSION)) throw new Error(`${PLACE_EXTENSION} is not listed in extensionsUsed`);
   const nodeIndex = holders[0]!;
   const extension = parsePlaceExtension(json.nodes![nodeIndex]!.extensions![PLACE_EXTENSION]);
-  const bufferView = json.bufferViews?.[extension.bufferView];
-  if (!bufferView || (bufferView.buffer ?? 0) !== 0) throw new Error(`${PLACE_EXTENSION}.bufferView does not name a view of the GLB's own buffer`);
-  const offset = bufferView.byteOffset ?? 0;
-  const length = bufferView.byteLength ?? 0;
-  if (!bin || !isInteger(offset, 0, bin.byteLength) || !isInteger(length, 1, bin.byteLength - offset)) {
-    throw new Error(`${PLACE_EXTENSION}'s bytes lie outside the GLB's binary chunk`);
-  }
-  const spz = bin.subarray(offset, offset + length);
+  const viewBytes = (index: number, field: string): Uint8Array => {
+    const bufferView = json.bufferViews?.[index];
+    if (!bufferView || (bufferView.buffer ?? 0) !== 0) throw new Error(`${PLACE_EXTENSION}.${field} does not name a view of the GLB's own buffer`);
+    const offset = bufferView.byteOffset ?? 0;
+    const length = bufferView.byteLength ?? 0;
+    if (!bin || !isInteger(offset, 0, bin.byteLength) || !isInteger(length, 1, bin.byteLength - offset)) {
+      throw new Error(`${PLACE_EXTENSION}.${field}'s bytes lie outside the GLB's binary chunk`);
+    }
+    return bin.subarray(offset, offset + length);
+  };
+  const spz = viewBytes(extension.bufferView, "bufferView");
   const header = await checkSpzBytes(spz, PLACE_STORED_SPLAT_CAP);
   if (header.numPoints !== extension.splatCount) throw new Error(`the SPZ header says ${header.numPoints} splats, the extension ${extension.splatCount}`);
   if (header.shDegree !== extension.maxSh) throw new Error(`the SPZ header says SH degree ${header.shDegree}, the extension ${extension.maxSh}`);
-  return { nodeIndex, extension, spz, header };
+  let detail: StoredPlace["detail"] = null;
+  if (extension.detail) {
+    const detailSpz = viewBytes(extension.detail.bufferView, "detail.bufferView");
+    const detailHeader = await checkSpzBytes(detailSpz, PLACE_DETAIL_SPLAT_CAP);
+    if (detailHeader.numPoints !== extension.detail.splatCount) {
+      throw new Error(`the detail SPZ header says ${detailHeader.numPoints} splats, the extension ${extension.detail.splatCount}`);
+    }
+    if (detailHeader.shDegree !== extension.detail.maxSh) {
+      throw new Error(`the detail SPZ header says SH degree ${detailHeader.shDegree}, the extension ${extension.detail.maxSh}`);
+    }
+    detail = { spz: detailSpz, header: detailHeader };
+  }
+  return { nodeIndex, extension, spz, header, detail };
 }
