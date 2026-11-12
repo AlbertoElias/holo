@@ -1052,3 +1052,39 @@ bug above.)
   In IWER the first placement falls back to the floor (`hit-test-timeout`), so its anchor is the frame's `createAnchor`; a hit-test result's `createAnchor` (the `hit.createAnchor` call in `searchAhead`) is patched by the shim but was not exercised. It carries the same epoch.
 - **Not done:** emulation (IWER) only, no physical headset or phone.
 - **Closed 2026-11-12:** both shells fixed and replayed.
+
+### B-047 — Hosted CI on `main` fails on a different browser test each push, so deploys are skipped
+
+- **Area:** `apps/viewer-web` e2e (hosted CI shards), `apps/viewer-web/src/features/feed/HologramCardCanvas.tsx`
+- **Severity:** P1 (the CI Gate failed, so the viewer, capture and API deploys were skipped; production stayed at `2fba1e6`)
+- **Observed:** 2026-11-11, three pushes in a row (runs 43098856282, 43103556566, 43112916268).
+- **Cause:** four separate causes. Each depended on how long a frame or the page load took on a loaded runner:
+  1. `camera-take.pipeline.spec.ts`, "the initial is drawn in deep sea": counted centre pixels darker than a hard
+     cutoff. The 18 px initial covers pixels in part, and where its edges fall on the grid moves ink between
+     neighbours. Count on macOS 9, in Linux emulation 7, on CI 4 (threshold 6).
+  2. `bubble-capture.pipeline.spec.ts`, "feed sphere follows recorded motion": the 1.5 s walk take moves only for
+     its first 70%, and the looping feed was sampled from wherever the upload and load had left it. On a slow
+     runner both samples could fall in the still tail.
+  3. `spatial-audio.spec.ts`, "resumed, every source starts where the motion is": the motion time came from the
+     last frame and the audio clock from now, read between frames, so one stalled frame counted as skew
+     (0.1506 s against 0.15).
+  4. Pipeline shard 1 cancelled (run 43103556566): GitHub never assigned a runner (no runner name, no steps,
+     cancelled at 15 min). Not a test.
+  Emulation also found a fifth, in the app: the feed fitted the cloche on its first frame, after
+  `mixer.update(delta)` had already moved the take. A long first frame fitted the dome over different ground
+  ("cloche foot on the lowest drawn ground", 0.0537 m against 0.05).
+- **Fix (`bug/b-047-ci-flakes`):**
+  1. The face check sums each centre pixel's share of deep sea (integrated ink) instead of counting pixels past
+     a cutoff: 13.3 px native, 11.8 px in Linux emulation, threshold 6; an empty face has none.
+  2. After freezing the clock, the test starts the feed's take from 0, so both reads fall in the walk. The message
+     now prints clip times and `isRunning`.
+  3. `voicesInStep` samples in animation frames, after the card's own loop, over 5 frames, and takes each voice's
+     median error.
+  4. No change; a runner-capacity cancellation is retried by the next push.
+  5. `HologramCardCanvas` holds the take at its first pose until the dome is fitted (or found to have nothing to
+     wrap), so the dome no longer depends on the first frame's length.
+- **Evidence:** `scripts/ci-emulate.sh` (4 CPU, 16 GB, Linux), all fixes: `test:e2e:pipeline:shard1` ×6, 6 passed
+  (10.8 min); `test:e2e:pipeline:shard3` ×3, 21 passed (13.3 min); `test:e2e:mocked:shard2` ×5, 50 passed
+  (14.5 min). Before the fixes, shard 1 failed 1 run in 4 in emulation. `verify:agent` passes.
+- **Not this bug:** B-043 (an overlay intercepts the AR button click after the avatar-format uploads) has a
+  different cause and stays open.

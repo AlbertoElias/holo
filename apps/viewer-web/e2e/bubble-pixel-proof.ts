@@ -56,7 +56,7 @@ export async function captureBubblePixels(page: Page, mode: "feed" | "ar", artif
       const content = cameras.map(render);
       model.traverse((node) => { if ((node as Three.Mesh).isMesh) node.visible = node === shell; });
       const glass = cameras.map(render);
-      return { eyeAspects: cameras.map((eye) => eye.projectionMatrix.elements[5]! / eye.projectionMatrix.elements[0]!), full: full.map((item) => item.pixels), content: content.map((item) => item.pixels), glass: glass.map((item) => item.pixels), images: full.map((item, index) => png(item.bytes, cameras[index]!)), sphere: shell.getWorldPosition(new Vector3()).toArray(), clipCenter: [bubble.center.x, bubble.center.y, bubble.center.z], time: Object.values(actions).map((action) => action.time) };
+      return { eyeAspects: cameras.map((eye) => eye.projectionMatrix.elements[5]! / eye.projectionMatrix.elements[0]!), full: full.map((item) => item.pixels), content: content.map((item) => item.pixels), glass: glass.map((item) => item.pixels), images: full.map((item, index) => png(item.bytes, cameras[index]!)), sphere: shell.getWorldPosition(new Vector3()).toArray(), clipCenter: [bubble.center.x, bubble.center.y, bubble.center.z], time: Object.values(actions).map((action) => action.time), running: Object.values(actions).map((action) => action.isRunning()) };
     } finally {
       visibility.forEach((visible, node) => { node.visible = visible; });
       renderer.setRenderTarget(previousTarget); renderer.setClearColor(previousClear, previousAlpha); scene.background = previousBackground; renderer.xr.enabled = previousXr; target.dispose();

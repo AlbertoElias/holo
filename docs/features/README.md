@@ -28,6 +28,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Resize and move props on every device | Complete | [object-resize-and-move.md](archive/object-resize-and-move.md) |
 | The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
+| Richer holograms (raise the size budgets) | Draft | [hologram-budgets.md](hologram-budgets.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |
 | Self-resolving pointing | Verifying | [self-resolving-pointing.md](self-resolving-pointing.md) |
