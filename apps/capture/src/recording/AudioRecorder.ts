@@ -23,7 +23,8 @@ export class AudioRecorder {
       this.permissionState = 'granted';
       return true;
     } catch {
-      this.permissionState = 'denied';
+      // A refusal of this probe says nothing about a stream another request has opened since.
+      if (!this.hasLiveStream()) this.permissionState = 'denied';
       return false;
     }
   }
@@ -116,8 +117,13 @@ export class AudioRecorder {
     return this.recording;
   }
 
+  /** Granted while a stream is live, whatever a separate request last heard; otherwise what the last request heard. */
   getPermissionState(): 'pending' | 'granted' | 'denied' {
-    return this.permissionState;
+    return this.hasLiveStream() ? 'granted' : this.permissionState;
+  }
+
+  private hasLiveStream(): boolean {
+    return this.stream?.getAudioTracks().some((track) => track.readyState === 'live') ?? false;
   }
 
   private getOrCreateStream(): Promise<MediaStream | null> {

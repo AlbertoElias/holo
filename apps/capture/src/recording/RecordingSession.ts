@@ -37,6 +37,18 @@ interface RecordingSessionDeps {
 export type TakeKind = 'performer' | 'camera';
 
 /**
+ * Where a take is, one value for the whole lifecycle (B-049). Avatar size is
+ * locked and `isTakeBusy` is true in every phase but `idle`; `ui.recordingState`
+ * is what the user sees and shows `idle` while a take is `starting` or `abandoning`.
+ *   idle        no take
+ *   starting    Record pressed, waiting for the microphone (either kind of take)
+ *   recording   samples are being taken
+ *   exporting   Stop pressed; the export runs
+ *   abandoning  a camera take that never began (session ended, page hid) is letting go of the microphone
+ */
+type TakePhase = 'idle' | 'starting' | 'recording' | 'exporting' | 'abandoning';
+
+/**
  * A recording: avatar frames sampled once per simulation step, microphone
  * audio, and (in development) the raw headset input behind it. Avatar size
  * stays locked from start until the export finishes.
@@ -53,7 +65,7 @@ export class RecordingSession {
   /** A camera take admitted and waiting for its microphone; cancelled by a hidden page or the session's end. */
   private startingCamera: { cancelled: boolean } | null = null;
   private inputRecording: InputRecordingSession | null = null;
-  private sizeLocked = false;
+  private phase: TakePhase = 'idle';
   // Checks re-export the last take to compare bytes (chrome visible or not);
   // off in production, where a take's samples are freed once it downloads.
   private retainLastTake = false;
@@ -77,8 +89,8 @@ export class RecordingSession {
    * it open for camera takes. Never awaited before the session request.
    */
   holdMicForArTake(): void {
-    this.audio.holdStream().then((held) => {
-      this.deps.ui.setMicPermission(held ? 'granted' : this.audio.getPermissionState());
+    this.audio.holdStream().then(() => {
+      this.publishMicPermission();
     }).catch(() => {
       this.deps.ui.setMicPermission('denied');
     });
@@ -100,33 +112,31 @@ export class RecordingSession {
   endCameraTake(): void {
     if (this.startingCamera) this.startingCamera.cancelled = true;
     if (this.takeKind !== 'camera') return;
-    if (this.deps.ui.getState().recordingState !== 'recording') return;
+    if (this.phase !== 'recording') return;
     void this.stopAndExportCamera();
   }
 
-  /** A take is starting, recording or exporting: placement must not move under it. */
+  /** A take is starting, recording, exporting or letting go: placement and avatar size must not move under it. */
   isTakeBusy(): boolean {
-    return this.startingCamera !== null || this.deps.ui.getState().recordingState !== 'idle';
+    return this.phase !== 'idle';
   }
 
   get isSizeLocked(): boolean {
-    return this.sizeLocked;
+    return this.phase !== 'idle';
   }
 
   /** Asks early, before VR entry, where permission dialogs are awkward; recording works without it. */
   requestMicPermission(): void {
-    this.audio.requestMicPermission().then((granted) => {
-      this.deps.ui.setMicPermission(granted ? 'granted' : 'denied');
+    this.audio.requestMicPermission().then(() => {
+      this.publishMicPermission();
     }).catch(() => {
       this.deps.ui.setMicPermission('denied');
     });
   }
 
   toggle(): void {
-    const state = this.deps.ui.getState();
-    if (state.recordingState === 'exporting' || (this.sizeLocked && state.recordingState === 'idle')) return;
-    if (state.recordingState === 'recording') void this.stopAndExport();
-    else void this.start();
+    if (this.phase === 'recording') void this.stopAndExport();
+    else if (this.phase === 'idle') void this.start();
   }
 
   /** Keep the last take's samples after it downloads, for `reexportLastTake`. */
@@ -159,7 +169,7 @@ export class RecordingSession {
       return;
     }
     this.takeKind = 'performer';
-    this.sizeLocked = true;
+    this.phase = 'starting';
     this.deps.onSizeLocked();
     this.lastTake = null;
     this.recorder.clear();
@@ -171,8 +181,9 @@ export class RecordingSession {
     } catch {
       // Audio capture is best-effort; continue without it
     } finally {
-      this.deps.ui.setMicPermission(this.audio.getPermissionState());
+      this.publishMicPermission();
     }
+    this.phase = 'recording';
     this.deps.ui.setRecordingState('recording');
   }
 
@@ -191,7 +202,7 @@ export class RecordingSession {
       return;
     }
     this.takeKind = 'camera';
-    this.sizeLocked = true;
+    this.phase = 'starting';
     this.deps.onSizeLocked();
     this.lastTake = null;
     this.deps.onTakeStart();
@@ -203,7 +214,7 @@ export class RecordingSession {
     } catch {
       // Audio capture is best-effort; the take is silent
     } finally {
-      ui.setMicPermission(this.audio.getPermissionState());
+      this.publishMicPermission();
       this.startingCamera = null;
     }
     if (start.cancelled || !this.deps.isCameraAuthor() || document.visibilityState === 'hidden') {
@@ -211,16 +222,22 @@ export class RecordingSession {
       // microphone was starting: the take never began, so nothing is exported.
       this.cameraRecorder.setEnabled(false);
       this.cameraRecorder.clear();
-      if (this.audio.isRecording()) await this.audio.stop().catch(() => undefined);
-      this.sizeLocked = false;
+      if (this.audio.isRecording()) {
+        // Still locked and busy while the recorder lets go: nothing may begin on a half-released microphone.
+        this.phase = 'abandoning';
+        await this.audio.stop().catch(() => undefined);
+      }
+      this.phase = 'idle';
       return;
     }
     if (!this.audio.isRecording()) ui.flashNotice('No microphone: this take is silent.', NOTICE_MS);
+    this.phase = 'recording';
     ui.setRecordingState('recording');
   }
 
   private async stopAndExportCamera(): Promise<void> {
     const ui = this.deps.ui;
+    this.phase = 'exporting';
     ui.setRecordingState('exporting', 'Exporting...');
     this.cameraRecorder.setEnabled(false);
     try {
@@ -244,8 +261,13 @@ export class RecordingSession {
       console.error(err);
       ui.setRecordingState('idle', (err as Error).message);
     } finally {
-      this.sizeLocked = false;
+      this.phase = 'idle';
     }
+  }
+
+  /** The one writer of the microphone state the user sees: what the recorder knows now, not what one request said. */
+  private publishMicPermission(): void {
+    this.deps.ui.setMicPermission(this.audio.getPermissionState());
   }
 
   private download(blob: Blob, name: string): void {
@@ -263,6 +285,7 @@ export class RecordingSession {
       return;
     }
     const ui = this.deps.ui;
+    this.phase = 'exporting';
     ui.setRecordingState('exporting', 'Exporting...');
     this.recorder.setEnabled(false);
 
@@ -295,7 +318,7 @@ export class RecordingSession {
       console.error(err);
       ui.setRecordingState('idle', (err as Error).message);
     } finally {
-      this.sizeLocked = false;
+      this.phase = 'idle';
     }
   }
 
