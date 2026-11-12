@@ -39,8 +39,9 @@ not run this on the current `main`, remind them first and offer to run it.
 ## The five personas
 
 Spawn them as five parallel subagents (this is the "parallel, discard context
-afterward" case in AGENTS.md). Set `model` explicitly on every `Agent` call:
-Sonnet for the browsing personas (routine Standard work). Each persona opens
+afterward" case in AGENTS.md). Set `model: "opus"` explicitly on every `Agent`
+call, as the source prompt specifies. This is a deliberate exception to the
+Standard-tier default for browsing work: launch judgment is the point. Each persona opens
 the app from the landing page, tries to reach first success, and screenshots
 every moment of confusion, stall, or annoyance with a one-line note of what
 they expected.
