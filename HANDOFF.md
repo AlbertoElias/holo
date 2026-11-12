@@ -39,6 +39,17 @@ queue item in [`TODOS.md`](TODOS.md).
   scripts and docs only, so it rides along with the next merge. Uploaded to
   production 2026-11-12 (`cmwcte5x20005oeiqsmobz8mf`) and plays on the live
   feed; its Quick Look conversion failed on the extent budget (B-048).
+- "The way down II" showcase hologram (scene `introspection2`, beat sheet in
+  `apps/capture/scripts/showcase/introspection2/BEATS.md`, lessons in
+  [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md)),
+  branch `feature/showcase-introspection-ii`, pushed 2026-11-12. It is the
+  [`TODOS.md`](TODOS.md) item "The way down, version 2". Built, uploaded and
+  played on a local feed with sound; a real-time proof video was watched and
+  sent; `verify:agent` passed. The build now measures Quick Look's load and
+  fails over 100 M point-frames (this scene: 50.9 M), but the Quick Look
+  conversion itself is unchecked. The critic was Muse, because Codex had hit
+  its usage limit. Capture scripts and docs only, so it rides along with the
+  next merge. Not uploaded to production: that waits for the user's go-ahead.
 
 ## Recently merged (grouped)
 
