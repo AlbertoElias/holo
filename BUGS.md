@@ -64,6 +64,11 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   `.ar-trigger-button` keeps hitting `<div data-reach="hidden" class="portal-controls" data-portal-mode="follow">`
   (and `.portal-controls-side`), which "intercepts pointer events". 2 of 2 full-stage runs on the branch and 1 of 1 on
   `main` fail the same way; the other 27 tests pass.
+- **Update 2026-11-12:** it also fails intermittently when the spec runs alone on clean `main` `fff8507`
+  (same click, same overlay, 6 min timeout): in two simultaneous runs of `main` and of `main` plus unrelated
+  CI-script changes, round 1 failed on both and round 2 passed on both, so it is a timing race, not tied to
+  the avatar-format uploads alone. Under heavy machine load it failed 0 of 5, then passed on a quiet retry
+  (`test:smoke:pipeline` 34 passed, 5 skipped).
 - **Expected:** the card's AR button is clickable whatever other cards the feed already holds.
 - **Reproduction:** `pnpm run test:smoke:pipeline` (about 17 min). The spec alone passes
   (`RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/bubble-capture.pipeline.spec.ts` in
