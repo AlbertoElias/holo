@@ -1,7 +1,7 @@
 # Feature brief: Creator pages, shareable holograms, search
 
 **Lead:** Claude Code (Sonnet 5.5)
-**Status:** Implementing
+**Status:** Complete
 **Layer:** View (how a hologram is found, shared and attributed on flat screens)
 
 ## User outcome
@@ -119,9 +119,14 @@ the cursor up when the card it points at is deleted, so the list is not cut
 short. Search matches title and creator name in the API (in code, so case and accents
 fold and a typed `%` is literal). It reads the table newest first in batches
 of 200 from the cursor and stops once the page is full, so memory is bounded
-and a common word costs a batch or two; a word that matches nothing reads
-every row once. The API has no rate limiting yet, which is the open guard
-against abusing that scan.
+and a common word costs a batch or two. One request reads at most 2000 rows;
+a rarer word returns what it found with a cursor at the last row read, and the
+feed keeps asking until the list ends. Each client (Fly-Client-IP on Fly) may
+run 60 searches a minute and request 20 sign-in emails per ten minutes, each
+with a 429 and `retry-after`; plain feed browsing is not limited. The limiter
+is the shared in-memory one from object search, moved to `lib/rate-limit.ts`.
+If the table grows to where scans are slow, the next step is an SQLite
+full-text index.
 
 ## Test plan and evidence
 
@@ -129,8 +134,8 @@ against abusing that scan.
 |---|---|---|
 | Creator page, search, `/h/:id`, copy link, delete reveal | `apps/viewer-web/e2e/profiles.pipeline.spec.ts` against the real API (two creators) | 6 pass; screenshots under `output/profiles-and-share/` |
 | Claim script | Run against a seeded temp DB: dry-run, apply, re-apply, unknown email | Done; output in the session |
-| API filters and paging | `apps/viewer-api/test/auth-routes.test.ts` through the real HTTP layer | API tests pass (82 in the package) |
-| Visual | Screenshots under `output/profiles-and-share/`; proof video | pending until run |
+| API filters and paging | `apps/viewer-api/test/auth-routes.test.ts` through the real HTTP layer | API tests pass (85 in the package), including the scan budget and the limits |
+| Visual | Screenshots under `output/profiles-and-share/`; proof video | Proof video recorded and watched (it caught the chip overlap, fixed); not committed |
 
 ## Physical-device limits
 

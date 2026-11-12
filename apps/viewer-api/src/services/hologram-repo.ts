@@ -174,6 +174,13 @@ const olderThan = (position: Position): Prisma.HologramWhereInput => ({
 /** How many rows a search reads from the database at a time. */
 const SEARCH_BATCH = 200;
 
+/**
+ * The most rows one search request reads. A search that has not filled its page by then returns what it
+ * found with a cursor at the last row read, and the next request carries on from there, so no single
+ * request can hold the database for long however rare the word is.
+ */
+const SEARCH_SCAN_BUDGET = 2000;
+
 export async function listHolograms(args: ListHologramsArgs) {
   const cursorItem = args.cursor ? await prisma.hologram.findUnique({ where: { id: args.cursor } }) : null;
   // A cursor that no longer exists (deleted since the last page) ends the list rather than restarting it.
@@ -184,15 +191,17 @@ export async function listHolograms(args: ListHologramsArgs) {
 
   const order: Prisma.HologramOrderByWithRelationInput[] = [{ createdAt: "desc" }, { id: "desc" }];
   let rows;
+  let resumeCursor: string | null = null;
   if (args.q) {
     // Matching happens in code, not SQL, so a typed % or _ is literal and case and accents fold for every
     // script. The database is read newest first in batches, from the cursor, and the scan stops as soon as
     // the page is full: a common word costs a batch or two, and memory never holds more than a batch.
-    // A word that matches nothing reads every row once, in batches.
+    // A word that matches nothing reads rows until the scan budget runs out, then hands back a cursor.
     const needle = foldForSearch(args.q);
     rows = [];
     let after: Position | null = cursorItem;
-    while (rows.length <= args.limit) {
+    let scanned = 0;
+    while (rows.length <= args.limit && scanned < SEARCH_SCAN_BUDGET) {
       const batch: Array<Prisma.HologramGetPayload<{ include: { owner: { select: { displayName: true } } } }>> =
         await prisma.hologram.findMany({
           where: { AND: after ? [...scope, olderThan(after)] : scope },
@@ -205,8 +214,10 @@ export async function listHolograms(args: ListHologramsArgs) {
         rows.push(row);
         if (rows.length > args.limit) break;
       }
+      scanned += batch.length;
       if (batch.length < SEARCH_BATCH) break;
       after = batch[batch.length - 1]!;
+      if (rows.length <= args.limit && scanned >= SEARCH_SCAN_BUDGET) resumeCursor = after.id;
     }
   } else {
     if (cursorItem) scope.push(olderThan(cursorItem));
@@ -215,7 +226,7 @@ export async function listHolograms(args: ListHologramsArgs) {
 
   const hasNext = rows.length > args.limit;
   const items = hasNext ? rows.slice(0, args.limit) : rows;
-  const nextCursor = hasNext ? items[items.length - 1]?.id ?? null : null;
+  const nextCursor = hasNext ? items[items.length - 1]?.id ?? null : resumeCursor;
 
   return { items, nextCursor };
 }

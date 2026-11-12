@@ -10,6 +10,7 @@ import {
 } from "@holoim/contracts";
 
 import { env } from "../lib/env.js";
+import { clientKey, createRateLimit } from "../lib/rate-limit.js";
 import {
   POLYHAVEN_ID_PATTERN,
   createPolyhaven,
@@ -66,33 +67,6 @@ function interleave<T>(lists: T[][], max: number): T[] {
     }
   }
   return merged;
-}
-
-/**
- * Fly's proxy overwrites Fly-Client-IP with the real client, so it is trusted
- * only on Fly (FLY_APP_NAME is set on every Fly machine); elsewhere a client
- * could send any value, so the socket address is the client.
- */
-function clientKey(request: FastifyRequest, behindFly: boolean): string {
-  const forwarded = request.headers["fly-client-ip"];
-  return behindFly && typeof forwarded === "string" && forwarded.length > 0 ? forwarded : request.ip;
-}
-
-function createRateLimit(perWindow: number, windowMs: number) {
-  const windows = new Map<string, { start: number; count: number }>();
-  return (key: string, now = Date.now()): number | null => {
-    if (windows.size > 10_000) {
-      for (const [entry, value] of windows) if (now - value.start >= windowMs) windows.delete(entry);
-    }
-    const current = windows.get(key);
-    if (!current || now - current.start >= windowMs) {
-      windows.set(key, { start: now, count: 1 });
-      return null;
-    }
-    if (current.count >= perWindow) return Math.ceil((current.start + windowMs - now) / 1000);
-    current.count += 1;
-    return null;
-  };
 }
 
 export async function registerObjectRoutes(app: FastifyInstance, options: ObjectRouteOptions = {}): Promise<void> {

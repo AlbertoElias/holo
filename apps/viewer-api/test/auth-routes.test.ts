@@ -113,7 +113,7 @@ describe("auth and ownership routes", () => {
       )`);
 
     const { buildApp } = await import("../src/app.js");
-    app = buildApp({ logger: false, uploadsRoot });
+    app = buildApp({ logger: false, uploadsRoot, searchLimit: 10_000, magicLinkLimit: 10_000 });
     await app.ready();
   });
 
@@ -297,6 +297,52 @@ describe("auth and ownership routes", () => {
 
     expect((await list("q=needle&limit=2")).items.map((item) => item.hologramName)).toEqual(["needle 3", "needle 250"]);
     expect(await list("q=nothing-like-it")).toEqual({ items: [], nextCursor: null });
+  });
+
+  it("stops one search request after its scan budget and carries on from a cursor", async () => {
+    // 2300 rows, newest first by index; the only match is past the 2000-row budget of one request.
+    const base = Date.now() - 1_000_000;
+    await prisma.hologram.createMany({
+      data: Array.from({ length: 2300 }, (_, index) => ({
+        filenameOriginal: "a.glb", hologramName: index === 2250 ? "needle far" : `filler ${index}`,
+        submittedBy: "bulk", filenameStored: `far-${index}.glb`, mimeType: "model/gltf-binary", sizeBytes: 1,
+        storagePath: `uploads/far-${index}.glb`, createdAt: new Date(base - index * 1000)
+      }))
+    });
+    const list = async (query: string) =>
+      (await app.inject({ method: "GET", url: `/api/holograms?${query}` })).json<{ items: HologramDto[]; nextCursor: string | null }>();
+
+    const first = await list("q=needle&limit=5");
+    expect(first.items).toEqual([]);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await list(`q=needle&limit=5&cursor=${first.nextCursor}`);
+    expect(second.items.map((item) => item.hologramName)).toEqual(["needle far"]);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it("limits searches and sign-in emails per client, but not browsing the feed", async () => {
+    const { buildApp } = await import("../src/app.js");
+    const limited = buildApp({ logger: false, uploadsRoot: path.join(testRoot, "uploads"), searchLimit: 2, magicLinkLimit: 2 });
+    await limited.ready();
+    try {
+      const search = () => limited.inject({ method: "GET", url: "/api/holograms?q=anything" });
+      expect((await search()).statusCode).toBe(200);
+      expect((await search()).statusCode).toBe(200);
+      const refused = await search();
+      expect(refused.statusCode).toBe(429);
+      expect(Number(refused.headers["retry-after"])).toBeGreaterThan(0);
+      for (let browse = 0; browse < 5; browse += 1) {
+        expect((await limited.inject({ method: "GET", url: "/api/holograms" })).statusCode).toBe(200);
+      }
+
+      const ask = () =>
+        limited.inject({ method: "POST", url: "/api/auth/magic-link", payload: { email: "ada@example.com" } });
+      expect((await ask()).statusCode).toBe(202);
+      expect((await ask()).statusCode).toBe(202);
+      expect((await ask()).statusCode).toBe(429);
+    } finally {
+      await limited.close();
+    }
   });
 
   it("serves a creator's public page without their email, and 404s an unknown creator", async () => {

@@ -18,6 +18,7 @@ import {
 } from "@holoim/contracts";
 
 import { MAX_GLB_BYTES } from "../lib/constants.js";
+import { clientKey, createRateLimit } from "../lib/rate-limit.js";
 import {
   completeUploadIntent,
   countHologramsByOwner,
@@ -97,11 +98,18 @@ function toDto(record: HologramRecord, storage: MediaStorage, viewerId?: string 
   };
 }
 
+const SEARCH_WINDOW_MS = 60_000;
+/** Each page of a search, and each "load more" of one, counts as a search. */
+const SEARCH_PER_WINDOW = 60;
+
 export async function registerHologramRoutes(
   app: FastifyInstance,
-  options: { uploadsRoot: string; storage: MediaStorage }
+  options: { uploadsRoot: string; storage: MediaStorage; searchLimit?: number }
 ): Promise<void> {
   const { uploadsRoot, storage } = options;
+  const behindFly = Boolean(process.env.FLY_APP_NAME);
+  // A search can read much of the table, so each client gets a few a minute; browsing the feed is not limited.
+  const searchLimit = createRateLimit(options.searchLimit ?? SEARCH_PER_WINDOW, SEARCH_WINDOW_MS);
   // The anonymous first page, kept beside the media for the viewer's edge; rewritten
   // after every upload and delete, and at boot.
   const refreshFeedSnapshot = createFeedSnapshotWriter(storage, async () => {
@@ -340,8 +348,14 @@ export async function registerHologramRoutes(
       return reply.status(400).send({ error: "Invalid query params." });
     }
 
-    const authUser = await optionalAuthUser(request.headers);
     const { cursor, limit, ownerId, q } = parsed.data;
+    if (q) {
+      const retryAfter = searchLimit(clientKey(request, behindFly));
+      if (retryAfter !== null) {
+        return reply.status(429).header("retry-after", String(retryAfter)).send({ error: "Too many searches; try again in a minute." });
+      }
+    }
+    const authUser = await optionalAuthUser(request.headers);
     const result = await listHolograms({
       limit,
       ...(cursor ? { cursor } : {}),

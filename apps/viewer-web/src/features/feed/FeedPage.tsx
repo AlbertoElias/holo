@@ -309,9 +309,10 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
       ? { kind: "offline", text: "You're offline. The feed loads again when you're back online." }
       : error
         ? { kind: "error", text: error, action: { label: VIEWER_CONTROL_NAMES.retry, onPress: () => void retry() } }
-        : isLoading && items.length === 0
+        : // A search page can come back empty with a cursor (the server read its share of rows); more is on the way.
+          (isLoading || canLoadMore) && items.length === 0
           ? { kind: "loading", text: "Loading holograms…" }
-          : !isLoading && items.length === 0 && !uploadOpen && !settingsOpen && !searchOpen
+          : items.length === 0 && !uploadOpen && !settingsOpen && !searchOpen
             ? // A sheet already answers the empty feed; the notice would sit on its title.
               { kind: "empty", text: emptyMessage }
             : null;
