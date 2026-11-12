@@ -144,7 +144,9 @@ Routing is the agent's job, not the user's. Do it automatically:
 Multiple agents share this repo, so uncommitted work is invisible to the others.
 Always work in your own worktree under `.worktrees/` (a Claude Code session
 worktree under `.claude/worktrees/` is also fine); the main checkout is the
-integration point only and never takes edits.
+integration point only and never takes edits. A Claude Code hook
+(`scripts/hooks/guard-main-checkout.mjs`) blocks Edit and Write there, except
+for git-ignored files and while resolving a merge, cherry-pick or rebase.
 
 - Before starting, run `git fetch` and check `git status`; read any in-flight
   brief in `docs/features/README.md` before touching overlapping files.
