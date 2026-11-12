@@ -262,7 +262,7 @@ With `STORAGE_DRIVER=s3`, the DTO serves media from
 `PUBLIC_MEDIA_BASE_URL` with immutable caching. Uploads to R2 go through
 the API (`initiate` answers `multipart`, and the API writes the object):
 R2 answers presigned POST with `501 NotImplemented`, so the direct
-browser → bucket path (presigned POST, 25 MB cap enforced by policy +
+browser → bucket path (presigned POST, 100 MB cap enforced by policy +
 completion checks) only runs against S3 proper. Local
 development keeps `STORAGE_DRIVER=local` and needs no credentials.
 

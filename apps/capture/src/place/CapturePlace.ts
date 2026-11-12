@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
-import { PLACE_INPUT_SPLAT_CAP, checkSpzBytes } from '@holoim/contracts';
+import { MAX_HOLOGRAM_BYTES, PLACE_INPUT_SPLAT_CAP, checkSpzBytes } from '@holoim/contracts';
 import { FLOOR_BAND_METERS, SPLAT_EXTENT_SIGMA, decodeScan, plyVertexCount, type DecodedScan } from '@holoim/place';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
@@ -143,8 +143,8 @@ async function checkDeclaredSize(bytes: Uint8Array, name: string): Promise<void>
 const MAX_FIT_PASSES = 4;
 /** Each pass aims a little under the bytes left, so one pass usually fits. */
 const FIT_SHRINK = 0.95;
-/** The upload's cap (`viewer-api`'s `MAX_GLB_BYTES`). */
-const GLB_BYTE_BUDGET = 25 * 1024 * 1024;
+/** The upload's cap, shared with the API. */
+const GLB_BYTE_BUDGET = MAX_HOLOGRAM_BYTES;
 
 function castsEverySplat(mesh: SplatMesh, numSplats: number): void {
   mesh.raycastIndices = { numSplats, indices: null as unknown as Uint32Array };
@@ -352,7 +352,7 @@ export class CapturePlace {
     return this.byteBudget;
   }
 
-  /** Automation only: a lower cap, so a check can make a take's place thin to fit without a 25 MB take. */
+  /** Automation only: a lower cap, so a check can make a take's place thin to fit without a 100 MB take. */
   setGlbByteBudget(bytes: number | null): void {
     this.byteBudget = bytes === null ? GLB_BYTE_BUDGET : Math.min(GLB_BYTE_BUDGET, Math.max(0, bytes));
   }

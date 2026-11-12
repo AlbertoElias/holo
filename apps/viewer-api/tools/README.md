@@ -127,7 +127,7 @@ deployment.
 All resources must be embedded. The converter rejects external buffers/images,
 unsupported audio demuxers, excessive object/accessor/pixel/sample counts,
 recordings longer than 600 seconds, and excessive geometry/baking work. The CLI
-limits input to 100 MB (the API upload limit remains 25 MB), output to 400 MB,
+limits input to 100 MB (the same as the API upload limit, `MAX_HOLOGRAM_BYTES`), output to 400 MB,
 conversion to 100 CPU-seconds (a permanent failure) and 900 wall seconds (a
 timeout, which the API worker retries up to three times), and ffmpeg to 30
 seconds. The wall limit is long because Fly's shared CPU is throttled to a
