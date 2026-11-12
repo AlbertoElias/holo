@@ -75,6 +75,7 @@ Port onto current `main` (2026-11-11, Node 24, base `4b6d51bbb84d`):
   production build including Mermaid, then the 11 browser tests) passes, and
   `pnpm run doctor` passes. This is the knowledge scope of `verify:pr`; the
   change touches no other package, so the capture and viewer suites do not apply.
+- After rebasing onto the PRDs that landed later the same day, the "missing guide" test flaked once in two full runs (`page.goto: net::ERR_ABORTED`: the dev-server reload that follows the guide rename aborted the navigation). The test now retries that navigation; three further full runs passed 11 of 11.
 - Proof video (ignored, `output/atlas-narrative-proof/atlas-narrative-proof.mp4`,
   recorded by `record.mjs` beside it): home backbone and layer selection,
   Follow/Free wireframe with the keyboard slider, grouped idea territories and

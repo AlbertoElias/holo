@@ -565,10 +565,14 @@ test("source refresh preserves reading state, and missing guide leaves canonical
     ).toHaveValue("IDEA-045");
     await expect(page.locator(".idea-card")).toHaveCount(1);
     await rename(guideFile, hidden);
-    await page.goto("/");
-    await expect(
-      page.getByRole("heading", { name: "Reading guide unavailable." }),
-    ).toBeVisible();
+    // The source change triggers a dev-server reload that can abort a
+    // navigation in flight, so retry the navigation until the page settles.
+    await expect(async () => {
+      await page.goto("/");
+      await expect(
+        page.getByRole("heading", { name: "Reading guide unavailable." }),
+      ).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 20000 });
     await page
       .getByRole("link", { name: "Hologram model", exact: true })
       .click();
