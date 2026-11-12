@@ -67,7 +67,8 @@ const wrapA = (a) => {
 /**
  * The gas's puffs as one world-space mesh.
  * ctx: { C, him(t) world point of him (no knocks), iris(t) world centre of
- * the opening, S(t), from (first visible time), back: [t0, t1] (the way out) }.
+ * the opening, S(t), from (first visible time), back: [t0, t1] (the way out),
+ * k his size against the 72 cm the gas was first drawn for }.
  */
 export function gasSprites(ctx) {
   const { C } = ctx;
@@ -93,12 +94,33 @@ export function gasSprites(ctx) {
       alpha: near ? 0.22 : mix(0.4, 0.62, r())
     });
   }
+  // Round him: puffs that ride with him, so he is always among the gas, not in front of it.
+  const k = ctx.k ?? 1;
+  for (let i = 0; i < 36; i += 1) {
+    const ring = mix(0.55, 1.5, r() ** 0.7) * k;
+    const sf = (r() - 0.45) * 1.2 * k;
+    puffs.push({
+      kind: 'near',
+      ring,
+      sf,
+      c: 0.5 + sf,
+      phase: r() * 6.28,
+      orbit: (r() < 0.5 ? -1 : 1) * mix(0.25, 0.6, r()),
+      tilt: mix(0.45, 1, r()),
+      size: mix(0.3, 0.62, r()) * k ** 0.7,
+      spin: (r() - 0.5) * 1.2,
+      angle: r() * 6.28,
+      seed: r() * 100,
+      colour: lin(PASTELS[Math.floor(r() * PASTELS.length)]),
+      alpha: mix(0.32, 0.5, r())
+    });
+  }
   // Far first, so the blend draws nearer puffs over farther ones.
   puffs.sort((p, q) => p.c - q.c);
 
   const entry = (t) => Math.min(1, ctx.S(t) / 100) ** 0.6;
   const calm = (t) => smooth(21.3, 22.6, t);
-  const open = (t) => smooth(23.4, 24.6, t);
+  const open = (t) => smooth(23.2, 24.6, t); // from his breath out (acting: exhale 23.2)
   const gone = (t) => smooth(24.5, 25.4, t);
 
   // One puff at t: { p: centre, h: half size, th: angle } (h 0 hides it).
@@ -134,7 +156,19 @@ export function gasSprites(ctx) {
     return { p: p.map((v, k) => v + C[k]), h, th: pf.angle + pf.spin * t * (1 + 0.6 * speed(t)) };
   }
 
-  const state = (pf, t, back) => ambientAt(pf, t, back);
+  // A puff round him at t: orbiting slowly, buffeted harder while the gusts blow, and on his
+  // breath out thrown outward in a ring, the gas thinning away from him.
+  function nearAt(pf, t, back) {
+    if (back) return { p: C, h: 0, th: 0 };
+    const H = ctx.him(t);
+    const a = pf.phase + pf.orbit * t + 0.25 * n(pf.seed, t * 0.5, 0.2);
+    const o = open(t);
+    const R = pf.ring * (1 + 0.15 * n(pf.seed + 3, t * 0.8, 0.5)) * (1 + 2.8 * o ** 1.4);
+    const p = [0, 1, 2].map((j) => H[j] + R * (Math.cos(a) * SR[j] + pf.tilt * Math.sin(a) * SU[j]) + pf.sf * SF[j]);
+    const h = pf.size * smooth(ctx.from + 0.8, ctx.from + 1.8, t) * (1 - smooth(0.35, 1, o)) * (1 - gone(t));
+    return { p, h, th: pf.angle + pf.spin * t };
+  }
+  const state = (pf, t, back) => (pf.kind === 'near' ? nearAt(pf, t, back) : ambientAt(pf, t, back));
 
   // Geometry: four corners per puff, uv, RGBA.
   const count = puffs.length * 4;
@@ -204,7 +238,7 @@ function writeQuad(out, i, s, C) {
 // swirling, then shoots at him in a streak, bursts on him in a spray, and
 // blows on past.
 
-const GUST_BODY = 22;
+const GUST_BODY = 28;
 const GUST_SPRAY = 8;
 const G0 = -1.5;
 const G1 = 1.4;
@@ -212,6 +246,7 @@ const G1 = 1.4;
 function gustMesh(ctx, g) {
   const { C } = ctx;
   const r = rng(9100 + g.i);
+  const k = ctx.k ?? 1; // his size against the 72 cm the gusts were drawn for
   const hex = lin(DEMAND[g.demand].hex);
   const H = ctx.him(g.t);
   // On screen the blast runs along -d.
@@ -229,16 +264,16 @@ function gustMesh(ctx, g) {
     puffs.push({
       spray,
       off: o.map((v) => (v / ol) * rad),
-      size: (spray ? mix(0.12, 0.26, r()) : mix(0.32, 0.8, r())) * (0.85 + 0.3 * g.power),
+      size: (spray ? mix(0.12, 0.26, r()) : mix(0.32, 0.8, r())) * (0.85 + 0.3 * g.power) * k ** 0.7,
       spin: (r() - 0.5) * 2,
       angle: (r() - 0.5) * 1.2,
       swirl: (r() - 0.5) * 3,
-      speed: mix(2.2, 4.2, r()),
+      speed: mix(2.2, 4.2, r()) * k ** 0.7,
       colour: spray ? hex.map((v) => mix(v, 1, 0.45)) : hex.map((v) => v * shade),
       alpha: spray ? 0.95 : mix(0.8, 0.95, r())
     });
   }
-  const reach = 3.6;
+  const reach = 3.6 * k ** 0.5;
   const at = (pf, t) => {
     const x = t - g.t;
     if (x < G0 || x > G1) return null;
@@ -255,7 +290,7 @@ function gustMesh(ctx, g) {
     else if (x < 0) lam = 0.05 + 0.95 * ((x + 0.4) / 0.4) ** 3;
     else lam = 1 + 0.7 * (1 - (1 - Math.min(1, x / 1.1)) ** 2);
     // Gathered tight before the blast; burst wide on impact.
-    const spread = x < -0.4 ? mix(1.4, 0.6, smooth(G0, -0.4, x)) : x < 0 ? mix(0.6, 0.35, (x + 0.4) / 0.4) : mix(0.35, 2.3, 1 - (1 - Math.min(1, x / 0.5)) ** 3);
+    const spread = k * (x < -0.4 ? mix(1.4, 0.6, smooth(G0, -0.4, x)) : x < 0 ? mix(0.6, 0.35, (x + 0.4) / 0.4) : mix(0.35, 2.3, 1 - (1 - Math.min(1, x / 0.5)) ** 3));
     const o = rotateAbout(pf.off, g.d, pf.swirl * (x - G0));
     const p = [0, 1, 2].map((m) => H[m] + g.d[m] * reach * (1 - lam) + o[m] * spread);
     const blast = smooth(-0.42, -0.22, x) * (1 - smooth(0.02, 0.2, x));
@@ -299,4 +334,64 @@ function rotateAbout(v, axis, a) {
   const d = v[0] * axis[0] + v[1] * axis[1] + v[2] * axis[2];
   const x = [axis[1] * v[2] - axis[2] * v[1], axis[2] * v[0] - axis[0] * v[2], axis[0] * v[1] - axis[1] * v[0]];
   return [0, 1, 2].map((k) => v[k] * c + x[k] * s + axis[k] * d * (1 - c));
+}
+
+/**
+ * The gas inside the man before the way in: puffs in his torso (box: its bounds), facing the feed,
+ * still at home size. Two shapes: a swirl round his spine and a bob.
+ */
+export function innerPuffs({ box, n, door, nDoor }) {
+  const r = rng(4242);
+  const c = [0, 1, 2].map((k) => (box.min.getComponent(k) + box.max.getComponent(k)) / 2);
+  const h = [0, 1, 2].map((k) => (box.max.getComponent(k) - box.min.getComponent(k)) / 2);
+  const hues = [...DEMANDS.map((d) => d.hex), ...PASTELS.slice(0, 4)];
+  const pos = [];
+  const uv = [];
+  const col = [];
+  const idx = [];
+  const swirl = [];
+  const bob = [];
+  for (let i = 0; i < n + nDoor; i += 1) {
+    let p;
+    let size;
+    if (i < n) {
+      let q;
+      do q = [r() * 2 - 1, r() * 2 - 1, r() * 2 - 1];
+      while (q[0] ** 2 + q[1] ** 2 + q[2] ** 2 > 1);
+      p = [c[0] + 0.55 * h[0] * q[0], c[1] + 0.72 * h[1] * q[1], c[2] + 0.5 * h[2] * q[2]];
+      size = mix(0.045, 0.1, r());
+    } else {
+      // Behind the spot the zoom goes in at: small ones, nearer the shirt the smaller, so the view
+      // keeps filling with gas until the switch.
+      const d = 0.006 + 0.1 * r() ** 1.6;
+      const a = r() * Math.PI * 2;
+      const l = 0.6 * d * Math.sqrt(r());
+      p = [0, 1, 2].map((j) => door[j] - SF[j] * d + l * (Math.cos(a) * SR[j] + Math.sin(a) * SU[j]));
+      size = 0.35 * d + 0.005;
+    }
+    const a = 0.7 * (r() < 0.5 ? 1 : -1) * mix(0.6, 1, r());
+    const dx = p[0] - c[0];
+    const dz = p[2] - c[2];
+    const turn = [c[0] + dx * Math.cos(a) - dz * Math.sin(a) - p[0], 0.03 * (r() - 0.5), c[2] + dx * Math.sin(a) + dz * Math.cos(a) - p[2]];
+    const up = 0.025 * (r() - 0.5);
+    const colour = lin(i < n ? hues[i % hues.length] : DEMANDS[i % DEMANDS.length].hex);
+    const alpha = mix(0.7, 0.95, r());
+    const spin = r() * Math.PI * 2;
+    for (let k = 0; k < 4; k += 1) {
+      const ang = spin + (k * Math.PI) / 2 + Math.PI / 4;
+      for (let j = 0; j < 3; j += 1) pos.push(p[j] + size * (Math.cos(ang) * SR[j] + Math.sin(ang) * SU[j]));
+      col.push(...colour, alpha);
+      swirl.push(...turn);
+      bob.push(0, up, 0);
+    }
+    uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    const o = i * 4;
+    idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+  geo.setAttribute('color', new Float32BufferAttribute(col, 4));
+  geo.setIndex(idx);
+  return { geo, shapes: [Float32Array.from(swirl), Float32Array.from(bob)] };
 }

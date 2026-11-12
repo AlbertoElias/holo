@@ -1,5 +1,5 @@
 import { SAMPLE_RATE, add, lowpass, noise, normalize, pluck, track } from '../lib/audio.mjs';
-import { BEAT, GUSTS, HITS } from './events.mjs';
+import { BEAT, GUSTS, WAVES } from './events.mjs';
 import { HEART, LOOP, smooth } from './timeline.mjs';
 
 // The way down II, third pass: the music as a chip sequencer would play it
@@ -248,7 +248,7 @@ function liquid() {
     if (k % 2 === 0) hit(out, t, 0.08 * g, 11000, 0.015, 2000 + k);
     if (k % 4 === 2) hit(out, t, 0.2 * g, 3500, 0.06, 2500 + k);
   }
-  for (const e of HITS) {
+  for (const e of WAVES) {
     for (const n of STABS[e.hue]) note(out, e.t, 0.26, pulse(hz(n + 12), 0.5), 0.13 * e.power, gateEnv(0.26, 0.35, 0.08));
     hit(out, e.t, 0.35 * e.power, 7000, 0.07, 3000 + e.i);
   }

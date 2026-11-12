@@ -26,25 +26,45 @@ const FROM = {
   upRight: [0.8, 0.7, 0.1]
 };
 
-// The gas: each demand gathers into a gust that blasts him, closer and closer together.
+// The gas: each demand gathers into a gust that blasts him, closer and closer together, and from
+// 16 s in pairs from two sides, so two to four are always gathering or landing at once.
 export const GUSTS = [
   [12.5, 'chime', 'left'],
-  [13.75, 'buzz', 'right'],
-  [14.75, 'tick', 'top'],
-  [15.75, 'kettle', 'camera'],
-  [16.5, 'clatter', 'low'],
-  [17.25, 'chime', 'right'],
-  [18.0, 'buzz', 'behind'],
-  [18.5, 'tick', 'left'],
-  [19.0, 'kettle', 'right'],
-  [19.5, 'clatter', 'top'],
-  [20.0, 'chime', 'camera'],
-  [20.5, 'buzz', 'low'],
-  [20.75, 'tick', 'upLeft'],
-  [21.0, 'kettle', 'upRight']
-].map(([t, demand, from], i) => ({ i, t, demand, from, d: screenDir(...FROM[from]), power: 0.75 + 0.25 * (i / 13) }));
+  [13.25, 'buzz', 'right'],
+  [13.75, 'tick', 'top'],
+  [14.25, 'kettle', 'camera'],
+  [14.75, 'clatter', 'low'],
+  [15.25, 'chime', 'upRight'],
+  [15.5, 'buzz', 'behind'],
+  [16.0, 'tick', 'left'],
+  [16.0, 'kettle', 'right'],
+  [16.5, 'clatter', 'top'],
+  [17.0, 'chime', 'camera'],
+  [17.0, 'buzz', 'low'],
+  [17.5, 'tick', 'upLeft'],
+  [17.75, 'kettle', 'upRight'],
+  [18.0, 'clatter', 'left'],
+  [18.25, 'chime', 'right'],
+  [18.5, 'buzz', 'top'],
+  [18.5, 'tick', 'camera'],
+  [18.75, 'kettle', 'behind'],
+  [19.0, 'clatter', 'upLeft'],
+  [19.25, 'chime', 'low'],
+  [19.5, 'buzz', 'right'],
+  [19.5, 'kettle', 'left'],
+  [19.75, 'tick', 'upRight'],
+  [20.0, 'clatter', 'camera'],
+  [20.0, 'chime', 'top'],
+  [20.25, 'buzz', 'left'],
+  [20.5, 'kettle', 'right'],
+  [20.5, 'tick', 'low'],
+  [20.75, 'clatter', 'upLeft'],
+  [21.0, 'chime', 'upRight'],
+  [21.0, 'buzz', 'left']
+].map(([t, demand, from], i, all) => ({ i, t, demand, from, d: screenDir(...FROM[from]), power: 0.75 + 0.25 * (i / (all.length - 1)) }));
 
-// The liquid: paint thrown at him from every side, ten colours, on every eighth, pairs and fours at the peaks (30, 33).
+// The liquid: a sea of paint. Each wave is one colour, rolling in from its own side and breaking on
+// him; two or three are always building, and at the peaks (30, 33) they clash on him at once.
 export const HUES = {
   cadmium: '#e3261b',
   orange: '#ff7a1a',
@@ -57,45 +77,37 @@ export const HUES = {
   cobalt: '#1f6fe0',
   violet: '#7a2bc8'
 };
-export const HITS = [
-  [27.5, 'left', 'cadmium', 0.6],
-  [28.5, 'right', 'ultramarine', 0.65],
-  [29.25, 'upLeft', 'lemon', 0.7],
-  [30.0, 'left', 'magenta', 1],
-  [30.0, 'right', 'viridian', 1],
-  [30.0, 'top', 'orange', 1],
-  [30.75, 'behind', 'white', 0.7],
-  [31.25, 'upRight', 'cobalt', 0.8],
-  [31.25, 'camera', 'ochre', 0.8],
-  [31.75, 'left', 'violet', 0.75],
-  [32.25, 'right', 'cadmium', 0.85],
-  [32.25, 'upLeft', 'viridian', 0.85],
-  [32.5, 'top', 'lemon', 0.8],
-  [33.0, 'left', 'ultramarine', 1],
-  [33.0, 'right', 'orange', 1],
-  [33.0, 'top', 'magenta', 1],
-  [33.0, 'camera', 'white', 1],
-  [33.5, 'upRight', 'violet', 0.8],
-  [33.5, 'behind', 'ochre', 0.8],
-  [34.0, 'left', 'cobalt', 0.6],
-  [34.5, 'upLeft', 'cadmium', 0.45],
-  // the off-beats between them, so the paint never lets up
-  [28.0, 'camera', 'viridian', 0.55],
-  [28.75, 'top', 'magenta', 0.55],
-  [29.5, 'right', 'cobalt', 0.6],
-  [29.75, 'behind', 'orange', 0.6],
-  [30.25, 'upLeft', 'ochre', 0.7],
-  [30.5, 'right', 'violet', 0.7],
-  [31.0, 'left', 'lemon', 0.7],
-  [31.5, 'top', 'ultramarine', 0.75],
-  [32.0, 'camera', 'magenta', 0.8],
-  [32.75, 'upRight', 'white', 0.8],
-  [33.25, 'left', 'viridian', 0.85],
-  [33.75, 'right', 'cadmium', 0.7],
-  [34.25, 'top', 'orange', 0.55]
-]
-  .sort((a, b) => a[0] - b[0])
-  .map(([t, from, hue, power], i) => ({ i, t, from, hue, colour: HUES[hue], power, d: screenDir(...FROM[from]) }));
+/** A level direction toward where a wave comes from: az 0 behind the camera, 90 screen right, 180 far side.
+ * None come from the camera's side, where they would hide him: they roll toward the camera, faces lit. */
+const seaDir = (az) => {
+  const a = (az * Math.PI) / 180;
+  const v = screenDir(Math.sin(a), 0, Math.cos(a));
+  const n = Math.hypot(v[0], v[2]);
+  return [v[0] / n, 0, v[2] / n];
+};
+export const WAVES = [
+  [27.5, 250, 'cadmium', 0.6],
+  [28.0, 110, 'ultramarine', 0.65],
+  [28.5, 190, 'viridian', 0.7],
+  [29.0, 230, 'magenta', 0.75],
+  [29.25, 140, 'lemon', 0.7],
+  [29.75, 265, 'cobalt', 0.8],
+  [30.0, 95, 'orange', 1],
+  [30.0, 265, 'violet', 1],
+  [30.5, 175, 'ochre', 0.8],
+  [31.0, 120, 'cadmium', 0.85],
+  [31.25, 215, 'viridian', 0.85],
+  [31.5, 150, 'magenta', 0.85],
+  [32.0, 245, 'ultramarine', 0.9],
+  [32.25, 100, 'lemon', 0.9],
+  [32.5, 195, 'orange', 0.9],
+  [33.0, 255, 'cobalt', 1],
+  [33.0, 100, 'magenta', 1],
+  [33.0, 180, 'viridian', 1],
+  [33.5, 140, 'violet', 0.8],
+  [34.0, 230, 'cadmium', 0.6],
+  [34.5, 160, 'ultramarine', 0.45]
+].map(([t, az, hue, power], i) => ({ i, t, az, hue, colour: HUES[hue], power, d: seaDir(az) }));
 
 /** A blow's push: rises in ~0.12 s, dies away over ~1 s (x = time since the blow). */
 export const knockCurve = (x) => (x <= 0 ? 0 : (1 - Math.exp(-x / 0.12)) * Math.exp(-x / 1.1));

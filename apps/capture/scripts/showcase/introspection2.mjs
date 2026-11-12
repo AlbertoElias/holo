@@ -7,7 +7,7 @@ import { CHILD_DIMS, HAT_AT, PALETTES, Rig, applyPose, briefcaseGeometry, hatGeo
 import { HUG, childPose, childPresence, manPose, travellerBody, travellerPlace, travellerPose } from './introspection2/acting.mjs';
 import * as G from './introspection2/gas.mjs';
 import * as L from './introspection2/layers.mjs';
-import { HITS, HUES, GUSTS, KNOCK_PEAK, knock, knockCurve, knocked } from './introspection2/events.mjs';
+import { WAVES, GUSTS, KNOCK_PEAK, knock, knockCurve, knocked } from './introspection2/events.mjs';
 import { POOL, liquid } from './introspection2/liquid.mjs';
 import { layerSounds, voices } from './introspection2/sound.mjs';
 import { FPS, K, LOOP, PI, S, U, mix, smooth, sOf } from './introspection2/timeline.mjs';
@@ -43,9 +43,11 @@ const TRAV = 0.023; // his scale: 1.75 m of rig is 4 cm
 // The camera follows him in: through the door he grows with the zoom until he
 // is Z times his size on his chest, and stays that big on screen from then on.
 const Z = 5;
-// Among the gases and liquids he is bigger again (18×, about 72 cm): at 5× he was a 12 px speck on the busy layers. He shrinks back to Z as he falls into the hole.
-const ZW = 18;
-const ZW_LIQ = 29; // in the paint he grows to about 1.2 m so the moulds read on a phone
+// Among the gases and liquids he is bigger again (34×, about 1.35 m, a quarter of the frame): at 18× he was
+// still a speck among the gusts. The feed fits its dome to him at its motion samples (every 7.5 s), so at
+// those instants he has to stay inside the skies' ball (about 1.1 m round C). He shrinks back as he sinks.
+const ZW = 34;
+const ZW_LIQ = 55; // in the sea he is about 2.2 m (legs folded away under it), the sea at his lower chest
 const PELVIS = 0.93;
 const R18 = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), (18 * PI) / 180);
 const Y_PI = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), PI);
@@ -53,9 +55,19 @@ const H = new Vector3(HUG.centre[0], HUG.centre[1], 0); // the hug frame's point
 const EPS = 0.0005;
 const add = (a, b, k = 1) => a.map((v, i) => v + k * b[i]);
 
+// The dark's gain on the zoom: he leaves the sea at 5× (inside the skies' ball at the feed's 37.5 s motion
+// sample, so the dome fit holds), grows to 7× (about 1.4 m, a seventh of the frame) as he falls toward the
+// camera, lands and walks at that size, then the hug's own growth takes over and from 52.5 s (the last
+// sample) it swells to about half the frame.
+const F_WALK = K([[0, 5], [37.6, 5], [40, 7], [60, 7]]);
+const rawF = (t) => (t < 40 ? 1 : S(t) / (6 * U.dark));
+const SWELL = K([[0, 1], [48.5, 1], [52.5, 1.6], [54.5, 2.1], [60, 2.1]]);
+const hugF = (t) => Math.max(F_WALK(t), rawF(t) * SWELL(t));
+/** The gain over the unscaled dark, shared by him and the dark layer so his floor stays under him. */
+const DG = (t) => hugF(t) / rawF(t);
 /** The hug frame (37–58.5): his body's units, H on C, turned to face the feed, growing with the dark from 40. */
 function hugFrame(C, t) {
-  const F = t < 40 ? 1 : S(t) / (6 * U.dark);
+  const F = hugF(t);
   const s = TRAV * Z * F;
   const RH = H.clone().applyQuaternion(R18).multiplyScalar(s);
   return { T: [C[0] - RH.x, C[1] - RH.y, C[2] - RH.z], Q: R18.clone(), s, F };
@@ -130,8 +142,6 @@ export async function build() {
   if (n.dot(new Vector3(...FOLLOW)) < 0) n.negate();
   const dd = shirt.distance;
   const hit = shirt.point.toArray();
-  const doorRight = new Vector3(0, 1, 0).cross(n).normalize();
-  const doorUp = n.clone().cross(doorRight).normalize();
   const toChest7 = chest7.clone().invert();
   const pinLocal = shirt.point.clone().addScaledVector(n, 0.0058).applyMatrix4(toChest7);
   const inLocal = shirt.point.clone().addScaledVector(n, -0.03).applyMatrix4(toChest7);
@@ -171,7 +181,15 @@ export async function build() {
   const B_GL = before(solve(56.3, 57.2, fillGas));
   const B_S1 = before(solve(57.2, 58.5, fillShirt));
   console.error(`switches: shirt ${S1.toFixed(3)}, gas→liquid ${T_GL.toFixed(3)}, back: dark→liquid ${B_DL.toFixed(3)}, liquid→gas ${B_GL.toFixed(3)}, gas→man ${B_S1.toFixed(3)}`);
-  const SWITCHES = [7, 9.4, S1, T_GL, 37, 44.6, B_DL, B_GL, B_S1, 58.5];
+  // Letting go in the sea: the waves die (calm), and the sea climbs over him and past the camera, so the
+  // dark is under it. The feed sees the dark's sky from the moment the camera is under.
+  const calm = (t) => smooth(34.6, 35.6, t);
+  const seaRise = K([[0, 0], [35.7, 0], [36.2, 0.7], [36.6, 1.9], [37, 3.0]]);
+  const camY = FOLLOW[1] * D_CAM;
+  let under = Math.round(36.2 * FPS);
+  while (under < 37 * FPS && -POOL.drop + seaRise(under / FPS) < camY) under += 1;
+  const UNDER = under / FPS;
+  const SWITCHES = [7, 9.4, S1, T_GL, UNDER, 37, 44.6, B_DL, B_GL, B_S1, 58.5];
   /** Which layer the feed is in at t. */
   const active = (t) => (t < S1 ? 'man' : t < T_GL ? 'gas' : t < 37 ? 'liquid' : t < B_DL ? 'dark' : t < B_GL ? 'liquid' : t < B_S1 ? 'gas' : 'man');
 
@@ -207,14 +225,14 @@ export async function build() {
     }
     return { yaw, pitch, roll };
   };
-  // His pelvis against the paint, in his own metres (×TRAV·ZW_LIQ): waist-deep, sinking through the opening at the end.
-  const OFF = K([[27, -0.12], [35.6, -0.14], [36.1, -0.6], [36.9, -2.4]]);
+  // His pelvis against the sea, in his own metres (×TRAV·ZW_LIQ): chest-deep, sinking a little once he lets go.
+  const OFF = K([[27, -0.25], [35.6, -0.27], [36.3, -0.6], [36.9, -0.9]]);
   const buffet = (t) => smooth(11.5, 13, t) * (1 - smooth(21.5, 22.5, t));
   const floor37 = travellerPlace(trav, 37).floor;
-  const zWorld = (t) => mix(mix(Math.min(S(t), ZW), ZW_LIQ, smooth(25.3, 26.8, t)), Z, smooth(36.3, 37, t));
+  const zWorld = (t) => mix(mix(Math.min(S(t), ZW), ZW_LIQ, smooth(25.3, 26.8, t)), Z * DG(37), smooth(36.3, 37, t));
   const sGas = (t) => sOf('gas', t);
   const sLiq = (t) => sOf('liquid', t);
-  const gasHome = C3.clone().addScaledVector(F3, 0.5).addScaledVector(SU3, 0.32);
+  const gasHome = C3.clone().addScaledVector(F3, 0.45).addScaledVector(SU3, 0.05);
   const giHome = add(add(C, FOLLOW, GI.f), SCREEN.up, -GI.drop);
   const irisW = (t) => new Vector3(...zoomed(giHome, C, sGas(t)));
   // Him in the gas without the blows (the gusts aim here).
@@ -225,7 +243,7 @@ export async function build() {
     return p.addScaledVector(RIGHT, e * (0.04 * Math.sin(1.3 * t) + 0.025 * Math.sin(3.1 * t + 1))).addScaledVector(SU3, e * (0.03 * Math.sin(0.9 * t + 2) + 0.02 * Math.sin(2.7 * t)));
   }
   function gasRoot(t) {
-    const p = gasBase(t).add(new Vector3(...knock(GUSTS, t, 0.38)));
+    const p = gasBase(t).add(new Vector3(...knock(GUSTS, t, 0.42)));
     // Letting go: he drifts over the opening and sinks into it, then stays behind its hole.
     const iw = irisW(t);
     p.lerp(iw.clone().addScaledVector(F3, 0.1).addScaledVector(SU3, 0.12), smooth(23.9, 24.6, t));
@@ -244,23 +262,24 @@ export async function build() {
       // Out of the gas's hole he drops from above the frame into the paint.
       const u = smooth(T_GL, 26.95, t) ** 1.6;
       p = liquidBase(t).addScaledVector(UP, (1 - u) * 3.2);
-      const kn = new Vector3(...knock(HITS, t, 0.42));
+      const kn = new Vector3(...knock(WAVES, t, 0.25)); // the sea holds him: the waves rock him, they do not throw him
       kn.y *= 0.35;
       p.add(kn);
-      if (t >= 36.3) p.y = mix(p.y, C[1] + TRAV * Z * (floor37 + PELVIS - 0.5), smooth(36.3, 37, t));
+      if (t >= 36.3) p.y = mix(p.y, C[1] + TRAV * Z * DG(37) * (floor37 + PELVIS - 0.5), smooth(36.3, 37, t));
     }
-    const tb = t < T_GL ? tumble(GUSTS, t, 1) : tumble(HITS, t, 0.8);
+    const tb = t < T_GL ? tumble(GUSTS, t, 1) : tumble(WAVES, t, 0.8);
     const q = new Quaternion().setFromEuler(new Euler(tb.pitch, YAW(t) + tb.yaw, tb.roll, 'YXZ'));
     return { T: p.toArray(), Q: q, s: TRAV * zWorld(t) };
   }
   // His limbs trail the way the strongest blow is pushing him.
   const REACH = { wristL: [[0.19, 1.45, 0], 0.72], wristR: [[-0.19, 1.45, 0], 0.72], ankleL: [[0.1, 0.9, 0], 0.92], ankleR: [[-0.1, 0.9, 0], 0.92] };
   function pulls(t, root) {
-    const { best } = knocked(t < T_GL ? GUSTS : HITS, t);
+    const { best } = knocked(t < T_GL ? GUSTS : WAVES, t);
     if (!best || best.k < 0.05) return [];
     const w = Math.min(1, best.k) * (t < T_GL ? 0.7 : 0.55);
     const away = new Vector3(...best.d).negate().applyQuaternion(root.Q.clone().invert()).normalize();
-    return Object.entries(REACH).map(([limb, [from, l]]) => {
+    // In the sea his legs are under it, held: only his arms are flung.
+    return Object.entries(REACH).filter(([limb]) => t < T_GL || !limb.startsWith('ankle')).map(([limb, [from, l]]) => {
       const o = new Vector3(...from);
       return { limb, w, at: o.addScaledVector(away, l).add(new Vector3(0, limb.startsWith('ankle') ? 0 : 0.1, 0)) };
     });
@@ -322,14 +341,94 @@ export async function build() {
 
   // The statue stands only while the feed is in the man's own world.
   const inMan = (t) => active(t) === 'man';
-  zoomLayer('man-statue', statueGeo, mats.man, ZR.statue, (t) => (inMan(t) && !live(t) ? S(t) : ZR.statue.inner));
-
-  // --- The skies: only the one the feed is in, closed round the camera ---------------
   const skyCol = {
     gas: ['#e6dcf5', '#f8dcc8'],
     liquid: ['#3d0c10', '#24060a'],
     dark: ['#030305', '#010102']
   };
+  const puffMat = glb.material({ name: 'Gas puffs', color: '#ffffff', unlit: true, doubleSided: true, blend: true, texture: glb.texture(G.puffTexture()) });
+  const statueS = (t) => (inMan(t) && !live(t) ? S(t) : ZR.statue.inner);
+  // The way in is through him: from his heart outward the solid body melts away (each part shrinks
+  // to its own centre, in bands by its distance from the heart) and leaves a glass man, his torso
+  // full of the gas, so the zoom goes into the gas that is inside him. On the way out it sets again,
+  // from the hands and feet in to the heart, before he breathes out at 58.5.
+  const heartAt = new Vector3(...hit);
+  const solidParts = statueParts.map((g) => mergeVertices(g, 1e-5));
+  const partInfo = solidParts.map((g) => {
+    g.computeBoundingBox();
+    const c = g.boundingBox.getCenter(new Vector3());
+    return { c, d: c.distanceTo(heartAt), n: g.attributes.position.count };
+  });
+  const dMax = Math.max(...partInfo.map((q) => q.d));
+  const BANDS = 6;
+  const solidGeo = mergeGeometries(solidParts);
+  const solidN = solidGeo.attributes.position.count;
+  const meltShapes = Array.from({ length: BANDS }, () => new Float32Array(solidN * 3));
+  {
+    const pos = solidGeo.attributes.position;
+    let v0 = 0;
+    for (const q of partInfo) {
+      const b = Math.min(BANDS - 1, Math.floor((q.d / dMax) * BANDS));
+      for (let i = v0; i < v0 + q.n; i += 1) {
+        meltShapes[b][i * 3] = q.c.x - pos.getX(i);
+        meltShapes[b][i * 3 + 1] = q.c.y - pos.getY(i);
+        meltShapes[b][i * 3 + 2] = q.c.z - pos.getZ(i);
+      }
+      v0 += q.n;
+    }
+  }
+  const melt = (b) => (t) => (t < 30 ? smooth(7.15 + 0.22 * b, 7.6 + 0.22 * b, t) : 1 - smooth(57.7 + 0.1 * (BANDS - 1 - b), 58.0 + 0.1 * (BANDS - 1 - b), t));
+  const melts = Array.from({ length: BANDS }, (_, b) => melt(b));
+  zoomLayer('man-statue', solidGeo, mats.man, ZR.statue, statueS, meltShapes, (t) => melts.map((m) => m(t)));
+  // The glass: his own surface 2 mm in (the solid hides it until it melts), his colours paled.
+  const glassGeo = statueGeo.clone();
+  {
+    const pos = glassGeo.attributes.position;
+    const nor = glassGeo.attributes.normal;
+    const col = glassGeo.attributes.color;
+    const pale = lin('#efe6fb');
+    for (let i = 0; i < pos.count; i += 1) {
+      pos.setXYZ(i, pos.getX(i) - 0.002 * nor.getX(i), pos.getY(i) - 0.002 * nor.getY(i), pos.getZ(i) - 0.002 * nor.getZ(i));
+      col.setXYZ(i, mix(col.getX(i), pale[0], 0.6), mix(col.getY(i), pale[1], 0.6), mix(col.getZ(i), pale[2], 0.6));
+    }
+  }
+  zoomLayer('man-glass', glassGeo, glb.material({ name: 'Glass', color: '#ffffff', unlit: true, opacity: 0.2 }), ZR.statue, statueS);
+  // Inside his torso: the gas's light (the far wall of his chest, drawn from the inside, in the gas
+  // sky's colours, so the switch into the gas at S1 lands on the same colour) and its puffs.
+  const TORSO = ['pelvis', 'spine', 'chest'];
+  const torsoGeo = mergeGeometries(man.skeleton.flatMap(([joint], i) => (TORSO.includes(joint) ? [solidParts[i]] : [])));
+  torsoGeo.computeBoundingBox();
+  const tb = torsoGeo.boundingBox;
+  const lining = torsoGeo.clone();
+  {
+    const pos = lining.attributes.position;
+    const nor = lining.attributes.normal;
+    const col = lining.attributes.color;
+    const [top, bottom] = skyCol.gas.map(lin);
+    for (let i = 0; i < pos.count; i += 1) {
+      pos.setXYZ(i, pos.getX(i) - 0.004 * nor.getX(i), pos.getY(i) - 0.004 * nor.getY(i), pos.getZ(i) - 0.004 * nor.getZ(i));
+      const k = (pos.getY(i) - tb.min.y) / (tb.max.y - tb.min.y);
+      col.setXYZ(i, mix(bottom[0], top[0], k), mix(bottom[1], top[1], k), mix(bottom[2], top[2], k));
+    }
+    // Only the far half, turned inside out: the near half (and his tie and lapels) would hide the gas.
+    const idx = lining.index.array;
+    const mid = tb.getCenter(new Vector3());
+    const keep = [];
+    for (let i = 0; i < idx.length; i += 3) {
+      let depth = 0;
+      for (const v of [idx[i], idx[i + 1], idx[i + 2]]) depth += (pos.getX(v) - mid.x) * FOLLOW[0] + (pos.getY(v) - mid.y) * FOLLOW[1] + (pos.getZ(v) - mid.z) * FOLLOW[2];
+      if (depth < 0) keep.push(idx[i], idx[i + 2], idx[i + 1]);
+    }
+    lining.setIndex(keep);
+  }
+  zoomLayer('man-lining', lining, mats.flat, ZR.statue, statueS);
+  const inner = G.innerPuffs({ box: tb, n: 70, door: hit, nDoor: 40 });
+  zoomLayer('man-gas', inner.geo, puffMat, ZR.statue, statueS, inner.shapes, (t) => {
+    const swirl = t < 30 ? smooth(7.0, S1, t) : 1 - smooth(57.6, 58.5, t);
+    return [swirl, 0.5 + 0.5 * Math.sin((2 * PI * t) / 1.7)];
+  });
+
+  // --- The skies: only the one the feed is in, closed round the camera ---------------
   const camW = add(C, FOLLOW, D_CAM);
   /** The colour of a sky (radius SKY_CAP round C) seen through world point p. */
   const skySeen = (layer, p) => {
@@ -347,45 +446,27 @@ export async function build() {
   };
 
   // --- The doors: one in every layer, the layer itself opening --------------------
-  // The man's: on his shirt, where the line from C to the feed leaves it; pleats in his shirt's colours, the gas behind.
-  const shirtCol = nearestColour(statueGeo, hit);
-  const shirtIris = L.iris({
-    centre: hit, right: doorRight.toArray(), up: doorUp.toArray(), normal: n.toArray(), R: IR_SHIRT, lift: 0.0016,
-    rim: [shirtCol, shirtCol.map((v) => v * 0.55), shirtCol.map((v) => v * 0.8)],
-    hole: (p) => skySeen('gas', zoomed(p, C, S(S1)))
-  });
-  const shirtOpen = K([[0, 0], [7.0, 0], [8.3, 1], [58.6, 1], [59.2, 0], [60, 0]]);
-  zoomLayer('door-man', shirtIris.geo, mats.flat, ZR.statue, (t) => (inMan(t) ? (live(t) ? 1 : S(t)) : ZR.statue.inner), shirtIris.shapes, (t) => L.irisWeights(shirtOpen(t)));
-  // The gas's: just under him, the paint's sky behind; pleats in the demands' colours.
+  // The man's: none; the way in is through his glass body (see the statue above).
+  // The gas's: no door, the gas thinning under him once he breathes out. Its pleats are the gas's own
+  // pale colours, so only the dark of the sea below shows as it opens.
   const gasIris = L.iris({
-    centre: giHome, right: SCREEN.right, up: SCREEN.up, normal: FOLLOW, R: GI.R, lift: 0.0012, width: 0.35, twist: 1.4,
-    rim: G.DEMANDS.map((d) => d.hex),
+    centre: giHome, right: SCREEN.right, up: SCREEN.up, normal: FOLLOW, R: GI.R, lift: 0.0012, width: 0.3, twist: 1.4,
+    rim: [...skyCol.gas, '#efe2f7', '#e3d3f6'],
     hole: (p) => skySeen('liquid', zoomed(p, C, sGas(T_GL)))
   });
-  const gasOpen = K([[0, 0], [23.4, 0], [24.6, 1], [B_GL + 0.1, 1], [B_GL + 0.8, 0], [60, 0]]);
+  const gasOpen = K([[0, 0], [23.2, 0], [24.6, 1], [B_GL + 0.1, 1], [B_GL + 0.8, 0], [60, 0]]);
   zoomLayer('door-gas', gasIris.geo, mats.flat, ZR.gas, (t) => (active(t) === 'gas' ? sGas(t) : ZR.gas.inner), gasIris.shapes, (t) => L.irisWeights(gasOpen(t)));
 
   // --- The gas (beats 3–4): puffs and gusts, authored where the feed sees them ---------
-  const gasSprites = G.gasSprites({ C, S, from: S1, back: [B_GL, B_S1], him: (t) => gasBase(t).toArray(), iris: (t) => irisW(t).toArray() });
+  const gasSprites = G.gasSprites({ C, S, from: S1, back: [B_GL, B_S1], him: (t) => gasBase(t).toArray(), iris: (t) => irisW(t).toArray(), k: ZW / 18 });
   console.error(`gas: ${gasSprites.puffs} puffs, ${gasSprites.keys} keys`);
-  const puffMat = glb.material({ name: 'Gas puffs', color: '#ffffff', unlit: true, doubleSided: true, blend: true, texture: glb.texture(G.puffTexture()) });
   worldLayer('gas-puffs', gasSprites.geo, puffMat, gasSprites.weights);
   gasSprites.gusts.forEach((g, i) => worldLayer(`gas-gust-${i}`, g.geo, puffMat, g.weights));
 
-  // --- The liquid (beats 5–6): the pool, the paint thrown at him, the opening ---------
-  const liqOpen = K([[0, 0], [35.6, 0], [36.8, 1], [60, 0]]);
-  const LQ = liquid({ C, from: T_GL, to: 37, back: [B_DL, B_GL], sLiq, open: (t) => (t < 37 ? liqOpen(t) : 0), him: (t) => liquidBase(t).toArray() });
+  // --- The liquid (beats 5–6): a sea of paint, its waves breaking on him; calm, it rises over him ---
+  const LQ = liquid({ C, from: T_GL, to: 37, back: [B_DL, B_GL], sLiq, rise: (t) => (t < 37 ? seaRise(t) : 0), calm, him: (t) => liquidBase(t).toArray() });
   worldLayer('liquid-pool', LQ.pool.geo, mats.paint, LQ.pool.weights);
-  LQ.streams.forEach((s, i) => worldLayer(`liquid-stream-${i}`, s.geo, mats.paint, s.weights));
-  // The paint's own door: a black hole opening round him, its pleats every colour of the paint.
-  const liqN = UP.clone().addScaledVector(F3, 0.15).normalize();
-  const liqIris = L.iris({
-    centre: [C[0], LQ.P0[1] + 0.02, C[2]], right: RIGHT.toArray(), up: liqN.clone().cross(RIGHT).normalize().toArray(), normal: liqN.toArray(),
-    R: 1.15, lift: 0.025, width: 0.22, twist: 2.2, rim: Object.values(HUES), hole: () => [0, 0, 0]
-  });
-  liqIris.geo.morphAttributes.position = liqIris.shapes.map((d) => new Float32BufferAttribute(d, 3));
-  liqIris.geo.morphTargetsRelative = true;
-  worldLayer('door-liquid', liqIris.geo, mats.paint, (t) => L.irisWeights(active(t) === 'liquid' && t < 37 ? liqOpen(t) : 0));
+  LQ.waves.forEach((w, i) => worldLayer(`liquid-wave-${i}`, w.geo, mats.paint, w.weights));
 
   // --- The dark, in its own home units: a hug-frame point p is C + κ·R18·(p − H) ---
   const kappa = (TRAV * Z) / 6;
@@ -393,7 +474,7 @@ export async function build() {
     const v = new Vector3(...p).sub(H).applyQuaternion(R18).multiplyScalar(kappa);
     return [C[0] + v.x, C[1] + v.y, C[2] + v.z];
   };
-  const darkS = (t) => (active(t) === 'dark' ? sOf('dark', t) : ZR.dark.inner);
+  const darkS = (t) => (active(t) === 'dark' ? sOf('dark', t) * DG(t) : ZR.dark.inner);
   const RC = 0.95;
   zoomLayer('dark-floor', L.darkFloor(C, RC, 0.5 * kappa), mats.flat, ZR.dark, darkS);
   // The pool of his light on the floor follows him by two translation shapes.
@@ -425,8 +506,14 @@ export async function build() {
   glb.animate(travRoot, 'scale', keyT, roots.trav.flatMap((r) => [tiny(r.s), tiny(r.s), tiny(r.s)]));
   const travBody = glb.node({ name: 'traveller-body', translation: [0, -PELVIS, 0], parent: travRoot });
   const travNodes = writeJoints(glb, meshNode, trav, frames.trav, keyT, travBody, 'traveller', trav.geometry(travPaint), mats.trav);
+  // In the sea his legs are under the paint, unseen: they fold into his pelvis so the feed's dome fit (which
+  // samples him at 30 s) sees only what shows, and he can stand twice as big. They are back before the
+  // camera follows him under.
+  const legs = (t) => 1 - smooth(27.0, 27.25, t) * (1 - smooth(35.95, 36.2, t));
+  for (const hip of [travNodes.hipL, travNodes.hipR]) glb.animate(hip, 'scale', keyT, keyT.flatMap((t) => { const k = tiny(legs(t)); return [k, k, k]; }));
   const glowNode = meshNode('glow', L.glowShells([0, 0, 0], 0.6), mats.glow, { translation: [0, 0.3, 0], parent: travNodes.pelvis });
-  glb.animate(glowNode, 'scale', keyT, keyT.flatMap((t) => (t < 44.6 || t >= 58.5 ? [1, 1, 1] : [1e-4, 1e-4, 1e-4])));
+  // In the sea, as big as he is there, his glow draws in round his chest (the dome fit samples him at 30 s).
+  glb.animate(glowNode, 'scale', keyT, keyT.flatMap((t) => { const k = t < 44.6 || t >= 58.5 ? 1 - 0.5 * (1 - legs(t)) : 1e-4; return [k, k, k]; }));
 
   const kid = roots.child;
   const childRoot = glb.node({ name: 'child', translation: kid[0].T, rotation: kid[0].Q.toArray(), scale: [kid[0].s, kid[0].s, kid[0].s] });
@@ -458,7 +545,7 @@ export async function build() {
   console.error(`sky radius R0 ${R0.toFixed(4)}; layer content reaches ${content.toFixed(3)} from C`);
   if (content > R0) console.error(`WARNING: layer content (${content.toFixed(3)}) is outside the sky radius (${R0.toFixed(3)}) and widens the dome`);
   // Only the sky of the layer the feed is in is drawn, closed round the camera; the others are gone.
-  const skyS = (layer) => (t) => (active(t) === layer ? SKY_CAP / R0 : ZR.sky.inner);
+  const skyS = (layer) => (t) => ((t >= UNDER && t < 37 ? 'dark' : active(t)) === layer ? SKY_CAP / R0 : ZR.sky.inner);
   for (const layer of ['gas', 'liquid', 'dark']) zoomLayer(`sky-${layer}`, L.sky(C, R0, ...skyCol[layer]), mats.flat, ZR.sky, skyS(layer));
 
   const fit = feedFit(fitPoints(glb, drawn));
@@ -549,18 +636,6 @@ function writeJoints(glb, meshNode, rig, frames, times, parent, name, geo, mat) 
 }
 
 /** The linear vertex colour of geo nearest to p. */
-function nearestColour(geo, p) {
-  const pos = geo.attributes.position;
-  const col = geo.attributes.color;
-  let best = 0;
-  let bd = Infinity;
-  for (let i = 0; i < pos.count; i += 1) {
-    const d = Math.hypot(pos.getX(i) - p[0], pos.getY(i) - p[1], pos.getZ(i) - p[2]);
-    if (d < bd) [bd, best] = [d, i];
-  }
-  return [col.getX(best), col.getY(best), col.getZ(best)];
-}
-
 function maxDist(geo, C) {
   const p = geo.attributes.position;
   let m = 0;

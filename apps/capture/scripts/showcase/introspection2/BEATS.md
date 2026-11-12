@@ -217,3 +217,70 @@ Quick Look) and get more out of it, rather than switch tools.
   on a hinge, and light underneath. It sits on the shirt, then floats in the
   gas, then floats on the paint. It is clearer as "a door", but in the gas
   and liquid it is an object that has to come from somewhere.
+
+## Decided for the fourth pass (2026-11-12)
+
+The user watched draft 10, agreed with the critic (he is too small in the
+gas and the paint, the dark from 38 to 44 s is nearly empty, and the hug is
+too small and far away), and said:
+
+- the gases should feel like there are more of them at the same time;
+- the liquid should not be one wave hitting him and then the next. He is in
+  a sea, with several waves of different colours clashing on him at once,
+  and it should feel like a sea. Draft 10 read as a multicoloured pool, with
+  splashes hitting his head;
+- the portals all look weird. The first should feel like zooming in inside
+  him, and the gas is what is inside his body;
+- the fact that he has to relax to uncover each door does not come across.
+
+They chose **a see-through body** for the way in and **calm clears the way**
+for the ways down.
+
+- **Bigger.** He fills about a fifth of the frame's height in the gas and
+  the sea, against a few percent in draft 10. In the dark he stays near that
+  size while he walks, and the hug grows to about half the frame.
+- **The gas is crowded.** Gusts overlap: from the first hit, two to four are
+  in flight at once, gathering on several sides while another lands. The
+  ambient puffs are denser close to him, so he is always among them.
+- **The way in: a see-through body.** As the camera closes on his chest, his
+  suit and body turn to a glassy outline from the heart outward, and the gas
+  is already there, swirling inside his torso. The camera passes through the
+  outline, and the gas that was inside him is all around. The shirt door
+  goes.
+- **The liquid is a sea.** He is in open water up to his chest, the
+  camera just above the surface, with the sea running to the horizon. Swells
+  of different colours roll in from several directions, two to four at a
+  time, rise over him, crest and break on him, and cross each other where
+  they meet, so the colours clash in the water. The thrown paint ropes and
+  the pool go.
+- **Calm clears the way; no doors after the first.**
+  - In the gas, while he is fighting, nothing opens. When he breathes out and
+    goes limp, the gusts die and the gas thins outward from him in a ring,
+    uncovering the dark of the sea below. He drops into it.
+  - In the sea, when he stops fighting, the waves fall still and the water
+    goes flat. He sinks, the surface closes over the camera, and its
+    coloured underside falls away above him into the dark.
+  - The gas iris's coloured rim and the black well in the pool go.
+- **The dark is not empty.** The sea's underside stays in view as it
+  recedes, while he sinks, lands and starts to walk at his larger size.
+
+### How the fourth pass is built
+
+- **The way in.** From 7.15 s the statue's parts shrink to their own centres
+  in six bands, from the heart out to the hands and feet (about 1.5 s).
+  Under them is a glass copy of his surface, 2 mm in, at 20% opacity in his
+  colours paled. His torso holds the gas: the far half of its wall, drawn
+  from inside in the gas sky's colours, and puffs in the gas's colours,
+  swirling. More puffs sit just behind the spot the zoom enters, small near
+  the shirt, so the view fills with gas up to the switch. The traveller
+  kneels with his palms on the shirt as it clears, then sinks through. On the
+  way out the body sets again, hands and feet first, before 58.5 s.
+- **The sea.** One sea, 8 m round him, marbled in the paint colours at
+  about a quarter of their strength. Twenty-one waves, each one colour, run
+  as long swells across it from the far side and the flanks (never from the
+  camera's side). They are low far out, steepen near him, and curl only
+  where they meet him. Between him and the camera the water stays low, so
+  the waves rise behind and beside him and sink as they roll on toward us.
+  At 30 s and 33 s two or three break on him at once. Calm (34.6–35.6 s)
+  stills the swell; the sea climbs over him and the camera, and the dark's
+  sky takes over from the frame the camera is under.

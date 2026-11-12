@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 
 import { bodyDir, bodyPoint, stepFeet } from '../introspection/figures.mjs';
-import { GUSTS, HITS } from './events.mjs';
+import { GUSTS, WAVES } from './events.mjs';
 import { K, PI, clamp, mix, smooth } from './timeline.mjs';
 
 // The acting of The way down II: key-framed poses with eased holds, and
@@ -81,8 +81,7 @@ const breathe = (q, amp, t, period, phase = 0) => {
 
 // ---------------------------------------------------------------------------
 // The man: composed, then the hand to the heart and a held breath. His torso
-// is still from 4.5 s to 7 s so the trap door (built on his statue) sits on
-// his shirt; 58.5–60 is the exhale back into the opening pose.
+// is still from 4.5 s to 7 s so his statue (the glass way in) matches him; 58.5–60 is the exhale back into the opening pose.
 
 const MAN_BASE = {
   ...DEF, pelvisY: 0.935, sp: -0.02, cp: -0.06, hp: -0.05, spread: 0.04,
@@ -143,15 +142,11 @@ const T_POSES = {
     hL: [0.12, 0.85, 0.24, 1], hR: [-0.12, 0.85, 0.24, 1],
     fL: [0.14, 0, 0.12, 0.3, 0.1], fR: [-0.14, 0, 0.12, 0.3, -0.1]
   },
-  haulLow: {
-    pelvisY: 0.6, pp: 0.25, sp: 0.15, cp: 0.1, hp: -0.3, knee: [0, 0.2, 1],
-    hL: [0.1, 0.75, 0.24, 1], hR: [-0.1, 0.75, 0.24, 1],
-    fL: [0.15, 0, 0.1, 0.3, 0.1], fR: [-0.15, 0, 0.1, 0.3, -0.1]
-  },
-  haul: {
-    pelvisY: 0.9, pp: -0.08, sp: -0.12, cp: -0.15, hp: -0.4,
-    hL: [0.12, 1.78, 0.2, 1], hR: [-0.12, 1.78, 0.2, 1], pL: [1, -0.2, -0.2], pR: [-1, -0.2, -0.2],
-    fL: [0.13, 0, 0.08, 0.2, 0.1], fR: [-0.13, 0, 0.08, 0.2, -0.1]
+  // At the way in: kneeling, palms flat on his shirt as it turns to glass under them.
+  press: {
+    pelvisY: 0.5, pp: 0.45, sp: 0.3, cp: 0.2, hp: -0.35, knee: [0, 0.2, 1],
+    hL: [0.13, 0.55, 0.36, 1], hR: [-0.13, 0.55, 0.36, 1],
+    fL: [0.14, 0, 0.1, 0.3, 0.1], fR: [-0.14, 0, 0.1, 0.3, -0.1]
   },
   drop: {
     hp: -0.25, hL: [0.15, 1.86, 0.02, 1], hR: [-0.15, 1.86, 0.02, 1], pL: [1, 0, 0], pR: [-1, 0, 0],
@@ -306,7 +301,7 @@ const unique = (list) => [...new Set(list.map((e) => e.t))];
 const travKeys = keyed([
   [0, 'pocket'], [0.9, 'pocket'], [1.6, 'cling'], [2.0, 'clingLook'], [2.7, 'clingLook'], [3.0, 'cling'],
   [3.4, 'clingReachR'], [3.8, 'cling'], [4.1, 'clingReachR'], [4.5, 'crouchDoor'], [4.9, 'crouchDoor', { hy: 0.5 }],
-  [5.4, 'crouchDoor'], [6.6, 'crouchDoor'], [7.0, 'haulLow'], [7.7, 'haul'], [8.2, 'haul'], [8.6, 'drop'],
+  [5.4, 'crouchDoor'], [6.6, 'crouchDoor'], [7.0, 'crouchDoor'], [7.5, 'press'], [8.2, 'press'], [8.6, 'drop'],
   [10.4, 'drop'], [11.2, 'float'],
   // gas: each gust knocks him flailing; between them he snatches at his watch and his tie; then he lets go
   ...blows(unique(GUSTS), ['knocked'], (t) => (Math.round(t * 4) % 2 ? 'tieG' : 'watchG'), 'float'),
@@ -314,7 +309,7 @@ const travKeys = keyed([
   [24.5, 'drop'], [26.2, 'drop'],
   // liquid: waist-deep, paint thrown at him from every side; he is knocked, shields, gasps, curls, and goes limp
   [26.5, 'drop'], [27.0, 'tread'],
-  ...blows(unique(HITS), ['knocked', 'shield', 'gasp'], (t) => (t > 33 ? 'curl' : t > 31 ? 'shield' : 'tread'), 'tread'),
+  ...blows(unique(WAVES), ['knocked', 'shield', 'gasp'], (t) => (t > 33 ? 'curl' : t > 31 ? 'shield' : 'tread'), 'tread'),
   [35.2, 'limp'], [36.9, 'limp'],
   // the dark
   [39.6, 'limp'], [40.0, 'landed'], [40.6, 'landed'], [41.3, 'careful'], [42.4, 'careful'], [42.8, 'listen'],
