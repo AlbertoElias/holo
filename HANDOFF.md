@@ -52,8 +52,9 @@ queue item in [`TODOS.md`](TODOS.md).
   go-ahead. It also changes the viewer: the feed's dome follows a
   `HologramZoom` node, so it grows with the outer layer and leaves the view
   when a piece zooms into itself. Holograms without the node are unchanged.
-  `verify:pr` has not run on it yet. Open: the user's new read of the gas
-  and liquid layers (proposal in BEATS.md, awaiting their choice).
+  `verify:pr` has not run on it yet. Not ready to merge yet: the gas and
+  liquid layers are being rebuilt to the user's 2026-11-12 decisions
+  ("Decided for the gas and the liquid" in BEATS.md).
 
 ## Recently merged (grouped)
 

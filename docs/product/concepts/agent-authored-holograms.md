@@ -258,17 +258,17 @@ What it added:
   exactly C (to 0.1 mm), so the zoom centre stays in the middle of the
   card. The live feed measured the same distance as the build (6.98 m).
 - **4 cm at 7 m is a dot.** A 4 cm figure at the feed's distance is under
-  1% of the frame; the first proof could not find her after the door. The
-  camera now "follows her in": she grows to 5× through the door (about 4.5%
+  1% of the frame; the first proof could not find him after the door. The
+  camera now "follows him in": he grows to 5× through the door (about 4.5%
   of the frame) and the hug frame scales from there.
 - **Keep a clear corridor between the figure and the camera.** In the gas,
-  clouds whose drift reached the camera ray hid her; in the liquid the
-  camera, 16° above level, looked at the surface in front of her. She now
+  clouds whose drift reached the camera ray hid him; in the liquid the
+  camera, 16° above level, looked at the surface in front of him. He now
   floats waist-deep and sinks only to the chin on the crashes, and the swell
-  calms round C. A ray test from the feed camera to her head at each beat
+  calms round C. A ray test from the feed camera to his head at each beat
   catches this before a recording does.
 - **Contrast is luminance, not hue.** Pale gold on pastel had the same
-  luminance and disappeared even when nothing was in front of her. Amber
+  luminance and disappeared even when nothing was in front of him. Amber
   still reads as light in the dark beats and separates from the pastels,
   the reds and the grey suit.
 - **Follow the ear when emitters move.** Each layer's emitter rides the zoom
@@ -278,7 +278,7 @@ What it added:
 - **Grow the climax between the feed's motion samples.** Content larger than
   the sky at a sample time pulls the fit off C, but the feed only samples at
   60·k/8 s. The hug stays about 1 m from C at 52.5 s and swells to half the
-  frame in the unsampled stretch after it (54–55.5 s). In the gas she drifts
+  frame in the unsampled stretch after it (54–55.5 s). In the gas he drifts
   beside the knot rather than over its stripes, and stays inside the sky at
   the 15 s sample for the same reason.
 - **Loudness should follow the intensity curve.** Every stem normalised to

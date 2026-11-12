@@ -35,29 +35,34 @@ previous one, shrunk by the step factor.
 | The man, 1.8 m | the dome | 1 | 45× |
 | Pastel gas, in his torso cavity | his chest | ×100 | about 75× |
 | Rothko liquid, in a knot of gas | a gas vortex | ×40 | about 75× |
-| The dark, with the child | a seam under the liquid | ×40 | only her light |
+| The dark, with the child | a trap door under the liquid | ×40 | only his light |
 
-**The traveller is 4 cm on his chest; then the camera follows her in.** The
-first zoom carries her through the door until she is 5× that (20 cm on
-screen, about 4% of the frame). Among the gases and liquids she is 12×
-(47 cm, about 10% of the frame): at 5× she was a 12 px speck against the busy
-layers. She shrinks back to 5× as she falls into the hole, and keeps that while
-the dark grows round her. Each zoom grows the walls 40–100× around her, so
-she still gets relatively smaller: that is the descent. At the core, the zoom goes into her and the child instead, so the
-hug fills the frame.
+**The traveller is a he, 4 cm on the man's chest; then the camera follows him
+in.** The first zoom carries him through the door until he is 5× that (20 cm
+on screen, about 4% of the frame). Among the gases and liquids he is 12×
+(47 cm, about 10% of the frame): at 5× he was a 12 px speck against the busy
+layers. He shrinks back to 5× as he falls through the last door, and keeps that
+while the dark grows round him. Each zoom grows the walls 40–100× around him,
+so he still gets relatively smaller: that is the descent. At the core, the zoom
+goes into him and the child instead, so the hug fills the frame.
+
+**Every way down is a trap door, and every door is found by letting go.** He
+cannot fight his way out of the gas or the liquid. Only when he calms down
+and accepts where he is do the gas or the paint relax, and the relaxing
+reveals the door to the next layer.
 
 ## Beats
 
 | # | Time (s) | Int. | Scale | Picture | Sound (positional) | Acting |
 |---|---|---|---|---|---|---|
-| 1 | 0–7 | 2 | 1 | **The composed man.** A 1950s suit and hat, standing in the bell jar. A 4 cm glow hides at his breast pocket, easy to miss. | **The tune:** a celesta and muted-clarinet waltz in a minor key over a low tritone pedal. Light and ominous. **Heartbeat:** 66 bpm at his chest, soft. | He breathes, his weight settles, he straightens his tie and checks his watch. His smile holds a beat too long. **Traveller:** she climbs out of the pocket onto his shirt, small and curious. |
-| 2 | 7–12 | 3→5 | 1→100 (she grows with it to 5×, then stays that size on screen) | **Going in.** She finds a trap door between two shirt buttons and lifts it. Light spills out and she drops through. The chest fills the frame, and we pass through the shirt into a ribbed torso cavity full of coloured haze. | The tune slows and bends flat, as if the tape is stretching. The heartbeat swells as we reach it and speeds up (66 → 100). Gas hiss rises from the centre. | **Man:** his hand drifts to his chest, a held breath, and he freezes. **Traveller:** she kneels, pulls the door up with her whole body, and drops through feet first, arms up. |
-| 3 | 12–24 | 5→7 | 100 | **Gas.** Pastel clouds (pink, mint, lilac, butter) collide and shear. Gusts cross her path, and a vortex knot tightens below. | **Busy and stressful:** arpeggios in 5 against 7, ticking clicks and rising sirens. Each cloud has its own voice and position. Heartbeat racing (100 → 140). | Buffeted: she shields her face, spins in a gust and recovers. She swims down against it and is knocked back. **Clawing:** she tears at the knot's edges, and it opens. |
-| 4 | 24–27 | 7→8 | 100→4,000 | **The knot is a portal.** We follow her down the vortex throat. The gas sweeps out past the camera, and dark red light floods up from below. | The arpeggios smear upward and are cut off. The first low surge arrives from below. | She is sucked in head first with her arms trailing. |
-| 5 | 27–37 | 8→10 (peak at 33–35) | 4,000 | **Liquid.** Slabs of maroon, cadmium orange, oxblood and plum heave and crash into each other. They are viscous and heavy, with soft Rothko edges. | **An abstract storm at sea**, made entirely of synths: sub-bass surges, detuned saw swells and metallic FM hits on the crashes. There is no water, wind or noise texture. The heartbeat pounds, then drowns under the storm at the peak. | **Pulled under** (30 s): a wave drags her down, she breaks the surface gasping, and is dragged under again (33 s, the peak). **Reaching:** her hand stretches up out of a trough, and the slabs close over her. |
-| 6 | 37–40 | 10→1 | 4,000→160,000 | **The hole.** At the bottom of the trough, the liquid parts for a moment to show a tiny black seam, easy to miss. She slips through, and the liquid sweeps past and is gone. | **A hard cut** to near silence: one high sine, barely there, and her breath. The heartbeat is gone. | She falls limp and slow, turning once. |
-| 7 | 40–45 | 1→2 | 160,000 → ×10 into her | **The dark.** Black everywhere; she is the only light, lighting a small circle of floor. The world grows slowly round her so that, by the time she reaches him, the two figures read. Then, at the edge of her light, a shape. | Near silence. A faint, uneven, sob-like breath (synthesized) from where the shape will be. | She gets up, holds her light out and steps carefully. She stops when she hears him. **The child appears only as she reaches him:** hunched, knees up, face hidden, his shoulders heaving with sobs. |
-| 8 | 45–55.5 | 3→1 (release) | ×2 → ×16 into the pair (×8.5 at 52.5 s, the feed's last motion sample; the climax swells after it to about half the frame) | **The hug, filling the frame.** She kneels, reaches out, hesitates, and touches his shoulder. He flinches, then turns into her. They hold on, and the sobs slow and settle. Her light opens up to warm both of them. | **Heartbeat returns**, slowly, as the child's (48 → 60 bpm). **The tune returns transformed:** half tempo, now a lullaby in 3/4 on a music box and a soft pad. The tritone pedal resolves into an open fifth, and the dissonant note turns into a suspension that finally resolves. | The hug is a long hold that settles: the shoulders slow from sobbing to breathing, her chin comes to rest on his head, and their breathing syncs (about 10 s). |
+| 1 | 0–7 | 2 | 1 | **The composed man.** A 1950s suit and hat, standing in the bell jar. A 4 cm glow hides at his breast pocket, easy to miss. | **The tune:** a celesta and muted-clarinet waltz in a minor key over a low tritone pedal. Light and ominous. **Heartbeat:** 66 bpm at his chest, soft. | He breathes, his weight settles, he straightens his tie and checks his watch. His smile holds a beat too long. **Traveller:** he climbs out of the pocket onto the man's shirt, small and curious. |
+| 2 | 7–12 | 3→5 | 1→100 (he grows with it to 5×, then stays that size on screen) | **Going in.** He finds a trap door between two shirt buttons and lifts it. Light spills out and he drops through. The chest fills the frame, and we pass through the shirt into a ribbed torso cavity full of coloured haze. | The tune slows and bends flat, as if the tape is stretching. The heartbeat swells as we reach it and speeds up (66 → 100). Gas hiss rises from the centre. | **Man:** his hand drifts to his chest, a held breath, and he freezes. **Traveller:** he kneels, pulls the door up with his whole body, and drops through feet first, arms up. |
+| 3 | 12–22 | 5→7 | 100 | **Gas: pulled every way at once.** Realistic gas: pastel billows (pink, mint, lilac, butter) that roil, curl and shear, with soft edges and wisps that stretch and tear. Each billow is a day-to-day demand that pulses in its own rhythm. When one pulses, a wisp reaches out, catches one of his limbs and pulls it toward it. He is stretched between two or three at once; as he frees one, the next one catches him. Every time he starts to dive, a billow rolls across his path and turns him round. | **Nagging, out of time:** each billow has its own voice from its own place: a buzz pattern, a two-note chime, a ticking, a kettle-like rise, a clatter. The voices stack up and get denser. Heartbeat racing (100 → 140). | He fights each pull. Between tugs he does the man's watch check, faster and faster, then straightens his tie in mid-air, as if putting himself back together were one more demand. |
+| 4 | 22–27 | 7→3 | 100→4,000 | **Letting go of the day.** He stops fighting. He lets the wisps hold him, his arms fall open and he breathes out. The gas relaxes: the billows slow, thin and part, and the wisps let go one by one, revealing a trap door in the haze below him. He opens it and drops through, and the gas sweeps out past the camera as the paint rises from below. | The voices fall away one at a time. The heartbeat slows (140 → 90) and his long breath out is heard. The first low swell of the liquid arrives from below. | Held breath, then a long exhale: shoulders drop, hands open. He floats a beat, then reaches the door, lifts it and drops through feet first. |
+| 5 | 27–35 | 8→10 (peak at 33) | 4,000 | **Liquid: pressed into who he's supposed to be.** Not slabs: thick, heavy waves of paint (maroon, cadmium orange, oxblood, plum) that roll, fold over and stretch into ropes, with slow, viscous crests that collapse under their own weight. As each wave rears up, its crest takes the man's silhouette, in his suit and hat, huge and composed: who he is supposed to be. The wave folds onto him and presses him into that outline. He struggles out, and the next wave presses him into it again (30 s, then 33 s, the peak). | **His "proper" tune, the waltz, huge, slowed and heavy,** pressing down from above. Sub-bass clamps land as each wave closes over him. The heartbeat pounds, then drowns under it at the peak. | He hides his face, curls small, tries to hold the man's pose (straight back, tie hand) and can't. Pressed into the pose, he breaks out of it, gasping. |
+| 6 | 35–40 | 10→1 | 4,000→160,000 | **Acceptance.** At the bottom he stops fighting the mould and goes limp, and lets the paint hold him. The waves relax into a slow swell and part, revealing a trap door, small and black, at the bottom of the trough. He slips through it, and the paint sweeps past and is gone. | **A hard cut** at 37 s, on his surrender, to near silence: one high sine, barely there, and his breath. The heartbeat is gone. | He falls limp and slow, turning once. |
+| 7 | 40–45 | 1→2 | 160,000 → ×10 into him | **The dark.** Black everywhere; he is the only light, lighting a small circle of floor. The world grows slowly round him so that, by the time he reaches the child, the two figures read. Then, at the edge of his light, a shape. | Near silence. A faint, uneven, sob-like breath (synthesized) from where the shape will be. | He gets up, holds his light out and steps carefully. He stops when he hears the child. **The child appears only as he reaches him:** hunched, knees up, face hidden, his shoulders heaving with sobs. |
+| 8 | 45–55.5 | 3→1 (release) | ×2 → ×16 into the pair (×8.5 at 52.5 s, the feed's last motion sample; the climax swells after it to about half the frame) | **The hug, filling the frame.** The traveller kneels, reaches out, hesitates, and touches the child's shoulder. The child flinches, then turns into him. They hold on, and the sobs slow and settle. The traveller's light opens up to warm both of them. | **Heartbeat returns**, slowly, as the child's (48 → 60 bpm). **The tune returns transformed:** half tempo, now a lullaby in 3/4 on a music box and a soft pad. The tritone pedal resolves into an open fifth, and the dissonant note turns into a suspension that finally resolves. | The hug is a long hold that settles: the shoulders slow from sobbing to breathing, the traveller's chin comes to rest on the child's head, and their breathing syncs (about 10 s). |
 | 9 | 55–60 | 1→2 | to 1 | **The way back.** The world zooms back out through the calmed layers, pausing on the still liquid and the settled gas, onto the man. His hand is on his chest and his eyes are closed. He exhales, straightens and is composed again (the loop). | The lullaby's last note becomes the waltz's first. Heartbeat at 66, now even. | **Man:** a deep breath out and his shoulders drop, then he straightens his tie (beat 1 again). |
 
 ## The heartbeat thread
@@ -66,6 +71,7 @@ It is one emitter voice whose position travels:
 
 - his chest at 66 bpm,
 - racing in the gas (100 → 140),
+- slowing as he lets go of the gas (140 → 90),
 - pounding, then lost in the liquid,
 - gone in the dark,
 - returning as the child's (48 → 60),
@@ -102,81 +108,25 @@ just the key.
    it pauses on the liquid (56.3 s) and the gas (57.2 s), then the man is whole
    again at 58.5 s for his exhale (58.5–60 s).
 
-## Proposed: what the gas and the liquid are about (for your choice)
+## Decided for the gas and the liquid (2026-11-12)
 
-Your note (2026-11-12): the gas is the day-to-day stresses pushing and pulling
-you; the liquid is the badly learnt fears of who you're supposed to be, the
-lack of acceptance of yourself. No words, but being in them should make you
-feel that way. Today both layers read as weather: pretty clouds, then a
-storm, with nothing that acts on her for a reason.
+The user chose the "Tugged" gas and "The mould" liquid, with these changes:
 
-The thread that ties both layers to the man is his **composed gestures**
-(he straightens his tie, checks his watch). In the gas they become her
-compulsions. In the liquid they become the shape she is pressed into.
-
-### The gas: pulled every way at once
-
-**A. Tugged (recommended).**
-- **The clouds:** each one is a demand with its own rhythm and its own
-  voice. They pulse out of time with one another: a buzz pattern, a
-  two-note chime, a ticking, a kettle-like rise, a clatter.
-- **The tethers:** when a cloud pulses, a thin strand shoots out and latches
-  onto one of her limbs, and pulls that limb toward it. She is stretched
-  between two or three at once. As she frees one, the next one latches.
-- **Getting nowhere:** every time she starts to swim down, a cloud slides
-  across her path and turns her round.
-- **Her acting:** between tugs she does the man's watch check, faster and
-  faster, then his tie straighten in mid-air, as if putting herself back
-  together is part of the stress.
-- **The sound:** the nagging voices stack up, each from its own cloud, and
-  get denser as the heartbeat races (100 → 140). The portal opens when she
-  tears the last strand off and dives.
-
-**B. Rush hour.**
-- **The clouds:** streams of them cross in lanes, like crowd or traffic
-  currents.
-- **Her path:** she has to cross the lanes. She is jostled and swept
-  sideways, and keeps getting carried back to where she started.
-- **The sound:** each lane sounds as it passes her ear.
-- **What it trades:** it is simpler to read than A, but it says "busy"
-  more than "pulled apart".
-
-### The liquid: pressed into who you're supposed to be
-
-**A. The mould (recommended).**
-- **The slabs:** their soft edges resolve into the man's own silhouette,
-  in his suit and hat, huge and composed: who she is supposed to be.
-- **The pressing:** the slabs close on her and press her into that outline.
-  She is held in the pose, his straight back and tie hand, and struggles
-  out. Then the next slab presses her into it again. That is the
-  "pulled under" beat, now with a reason.
-- **The tune:** the waltz, his "proper" tune, comes back huge, slowed and
-  heavy, pressing down from above. Sub-bass clamps land when the slabs
-  close. The heartbeat drowns.
-- **Her acting:** she hides her face, curls small, tries the man's pose
-  and can't hold it.
-- **The turn:** at the bottom she stops fighting the mould and goes limp.
-  Only then does the seam open, so letting go of who she should be is
-  what lets her find the child. The hard cut at 37 s lands on that
-  surrender.
-
-**B. The faces that turn away.**
-- **The figures:** looming, perfect, upright copies of her, amber and
-  composed, stand in the liquid.
-- **Her reaching:** she reaches toward each one, and each turns its back.
-  The liquid between them gets heavier.
-- **The turn:** at the bottom she stops reaching and sinks through the seam.
-- **What it trades:** it is more about rejection by others than
-  self-rejection, and adds three more moving figures, which costs Quick
-  Look budget.
-
-### What it costs
-
-- **Both A options reuse what exists:** the layers' morph-target zoom, the
-  key-framed acting and the positional emitters.
-- **New geometry:** the tethers are thin strips with a few key frames each.
-  The mould is the man's silhouette extruded into the slabs' shape, so it
-  adds no new moving figure.
-- **Quick Look:** it stays under the 100 M point-frame budget (today 50.9 M).
-- **What it means for the sheet:** beats 3 to 6 change, in picture, sound
-  and acting. Timing, the zoom and the hug stay.
+- **The traveller is a he.** The scene code still names him `HER` and
+  `herPaint`; rename those in the rebuild.
+- **Each layer is left by letting go.** Fighting never opens a way down. When
+  he calms down and accepts the layer, the gas or the paint relaxes, and
+  that reveals the trap door to the next layer. This replaces the knot he
+  claws open (gas) and the seam that opens when he goes limp (liquid);
+  beats 4 and 6 above are the two surrenders.
+- **The liquid is waves of thick paint, not slabs.** The waves roll, fold
+  and rope, and their crests take the man's silhouette.
+- **Gas and liquid move realistically.**
+  - **The gas:** billows that roil, curl and tear, as if advected by a
+    turbulent flow (curl noise is the usual way).
+  - **The paint:** waves with viscous weight, where crests fold over and
+    collapse slowly, and strands stretch and snap back.
+  - **The cost:** today's morph-target layers are stiff blobs. Realistic
+    motion needs more moving vertices or more key frames. Quick Look's
+    load is 50.9 M of the 100 M budget, so there is room for about 27 k
+    more moving points over the take. Measure it at build time, as now.
