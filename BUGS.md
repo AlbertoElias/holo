@@ -7,19 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-048 — R3F AR view: a late anchor pulls the model back to a spot it left
-
-- **Area:** `apps/viewer-web/src/features/ar/ARHologramModel.tsx` (`requestWorldAnchor`), reached only through `/ar/:id?shell=r3f`, the fallback shell; the default IWSDK shell (`placementSystems.ts`) is a different code path
-- **Severity:** P3 (fallback shell only; needs `createAnchor` to answer after a re-placement)
-- **Found:** 2026-11-11 by a TLA+ model of the placement stage, then replayed against the real view
-- **Cause:** `createAnchor`'s answer was accepted whenever the placement mode was set, so an anchor asked for at one spot was adopted after the model had moved. The frame loop then set the model to the anchor's pose. Two orderings:
-  1. Placed on a surface, anchor pending, the viewer turns away and the visibility fallback puts the model in front of them, the anchor arrives: the model jumps back to the unseen surface spot, and the status reads `visibility-fallback` with `anchored: true`.
-  2. Placed, anchor pending, Recenter places it again elsewhere, and the old anchor arrives after the new one (WebXR does not order the answers): the model jumps back to the first spot.
-- **Fix, on `bug/ar-late-anchor`:** `anchorRequestEpochRef` counts placements; `clearActiveAnchor` (every re-placement, reset and anchor loss) and the visibility fallback bump it, and an answer from an older epoch is deleted instead of adopted. The other modes (`hit-test`, `plane-detected`, `floor`) place and anchor as before.
-- **Replay:** `apps/viewer-web/e2e/ar-late-anchor.spec.ts` holds `XRFrame.createAnchor` open with a shim and steps exact frames (clock frozen). Before the fix, orderings 1 and 2 failed (model back at `[0, 1.299, -0.86]` from `[0, 1.38, 1.53]`, and from `[1, 0.129, -1.8]`); after it all three checks pass. Reports in `output/ar-late-anchor/` (`run-before.log`, `run-after.log`, `*.json`; ignored). Wired into `test:e2e:mocked` and its shard 1. `verify:agent` (lint, typecheck, unit tests) passes.
-- **Model's second claim did not hold:** "an anchor overwrites a `locked` model, and anchored models get no monitoring". Replayed (the third check): the anchor resolves after the 45-frame lock, the stage label goes `locked` → `anchored`, and the model does not move (it was anchored at the spot it stood on). Nothing reads the label but the `data-placement-stage` attribute and `arController`, which treats both as placed, so there is no user-visible defect and no change was made. Frames spent with an anchor skip the visibility monitor, so looking away does not trigger the fallback (also pinned by the third check); that fits the placement being a point in the room the viewer chose. The model was wrong to treat `locked` as terminal: the code never said so. A device that answers `createAnchor` within a few frames never reaches the fallback for surface placements; that is by design, not a recorded requirement either way, so it is left as a note.
-- **Not done:** emulation (IWER) only, no physical headset or phone. The default shell's `ArPlacementSystem.adoptAnchor` (`placementSystems.ts:432`) only discards an anchor whose hologram is `searching` or gone, so a slow anchor after a floor tap (`placeAtTap`) or a two-hand move may pull the hologram back the same way. Not replayed here; the same shim would do it.
-
 ### B-047 — Hosted CI on `main` fails on a different browser test each push, so deploys are skipped
 
 - **Area:** `apps/viewer-web` e2e (hosted CI shards), `.github/workflows/ci.yml` gate
