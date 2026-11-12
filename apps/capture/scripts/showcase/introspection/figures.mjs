@@ -53,8 +53,16 @@ function skeleton(d) {
   });
 }
 
+// Mesh detail for the figures built after `setDetail(k)` (1 = v1's): fewer
+// segments keep a scene's moving vertices inside the Quick Look budget.
+let DETAIL = 1;
+export function setDetail(k) {
+  DETAIL = k;
+}
+const seg = (n, least) => Math.max(least, Math.round(n * DETAIL));
+
 function ell(rx, ry, rz, c = [0, 0, 0], ws = 22, hs = 16) {
-  const g = new SphereGeometry(1, ws, hs);
+  const g = new SphereGeometry(1, seg(ws, 6), seg(hs, 4));
   g.scale(rx, ry, rz);
   g.translate(...c);
   return g;
@@ -66,7 +74,7 @@ function limb(a, b, ra, rb, sx = 1, sz = 1, radial = 16) {
   const B = new Vector3(...b);
   const L = A.distanceTo(B);
   const pts = [];
-  const cap = 5;
+  const cap = seg(5, 2);
   for (let i = 0; i <= cap; i += 1) {
     const ang = -PI / 2 + (i / cap) * (PI / 2);
     pts.push(new Vector2(Math.max(1e-4, ra * Math.cos(ang)), ra * Math.sin(ang)));
@@ -79,7 +87,7 @@ function limb(a, b, ra, rb, sx = 1, sz = 1, radial = 16) {
     const ang = (i / cap) * (PI / 2);
     pts.push(new Vector2(Math.max(1e-4, rb * Math.cos(ang)), L + rb * Math.sin(ang)));
   }
-  const g = new LatheGeometry(pts, radial);
+  const g = new LatheGeometry(pts, seg(radial, 6));
   g.scale(sx, 1, sz);
   const dir = B.clone().sub(A).normalize();
   const up = new Vector3(0, 1, 0);
@@ -855,7 +863,7 @@ export function writeFigure(glb, rig, frames, times, { name, materials, paint, h
   return { root, nodes };
 }
 
-export { briefcaseGeometry, hatGeometry, PALETTES, ell };
+export { briefcaseGeometry, hatGeometry, PALETTES, ell, Rig, applyPose, snapshot, HAT_AT, ADULT_DIMS, CHILD_DIMS, standFeet, stepFeet, bodyPoint, bodyDir, twoBone };
 
 /** The pelvis of frame i, raised to the chest: where a figure grows from. */
 export const chestPivot = (lift) => (frames, i) => {

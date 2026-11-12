@@ -233,3 +233,66 @@ What it added:
   mesh under a turned parent swings its corners past the rim (3.04 m for a
   2.6 m diorama). The rooms' static sets are baked into world space so a
   narrow card, where width wins, is not pushed back.
+
+## The way down II (2026-11-11)
+
+Version 2 of the same brief (scene `introspection2`, beat sheet in
+`apps/capture/scripts/showcase/introspection2/BEATS.md`). Instead of a
+diorama turned by the viewer, the world grows round the point the feed
+looks at: the man fills the dome, a 4 cm figure of light leaves his chest
+through a trap door, and each layer waits inside the one before, small
+enough to hide there, until the zoom brings it to size.
+
+What it added:
+
+- **Zoom the content, not the camera.** The feed's camera is fixed by its
+  fit, so going "in" means scaling the world about one point C (the man's
+  chest at the door). Each layer is still geometry with a morph target per
+  zoom range; one clock S(t) drives every layer's weights, and a layer
+  built at unit U is drawn at S/U. Nested layers hide inside each other's
+  knot or hole until their turn.
+- **Solve the fit so its target lands on C.** The feed fits on static
+  vertices plus eight motion samples (at 60·k/8 s); every mesh that moves
+  between samples adds its box, morph targets included. The build
+  reproduces that fit and bisects the sky radius until the fit's target is
+  exactly C (to 0.1 mm), so the zoom centre stays in the middle of the
+  card. The live feed measured the same distance as the build (6.98 m).
+- **4 cm at 7 m is a dot.** A 4 cm figure at the feed's distance is under
+  1% of the frame; the first proof could not find her after the door. The
+  camera now "follows her in": she grows to 5× through the door (about 4.5%
+  of the frame) and the hug frame scales from there.
+- **Keep a clear corridor between the figure and the camera.** In the gas,
+  clouds whose drift reached the camera ray hid her; in the liquid the
+  camera, 16° above level, looked at the surface in front of her. She now
+  floats waist-deep and sinks only to the chin on the crashes, and the swell
+  calms round C. A ray test from the feed camera to her head at each beat
+  catches this before a recording does.
+- **Contrast is luminance, not hue.** Pale gold on pastel had the same
+  luminance and disappeared even when nothing was in front of her. Amber
+  still reads as light in the dark beats and separates from the pastels,
+  the reds and the grey suit.
+- **Follow the ear when emitters move.** Each layer's emitter rides the zoom
+  toward the ear (2.5 m out along Follow) and the next layer's takes over;
+  a layer whose emitter is held at its arrival position for the length of
+  its beat avoids the silent gaps the first proof had at the hand-offs.
+- **Grow the climax between the feed's motion samples.** Content larger than
+  the sky at a sample time pulls the fit off C, but the feed only samples at
+  60·k/8 s. The hug stays about 1 m from C at 52.5 s and swells to half the
+  frame in the unsampled stretch after it (54–55.5 s). In the gas she drifts
+  beside the knot rather than over its stripes, and stays inside the sky at
+  the 15 s sample for the same reason.
+- **Loudness should follow the intensity curve.** Every stem normalised to
+  the same peak made the calm opening as loud as the stressful gas and the
+  storm no louder than either. Stem peaks now step up from the opening to the
+  storm and down again for the dark. The second critic, working from a
+  contact sheet and a per-second RMS trace, caught this; the sheet at 2.5 s
+  steps missed the door beat (7–9.4 s), so check short beats at finer steps
+  before acting on a "missing" verdict.
+- **Measure Quick Look's load at build time.** The build sums the points of
+  meshes under animated nodes (and meshes with morph targets) times the
+  distinct key times, and fails above the scene's budget (100 M). This
+  piece measures 28,203 points × 1,806 frames = 51 M.
+- **The dome stays drawn in Follow.** The gold dome belongs to the viewer
+  and wraps the card; zooming the content leaves it in view. A framing hint
+  from the piece to the feed (hide the dome while the world is zoomed) is a
+  possible follow-up, not part of this scene.

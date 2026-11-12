@@ -152,6 +152,13 @@ export class Glb {
     const color = geometry.attributes.color;
     if (color) put('COLOR_0', color, color.itemSize === 4 ? 'VEC4' : 'VEC3');
     const primitive = { attributes, material };
+    // Morph targets: three's relative position deltas (morphTargetsRelative),
+    // which is what glTF stores. `geometry.userData.weights` sets the mesh's
+    // default weights (what shows before the clip's first key applies).
+    const morphs = geometry.morphAttributes?.position;
+    if (morphs?.length) {
+      primitive.targets = morphs.map((target) => ({ POSITION: this.accessor(new Float32Array(target.array), 'VEC3', { target: ARRAY_BUFFER, minMax: true }) }));
+    }
     if (geometry.index) {
       const count = geometry.attributes.position.count;
       const indices = count > 65535 ? new Uint32Array(geometry.index.array) : new Uint16Array(geometry.index.array);
@@ -160,7 +167,9 @@ export class Glb {
         componentType: count > 65535 ? UINT : USHORT
       });
     }
-    return this.json.meshes.push({ name, primitives: [primitive] }) - 1;
+    const mesh = { name, primitives: [primitive] };
+    if (morphs?.length) mesh.weights = geometry.userData.weights ?? morphs.map(() => 0);
+    return this.json.meshes.push(mesh) - 1;
   }
 
   /** Adds a node; `parent` is a node index, omitted for a scene root. */
@@ -182,10 +191,11 @@ export class Glb {
 
   /**
    * Keyframes for one node property in the single take clip.
-   * `path` is translation, rotation (xyzw quaternions) or scale; `values` is flat.
+   * `path` is translation, rotation (xyzw quaternions), scale or weights
+   * (one value per morph target of the node's mesh); `values` is flat.
    */
   animate(node, animationPath, times, values, interpolation = 'LINEAR') {
-    const size = animationPath === 'rotation' ? 4 : 3;
+    const size = animationPath === 'rotation' ? 4 : animationPath === 'weights' ? this.json.meshes[this.json.nodes[node].mesh].weights.length : 3;
     if (values.length !== times.length * size) {
       throw new Error(`animate(${animationPath}): ${values.length} values for ${times.length} keys`);
     }
@@ -253,7 +263,7 @@ export class Glb {
       const timeAccessors = new Map();
       const valueAccessors = new Map();
       for (const channel of this.channels) {
-        const type = channel.path === 'rotation' ? 'VEC4' : 'VEC3';
+        const type = channel.path === 'rotation' ? 'VEC4' : channel.path === 'weights' ? 'SCALAR' : 'VEC3';
         // Channels keyed on the same `times` array share one accessor.
         if (!timeAccessors.has(channel.times)) {
           timeAccessors.set(channel.times, this.accessor(new Float32Array(channel.times), 'SCALAR', { minMax: true }));
