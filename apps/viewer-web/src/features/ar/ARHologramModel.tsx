@@ -10,6 +10,7 @@ import { TRUE_SCALE, fitCloche, type ClocheShape } from "@holoim/xr-ui-core";
 
 import { drawnBounds, drawnPoints, motionPoints, recordedBubble } from "../hologram/drawnPoints";
 import { boundsWithoutObjects, isCameraTake, normalizeSceneAtOrigin } from "../hologram/hologramScene";
+import { withKtx2 } from "../hologram/ktx2";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { useSphereClipping } from "../hologram/useSphereClipping";
@@ -147,7 +148,7 @@ export function ARHologramModel({
   children,
   clocheChrome
 }: ARHologramModelProps) {
-  const gltf = useGLTF(url);
+  const gltf = useGLTF(url, true, true, withKtx2);
   const { scene, animations } = gltf;
   const renderer = useThree((state) => state.gl);
   const renderScene = useThree((state) => state.scene);

@@ -9,6 +9,7 @@ import { decodeGltfAudio, type DecodedGltfAudio } from "../hologram/gltfAudio";
 import { isCameraTake, normalizeSceneAtOrigin, rankClipsForPlayback } from "../hologram/hologramScene";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { freezeBubbleWrapperMotion } from "../ar/arAnimation";
+import { ktx2Loader } from "../hologram/ktx2";
 
 // Loaded holograms, shared by the gallery's previews and the placed holograms
 // (step 4). One GLTF per URL is loaded once and cloned per use; clones share
@@ -31,7 +32,7 @@ interface CacheEntry {
 
 export class HologramAssetCache {
   private readonly entries = new Map<string, CacheEntry>();
-  private readonly loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  private readonly loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(ktx2Loader());
 
   /** Takes a use of `url`, loading it the first time. Rejects (holding no use) if it fails to load. */
   acquire(url: string): Promise<LoadedHologram> {

@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 import { iwsdkDev } from "@iwsdk/vite-plugin-dev";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT ?? "3174");
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:3001";
@@ -38,6 +40,31 @@ function packageName(id: string): string | undefined {
   return match?.[1];
 }
 
+// The Basis transcoder KTX2Loader fetches by name from one directory
+// (hologram-budgets, Q4 C): served from three's own copy in dev and emitted
+// beside the bundle, so it always matches the three that decodes with it.
+const BASIS_DIR = "basis";
+const BASIS_FILES = ["basis_transcoder.js", "basis_transcoder.wasm"] as const;
+function basisTranscoder(): Plugin {
+  const source = path.dirname(createRequire(import.meta.url).resolve("three/examples/jsm/libs/basis/basis_transcoder.js"));
+  return {
+    name: "holoim-basis-transcoder",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const name = BASIS_FILES.find((file) => request.url?.split("?")[0] === `/${BASIS_DIR}/${file}`);
+        if (!name) return next();
+        response.setHeader("Content-Type", name.endsWith(".wasm") ? "application/wasm" : "text/javascript");
+        response.end(readFileSync(path.join(source, name)));
+      });
+    },
+    generateBundle() {
+      for (const name of BASIS_FILES) {
+        this.emitFile({ type: "asset", fileName: `${BASIS_DIR}/${name}`, source: readFileSync(path.join(source, name)) });
+      }
+    }
+  };
+}
+
 export default defineConfig(({ command }) => ({
   resolve: {
     // @holoim/xr-ui-iwsdk resolves its own pnpm copy of @iwsdk/core (no React
@@ -46,6 +73,7 @@ export default defineConfig(({ command }) => ({
   },
   plugins: [
     react(),
+    basisTranscoder(),
     iwsdkDev({
       emulator: {
         activation: "localhost",

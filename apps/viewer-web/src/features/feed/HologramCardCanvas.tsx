@@ -1,4 +1,6 @@
 import { useGLTF } from "@react-three/drei";
+import { withKtx2 } from "../hologram/ktx2";
+import { useTextureDetail } from "../hologram/textureDetail";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -64,6 +66,9 @@ export type HologramRenderInfo = {
 
 type HologramCardCanvasProps = {
   modelUrl: string;
+  /** The place's detail SPZ and the full-size textures (hologram-budgets), for the focused card. */
+  placeDetailUrl?: string | null;
+  textureDetailUrl?: string | null;
   active: boolean;
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
@@ -222,8 +227,10 @@ function FrameFirst({ run }: { run: (delta: number) => void }) {
   return null;
 }
 
-function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author, placeRequest }: {
+function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author, placeRequest }: {
   url: string;
+  placeDetailUrl: string | null;
+  textureDetailUrl: string | null;
   placeRequest: PlaceRequest | null;
   author: string;
   seed: string;
@@ -238,7 +245,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   portal: PortalStore;
 }) {
-  const gltf = useGLTF(url);
+  const gltf = useGLTF(url, true, true, withKtx2);
   const { scene, animations } = gltf;
   // The take's own place, read from the GLB's JSON (Spark-free); a malformed one leaves the take on its floor disc.
   const storedPlace = useMemo(() => {
@@ -872,6 +879,13 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     }
     return sweep;
   }, [animations, cloche, clonedScene, placeRequest]);
+  // Full-size textures for the focused card (hologram-budgets, Q4 A).
+  useTextureDetail({
+    url: textureDetailUrl,
+    wanted: active,
+    scene: clonedScene,
+    associations: (gltf.parser as unknown as { associations: Map<object, { textures?: number } | undefined> }).associations
+  });
   // The lowest foot bone of the author now, for the place report.
   const readFeetY = useCallback(() => {
     const avatar = clonedScene.getObjectByName("RecordedAvatar");
@@ -930,6 +944,8 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
           <StoredPlaceMount
             place={storedPlace}
             readBytes={readStoredPlaceBytes}
+            detailUrl={placeDetailUrl}
+            detailWanted={active}
             scene={clonedScene}
             shape={cloche}
             shift={clocheShift}
@@ -950,6 +966,8 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
 
 export function HologramCardCanvas({
   modelUrl,
+  placeDetailUrl = null,
+  textureDetailUrl = null,
   active,
   muted,
   onHasAudio,
@@ -978,7 +996,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} placeRequest={placeRequest ?? null} />
+      <HologramModel url={modelUrl} placeDetailUrl={placeDetailUrl} textureDetailUrl={textureDetailUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} placeRequest={placeRequest ?? null} />
     </Canvas>
   );
 }

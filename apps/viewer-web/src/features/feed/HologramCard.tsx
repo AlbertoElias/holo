@@ -10,6 +10,7 @@ import { Chip, GlyphControl, Type, useReducedMotion } from "@holoim/ui-dom";
 import { controlRowPaddingApx, flatGroundColorAt, relativeLuminance, type ViewTarget } from "@holoim/xr-ui-core";
 import { readXrCapabilities } from "@holoim/xr-runtime";
 
+import { withKtx2 } from "../hologram/ktx2";
 import { isIOSDevice } from "../ar/isIOSDevice";
 import { ARQuickLookLink } from "../ar/ARQuickLookLink";
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
@@ -220,6 +221,9 @@ function formatByline(item: HologramDTO): string {
 
 export function HologramCard({ item, active, muted, onToggleMute, onDelete, loadTurn, onModelSettled, target, xrFeed, first }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
+  // The detail level split from the upload (hologram-budgets): fetched only for the focused card.
+  const placeDetailUrl = item.placeDetailUrl ? resolveMediaUrl(item.placeDetailUrl) : null;
+  const textureDetailUrl = item.textureDetailUrl ? resolveMediaUrl(item.textureDetailUrl) : null;
   const placeRequest = useMemo(() => (testHooks ? readPlaceRequest(window.location.search, { id: item.id, first: first === true }) : null), [first, item.id]);
   const colorAccurateMode = COLOR_ACCURATE_MODE;
   const navigate = useNavigate();
@@ -323,7 +327,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
       return;
     }
 
-    useGLTF.preload(modelUrl);
+    useGLTF.preload(modelUrl, true, true, withKtx2);
   }, [canRenderModel, modelUrl]);
 
   useEffect(() => {
@@ -434,6 +438,8 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
             >
               <HologramCardCanvas
                 modelUrl={modelUrl}
+                placeDetailUrl={placeDetailUrl}
+                textureDetailUrl={textureDetailUrl}
                 active={active}
                 muted={muted}
                 onHasAudio={onHasAudio}
