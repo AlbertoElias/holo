@@ -1,7 +1,7 @@
 # Feature brief: Richer holograms (raise the size budgets)
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed (design review 2026-11-12; first step is the LoD spike)  
+**Status:** Reviewed (design review and user decisions 2026-11-12; first step is the LoD spike)  
 **Layer:** event (what is recorded and kept), with view costs
 
 ## User outcome
@@ -124,40 +124,45 @@ place and nothing else. Old holograms have no `detail` and no
 
 **Included:** the caps above; SH1 carried from scan to stored place; two
 place levels in one upload, split by the API; viewer light-then-detail load
-with LoD; delete of the detail; correcting
+with LoD; delete of the detail; Q4's light and detail textures, animation reduction
+and KTX2, with a separate Quick Look input; correcting
 `docs/features/live-deployment.md`'s line about anonymous uploads.
 
-**Excluded:** Spark's per-device draw budgets; avatar realism; Draco,
-meshopt or KTX2 props; longer takes; SH degree 2 or 3; Quest recording in a
+**Excluded:** Spark's per-device draw budgets; avatar realism; Draco;
+compression in capture's own export (the API does it, Q4); longer takes; SH degree 2 or 3; Quest recording in a
 place (that arrives with splat-capture slice 2b).
 
-## Open question Q4: making large non-splat holograms load well
+## Q4: large non-splat holograms (decided 2026-11-12: A, B and C)
 
 Without a place, 100 MB is the avatar, its animation, props and sound. What
 fills it today: animation is every bone sampled every frame as float32 with
 no keyframe reduction or quantization (`GltfExportComposer.ts:151-171`);
-props and avatar textures are stored as given (PNG or JPEG); sound is
-Opus in WebM (`AudioRecorder.ts:1`), already small. The viewer already
-decodes meshopt (`apps/viewer-web/src/features/xr/hologramAssets.ts:34`).
+props and avatar textures are stored as given (PNG or JPEG); sound is Opus
+in WebM (`AudioRecorder.ts:1`), already small. The viewer already decodes
+meshopt (`apps/viewer-web/src/features/xr/hologramAssets.ts:34`).
 
-Options, recommended first:
+All three run in the API's upload split, so capture's export stays as it is:
 
-- **(A, recommended)** Generalise the two levels to the whole hologram. On
-  upload the API stores a light GLB (avatar, animation, sound, props with
-  textures downscaled to 1024 px) and a detail file with the full-size
-  textures, just as for the place; the viewer paints the light hologram and
-  swaps in full textures for the focused card. Quick Look keeps reading
-  plain PNG/JPEG.
-- **(B, with A)** Shrink animation at upload: drop keyframes that
-  interpolation reproduces and quantize rotations (glTF-Transform `resample`
-  plus `KHR_mesh_quantization`/meshopt). Lossless to the eye; long takes
-  shrink most. Needs a Quick Look check: the converter must read the result
-  or receive the unquantized copy.
-- (C) KTX2 (Basis) textures: about 4–8× less GPU memory, which matters most
-  on phones and Quest with 40 MB props. Quick Look cannot read KTX2, so the
-  API would keep PNG/JPEG for the converter.
-- (D) Leave it: a 100 MB prop-heavy hologram downloads whole before first
-  paint (about 100 s at 1 MB/s).
+- **A. Two levels for the whole hologram.** The light GLB carries the
+  avatar, animation, sound, the light place and props with textures
+  downscaled to at most 1024 px. The detail carries full-size textures (and
+  the detail place). The viewer paints the light hologram and swaps in the
+  full textures for the focused card, freeing them when it scrolls away.
+- **B. Smaller animation.** Keyframes that interpolation reproduces are
+  dropped and rotations quantized (glTF-Transform `resample`, meshopt with
+  `KHR_mesh_quantization`). The light GLB served to viewers carries the
+  result.
+- **C. KTX2 (Basis) textures** in both levels for the viewer: about 4–8×
+  less GPU memory. The viewer gains a `KTX2Loader` beside its meshopt
+  decoder.
+
+**Quick Look** cannot read KTX2, and its converter's support for meshopt
+and quantized animation is unverified. The converter therefore receives a
+separate Quick Look input made at the split: full PNG/JPEG textures and
+unquantized animation, no place. It is temporary (deleted after conversion)
+and is still bounded by the converter's 100 MB input limit.
+
+Added criteria and failures are listed below.
 
 ## Undo
 
@@ -190,6 +195,15 @@ do while recording.
 - [ ] Three concurrent 100 MB completes plus a Quick Look conversion stay
       within the API machine's 2 GB.
 - [ ] Pointing marks lie on surfaces in both levels.
+- [ ] A prop-heavy take without a place (64 MB of props, 4096 px
+      textures, a long take) paints its light version first; full textures
+      swap in for the focused card without a visible change in placement.
+- [ ] The served animation differs from the recorded one by at most 1 mm in
+      bone position and 0.5° in rotation at every recorded frame, and its
+      bytes shrink (reported).
+- [ ] The viewer loads KTX2 textures on desktop, iPhone, Android and Quest;
+      GPU texture memory is reported before and after.
+- [ ] Quick Look converts the take from its PNG/JPEG, unquantized input.
 - [ ] `pnpm run verify:pr` passes locally.
 
 ## Failure cases considered
@@ -211,6 +225,10 @@ do while recording.
 | Quick Look fed the full file | The converter receives the light GLB; props stay under its 100 MB input limit |
 | Stop takes too long at 3 M splats | One crop for both levels, at most one rewrite; Stop timed on the 3 M fixture |
 | Pointing marks off the painted surface | Raycast on the light level; checked on both |
+| Animation reduction visibly changes motion (foot slide, hand jitter, lip sync) | Error bound criterion against the recorded frames; body and hand replays on the served file |
+| A device without a Basis transcoder path shows no textures | KTX2Loader detects support and transcodes to what the GPU takes; per-device criterion |
+| Quick Look meets KTX2 or quantized data | It gets its own PNG/JPEG, unquantized input |
+| Texture or animation processing at upload exhausts the 2 GB API machine or takes too long | Processing time and peak memory measured on a 100 MB take; run in the existing conversion queue if it does not fit the request |
 | Rewrite collides with splat-capture 2b and 2c | This lands before 2b starts (2b has not started, `splat-capture.md:4`) |
 
 ## Ownership
@@ -240,7 +258,10 @@ frame-rate check in the denser place.
 | Old holograms | Feed spec with a pre-change GLB | Pending |
 | Feed first paint | Throttled Chromium at 1 MB/s against a preview deploy | Pending |
 | API memory | Three concurrent 100 MB completes plus a conversion, in `scripts/ci-emulate.sh` | Pending |
-| Quick Look | Converter on a light GLB with 64 MB of props; `check_usdz_tools.sh` | Pending |
+| Quick Look | Converter on the PNG/JPEG input of a take with 64 MB of props; `check_usdz_tools.sh` | Pending |
+| Prop-heavy take, light then full | Pipeline spec with a 64 MB tray and no place | Pending |
+| Animation error bound | Compare served and recorded bone tracks frame by frame; body and hand replays | Pending |
+| KTX2 on each device | Feed spec on desktop; phones and Quest by hand | Pending |
 
 ## Physical-device limits
 
