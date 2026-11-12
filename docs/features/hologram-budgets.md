@@ -1,7 +1,7 @@
 # Feature brief: Richer holograms (raise the size budgets)
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed (design review and user decisions 2026-11-12; first step is the LoD spike)  
+**Status:** In progress (spike done 2026-11-12; implementation on `feature/hologram-budgets`)  
 **Layer:** event (what is recorded and kept), with view costs
 
 ## User outcome
@@ -102,6 +102,40 @@ place and nothing else. Old holograms have no `detail` and no
   minutes of worker time", so (b) is only acceptable if the spike shows
   otherwise on an iPhone and an Android phone. The spike's numbers decide;
   record them here.
+- **Spike result (2026-11-12).** Spark 2.3.1 tiny LoD in its worker,
+  HeadlessChrome 145 on an Apple M1 Max (32 GB), a 3 M-splat SH1 place tiled
+  from a real scan:
+
+  | Step | 1 M SH1 | 3 M SH1 |
+  |---|---|---|
+  | Decode PLY | 0.27 s | 0.76 s |
+  | `writeSpz` SH1 (the detail) | 3.2 s, 17.5 MB | 9.9 s, 50.3 MB |
+  | LoD build (`createLodSplats`) | 3.3 s, 1 M → 1.51 M nodes | 11.1–11.9 s, 3 M → 4.40 M nodes |
+  | LoD tree | 24.2 MB raw | 70.5 MB raw, 37.5 MB gzipped |
+  | LoD splats as SPZ | 28.2 MB | 78.6 MB, 12.7 s |
+  | Renderer peak (build) | | +936 MB at Stop, +772 MB in the viewer |
+  | Viewer, option (b): read, decode, build | | 0.98 s + 11.9 s = 12.9 s |
+  | Viewer, option (a): decode stored LoD + tree | | 2.0 s, +479 MB |
+
+  No physical iPhone or Android phone was reachable (no adb device; the iOS
+  simulator runs at Mac speed, and DevTools CPU throttling does not slow
+  Spark's worker), so phone figures are a device gap. Scaling by the usual
+  2–4× desktop-to-phone gap puts (b) at roughly 25–50 s and about 0.8 GB per
+  3 M place on a phone.
+
+  **Decision: neither (a) nor (b) as written.** (a) stores 78.6 + 37.5 =
+  116 MB for a 3 M detail, over the 100 MB cap by itself, and the LoD splats
+  written as SPZ decode back to zero splats in Spark 2.3.1 (Spark's own LoD
+  format is RAD, written only by its Rust `build-lod` tool). (b) misses any
+  reasonable phone budget and costs 13 s and 0.8 GB even on this desktop.
+  Instead the viewer loads the detail without a LoD tree and **thins it to
+  the device's Spark budget** when it is larger (Quest 500 k, Vision Pro
+  750 k, Android 1 M, iOS 1.5 M, desktop 2.5 M; the same per-device numbers
+  capture draws live) by keeping every k-th splat, the cheap kind of thinning
+  capture already uses for the light level. That is the brief's "lower detail cap" applied at view
+  time: one O(n) copy instead of a tree, so each device draws at most its
+  budget. Follow-up, not in this brief: a true LoD detail as a RAD file built
+  by the API with Spark's `build-lod` (needs a Rust binary in the API image).
 
 **API.**
 
@@ -248,7 +282,7 @@ frame-rate check in the denser place.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| LoD spike | Build time and heap for a 3 M SH1 tree, at Stop (desktop) and in a viewer worker (iPhone, Android) | Pending |
+| LoD spike | Build time and heap for a 3 M SH1 tree, at Stop (desktop) and in a viewer worker (iPhone, Android) | Done on desktop (Design, Viewer: spike result); phones are a device gap; decision: thin to device budget |
 | Both levels stored, SH from source | `e2e/place-capture.pipeline.spec.ts` with 3 M SH1 and SH0 fixtures, through the real API | Pending |
 | Light GLB, detail URL, old viewer | Same spec; previous viewer build against the new hologram | Pending |
 | Swap without a jump; marks on both levels | Same spec, feed portal | Pending |
