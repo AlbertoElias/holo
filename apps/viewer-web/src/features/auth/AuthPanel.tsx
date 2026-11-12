@@ -19,7 +19,6 @@ export function AuthPanel({ user, onSignOut }: AuthPanelProps) {
     <div className="upload-form">
       <Type variant="byline" as="p">
         Signed in as <strong>{user.displayName}</strong>
-        <span className="verified-badge">Verified creator</span>
       </Type>
       <Type variant="byline" as="p">{user.email}</Type>
       <div className="upload-actions">

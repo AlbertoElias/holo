@@ -10,6 +10,7 @@ import {
 } from "@holoim/contracts";
 
 import { env } from "../lib/env.js";
+import { clientKey, createRateLimit } from "../lib/rate-limit.js";
 import {
   bearerToken,
   getSessionUser,
@@ -35,11 +36,24 @@ async function requireUser(
   return user;
 }
 
-export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
+const MAGIC_LINK_WINDOW_MS = 10 * 60_000;
+/** Each request sends an email through a paid service, so one client may ask only so often. */
+const MAGIC_LINK_PER_WINDOW = 20;
+
+export async function registerAuthRoutes(app: FastifyInstance, options: { magicLinkLimit?: number } = {}): Promise<void> {
+  const behindFly = Boolean(process.env.FLY_APP_NAME);
+  // Tests sign in dozens of times from one address; the mode that hands the token back (never on in production) sends no email, so it has nothing to protect.
+  const perWindow = options.magicLinkLimit ?? (env.AUTH_DEV_EXPOSE_MAGIC_LINK ? Number.MAX_SAFE_INTEGER : MAGIC_LINK_PER_WINDOW);
+  const magicLinkLimit = createRateLimit(perWindow, MAGIC_LINK_WINDOW_MS);
+
   app.post("/auth/magic-link", async (request, reply) => {
     const parsed = requestMagicLinkSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "A valid email is required." });
+    }
+    const retryAfter = magicLinkLimit(clientKey(request, behindFly));
+    if (retryAfter !== null) {
+      return reply.status(429).header("retry-after", String(retryAfter)).send({ error: "Too many sign-in emails; try again in a few minutes." });
     }
 
     let token: string;

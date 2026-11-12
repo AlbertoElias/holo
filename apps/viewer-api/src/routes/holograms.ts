@@ -12,19 +12,23 @@ import {
   initiateUploadRequestSchema,
   initiateUploadResponseSchema,
   paginatedHologramsSchema,
+  publicUserSchema,
   usdzStatusResponseSchema,
   type UsdzStatus
 } from "@holoim/contracts";
 
 import { MAX_GLB_BYTES, MAX_GLB_MEGABYTES } from "../lib/constants.js";
+import { clientKey, createRateLimit } from "../lib/rate-limit.js";
 import {
   completeUploadIntent,
+  countHologramsByOwner,
   createHologram,
   createUploadIntent,
   deleteHologramById,
   getHologramById,
   getUploadIntentById,
   getUploadIntentByStorageKey,
+  getUserById,
   listHolograms,
   transitionUsdzStatus
 } from "../services/hologram-repo.js";
@@ -47,7 +51,10 @@ const SIGN_IN_TO_UPLOAD = "Sign in to upload a hologram.";
 
 const listQuerySchema = z.object({
   cursor: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(20).default(10)
+  limit: z.coerce.number().int().min(1).max(20).default(10),
+  ownerId: z.string().min(1).max(64).optional(),
+  // Search by title or creator; a blank query is the plain feed.
+  q: z.string().trim().max(100).optional()
 });
 
 const uploadFieldsSchema = z.object({
@@ -99,7 +106,8 @@ function toDto(record: HologramRecord, storage: MediaStorage, viewerId?: string 
     hologramName: record.hologramName,
     submittedBy: record.submittedBy,
     submittedByVerified: record.ownerId != null,
-    ownedByViewer: viewerId != null && record.ownerId === viewerId
+    ownedByViewer: viewerId != null && record.ownerId === viewerId,
+    ownerId: record.ownerId ?? null
   };
 }
 
@@ -115,11 +123,18 @@ export function createHologramFeedSnapshotWriter(storage: MediaStorage, log: { e
   }, log);
 }
 
+const SEARCH_WINDOW_MS = 60_000;
+/** Each page of a search, and each "load more" of one, counts as a search. */
+const SEARCH_PER_WINDOW = 60;
+
 export async function registerHologramRoutes(
   app: FastifyInstance,
-  options: { uploadsRoot: string; storage: MediaStorage }
+  options: { uploadsRoot: string; storage: MediaStorage; searchLimit?: number }
 ): Promise<void> {
   const { storage } = options;
+  const behindFly = Boolean(process.env.FLY_APP_NAME);
+  // A search can read much of the table, so each client gets a few a minute; browsing the feed is not limited.
+  const searchLimit = createRateLimit(options.searchLimit ?? SEARCH_PER_WINDOW, SEARCH_WINDOW_MS);
   const refreshFeedSnapshot = createHologramFeedSnapshotWriter(storage, app.log);
   void refreshFeedSnapshot();
 
@@ -360,17 +375,20 @@ export async function registerHologramRoutes(
       return reply.status(400).send({ error: "Invalid query params." });
     }
 
+    const { cursor, limit, ownerId, q } = parsed.data;
+    if (q) {
+      const retryAfter = searchLimit(clientKey(request, behindFly));
+      if (retryAfter !== null) {
+        return reply.status(429).header("retry-after", String(retryAfter)).send({ error: "Too many searches; try again in a minute." });
+      }
+    }
     const authUser = await optionalAuthUser(request.headers);
-    const result = await listHolograms(
-      parsed.data.cursor
-        ? {
-            cursor: parsed.data.cursor,
-            limit: parsed.data.limit
-          }
-        : {
-            limit: parsed.data.limit
-          }
-    );
+    const result = await listHolograms({
+      limit,
+      ...(cursor ? { cursor } : {}),
+      ...(ownerId ? { ownerId } : {}),
+      ...(q ? { q } : {})
+    });
 
     const payload = paginatedHologramsSchema.parse({
       items: result.items.map((item) => toDto(item, storage, authUser?.id)),
@@ -378,6 +396,25 @@ export async function registerHologramRoutes(
     });
 
     return reply.send(payload);
+  });
+
+  // A creator's public page: name and count, never the email.
+  app.get("/users/:id", async (request, reply) => {
+    const params = z.object({ id: z.string().min(1).max(64) }).safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ error: "Invalid id param." });
+    }
+    const user = await getUserById(params.data.id);
+    if (!user) {
+      return reply.status(404).send({ error: "Creator not found." });
+    }
+    return reply.send(
+      publicUserSchema.parse({
+        id: user.id,
+        displayName: user.displayName,
+        hologramCount: await countHologramsByOwner(user.id)
+      })
+    );
   });
 
   app.get("/holograms/:id", async (request, reply) => {

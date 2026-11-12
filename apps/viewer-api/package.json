@@ -15,6 +15,7 @@
     "prisma:setup": "pnpm run prisma:generate && prisma migrate deploy",
     "prisma:migrate": "prisma migrate dev --name init",
     "worker:usdz": "pnpm --filter @holoim/contracts build && pnpm --filter @holoim/objects build && tsx src/worker.ts",
+    "claim:uploads": "tsx src/claim-uploads.ts",
     "rebuild:usdz": "pnpm --filter @holoim/contracts build && pnpm --filter @holoim/objects build && tsx src/rebuild-usdz.ts",
     "test:usdz-tools": "bash tools/check_usdz_tools.sh"
   },

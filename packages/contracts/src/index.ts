@@ -28,7 +28,16 @@ export const hologramDtoSchema = z.object({
   // detail SPZ and the full-size textures. Absent on older holograms and on
   // takes that had no detail.
   placeDetailUrl: z.string().nullable().optional(),
-  textureDetailUrl: z.string().nullable().optional()
+  textureDetailUrl: z.string().nullable().optional(),
+  // The creator's account, for the byline link to their page; null for legacy uploads without one.
+  ownerId: z.string().nullable().default(null)
+});
+
+/** What anyone may see of a creator: no email. */
+export const publicUserSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  hologramCount: z.number().int().nonnegative()
 });
 
 export const userDtoSchema = z.object({
@@ -105,6 +114,7 @@ export const completeUploadRequestSchema = z.object({
   intentId: z.string().min(1)
 });
 
+export type PublicUserDTO = z.infer<typeof publicUserSchema>;
 export type UserDTO = z.infer<typeof userDtoSchema>;
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 export type HologramDTO = z.infer<typeof hologramDtoSchema>;

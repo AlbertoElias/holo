@@ -46,6 +46,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 }
 
 async function withSnapshot({ request, env, next }: PagesContext): Promise<Response> {
+  // A search result is not the newest-first page the snapshot holds.
+  if (new URL(request.url).searchParams.has("q")) return next();
   // The page changes with every upload, so never answer from a validator the browser kept.
   const headers = new Headers(request.headers);
   headers.delete("if-none-match");

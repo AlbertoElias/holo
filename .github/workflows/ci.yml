@@ -326,7 +326,8 @@ jobs:
     # whole, 195 s on a slow runner), camera-take + summon 92 s,
     # avatar-formats + object 86 s, capture-to-viewer + object-search 108 s,
     # hand traces (four takes of its own) in the seventh, the scanned place
-    # taken in capture (slice 2a: its own room take) in the eighth, the
+    # taken in capture (slice 2a: its own room take) in the eighth, with the
+    # creator pages, hologram pages and search spec (API and viewer only), the
     # hologram budgets' 3 M-splat take and 100 MB uploads in the ninth
     # (apps/viewer-web test:e2e:pipeline:shardN). Each records its own takes;
     # the walk take is shared only within a shard. scripts/check-e2e-shards.mjs

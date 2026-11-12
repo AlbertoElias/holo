@@ -1101,3 +1101,27 @@ bug above.)
 - **Did not reproduce, suspected 2:** "`endCameraTake()` ignores performer takes, so a page hide or an XR session end mid-start leaves a take running or half-started." The omission is real but not a defect. The `performer-ends` phase hides the page and ends a VR session while the microphone is pending: the start completes, the take records on the desktop, a hidden page mid-take does not stop it, and Stop exports one GLB and unlocks size. Nothing is stuck. The documented promise (`docs/features/archive/ar-recording.md:253`) is for camera takes, which stop and export; the model's rule for them (`CameraTakeEndsWithSession`) holds, and the existing `ar-record` phases (`hidden-at-start`, `ended-at-start`, `session-end`, `page-hidden`) cover it. Not replayed: a performer take across a long hidden page on the real clock (the manual clock cannot show a time gap).
 - **Also checked, no defect:** a double Record in one task makes one start and one microphone request; a double Stop makes one export and one download (`toggle-races`); the model found no way for a second take to begin while one is starting, recording or exporting.
 - **Not done:** emulation (IWER) and Chromium's fake microphone only, no physical headset or phone. While the microphone prompt is open Record is refused without a message and there is no way to cancel a starting performer take (unchanged; if the prompt is never answered the take never starts). The model leaves out the input-recording await (test builds only), the held microphone's release, and the export's own steps.
+
+### B-043 — The bubble pipeline test cannot click its card's AR button after the avatar-format uploads
+
+- **Area:** `apps/viewer-web` e2e (`test:smoke:pipeline`, part of `verify:pr`)
+- **Severity:** P2 (fails `verify:pr` locally; the pipeline stage is not in hosted CI)
+- **Observed:** 2026-11-11 on `main` `623e4645f986` and on `bug/b041-avatar-objects`
+- **Evidence:** `e2e/bubble-capture.pipeline.spec.ts:44` "real capture bubble exports, uploads and draws in feed and
+  immersive AR" times out after 6 min at `bubble-capture.pipeline.spec.ts:126`: clicking the new card's
+  `.ar-trigger-button` keeps hitting `<div data-reach="hidden" class="portal-controls" data-portal-mode="follow">`
+  (and `.portal-controls-side`), which "intercepts pointer events". 2 of 2 full-stage runs on the branch and 1 of 1 on
+  `main` fail the same way; the other 27 tests pass.
+- **Update 2026-11-12:** it also fails intermittently when the spec runs alone on clean `main` `fff8507`
+  (same click, same overlay, 6 min timeout): in two simultaneous runs of `main` and of `main` plus unrelated
+  CI-script changes, round 1 failed on both and round 2 passed on both, so it is a timing race, not tied to
+  the avatar-format uploads alone. Under heavy machine load it failed 0 of 5, then passed on a quiet retry
+  (`test:smoke:pipeline` 34 passed, 5 skipped).
+- **Expected:** the card's AR button is clickable whatever other cards the feed already holds.
+- **Reproduction:** `pnpm run test:smoke:pipeline` (about 17 min). The spec alone passes
+  (`RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/bubble-capture.pipeline.spec.ts` in
+  `apps/viewer-web`, 57 s), so it depends on the three `avatar-formats` uploads that run before it. Suspect: a
+  portal-controls overlay marked `data-reach="hidden"` still takes pointer events over the neighbouring card.
+- **Cause:** the reach controls fold 4 s after the last cursor move and, folded, take no presses (`pointer-events: none`). `pressViewInAr` hovered, then clicked; on a page stalled between the two (a loaded machine, the pipeline's 3D feed) the controls folded first, and Playwright waited on the `data-reach="hidden"` overlay without ever moving the cursor again. Logged under CPU load: reach shown 68 ms after the move, hidden about 25 s later, before the click's hit test. The app behaves as designed (styleguide 1.2); the avatar-format uploads were not involved.
+- **Fix:** `pressReach` (`e2e/bootstrap.ts`) moves the cursor and presses together and retries both when the controls fold; `pressViewInAr` uses it. Regression check: `portal.spec.ts` "desktop reach" folds the controls just before the first press; it fails on the old helper with the exact overlay error and passes now.
+- **Closed 2026-11-12:** `verify:pr` passed (pipeline stage included), and the spec passed under `scripts/ci-emulate.sh`. A separate load-only flake remained: the click can sit at Playwright's "stable" check when the page produces no frames on a starved machine; not seen on a quiet one.

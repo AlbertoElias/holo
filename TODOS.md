@@ -33,6 +33,17 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Tests should not have to sign in (the user's direction on 2026-11-12).
+  Today 14 e2e specs sign in through the real magic-link route
+  (`apps/viewer-web/e2e/sign-in.ts`, `signInForUpload`, from B-044) to get
+  upload rights; the pipeline signs in dozens of times from one address.
+  Wanted: a test-API mode that accepts an upload without an account, with the
+  specs that do not test ownership switched to it. Constraints found while
+  scoping: `sign-in-email.spec.ts` asserts an anonymous upload gets 401 (B-044),
+  and `profiles.pipeline.spec.ts` needs owned uploads for creator pages and
+  delete, so both keep a real account; the mode must be a test-only flag that is
+  never on in production.
+
 - [ ] Record a take inside a scanned place (split capture slice 2, the
   user's direction on 2026-11-10): capture loads a scan (SPZ or PLY) as the
   take's set, and the place is stored with the hologram through export →

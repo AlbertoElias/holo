@@ -1,7 +1,7 @@
 import { useGLTF } from "@react-three/drei";
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import type { HologramDTO } from "@holoim/contracts";
 import { tokens } from "@holoim/design-tokens";
@@ -36,6 +36,10 @@ type HologramCardProps = {
   muted: boolean;
   onToggleMute: () => void;
   onDelete?: ((item: HologramDTO) => Promise<void> | void) | undefined;
+  /** Copy the link to this hologram's own page (or open the share sheet on a phone). */
+  onShare?: ((item: HologramDTO) => void) | undefined;
+  /** The title opens the hologram's own page; off on that page itself. */
+  linkTitle?: boolean;
   /** Whether the card may download its hologram yet, only check the file, or must wait (modelLoadOrder.ts). */
   loadTurn: "load" | "check" | "wait";
   /** The hologram has loaded, or will not: the next card may start. */
@@ -215,11 +219,11 @@ function usePlayHeldMiddle(footRef: React.RefObject<HTMLElement | null>, chipSho
   }, [chipShown, footRef]);
 }
 
-function formatByline(item: HologramDTO): string {
-  return `By ${item.submittedBy} · ${new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
+function formatDate(item: HologramDTO): string {
+  return new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, onDelete, loadTurn, onModelSettled, target, xrFeed, first }: HologramCardProps) {
+export function HologramCard({ item, active, muted, onToggleMute, onDelete, onShare, linkTitle = true, loadTurn, onModelSettled, target, xrFeed, first }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
   // The detail level split from the upload (hologram-budgets): fetched only for the focused card.
   const placeDetailUrl = item.placeDetailUrl ? resolveMediaUrl(item.placeDetailUrl) : null;
@@ -379,6 +383,24 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
   const soot = useMemo(() => ({ groundLuminance: relativeLuminance(flatGroundColorAt(Math.min(Math.max(footFraction, 0), 1))) }), [footFraction]);
   const portalStyle = { "--portal-open": portalOpen } as CSSProperties;
 
+  const handleDelete = () => {
+    // The glyph is the only warning on the card, so ask once before a delete that cannot be undone.
+    if (window.confirm(`Delete “${item.hologramName}”? This cannot be undone.`)) void onDelete?.(item);
+  };
+  const ownerActions = (
+    <>
+      {onShare && (
+        <span className="copy-link-button">
+          <GlyphControl glyph="copyLink" label={VIEWER_CONTROL_NAMES.copyLink} onPress={() => onShare(item)} />
+        </span>
+      )}
+      {item.ownedByViewer && onDelete && (
+        <span className="delete-button">
+          <GlyphControl glyph="remove" label={VIEWER_CONTROL_NAMES.deleteHologram} onPress={handleDelete} />
+        </span>
+      )}
+    </>
+  );
   const controls = canRenderModel ? (
     <PortalControls store={portal} tiltAvailable={portalTriggers.tilt} active={active} reached={reached}>
       {shouldShowArTrigger && (
@@ -397,8 +419,12 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
           <GlyphControl glyph={muted ? "soundOff" : "soundOn"} label={muted ? VIEWER_CONTROL_NAMES.soundOn : VIEWER_CONTROL_NAMES.soundOff} onPress={onToggleMute} />
         </span>
       )}
+      {ownerActions}
     </PortalControls>
-  ) : null;
+  ) : (
+    // A hologram that will not load has no Play row; its link and its creator's delete still stand at its foot.
+    <div className="feed-card-foot-actions">{ownerActions}</div>
+  );
 
   return (
     <article
@@ -466,11 +492,18 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
 
       <header className="feed-card-meta">
         <Type variant={target.device === "phone" ? "titlePhoneCard" : "titleDesktop"} as="h2" className="feed-card-title">
-          {item.hologramName}
+          {linkTitle ? (
+            <Link className="feed-card-link feed-card-title-link" to={`/h/${item.id}`}>{item.hologramName}</Link>
+          ) : item.hologramName}
         </Type>
         <Type variant="byline" as="p">
-          {formatByline(item)}
-          {item.submittedByVerified ? <span className="verified-badge">Verified creator</span> : null}
+          By{" "}
+          {item.ownerId ? (
+            // A creator with an account has a page of their own; a name typed by hand (legacy) has none.
+            <Link className="feed-card-link feed-card-creator" to={`/u/${item.ownerId}`}>{item.submittedBy}</Link>
+          ) : item.submittedBy}
+          {" · "}
+          {formatDate(item)}
         </Type>
         {credits.length > 0 ? (
           // Models the author brought in from a registry keep their credit beside the byline (PRD-060).
@@ -482,16 +515,6 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, load
               </span>
             ))}
           </Type>
-        ) : null}
-        {item.ownedByViewer && onDelete ? (
-          <button
-            className="feed-card-delete"
-            type="button"
-            onClick={() => void onDelete(item)}
-            aria-label={`Delete ${item.hologramName}`}
-          >
-            Delete my hologram
-          </button>
         ) : null}
       </header>
 
