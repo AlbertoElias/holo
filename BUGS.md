@@ -20,20 +20,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Model's second claim did not hold:** "an anchor overwrites a `locked` model, and anchored models get no monitoring". Replayed (the third check): the anchor resolves after the 45-frame lock, the stage label goes `locked` → `anchored`, and the model does not move (it was anchored at the spot it stood on). Nothing reads the label but the `data-placement-stage` attribute and `arController`, which treats both as placed, so there is no user-visible defect and no change was made. Frames spent with an anchor skip the visibility monitor, so looking away does not trigger the fallback (also pinned by the third check); that fits the placement being a point in the room the viewer chose. The model was wrong to treat `locked` as terminal: the code never said so. A device that answers `createAnchor` within a few frames never reaches the fallback for surface placements; that is by design, not a recorded requirement either way, so it is left as a note.
 - **Not done:** emulation (IWER) only, no physical headset or phone. The default shell's `ArPlacementSystem.adoptAnchor` (`placementSystems.ts:432`) only discards an anchor whose hologram is `searching` or gone, so a slow anchor after a floor tap (`placeAtTap`) or a two-hand move may pull the hologram back the same way. Not replayed here; the same shim would do it.
 
-### B-047 — Hosted CI on `main` fails on a different browser test each push, so deploys are skipped
-
-- **Area:** `apps/viewer-web` e2e (hosted CI shards), `.github/workflows/ci.yml` gate
-- **Severity:** P1 (the CI Gate fails, so the viewer, capture and API deploys are skipped; production stays at `2fba1e6`)
-- **Observed:** 2026-11-11, three pushes in a row; the last green run was `2fba1e6`
-- **Evidence:**
-  - `5f89dfcc` (run 43098856282), pipeline shard 3: `camera-take.pipeline.spec.ts:924`, "the initial "C" is drawn in deep sea on the face" (`initialPixels` under 6, line 1035).
-  - `0e20b8c8` (run 43103556566): pipeline shard 1 was cancelled, so the gate failed.
-  - `8a7b7a09` (run 43112916268), pipeline shard 1: `bubble-capture.pipeline.spec.ts:45`, "feed sphere follows recorded motion" (line 91); viewer shard 2: `spatial-audio.spec.ts:236`, "resumed, every source starts where the motion is" (line 343, above `VOICE_SYNC_TOLERANCE_S`).
-  - Every other job passed in each run. Not yet reproduced locally.
-- **Expected:** a push to `main` whose checks pass locally passes the hosted gate and deploys.
-- **Reproduction:** run each spec alone, then under `scripts/ci-emulate.sh` with its shard's neighbours. Suspect: timing-sensitive assertions (motion sampled before playback advances, audio resume skew) under the hosted runner's load. These are different assertions from B-043 (the AR button click).
-- **Note:** a later push only deploys once the gate passes; check that the deploys run after the fix.
-
 ### B-042 — Agent-authored holograms have no Quick Look preview
 
 - **Area:** `apps/capture/scripts/showcase/upload.mjs`, `apps/viewer-api/tools/glb_to_usdz.py`

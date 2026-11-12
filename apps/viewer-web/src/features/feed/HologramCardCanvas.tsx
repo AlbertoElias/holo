@@ -332,6 +332,8 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   const rimProbe = useRef<RimProbe>({ gated: false, rimReady: false, lifts: false, maxLift: 0, buildMs: null, candidates: 0, heights: null, target: null, raw: null, framing: null, timing: null, groundAt: null, insideDome: null }).current;
   // A scanned place (testHooks only): the fit waits for it, with a timeout, then hides the recorded set.
   const placeGate = useMemo(() => createPlaceGate(testHooks && placeRequest !== null), [placeRequest]);
+  // The dome has been fitted once, or tried and found nothing to wrap (a take with no drawn points plays unwrapped).
+  const fitTried = useRef(false);
   useEffect(() => {
     if (placeGate.status !== "loading") return undefined;
     const timer = window.setTimeout(() => {
@@ -408,9 +410,10 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   const bubbleNode = useMemo(() => clonedScene.getObjectByName("RecordedBubbleSphere") ?? null, [clonedScene]);
   const bubbleNow = useRef(new Vector3()).current;
   const driveCloche = useCallback((delta: number) => {
-    // The take advances first: everything after reads this frame's pose. While a scan is awaited the take holds at its first pose,
-    // so the dome fitted after the wait is the dome fitted without one.
-    mixer.update(placeGate.status === "off" || clocheRef.current ? delta : 0);
+    // The take advances first: everything after reads this frame's pose. Until the dome is fitted the take holds at its
+    // first pose, so the dome is the same however long the first frame was (a loaded machine's can be a large part of a
+    // second, and the bubble walks over uneven ground), and the dome fitted after a scan's wait is the one fitted without.
+    mixer.update(clocheRef.current || (fitTried.current && placeGate.status === "off") ? delta : 0);
     // The bubble where it is now (a seek between frames included), not where the last draw synced it.
     if (fittedCentre.current && sphereClip.active && bubbleNode) clocheShift.copy(bubbleNode.getWorldPosition(bubbleNow)).sub(fittedCentre.current);
     const rim = rimRef.current;
@@ -731,7 +734,10 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     portal.runtime.playbackSeconds = primaryActionRef.current?.time ?? 0;
     if (!clocheRef.current) {
       // The scan is read before the dome is fitted, so the set it replaces is still in the fit.
-      if (placeGate.status !== "loading") fitClocheNow();
+      if (placeGate.status !== "loading") {
+        fitClocheNow();
+        fitTried.current = true;
+      }
     }
     else if (rimPending.current && groundFieldBudget()) buildRimNow(clocheRef.current);
     if (!(camera instanceof PerspectiveCamera)) {
