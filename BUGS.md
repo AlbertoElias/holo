@@ -90,12 +90,12 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
   Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
 
-### B-052 — The profiles "copy link" check fails locally and passes on hosted CI
+##
 
 - **Area:** `apps/viewer-web` e2e (`e2e/profiles.pipeline.spec.ts:175`), pipeline shard 8
 - **Severity:** P3 (fails the `pipeline` step of a local `verify:pr`; hosted CI passes it)
 - **Observed:** 2026-11-12 on macOS: inside a full `test:smoke:pipeline` and, run alone twice, on this tree and on clean `origin/main` (`eb9add54d707`), with the ports moved off their defaults; the other four tests of the spec pass
-- **Evidence:** "copy link and delete wait out of sight until the card is reached; delete is the owner's alone": `expect(getByRole("status")).toContainText("Link copied")` times out after 5 s, "element(s) not found" (`profiles.pipeline.spec.ts:190`). Hosted CI shard 8 passed it in runs 43272311181 and 43260608085.
+- **Evidence:** "copy link and delete wait out of sight until the card is reached; delete is the owner's alone": `expect(getByRole("status")).toContainText("Link copied")` times out after 5 s, "element(s) not found" (`profiles.pipeline.spec.ts:190`). Hosted CI shard 8 passed it in runs 43272311181 and 43260608085, then failed it once on run 43319865598 (`37a99105`, no source change) and passed on rerun.
 - **Expected:** the status line appears after "Copy link" is pressed, as on CI.
 - **Reproduction:** `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/profiles.pipeline.spec.ts --workers=1` from a clean `main` worktree on a Mac.
   Suspect: the clipboard write or its permission differs locally (the status appears only after `navigator.clipboard.writeText` resolves), or the moved base URL origin; not yet run under `scripts/ci-emulate.sh`.
