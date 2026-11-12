@@ -40,27 +40,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `showcase:build blue-hour`, start a local API with `USDZ_PYTHON` set, then run `showcase:upload --api <local> blue-hour` (status `ready`) and `inspect_usdz.py` on the stored GLB and USDZ.
 - **Not done:** Fly auto-stop can still interrupt a long conversion when nobody is using the site (the worker reclaims it after 20 min). Not seen on a real iPhone or in RealityKit with the full packages. Cause 3 is still open.
 
-### B-043 — The bubble pipeline test cannot click its card's AR button after the avatar-format uploads
-
-- **Area:** `apps/viewer-web` e2e (`test:smoke:pipeline`, part of `verify:pr`)
-- **Severity:** P2 (fails `verify:pr` locally; the pipeline stage is not in hosted CI)
-- **Observed:** 2026-11-11 on `main` `623e4645f986` and on `bug/b041-avatar-objects`
-- **Evidence:** `e2e/bubble-capture.pipeline.spec.ts:44` "real capture bubble exports, uploads and draws in feed and
-  immersive AR" times out after 6 min at `bubble-capture.pipeline.spec.ts:126`: clicking the new card's
-  `.ar-trigger-button` keeps hitting `<div data-reach="hidden" class="portal-controls" data-portal-mode="follow">`
-  (and `.portal-controls-side`), which "intercepts pointer events". 2 of 2 full-stage runs on the branch and 1 of 1 on
-  `main` fail the same way; the other 27 tests pass.
-- **Update 2026-11-12:** it also fails intermittently when the spec runs alone on clean `main` `fff8507`
-  (same click, same overlay, 6 min timeout): in two simultaneous runs of `main` and of `main` plus unrelated
-  CI-script changes, round 1 failed on both and round 2 passed on both, so it is a timing race, not tied to
-  the avatar-format uploads alone. Under heavy machine load it failed 0 of 5, then passed on a quiet retry
-  (`test:smoke:pipeline` 34 passed, 5 skipped).
-- **Expected:** the card's AR button is clickable whatever other cards the feed already holds.
-- **Reproduction:** `pnpm run test:smoke:pipeline` (about 17 min). The spec alone passes
-  (`RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/bubble-capture.pipeline.spec.ts` in
-  `apps/viewer-web`, 57 s), so it depends on the three `avatar-formats` uploads that run before it. Suspect: a
-  portal-controls overlay marked `data-reach="hidden"` still takes pointer events over the neighbouring card.
-
 ### B-044 — On the user's table scan, the author's feet end 3 cm off the scan's floor
 
 - **Area:** `apps/viewer-web` e2e and `packages/place` (split capture slice 2a)
