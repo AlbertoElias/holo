@@ -651,14 +651,31 @@ export async function runIwerHandsSummonTake({ browser, baseUrl, artifactDir, co
   }
 }
 
-/** Desktop: the overlay tray picker and its refusal, 1–5 without T, then T + 1 summons into the right hand and G places. */
-/** Resolves when the tray holds `count` items (the settings sheet no longer says "Tray: N"). */
-const trayHolds = (page, count, timeout = 10_000) =>
-  page.waitForFunction((n) => {
-    window.advanceTime(50); // the page clock is manual: state reaches the text only on a step
-    return JSON.parse(window.render_game_to_text()).objects.tray.items.length === n;
-  }, count, { timeout, polling: 100 });
+/**
+ * Resolves when the tray holds `count` items. The page clock is manual, so each
+ * poll steps it (state reaches the text only on a step). The budget is a
+ * ceiling on a loaded machine, not a delay: it returns the moment the tray
+ * holds the items. On a timeout the error says where the load stood, from
+ * capture's own `tray:<step>` marks, instead of only that a wait ran out.
+ */
+export async function trayHolds(page, count, timeout = 30_000) {
+  try {
+    await page.waitForFunction((n) => {
+      window.advanceTime(50);
+      return JSON.parse(window.render_game_to_text()).objects.tray.items.length === n;
+    }, count, { timeout, polling: 100 });
+  } catch (error) {
+    const where = await page.evaluate(() => ({
+      items: JSON.parse(window.render_game_to_text()).objects.tray.items.length,
+      loading: document.querySelector('[data-tray-loading]')?.getAttribute('data-tray-loading') ?? null,
+      now: Math.round(performance.now()),
+      marks: performance.getEntriesByType('mark').filter((mark) => mark.name.startsWith('tray:')).map((mark) => `${mark.name}@${Math.round(mark.startTime)}`)
+    })).catch(() => null);
+    throw new Error(`the tray never held ${count} items in ${timeout} ms: ${JSON.stringify(where)}\n${error.message}`);
+  }
+}
 
+/** Desktop: the overlay tray picker and its refusal, 1–5 without T, then T + 1 summons into the right hand and G places. */
 export async function runDesktopSummonTake({ browser, baseUrl, captureRoot, artifactDir, consoleErrors }) {
   const label = 'desktop-summon';
   const failures = [];
@@ -847,7 +864,7 @@ export async function runDesktopFindApiTake({ browser, baseUrl, captureRoot, art
     const pick = picks.first();
     const shown = (await pick.innerText()).replace(/\s+/g, ' ');
     await pick.click();
-    await trayHolds(page, 1, 20_000);
+    await trayHolds(page, 1);
     await page.keyboard.press('Escape');
     await page.getByTestId('find-sheet').waitFor({ state: 'detached' });
     await page.getByTestId('dock-tray').click();

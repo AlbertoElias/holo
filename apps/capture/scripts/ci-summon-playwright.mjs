@@ -8,7 +8,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 import { VOICE_BROWSER_ARGS, runDesktopVoiceTake, runIwerFindTake, runIwerVoiceTake } from './lib/find-take.mjs';
 import { runDesktopFindTake, runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
 import { runIwerHandsPutBackTake, runIwerPutBackTake } from './lib/put-back-xr-take.mjs';
-import { runDesktopAnytimeTake, runLongCarryTake, runTouchTrayTake, runTrayHitchTake } from './lib/tray-anytime-take.mjs';
+import { runDesktopAnytimeTake, runLongCarryTake, runTouchTrayTake, runTrayHitchTake, runTrayStallTake } from './lib/tray-anytime-take.mjs';
 import { runControllersUndoTake, runDesktopUndoTake, runHandsUndoTake, runTouchUndoTake } from './lib/undo-take.mjs';
 import { runDesktopPutBackTake, runTouchPutBackTake, runTrayBudgetTake } from './lib/put-back-take.mjs';
 
@@ -53,6 +53,8 @@ try {
     ['undo-touch', () => runTouchUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['undo-controllers', () => runControllersUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['undo-hands', () => runHandsUndoTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    // A stalled thumbnail readback must not hold the tray (B-050).
+    ['tray-stall', () => runTrayStallTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['tray-budget', () => runTrayBudgetTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['long-carry', () => runLongCarryTake({ browser, baseUrl, artifactDir, consoleErrors })],
     // Timed: a browser of its own, so no earlier phase's GPU work is still draining.

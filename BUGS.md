@@ -68,20 +68,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
   5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
 
-### B-050 — The Poly Haven object-search case fails inside the full pipeline and passes alone
-
-- **Area:** `apps/viewer-web` e2e (`object-search.pipeline.spec.ts`), `apps/capture/scripts/lib/summon-take.mjs`
-- **Severity:** P2 (fails the `pipeline` step of `verify:pr`, which stops there)
-- **Observed:** 2026-11-12, in three full `test:smoke:pipeline` runs: twice on `feature/profiles-and-share` and once on clean `main`
-- **Evidence:** `e2e/object-search.pipeline.spec.ts:168` "found Poly Haven object: search, summon twice, credit survives the GLB, the feed card and the USDZ":
-  `TimeoutError: page.waitForFunction: Timeout 10000ms exceeded` in `trayHolds` (`summon-take.mjs:657`, called from `runDesktopFindApiTake`, `:856`),
-  the tray never reaching the expected count. Also failed in a full `verify:pr` on `ci-speedups` on 2026-11-12. Run alone it passes on both trees (1 passed in 57 s on `main` `73e9ef6f78aa`, 33 s on the branch).
-- **Expected:** it passes in the full pipeline as it does alone.
-- **Reproduction:** `pnpm run test:smoke:pipeline` from the repository root, with the five ports moved off their defaults when another run holds them.
-  Suspect: the 10 s `trayHolds` wait on a loaded machine after many specs, or state left in the shared database or the stubbed Poly Haven server.
-  2026-11-12 (`feature/hologram-budgets`): it also failed run alone, twice, at a load average of about 45 on 10 cores (other sessions' browsers), then
-  passed alone (2 passed in 1.0 m) once the load fell to about 30; this points to the 10 s wait under load rather than leftover state.
-
 ### B-051 — Feed spatial audio's motion-wrap step flakes on hosted CI
 
 - **Area:** `apps/viewer-web` e2e (`e2e/spatial-audio.spec.ts`), `test:e2e:mocked:shard2`
@@ -117,6 +103,15 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Did not reproduce for the user (suspected 2):** "`fail()` overwrites `timeout`". The gate does not: every writer checks `loading` first, so a terminal gate status never changes (a late failure leaves `timeout`). Only the diagnostic report differs (`status` reads `failed` after a timeout then a failure, `timeout` after a timeout then a success, and `loading` between the timeout and the load settling); the card is the same recorded one in every order, and the one-warning rule holds (`place.spec.ts` "a slow scan that then fails warns once"). Not changed.
 - **Not done:** emulation in headless Chromium only; the upload demotion path was not replayed; no real-device run.
 - **Landed:** on `main` as `93087d65187b` (2026-11-12). Local `verify:pr` passed every stage but two pipeline checks that failed under load from another session's run and passed alone (`bubble-capture` is B-043's race; `hologram-budgets` "the API stores the light GLB", the stored place's detail never reading `ready` in 120 s). Hosted CI run 43322984644 failed its gate on shard 8 (B-052, `profiles.pipeline.spec.ts:175`) and shard 9 (`hologram-budgets` KTX2 case: `browser.newContext: Failed to find browser context`, a browser crash before the page loaded), neither near the place gate; the deploys were skipped. Close this entry (move it to `docs/archive/closed-bugs.md`) once a run of `main` is green and the viewer deploy health check passes.
+
+### B-054 — The summon XR check's `desktop-anytime` phase flakes on "mid-take row: no tray row"
+
+- **Area:** `apps/capture` (`scripts/lib/tray-anytime-take.mjs`, `test:xr:summon`)
+- **Severity:** P3 (a phase of the summon XR check; not in `verify:pr`'s pipeline stage)
+- **Observed:** 2026-11-12 on `claude/bug-b-050-object-search-24dbf3`, found while verifying B-050
+- **Evidence:** `SUMMON_ONLY=desktop-anytime` fails at `tray-anytime-take.mjs:204` (`checkRow(rowMid, { filled: 2, ... where: 'mid-take row' })`) with "no tray row": 2 of 3 runs with the B-050 fix, 1 of 4 without it, so the fix does not cause it. It ran at a load average of 30 or more.
+- **Expected:** the tray dock shows its row mid-take on every run.
+- **Reproduction:** `SUMMON_ONLY=desktop-anytime pnpm --filter @holoim/capture run test:xr:summon`, repeated on a loaded machine. Not isolated; suspect the same starved-page timing as B-050 (a wait that ends before the dock re-renders).
 
 ## Entry template
 

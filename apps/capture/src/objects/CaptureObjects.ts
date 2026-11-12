@@ -542,22 +542,27 @@ export class CaptureObjects {
       const prepared = [];
       for (const entry of loaded) {
         const name = entry.item.credit?.title ?? entry.item.source.name;
-        const thumbnail = await this.thumbnailer.render(entry.item.model, this.liveScene()).catch((error: unknown) => {
+        // A readback that stalls does not hold the load: the item joins the tray
+        // with its glyph and `late` attaches the thumbnail when it finishes.
+        const late: { item?: TrayItem; thumbnail?: TrayThumbnail } = {};
+        const thumbnail = await this.thumbnailer.render(entry.item.model, this.liveScene(), (arrived) => this.attachLateThumbnail(late, arrived)).catch((error: unknown) => {
           console.warn(`[tray] no thumbnail for ${name}: ${(error as Error).message}`);
           return null;
         });
         await prepareHull(entry.item.model, nextTask);
         trayMark('hull');
-        prepared.push({ ...entry, name, thumbnail });
+        prepared.push({ ...entry, name, thumbnail, late });
       }
       if (this.tray.getItems().length + prepared.length > MAX_TRAY_ITEMS) throw new SuppliedObjectError(`The tray holds at most ${MAX_TRAY_ITEMS} items.`);
       // An undo may have brought an item back while this one prepared.
       const after = this.budgetBytes() + prepared.reduce((sum, entry) => sum + entry.input.bytes.byteLength, 0);
       if (after > MAX_TRAY_BYTES) throw new SuppliedObjectError(`The tray would be ${(after / 1048576).toFixed(1)} MB; the limit is ${MAX_TRAY_BYTES / 1048576} MB.`);
       const addedItems: TrayItem[] = [];
-      for (const { input, item, name, thumbnail } of prepared) {
+      for (const { input, item, name, thumbnail, late } of prepared) {
         const added = this.tray.add(item.model, { name, source: item.source, kind: item.kind, bytes: input.bytes.byteLength, credit: item.credit });
-        if (thumbnail) this.thumbnails.set(added, thumbnail);
+        late.item = added;
+        const shown = thumbnail ?? late.thumbnail;
+        if (shown) this.thumbnails.set(added, shown);
         addedItems.push(added);
       }
       ui.setTrayState({ ...this.trayState(), message: null });
@@ -568,6 +573,14 @@ export class CaptureObjects {
       ui.setTrayState({ ...this.trayState(), loading: false });
       return fail(error instanceof SuppliedObjectError ? error.message : `Could not load the tray: ${(error as Error).message}`);
     }
+  }
+
+  /** A thumbnail whose readback finished after its item's load stopped waiting: shown if the item is on the tray now, else kept for the add. */
+  private attachLateThumbnail(late: { item?: TrayItem; thumbnail?: TrayThumbnail }, thumbnail: TrayThumbnail): void {
+    late.thumbnail = thumbnail;
+    if (!late.item || this.tray.indexOf(late.item) < 0) return;
+    this.thumbnails.set(late.item, thumbnail);
+    this.publishTray();
   }
 
   /** One pick (a Find result, or the files chosen together) is one entry: undone, its slots leave; redone, they come back at the end. */

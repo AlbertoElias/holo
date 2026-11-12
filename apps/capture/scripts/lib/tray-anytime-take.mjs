@@ -6,7 +6,7 @@ import { createXrContext, waitForPageFunctions, waitForTextContentPrefix, wireXr
 import { heavyGlb } from './heavy-glb.mjs';
 import { loadTake, objectNodes, readGlb } from './object-glb.mjs';
 import { OBJECT_URL, openCapture, proofPace, proofVideoOptions, readState, saveDownload } from './object-take.mjs';
-import { carriedNow, checkCarried, PIXEL_PNG, STEP_MS, summonedItems, TRAY_URLS } from './summon-take.mjs';
+import { carriedNow, checkCarried, PIXEL_PNG, STEP_MS, summonedItems, TRAY_URLS, trayHolds } from './summon-take.mjs';
 
 // The tray on every device (docs/features/archive/tray-everywhere.md), through
 // capture's real flat-screen UI:
@@ -21,6 +21,9 @@ import { carriedNow, checkCarried, PIXEL_PNG, STEP_MS, summonedItems, TRAY_URLS 
 //   - long-carry: five objects summoned and placed before a 60 s take, all
 //     carried into it as `prepared` from frame 0 (the viewer pipeline converts
 //     this take to USDZ: apps/viewer-web/e2e/summon.pipeline.spec.ts).
+//   - tray-stall: the thumbnail's GPU readback never completes (B-050): the
+//     tray still takes its items within a few seconds, with fallback glyphs,
+//     and the thumbnails appear once the readback finishes.
 //   - tray-hitch: real time, no manual clock: an ~7 MB GLB loaded mid-take and
 //     summoned; every long task is reported against the take's own baseline.
 
@@ -510,3 +513,51 @@ export async function runLongCarryTake({ browser, baseUrl, artifactDir, consoleE
   }
 }
 
+
+/**
+ * B-050: a tray item's thumbnail readback (a GPU fence) can stall for tens of
+ * seconds on a starved machine, and a load waited on it. Here the fence reports
+ * "not ready" until released. The tray must still hold both items within a
+ * bounded time, drawn with their fallback glyphs, then show the thumbnails the
+ * moment the readback completes.
+ */
+export async function runTrayStallTake({ browser, baseUrl, captureRoot, artifactDir, consoleErrors }) {
+  const label = 'tray-stall';
+  const failures = [];
+  const fail = (message) => failures.push(message);
+  await mkdir(artifactDir, { recursive: true });
+  const { context, page } = await setupFlatPage(browser, { consoleErrors, label });
+  try {
+    await page.addInitScript(() => {
+      window.__stallReads = true;
+      const clientWaitSync = WebGL2RenderingContext.prototype.clientWaitSync;
+      WebGL2RenderingContext.prototype.clientWaitSync = function stalled(...args) {
+        return window.__stallReads ? this.TIMEOUT_EXPIRED : clientWaitSync.apply(this, args);
+      };
+    });
+    await openCapture(page, baseUrl, {});
+    await advance(page, 1);
+    await page.getByTestId('dock-tray').click();
+    await advance(page, 0.5);
+    const fixtures = ['bracket.glb', 'diagram.png'].map((name) => path.join(captureRoot, 'fixtures/objects', name));
+    const started = Date.now();
+    await page.getByLabel('Add tray items (.glb, .png, .jpg)').setInputFiles(fixtures);
+    await trayHolds(page, 2, 30_000);
+    const heldAfterMs = Date.now() - started;
+    const stalled = await readRow(page);
+    const withThumbnail = (row) => row?.slots.filter((slot) => slot.filled && slot.thumbnail?.rendered).length ?? 0;
+    if (withThumbnail(stalled) !== 0) fail(`a thumbnail drew while its readback was stalled (${JSON.stringify(stalled?.slots)})`);
+    if (stalled?.slots.filter((slot) => slot.filled).length !== 2) fail(`the stalled tray shows ${stalled?.slots.filter((slot) => slot.filled).length} filled slots, expected 2`);
+    // The readback completes late: the thumbnails arrive on the items already in the tray.
+    await page.evaluate(() => { window.__stallReads = false; });
+    await page.waitForFunction(() => {
+      window.advanceTime(50);
+      return document.querySelectorAll('[data-testid="tray-row"] [data-tray-filled="true"] img').length === 2;
+    }, null, { timeout: 15_000, polling: 100 }).catch(() => fail('the thumbnails never arrived after the readback completed'));
+    const released = await readRow(page);
+    if (withThumbnail(released) !== 2) fail(`after release ${withThumbnail(released)} slots have a rendered thumbnail, expected 2`);
+    return { label, status: failures.length ? 'fail' : 'pass', failures, heldAfterMs, stalled: stalled?.slots, released: released?.slots };
+  } finally {
+    await context.close();
+  }
+}
