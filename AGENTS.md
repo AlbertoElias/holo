@@ -183,14 +183,13 @@ integration point only and never takes edits.
   `git branch --merged main` afterwards). If a push is
   rejected because another agent landed first, pull with rebase, re-run the
   affected check, and push again. Do not force-push.
-- Every push to `main` runs CI and a deploy, so merge to `main` as rarely as
-  possible. Batch follow-up fixes locally, and group finished, verified
-  changes into one merge: push the verified branch, record it as ready in
-  `HANDOFF.md`, and merge it together with the next finished change rather
-  than on its own. Documentation-only changes ride along with the next merge
-  unless the user asks for them on `main` sooner. A newer push also cancels
-  in-flight CI test jobs (never deploys), and the cancelled run's minutes are
-  lost.
+- Every push to `main` runs CI and a deploy, so batch within a task: commit
+  each step and its follow-up fixes locally, and merge to `main` once, when
+  the whole task is finished and verified. That merge happens in the same
+  session, documentation-only changes included, so the session can be
+  archived; never park finished work as "ready" for a later merge. A newer
+  push also cancels in-flight CI test jobs (never deploys), and the cancelled
+  run's minutes are lost.
 
 ## Agent configuration (Codex and Claude Code)
 
