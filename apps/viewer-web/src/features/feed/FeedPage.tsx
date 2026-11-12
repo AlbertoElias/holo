@@ -339,7 +339,7 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
   );
 
   return (
-    <main className="app-shell" data-flat-device={target.device}>
+    <main className="app-shell" data-flat-device={target.device} data-narrowed={context ? "" : undefined}>
       <section ref={feedRef} className="feed-scroll" aria-label="Hologram feed">
         {cards}
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />

@@ -109,6 +109,12 @@ test.describe("creator pages, hologram pages and search", () => {
     await expect(cards(page)).toHaveCount(2);
     await expect.poll(async () => (await cardTitles(page)).sort()).toEqual([`${token} arch`, `${token} tower`]);
     await expect(page.locator(".feed-context")).toContainText(adaName);
+    // The chip holds the top left; no card's title or byline runs under it.
+    const chip = (await page.locator(".feed-context").boundingBox())!;
+    for (const meta of await cards(page).locator(".feed-card-meta").all()) {
+      const box = await meta.boundingBox();
+      if (box) expect(box.y, "title starts below the chip").toBeGreaterThanOrEqual(chip.y + chip.height - 1);
+    }
     await shot(page, "02-creator-page");
 
     // The context chip's close goes back to the whole feed.

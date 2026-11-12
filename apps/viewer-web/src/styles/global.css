@@ -113,6 +113,11 @@ body::before {
   touch-action: pan-y;
 }
 
+/* The feed narrowed to a creator or a search holds its chip top left; each card's title starts below it. */
+.app-shell[data-narrowed] .feed-card {
+  padding-top: calc(max(env(safe-area-inset-top), var(--holoim-glyph-gap)) + var(--holoim-hit-touch) + var(--holoim-glyph-gap));
+}
+
 .feed-card.portal-captured {
   touch-action: none;
 }
