@@ -4,7 +4,7 @@
  * results, and a fetch that only reaches allowed hosts and caps every body.
  */
 
-/** Same ceiling as capture's MAX_SUPPLIED_OBJECT_BYTES: a result the tray would refuse is never offered. */
+/** At most capture's MAX_SUPPLIED_OBJECT_BYTES (40 MB), so a result the tray would refuse is never offered; kept lower to bound registry fetches. */
 export const MAX_PACKED_OBJECT_BYTES = 8 * 1024 * 1024;
 /** Source files may be a little larger than the packed GLB (jpg stays jpg, but JSON/padding differ). */
 export const MAX_DOWNLOAD_BYTES = 12 * 1024 * 1024;

@@ -8,8 +8,8 @@ import type { SceneObject, SceneObjectRegistry } from './SceneObjectRegistry';
 import type { TrayItemKind } from './trayItem';
 
 export const MAX_TRAY_ITEMS = 5;
-/** A take must stay under the 25 MB upload; textures are re-encoded as PNG. */
-export const MAX_TRAY_BYTES = 16 * 1024 * 1024;
+/** A take must stay under the 100 MB upload (`MAX_HOLOGRAM_BYTES`); textures are re-encoded as PNG. */
+export const MAX_TRAY_BYTES = 64 * 1024 * 1024;
 // Each miniature fits this cube.
 const MINIATURE_M = 0.08;
 const SPACING_M = 0.1;

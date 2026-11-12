@@ -6,7 +6,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
 
-import { MAX_GLB_BYTES } from "../lib/constants.js";
+import { MAX_GLB_BYTES, MAX_GLB_MEGABYTES } from "../lib/constants.js";
 import { storedPlaceProblem } from "./place-check.js";
 
 const allowedMimeTypes = new Set(["model/gltf-binary", "application/octet-stream"]);
@@ -61,7 +61,7 @@ export async function saveUploadedGlb(file: MultipartFile, absoluteUploadDir: st
   await pipeline(file.file, createWriteStream(absolutePath));
 
   if (file.file.truncated || sizeBytes > MAX_GLB_BYTES) {
-    throw new UploadValidationError("File exceeds 25MB limit.", 413);
+    throw new UploadValidationError(`File exceeds ${MAX_GLB_MEGABYTES}MB limit.`, 413);
   }
 
   const placeProblem = await storedPlaceProblem(new Uint8Array(await readFile(absolutePath)));

@@ -16,7 +16,7 @@ import {
   type UsdzStatus
 } from "@holoim/contracts";
 
-import { MAX_GLB_BYTES } from "../lib/constants.js";
+import { MAX_GLB_BYTES, MAX_GLB_MEGABYTES } from "../lib/constants.js";
 import {
   completeUploadIntent,
   createHologram,
@@ -114,7 +114,7 @@ export async function registerHologramRoutes(
     const authUser = await optionalAuthUser(request.headers);
     const submittedBy = authUser?.displayName ?? parsed.data.submittedBy;
     if (parsed.data.sizeBytes > MAX_GLB_BYTES) {
-      return reply.status(413).send({ error: "File exceeds 25MB limit." });
+      return reply.status(413).send({ error: `File exceeds ${MAX_GLB_MEGABYTES}MB limit.` });
     }
     try {
       validateGlbMeta({ filename: parsed.data.filenameOriginal, mimetype: parsed.data.mimeType });

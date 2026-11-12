@@ -33,7 +33,7 @@ interface MorphExportBinding {
 export interface PlaceExportSource {
   /** The crop for this path; with `maxSpzBytes`, thinned until its SPZ fits in that many bytes. */
   prepare(path: THREE.Vector3[], maxSpzBytes?: number): Promise<PlaceExportPayload | null>;
-  /** The take's size cap (the upload's 25 MB, lowered only by the automation hook). */
+  /** The take's size cap (the upload's `MAX_HOLOGRAM_BYTES`, lowered only by the automation hook). */
   glbByteBudget(): number;
 }
 
