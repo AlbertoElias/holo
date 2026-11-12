@@ -557,7 +557,10 @@ export async function reduceAnimations(
       return Math.min(byAngle, byReach) * share * BOUND_MARGIN;
     }
     if (candidate.kind === "translation") return ((ANIMATION_POSITION_BOUND_METERS / chainAll) * share * BOUND_MARGIN) / candidate.parentScale;
-    return SCALE_BOUND * share * BOUND_MARGIN * Math.max(1e-6, ...Array.from(candidate.track.values, Math.abs));
+    let largest = 1e-6;
+    // A loop, not Math.max(...values): a long track overflows the call stack.
+    for (const value of candidate.track.values) largest = Math.max(largest, Math.abs(value));
+    return SCALE_BOUND * share * BOUND_MARGIN * largest;
   };
 
   let selections: Selection[] | null = null;

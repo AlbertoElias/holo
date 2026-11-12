@@ -492,7 +492,9 @@ export async function registerHologramRoutes(
       for (const key of detailKeys) {
         try {
           const removed = await storage.delete(key);
-          if (key === item.placeDetailKey || key === item.textureDetailKey) deletedDetail = removed || deletedDetail;
+          const isDetail = key === item.placeDetailKey || key === item.textureDetailKey
+            || key === placeDetailKeyFor(item.filenameStored) || key === textureDetailKeyFor(item.filenameStored);
+          if (isDetail) deletedDetail = removed || deletedDetail;
         } catch (error) {
           request.log.warn({ error, key }, "Could not delete hologram detail object");
         }

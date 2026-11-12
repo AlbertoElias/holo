@@ -22,7 +22,7 @@ export const SERVED_TEXTURE_MAX_SIDE = 1024;
  */
 export const MAX_TEXTURE_PIXELS = 4096 * 4096;
 export const MAX_GLB_TEXTURE_PIXELS = 4 * MAX_TEXTURE_PIXELS;
-/** One toktx run's wall limit; a run past it fails the job, which the worker retries then marks failed. */
+/** One toktx run's wall limit; an image past it keeps its original bytes (skipped as encode-failed). */
 export const TOKTX_TIMEOUT_MS = 5 * 60_000;
 const BASISU = "KHR_texture_basisu";
 
@@ -36,7 +36,7 @@ export type TextureReport = {
   ms: number;
 };
 
-export type SkippedTexture = { image: number; reason: "too-large" | "glb-budget" | "unreadable"; width?: number; height?: number };
+export type SkippedTexture = { image: number; reason: "too-large" | "glb-budget" | "unreadable" | "encode-failed"; width?: number; height?: number };
 
 export type ProcessReport = {
   sourceBytes: number;
@@ -168,7 +168,14 @@ export async function processHologram(sourcePath: string, workDir: string): Prom
       const served = fitWithin(size, SERVED_TEXTURE_MAX_SIDE);
       const downscaled = served.width !== size.width || served.height !== size.height;
       const lightPath = path.join(workDir, `image-${imageIndex}-light.ktx2`);
-      await encodeKtx2(inputPath, lightPath, { role, timeoutMs: TOKTX_TIMEOUT_MS, ...(downscaled ? { resize: served } : {}) });
+      // One image the encoder refuses (corrupt data, past its time limit)
+      // keeps its original bytes; the rest of the take is still processed.
+      try {
+        await encodeKtx2(inputPath, lightPath, { role, timeoutMs: TOKTX_TIMEOUT_MS, ...(downscaled ? { resize: served } : {}) });
+      } catch {
+        skipped.push({ image: imageIndex, reason: "encode-failed", ...size });
+        continue;
+      }
       const light = await openFile(lightPath);
       orphanCandidates.add(image.bufferView);
       image.bufferView = pushView(light.source, light.bytes);
@@ -182,10 +189,13 @@ export async function processHologram(sourcePath: string, workDir: string): Prom
       };
       if (downscaled) {
         const fullPath = path.join(workDir, `image-${imageIndex}-full.ktx2`);
-        await encodeKtx2(inputPath, fullPath, { role, timeoutMs: TOKTX_TIMEOUT_MS });
-        const full = await openFile(fullPath);
-        fullImages.push({ texture: imageIndex, ...full });
-        report.full = { ...size, bytes: full.bytes };
+        // Without its full size the texture stays at the served size.
+        const encoded = await encodeKtx2(inputPath, fullPath, { role, timeoutMs: TOKTX_TIMEOUT_MS }).then(() => true, () => false);
+        if (encoded) {
+          const full = await openFile(fullPath);
+          fullImages.push({ texture: imageIndex, ...full });
+          report.full = { ...size, bytes: full.bytes };
+        }
       }
       converted.set(imageIndex, { downscaled });
       report.ms = Math.round(performance.now() - imageStarted);

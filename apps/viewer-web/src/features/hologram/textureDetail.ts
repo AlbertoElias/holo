@@ -16,7 +16,7 @@ import { ktx2Loader } from "./ktx2";
 
 /** Material slots a glTF texture can fill in three's standard materials. */
 const SLOTS = [
-  "map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap", "alphaMap",
+  "map", "normalMap", "bumpMap", "displacementMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap", "alphaMap",
   "clearcoatMap", "clearcoatNormalMap", "clearcoatRoughnessMap", "sheenColorMap", "sheenRoughnessMap",
   "specularIntensityMap", "specularColorMap", "transmissionMap", "thicknessMap", "iridescenceMap", "iridescenceThicknessMap", "anisotropyMap"
 ] as const;

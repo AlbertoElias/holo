@@ -437,6 +437,38 @@ fs.writeFileSync(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), f
     expect(report.animation.reducedTracks, "the animation is still reduced").toBe(4);
   }, 120_000);
 
+  it("keeps a texture the encoder refuses as uploaded and still processes the rest", async () => {
+    // A PNG whose header reads but whose pixel data is corrupt: toktx exits non-zero.
+    const glb = hologramGlb({ texture: { width: 2048, height: 2048 } });
+    const idat = glb.indexOf("IDAT");
+    expect(idat, "the fixture's PNG has pixel data").toBeGreaterThan(0);
+    glb.fill(0xa5, idat + 8, idat + 72);
+    const { after, report, served } = await processOne(glb);
+    expect(report, "one bad image does not fail the job").not.toBeNull();
+    expect(after.url).toMatch(/-light\.glb$/);
+    expect(report.skippedTextures).toEqual([{ image: 0, reason: "encode-failed", width: 2048, height: 2048 }]);
+    expect(served.images).toEqual([expect.objectContaining({ mimeType: "image/png" })]);
+    expect(served.extensionsUsed).not.toContain("KHR_texture_basisu");
+    expect(after.textureDetailUrl).toBeNull();
+    expect(report.animation.reducedTracks, "the animation is still reduced").toBe(4);
+  }, 120_000);
+
+  it("reduces a long LINEAR scale track without overflowing the stack", async () => {
+    // 60 000 keys x 3 values: spreading them into Math.max overflows the call stack.
+    const { after, report } = await processOne(
+      hologramGlb({
+        frames: 60_000,
+        mutate: (json) => {
+          for (const sampler of json.animations[0]!.samplers as Array<{ interpolation?: string }>) sampler.interpolation = "LINEAR";
+        }
+      })
+    );
+    expect(report, "the job finished").not.toBeNull();
+    expect(after.url).toMatch(/-light\.glb$/);
+    expect(report.animation.skipped).toBeUndefined();
+    expect(report.animation.reducedTracks).toBe(5);
+  }, 240_000);
+
   it("serves the animation as recorded when its key count is over the cap", async () => {
     const { report, served } = await processOne(
       hologramGlb({ mutate: (json) => void (json.accessors[json.animations[0]!.samplers[0]!.input]!.count = 4_000_001) })
