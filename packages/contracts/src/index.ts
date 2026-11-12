@@ -3,6 +3,12 @@ import { z } from "zod";
 export const usdzStatusSchema = z.enum(["none", "pending", "processing", "ready", "failed"]);
 export type UsdzStatus = z.infer<typeof usdzStatusSchema>;
 
+/**
+ * The most bytes one hologram upload may hold (docs/features/hologram-budgets.md):
+ * capture fits its export under it and the API refuses anything larger.
+ */
+export const MAX_HOLOGRAM_BYTES = 100 * 1024 * 1024;
+
 export const hologramDtoSchema = z.object({
   id: z.string(),
   url: z.string(),
@@ -17,7 +23,21 @@ export const hologramDtoSchema = z.object({
   submittedBy: z.string(),
   // Defaults keep older fixtures/mocks parseable; the API always sends them.
   submittedByVerified: z.boolean().default(false),
-  ownedByViewer: z.boolean().default(false)
+  ownedByViewer: z.boolean().default(false),
+  // The detail level split from the upload (hologram-budgets): the place's
+  // detail SPZ and the full-size textures. Absent on older holograms and on
+  // takes that had no detail.
+  placeDetailUrl: z.string().nullable().optional(),
+  textureDetailUrl: z.string().nullable().optional(),
+  // The creator's account, for the byline link to their page; null for legacy uploads without one.
+  ownerId: z.string().nullable().default(null)
+});
+
+/** What anyone may see of a creator: no email. */
+export const publicUserSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  hologramCount: z.number().int().nonnegative()
 });
 
 export const userDtoSchema = z.object({
@@ -59,7 +79,8 @@ export const paginatedHologramsSchema = z.object({
 export const deleteHologramResponseSchema = z.object({
   id: z.string(),
   deletedFile: z.boolean(),
-  deletedUsdz: z.boolean()
+  deletedUsdz: z.boolean(),
+  deletedDetail: z.boolean().optional()
 });
 
 export const usdzStatusResponseSchema = z.object({
@@ -93,6 +114,7 @@ export const completeUploadRequestSchema = z.object({
   intentId: z.string().min(1)
 });
 
+export type PublicUserDTO = z.infer<typeof publicUserSchema>;
 export type UserDTO = z.infer<typeof userDtoSchema>;
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 export type HologramDTO = z.infer<typeof hologramDtoSchema>;

@@ -13,9 +13,9 @@ October are still there, pending a review of what they hold.
 
 ## Next action
 
-Hosted CI on `main` has failed on the last three pushes, each time on a
-different browser test, so the three deploys after `2fba1e6` were skipped
-(B-047). Fix that first: production is behind `main` until a push passes.
+B-047 (hosted CI on `main` failing on a different browser test each push) is
+closed in [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md); its
+merge is the first push since `2fba1e6` expected to pass and deploy.
 
 Resize and move props on every device
 ([`docs/features/archive/object-resize-and-move.md`](docs/features/archive/object-resize-and-move.md))
@@ -38,7 +38,7 @@ queue item in [`TODOS.md`](TODOS.md).
   and played on a local feed with sound; `verify:agent` passed. Capture
   scripts and docs only, so it rides along with the next merge. Uploaded to
   production 2026-11-12 (`cmwcte5x20005oeiqsmobz8mf`) and plays on the live
-  feed; its Quick Look conversion failed on the extent budget (B-048).
+  feed; its Quick Look conversion failed on the extent budget (B-052).
 - "The way down II" showcase hologram (scene `introspection2`, beat sheet in
   `apps/capture/scripts/showcase/introspection2/BEATS.md`, lessons in
   [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md)),

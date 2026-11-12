@@ -14,16 +14,22 @@ interface GLTFWriterInternal {
   processBuffer(buffer: ArrayBuffer): number;
 }
 
+/** One SPZ level of the place, as the plugin writes it. */
+export type PlaceLevelBytes = { spz: Uint8Array; splatCount: number; maxSh: number };
+
 /**
  * Writes the take's stored place (docs/features/splat-capture.md, Q4):
  * the SPZ bytes in a buffer view no mesh references, and `HOLOIM_place` v1 on
  * the `RecordedPlace` node, whose TRS the exporter has already written.
- * Optional, never required, like `KHR_audio`.
+ * Optional, never required, like `KHR_audio`. The light level is the
+ * extension's own buffer view; the detail level, when there is one
+ * (docs/features/hologram-budgets.md), a second view named by `detail`, at the
+ * same node: the API moves it out of the stored GLB.
  */
 export class GLTFPlacePlugin implements GLTFExporterPlugin {
   private readonly writer: GLTFWriterInternal;
 
-  constructor(writer: unknown, private readonly place: { node: THREE.Object3D; spz: Uint8Array; splatCount: number; maxSh: number }) {
+  constructor(writer: unknown, private readonly place: { node: THREE.Object3D; detail?: PlaceLevelBytes | null } & PlaceLevelBytes) {
     this.writer = writer as GLTFWriterInternal;
   }
 
@@ -33,24 +39,32 @@ export class GLTFPlacePlugin implements GLTFExporterPlugin {
     const nodeIndex = writer.nodeMap.get(this.place.node);
     const node = nodeIndex === undefined ? undefined : json.nodes?.[nodeIndex];
     if (!node) throw new Error('The place node was not exported.');
+    const { detail } = this.place;
+    const extension: PlaceExtension = {
+      version: PLACE_EXTENSION_VERSION,
+      bufferView: this.writeView(this.place.spz),
+      splatCount: this.place.splatCount,
+      maxSh: this.place.maxSh,
+      // Not aligned with the real room (Q2 *here* is slice 2e): the scan is the take's set, never its site.
+      provenance: { kind: 'reconstruction', relation: 'set' },
+      ...(detail ? { detail: { bufferView: this.writeView(detail.spz), splatCount: detail.splatCount, maxSh: detail.maxSh } } : {})
+    };
+    node.extensions = { ...node.extensions, [PLACE_EXTENSION]: extension };
+    writer.extensionsUsed[PLACE_EXTENSION] = true;
+  }
+
+  /** One SPZ in a buffer view of its own, no mesh referencing it. */
+  private writeView(spz: Uint8Array): number {
+    const writer = this.writer;
+    const json = writer.json;
     json.bufferViews ??= [];
     json.buffers ??= [{ byteLength: 0 }];
-    const { spz } = this.place;
     // GLB chunks align to 4 bytes; the view keeps the SPZ's own length, so a gzip reader never meets the padding.
     const padded = new Uint8Array(Math.ceil(spz.byteLength / 4) * 4);
     padded.set(spz);
     const buffer = writer.processBuffer(padded.buffer);
     const bufferView = json.bufferViews.push({ buffer, byteOffset: writer.byteOffset, byteLength: spz.byteLength }) - 1;
     writer.byteOffset += padded.byteLength;
-    const extension: PlaceExtension = {
-      version: PLACE_EXTENSION_VERSION,
-      bufferView,
-      splatCount: this.place.splatCount,
-      maxSh: this.place.maxSh,
-      // Not aligned with the real room (Q2 *here* is slice 2e): the scan is the take's set, never its site.
-      provenance: { kind: 'reconstruction', relation: 'set' }
-    };
-    node.extensions = { ...node.extensions, [PLACE_EXTENSION]: extension };
-    writer.extensionsUsed[PLACE_EXTENSION] = true;
+    return bufferView;
   }
 }

@@ -1031,3 +1031,97 @@ bug above.)
 - **Fix (`bug/creator-sign-in`):** `deliverMagicLink` sends through Resend (free tier) or Cloudflare Email Service and throws when it cannot, so the route answers 503 and drops the unsent token; the form says "sent" only after a send. The form reuses the Upload sheet's fields and word-and-glyph control. Uploads now need a signed-in account (API 401 otherwise; the Upload sheet shows sign-in), and are always credited to the account name. `showcase:upload` reads a session token from `HOLOIM_SESSION`. On a phone, a long feed notice (the empty feed) no longer covers the Settings chip, and the empty notice stays off Settings' sheet.
 - **Closed 2026-11-11:** merged to `main` (`0e20b8c`) and deployed (API, viewer, capture). On the live app an anonymous upload answers 401, and a sign-in request for the user's address answered 202 and arrived in the inbox from `signin@mail.holostud.io` (not spam). CI's gate was red only for B-043's `bubble-capture` shard.
 - **Operator setup (done 2026-11-11):** sending domain `mail.holostud.io` verified in Resend, `RESEND_API_KEY` and `AUTH_EMAIL_FROM` set as Fly secrets (`docs/DEPLOYMENT.md`, "Sign-in email").
+
+### B-048 — AR views: a late anchor pulls the model back to a spot it left
+
+- **Area:** `apps/viewer-web/src/features/ar/ARHologramModel.tsx` (`requestWorldAnchor`), reached through `/ar/:id?shell=r3f`, the fallback shell; and `apps/viewer-web/src/features/xr/placementSystems.ts` (`ArPlacementSystem.adoptAnchor`), the default IWSDK shell
+- **Severity:** P3 (needs `createAnchor` to answer after a re-placement; both shells)
+- **Found:** 2026-11-11 by a TLA+ model of the placement stage, then replayed against the real view
+- **Cause:** `createAnchor`'s answer was accepted whenever the placement mode was set, so an anchor asked for at one spot was adopted after the model had moved. The frame loop then set the model to the anchor's pose. Two orderings:
+  1. Placed on a surface, anchor pending, the viewer turns away and the visibility fallback puts the model in front of them, the anchor arrives: the model jumps back to the unseen surface spot, and the status reads `visibility-fallback` with `anchored: true`.
+  2. Placed, anchor pending, Recenter places it again elsewhere, and the old anchor arrives after the new one (WebXR does not order the answers): the model jumps back to the first spot.
+- **Fix, on `bug/ar-late-anchor`:** `anchorRequestEpochRef` counts placements; `clearActiveAnchor` (every re-placement, reset and anchor loss) and the visibility fallback bump it, and an answer from an older epoch is deleted instead of adopted. The other modes (`hit-test`, `plane-detected`, `floor`) place and anchor as before.
+- **Replay:** `apps/viewer-web/e2e/ar-late-anchor.spec.ts` holds `XRFrame.createAnchor` open with a shim and steps exact frames (clock frozen). Before the fix, orderings 1 and 2 failed (model back at `[0, 1.299, -0.86]` from `[0, 1.38, 1.53]`, and from `[1, 0.129, -1.8]`); after it all three checks pass. Reports in `output/ar-late-anchor/` (`run-before.log`, `run-after.log`, `*.json`; ignored). Wired into `test:e2e:mocked` and its shard 1. `verify:agent` (lint, typecheck, unit tests) passes.
+- **Model's second claim did not hold:** "an anchor overwrites a `locked` model, and anchored models get no monitoring". Replayed (the third check): the anchor resolves after the 45-frame lock, the stage label goes `locked` → `anchored`, and the model does not move (it was anchored at the spot it stood on). Nothing reads the label but the `data-placement-stage` attribute and `arController`, which treats both as placed, so there is no user-visible defect and no change was made. Frames spent with an anchor skip the visibility monitor, so looking away does not trigger the fallback (also pinned by the third check); that fits the placement being a point in the room the viewer chose. The model was wrong to treat `locked` as terminal: the code never said so. A device that answers `createAnchor` within a few frames never reaches the fallback for surface placements; that is by design, not a recorded requirement either way, so it is left as a note.
+- **Default IWSDK shell, same defect (`bug/ar-late-anchor-iwsdk`, 2026-11-12):** `ArPlacementSystem.adoptAnchor` discarded an anchor only while the hologram was `searching` or gone, so an answer for a spot the hologram had left was adopted, and the frame loop then followed it. Three orderings, all replayed before the change:
+  1. Floor tap (`placeAtTap`) after the first anchor was asked, the old anchor answers (before or after the tap's own): the hologram moved from the tapped `[0.6, 0, -0.2]` back to `[0, 0, -0.6]`. With the old answer last it also replaced the tap's anchor.
+  2. Two-hand move after the anchor was asked, the old anchor answers during the move: after the hands let go and re-grounding ended, the hologram went from `[0.5, 0.77, -0.6]` back to `[0, 0, -0.6]`.
+  3. Recenter has the same shape (an old answer arriving after the new placement) but was not replayed on its own; the change covers it, since it bumps the same count. No other path asks for an anchor.
+  Fix: `ArRecordState.anchorEpoch`, as in the R3F view. A request remembers the count it was asked at; `invalidateAnchor` (tap, grab start, Recenter, forget) bumps it and lets go of the anchor, and `adoptAnchor` deletes an answer from an older count. Hit-test, floor, stage placements and anchored following are unchanged.
+  Replay: `apps/viewer-web/e2e/ar-late-anchor-iwsdk.spec.ts`, the same `createAnchor` shim (patching `XRFrame` and `XRHitTestResult`), clock frozen, exact frames. Phone AR for the taps, Quest-style AR with two controllers for the hand move. Before the fix all three failed (`output/ar-late-anchor-iwsdk/run-before.log`, `run-before-grab.log`); after it all three pass (`run-after.log`, `*.json`; ignored). Wired into `test:e2e:mocked` and its shard 1.
+  In IWER the first placement falls back to the floor (`hit-test-timeout`), so its anchor is the frame's `createAnchor`; a hit-test result's `createAnchor` (the `hit.createAnchor` call in `searchAhead`) is patched by the shim but was not exercised. It carries the same epoch.
+- **Not done:** emulation (IWER) only, no physical headset or phone.
+- **Closed 2026-11-12:** both shells fixed and replayed.
+
+### B-047 — Hosted CI on `main` fails on a different browser test each push, so deploys are skipped
+
+- **Area:** `apps/viewer-web` e2e (hosted CI shards), `apps/viewer-web/src/features/feed/HologramCardCanvas.tsx`
+- **Severity:** P1 (the CI Gate failed, so the viewer, capture and API deploys were skipped; production stayed at `2fba1e6`)
+- **Observed:** 2026-11-11, three pushes in a row (runs 43098856282, 43103556566, 43112916268).
+- **Cause:** four separate causes. Each depended on how long a frame or the page load took on a loaded runner:
+  1. `camera-take.pipeline.spec.ts`, "the initial is drawn in deep sea": counted centre pixels darker than a hard
+     cutoff. The 18 px initial covers pixels in part, and where its edges fall on the grid moves ink between
+     neighbours. Count on macOS 9, in Linux emulation 7, on CI 4 (threshold 6).
+  2. `bubble-capture.pipeline.spec.ts`, "feed sphere follows recorded motion": the 1.5 s walk take moves only for
+     its first 70%, and the looping feed was sampled from wherever the upload and load had left it. On a slow
+     runner both samples could fall in the still tail.
+  3. `spatial-audio.spec.ts`, "resumed, every source starts where the motion is": the motion time came from the
+     last frame and the audio clock from now, read between frames, so one stalled frame counted as skew
+     (0.1506 s against 0.15).
+  4. Pipeline shard 1 cancelled (run 43103556566): GitHub never assigned a runner (no runner name, no steps,
+     cancelled at 15 min). Not a test.
+  Emulation also found a fifth, in the app: the feed fitted the cloche on its first frame, after
+  `mixer.update(delta)` had already moved the take. A long first frame fitted the dome over different ground
+  ("cloche foot on the lowest drawn ground", 0.0537 m against 0.05).
+- **Fix (`bug/b-047-ci-flakes`):**
+  1. The face check sums each centre pixel's share of deep sea (integrated ink) instead of counting pixels past
+     a cutoff: 13.3 px native, 11.8 px in Linux emulation, threshold 6; an empty face has none.
+  2. After freezing the clock, the test starts the feed's take from 0, so both reads fall in the walk. The message
+     now prints clip times and `isRunning`.
+  3. `voicesInStep` samples in animation frames, after the card's own loop, over 5 frames, and takes each voice's
+     median error.
+  4. No change; a runner-capacity cancellation is retried by the next push.
+  5. `HologramCardCanvas` holds the take at its first pose until the dome is fitted (or found to have nothing to
+     wrap), so the dome no longer depends on the first frame's length.
+- **Evidence:** `scripts/ci-emulate.sh` (4 CPU, 16 GB, Linux), all fixes: `test:e2e:pipeline:shard1` ×6, 6 passed
+  (10.8 min); `test:e2e:pipeline:shard3` ×3, 21 passed (13.3 min); `test:e2e:mocked:shard2` ×5, 50 passed
+  (14.5 min). Before the fixes, shard 1 failed 1 run in 4 in emulation. `verify:agent` passes.
+- **Not this bug:** B-043 (an overlay intercepts the AR button click after the avatar-format uploads) has a
+  different cause and stays open.
+
+### B-049 — Capture take lifecycle: a starting take reads as idle, and a late mic refusal reads as "no microphone"
+
+- **Area:** `apps/capture/src/recording/RecordingSession.ts`, `AudioRecorder.ts`
+- **Severity:** P3 (the start window lasts as long as the microphone prompt; the second needs two `getUserMedia` calls that disagree)
+- **Found:** 2026-11-12 by a TLA+ model of the take lifecycle (`TakeLifecycle.tla`, in the side-session notes for this run), each claim replayed against the real page
+- **Reproduced 1, `isTakeBusy()` was false while a performer take started:** Record pressed, the microphone not yet answered: `ui.recordingState` is `idle`, size is locked (`sizeLocked`), and `isTakeBusy()` (`startingCamera !== null || recordingState !== 'idle'`) is false. Its consumers read it as "no take", so `CapturePlace.load` accepted a scan (`?placeCapture=1`) under the starting take instead of refusing it as it does while recording. The same gap was in a camera take letting go of the microphone after a hidden page or a session end (`await audio.stop()` with the size still locked). The camera start itself was covered by `startingCamera`.
+- **Reproduced 3, the shown microphone state came from whichever request spoke last:** `requestMicPermission()` (page load) and the take's own request (`getOrCreateStream`) are two `getUserMedia` calls; each wrote `micPermission`. The take's request granted and recording began, then the probe's refusal arrived: `micPermission` `denied`, and the overlay said "No microphone: takes save without sound." over a take that records sound (the export does carry `KHR_audio`). Needs the two calls to disagree (a transient device error on one), so it is rare; the replay answers them by hand.
+- **Fix, on `bug/take-lifecycle`:** `RecordingSession` keeps one `TakePhase` (`idle | starting | recording | exporting | abandoning`) in place of `sizeLocked`, `startingCamera`-as-busy and the `recordingState` reads. `isTakeBusy()` and `isSizeLocked` are `phase !== 'idle'`, `toggle()` acts only in `idle` (start) and `recording` (stop). `ui.recordingState` is unchanged for everything the user sees. One writer, `publishMicPermission()`, sets `micPermission` from `AudioRecorder.getPermissionState()`, which is `granted` while a stream is live whatever a separate request last heard; the probe's refusal no longer overwrites a live stream's grant. `render_game_to_text` gains `heightAdaptation.recordingTakeBusy`. No change to the exported GLB.
+- **Replay:** `pnpm --filter @holoim/capture run test:xr:take` (`apps/capture/scripts/ci-take-lifecycle-playwright.ts`; desktop, manual clock, the microphone answered by hand). Before the fix `start-window` and `mic-order` failed (scan load accepted during the start, `isTakeBusy` not true, UI `denied` while recording); after it all four phases pass. Reports in `output/take-lifecycle/` (`run-before.log`, `run-after.log`, `report.json`; ignored). The fixed model (`TakeLifecycleFixed.tla`) holds every rule.
+- **Did not reproduce, suspected 2:** "`endCameraTake()` ignores performer takes, so a page hide or an XR session end mid-start leaves a take running or half-started." The omission is real but not a defect. The `performer-ends` phase hides the page and ends a VR session while the microphone is pending: the start completes, the take records on the desktop, a hidden page mid-take does not stop it, and Stop exports one GLB and unlocks size. Nothing is stuck. The documented promise (`docs/features/archive/ar-recording.md:253`) is for camera takes, which stop and export; the model's rule for them (`CameraTakeEndsWithSession`) holds, and the existing `ar-record` phases (`hidden-at-start`, `ended-at-start`, `session-end`, `page-hidden`) cover it. Not replayed: a performer take across a long hidden page on the real clock (the manual clock cannot show a time gap).
+- **Also checked, no defect:** a double Record in one task makes one start and one microphone request; a double Stop makes one export and one download (`toggle-races`); the model found no way for a second take to begin while one is starting, recording or exporting.
+- **Not done:** emulation (IWER) and Chromium's fake microphone only, no physical headset or phone. While the microphone prompt is open Record is refused without a message and there is no way to cancel a starting performer take (unchanged; if the prompt is never answered the take never starts). The model leaves out the input-recording await (test builds only), the held microphone's release, and the export's own steps.
+
+### B-043 — The bubble pipeline test cannot click its card's AR button after the avatar-format uploads
+
+- **Area:** `apps/viewer-web` e2e (`test:smoke:pipeline`, part of `verify:pr`)
+- **Severity:** P2 (fails `verify:pr` locally; the pipeline stage is not in hosted CI)
+- **Observed:** 2026-11-11 on `main` `623e4645f986` and on `bug/b041-avatar-objects`
+- **Evidence:** `e2e/bubble-capture.pipeline.spec.ts:44` "real capture bubble exports, uploads and draws in feed and
+  immersive AR" times out after 6 min at `bubble-capture.pipeline.spec.ts:126`: clicking the new card's
+  `.ar-trigger-button` keeps hitting `<div data-reach="hidden" class="portal-controls" data-portal-mode="follow">`
+  (and `.portal-controls-side`), which "intercepts pointer events". 2 of 2 full-stage runs on the branch and 1 of 1 on
+  `main` fail the same way; the other 27 tests pass.
+- **Update 2026-11-12:** it also fails intermittently when the spec runs alone on clean `main` `fff8507`
+  (same click, same overlay, 6 min timeout): in two simultaneous runs of `main` and of `main` plus unrelated
+  CI-script changes, round 1 failed on both and round 2 passed on both, so it is a timing race, not tied to
+  the avatar-format uploads alone. Under heavy machine load it failed 0 of 5, then passed on a quiet retry
+  (`test:smoke:pipeline` 34 passed, 5 skipped).
+- **Expected:** the card's AR button is clickable whatever other cards the feed already holds.
+- **Reproduction:** `pnpm run test:smoke:pipeline` (about 17 min). The spec alone passes
+  (`RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/bubble-capture.pipeline.spec.ts` in
+  `apps/viewer-web`, 57 s), so it depends on the three `avatar-formats` uploads that run before it. Suspect: a
+  portal-controls overlay marked `data-reach="hidden"` still takes pointer events over the neighbouring card.
+- **Cause:** the reach controls fold 4 s after the last cursor move and, folded, take no presses (`pointer-events: none`). `pressViewInAr` hovered, then clicked; on a page stalled between the two (a loaded machine, the pipeline's 3D feed) the controls folded first, and Playwright waited on the `data-reach="hidden"` overlay without ever moving the cursor again. Logged under CPU load: reach shown 68 ms after the move, hidden about 25 s later, before the click's hit test. The app behaves as designed (styleguide 1.2); the avatar-format uploads were not involved.
+- **Fix:** `pressReach` (`e2e/bootstrap.ts`) moves the cursor and presses together and retries both when the controls fold; `pressViewInAr` uses it. Regression check: `portal.spec.ts` "desktop reach" folds the controls just before the first press; it fails on the old helper with the exact overlay error and passes now.
+- **Closed 2026-11-12:** `verify:pr` passed (pipeline stage included), and the spec passed under `scripts/ci-emulate.sh`. A separate load-only flake remained: the click can sit at Playwright's "stable" check when the page produces no frames on a starved machine; not seen on a quiet one.

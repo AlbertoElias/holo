@@ -7,20 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-047 — Hosted CI on `main` fails on a different browser test each push, so deploys are skipped
-
-- **Area:** `apps/viewer-web` e2e (hosted CI shards), `.github/workflows/ci.yml` gate
-- **Severity:** P1 (the CI Gate fails, so the viewer, capture and API deploys are skipped; production stays at `2fba1e6`)
-- **Observed:** 2026-11-11, three pushes in a row; the last green run was `2fba1e6`
-- **Evidence:**
-  - `5f89dfcc` (run 43098856282), pipeline shard 3: `camera-take.pipeline.spec.ts:924`, "the initial "C" is drawn in deep sea on the face" (`initialPixels` under 6, line 1035).
-  - `0e20b8c8` (run 43103556566): pipeline shard 1 was cancelled, so the gate failed.
-  - `8a7b7a09` (run 43112916268), pipeline shard 1: `bubble-capture.pipeline.spec.ts:45`, "feed sphere follows recorded motion" (line 91); viewer shard 2: `spatial-audio.spec.ts:236`, "resumed, every source starts where the motion is" (line 343, above `VOICE_SYNC_TOLERANCE_S`).
-  - Every other job passed in each run. Not yet reproduced locally.
-- **Expected:** a push to `main` whose checks pass locally passes the hosted gate and deploys.
-- **Reproduction:** run each spec alone, then under `scripts/ci-emulate.sh` with its shard's neighbours. Suspect: timing-sensitive assertions (motion sampled before playback advances, audio resume skew) under the hosted runner's load. These are different assertions from B-043 (the AR button click).
-- **Note:** a later push only deploys once the gate passes; check that the deploys run after the fix.
-
 ### B-042 — Agent-authored holograms have no Quick Look preview
 
 - **Area:** `apps/capture/scripts/showcase/upload.mjs`, `apps/viewer-api/tools/glb_to_usdz.py`
@@ -54,22 +40,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `showcase:build blue-hour`, start a local API with `USDZ_PYTHON` set, then run `showcase:upload --api <local> blue-hour` (status `ready`) and `inspect_usdz.py` on the stored GLB and USDZ.
 - **Not done:** Fly auto-stop can still interrupt a long conversion when nobody is using the site (the worker reclaims it after 20 min). Not seen on a real iPhone or in RealityKit with the full packages. Cause 3 is still open.
 
-### B-043 — The bubble pipeline test cannot click its card's AR button after the avatar-format uploads
-
-- **Area:** `apps/viewer-web` e2e (`test:smoke:pipeline`, part of `verify:pr`)
-- **Severity:** P2 (fails `verify:pr` locally; the pipeline stage is not in hosted CI)
-- **Observed:** 2026-11-11 on `main` `623e4645f986` and on `bug/b041-avatar-objects`
-- **Evidence:** `e2e/bubble-capture.pipeline.spec.ts:44` "real capture bubble exports, uploads and draws in feed and
-  immersive AR" times out after 6 min at `bubble-capture.pipeline.spec.ts:126`: clicking the new card's
-  `.ar-trigger-button` keeps hitting `<div data-reach="hidden" class="portal-controls" data-portal-mode="follow">`
-  (and `.portal-controls-side`), which "intercepts pointer events". 2 of 2 full-stage runs on the branch and 1 of 1 on
-  `main` fail the same way; the other 27 tests pass.
-- **Expected:** the card's AR button is clickable whatever other cards the feed already holds.
-- **Reproduction:** `pnpm run test:smoke:pipeline` (about 17 min). The spec alone passes
-  (`RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/bubble-capture.pipeline.spec.ts` in
-  `apps/viewer-web`, 57 s), so it depends on the three `avatar-formats` uploads that run before it. Suspect: a
-  portal-controls overlay marked `data-reach="hidden"` still takes pointer events over the neighbouring card.
-
 ### B-044 — On the user's table scan, the author's feet end 3 cm off the scan's floor
 
 - **Area:** `apps/viewer-web` e2e and `packages/place` (split capture slice 2a)
@@ -98,7 +68,29 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
   5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
 
-### B-048 — A long animated showcase piece fails Quick Look conversion on the extent budget
+### B-050 — The Poly Haven object-search case fails inside the full pipeline and passes alone
+
+- **Area:** `apps/viewer-web` e2e (`object-search.pipeline.spec.ts`), `apps/capture/scripts/lib/summon-take.mjs`
+- **Severity:** P2 (fails the `pipeline` step of `verify:pr`, which stops there)
+- **Observed:** 2026-11-12, in three full `test:smoke:pipeline` runs: twice on `feature/profiles-and-share` and once on clean `main`
+- **Evidence:** `e2e/object-search.pipeline.spec.ts:168` "found Poly Haven object: search, summon twice, credit survives the GLB, the feed card and the USDZ":
+  `TimeoutError: page.waitForFunction: Timeout 10000ms exceeded` in `trayHolds` (`summon-take.mjs:657`, called from `runDesktopFindApiTake`, `:856`),
+  the tray never reaching the expected count. Run alone it passes on both trees (1 passed in 57 s on `main` `73e9ef6f78aa`, 33 s on the branch).
+- **Expected:** it passes in the full pipeline as it does alone.
+- **Reproduction:** `pnpm run test:smoke:pipeline` from the repository root, with the five ports moved off their defaults when another run holds them.
+  Suspect: the 10 s `trayHolds` wait on a loaded machine after many specs, or state left in the shared database or the stubbed Poly Haven server.
+
+### B-051 — Feed spatial audio's motion-wrap step flakes on hosted CI
+
+- **Area:** `apps/viewer-web` e2e (`e2e/spatial-audio.spec.ts`), `test:e2e:mocked:shard2`
+- **Severity:** P2 (fails the CI Gate, which skips every deploy)
+- **Observed:** 2026-11-12 on hosted CI twice: run 43158849962 (`d0182e3c`, "after the motion wraps, every source is where the motion is") and run 43268222950 (`6b531875`, "the motion wraps", the poll at `spatial-audio.spec.ts:364` never seeing the clip time drop within `SPATIAL_CLIP_S + 4` s)
+- **Evidence:** local runs pass (3/3 with `--repeat-each=3` on 2026-11-12); not yet run under `scripts/ci-emulate.sh`.
+- **Expected:** the animated sources' clip wraps and the step passes on a 4-CPU runner as it does locally.
+- **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
+  Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
+
+### B-052 — A long animated showcase piece fails Quick Look conversion on the extent budget
 
 - **Area:** `apps/viewer-api/tools/glb_to_usdz.py`
 - **Severity:** P3 (one piece, "The way down", has no iPhone AR preview; the feed plays it)

@@ -10,6 +10,7 @@ import { TRUE_SCALE, fitCloche, type ClocheShape } from "@holoim/xr-ui-core";
 
 import { drawnBounds, drawnPoints, motionPoints, recordedBubble } from "../hologram/drawnPoints";
 import { boundsWithoutObjects, isCameraTake, normalizeSceneAtOrigin } from "../hologram/hologramScene";
+import { withKtx2 } from "../hologram/ktx2";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "../hologram/takePlayback";
 import { prepareAnimatedScene } from "../hologram/object3dUtils";
 import { useSphereClipping } from "../hologram/useSphereClipping";
@@ -147,7 +148,7 @@ export function ARHologramModel({
   children,
   clocheChrome
 }: ARHologramModelProps) {
-  const gltf = useGLTF(url);
+  const gltf = useGLTF(url, true, true, withKtx2);
   const { scene, animations } = gltf;
   const renderer = useThree((state) => state.gl);
   const renderScene = useThree((state) => state.scene);
@@ -202,6 +203,9 @@ export function ARHologramModel({
   const anchorReportedRef = useRef(new Vector3());
   const anchorRef = useRef<XRAnchor | null>(null);
   const anchorRequestPendingRef = useRef(false);
+  // Counts the placements an anchor request may still belong to: a request whose
+  // answer arrives after the model was placed again, reset, or let go is stale.
+  const anchorRequestEpochRef = useRef(0);
   const hitTestSourceRef = useRef<XRHitTestSource | null>(null);
   const cameraPositionRef = useRef(new Vector3());
   const cameraQuaternionRef = useRef(new Quaternion());
@@ -249,6 +253,7 @@ export function ARHologramModel({
 
   const clearActiveAnchor = useCallback((deleteAnchor: boolean): void => {
     anchorRequestPendingRef.current = false;
+    anchorRequestEpochRef.current += 1;
     const activeAnchor = anchorRef.current;
     anchorRef.current = null;
     if (!activeAnchor || !deleteAnchor) {
@@ -315,6 +320,7 @@ export function ARHologramModel({
     }
 
     anchorRequestPendingRef.current = true;
+    const requestEpoch = anchorRequestEpochRef.current;
     const transform = new XRRigidTransform(
       { x: position.x, y: position.y, z: position.z, w: 1 },
       { x: 0, y: 0, z: 0, w: 1 }
@@ -322,6 +328,16 @@ export function ARHologramModel({
 
     void createAnchor(transform, originReferenceSpace)
       .then((anchor: XRAnchor | undefined) => {
+        if (requestEpoch !== anchorRequestEpochRef.current) {
+          // The model was placed again (or reset) since the request: the anchor
+          // marks a spot it no longer stands on, and would pull it back there.
+          try {
+            anchor?.delete();
+          } catch {
+            // Best effort cleanup only.
+          }
+          return;
+        }
         anchorRequestPendingRef.current = false;
         if (!anchor || placementStatusRef.current.mode == null) {
           return;
@@ -336,7 +352,9 @@ export function ARHologramModel({
         });
       })
       .catch((error: unknown) => {
-        anchorRequestPendingRef.current = false;
+        if (requestEpoch === anchorRequestEpochRef.current) {
+          anchorRequestPendingRef.current = false;
+        }
         if (testHooks) {
           console.warn("[AR] Anchor placement unavailable; continuing without anchor.", error);
         }
@@ -707,6 +725,8 @@ export function ARHologramModel({
           distanceMeters,
           verticalOffsetMeters: AR_FALLBACK_PLACEMENT_VERTICAL_OFFSET_METERS
         });
+        // An anchor still being made marks the spot the model just left.
+        clearActiveAnchor(true);
         applyPlacementTransform(fallbackPlacement.position);
         state.monitorFrames = 0;
         state.continuousVisibilityFailures = 0;

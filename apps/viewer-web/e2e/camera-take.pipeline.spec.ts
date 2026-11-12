@@ -1026,13 +1026,19 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
   const ring = Array.from({ length: 8 }, (_, k) => (k * Math.PI) / 4).map((angle) => at(7 * Math.cos(angle) + (shown.screenAt[0] - Math.round(shown.screenAt[0])), 7 * Math.sin(angle)));
   const faceMatches = ring.filter((rgb) => rgb.every((value, i) => Math.abs(value - hue[i]!) <= 24)).length;
   expect(faceMatches, `the mark's face is the author's hue ${identity.hex} (${ring.map((rgb) => rgb.join(",")).join(" | ")})`).toBeGreaterThanOrEqual(6);
-  // The initial is thin type on a small face: count the pixels that read as deep sea ink rather than the hue, by how dark they are.
+  // The initial is thin type on a small face, so its strokes cover pixels in part, and how its edges fall on
+  // the pixel grid (the mark's sub-pixel place, the GPU's filtering) moves ink between neighbours without changing
+  // how much there is: sum each centre pixel's share of deep sea between the hue and deep sea, in pixels of ink.
   const lightness = (rgb: readonly number[]) => 0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!;
-  let initialPixels = 0;
+  const hueLightness = lightness(hue);
+  const inkLightness = lightness(hexToRgb(tokens.color.deepSea));
+  let initialInk = 0;
   for (let dy = -4; dy <= 4; dy += 1) for (let dx = -4; dx <= 4; dx += 1) {
-    if (lightness(at(dx, dy)) < lightness(hue) * 0.6) initialPixels += 1;
+    initialInk += Math.min(Math.max((hueLightness - lightness(at(dx, dy))) / (hueLightness - inkLightness), 0), 1);
   }
-  expect(initialPixels, `the initial "${identity.initial}" is drawn in deep sea on the face`).toBeGreaterThanOrEqual(6);
+  const grid = Array.from({ length: 9 }, (_, row) => Array.from({ length: 9 }, (_, col) => Math.round(lightness(at(col - 4, row - 4)))).join(" ")).join(" / ");
+  // About 13 pixels of ink at 18 apx; an empty face has none.
+  expect(initialInk, `the initial "${identity.initial}" is drawn in deep sea on the face (centre lightness, hue ${Math.round(hueLightness)}: ${grid})`).toBeGreaterThanOrEqual(6);
 
   // Outside the span the mark still stands where the camera is, with no ink.
   await settleInk(page, uploaded.url, OUTSIDE_SPAN_TIMES[1]!, 0);
@@ -1079,7 +1085,7 @@ test("a camera take shows the author's camera as a mark that follows the clip, a
     ink: inks.map((i) => ({ time: i.time, from: i.ink.ink!.from, to: i.ink.ink!.to, markAt: i.mark.markAt, referentAt: i.mark.referentAt, startErrorM: distance(i.ink.ink!.from, i.mark.markAt), endErrorM: distance(i.ink.ink!.to, i.mark.referentAt), hex: i.ink.inkHex })),
     fit: { boundsEqual: true, drawnPoints: fit.with.drawn.length / 3, motionPoints: fit.with.motion.length / 3, bounds: fit.with.bounds },
     feed: { camera: feed.camera, setRect: feed.setRect, box: feed.box, clocheBaseY: feed.clocheBaseY, cameraAgainstTakesOwnTestM: distance(feed.camera, reference.feed.camera) },
-    face: { ring, initialPixels },
+    face: { ring, initialInk },
     durationS: duration
   }, null, 2));
 });

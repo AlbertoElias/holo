@@ -33,7 +33,7 @@ describe("AuthPanel", () => {
     expect(mockedRequest).toHaveBeenCalledWith({ email: "ada@example.com", displayName: "Ada" });
   });
 
-  it("shows the verified account and signs out", async () => {
+  it("shows the signed-in account and signs out", async () => {
     const onSignOut = vi.fn();
     render(
       <AuthPanel
@@ -47,7 +47,7 @@ describe("AuthPanel", () => {
       />
     );
 
-    expect(screen.getByText("Verified creator")).toBeInTheDocument();
+    expect(screen.queryByText("Verified creator")).not.toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));

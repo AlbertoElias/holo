@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Page } from "@playwright/test";
 
-import { assertViewerShell, captureEvidence, expect, test, reachFor } from "./bootstrap";
+import { assertViewerShell, captureEvidence, expect, test, reachFor, pressReach } from "./bootstrap";
 import {
   PITCH_MAX,
   PITCH_MIN,
@@ -437,4 +437,30 @@ test("desktop freeze: scrolling away just after a drag on a playing card stays s
   // Past the 800 ms a settle waits for its glide: nothing pulls the feed back.
   await page.waitForTimeout(1200);
   expect(await feedScrollTop(page), "the feed stays on the card it scrolled to").toBe(away);
+});
+
+test("desktop reach: controls folded after the idle time take no press, and the next cursor move brings them back (B-043)", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 440 });
+  await openFeed(page, null);
+  const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+  const free = card.getByRole("button", { name: "Free", exact: true });
+  await reachFor(card);
+  // They fold 4 s after the last movement, or when the cursor leaves, and folded they take no press (pointer-events: none).
+  await expect(card.locator(".portal-controls")).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
+  expect(await free.evaluate((button) => getComputedStyle(button.closest(".portal-controls-reach")!).pointerEvents), "folded controls take no press").toBe("none");
+  // A page that stalls between the hover and the press finds them folded: the first attempt here folds them just before
+  // its press, and the helper moves the cursor again instead of waiting on the overlay.
+  let attempts = 0;
+  await pressReach(card, {
+    click: async (options) => {
+      attempts += 1;
+      if (attempts === 1) {
+        await page.mouse.move(2, 2);
+        await expect(card.locator(".portal-controls")).toHaveAttribute("data-reach", "hidden");
+      }
+      await free.click(options);
+    }
+  });
+  expect(attempts, "the first press met the folded controls and the second came after a new move").toBe(2);
+  await expect(card).toHaveAttribute("data-portal-mode", "free");
 });

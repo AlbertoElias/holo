@@ -35,6 +35,17 @@ export type FixtureOptions = {
    * wall behind it, up to 1.2 m above. It outweighs a sparse floor.
    */
   table?: { x: number; z: number; half: number; height: number; step: number; under: number; over: number };
+  /**
+   * Degree-1 spherical harmonics on every splat (`f_rest_0` to `f_rest_8`), as a trained scan carries them: a
+   * view-dependent tint that differs per splat. Without it the scan is SH0 only.
+   */
+  sh1?: boolean;
+  /**
+   * This many more splats laid on the floor, `fill.half` each way around the middle (the floor's `half` unless
+   * given), small and opaque, so a scan reaches a few million splats (hologram-budgets). They thicken the floor's
+   * peak, never move it, and are written straight to the file: `splats` does not list them (`count` does).
+   */
+  fill?: { count: number; half?: number };
 };
 
 /** One written splat, in the y-up room the file was made from, and in the file's own frame. */
@@ -56,7 +67,7 @@ function mulberry32(seed: number): () => number {
 
 type Splat = { x: number; y: number; z: number; r: number; g: number; b: number; opacity: number; scale: number };
 
-export function makeFixture({ floorY = 0.35, half, ring, blobs = [], clutter = 3000, noFloor = false, ceiling, yUp = false, floorStep = 0.06, floorJitter = 0.01, table }: FixtureOptions): Fixture {
+export function makeFixture({ floorY = 0.35, half, ring, blobs = [], clutter = 3000, noFloor = false, ceiling, yUp = false, floorStep = 0.06, floorJitter = 0.01, table, sh1 = false, fill }: FixtureOptions): Fixture {
   const rand = mulberry32(0x5ca17);
   const middle = { x: 1, z: -0.5 };
   const splats: Splat[] = [];
@@ -108,26 +119,58 @@ export function makeFixture({ floorY = 0.35, half, ring, blobs = [], clutter = 3
   }
   for (const blob of blobs) add(middle.x + blob.x, floorY + blob.height, middle.z + blob.z, blob.color, blob.scale, blob.opacity ?? 0.99);
 
-  const names = ["x", "y", "z", "nx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"];
-  const header = `ply\nformat binary_little_endian 1.0\nelement vertex ${splats.length}\n${names.map((name) => `property float ${name}`).join("\n")}\nend_header\n`;
-  const body = Buffer.alloc(splats.length * names.length * 4);
-  splats.forEach((splat, index) => {
-    const values = [
-      splat.x, noFloor ? Number.NaN : yUp ? splat.y : -splat.y, yUp ? splat.z : -splat.z, 0, 0, 0,
-      (splat.r - 0.5) / SH_C0, (splat.g - 0.5) / SH_C0, (splat.b - 0.5) / SH_C0,
-      Math.log(splat.opacity / (1 - splat.opacity)),
-      Math.log(splat.scale), Math.log(splat.scale), Math.log(splat.scale),
-      1, 0, 0, 0
-    ];
-    values.forEach((value, slot) => body.writeFloatLE(value, (index * names.length + slot) * 4));
-  });
+  const fillCount = Math.max(0, Math.floor(fill?.count ?? 0));
+  const fillHalf = fill?.half ?? half;
+  const names = ["x", "y", "z", "nx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", ...(sh1 ? Array.from({ length: 9 }, (_, i) => `f_rest_${i}`) : []), "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"];
+  const total = splats.length + fillCount;
+  const header = `ply\nformat binary_little_endian 1.0\nelement vertex ${total}\n${names.map((name) => `property float ${name}`).join("\n")}\nend_header\n`;
+  const body = Buffer.alloc(total * names.length * 4);
+  const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
+  let offset = 0;
+  const put = (value: number) => {
+    view.setFloat32(offset, value, true);
+    offset += 4;
+  };
+  const write = (splat: Splat) => {
+    put(splat.x);
+    put(noFloor ? Number.NaN : yUp ? splat.y : -splat.y);
+    put(yUp ? splat.z : -splat.z);
+    put(0);
+    put(0);
+    put(0);
+    put((splat.r - 0.5) / SH_C0);
+    put((splat.g - 0.5) / SH_C0);
+    put((splat.b - 0.5) / SH_C0);
+    // Each channel's three coefficients in turn, as trainers write them, of up to a quarter of the colour range.
+    if (sh1) for (let i = 0; i < 9; i += 1) put((rand() - 0.5) * 0.5);
+    put(Math.log(splat.opacity / (1 - splat.opacity)));
+    put(Math.log(splat.scale));
+    put(Math.log(splat.scale));
+    put(Math.log(splat.scale));
+    put(1);
+    put(0);
+    put(0);
+    put(0);
+  };
+  for (const splat of splats) write(splat);
+  const filler: Splat = { x: 0, y: 0, z: 0, r: 0, g: 0, b: 0, opacity: 0.95, scale: 0.012 };
+  for (let i = 0; i < fillCount; i += 1) {
+    filler.x = middle.x + (rand() - 0.5) * 2 * fillHalf;
+    filler.y = floorY + (rand() - 0.5) * floorJitter;
+    filler.z = middle.z + (rand() - 0.5) * 2 * fillHalf;
+    const shade = 0.3 + rand() * 0.35;
+    filler.r = shade;
+    filler.g = shade + 0.03;
+    filler.b = shade - 0.03;
+    write(filler);
+  }
   const written = splats.map((splat): FixtureSplat => ({
     room: [splat.x, splat.y, splat.z],
     file: [splat.x, yUp ? splat.y : -splat.y, yUp ? splat.z : -splat.z],
     scale: splat.scale,
     opacity: splat.opacity
   }));
-  return { bytes: Buffer.concat([Buffer.from(header, "ascii"), body]), floorY, middle, count: splats.length, splats: written };
+  return { bytes: Buffer.concat([Buffer.from(header, "ascii"), body]), floorY, middle, count: total, splats: written };
 }
 
 export async function writeFixture(dir: string, name: string, options: FixtureOptions): Promise<{ file: string } & Fixture> {

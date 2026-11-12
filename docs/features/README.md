@@ -16,6 +16,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Standard avatar formats (slice 1) | Complete | [avatar-formats.md](archive/avatar-formats.md) |
 | Shared XR interface and viewer VR/AR | Complete | [viewer-xr-interface.md](archive/viewer-xr-interface.md) |
 | Creator accounts (IDEA-052) | Complete | [creator-accounts.md](archive/creator-accounts.md) |
+| Creator pages, shareable holograms, search | Complete | [profiles-and-share.md](archive/profiles-and-share.md) |
 | Find an object by asking (PRD-060) | Delivered; device checks open | [object-search.md](object-search.md) |
 | Commit to deploy in under five minutes | Complete | [ci-under-5m.md](archive/ci-under-5m.md) |
 | Snappy feed first load | Shipped | [snappy-feed-first-load.md](snappy-feed-first-load.md) |
@@ -28,6 +29,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Resize and move props on every device | Complete | [object-resize-and-move.md](archive/object-resize-and-move.md) |
 | The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
+| Richer holograms (raise the size budgets) | Delivered (2026-11-12); device checks and the KTX2 fallback decision open | [hologram-budgets.md](hologram-budgets.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |
 | Self-resolving pointing | Verifying | [self-resolving-pointing.md](self-resolving-pointing.md) |

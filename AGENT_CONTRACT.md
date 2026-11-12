@@ -65,6 +65,10 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - Default during implementation: run `pnpm run verify:agent`. It derives affected
   workspaces and reverse dependents from package manifests, then fails closed to the
   comprehensive workspace checks if it cannot classify a change safely.
+- Pre-push hook: `core.hooksPath` points at `scripts/hooks/git` (set by `pnpm install`
+  or `pnpm run hooks:install`; `pnpm run doctor` fails if missing). Each push runs the
+  changed packages' `lint`, and `typecheck` of those packages and their dependents, in parallel;
+  docs-only pushes skip. Bypass only with `git push --no-verify`.
 - For documentation-only changes, check the edited content and references; do not
   run application suites solely because a Markdown file changed.
 - Required before merging into `main`: run `pnpm run verify:pr` locally. Hosted
@@ -100,10 +104,22 @@ usually smaller than two runners, and overlapping runs crash pages and time
 out navigations that pass on their own. The container is a
 close emulation, not the runner image: a failure that reproduces only on
 hosted CI is still a defect to explain, not something to rerun.
-- `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
-  the viewer AR checks, the capture → viewer pipeline, and the portal view
-  checks (`test:portal`: mocked gestures plus a real capture). `verify:full` is an
-  alias kept for older notes.
+- `pnpm run verify:pr` is the pre-merge gate. It runs only the suites the change
+  can affect: `scripts/verify-pr.ts` fetches `origin/main`, takes every file that
+  differs from the merge-base (commits, uncommitted and untracked), and maps
+  them with `scripts/ci-changed-areas.sh`, the mapping hosted CI uses. Doctor
+  and `check:ci-areas` always run; quality (lint, typecheck, unit, build,
+  shard check), knowledge, pipeline, portal, capture XR and viewer XR follow
+  their areas. The mapping fails closed (lockfile, unclassified file, no
+  merge-base: everything runs). `pnpm run verify:pr -- --dry-run` prints the
+  plan; `pnpm run verify:full` (or `verify:pr -- --full`) runs every suite
+  (capture XR flows, viewer AR checks, pipeline, portal). Keep `STEPS` in
+  `scripts/verify-pr.ts` in step with the CI jobs.
+- `verify:pr` writes its exit code to `output/verify-pr.exit` when it ends.
+  Wait on that file, not on the log:
+  `until [ -s output/verify-pr.exit ]; do sleep 20; done` (give a watcher at
+  least 40 minutes for a full run). Use `grep -a` on logs; NUL bytes made grep
+  skip them as binary, and the driver now prints them as `\0`.
 - If GLTF export/import contract is touched, run:
   1. `pnpm run verify:repo:capture`
   2. `pnpm run verify:repo:viewer`
@@ -118,7 +134,7 @@ before pushing. Measured locally on Node 24 (M-series, shared machine):
 |---|---|---|
 | Docs-only edit | `pnpm run verify:agent` (runs Knowledge `check:docs` only) | ~2 s |
 | One package edit | `pnpm run verify:agent` | 5–10 s |
-| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|flows\|terrain\|hands\|height\|body\|pointing\|object\|summon\|face>` | 10–45 s |
+| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|take\|flows\|terrain\|hands\|height\|body\|pointing\|object\|summon\|face>` | 10–45 s |
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |
@@ -164,6 +180,11 @@ before pushing. Measured locally on Node 24 (M-series, shared machine):
   build: quality in CI, `verify:pr` locally) fails unless the shards run each test exactly once. Update
   `CHECK_COST` and those scripts from the CI timing artifacts
   (`xr-checks-shard-*.json`, `playwright-web-*.json`) when a cost changes a lot.
+- `pnpm run check:ci-areas` feeds every tracked file through
+  `scripts/ci-changed-areas.sh` and fails if a source change would select no
+  CI suite (skipped jobs report green). Run it (also in `verify:pr`) after
+  editing the selector or adding a top-level path. The CI gate fails the same
+  case: no area, not `docs_only`, not `no_suite`.
 - Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`, `FACE_VIDEO=1`) screenshot every frame
   and multiply wall time; combine them with `XR_REPLAY_ONLY`.
 

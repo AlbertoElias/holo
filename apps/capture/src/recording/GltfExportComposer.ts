@@ -31,9 +31,13 @@ interface MorphExportBinding {
 
 /** A scanned place the take was recorded in: asked for its stored crop once the take's path is known. */
 export interface PlaceExportSource {
-  /** The crop for this path; with `maxSpzBytes`, thinned until its SPZ fits in that many bytes. */
+  /**
+   * The crop for this path, both levels (docs/features/hologram-budgets.md);
+   * with `maxSpzBytes`, fitted so both SPZs take at most that many bytes. The
+   * composer fits through the payload's own `fit`, which reuses its crop.
+   */
   prepare(path: THREE.Vector3[], maxSpzBytes?: number): Promise<PlaceExportPayload | null>;
-  /** The take's size cap (the upload's 25 MB, lowered only by the automation hook). */
+  /** The take's size cap (the upload's `MAX_HOLOGRAM_BYTES`, lowered only by the automation hook). */
   glbByteBudget(): number;
 }
 
@@ -265,7 +269,8 @@ export class GltfExportComposer {
         exporter.register((writer) => new GLTFObjectsPlugin(writer, drafts, authoring));
       }
       if (stored && placeNode) {
-        const place = { node: placeNode, spz: stored.spz, splatCount: stored.crop.numSplats, maxSh: stored.maxSh };
+        const detail = stored.detail ? { spz: stored.detail.spz, splatCount: stored.detail.crop.numSplats, maxSh: stored.detail.maxSh } : null;
+        const place = { node: placeNode, spz: stored.spz, splatCount: stored.crop.numSplats, maxSh: stored.maxSh, detail };
         exporter.register((writer) => new GLTFPlacePlugin(writer, place));
       }
       exporter.parse(
@@ -285,15 +290,13 @@ export class GltfExportComposer {
     try {
       const blob = await write(placePayload);
       if (!place || !placePayload) return blob;
-      // Sized at Stop (Q5): the place gets what the cap leaves after the rest of the take, thinned to fit, never refused.
+      // Sized at Stop (Q5, hologram-budgets): the place gets what the cap leaves after the rest of the take, never
+      // refused. Only the detail is thinned (or the light level, when there is no detail), and written again once.
       const budget = place.glbByteBudget();
       if (blob.size <= budget) return blob;
-      const room = budget - (blob.size - placePayload.spz.byteLength) - GLB_BUDGET_MARGIN_BYTES;
+      const room = budget - (blob.size - placePayload.placeBytes) - GLB_BUDGET_MARGIN_BYTES;
       if (room <= 0) return blob;
-      const smaller = await place.prepare(placePath, room);
-      if (!smaller) return blob;
-      smaller.raycast.dispose();
-      return await write(smaller);
+      return await write(await placePayload.fit(room));
     } finally {
       placePayload?.raycast.dispose();
     }

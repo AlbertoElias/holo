@@ -20,6 +20,7 @@ type HologramDto = {
   submittedBy: string;
   submittedByVerified: boolean;
   ownedByViewer: boolean;
+  ownerId: string | null;
 };
 
 function sha256(value: string): string {
@@ -36,11 +37,11 @@ describe("auth and ownership routes", () => {
   const requestMagicToken = (email: string, displayName?: string) => requestToken(app, email, displayName);
   const signIn = (email: string, displayName?: string) => signInAs(app, email, displayName);
 
-  async function upload(session: SessionBody, submittedBy = "Spoofed Name"): Promise<HologramDto> {
+  async function upload(session: SessionBody, submittedBy = "Spoofed Name", name = "Owned take"): Promise<HologramDto> {
     const boundary = `auth-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const payload = Buffer.concat([
       Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="hologramName"\r\n\r\nOwned take\r\n` +
+        `--${boundary}\r\nContent-Disposition: form-data; name="hologramName"\r\n\r\n${name}\r\n` +
           `--${boundary}\r\nContent-Disposition: form-data; name="submittedBy"\r\n\r\n${submittedBy}\r\n` +
           `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="avatar.glb"\r\n` +
           "Content-Type: model/gltf-binary\r\n\r\n"
@@ -92,6 +93,14 @@ describe("auth and ownership routes", () => {
         "usdzAttempts" INTEGER NOT NULL DEFAULT 0,
         "usdzError" TEXT,
         "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
+        "placeDetailKey" TEXT,
+        "textureDetailKey" TEXT,
+        "servedKey" TEXT,
+        "processStatus" TEXT NOT NULL DEFAULT 'none',
+        "processClaimedAt" DATETIME,
+        "processClaimToken" TEXT,
+        "processAttempts" INTEGER NOT NULL DEFAULT 0,
+        "processError" TEXT,
         "ownerId" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`);
@@ -112,7 +121,7 @@ describe("auth and ownership routes", () => {
       )`);
 
     const { buildApp } = await import("../src/app.js");
-    app = buildApp({ logger: false, uploadsRoot });
+    app = buildApp({ logger: false, uploadsRoot, searchLimit: 10_000, magicLinkLimit: 10_000 });
     await app.ready();
   });
 
@@ -228,5 +237,129 @@ describe("auth and ownership routes", () => {
       ownerId: ada.user.id,
       submittedBy: "Ada Lovelace"
     });
+  });
+
+  it("lists one creator's holograms, searches by title or creator, and pages a filtered list", async () => {
+    const ada = await signIn("ada@example.com", "Ada Lovelace");
+    const bo = await signIn("bo@example.com", "Bo");
+    await upload(ada, "x", "Engine tour");
+    await upload(ada, "x", "100% sure_thing");
+    await upload(bo, "x", "Engine room");
+    // A legacy upload: named by hand, no account.
+    await prisma.hologram.create({
+      data: {
+        filenameOriginal: "a.glb", hologramName: "Legacy engine", submittedBy: "alberto", filenameStored: "legacy.glb",
+        mimeType: "model/gltf-binary", sizeBytes: 1, storagePath: "uploads/legacy.glb"
+      }
+    });
+    const list = async (query: string) =>
+      (await app.inject({ method: "GET", url: `/api/holograms?${query}` })).json<{ items: HologramDto[]; nextCursor: string | null }>();
+
+    const owned = await list(`ownerId=${ada.user.id}`);
+    expect(owned.items.map((item) => item.hologramName).sort()).toEqual(["100% sure_thing", "Engine tour"]);
+    expect(owned.items.every((item) => item.ownerId === ada.user.id)).toBe(true);
+
+    expect((await list("q=ENGINE")).items.map((item) => item.hologramName).sort()).toEqual(["Engine room", "Engine tour", "Legacy engine"]);
+    expect((await list("q=lovelace")).items.map((item) => item.hologramName).sort()).toEqual(["100% sure_thing", "Engine tour"]);
+    expect((await list(`q=${encodeURIComponent("%")}`)).items.map((item) => item.hologramName)).toEqual(["100% sure_thing"]);
+    expect((await list(`q=${encodeURIComponent("_")}`)).items.map((item) => item.hologramName)).toEqual(["100% sure_thing"]);
+    expect((await list("q=zzz")).items).toEqual([]);
+    expect((await list(`q=${encodeURIComponent("éngine")}`)).items).toHaveLength(3);
+    expect((await list("limit=5&cursor=deleted-since")).items).toEqual([]);
+    expect((await list("q=%20%20")).items).toHaveLength(4);
+    expect((await list(`ownerId=${ada.user.id}&q=room`)).items).toEqual([]);
+
+    const first = await list(`ownerId=${ada.user.id}&limit=1`);
+    expect(first.items).toHaveLength(1);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await list(`ownerId=${ada.user.id}&limit=1&cursor=${first.nextCursor}`);
+    expect(second.items).toHaveLength(1);
+    expect(second.items[0]!.id).not.toBe(first.items[0]!.id);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it("pages a search through a table larger than one read batch, in order, and ends cleanly", async () => {
+    // 450 rows, newest first by index. Matches sit in the first, second and last read batches (batches are 200).
+    const base = Date.now() - 1_000_000;
+    const matching = new Set([3, 250, 449]);
+    await prisma.hologram.createMany({
+      data: Array.from({ length: 450 }, (_, index) => ({
+        filenameOriginal: "a.glb", hologramName: matching.has(index) ? `needle ${index}` : `filler ${index}`,
+        submittedBy: "bulk", filenameStored: `bulk-${index}.glb`, mimeType: "model/gltf-binary", sizeBytes: 1,
+        storagePath: `uploads/bulk-${index}.glb`, createdAt: new Date(base - index * 1000)
+      }))
+    });
+    const list = async (query: string) =>
+      (await app.inject({ method: "GET", url: `/api/holograms?${query}` })).json<{ items: HologramDto[]; nextCursor: string | null }>();
+
+    const names: string[] = [];
+    let cursor: string | null = null;
+    for (let pages = 0; pages < 10; pages += 1) {
+      const page: { items: HologramDto[]; nextCursor: string | null } = await list(`q=needle&limit=1${cursor ? `&cursor=${cursor}` : ""}`);
+      names.push(...page.items.map((item) => item.hologramName));
+      cursor = page.nextCursor;
+      if (!cursor) break;
+    }
+    expect(names).toEqual(["needle 3", "needle 250", "needle 449"]);
+    expect(cursor).toBeNull();
+
+    expect((await list("q=needle&limit=2")).items.map((item) => item.hologramName)).toEqual(["needle 3", "needle 250"]);
+    expect(await list("q=nothing-like-it")).toEqual({ items: [], nextCursor: null });
+  });
+
+  it("stops one search request after its scan budget and carries on from a cursor", async () => {
+    // 2300 rows, newest first by index; the only match is past the 2000-row budget of one request.
+    const base = Date.now() - 1_000_000;
+    await prisma.hologram.createMany({
+      data: Array.from({ length: 2300 }, (_, index) => ({
+        filenameOriginal: "a.glb", hologramName: index === 2250 ? "needle far" : `filler ${index}`,
+        submittedBy: "bulk", filenameStored: `far-${index}.glb`, mimeType: "model/gltf-binary", sizeBytes: 1,
+        storagePath: `uploads/far-${index}.glb`, createdAt: new Date(base - index * 1000)
+      }))
+    });
+    const list = async (query: string) =>
+      (await app.inject({ method: "GET", url: `/api/holograms?${query}` })).json<{ items: HologramDto[]; nextCursor: string | null }>();
+
+    const first = await list("q=needle&limit=5");
+    expect(first.items).toEqual([]);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await list(`q=needle&limit=5&cursor=${first.nextCursor}`);
+    expect(second.items.map((item) => item.hologramName)).toEqual(["needle far"]);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it("limits searches and sign-in emails per client, but not browsing the feed", async () => {
+    const { buildApp } = await import("../src/app.js");
+    const limited = buildApp({ logger: false, uploadsRoot: path.join(testRoot, "uploads"), searchLimit: 2, magicLinkLimit: 2 });
+    await limited.ready();
+    try {
+      const search = () => limited.inject({ method: "GET", url: "/api/holograms?q=anything" });
+      expect((await search()).statusCode).toBe(200);
+      expect((await search()).statusCode).toBe(200);
+      const refused = await search();
+      expect(refused.statusCode).toBe(429);
+      expect(Number(refused.headers["retry-after"])).toBeGreaterThan(0);
+      for (let browse = 0; browse < 5; browse += 1) {
+        expect((await limited.inject({ method: "GET", url: "/api/holograms" })).statusCode).toBe(200);
+      }
+
+      const ask = () =>
+        limited.inject({ method: "POST", url: "/api/auth/magic-link", payload: { email: "ada@example.com" } });
+      expect((await ask()).statusCode).toBe(202);
+      expect((await ask()).statusCode).toBe(202);
+      expect((await ask()).statusCode).toBe(429);
+    } finally {
+      await limited.close();
+    }
+  });
+
+  it("serves a creator's public page without their email, and 404s an unknown creator", async () => {
+    const ada = await signIn("ada@example.com", "Ada Lovelace");
+    await upload(ada);
+    const page = await app.inject({ method: "GET", url: `/api/users/${ada.user.id}` });
+    expect(page.statusCode).toBe(200);
+    expect(page.json()).toEqual({ id: ada.user.id, displayName: "Ada Lovelace", hologramCount: 1 });
+    expect(page.body).not.toContain("example.com");
+    expect((await app.inject({ method: "GET", url: "/api/users/nobody" })).statusCode).toBe(404);
   });
 });

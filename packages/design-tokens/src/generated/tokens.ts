@@ -295,6 +295,21 @@ export const tokens = {
         fill: false,
         linejoin: 'miter'
       },
+      copyLink: {
+        d: 'M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.4-2.4a2.6 2.6 0 0 0-3.7-3.7L8 4.3M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.1 9.2a2.6 2.6 0 0 0 3.7 3.7L8 11.7',
+        fill: false,
+        linejoin: 'round'
+      },
+      remove: {
+        d: 'M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.8 7v3.8M9.2 7v3.8',
+        fill: false,
+        linejoin: 'round'
+      },
+      search: {
+        d: 'M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9M10.3 10.3l3.2 3.2',
+        fill: false,
+        linejoin: 'round'
+      },
       undo: {
         d: 'M6 3.5 2.5 7l3.5 3.5M2.5 7H10a3.5 3.5 0 0 1 0 7H8',
         fill: false,

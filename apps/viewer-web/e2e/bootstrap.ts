@@ -11,6 +11,11 @@ const webglInvalidOperationPattern = /GL_INVALID_OPERATION/;
 // Console errors a test seeds on purpose (a missing model's 404), matched on
 // the message and the URL it names.
 const expectedConsoleErrors = new WeakMap<Page, RegExp[]>();
+// A test's own page.goto tears down texture loads still in flight. KTX2 images
+// transcode in workers, and three's GLTFLoader logs each cut one as it leaves
+// (PNG and JPEG decodes cut the same way stay silent). Only while the main
+// frame is navigating away is that the test's doing; at any other time it fails.
+const textureCutOnLeavePattern = /^THREE\.GLTFLoader: Couldn't load texture blob:/;
 
 /** Accepts console errors matching `pattern` (message or resource URL) for the rest of this test. */
 export function expectConsoleErrors(page: Page, pattern: RegExp): void {
@@ -22,11 +27,19 @@ export const test = base.extend({
     await attachXrEnvironment(page, process.env.XR_TEST_MODE === undefined ? {} : { mode: process.env.XR_TEST_MODE });
     const stepsBefore = xrStepTotals();
     const runtimeErrors: string[] = [];
+    let leaving = false;
+    page.on("request", (request) => {
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) leaving = true;
+    });
+    page.on("domcontentloaded", () => {
+      leaving = false;
+    });
     page.on("pageerror", (error) => {
       runtimeErrors.push(`pageerror: ${error.message}`);
     });
     page.on("console", (message) => {
       if (message.type() === "error") {
+        if (leaving && textureCutOnLeavePattern.test(message.text())) return;
         const seeded = expectedConsoleErrors.get(page)?.some((pattern) => pattern.test(message.text()) || pattern.test(message.location().url));
         if (!seeded) runtimeErrors.push(`console.error: ${message.text()}`);
       } else if (message.type() === "warning" && webglInvalidOperationPattern.test(message.text())) {
@@ -128,12 +141,27 @@ export { expect };
  * the card brings it out before they press it, so a test does the same.
  */
 export async function pressViewInAr(page: Page, card: Locator = page.locator(".feed-card").first()): Promise<void> {
-  await reachFor(card);
-  await card.locator(".ar-trigger-button").click();
+  await pressReach(card, card.locator(".ar-trigger-button"));
+}
+
+/**
+ * Presses a reach control the way a person does: the cursor moves over the card, and the press follows while the
+ * control shows. The controls fold 4 s after the last movement (styleguide 1.2) and, folded, take no presses, so a
+ * page that stalls between the hover and the press (a busy runner, B-043) finds them gone, and Playwright then waits
+ * on an overlay without ever moving the cursor. Each attempt moves it again, so the controls come back.
+ */
+export async function pressReach(card: Locator, control: Pick<Locator, "click">): Promise<void> {
+  await expect(async () => {
+    await reachFor(card);
+    await control.click({ timeout: 10_000 });
+  }).toPass({ timeout: 120_000, intervals: [0] });
 }
 
 /** A cursor over the card, so its reach controls (Free, tilt, View in your room, Step inside, sound) come out. */
+let reachNudge = 0;
 export async function reachFor(card: Locator): Promise<void> {
-  await card.locator(".feed-card-portal").hover({ force: true });
+  // Each call moves the cursor, so a card it already rests on still sees movement and unfolds the controls.
+  reachNudge = (reachNudge + 1) % 2;
+  await card.locator(".feed-card-portal").hover({ force: true, position: { x: 40 + reachNudge * 6, y: 40 } });
   await expect(card.locator(".portal-controls")).toHaveAttribute("data-reach", "shown");
 }

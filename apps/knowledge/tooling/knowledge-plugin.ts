@@ -107,6 +107,12 @@ export function knowledgePlugin(repoRoot: string): Plugin {
     return list;
   }
 
+  // The dev server already watches these paths (configureServer). Vite's dev
+  // addWatchFile also records each file as an import of the virtual module, so
+  // a deleted document then fails import analysis ("Failed to resolve import"),
+  // and the log line carries the \0 module-id prefix. Watch from the plugin
+  // only outside the dev server.
+  let dev = false;
   return {
     name: "holoim-knowledge",
     resolveId(id) {
@@ -120,7 +126,7 @@ export function knowledgePlugin(repoRoot: string): Plugin {
       ];
       const documents = files.sort().map((filename) => {
         requireRegularPath(filename);
-        this.addWatchFile(filename);
+        if (!dev) this.addWatchFile(filename);
         const content = readFileSync(filename, "utf8");
         return {
           path: path.relative(repoRoot, filename).split(path.sep).join("/"),
@@ -136,7 +142,7 @@ export function knowledgePlugin(repoRoot: string): Plugin {
             requireRegularPath(filename);
             const stat = lstatSync(filename);
             if (!stat.isFile() || stat.size > 5 * 1024 * 1024) continue;
-            this.addWatchFile(filename);
+            if (!dev) this.addWatchFile(filename);
             const type = mime[path.extname(filename).toLowerCase()]!;
             images[relative] =
               `data:${type};base64,${readFileSync(filename).toString("base64")}`;
@@ -148,6 +154,7 @@ export function knowledgePlugin(repoRoot: string): Plugin {
       return `export const images = ${JSON.stringify(images)}; export default ${JSON.stringify(documents)};`;
     },
     configureServer(server) {
+      dev = true;
       server.watcher.add([
         path.join(repoRoot, "docs"),
         ...rootFiles.map((file) => path.join(repoRoot, file)),

@@ -1,4 +1,6 @@
 import { useGLTF } from "@react-three/drei";
+import { withKtx2 } from "../hologram/ktx2";
+import { useTextureDetail } from "../hologram/textureDetail";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -64,6 +66,9 @@ export type HologramRenderInfo = {
 
 type HologramCardCanvasProps = {
   modelUrl: string;
+  /** The place's detail SPZ and the full-size textures (hologram-budgets), for the focused card. */
+  placeDetailUrl?: string | null;
+  textureDetailUrl?: string | null;
   active: boolean;
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
@@ -224,8 +229,10 @@ function FrameFirst({ run }: { run: (delta: number) => void }) {
   return null;
 }
 
-function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author, placeRequest }: {
+function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author, placeRequest }: {
   url: string;
+  placeDetailUrl: string | null;
+  textureDetailUrl: string | null;
   placeRequest: PlaceRequest | null;
   author: string;
   seed: string;
@@ -240,7 +247,7 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   portal: PortalStore;
 }) {
-  const gltf = useGLTF(url);
+  const gltf = useGLTF(url, true, true, withKtx2);
   const { scene, animations } = gltf;
   // The take's own place, read from the GLB's JSON (Spark-free); a malformed one leaves the take on its floor disc.
   const storedPlace = useMemo(() => {
@@ -334,6 +341,8 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   const rimProbe = useRef<RimProbe>({ gated: false, rimReady: false, lifts: false, maxLift: 0, buildMs: null, candidates: 0, heights: null, target: null, raw: null, framing: null, timing: null, groundAt: null, insideDome: null }).current;
   // A scanned place (testHooks only): the fit waits for it, with a timeout, then hides the recorded set.
   const placeGate = useMemo(() => createPlaceGate(testHooks && placeRequest !== null), [placeRequest]);
+  // The dome has been fitted once, or tried and found nothing to wrap (a take with no drawn points plays unwrapped).
+  const fitTried = useRef(false);
   useEffect(() => {
     if (placeGate.status !== "loading") return undefined;
     const timer = window.setTimeout(() => {
@@ -417,9 +426,10 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   if (zoomNode && !clocheZoom.current) clocheZoom.current = { scale: 1, centre: new Vector3() };
   const zoomScale = useRef(new Vector3()).current;
   const driveCloche = useCallback((delta: number) => {
-    // The take advances first: everything after reads this frame's pose. While a scan is awaited the take holds at its first pose,
-    // so the dome fitted after the wait is the dome fitted without one.
-    mixer.update(placeGate.status === "off" || clocheRef.current ? delta : 0);
+    // The take advances first: everything after reads this frame's pose. Until the dome is fitted the take holds at its
+    // first pose, so the dome is the same however long the first frame was (a loaded machine's can be a large part of a
+    // second, and the bubble walks over uneven ground), and the dome fitted after a scan's wait is the one fitted without.
+    mixer.update(clocheRef.current || (fitTried.current && placeGate.status === "off") ? delta : 0);
     // The bubble where it is now (a seek between frames included), not where the last draw synced it.
     if (fittedCentre.current && sphereClip.active && bubbleNode) clocheShift.copy(bubbleNode.getWorldPosition(bubbleNow)).sub(fittedCentre.current);
     const zoom = clocheZoom.current;
@@ -459,7 +469,12 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
   useEffect(() => {
     if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip, sound: soundRef });
+      const probe = { url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip, sound: soundRef };
+      observer?.(probe);
+      // Once processed, the API serves `<id>-light.glb` (hologram-budgets) in
+      // place of the `<id>.glb` the upload answered with; tests find a card by
+      // the upload's URL, whichever of the two the feed fetched first.
+      if (/-light\.glb$/.test(url)) observer?.({ ...probe, url: url.replace(/-light\.glb$/, ".glb") });
     }
   }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, rimProbe, domeClip, sphereClip, tracesProbe, url]);
 
@@ -752,7 +767,10 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     portal.runtime.playbackSeconds = primaryActionRef.current?.time ?? 0;
     if (!clocheRef.current) {
       // The scan is read before the dome is fitted, so the set it replaces is still in the fit.
-      if (placeGate.status !== "loading") fitClocheNow();
+      if (placeGate.status !== "loading") {
+        fitClocheNow();
+        fitTried.current = true;
+      }
     }
     else if (rimPending.current && groundFieldBudget()) buildRimNow(clocheRef.current);
     if (!(camera instanceof PerspectiveCamera)) {
@@ -887,6 +905,13 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
     }
     return sweep;
   }, [animations, cloche, clonedScene, placeRequest]);
+  // Full-size textures for the focused card (hologram-budgets, Q4 A).
+  useTextureDetail({
+    url: textureDetailUrl,
+    wanted: active,
+    scene: clonedScene,
+    associations: (gltf.parser as unknown as { associations: Map<object, { textures?: number } | undefined> }).associations
+  });
   // The lowest foot bone of the author now, for the place report.
   const readFeetY = useCallback(() => {
     const avatar = clonedScene.getObjectByName("RecordedAvatar");
@@ -945,6 +970,8 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
           <StoredPlaceMount
             place={storedPlace}
             readBytes={readStoredPlaceBytes}
+            detailUrl={placeDetailUrl}
+            detailWanted={active}
             scene={clonedScene}
             shape={cloche}
             shift={clocheShift}
@@ -965,6 +992,8 @@ function HologramModel({ url, active, muted, onHasAudio, onCredits, onRendered, 
 
 export function HologramCardCanvas({
   modelUrl,
+  placeDetailUrl = null,
+  textureDetailUrl = null,
   active,
   muted,
   onHasAudio,
@@ -993,7 +1022,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} placeRequest={placeRequest ?? null} />
+      <HologramModel url={modelUrl} placeDetailUrl={placeDetailUrl} textureDetailUrl={textureDetailUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} placeRequest={placeRequest ?? null} />
     </Canvas>
   );
 }

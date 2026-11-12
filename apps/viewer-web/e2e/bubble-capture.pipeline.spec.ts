@@ -83,12 +83,19 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   await writeFile(resolve(artifactDir, "capture-export.glb"), glbBytes);
   await page.waitForFunction(() => Boolean((window as unknown as { __feedProbe?: Probe }).__feedProbe));
   await freezePageClock(page);
+  // The author walks for the take's first 70% and stands for the rest, and the feed has played it for however long
+  // the upload and load took (looping): from its start, both reads fall in the walk on any machine.
+  await page.evaluate(() => {
+    const { actions, mixer } = (window as unknown as { __feedProbe: Probe }).__feedProbe;
+    for (const action of Object.values(actions)) action.time = 0;
+    mixer.update(0);
+  });
   await page.clock.runFor(100);
   const feedBefore = await captureBubblePixels(page, "feed", artifactDir);
   await page.clock.runFor(400);
   const feedAfter = await captureBubblePixels(page, "feed", artifactDir);
   const feedFloor = await measureFloor(page, "feed");
-  expect(feedAfter.sphere, "feed sphere follows recorded motion").not.toEqual(feedBefore.sphere);
+  expect(feedAfter.sphere, `feed sphere follows recorded motion (clip time ${feedBefore.time.join(",")} → ${feedAfter.time.join(",")} s, running ${feedAfter.running.join(",")})`).not.toEqual(feedBefore.sphere);
   // scene.glb's ground is its grass and its mountain; its boxes are props (a ledge within a step counts, as the brief's rule does).
   const SCENE_GROUND = ["pCylinder1_Grama", "Montanha"];
   // The rim on scene.glb's ground (3.4): against the test's own raycast at the start, middle and end of the walk.

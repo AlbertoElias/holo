@@ -44,8 +44,18 @@ it from the item below instead of duplicating its status here.
   approved before building; one heartbeat motif across all layers; the agent
   animates both figures (the user chose this over captured performances).
   First prove the feed's framing survives an animated world scale. Keep its
-  moving vertices × frames under the Quick Look extent budget (B-048).
+  moving vertices × frames under the Quick Look extent budget (B-052).
   Lessons go to `docs/product/concepts/agent-authored-holograms.md`.
+- [ ] Tests should not have to sign in (the user's direction on 2026-11-12).
+  Today 14 e2e specs sign in through the real magic-link route
+  (`apps/viewer-web/e2e/sign-in.ts`, `signInForUpload`, from B-044) to get
+  upload rights; the pipeline signs in dozens of times from one address.
+  Wanted: a test-API mode that accepts an upload without an account, with the
+  specs that do not test ownership switched to it. Constraints found while
+  scoping: `sign-in-email.spec.ts` asserts an anonymous upload gets 401 (B-044),
+  and `profiles.pipeline.spec.ts` needs owned uploads for creator pages and
+  delete, so both keep a real account; the mode must be a test-only flag that is
+  never on in production.
 
 - [ ] Record a take inside a scanned place (split capture slice 2, the
   user's direction on 2026-11-10): capture loads a scan (SPZ or PLY) as the
@@ -210,6 +220,32 @@ it from the item below instead of duplicating its status here.
   equivalent on Android) and drives the avatar's face, while headset or body
   tracking drives the rest. Needs a PRD first
   ([IDEA-078](docs/product/IDEAS.md)); depends on the two items above.
+
+- [ ] Replay the implicit state machines `/find-implicit-state-machines`
+  found but did not yet model (2026-11-12). Each is a hypothesis from a
+  read of the code, not a verified defect: model it, replay the bug path
+  against the real code, and record a defect in [`BUGS.md`](BUGS.md) only
+  when every step can happen. One session per machine, ranked by user harm:
+  1. Done (2026-11-12): capture take lifecycle, B-049 in
+     [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md). Two of three
+     suspected defects reproduced and are fixed; the third did not.
+  2. Done (2026-11-12): default AR shell anchor adoption, fixed with the
+     fallback shell under B-048.
+  3. Place gate (`apps/viewer-web/src/features/place/PlaceMount.tsx`): place
+     mounts after the gate timeout, and `fail()` overwrites `timeout`.
+  4. Portal tilt permission (`usePortalTriggers.ts`): a pending `enableTilt`
+     writes `on` after `reset()`.
+  5. Upload panel (`UploadPanel.tsx`): file picker stays enabled mid-upload and
+     is cleared by the success reset.
+  6. XR session mode (`apps/capture/src/runtime/xrEntry.ts`): stale
+     `requestedMode`.
+  7. Mic permission: independent promise writers and mismatched unions
+     (`apps/capture/src/types/contracts.ts` vs `packages/xr-ui-core/src/index.ts`).
+  8. Voice input (`apps/capture/src/objects/voiceInput.ts`), locomotion,
+     desktop reach and held modes (`packages/xr-ui-core/src/heldMode.ts`,
+     `apps/capture/src/xr/HeadsetHolds.ts`): not yet modeled.
+  The skill and its rules live in
+  [`.agents/skills/find-implicit-state-machines/SKILL.md`](.agents/skills/find-implicit-state-machines/SKILL.md).
 
 ## Later
 

@@ -13,6 +13,12 @@
 # job). Lockfile changes alter every app's dependencies and select every
 # area; unclassified files fail closed the same way. Keep this mapping in sync
 # with the test and deploy jobs in .github/workflows/ci.yml.
+#
+# no_suite=true means the changes legitimately need no suite (docs, CI
+# plumbing or nothing changed); the CI gate fails when no area and no
+# no_suite is set, and scripts/check-ci-areas.ts feeds file lists through this
+# script. CI_AREAS_FILES_FROM=<file> reads the changed files from a file
+# (one per line) instead of git, for that check.
 set -euo pipefail
 
 base="${1:-}"
@@ -28,18 +34,24 @@ api=false
 web=false
 capture_app=false
 docs_only=false
+no_suite=false
 
 all() {
   quality=true; capture_xr=true; e2e=true; pipeline=true; portal=true; usdz_tools=true
   api=true; web=true; capture_app=true
 }
 
-if [ -z "${base}" ] || [ "${base}" = "0000000000000000000000000000000000000000" ] \
-  || ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null; then
+if [ -z "${CI_AREAS_FILES_FROM:-}" ] && { [ -z "${base}" ] \
+  || [ "${base}" = "0000000000000000000000000000000000000000" ] \
+  || ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null; }; then
   echo "ci-changed-areas: no usable base; selecting all areas" >&2
   all
 else
-  files="$(git diff --name-only "${base}" "${head}")"
+  if [ -n "${CI_AREAS_FILES_FROM:-}" ]; then
+    files="$(cat "${CI_AREAS_FILES_FROM}")"
+  else
+    files="$(git diff --name-only "${base}" "${head}")"
+  fi
   if [ -z "${files}" ]; then
     echo "ci-changed-areas: no changed files" >&2
   fi
@@ -102,6 +114,9 @@ EOF
     && [ "${saw_plumbing}" = "false" ]; then
     docs_only=true
   fi
+  if [ "${saw_code}" = "false" ]; then
+    no_suite=true
+  fi
 fi
 
 cat <<EOF
@@ -115,4 +130,5 @@ api=${api}
 web=${web}
 capture_app=${capture_app}
 docs_only=${docs_only}
+no_suite=${no_suite}
 EOF

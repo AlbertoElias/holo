@@ -16,6 +16,9 @@ type BuildAppOptions = {
   logger?: boolean;
   uploadsRoot?: string;
   storage?: MediaStorage;
+  /** Searches per client per minute, and sign-in emails per client per ten minutes; tests lower them. */
+  searchLimit?: number;
+  magicLinkLimit?: number;
 };
 
 export function buildApp(options: BuildAppOptions = {}) {
@@ -53,8 +56,12 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   app.register(
     async (instance) => {
-      await registerAuthRoutes(instance);
-      await registerHologramRoutes(instance, { uploadsRoot, storage });
+      await registerAuthRoutes(instance, options.magicLinkLimit === undefined ? {} : { magicLinkLimit: options.magicLinkLimit });
+      await registerHologramRoutes(instance, {
+        uploadsRoot,
+        storage,
+        ...(options.searchLimit === undefined ? {} : { searchLimit: options.searchLimit })
+      });
       await registerObjectRoutes(instance);
     },
     { prefix: API_PREFIX }

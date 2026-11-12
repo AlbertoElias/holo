@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { createBrowserRouter, useSearchParams } from "react-router-dom";
+import { createBrowserRouter, useParams, useSearchParams } from "react-router-dom";
 
 import { FeedPage } from "../features/feed/FeedPage";
 import { AuthVerifyPage } from "../features/auth/AuthVerifyPage";
@@ -28,10 +28,35 @@ function ArRoute() {
   );
 }
 
+// The feed page keeps one list per source, so each route keys it by what it lists.
+function HomeRoute() {
+  const [params] = useSearchParams();
+  const q = params.get("q")?.trim() ?? "";
+  return q ? <FeedPage key={`q:${q}`} source={{ kind: "search", q }} /> : <FeedPage key="all" />;
+}
+
+function CreatorRoute() {
+  const { userId = "" } = useParams<{ userId: string }>();
+  return <FeedPage key={`u:${userId}`} source={{ kind: "creator", ownerId: userId }} />;
+}
+
+function HologramRoute() {
+  const { id = "" } = useParams<{ id: string }>();
+  return <FeedPage key={`h:${id}`} source={{ kind: "one", id }} />;
+}
+
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <FeedPage />
+    element: <HomeRoute />
+  },
+  {
+    path: "/u/:userId",
+    element: <CreatorRoute />
+  },
+  {
+    path: "/h/:id",
+    element: <HologramRoute />
   },
   {
     path: "/vr/:id",

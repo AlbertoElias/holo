@@ -1,13 +1,12 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { MultipartFile } from "@fastify/multipart";
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
 
-import { MAX_GLB_BYTES } from "../lib/constants.js";
-import { storedPlaceProblem } from "./place-check.js";
+import { MAX_GLB_BYTES, MAX_GLB_MEGABYTES } from "../lib/constants.js";
 
 const allowedMimeTypes = new Set(["model/gltf-binary", "application/octet-stream"]);
 
@@ -60,14 +59,9 @@ export async function saveUploadedGlb(file: MultipartFile, absoluteUploadDir: st
 
   await pipeline(file.file, createWriteStream(absolutePath));
 
+  // The place is checked by the split (hologram-ingest), on the file, not here.
   if (file.file.truncated || sizeBytes > MAX_GLB_BYTES) {
-    throw new UploadValidationError("File exceeds 25MB limit.", 413);
-  }
-
-  const placeProblem = await storedPlaceProblem(new Uint8Array(await readFile(absolutePath)));
-  if (placeProblem) {
-    await rm(absolutePath, { force: true });
-    throw new UploadValidationError(placeProblem, 422);
+    throw new UploadValidationError(`File exceeds ${MAX_GLB_MEGABYTES}MB limit.`, 413);
   }
 
   return { storedFilename, absolutePath, relativeStoragePath, sizeBytes };

@@ -16,7 +16,7 @@ import { advance, advanceUntil, readRow, setupFlatPage } from './tray-anytime-ta
 //     remove. A take carrying an object puts it back mid-take, and a
 //     mid-take summon is put back too: both presences end where capture put
 //     them back.
-//   - tray-budget: an item taken off the tray still counts toward the 16 MB
+//   - tray-budget: an item taken off the tray still counts toward the 64 MB
 //     budget while a copy of it is in the scene, since the take exports it;
 //     once that copy is put back, it no longer does. Judged from refusals,
 //     which are decided before a parse (a second heavy thumbnail read-back
@@ -321,7 +321,8 @@ export async function runTrayBudgetTake({ browser, baseUrl, artifactDir, console
   const fail = (message) => failures.push(message);
   await mkdir(artifactDir, { recursive: true });
   const { context, page } = await setupFlatPage(browser, { consoleErrors, label });
-  const heavy = heavyGlb();
+  // ~23 MB: two copies fit the 64 MB tray budget, a third does not.
+  const heavy = heavyGlb({ triangles: 200_000, textureSize: 2048 });
   const refusals = [];
   page.on('console', (message) => {
     const size = /The tray would be ([\d.]+) MB/.exec(message.text());
@@ -358,7 +359,7 @@ export async function runTrayBudgetTake({ browser, baseUrl, artifactDir, console
     state = await readState(page);
     const removed = state.objects.tray.items.length === 0;
     if (!removed) fail(`slot 1 did not leave the tray (${state.objects.tray.items.length} items)`);
-    // Two more would be three copies' bytes, past 16 MB: refused, counting the copy in the hand.
+    // Two more would be three copies' bytes, past 64 MB: refused, counting the copy in the hand.
     const whileCopy = await load(2);
     const countedWithCopy = refusals.at(-1) ?? null;
     if (whileCopy !== false || countedWithCopy === null || Math.abs(countedWithCopy - 3 * mb) > 0.1) fail(`two more loads with the copy in the scene: ${whileCopy}, counted ${countedWithCopy} MB, expected ${round(3 * mb, 1)}`);

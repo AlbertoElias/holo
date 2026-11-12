@@ -179,6 +179,15 @@ export class VrPlacementSystem extends createSystem() {
 
 interface ArRecordState {
   anchor: XRAnchor | null;
+  /**
+   * Counts the placements an anchor can still belong to. An anchor request
+   * remembers the count it was asked at, and its answer, which WebXR gives
+   * some frames later and in no fixed order, is adopted only while the count
+   * is unchanged. Every move of the hologram (a tap, a hand move, Recenter)
+   * and every let-go of the anchor bumps it, so an answer for a spot the
+   * hologram has left is deleted instead of pulling it back (B-048).
+   */
+  anchorEpoch: number;
   pendingAnchorPose: Matrix4 | null;
   /** A two-hand grab moved the hologram off its anchor; re-anchor where it is let go. */
   grabbed: boolean;
@@ -219,7 +228,7 @@ export class ArPlacementSystem extends createSystem() {
     const point = ray.intersectPlane(floor, new Vector3());
     if (!point || point.distanceTo(ray.origin) > AR_TAP_MAX_DISTANCE_M) return false;
     const state = this.state(record.entity);
-    this.dropAnchor(state);
+    this.invalidateAnchor(state);
     readHead(this);
     placeRecord(record, headPosition, point, "tap", false);
     state.pendingAnchorPose = object.matrixWorld.clone().setPosition(point);
@@ -231,7 +240,7 @@ export class ArPlacementSystem extends createSystem() {
     const state = this.states.get(entity);
     if (!state) return;
     this.cancelReground(state);
-    this.dropAnchor(state);
+    this.invalidateAnchor(state);
     this.states.delete(entity);
   }
 
@@ -246,7 +255,7 @@ export class ArPlacementSystem extends createSystem() {
   private state(entity: Entity): ArRecordState {
     let state = this.states.get(entity);
     if (!state) {
-      state = { anchor: null, pendingAnchorPose: null, grabbed: false, reground: null, ahead: false, searchStartedAt: performance.now(), nearestBlockM: null };
+      state = { anchor: null, anchorEpoch: 0, pendingAnchorPose: null, grabbed: false, reground: null, ahead: false, searchStartedAt: performance.now(), nearestBlockM: null };
       this.states.set(entity, state);
     }
     return state;
@@ -257,7 +266,7 @@ export class ArPlacementSystem extends createSystem() {
     const object = record.entity.object3D!;
     if (record.recenterRequested) {
       record.recenterRequested = false;
-      this.dropAnchor(state);
+      this.invalidateAnchor(state);
       this.cancelReground(state);
       record.placement = { ...record.placement, stage: "searching" };
       state.ahead = true;
@@ -268,7 +277,7 @@ export class ArPlacementSystem extends createSystem() {
     if (record.entity.hasComponent(Grabbed)) {
       // The hands hold it: the anchor lets go until it is released.
       if (!state.grabbed) {
-        this.dropAnchor(state);
+        this.invalidateAnchor(state);
         this.cancelReground(state);
       }
       state.grabbed = true;
@@ -405,7 +414,8 @@ export class ArPlacementSystem extends createSystem() {
       placeRecord(record, headPosition, position, "hit-test", false, "hit-test");
       state.ahead = false;
       c.stage ??= stageAt(headPosition, position);
-      void hit.createAnchor?.()?.then((anchor) => this.adoptAnchor(record, anchor), () => undefined);
+      const epoch = state.anchorEpoch;
+      void hit.createAnchor?.()?.then((anchor) => this.adoptAnchor(record, anchor, epoch), () => undefined);
       return;
     }
     if (performance.now() - state.searchStartedAt < AR_HIT_TEST_TIMEOUT_MS) return;
@@ -426,19 +436,27 @@ export class ArPlacementSystem extends createSystem() {
     const local = worldPose.clone().premultiply(this.player.matrixWorld.clone().invert());
     const position = new Vector3().setFromMatrixPosition(local);
     const transform = new XRRigidTransform({ x: position.x, y: position.y, z: position.z });
-    void frame.createAnchor(transform, refSpace)?.then((anchor) => this.adoptAnchor(record, anchor), () => undefined);
+    const epoch = this.state(record.entity).anchorEpoch;
+    void frame.createAnchor(transform, refSpace)?.then((anchor) => this.adoptAnchor(record, anchor, epoch), () => undefined);
   }
 
-  private adoptAnchor(record: PlacedHologram, anchor: XRAnchor): void {
+  private adoptAnchor(record: PlacedHologram, anchor: XRAnchor, epoch: number): void {
     const state = this.states.get(record.entity);
-    // Removed, or re-placing meanwhile: this anchor is stale.
-    if (!state || record.placement.stage === "searching" || !viewerContext(this.world).placed.includes(record)) {
+    // Removed, searching again, or placed anew since it was asked for (a tap,
+    // a hand move, Recenter): this anchor is for a spot the hologram left.
+    if (!state || state.anchorEpoch !== epoch || record.placement.stage === "searching" || !viewerContext(this.world).placed.includes(record)) {
       anchor.delete();
       return;
     }
     this.dropAnchor(state);
     state.anchor = anchor;
     record.placement = { ...record.placement, stage: "anchored" };
+  }
+
+  /** The hologram is moving on: lets go of its anchor and of every answer still on its way. */
+  private invalidateAnchor(state: ArRecordState): void {
+    state.anchorEpoch += 1;
+    this.dropAnchor(state);
   }
 
   private dropAnchor(state: ArRecordState): void {

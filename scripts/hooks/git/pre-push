@@ -1,0 +1,11 @@
+#!/bin/sh
+# Git pre-push hook (installed through core.hooksPath by `pnpm run hooks:install`).
+# Skip it only with the standard `git push --no-verify`.
+root="$(git rev-parse --show-toplevel)" || exit 0
+cd "$root" || exit 0
+major="$(tr -dc '0-9' < .nvmrc 2>/dev/null)"
+current="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)"
+if [ -n "$major" ] && [ "$current" != "$major" ] && [ -x scripts/agent-node-env.sh ]; then
+  eval "$(scripts/agent-node-env.sh 2>/dev/null)"
+fi
+exec node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/hooks/pre-push-checks.mjs "$@"
