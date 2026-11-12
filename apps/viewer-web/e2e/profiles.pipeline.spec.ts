@@ -192,6 +192,9 @@ test.describe("creator pages, hologram pages and search", () => {
   });
 
   test("the owner deletes behind a confirmation, and the page of a deleted hologram leaves for the feed", async ({ page }) => {
+    // Deleting lands on the feed, which on a shared database starts the models near its top;
+    // the next goto then cuts their textures off mid-load: the test's own doing, not the viewer's.
+    expectConsoleErrors(page, /Couldn't load texture blob:/);
     // Sign in as Ada in this page (the account exists; the API keeps its first name).
     await signInForUpload(page, { displayName: adaName });
     await page.goto(`/h/${ada[1]!.id}`);
