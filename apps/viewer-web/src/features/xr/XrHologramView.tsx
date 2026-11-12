@@ -19,7 +19,7 @@ const galleryItems = (items: readonly HologramDTO[]): GalleryFeed["items"] =>
 async function loadFeed(state: XrFeedState | null): Promise<GalleryFeed> {
   if (state?.feed) return { items: galleryItems(state.feed.items), nextCursor: state.feed.nextCursor };
   try {
-    const page = await fetchHolograms();
+    const page = await fetchHolograms(undefined, undefined, state?.filter);
     return { items: galleryItems(page.items), nextCursor: page.nextCursor };
   } catch (error) {
     // The opened hologram still shows; the gallery stays empty.
@@ -51,7 +51,7 @@ export function XrHologramView({ mode }: { mode: XrViewMode }) {
     let viewer: ViewerWorld | null = null;
     // Exit returns to the feed at the last focused hologram.
     const backToFeed = (focusedId: string | null): void =>
-      void navigate("/", { replace: true, state: { focusHologramId: focusedId ?? id } });
+      void navigate(feedState?.returnTo ?? "/", { replace: true, state: { focusHologramId: focusedId ?? id } });
 
     void (async () => {
       try {
@@ -63,7 +63,7 @@ export function XrHologramView({ mode }: { mode: XrViewMode }) {
           initial: { id: hologram.id, url: resolveMediaUrl(hologram.url) },
           feed,
           loadMore: async (cursor) => {
-            const page = await fetchHolograms(cursor);
+            const page = await fetchHolograms(cursor, undefined, feedState?.filter);
             return { items: galleryItems(page.items), nextCursor: page.nextCursor };
           },
           onSessionEnd: backToFeed
@@ -110,7 +110,7 @@ export function XrHologramView({ mode }: { mode: XrViewMode }) {
                 {XR_ENTRY_LABEL[mode]}
               </UiButton>
             ) : null}
-            <UiButton type="button" tone="ghost" onClick={() => void navigate("/", { state: { focusHologramId: id } })}>
+            <UiButton type="button" tone="ghost" onClick={() => void navigate(feedState?.returnTo ?? "/", { state: { focusHologramId: id } })}>
               Back to feed
             </UiButton>
           </UiStack>

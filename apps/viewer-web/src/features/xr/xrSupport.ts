@@ -1,5 +1,6 @@
 import type { HologramDTO } from "@holoim/contracts";
 
+import type { FeedFilter } from "../feed/api";
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
 
 
@@ -23,4 +24,8 @@ export const XR_ENTRY_LABEL = {
 /** Router state for `/vr/:id` and `/ar/:id`: the feed the card was opened from, for the gallery. */
 export interface XrFeedState {
   feed?: { items: HologramDTO[]; nextCursor: string | null };
+  /** What narrowed that feed (a creator or a search), so the gallery pages through the same list. */
+  filter?: FeedFilter;
+  /** The page the card was opened from (path and query); leaving the view returns there. */
+  returnTo?: string;
 }

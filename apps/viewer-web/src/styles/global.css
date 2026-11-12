@@ -156,6 +156,33 @@ body::before {
   display: flex;
 }
 
+/* Where the feed is narrowed to (a creator or a search), top left, mirroring Settings. */
+.feed-context {
+  position: fixed;
+  z-index: 10;
+  top: max(env(safe-area-inset-top), var(--holoim-glyph-gap));
+  left: max(env(safe-area-inset-left), var(--holoim-hit-phone-side-edge));
+  display: flex;
+  align-items: center;
+  column-gap: var(--holoim-glyph-gap);
+  max-width: calc(100vw - 2 * var(--feed-settings-clearance));
+}
+
+.feed-context-text {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A hologram whose model cannot draw has no reach row: its owner's controls sit alone in the foot. */
+.feed-card-foot-actions {
+  display: flex;
+  justify-content: center;
+  column-gap: var(--holoim-glyph-gap);
+  pointer-events: auto;
+}
+
 .feed-card-meta h2,
 .feed-card-meta p {
   margin: 0;
@@ -167,7 +194,8 @@ body::before {
   content: " · ";
 }
 
-.feed-card-credit a {
+.feed-card-credit a,
+.feed-card-link {
   position: relative;
   color: inherit;
   text-decoration: underline;
@@ -175,32 +203,28 @@ body::before {
 }
 
 /* Hit area: the touch minimum (styleguide 6.1), reached by an inset pseudo-element so the line does not shift. */
-.feed-card-credit a::after {
+.feed-card-credit a::after,
+.feed-card-link::after {
   content: "";
   position: absolute;
   inset: calc((var(--holoim-hit-touch) - 1lh) / -2) calc(var(--holoim-glyph-gap) / -2);
 }
 
-.feed-card-credit a:hover {
+/* The title is a link without the underline: it reads as the title, and answers hover and focus like the rest. */
+.feed-card-title-link {
+  text-decoration: none;
+}
+
+.feed-card-credit a:hover,
+.feed-card-link:hover {
   color: var(--holoim-glyph-states-hover-color);
 }
 
-.feed-card-credit a:focus-visible {
+.feed-card-credit a:focus-visible,
+.feed-card-link:focus-visible {
   outline: var(--holoim-glyph-states-focus-ring-width) solid var(--holoim-glyph-states-focus-ring-color);
   outline-offset: var(--holoim-glyph-states-focus-ring-offset);
   border-radius: var(--holoim-chip-radius);
-}
-
-.verified-badge {
-  margin-left: 0.45rem;
-  padding: 0.08rem 0.45rem;
-  border: 1px solid rgb(120 220 170 / 55%);
-  border-radius: 999px;
-  color: #9be7c0;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
 }
 
 .auth-dev-link {
@@ -213,19 +237,6 @@ body::before {
   margin: 12vh auto;
   padding: 1rem;
   text-align: center;
-}
-
-.feed-card-delete {
-  margin-top: 0.45rem;
-  padding: 0.3rem 0.8rem;
-  border: 1px solid rgb(255 150 150 / 45%);
-  border-radius: 999px;
-  background: transparent;
-  color: #ffb3b3;
-  font-size: 0.68rem;
-  cursor: pointer;
-  pointer-events: auto;
-  justify-self: start;
 }
 
 [data-flat-device="desktop"] .feed-card-title {

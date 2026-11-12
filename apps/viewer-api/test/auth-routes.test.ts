@@ -20,6 +20,7 @@ type HologramDto = {
   submittedBy: string;
   submittedByVerified: boolean;
   ownedByViewer: boolean;
+  ownerId: string | null;
 };
 
 function sha256(value: string): string {
@@ -36,11 +37,11 @@ describe("auth and ownership routes", () => {
   const requestMagicToken = (email: string, displayName?: string) => requestToken(app, email, displayName);
   const signIn = (email: string, displayName?: string) => signInAs(app, email, displayName);
 
-  async function upload(session: SessionBody, submittedBy = "Spoofed Name"): Promise<HologramDto> {
+  async function upload(session: SessionBody, submittedBy = "Spoofed Name", name = "Owned take"): Promise<HologramDto> {
     const boundary = `auth-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const payload = Buffer.concat([
       Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="hologramName"\r\n\r\nOwned take\r\n` +
+        `--${boundary}\r\nContent-Disposition: form-data; name="hologramName"\r\n\r\n${name}\r\n` +
           `--${boundary}\r\nContent-Disposition: form-data; name="submittedBy"\r\n\r\n${submittedBy}\r\n` +
           `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="avatar.glb"\r\n` +
           "Content-Type: model/gltf-binary\r\n\r\n"
@@ -228,5 +229,54 @@ describe("auth and ownership routes", () => {
       ownerId: ada.user.id,
       submittedBy: "Ada Lovelace"
     });
+  });
+
+  it("lists one creator's holograms, searches by title or creator, and pages a filtered list", async () => {
+    const ada = await signIn("ada@example.com", "Ada Lovelace");
+    const bo = await signIn("bo@example.com", "Bo");
+    await upload(ada, "x", "Engine tour");
+    await upload(ada, "x", "100% sure_thing");
+    await upload(bo, "x", "Engine room");
+    // A legacy upload: named by hand, no account.
+    await prisma.hologram.create({
+      data: {
+        filenameOriginal: "a.glb", hologramName: "Legacy engine", submittedBy: "alberto", filenameStored: "legacy.glb",
+        mimeType: "model/gltf-binary", sizeBytes: 1, storagePath: "uploads/legacy.glb"
+      }
+    });
+    const list = async (query: string) =>
+      (await app.inject({ method: "GET", url: `/api/holograms?${query}` })).json<{ items: HologramDto[]; nextCursor: string | null }>();
+
+    const owned = await list(`ownerId=${ada.user.id}`);
+    expect(owned.items.map((item) => item.hologramName).sort()).toEqual(["100% sure_thing", "Engine tour"]);
+    expect(owned.items.every((item) => item.ownerId === ada.user.id)).toBe(true);
+
+    expect((await list("q=ENGINE")).items.map((item) => item.hologramName).sort()).toEqual(["Engine room", "Engine tour", "Legacy engine"]);
+    expect((await list("q=lovelace")).items.map((item) => item.hologramName).sort()).toEqual(["100% sure_thing", "Engine tour"]);
+    expect((await list(`q=${encodeURIComponent("%")}`)).items.map((item) => item.hologramName)).toEqual(["100% sure_thing"]);
+    expect((await list(`q=${encodeURIComponent("_")}`)).items.map((item) => item.hologramName)).toEqual(["100% sure_thing"]);
+    expect((await list("q=zzz")).items).toEqual([]);
+    expect((await list(`q=${encodeURIComponent("éngine")}`)).items).toHaveLength(3);
+    expect((await list("limit=5&cursor=deleted-since")).items).toEqual([]);
+    expect((await list("q=%20%20")).items).toHaveLength(4);
+    expect((await list(`ownerId=${ada.user.id}&q=room`)).items).toEqual([]);
+
+    const first = await list(`ownerId=${ada.user.id}&limit=1`);
+    expect(first.items).toHaveLength(1);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await list(`ownerId=${ada.user.id}&limit=1&cursor=${first.nextCursor}`);
+    expect(second.items).toHaveLength(1);
+    expect(second.items[0]!.id).not.toBe(first.items[0]!.id);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it("serves a creator's public page without their email, and 404s an unknown creator", async () => {
+    const ada = await signIn("ada@example.com", "Ada Lovelace");
+    await upload(ada);
+    const page = await app.inject({ method: "GET", url: `/api/users/${ada.user.id}` });
+    expect(page.statusCode).toBe(200);
+    expect(page.json()).toEqual({ id: ada.user.id, displayName: "Ada Lovelace", hologramCount: 1 });
+    expect(page.body).not.toContain("example.com");
+    expect((await app.inject({ method: "GET", url: "/api/users/nobody" })).statusCode).toBe(404);
   });
 });

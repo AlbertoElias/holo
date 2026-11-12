@@ -27,6 +27,7 @@ function fakeDto(quickLookEnabled: boolean): HologramDTO {
     hologramName: "Demo",
     submittedBy: "Tester",
     submittedByVerified: false,
+    ownerId: null,
     ownedByViewer: false
   };
 }

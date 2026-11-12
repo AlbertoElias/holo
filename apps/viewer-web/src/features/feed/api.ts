@@ -1,8 +1,9 @@
-import type { HologramDTO, InitiateUploadResponse, PaginatedHolograms } from "@holoim/contracts";
+import type { HologramDTO, InitiateUploadResponse, PaginatedHolograms, PublicUserDTO } from "@holoim/contracts";
 import {
   hologramDtoSchema,
   initiateUploadResponseSchema,
-  paginatedHologramsSchema
+  paginatedHologramsSchema,
+  publicUserSchema
 } from "@holoim/contracts";
 
 import { authHeaders } from "../auth/auth";
@@ -27,11 +28,16 @@ async function readErrorMessage(response: Response, fallback: string): Promise<s
   return body.error ?? fallback;
 }
 
-export async function fetchHolograms(cursor?: string, limit = 10): Promise<PaginatedHolograms> {
+/** Narrows the feed to one creator's holograms, or to a search by title or creator name. */
+export type FeedFilter = { ownerId?: string; q?: string };
+
+export async function fetchHolograms(cursor?: string, limit = 10, filter: FeedFilter = {}): Promise<PaginatedHolograms> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) {
     params.set("cursor", cursor);
   }
+  if (filter.ownerId) params.set("ownerId", filter.ownerId);
+  if (filter.q) params.set("q", filter.q);
 
   let response: Response;
   try {
@@ -47,6 +53,20 @@ export async function fetchHolograms(cursor?: string, limit = 10): Promise<Pagin
   return paginatedHologramsSchema.parse(await response.json());
 }
 
+export async function fetchCreator(id: string): Promise<PublicUserDTO | null> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/users/${encodeURIComponent(id)}`);
+  } catch {
+    throw new Error(`Unable to reach API at ${resolveApiBaseForMessage()}. Start the API server and try again.`);
+  }
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, `Failed to fetch creator (${response.status}).`));
+  }
+  return publicUserSchema.parse(await response.json());
+}
+
 export async function deleteHologram(id: string): Promise<void> {
   const response = await fetch(`${apiBase}/holograms/${id}`, {
     method: "DELETE",
@@ -57,6 +77,8 @@ export async function deleteHologram(id: string): Promise<void> {
   }
 }
 
+export class HologramNotFoundError extends Error {}
+
 export async function fetchHologram(id: string): Promise<HologramDTO> {
   let response: Response;
   try {
@@ -65,11 +87,24 @@ export async function fetchHologram(id: string): Promise<HologramDTO> {
     throw new Error(`Unable to reach API at ${resolveApiBaseForMessage()}. Start the API server and try again.`);
   }
 
+  if (response.status === 404) {
+    throw new HologramNotFoundError(await readErrorMessage(response, "Hologram not found."));
+  }
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, `Failed to fetch hologram (${response.status}).`));
   }
 
   return hologramDtoSchema.parse(await response.json());
+}
+
+/** A shared link's hologram, or null when it no longer exists (deleted, or a mistyped link). */
+export async function fetchSharedHologram(id: string): Promise<HologramDTO | null> {
+  try {
+    return await fetchHologram(id);
+  } catch (error) {
+    if (error instanceof HologramNotFoundError) return null;
+    throw error;
+  }
 }
 
 export type UploadHologramInput = {
