@@ -116,8 +116,12 @@ and `remove` (owner only, behind a confirmation), drawn as SVG from
 5). Search is a glyph in the dock, beside making.
 Paging a creator page or a search keeps the feed's id cursor; the client moves
 the cursor up when the card it points at is deleted, so the list is not cut
-short. Search matches title and creator name in the API, after the cursor, so
-a page costs the same however many holograms match.
+short. Search matches title and creator name in the API (in code, so case and accents
+fold and a typed `%` is literal). It reads the table newest first in batches
+of 200 from the cursor and stops once the page is full, so memory is bounded
+and a common word costs a batch or two; a word that matches nothing reads
+every row once. The API has no rate limiting yet, which is the open guard
+against abusing that scan.
 
 ## Test plan and evidence
 

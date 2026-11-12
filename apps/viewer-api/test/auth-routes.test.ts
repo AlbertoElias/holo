@@ -270,6 +270,35 @@ describe("auth and ownership routes", () => {
     expect(second.nextCursor).toBeNull();
   });
 
+  it("pages a search through a table larger than one read batch, in order, and ends cleanly", async () => {
+    // 450 rows, newest first by index. Matches sit in the first, second and last read batches (batches are 200).
+    const base = Date.now() - 1_000_000;
+    const matching = new Set([3, 250, 449]);
+    await prisma.hologram.createMany({
+      data: Array.from({ length: 450 }, (_, index) => ({
+        filenameOriginal: "a.glb", hologramName: matching.has(index) ? `needle ${index}` : `filler ${index}`,
+        submittedBy: "bulk", filenameStored: `bulk-${index}.glb`, mimeType: "model/gltf-binary", sizeBytes: 1,
+        storagePath: `uploads/bulk-${index}.glb`, createdAt: new Date(base - index * 1000)
+      }))
+    });
+    const list = async (query: string) =>
+      (await app.inject({ method: "GET", url: `/api/holograms?${query}` })).json<{ items: HologramDto[]; nextCursor: string | null }>();
+
+    const names: string[] = [];
+    let cursor: string | null = null;
+    for (let pages = 0; pages < 10; pages += 1) {
+      const page: { items: HologramDto[]; nextCursor: string | null } = await list(`q=needle&limit=1${cursor ? `&cursor=${cursor}` : ""}`);
+      names.push(...page.items.map((item) => item.hologramName));
+      cursor = page.nextCursor;
+      if (!cursor) break;
+    }
+    expect(names).toEqual(["needle 3", "needle 250", "needle 449"]);
+    expect(cursor).toBeNull();
+
+    expect((await list("q=needle&limit=2")).items.map((item) => item.hologramName)).toEqual(["needle 3", "needle 250"]);
+    expect(await list("q=nothing-like-it")).toEqual({ items: [], nextCursor: null });
+  });
+
   it("serves a creator's public page without their email, and 404s an unknown creator", async () => {
     const ada = await signIn("ada@example.com", "Ada Lovelace");
     await upload(ada);

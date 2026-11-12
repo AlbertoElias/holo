@@ -164,11 +164,15 @@ function matchesSearch(row: { hologramName: string; submittedBy: string; owner?:
   return [row.hologramName, row.submittedBy, row.owner?.displayName ?? ""].some((field) => foldForSearch(field).includes(needle));
 }
 
-/** Where a row sits in the newest-first order, against a cursor row. */
-function isOlder(row: { createdAt: Date; id: string }, cursor: { createdAt: Date; id: string }): boolean {
-  const delta = row.createdAt.getTime() - cursor.createdAt.getTime();
-  return delta < 0 || (delta === 0 && row.id < cursor.id);
-}
+type Position = { createdAt: Date; id: string };
+
+/** Rows strictly after `position` in the newest-first order (createdAt, then id, both descending). */
+const olderThan = (position: Position): Prisma.HologramWhereInput => ({
+  OR: [{ createdAt: { lt: position.createdAt } }, { createdAt: position.createdAt, id: { lt: position.id } }]
+});
+
+/** How many rows a search reads from the database at a time. */
+const SEARCH_BATCH = 200;
 
 export async function listHolograms(args: ListHologramsArgs) {
   const cursorItem = args.cursor ? await prisma.hologram.findUnique({ where: { id: args.cursor } }) : null;
@@ -178,30 +182,35 @@ export async function listHolograms(args: ListHologramsArgs) {
   const scope: Prisma.HologramWhereInput[] = [excludeTestArtifacts()];
   if (args.ownerId) scope.push({ ownerId: args.ownerId });
 
+  const order: Prisma.HologramOrderByWithRelationInput[] = [{ createdAt: "desc" }, { id: "desc" }];
   let rows;
   if (args.q) {
     // Matching happens in code, not SQL, so a typed % or _ is literal and case and accents fold for every
-    // script. The matches are cut to the page here too, rather than passed back to SQL as a long id list.
+    // script. The database is read newest first in batches, from the cursor, and the scan stops as soon as
+    // the page is full: a common word costs a batch or two, and memory never holds more than a batch.
+    // A word that matches nothing reads every row once, in batches.
     const needle = foldForSearch(args.q);
-    const candidates = await prisma.hologram.findMany({
-      where: { AND: scope },
-      include: { owner: { select: { displayName: true } } },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }]
-    });
-    rows = candidates
-      .filter((row) => matchesSearch(row, needle) && (!cursorItem || isOlder(row, cursorItem)))
-      .slice(0, args.limit + 1);
-  } else {
-    if (cursorItem) {
-      scope.push({
-        OR: [{ createdAt: { lt: cursorItem.createdAt } }, { createdAt: cursorItem.createdAt, id: { lt: cursorItem.id } }]
-      });
+    rows = [];
+    let after: Position | null = cursorItem;
+    while (rows.length <= args.limit) {
+      const batch: Array<Prisma.HologramGetPayload<{ include: { owner: { select: { displayName: true } } } }>> =
+        await prisma.hologram.findMany({
+          where: { AND: after ? [...scope, olderThan(after)] : scope },
+          include: { owner: { select: { displayName: true } } },
+          orderBy: order,
+          take: SEARCH_BATCH
+        });
+      for (const row of batch) {
+        if (!matchesSearch(row, needle)) continue;
+        rows.push(row);
+        if (rows.length > args.limit) break;
+      }
+      if (batch.length < SEARCH_BATCH) break;
+      after = batch[batch.length - 1]!;
     }
-    rows = await prisma.hologram.findMany({
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: args.limit + 1,
-      where: { AND: scope }
-    });
+  } else {
+    if (cursorItem) scope.push(olderThan(cursorItem));
+    rows = await prisma.hologram.findMany({ orderBy: order, take: args.limit + 1, where: { AND: scope } });
   }
 
   const hasNext = rows.length > args.limit;
