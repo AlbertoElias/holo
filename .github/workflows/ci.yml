@@ -45,6 +45,7 @@ jobs:
       web: ${{ steps.areas.outputs.web }}
       capture_app: ${{ steps.areas.outputs.capture_app }}
       docs_only: ${{ steps.areas.outputs.docs_only }}
+      no_suite: ${{ steps.areas.outputs.no_suite }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -711,6 +712,20 @@ jobs:
             echo "| Deploy viewer (Pages) | ${DEPLOY_WEB_RESULT} |"
             echo "| Deploy capture (Pages) | ${DEPLOY_CAPTURE_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
+      # Skipped jobs report green, so a change the selector cannot see would
+      # pass untested: fail unless some area ran, the change is docs-only, or
+      # it is declared no-suite plumbing (scripts/ci-changed-areas.sh).
+      - name: Enforce that changed source selected a suite
+        env:
+          AREAS: ${{ needs.changes.outputs.quality }}${{ needs.changes.outputs.capture_xr }}${{ needs.changes.outputs.e2e }}${{ needs.changes.outputs.pipeline }}${{ needs.changes.outputs.portal }}${{ needs.changes.outputs.usdz_tools }}${{ needs.changes.outputs.api }}${{ needs.changes.outputs.web }}${{ needs.changes.outputs.capture_app }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          NO_SUITE: ${{ needs.changes.outputs.no_suite }}
+        run: |
+          if [ "${DOCS_ONLY}" != "true" ] && [ "${NO_SUITE}" != "true" ] \
+            && ! grep -q true <<<"${AREAS}"; then
+            echo "::error::Changed files selected no CI area, so every suite skipped; fix scripts/ci-changed-areas.sh"
+            exit 1
+          fi
       - name: Enforce required jobs
         run: |
           # A job is either green or skipped because its area was not
