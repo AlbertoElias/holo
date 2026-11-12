@@ -165,8 +165,9 @@ contracts are preserved, and direct-upload is additive.
   schemas in `packages/contracts`. Local driver returns
   `{ mode: "multipart" }` from initiate and the web falls back to the
   existing multipart POST. Unauthenticated intent minting was a
-  beta-accepted abuse risk (25 MB cap per intent); all upload routes now
-  require sign-in (creator accounts), so it no longer applies.
+  beta-accepted abuse risk (then 25 MB per intent); all upload routes now
+  require sign-in (creator accounts), so it no longer applies, and the cap
+  is 100 MB (`MAX_HOLOGRAM_BYTES`, hologram-budgets).
 - **B6 Quick Look.** Contracts export `usdzStatusSchema` and
   `usdzStatusResponseSchema` (`{ id, usdzStatus, usdzUrl }`); the 202
   carries `Retry-After: 5`. DTO `usdzUrl` is non-null exactly when
