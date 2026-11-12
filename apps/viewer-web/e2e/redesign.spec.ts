@@ -173,9 +173,13 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     const reachedPlay = await play.boundingBox();
     expect(Math.abs(reachedPlay!.x - restingPlay!.x), "Play does not move as the reach controls come").toBeLessThan(1);
     expect(Math.abs(reachedPlay!.x + reachedPlay!.width / 2 - viewport.width / 2), "Play holds the middle").toBeLessThan(2);
+    // The reach controls may unfold on a row of their own when they do not fit beside Play, so crowding is judged within a row.
     const spacing = await controls.evaluate((row) => [...row.querySelectorAll("button")].map((button) => button.getBoundingClientRect()).sort((a, b) => a.x - b.x));
     for (let index = 1; index < spacing.length; index += 1) {
-      expect(spacing[index]!.x - (spacing[index - 1]!.x + spacing[index - 1]!.width), "no two controls crowd").toBeGreaterThanOrEqual(tokens.glyph.gap - 0.5);
+      const sameRow = spacing.slice(0, index).filter((box) => Math.abs(box.y + box.height / 2 - (spacing[index]!.y + spacing[index]!.height / 2)) < 4);
+      const before = sameRow.at(-1);
+      if (!before) continue;
+      expect(spacing[index]!.x - (before.x + before.width), "no two controls crowd").toBeGreaterThanOrEqual(tokens.glyph.gap - 0.5);
     }
     await shot(page, `${label}-feed-reached`);
 
@@ -327,8 +331,9 @@ test.describe("phone by touch", () => {
     await assertViewerShell(page);
     await waitForPortalReady(page, long.id, long.url);
     const dock = page.getByRole("toolbar", { name: "Feed" });
-    await expect(dock.getByRole("button"), "Upload stands alone in the dock").toHaveCount(1);
+    await expect(dock.getByRole("button"), "the dock holds Upload and Search, and Settings is not among them").toHaveCount(2);
     await expect(dock.getByRole("button", { name: "Upload a hologram" })).toBeVisible();
+    await expect(dock.getByRole("button", { name: "Search" })).toBeVisible();
     const settings = page.getByRole("button", { name: "Settings" });
     const corner = (await settings.boundingBox())!;
     expect(corner.y, "at the top of the screen").toBeLessThan(PHONE.height * 0.08);
