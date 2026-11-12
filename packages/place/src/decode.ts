@@ -21,6 +21,15 @@ export type DecodedScan = {
   packedArray: Uint32Array;
   numSplats: number;
   encoding: Spark.PackedSplats["splatEncoding"];
+  /**
+   * Spark's degree-1 spherical harmonics (`PackedSplats.extra.sh1`), 2 words
+   * per splat in the same order as `packedArray` (7 bits for each of the 9
+   * coefficients, scaled by `encoding.sh1Max`); null when the scan has none.
+   * Higher degrees are left behind: a place stores at most SH1.
+   */
+  sh1: Uint32Array | null;
+  /** The SH degree the scan carries, as far as a place stores it: 1 with `sh1`, else 0. Never padded. */
+  maxSh: 0 | 1;
   /** Each splat's centre in the scan's frame turned to y up, its largest scale, its opacity. */
   centers: Float32Array;
   scale: Float32Array;
@@ -72,6 +81,7 @@ export async function decodeScan(input: { bytes: Uint8Array; fileName: string; f
   await splats.initialized;
   const { numSplats, packedArray, splatEncoding } = splats;
   if (!packedArray || numSplats === 0) throw new Error("no splats in the file");
+  const sh1 = splats.extra.sh1 instanceof Uint32Array && splats.extra.sh1.length >= numSplats * 2 ? splats.extra.sh1 : null;
   const centers = new Float32Array(numSplats * 3);
   const scale = new Float32Array(numSplats);
   const opacity = new Float32Array(numSplats);
@@ -100,6 +110,8 @@ export async function decodeScan(input: { bytes: Uint8Array; fileName: string; f
     packedArray,
     numSplats,
     encoding: splatEncoding,
+    sh1,
+    maxSh: sh1 ? 1 : 0,
     centers: upCenters,
     scale,
     opacity,
