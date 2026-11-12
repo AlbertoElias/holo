@@ -174,7 +174,7 @@ before pushing. Measured locally on Node 24 (M-series, shared machine):
   `ubuntu-latest` runner has 2 vCPUs, so the default is 1. Running 2 at a time
   passed on the branch but timed out on main: the hand and body checks each
   open 2 pages at once, and cold page loads then pass the 30 s goto limit.
-  The pipeline job runs its specs in 6 shards, the viewer mocked suite in 4
+  The pipeline job runs its specs in 11 shards, the viewer mocked suite in 4
   and the VR checks in 2, each a script balanced by measured wall time
   (`test:e2e:pipeline:shard<i>`, `test:e2e:mocked:shard<i>`,
   `test:e2e:xr-viewer-vr:shard<i>` in
