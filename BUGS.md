@@ -68,6 +68,18 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
   5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
 
+### B-050 — The Poly Haven object-search case fails inside the full pipeline and passes alone
+
+- **Area:** `apps/viewer-web` e2e (`object-search.pipeline.spec.ts`), `apps/capture/scripts/lib/summon-take.mjs`
+- **Severity:** P2 (fails the `pipeline` step of `verify:pr`, which stops there)
+- **Observed:** 2026-11-12, in three full `test:smoke:pipeline` runs: twice on `feature/profiles-and-share` and once on clean `main`
+- **Evidence:** `e2e/object-search.pipeline.spec.ts:168` "found Poly Haven object: search, summon twice, credit survives the GLB, the feed card and the USDZ":
+  `TimeoutError: page.waitForFunction: Timeout 10000ms exceeded` in `trayHolds` (`summon-take.mjs:657`, called from `runDesktopFindApiTake`, `:856`),
+  the tray never reaching the expected count. Run alone it passes on both trees (1 passed in 57 s on `main` `73e9ef6f78aa`, 33 s on the branch).
+- **Expected:** it passes in the full pipeline as it does alone.
+- **Reproduction:** `pnpm run test:smoke:pipeline` from the repository root, with the five ports moved off their defaults when another run holds them.
+  Suspect: the 10 s `trayHolds` wait on a loaded machine after many specs, or state left in the shared database or the stubbed Poly Haven server.
+
 ## Entry template
 
 ```md
