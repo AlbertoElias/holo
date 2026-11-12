@@ -79,6 +79,8 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** it passes in the full pipeline as it does alone.
 - **Reproduction:** `pnpm run test:smoke:pipeline` from the repository root, with the five ports moved off their defaults when another run holds them.
   Suspect: the 10 s `trayHolds` wait on a loaded machine after many specs, or state left in the shared database or the stubbed Poly Haven server.
+  2026-11-12 (`feature/hologram-budgets`): it also failed run alone, twice, at a load average of about 45 on 10 cores (other sessions' browsers), then
+  passed alone (2 passed in 1.0 m) once the load fell to about 30; this points to the 10 s wait under load rather than leftover state.
 
 ### B-051 — Feed spatial audio's motion-wrap step flakes on hosted CI
 

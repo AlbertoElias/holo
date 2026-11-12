@@ -308,15 +308,17 @@ accept it (tabs reload on the next visit), add a build-version check that
 reloads stale tabs, or serve the fallback for a grace period. Found by the
 independent verifier.
 
-## Known risk: KTX2 can serve more bytes than small JPEGs (decision open)
+## KTX2 kept only where it saves bytes (fixed 2026-11-12)
 
-Processing encodes every texture to KTX2, even when the source is a small
-JPEG. For the capture's `avatar.glb` (twenty JPEG textures of 64 to 1024 px),
-the served light GLB is 3.55 MB against a 1.83 MB upload: KTX2 cuts GPU memory
-but roughly doubles the download here. Options: keep a texture as uploaded
-when its KTX2 is larger and it is not downscaled (which needs a PNG/JPEG path
-next to `KHR_texture_basisu`), or serve the stored GLB whenever the light GLB
-is the larger file.
+Processing used to encode every texture to KTX2, even a small JPEG: the
+capture's `avatar.glb` (twenty JPEG textures of 64 to 1024 px) was served as a
+3.55 MB light GLB against a 1.83 MB upload. A texture that fits the served size
+and whose KTX2 is no smaller than its upload now stays as uploaded (skipped as
+`smaller-as-uploaded`), and `KHR_texture_basisu` is required only when some
+texture still uses it. `avatar.glb` is now served at 1.83 MB, with one texture
+in KTX2. A downscaled texture always takes its KTX2. Covered by "keeps a small
+texture as uploaded when its KTX2 would be larger" in
+`apps/viewer-api/test/hologram-budgets.test.ts`.
 
 ## Open checks
 

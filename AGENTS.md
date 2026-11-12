@@ -235,8 +235,13 @@ is convention.
   `AGENTS.md` beside it; add the same symlink when creating a new nested guide.
   The exception is `.agents/skills/gstack/CLAUDE.md`, which is upstream-owned
   and exempt from the symlink rule (its browser rules apply under that directory).
-- When an instruction file and the code disagree, follow the code and report the
-  mismatch in your final reply; then fix the stale line in the owning file.
+- When an instruction file and the code disagree, follow the code and fix the
+  stale line in the owning file yourself, in the same change, without asking;
+  then name each fix in your final reply. Only a mismatch you cannot settle from
+  the code (which side is intended) waits for the user. A mismatch in a task
+  handed to you (a brief from another session) has no repo line to fix: tell
+  that session which part was wrong. `pnpm run doctor` (in `verify:pr`) fails
+  on any `--filter` naming a package that does not exist.
 - Typecheck with each package's own `typecheck` script (root uses `tsc`;
   `apps/knowledge` uses `tsgo`).
 - Skills: add skill directories under `.agents/skills/`. `.claude/skills` is a

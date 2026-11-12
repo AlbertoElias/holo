@@ -36,7 +36,7 @@ export type TextureReport = {
   ms: number;
 };
 
-export type SkippedTexture = { image: number; reason: "too-large" | "glb-budget" | "unreadable" | "encode-failed"; width?: number; height?: number };
+export type SkippedTexture = { image: number; reason: "too-large" | "glb-budget" | "unreadable" | "encode-failed" | "smaller-as-uploaded"; width?: number; height?: number };
 
 export type ProcessReport = {
   sourceBytes: number;
@@ -177,6 +177,13 @@ export async function processHologram(sourcePath: string, workDir: string): Prom
         continue;
       }
       const light = await openFile(lightPath);
+      // KTX2 trades bytes for GPU memory; a small JPEG often grows. A texture
+      // that fits the served size and whose KTX2 is no smaller than its upload
+      // is served as uploaded. A downscaled one always takes its KTX2.
+      if (!downscaled && light.bytes >= sourceBytes) {
+        skipped.push({ image: imageIndex, reason: "smaller-as-uploaded", ...size });
+        continue;
+      }
       orphanCandidates.add(image.bufferView);
       image.bufferView = pushView(light.source, light.bytes);
       image.mimeType = KTX2_MIME;
