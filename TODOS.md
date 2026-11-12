@@ -202,11 +202,11 @@ it from the item below instead of duplicating its status here.
   read of the code, not a verified defect: model it, replay the bug path
   against the real code, and record a defect in [`BUGS.md`](BUGS.md) only
   when every step can happen. One session per machine, ranked by user harm:
-  1. Capture take lifecycle (`apps/capture/src/recording/RecordingSession.ts`
-     `endCameraTake`, `isTakeBusy`, `start`): size lock while idle, and a page
-     hide that ignores performer takes.
-  2. Default AR shell anchor adoption (`placementSystems.ts` `adoptAnchor`):
-     B-048 fixed the `?shell=r3f` fallback only.
+  1. Done (2026-11-12): capture take lifecycle, B-049 in
+     [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md). Two of three
+     suspected defects reproduced and are fixed; the third did not.
+  2. Done (2026-11-12): default AR shell anchor adoption, fixed with the
+     fallback shell under B-048.
   3. Place gate (`apps/viewer-web/src/features/place/PlaceMount.tsx`): place
      mounts after the gate timeout, and `fail()` overwrites `timeout`.
   4. Portal tilt permission (`usePortalTriggers.ts`): a pending `enableTilt`
