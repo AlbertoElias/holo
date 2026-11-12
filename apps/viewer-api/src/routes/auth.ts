@@ -42,7 +42,9 @@ const MAGIC_LINK_PER_WINDOW = 20;
 
 export async function registerAuthRoutes(app: FastifyInstance, options: { magicLinkLimit?: number } = {}): Promise<void> {
   const behindFly = Boolean(process.env.FLY_APP_NAME);
-  const magicLinkLimit = createRateLimit(options.magicLinkLimit ?? MAGIC_LINK_PER_WINDOW, MAGIC_LINK_WINDOW_MS);
+  // Tests sign in dozens of times from one address; the mode that hands the token back (never on in production) sends no email, so it has nothing to protect.
+  const perWindow = options.magicLinkLimit ?? (env.AUTH_DEV_EXPOSE_MAGIC_LINK ? Number.MAX_SAFE_INTEGER : MAGIC_LINK_PER_WINDOW);
+  const magicLinkLimit = createRateLimit(perWindow, MAGIC_LINK_WINDOW_MS);
 
   app.post("/auth/magic-link", async (request, reply) => {
     const parsed = requestMagicLinkSchema.safeParse(request.body);
