@@ -50,9 +50,11 @@ const reachOpacity = (control: Locator): Promise<number> =>
 /**
  * Presses a reach control as a person does: the cursor travels to it over the card (which keeps the row open),
  * and the press lands once the row has stopped unfolding. A fast scripted click would aim at a button still on
- * the move.
+ * the move. The row folds 4 s after the last movement and, folded, takes no press (it lands on the card), so a
+ * slow frame or screenshot before the press (B-052, B-043) would otherwise lose it: the cursor moves again first.
  */
 async function pressReached(page: Page, card: Locator, name: string): Promise<void> {
+  await reachFor(card);
   const control = card.getByRole("button", { name });
   let last = "";
   await expect

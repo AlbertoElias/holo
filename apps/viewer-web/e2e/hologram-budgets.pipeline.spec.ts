@@ -302,7 +302,9 @@ const gltfJson = (glb: Buffer) => JSON.parse(glb.subarray(20, 20 + glb.readUInt3
 
 test.describe("hologram budgets: two levels of the place, the 100 MB cap", () => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture server and a live API.");
-  test.describe.configure({ mode: "serial" });
+  // A test's own setTimeout only starts once its fixtures are up; without this the context fixture of a test after
+  // the heavy ones runs under the 30 s default, and times out on a loaded runner (hosted CI, shard 9).
+  test.describe.configure({ mode: "serial", timeout: 600_000 });
 
   test("capture: a 3 M-splat SH1 scan stores a detail at SH1 and a light place of at most 200 k at SH0, under 100 MB", async ({ browser }) => {
     test.setTimeout(900_000);

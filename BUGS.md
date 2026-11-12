@@ -100,7 +100,9 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Evidence:** "copy link and delete wait out of sight until the card is reached; delete is the owner's alone": `expect(getByRole("status")).toContainText("Link copied")` times out after 5 s, "element(s) not found" (`profiles.pipeline.spec.ts:190`). Hosted CI shard 8 passed it in runs 43272311181 and 43260608085, then failed it once on run 43319865598 (`37a99105`, no source change) and passed on rerun.
 - **Expected:** the status line appears after "Copy link" is pressed, as on CI.
 - **Reproduction:** `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/profiles.pipeline.spec.ts --workers=1` from a clean `main` worktree on a Mac.
-  Suspect: the clipboard write or its permission differs locally (the status appears only after `navigator.clipboard.writeText` resolves), or the moved base URL origin; not yet run under `scripts/ci-emulate.sh`.
+  Suspect (disproved): the clipboard write or its permission differs locally (the status appears only after `navigator.clipboard.writeText` resolves), or the moved base URL origin.
+- **Cause (2026-11-12):** reproduced under `scripts/ci-emulate.sh` (the file alone failed 3 of 3; the one test alone passed). The reach row folds 4 s after the last cursor movement and, folded, takes no press; the spec's `pressReached` only moved the cursor to the control, so a slow `06-card-reached` screenshot plus the 800 ms wait let the row fold first and the press landed on the card (a `DIV`, no click on the button, no status). The same stall as B-043, which `pressReach` in `e2e/bootstrap.ts` already handles.
+- **Fix:** `pressReached` starts with `reachFor(card)`; the file then passes 6 of 6 under `ci-emulate`. Close this entry once a hosted run of `main` passes shard 8.
 
 ### B-053 — Place gate: a card that becomes first after its dome is fitted takes the place late
 
