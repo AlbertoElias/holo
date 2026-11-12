@@ -30,6 +30,16 @@ the B-039 port fix, tray removal and author-marked hand traces v1
 their device checks are in each brief's "Physical-device limits". Pick the next
 queue item in [`TODOS.md`](TODOS.md).
 
+## Ready to merge with the next change
+
+- "The way down" showcase hologram (scene `introspection`, notes in
+  [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md)),
+  branch `feature/showcase-introspection`, pushed 2026-11-11. Built, uploaded
+  and played on a local feed with sound; `verify:agent` passed. Capture
+  scripts and docs only, so it rides along with the next merge. Not yet
+  uploaded to production, and not checked in Quick Look (four positional
+  emitters).
+
 ## Recently merged (grouped)
 
 - Undo and redo for every authoring action (brief
