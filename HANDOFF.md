@@ -46,8 +46,7 @@ queue item in [`TODOS.md`](TODOS.md).
   [`TODOS.md`](TODOS.md) item "The way down, version 2". Built, uploaded and
   played on a local feed with sound; a real-time proof video was watched and
   sent; `verify:agent` passed. The build now measures Quick Look's load and
-  fails over 100 M point-frames (this scene: 89.2 M after the gas and liquid
-  rebuild), but the Quick Look conversion itself is unchecked. The critic was Muse, because Codex had hit
+  fails over 100 M point-frames (this scene: 61.9 M after the third pass), but the Quick Look conversion itself is unchecked. The critic was Muse, because Codex had hit
   its usage limit. Not uploaded to production: that waits for the user's
   go-ahead. It also changes the viewer: the feed's dome follows a
   `HologramZoom` node, so it grows with the outer layer and leaves the view
@@ -55,8 +54,13 @@ queue item in [`TODOS.md`](TODOS.md).
   `verify:pr` has not run on it yet. The gas ("Tugged") and the liquid ("The
   mould") were rebuilt to the user's 2026-11-12 decisions ("Decided for the
   gas and the liquid" in BEATS.md) and played on the local feed with sound
-  (draft 9). The GLB is now 63 MB, so the production upload needs the API's
-  upload limit raised from 25 MB first (the user is raising it to 100 MB).
+  (draft 9). A third pass (2026-11-12, draft 10) answers the user's notes
+  on draft 9: the gusts are keyed in world space and blast him, the paint is
+  34 multicoloured ropes on a darker pool, only the active layer draws (no
+  silhouette, no red line), the doors are irises in each layer, and the music
+  is chip/MIDI. That leaves a 38 MB GLB and 61.9 M point-frames. The
+  production upload still needs the API's 25 MB upload limit raised first
+  (the user is raising it to 100 MB).
 
 ## Recently merged (grouped)
 

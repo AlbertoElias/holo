@@ -336,3 +336,41 @@ What it added:
 - **Sound adds up fast.** Ten 60 s stems at 22 kHz come to about 26 MB, so
   this piece is 63 MB, above the API's 25 MB upload limit (which is being
   raised to 100 MB).
+
+### The third pass (2026-11-12)
+
+The user's notes on the rebuild: the gas looked like satellite clouds and
+barely touched him, the paint needed more colours hitting him harder, a
+silhouette of him showed in the lower layers, the doors opened oddly (and
+one looked like a post-it in his chest), a red line crossed the child scene,
+and the music needed a more abstract, MIDI feel.
+
+- **Author fast things in world space.** A layer authored at home size and
+  grown by the zoom smears anything quicker than its keys. Gusts and paint
+  ropes are now keyed where the feed sees them: one morph target per key,
+  blended by a uniform cubic B-spline, with a hidden key 0 outside the
+  event's window. A 0.4 s blast needs keys every 0.05 s. At 0.15 s it read
+  as a soft blob.
+- **Draw only the layer you are in.** Every sky, the statue and every door
+  collapse outside their own window, and the switch times are solved for
+  the frame where an iris hole fills the view. That fixed both the
+  silhouette in the lower layers and the red line: an inactive layer's sky
+  edge was showing.
+- **A door is the layer opening, not an object on it.** An iris cut into
+  the surface you are on, with its rim taken from that surface's own colours
+  and the next layer's sky in its hole, reads as going through. A panel or
+  hatch reads as a prop.
+- **Impact is streak, spray and recoil together.** A gust reads as a blow
+  when its puffs stretch along the line of travel, spray scatters at
+  contact, and he tumbles and his limbs trail away from it on the same frame.
+- **Saturated paint needs a dark ground.** On a pool of all ten hues at
+  full strength, both he and the ropes were lost. A pool of the deep
+  pigments at about a third of their brightness lets them read. Ropes read
+  as paint, not horns, when they lump along their length and swell at the
+  head.
+- **One event list keeps picture, acting and music in step.** Gusts and
+  hits on a 120 bpm quarter-beat grid drive his knocks, his poses and the
+  sequencer, so adding thirteen hits needed one table edit.
+- **Chip voices need a pitched body.** Noise-only ticks and clatters
+  normalise to a fifth of the loudness of the pulse voices. A short pulse
+  note under each one evens them out.

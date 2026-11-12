@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Float32BufferAttribute, PlaneGeometry, SphereGeometry, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Float32BufferAttribute, SphereGeometry, Vector3 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 import { lin } from '../introspection/common.mjs';
@@ -92,26 +92,78 @@ export function skyRadii(S, R, U, cap) {
 }
 
 // ---------------------------------------------------------------------------
-// The trap door on the man's shirt: a warm light behind a shutter that slides up.
+// The doors, third pass: one door in every layer, and it is the layer itself
+// opening. An iris: a hole (a disc painted the colour of what is behind it,
+// so it reads as a hole and the switch to that layer is seamless) and a rim
+// of pleats round it that untwist as it opens. Built closed (every vertex on
+// the centre, so nothing shows) with STATES open poses as shapes.
 
-export const DOOR = { w: 0.034, h: 0.04 };
-export function door(hit, { right, up, normal }) {
-  const quad = (lift, hex, w, h, dy = 0) => {
-    const g = new PlaneGeometry(w, h, 1, 1);
-    const pos = g.attributes.position;
-    for (let i = 0; i < pos.count; i += 1) {
-      const x = pos.getX(i);
-      const y = pos.getY(i) + dy;
-      pos.setXYZ(i, ...[0, 1, 2].map((k) => hit[k] + x * right[k] + y * up[k] + lift * normal[k]));
+export const IRIS_STATES = [0.25, 0.5, 0.75, 1];
+
+/**
+ * centre, right, up, normal: its frame; R: the open hole's radius; hole(p):
+ * linear RGB of the hole at p (the open pose); rim: hex colours in stripes;
+ * (hex, or linear RGB arrays); lift: how far the rim stands off the surface (the hole sits at half that).
+ */
+export function iris({ centre, right, up, normal, R, hole, rim, lift, N = 48, twist = 1.05, width = 0.3 }) {
+  const place = (x, y, z) => [0, 1, 2].map((k) => centre[k] + x * right[k] + y * up[k] + z * normal[k]);
+  const pose = (o) => {
+    const out = [];
+    const r = o * R;
+    const w = width * R * Math.min(1, 3 * o);
+    out.push(...place(0, 0, lift / 2));
+    for (let i = 0; i < N; i += 1) {
+      const a = (i / N) * 2 * PI;
+      out.push(...place(r * Math.cos(a), r * Math.sin(a), lift / 2));
     }
-    g.computeVertexNormals();
-    return paint(g, hex, { amb: 1 });
+    for (let i = 0; i < N; i += 1) {
+      const a = (i / N) * 2 * PI + (1 - o) * twist;
+      out.push(...place(r * Math.cos(a), r * Math.sin(a), lift));
+    }
+    for (let i = 0; i < N; i += 1) {
+      const a = (i / N) * 2 * PI;
+      out.push(...place((r + w) * Math.cos(a), (r + w) * Math.sin(a), lift));
+    }
+    return Float32Array.from(out);
   };
-  const light = quad(0.0015, '#ffd890', DOOR.w, DOOR.h);
-  const shutter = quad(0.0028, '#d8d0bd', DOOR.w * 1.04, DOOR.h * 1.04);
-  const handle = quad(0.0032, '#8a7a5c', DOOR.w * 0.5, DOOR.h * 0.08, -DOOR.h * 0.4);
-  const slide = (g) => shapeOf(g, () => up.map((v) => v * DOOR.h * 1.05));
-  return mergeParts([{ geo: light }, { geo: shutter, shapes: { open: slide(shutter) } }, { geo: handle, shapes: { open: slide(handle) } }], ['open']);
+  const open = pose(1);
+  const pt = (i) => [open[i * 3], open[i * 3 + 1], open[i * 3 + 2]];
+  const col = [];
+  for (let i = 0; i <= N; i += 1) col.push(...hole(pt(i)));
+  const rims = rim.map((c) => (typeof c === 'string' ? lin(c) : c));
+  for (let ring = 0; ring < 2; ring += 1) {
+    for (let i = 0; i < N; i += 1) {
+      const c = rims[Math.floor(i / 2) % rims.length];
+      const k = ring === 0 ? 0.62 : 1; // the pleats darken toward the hole
+      col.push(c[0] * k, c[1] * k, c[2] * k);
+    }
+  }
+  const idx = [];
+  for (let i = 0; i < N; i += 1) idx.push(0, 1 + i, 1 + ((i + 1) % N));
+  const a0 = 1 + N;
+  const b0 = 1 + 2 * N;
+  for (let i = 0; i < N; i += 1) {
+    const j = (i + 1) % N;
+    idx.push(a0 + i, b0 + i, a0 + j, a0 + j, b0 + i, b0 + j);
+  }
+  const geo = new BufferGeometry();
+  const base = pose(0);
+  // Closed, every vertex is on the centre: spread them by a hair so no two coincide.
+  for (let i = 0; i < base.length / 3; i += 1) for (let k = 0; k < 3; k += 1) base[i * 3 + k] += 1e-6 * i * normal[k];
+  geo.setAttribute('position', new Float32BufferAttribute(base, 3));
+  geo.setAttribute('color', new BufferAttribute(Float32Array.from(col), 3));
+  geo.setIndex(idx);
+  const shapes = IRIS_STATES.map((o) => {
+    const p = pose(o);
+    return p.map((v, i) => v - base[i]);
+  });
+  return { geo, shapes, states: IRIS_STATES.map(pose) };
+}
+
+/** The shape weights that draw an iris open by o (0..1), linear between its states. */
+export function irisWeights(o) {
+  const x = Math.min(1, Math.max(0, o)) * IRIS_STATES.length;
+  return IRIS_STATES.map((_, k) => Math.max(0, 1 - Math.abs(x - (k + 1))));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { Vector3 } from 'three';
 
 import { bodyDir, bodyPoint, stepFeet } from '../introspection/figures.mjs';
+import { GUSTS, HITS } from './events.mjs';
 import { K, PI, clamp, mix, smooth } from './timeline.mjs';
 
 // The acting of The way down II: key-framed poses with eased holds, and
@@ -280,36 +281,41 @@ const T_POSES = {
 const KNEELING = (name) => ({ ...T_POSES.kneel, ...T_POSES[name] });
 const T_ALL = { ...T_POSES, reach: KNEELING('reach'), withdraw: KNEELING('withdraw'), touch: KNEELING('touch'), hugOpen: KNEELING('hugOpen'), hug: KNEELING('hug') };
 
-/** Watch, tie, watch, tie… from a to b, each check quicker than the last. */
-function checks(a, b) {
+/**
+ * Keys for a run of blows: each one knocks him (a pose from `hitPoses` in turn)
+ * and he recovers into `recover(t)` when there is time before the next.
+ */
+function blows(times, hitPoses, recover, from) {
   const out = [];
-  let t = a;
-  let i = 0;
-  while (t < b - 0.3) {
-    const g = mix(1.5, 0.55, clamp((t - a) / (b - a)));
-    const pose = i % 2 ? 'tieG' : 'watchG';
-    out.push([t, pose], [Math.min(b, t + 0.62 * g), pose]);
-    t += g;
-    i += 1;
-  }
+  let prev = from;
+  times.forEach((t, i) => {
+    const next = times[i + 1] ?? t + 2;
+    const pose = hitPoses[i % hitPoses.length];
+    out.push([t - 0.05, prev], [t + 0.13, pose]);
+    prev = pose;
+    if (next - t > 0.6) {
+      const r = recover(t);
+      out.push([t + 0.5, r], [next - 0.07, r]);
+      prev = r;
+    }
+  });
   return out;
 }
+const unique = (list) => [...new Set(list.map((e) => e.t))];
 
 const travKeys = keyed([
   [0, 'pocket'], [0.9, 'pocket'], [1.6, 'cling'], [2.0, 'clingLook'], [2.7, 'clingLook'], [3.0, 'cling'],
   [3.4, 'clingReachR'], [3.8, 'cling'], [4.1, 'clingReachR'], [4.5, 'crouchDoor'], [4.9, 'crouchDoor', { hy: 0.5 }],
   [5.4, 'crouchDoor'], [6.6, 'crouchDoor'], [7.0, 'haulLow'], [7.7, 'haul'], [8.2, 'haul'], [8.6, 'drop'],
   [10.4, 'drop'], [11.2, 'float'],
-  // gas: his watch and his tie, faster and faster while the demands pull at him; then he lets go
-  ...checks(12.0, 21.0),
-  [21.3, 'tense'], [21.9, 'inhale'], [22.3, 'inhale'], [23.2, 'exhale'], [23.5, 'calm'], [23.95, 'reachDoor'],
-  [24.2, 'reachDoor'], [24.55, 'lift'], [24.75, 'drop'], [26.2, 'drop'],
-  // liquid: he sees the crest rear up as the man and hides his face, curls small, is pressed into the man's pose
-  // (straight back, tie hand) and strains in it; he breaks out gasping, is pressed again, and goes limp
-  [27.0, 'tread'], [28.2, 'tread'], [28.7, 'hide'], [29.3, 'hide'], [29.7, 'curl'], [30.05, 'mould'], [30.45, 'strain'],
-  [30.75, 'mould'], [31.0, 'strain'], [31.35, 'gasp'], [31.9, 'gasp'], [32.3, 'hide'], [32.65, 'curl'], [33.05, 'mould'],
-  [33.45, 'strain'], [33.75, 'mould'], [34.05, 'strain'], [34.5, 'mould'], [35.1, 'limp'],
-  [36.9, 'limp'],
+  // gas: each gust knocks him flailing; between them he snatches at his watch and his tie; then he lets go
+  ...blows(unique(GUSTS), ['knocked'], (t) => (Math.round(t * 4) % 2 ? 'tieG' : 'watchG'), 'float'),
+  [21.6, 'tense'], [21.9, 'inhale'], [22.3, 'inhale'], [23.2, 'exhale'], [23.5, 'calm'], [24.0, 'calm'],
+  [24.5, 'drop'], [26.2, 'drop'],
+  // liquid: waist-deep, paint thrown at him from every side; he is knocked, shields, gasps, curls, and goes limp
+  [26.5, 'drop'], [27.0, 'tread'],
+  ...blows(unique(HITS), ['knocked', 'shield', 'gasp'], (t) => (t > 33 ? 'curl' : t > 31 ? 'shield' : 'tread'), 'tread'),
+  [35.2, 'limp'], [36.9, 'limp'],
   // the dark
   [39.6, 'limp'], [40.0, 'landed'], [40.6, 'landed'], [41.3, 'careful'], [42.4, 'careful'], [42.8, 'listen'],
   [43.5, 'listen'], [43.9, 'careful'], [44.4, 'careful'], [45.3, 'kneel'], [45.8, 'reach'], [46.3, 'withdraw'],
@@ -325,7 +331,7 @@ export function travellerPose(rig, t, place = {}, ctx = null) {
   if (t < 37) breathe(q, 0.02 * (t > 11 ? 1.6 : 1), t, t > 11 ? 0.9 : 3.2);
   else if (t > 40.4) breathe(q, mix(0.015, 0.03, hold), t, mix(2.2, 3.6, hold), 50);
   // Gasping heaves at the surface.
-  q.cp -= 0.12 * win(31.4, 32.2, t, 0.2) * Math.max(0, Math.sin(2 * PI * 2.4 * t));
+  q.cp -= 0.12 * win(30.8, 31.2, t, 0.15) * Math.max(0, Math.sin(2 * PI * 2.4 * t));
   const P = toP(rig, q, place);
   for (const p of ctx?.pull ?? []) {
     if (!(p.w > 1e-3)) continue;
