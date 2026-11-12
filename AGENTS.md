@@ -47,6 +47,10 @@ process in `docs/FEATURE_WORKFLOW.md` (via the `feature-delivery` skill in
 `.agents/skills/feature-delivery/SKILL.md`); do not wait for the user to name it.
 Judge product behavior against `docs/product/concepts/what-a-hologram-is.md`:
 a hologram is a recorded event, viewed through a portal on flat screens.
+Before any public launch, announcement, or share link, run the `launch-qa`
+skill (`.agents/skills/launch-qa/SKILL.md`). Whenever the user mentions
+launching, going live, going public, or posting the app, remind them to run it
+(and offer to) unless it already passed on the current `main`.
 Judge any UI or visual change against `docs/product/design/styleguide.md`
 and take its values from `docs/product/design/tokens.json`.
 
