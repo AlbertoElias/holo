@@ -188,21 +188,37 @@ function toEar(ear: Reading["ear"], world: Vec3): Vec3 {
 const VOICE_SYNC_TOLERANCE_S = 0.15;
 
 /** Every source's place in its buffer against the motion's, read at one instant. */
-async function voicesInStep(page: Page): Promise<{ time: number; voices: Array<{ duration: number; offset: number | null; errorS: number }> }> {
-  const sample = await page.evaluate((url) => {
+/**
+ * Where each voice is against the motion. The motion's time is the last frame's, so each sample is read in an
+ * animation frame, after the card's own loop (registered a frame earlier, so called first) has advanced the
+ * motion: read between frames, a stalled frame on a loaded machine would count against the sound. A voice's
+ * error is its median over a few frames, so one frame's stall or a restart's first frame is not the measure.
+ */
+async function voicesInStep(page: Page, frames = 5): Promise<{ time: number; voices: Array<{ duration: number; offset: number | null; errorS: number }> }> {
+  const samples = await page.evaluate(([url, count]) => new Promise<Array<{ time: number; voices: Voice[] }>>((resolve) => {
     type Probe = { sound: SoundProbe; actions: Record<string, { time: number } | null> };
     const hooks = window as unknown as { __portalProbes: Record<string, Probe> };
-    const probe = Object.entries(hooks.__portalProbes).find(([key]) => key.endsWith(url))![1];
-    const time = Object.values(probe.actions).find(Boolean)!.time;
-    return { time, voices: probe.sound.current!.readVoices() };
-  }, item.url);
+    const probe = Object.entries(hooks.__portalProbes).find(([key]) => key.endsWith(url as string))![1];
+    const read: Array<{ time: number; voices: Voice[] }> = [];
+    const sample = () => {
+      read.push({ time: Object.values(probe.actions).find(Boolean)!.time, voices: probe.sound.current!.readVoices() });
+      if (read.length < (count as number)) requestAnimationFrame(sample);
+      else resolve(read);
+    };
+    requestAnimationFrame(sample);
+  }), [item.url, frames] as const);
+  const errors = samples.map((sample) => sample.voices.map((voice) => {
+    if (voice.offset === null) return Infinity;
+    const expected = voice.loop ? sample.time % voice.duration : sample.time;
+    const apart = Math.abs(voice.offset - expected) % voice.duration;
+    return Math.min(apart, voice.duration - apart);
+  }));
+  const last = samples.at(-1)!;
   return {
-    time: sample.time,
-    voices: sample.voices.map((voice) => {
-      if (voice.offset === null) return { duration: voice.duration, offset: null, errorS: Infinity };
-      const expected = voice.loop ? sample.time % voice.duration : sample.time;
-      const apart = Math.abs(voice.offset - expected) % voice.duration;
-      return { duration: voice.duration, offset: voice.offset, errorS: Math.min(apart, voice.duration - apart) };
+    time: last.time,
+    voices: last.voices.map((voice, index) => {
+      const sorted = errors.map((frame) => frame[index]!).sort((a, b) => a - b);
+      return { duration: voice.duration, offset: voice.offset, errorS: sorted[Math.floor(sorted.length / 2)]! };
     })
   };
 }
