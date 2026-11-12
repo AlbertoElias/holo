@@ -28,6 +28,12 @@ const COMPONENTS: Record<string, number> = { SCALAR: 1, VEC3: 3, VEC4: 4 };
  */
 export const MAX_ANIMATION_TRACKS = 4_000;
 export const MAX_ANIMATION_KEYS = 4_000_000;
+/**
+ * The error check composes every node at or below an animated one at every
+ * distinct recorded time, up to four times; past this many node-frames the
+ * animation is served as recorded. A 60 s avatar take is ~4 k frames × ~70 nodes.
+ */
+export const MAX_ANIMATION_NODE_FRAMES = 20_000_000;
 
 export type AnimationReport = {
   tracks: number;
@@ -47,7 +53,7 @@ export type AnimationReport = {
   /** The same, measured on world-space bone positions and rotations at every recorded frame (forward kinematics). */
   world: { frames: number; maxPositionErrorMm: number; maxRotationErrorDeg: number };
   /** Set when a cap stopped the reduction: the animation is served as recorded. */
-  skipped?: "too-many-tracks" | "too-many-keys";
+  skipped?: "too-many-tracks" | "too-many-keys" | "too-many-node-frames";
 };
 
 type Track = {
@@ -563,6 +569,12 @@ export async function reduceAnimations(
     return SCALE_BOUND * share * BOUND_MARGIN * largest;
   };
 
+  if (nodeFrames(parents, order, candidates) > MAX_ANIMATION_NODE_FRAMES) {
+    report.skipped = "too-many-node-frames";
+    report.allAnimationBytesAfter = report.allAnimationBytesBefore;
+    return { orphaned, report };
+  }
+
   let selections: Selection[] | null = null;
   let world: AnimationReport["world"] = { frames: 0, maxPositionErrorMm: 0, maxRotationErrorDeg: 0 };
   for (const share of [1, 0.5, 0.25, 0.125]) {
@@ -657,6 +669,22 @@ export async function reduceAnimations(
   forEachViewReference(json, (_holder, _key, index) => orphaned.delete(index));
   report.allAnimationBytesAfter = animationViewBytes(json);
   return { orphaned, report };
+}
+
+/** The error check's work: distinct recorded times × nodes at or below an animated node. */
+function nodeFrames(parents: Int32Array, order: number[], candidates: Candidate[]): number {
+  const times = new Set<number>();
+  const animated = new Uint8Array(parents.length);
+  for (const candidate of candidates) {
+    for (const time of candidate.track.times) times.add(time);
+    for (const node of candidate.nodes) animated[node] = 1;
+  }
+  let moving = 0;
+  for (const index of order) {
+    if (!animated[index] && parents[index]! >= 0 && animated[parents[index]!]) animated[index] = 1;
+    moving += animated[index]!;
+  }
+  return times.size * moving;
 }
 
 /**

@@ -479,6 +479,24 @@ fs.writeFileSync(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), f
     expect(served.accessors[served.animations[0]!.samplers[0]!.input]!.count).toBe(4_000_001);
   });
 
+  it("serves the animation as recorded when the error check would compose too many node-frames", async () => {
+    // A few thousand keys on Hips over ten thousand child nodes: under the key cap, past the work cap.
+    const { report, served } = await processOne(
+      hologramGlb({
+        frames: 2_400,
+        mutate: (json) => {
+          const first = json.nodes.length;
+          for (let i = 0; i < 10_000; i += 1) json.nodes.push({ name: `Leaf ${i}` });
+          const hips = json.nodes[1] as { children?: number[] };
+          hips.children = [...(hips.children ?? []), ...Array.from({ length: 10_000 }, (_, i) => first + i)];
+        }
+      })
+    );
+    expect(report.animation.skipped).toBe("too-many-node-frames");
+    expect(report.animation.reducedTracks).toBe(0);
+    expect(served.accessors.every((accessor) => accessor.componentType === 5126), "nothing quantized").toBe(true);
+  });
+
   it("leaves a track whose accessor runs past its buffer view as recorded, and reduces the rest", async () => {
     const { report, served } = await processOne(
       hologramGlb({ mutate: (json) => void (json.accessors[json.animations[0]!.samplers[0]!.output]!.count = 241) })
