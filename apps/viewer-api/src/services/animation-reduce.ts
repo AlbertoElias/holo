@@ -21,6 +21,13 @@ const FLOAT = 5126;
 const SHORT = 5122;
 const INT16_SCALE = 32767;
 const COMPONENTS: Record<string, number> = { SCALAR: 1, VEC3: 3, VEC4: 4 };
+/**
+ * Work caps, checked on the JSON before any track is read: past either, the
+ * animation is served as recorded. A 60 s take of a full avatar is ~140
+ * tracks and ~1 M keys.
+ */
+export const MAX_ANIMATION_TRACKS = 4_000;
+export const MAX_ANIMATION_KEYS = 4_000_000;
 
 export type AnimationReport = {
   tracks: number;
@@ -39,6 +46,8 @@ export type AnimationReport = {
   maxScaleError: number;
   /** The same, measured on world-space bone positions and rotations at every recorded frame (forward kinematics). */
   world: { frames: number; maxPositionErrorMm: number; maxRotationErrorDeg: number };
+  /** Set when a cap stopped the reduction: the animation is served as recorded. */
+  skipped?: "too-many-tracks" | "too-many-keys";
 };
 
 type Track = {
@@ -54,10 +63,17 @@ async function readFloatAccessor(glb: GlbFile, json: GltfJson, index: number): P
   if (!components) return null;
   const view = json.bufferViews?.[accessor.bufferView];
   if (!view) return null;
-  const bytes = await readView(glb, accessor.bufferView);
+  const count = accessor.count;
   const stride = view.byteStride ?? components * 4;
   const offset = accessor.byteOffset ?? 0;
-  const out = new Float32Array(accessor.count * components);
+  // Bounds first, from the JSON: nothing is read or allocated for an accessor
+  // whose last element would fall outside its view.
+  if (!Number.isSafeInteger(count) || count < 1 || count > MAX_ANIMATION_KEYS) return null;
+  if (!Number.isSafeInteger(stride) || stride < components * 4 || !Number.isSafeInteger(offset) || offset < 0) return null;
+  if (!Number.isSafeInteger(view.byteLength) || offset + (count - 1) * stride + components * 4 > view.byteLength) return null;
+  const bytes = await readView(glb, accessor.bufferView);
+  if (offset + (count - 1) * stride + components * 4 > bytes.byteLength) return null;
+  const out = new Float32Array(count * components);
   const data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   for (let i = 0; i < accessor.count; i++) {
     for (let c = 0; c < components; c++) {
@@ -458,6 +474,23 @@ export async function reduceAnimations(
     for (const sampler of clip.samplers) {
       for (const index of [sampler.input, sampler.output]) accessorUses.set(index, (accessorUses.get(index) ?? 0) + 1);
     }
+  }
+
+  // ---- the caps, on the JSON alone ----
+  let trackCount = 0;
+  let keyCount = 0;
+  for (const clip of json.animations ?? []) {
+    for (const sampler of clip.samplers) {
+      trackCount += 1;
+      const count = json.accessors?.[sampler.input]?.count;
+      keyCount += typeof count === "number" && Number.isFinite(count) && count > 0 ? count : 0;
+    }
+  }
+  if (trackCount > MAX_ANIMATION_TRACKS || keyCount > MAX_ANIMATION_KEYS) {
+    report.skipped = trackCount > MAX_ANIMATION_TRACKS ? "too-many-tracks" : "too-many-keys";
+    report.tracks = trackCount;
+    report.allAnimationBytesAfter = report.allAnimationBytesBefore;
+    return { orphaned, report };
   }
 
   // ---- read the reducible tracks ----

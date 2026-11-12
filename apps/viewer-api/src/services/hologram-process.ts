@@ -14,6 +14,16 @@ import { encodeKtx2, fitWithin, imageSize, KTX2_MIME, type ImageSize, type Textu
 // takes tens of seconds on a 4096 px texture.
 
 export const SERVED_TEXTURE_MAX_SIDE = 1024;
+/**
+ * Resource caps. toktx peaked at ~1.1 GB on one 4096 x 4096 texture, so a
+ * larger image would not fit the 2 GB machine: such an image keeps its
+ * original PNG/JPEG. The per-GLB budget bounds the encode time (~30 s per
+ * 4096 px image); images past it also keep their originals.
+ */
+export const MAX_TEXTURE_PIXELS = 4096 * 4096;
+export const MAX_GLB_TEXTURE_PIXELS = 4 * MAX_TEXTURE_PIXELS;
+/** One toktx run's wall limit; a run past it fails the job, which the worker retries then marks failed. */
+export const TOKTX_TIMEOUT_MS = 5 * 60_000;
 const BASISU = "KHR_texture_basisu";
 
 export type TextureReport = {
@@ -26,11 +36,15 @@ export type TextureReport = {
   ms: number;
 };
 
+export type SkippedTexture = { image: number; reason: "too-large" | "glb-budget" | "unreadable"; width?: number; height?: number };
+
 export type ProcessReport = {
   sourceBytes: number;
   lightBytes: number;
   texturesBytes: number;
   textures: TextureReport[];
+  /** Images kept as uploaded (PNG/JPEG), and why. */
+  skippedTextures: SkippedTexture[];
   animation: AnimationReport;
   ms: { textures: number; animation: number; write: number; total: number };
 };
@@ -93,6 +107,8 @@ export async function processHologram(sourcePath: string, workDir: string): Prom
     const replace = new Map<number, ViewSource>();
     const orphanCandidates = new Set<number>();
     const reports: TextureReport[] = [];
+    const skipped: SkippedTexture[] = [];
+    let budget = MAX_GLB_TEXTURE_PIXELS;
     const fullImages: Array<{ texture: number; source: ViewSource; bytes: number }> = [];
     const pushView = (source: ViewSource, bytes: number): number => {
       json.bufferViews ??= [];
@@ -124,20 +140,35 @@ export async function processHologram(sourcePath: string, workDir: string): Prom
       const imageStarted = performance.now();
       const ext = image.mimeType === "image/png" ? "png" : "jpg";
       const inputPath = path.join(workDir, `image-${imageIndex}.${ext}`);
-      let size: ImageSize | null;
+      let size: ImageSize;
       let sourceBytes: number;
       {
-        // One image's bytes in memory at a time, released before the encoder runs.
+        // One image's bytes in memory at a time, released before the encoder
+        // runs; the header's size is checked before anything is written.
         const bytes = await readView(glb, image.bufferView);
-        size = imageSize(bytes);
+        const read = imageSize(bytes);
+        if (!read || !(read.width > 0 && read.height > 0)) {
+          skipped.push({ image: imageIndex, reason: "unreadable" });
+          continue;
+        }
+        const pixels = read.width * read.height;
+        if (pixels > MAX_TEXTURE_PIXELS) {
+          skipped.push({ image: imageIndex, reason: "too-large", ...read });
+          continue;
+        }
+        if (pixels > budget) {
+          skipped.push({ image: imageIndex, reason: "glb-budget", ...read });
+          continue;
+        }
+        budget -= pixels;
+        size = read;
         sourceBytes = bytes.byteLength;
         await writeFile(inputPath, bytes);
       }
-      if (!size) continue;
       const served = fitWithin(size, SERVED_TEXTURE_MAX_SIDE);
       const downscaled = served.width !== size.width || served.height !== size.height;
       const lightPath = path.join(workDir, `image-${imageIndex}-light.ktx2`);
-      await encodeKtx2(inputPath, lightPath, { role, ...(downscaled ? { resize: served } : {}) });
+      await encodeKtx2(inputPath, lightPath, { role, timeoutMs: TOKTX_TIMEOUT_MS, ...(downscaled ? { resize: served } : {}) });
       const light = await openFile(lightPath);
       orphanCandidates.add(image.bufferView);
       image.bufferView = pushView(light.source, light.bytes);
@@ -151,7 +182,7 @@ export async function processHologram(sourcePath: string, workDir: string): Prom
       };
       if (downscaled) {
         const fullPath = path.join(workDir, `image-${imageIndex}-full.ktx2`);
-        await encodeKtx2(inputPath, fullPath, { role });
+        await encodeKtx2(inputPath, fullPath, { role, timeoutMs: TOKTX_TIMEOUT_MS });
         const full = await openFile(fullPath);
         fullImages.push({ texture: imageIndex, ...full });
         report.full = { ...size, bytes: full.bytes };
@@ -202,6 +233,7 @@ export async function processHologram(sourcePath: string, workDir: string): Prom
         lightBytes,
         texturesBytes,
         textures: reports,
+        skippedTextures: skipped,
         animation,
         ms: {
           textures: Math.round(texturesMs),

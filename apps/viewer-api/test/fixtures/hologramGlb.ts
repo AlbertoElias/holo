@@ -85,6 +85,8 @@ export type HologramGlbSpec = {
   frames?: number;
   /** Pad the file to exactly this many bytes with an unreferenced view. */
   padTo?: number;
+  /** Edits the finished glTF JSON (accessors, bufferViews, animations) before it is written. */
+  mutate?: (json: { accessors: Array<Record<string, unknown>>; animations: Array<{ samplers: Array<{ input: number; output: number }> }> }) => void;
 };
 
 export const MEANING = {
@@ -209,6 +211,7 @@ export function hologramGlb(spec: HologramGlbSpec = {}): Buffer {
     json.textures = [{ source: 0, sampler: 0 }];
   }
 
+  spec.mutate?.(json as never);
   const assemble = (padding: number): Buffer => {
     const allViews = padding > 0 ? [...views, Buffer.alloc(padding)] : views;
     const allBufferViews = padding > 0 ? [...bufferViews, { buffer: 0, byteLength: padding }] : bufferViews;

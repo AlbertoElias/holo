@@ -413,6 +413,50 @@ fs.writeFileSync(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), f
     expect((await readStoredPlace(new Uint8Array(await stored(created.url))))?.extension.splatCount, "the stored GLB keeps its place").toBe(40);
   });
 
+  type CapReport = {
+    skippedTextures: Array<{ image: number; reason: string; width?: number; height?: number }>;
+    textures: unknown[];
+    animation: { skipped?: string; tracks: number; reducedTracks: number };
+  };
+  const processOne = async (file: Buffer) => {
+    const created = (await upload(file)).json<HologramDto>();
+    const result = await processNextHologram({ storage: localStorage as never });
+    const after = (await app.inject({ method: "GET", url: `/api/holograms/${created.id}` })).json<HologramDto>();
+    return { after, report: (result as { report: CapReport }).report, served: parse(await stored(after.url)).json };
+  };
+
+  it("keeps a texture over the pixel cap as uploaded instead of encoding it", async () => {
+    // 8192 x 2049 is just over 4096 x 4096 pixels.
+    const { after, report, served } = await processOne(hologramGlb({ texture: { width: 8192, height: 2049 } }));
+    expect(report.skippedTextures).toEqual([{ image: 0, reason: "too-large", width: 8192, height: 2049 }]);
+    expect(report.textures).toEqual([]);
+    expect(served.images).toEqual([expect.objectContaining({ mimeType: "image/png" })]);
+    expect(served.textures).toEqual([{ source: 0, sampler: 0 }]);
+    expect(served.extensionsUsed).not.toContain("KHR_texture_basisu");
+    expect(after.textureDetailUrl).toBeNull();
+    expect(report.animation.reducedTracks, "the animation is still reduced").toBe(4);
+  }, 120_000);
+
+  it("serves the animation as recorded when its key count is over the cap", async () => {
+    const { report, served } = await processOne(
+      hologramGlb({ mutate: (json) => void (json.accessors[json.animations[0]!.samplers[0]!.input]!.count = 4_000_001) })
+    );
+    expect(report.animation.skipped).toBe("too-many-keys");
+    expect(report.animation.reducedTracks).toBe(0);
+    expect(served.accessors.every((accessor) => accessor.componentType === 5126), "nothing quantized").toBe(true);
+    expect(served.accessors[served.animations[0]!.samplers[0]!.input]!.count).toBe(4_000_001);
+  });
+
+  it("leaves a track whose accessor runs past its buffer view as recorded, and reduces the rest", async () => {
+    const { report, served } = await processOne(
+      hologramGlb({ mutate: (json) => void (json.accessors[json.animations[0]!.samplers[0]!.output]!.count = 241) })
+    );
+    expect(report.animation.skipped).toBeUndefined();
+    expect(report.animation.reducedTracks).toBe(3);
+    const translation = served.accessors[served.animations[0]!.samplers[0]!.output]!;
+    expect([translation.componentType, translation.count]).toEqual([5126, 241]);
+  });
+
   it("delete removes the place detail, the textures and the processed GLB", async () => {
     const created = (await upload(hologramGlb({ ...withDetail, texture: { width: 2048, height: 16 } }))).json<HologramDto>();
     await processNextHologram({ storage: localStorage as never });
