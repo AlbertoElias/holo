@@ -1,0 +1,271 @@
+# Feature brief: Richer holograms (raise the size budgets)
+
+**Lead:** Claude (Opus)  
+**Status:** Reviewed (design review and user decisions 2026-11-12; first step is the LoD spike)  
+**Layer:** event (what is recorded and kept), with view costs
+
+## User outcome
+
+An author records a take inside a detailed scan, with high-quality props, and
+the hologram that viewers open keeps that detail: the place keeps its splats
+and view-dependent colour, and props keep their textures. A viewer on a phone
+still sees the hologram start quickly, and every device draws only as much
+of the place as it can.
+
+## Why this is needed: where the limits are today
+
+The 25 MB upload cap (`apps/viewer-api/src/lib/constants.ts:1`) is the visible
+limit, but for the place it is not the one that binds:
+
+| Limit | Value | Where | Binds today? |
+|---|---|---|---|
+| Stored place splats | 200 k | `packages/contracts/src/place.ts:15` `PLACE_STORED_SPLAT_CAP` | **Yes**: a scan crop is thinned to 200 k whatever room is left |
+| Stored place colour | SH degree 0 written by capture (`CapturePlace.ts:308` `maxSh: 0`); the contract already allows 1 (`place.ts:19` `PLACE_STORED_MAX_SH`) | capture | **Yes**: surfaces look matte from every angle. The SH data is also dropped on load: `decodeScan` keeps only `packedArray` (`packages/place/src/decode.ts:73,100`), and the crop copies only those rows (`placeExport.ts:145-149`) |
+| GLB upload | 25 MB | `viewer-api` `MAX_GLB_BYTES`, hand-copied in `CapturePlace.ts:147` | Rarely: 200 k SH0 splats are a few MB |
+| Tray | 5 items, 16 MB total | `apps/capture/src/objects/ObjectTray.ts:10-12` | Yes, for detailed props |
+| One object | 8 MB, images up to 4096 px | `suppliedObject.ts:14`, `registry-fetch.ts:8` | Yes, for detailed props |
+| Live splats drawn in capture | Quest 500 k, Vision Pro 750 k, Android 1 M, iOS 1.5 M, desktop 2.5 M | Spark's LoD defaults | Device GPU limit; unchanged |
+| Viewer place drawing | No LoD: every stored splat is drawn | `StoredPlaceMount.tsx:122-124` (`enableLod: false`) | Fine at 200 k; **must change** for a larger place |
+| Quick Look | 100 MB input, 4096² per texture, 64 MP texture total, 100 CPU-seconds | `glb_to_usdz.py:34-41`, `:1493` | Ignores the place; props count |
+
+Splat-capture (`docs/features/splat-capture.md` Q5) chose 200 k, SH0 and
+"sized at Stop to what 25 MB leaves". This brief revisits that choice.
+
+Uploads already require sign-in: all three upload routes return 401 without
+a session (`apps/viewer-api/src/routes/holograms.ts:38,107,169,235`). Capture
+never uploads; the author downloads the take and uploads it in the viewer's
+`UploadPanel`.
+
+## Decisions (user, 2026-11-12)
+
+- **Q1, place detail: whatever fits in 100 MB.** No splat-count target: the
+  detail keeps as many splats as fit in what the 100 MB cap leaves after the
+  rest of the take, up to the input cap (3 M, `PLACE_INPUT_SPLAT_CAP`), at
+  **SH degree 1** where the source scan has it. Each device draws its own
+  share through LoD. SH1, not SH3: SH3 costs about 2.5× the bytes per splat,
+  so it would buy view-dependent colour with far fewer splats. (Revised from
+  "2.5 M splats" the same day.)
+- **Q2, cap: 100 MB per hologram, no anonymous uploads.** Tray 64 MB, one
+  object 40 MB, images still 4096 px on a side. One cap for every upload,
+  defined once in `@holoim/contracts`. Anonymous uploads are already refused
+  (sign-in required since creator accounts); this brief keeps it that way
+  and corrects the stale line in `live-deployment.md`.
+- **Q3, feed speed: two levels of place.** A light place (today's: 200 k,
+  SH0) is what the feed paints first; the full-detail place is swapped in
+  after.
+
+## Design (after review)
+
+**One upload, split by the API.** Capture still writes one GLB. The
+`HOLOIM_place` extension gains an optional `detail: { bufferView,
+splatCount, maxSh }` that names a second SPZ in the same file. On
+`complete` (and on the multipart route) the API checks the detail SPZ's
+header, stores its bytes as `<id>-place.spz`, and stores a **light GLB**
+with the detail buffer view removed. The hologram DTO gains an optional
+`placeDetailUrl`. The GLB never holds a URL.
+
+Why not a separate file from capture (the first draft): the author would
+download two files and upload both, so a missing or mismatched SPZ becomes a
+normal outcome. One file keeps today's download → upload flow and the
+`UploadPanel` (`accept=".glb"`) unchanged.
+
+Backward compatibility: `parsePlaceExtension` ignores unknown fields
+(`packages/contracts/src/place.ts:147-160`), so older viewers read the light
+place and nothing else. Old holograms have no `detail` and no
+`placeDetailUrl`, and play as today. Quick Look receives the light GLB.
+
+**Capture at Stop.**
+
+- Carry SH1 (`PackedSplats.extra`) through `decodeScan` and
+  `cropScanToTake`. A scan without SH1 stores SH0: `maxSh` comes from the
+  source and is never padded.
+- Write two levels from one crop: detail (≤ 3 M, SH1, sized to the cap) and light (≤ 200 k,
+  SH0, thinned from the detail). Same node TRS for both; the light crop lies
+  inside the detail crop, so the swap shows no jump.
+- Size fitting: props first, as today; only the detail level is thinned to
+  fit the 100 MB, with at most one rewrite (not today's four passes). With a
+  full 64 MB tray the detail keeps far fewer splats; that is expected.
+- The export's raycast mesh (`CapturePlace.ts:319`) is built on the light
+  level, so pointing marks resolve against what every viewer paints first.
+  The check confirms marks also lie on the detail's surfaces.
+
+**Viewer.**
+
+- Paint the light place (no change), then load the detail for the focused
+  card once it has painted and is idle; free it when the card scrolls away.
+- The detail needs LoD so each device draws its own budget. Where the LoD
+  tree is built is **the first implementation step, a spike**:
+  (a) built at Stop and stored with the detail (no viewer cost; larger file),
+  or (b) built in a worker in the viewer for the focused card only, under a
+  time and heap budget, with phones given a lower detail cap if it misses.
+  `CapturePlace.ts:232-235` notes a tree for 1 M splats with SH "can take
+  minutes of worker time", so (b) is only acceptable if the spike shows
+  otherwise on an iPhone and an Android phone. The spike's numbers decide;
+  record them here.
+
+**API.**
+
+- Caps: one `MAX_HOLOGRAM_BYTES` (100 MB) in `@holoim/contracts`, imported
+  by the API and capture (replacing the copy in `CapturePlace.ts:147`), and a
+  new `PLACE_DETAIL_SPLAT_CAP` (3 M, the input cap) beside `PLACE_STORED_SPLAT_CAP`, which
+  stays 200 k for the light level.
+- Enforcement points: the `initiate` schema and the presign
+  `content-length-range` (`holograms.ts:116,135`), the head check on
+  `complete` (`:196`), and the multipart file limit (`:241`,
+  `hologram-storage.ts:61`).
+- Memory: `complete` reads the whole object (`:205`) and multipart uses
+  `readFile` (`hologram-storage.ts:67`); at 100 MB on the 2 GB machine,
+  validate the detail with a header and streamed check, and split the GLB
+  without holding several copies.
+- Delete removes the detail object too (`holograms.ts:417-466` deletes only
+  the GLB and USDZ today).
+
+## Scope
+
+**Included:** the caps above; SH1 carried from scan to stored place; two
+place levels in one upload, split by the API; viewer light-then-detail load
+with LoD; delete of the detail; Q4's light and detail textures, animation reduction
+and KTX2, with a separate Quick Look input; correcting
+`docs/features/live-deployment.md`'s line about anonymous uploads.
+
+**Excluded:** Spark's per-device draw budgets; avatar realism; Draco;
+compression in capture's own export (the API does it, Q4); longer takes; SH degree 2 or 3; Quest recording in a
+place (that arrives with splat-capture slice 2b).
+
+## Q4: large non-splat holograms (decided 2026-11-12: A, B and C)
+
+Without a place, 100 MB is the avatar, its animation, props and sound. What
+fills it today: animation is every bone sampled every frame as float32 with
+no keyframe reduction or quantization (`GltfExportComposer.ts:151-171`);
+props and avatar textures are stored as given (PNG or JPEG); sound is Opus
+in WebM (`AudioRecorder.ts:1`), already small. The viewer already decodes
+meshopt (`apps/viewer-web/src/features/xr/hologramAssets.ts:34`).
+
+All three run in the API's upload split, so capture's export stays as it is:
+
+- **A. Two levels for the whole hologram.** The light GLB carries the
+  avatar, animation, sound, the light place and props with textures
+  downscaled to at most 1024 px. The detail carries full-size textures (and
+  the detail place). The viewer paints the light hologram and swaps in the
+  full textures for the focused card, freeing them when it scrolls away.
+- **B. Smaller animation.** Keyframes that interpolation reproduces are
+  dropped and rotations quantized (glTF-Transform `resample`, meshopt with
+  `KHR_mesh_quantization`). The light GLB served to viewers carries the
+  result.
+- **C. KTX2 (Basis) textures** in both levels for the viewer: about 4–8×
+  less GPU memory. The viewer gains a `KTX2Loader` beside its meshopt
+  decoder.
+
+**Quick Look** cannot read KTX2, and its converter's support for meshopt
+and quantized animation is unverified. The converter therefore receives a
+separate Quick Look input made at the split: full PNG/JPEG textures and
+unquantized animation, no place. It is temporary (deleted after conversion)
+and is still bounded by the converter's 100 MB input limit.
+
+Added criteria and failures are listed below.
+
+## Undo
+
+None: the feature changes how much of a take is kept, not what the author can
+do while recording.
+
+## Acceptance criteria
+
+- [ ] A take recorded in a 3 M-splat SH1 scan with an empty tray stores a
+      detail place of at most 3 M splats at SH1, sized so the take is at most
+      100 MB, and a light place of at most 200 k at SH0
+      (read from both stored SPZ headers).
+- [ ] A take in an SH0-only scan stores SH0 in both levels.
+- [ ] The stored GLB holds no detail bytes; the DTO's `placeDetailUrl`
+      serves them; an older viewer build plays the new hologram's light place.
+- [ ] The viewer paints the light place first and swaps in the detail with
+      no change in position or floor height (within 0.5 mm).
+- [ ] Each device draws at most its own Spark budget from the detail (render
+      stats); light-to-detail time and peak heap on an iPhone and an Android
+      phone are recorded and within the budgets the spike sets.
+- [ ] Scrolling a card away frees its detail (heap returns near baseline).
+- [ ] A 100 MB take uploads through both routes and plays; one byte over is
+      refused with the cap in the message at capture and at the API.
+- [ ] The tray accepts items up to 40 MB each and 64 MB in total and refuses
+      the next byte with a notice.
+- [ ] Deleting a hologram removes its detail object.
+- [ ] Holograms uploaded before this change play unchanged.
+- [ ] Feed first paint at 1 MB/s for a 100 MB hologram is no slower than for
+      today's holograms (`snappy-feed-first-load.md` numbers).
+- [ ] Three concurrent 100 MB completes plus a Quick Look conversion stay
+      within the API machine's 2 GB.
+- [ ] Pointing marks lie on surfaces in both levels.
+- [ ] A prop-heavy take without a place (64 MB of props, 4096 px
+      textures, a long take) paints its light version first; full textures
+      swap in for the focused card without a visible change in placement.
+- [ ] The served animation differs from the recorded one by at most 1 mm in
+      bone position and 0.5° in rotation at every recorded frame, and its
+      bytes shrink (reported).
+- [ ] The viewer loads KTX2 textures on desktop, iPhone, Android and Quest;
+      GPU texture memory is reported before and after.
+- [ ] Quick Look converts the take from its PNG/JPEG, unquantized input.
+- [ ] `pnpm run verify:pr` passes locally.
+
+## Failure cases considered
+
+| Failure case | Prevention or evidence |
+|---|---|
+| Capture and API caps drift apart again | One constant in `@holoim/contracts`, imported by both |
+| SH1 silently lost between load and export | Carried through decode and crop; criterion checks the stored header |
+| SH0 scan padded to SH1 (bigger file, no gain) | `maxSh` from the source |
+| Detail drawn whole on a phone | Viewer LoD (spike decides where it is built); per-device draw criterion |
+| LoD build or detail decode stalls the feed | Detail only for the focused card, after first paint, under a time and heap budget |
+| Many cards keep detail in memory | Freed when a card scrolls away |
+| Light and detail disagree in position (jump on swap) | Same TRS; light crop inside the detail crop; 0.5 mm criterion |
+| Missing or mismatched detail file | One upload; the API splits it, so there is no pairing |
+| Detail header lies (gzip bomb, wrong count) | Header and decompressed-size checks under `PLACE_DETAIL_SPLAT_CAP`, as for today's place |
+| 100 MB uploads exhaust the 2 GB API machine | Streamed checks; concurrency criterion |
+| Detail object orphaned on delete | Delete covers it |
+| Old viewer meets the new `detail` field | `parsePlaceExtension` ignores unknown fields (`place.ts:147-160`); old-build check |
+| Quick Look fed the full file | The converter receives the light GLB; props stay under its 100 MB input limit |
+| Stop takes too long at 3 M splats | One crop for both levels, at most one rewrite; Stop timed on the 3 M fixture |
+| Pointing marks off the painted surface | Raycast on the light level; checked on both |
+| Animation reduction visibly changes motion (foot slide, hand jitter, lip sync) | Error bound criterion against the recorded frames; body and hand replays on the served file |
+| A device without a Basis transcoder path shows no textures | KTX2Loader detects support and transcodes to what the GPU takes; per-device criterion |
+| Quick Look meets KTX2 or quantized data | It gets its own PNG/JPEG, unquantized input |
+| Texture or animation processing at upload exhausts the 2 GB API machine or takes too long | Processing time and peak memory measured on a 100 MB take; run in the existing conversion queue if it does not fit the request |
+| Rewrite collides with splat-capture 2b and 2c | This lands before 2b starts (2b has not started, `splat-capture.md:4`) |
+
+## Ownership
+
+| Role | Owner | Files or modules |
+|---|---|---|
+| Lead | Claude (Opus) | Brief, integration, final handoff |
+| Design reviewer | `design-reviewer` (Opus) | Done 2026-11-12; findings folded in above |
+| Implementer | Claude (Opus for the contract, export and API split; Sonnet for caps and tray) | `packages/contracts`, `packages/place`, `apps/viewer-api` upload, storage and delete, `apps/capture/src/place`, `apps/capture/src/objects`, `apps/capture/src/recording/GltfExportComposer.ts`, `apps/viewer-web/src/features/place` |
+| Independent verifier | Codex (`-p standard`) | Read-only verification; test artifacts only |
+
+Coordination: `splat-capture.md` slices 2b and 2c change `prepareExport` and
+the composer too. Land this first; 2b then carries the Quest recording and
+frame-rate check in the denser place.
+
+## Test plan and evidence
+
+| Acceptance criterion | Workflow or command | Inspectable artifact/result |
+|---|---|---|
+| LoD spike | Build time and heap for a 3 M SH1 tree, at Stop (desktop) and in a viewer worker (iPhone, Android) | Pending |
+| Both levels stored, SH from source | `e2e/place-capture.pipeline.spec.ts` with 3 M SH1 and SH0 fixtures, through the real API | Pending |
+| Light GLB, detail URL, old viewer | Same spec; previous viewer build against the new hologram | Pending |
+| Swap without a jump; marks on both levels | Same spec, feed portal | Pending |
+| Per-device draw, heap, free on scroll | Feed spec with render stats; phones by hand | Pending |
+| Caps and refusals | Pipeline spec at 100 MB and +1 byte on both routes; tray take at 40/64 MB | Pending |
+| Delete | Hologram route test: detail object gone | Pending |
+| Old holograms | Feed spec with a pre-change GLB | Pending |
+| Feed first paint | Throttled Chromium at 1 MB/s against a preview deploy | Pending |
+| API memory | Three concurrent 100 MB completes plus a conversion, in `scripts/ci-emulate.sh` | Pending |
+| Quick Look | Converter on the PNG/JPEG input of a take with 64 MB of props; `check_usdz_tools.sh` | Pending |
+| Prop-heavy take, light then full | Pipeline spec with a 64 MB tray and no place | Pending |
+| Animation error bound | Compare served and recorded bone tracks frame by frame; body and hand replays | Pending |
+| KTX2 on each device | Feed spec on desktop; phones and Quest by hand | Pending |
+
+## Physical-device limits
+
+iPhone and Android: light-to-detail time, peak heap and frame rate viewing a
+3 M-splat place in the feed portal. Quest: viewing only (recording in a
+place waits for splat-capture 2b). iPhone Quick Look open of a hologram with
+64 MB of props. IWER emulation does not stand in for any of these.
