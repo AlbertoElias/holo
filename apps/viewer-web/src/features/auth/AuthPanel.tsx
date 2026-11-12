@@ -12,12 +12,11 @@ type AuthPanelProps = {
 // The contents of the Settings sheet's Account section; the section and its heading come from the sheet.
 export function AuthPanel({ user, onSignOut }: AuthPanelProps) {
   if (!user) {
-    return <SignInForm intro="Sign in to upload holograms under your name and delete your own." />;
+    return <SignInForm />;
   }
 
   return (
     <div className="upload-form">
-      <Type variant="captionUnderCard" as="p">Creator account</Type>
       <Type variant="byline" as="p">
         Signed in as <strong>{user.displayName}</strong>
         <span className="verified-badge">Verified creator</span>
