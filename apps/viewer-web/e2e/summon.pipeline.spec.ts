@@ -9,7 +9,6 @@ import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, expect, test } from "./bootstrap";
 import { cardCenter, installProbe, waitForPortalReady } from "./portal-helpers";
-import { signInForUpload } from "./sign-in";
 
 // Summon and place while speaking (PRD-045) in the viewer. Capture's own
 // IWER take (lib/summon-take.mjs: hold Y, summon the bracket and the image
@@ -97,7 +96,6 @@ function expectedFrom(lib: Record<string, (...args: never[]) => unknown>, file: 
 
 async function upload(page: Page, glb: Buffer): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
-    headers: (await signInForUpload(page)).headers,
     multipart: {
       hologramName: `Summon ${Date.now()}`,
       submittedBy: "summon-e2e",
