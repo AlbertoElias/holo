@@ -6,7 +6,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import type { Browser, BrowserContext, Page } from "@playwright/test";
 import { Matrix4, Quaternion, Vector3 } from "three";
 
-import { PLACE_EXTENSION, PLACE_NODE_NAME, checkSpzBytes, readGlbChunks, readStoredPlace } from "@holoim/contracts";
+import { MAX_HOLOGRAM_BYTES, PLACE_EXTENSION, PLACE_NODE_NAME, checkSpzBytes, readGlbChunks, readStoredPlace } from "@holoim/contracts";
 import { placeClipFade, type DomeShape } from "@holoim/place";
 import { createXrContext, waitForTextContentPrefix } from "@holoim/tooling-testing/xr-env";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
@@ -41,7 +41,7 @@ const STEP_MS = 1000 / 60;
 const FEET_TOLERANCE = 0.02;
 const LINK_TOLERANCE = 0.02;
 const DOME_TOLERANCE = 0.01;
-const MAX_GLB_BYTES = 25 * 1024 * 1024;
+const MAX_GLB_BYTES = MAX_HOLOGRAM_BYTES;
 
 type Vec3 = [number, number, number];
 
@@ -614,7 +614,7 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
     test.setTimeout(300_000);
     const take = await recordRoomTake(browser);
     const { glb, fixture, report } = take;
-    expect(glb.byteLength, "the GLB is under 25 MB").toBeLessThan(MAX_GLB_BYTES);
+    expect(glb.byteLength, "the GLB is under the 100 MB cap").toBeLessThan(MAX_GLB_BYTES);
     const json = readJson(glb);
     expect(json.extensionsUsed, "listed as used").toContain(PLACE_EXTENSION);
     expect(json.extensionsRequired ?? [], "never required").not.toContain(PLACE_EXTENSION);
@@ -761,7 +761,7 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
       // The same short take twice: the first sets the sizes, the second is made under a cap that leaves the place half its bytes.
       const full = await recordAndDownload(page, () => advance(page, 1.5), path.join(evidenceDir, "budget-full.glb"));
       const before = (await placeReport(page))!.lastExport!;
-      expect(before.thinned, "under 25 MB nothing is thinned").toBe(0);
+      expect(before.thinned, "under the cap nothing is thinned").toBe(0);
       const budget = full.byteLength - Math.floor(before.spzBytes / 2);
       await page.evaluate((bytes) => (window as unknown as CaptureWindow).__setPlaceGlbBudget(bytes), budget);
       const fitted = await recordAndDownload(page, () => advance(page, 1.5), path.join(evidenceDir, "budget-fitted.glb"));
@@ -1002,7 +1002,7 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
         await context.close();
       }
       expect(Math.max(...soles.map(Math.abs)), "the sole stays on the scan's floor").toBeLessThanOrEqual(FEET_TOLERANCE);
-      expect(glb.byteLength, "under 25 MB").toBeLessThan(MAX_GLB_BYTES);
+      expect(glb.byteLength, "under the 100 MB cap").toBeLessThan(MAX_GLB_BYTES);
       const stored = (await readStoredPlace(new Uint8Array(glb), readGlbChunks(new Uint8Array(glb))))!;
       expect(stored.extension.splatCount).toBe(report.lastExport!.kept);
       testInfo.annotations.push({ type: "crop", description: `${scan}: kept ${report.lastExport!.kept}, in box ${report.lastExport!.inBox}, thinned ${report.lastExport!.thinned}, ${(glb.byteLength / 1e6).toFixed(2)} MB; ${report.splatsLoaded} splats, LoD ${report.lodState}${report.lodState === "ready" ? ` in ${(report.lodMs / 1000).toFixed(1)} s` : ""} (budget ${report.lodBudget})` });
