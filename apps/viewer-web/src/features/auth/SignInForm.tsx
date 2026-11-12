@@ -57,7 +57,6 @@ export function SignInForm({ intro }: SignInFormProps) {
 
   return (
     <form className="upload-form" onSubmit={onSubmit} aria-label="Sign in">
-      <Type variant="captionUnderCard" as="p">Creator account</Type>
       {intro ? <Type variant="byline" as="p">{intro}</Type> : null}
       <label className="upload-field" htmlFor={emailId}>
         <Type variant="byline">Email</Type>
