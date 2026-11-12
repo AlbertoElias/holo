@@ -218,8 +218,10 @@ it from the item below instead of duplicating its status here.
      suspected defects reproduced and are fixed; the third did not.
   2. Done (2026-11-12): default AR shell anchor adoption, fixed with the
      fallback shell under B-048.
-  3. Place gate (`apps/viewer-web/src/features/place/PlaceMount.tsx`): place
-     mounts after the gate timeout, and `fail()` overwrites `timeout`.
+  3. Done (2026-11-12): place gate, B-052. Neither suspect reproduced as
+     framed (a late scan never shows; the gate's `timeout` is never
+     overwritten). The replay found the real defect: a card that becomes
+     first after its dome is fitted took the place late. Fixed.
   4. Portal tilt permission (`usePortalTriggers.ts`): a pending `enableTilt`
      writes `on` after `reset()`.
   5. Upload panel (`UploadPanel.tsx`): file picker stays enabled mid-upload and

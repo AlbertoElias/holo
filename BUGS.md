@@ -90,6 +90,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
   Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
 
+### B-052 — Place gate: a card that becomes first after its dome is fitted takes the place late
+
+- **Area:** `apps/viewer-web/src/features/feed/HologramCard.tsx` (`placeRequest`), `HologramCardCanvas.tsx` (`placeGate`), `features/place/PlaceMount.tsx`
+- **Severity:** P3 (the scanned place is a dev and e2e build feature, `testHooks` only; production never asks)
+- **Found by:** `/find-implicit-state-machines` (2026-11-12), replayed 2026-11-12. Model: gate states `off | loading | ready | failed | timeout`; rule "a place draws only if the gate said ready before the dome was fitted".
+- **Replay, reproduced:** `place.spec.ts` "a card that becomes first once its dome is fitted does not take the place". A faked two-card feed with `?place=` shows the place on the first card; deleting that card (the real Delete button, the real `DELETE` path) makes the second the first in the list. Its `placeRequest` was keyed on `first`, so it went from `null` to a request, `createPlaceGate` made a new gate in `loading`, `PlaceMount` mounted on a card whose dome was fitted long before, loaded the (cached) scan and reported `ready`: the place drew late, over a card the fit had treated as placeless. Before the fix the check read `status: "ready"` for the second card; after it, no place report exists.
+- **Cause:** whether a scan is wanted was derived from `first` (the card's index), which changes while the card lives; the gate and the fit assume it is settled at mount.
+- **Fix:** `HologramCard` reads `first` once, at mount (`useState`), so a card that later becomes first is not handed a place, and one that stops being first keeps its own. `?place=` on a fresh page, `placeFor`, and the fit's wait are unchanged.
+- **Same cause, not replayed:** the card demoted by an upload at the top (`onUploaded` → `addToTop`) used to lose its `PlaceMount` while its recorded set stayed hidden from the fit. Needs a real upload; the fix removes the cause (the request no longer changes), the delete replay is the check.
+- **Did not reproduce (suspected 1, as framed):** "the place mounts after the gate timeout and changes what the viewer sees". The late scan does set `place`, but `PlaceMount` renders it only while `gate.status === "ready"`, and the gate never leaves `timeout`. Check kept: `place.spec.ts` "a scan that is still loading when the fit gives up is not shown late" (scan held past `placeWait=1500`, then served whole: pixels and dome equal today's card, report `timeout`, one warning).
+- **Did not reproduce for the user (suspected 2):** "`fail()` overwrites `timeout`". The gate does not: every writer checks `loading` first, so a terminal gate status never changes (a late failure leaves `timeout`). Only the diagnostic report differs (`status` reads `failed` after a timeout then a failure, `timeout` after a timeout then a success, and `loading` between the timeout and the load settling); the card is the same recorded one in every order, and the one-warning rule holds (`place.spec.ts` "a slow scan that then fails warns once"). Not changed.
+- **Not done:** emulation in headless Chromium only; the upload demotion path was not replayed; no real-device run.
+
 ## Entry template
 
 ```md
