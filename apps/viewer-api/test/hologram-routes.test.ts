@@ -220,6 +220,14 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
         "usdzAttempts" INTEGER NOT NULL DEFAULT 0,
         "usdzError" TEXT,
         "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
+        "placeDetailKey" TEXT,
+        "textureDetailKey" TEXT,
+        "servedKey" TEXT,
+        "processStatus" TEXT NOT NULL DEFAULT 'none',
+        "processClaimedAt" DATETIME,
+        "processClaimToken" TEXT,
+        "processAttempts" INTEGER NOT NULL DEFAULT 0,
+        "processError" TEXT,
         "ownerId" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
@@ -439,7 +447,8 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     expect(response.json()).toEqual({
       id: created.id,
       deletedFile: true,
-      deletedUsdz: true
+      deletedUsdz: true,
+      deletedDetail: false
     });
     await expect(access(glbPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(access(usdzPath)).rejects.toMatchObject({ code: "ENOENT" });

@@ -9,6 +9,7 @@ import { parseArgs, promisify } from "node:util";
 import { UPLOADS_DIR } from "./lib/constants.js";
 import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
+import { quickLookInput } from "./services/hologram-split.js";
 import { createMediaStorage, type MediaStorage } from "./services/media-storage.js";
 import { USDZ_CONVERTER_VERSION, convertGlbToUsdz, resolveToolPath, usdzFilenameFor } from "./services/usdz-converter.js";
 
@@ -92,9 +93,11 @@ async function rebuild(
   const to = `uploads/${newKey}`;
   const workDir = await mkdtemp(path.join(tmpdir(), "holoim-usdz-rebuild-"));
   try {
-    const glbPath = path.join(workDir, record.filenameStored);
+    const storedPath = path.join(workDir, record.filenameStored);
     const newPath = path.join(workDir, newKey);
-    await storage.downloadToFile(record.filenameStored, glbPath);
+    await storage.downloadToFile(record.filenameStored, storedPath);
+    // The converter's own input: the stored GLB without its place (hologram-budgets).
+    const glbPath = await quickLookInput(storedPath, path.join(workDir, "quick-look-input.glb"));
     // Always convert afresh: a package left by an interrupted run is never trusted.
     await convertGlbToUsdz(glbPath, newPath, { seed: record.id });
     let previous: Report | null = null;

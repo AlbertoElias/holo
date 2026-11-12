@@ -62,6 +62,13 @@ Rules that keep this topology correct:
   attempt; the count is never reset by a request.
 - The embedded USDZ worker runs in the same process (SQLite phase). The
   machine is sized `shared-cpu-2x` / 2 GB for the Python converter.
+- The same worker loop processes new uploads first (hologram-budgets Q4):
+  it encodes textures to KTX2 with `toktx` (KTX-Software 4.4.2, installed
+  in the image; `TOKTX_PATH` and `TOKTX_THREADS` override it), reduces
+  the animation and publishes `<id>-light.glb` and `<id>-textures.glb`.
+  One job at a time, never alongside a Quick Look conversion: a 4096 px
+  texture alone takes ~30 s and ~1.2 GB in `toktx`. The uploaded GLB is
+  served until processing publishes, and stays as the Quick Look source.
 - Volumes are billed at $0.15/GB-month with no free allowance on new
   Fly organisations, so start small: 3 GB (~$0.45/month) holds roughly
   800 median GLBs, or ~30 GLB+USDZ demo pairs at ~90 MB per USDZ. Grow
