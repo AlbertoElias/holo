@@ -229,7 +229,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, onSh
   const placeDetailUrl = item.placeDetailUrl ? resolveMediaUrl(item.placeDetailUrl) : null;
   const textureDetailUrl = item.textureDetailUrl ? resolveMediaUrl(item.textureDetailUrl) : null;
   // Whether a scan is wanted is settled when the card mounts: the dome is fitted once, and with the scan or without it
-  // for good (B-052). A card that later becomes first (the one above it was deleted) is not handed a place, and one that
+  // for good (B-053). A card that later becomes first (the one above it was deleted) is not handed a place, and one that
   // stops being first keeps its own.
   const [firstAtMount] = useState(first === true);
   const placeRequest = useMemo(() => (testHooks ? readPlaceRequest(window.location.search, { id: item.id, first: firstAtMount }) : null), [firstAtMount, item.id]);

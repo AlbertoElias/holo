@@ -33,16 +33,16 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
-- [ ] Tests should not have to sign in (the user's direction on 2026-11-12).
-  Today 14 e2e specs sign in through the real magic-link route
-  (`apps/viewer-web/e2e/sign-in.ts`, `signInForUpload`, from B-044) to get
-  upload rights; the pipeline signs in dozens of times from one address.
-  Wanted: a test-API mode that accepts an upload without an account, with the
-  specs that do not test ownership switched to it. Constraints found while
-  scoping: `sign-in-email.spec.ts` asserts an anonymous upload gets 401 (B-044),
-  and `profiles.pipeline.spec.ts` needs owned uploads for creator pages and
-  delete, so both keep a real account; the mode must be a test-only flag that is
-  never on in production.
+- [x] Tests should not have to sign in (the user's direction on 2026-11-12).
+  Delivered 2026-11-12: the e2e API runs with `TEST_OPEN_UPLOADS` (off by
+  default and in production; `scripts/test-api.ts` turns it on), which accepts
+  an upload without an account, credited to the submitted name with no owner.
+  11 specs now upload anonymously. Three keep `signInForUpload`:
+  `profiles.pipeline.spec.ts` (owned uploads, owner-only delete) and
+  `bubble-capture` / `capture-to-viewer` (they drive the viewer's Upload sheet,
+  which shows sign-in until a session exists; opening that gate in the viewer
+  would be a product change). `sign-in-email.spec.ts` runs the API with
+  `TEST_OPEN_UPLOADS=false` and still proves an anonymous upload gets 401.
 
 - [ ] Record a take inside a scanned place (split capture slice 2, the
   user's direction on 2026-11-10): capture loads a scan (SPZ or PLY) as the
@@ -218,7 +218,7 @@ it from the item below instead of duplicating its status here.
      suspected defects reproduced and are fixed; the third did not.
   2. Done (2026-11-12): default AR shell anchor adoption, fixed with the
      fallback shell under B-048.
-  3. Done (2026-11-12): place gate, B-052. Neither suspect reproduced as
+  3. Done (2026-11-12): place gate, B-053. Neither suspect reproduced as
      framed (a late scan never shows; the gate's `timeout` is never
      overwritten). The replay found the real defect: a card that becomes
      first after its dome is fitted took the place late. Fixed.

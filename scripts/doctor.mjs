@@ -78,7 +78,13 @@ function checkAgentConfigParity() {
 
 // The pre-push hook (scripts/hooks/pre-push-checks.mjs) is installed through core.hooksPath.
 function checkPrePushHook() {
-  const configured = spawnSync("git", ["config", "--get", "core.hooksPath"], { cwd: rootDir, encoding: "utf8" }).stdout.trim();
+  const read = () => spawnSync("git", ["config", "--get", "core.hooksPath"], { cwd: rootDir, encoding: "utf8" }).stdout.trim();
+  let configured = read();
+  if (configured !== "scripts/hooks/git") {
+    // Self-heal (an app-created worktree may carry an absolute override), then re-read.
+    spawnSync(process.execPath, [path.resolve(rootDir, "scripts/hooks/install.mjs")], { cwd: rootDir, stdio: "ignore" });
+    configured = read();
+  }
   if (configured !== "scripts/hooks/git") {
     reporter.fail(`Pre-push hook is not installed (core.hooksPath is "${configured || "unset"}"); run "pnpm run hooks:install".`);
   }

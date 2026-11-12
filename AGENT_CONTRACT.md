@@ -66,7 +66,9 @@ Run automation from these scripts unless a task explicitly requires lower-level 
   workspaces and reverse dependents from package manifests, then fails closed to the
   comprehensive workspace checks if it cannot classify a change safely.
 - Pre-push hook: `core.hooksPath` points at `scripts/hooks/git` (set by `pnpm install`
-  or `pnpm run hooks:install`; `pnpm run doctor` fails if missing). Each push runs the
+  or `pnpm run hooks:install`; `pnpm run doctor` and the Claude Code SessionStart hook
+  repair it, including the absolute `core.hooksPath` the desktop app writes into a
+  session worktree's own config, which would otherwise override it). Each push runs the
   changed packages' `lint`, and `typecheck` of those packages and their dependents, in parallel;
   docs-only pushes skip. Bypass only with `git push --no-verify`.
 - For documentation-only changes, check the edited content and references; do not
@@ -172,7 +174,7 @@ before pushing. Measured locally on Node 24 (M-series, shared machine):
   `ubuntu-latest` runner has 2 vCPUs, so the default is 1. Running 2 at a time
   passed on the branch but timed out on main: the hand and body checks each
   open 2 pages at once, and cold page loads then pass the 30 s goto limit.
-  The pipeline job runs its specs in 6 shards, the viewer mocked suite in 4
+  The pipeline job runs its specs in 11 shards, the viewer mocked suite in 4
   and the VR checks in 2, each a script balanced by measured wall time
   (`test:e2e:pipeline:shard<i>`, `test:e2e:mocked:shard<i>`,
   `test:e2e:xr-viewer-vr:shard<i>` in

@@ -7,7 +7,6 @@ import type * as Three from "three";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, expectConsoleErrors, test } from "./bootstrap";
-import { signInForUpload } from "./sign-in";
 import { measureFloor } from "./floor-proof";
 import { diagonalFactor, extentLeavesDome, SPLAT_EXTENT_SIGMA } from "@holoim/place";
 import { writeFixture } from "./place-fixture";
@@ -431,7 +430,7 @@ test.describe("a scanned place around a take", () => {
   });
 
   // The place gate is one decision per card: whether the fit waits for a scan is settled when the card mounts,
-  // and once the dome is fitted the card is what it is (B-052). Both checks replay a path the page can take.
+  // and once the dome is fitted the card is what it is (B-053). Both checks replay a path the page can take.
   test("a scan that is still loading when the fit gives up is not shown late", async ({ page }, testInfo) => {
     test.setTimeout(120_000);
     const item = fakeItem("g");
@@ -573,9 +572,7 @@ test.describe("a scanned place around a take", () => {
     test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture dev server and a live API.");
     test.setTimeout(420_000);
     const take = await recordWalkTake(browser, testInfo);
-    const { headers } = await signInForUpload(page, { displayName: "place-e2e" });
     const response = await page.request.post("/api/holograms", {
-      headers,
       multipart: {
         hologramName: `Place ${testInfo.testId.slice(0, 6)}-${Date.now()}`,
         submittedBy: "place-e2e",

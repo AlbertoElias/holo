@@ -10,7 +10,6 @@ import { createXrContext, waitForTextContentPrefix } from "@holoim/tooling-testi
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, test } from "./bootstrap";
-import { signInForUpload } from "./sign-in";
 import { makeFixture } from "./place-fixture";
 import { installProbe, waitForPortalReady } from "./portal-helpers";
 
@@ -144,9 +143,7 @@ const recordSh1Take = (browser: Browser) => (sh1Take ??= recordTake(browser, mak
 // ---------------------------------------------------------------- viewer
 
 async function upload(page: Page, name: string, glb: Buffer): Promise<{ status: number; body: string; dto: HologramDto | null }> {
-  const { headers } = await signInForUpload(page, { displayName: "hologram-budgets-e2e" });
   const response = await page.request.post("/api/holograms", {
-    headers,
     timeout: 300_000,
     multipart: { hologramName: `${name} ${Date.now()}`, submittedBy: "hologram-budgets-e2e", file: { name: `${name}.glb`, mimeType: "model/gltf-binary", buffer: glb } }
   });
@@ -388,8 +385,7 @@ test.describe("hologram budgets: two levels of the place, the 100 MB cap", () =>
     expect(afterScroll - baseline, "the heap returns near its baseline").toBeLessThan(Math.max(32 * 1024 * 1024, (withDetail - baseline) / 4));
 
     // Delete removes the detail object.
-    const { headers } = await signInForUpload(page);
-    const deleted = await page.request.delete(`/api/holograms/${dto.id}`, { headers });
+    const deleted = await page.request.delete(`/api/holograms/${dto.id}`);
     expect(deleted.status(), await deleted.text()).toBe(200);
     expect(((await deleted.json()) as { deletedDetail?: boolean }).deletedDetail).toBe(true);
     expect((await page.request.get(dto.placeDetailUrl!)).status(), "the detail object is gone").toBe(404);
@@ -436,9 +432,8 @@ test.describe("hologram budgets: two levels of the place, the 100 MB cap", () =>
     expect(atCap.byteLength).toBe(MAX_HOLOGRAM_BYTES);
     // One byte past the cap: the route refuses by streamed size, before the GLB is read.
     const over = Buffer.concat([atCap, Buffer.alloc(1)]);
-    const { headers } = await signInForUpload(page, { displayName: "hologram-budgets-e2e" });
     // The intent route refuses by declared size, before any bytes move.
-    const intent = (sizeBytes: number) => page.request.post("/api/holograms/uploads/initiate", { headers, data: { filenameOriginal: "cap.glb", hologramName: "cap", mimeType: "model/gltf-binary", sizeBytes, submittedBy: "hologram-budgets-e2e" } });
+    const intent = (sizeBytes: number) => page.request.post("/api/holograms/uploads/initiate", { data: { filenameOriginal: "cap.glb", hologramName: "cap", mimeType: "model/gltf-binary", sizeBytes, submittedBy: "hologram-budgets-e2e" } });
     expect((await intent(MAX_HOLOGRAM_BYTES)).status()).toBe(200);
     const refusedIntent = await intent(MAX_HOLOGRAM_BYTES + 1);
     expect(refusedIntent.status()).toBe(413);

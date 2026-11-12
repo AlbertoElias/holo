@@ -9,7 +9,6 @@ import { launchXrBrowser, waitForIwerSession, waitForPageFunctions, waitForTextC
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, captureEvidence, expect, pressViewInAr, test } from "./bootstrap";
-import { signInForUpload } from "./sign-in";
 
 // Standard avatar formats (docs/features/archive/avatar-formats.md): exports from
 // avatars that are not Ready Player Me go through the real export → upload →
@@ -111,7 +110,6 @@ function yawDifference(a: number, b: number): number {
 
 async function upload(page: Page, name: string, glb: Buffer): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
-    headers: (await signInForUpload(page)).headers,
     multipart: {
       hologramName: `${name} ${Date.now()}`,
       submittedBy: "avatar-formats-e2e",
