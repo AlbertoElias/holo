@@ -36,9 +36,9 @@ queue item in [`TODOS.md`](TODOS.md).
   [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md)),
   branch `feature/showcase-introspection`, pushed 2026-11-11. Built, uploaded
   and played on a local feed with sound; `verify:agent` passed. Capture
-  scripts and docs only, so it rides along with the next merge. Not yet
-  uploaded to production, and not checked in Quick Look (four positional
-  emitters).
+  scripts and docs only, so it rides along with the next merge. Uploaded to
+  production 2026-11-12 (`cmwcte5x20005oeiqsmobz8mf`) and plays on the live
+  feed; its Quick Look conversion failed on the extent budget (B-048).
 
 ## Recently merged (grouped)
 

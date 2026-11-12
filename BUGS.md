@@ -98,6 +98,16 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
   5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
 
+### B-048 — A long animated showcase piece fails Quick Look conversion on the extent budget
+
+- **Area:** `apps/viewer-api/tools/glb_to_usdz.py`
+- **Severity:** P3 (one piece, "The way down", has no iPhone AR preview; the feed plays it)
+- **Observed:** 2026-11-12. The production upload of "The way down" (`cmwcte5x20005oeiqsmobz8mf`, 19.8 MB, a 60 s loop) ended `usdzStatus: "failed"` with `Animation extent evaluation exceeds conversion budget`.
+- **Evidence:** the extent pass sums mesh points × sampled frames for every moving mesh and refuses above 100 M. A 60 s clip has about 1,800 frames, so roughly 55 k moving vertices (the gas clouds, liquid surfaces and figures) cross it.
+- **Expected:** a piece the feed plays also converts, or the budget is checked before upload so the author can thin the animation first.
+- **Reproduction:** `showcase:build introspection`, then `showcase:upload --api <local API with the USDZ worker on> introspection`.
+- **Options:** sample extents at a coarser rate (the bound only needs to contain the motion), or report the budget at build time in `build.mjs`. A re-upload adds a duplicate, so the live piece stays without a preview until it is replaced.
+
 ## Entry template
 
 ```md
