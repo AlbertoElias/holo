@@ -57,7 +57,6 @@ from this table still appears using its canonical registry text.
 | IDEA-044 | Object-indexed timeline | Find moments by the thing being discussed. |
 | IDEA-045 | Portal view | Make a screen a window into the event. |
 | IDEA-046 | Direct publishing | Send a recording without the file handoff. |
-| IDEA-047 | Processing lifecycle | Show when an upload is usable or failed. |
 | IDEA-048 | Asset metadata | Explain duration, audio and asset complexity. |
 | IDEA-049 | Thumbnails | Help people recognize the right message. |
 | IDEA-050 | Artifact jobs | Generate derived formats with recoverable failures. |
@@ -67,7 +66,6 @@ from this table still appears using its canonical registry text.
 | IDEA-054 | Durable storage | Keep assets available with controlled access. |
 | IDEA-055 | Usage limits | Protect creation and delivery from abuse. |
 | IDEA-056 | Operational visibility | Detect and diagnose delivery failures. |
-| IDEA-057 | Upload recovery | Retry without losing the recording or metadata. |
 | IDEA-058 | Shareable messages | Give each explanation a clear destination. |
 | IDEA-059 | Explain with an object | Show a relationship by manipulating a model. |
 | IDEA-060 | Recipient control | Pause, inspect and regain orientation. |
