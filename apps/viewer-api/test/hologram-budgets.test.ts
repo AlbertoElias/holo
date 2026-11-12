@@ -437,6 +437,20 @@ fs.writeFileSync(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), f
     expect(report.animation.reducedTracks, "the animation is still reduced").toBe(4);
   }, 120_000);
 
+  it("keeps a small texture as uploaded when its KTX2 would be larger", async () => {
+    // A one-colour 128 px PNG deflates to a few hundred bytes, as small JPEGs
+    // in real avatars do; its KTX2 with mipmaps and codebooks is bigger.
+    const glb = hologramGlb({ texture: { width: 128, height: 128, flat: true } });
+    const { after, report, served } = await processOne(glb);
+    expect(report.skippedTextures).toEqual([{ image: 0, reason: "smaller-as-uploaded", width: 128, height: 128 }]);
+    expect(report.textures).toEqual([]);
+    expect(served.images).toEqual([expect.objectContaining({ mimeType: "image/png" })]);
+    expect(served.textures).toEqual([{ source: 0, sampler: 0 }]);
+    expect(served.extensionsUsed ?? []).not.toContain("KHR_texture_basisu");
+    expect(served.extensionsRequired ?? [], "an old viewer can still open it").not.toContain("KHR_texture_basisu");
+    expect(after.textureDetailUrl).toBeNull();
+  }, 120_000);
+
   it("keeps a texture the encoder refuses as uploaded and still processes the rest", async () => {
     // A PNG whose header reads but whose pixel data is corrupt: toktx exits non-zero.
     const glb = hologramGlb({ texture: { width: 2048, height: 2048 } });

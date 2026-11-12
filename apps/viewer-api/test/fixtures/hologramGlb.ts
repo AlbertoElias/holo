@@ -39,7 +39,7 @@ function crc32(bytes: Buffer): number {
 }
 
 /** An RGB PNG of a gradient, `width` x `height`. */
-export function png(width: number, height: number): Buffer {
+export function png(width: number, height: number, flat = false): Buffer {
   const chunk = (type: string, data: Buffer) => {
     const length = Buffer.alloc(4);
     length.writeUInt32BE(data.length);
@@ -57,8 +57,8 @@ export function png(width: number, height: number): Buffer {
   for (let y = 0; y < height; y++) {
     const row = y * (width * 3 + 1);
     for (let x = 0; x < width; x++) {
-      raw[row + 1 + x * 3] = (x * 255) / width;
-      raw[row + 2 + x * 3] = (y * 255) / height;
+      raw[row + 1 + x * 3] = flat ? 200 : (x * 255) / width;
+      raw[row + 2 + x * 3] = flat ? 120 : (y * 255) / height;
       raw[row + 3 + x * 3] = 128;
     }
   }
@@ -80,7 +80,7 @@ export type PlaceSpec = {
 export type HologramGlbSpec = {
   place?: PlaceSpec;
   /** Width and height of the base colour texture; none when omitted. */
-  texture?: { width: number; height: number };
+  texture?: { width: number; height: number; /** One colour: the PNG deflates to a few hundred bytes. */ flat?: boolean };
   /** Recorded frames at 120 Hz (default 240). */
   frames?: number;
   /** Pad the file to exactly this many bytes with an unreferenced view. */
@@ -205,7 +205,7 @@ export function hologramGlb(spec: HologramGlbSpec = {}): Buffer {
   // Root-node children: Scene holds Armature (0), RecordedObject (4) and the place.
   (nodes[nodes.length - 1] as { children: number[] }).children = [0, 4, ...(spec.place ? [5] : [])];
   if (spec.texture) {
-    const image = addView(png(spec.texture.width, spec.texture.height));
+    const image = addView(png(spec.texture.width, spec.texture.height, spec.texture.flat));
     json.images = [{ bufferView: image, mimeType: "image/png" }];
     json.samplers = [{ magFilter: 9729, minFilter: 9987 }];
     json.textures = [{ source: 0, sampler: 0 }];
