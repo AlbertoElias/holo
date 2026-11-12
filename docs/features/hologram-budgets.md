@@ -308,6 +308,16 @@ accept it (tabs reload on the next visit), add a build-version check that
 reloads stale tabs, or serve the fallback for a grace period. Found by the
 independent verifier.
 
+## Known risk: KTX2 can serve more bytes than small JPEGs (decision open)
+
+Processing encodes every texture to KTX2, even when the source is a small
+JPEG. For the capture's `avatar.glb` (twenty JPEG textures of 64 to 1024 px),
+the served light GLB is 3.55 MB against a 1.83 MB upload: KTX2 cuts GPU memory
+but roughly doubles the download here. Options: keep a texture as uploaded
+when its KTX2 is larger and it is not downscaled (which needs a PNG/JPEG path
+next to `KHR_texture_basisu`), or serve the stored GLB whenever the light GLB
+is the larger file.
+
 ## Open checks
 
 - Phones and Quest: light-to-detail time, peak heap, draw budget and KTX2

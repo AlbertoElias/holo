@@ -11,6 +11,11 @@ const webglInvalidOperationPattern = /GL_INVALID_OPERATION/;
 // Console errors a test seeds on purpose (a missing model's 404), matched on
 // the message and the URL it names.
 const expectedConsoleErrors = new WeakMap<Page, RegExp[]>();
+// A test's own page.goto tears down texture loads still in flight. KTX2 images
+// transcode in workers, and three's GLTFLoader logs each cut one as it leaves
+// (PNG and JPEG decodes cut the same way stay silent). Only while the main
+// frame is navigating away is that the test's doing; at any other time it fails.
+const textureCutOnLeavePattern = /^THREE\.GLTFLoader: Couldn't load texture blob:/;
 
 /** Accepts console errors matching `pattern` (message or resource URL) for the rest of this test. */
 export function expectConsoleErrors(page: Page, pattern: RegExp): void {
@@ -22,11 +27,19 @@ export const test = base.extend({
     await attachXrEnvironment(page, process.env.XR_TEST_MODE === undefined ? {} : { mode: process.env.XR_TEST_MODE });
     const stepsBefore = xrStepTotals();
     const runtimeErrors: string[] = [];
+    let leaving = false;
+    page.on("request", (request) => {
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) leaving = true;
+    });
+    page.on("domcontentloaded", () => {
+      leaving = false;
+    });
     page.on("pageerror", (error) => {
       runtimeErrors.push(`pageerror: ${error.message}`);
     });
     page.on("console", (message) => {
       if (message.type() === "error") {
+        if (leaving && textureCutOnLeavePattern.test(message.text())) return;
         const seeded = expectedConsoleErrors.get(page)?.some((pattern) => pattern.test(message.text()) || pattern.test(message.location().url));
         if (!seeded) runtimeErrors.push(`console.error: ${message.text()}`);
       } else if (message.type() === "warning" && webglInvalidOperationPattern.test(message.text())) {

@@ -80,6 +80,16 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `pnpm run test:smoke:pipeline` from the repository root, with the five ports moved off their defaults when another run holds them.
   Suspect: the 10 s `trayHolds` wait on a loaded machine after many specs, or state left in the shared database or the stubbed Poly Haven server.
 
+### B-051 — Feed spatial audio's motion-wrap step flakes on hosted CI
+
+- **Area:** `apps/viewer-web` e2e (`e2e/spatial-audio.spec.ts`), `test:e2e:mocked:shard2`
+- **Severity:** P2 (fails the CI Gate, which skips every deploy)
+- **Observed:** 2026-11-12 on hosted CI twice: run 43158849962 (`d0182e3c`, "after the motion wraps, every source is where the motion is") and run 43268222950 (`6b531875`, "the motion wraps", the poll at `spatial-audio.spec.ts:364` never seeing the clip time drop within `SPATIAL_CLIP_S + 4` s)
+- **Evidence:** local runs pass (3/3 with `--repeat-each=3` on 2026-11-12); not yet run under `scripts/ci-emulate.sh`.
+- **Expected:** the animated sources' clip wraps and the step passes on a 4-CPU runner as it does locally.
+- **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
+  Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
+
 ## Entry template
 
 ```md
