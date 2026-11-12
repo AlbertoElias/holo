@@ -3,6 +3,7 @@ import "dotenv/config";
 import { buildApp } from "./app.js";
 import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
+import { createHologramFeedSnapshotWriter } from "./routes/holograms.js";
 import { createMediaStorage } from "./services/media-storage.js";
 import { startUsdzWorker } from "./services/usdz-worker.js";
 import { startUploadIntentCleanup } from "./services/upload-intent-cleanup.js";
@@ -19,8 +20,11 @@ async function main(): Promise<void> {
 
   if (env.USDZ_WORKER_ENABLED) {
     const uploadsRoot = env.UPLOADS_ROOT ?? path.join(process.cwd(), UPLOADS_DIR);
+    const storage = createMediaStorage(uploadsRoot);
+    const refreshFeedSnapshot = createHologramFeedSnapshotWriter(storage, app.log);
     const worker = startUsdzWorker({
-      storage: createMediaStorage(uploadsRoot),
+      storage,
+      onPublished: refreshFeedSnapshot,
       logger: {
         info: (obj, msg) => app.log.info(obj as object, msg),
         error: (obj, msg) => app.log.error(obj as object, msg)

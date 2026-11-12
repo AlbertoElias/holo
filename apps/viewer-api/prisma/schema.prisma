@@ -59,12 +59,23 @@ model Hologram {
   usdzAttempts     Int       @default(0)
   usdzError        String?
   quickLookEnabled Boolean   @default(false)
+  // hologram-budgets: the place's detail level and the full-size textures as
+  // their own objects, and the processed GLB served once the worker made it.
+  placeDetailKey    String?
+  textureDetailKey  String?
+  servedKey         String?
+  processStatus     String    @default("none")
+  processClaimedAt  DateTime?
+  processClaimToken String?
+  processAttempts   Int       @default(0)
+  processError      String?
   ownerId          String?
   owner            User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   createdAt        DateTime  @default(now())
 
   @@index([createdAt(sort: Desc)])
   @@index([usdzStatus])
+  @@index([processStatus])
   @@index([ownerId])
 }
 

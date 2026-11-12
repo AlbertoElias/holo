@@ -5,12 +5,14 @@ import path from "node:path";
 
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/prisma.js";
+import { quickLookInput } from "./hologram-split.js";
 import type { MediaStorage } from "./media-storage.js";
+import { processNextHologram, type ProcessWorkerOptions } from "./process-worker.js";
 import { convertGlbToUsdz, isUsdzConversionTimeout, usdzFilenameFor, type ConversionOptions } from "./usdz-converter.js";
 
 export type GlbToUsdzConverter = (glbAbsolutePath: string, usdzAbsolutePath: string, options?: ConversionOptions) => Promise<void>;
 
-export type UsdzWorkerOptions = {
+export type UsdzWorkerOptions = Pick<ProcessWorkerOptions, "onPublished"> & {
   storage: MediaStorage;
   convert?: GlbToUsdzConverter;
   staleClaimMs?: number;
@@ -80,7 +82,11 @@ export async function processNextUsdzConversion(options: UsdzWorkerOptions): Pro
       const glbPath = path.join(workDir, glbKey);
       const usdzTempPath = path.join(workDir, usdzKey);
       await storage.downloadToFile(glbKey, glbPath);
-      await convert(glbPath, usdzTempPath, { seed: record.id });
+      // The converter gets its own temporary input (hologram-budgets): the
+      // stored GLB (PNG/JPEG textures, unreduced animation) without the
+      // place, which Quick Look cannot show. It goes with the work dir.
+      const inputPath = await quickLookInput(glbPath, path.join(workDir, "quick-look-input.glb"));
+      await convert(inputPath, usdzTempPath, { seed: record.id });
       await storage.putFile(usdzKey, usdzTempPath, "model/vnd.usdz+zip", undefined, "inline");
     }
 
@@ -134,8 +140,10 @@ export function startUsdzWorker(options: UsdzWorkerOptions & { pollIntervalMs?: 
     if (stopped || running) return;
     running = true;
     try {
-      // Drain available work one conversion at a time.
-      while (!stopped && (await processNextUsdzConversion(options))) {
+      // Drain available work one job at a time: the hologram processing
+      // (hologram-budgets) first, then the conversions. Serial, so the
+      // texture encoder and the USDZ converter never share the machine.
+      while (!stopped && ((await processNextHologram(options)) !== false || (await processNextUsdzConversion(options)))) {
         // continue until idle
       }
     } catch (error) {

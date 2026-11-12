@@ -14,6 +14,10 @@ export type CreateHologramInput = {
   sizeBytes: number;
   storagePath: string;
   quickLookEnabled: boolean;
+  /** hologram-budgets: the place's detail level, stored as its own object. */
+  placeDetailKey?: string | null;
+  /** "pending" queues the background processing (KTX2, reduced animation). */
+  processStatus?: "pending" | "none";
   ownerId?: string | null;
 };
 
@@ -28,6 +32,8 @@ export async function createHologram(input: CreateHologramInput) {
       sizeBytes: input.sizeBytes,
       storagePath: input.storagePath,
       quickLookEnabled: input.quickLookEnabled,
+      placeDetailKey: input.placeDetailKey ?? null,
+      processStatus: input.processStatus ?? "none",
       ownerId: input.ownerId ?? null,
       usdzStatus: input.quickLookEnabled ? "pending" : "none"
     }

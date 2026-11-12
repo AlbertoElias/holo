@@ -92,6 +92,14 @@ describe("auth and ownership routes", () => {
         "usdzAttempts" INTEGER NOT NULL DEFAULT 0,
         "usdzError" TEXT,
         "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
+        "placeDetailKey" TEXT,
+        "textureDetailKey" TEXT,
+        "servedKey" TEXT,
+        "processStatus" TEXT NOT NULL DEFAULT 'none',
+        "processClaimedAt" DATETIME,
+        "processClaimToken" TEXT,
+        "processAttempts" INTEGER NOT NULL DEFAULT 0,
+        "processError" TEXT,
         "ownerId" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`);

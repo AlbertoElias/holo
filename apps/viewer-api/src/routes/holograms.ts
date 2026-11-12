@@ -30,9 +30,17 @@ import {
 } from "../services/hologram-repo.js";
 import { optionalAuthUser } from "../services/auth.js";
 import { createFeedSnapshotWriter } from "../services/feed-snapshot.js";
+import {
+  capMessage,
+  GLB_CONTENT_TYPE,
+  placeDetailKeyFor,
+  servedKeyFor,
+  storeUpload,
+  textureDetailKeyFor,
+  type StoredUpload
+} from "../services/hologram-ingest.js";
 import { saveUploadedGlb, UploadValidationError, validateGlbMeta } from "../services/hologram-storage.js";
 import type { MediaStorage } from "../services/media-storage.js";
-import { storedPlaceProblem } from "../services/place-check.js";
 import { usdzFilenameFor, usdzFilenamesFor, withHologramLock } from "../services/usdz-converter.js";
 
 const SIGN_IN_TO_UPLOAD = "Sign in to upload a hologram.";
@@ -65,6 +73,9 @@ type HologramRecord = {
   usdzPath: string | null;
   usdzStatus: string;
   quickLookEnabled: boolean;
+  placeDetailKey?: string | null;
+  textureDetailKey?: string | null;
+  servedKey?: string | null;
   ownerId?: string | null;
   createdAt: Date;
 };
@@ -76,7 +87,9 @@ function toDto(record: HologramRecord, storage: MediaStorage, viewerId?: string 
   const usdzKey = record.usdzPath ? path.posix.basename(record.usdzPath) : null;
   return {
     id: record.id,
-    url: storage.publicUrl(record.filenameStored),
+    url: storage.publicUrl(record.servedKey ?? record.filenameStored),
+    placeDetailUrl: record.placeDetailKey ? storage.publicUrl(record.placeDetailKey) : null,
+    textureDetailUrl: record.textureDetailKey ? storage.publicUrl(record.textureDetailKey) : null,
     usdzUrl: record.quickLookEnabled && status === "ready" && usdzKey ? storage.publicUrl(usdzKey) : null,
     usdzStatus: status,
     quickLookEnabled: record.quickLookEnabled,
@@ -90,17 +103,24 @@ function toDto(record: HologramRecord, storage: MediaStorage, viewerId?: string 
   };
 }
 
+/**
+ * The anonymous first page, kept beside the media for the viewer's edge;
+ * rewritten after every upload and delete, at boot, and when the worker
+ * publishes a processed GLB (its URL changes).
+ */
+export function createHologramFeedSnapshotWriter(storage: MediaStorage, log: { error: (obj: unknown, msg: string) => void }) {
+  return createFeedSnapshotWriter(storage, async () => {
+    const result = await listHolograms({ limit: listQuerySchema.parse({}).limit });
+    return paginatedHologramsSchema.parse({ items: result.items.map((item) => toDto(item, storage)), nextCursor: result.nextCursor });
+  }, log);
+}
+
 export async function registerHologramRoutes(
   app: FastifyInstance,
   options: { uploadsRoot: string; storage: MediaStorage }
 ): Promise<void> {
-  const { uploadsRoot, storage } = options;
-  // The anonymous first page, kept beside the media for the viewer's edge; rewritten
-  // after every upload and delete, and at boot.
-  const refreshFeedSnapshot = createFeedSnapshotWriter(storage, async () => {
-    const result = await listHolograms({ limit: listQuerySchema.parse({}).limit });
-    return paginatedHologramsSchema.parse({ items: result.items.map((item) => toDto(item, storage)), nextCursor: result.nextCursor });
-  }, app.log);
+  const { storage } = options;
+  const refreshFeedSnapshot = createHologramFeedSnapshotWriter(storage, app.log);
   void refreshFeedSnapshot();
 
   app.post("/holograms/uploads/initiate", async (request, reply) => {
@@ -193,7 +213,11 @@ export async function registerHologramRoutes(
     if (!head) {
       return reply.status(409).send({ error: "Uploaded object not available yet. Retry complete." });
     }
-    if (head.sizeBytes > MAX_GLB_BYTES || head.sizeBytes !== intent.sizeBytes) {
+    if (head.sizeBytes > MAX_GLB_BYTES) {
+      await storage.delete(intent.storageKey).catch(() => undefined);
+      return reply.status(413).send({ error: capMessage() });
+    }
+    if (head.sizeBytes !== intent.sizeBytes) {
       await storage.delete(intent.storageKey).catch(() => undefined);
       return reply.status(422).send({ error: "Uploaded object size does not match the declared size." });
     }
@@ -202,15 +226,26 @@ export async function registerHologramRoutes(
       await storage.delete(intent.storageKey).catch(() => undefined);
       return reply.status(422).send({ error: "Uploaded object is not a GLB file." });
     }
-    const whole = await storage.readPrefix(intent.storageKey, head.sizeBytes);
-    const placeProblem = whole ? await storedPlaceProblem(new Uint8Array(whole)) : "The uploaded object could not be read.";
-    if (placeProblem) {
-      await storage.delete(intent.storageKey).catch(() => undefined);
-      return reply.status(422).send({ error: placeProblem });
-    }
 
-    const filenameStored = `${createId()}.glb`;
-    await storage.copy(intent.storageKey, filenameStored, "model/gltf-binary");
+    // The object goes to a temporary file, never whole into memory; the split
+    // reads the place's views and copies the rest range by range.
+    const workDir = await mkdtemp(path.join(tmpdir(), "holoim-complete-"));
+    let stored: StoredUpload;
+    try {
+      const uploadPath = path.join(workDir, "upload.glb");
+      await storage.downloadToFile(intent.storageKey, uploadPath);
+      stored = await storeUpload(storage, uploadPath, head.sizeBytes, workDir, (filenameStored) =>
+        storage.copy(intent.storageKey, filenameStored, GLB_CONTENT_TYPE)
+      );
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        await storage.delete(intent.storageKey).catch(() => undefined);
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
     await storage.delete(intent.storageKey).catch(() => undefined);
 
     const created = await createHologram({
@@ -218,10 +253,12 @@ export async function registerHologramRoutes(
       hologramName: intent.hologramName,
       submittedBy: intent.submittedBy,
       quickLookEnabled: intent.quickLookEnabled,
-      filenameStored,
+      filenameStored: stored.filenameStored,
       mimeType: intent.mimeType,
-      sizeBytes: head.sizeBytes,
-      storagePath: `uploads/${filenameStored}`,
+      sizeBytes: stored.sizeBytes,
+      storagePath: `uploads/${stored.filenameStored}`,
+      placeDetailKey: stored.placeDetailKey,
+      processStatus: stored.processStatus,
       ownerId: intent.ownerId ?? null
     });
     await completeUploadIntent(intent.id, created.id);
@@ -244,20 +281,12 @@ export async function registerHologramRoutes(
       });
 
       let uploadedFileMeta: { filename: string; mimetype: string } | undefined;
-      let storedUpload:
-        | {
-            storedFilename: string;
-            relativeStoragePath: string;
-            sizeBytes: number;
-            absolutePath: string;
-          }
-        | undefined;
+      let storedUpload: { sizeBytes: number; absolutePath: string } | undefined;
       const fields: Record<string, string> = {};
 
-      // Local driver writes straight into the uploads root. Other drivers
-      // stage to a temp file that is then put to object storage.
-      const stagingRoot =
-        storage.kind === "local" ? uploadsRoot : (tempRoot = await mkdtemp(path.join(tmpdir(), "holoim-upload-")));
+      // Every driver stages the upload to a temp file; the split writes the
+      // light GLB and the detail SPZ beside it, and both are put to storage.
+      const stagingRoot = (tempRoot = await mkdtemp(path.join(tmpdir(), "holoim-upload-")));
 
       for await (const part of parts) {
         if (part.type === "file") {
@@ -288,25 +317,23 @@ export async function registerHologramRoutes(
 
       const parsedFields = uploadFieldsSchema.safeParse(fields);
       if (!parsedFields.success) {
-        await rm(storedUpload.absolutePath, { force: true });
         return reply.status(400).send({ error: "Missing or invalid upload fields." });
       }
 
       const authUser = await optionalAuthUser(request.headers);
-
-      if (storage.kind !== "local") {
-        await storage.putFile(storedUpload.storedFilename, storedUpload.absolutePath, "model/gltf-binary");
-      }
+      const stored = await storeUpload(storage, storedUpload.absolutePath, storedUpload.sizeBytes, stagingRoot);
 
       const created = await createHologram({
         filenameOriginal: uploadedFileMeta.filename,
         hologramName: parsedFields.data.hologramName,
         submittedBy: authUser?.displayName ?? parsedFields.data.submittedBy,
-        filenameStored: storedUpload.storedFilename,
+        filenameStored: stored.filenameStored,
         mimeType: uploadedFileMeta.mimetype,
-        sizeBytes: storedUpload.sizeBytes,
-        storagePath: storedUpload.relativeStoragePath,
+        sizeBytes: stored.sizeBytes,
+        storagePath: `uploads/${stored.filenameStored}`,
         quickLookEnabled: parsedFields.data.quickLookEnabled,
+        placeDetailKey: stored.placeDetailKey,
+        processStatus: stored.processStatus,
         ownerId: authUser?.id ?? null
       });
 
@@ -443,10 +470,32 @@ export async function registerHologramRoutes(
 
       let deletedFile = false;
       let deletedUsdz = false;
+      let deletedDetail = false;
       try {
         deletedFile = await storage.delete(item.filenameStored);
       } catch (error) {
         request.log.warn({ error }, "Could not delete GLB object");
+      }
+      // The processed GLB, the place's detail level and the full-size textures
+      // (hologram-budgets); the keys derived from the stored name too, in case
+      // a crash came between writing an object and recording it.
+      const detailKeys = new Set(
+        [
+          item.servedKey,
+          item.placeDetailKey,
+          item.textureDetailKey,
+          servedKeyFor(item.filenameStored),
+          placeDetailKeyFor(item.filenameStored),
+          textureDetailKeyFor(item.filenameStored)
+        ].filter((key): key is string => Boolean(key))
+      );
+      for (const key of detailKeys) {
+        try {
+          const removed = await storage.delete(key);
+          if (key === item.placeDetailKey || key === item.textureDetailKey) deletedDetail = removed || deletedDetail;
+        } catch (error) {
+          request.log.warn({ error, key }, "Could not delete hologram detail object");
+        }
       }
       for (const usdzKey of usdzKeys) {
         try {
@@ -463,7 +512,8 @@ export async function registerHologramRoutes(
         deleteHologramResponseSchema.parse({
           id: item.id,
           deletedFile,
-          deletedUsdz
+          deletedUsdz,
+          deletedDetail
         })
       );
     });
