@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -76,6 +76,35 @@ function checkAgentConfigParity() {
   }
 }
 
+// Instructions drift from the code silently (a package renamed, a command
+// moved). Every `--filter <name>` in a tracked instruction or doc file must
+// name a workspace package; archives record history and are skipped.
+function checkInstructionFilters() {
+  const packages = new Set();
+  for (const group of ["apps", "packages"]) {
+    for (const entry of readdirSync(path.join(rootDir, group))) {
+      const manifest = path.join(rootDir, group, entry, "package.json");
+      if (existsSync(manifest)) packages.add(JSON.parse(readFileSync(manifest, "utf8")).name);
+    }
+  }
+  const listed = spawnSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "--", "*.md", ":!**/archive/**", ":!.agents/skills/gstack/**", ":!**/node_modules/**"],
+    { cwd: rootDir, encoding: "utf8" }
+  );
+  for (const file of new Set(listed.stdout.split("\n").filter(Boolean))) {
+    if (!existsSync(path.join(rootDir, file)) || lstatSync(path.join(rootDir, file)).isSymbolicLink()) continue;
+    const lines = readFileSync(path.join(rootDir, file), "utf8").split("\n");
+    lines.forEach((line, index) => {
+      for (const match of line.matchAll(/--filter[= ](@holoim\/[\w-]+)/g)) {
+        if (!packages.has(match[1])) {
+          reporter.fail(`${file}:${index + 1} filters on ${match[1]}, which is not a workspace package; fix the line to the real name.`);
+        }
+      }
+    });
+  }
+}
+
 // The pre-push hook (scripts/hooks/pre-push-checks.mjs) is installed through core.hooksPath.
 function checkPrePushHook() {
   const read = () => spawnSync("git", ["config", "--get", "core.hooksPath"], { cwd: rootDir, encoding: "utf8" }).stdout.trim();
@@ -118,6 +147,7 @@ async function main() {
 
   checkPackageManagerAlignment();
   checkAgentConfigParity();
+  checkInstructionFilters();
   checkPrePushHook();
   await checkPorts();
 

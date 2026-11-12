@@ -96,7 +96,7 @@ Outputs and Playwright reports are copied to `output/ci-emulate/`.
 
 ```bash
 scripts/ci-emulate.sh pnpm run test:xr:viewer
-scripts/ci-emulate.sh pnpm --filter @holoim/viewer-web exec playwright test e2e/ar.spec.ts --repeat-each=20 --workers=1
+scripts/ci-emulate.sh pnpm --filter @holoim/web exec playwright test e2e/ar.spec.ts --repeat-each=20 --workers=1
 ```
 
 `CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`), and
