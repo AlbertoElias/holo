@@ -44,18 +44,24 @@ export const zoomed = (p, centre, s) => p.map((v, k) => centre[k] + s * (v - cen
 // ---------------------------------------------------------------------------
 // Moving shapes inside a zooming layer. A shape is a per-vertex delta Δ (gas
 // drift, a travelling wave, a door sliding). Drawn at zoom s it must move by
-// s·Δ, so each shape gets three targets: Δ, (outer−1)Δ and (inner−1)Δ, weighted
-// w, w·g and w·h where g and h are the layer's grow and shrink weights.
+// s·Δ, so each shape gets two targets, Δ and (outer−1)Δ. Below home size the
+// first alone, weighted w·s, gives s·Δ; above it, w and w·g (g the grow
+// weight) give Δ + (s−1)Δ. Every weight stays within 0..1.
 
-/** Zoom targets plus three per shape (Float32Array deltas, one VEC3 per vertex). */
-export function morphLayer(geo, centre, zoom, shapes = []) {
+/** Zoom targets plus two per shape (Float32Array deltas, one VEC3 per vertex). */
+export function morphLayer(geo, centre, zoom, shapes = [], normals = null) {
   zoomable(geo, centre, zoom);
-  const { inner, outer } = zoom;
+  const { outer } = zoom;
   const list = geo.morphAttributes.position;
   for (const d of shapes) {
     list.push(new BufferAttribute(Float32Array.from(d), 3));
     list.push(new BufferAttribute(d.map((v) => (outer - 1) * v), 3));
-    list.push(new BufferAttribute(d.map((v) => (inner - 1) * v), 3));
+  }
+  // Optional normal deltas, one per shape: on the first target of its pair
+  // (weighted by the shape's weight once the layer is at or above home size).
+  if (normals) {
+    const none = () => new BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3);
+    geo.morphAttributes.normal = [none(), none(), ...normals.flatMap((n) => [new BufferAttribute(Float32Array.from(n), 3), none()])];
   }
   geo.userData.shapes = shapes.length;
   return geo;
@@ -64,7 +70,8 @@ export function morphLayer(geo, centre, zoom, shapes = []) {
 /** Weights for a morphLayer drawn at `s` with each shape at weight `w[i]`. */
 export function layerWeights(s, zoom, w = []) {
   const [h, g] = zoomWeights(s, zoom);
-  return [h, g, ...w.flatMap((x) => [x, x * g, x * h])];
+  const below = Math.min(1, Math.max(s, zoom.inner));
+  return [h, g, ...w.flatMap((x) => [x * below, x * g])];
 }
 
 /** The scale a layer actually reaches at s (the targets clamp it to [inner, outer]). */

@@ -130,3 +130,20 @@ The user chose the "Tugged" gas and "The mould" liquid, with these changes:
     motion needs more moving vertices or more key frames. Quick Look's
     load is 50.9 M of the 100 M budget, so there is room for about 27 k
     more moving points over the take. Measure it at build time, as now.
+
+## Decided before the rebuild (2026-11-12)
+
+- **The silhouette is a legible relief.** As each paint wave rears up, its
+  crest holds for about half a second as a clear bust of the man in the
+  paint: hat crown and brim, head, shoulders, lapels. It is in the paint's
+  own colours, so it reads as paint taking his form. Then it folds over and
+  presses the traveller into the same outline at his own size.
+- **The gas door is a hatch in a cloud floor.** Under him, a denser and
+  slower bank of gas swells into a mound round C. When the billows part, they
+  uncover a hatch set in the mound's face, where the line from C toward the
+  feed leaves it, the same door as on the man's shirt. Through it is the
+  liquid's dark red.
+- **Each nagging voice has its own emitter on its own billow** (buzz,
+  chime, tick, kettle, clatter), carried by the gas's zoom. Five more
+  60 s stems make the file larger than today's 25 MB upload limit; the user
+  is raising the limit to 100 MB.

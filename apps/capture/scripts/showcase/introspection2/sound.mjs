@@ -1,5 +1,5 @@
 import { SAMPLE_RATE, add, lowpass, noise, normalize, pluck, track } from '../lib/audio.mjs';
-import { HEART, LOOP, clamp, smooth } from './timeline.mjs';
+import { HEART, LOOP, PI, clamp, smooth } from './timeline.mjs';
 
 // Five 60 s mono loops for "The way down II", one per layer plus the heart.
 // Each (except the heart) plays from an emitter that flies in while its layer
@@ -8,7 +8,7 @@ import { HEART, LOOP, clamp, smooth } from './timeline.mjs';
 // the stage plays it as a minor waltz over a tritone, the dark as a lullaby
 // over an open fifth, with the uneasy held note finally resolved.
 
-const OUT_RATE = 22050; // five tracks must fit about 13 MB
+const OUT_RATE = 22050; // ten 60 s tracks come to about 26 MB
 function toWav(samples) {
   const src = lowpass(lowpass(Float32Array.from(samples), 9500), 9500);
   const count = Math.round((src.length * OUT_RATE) / SAMPLE_RATE);
@@ -169,93 +169,133 @@ function stage() {
 }
 
 // ---------------------------------------------------------------------------
-// gas: 5 against 7, ticks, sirens, then a smear, then a sparse way back.
+// gas: the turbulence itself, a roiling hiss that calms when he lets go, and his
+// long breath out. The demands' voices are their own tracks (voices()).
+
+/** Band-limited noise: lowpass minus a lower lowpass. */
+function band(samples, lo, hi) {
+  const a = lowpass(Float32Array.from(samples), hi);
+  const b = lowpass(Float32Array.from(samples), lo);
+  for (let i = 0; i < a.length; i += 1) a[i] -= b[i];
+  return a;
+}
 
 function gas() {
   const out = track(LOOP);
-  const R = rng(11);
-  const cycle = (t) => 1.5 * (1 - 0.4 * smooth(12, 24, t)); // seconds for 5 notes (A) or 7 (B)
-  const level = (t) => 0.22 + 0.78 * smooth(7, 12, t) * (0.55 + 0.45 * smooth(12, 24, t));
-  const trans = (t) => Math.round(12 * smooth(12, 24, t));
-  const pentA = [0, 2, 4, 7, 9];
-  const setB = [0, 3, 5, 7, 10, 12, 15];
-  const ticks = [];
-  // Pattern A: five-note cycle, pastel pentatonic, enters at 7.
-  let i = 0;
-  for (let t = 7; t < 24; t += cycle(t) / 5, i += 1) {
-    const n = 72 + pentA[(i * 2) % 5] + (i % 5 > 2 ? 12 : 0) + trans(t);
-    const g = (i % 5 === 0 ? 0.26 : 0.16) * level(t);
-    add(out, t, 0.5, (u) => g * (sin(TAU * hz(n) * u) + 0.3 * sin(TAU * hz(n) * 3.99 * u) * Math.exp(-u * 25)), pluck(0.002, 0.13));
-    if (t >= 12) ticks.push([t, 2300, 0.1]);
+  const n = noise(19);
+  const raw = Float32Array.from(out, () => n());
+  // Two bands, each swelling in slow, uneven gusts: the billows rolling over each other.
+  const gust = (t, k) => 0.55 + 0.25 * sin(TAU * 0.23 * t + k) + 0.2 * sin(TAU * 0.61 * t + 2 * k);
+  const rough = (t) => smooth(7.5, 12, t) * (1 - 0.8 * smooth(21.5, 24, t)) * (1 - smooth(25.5, 27.5, t));
+  const low = band(raw, 120, 700);
+  const high = band(raw, 900, 4200);
+  for (let i = 0; i < out.length; i += 1) {
+    const t = i / SAMPLE_RATE;
+    out[i] = rough(t) * (0.9 * low[i] * gust(t, 0) + 0.35 * high[i] * gust(t, 1.7) * (0.6 + 0.4 * smooth(12, 20, t)));
   }
-  // Pattern B: seven-note cycle, a fifth up, enters at 10.
-  i = 0;
-  for (let t = 10; t < 24; t += cycle(t) / 7, i += 1) {
-    const n = 79 + setB[(i * 3) % 7] - (i % 7 > 4 ? 12 : 0) + trans(t);
-    const g = (i % 7 === 0 ? 0.2 : 0.12) * level(t) * smooth(10, 13, t);
-    add(out, t, 0.4, (u) => g * (sin(TAU * hz(n) * u) + 0.4 * sin(TAU * hz(n) * 2 * u)), pluck(0.002, 0.09));
-    if (t >= 12) ticks.push([t, 3300, 0.07]);
+  // His breath: a held one in (21.9), then the long one out (22.3-23.4).
+  const bn = noise(23);
+  const breath = track(LOOP);
+  add(breath, 21.85, 0.5, () => 0.22 * bn(), (u) => smooth(0, 0.35, u) * (1 - smooth(0.4, 0.5, u)));
+  add(breath, 22.35, 1.3, () => 0.4 * bn(), (u) => smooth(0, 0.12, u) * (1 - smooth(0.3, 1.3, u)) ** 1.2);
+  lowpass(breath, (t) => 1600 - 900 * smooth(22.35, 23.6, t));
+  lowpass(breath, 2200);
+  for (let i = 0; i < out.length; i += 1) out[i] += breath[i];
+  // The way back: the settled gas, a soft breath of hiss as it passes (57.2 s).
+  for (let i = Math.round(56.6 * SAMPLE_RATE); i < Math.round(58.2 * SAMPLE_RATE); i += 1) {
+    const t = i / SAMPLE_RATE;
+    out[i] += 0.25 * low[i] * Math.sin((PI * (t - 56.6)) / 1.6) ** 2;
   }
-  // A third, quickened figure for density after 18.
-  for (let t = 18; t < 24; t += cycle(t) / 10) {
-    const n = 91 + pentA[Math.floor(R() * 5)] + trans(t) - 6;
-    add(out, t, 0.2, (u) => 0.07 * sin(TAU * hz(n) * u), pluck(0.002, 0.05));
-  }
-  // Synthetic ticking clicks on both grids.
-  for (const [t, f, g] of ticks) add(out, t, 0.012, (u) => g * Math.sign(sin(TAU * f * u)), pluck(0.0005, 0.003));
-  // Sirens: slow rising glides, each starting a little higher.
-  for (let k = 0; k < 4; k += 1) {
-    const a = 12 + k * 3;
-    glide(out, a, 3.4, hz(74 + 2 * k), hz(86 + 2 * k), 0.07 * level(a), (u) => Math.sin((Math.PI * u) / 3.4) ** 2, (p) => sin(TAU * p + 1.5 * sin(TAU * p * 0.01)) + 0.25 * sin(TAU * 2 * p));
-    glide(out, a + 1.5, 3.4, hz(81 + 2 * k), hz(91 + 2 * k), 0.04 * level(a), (u) => Math.sin((Math.PI * u) / 3.4) ** 2);
-  }
-  glide(out, 9, 3, hz(79), hz(88), 0.035, (u) => Math.sin((Math.PI * u) / 3) ** 2);
-  // 24-26.8: the arpeggios smear upward, then cut.
-  const smearEnd = 26.8;
-  [0, 7, 14, 4, 11, 2].forEach((d, j) => {
-    const a = 24 + j * 0.12;
-    const dur = smearEnd - a;
-    const f0 = hz(81 + d);
-    glide(out, a, dur, f0, f0 * 4.2, 0.12, (u) => smooth(0, 0.5, u) * clamp((dur - u) / 0.03));
-  });
-  gate(out, smearEnd, 55.9, 0);
-  // Way back: a gentle, sparse slow version.
-  [[56.1, 88], [56.8, 91], [57.35, 95], [58.0, 91]].forEach(([t, n], j) => {
-    add(out, t, 1.6, (u) => 0.12 * (sin(TAU * hz(n) * u) + 0.2 * sin(TAU * hz(n) * 2.01 * u)), pluck(0.01, 0.35 + 0.05 * j));
-  });
-  return toWav(normalize(lowpass(out, 7500), 0.85));
+  return toWav(normalize(out, 0.6));
 }
 
 // ---------------------------------------------------------------------------
-// liquid: a storm at sea in synths alone.
+// voices: each demand nags from its own billow, on the same events that make
+// it pulse (gas.mjs), out of time with the others.
+
+const VOICE = {
+  // a two-note door chime: ding, dong
+  chime: (out, [t, , a], j) => add(out, t, 2.2, (u) => 0.32 * a * bell(hz(j % 2 ? 76 : 80))(u), pluck(0.002, 0.9)),
+  // a phone vibrating on a table: a rattly 150 Hz buzz
+  buzz: (out, [t, d, a]) => add(out, t, d, (u) => 0.3 * a * (Math.sign(sin(TAU * 151 * u)) * 0.6 + sin(TAU * 302 * u) * 0.4) * (0.7 + 0.3 * sin(TAU * 31 * u)), (u) => smooth(0, 0.01, u) * (1 - smooth(d - 0.03, d, u))),
+  // a clock: tick, tock
+  tick: (out, [t, , a], j) => {
+    const f = j % 2 ? 1900 : 2500;
+    add(out, t, 0.05, (u) => 0.5 * a * (sin(TAU * f * u) + 0.6 * sin(TAU * f * 1.47 * u)), pluck(0.0005, 0.012));
+  },
+  // a kettle coming to the boil: breathy whistle rising, then cut
+  kettle: (out, [t, d, a]) => {
+    const n = noise(Math.round(t * 100));
+    glide(out, t, d, 900, 2100, 0.16 * a, (u) => smooth(0, d * 0.8, u) * clamp((d - u) / 0.02), (p) => sin(TAU * p) + 0.15 * n());
+  },
+  // dishes, keys, something dropped
+  clatter: (out, [t, d, a], j) => {
+    const f = [610, 870, 1330, 520][j % 4];
+    add(out, t, d + 0.3, (u) => 0.24 * a * fm(f, 1.41 + 0.13 * (j % 3), 4, 0.06)(u), pluck(0.001, 0.12));
+    add(out, t, 0.04, (u) => 0.12 * a * Math.sign(sin(TAU * 3100 * u)), pluck(0.0005, 0.008));
+  }
+};
+
+/** One 60 s track per demand. */
+export function voices(demands) {
+  return Object.fromEntries(demands.map((d) => {
+    const out = track(LOOP);
+    d.events.forEach((e, j) => VOICE[d.id](out, e, j));
+    return [d.id, toWav(normalize(out, 0.7))];
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// liquid: his "proper" tune, the waltz, huge, slowed and heavy, pressing down
+// from above, with a sub-bass clamp as each mould closes over him; a hard cut
+// at 37 s when he lets go.
+
+export const CLAMPS = [30.0, 33.0];
 
 function liquid() {
   const out = track(LOOP);
-  const intensity = (t) => 0.3 + 0.7 * smooth(27, 33, t) - 0.2 * smooth(35, 37, t);
-  // Sub-bass surges, every 3-4 s.
-  [[24.3, 3.6, 41], [27.6, 3.6, 44], [31, 3.4, 46], [34.2, 2.9, 49]].forEach(([a, d, f]) => {
-    const g = a < 27 ? 0.5 : 0.9 * intensity(a + d / 2);
-    glide(out, a, d, f * 1.12, f * 0.92, g, (u) => Math.sin((Math.PI * u) / d) ** 2);
-    glide(out, a, d, f * 2.24, f * 1.84, g * 0.25, (u) => Math.sin((Math.PI * u) / d) ** 2);
-  });
-  // Detuned saw swells, a minor second apart.
-  [[27.4, 4.2, 33], [30.6, 4, 34], [33.4, 3.6, 36]].forEach(([a, d, n]) => {
-    for (const [dn, dt, g] of [[0, 1, 0.1], [0, 1.007, 0.1], [1, 0.995, 0.08], [7, 1.004, 0.05]]) {
-      add(out, a, d, (u) => g * saw(hz(n + dn) * dt, 5)(u), (u) => Math.sin((Math.PI * u) / d) ** 1.5 * intensity(a + u));
-    }
-  });
-  // Metallic FM crashes.
-  [28.5, 30, 31.5, 33, 34, 35, 36].forEach((t, j) => {
-    const g = 0.4 * intensity(t) * (t >= 33 && t <= 35 ? 1.25 : 1);
-    const f = 92 + 14 * (j % 3);
-    add(out, t, 1.6, (u) => g * fm(f, 1.414, 5, 0.35)(u), pluck(0.002, 0.7));
-    add(out, t, 1, (u) => g * 0.35 * fm(f * 2.76, 2.1, 3, 0.2)(u), pluck(0.002, 0.3));
-    add(out, t, 0.4, (u) => g * 0.16 * fm(f * 11.3, 1.37, 4, 0.05)(u), pluck(0.001, 0.08));
-  });
-  gate(out, 37, 54.6, 0); // the hard cut
-  // Way back: the sea at rest, a calm low pad.
-  for (const n of [33, 40, 45, 52]) add(out, 54.8, 3.4, (u) => 0.1 * pad(hz(n))(u), (u) => Math.sin((Math.PI * u) / 3.4) ** 2);
-  return toWav(normalize(out, 0.78)); // 0.9 clipped on the 33 s crash with the heart at full
+  const level = (t) => smooth(24.5, 28, t) * (0.55 + 0.45 * smooth(28, 33, t)) * (1 - 0.45 * smooth(34.6, 36.2, t));
+  // The waltz at a crawl, two octaves down, on a detuned organ of saws and a choir pad.
+  const beat = 0.92;
+  const t0 = 25.4;
+  const at = (b) => t0 + beat * b;
+  for (let rep = 0; rep < 2; rep += 1) {
+    MOTIF.forEach(([b, n, len]) => {
+      const s0 = at(rep * 12 + b);
+      if (s0 > 37) return;
+      const d = len * beat + 0.6;
+      const g = level(s0);
+      for (const [dn, dt, k] of [[-24, 1, 0.16], [-24, 1.006, 0.14], [-12, 0.997, 0.08], [-36, 1, 0.1]]) {
+        add(out, s0, d, (u) => k * g * saw(hz(n + dn) * dt, 7)(u), (u) => smooth(0, 0.18, u) * (1 - smooth(d - 0.5, d, u)));
+      }
+    });
+    BARS.forEach(({ bass, chord }, k) => {
+      const s0 = at(rep * 12 + k * 3);
+      if (s0 > 37) return;
+      const d = 3 * beat + 0.5;
+      const g = level(s0);
+      add(out, s0, d, (u) => 0.32 * g * (sin(TAU * hz(bass - 12) * u) + 0.4 * sin(TAU * hz(bass) * u)), (u) => smooth(0, 0.08, u) * Math.exp(-u / 2.2));
+      for (const n of chord) add(out, s0 + beat, 2 * beat, (u) => 0.05 * g * pad(hz(n - 12), 0.008)(u), (u) => Math.sin((PI * u) / (2 * beat)) ** 2);
+    });
+  }
+  // Each wave rearing: a slow rumble rising under it.
+  for (const c of CLAMPS) glide(out, c - 2.0, 2.0, 30, 46, 0.35, (u) => smooth(0, 1.9, u) ** 2 * (1 - smooth(1.9, 2.0, u)));
+  // The clamps: a sub drop and a dull slam as the mould closes.
+  const sn = noise(61);
+  for (const c of CLAMPS) {
+    const g = c === 33 ? 1 : 0.8;
+    glide(out, c, 1.6, 52, 26, 0.95 * g, (u) => Math.min(1, u / 0.004) * Math.exp(-u / 0.55), (p) => Math.tanh(1.8 * sin(TAU * p)));
+    const slam = track(2);
+    add(slam, 0, 0.6, () => sn(), (u) => Math.exp(-u / 0.09));
+    lowpass(slam, 260);
+    lowpass(slam, 260);
+    normalize(slam, 0.7 * g);
+    add(out, c, 0.6, (u) => slam[Math.round(u * SAMPLE_RATE)] ?? 0);
+  }
+  gate(out, 37, 54.6, 0); // the hard cut on his surrender
+  // Way back: the paint at rest, a calm low pad.
+  for (const n of [33, 40, 45, 52]) add(out, 54.8, 3.4, (u) => 0.1 * pad(hz(n))(u), (u) => Math.sin((PI * u) / 3.4) ** 2);
+  return toWav(normalize(lowpass(out, 5200), 0.85));
 }
 
 // ---------------------------------------------------------------------------

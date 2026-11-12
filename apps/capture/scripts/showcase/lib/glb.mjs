@@ -157,7 +157,14 @@ export class Glb {
     // default weights (what shows before the clip's first key applies).
     const morphs = geometry.morphAttributes?.position;
     if (morphs?.length) {
-      primitive.targets = morphs.map((target) => ({ POSITION: this.accessor(new Float32Array(target.array), 'VEC3', { target: ARRAY_BUFFER, minMax: true }) }));
+      // Normal deltas ride along when every target has one (three fills a
+      // missing one with the base normal, which would add it again).
+      const normals = geometry.morphAttributes?.normal;
+      const withNormals = normals?.length === morphs.length;
+      primitive.targets = morphs.map((target, i) => ({
+        POSITION: this.accessor(new Float32Array(target.array), 'VEC3', { target: ARRAY_BUFFER, minMax: true }),
+        ...(withNormals ? { NORMAL: this.accessor(new Float32Array(normals[i].array), 'VEC3', { target: ARRAY_BUFFER }) } : {})
+      }));
     }
     if (geometry.index) {
       const count = geometry.attributes.position.count;

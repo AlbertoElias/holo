@@ -114,8 +114,8 @@ export function manPose(rig, t) {
 }
 
 // ---------------------------------------------------------------------------
-// The traveller, in her own frame (feet at the origin, facing +z). Where that
-// frame is in the world is the scene's job; in the dark (37–58.5) her frame
+// The traveller, in his own frame (feet at the origin, facing +z). Where that
+// frame is in the world is the scene's job; in the dark (37–58.5) his frame
 // is the hug frame, shared with the child, and `travellerPlace` walks it.
 
 const FALL = [0.09, 0.09, 0.03, 0.75, 0.1];
@@ -189,6 +189,56 @@ const T_POSES = {
     hp: -0.15, hL: [0.2, 0.78, -0.16, 1], hR: [-0.2, 0.78, -0.16, 1], pL: [1, 0.2, -0.3], pR: [-1, 0.2, -0.3],
     fL: [0.05, 0.09, -0.02, 0.9, 0], fR: [-0.05, 0.09, -0.02, 0.9, 0]
   },
+  // The gas: the compulsive checks (his watch, his tie), then letting go.
+  watchG: {
+    sp: 0.08, cp: 0.06, hp: 0.42, hy: 0.12, hL: [0.06, 1.2, 0.3, 1], hR: [-0.42, 1.1, 0.1, 0.5], pL: [0.9, -0.7, -0.1],
+    fL: [0.11, 0.14, 0.08, 0.6, 0.1], fR: [-0.1, 0.1, 0.0, 0.7, -0.1]
+  },
+  tieG: {
+    sp: 0.02, cp: 0.0, hp: 0.16, hL: [0.44, 1.12, 0.12, 0.55], hR: [0.0, 1.42, 0.17, 1], pR: [-0.9, -0.7, 0.1],
+    fL: [0.11, 0.14, 0.08, 0.6, 0.1], fR: [-0.1, 0.1, 0.0, 0.7, -0.1]
+  },
+  tense: {
+    sp: -0.04, cp: -0.06, hp: -0.06, spread: -0.04, hL: [0.16, 1.24, 0.2, 0.9], hR: [-0.16, 1.24, 0.2, 0.9],
+    fL: [0.08, 0.12, 0.04, 0.6, 0.05], fR: [-0.08, 0.1, 0.02, 0.6, -0.05]
+  },
+  inhale: {
+    sp: -0.08, cp: -0.16, hp: -0.3, np: -0.1, hL: [0.34, 1.18, 0.14, 0.7], hR: [-0.34, 1.18, 0.14, 0.7],
+    fL: [0.1, 0.1, 0.02, 0.6, 0.1], fR: [-0.1, 0.08, 0.0, 0.6, -0.1]
+  },
+  exhale: {
+    sp: 0.12, cp: 0.1, np: 0.16, hp: 0.32, spread: 0.12, hL: [0.52, 0.98, 0.16, 0.6], hR: [-0.52, 0.98, 0.16, 0.6],
+    fL: [0.11, 0.08, 0.04, 0.7, 0.12], fR: [-0.11, 0.06, 0.0, 0.7, -0.12]
+  },
+  calm: {
+    sp: 0.05, cp: 0.03, hp: 0.12, spread: 0.08, hL: [0.48, 1.04, 0.1, 0.5], hR: [-0.48, 1.04, 0.1, 0.5],
+    fL: [0.1, 0.1, 0.02, 0.65, 0.1], fR: [-0.1, 0.08, 0.0, 0.65, -0.1]
+  },
+  reachDoor: {
+    pp: 0.55, sp: 0.35, cp: 0.2, hp: 0.25, hL: [0.15, 0.78, 0.5, 1], hR: [-0.15, 0.78, 0.5, 1], pL: [1, -0.3, -0.3], pR: [-1, -0.3, -0.3],
+    fL: [0.1, 0.25, -0.3, 1.0, 0.1], fR: [-0.1, 0.32, -0.36, 1.0, -0.1]
+  },
+  lift: {
+    pp: 0.12, sp: 0.05, hp: -0.25, hL: [0.15, 1.5, 0.45, 1], hR: [-0.15, 1.5, 0.45, 1], pL: [1, -0.4, -0.2], pR: [-1, -0.4, -0.2],
+    fL: [0.1, 0.12, -0.05, 0.6, 0.1], fR: [-0.1, 0.1, -0.08, 0.6, -0.1]
+  },
+  // The liquid: the man's own pose, which the mould presses him into.
+  mould: {
+    sp: -0.03, cp: -0.03, hp: 0.02, hL: [0.0, 1.405, 0.17, 1], hR: [-0.21, 0.92, 0.04, 0.8], pL: [0.9, -0.7, -0.1],
+    fL: [0.1, 0.02, 0.02, 0.8, 0.05], fR: [-0.1, 0.02, 0.0, 0.8, -0.05]
+  },
+  strain: {
+    sp: -0.08, cp: -0.08, hp: -0.1, hr: 0.12, hL: [0.03, 1.38, 0.2, 1], hR: [-0.3, 1.02, 0.12, 0.8], pL: [0.9, -0.7, -0.1],
+    fL: [0.11, 0.06, 0.06, 0.8, 0.1], fR: [-0.1, 0.03, -0.02, 0.8, -0.1]
+  },
+  hide: {
+    pp: 0.12, sp: 0.2, cp: 0.12, hp: 0.32, hL: [0.05, 1.6, 0.2, 1], hR: [-0.05, 1.6, 0.2, 1], pL: [1, -0.6, 0], pR: [-1, -0.6, 0],
+    fL: [0.1, 0.16, 0.1, 0.6, 0.1], fR: [-0.1, 0.1, 0.04, 0.7, -0.1]
+  },
+  curl: {
+    pp: 0.3, sp: 0.35, cp: 0.25, hp: 0.45, hL: [0.08, 1.22, 0.26, 1], hR: [-0.08, 1.22, 0.26, 1], pL: [1, -0.5, 0], pR: [-1, -0.5, 0],
+    fL: [0.1, 0.45, 0.25, 0.5, 0.1], fR: [-0.1, 0.42, 0.22, 0.5, -0.1]
+  },
   tread: {
     sp: 0.05, cp: 0.0, hp: -0.1, hL: [0.42, 1.25, 0.18, 1], hR: [-0.42, 1.25, 0.18, 1],
     fL: [0.11, 0.16, 0.06, 0.6, 0.1], fR: [-0.1, 0.1, -0.04, 0.7, -0.1]
@@ -230,19 +280,35 @@ const T_POSES = {
 const KNEELING = (name) => ({ ...T_POSES.kneel, ...T_POSES[name] });
 const T_ALL = { ...T_POSES, reach: KNEELING('reach'), withdraw: KNEELING('withdraw'), touch: KNEELING('touch'), hugOpen: KNEELING('hugOpen'), hug: KNEELING('hug') };
 
+/** Watch, tie, watch, tie… from a to b, each check quicker than the last. */
+function checks(a, b) {
+  const out = [];
+  let t = a;
+  let i = 0;
+  while (t < b - 0.3) {
+    const g = mix(1.5, 0.55, clamp((t - a) / (b - a)));
+    const pose = i % 2 ? 'tieG' : 'watchG';
+    out.push([t, pose], [Math.min(b, t + 0.62 * g), pose]);
+    t += g;
+    i += 1;
+  }
+  return out;
+}
+
 const travKeys = keyed([
   [0, 'pocket'], [0.9, 'pocket'], [1.6, 'cling'], [2.0, 'clingLook'], [2.7, 'clingLook'], [3.0, 'cling'],
   [3.4, 'clingReachR'], [3.8, 'cling'], [4.1, 'clingReachR'], [4.5, 'crouchDoor'], [4.9, 'crouchDoor', { hy: 0.5 }],
   [5.4, 'crouchDoor'], [6.6, 'crouchDoor'], [7.0, 'haulLow'], [7.7, 'haul'], [8.2, 'haul'], [8.6, 'drop'],
   [10.4, 'drop'], [11.2, 'float'],
-  // gas: buffeted, spun, swimming down, knocked back, clawing at the knot
-  [12.6, 'float'], [13.2, 'shield'], [13.9, 'float'], [14.4, 'shield'], [15.2, 'float'], [15.8, 'knocked'],
-  [16.6, 'float'], [17.2, 'swim'], [17.7, 'swimPull'], [18.2, 'swim'], [18.7, 'swimPull'], [19.2, 'swim'],
-  [19.6, 'knocked'], [20.3, 'float'], [20.8, 'clawL'], [21.3, 'clawR'], [21.75, 'clawL'], [22.2, 'clawR'],
-  [22.6, 'clawL'], [23.0, 'clawR'], [23.4, 'clawL'], [23.8, 'clawR'], [24.3, 'suck'], [26.2, 'suck'],
-  // liquid: on the surface, pulled under, gasping, under again, reaching
-  [27.0, 'tread'], [29.6, 'tread'], [30.1, 'under'], [31.0, 'under'], [31.4, 'gasp'], [32.2, 'gasp'],
-  [32.6, 'tread'], [33.0, 'under'], [34.6, 'under'], [35.1, 'reachUp'], [36.0, 'reachUp'], [36.4, 'under'],
+  // gas: his watch and his tie, faster and faster while the demands pull at him; then he lets go
+  ...checks(12.0, 21.0),
+  [21.3, 'tense'], [21.9, 'inhale'], [22.3, 'inhale'], [23.2, 'exhale'], [23.5, 'calm'], [23.95, 'reachDoor'],
+  [24.2, 'reachDoor'], [24.55, 'lift'], [24.75, 'drop'], [26.2, 'drop'],
+  // liquid: he sees the crest rear up as the man and hides his face, curls small, is pressed into the man's pose
+  // (straight back, tie hand) and strains in it; he breaks out gasping, is pressed again, and goes limp
+  [27.0, 'tread'], [28.2, 'tread'], [28.7, 'hide'], [29.3, 'hide'], [29.7, 'curl'], [30.05, 'mould'], [30.45, 'strain'],
+  [30.75, 'mould'], [31.0, 'strain'], [31.35, 'gasp'], [31.9, 'gasp'], [32.3, 'hide'], [32.65, 'curl'], [33.05, 'mould'],
+  [33.45, 'strain'], [33.75, 'mould'], [34.05, 'strain'], [34.5, 'mould'], [35.1, 'limp'],
   [36.9, 'limp'],
   // the dark
   [39.6, 'limp'], [40.0, 'landed'], [40.6, 'landed'], [41.3, 'careful'], [42.4, 'careful'], [42.8, 'listen'],
@@ -251,7 +317,7 @@ const travKeys = keyed([
   [50.1, 'hug'], [58.4, 'hug'], [58.5, 'pocket'], [60, 'pocket']
 ], T_ALL);
 
-/** The traveller's pose at t in her frame; `ctx` holds the child's points in the hug frame. */
+/** The traveller's pose at t in his frame; `ctx` holds the child's points in the hug frame. */
 export function travellerPose(rig, t, place = {}, ctx = null) {
   const q = travKeys(t);
   // Breath: quick and shallow in the gas and the liquid, slow in the hug, synced to the child.
@@ -261,6 +327,12 @@ export function travellerPose(rig, t, place = {}, ctx = null) {
   // Gasping heaves at the surface.
   q.cp -= 0.12 * win(31.4, 32.2, t, 0.2) * Math.max(0, Math.sin(2 * PI * 2.4 * t));
   const P = toP(rig, q, place);
+  for (const p of ctx?.pull ?? []) {
+    if (!(p.w > 1e-3)) continue;
+    const s = p.limb.endsWith('L') ? 'L' : 'R';
+    if (p.limb.startsWith('wrist')) P.hands[s].push({ w: p.w, at: p.at.clone(), pole: p.pole ?? bodyDir(P, s === 'L' ? 1 : -1, -0.5, -0.3) });
+    else P.feet[s].pos.lerp(p.at, p.w);
+  }
   if (ctx && q.touch > 1e-3) P.hands.R.push({ w: q.touch, at: ctx.shoulder.clone(), pole: bodyDir(P, -1, -0.6, -0.2) });
   if (ctx && q.hug > 1e-3) {
     P.hands.L.push({ w: q.hug, at: ctx.back.L.clone(), pole: bodyDir(P, 1, -0.3, 0.2) });
@@ -269,9 +341,9 @@ export function travellerPose(rig, t, place = {}, ctx = null) {
   return P;
 }
 
-// Her path in the hug frame (37–58.5): she leaves the seam at the frame's
+// His path in the hug frame (37–58.5): he leaves the seam at the frame's
 // zoom point, falls limp and slow, turning once, lands to the left, walks to
-// the child and kneels. Units are her body's (she is 1.75 tall).
+// the child and kneels. Units are his body's (he is 1.75 tall).
 export const HUG = { centre: [-0.06, 0.5], child: { x: 0.15, z: 0 }, kneel: { x: -0.27, z: 0 }, land: { x: -1.6, z: 0.05 } };
 const START_PELVIS = 1.23;
 const PX = K([[37, HUG.centre[0]], [40, HUG.land.x], [41.1, HUG.land.x], [44.4, HUG.kneel.x], [60, HUG.kneel.x]]);
@@ -282,7 +354,7 @@ export const travellerBody = (t) => ({ x: PX(t), z: PZ(t), yaw: PYAW(t), floor: 
 export function travellerPlace(rig, t) {
   const b = travellerBody(t);
   const q = travKeys(t);
-  // Falling: the floor under her frame drops from where her pelvis left the seam.
+  // Falling: the floor under his frame drops from where his pelvis left the seam.
   const fall = 1 - smooth(37, 40, t) ** 1.4;
   const floor = (START_PELVIS - travKeys(37).pelvisY) * fall;
   const place = { x: b.x, z: b.z, yaw: b.yaw, floor };
@@ -302,7 +374,7 @@ export function travellerPlace(rig, t) {
 
 // ---------------------------------------------------------------------------
 // The child, in the hug frame: hunched, knees up, face hidden, sobbing; he
-// flinches at her touch, looks, turns into her and holds on while the sobs
+// flinches at his touch, looks, turns into him and holds on while the sobs
 // slow into breathing.
 
 /** Sobbing: irregular bursts, as a 0..1 pulse train. */

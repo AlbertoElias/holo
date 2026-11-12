@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-11-11
+**Updated:** 2026-11-12
 **Baseline:** `main` after the undo and redo merge (`8a7b7a097905`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. Merged branches and their
 worktrees were cleaned up on 2026-11-11; the stale unmerged branches from
@@ -46,15 +46,17 @@ queue item in [`TODOS.md`](TODOS.md).
   [`TODOS.md`](TODOS.md) item "The way down, version 2". Built, uploaded and
   played on a local feed with sound; a real-time proof video was watched and
   sent; `verify:agent` passed. The build now measures Quick Look's load and
-  fails over 100 M point-frames (this scene: 50.9 M), but the Quick Look
-  conversion itself is unchecked. The critic was Muse, because Codex had hit
+  fails over 100 M point-frames (this scene: 89.2 M after the gas and liquid
+  rebuild), but the Quick Look conversion itself is unchecked. The critic was Muse, because Codex had hit
   its usage limit. Not uploaded to production: that waits for the user's
   go-ahead. It also changes the viewer: the feed's dome follows a
   `HologramZoom` node, so it grows with the outer layer and leaves the view
   when a piece zooms into itself. Holograms without the node are unchanged.
-  `verify:pr` has not run on it yet. Not ready to merge yet: the gas and
-  liquid layers are being rebuilt to the user's 2026-11-12 decisions
-  ("Decided for the gas and the liquid" in BEATS.md).
+  `verify:pr` has not run on it yet. The gas ("Tugged") and the liquid ("The
+  mould") were rebuilt to the user's 2026-11-12 decisions ("Decided for the
+  gas and the liquid" in BEATS.md) and played on the local feed with sound
+  (draft 9). The GLB is now 63 MB, so the production upload needs the API's
+  upload limit raised from 25 MB first (the user is raising it to 100 MB).
 
 ## Recently merged (grouped)
 

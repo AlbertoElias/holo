@@ -49,13 +49,13 @@ export const BEATS = {
 // gas fits the torso (×16.7), liquid the gas knot (×40), and the dark is a
 // seam about 2 cm wide in the liquid's hole at t = 37 (s = 0.02).
 export const U = { man: 1, gas: 100 / 6, liquid: 4000 / 6, dark: 300000 };
-// The hug frame already starts 5× (she grew through the door); this is the zoom on top.
+// The hug frame already starts 5× (he grew through the door); this is the zoom on top.
 // The feed samples motion at 52.5 s, so the pair stays inside the sky then (×8.5,
 // about 1 m from C) and swells to the climax in the unsampled stretch after it.
 export const HUG_ZOOM = 16;
 const S_KEYS = [
-  [0, 1], [7, 1], [12, 100], [24, 200], [27, 6 * U.liquid], [37, 9 * U.liquid],
-  // In the dark the world grows round her: a lone light at 40, the child readable by 44.6, the hug filling the frame by 55.
+  [0, 1], [7, 1], [12, 100], [24.5, 200], [27, 6 * U.liquid], [37, 9 * U.liquid],
+  // In the dark the world grows round him: a lone light at 40, the child readable by 44.6, the hug filling the frame by 55.
   [40, 6 * U.dark], [42, 6 * U.dark], [44.6, 6 * U.dark * 2], [47.5, 6 * U.dark * 5], [52.5, 6 * U.dark * 8.5], [55, 6 * U.dark * HUG_ZOOM], [55.5, 6 * U.dark * HUG_ZOOM],
   // The way back pauses on each calmed layer: the liquid, then the gas.
   [56.3, 7 * U.liquid], [57.2, 8 * U.gas], [58.5, 1], [60, 1]
@@ -69,6 +69,6 @@ export const sOf = (layer, t) => S(t) / U[layer];
 
 /** The heartbeat's tempo (bpm) and level (0..1) at time t: one voice through the piece. */
 export const HEART = {
-  bpm: K([[0, 66], [7, 66], [12, 100], [24, 140], [37, 150], [40, 150], [45, 48], [55, 60], [58.5, 66], [60, 66]]),
-  level: K([[0, 0.5], [7, 0.5], [11, 0.9], [24, 0.9], [33, 1], [35.5, 0.25], [37, 0], [45.5, 0], [48, 0.55], [55, 0.6], [58.5, 0.5], [60, 0.5]])
+  bpm: K([[0, 66], [7, 66], [12, 100], [21.5, 140], [24.5, 90], [27, 100], [33, 150], [37, 150], [40, 150], [45, 48], [55, 60], [58.5, 66], [60, 66]]),
+  level: K([[0, 0.5], [7, 0.5], [11, 0.9], [24, 0.9], [30, 1], [33, 1], [33.4, 0.3], [34.5, 0.35], [35.5, 0.25], [37, 0], [45.5, 0], [48, 0.55], [55, 0.6], [58.5, 0.5], [60, 0.5]])
 };

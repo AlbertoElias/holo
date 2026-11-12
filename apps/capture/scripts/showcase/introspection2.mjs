@@ -5,8 +5,10 @@ import { Glb } from './lib/glb.mjs';
 import { quatTrack, tiny } from './introspection/common.mjs';
 import { CHILD_DIMS, HAT_AT, PALETTES, Rig, applyPose, briefcaseGeometry, hatGeometry, painter, setDetail, snapshot } from './introspection/figures.mjs';
 import { HUG, childPose, childPresence, manPose, travellerBody, travellerPlace, travellerPose } from './introspection2/acting.mjs';
+import * as G from './introspection2/gas.mjs';
 import * as L from './introspection2/layers.mjs';
-import { layerSounds } from './introspection2/sound.mjs';
+import * as LQ from './introspection2/liquid.mjs';
+import { layerSounds, voices } from './introspection2/sound.mjs';
 import { FPS, K, LOOP, PI, S, U, mix, smooth, sOf } from './introspection2/timeline.mjs';
 import { FOLLOW, clampScale, feedFit, layerWeights, morphLayer, zoomed } from './introspection2/zoom.mjs';
 
@@ -15,8 +17,8 @@ import { FOLLOW, clampScale, feedFit, layerWeights, morphLayer, zoomed } from '.
 // still mesh drawn bigger or smaller by morph targets about C (zoom.mjs), C
 // is the man's heart, and the skies are sized at build time so the feed's
 // dome fit puts its target exactly on C. The traveller is 4 cm on his
-// chest; the zoom carries her through the door until she is Z times that,
-// then the world grows round her alone. The hug is drawn in the dark's own
+// chest; the zoom carries him through the door until he is Z times that,
+// then the world grows round him alone. The hug is drawn in the dark's own
 // frame, so the last zoom carries the two of them with it.
 
 export const meta = {
@@ -35,12 +37,13 @@ const ZR = {
   sky: { inner: 1e-7, outer: 40 }
 };
 const SKY_CAP = 8.5;
-const HER = 0.023; // her scale: 1.75 m of rig is 4 cm
-// The camera follows her in: through the door she grows with the zoom until she
-// is Z times her size on his chest, and stays that big on screen from then on.
+const TRAV = 0.023; // his scale: 1.75 m of rig is 4 cm
+// The camera follows him in: through the door he grows with the zoom until he
+// is Z times his size on his chest, and stays that big on screen from then on.
 const Z = 5;
-// Among the gases and liquids she is bigger again (12×, about 47 cm): at 5× she was a 12 px speck on the busy layers. She shrinks back to Z as she falls into the hole.
-const ZW = 12;
+// Among the gases and liquids he is bigger again (18×, about 72 cm): at 5× he was a 12 px speck on the busy layers. He shrinks back to Z as he falls into the hole.
+const ZW = 18;
+const ZW_LIQ = 29; // in the paint he grows to about 1.2 m so the moulds read on a phone
 const PELVIS = 0.93;
 const R18 = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), (18 * PI) / 180);
 const Y_PI = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), PI);
@@ -49,10 +52,10 @@ const SWITCHES = [7, 9.4, 37, 44.6, 58.5];
 const EPS = 0.0005;
 const add = (a, b, k = 1) => a.map((v, i) => v + k * b[i]);
 
-/** The hug frame (37–58.5): her body's units, H on C, turned to face the feed, growing with the dark from 40. */
+/** The hug frame (37–58.5): his body's units, H on C, turned to face the feed, growing with the dark from 40. */
 function hugFrame(C, t) {
   const F = t < 40 ? 1 : S(t) / (6 * U.dark);
-  const s = HER * Z * F;
+  const s = TRAV * Z * F;
   const RH = H.clone().applyQuaternion(R18).multiplyScalar(s);
   return { T: [C[0] - RH.x, C[1] - RH.y, C[2] - RH.z], Q: R18.clone(), s, F };
 }
@@ -81,8 +84,10 @@ export async function build() {
   const mats = {
     man: glb.material({ name: 'Man', color: '#ffffff', emissive: '#1c1814', roughness: 0.72 }),
     flat: glb.material({ name: 'Layer', color: '#ffffff', unlit: true }),
-    gas: glb.material({ name: 'Gas', color: '#ffffff', unlit: true, doubleSided: true }),
-    her: glb.material({ name: 'Traveller', color: '#ffffff', unlit: true }),
+    gasBlend: glb.material({ name: 'Gas', color: '#ffffff', unlit: true, doubleSided: true, blend: true }),
+    paint: glb.material({ name: 'Paint', color: '#ffffff', unlit: true, doubleSided: true }),
+    sea: glb.material({ name: 'Paint sea', color: '#ffffff', roughness: 0.3 }),
+    trav: glb.material({ name: 'Traveller', color: '#ffffff', unlit: true }),
     child: glb.material({ name: 'Child', color: '#ffffff', unlit: true }),
     glow: glb.material({ name: 'Glow', color: '#ffffff', unlit: true, opacity: 0.14 }),
     pool: glb.material({ name: 'Light pool', color: '#ffffff', unlit: true, blend: true })
@@ -138,42 +143,90 @@ export async function build() {
   const keyT = [...grid, ...SWITCHES.map((s) => s - EPS)].sort((a, b) => a - b);
   const frames = { man: [], trav: [], child: [] };
   const roots = { trav: [], child: [] };
-  const glowAt = []; // her chest in the hug frame, for the still glow
+  const glowAt = []; // his chest in the hug frame, for the still glow
   const presenceOf = (t) => (t >= 58.5 ? smooth(58.6, 59.6, t) : 1);
 
-  // Her root in the world (mode A): chest-pinned, door, then free.
+  // His root in the world (mode A): chest-pinned, door, then free.
   const C3 = new Vector3(...C);
   const F3 = new Vector3(...FOLLOW);
   const UP = new Vector3(0, 1, 0);
   const RIGHT = new Vector3(FOLLOW[2], 0, -FOLLOW[0]).normalize();
   const deg = (d) => (d * PI) / 180;
-  const YAW = K([[9.4, deg(158)], [14, deg(158)], [16.6, deg(198)], [26.2, deg(198)], [27, deg(48)], [35.6, deg(48)], [36.8, deg(108)], [37, deg(108)]]);
-  const PITCH = K([[9.4, 0], [15.8, 0], [16.6, -2 * PI], [24.2, -2 * PI], [24.8, -2 * PI + PI / 2], [26.2, -2 * PI + PI / 2], [27, -2 * PI], [37, -2 * PI]]);
-  // Her pelvis against the surface, in her own height units (×HER·ZW): she floats waist-deep and goes under to the chin on the crashes, never fully, so the feed always sees her head.
-  const OFF = K([[27, -0.1], [29.6, -0.1], [30.1, -0.45], [31.0, -0.45], [31.4, -0.05], [32.2, -0.05], [32.6, -0.1], [33.0, -0.45], [34.6, -0.45], [35.1, -0.25], [36.0, -0.25], [36.4, -0.5]]);
-  const ySurf = (t) => sOf('liquid', t) * L.liquidSurface(t);
-  const buffet = (t) => smooth(11.5, 13, t) * (1 - smooth(20, 21, t));
+  // In the gas he faces the feed three-quarters (18° is square on); he turns his back to it to open the hatch.
+  const YAW = K([[9.4, deg(158)], [11.4, deg(40)], [23.3, deg(40)], [23.9, deg(198)], [25.4, deg(198)], [27, deg(48)], [29.5, deg(40)], [29.95, deg(18)], [31.1, deg(18)], [31.6, deg(62)], [32.4, deg(40)], [32.95, deg(18)], [35.6, deg(18)], [36.8, deg(108)], [37, deg(108)]]);
+  const PITCH = K([[9.4, 0], [37, 0]]);
+  // His pelvis against the paint, in his own metres (×TRAV·ZW): he floats waist-deep, is pressed down a little in each mould, heaves up out of the first, and sinks as he goes limp.
+  const OFF = K([[27, -0.12], [29.6, -0.12], [30.0, -0.2], [31.1, -0.2], [31.4, 0.02], [32.2, -0.08], [32.6, -0.12], [33.0, -0.22], [34.6, -0.22], [35.4, -0.34], [36.0, -0.4], [36.4, -0.5]]);
+  const ySurf = (t) => sOf('liquid', t) * LQ.seaHeight(t);
+  const buffet = (t) => smooth(11.5, 13, t) * (1 - smooth(21.5, 22.5, t));
   const floor37 = travellerPlace(trav, 37).floor;
-  const zWorld = (t) => mix(Math.min(S(t), ZW), Z, smooth(36.3, 37, t));
-  function worldRoot(t) {
-    // She stays inside the sky sphere (about 1 m round C) so the feed's motion samples don't pull its fit off C: 0.55 m out, then 0.12 m off the knot's surface.
-    const cGas = (u) => mix(0.55, 0.05 * sOf('gas', u) + 0.12, smooth(17, 20.6, u));
-    let c = cGas(Math.min(t, 24)) * (1 - smooth(24.2, 26.6, t));
-    if (t < 10.5) c = Math.min(c, dd * S(t) - 0.03);
+  const zWorld = (t) => mix(mix(Math.min(S(t), ZW), ZW_LIQ, smooth(25.3, 26.8, t)), Z, smooth(36.3, 37, t));
+  // The gas (9.4–25.3): in from the door to his place above the hatch (G.anchorWorld), dragged about by the wisps that hold him, then to the hatch's near edge, over it and down through it.
+  const sGas = (t) => sOf('gas', t);
+  const hatchW = (t) => new Vector3(...zoomed(G.HATCH.centre(C), C, sGas(t)));
+  const nH = new Vector3(...G.HATCH.n);
+  const farH = new Vector3(...G.HATCH.far);
+  function gasRoot(t) {
+    const entry = C3.clone().addScaledVector(F3, Math.min(0.55, dd * S(t) - 0.03));
+    const anchor = new Vector3(...G.anchorWorld(C, sGas(t)));
+    const p = entry.lerp(anchor, smooth(9.6, 11.6, t));
     const e = buffet(t);
-    const a = e * (0.07 * Math.sin(1.3 * t) + 0.04 * Math.sin(3.1 * t + 1));
-    // Beside the knot, not over its stripes, until she swims to it to claw at 17 s.
-    const aside = 0.3 * smooth(10.5, 12.5, t) * (1 - smooth(15.8, 18.6, t));
-    let b = e * (0.05 * Math.sin(0.9 * t + 2) + 0.03 * Math.sin(2.7 * t));
-    if (t >= 24) b = mix(b, ySurf(t) + HER * ZW * OFF(27), smooth(25.4, 27, t));
-    if (t >= 27) b = ySurf(t) + HER * zWorld(t) * OFF(t);
-    if (t >= 36.3) b = mix(b, HER * Z * (floor37 + PELVIS - 0.5), smooth(36.3, 37, t));
-    const roll = e * 0.35 * Math.sin(1.7 * t);
-    const p = C3.clone().addScaledVector(RIGHT, a + aside).addScaledVector(UP, b).addScaledVector(F3, c);
-    const q = new Quaternion().setFromEuler(new Euler(PITCH(t), YAW(t), roll, 'YXZ'));
-    return { T: p.toArray(), Q: q, s: HER * zWorld(t) };
+    p.addScaledVector(RIGHT, e * (0.04 * Math.sin(1.3 * t) + 0.025 * Math.sin(3.1 * t + 1))).addScaledVector(UP, e * (0.03 * Math.sin(0.9 * t + 2) + 0.02 * Math.sin(2.7 * t)));
+    for (const tug of G.TUGS) {
+      const h = G.holdOf(tug, t);
+      if (h < 1e-3) continue;
+      const toward = new Vector3(...zoomed(G.tugCentre(C, tug), C, sGas(t))).sub(anchor).normalize();
+      p.addScaledVector(toward, 0.12 * h);
+    }
+    // Offsets in his own body metres (hs a metre of him).
+    const hw = hatchW(t);
+    const hs = TRAV * zWorld(t);
+    const half = G.HATCH.half * sGas(t);
+    const near = hw.clone().addScaledVector(farH, -(half + 0.45 * hs)).addScaledVector(nH, (0.25 + 0.35 * smooth(24.3, 24.6, t)) * hs);
+    p.lerp(near, smooth(23.3, 24.0, t));
+    p.lerp(hw.clone().addScaledVector(nH, 0.75 * hs), smooth(24.6, 24.85, t));
+    p.lerp(hw.clone().addScaledVector(nH, -1.6 * hs), smooth(24.85, 25.3, t));
+    return p;
   }
+  const through = gasRoot(25.3);
+  function worldRoot(t) {
+    const gasP = t < 25.3 ? gasRoot(t) : through.clone();
+    // The liquid.
+    let b = ySurf(t) + TRAV * zWorld(t) * OFF(Math.max(t, 27));
+    if (t >= 36.3) b = mix(b, TRAV * Z * (floor37 + PELVIS - 0.5), smooth(36.3, 37, t));
+    const liqP = C3.clone().addScaledVector(UP, b);
+    const p = gasP.lerp(liqP, smooth(25.3, 26.8, t));
+    const q = new Quaternion().setFromEuler(new Euler(PITCH(t), YAW(t), 0, 'YXZ'));
+    return { T: p.toArray(), Q: q, s: TRAV * zWorld(t) };
+  }
+  // A world point in his rig's space, given his root.
+  const toRig = (w, root) => new Vector3(...w).sub(new Vector3(...root.T)).applyQuaternion(root.Q.clone().invert()).divideScalar(root.s).add(new Vector3(0, PELVIS, 0));
+  const toWorld = (v, root) => v.clone().sub(new Vector3(0, PELVIS, 0)).multiplyScalar(root.s).applyQuaternion(root.Q).add(new Vector3(...root.T));
+  // The limbs the gas holds: where a limb would reach toward its billow (shoulder or hip plus a full stretch), and the lid's near edge.
+  const REACH = { wristL: [[0.19, 1.45, 0], 0.72], wristR: [[-0.19, 1.45, 0], 0.72], ankleL: [[0.1, 0.9, 0], 0.92], ankleR: [[-0.1, 0.9, 0], 0.92] };
+  function pulls(t, root) {
+    const out = [];
+    for (const tug of G.TUGS) {
+      const w = G.holdOf(tug, t);
+      if (w < 1e-3) continue;
+      const [from, l] = REACH[tug.limb];
+      const o = new Vector3(...from);
+      const dir = toRig(zoomed(G.tugCentre(C, tug), C, sGas(t)), root).sub(o).normalize();
+      out.push({ limb: tug.limb, w, at: o.addScaledVector(dir, l) });
+    }
+    const grip = smooth(23.95, 24.15, t) * (1 - smooth(24.5, 24.65, t));
+    if (grip > 1e-3) {
+      for (const [limb, u] of [['wristL', -0.55], ['wristR', 0.55]]) {
+        const lw = zoomed(lidPoint(t, u * G.HATCH.half, -0.92 * G.HATCH.half), C, sGas(t));
+        out.push({ limb, w: grip, at: toRig(lw, root) });
+      }
+    }
+    return out;
+  }
+  const limbs = { wristL: [], wristR: [], ankleL: [], ankleR: [] }; // world positions per key time
 
+  const hatchParts = G.hatch(C);
+  const lidPoint = hatchParts.lidAt;
   for (const t of keyT) {
     applyPose(man, manPose(man, t));
     frames.man.push(snapshot(man));
@@ -183,24 +236,27 @@ export async function build() {
     const back = { L: child.world('chest', 0.11, 0.1, -0.1), R: child.world('chest', -0.11, 0.1, -0.1) };
     const shoulder = child.world('shoulderR', 0, 0.02, 0);
     const hugMode = t >= 37 && t < 58.5;
-    applyPose(trav, travellerPose(trav, t, hugMode ? travellerPlace(trav, t) : {}, { shoulder, back }));
+    const inWorld = t >= 9.4 && t < 37;
+    const early = inWorld ? worldRoot(t) : null;
+    applyPose(trav, travellerPose(trav, t, hugMode ? travellerPlace(trav, t) : {}, { shoulder, back, pull: inWorld ? pulls(t, early) : [] }));
+    for (const limb of Object.keys(limbs)) limbs[limb].push(inWorld ? toWorld(trav.world(limb), early).toArray() : null);
     frames.trav.push(snapshot(trav));
     glowAt.push(trav.world('pelvis', 0, 0.3, 0));
     const neck = { L: trav.world('neck', 0.07, 0.03, -0.05), R: trav.world('neck', -0.07, 0.03, -0.05) };
     applyPose(child, childPose(child, t, { neck, head: trav.world('head', 0, 0.07, 0.02) }));
     frames.child.push(snapshot(child));
 
-    // Her root: the node sits at her pelvis height (her frame's (0, 0.93, 0)).
+    // His root: the node sits at his pelvis height (his frame's (0, 0.93, 0)).
     let root;
     if (t < 7 || t >= 58.5) {
       const p = pinLocal.clone().applyMatrix4(chestW);
       const q = new Quaternion().setFromRotationMatrix(chestW).multiply(Y_PI);
-      root = { T: p.toArray(), Q: q, s: HER * presenceOf(t) };
+      root = { T: p.toArray(), Q: q, s: TRAV * presenceOf(t) };
     } else if (t < 9.4) {
       const local = pinLocal.clone().lerp(inLocal, smooth(8.4, 9.3, t));
-      root = { T: zoomed(local.applyMatrix4(chest7).toArray(), C, S(t)), Q: chest7Q.clone().multiply(Y_PI), s: HER * Math.min(S(t), ZW) };
+      root = { T: zoomed(local.applyMatrix4(chest7).toArray(), C, S(t)), Q: chest7Q.clone().multiply(Y_PI), s: TRAV * Math.min(S(t), ZW) };
     } else if (t < 37) {
-      root = worldRoot(t);
+      root = early;
     } else {
       const f = hugFrame(C, t);
       const p = new Vector3(0, PELVIS, 0).applyMatrix4(frameMatrix(f));
@@ -243,20 +299,50 @@ export async function build() {
 
   // --- The layers -----------------------------------------------------------
   const RC = 0.95; // content stays inside this ball round C (the skies' radius must cover it)
-  const gas = L.gas(C, RC);
-  zoomLayer('gas', gas.geo, mats.gas, ZR.gas, (t) => sOf('gas', t), gas.shapes, L.gasShapeWeights);
-  const liquid = L.liquid(C);
-  zoomLayer('liquid', liquid.geo, mats.flat, ZR.liquid, (t) => sOf('liquid', t), liquid.shapes, L.liquidShapeWeights);
+  const gasS = (t) => sOf('gas', t);
+  const bank = G.bank(C);
+  zoomLayer('gas-bank', bank.geo, mats.flat, ZR.gas, gasS, bank.shapes, bank.weights);
+  zoomLayer('gas-floor', bank.floor.geo, mats.gasBlend, ZR.gas, gasS, bank.floor.shapes, bank.floor.weights);
+  zoomLayer('gas-lining', G.lining(C), mats.flat, ZR.gas, gasS);
+  zoomLayer('gas-hatch', hatchParts.frame, mats.flat, ZR.gas, gasS);
+  zoomLayer('gas-lid', hatchParts.lid.geo, mats.flat, ZR.gas, gasS, hatchParts.lid.shapes, hatchParts.lid.weights);
+  const ambient = G.ambientBillows(C);
+  zoomLayer('gas-ambient', ambient.geo, mats.gasBlend, ZR.gas, gasS, ambient.shapes, ambient.weights);
+  const demands = G.demandBillows(C);
+  zoomLayer('gas-demands', demands.geo, mats.gasBlend, ZR.gas, gasS, demands.shapes, demands.weights);
+  // The wisps, from where his limbs actually were (in the gas's home units).
+  G.TUGS.forEach((tug, i) => {
+    const track = limbs[tug.limb];
+    const limbHome = (t) => {
+      let j = keyT.findIndex((k) => k >= t - 1e-9);
+      if (j < 0) j = keyT.length - 1;
+      return C.map((c, k) => c + (track[j][k] - c) / gasS(keyT[j]));
+    };
+    const w = G.wisp(C, tug, limbHome, 900 + i);
+    zoomLayer(`gas-wisp-${i}`, w.geo, mats.gasBlend, ZR.gas, gasS, w.shapes, w.weights);
+  });
+  // The liquid: the paint sea, and the two moulds that press him into the man's outline.
+  const sLiq = (t) => sOf('liquid', t);
+  const sea = LQ.sea(C);
+  zoomLayer('liquid-sea', sea.geo, mats.sea, ZR.liquid, sLiq, sea.shapes, sea.weights, sea.normals);
+  const place = (t) => {
+    const r = worldRoot(t);
+    return { p: C.map((c, k) => c + (r.T[k] - c) / sLiq(t)), k: r.s / sLiq(t) };
+  };
+  LQ.MOULDS.forEach((m, i) => {
+    const mo = LQ.mould(C, m, place, 300 + i);
+    zoomLayer(`liquid-mould-${i}`, mo.geo, mats.paint, ZR.liquid, sLiq, mo.shapes, mo.weights);
+  });
 
   // The dark, in its own home units: a hug-frame point p is C + κ·R18·(p − H).
-  const kappa = (HER * Z) / 6;
+  const kappa = (TRAV * Z) / 6;
   const toDark = (p) => {
     const v = new Vector3(...p).sub(H).applyQuaternion(R18).multiplyScalar(kappa);
     return [C[0] + v.x, C[1] + v.y, C[2] + v.z];
   };
   const darkS = (t) => sOf('dark', t);
   zoomLayer('dark-floor', L.darkFloor(C, RC, 0.5 * kappa), mats.flat, ZR.dark, darkS);
-  // The pool of her light on the floor follows her by two translation shapes.
+  // The pool of his light on the floor follows him by two translation shapes.
   const land = [HUG.land.x, 0.012, HUG.land.z];
   const pool = L.lightPool(toDark(land), 1.4 * kappa);
   const dx = toDark([H.x + 1, 0.5, 0]).map((v, k) => v - C[k]);
@@ -268,7 +354,7 @@ export async function build() {
     const b = travellerBody(Math.min(Math.max(t, 37), 58.5));
     return [b.x - land[0], b.z - land[2], 1 - poolOn(t)];
   });
-  // Her glow, still in the dark from 44.6 s (she kneels there), so the last zoom can grow it.
+  // His glow, still in the dark from 44.6 s (he kneels there), so the last zoom can grow it.
   const g0 = glowAt[at(44.6)];
   const glowC = toDark(g0.toArray());
   const stillGlow = L.glowShells(glowC, 0.6 * kappa);
@@ -278,14 +364,14 @@ export async function build() {
 
   // --- The traveller and the child ------------------------------------------------
   // Amber, not pale gold: pale gold matched the pastel gas in luminance and vanished there; amber still reads as light in the dark.
-  const herPaint = painter({ top: '#f2a63a', shirt: '#f2a63a', legs: '#e08a2a', skin: '#ffd98c', hair: '#b4601a', brow: '#a35416', shoes: '#c27322', socks: '#f2a63a', temple: '#f2a63a', watch: '#f2a63a' }, { baked: true, light: new Vector3(0.2, 1, 0.5).normalize() });
-  const herRoot = glb.node({ name: 'traveller', translation: roots.trav[0].T, rotation: roots.trav[0].Q.toArray(), scale: [roots.trav[0].s, roots.trav[0].s, roots.trav[0].s] });
-  glb.animate(herRoot, 'translation', keyT, roots.trav.flatMap((r) => r.T));
-  glb.animate(herRoot, 'rotation', keyT, quatTrack(roots.trav.map((r) => r.Q.toArray())));
-  glb.animate(herRoot, 'scale', keyT, roots.trav.flatMap((r) => [tiny(r.s), tiny(r.s), tiny(r.s)]));
-  const herBody = glb.node({ name: 'traveller-body', translation: [0, -PELVIS, 0], parent: herRoot });
-  const herNodes = writeJoints(glb, meshNode, trav, frames.trav, keyT, herBody, 'traveller', trav.geometry(herPaint), mats.her);
-  const glowNode = meshNode('glow', L.glowShells([0, 0, 0], 0.6), mats.glow, { translation: [0, 0.3, 0], parent: herNodes.pelvis });
+  const travPaint = painter({ top: '#f2a63a', shirt: '#f2a63a', legs: '#e08a2a', skin: '#ffd98c', hair: '#b4601a', brow: '#a35416', shoes: '#c27322', socks: '#f2a63a', temple: '#f2a63a', watch: '#f2a63a' }, { baked: true, light: new Vector3(0.2, 1, 0.5).normalize() });
+  const travRoot = glb.node({ name: 'traveller', translation: roots.trav[0].T, rotation: roots.trav[0].Q.toArray(), scale: [roots.trav[0].s, roots.trav[0].s, roots.trav[0].s] });
+  glb.animate(travRoot, 'translation', keyT, roots.trav.flatMap((r) => r.T));
+  glb.animate(travRoot, 'rotation', keyT, quatTrack(roots.trav.map((r) => r.Q.toArray())));
+  glb.animate(travRoot, 'scale', keyT, roots.trav.flatMap((r) => [tiny(r.s), tiny(r.s), tiny(r.s)]));
+  const travBody = glb.node({ name: 'traveller-body', translation: [0, -PELVIS, 0], parent: travRoot });
+  const travNodes = writeJoints(glb, meshNode, trav, frames.trav, keyT, travBody, 'traveller', trav.geometry(travPaint), mats.trav);
+  const glowNode = meshNode('glow', L.glowShells([0, 0, 0], 0.6), mats.glow, { translation: [0, 0.3, 0], parent: travNodes.pelvis });
   glb.animate(glowNode, 'scale', keyT, keyT.flatMap((t) => (t < 44.6 || t >= 58.5 ? [1, 1, 1] : [1e-4, 1e-4, 1e-4])));
 
   const kid = roots.child;
@@ -329,7 +415,7 @@ export async function build() {
   FIT.distance = fit.distance;
 
   // --- Sound: one emitter per layer, carried by its layer's zoom -----------------------
-  const sounds = layerSounds();
+  const sounds = { ...layerSounds(), ...Object.fromEntries(Object.entries(voices(G.DEMANDS)).map(([id, w]) => [`voice-${id}`, w])) };
   const roll = { distanceModel: 'linear', refDistance: 0.9, maxDistance: 2.3 };
   const emitter = (name, fn, opts = roll) => {
     const node = glb.node({ name: `sound-${name}`, translation: fn(0) });
@@ -340,7 +426,16 @@ export async function build() {
   // The stage tune drifts off slowly (S^0.3) so it bends away under the gas rather than vanishing at 8.5 s.
   emitter('stage', (t) => zoomed(stageP, C, Math.min(S(t), 2000) ** 0.3));
   emitter('gas', (t) => add(C, FOLLOW, 0.31 * clampScale(sOf('gas', t), ZR.gas)));
-  emitter('liquid', (t) => add(C, FOLLOW, 0.33 * clampScale(sOf('liquid', t), ZR.liquid)));
+  // The demands nag from their own billows, so each voice comes from where its cloud pulses.
+  for (const d of G.DEMANDS) {
+    emitter(`voice-${d.id}`, (t) => zoomed(G.demandCentre(C, d), C, clampScale(sOf('gas', t), ZR.gas)), { distanceModel: 'linear', refDistance: 1, maxDistance: 4 });
+  }
+  // The waltz in the paint presses down from overhead, just above the feed's ear (2.5 m out from the target toward
+  // the camera) so the linear rolloff (out to 2.3 m) keeps it at full weight.
+  emitter('liquid', (t) => {
+    const s = clampScale(sOf('liquid', t), ZR.liquid);
+    return add(add(C, FOLLOW, Math.min(2.2, 0.33 * s)), [0, 1, 0], Math.min(0.6, 0.1 * s));
+  });
   emitter('dark', (t) => {
     const real = clampScale(sOf('dark', t), ZR.dark);
     const held = t >= 36.9 && t < 58.2 ? mix(6, real, smooth(57.6, 58.2, t)) : real;
@@ -352,9 +447,9 @@ export async function build() {
   return glb;
 
   // A still layer drawn at s(t) times its home size, with shapes weighted w(t).
-  function zoomLayer(name, geo, mat, zoom, s, shapes = [], w = () => []) {
+  function zoomLayer(name, geo, mat, zoom, s, shapes = [], w = () => [], normals = null) {
     const g = geo.index ? geo : mergeVertices(geo, 1e-5);
-    morphLayer(g, C, zoom, shapes);
+    morphLayer(g, C, zoom, shapes, normals);
     g.userData.weights = layerWeights(s(0), zoom, w(0));
     const node = meshNode(name, g, mat);
     glb.animate(node, 'weights', keyT, keyT.flatMap((t) => layerWeights(s(t), zoom, w(t))));
@@ -476,7 +571,7 @@ const view = (t, label) => ({
   t
 });
 export const tiles = [
-  view(1.5, 'man'), view(6.5, 'door'), view(8.2, 'haul'), view(10.6, 'enter'), view(12, 'gas'), view(16.2, 'knocked'),
-  view(22, 'claw'), view(25, 'portal'), view(28.3, 'liquid'), view(33, 'crash'), view(36.8, 'hole'), view(38.5, 'fall'),
+  view(1.5, 'man'), view(6.5, 'door'), view(8.2, 'haul'), view(10.6, 'enter'), view(12, 'gas'), view(16.2, 'tugged'),
+  view(20.6, 'held'), view(24.3, 'hatch'), view(28.3, 'liquid'), view(33, 'pressed'), view(36.8, 'hole'), view(38.5, 'fall'),
   view(42, 'dark'), view(46.5, 'reach'), view(50.5, 'hug'), view(54.5, 'hug zoom'), view(56, 'liquid back'), view(59.2, 'home')
 ];

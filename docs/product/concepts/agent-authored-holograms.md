@@ -291,7 +291,8 @@ What it added:
 - **Measure Quick Look's load at build time.** The build sums the points of
   meshes under animated nodes (and meshes with morph targets) times the
   distinct key times, and fails above the scene's budget (100 M). This
-  piece measures 28,203 points × 1,806 frames = 51 M.
+  piece measured 28,203 points × 1,806 frames = 51 M before the gas and
+  liquid rebuild, and 49,403 × 1,806 = 89 M after it.
 - **The dome wraps the outer layer, so name the zoom.** The gold dome is the
   viewer's: it wraps the hologram's outermost layer, so when the piece goes
   into itself, the dome must go with that layer and leave the view. Morph
@@ -303,3 +304,35 @@ What it added:
   so the fit ignores it, and holograms without it are unchanged. Only the
   desktop feed reads it so far; AR and the XR viewer still draw the dome at
   home size.
+
+### The gas and liquid rebuild (2026-11-12)
+
+- **Every morph target carries its own normals.** three.js fills a target's
+  missing NORMAL with the base normal, so a wave that moves its vertices
+  but not its normals is lit as if flat. `lib/glb.mjs` now writes a NORMAL
+  accessor for each target when the geometry has one per target (zeros
+  where nothing changes).
+- **Keyed flow starts from the rest shape.** Curl advection that fills its
+  keys from zero leaves every vertex outside a billow at the origin. That
+  hid the hatch's collar and pushed the layer's reach past the sky (1.29
+  against 1.12). Initialise every key from the base positions.
+- **One event list drives a demand's pulse and its voice.** Each nagging
+  billow has its own emitter and its own stem, both read from the same
+  `events` table, so the chime is heard from the pink billow as it swells.
+  Five voices out of step with each other sound like nagging; a shared beat
+  sounds like music.
+- **Grow the figure where nobody sees it.** He has to fit through the
+  hatch, so in the gas he stays small (about 72 cm). The bust and the press
+  read only once he is about 1.2 m, so he grows while he falls into the paint
+  (25.3 to 26.8 s), and the mould, sized from him, grows with him.
+- **A press at his size needs him big enough to see.** At 4% of the frame's
+  height, the paint closing round him was a speck; at about 7% the
+  hat-and-shoulders shell reads. Size the climax against the frame, not the
+  world.
+- **Flying through a lit panel flashes the screen.** The zoom into his chest
+  passes through the doorway's light for about 0.2 s, which reads as a warm
+  flash. That is the doorway by design; a billow would read as a glitch, so
+  billows stay out of the camera's corridor.
+- **Sound adds up fast.** Ten 60 s stems at 22 kHz come to about 26 MB, so
+  this piece is 63 MB, above the API's 25 MB upload limit (which is being
+  raised to 100 MB).
