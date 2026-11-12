@@ -104,10 +104,22 @@ usually smaller than two runners, and overlapping runs crash pages and time
 out navigations that pass on their own. The container is a
 close emulation, not the runner image: a failure that reproduces only on
 hosted CI is still a defect to explain, not something to rerun.
-- `pnpm run verify:pr` is the only full tier: it includes every capture XR flow,
-  the viewer AR checks, the capture → viewer pipeline, and the portal view
-  checks (`test:portal`: mocked gestures plus a real capture). `verify:full` is an
-  alias kept for older notes.
+- `pnpm run verify:pr` is the pre-merge gate. It runs only the suites the change
+  can affect: `scripts/verify-pr.ts` fetches `origin/main`, takes every file that
+  differs from the merge-base (commits, uncommitted and untracked), and maps
+  them with `scripts/ci-changed-areas.sh`, the mapping hosted CI uses. Doctor
+  and `check:ci-areas` always run; quality (lint, typecheck, unit, build,
+  shard check), knowledge, pipeline, portal, capture XR and viewer XR follow
+  their areas. The mapping fails closed (lockfile, unclassified file, no
+  merge-base: everything runs). `pnpm run verify:pr -- --dry-run` prints the
+  plan; `pnpm run verify:full` (or `verify:pr -- --full`) runs every suite
+  (capture XR flows, viewer AR checks, pipeline, portal). Keep `STEPS` in
+  `scripts/verify-pr.ts` in step with the CI jobs.
+- `verify:pr` writes its exit code to `output/verify-pr.exit` when it ends.
+  Wait on that file, not on the log:
+  `until [ -s output/verify-pr.exit ]; do sleep 20; done` (give a watcher at
+  least 40 minutes for a full run). Use `grep -a` on logs; NUL bytes made grep
+  skip them as binary, and the driver now prints them as `\0`.
 - If GLTF export/import contract is touched, run:
   1. `pnpm run verify:repo:capture`
   2. `pnpm run verify:repo:viewer`

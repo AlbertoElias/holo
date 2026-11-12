@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
-import { MAX_HOLOGRAM_BYTES, PLACE_INPUT_SPLAT_CAP, checkSpzBytes } from '@holoim/contracts';
+import { MAX_HOLOGRAM_BYTES, PLACE_DETAIL_SPLAT_CAP, PLACE_INPUT_SPLAT_CAP, PLACE_STORED_SPLAT_CAP, checkSpzBytes } from '@holoim/contracts';
 import { FLOOR_BAND_METERS, SPLAT_EXTENT_SIGMA, decodeScan, plyVertexCount, type DecodedScan } from '@holoim/place';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
@@ -9,7 +9,7 @@ import type { CharacterMotor } from '../physics/CharacterMotor';
 import type { CaptureStage } from '../runtime/captureStage';
 import type { UIStateStore } from '../ui/UIStateStore';
 import { createPlaceFloor, PLACE_FLOOR_NAME } from './placeFloor';
-import { cropScanToTake, type PlaceCrop } from './placeExport';
+import { planCrop, takeLevel, type PlaceCrop, type PlaceCropPlan } from './placeExport';
 
 // A scanned place as capture's set (docs/features/splat-capture.md, slice 2a):
 // a `.spz` or `.ply` from the picker or `?place=`, read for its way up and
@@ -44,16 +44,34 @@ export type LivePlace = {
   floorBandY: number;
 };
 
+/** One stored level of the place: its crop and its SPZ, written with `maxSh`. */
+export type PlaceLevel = { crop: PlaceCrop; spz: Uint8Array; maxSh: number };
+
 export type PlaceExportPayload = {
+  /** The light level (docs/features/hologram-budgets.md): at most 200 k splats, SH0, what every viewer paints first. */
   crop: PlaceCrop;
   spz: Uint8Array;
   maxSh: number;
+  /** The detail level: at most 3 M splats, SH from the scan; null when it would add nothing to the light level. */
+  detail: PlaceLevel | null;
+  /** Both SPZs' bytes: what thinning to fit can change. */
+  placeBytes: number;
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
-  /** The crop as a raycastable splat mesh at the node's transform: pointing resolves against what is stored. */
+  /** The light level as a raycastable splat mesh at the node's transform: pointing resolves against what every viewer paints. */
   raycast: SplatMesh;
   writeMs: number;
+  /**
+   * The same place with both SPZs in at most `maxPlaceBytes`: only the detail
+   * is thinned (once), and dropped when it cannot fit or would add nothing;
+   * without a detail the light level is thinned once. Keeps this payload's
+   * raycast mesh (the marks were resolved against it).
+   */
+  fit(maxPlaceBytes: number): Promise<PlaceExportPayload>;
 };
+
+/** What the latest export stored for one level. */
+export type PlaceLevelReport = { kept: number; inBox: number; thinned: number; spzBytes: number; maxSh: number };
 
 /** What checks read (`__samplePlace`). */
 export type PlaceCaptureReport = {
@@ -84,7 +102,31 @@ export type PlaceCaptureReport = {
   worldModel: string | null;
   groundVisible: boolean;
   previousSetAttached: boolean;
-  lastExport: { kept: number; inBox: number; thinned: number; spzBytes: number; maxSpzBytes: number | null; cropMs: number; writeMs: number; box: { min: number[]; max: number[] }; disc: { center: { x: number; z: number }; radius: number }; dome: unknown } | null;
+  /**
+   * The latest export. `kept`, `inBox`, `thinned`, `spzBytes` and `maxSh` are
+   * the light level's; `detail` the detail level's (null when not stored).
+   * `maxSpzBytes` is the room both SPZs were fitted to (null when unfitted),
+   * `fitted` what fitting changed, `prepareMs` the crop and both writes at
+   * Stop, `fitMs` the one rewrite of a level when the take was over its cap.
+   */
+  lastExport: {
+    kept: number;
+    inBox: number;
+    thinned: number;
+    spzBytes: number;
+    maxSh: number;
+    detail: PlaceLevelReport | null;
+    placeBytes: number;
+    maxSpzBytes: number | null;
+    fitted: 'none' | 'detail' | 'detail-dropped' | 'light';
+    cropMs: number;
+    writeMs: number;
+    prepareMs: number;
+    fitMs: number;
+    box: { min: number[]; max: number[] };
+    disc: { center: { x: number; z: number }; radius: number };
+    dome: unknown;
+  } | null;
 };
 
 export interface CapturePlaceDeps {
@@ -139,15 +181,18 @@ async function checkDeclaredSize(bytes: Uint8Array, name: string): Promise<void>
  * the LoD's indices instead (and the renderer rewrites them every frame), so
  * the meshes cast against are made with `enableLod: false` and never drawn.
  */
-/** Thinning passes at Stop before the place is written as it is: SPZ size is close to linear in splats. */
-const MAX_FIT_PASSES = 4;
-/** Each pass aims a little under the bytes left, so one pass usually fits. */
+/** Thinning to fit aims this far under the bytes left (SPZ size is close to linear in splats), so its one rewrite fits. */
 const FIT_SHRINK = 0.95;
 /** The upload's cap, shared with the API. */
 const GLB_BYTE_BUDGET = MAX_HOLOGRAM_BYTES;
 
 function castsEverySplat(mesh: SplatMesh, numSplats: number): void {
   mesh.raycastIndices = { numSplats, indices: null as unknown as Uint32Array };
+}
+
+/** A detail level adds to the light one when it holds more splats or carries SH the light level does not. */
+function detailAddsToLight(detail: PlaceCrop, light: PlaceCrop): boolean {
+  return detail.numSplats > light.numSplats || (detail.maxSh > light.maxSh && detail.numSplats >= light.numSplats);
 }
 
 function median(values: number[]): number {
@@ -293,47 +338,123 @@ export class CapturePlace {
   }
 
   /**
-   * The stored place for the take that just stopped: the scan cropped to the
-   * take's reach (Q7), thinned to the cap (Q5), written as SPZ with SH 0.
-   * `path` is the avatar root over the take, in the set frame.
+   * The stored place for the take that just stopped (docs/features/hologram-budgets.md):
+   * the scan cropped once to the take's reach (Q7), and two levels taken from
+   * that crop: the detail (at most 3 M splats nearest the path, SH from the
+   * scan, never padded) and the light level (the 200 k of those nearest the
+   * path, SH0), both at the same node transform. `path` is the avatar root
+   * over the take, in the set frame. With `maxSpzBytes`, fitted to it.
    */
   async prepareExport(path: readonly THREE.Vector3[], maxSpzBytes = Number.POSITIVE_INFINITY): Promise<PlaceExportPayload | null> {
     const live = this.live;
     if (!live) return null;
     const S = live.scan.spark;
-    let crop = cropScanToTake(live.scan, path, this.deps.avatar.avatarHeight);
-    if (crop.numSplats === 0) throw new Error('No part of the place lies within the take\'s reach.');
     const started = performance.now();
-    let packed = new S.PackedSplats({ packedArray: crop.packedArray, numSplats: crop.numSplats, splatEncoding: live.scan.encoding });
-    let { fileBytes } = await S.writeSpz(packed, { maxSh: 0 });
-    // Over the bytes the take leaves, thinned again by distance from the path (from the scan's own splats) until it fits.
-    for (let pass = 0; fileBytes.byteLength > maxSpzBytes && pass < MAX_FIT_PASSES; pass += 1) {
-      const cap = Math.max(1, Math.floor(crop.numSplats * (maxSpzBytes / fileBytes.byteLength) * FIT_SHRINK));
-      crop = cropScanToTake(live.scan, path, this.deps.avatar.avatarHeight, cap);
-      packed.dispose();
-      packed = new S.PackedSplats({ packedArray: crop.packedArray, numSplats: crop.numSplats, splatEncoding: live.scan.encoding });
-      ({ fileBytes } = await S.writeSpz(packed, { maxSh: 0 }));
-    }
-    const writeMs = performance.now() - started;
-    const raycast = new S.SplatMesh({ packedSplats: packed, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY, enableLod: false });
+    const avatarHeight = this.deps.avatar.avatarHeight;
+    // Ranked even under the light cap: a take over its size cap may thin the light level when there is no detail.
+    const plan = planCrop(live.scan, path, avatarHeight, 0);
+    const light = takeLevel(live.scan, plan, PLACE_STORED_SPLAT_CAP, false);
+    if (light.numSplats === 0) throw new Error('No part of the place lies within the take\'s reach.');
+    const detailCrop = takeLevel(live.scan, plan, PLACE_DETAIL_SPLAT_CAP, true);
+    const writeStarted = performance.now();
+    const lightPacked = this.packed(S, light, live.scan.encoding);
+    const lightSpz = (await S.writeSpz(lightPacked, { maxSh: 0 })).fileBytes;
+    const detail = detailAddsToLight(detailCrop, light) ? await this.writeLevel(S, detailCrop, live.scan.encoding) : null;
+    const writeMs = performance.now() - writeStarted;
+    const raycast = new S.SplatMesh({ packedSplats: lightPacked, raycastable: true, minRaycastOpacity: PLACE_RAYCAST_MIN_OPACITY, enableLod: false });
     await raycast.initialized;
-    castsEverySplat(raycast, crop.numSplats);
+    castsEverySplat(raycast, light.numSplats);
     raycast.position.copy(live.position);
     raycast.quaternion.copy(live.quaternion);
     raycast.updateMatrixWorld(true);
+    const prepareMs = performance.now() - started;
+    const payload = this.payload(live, plan, { crop: light, spz: lightSpz, maxSh: 0 }, detail, raycast as SplatMesh, writeMs);
+    this.reportExport(payload, { maxSpzBytes: null, fitted: 'none', prepareMs, fitMs: 0 });
+    return Number.isFinite(maxSpzBytes) ? payload.fit(maxSpzBytes) : payload;
+  }
+
+  private packed(S: DecodedScan['spark'], crop: PlaceCrop, encoding: DecodedScan['encoding']): InstanceType<DecodedScan['spark']['PackedSplats']> {
+    return new S.PackedSplats({ packedArray: crop.packedArray, numSplats: crop.numSplats, splatEncoding: encoding, extra: crop.sh1 ? { sh1: crop.sh1 } : {} });
+  }
+
+  private async writeLevel(S: DecodedScan['spark'], crop: PlaceCrop, encoding: DecodedScan['encoding']): Promise<PlaceLevel> {
+    const packed = this.packed(S, crop, encoding);
+    try {
+      const { fileBytes } = await S.writeSpz(packed, { maxSh: crop.maxSh });
+      return { crop, spz: fileBytes, maxSh: crop.maxSh };
+    } finally {
+      packed.dispose();
+    }
+  }
+
+  private payload(live: LivePlace, plan: PlaceCropPlan, light: PlaceLevel, detail: PlaceLevel | null, raycast: SplatMesh, writeMs: number): PlaceExportPayload {
+    const payload: PlaceExportPayload = {
+      crop: light.crop,
+      spz: light.spz,
+      maxSh: light.maxSh,
+      detail,
+      placeBytes: light.spz.byteLength + (detail?.spz.byteLength ?? 0),
+      position: live.position.clone(),
+      quaternion: live.quaternion.clone(),
+      raycast,
+      writeMs,
+      fit: (maxPlaceBytes) => this.fitExport(live, plan, payload, maxPlaceBytes)
+    };
+    return payload;
+  }
+
+  /** Thins one level once so both SPZs fit `maxPlaceBytes` (see `PlaceExportPayload.fit`). */
+  private async fitExport(live: LivePlace, plan: PlaceCropPlan, payload: PlaceExportPayload, maxPlaceBytes: number): Promise<PlaceExportPayload> {
+    if (payload.placeBytes <= maxPlaceBytes) return payload;
+    const S = live.scan.spark;
+    const started = performance.now();
+    const light: PlaceLevel = { crop: payload.crop, spz: payload.spz, maxSh: payload.maxSh };
+    const done = (next: PlaceExportPayload, fitted: 'detail' | 'detail-dropped' | 'light') => {
+      this.reportExport(next, { maxSpzBytes: maxPlaceBytes, fitted, prepareMs: this.lastExport?.prepareMs ?? 0, fitMs: performance.now() - started });
+      return next;
+    };
+    const detail = payload.detail;
+    if (detail) {
+      const room = maxPlaceBytes - light.spz.byteLength;
+      const cap = Math.floor(detail.crop.numSplats * (room / detail.spz.byteLength) * FIT_SHRINK);
+      if (room > 0 && cap > 0) {
+        const crop = takeLevel(live.scan, plan, cap, true);
+        if (detailAddsToLight(crop, light.crop)) {
+          const thinned = await this.writeLevel(S, crop, live.scan.encoding);
+          if (thinned.spz.byteLength <= room) return done(this.payload(live, plan, light, thinned, payload.raycast, payload.writeMs), 'detail');
+        }
+      }
+      // The detail cannot fit or would add nothing: the light level alone.
+      const alone = this.payload(live, plan, light, null, payload.raycast, payload.writeMs);
+      if (alone.placeBytes <= maxPlaceBytes) return done(alone, 'detail-dropped');
+    }
+    // No detail: the light level, thinned once by distance from the path.
+    const cap = Math.max(1, Math.floor(light.crop.numSplats * (maxPlaceBytes / light.spz.byteLength) * FIT_SHRINK));
+    const thinned = await this.writeLevel(S, takeLevel(live.scan, plan, cap, false), live.scan.encoding);
+    return done(this.payload(live, plan, thinned, null, payload.raycast, payload.writeMs), 'light');
+  }
+
+  private reportExport(payload: PlaceExportPayload, fit: { maxSpzBytes: number | null; fitted: NonNullable<PlaceCaptureReport['lastExport']>['fitted']; prepareMs: number; fitMs: number }): void {
+    const { crop, detail } = payload;
+    const maxSpzBytes = fit.maxSpzBytes !== null && Number.isFinite(fit.maxSpzBytes) ? fit.maxSpzBytes : null;
     this.lastExport = {
       kept: crop.numSplats,
       inBox: crop.inBox,
       thinned: crop.thinned,
-      spzBytes: fileBytes.byteLength,
-      maxSpzBytes: Number.isFinite(maxSpzBytes) ? maxSpzBytes : null,
+      spzBytes: payload.spz.byteLength,
+      maxSh: payload.maxSh,
+      detail: detail ? { kept: detail.crop.numSplats, inBox: detail.crop.inBox, thinned: detail.crop.thinned, spzBytes: detail.spz.byteLength, maxSh: detail.maxSh } : null,
+      placeBytes: payload.placeBytes,
+      maxSpzBytes,
+      fitted: fit.fitted,
       cropMs: crop.cropMs,
-      writeMs,
+      writeMs: payload.writeMs,
+      prepareMs: fit.prepareMs,
+      fitMs: fit.fitMs,
       box: { min: crop.box.min.toArray(), max: crop.box.max.toArray() },
       disc: crop.disc,
       dome: crop.dome
     };
-    return { crop, spz: fileBytes, maxSh: 0, position: live.position.clone(), quaternion: live.quaternion.clone(), raycast: raycast as SplatMesh, writeMs };
   }
 
   /** Spark's own per-device draw budget (`SparkRenderer.defaultSplatTarget`), or the automation hook's. */
