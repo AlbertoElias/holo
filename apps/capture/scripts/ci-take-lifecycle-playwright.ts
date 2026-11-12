@@ -76,9 +76,11 @@ async function openPage(browser: Browser, consoleErrors: string[], options: { qu
   downloads.set(page, log);
   page.on('download', (download) => {
     log.names.push(download.suggestedFilename());
-    log.paths.push(download.path().then((p) => p ?? ''));
+    log.paths.push(download.path().then((p) => p ?? '', () => ''));
   });
   await page.addInitScript('globalThis.__name = globalThis.__name || ((target) => target);');
+  // A VR take in a test build posts its raw input to the dev sink; keep it out of fixtures/input-recordings.
+  await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"take-lifecycle-input.json"}' }));
   wireXrConsoleErrors(page, consoleErrors);
   // Every recording microphone request waits for the check to answer it. The face driver's voice meter is another request.
   await page.addInitScript(() => {
