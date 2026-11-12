@@ -128,12 +128,27 @@ export { expect };
  * the card brings it out before they press it, so a test does the same.
  */
 export async function pressViewInAr(page: Page, card: Locator = page.locator(".feed-card").first()): Promise<void> {
-  await reachFor(card);
-  await card.locator(".ar-trigger-button").click();
+  await pressReach(card, card.locator(".ar-trigger-button"));
+}
+
+/**
+ * Presses a reach control the way a person does: the cursor moves over the card, and the press follows while the
+ * control shows. The controls fold 4 s after the last movement (styleguide 1.2) and, folded, take no presses, so a
+ * page that stalls between the hover and the press (a busy runner, B-043) finds them gone, and Playwright then waits
+ * on an overlay without ever moving the cursor. Each attempt moves it again, so the controls come back.
+ */
+export async function pressReach(card: Locator, control: Pick<Locator, "click">): Promise<void> {
+  await expect(async () => {
+    await reachFor(card);
+    await control.click({ timeout: 10_000 });
+  }).toPass({ timeout: 120_000, intervals: [0] });
 }
 
 /** A cursor over the card, so its reach controls (Free, tilt, View in your room, Step inside, sound) come out. */
+let reachNudge = 0;
 export async function reachFor(card: Locator): Promise<void> {
-  await card.locator(".feed-card-portal").hover({ force: true });
+  // Each call moves the cursor, so a card it already rests on still sees movement and unfolds the controls.
+  reachNudge = (reachNudge + 1) % 2;
+  await card.locator(".feed-card-portal").hover({ force: true, position: { x: 40 + reachNudge * 6, y: 40 } });
   await expect(card.locator(".portal-controls")).toHaveAttribute("data-reach", "shown");
 }
