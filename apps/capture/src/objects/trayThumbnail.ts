@@ -4,6 +4,15 @@ import * as THREE from 'three';
 /** Thumbnail edge in pixels: 2× the flat tray slot's 54 apx, rounded up. */
 export const TRAY_THUMBNAIL_PX = 128;
 
+/**
+ * How long a tray load waits for a thumbnail's GPU readback. Normally it
+ * returns in about a tenth of a second; on a machine starved of CPU or GPU the
+ * fence has stalled for tens of seconds (B-050). The thumbnail is cosmetic, so
+ * past this the item joins the tray with its fallback glyph and the thumbnail
+ * is attached when the readback finishes.
+ */
+export const THUMBNAIL_READ_TIMEOUT_MS = 5_000;
+
 export interface TrayThumbnail {
   /** A PNG data URL for the flat dock row. */
   url: string;
@@ -21,7 +30,6 @@ export class TrayThumbnailer {
   private readonly target = new THREE.WebGLRenderTarget(TRAY_THUMBNAIL_PX, TRAY_THUMBNAIL_PX, { colorSpace: THREE.SRGBColorSpace });
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
-  private readonly pixels = new Uint8Array(TRAY_THUMBNAIL_PX * TRAY_THUMBNAIL_PX * 4);
   private readonly box = new THREE.Box3();
   private readonly size = new THREE.Vector3();
   private readonly center = new THREE.Vector3();
@@ -39,9 +47,11 @@ export class TrayThumbnailer {
    * scene's lights, so they are compiled against it as well. Each costly step
    * (compiles, each texture's upload, the draw that uploads the geometry, the
    * read back) runs in its own task, so a load mid-take never holds one frame
-   * for all of them.
+   * for all of them. The read back waits at most `THUMBNAIL_READ_TIMEOUT_MS`:
+   * past it this returns null and `onLate` receives the thumbnail if the read
+   * ever finishes.
    */
-  async render(model: THREE.Object3D, liveScene?: THREE.Scene): Promise<TrayThumbnail | null> {
+  async render(model: THREE.Object3D, liveScene?: THREE.Scene, onLate?: (thumbnail: TrayThumbnail) => void): Promise<TrayThumbnail | null> {
     const { renderer, scene, camera, target } = this;
     const proxy = model.clone();
     proxy.visible = true;
@@ -78,14 +88,26 @@ export class TrayThumbnailer {
       await nextTask();
       this.drawOnce();
       trayMark('drawn');
-      await renderer.readRenderTargetPixelsAsync(target, 0, 0, TRAY_THUMBNAIL_PX, TRAY_THUMBNAIL_PX, this.pixels);
+      // Its own buffer: a late read keeps filling it while the next item renders.
+      const pixels = new Uint8Array(TRAY_THUMBNAIL_PX * TRAY_THUMBNAIL_PX * 4);
+      const read = renderer.readRenderTargetPixelsAsync(target, 0, 0, TRAY_THUMBNAIL_PX, TRAY_THUMBNAIL_PX, pixels);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<'late'>((resolve) => {
+        timer = setTimeout(() => resolve('late'), THUMBNAIL_READ_TIMEOUT_MS);
+      });
+      const outcome = await Promise.race([read.then(() => 'read' as const), timedOut]).finally(() => clearTimeout(timer));
+      if (outcome === 'late') {
+        trayMark('read-late');
+        read.then(() => onLate?.(this.toCanvas(pixels)), () => undefined);
+        return null;
+      }
       trayMark('read');
+      const thumbnail = this.toCanvas(pixels);
+      trayMark('thumbnail');
+      return thumbnail;
     } finally {
       scene.remove(proxy);
     }
-    const thumbnail = this.toCanvas();
-    trayMark('thumbnail');
-    return thumbnail;
   }
 
   dispose(): void {
@@ -123,7 +145,7 @@ export class TrayThumbnailer {
     }
   }
 
-  private toCanvas(): TrayThumbnail {
+  private toCanvas(pixels: Uint8Array): TrayThumbnail {
     const canvas = document.createElement('canvas');
     canvas.width = TRAY_THUMBNAIL_PX;
     canvas.height = TRAY_THUMBNAIL_PX;
@@ -132,7 +154,7 @@ export class TrayThumbnailer {
     // Render targets read bottom row first; the canvas is top row first.
     const row = TRAY_THUMBNAIL_PX * 4;
     for (let y = 0; y < TRAY_THUMBNAIL_PX; y++) {
-      image.data.set(this.pixels.subarray((TRAY_THUMBNAIL_PX - 1 - y) * row, (TRAY_THUMBNAIL_PX - y) * row), y * row);
+      image.data.set(pixels.subarray((TRAY_THUMBNAIL_PX - 1 - y) * row, (TRAY_THUMBNAIL_PX - y) * row), y * row);
     }
     context.putImageData(image, 0, 0);
     return { url: canvas.toDataURL('image/png'), canvas };
