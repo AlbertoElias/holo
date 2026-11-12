@@ -69,7 +69,10 @@ export function useTextureDetail({ url, wanted, scene, associations }: {
       const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(ktx2Loader());
       const detail = await loader.loadAsync(url);
       if (!live) return;
-      const count = (detail.parser.json as { textures?: unknown[] }).textures?.length ?? 0;
+      // The API writes `{}` for every texture it did not downscale (same
+      // length and order as the light GLB); only the others carry a full image.
+      const defs = (detail.parser.json as { textures?: Array<{ source?: number; extensions?: Record<string, unknown> }> }).textures ?? [];
+      const hasFull = (index: number) => defs[index]?.source !== undefined || Object.keys(defs[index]?.extensions ?? {}).length > 0;
       const full = new Map<number, Texture>();
       const wantedIndices = new Set<number>();
       scene.traverse((node) => {
@@ -78,7 +81,7 @@ export function useTextureDetail({ url, wanted, scene, associations }: {
           for (const slot of SLOTS) {
             const texture = (material as unknown as Record<string, Texture | null | undefined>)[slot];
             const index = texture ? associations.get(texture)?.textures : undefined;
-            if (index !== undefined && index < count) wantedIndices.add(index);
+            if (index !== undefined && hasFull(index)) wantedIndices.add(index);
           }
         }
       });

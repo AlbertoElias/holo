@@ -18,11 +18,23 @@ function probeRenderer(): Pick<WebGLRenderer, "extensions"> {
   const canvas = document.createElement("canvas");
   const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
   const found = new Set<string>();
+  // KTX2Loader also reads the ASTC profiles (for HDR) through `extensions.get`
+  // whenever ASTC is present (Apple GPUs, Quest, most phones), so keep them
+  // before the context is released.
+  let astcProfiles: string[] = [];
   if (gl) {
     for (const name of gl.getSupportedExtensions() ?? []) found.add(name);
+    if (found.has("WEBGL_compressed_texture_astc")) {
+      astcProfiles = gl.getExtension("WEBGL_compressed_texture_astc")?.getSupportedProfiles() ?? [];
+    }
     gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
-  return { extensions: { has: (name: string) => found.has(name) } } as Pick<WebGLRenderer, "extensions">;
+  const extensions = {
+    has: (name: string) => found.has(name),
+    get: (name: string) =>
+      found.has(name) && name === "WEBGL_compressed_texture_astc" ? { getSupportedProfiles: () => astcProfiles } : null
+  };
+  return { extensions } as unknown as Pick<WebGLRenderer, "extensions">;
 }
 
 export function ktx2Loader(): KTX2Loader {
