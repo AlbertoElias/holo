@@ -80,9 +80,10 @@ and session length multiplies it.
 - Run commands that may take over two minutes in the background and wait for
   the completion notice; do not poll in a loop or let a foreground command
   reach its timeout.
-- Send broad searches and file sweeps to a subagent so only its conclusion
-  enters the conversation. Print excerpts (`sed -n`, `grep`, `head`) instead
-  of whole large files or logs.
+- Do small lookups yourself: a known file, a handful of greps, one check.
+  Print excerpts (`sed -n`, `grep`, `head`) instead of whole large files or
+  logs. Send a sweep to a subagent only when it would read many files and you
+  need just the conclusion (see "Subagents: fold in by default").
 - Iterate on the narrowest check, then widen once: one capture XR check
   (`pnpm --filter @holoim/capture run test:xr:body`), one replay fixture
   (`XR_REPLAY_ONLY=<name>`), and the full tier only before pushing. See
@@ -91,10 +92,31 @@ and session length multiplies it.
 ## Model routing
 
 Pick the tier when starting a session; an agent cannot change its own model
-mid-session, so a lead delegates lighter work to a pinned subagent instead.
-Split work into small tasks and give each one to a subagent on the matching
-tier (one module, one check run, one search); the lead keeps only design,
-integration, and decisions. Smaller tasks keep each context short.
+mid-session, so a lead delegates lighter work to a pinned subagent only when
+the criteria below say a subagent earns its cost.
+
+### Subagents: fold in by default
+
+One agent in one context sees how results connect; every subagent adds a
+nested model loop (latency) and a lossy summary handoff, and the lead cannot
+check what it missed. So keep work in the main loop and split by context
+isolation, never by problem type or role. Use a subagent only when:
+
+1. the job reads or produces a lot of output the lead does not need (a wide
+   search sweep, a long check log, a big diff review) and returns a compact
+   result;
+2. several independent jobs run in parallel and each can discard its context
+   afterward; or
+3. the lead's context is already bloated enough to hurt quality (then prefer a
+   fresh session over more delegation, per "One task per session").
+
+Not subagent work: one module edit, one grep, a single short command, anything
+whose output the lead must reason over in detail, or steps that chain on each
+other's results (do those in one loop). When a subagent is warranted, pass the
+goal, files and done criteria, and ask for a compact result with paths and
+line numbers. Check that result before relying on it; a handoff can drop the
+detail that matters. If a delegated step keeps coming back incomplete, pull it
+back into the lead.
 
 | Tier | Work | Claude Code | Codex | Muse |
 |---|---|---|---|---|
@@ -110,7 +132,8 @@ Routing is the agent's job, not the user's. Do it automatically:
   I'm on <model>. <Cheaper|Stronger> option: <model or subagent> (<why>).`
   Say nothing when the model already fits.
 - Warn in both directions. Opus on Standard or Light work wastes budget:
-  delegate it to a pinned subagent. Sonnet on Deep work risks a wrong
+  delegate it to a pinned subagent when the criteria above hold, otherwise
+  just recommend a cheaper session. Sonnet on Deep work risks a wrong
   design: tell the user and recommend a fresh Opus session before starting.
 - Escalate instead of looping: when a Standard model fails the same check
   twice, stop, report the failure, and recommend Opus (as a subagent for
