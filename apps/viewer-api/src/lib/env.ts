@@ -48,6 +48,9 @@ const envSchema = z.object({
   AUTH_MAGIC_LINK_TTL_MS: z.coerce.number().int().positive().default(900_000),
   AUTH_SESSION_TTL_MS: z.coerce.number().int().positive().default(2_592_000_000),
   AUTH_DEV_EXPOSE_MAGIC_LINK: boolFromEnvFalse,
+  // Test-only: accept an upload without an account, credited to the submitted name with no owner.
+  // Set only where the e2e API is launched (scripts/test-api.ts); never in production config.
+  TEST_OPEN_UPLOADS: boolFromEnvFalse,
   // Sign-in email: Cloudflare Email Service (REST). Off unless the account,
   // token and a from-address on an onboarded sending domain are all set.
   AUTH_EMAIL_FROM: optionalSecret,
@@ -97,6 +100,7 @@ const parsed = envSchema.parse({
   AUTH_MAGIC_LINK_TTL_MS: process.env.AUTH_MAGIC_LINK_TTL_MS,
   AUTH_SESSION_TTL_MS: process.env.AUTH_SESSION_TTL_MS,
   AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK,
+  TEST_OPEN_UPLOADS: process.env.TEST_OPEN_UPLOADS,
   AUTH_EMAIL_FROM: process.env.AUTH_EMAIL_FROM,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   RESEND_API_ORIGIN: process.env.RESEND_API_ORIGIN,

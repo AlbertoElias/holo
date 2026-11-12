@@ -7,7 +7,6 @@ import type * as Three from "three";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, expectConsoleErrors, test } from "./bootstrap";
-import { signInForUpload } from "./sign-in";
 import { measureFloor } from "./floor-proof";
 import { diagonalFactor, extentLeavesDome, SPLAT_EXTENT_SIGMA } from "@holoim/place";
 import { writeFixture } from "./place-fixture";
@@ -471,9 +470,7 @@ test.describe("a scanned place around a take", () => {
     test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture dev server and a live API.");
     test.setTimeout(420_000);
     const take = await recordWalkTake(browser, testInfo);
-    const { headers } = await signInForUpload(page, { displayName: "place-e2e" });
     const response = await page.request.post("/api/holograms", {
-      headers,
       multipart: {
         hologramName: `Place ${testInfo.testId.slice(0, 6)}-${Date.now()}`,
         submittedBy: "place-e2e",

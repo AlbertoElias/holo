@@ -176,6 +176,10 @@ email") and stores no link; it never claims an email went out.
 the link in the response instead. Never set it in production: it would let
 anyone sign in as any email address.
 
+`TEST_OPEN_UPLOADS=true` (the e2e API only, set by `scripts/test-api.ts`) accepts an
+upload without an account, credited to the submitted name with no owner. Never set
+it in production: it would let anyone upload anonymously. It defaults to off.
+
 Alternative provider: Cloudflare Email Service (needs Workers Paid) is used
 when `RESEND_API_KEY` is unset and `CLOUDFLARE_EMAIL_ACCOUNT_ID`,
 `CLOUDFLARE_EMAIL_API_TOKEN` (Email Sending: Edit) and `AUTH_EMAIL_FROM` are
