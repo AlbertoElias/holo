@@ -454,7 +454,12 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   useEffect(() => {
     if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      observer?.({ url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip, sound: soundRef });
+      const probe = { url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip, sound: soundRef };
+      observer?.(probe);
+      // Once processed, the API serves `<id>-light.glb` (hologram-budgets) in
+      // place of the `<id>.glb` the upload answered with; tests find a card by
+      // the upload's URL, whichever of the two the feed fetched first.
+      if (/-light\.glb$/.test(url)) observer?.({ ...probe, url: url.replace(/-light\.glb$/, ".glb") });
     }
   }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, rimProbe, domeClip, sphereClip, tracesProbe, url]);
 

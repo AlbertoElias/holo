@@ -240,6 +240,9 @@ export default function StoredPlaceMount({ place, readBytes, detailUrl = null, d
       status: "waiting", error: null, storedCount: 0, shDegree: 0, drawnCount: 0, budget: 0, floorBandY: Number.NaN, nodeWorld: [], loadMs: 0
     };
     now.detail = detail;
+    // Every mounted place publishes its report, the last one winning; the
+    // focused card's takes the hook back so tests read the card with a detail.
+    if (testHooks) window.__HOLOIM_STORED_PLACE__ = now;
     const cancelIdle = whenIdle(() => {
       const started = performance.now();
       detail.status = "loading";
