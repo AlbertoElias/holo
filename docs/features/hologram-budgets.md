@@ -1,7 +1,7 @@
 # Feature brief: Richer holograms (raise the size budgets)
 
 **Lead:** Claude (Opus)  
-**Status:** In progress (spike done 2026-11-12; implementation on `feature/hologram-budgets`)  
+**Status:** Delivered 2026-11-12 (merged to `main`); device checks, marks on the detail level, feed first paint and the KTX2 fallback decision open  
 **Layer:** event (what is recorded and kept), with view costs
 
 ## User outcome
@@ -205,40 +205,40 @@ do while recording.
 
 ## Acceptance criteria
 
-- [ ] A take recorded in a 3 M-splat SH1 scan with an empty tray stores a
+- [x] A take recorded in a 3 M-splat SH1 scan with an empty tray stores a
       detail place of at most 3 M splats at SH1, sized so the take is at most
       100 MB, and a light place of at most 200 k at SH0
       (read from both stored SPZ headers).
-- [ ] A take in an SH0-only scan stores SH0 in both levels.
+- [x] A take in an SH0-only scan stores SH0 in both levels.
 - [ ] The stored GLB holds no detail bytes; the DTO's `placeDetailUrl`
       serves them; an older viewer build plays the new hologram's light place.
-- [ ] The viewer paints the light place first and swaps in the detail with
+- [x] The viewer paints the light place first and swaps in the detail with
       no change in position or floor height (within 0.5 mm).
 - [ ] Each device draws at most its own Spark budget from the detail (render
       stats); light-to-detail time and peak heap on an iPhone and an Android
       phone are recorded and within the budgets the spike sets.
-- [ ] Scrolling a card away frees its detail (heap returns near baseline).
-- [ ] A 100 MB take uploads through both routes and plays; one byte over is
+- [x] Scrolling a card away frees its detail (heap returns near baseline).
+- [x] A 100 MB take uploads through both routes and plays; one byte over is
       refused with the cap in the message at capture and at the API.
 - [ ] The tray accepts items up to 40 MB each and 64 MB in total and refuses
       the next byte with a notice.
-- [ ] Deleting a hologram removes its detail object.
-- [ ] Holograms uploaded before this change play unchanged.
+- [x] Deleting a hologram removes its detail object.
+- [x] Holograms uploaded before this change play unchanged.
 - [ ] Feed first paint at 1 MB/s for a 100 MB hologram is no slower than for
       today's holograms (`snappy-feed-first-load.md` numbers).
-- [ ] Three concurrent 100 MB completes plus a Quick Look conversion stay
+- [x] Three concurrent 100 MB completes plus a Quick Look conversion stay
       within the API machine's 2 GB.
 - [ ] Pointing marks lie on surfaces in both levels.
 - [ ] A prop-heavy take without a place (64 MB of props, 4096 px
       textures, a long take) paints its light version first; full textures
       swap in for the focused card without a visible change in placement.
-- [ ] The served animation differs from the recorded one by at most 1 mm in
+- [x] The served animation differs from the recorded one by at most 1 mm in
       bone position and 0.5° in rotation at every recorded frame, and its
       bytes shrink (reported).
 - [ ] The viewer loads KTX2 textures on desktop, iPhone, Android and Quest;
       GPU texture memory is reported before and after.
-- [ ] Quick Look converts the take from its PNG/JPEG, unquantized input.
-- [ ] `pnpm run verify:pr` passes locally.
+- [x] Quick Look converts the take from its PNG/JPEG, unquantized input.
+- [x] `pnpm run verify:pr` passes locally.
 
 ## Failure cases considered
 
@@ -272,7 +272,7 @@ do while recording.
 | Lead | Claude (Opus) | Brief, integration, final handoff |
 | Design reviewer | `design-reviewer` (Opus) | Done 2026-11-12; findings folded in above |
 | Implementer | Claude (Opus for the contract, export and API split; Sonnet for caps and tray) | `packages/contracts`, `packages/place`, `apps/viewer-api` upload, storage and delete, `apps/capture/src/place`, `apps/capture/src/objects`, `apps/capture/src/recording/GltfExportComposer.ts`, `apps/viewer-web/src/features/place` |
-| Independent verifier | Codex (`-p standard`) | Read-only verification; test artifacts only |
+| Independent verifier | Muse (Meta; Codex was at its usage limit) | Read-only verification; test artifacts only. Found five defects: four fixed in `1a671ef`, one is the open decision under Known risk |
 
 Coordination: `splat-capture.md` slices 2b and 2c change `prepareExport` and
 the composer too. Land this first; 2b then carries the Quest recording and
@@ -283,19 +283,40 @@ frame-rate check in the denser place.
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | LoD spike | Build time and heap for a 3 M SH1 tree, at Stop (desktop) and in a viewer worker (iPhone, Android) | Done on desktop (Design, Viewer: spike result); phones are a device gap; decision: thin to device budget |
-| Both levels stored, SH from source | `e2e/place-capture.pipeline.spec.ts` with 3 M SH1 and SH0 fixtures, through the real API | Pending |
-| Light GLB, detail URL, old viewer | Same spec; previous viewer build against the new hologram | Pending |
-| Swap without a jump; marks on both levels | Same spec, feed portal | Pending |
-| Per-device draw, heap, free on scroll | Feed spec with render stats; phones by hand | Pending |
-| Caps and refusals | Pipeline spec at 100 MB and +1 byte on both routes; tray take at 40/64 MB | Pending |
-| Delete | Hologram route test: detail object gone | Pending |
-| Old holograms | Feed spec with a pre-change GLB | Pending |
-| Feed first paint | Throttled Chromium at 1 MB/s against a preview deploy | Pending |
-| API memory | Three concurrent 100 MB completes plus a conversion, in `scripts/ci-emulate.sh` | Pending |
-| Quick Look | Converter on the PNG/JPEG input of a take with 64 MB of props; `check_usdz_tools.sh` | Pending |
-| Prop-heavy take, light then full | Pipeline spec with a 64 MB tray and no place | Pending |
-| Animation error bound | Compare served and recorded bone tracks frame by frame; body and hand replays | Pending |
-| KTX2 on each device | Feed spec on desktop; phones and Quest by hand | Pending |
+| Both levels stored, SH from source | `apps/viewer-web/e2e/hologram-budgets.pipeline.spec.ts` (capture tests 1–2) with 3 M SH1 and SH0 fixtures | Pass: 35.4 MB take; light 200 k SH0, detail 2.83 M SH1 (SPZ headers); SH0 scan stores SH0 in both; a small scan stores no detail |
+| Light GLB, detail URL, old viewer | `apps/viewer-web/e2e/hologram-budgets.pipeline.spec.ts` test 3; `apps/viewer-api/test/hologram-budgets.test.ts` split tests | Pass for the split: stored GLB 3.9 MB with no detail, `placeDetailUrl` serves the SPZ, both upload routes. Not run: a previous viewer build. Known risk below: processed GLBs require `KHR_texture_basisu` |
+| Swap without a jump; marks on both levels | `apps/viewer-web/e2e/hologram-budgets.pipeline.spec.ts` test 3, feed portal | Pass for the swap: `floorBandY` equal before and after, detail in 1.41 s. Marks on the detail level not checked |
+| Per-device draw, heap, free on scroll | `apps/viewer-web/e2e/hologram-budgets.pipeline.spec.ts` test 3 with the Quest budget forced | Pass on desktop: `drawnCount` 500 000; heap 15.4 MB → 19.1 MB with detail, back to baseline after scroll. Phones are a device gap |
+| Caps and refusals | `apps/viewer-web/e2e/hologram-budgets.pipeline.spec.ts` test 5; `apps/viewer-api/test/hologram-budgets.test.ts` cap test; `pnpm --filter @holoim/capture run test:xr:summon` (tray-budget) | Pass: 100 MB accepted and played, +1 byte refused with 413 naming 100MB on both routes. Tray: a 23.45 MB item loads, a third copy (70.4 MB) is refused at the 64 MB total, counting a copy in the scene. The old 7 MB fixture failed against the 64 MB cap and was resized. A 40 MB single item not run |
+| Delete | `apps/viewer-api/test/hologram-budgets.test.ts` delete test; `apps/viewer-web/e2e/hologram-budgets.pipeline.spec.ts` test 3 | Pass: place detail, texture detail and processed GLB removed; `deletedDetail` counts them |
+| Old holograms | `pnpm run verify:pr` feed and pipeline suites, whose fixtures predate this change | Pass (B-043 flake aside, which passes alone) |
+| Feed first paint | Throttled Chromium at 1 MB/s against a preview deploy | Not measured. The served first load is 3.9 MB against a 35.4 MB recording; baseline 4.2–4.7 s in `snappy-feed-first-load.md` |
+| API memory | Three concurrent 100 MB completes plus a conversion, in Docker at 2 GB | Pass: stayed under 2 GB (processing is serial in the USDZ worker loop) |
+| Quick Look | `apps/viewer-api/test/hologram-budgets.test.ts` Quick Look input test; `check_usdz_tools.sh` on the 3 M SH1 take | Pass 6/6. Input is the stored GLB without the place, PNG textures |
+| Prop-heavy take, light then full | `apps/viewer-web/e2e/hologram-budgets.pipeline.spec.ts` test 4 | Pass at 30 MB (not 64 MB): a 4096 px texture is served as KTX2 at 1024 px (3.9 MB), the focused card swaps in 4096 px in 50 ms |
+| Animation error bound | `apps/viewer-api/test/hologram-budgets.test.ts` processing tests; verifier's frame-by-frame compare | Pass: worst 0.32 mm / 0.17°; 1.82 MB → 85 KB on the fixture; long LINEAR tracks no longer overflow |
+| KTX2 on each device | `apps/viewer-web/e2e/hologram-budgets.pipeline.spec.ts` test 4 on desktop | Pass on desktop (the ASTC probe now answers `extensions.get`). Phones and Quest are a device gap; GPU texture memory not reported |
+
+## Known risk: processed GLBs require KTX2 (decision open)
+
+Processing serves textures as `KHR_texture_basisu` listed in
+`extensionsRequired`, with no PNG fallback. A viewer build from before this
+change cannot load a processed hologram: a tab left open across the deploy
+(there is no service worker) shows that card broken until it reloads. New
+builds load it. Keeping a PNG fallback would undo the byte savings. Options:
+accept it (tabs reload on the next visit), add a build-version check that
+reloads stale tabs, or serve the fallback for a grace period. Found by the
+independent verifier.
+
+## Open checks
+
+- Phones and Quest: light-to-detail time, peak heap, draw budget and KTX2
+  loading (see Physical-device limits).
+- Pointing marks on the detail level.
+- Feed first paint at 1 MB/s for a 100 MB hologram against a preview deploy.
+- A 64 MB prop take end to end (the pipeline ran a 30 MB one), and a 40 MB
+  single tray item (the summon tray-budget check exercises the 64 MB total).
+- A previous viewer build against a new hologram (see Known risk).
 
 ## Physical-device limits
 
