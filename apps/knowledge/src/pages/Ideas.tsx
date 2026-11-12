@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useReadingState } from "../useReadingState";
 import { ideas, relatedDocuments } from "../knowledge";
 import type { Idea } from "../knowledge";
 import {
@@ -9,136 +9,203 @@ import {
   PageHeading,
   Source,
 } from "../components";
+import {
+  ideaLabel,
+  ideaStatus,
+  ideaTakeaway,
+  opening,
+  territories,
+} from "../guide";
+import { RelationshipMap } from "../visuals";
+
 export function IdeaCard({ idea }: { idea: Idea }) {
-  const related = relatedDocuments(idea.id);
-  const specs = related.filter((doc) => doc.kind === "PRD");
   return (
-    <a href={`#/idea/${idea.id}`} className="idea-card">
-      <div className="card-top">
-        <span className="idea-id">{idea.id}</span>
-        <Badge tone={specs.length ? "accent" : ""}>
-          {specs.length
-            ? `${specs.length} PRD${specs.length > 1 ? "s" : ""}`
-            : idea.state}
-        </Badge>
-        <span className="arrow">↗</span>
+    <a href={`#/idea/${idea.id}`} className="idea-card idea-row">
+      <span className="idea-id">{idea.id}</span>
+      <div>
+        <h2>{ideaLabel(idea)}</h2>
+        <p>{ideaTakeaway(idea)}</p>
       </div>
-      <h2>{idea.title}</h2>
-      <p className="idea-question">{idea.question}</p>
-      <div className="card-bottom">
-        <span>
-          {idea.layer && <small className="idea-layer">{idea.layer}</small>}
-          {idea.theme}
-        </span>
-        <span>
-          {related.length ? `${related.length} linked notes` : "Seed idea"}
-        </span>
-      </div>
+      <Badge>{ideaStatus(idea)}</Badge>
+      <span className="idea-layer">{idea.layer}</span>
+      <span className="arrow" aria-hidden="true">
+        ↗
+      </span>
     </a>
   );
 }
 export function IdeaGarden({
   search,
   setSearch,
+  layer,
 }: {
   search: string;
   setSearch: (value: string) => void;
+  layer: string;
 }) {
-  const [theme, setTheme] = useState("All themes");
-  const [layer, setLayer] = useState("Every layer");
-  const [depth, setDepth] = useState("All ideas");
-  const themes = [...new Set(ideas.map((idea) => idea.theme))].sort();
+  const [theme, setTheme] = useReadingState("idea-theme", "All themes");
+  const [depth, setDepth] = useReadingState("idea-depth", "All ideas");
+  const showing = Boolean(
+    layer || search || theme !== "All themes" || depth !== "All ideas",
+  );
+  const groups = [
+    ...territories,
+    ...[...new Set(ideas.map((idea) => idea.layer))]
+      .filter((key) => !territories.some((row) => row.Layer === key))
+      .map((key) => ({
+        Layer: key,
+        Title: key || "Other ideas",
+        Description: "New territory from the idea registry.",
+      })),
+  ];
   const filtered = ideas.filter((idea) => {
     const links = relatedDocuments(idea.id);
     const query = search.trim().toLowerCase();
-    const matches = /^idea-\d+$/.test(query)
-      ? idea.id.toLowerCase() === query
-      : `${idea.searchText} ${links.map((doc) => doc.title).join(" ")}`
-          .toLowerCase()
-          .includes(query);
     return (
-      (theme === "All themes" || idea.theme === theme) &&
-      (layer === "Every layer" || idea.layer === layer) &&
+      (!layer || layer === "all" || idea.layer === layer) &&
+      (theme === "All themes" || theme === idea.theme) &&
       (depth === "All ideas" ||
         (depth === "With PRDs"
           ? links.some((doc) => doc.kind === "PRD")
-          : links.length > 0)) &&
-      matches
+          : links.length)) &&
+      (/^idea-\d+$/.test(query)
+        ? idea.id.toLowerCase() === query
+        : `${idea.searchText} ${ideaLabel(idea)} ${ideaTakeaway(idea)} ${links.map((doc) => doc.title).join(" ")}`
+            .toLowerCase()
+            .includes(query))
     );
   });
   return (
     <>
       <PageHeading
-        eyebrow="THE POSSIBILITY SPACE"
-        title="The idea garden."
-        description="Seeds, questions, and possibilities. Open an idea to follow its thinking into concepts and product briefs."
+        eyebrow="EXPLORE IDEAS"
+        title={opening["Map title"] || "Explore ideas."}
+        description={
+          opening["Map intro"] ||
+          "Browse the idea registry by layer, or search every idea."
+        }
       />
       <div className="filter-bar">
         <label className="search-field">
           <span aria-hidden="true">⌕</span>
           <input
             aria-label="Search ideas"
-            placeholder="Search ideas, questions, or linked notes…"
+            placeholder={`Search ${ideas.length} ideas…`}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
-        <select
-          aria-label="Filter by theme"
-          value={theme}
-          onChange={(event) => setTheme(event.target.value)}
+        <a
+          className="button subtle"
+          href={layer === "all" ? "#/ideas" : "#/ideas?layer=all"}
         >
-          <option>All themes</option>
-          {themes.map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-        <select
-          aria-label="Filter by layer"
-          value={layer}
-          onChange={(event) => setLayer(event.target.value)}
-        >
-          <option>Every layer</option>
-          {[...new Set(ideas.map((idea) => idea.layer))]
-            .filter(Boolean)
-            .sort()
-            .map((item) => (
-              <option key={item}>{item}</option>
+          {layer === "all"
+            ? "Back to territories"
+            : `All ${ideas.length} ideas`}
+        </a>
+      </div>
+      <details className="advanced-filters">
+        <summary>More filters</summary>
+        <div className="filter-bar">
+          <select
+            aria-label="Filter by layer"
+            value={layer}
+            onChange={(event) => {
+              location.hash = event.target.value
+                ? `/ideas?layer=${encodeURIComponent(event.target.value)}`
+                : "/ideas";
+            }}
+          >
+            <option value="">Every layer</option>
+            <option value="all">All ideas</option>
+            {groups.map((group) => (
+              <option key={group.Layer} value={group.Layer}>
+                {group.Layer}
+              </option>
             ))}
-        </select>
-        <select
-          aria-label="Filter by detail"
-          value={depth}
-          onChange={(event) => setDepth(event.target.value)}
-        >
-          <option>All ideas</option>
-          <option>With notes</option>
-          <option>With PRDs</option>
-        </select>
-      </div>
-      <div className="results-line">
-        <span>
-          {filtered.length} of {ideas.length} ideas
-        </span>
-        <span>Curiosity before commitment</span>
-      </div>
-      {filtered.length ? (
-        <div className="idea-grid">
-          {filtered.map((idea) => (
-            <IdeaCard key={idea.id} idea={idea} />
-          ))}
+          </select>
+          <select
+            aria-label="Filter by theme"
+            value={theme}
+            onChange={(event) => setTheme(event.target.value)}
+          >
+            <option>All themes</option>
+            {[...new Set(ideas.map((idea) => idea.theme))]
+              .sort()
+              .map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+          </select>
+          <select
+            aria-label="Filter by detail"
+            value={depth}
+            onChange={(event) => setDepth(event.target.value)}
+          >
+            <option>All ideas</option>
+            <option>With notes</option>
+            <option>With PRDs</option>
+          </select>
         </div>
+      </details>
+      {!showing ? (
+        <>
+          <div className="territory-grid">
+            {groups.map((group, index) => (
+              <a
+                className="territory-card"
+                href={`#/ideas?layer=${encodeURIComponent(group.Layer!)}`}
+                key={group.Layer}
+              >
+                <span className="territory-number">0{index + 1}</span>
+                <span className="eyebrow">{group.Layer}</span>
+                <h2>{group.Title}</h2>
+                <p>{group.Description}</p>
+                <span className="territory-count">
+                  {ideas.filter((idea) => idea.layer === group.Layer).length}{" "}
+                  ideas <span aria-hidden="true">↗</span>
+                </span>
+              </a>
+            ))}
+          </div>
+          <RelationshipMap />
+        </>
       ) : (
-        <Empty
-          title="Nothing growing here yet."
-          description="Try another word or widen your filters."
-          action={() => {
-            setSearch("");
-            setTheme("All themes");
-            setLayer("Every layer");
-            setDepth("All ideas");
-          }}
-        />
+        <>
+          <div className="results-line">
+            <span>
+              {filtered.length} of {ideas.length} ideas
+              {layer && layer !== "all" ? ` / ${layer}` : ""}
+            </span>
+            <a
+              href="#/ideas"
+              onClick={() => {
+                setSearch("");
+                setTheme("All themes");
+                setDepth("All ideas");
+              }}
+            >
+              Back to territories
+            </a>
+          </div>
+          {filtered.length ? (
+            <div className="idea-list">
+              {filtered.map((idea) => (
+                <IdeaCard key={idea.id} idea={idea} />
+              ))}
+            </div>
+          ) : (
+            <Empty
+              title="Nothing growing here yet."
+              description="Try another word or widen your filters."
+              action={() => {
+                setSearch("");
+                setTheme("All themes");
+                setDepth("All ideas");
+                location.hash = "/ideas";
+              }}
+            />
+          )}
+        </>
       )}
       <footer className="page-source">
         <Source path="docs/product/IDEAS.md" />
@@ -154,20 +221,31 @@ export function IdeaDetail({ id }: { id: string }) {
   const notes = related.filter((doc) => doc.kind !== "PRD");
   return (
     <>
-      <a className="back-link" href="#/ideas">
-        ← Back to the idea garden
+      <a
+        className="back-link"
+        href={`#/ideas?layer=${encodeURIComponent(idea.layer)}`}
+      >
+        ← Back to this territory
       </a>
       <PageHeading
-        eyebrow={`${idea.id} / ${idea.layer} / ${idea.theme}`}
-        title={idea.title}
-        description="Read the source status and any PRD decision before treating an idea as implementation work. A linked PRD may be Draft, Approved, or Parked."
+        eyebrow={`${idea.id} / ${idea.layer}`}
+        title={ideaLabel(idea)}
+        description={ideaTakeaway(idea)}
       >
-        <Badge>{idea.state}</Badge>
+        <Badge>{ideaStatus(idea)}</Badge>
       </PageHeading>
       <div className="question-panel">
-        <span className="eyebrow">THE NEXT QUESTION</span>
+        <span className="eyebrow">THE OPEN QUESTION</span>
         <p>{idea.question}</p>
       </div>
+      <details className="source-details">
+        <summary>Original idea and source status</summary>
+        <h2>{idea.title}</h2>
+        <p>
+          {idea.theme} · {idea.state}
+        </p>
+        <Source path="docs/product/IDEAS.md" />
+      </details>
       <section className="bottom-section">
         <div className="section-label">
           <h2>Product briefs</h2>
@@ -181,10 +259,13 @@ export function IdeaDetail({ id }: { id: string }) {
           </div>
         ) : (
           <p className="muted">
-            No PRD yet. The idea remains open for exploration.
+            No PRD yet. An idea is not a delivery commitment.
           </p>
         )}
       </section>
+      {(id === "IDEA-032" || id === "IDEA-045") && (
+        <RelationshipMap focus={id} />
+      )}
       <section className="bottom-section">
         <div className="section-label">
           <h2>Explore the thinking</h2>

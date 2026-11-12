@@ -88,8 +88,8 @@ Use a non-localhost secure origin for native mobile/headset AR so the localhost-
 - `pnpm run dev:capture:ai` opens a visible collaborative runtime;
   `pnpm run dev:capture:agent` runs the managed browser headlessly.
 - Public `XR_TEST_MODE` values are `iwer` and `off`. The jsdom-only shim stays internal to unit tests.
-- Every push, pull request, manual run, and weekly dependency-drift run uses the
-  same CI tier: quality checks, production builds, Knowledge Atlas browser
+- Every push to `main` and every manual run uses the same CI tier (docs-only
+  pushes run no suites): quality checks, production builds, Knowledge Atlas browser
   checks, IWER surfaces, and the real capture-to-viewer pipeline. Browser jobs
   install Chromium and upload failure diagnostics.
 - Local `ktx` is optional. If you install it, capture builds use the same higher-quality compression path as CI.
