@@ -26,7 +26,8 @@
   handoff. Durable evidence stays in the e2e checks and their reports.
 
 This pnpm monorepo contains `apps/capture` (WebXR recording and GLTF export),
-`apps/viewer-api` (upload and storage), and `apps/viewer-web` (feed and AR viewer).
+`apps/viewer-api` (upload and storage), `apps/viewer-web` (feed and AR viewer),
+and `apps/knowledge` (read-only Markdown atlas).
 Shared contracts, configuration, and tooling live in `packages/`.
 
 Use TypeScript and existing shared configuration. Keep app-specific logic local;
@@ -37,7 +38,7 @@ Read `AGENT_CONTRACT.md` when selecting commands, validation scope, or XR enviro
 settings. Use `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr`
 locally before merging. Hosted CI runs only on pushes to `main` (only the
 suites relevant to the merged files) and on manual dispatch; it never runs
-on branches or pull requests, so local verification is the pre-merge gate.
+on branches, so local verification is the pre-merge gate.
 Documentation-only edits need documentation checks, not every application test.
 Complete relevant checks and fixes before handoff.
 
@@ -46,6 +47,10 @@ process in `docs/FEATURE_WORKFLOW.md` (via the `feature-delivery` skill in
 `.agents/skills/feature-delivery/SKILL.md`); do not wait for the user to name it.
 Judge product behavior against `docs/product/concepts/what-a-hologram-is.md`:
 a hologram is a recorded event, viewed through a portal on flat screens.
+Before any public launch, announcement, or share link, run the `launch-qa`
+skill (`.agents/skills/launch-qa/SKILL.md`). Whenever the user mentions
+launching, going live, going public, or posting the app, remind them to run it
+(and offer to) unless it already passed on the current `main`.
 Judge any UI or visual change against `docs/product/design/styleguide.md`
 and take its values from `docs/product/design/tokens.json`.
 
@@ -79,9 +84,10 @@ and session length multiplies it.
 - Run commands that may take over two minutes in the background and wait for
   the completion notice; do not poll in a loop or let a foreground command
   reach its timeout.
-- Send broad searches and file sweeps to a subagent so only its conclusion
-  enters the conversation. Print excerpts (`sed -n`, `grep`, `head`) instead
-  of whole large files or logs.
+- Do small lookups yourself: a known file, a handful of greps, one check.
+  Print excerpts (`sed -n`, `grep`, `head`) instead of whole large files or
+  logs. Send a sweep to a subagent only when it would read many files and you
+  need just the conclusion (see "Subagents: fold in by default").
 - Iterate on the narrowest check, then widen once: one capture XR check
   (`pnpm --filter @holoim/capture run test:xr:body`), one replay fixture
   (`XR_REPLAY_ONLY=<name>`), and the full tier only before pushing. See
@@ -90,10 +96,31 @@ and session length multiplies it.
 ## Model routing
 
 Pick the tier when starting a session; an agent cannot change its own model
-mid-session, so a lead delegates lighter work to a pinned subagent instead.
-Split work into small tasks and give each one to a subagent on the matching
-tier (one module, one check run, one search); the lead keeps only design,
-integration, and decisions. Smaller tasks keep each context short.
+mid-session, so a lead delegates lighter work to a pinned subagent only when
+the criteria below say a subagent earns its cost.
+
+### Subagents: fold in by default
+
+One agent in one context sees how results connect; every subagent adds a
+nested model loop (latency) and a lossy summary handoff, and the lead cannot
+check what it missed. So keep work in the main loop and split by context
+isolation, never by problem type or role. Use a subagent only when:
+
+1. the job reads or produces a lot of output the lead does not need (a wide
+   search sweep, a long check log, a big diff review) and returns a compact
+   result;
+2. several independent jobs run in parallel and each can discard its context
+   afterward; or
+3. the lead's context is already bloated enough to hurt quality (then prefer a
+   fresh session over more delegation, per "One task per session").
+
+Not subagent work: one module edit, one grep, a single short command, anything
+whose output the lead must reason over in detail, or steps that chain on each
+other's results (do those in one loop). When a subagent is warranted, pass the
+goal, files and done criteria, and ask for a compact result with paths and
+line numbers. Check that result before relying on it; a handoff can drop the
+detail that matters. If a delegated step keeps coming back incomplete, pull it
+back into the lead.
 
 | Tier | Work | Claude Code | Codex | Muse |
 |---|---|---|---|---|
@@ -109,7 +136,8 @@ Routing is the agent's job, not the user's. Do it automatically:
   I'm on <model>. <Cheaper|Stronger> option: <model or subagent> (<why>).`
   Say nothing when the model already fits.
 - Warn in both directions. Opus on Standard or Light work wastes budget:
-  delegate it to a pinned subagent. Sonnet on Deep work risks a wrong
+  delegate it to a pinned subagent when the criteria above hold, otherwise
+  just recommend a cheaper session. Sonnet on Deep work risks a wrong
   design: tell the user and recommend a fresh Opus session before starting.
 - Escalate instead of looping: when a Standard model fails the same check
   twice, stop, report the failure, and recommend Opus (as a subagent for
@@ -141,8 +169,11 @@ Routing is the agent's job, not the user's. Do it automatically:
 ## Sharing work between agents
 
 Multiple agents share this repo, so uncommitted work is invisible to the others.
-Always work in your own worktree under `.worktrees/`; the main checkout is the
-integration point only and never takes edits.
+Always work in your own worktree under `.worktrees/` (a Claude Code session
+worktree under `.claude/worktrees/` is also fine); the main checkout is the
+integration point only and never takes edits. A Claude Code hook
+(`scripts/hooks/guard-main-checkout.mjs`) blocks Edit and Write there, except
+for git-ignored files and while resolving a merge, cherry-pick or rebase.
 
 - Before starting, run `git fetch` and check `git status`; read any in-flight
   brief in `docs/features/README.md` before touching overlapping files.
@@ -156,43 +187,55 @@ integration point only and never takes edits.
   by change type, never by agent: `feature/`, `bug/`, `docs/`, `infra/`
   (e.g. `feature/ar-recenter`, `infra/metavr-setup`). Never edit files another
   agent has modified in a shared tree.
-- Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`),
-  dev servers, and local databases are still shared, so only one agent runs
+- Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`,
+  `5175`, `4176`), dev servers, and local databases are still shared, so only one agent runs
   the XR harness or a dev server at a time unless ports are reassigned via
   `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`. A parallel `verify:pr` also needs
   `E2E_BASE_URL`, `E2E_POLYPIZZA_PORT`, `E2E_POLYHAVEN_PORT`,
   `E2E_CAPTURE_URL` and `KNOWLEDGE_E2E_PORT` moved off their defaults.
 - As soon as your change is working and verified, commit and push your branch.
-  You are pre-authorized to commit, push, open a pull request, and merge on
-  green CI without asking; do not stop for approval on those steps. After
-  merge, confirm the automated deploy health checks passed and report the
-  live URLs. Still ask before product or scope decisions, secret or billing
-  changes, and destructive operations (force-push, volume or snapshot
-  actions). Stage only the files you changed by name — never commit another
-  agent's in-progress work, and never use a broad `git add`.
+  You are pre-authorized to commit, push your branch, and merge it into
+  `main` locally once `pnpm run verify:pr` passes, without asking; do not stop
+  for approval on those steps. Never open pull requests: verified work lands
+  by merging the branch into `main` locally. After the push to `main`, confirm
+  the automated deploy health checks passed and report the live URLs. Still ask
+  before product or scope decisions, secret or billing changes, and destructive
+  operations (force-push, volume or snapshot actions). Stage only the files you
+  changed by name — never commit another agent's in-progress work, and never
+  use a broad `git add`.
 - Git transport is HTTPS with the `gh` credential helper (repo-local config:
   `credential.https://github.com.helper` → `gh auth git-credential`). SSH
   fails inside sandboxed agent sessions (`No user exists for uid 501` — the
   sandbox blocks the user-database lookup SSH requires); HTTPS through `gh`
   works with no approval. Do not switch the remote back to SSH.
 - The lead merges the verified branch into `main`, pushes, then removes the
-  worktree (`git worktree remove`) and deletes the merged branch. If a push is
+  worktree (`git worktree remove`) and deletes the merged branch (check
+  `git branch --merged main` afterwards). If a push is
   rejected because another agent landed first, pull with rebase, re-run the
   affected check, and push again. Do not force-push.
-- Every push to `main` runs CI and a deploy, so merge to `main` as rarely as
-  possible. Batch follow-up fixes locally, and group finished, verified
-  changes into one merge: push the verified branch, record it as ready in
-  `HANDOFF.md`, and merge it together with the next finished change rather
-  than on its own. Documentation-only changes ride along with the next merge
-  unless the user asks for them on `main` sooner. CI also cancels a run when
-  a newer push lands, and the cancelled run's minutes are lost.
+- Every push to `main` runs CI and a deploy, so batch within a task: commit
+  each step and its follow-up fixes locally, and merge to `main` once, when
+  the whole task is finished and verified. That merge happens in the same
+  session, documentation-only changes included, so the session can be
+  archived; never park finished work as "ready" for a later merge. A newer
+  push also cancels in-flight CI test jobs (never deploys), and the cancelled
+  run's minutes are lost.
 
 ## Agent configuration (Codex and Claude Code)
 
-Keep one source of truth for both agents; `pnpm run doctor` enforces this layout.
+Keep one source of truth for both agents; `pnpm run doctor` checks the
+`CLAUDE.md` and `.claude/skills` symlinks and that `.mcp.json` and
+`.codex/config.toml` register the same MCP server names. Everything else here
+is convention.
 
 - Instructions: edit `AGENTS.md` files only. Each `CLAUDE.md` is a symlink to the
   `AGENTS.md` beside it; add the same symlink when creating a new nested guide.
+  The exception is `.agents/skills/gstack/CLAUDE.md`, which is upstream-owned
+  and exempt from the symlink rule (its browser rules apply under that directory).
+- When an instruction file and the code disagree, follow the code and report the
+  mismatch in your final reply; then fix the stale line in the owning file.
+- Typecheck with each package's own `typecheck` script (root uses `tsc`;
+  `apps/knowledge` uses `tsgo`).
 - Skills: add skill directories under `.agents/skills/`. `.claude/skills` is a
   symlink to that directory, so never create files inside `.claude/skills` directly.
 - MCP servers: put launch logic in an executable `scripts/mcp/<name>.sh`, then

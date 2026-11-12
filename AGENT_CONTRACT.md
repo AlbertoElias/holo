@@ -67,9 +67,8 @@ Run automation from these scripts unless a task explicitly requires lower-level 
   comprehensive workspace checks if it cannot classify a change safely.
 - For documentation-only changes, check the edited content and references; do not
   run application suites solely because a Markdown file changed.
-- Required before opening or updating a pull request: run `pnpm run verify:pr`
-  locally. Hosted CI does not run on branches or pull requests, so this local
-  run is the pre-merge gate; do not dispatch hosted CI to substitute for it.
+- Required before merging into `main`: run `pnpm run verify:pr` locally. Hosted
+  CI does not run on branches, so this local run is the pre-merge gate; do not dispatch hosted CI to substitute for it.
   Hosted CI is only the final check on `main` before deployment: never use it
   to reproduce, debug or verify a change.
 
@@ -113,7 +112,7 @@ hosted CI is still a defect to explain, not something to rerun.
 ## Fast Agent Loop
 
 Iterate on the narrowest check that exercises the change, then widen once
-before pushing. Measured locally on Node 22 (M-series, shared machine):
+before pushing. Measured locally on Node 24 (M-series, shared machine):
 
 | Step | Command | Wall time |
 |---|---|---|
@@ -237,13 +236,13 @@ Supported env vars for smoke and XR scripts:
 | Agent edit loop | `pnpm run verify:agent` |
 | API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` (real capture export → upload → viewer render) |
 | XR behavior change | `pnpm run verify:agent` + `pnpm run verify:xr` |
-| Pull request / pre-merge | `pnpm run verify:pr` locally (hosted CI does not run on PRs) |
+| Pre-merge | `pnpm run verify:pr` locally (hosted CI does not run on branches) |
 
 ## CI Contract
 
 - `.github/workflows/ci.yml` exposes one stable check on main: `CI Gate`.
   It triggers only on pushes to `main` and on manual dispatch — never on
-  branches or pull requests. Agents verify locally instead:
+  branches. Agents verify locally instead:
   `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr` before
   merging (see Pre-Handoff Check Policy).
 - On a push to `main`, a `changes` job (`scripts/ci-changed-areas.sh`,
@@ -311,5 +310,6 @@ Supported env vars for smoke and XR scripts:
 ## Git Conventions
 
 - Treat this workspace as one monorepo for commits and branches.
-- Keep branch names intent-scoped (`codex/*`, `claude/*`, `feature/*`, `fix/*`, `chore/*`).
+- Name branches by change type, never by agent: `feature/*`, `bug/*`, `docs/*`,
+  `infra/*` (see "Sharing work between agents" in `AGENTS.md`).
 - Keep changes app-local unless a shared contract/tooling update is required.
