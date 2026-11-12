@@ -284,3 +284,68 @@ for the ways down.
   At 30 s and 33 s two or three break on him at once. Calm (34.6–35.6 s)
   stills the swell; the sea climbs over him and the camera, and the dark's
   sky takes over from the frame the camera is under.
+
+### Decided for the fifth pass
+
+The user's notes on draft 11, taken as given:
+
+- **The music steps back.** It should be more succinct, with less of a
+  leading role.
+- **The sea is beautiful.** Rothko's colours, but beautiful: the still sea
+  above all.
+- **Letting go reads in three steps.** He breathes, then the gas or the sea
+  calms, then he passes to the next layer.
+- **The dark at 38–44 s is not plain black.**
+- **He comes home small.** At 58.3 s he no longer crosses the man's chest at
+  a large size.
+
+### How the fifth pass is built
+
+- **The still sea** is painted in Rothko's soft horizontal fields by depth
+  across the frame:
+  - near: oxblood;
+  - middle: a red field, then a plum band;
+  - far: a glowing orange horizon.
+  
+  The fields are scumbled with a slow marble and fade at the edge into a
+  deep red sky.
+- **The waves** rise out of the sea's own red at the foot and the ends into
+  their colour up the face. Each keeps some of the red, under a faint cream
+  lip. Their colours are all one warm family: cadmium, vermilion, saffron,
+  burnt orange, oxblood, plum, magenta, a deep ultramarine and a warm white.
+  The pigment names stay, because the music keys on them. The water between
+  him and the camera stays lower than before.
+- **Letting go, gas.**
+  - 21.6–22.2 s: still.
+  - 22.6 s: one big breath in (chest open, head up, arms wide), held to
+    23.2 s.
+  - 23.2–23.9 s: a long breath out. During the breath the puffs round him
+    draw in, then are pushed out, his glow swells and lets go, and the
+    panting stops.
+  - 23.5–24.3 s: the gas calms.
+  - 24.0–24.7 s: it opens under him.
+  
+  The breath starts after 22.5 s because the feed fit samples that frame,
+  and the swelling glow would pull the dome off C.
+- **Letting go, sea.**
+  - 34.75 s: a breath in, as the last wave passes.
+  - To 35.7 s: a breath out, into limp, with the same glow swell.
+  - 35.5–36.1 s: the swell calms.
+  - From 36.05 s: the sea rises over him.
+- **The dark** shows the sea's underside from the frame the camera is under
+  until 44.6 s. It is a wide arc behind and above him, fading to black at
+  its ends, in soft fields: black,
+  oxblood, a glowing red seam, plum, black. It rises out of the frame as he
+  sinks, until only his own light is left. It is built at a tenth of its
+  size and drawn at s = 10, like the skies, so the feed fit stays on C.
+- **Home.**
+  - 57.7–58.4 s: he shrinks with the world toward the pocket pin, and the
+    child goes down with him.
+  - 58.5 s: the pin takes over at his pocket size.
+- **The music** is sparser and quieter:
+  - Gas: eighths only, fewer hats, crashes about 60% as loud, and a falling
+    square on every other gust.
+  - Demand voices: gather for 0.75 s.
+  - Sea: the bass is in quarters, and stabs come only on the big waves.
+  - Every layer is normalised lower.
+  - The breath and opening cues moved to the new times.

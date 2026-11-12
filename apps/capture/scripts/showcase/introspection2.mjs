@@ -183,8 +183,8 @@ export async function build() {
   console.error(`switches: shirt ${S1.toFixed(3)}, gas→liquid ${T_GL.toFixed(3)}, back: dark→liquid ${B_DL.toFixed(3)}, liquid→gas ${B_GL.toFixed(3)}, gas→man ${B_S1.toFixed(3)}`);
   // Letting go in the sea: the waves die (calm), and the sea climbs over him and past the camera, so the
   // dark is under it. The feed sees the dark's sky from the moment the camera is under.
-  const calm = (t) => smooth(34.6, 35.6, t);
-  const seaRise = K([[0, 0], [35.7, 0], [36.2, 0.7], [36.6, 1.9], [37, 3.0]]);
+  const calm = (t) => smooth(35.5, 36.1, t); // after his breath out (acting: 35.15–35.7)
+  const seaRise = K([[0, 0], [36.05, 0], [36.4, 0.7], [36.7, 1.9], [37, 3.0]]);
   const camY = FOLLOW[1] * D_CAM;
   let under = Math.round(36.2 * FPS);
   while (under < 37 * FPS && -POOL.drop + seaRise(under / FPS) < camY) under += 1;
@@ -226,7 +226,7 @@ export async function build() {
     return { yaw, pitch, roll };
   };
   // His pelvis against the sea, in his own metres (×TRAV·ZW_LIQ): chest-deep, sinking a little once he lets go.
-  const OFF = K([[27, -0.25], [35.6, -0.27], [36.3, -0.6], [36.9, -0.9]]);
+  const OFF = K([[27, -0.25], [35.9, -0.27], [36.45, -0.6], [36.9, -0.9]]);
   const buffet = (t) => smooth(11.5, 13, t) * (1 - smooth(21.5, 22.5, t));
   const floor37 = travellerPlace(trav, 37).floor;
   const zWorld = (t) => mix(mix(Math.min(S(t), ZW), ZW_LIQ, smooth(25.3, 26.8, t)), Z * DG(37), smooth(36.3, 37, t));
@@ -246,8 +246,8 @@ export async function build() {
     const p = gasBase(t).add(new Vector3(...knock(GUSTS, t, 0.42)));
     // Letting go: he drifts over the opening and sinks into it, then stays behind its hole.
     const iw = irisW(t);
-    p.lerp(iw.clone().addScaledVector(F3, 0.1).addScaledVector(SU3, 0.12), smooth(23.9, 24.6, t));
-    p.lerp(iw.clone().addScaledVector(F3, -0.8), smooth(24.6, 25.3, t));
+    p.lerp(iw.clone().addScaledVector(F3, 0.1).addScaledVector(SU3, 0.12), smooth(24.1, 24.65, t));
+    p.lerp(iw.clone().addScaledVector(F3, -0.8), smooth(24.65, 25.3, t));
     return p;
   }
   // Him in the paint without the blows.
@@ -319,8 +319,20 @@ export async function build() {
       const p = new Vector3(0, PELVIS, 0).applyMatrix4(frameMatrix(f));
       root = { T: p.toArray(), Q: f.Q, s: f.s };
     }
+    let childRoot = hugFrame(C, t);
+    // Home (57.7–58.4): he keeps no size of his own; he shrinks with the world into the man's pocket,
+    // where the pin takes him at 58.5, and the child goes down with him.
+    const home = t >= 57.6 && t < 58.5 ? smooth(57.7, 58.4, t) : 0;
+    if (home > 0) {
+      const pin = { T: zoomed(pinLocal.clone().applyMatrix4(chest7).toArray(), C, S(t)), Q: chest7Q.clone().multiply(Y_PI), s: TRAV * S(t) };
+      const k = (pin.s / root.s) ** home;
+      const P = root.T;
+      const T = P.map((v, i) => mix(v, pin.T[i], home));
+      childRoot = { ...childRoot, T: childRoot.T.map((v, i) => T[i] + k * (v - P[i])), s: k * childRoot.s };
+      root = { T, Q: root.Q.clone().slerp(pin.Q, home), s: k * root.s };
+    }
     roots.trav.push(root);
-    roots.child.push(hugFrame(C, t));
+    roots.child.push(childRoot);
   }
   const at = (t) => keyT.indexOf(t);
 
@@ -454,7 +466,7 @@ export async function build() {
     rim: [...skyCol.gas, '#efe2f7', '#e3d3f6'],
     hole: (p) => skySeen('liquid', zoomed(p, C, sGas(T_GL)))
   });
-  const gasOpen = K([[0, 0], [23.2, 0], [24.6, 1], [B_GL + 0.1, 1], [B_GL + 0.8, 0], [60, 0]]);
+  const gasOpen = K([[0, 0], [24.0, 0], [24.7, 1], [B_GL + 0.1, 1], [B_GL + 0.8, 0], [60, 0]]);
   zoomLayer('door-gas', gasIris.geo, mats.flat, ZR.gas, (t) => (active(t) === 'gas' ? sGas(t) : ZR.gas.inner), gasIris.shapes, (t) => L.irisWeights(gasOpen(t)));
 
   // --- The gas (beats 3–4): puffs and gusts, authored where the feed sees them ---------
@@ -477,6 +489,50 @@ export async function build() {
   const darkS = (t) => (active(t) === 'dark' ? sOf('dark', t) * DG(t) : ZR.dark.inner);
   const RC = 0.95;
   zoomLayer('dark-floor', L.darkFloor(C, RC, 0.5 * kappa), mats.flat, ZR.dark, darkS);
+  // The sea's underside: once the camera is under, the lit sea he sank from hangs behind and above him
+  // as Rothko's soft fields (black, oxblood, a glowing red seam, plum, black), and rises out of the
+  // frame as he sinks, so the dark is the sea receding until only his own light is left (44.6).
+  // Built at a tenth (inside the sky radius, for the feed fit) and drawn at s = 10, like the skies.
+  {
+    const { right: SR3, up: SU3, toward: SF3 } = SCREEN;
+    const FIELDS = [[0, '#030305'], [1.3, '#1a0508'], [2.5, '#43101a'], [3.4, '#701c1a'], [4.05, '#a8401c'], [4.35, '#c2602a'], [4.7, '#6e1918'], [5.5, '#3a0e22'], [6.4, '#0b0306'], [7, '#030305']].map(([b, h]) => [b, lin(h)]);
+    const field = (b) => {
+      let i = 0;
+      while (i < FIELDS.length - 2 && FIELDS[i + 1][0] < b) i += 1;
+      const [b0, c0] = FIELDS[i];
+      const [b1, c1] = FIELDS[i + 1];
+      const x = smooth(b0, b1, b);
+      return c0.map((v, k) => mix(v, c1[k], x));
+    };
+    const ROWS = 36;
+    const pos = [];
+    const col = [];
+    const idx = [];
+    // An arc 7.2 m round C across the far side (±85°), so it fills the feed's wide frame; its ends fade to black.
+    const COLS = 18;
+    const black = lin('#030305');
+    for (let j = 0; j <= ROWS; j += 1) {
+      const b = (7 * j) / ROWS;
+      for (let i = 0; i <= COLS; i += 1) {
+        const th = ((i / COLS) * 2 - 1) * (85 * PI) / 180;
+        const fade = 1 - smooth(50, 82, (Math.abs(th) * 180) / PI);
+        pos.push(...[0, 1, 2].map((k) => C[k] + 0.1 * (7.2 * Math.sin(th) * SR3[k] + (b - 3) * SU3[k] - 7.2 * Math.cos(th) * SF3[k])));
+        col.push(...field(b).map((v, k) => mix(black[k], v, fade)));
+      }
+    }
+    for (let j = 0; j < ROWS; j += 1) for (let i = 0; i < COLS; i += 1) {
+      const o = j * (COLS + 1) + i;
+      idx.push(o, o + 1, o + COLS + 1, o + 1, o + COLS + 2, o + COLS + 1);
+    }
+    const under = new BufferGeometry();
+    under.setAttribute('position', new Float32BufferAttribute(pos, 3));
+    under.setAttribute('color', new Float32BufferAttribute(col, 3));
+    under.setIndex(idx);
+    const liftShape = Float32Array.from(Array.from({ length: pos.length / 3 }, () => SU3.map((v) => 0.7 * v)).flat());
+    const seen = (t) => t >= UNDER && t < 44.6;
+    const lift = (t) => Math.min(1, Math.max(0, (t - 37) / 7.6)) ** 1.2;
+    zoomLayer('dark-underside', under, mats.flat, ZR.sky, (t) => (seen(t) ? 10 : ZR.sky.inner), [liftShape], (t) => [lift(t)]);
+  }
   // The pool of his light on the floor follows him by two translation shapes.
   const land = [HUG.land.x, 0.012, HUG.land.z];
   const pool = L.lightPool(toDark(land), 1.4 * kappa);
@@ -513,7 +569,9 @@ export async function build() {
   for (const hip of [travNodes.hipL, travNodes.hipR]) glb.animate(hip, 'scale', keyT, keyT.flatMap((t) => { const k = tiny(legs(t)); return [k, k, k]; }));
   const glowNode = meshNode('glow', L.glowShells([0, 0, 0], 0.6), mats.glow, { translation: [0, 0.3, 0], parent: travNodes.pelvis });
   // In the sea, as big as he is there, his glow draws in round his chest (the dome fit samples him at 30 s).
-  glb.animate(glowNode, 'scale', keyT, keyT.flatMap((t) => { const k = t < 44.6 || t >= 58.5 ? 1 - 0.5 * (1 - legs(t)) : 1e-4; return [k, k, k]; }));
+  // His two big breaths (acting: gas in 22.6–23.2, out to 23.9; sea in 34.75–35.15, out to 35.7) swell it and let it go.
+  const bigBreath = (t) => Math.max(smooth(22.55, 23.2, t) * (1 - smooth(23.25, 23.95, t)), smooth(34.65, 35.15, t) * (1 - smooth(35.2, 35.8, t)));
+  glb.animate(glowNode, 'scale', keyT, keyT.flatMap((t) => { const k = t < 44.6 || t >= 58.5 ? (1 - 0.5 * (1 - legs(t))) * (1 + 1.1 * bigBreath(t)) : 1e-4; return [k, k, k]; }));
 
   const kid = roots.child;
   const childRoot = glb.node({ name: 'child', translation: kid[0].T, rotation: kid[0].Q.toArray(), scale: [kid[0].s, kid[0].s, kid[0].s] });

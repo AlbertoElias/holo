@@ -199,11 +199,11 @@ const T_POSES = {
     fL: [0.08, 0.12, 0.04, 0.6, 0.05], fR: [-0.08, 0.1, 0.02, 0.6, -0.05]
   },
   inhale: {
-    sp: -0.08, cp: -0.16, hp: -0.3, np: -0.1, hL: [0.34, 1.18, 0.14, 0.7], hR: [-0.34, 1.18, 0.14, 0.7],
+    sp: -0.16, cp: -0.32, hp: -0.42, np: -0.16, spread: -0.1, hL: [0.5, 1.32, 0.12, 0.8], hR: [-0.5, 1.32, 0.12, 0.8],
     fL: [0.1, 0.1, 0.02, 0.6, 0.1], fR: [-0.1, 0.08, 0.0, 0.6, -0.1]
   },
   exhale: {
-    sp: 0.12, cp: 0.1, np: 0.16, hp: 0.32, spread: 0.12, hL: [0.52, 0.98, 0.16, 0.6], hR: [-0.52, 0.98, 0.16, 0.6],
+    sp: 0.2, cp: 0.18, np: 0.22, hp: 0.4, spread: 0.16, hL: [0.44, 0.9, 0.18, 0.55], hR: [-0.44, 0.9, 0.18, 0.55],
     fL: [0.11, 0.08, 0.04, 0.7, 0.12], fR: [-0.11, 0.06, 0.0, 0.7, -0.12]
   },
   calm: {
@@ -305,12 +305,15 @@ const travKeys = keyed([
   [10.4, 'drop'], [11.2, 'float'],
   // gas: each gust knocks him flailing; between them he snatches at his watch and his tie; then he lets go
   ...blows(unique(GUSTS), ['knocked'], (t) => (Math.round(t * 4) % 2 ? 'tieG' : 'watchG'), 'float'),
-  [21.6, 'tense'], [21.9, 'inhale'], [22.3, 'inhale'], [23.2, 'exhale'], [23.5, 'calm'], [24.0, 'calm'],
+  // He lets go: still a moment, one big breath in (22.6–23.2, held) and a long one out (to 23.9); only then
+  // does the gas calm. (It starts after 22.5 s, a feed fit sample, so the swelling glow stays out of the fit.)
+  [21.6, 'tense'], [22.2, 'tense'], [22.6, 'inhale'], [23.2, 'inhale'], [23.9, 'exhale'], [24.2, 'calm'],
   [24.5, 'drop'], [26.2, 'drop'],
   // liquid: waist-deep, paint thrown at him from every side; he is knocked, shields, gasps, curls, and goes limp
   [26.5, 'drop'], [27.0, 'tread'],
   ...blows(unique(WAVES), ['knocked', 'shield', 'gasp'], (t) => (t > 33 ? 'curl' : t > 31 ? 'shield' : 'tread'), 'tread'),
-  [35.2, 'limp'], [36.9, 'limp'],
+  // He lets go here too: a breath in as the last wave passes, out into limp; then the sea calms and rises.
+  [34.75, 'inhale'], [35.15, 'inhale'], [35.7, 'exhale'], [36.0, 'limp'], [36.9, 'limp'],
   // the dark
   [39.6, 'limp'], [40.0, 'landed'], [40.6, 'landed'], [41.3, 'careful'], [42.4, 'careful'], [42.8, 'listen'],
   [43.5, 'listen'], [43.9, 'careful'], [44.4, 'careful'], [45.3, 'kneel'], [45.8, 'reach'], [46.3, 'withdraw'],
@@ -323,7 +326,9 @@ export function travellerPose(rig, t, place = {}, ctx = null) {
   const q = travKeys(t);
   // Breath: quick and shallow in the gas and the liquid, slow in the hug, synced to the child.
   const hold = smooth(50, 51.5, t);
-  if (t < 37) breathe(q, 0.02 * (t > 11 ? 1.6 : 1), t, t > 11 ? 0.9 : 3.2);
+  // The panting stops for his two big breaths (gas 22.2–24.4, liquid 34.6–36.2), so they read.
+  const big = Math.max(win(22.2, 24.4, t, 0.2), win(34.6, 36.2, t, 0.2));
+  if (t < 37) breathe(q, 0.02 * (t > 11 ? 1.6 : 1) * (1 - big), t, t > 11 ? 0.9 : 3.2);
   else if (t > 40.4) breathe(q, mix(0.015, 0.03, hold), t, mix(2.2, 3.6, hold), 50);
   // Gasping heaves at the surface.
   q.cp -= 0.12 * win(30.8, 31.2, t, 0.15) * Math.max(0, Math.sin(2 * PI * 2.4 * t));

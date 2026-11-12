@@ -3,6 +3,7 @@ import { BEAT, GUSTS, WAVES } from './events.mjs';
 import { HEART, LOOP, smooth } from './timeline.mjs';
 
 // The way down II, third pass: the music as a chip sequencer would play it
+// (fifth pass: sparser and quieter, so it sits under the picture)
 // (BEATS.md, "Sound"). Pulse and square leads, a triangle bass, stepped
 // noise for the drums, everything on note grids, nothing natural. One 60 s
 // mono loop per layer plus the heart, and one per demand: each demand's
@@ -150,7 +151,7 @@ function stage() {
   };
   add(out, 58.5, 13.5, (u) => 0.32 * tri(hz(33))(u) + 0.07 * pulse(hz(39), 0.5)(u), pedal);
   gate(out, 12.6, 58.4, 0);
-  return toWav(normalize(out, 0.4));
+  return toWav(normalize(out, 0.3));
 }
 
 // ---------------------------------------------------------------------------
@@ -165,27 +166,28 @@ function gas() {
   for (let k = 0; ; k += 1) {
     const t = 11 + k * (BEAT / 4);
     if (t > 21.6) break;
-    const sixteenth = t > 16;
-    if (!sixteenth && k % 2) continue;
+    // Fifth pass: eighths throughout (no sixteenths), so the gas is pulse, not clatter.
+    if (k % 2) continue;
     const g = level(t);
     if (g < 0.01) continue;
-    note(out, t, BEAT / 4 - 0.02, pulse(hz(ARP[k % ARP.length] + 12), 0.25), 0.2 * g, gateEnv(BEAT / 4 - 0.02, 0.4, 0.04));
-    if (k % 2 === 0) hit(out, t, (k % 4 ? 0.06 : 0.1) * g, 12000, 0.012, 300 + k);
+    note(out, t, BEAT / 4 - 0.02, pulse(hz(ARP[(k / 2) % ARP.length] + 12), 0.25), 0.12 * g, gateEnv(BEAT / 4 - 0.02, 0.4, 0.04));
+    if (k % 4 === 0) hit(out, t, 0.06 * g, 12000, 0.012, 300 + k);
     if (k % 4 === 0) note(out, t, BEAT * 0.9, tri(hz((k / 4) % 2 ? 39 : 33)), 0.5 * g);
   }
   // The gusts: a crash and a falling square, louder as they crowd in.
   for (const e of GUSTS) {
-    hit(out, e.t, 0.5 * e.power, 6000, 0.09, 700 + e.i);
-    glide(out, e.t, 0.3, 880, 110, 0.3 * e.power, (u) => Math.exp(-u / 0.12));
+    hit(out, e.t, 0.3 * e.power, 6000, 0.07, 700 + e.i);
+    if (e.i % 2 === 0) glide(out, e.t, 0.25, 880, 110, 0.14 * e.power, (u) => Math.exp(-u / 0.1));
   }
   // The calm: his breath held (a rising triangle), then let out (a long fall).
-  glide(out, 21.85, 0.45, 220, 330, 0.25, (u) => smooth(0, 0.3, u) * (1 - smooth(0.4, 0.45, u)), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
-  glide(out, 22.35, 1.2, 330, 110, 0.35, (u) => (1 - smooth(0.4, 1.2, u)), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
+  // (acting: in 22.6–23.2, out to 23.9)
+  glide(out, 22.6, 0.65, 220, 330, 0.2, (u) => smooth(0, 0.5, u) * (1 - smooth(0.6, 0.65, u)), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
+  glide(out, 23.25, 1.1, 330, 110, 0.26, (u) => (1 - smooth(0.4, 1.1, u)), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
   // The gas opening under him: an arpeggio climbing out of the grid.
-  [57, 60, 64, 69, 72, 76, 81, 84].forEach((n, i) => note(out, 23.4 + i * (BEAT / 4), 0.11, pulse(hz(n), 0.5), 0.2, gateEnv(0.11, 0.5, 0.05)));
+  [57, 64, 69, 76].forEach((n, i) => note(out, 24.1 + i * (BEAT / 2), 0.14, pulse(hz(n), 0.5), 0.14, gateEnv(0.14, 0.5, 0.05)));
   // The way back: the gas passing, four soft notes (57.2 s).
   [69, 64, 60, 57].forEach((n, i) => note(out, 56.6 + i * BEAT * 0.6, 0.22, pulse(hz(n + 12), 0.125), 0.15));
-  return toWav(normalize(out, 0.6));
+  return toWav(normalize(out, 0.38));
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +207,7 @@ const VOICE = {
     if (k % 2) hit(out, t, 0.2 * g, 4000, 0.02, 1100 + k);
   }
 };
-const GATHER = 1.4;
+const GATHER = 0.75;
 
 /** One 60 s track per demand: its gusts, each a run of its sequence. */
 export function voices() {
@@ -218,10 +220,10 @@ export function voices() {
         const g = e.power * (0.35 + 0.65 * smooth(-GATHER, 0, x));
         VOICE[id](out, e.t + x, g, k);
         k += 1;
-        x += x < -0.5 ? BEAT / 2 : BEAT / 4;
+        x += BEAT / 2;
       }
     }
-    return [id, toWav(normalize(out, 0.7))];
+    return [id, toWav(normalize(out, 0.45))];
   }));
 }
 
@@ -239,26 +241,26 @@ export const PEAKS = [30.0, 33.0];
 
 function liquid() {
   const out = track(LOOP);
-  const level = (t) => smooth(26.6, 27.4, t) * (1 - 0.6 * smooth(34.6, 36.2, t));
+  const level = (t) => smooth(26.6, 27.4, t) * (1 - 0.7 * smooth(35.2, 36.2, t));
   for (let k = 0; ; k += 1) {
     const t = 27 + k * (BEAT / 2);
     if (t >= 37) break;
+    if (k % 2) continue; // fifth pass: quarters, not eighths
     const g = level(t);
     note(out, t, BEAT / 2 - 0.03, pulse(hz(LINE[k % LINE.length]), 0.25), 0.3 * g, gateEnv(BEAT / 2 - 0.03, 0.5, 0.06));
-    if (k % 2 === 0) hit(out, t, 0.08 * g, 11000, 0.015, 2000 + k);
-    if (k % 4 === 2) hit(out, t, 0.2 * g, 3500, 0.06, 2500 + k);
+    if (k % 4 === 0) hit(out, t, 0.05 * g, 11000, 0.015, 2000 + k);
   }
   for (const e of WAVES) {
-    for (const n of STABS[e.hue]) note(out, e.t, 0.26, pulse(hz(n + 12), 0.5), 0.13 * e.power, gateEnv(0.26, 0.35, 0.08));
-    hit(out, e.t, 0.35 * e.power, 7000, 0.07, 3000 + e.i);
+    if (e.power >= 0.85) for (const n of STABS[e.hue].slice(0, 2)) note(out, e.t, 0.22, pulse(hz(n + 12), 0.5), 0.1 * e.power, gateEnv(0.22, 0.35, 0.08));
+    hit(out, e.t, 0.2 * e.power, 7000, 0.05, 3000 + e.i);
   }
-  for (const c of PEAKS) glide(out, c, 1.3, 70, 28, 0.9, (u) => Math.exp(-u / 0.5), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
+  for (const c of PEAKS) glide(out, c, 1.3, 70, 28, 0.6, (u) => Math.exp(-u / 0.5), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
   // The opening: the bass line falls away under him.
-  glide(out, 35.6, 1.4, 220, 55, 0.25, (u) => 1 - smooth(1, 1.4, u));
+  glide(out, 36.0, 1.0, 220, 55, 0.2, (u) => 1 - smooth(0.7, 1.0, u)); // after his breath out (35.7)
   gate(out, 37, 54.6, 0);
   // The way back: the paint at rest, a slow triangle arpeggio.
   [45, 52, 57, 64, 57, 52].forEach((n, i) => note(out, 54.9 + i * BEAT, BEAT * 0.9, tri(hz(n)), 0.3, gateEnv(BEAT * 0.9, 0.4, 0.3)));
-  return toWav(normalize(out, 0.85));
+  return toWav(normalize(out, 0.5));
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +302,7 @@ function dark() {
   // The open fifth as a chip pad: A, E, A cycled in 32nds.
   const fifth = [57, 64, 69];
   add(out, 45, 13.5, (u) => pulse(hz(fifth[Math.floor(u / (BEAT / 8)) % 3]), 0.125)(u), (u) => 0.05 * warm(45 + u));
-  return toWav(normalize(out, 0.5));
+  return toWav(normalize(out, 0.4));
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +334,7 @@ function heart() {
     }
     phase += (HEART.bpm(t) / 60) * dt * scale;
   }
-  return toWav(normalize(out, 0.8));
+  return toWav(normalize(out, 0.7));
 }
 
 export function layerSounds() {

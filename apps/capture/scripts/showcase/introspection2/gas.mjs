@@ -50,7 +50,8 @@ export function puffTexture(size = 128) {
 const at = (C, a, b, c) => [0, 1, 2].map((k) => C[k] + a * SR[k] + b * SU[k] + c * SF[k]);
 
 // The wind: right to left across the frame, from a breeze to a gale by 20.5 s, dropping when he lets go.
-const speed = (t) => mix(0.25, 1.35, smooth(10, 20.5, t)) * (1 - 0.8 * smooth(21.3, 22.6, t));
+const win = (a, b, t, r) => smooth(a - r, a, t) * (1 - smooth(b, b + r, t));
+const speed = (t) => mix(0.25, 1.35, smooth(10, 20.5, t)) * (1 - 0.8 * smooth(23.5, 24.3, t)); // calms after his breath out
 const WIND = (() => {
   const out = [0];
   for (let i = 1; i <= 6100; i += 1) out.push(out[i - 1] + 0.01 * speed(i * 0.01));
@@ -119,13 +120,14 @@ export function gasSprites(ctx) {
   puffs.sort((p, q) => p.c - q.c);
 
   const entry = (t) => Math.min(1, ctx.S(t) / 100) ** 0.6;
-  const calm = (t) => smooth(21.3, 22.6, t);
-  const open = (t) => smooth(23.2, 24.6, t); // from his breath out (acting: exhale 23.2)
+  // He breathes (acting: in 22.6, out 23.2–23.9), then the gas calms, then it opens under him.
+  const calm = (t) => smooth(23.5, 24.3, t);
+  const open = (t) => smooth(24.0, 24.7, t);
   const gone = (t) => smooth(24.5, 25.4, t);
 
   // One puff at t: { p: centre, h: half size, th: angle } (h 0 hides it).
   function ambientAt(pf, t, back) {
-    const w = back ? windX(22.6) + 0.08 * (t - 56) : windX(t);
+    const w = back ? windX(24.3) + 0.08 * (t - 56) : windX(t);
     const a = wrapA(pf.a0 - w * pf.drift);
     const env = Math.sin((Math.PI * (a + BOX.a)) / (2 * BOX.a)) ** 0.6;
     const wob = 0.35 * mix(1, 0.4, back ? 1 : calm(t));
@@ -163,7 +165,9 @@ export function gasSprites(ctx) {
     const H = ctx.him(t);
     const a = pf.phase + pf.orbit * t + 0.25 * n(pf.seed, t * 0.5, 0.2);
     const o = open(t);
-    const R = pf.ring * (1 + 0.15 * n(pf.seed + 3, t * 0.8, 0.5)) * (1 + 2.8 * o ** 1.4);
+    // His big breath moves the gas round him: drawn in as he breathes in, pushed out as he breathes out.
+    const breath = 1 - 0.4 * win(22.6, 23.2, t, 0.35) + 0.35 * win(23.3, 23.95, t, 0.35);
+    const R = pf.ring * breath * (1 + 0.15 * n(pf.seed + 3, t * 0.8, 0.5)) * (1 + 2.8 * o ** 1.4);
     const p = [0, 1, 2].map((j) => H[j] + R * (Math.cos(a) * SR[j] + pf.tilt * Math.sin(a) * SU[j]) + pf.sf * SF[j]);
     const h = pf.size * smooth(ctx.from + 0.8, ctx.from + 1.8, t) * (1 - smooth(0.35, 1, o)) * (1 - gone(t));
     return { p, h, th: pf.angle + pf.spin * t };

@@ -1,7 +1,7 @@
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 
 import { lin } from '../introspection/common.mjs';
-import { HUES, WAVES } from './events.mjs';
+import { WAVES } from './events.mjs';
 import { fbm, noise3 } from './flow.mjs';
 import { SCREEN } from './zoom.mjs';
 import { rng } from './layers.mjs';
@@ -18,7 +18,6 @@ import { runs, worldMorph } from './world.mjs';
 
 /** The sea: its rest level sits `drop` below C (above it when negative), R across. */
 export const POOL = { drop: 0.1, R: 8, rings: 34, segs: 88 };
-const SEA_ORDER = ['cadmium', 'ultramarine', 'viridian', 'magenta', 'cobalt', 'violet', 'orange', 'ultramarine', 'ochre', 'violet'];
 
 /** The sea's surface height (world y offset from its rest) at offset (x, z) from its centre. */
 function swell(x, z, t, calmness) {
@@ -60,24 +59,42 @@ export function liquid(ctx) {
     const r = R * (i / rings) ** 1.5;
     for (let j = 0; j < segs; j += 1) polar.push([r, (j / segs) * 2 * Math.PI]);
   }
-  // The sea is the deep pigments marbled together, in shadow, so the waves' colours read against it.
-  const hues = SEA_ORDER.map((h) => lin(HUES[h]).map((v) => v * 0.24));
-  const shadeN = fbm(noise3(733), 2);
+  // The still sea is a Rothko: soft-edged fields of colour stacked away from the camera, a dark
+  // oxblood at our feet, a glowing red where he stands, a band of plum, a luminous vermilion and
+  // saffron toward the horizon. Their edges are feathered and their faces scumbled, never marbled.
+  const TWs = (() => {
+    const n = Math.hypot(SCREEN.toward[0], SCREEN.toward[2]);
+    return [SCREEN.toward[0] / n, SCREEN.toward[2] / n];
+  })();
+  const FIELDS = [
+    [-9, '#2c070c'],
+    [-2.4, '#420c12'],
+    [-0.9, '#6e1918'],
+    [0.9, '#7c2018'],
+    [2.0, '#4a1430'],
+    [3.6, '#3d1230'],
+    [4.8, '#a83a1a'],
+    [6.4, '#cf7a2a'],
+    [9, '#cf7a2a']
+  ].map(([u, hex]) => [u, lin(hex)]);
+  const field = (u) => {
+    let i = 0;
+    while (i < FIELDS.length - 2 && u > FIELDS[i + 1][0]) i += 1;
+    const [u0, c0] = FIELDS[i];
+    const [u1, c1] = FIELDS[i + 1];
+    const k = smooth(0, 1, (u - u0) / (u1 - u0));
+    return c0.map((v, m) => mix(v, c1[m], k));
+  };
   const sky = lin('#2a080b');
   const col = [];
   for (const [r, a] of polar) {
     const x = r * Math.cos(a);
     const z = r * Math.sin(a);
-    const q = 1.6 * warp(x * 0.3 + 3, z * 0.3, 0.4);
-    const v = marble(x * 0.24 + q, z * 0.24 - q, 1.3) * 0.5 + 0.5;
-    const L = SEA_ORDER.length;
-    const f = ((((v * 2.6 + r * 0.05) % 1) + 1) % 1) * L;
-    const i0 = Math.floor(f);
-    const k = smooth(0.55, 1, f - i0);
-    const sh = 0.7 + 0.6 * (shadeN(x * 0.5, z * 0.5, 4.2) * 0.5 + 0.5);
-    const c = hues[i0 % L].map((u, m) => mix(u, hues[(i0 + 1) % L][m], k) * sh);
-    const fade = smooth(0.7 * R, R, r); // the far edge sinks into the sky
-    col.push(...c.map((u, m) => mix(u, sky[m], fade)));
+    const u = -(x * TWs[0] + z * TWs[1]) + 0.55 * warp(x * 0.35 + 3, z * 0.35, 0.4); // feathered edges
+    const scumble = 0.78 + 0.4 * (marble(x * 0.45, z * 0.9, 1.3) * 0.5 + 0.5); // brushed, along the fields
+    const c = field(u).map((v) => v * scumble);
+    const fade = smooth(0.8 * R, R, r); // the far edge sinks into the sky
+    col.push(...c.map((v, m) => mix(v, sky[m], fade)));
   }
   const idx = [];
   for (let j = 0; j < segs; j += 1) idx.push(0, 1 + ((j + 1) % segs), 1 + j);
@@ -88,8 +105,8 @@ export function liquid(ctx) {
       idx.push(a, b, a + segs, b, b + segs, a + segs);
     }
   }
-  // The marbling drifts slowly round him, as currents.
-  const drift = (r) => 0.12 / (1 + 0.3 * r);
+  // The fields barely drift (they are the painting).
+  const drift = (r) => 0.012 / (1 + 0.3 * r);
   const poolAt = (t, back) => {
     const out = new Float32Array(polar.length * 3);
     // Coming in, the sea grows out of C with the zoom; going out, it shrinks back into it.
@@ -141,6 +158,8 @@ export function liquid(ctx) {
     const n = Math.hypot(SCREEN.toward[0], SCREEN.toward[2]);
     return [SCREEN.toward[0] / n, 0, SCREEN.toward[2] / n];
   })();
+  const CREAM = lin('#f1dcb4');
+  const SEA_RED = lin('#6e1918');
   const bump = (u) => (u < UC ? 0.5 - 0.5 * Math.cos(Math.PI * (u / UC)) : Math.cos((Math.PI / 2) * ((u - UC) / (1 - UC))) ** 0.6);
 
   const waves = WAVES.map((e, wi) => {
@@ -190,7 +209,7 @@ export function liquid(ctx) {
           // Between him and the camera the sea stays low: the waves rise behind and beside him,
           // break on him, and sink as they roll on toward us, so he is never hidden.
           const depth = (P0[0] + px - H[0]) * TW[0] + (P0[2] + pz - H[2]) * TW[2];
-          h = mix(h, -0.06, smooth(0.15, 1.3, depth));
+          h = mix(h, -0.3, smooth(-0.1, 0.9, depth));
           out.push(P0[0] + px, seaAt(P0[0] + px, P0[2] + pz, t) + h - sink, P0[2] + pz);
         }
       }
@@ -223,8 +242,9 @@ export function liquid(ctx) {
         const u = j / (NS - 1);
         const f = bump(u);
         const lip = smooth(0.8, 1, f) * (u >= UC ? 0.45 : 0.2) * (0.3 + 0.7 * Math.exp(-(((a * LH) / 1.8) ** 2))); // palest where it breaks
-        const body = mix(0.24, 1.15, Math.min(1, (f * end) ** 0.7 * 1.15));
-        colours.push(...c.map((v) => Math.min(1, mix(v * body, 1, lip))));
+        // Out of the sea's own red at the foot and the ends into the wave's colour up its face.
+        const k = 0.88 * Math.min(1, (f * end) ** 0.8 * 1.1);
+        colours.push(...c.map((v, m) => Math.min(1, mix(mix(SEA_RED[m], v * 0.95, k), CREAM[m], lip * 0.35))));
       }
     }
     const index = [];

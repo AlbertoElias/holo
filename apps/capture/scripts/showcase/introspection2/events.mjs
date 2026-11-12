@@ -65,18 +65,21 @@ export const GUSTS = [
 
 // The liquid: a sea of paint. Each wave is one colour, rolling in from its own side and breaking on
 // him; two or three are always building, and at the peaks (30, 33) they clash on him at once.
+// Rothko's colours (the Seagram and late-fifties fields): reds, oxblood, vermilion, saffron, plum and
+// a deep blue-black, kept in one warm family so the sea reads as one painting; the names stay the
+// pigments the music knows.
 export const HUES = {
-  cadmium: '#e3261b',
-  orange: '#ff7a1a',
-  ultramarine: '#2338c9',
-  viridian: '#0f8a6a',
-  magenta: '#d81b8c',
-  ochre: '#d9a514',
-  white: '#f4efe4',
-  lemon: '#f2e14a',
-  cobalt: '#1f6fe0',
-  violet: '#7a2bc8'
-};
+  cadmium: '#b5241d',
+  orange: '#d4561f',
+  ultramarine: '#1f2a50',
+  viridian: '#5a1424',
+  magenta: '#97203c',
+  ochre: '#c4602a',
+  white: '#e8c9a0',
+  lemon: '#d98a2b',
+  cobalt: '#4a1838',
+  violet: '#4e1d48'
+}
 /** A level direction toward where a wave comes from: az 0 behind the camera, 90 screen right, 180 far side.
  * None come from the camera's side, where they would hide him: they roll toward the camera, faces lit. */
 const seaDir = (az) => {
