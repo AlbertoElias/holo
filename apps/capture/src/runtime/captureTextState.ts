@@ -73,7 +73,8 @@ export function renderCaptureTextState(c: CaptureContext): string {
       headWorld: tracking.getHeadWorldPosition(new THREE.Vector3()),
       floorHead: tracking.getFloorHeadPosition() ?? null,
       refitPending: heightFit.calibration.refitting,
-      recordingSizeLocked: c.recording.isSizeLocked
+      recordingSizeLocked: c.recording.isSizeLocked,
+      recordingTakeBusy: c.recording.isTakeBusy()
     },
     mockVr: tracking.mock.snapshot(),
     ar: {
