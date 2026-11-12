@@ -168,6 +168,11 @@ before pushing. Measured locally on Node 24 (M-series, shared machine):
   build: quality in CI, `verify:pr` locally) fails unless the shards run each test exactly once. Update
   `CHECK_COST` and those scripts from the CI timing artifacts
   (`xr-checks-shard-*.json`, `playwright-web-*.json`) when a cost changes a lot.
+- `pnpm run check:ci-areas` feeds every tracked file through
+  `scripts/ci-changed-areas.sh` and fails if a source change would select no
+  CI suite (skipped jobs report green). Run it (also in `verify:pr`) after
+  editing the selector or adding a top-level path. The CI gate fails the same
+  case: no area, not `docs_only`, not `no_suite`.
 - Videos (`HAND_REPLAY_VIDEO=1`, `BODY_REPLAY_VIDEO=1`, `FACE_VIDEO=1`) screenshot every frame
   and multiply wall time; combine them with `XR_REPLAY_ONLY`.
 
