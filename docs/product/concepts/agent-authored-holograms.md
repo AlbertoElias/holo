@@ -292,7 +292,14 @@ What it added:
   meshes under animated nodes (and meshes with morph targets) times the
   distinct key times, and fails above the scene's budget (100 M). This
   piece measures 28,203 points × 1,806 frames = 51 M.
-- **The dome stays drawn in Follow.** The gold dome belongs to the viewer
-  and wraps the card; zooming the content leaves it in view. A framing hint
-  from the piece to the feed (hide the dome while the world is zoomed) is a
-  possible follow-up, not part of this scene.
+- **The dome wraps the outer layer, so name the zoom.** The gold dome is the
+  viewer's: it wraps the hologram's outermost layer, so when the piece goes
+  into itself, the dome must go with that layer and leave the view. Morph
+  targets give the feed no way to know that, so the piece names its zoom:
+  a node called `HologramZoom`, placed at the zoom's centre, with an animated
+  uniform scale equal to the outermost layer's growth. The feed's dome
+  scales about that centre every frame, sweeps past the camera on the way
+  in, and closes round the man again on the way out. The node has no mesh,
+  so the fit ignores it, and holograms without it are unchanged. Only the
+  desktop feed reads it so far; AR and the XR viewer still draw the dome at
+  home size.

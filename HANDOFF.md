@@ -48,8 +48,12 @@ queue item in [`TODOS.md`](TODOS.md).
   sent; `verify:agent` passed. The build now measures Quick Look's load and
   fails over 100 M point-frames (this scene: 50.9 M), but the Quick Look
   conversion itself is unchecked. The critic was Muse, because Codex had hit
-  its usage limit. Capture scripts and docs only, so it rides along with the
-  next merge. Not uploaded to production: that waits for the user's go-ahead.
+  its usage limit. Not uploaded to production: that waits for the user's
+  go-ahead. It also changes the viewer: the feed's dome follows a
+  `HologramZoom` node, so it grows with the outer layer and leaves the view
+  when a piece zooms into itself. Holograms without the node are unchanged.
+  `verify:pr` has not run on it yet. Open: the user's new read of the gas
+  and liquid layers (proposal in BEATS.md, awaiting their choice).
 
 ## Recently merged (grouped)
 

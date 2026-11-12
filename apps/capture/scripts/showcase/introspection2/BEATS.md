@@ -93,11 +93,90 @@ just the key.
 
 ## Decided with you
 
-1. **The dome is the viewer's, not the piece's.** It wraps you when you
-   zoom the view in, as for any hologram. The piece's own zoom happens inside
-   the content, with the camera still, so in the feed's Follow view the dome
-   stays drawn round the layers; nothing in the piece works around it.
+1. **The dome is the viewer's, and it wraps the outer layer.** When the
+   piece goes into the man, the dome grows with him and leaves the view, and
+   it closes round him again on the way back. The piece names its zoom with
+   a `HologramZoom` node, which the feed's dome follows.
 2. **The child's sobbing is synthesized**, like every other sound.
 3. **The way back zooms out** through the calmed layers: from the hug, held 55–55.5 s,
    it pauses on the liquid (56.3 s) and the gas (57.2 s), then the man is whole
    again at 58.5 s for his exhale (58.5–60 s).
+
+## Proposed: what the gas and the liquid are about (for your choice)
+
+Your note (2026-11-12): the gas is the day-to-day stresses pushing and pulling
+you; the liquid is the badly learnt fears of who you're supposed to be, the
+lack of acceptance of yourself. No words, but being in them should make you
+feel that way. Today both layers read as weather: pretty clouds, then a
+storm, with nothing that acts on her for a reason.
+
+The thread that ties both layers to the man is his **composed gestures**
+(he straightens his tie, checks his watch). In the gas they become her
+compulsions. In the liquid they become the shape she is pressed into.
+
+### The gas: pulled every way at once
+
+**A. Tugged (recommended).**
+- **The clouds:** each one is a demand with its own rhythm and its own
+  voice. They pulse out of time with one another: a buzz pattern, a
+  two-note chime, a ticking, a kettle-like rise, a clatter.
+- **The tethers:** when a cloud pulses, a thin strand shoots out and latches
+  onto one of her limbs, and pulls that limb toward it. She is stretched
+  between two or three at once. As she frees one, the next one latches.
+- **Getting nowhere:** every time she starts to swim down, a cloud slides
+  across her path and turns her round.
+- **Her acting:** between tugs she does the man's watch check, faster and
+  faster, then his tie straighten in mid-air, as if putting herself back
+  together is part of the stress.
+- **The sound:** the nagging voices stack up, each from its own cloud, and
+  get denser as the heartbeat races (100 → 140). The portal opens when she
+  tears the last strand off and dives.
+
+**B. Rush hour.**
+- **The clouds:** streams of them cross in lanes, like crowd or traffic
+  currents.
+- **Her path:** she has to cross the lanes. She is jostled and swept
+  sideways, and keeps getting carried back to where she started.
+- **The sound:** each lane sounds as it passes her ear.
+- **What it trades:** it is simpler to read than A, but it says "busy"
+  more than "pulled apart".
+
+### The liquid: pressed into who you're supposed to be
+
+**A. The mould (recommended).**
+- **The slabs:** their soft edges resolve into the man's own silhouette,
+  in his suit and hat, huge and composed: who she is supposed to be.
+- **The pressing:** the slabs close on her and press her into that outline.
+  She is held in the pose, his straight back and tie hand, and struggles
+  out. Then the next slab presses her into it again. That is the
+  "pulled under" beat, now with a reason.
+- **The tune:** the waltz, his "proper" tune, comes back huge, slowed and
+  heavy, pressing down from above. Sub-bass clamps land when the slabs
+  close. The heartbeat drowns.
+- **Her acting:** she hides her face, curls small, tries the man's pose
+  and can't hold it.
+- **The turn:** at the bottom she stops fighting the mould and goes limp.
+  Only then does the seam open, so letting go of who she should be is
+  what lets her find the child. The hard cut at 37 s lands on that
+  surrender.
+
+**B. The faces that turn away.**
+- **The figures:** looming, perfect, upright copies of her, amber and
+  composed, stand in the liquid.
+- **Her reaching:** she reaches toward each one, and each turns its back.
+  The liquid between them gets heavier.
+- **The turn:** at the bottom she stops reaching and sinks through the seam.
+- **What it trades:** it is more about rejection by others than
+  self-rejection, and adds three more moving figures, which costs Quick
+  Look budget.
+
+### What it costs
+
+- **Both A options reuse what exists:** the layers' morph-target zoom, the
+  key-framed acting and the positional emitters.
+- **New geometry:** the tethers are thin strips with a few key frames each.
+  The mould is the man's silhouette extruded into the slabs' shape, so it
+  adds no new moving figure.
+- **Quick Look:** it stays under the 100 M point-frame budget (today 50.9 M).
+- **What it means for the sheet:** beats 3 to 6 change, in picture, sound
+  and acting. Timing, the zoom and the hug stay.

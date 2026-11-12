@@ -211,6 +211,12 @@ export async function build() {
   }
   const at = (t) => keyT.indexOf(t);
 
+  // --- The zoom, named for the viewer -------------------------------------------
+  // The viewer's dome wraps the outermost layer, the man, so it grows with him
+  // about C and leaves the view when the world goes into his chest.
+  const zoomNode = glb.node({ name: 'HologramZoom', translation: C });
+  glb.animate(zoomNode, 'scale', keyT, keyT.flatMap((t) => [S(t), S(t), S(t)]));
+
   // --- The man: alive before 7 s and after 58.5 s, a statue in between ------------
   const live = (t) => t < 7 || t >= 58.5;
   const manPlace = glb.node({ name: 'man' });
