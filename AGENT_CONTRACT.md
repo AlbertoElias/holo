@@ -67,9 +67,8 @@ Run automation from these scripts unless a task explicitly requires lower-level 
   comprehensive workspace checks if it cannot classify a change safely.
 - For documentation-only changes, check the edited content and references; do not
   run application suites solely because a Markdown file changed.
-- Required before merging into `main` (or opening or updating a pull request, if
-  the user asked for one): run `pnpm run verify:pr` locally. Hosted CI does not run on branches or pull requests, so this local
-  run is the pre-merge gate; do not dispatch hosted CI to substitute for it.
+- Required before merging into `main`: run `pnpm run verify:pr` locally. Hosted
+  CI does not run on branches, so this local run is the pre-merge gate; do not dispatch hosted CI to substitute for it.
   Hosted CI is only the final check on `main` before deployment: never use it
   to reproduce, debug or verify a change.
 
@@ -237,13 +236,13 @@ Supported env vars for smoke and XR scripts:
 | Agent edit loop | `pnpm run verify:agent` |
 | API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` (real capture export → upload → viewer render) |
 | XR behavior change | `pnpm run verify:agent` + `pnpm run verify:xr` |
-| Pull request / pre-merge | `pnpm run verify:pr` locally (hosted CI does not run on PRs) |
+| Pre-merge | `pnpm run verify:pr` locally (hosted CI does not run on branches) |
 
 ## CI Contract
 
 - `.github/workflows/ci.yml` exposes one stable check on main: `CI Gate`.
   It triggers only on pushes to `main` and on manual dispatch — never on
-  branches or pull requests. Agents verify locally instead:
+  branches. Agents verify locally instead:
   `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr` before
   merging (see Pre-Handoff Check Policy).
 - On a push to `main`, a `changes` job (`scripts/ci-changed-areas.sh`,

@@ -38,7 +38,7 @@ Read `AGENT_CONTRACT.md` when selecting commands, validation scope, or XR enviro
 settings. Use `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr`
 locally before merging. Hosted CI runs only on pushes to `main` (only the
 suites relevant to the merged files) and on manual dispatch; it never runs
-on branches or pull requests, so local verification is the pre-merge gate.
+on branches, so local verification is the pre-merge gate.
 Documentation-only edits need documentation checks, not every application test.
 Complete relevant checks and fixes before handoff.
 
@@ -169,12 +169,13 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
 - As soon as your change is working and verified, commit and push your branch.
   You are pre-authorized to commit, push your branch, and merge it into
   `main` locally once `pnpm run verify:pr` passes, without asking; do not stop
-  for approval on those steps. Do not open pull requests unless the user asks
-  (CI never runs on them). After the push to `main`, confirm the automated
-  deploy health checks passed and report the live URLs. Still ask before product or scope decisions, secret or billing
-  changes, and destructive operations (force-push, volume or snapshot
-  actions). Stage only the files you changed by name — never commit another
-  agent's in-progress work, and never use a broad `git add`.
+  for approval on those steps. Never open pull requests: verified work lands
+  by merging the branch into `main` locally. After the push to `main`, confirm
+  the automated deploy health checks passed and report the live URLs. Still ask
+  before product or scope decisions, secret or billing changes, and destructive
+  operations (force-push, volume or snapshot actions). Stage only the files you
+  changed by name — never commit another agent's in-progress work, and never
+  use a broad `git add`.
 - Git transport is HTTPS with the `gh` credential helper (repo-local config:
   `credential.https://github.com.helper` → `gh auth git-credential`). SSH
   fails inside sandboxed agent sessions (`No user exists for uid 501` — the
