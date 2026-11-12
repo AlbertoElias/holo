@@ -17,7 +17,7 @@ const outDir = path.resolve(here, '../../../../output/showcase');
 export const SCENES = [
   'light', 'door', 'murmuration', 'blue-hour',
   'words', 'seasons', 'hearts', 'rain', 'bath', 'strings',
-  'street', 'orion', 'corridor', 'mirror', 'dive', 'stairs'
+  'street', 'orion', 'corridor', 'mirror', 'dive', 'stairs', 'introspection'
 ];
 
 const args = process.argv.slice(2);

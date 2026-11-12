@@ -203,3 +203,33 @@ What this set added to the findings above:
   their own light so both sides shade alike.
 - **The punchline can be too small.** The finger to the lips reads only
   when the viewer zooms to about half the first distance.
+
+## A longer piece: The way down (2026-11-11)
+
+One piece made from a person's brief, not a theme of the agent's own: a
+60-second story in four layers, each with its own sound (scene
+`introspection`).
+
+| Piece | Scene | Feeling | What the viewer's position does |
+| --- | --- | --- | --- |
+| The way down | `introspection` | Composure, then anxiety, then overwhelm, then release | A round diorama in four quarters, each a step lower. A man in his thirties stands in front of his house on a 1950s film set, checking his watch. A figure of light leaves his chest and drops through trap doors: into pastel gases that keep colliding, then dark Rothko-coloured liquids crashing like a storm, then a hole in the dark where a child sits crying. It kneels and holds the child; the light climbs back up the well and the man breathes out. Turning to a quarter is going down a layer, and you hear only that layer's music. |
+
+What it added:
+
+- **Positional sound can keep rooms apart.** Each quarter plays its own
+  track from an emitter over its middle, with linear rolloff (full within
+  0.9 m, silent by 2.3 m). The feed's ear stands 2.5 m out from the view's
+  middle at Follow, so it lands about 0.85 m from the emitter of the quarter
+  it faces and about 3 m from the others: from any quarter you hear that
+  layer alone.
+- **Put the emitters where the ear goes, not where the floor is.** The ear
+  rides above the view's middle, and higher still when the viewer looks
+  down. Emitters 1.1 m above each floor left the deepest room, the climax,
+  at half volume from the side and silent from above. All four now sit at
+  one height, 2 m.
+- **The feed fits a wide card by height.** Its framing takes the larger of
+  the height and width fits; on a landscape card the height wins. Each
+  mesh's box is its local box carried into world space, so a big static
+  mesh under a turned parent swings its corners past the rim (3.04 m for a
+  2.6 m diorama). The rooms' static sets are baked into world space so a
+  narrow card, where width wins, is not pushed back.
