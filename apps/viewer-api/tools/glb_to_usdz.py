@@ -36,6 +36,15 @@ MAX_VERTICES = 2_000_000
 MAX_SAMPLES = 20_000
 # Scale written for a hidden (zero-scale) node; see `animate`.
 HIDDEN_SCALE = 1e-4
+# Bake times closer than this are one time (B-057). A glTF key is float32, so
+# a key on the 30 Hz grid lands up to half a float32 step off the grid's own
+# float64 time (under 4 microseconds for clips up to 128 s); counted apart,
+# nearly every key of a 30 Hz export doubled the samples and the budget. It
+# stays under the 10 microseconds a STEP key's pre-step sample sits before it.
+SAME_TIME = 4e-6
+# Rigid meshes cost far less a point-frame in the extent pass than deformed
+# ones (B-057: "The way down" has 230 M of them).
+RIGID_EXTENT_POINT_FRAMES = 500_000_000
 MAX_DURATION = 600
 MAX_TEXTURE_PIXELS = 4096 * 4096
 MAX_TOTAL_TEXTURE_PIXELS = 64 * 1024 * 1024
@@ -194,6 +203,18 @@ def _sample(times, values, interpolation, time, rotation=False):
     if rotation:
         result = result / np.linalg.norm(result)
     return result
+
+
+def _distinct_times(times):
+    """`times` sorted, each run of times within SAME_TIME kept once, as its
+    latest, so a STEP key sampled at its own time already has its new value."""
+    merged = []
+    for time in sorted(times):
+        if merged and time - merged[-1] < SAME_TIME:
+            merged[-1] = time
+        else:
+            merged.append(time)
+    return merged
 
 
 def _sample_all(times, values, interpolation, samples, rotation=False):
@@ -1044,6 +1065,7 @@ class Converter:
                 times.update(map(float, source_times))
                 if interpolation == "STEP":
                     times.update(max(0, float(t)-1e-5) for t in source_times[1:])
+            times = _distinct_times(times)
             work = 3 * len(self.animated) + 4 * sum(len(ordered) for _, ordered in animations) + len(morph_names)
             if len(times) > MAX_SAMPLES or len(times) * work > 8_000_000:
                 raise ValueError("Baked animation exceeds conversion budget")
@@ -1059,7 +1081,7 @@ class Converter:
             # Sample each channel at every time in one pass, make each
             # quaternion once, and resolve each node's tracks before the frame
             # loop, instead of per channel per frame.
-            ordered_times = sorted(times)
+            ordered_times = times
             raw, quats = {}, {}
             for key, channel in channels.items():
                 rows = _sample_all(*channel, ordered_times, rotation=key[1] == "rotation")
@@ -1336,41 +1358,56 @@ class Converter:
             while not moving and ancestor:
                 moving = ancestor.IsA(UsdGeom.Xformable) and UsdGeom.Xformable(ancestor).TransformMightBeTimeVarying()
                 ancestor = ancestor.GetParent()
-            meshes.append((prim, points, skeleton, query, skinning, names, blend, animation, moving))
-        if sum(len(entry[1]) * (len(frames) if entry[8] else 1) for entry in meshes) > 100_000_000:
-            raise ValueError("Animation extent evaluation exceeds conversion budget")
-        lower, upper = np.full(3, np.inf), np.full(3, -np.inf)
-        # Rigid meshes (no skin, no morphs) take one batched transform of all
-        # their points per frame; the static ones only on the first frame.
+            # A morph mesh's point indices, sub-shape offsets and weight order
+            # are constant; computed per frame they dominated the pass (B-057).
+            shapes = None
+            if blend:
+                order = {name: slot for slot, name in enumerate(animation.GetBlendShapeOrder())}
+                shapes = ([order[name] for name in names], blend.ComputeBlendShapePointIndices(), blend.ComputeSubShapePointOffsets())
+            meshes.append((prim, points, skeleton, query, skinning, shapes, blend, animation, moving))
+        # Rigid meshes (no skin, no morphs) cost one transform of their points
+        # a frame, deformed ones a USD evaluation, so they budget apart. The
+        # static rigid ones count once.
         rigid = [entry for entry in meshes if not entry[4] and not entry[6]]
         deformed = [entry for entry in meshes if entry[4] or entry[6]]
 
-        def batch(entries):
-            if not entries:
-                return [], None, None
-            points = np.concatenate([np.asarray(entry[1]) for entry in entries])
-            owners = np.repeat(np.arange(len(entries)), [len(entry[1]) for entry in entries])
-            return [entry[0] for entry in entries], points, owners
-        first_frame = batch(rigid)
-        later_frames = batch([entry for entry in rigid if entry[8]])
+        def point_frames(entries):
+            return sum(len(entry[1]) * (len(frames) if entry[8] else 1) for entry in entries)
+        if point_frames(deformed) > 100_000_000 or point_frames(rigid) > RIGID_EXTENT_POINT_FRAMES:
+            raise ValueError("Animation extent evaluation exceeds conversion budget")
+        lower, upper = np.full(3, np.inf), np.full(3, -np.inf)
+        # A rigid mesh's points lie in its local box, so when the box's eight
+        # corners land inside the bound so far its points cannot widen it.
+        # einsum keeps the product on one thread: the budget counts every one.
+        corners = np.array([[x, y, z] for x in (0, 1) for y in (0, 1) for z in (0, 1)], dtype=np.float64)
+        boxes = []
+        for prim, points, *_, moving in rigid:
+            points = np.asarray(points, dtype=np.float64)
+            low, high = points.min(axis=0), points.max(axis=0)
+            boxes.append((prim, points, low + corners * (high - low), moving))
+        xforms = UsdGeom.XformCache()
         for index, frame in enumerate(sorted(frames)):
-            xforms = UsdGeom.XformCache(frame)
-            prims, points, owners = later_frames if index else first_frame
-            if prims:
-                matrices = np.array([xforms.GetLocalToWorldTransform(prim) for prim in prims])
-                world = np.einsum("ki,kij->kj", points, matrices[:, :3, :3][owners]) + matrices[:, 3, :3][owners]
+            xforms.SetTime(frame)
+            for prim, points, box, moving in boxes:
+                if index and not moving:
+                    continue
+                matrix = np.asarray(xforms.GetLocalToWorldTransform(prim))
+                ends = np.einsum("ni,ij->nj", box, matrix[:3, :3]) + matrix[3, :3]
+                if np.all(ends.min(axis=0) >= lower) and np.all(ends.max(axis=0) <= upper):
+                    continue
+                world = np.einsum("ni,ij->nj", points, matrix[:3, :3]) + matrix[3, :3]
                 lower = np.minimum(lower, world.min(axis=0))
                 upper = np.maximum(upper, world.max(axis=0))
-            for prim, original, skeleton, query, skinning, names, blend, animation, moving in deformed:
+            for prim, original, skeleton, query, skinning, shapes, blend, animation, moving in deformed:
                 if index and not moving:
                     continue
                 points = Vt.Vec3fArray(original)
                 if blend:
-                    order = list(animation.GetBlendShapeOrder())
-                    animated_weights = list(animation.ComputeBlendShapeWeights(frame))
-                    weights = Vt.FloatArray([animated_weights[order.index(name)] for name in names])
+                    slots, point_indices, offsets = shapes
+                    animated_weights = animation.ComputeBlendShapeWeights(frame)
+                    weights = Vt.FloatArray([animated_weights[slot] for slot in slots])
                     weights, blend_indices, subshape_indices = blend.ComputeSubShapeWeights(weights)
-                    if not blend.ComputeDeformedPoints(weights, blend_indices, subshape_indices, blend.ComputeBlendShapePointIndices(), blend.ComputeSubShapePointOffsets(), points):
+                    if not blend.ComputeDeformedPoints(weights, blend_indices, subshape_indices, point_indices, offsets, points):
                         raise ValueError("Unable to evaluate morph extent")
                 if skinning:
                     if not skinning.ComputeSkinnedPoints(query.ComputeSkinningTransforms(frame), points, frame):

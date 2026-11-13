@@ -26,7 +26,7 @@ limit, but for the place it is not the one that binds:
 | One object | 8 MB, images up to 4096 px | `suppliedObject.ts:14`, `registry-fetch.ts:8` | Yes, for detailed props |
 | Live splats drawn in capture | Quest 500 k, Vision Pro 750 k, Android 1 M, iOS 1.5 M, desktop 2.5 M | Spark's LoD defaults | Device GPU limit; unchanged |
 | Viewer place drawing | No LoD: every stored splat is drawn | `StoredPlaceMount.tsx:122-124` (`enableLod: false`) | Fine at 200 k; **must change** for a larger place |
-| Quick Look | 100 MB input, 4096² per texture, 64 MP texture total, 100 CPU-seconds | `glb_to_usdz.py:34-41`, `:1493` | Ignores the place; props count |
+| Quick Look | 100 MB input, 4096² per texture, 64 MP texture total, 100 CPU-seconds; extent pass 100 M deformed and 500 M rigid point-frames | `glb_to_usdz.py:34-56`, `:1530`, `extents` | Ignores the place; props count |
 
 Splat-capture (`docs/features/splat-capture.md` Q5) chose 200 k, SH0 and
 "sized at Stop to what 25 MB leaves". This brief revisits that choice.
