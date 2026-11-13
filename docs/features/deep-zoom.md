@@ -283,7 +283,7 @@ every size is 1 and the output is byte-identical.
 | Design reviewer | `design-reviewer` subagent (Opus) | Read-only review, done 2026-11-13 |
 | Implementer | Claude Code (Opus) | `apps/viewer-web/src/features/portal/` (store, triggers, new `deepZoom.ts`), `features/feed/HologramCardCanvas.tsx`, `features/hologram/gltfAudio.ts`, `features/xr/hologramPlayback.ts`, `apps/viewer-api/src/services/animation-reduce.ts`, `apps/viewer-web/e2e/` (new spec and fixture), `apps/capture/scripts/showcase/introspection2*` |
 | Implementer (Quick Look) | Claude Code (Opus) | `apps/viewer-api/tools/glb_to_usdz.py`, `inspect_usdz.py` |
-| Independent verifier | A different vendor (Codex, `-p standard`) | Read-only verification against this brief |
+| Independent verifier | `verifier` subagent (Opus, fresh context) and `/code-review high`; Codex had no quota | Read-only verification against this brief |
 
 ## Test plan and evidence
 

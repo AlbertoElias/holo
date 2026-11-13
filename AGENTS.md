@@ -154,16 +154,21 @@ Routing is the agent's job, not the user's. Do it automatically:
   hold off above about 70%.
 
 - Codex usage is scarce: the user runs out of it fast. Spend it only on the
-  independent verifier and design-screenshot validation, never on routine
-  implementation or searches (Claude subagents do those). Apply the same
+  independent verifier (when it has quota) and design-screenshot
+  validation, never on routine implementation or searches (Claude
+  subagents do those). Apply the same
   tier check: `-p light` for a bounded diff or log read, `-p standard` for
   verifier and design reviews, `-p deep` only when the user approves it in
-  that task. Prefer Muse or a Claude subagent when either fits.
+  that task. Prefer a Claude subagent when one fits.
 - The independent verifier in `docs/FEATURE_WORKFLOW.md` uses a different
-  vendor from the implementer (for example Codex implements, Claude verifies);
-  same-model review shares the implementer's blind spots.
+  vendor from the implementer when one has quota (for example Codex
+  implements, Claude verifies); same-model review shares the implementer's
+  blind spots. When none has quota, do not wait: run the `verifier` subagent
+  and a code review of the diff in fresh contexts, give them only the brief
+  and the diff, and confirm each finding yourself (step 4 there).
 - Claude Code subagents live in `.claude/agents/` with pinned models:
-  `searcher` (Haiku), `check-runner` (Sonnet), `design-reviewer` (Opus).
+  `searcher` (Haiku), `check-runner` (Sonnet), `design-reviewer` and
+  `verifier` (Opus).
 - A cheaper model does not offset a long session; context size still dominates.
 - Node must be 24 (`.nvmrc`). Claude Code sessions get it from a SessionStart
   hook; in other shells run `eval "$(scripts/agent-node-env.sh)"`. Never switch
