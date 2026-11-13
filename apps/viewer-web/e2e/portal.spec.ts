@@ -512,13 +512,17 @@ test("desktop freeze: scrolling away just after a drag on a playing card stays s
 
 test("desktop reach: controls folded after the idle time take no press, and the next cursor move brings them back (B-043)", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 440 });
+  // A reach control to press: View in your room, on a device that can (the fixture has no sound).
+  await page.addInitScript(() => {
+    (window as Window & { __HOLOIM_AR_SUPPORTED_OVERRIDE__?: boolean }).__HOLOIM_AR_SUPPORTED_OVERRIDE__ = true;
+  });
   await openFeed(page, null);
   const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
-  const free = card.getByRole("button", { name: "Free", exact: true });
+  const enter = card.getByRole("button", { name: "View in your room", exact: true });
   await reachFor(card);
   // They fold 4 s after the last movement, or when the cursor leaves, and folded they take no press (pointer-events: none).
   await expect(card.locator(".portal-controls")).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
-  expect(await free.evaluate((button) => getComputedStyle(button.closest(".portal-controls-reach")!).pointerEvents), "folded controls take no press").toBe("none");
+  expect(await enter.evaluate((button) => getComputedStyle(button.closest(".portal-controls-reach")!).pointerEvents), "folded controls take no press").toBe("none");
   // A page that stalls between the hover and the press finds them folded: the first attempt here folds them just before
   // its press, and the helper moves the cursor again instead of waiting on the overlay.
   let attempts = 0;
@@ -529,9 +533,9 @@ test("desktop reach: controls folded after the idle time take no press, and the 
         await page.mouse.move(2, 2);
         await expect(card.locator(".portal-controls")).toHaveAttribute("data-reach", "hidden");
       }
-      await free.click(options);
+      await enter.click(options);
     }
   });
   expect(attempts, "the first press met the folded controls and the second came after a new move").toBe(2);
-  await expect(card).toHaveAttribute("data-portal-mode", "free");
+  await expect(page).toHaveURL(new RegExp(`/ar/${first.id}$`));
 });

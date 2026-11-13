@@ -295,8 +295,8 @@ export const tokens = {
         fill: false,
         linejoin: 'miter'
       },
-      copyLink: {
-        d: 'M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.4-2.4a2.6 2.6 0 0 0-3.7-3.7L8 4.3M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.1 9.2a2.6 2.6 0 0 0 3.7 3.7L8 11.7',
+      settings: {
+        d: 'M2.5 4.5h3.5M10 4.5h3.5M8 2.5a2 2 0 1 0 0 4a2 2 0 1 0 0-4M2.5 11.5h1.5M8 11.5h5.5M6 9.5a2 2 0 1 0 0 4a2 2 0 1 0 0-4',
         fill: false,
         linejoin: 'round'
       },

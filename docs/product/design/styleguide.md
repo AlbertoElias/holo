@@ -115,8 +115,8 @@ hologram out onto the stage; selecting its tile again sends it back, with no
 extra glyph. A placed hologram stands where the viewer sees it whole: never
 behind a wing or another hologram.
 
-**Always there, and hidden until reached for.** Play, Free and Return stay
-visible, small and close to the edge. Every other control appears from the
+**Always there, and hidden until reached for.** Play and Return (once the
+view has moved) stay visible, small and close to the edge. Every other control appears from the
 hand or cursor and leaves afterwards. When nobody has used the always-there
 set for 4 s, it dims to 40%; it comes back to full strength when a hand,
 cursor or gaze comes near.
@@ -433,7 +433,7 @@ Only where the ground fails:
 | VR | Rows stay bare against the room's walls. They take the chip in front of the sky, a hologram or a lit surface. The chip fades in over 0.3 s, holds at least 2 s after the background last asks for it, and leaves over 0.4 s, as chrome does |
 | AR (WebXR) | Every row and every label sits on the chip |
 | AR Quick Look | No chip is possible, so no text or controls inside Quick Look |
-| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The feed's bottom dock stands on the amber horizon, where gold fails (2.1:1), with no chip, band or shadow across it: each control there is a **lantern**, its glyph in the gold ring (as Play's) round a deep-sea lens, and keyboard focus rings it in deep-sea ink (`glyph.lantern`). Its word does not show: ink text falls below 4.5:1 on most screens there, while the lens holds a control's 3:1. A control with no drawing yet holds its gold word in a lantern capsule, the same ring and lens, where gold on the lens holds 4.5:1. The dock holds making (Upload) and finding (Search); Settings is not in it but waits in the top right corner, where its side sheet unfolds from, its word on the chip: the chip all but vanishes on the night sky and keeps the word legible over a hologram's picture, and a title stops short of it. That corner is not the status line, which keeps the top's centre and never holds a control. A dock over a picture (AR, capture) keeps its row on the chip, sized to its contents. The side sheet is on the chip |
+| Phone and desktop | The card's controls stand bare in their row at its foot, and take the chip when the viewer is inside the hologram and its picture is behind them. Feed-wide notices, which have no hologram (empty feed, offline, upload status), use the chip. The feed's bottom dock stands on the amber horizon, where gold fails (2.1:1), with no chip, band or shadow across it: each control there is a **lantern**, its glyph in the gold ring (as Play's) round a deep-sea lens, and keyboard focus rings it in deep-sea ink (`glyph.lantern`). Its word does not show: ink text falls below 4.5:1 on most screens there, while the lens holds a control's 3:1. A control with no drawing yet holds its gold word in a lantern capsule, the same ring and lens, where gold on the lens holds 4.5:1. The dock holds making (Upload) alone. Finding (Search) and Settings wait in the top right corner, where the side sheet unfolds from, as two glyphs on the chip, Search first: the chip all but vanishes on the night sky and keeps them legible over a hologram's picture, and a title stops short of them. That corner is not the status line, which keeps the top's centre and never holds a control. A dock over a picture (AR, capture) keeps its row on the chip, sized to its contents. The side sheet is on the chip |
 | Everywhere | Text over a hologram's own picture always sits on the chip |
 
 ## 6. Glyph controls
@@ -444,29 +444,40 @@ sheet action, or a dock over a picture, where there is room. On the feed's
 amber dock the control is a lantern with no word ([section 5.2](#52-where-the-chip-is-mandatory)).
 
 **Few at rest, the rest on reach.** At rest a card shows **Play** (or
-**Pause**) alone in the middle of its foot, plus **Return** beside it while
-the viewer drives (Free). Reaching for the card (a cursor over it, a touch)
-unfolds the rest either side of Play, two glyph gaps (24 apx) apart: the
-timecode to the left; Free, highlights, tilt, View in your room, Step inside and sound to the
-right. Play never moves as they come and go. The row stands below the
+**Pause**) alone in the middle of its foot, plus **Return** beside it once
+the viewer has moved the view (a drag, a pinch, the wheel or the arrow keys
+leave Follow on their own; no glyph does). Reaching for the card (a cursor
+over it, a touch) unfolds the rest either side of Play, two glyph gaps
+(24 apx) apart: playback to the left (the timecode, then sound); the ways
+out of the screen the device has to the right (View in your room or AR
+Quick Look, Step inside; tilt in its experimental variant). A phone has at
+most one of these and a desktop none; only a headset shows both View in your
+room and Step inside. The author's pointing marks always show; there is no
+toggle. A card's own link is its title, and its creator's Delete is a word at
+the end of the byline, behind a confirmation, never a glyph in the row. Play never moves as they come and go. The row stands below the
 viewing box, off the cloche's foot line, and ends above 75% down the screen,
 where the ground is still dark enough for bare gold ([section 9.3](#93-phone-portal)),
 well clear of the dock. Over the hologram's own picture it takes the chip,
 sized to the controls showing, padded alike at both ends so Play stays in
 the middle.
 
-**Too many for one row.** When the reach controls do not fit beside Play at
-the input's hit size (a touch phone with a take that has sound), Free,
-highlights, tilt, View in AR and sound unfold in a line of their own above
-Play, centred, a glyph gap (12 apx) over the row, on the same chip when the
-row has one. The timecode stays left of Play and Return right of it. Play
+**Too many for one row.** When either side's reach controls do not fit
+beside Play at the input's hit size (a touch phone: the paused timecode and
+sound already pass half its width), both unfold on a line of their own a
+glyph gap (12 apx) above the row: playback ending a glyph gap left of Play's
+axis, the ways out starting a glyph gap right of it, each group on the
+row's chip colour when the row has one (text 14 apx from its chip's end,
+glyphs flush in their hit areas). Return stays right of Play. The timecode
+holds the paused text's width beside Play, so pausing never reflows the row;
+on the line above, the playback group hangs from Play's axis, so the text and
+its chip grow away from the axis on pause and no glyph moves. Play
 still never moves, and no glyph shrinks below its input's minimum or enters
 a gesture zone.
 
 | Glyph | Meaning | Label | Drawing (16 × 16 viewBox) |
 | --- | --- | --- | --- |
 | Play / Pause | Play or pause the event | "Paused · 0:08" beside it | Filled triangle `M4 2.5v11l9-5.5z`, drawn at 14 apx inside the 36 apx gold ring |
-| Free | Leave Follow; move through time and space yourself | "Free" | Four-way arrow cross `M8 1.5v13M1.5 8h13M8 1.5 6 3.5M8 1.5l2 2M8 14.5l-2-2M8 14.5l2-2M1.5 8l2-2M1.5 8l2 2M14.5 8l-2-2M14.5 8l-2 2` |
+| Free | Leave Follow; move through time and space yourself. In a headset's foot row only: on a flat card a drag leaves Follow | "Free" | Four-way arrow cross `M8 1.5v13M1.5 8h13M8 1.5 6 3.5M8 1.5l2 2M8 14.5l-2-2M8 14.5l2-2M1.5 8l2-2M1.5 8l2 2M14.5 8l-2-2M14.5 8l-2 2` |
 | Return | Back to the author's view (Follow) | "Return" | Open arc with an arrowhead `M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.5h2.5` |
 | Pause | Shown in the Play ring while the event plays; pauses it | "Paused · 0:08" once paused | Two filled bars `M4.5 3h2.4v10H4.5zM9.1 3h2.4v10H9.1z`, the Play triangle's weight, inside the same ring |
 | Restart | Back to the event's start, keeping play or pause | None | A back-to-start bar and an open triangle `M3.5 3v10M12.5 3.2 6 8l6.5 4.8z` |
@@ -478,9 +489,9 @@ a gesture zone.
 | Sound on / off | Mute or unmute the event | "Mute" / "Unmute" (name) | A speaker with waves, or with a cross (`tokens.json`, `glyph.path.soundOn` / `soundOff`) |
 | Upload | Open the upload sheet; send the upload | "Upload" | An arrow up out of a tray (`glyph.path.upload`) |
 | Close | Close a sheet | "Close" (name) | A cross (`glyph.path.close`) |
-| Copy link | Copy the link to this hologram's own page; on a touch phone, open the share sheet | "Copy link" (name) | Two chain links (`glyph.path.copyLink`). Among the reach controls, to the right of sound |
-| Delete | Delete the hologram, for its creator only, after a confirmation | "Delete" (name) | A bin with its lid (`glyph.path.remove`). Among the reach controls, last, so it is never the glyph a hand lands on by habit |
-| Search | Open the search sheet on the feed | "Search" (name) | A lens with its handle (`glyph.path.search`). In the feed's dock, beside Upload |
+| Delete | Delete the hologram, for its creator only, after a confirmation | "Delete" | No glyph on a card: the word at the end of the byline, away from the controls a hand lands on by habit |
+| Search | Open the search sheet on the feed | "Search" (name) | A lens with its handle (`glyph.path.search`). In the top right corner, left of Settings |
+| Settings | Open the settings sheet | "Settings" (name) | Two sliders, each with its knob (`glyph.path.settings`). In the top right corner, the sheet's own side |
 | Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
 | Undo / Redo | The Halo's W and E: undo or redo the last authoring action of any kind (an object summoned, put back, placed or resized, a held mark, a hand trace, a tray change; `docs/features/archive/undo-redo.md`) | "Undo" / "Redo" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 | Ink | The Halo's NW in a headset: start or end a hand trace while recording (PRD-023) | "Ink" (name); "Tracing 0:03" on the status line while on | A curving path into a fingertip dot (`glyph.path.ink`) |

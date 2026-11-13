@@ -12,8 +12,10 @@ import { usePortalValue } from "./usePortalValue";
 
 // The controls at a card's foot, under its cloche (styleguide 1.2, 6): Play
 // or Pause alone in the middle, and Return beside it while the viewer drives.
-// The rest unfold from the cursor or touch and leave afterwards: the timecode
-// to the left; Free, highlights, tilt, View in your room, Step inside and sound to the right.
+// The rest unfold from the cursor or touch and leave afterwards: playback
+// (the timecode and sound) to the left; the way out of the screen (View in
+// your room or Step inside) to the right, with tilt in its trial variant.
+// A drag, the wheel or the arrow keys look around, so no glyph does.
 // Play never moves as they come and go. They are the viewer's own, on the
 // screen rather than in the hologram (principle 1 in what-a-hologram-is.md).
 
@@ -50,13 +52,17 @@ function useNow(intervalMs: number, running: boolean): number {
   return now;
 }
 
-/** "Paused · 0:08" beside Play, the running time while it plays (7.2). */
+/**
+ * "Paused · 0:08" beside Play, the running time while it plays (7.2). It keeps
+ * the paused text's width either way, so pausing never reflows the row.
+ */
 function Timecode({ store, paused, active }: { store: PortalStore; paused: boolean; active: boolean }) {
   useNow(250, active && !paused);
   const ms = store.runtime.playbackSeconds * 1000;
   return (
     <span className="portal-timecode" data-portal-timecode="">
-      {paused ? pausedText(ms) : formatRunningTime(ms)}
+      <span>{paused ? pausedText(ms) : formatRunningTime(ms)}</span>
+      <span className="portal-timecode-room" aria-hidden="true">{pausedText(ms)}</span>
     </span>
   );
 }
@@ -68,16 +74,16 @@ export type PortalControlsProps = {
   active: boolean;
   /** A cursor or touch is on the card: the reach controls show and the always-there set is at full strength. */
   reached: boolean;
-  /** More reach controls, after the portal's own (View in your room, Step inside, sound). */
+  /** Playback reach controls after the timecode, left of Play (sound). */
+  playback?: ReactNode;
+  /** Reach controls right of Play: the way out of the screen (View in your room or Step inside). */
   children?: ReactNode;
 };
 
-export function PortalControls({ store, tiltAvailable, active, reached, children }: PortalControlsProps) {
+export function PortalControls({ store, tiltAvailable, active, reached, playback, children }: PortalControlsProps) {
   const paused = usePortalValue(store, (state) => state.paused);
   const mode = usePortalValue(store, (state) => state.mode);
   const tiltStatus = usePortalValue(store, (state) => state.tiltStatus);
-  const highlights = usePortalValue(store, (state) => state.highlights);
-  const hasHighlights = usePortalValue(store, (state) => state.hasHighlights);
   const [lastUse, setLastUse] = useState(() => performance.now());
   // A touch that lands on a reach control while it is still hidden only reveals it.
   const pressRevealsOnly = useRef(false);
@@ -105,6 +111,7 @@ export function PortalControls({ store, tiltAvailable, active, reached, children
     <div className="portal-controls" data-reach={reached ? "shown" : "hidden"} data-portal-mode={mode}>
       <div className="portal-controls-reach portal-controls-before" {...reachGuard}>
         <Timecode store={store} paused={paused} active={active} />
+        {playback}
       </div>
       <div className="portal-controls-row">
         <GlyphControl
@@ -122,24 +129,6 @@ export function PortalControls({ store, tiltAvailable, active, reached, children
         )}
         <div className="portal-controls-reach portal-controls-after" {...reachGuard}>
           <div className="portal-controls-after-inner">
-            {mode === "follow" && <GlyphControl glyph="free" label={VIEWER_CONTROL_NAMES.free} onPress={use(() => store.enterFree())} />}
-            {hasHighlights && (
-              <ChromeButton
-                label={VIEWER_CONTROL_NAMES.highlights}
-                pressed={highlights}
-                title={highlights ? "Hide what the author points at" : "Show what the author points at"}
-                onPress={() => store.toggleHighlights()}
-                drawnApx={METRICS.iconApx}
-              >
-                {(appearance) => (
-                  <LineIcon appearance={appearance}>
-                    <path d="M2 14l4.7-4.7" />
-                    <path d="M6 6l4 .7-2 2z" />
-                    <circle cx="10.7" cy="5.3" r="3.3" strokeDasharray={highlights ? undefined : "1.3 2"} />
-                  </LineIcon>
-                )}
-              </ChromeButton>
-            )}
             {tiltAvailable && (
               <ChromeButton
                 label={tiltStatus === "on" ? VIEWER_CONTROL_NAMES.tiltOff : VIEWER_CONTROL_NAMES.tiltOn}
