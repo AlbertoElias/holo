@@ -495,7 +495,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   useEffect(() => {
     if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      const probe = { url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, deep, depthNow, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip, sound: soundRef };
+      const probe = { url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, deep, depthNow, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre, group: clocheGroupRef }, rim: rimProbe, dome: domeClip, sound: soundRef };
       observer?.(probe);
       // Once processed, the API serves `<id>-light.glb` (hologram-budgets) in
       // place of the `<id>.glb` the upload answered with; tests find a card by

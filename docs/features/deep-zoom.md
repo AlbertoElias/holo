@@ -263,11 +263,14 @@ every size is 1 and the output is byte-identical.
 | Near plane cuts the layer being looked at, or far drops its walls | Near and far from the camera's distance; e2e pixel check at every home |
 | Outer layers (translucent gas) show around an inner one | Layer meshes hidden two homes in; e2e reads visibility |
 | A hologram without the declaration changes | `depth` only exists with a valid declaration; e2e on an undeclared twin plus the existing portal and spatial-audio specs; reducer byte-identity check |
-| A new wheel gesture at depth scrolls the feed and resets depth | Hit test true at depth; e2e wheels over empty frame after a pause |
+| A new wheel gesture at depth scrolls the feed and resets depth | Hit test true at depth; e2e wheels at the frame's edge after a pause, deep in, and checks it zooms without scrolling |
 | The camera jumps when crossing `zoom` 0 into `depth` | One log distance across the boundary; e2e checks distance is continuous |
 | Return from depth leaps out | Retraced log-distance glide; e2e samples it |
 | Resizing the card while deep moves the camera in depth | `depth` is in nepers, independent of framing |
-| The dome shows as a sliver | Hidden once the camera is inside its glass at depth |
+| The dome shows as a sliver | Hidden once the camera is inside its glass at depth; e2e reads it hidden at every home and drawn again after Return |
+| Coming out un-hides meshes another feature hid (the recorded bubble's old glass) | Only meshes deep zoom hid itself come back; e2e hides one first and checks it stays hidden |
+| A layer's size read from rest while a scale track sets another | A scale track on a layer or a parent must hold the rest scale (a cubic one with flat tangents), or the declaration is ignored |
+| A layer under a moving parent | Allowed by the viewer, but the reducer judges inner nodes in layer units, so any reduction of that parent's motion exceeds the bound and the GLB is served unreduced (safe, no saving). The piece's layer chain has no moving parents |
 | Outer music drowns the inner layer | Layer gain crossfade; gains read through the audio probe |
 | Inner music plays over the man in XR and AR | Players apply the layers at depth 0 |
 | Sibling layers make the aim jump between unrelated places | Chain rule; invalid declaration ignored |
@@ -283,7 +286,7 @@ every size is 1 and the output is byte-identical.
 | Design reviewer | `design-reviewer` subagent (Opus) | Read-only review, done 2026-11-13 |
 | Implementer | Claude Code (Opus) | `apps/viewer-web/src/features/portal/` (store, triggers, new `deepZoom.ts`), `features/feed/HologramCardCanvas.tsx`, `features/hologram/gltfAudio.ts`, `features/xr/hologramPlayback.ts`, `apps/viewer-api/src/services/animation-reduce.ts`, `apps/viewer-web/e2e/` (new spec and fixture), `apps/capture/scripts/showcase/introspection2*` |
 | Implementer (Quick Look) | Claude Code (Opus) | `apps/viewer-api/tools/glb_to_usdz.py`, `inspect_usdz.py` |
-| Independent verifier | `verifier` subagent (Opus, fresh context) and `/code-review high`; Codex had no quota | Read-only verification against this brief |
+| Independent verifier | `verifier` subagent (Opus, fresh context) and `/code-review high`; Codex had no quota | Read-only verification against this brief, done 2026-11-13: every criterion passed by code or probe; confirmed defects fixed (the bubble glass coming back, the cubic or held-off-rest scale track, a gain ramp per sound per frame without layers) and the e2e tightened where it asserted less than the criteria (the 2% aim at an exact home, the wheel at the frame's edge deep in, the cloche) |
 
 ## Test plan and evidence
 

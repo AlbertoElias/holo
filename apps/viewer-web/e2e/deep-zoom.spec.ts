@@ -60,6 +60,8 @@ type Deep = {
   spins: number[];
   placements: Array<{ node: string; layer: number; level: number; refDistance: number }>;
   modelScale: number;
+  /** Whether the cloche's group is drawn; null for a card without one. */
+  clocheDrawn: boolean | null;
 };
 
 const report: Record<string, unknown> = {};
@@ -93,6 +95,7 @@ async function read(page: Page, url: string, declaredNames: boolean): Promise<De
       deep: { layers: Array<{ name: string; size: number }> } | null;
       depthNow: { current: number };
       sound: { current: { readPlacements(): Array<{ node: string; layer: number; level: number; refDistance: number }> } | null };
+      cloche: { group: { current: { visible: boolean } | null } };
     };
     const hooks = window as unknown as { __portalProbes: Record<string, Probe> };
     const probe = Object.entries(hooks.__portalProbes).find(([key]) => key.endsWith(modelUrl as string))![1];
@@ -127,7 +130,8 @@ async function read(page: Page, url: string, declaredNames: boolean): Promise<De
       })),
       spins: list.spins.map((name) => 2 * Math.atan2(node(name).quaternion.y, node(name).quaternion.w)),
       placements: (probe.sound.current?.readPlacements() ?? []).map((p) => ({ node: p.node, layer: p.layer, level: p.level, refDistance: p.refDistance })),
-      modelScale: probe.model.getWorldScale(scratch).x
+      modelScale: probe.model.getWorldScale(scratch).x,
+      clocheDrawn: probe.cloche.group.current?.visible ?? null
     };
   }, [url, names] as const);
 }
@@ -207,6 +211,7 @@ test("deep zoom: the wheel stops at the inside end, then the camera goes into ea
   expect(start.layers, "the card reads the three declared layers, outermost first").toEqual(FIXTURE_LAYERS.map((layer, index) => ({ name: layerNodeName(layer, true), size: expect.closeTo(LAYER_SIZES[index]!, 9) })));
   expect(start.maxDepth, "it may go in until 16× past the deepest home").toBeCloseTo(HOMES.at(-1)! + LEAN_NEPERS, 6);
   expect(start.mode).toBe("follow");
+  expect(start.clocheDrawn, "the cloche is drawn outside the layers").toBe(true);
   // A mesh of the hologram itself hidden by another feature (as the recorded bubble's old glass is): deep zoom must leave it hidden.
   await page.evaluate((modelUrl) => {
     const probes = (window as unknown as { __portalProbes: Record<string, { model: { getObjectByName(name: string): { visible: boolean } | undefined } }> }).__portalProbes;
@@ -255,6 +260,13 @@ test("deep zoom: the wheel stops at the inside end, then the camera goes into ea
       await page.keyboard.press("+");
       await animationFrames(page, 1);
     }
+    // The last step a pinch to exactly the home (1:1 under the fingers), so the framing is measured there.
+    await page.evaluate(([modelUrl, to]) => {
+      type Probe = { portal: { getState(): { depth: number }; zoomByScale(scale: number): void } };
+      const probe = Object.entries((window as unknown as { __portalProbes: Record<string, Probe> }).__portalProbes).find(([key]) => key.endsWith(modelUrl as string))![1];
+      probe.portal.zoomByScale(Math.exp((to as number) - probe.portal.getState().depth));
+    }, [declared.url, home] as const);
+    await animationFrames(page, 2);
     const layer = index + 1;
     // The sound fades between layers over the frames that follow.
     await expect.poll(async () => {
@@ -263,11 +275,12 @@ test("deep zoom: the wheel stops at the inside end, then the camera goes into ea
     }, { message: `only layer ${layer}'s sound is up at its home`, timeout: 10_000 }).toBe(true);
     const at = await read(page, declared.url, true);
     const label = FIXTURE_LAYERS[index]!.name;
-    expect(Math.abs(at.depth - home), `${label}: at its home`).toBeLessThan(KEY_ZOOM_NEPERS);
+    expect(at.depth, `${label}: at its home`).toBeCloseTo(home, 6);
     expect(at.depthNow, `${label}: the frame drew the depth the store holds`).toBeCloseTo(at.depth, 6);
     // At home the layer is seen as the hologram is at the inside end: from the inside distance × its size.
     expect(Math.abs(at.cameraDistance / (at.insideDistance * Math.exp(-at.depth)) - 1), `${label}: the camera stands inside × e^−depth from its aim`).toBeLessThan(0.02);
-    expect(distance(at.target, at.aims[index]!) / at.cameraDistance, `${label}: it looks at the layer's aim`).toBeLessThan(0.1);
+    expect(distance(at.target, at.aims[index]!) / at.cameraDistance, `${label}: it looks at the layer's aim`).toBeLessThan(0.02);
+    expect(at.clocheDrawn, `${label}: the cloche is not drawn from inside its glass`).toBe(false);
     // Drawn: the layer's marker fills the aim in its own colour.
     const colour = await colourAt(page, await screenPoint(page, declared.url, at.aims[index]!));
     expect(dominant(colour), `${label}: the layer's own colour is drawn at the aim (${colour.map((c) => c.toFixed(2)).join(", ")})`).toBe(LAYER_CHANNEL[index]);
@@ -298,6 +311,17 @@ test("deep zoom: the wheel stops at the inside end, then the camera goes into ea
   const deepest = await read(page, declared.url, true);
   expect(deepest.depth, "the camera stops 16× past the deepest home").toBeCloseTo(deepest.maxDepth, 6);
 
+  // After a pause, a new wheel gesture over the frame's edge, off where the hologram stood, still zooms: in here it is all hologram.
+  await endWheelGesture(page);
+  const edge = await page.locator(`.feed-card[data-card-id="${declared.id}"] .feed-card-portal`).boundingBox();
+  if (!edge) throw new Error("viewing box not laid out");
+  await page.mouse.move(edge.x + edge.width * 0.08, edge.y + edge.height * 0.12);
+  await page.mouse.wheel(0, 200);
+  await animationFrames(page, 2);
+  const edged = await read(page, declared.url, true);
+  expect(edged.depth, "a wheel at the frame's edge deep in zooms out").toBeLessThan(deepest.depth - 0.1);
+  expect(await feedScrollTop(page), "and does not scroll the feed").toBe(scrollBefore);
+
   // Return glides out the way in, past each layer, to Follow.
   const glide = page.evaluate((modelUrl) => new Promise<Array<{ depth: number; mode: string }>>((resolve) => {
     type Probe = { portal: { getState(): { mode: string }; runtime: { returnBlend: number } }; depthNow: { current: number } };
@@ -325,6 +349,7 @@ test("deep zoom: the wheel stops at the inside end, then the camera goes into ea
   expect(back.depth).toBe(0);
   expect(back.visible.Body, "the body is drawn again").toBe(true);
   expect(back.visible.Floor, "a mesh hidden before the zoom stays hidden").toBe(false);
+  expect(back.clocheDrawn, "the cloche is drawn again").toBe(true);
   await expect.poll(async () => (await read(page, declared.url, true)).placements.every((p) => (p.layer === 0 ? p.level > 0.98 : p.level < 0.02)), { message: "only the hologram's own sound is up again" }).toBe(true);
 
   // Scrolling away from a card deep inside resets it.

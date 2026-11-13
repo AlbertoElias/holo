@@ -65,9 +65,14 @@ export function readDeepZoom(root: Object3D, animations: readonly AnimationClip[
       if (propertyName !== "scale" || !nodeName) continue;
       const rest = root.getObjectByName(nodeName)?.scale;
       const values = track.values;
+      // A cubic-spline track holds in-tangent, value and out-tangent per key: its values must hold still and its tangents be flat.
+      const stride = track.times.length > 0 ? values.length / track.times.length : 3;
+      const valueAt = stride === 9 ? 3 : 0;
       for (let i = 0; i < values.length; i += 1) {
-        const first = rest ? rest.getComponent(i % 3) : values[i % 3]!;
-        if (Math.abs(values[i]! - first) > Math.abs(first) * UNIFORM_TOLERANCE) {
+        const slot = i % stride;
+        const held = rest ? rest.getComponent(slot % 3) : values[valueAt + (slot % 3)]!;
+        const expected = slot >= valueAt && slot < valueAt + 3 ? held : 0;
+        if (Math.abs(values[i]! - expected) > Math.abs(held) * UNIFORM_TOLERANCE) {
           changing.add(nodeName);
           break;
         }
