@@ -94,21 +94,50 @@ Each slice is shippable on its own and ends with the journey script re-timed.
 - Capture opened without a grant (the direct address, the headset) behaves
   exactly as today.
 
-### Slice 2: Selfie mode on phones (blockers 3 and 4)
+### Slice 2: Selfie flow on phones (blockers 3 and 4, the journey part)
 
-- Merge the spike's slices 1 and 2 (`feature/camera-avatar`: camera source
-  for head, arms and fingers; pose and hand models loaded only on camera
-  start) into this branch, resolving the three known conflicts
-  (`run-xr-checks.ts`, `createCaptureRuntime.ts`, `docs/features/README.md`).
-  Camera hands stay `camera-hand`, so they never produce hand traces or
-  pointing links (the spike's unresolved aim does not matter here).
-- On a phone opened through Record, **selfie mode is the default**: front
-  camera on (face, head, arms, hands), the avatar faces the author as a
-  mirror, framed from the waist up, standing still (no joystick needed).
-  One short phone hint replaces the keyboard help: "Prop your phone up, step
-  back so your hands show, tap Record."
+**Boundary (2026-11-13):** how the avatar is driven belongs to the motion
+owner session ("Own natural avatar motion from every input source"), which
+owns `feature/camera-avatar` (IDEA-078), IK, retargeting, smoothing, jitter
+and aim. This brief does not edit `apps/capture/src/bodycam/*`,
+`XrTracking.ts`, `TrackedHandsSystem.ts`, `HandEmbodiment.ts` or
+`FaceDriver.ts`, and does not touch the spike branch. It uses whatever
+camera driving is on `main` through existing calls only.
+
+- On a phone opened through Record, **selfie mode is the default**: the
+  front camera starts through the existing face toggle (today: face and
+  expression only), and the view frames the avatar from the front, waist
+  up, like a mirror, standing still (no joystick needed). Camera and view
+  code only.
+- One short phone hint replaces the keyboard help: "Prop your phone up, face
+  it, tap Record."
 - A 3-2-1 countdown after Record so the author can get into frame.
-- Desktop and headset paths unchanged; `?input=camera` keeps working.
+- When the motion owner lands camera-driven head, arms and fingers on
+  `main`, selfie mode turns it on with the same flag (`?input=camera`) and
+  nothing else in this brief changes. Until then "it is you" is face and
+  voice only, which likely still fails "want to send"; that gap is the
+  motion owner's, recorded below.
+- Desktop and headset paths unchanged.
+
+### Inputs for the motion owner
+
+From the spike's own results on the owner's clip (2026-11-11) and this
+journey, in the order the phone journey needs them:
+
+1. **Camera upper body is not on `main`.** Selfie mode can drive only the
+   face today; head, arms and fingers from the camera are the difference
+   between "a stock avatar" and "you". The journey needs head, arms and hands
+   to look natural; it does **not** need pointing aim (no traces or links
+   from camera hands).
+2. Head: the face model loses a full profile turn and a hand crossing the
+   face (the spike falls back to pose yaw); a selfie take has both.
+3. Index-ray jitter while pointing (p95 5.7 to 20 deg) shows as trembling
+   fingers even when nobody reads the aim.
+4. Rate on a phone: unmeasured; the journey needs the face, pose and hand
+   models together at a rate that looks smooth (spike bar: 20 fps).
+5. Files this brief would want touched, for the two sessions to agree on:
+   none, if `?input=camera` stays the switch and the models still load only
+   on camera start.
 
 ### Slice 3: Waits (blocker 6), only if the device numbers say so
 
@@ -126,7 +155,7 @@ for a pre-public app with one user; see Open decisions.
 ## Scope
 
 **Included:** slices 1 and 2; slice 3 only after a device measurement.  
-**Excluded:** a personal avatar that looks like the author (photo or scan to
+**Excluded:** how the avatar is driven from the camera (the motion owner's); a personal avatar that looks like the author (photo or scan to
 avatar); legs and walking from the camera; the back camera; pointing
 meaning (traces, links) from camera hands; the headset journey; iPhone
 performance tuning beyond what slice 3 measures; changing sign-in.
@@ -153,8 +182,10 @@ posted hologram is deleted from the viewer as today. Save file stays.
   bar after capture reads it, and the session token is never sent to
   capture.
 - [ ] Capture without a grant behaves as today (no Post; download only).
-- [ ] Selfie mode: with the fake person stream, the avatar's head, face,
-  arms and fingers move in the exported GLB, and it plays in `viewer-web`.
+- [ ] Selfie mode: on a phone through Record, the front camera is on, the
+  view faces the avatar, the countdown runs, and the exported GLB's face
+  tracks move and play in `viewer-web`. (Head, arms and fingers from the
+  camera are the motion owner's acceptance, not this brief's.)
 - [ ] A phone never shows the keyboard help.
 - [ ] Desktop and headset unchanged: `pnpm run verify:agent`, the face check
   and the hand replay pass.
@@ -192,7 +223,8 @@ and auth service: `apps/viewer-api/src/routes/auth.ts`,
 `services/auth.ts`, `app.ts` (CORS). Viewer: `features/feed/FeedPage.tsx`,
 `features/auth/`, a share sheet on the hologram page. Capture: the post step
 in `recording/RecordingSession.ts` and its UI; selfie mode in
-`runtime/` and `camera/`. Shared contract (the grant response) in
+`runtime/`, `camera/` and `ui/`. Not owned here: avatar driving (see the
+slice 2 boundary). Shared contract (the grant response) in
 `packages/` with the other API contracts.
 
 ## Design decision
@@ -207,9 +239,9 @@ URL).
 
 1. **Handoff:** post grant in the URL fragment (recommended), or capture's own
    sign-in.
-2. **Selfie mode on the spike:** merge the spike's camera pipeline into this
-   work (recommended; it is the only path to "it is you"), or ship slice 1
-   with today's face-only camera first.
+2. **Selfie flow before camera body lands:** build slice 2 now with
+   face-only driving (recommended; the flow is ready the day the motion owner
+   lands upper body), or hold slice 2 until then.
 3. **Sign-in stays an email link** before recording (recommended while you
    are the only user), or anonymous posting now.
 
