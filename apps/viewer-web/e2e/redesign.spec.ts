@@ -50,6 +50,21 @@ async function settleTransitions(page: Page): Promise<void> {
   await animationFrames(page, 2);
 }
 
+/**
+ * A finger resting on the card: the reach controls fold after their idle time
+ * (tokens.glyph.idleAfter, real time), and a starved runner can take longer
+ * than that between a tap and the layout reads that follow. This keeps the
+ * card reached until the returned stop is called; a check of the fold stops it.
+ */
+async function holdReach(page: Page, cardId: string): Promise<() => Promise<void>> {
+  await page.evaluate((id) => {
+    const card = document.querySelector(`.feed-card[data-card-id="${id}"]`)!;
+    const hold = window.setInterval(() => card.dispatchEvent(new PointerEvent("pointermove", { pointerType: "touch", bubbles: true })), 500);
+    (window as unknown as { __holdReach?: number }).__holdReach = hold;
+  }, cardId);
+  return () => page.evaluate(() => window.clearInterval((window as unknown as { __holdReach?: number }).__holdReach));
+}
+
 async function shot(page: Page, name: string): Promise<void> {
   await mkdir(shotsDir, { recursive: true });
   await page.screenshot({ path: path.join(shotsDir, `${name}.png`) });
@@ -378,6 +393,7 @@ test.describe("phone by touch", () => {
     await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "beside");
     await card.locator(".feed-card-portal").tap({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
+    const letGo = await holdReach(page, first.id);
     await expect(controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }), "a take with a voice has its sound control").toHaveCount(1);
     await settleTransitions(page);
     await shot(page, "phone-touch-feed-reached");
@@ -466,6 +482,7 @@ test.describe("phone by touch", () => {
       return Math.abs(ends.start - ends.end);
     };
     await expect.poll(endsApart, { message: "reached, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
+    await letGo();
     await expect(controls).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
     await expect.poll(endsApart, { message: "folded, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
     expect(Math.abs((await play.boundingBox())!.x + freePlay.width / 2 - PHONE.width / 2), "folded, Play still holds the middle").toBeLessThan(2);
