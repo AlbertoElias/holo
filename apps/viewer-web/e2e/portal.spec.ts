@@ -240,8 +240,7 @@ test.describe("phone", () => {
   };
   const pressTilt = async (page: Page) => {
     const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
-    await reachFor(card);
-    await card.getByRole("button", { name: /tilting/ }).click();
+    await pressReach(card, card.getByRole("button", { name: /tilting/ }));
   };
 
   test("tilt permission: an answer that arrives after the card was left does not turn tilt on", async ({ page }, testInfo) => {
