@@ -27,7 +27,6 @@ export * from "./typeRoles.js";
 export type XrMode = "desktop" | "mobile" | "vr" | "ar";
 
 export type UiRecordingStatus = "idle" | "recording" | "exporting";
-export type UiPermissionStatus = "pending" | "granted" | "denied" | "unsupported";
 export type UiLoadStatus = "loading" | "ready" | "warning" | "error";
 
 export interface XrSessionUiState {
@@ -92,10 +91,6 @@ export interface PlacementUiState {
   mode: string | null;
   reason: string | null;
   sequence: number;
-}
-
-export interface PermissionUiState {
-  micPermission: UiPermissionStatus;
 }
 
 export interface XrUiActions {

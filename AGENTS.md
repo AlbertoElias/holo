@@ -195,7 +195,8 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
 - Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`,
   `5175`, `4176`), dev servers, and local databases are still shared, so only one agent runs
   the XR harness or a dev server at a time unless ports are reassigned via
-  `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`. `verify:pr` and
+  `CAPTURE_RUNTIME_PORT` (the managed runtime), `DEV_PORT` (`run-xr-checks.ts`
+  and the capture XR checks) / `E2E_API_PORT`. `verify:pr` and
   `scripts/ci-emulate.sh` share a machine-wide lock: a second run waits and
   prints who holds it, so start yours and let it queue. To run beside another
   anyway, move `E2E_BASE_URL`, `E2E_POLYPIZZA_PORT`, `E2E_POLYHAVEN_PORT`,

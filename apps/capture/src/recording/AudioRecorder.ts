@@ -7,6 +7,10 @@ export class AudioRecorder {
   private chunks: Blob[] = [];
   private recording = false;
   private permissionState: 'pending' | 'granted' | 'denied' = 'pending';
+  // Each getUserMedia call is numbered when asked. An answer older than one already
+  // heard is stale (the early probe answering after a take's own request) and is dropped.
+  private lastAsked = 0;
+  private lastHeard = 0;
   private resolvedMimeType = '';
   // A camera take's microphone, asked for in the AR entry tap and kept open
   // until the session ends (docs/features/archive/ar-recording.md): the stream
@@ -15,18 +19,25 @@ export class AudioRecorder {
   private pendingStream: Promise<MediaStream | null> | null = null;
 
   async requestMicPermission(): Promise<boolean> {
+    const asked = ++this.lastAsked;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1 }
       });
       this.releaseStream(stream);
-      this.permissionState = 'granted';
+      this.hear(asked, 'granted');
       return true;
     } catch {
-      // A refusal of this probe says nothing about a stream another request has opened since.
-      if (!this.hasLiveStream()) this.permissionState = 'denied';
+      this.hear(asked, 'denied');
       return false;
     }
+  }
+
+  /** Records what the request numbered `asked` heard, unless a newer request has already been answered. */
+  private hear(asked: number, state: 'granted' | 'denied'): void {
+    if (asked < this.lastHeard) return;
+    this.lastHeard = asked;
+    this.permissionState = state;
   }
 
   /**
@@ -137,14 +148,15 @@ export class AudioRecorder {
     }
     // Overlapping callers (the AR tap's hold, then Record while the prompt is
     // open) share one request, so no second stream is left live unowned.
+    const asked = ++this.lastAsked;
     this.pendingStream ??= navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } }).then(
       (stream) => {
         this.stream = stream;
-        this.permissionState = 'granted';
+        this.hear(asked, 'granted');
         return stream;
       },
       () => {
-        this.permissionState = 'denied';
+        this.hear(asked, 'denied');
         return null;
       }
     ).finally(() => {

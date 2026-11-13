@@ -30,6 +30,11 @@ import type {} from '../src/runtime/automationHooks';
 //                   separate getUserMedia calls. The take's request is granted and the take records; then
 //                   the probe is refused. The UI must not say there is no microphone while one records,
 //                   and the exported take carries the audio.
+//   mic-stale       An answer older than one already heard is dropped (B-059). The probe is asked first and
+//                   answers last: (a) the take's request is refused, the take records without sound, then the
+//                   probe is granted: the UI must keep saying there is no microphone while that take runs;
+//                   (b) the take's request is granted, the take records and stops (the stream is released),
+//                   then the probe is refused: the UI must stay granted.
 //   toggle-races    Record twice in one task: one take. Stop twice in one task: one export, one download.
 //   performer-ends  A performer take is not a camera take: a hidden page and a VR session's end mid-start
 //                   and mid-take leave it running (the performer walks on; Stop exports once). Not a
@@ -43,12 +48,12 @@ const FAKE_MIC_ARGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-
 const BUSY_NOTICE = 'Stop recording to change the place.';
 const NO_MIC_TEXT = 'No microphone: takes save without sound.';
 
-const PHASES = ['start-window', 'mic-order', 'toggle-races', 'performer-ends'] as const;
+const PHASES = ['start-window', 'mic-order', 'mic-stale', 'toggle-races', 'performer-ends'] as const;
 type Phase = (typeof PHASES)[number];
 
 type Mic = { calls: number; pending: number };
 type Win = Window & {
-  __micCalls: Array<{ settle: (how: 'grant' | 'deny') => void; settled: boolean }>;
+  __micCalls: Array<{ settle: (how: 'grant' | 'deny') => Promise<void>; settled: boolean }>;
   IWER_DEVICE?: { activeSession?: { end(): void } };
 };
 
@@ -95,8 +100,10 @@ async function openPage(browser: Browser, consoleErrors: string[], options: { qu
           settled: false,
           settle: (how: 'grant' | 'deny') => {
             call.settled = true;
-            if (how === 'grant') real(constraints).then(resolve, reject);
-            else reject(new DOMException('Permission denied', 'NotAllowedError'));
+            // Resolves once the page has the answer (a real stream takes real time to open).
+            if (how === 'grant') return real(constraints).then(resolve, reject);
+            reject(new DOMException('Permission denied', 'NotAllowedError'));
+            return Promise.resolve();
           }
         };
         w.__micCalls.push(call);
@@ -246,6 +253,62 @@ async function micOrder(browser: Browser, consoleErrors: string[]): Promise<Phas
   return report;
 }
 
+async function micStale(browser: Browser, consoleErrors: string[]): Promise<PhaseReport> {
+  const report: PhaseReport = { phase: 'mic-stale', failures: [], notes: {} };
+  const fail = (message: string) => report.failures.push(message);
+  const probe = 0; // requestMicPermission() at load: its own getUserMedia, answered last in both orders
+  const takeRequest = async (page: Page) => {
+    await toggle(page);
+    await page.waitForFunction(() => (window as unknown as Win).__micCalls.length >= 2);
+  };
+  // (a) the take's request is refused, then the older probe is granted
+  let page = await openPage(browser, consoleErrors, {});
+  try {
+    await takeRequest(page);
+    await answerMic(page, 1, 'deny');
+    await waitFor(page, 'a take recording without sound', (r) => r.recordingState === 'recording');
+    const refused = await read(page);
+    report.notes.afterTakeRefusal = refused;
+    if (refused.micPermission !== 'denied') fail(`the take's microphone was refused but the UI says ${refused.micPermission}`);
+    await answerMic(page, probe, 'grant'); // the older request answers late
+    await advance(page, 200);
+    const late = await read(page);
+    report.notes.afterLateProbeGrant = late;
+    const overlay = await page.evaluate(() => document.body.innerText);
+    report.notes.silentTakeOverlayShowsNoMic = overlay.includes(NO_MIC_TEXT);
+    if (late.micPermission !== 'denied') fail(`a late grant of the probe made the UI say ${late.micPermission} over a take that records without sound`);
+    if (!overlay.includes(NO_MIC_TEXT)) fail(`the page no longer says "${NO_MIC_TEXT}" while the take records without sound`);
+    await advance(page, 400);
+    await toggle(page);
+    await waitDownloads(page, 1);
+    if ((await glbText(page, 0)).includes('KHR_audio')) fail('the take that was refused a microphone exported audio');
+  } finally {
+    await page.context().close();
+  }
+  // (b) the take's request is granted and the take ends, then the older probe is refused
+  page = await openPage(browser, consoleErrors, {});
+  try {
+    await takeRequest(page);
+    await answerMic(page, 1, 'grant');
+    await waitFor(page, 'recording', (r) => r.recordingState === 'recording');
+    await advance(page, 400);
+    await toggle(page);
+    await waitDownloads(page, 1);
+    await waitFor(page, 'the take to finish', (r) => r.recordingState === 'idle');
+    await answerMic(page, probe, 'deny'); // the older request answers late, after the stream went
+    await advance(page, 200);
+    const late = await read(page);
+    report.notes.afterStopThenLateProbeDenial = late;
+    const overlay = await page.evaluate(() => document.body.innerText);
+    report.notes.idleOverlayShowsNoMic = overlay.includes(NO_MIC_TEXT);
+    if (late.micPermission !== 'granted') fail(`after a take with sound, a late refusal of the older probe made the UI say ${late.micPermission}`);
+    if (overlay.includes(NO_MIC_TEXT)) fail(`the page says "${NO_MIC_TEXT}" after a take that recorded sound`);
+  } finally {
+    await page.context().close();
+  }
+  return report;
+}
+
 async function toggleRaces(browser: Browser, consoleErrors: string[]): Promise<PhaseReport> {
   const report: PhaseReport = { phase: 'toggle-races', failures: [], notes: {} };
   const fail = (message: string) => report.failures.push(message);
@@ -334,6 +397,7 @@ async function performerEnds(browser: Browser, consoleErrors: string[]): Promise
 const RUNNERS: Record<Phase, (browser: Browser, consoleErrors: string[]) => Promise<PhaseReport>> = {
   'start-window': startWindow,
   'mic-order': micOrder,
+  'mic-stale': micStale,
   'toggle-races': toggleRaces,
   'performer-ends': performerEnds
 };

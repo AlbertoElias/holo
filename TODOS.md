@@ -258,8 +258,13 @@ it from the item below instead of duplicating its status here.
      the blend mode shows `ar` over a VR session. The code comment that claimed
      the request counts only while pending was corrected; the replay was not
      kept (nothing to regress). Evidence in the shared notes folder.
-  7. Mic permission: independent promise writers and mismatched unions
-     (`apps/capture/src/types/contracts.ts` vs `packages/xr-ui-core/src/index.ts`).
+  7. Done (2026-11-12): mic permission, B-059. B-049 had already made one UI
+     writer; two answer orders still reproduced under held `getUserMedia`
+     answers (a take's refusal then the older probe's grant; a take's grant and
+     stop then the older probe's refusal) and are fixed by numbering each
+     request and dropping an answer older than one already heard. The union
+     mismatch (`unsupported`) is naming only: the shared type had no reader and
+     was deleted.
   8. Voice input (`apps/capture/src/objects/voiceInput.ts`), locomotion,
      desktop reach and held modes (`packages/xr-ui-core/src/heldMode.ts`,
      `apps/capture/src/xr/HeadsetHolds.ts`): not yet modeled.
