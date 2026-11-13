@@ -38,29 +38,19 @@ queue item in [`TODOS.md`](TODOS.md).
   and played on a local feed with sound; `verify:agent` passed. Capture
   scripts and docs only, so it rides along with the next merge. Uploaded to
   production 2026-11-12 (`cmwcte5x20005oeiqsmobz8mf`) and plays on the live
-  feed; its Quick Look conversion failed on the extent budget (B-052).
+  feed; its Quick Look conversion failed on the extent budget (B-057).
 - "The way down II" showcase hologram (scene `introspection2`, beat sheet in
   `apps/capture/scripts/showcase/introspection2/BEATS.md`, lessons in
   [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md)),
-  branch `feature/showcase-introspection-ii`, pushed 2026-11-12. It is the
-  [`TODOS.md`](TODOS.md) item "The way down, version 2". Built, uploaded and
-  played on a local feed with sound; a real-time proof video was watched and
-  sent; `verify:agent` passed. The build now measures Quick Look's load and
-  fails over 100 M point-frames (this scene: 61.9 M after the third pass), but the Quick Look conversion itself is unchecked. The critic was Muse, because Codex had hit
-  its usage limit. Not uploaded to production: that waits for the user's
-  go-ahead. It also changes the viewer: the feed's dome follows a
-  `HologramZoom` node, so it grows with the outer layer and leaves the view
-  when a piece zooms into itself. Holograms without the node are unchanged.
-  `verify:pr` has not run on it yet. The gas ("Tugged") and the liquid ("The
-  mould") were rebuilt to the user's 2026-11-12 decisions ("Decided for the
-  gas and the liquid" in BEATS.md) and played on the local feed with sound
-  (draft 9). A third pass (2026-11-12, draft 10) answers the user's notes
-  on draft 9: the gusts are keyed in world space and blast him, the paint is
-  34 multicoloured ropes on a darker pool, only the active layer draws (no
-  silhouette, no red line), the doors are irises in each layer, and the music
-  is chip/MIDI. That leaves a 38 MB GLB and 61.9 M point-frames. The
-  production upload still needs the API's 25 MB upload limit raised first
-  (the user is raising it to 100 MB).
+  the [`TODOS.md`](TODOS.md) item "The way down, version 2". Five passes on
+  the user's notes (draft 12: a warm Rothko sea, a breath and a calm before
+  each pass down, quieter music, a red underside in the dark, the traveller
+  home small); 45 MB GLB, 90.4 M point-frames, under the 100 M Quick Look
+  budget the build now checks. It also changes the viewer: the feed's dome
+  follows a `HologramZoom` node, so it grows with the outer layer; holograms
+  without the node are unchanged. Merged to `main` 2026-11-12 after
+  `verify:pr`; uploaded to production as the agent account (standing token in
+  the Keychain, `docs/features/agent-upload-token.md`) after the deploy.
 
 ## Recently merged (grouped)
 

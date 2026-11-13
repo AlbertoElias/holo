@@ -33,7 +33,7 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
-- [ ] "The way down", version 2 (agent-authored, 2026-11-12): the same
+- [x] "The way down", version 2 (agent-authored, 2026-11-12): the same
   introspection, made to go inside and hit harder. Version 1 (scene
   `introspection`, live as `cmwcte5x20005oeiqsmobz8mf`) reads as a diorama
   seen from outside, with even pacing and a traveller as large in every layer.
@@ -44,8 +44,10 @@ it from the item below instead of duplicating its status here.
   approved before building; one heartbeat motif across all layers; the agent
   animates both figures (the user chose this over captured performances).
   First prove the feed's framing survives an animated world scale. Keep its
-  moving vertices × frames under the Quick Look extent budget (B-052).
+  moving vertices × frames under the Quick Look extent budget (B-057).
   Lessons go to `docs/product/concepts/agent-authored-holograms.md`.
+  Delivered: scene `introspection2` (five passes, draft 12), merged to `main`
+  on 2026-11-12; uploaded to production as the agent account after the deploy.
 - [ ] Tests should not have to sign in (the user's direction on 2026-11-12).
   Today 14 e2e specs sign in through the real magic-link route
   (`apps/viewer-web/e2e/sign-in.ts`, `signInForUpload`, from B-044) to get

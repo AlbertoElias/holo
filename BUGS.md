@@ -90,7 +90,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
   Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
 
-### B-052 — A long animated showcase piece fails Quick Look conversion on the extent budget
+### B-057 — A long animated showcase piece fails Quick Look conversion on the extent budget
 
 - **Area:** `apps/viewer-api/tools/glb_to_usdz.py`
 - **Severity:** P3 (one piece, "The way down", has no iPhone AR preview; the feed plays it)
