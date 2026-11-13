@@ -222,7 +222,7 @@ it from the item below instead of duplicating its status here.
      framed (a late scan never shows; the gate's `timeout` is never
      overwritten). The replay found the real defect: a card that becomes
      first after its dome is fitted took the place late. Fixed on `main`; B-053
-     stays open in `BUGS.md` until hosted CI is green and the viewer deploys.
+     is closed (green hosted CI, all three deploys).
   4. Portal tilt permission (`usePortalTriggers.ts`): a pending `enableTilt`
      writes `on` after `reset()`.
   5. Upload panel (`UploadPanel.tsx`): file picker stays enabled mid-upload and
