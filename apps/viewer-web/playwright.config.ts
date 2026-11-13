@@ -74,6 +74,12 @@ export default defineConfig({
   // it stops itself first, so a stalled run still names the test it was in
   // and leaves its report and diagnostics instead of being cancelled blind.
   globalTimeout: process.env.CI && runPipeline ? 16 * 60_000 : 0,
+  // A web-first assertion waits on its condition; the deadline only bounds a
+  // hang. Pipeline pages share the runner with the API, capture and a GPU-less
+  // renderer, and a starved page fetched and drew a creator's cards after the
+  // default 5 s (profiles, CI_EMULATE_LOAD=2: 2 of 8). A passing check still
+  // returns the moment its condition holds.
+  expect: { timeout: runPipeline ? 20_000 : 5_000 },
   reporter: [
     // The pipeline's tests run for minutes each; list prints each one's start.
     [process.env.CI && !runPipeline ? "dot" : "list"],
