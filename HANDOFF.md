@@ -50,7 +50,7 @@ queue item in [`TODOS.md`](TODOS.md).
   follows a `HologramZoom` node, so it grows with the outer layer; holograms
   without the node are unchanged. Merged to `main` 2026-11-12 after
   `verify:pr`; uploaded to production as the agent account (standing token in
-  the Keychain, `docs/features/agent-upload-token.md`) after the deploy.
+  the Keychain, `docs/features/archive/agent-upload-token.md`) after the deploy.
 
 ## Recently merged (grouped)
 
