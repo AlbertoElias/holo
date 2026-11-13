@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| A hologram of yourself from a phone in under 2 minutes | Draft, awaiting approval | [phone-capture.md](phone-capture.md) |
 | A scanned place around a take (split capture, first attempt) | Complete | [splat-place.md](archive/splat-place.md) |
 | Record a take inside a scanned place (split capture, slice 2) | 2a on `main` (2026-11-11); 2b, 2c not started | [splat-capture.md](splat-capture.md) |
 | Positional audio in holograms | Complete | [positional-audio.md](archive/positional-audio.md) |
