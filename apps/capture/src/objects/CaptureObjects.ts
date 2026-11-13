@@ -202,6 +202,16 @@ export class CaptureObjects {
     };
   }
 
+  /**
+   * One step of a spectator session (AR): nothing is held or reached for any more, and the props settle
+   * where physics puts them, so a prop carried at entry does not hang in the air for the take.
+   */
+  spectate(deltaSec: number): void {
+    this.interaction.endForSpectator();
+    this.commitHoldChanges(false);
+    this.interaction.stepPhysics(deltaSec);
+  }
+
   private takeRemoved(): boolean {
     const removed = this.removedSinceFrame;
     this.removedSinceFrame = false;

@@ -287,6 +287,17 @@ export class ObjectInteraction {
     this.physics?.step(this.deps.registry.eventObjects(), deltaSec, (object, world) => this.writeWorld(object, world));
   }
 
+  /**
+   * A session that is not the desktop's (AR: the phone's screen is the camera, nobody carries) took the
+   * frame: a reach ends, a held prop is let go (to fall where physics puts it) and no step stays queued.
+   * Safe every frame; the desktop picks up from an empty hand when the session ends.
+   */
+  endForSpectator(): void {
+    this.reach.reset();
+    this.clearStep();
+    if (this.hold) this.release(false);
+  }
+
   update(step: ObjectStep): void {
     const { registry, carry } = this.deps;
     if (!this.deps.avatar.avatar) return;

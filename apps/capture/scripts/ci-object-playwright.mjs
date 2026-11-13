@@ -11,6 +11,7 @@ import { runDesktopMouseObject, runPhoneTouchObject } from './lib/object-pointer
 import { runDesktopResize, runIwerResize, runPhoneResize } from './lib/object-resize.mjs';
 import { runDesktopFetch, runDesktopPush, runIwerFetch, runIwerPush, runPhoneFetchAndPush } from './lib/object-push.mjs';
 import { runFloorReach, runMouseFloorReach, runPhoneFloorReach, runPitReach, runRailingReach, runRevalidatesEveryFrame, runTrenchReach, runVrEntryMidStep, runWallReach } from './lib/object-reach.mjs';
+import { runReachInterruptions } from './lib/object-reach-states.mjs';
 
 // Explain with an object (PRD-043): an IWER controller take and a desktop
 // take load the bracket fixture, grab it, move and turn it, put it down, and
@@ -36,6 +37,7 @@ try {
     ['phone', () => runPhoneTouchObject({ browser, baseUrl, consoleErrors })],
     ['reach', () => runFloorReach({ browser, baseUrl, artifactDir, consoleErrors })],
     ['mouseReach', () => runMouseFloorReach({ browser, baseUrl, consoleErrors })],
+    ['reachStates', () => runReachInterruptions({ browser, baseUrl, consoleErrors, only: process.env.REACH_STATES_ONLY?.split(',') })],
     ['phoneReach', () => runPhoneFloorReach({ browser, baseUrl, consoleErrors })],
     ['trench', () => runTrenchReach({ browser, baseUrl, consoleErrors })],
     ['wall', () => runWallReach({ browser, baseUrl, consoleErrors })],

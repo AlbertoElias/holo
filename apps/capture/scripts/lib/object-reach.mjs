@@ -1,6 +1,7 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { emulatePhone } from '@holoim/tooling-testing/iwer-phone';
 import { createXrContext, waitForPageFunctions, waitForTextContentPrefix, wireXrConsoleErrors } from '@holoim/tooling-testing/xr-env';
 
 import * as THREE from 'three';
@@ -42,11 +43,13 @@ const round = (value, digits = 3) => Number(value.toFixed(digits));
 const centreOf = (item) => [0, 1, 2].map((a) => (item.boundsMin[a] + item.boundsMax[a]) / 2);
 const dist = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
 
-async function openPage(browser, baseUrl, consoleErrors, label, { viewport, touch, scene }) {
+export async function openPage(browser, baseUrl, consoleErrors, label, { viewport, touch, scene, phone }) {
   const context = await createXrContext(browser, { viewport, acceptDownloads: true, ...(touch ? { hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : {}) });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
   await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"object-reach-input.json"}' }));
+  // A phone that can start an AR session from the page's button (IWER's handheld device).
+  if (phone) await emulatePhone(page);
   await openCapture(page, baseUrl, { object: OBJECT_URL, ...(scene ? { scene } : {}) });
   await waitForPageFunctions(page, ['__projectToScreen', '__loadObjectUrl', '__setMockInput', '__sampleHolds']);
   await waitForTextContentPrefix(page, '#status', 'loaded');

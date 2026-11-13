@@ -25,6 +25,8 @@ export class ObjectSystem extends createSystem() {
       // A phone camera author places tray items where its centre ray lands, in this step, before the camera is recorded.
       // A headset in passthrough only watches: no summon.
       if (c.frame.arCameraAuthor) c.phoneChrome.stepPlacement(c.frame.elapsedSec);
+      // Whatever the desktop held or reached for when the session began is let go, not frozen mid-air.
+      c.objects.spectate(c.frame.deltaSec);
       return;
     }
     if (!c.motor.hasSpawnResolved()) return;

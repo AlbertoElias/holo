@@ -76,6 +76,8 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
   'ar-record': 300000,
   // Sixteen phases, five of them put back and tray removal (docs/features/archive/tray-remove.md): about 130 s locally.
   summon: 300000,
+  // Reach, push, fetch, resize and take phases on desktop, phone and IWER, plus the reach interruptions: about 130 s locally.
+  object: 300000,
   body: 360000,
   face: 360000,
   avatars: 900000

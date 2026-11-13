@@ -301,7 +301,17 @@ it from the item below instead of duplicating its status here.
      itself; fixed, check `loco-states`. Not covered: the viewer's VR gallery
      locomotion (the IWSDK locomotor, no app-owned mode state) and a physical
      headset.
-     Still not modeled: desktop reach and held modes
+     Desktop reach (`DesktopReach` with `ObjectInteraction.updateDesktop`, input
+     in `InputController`): Done (2026-11-13), B-065. The statechart skill is
+     user-invoked only, so the machine was read from the code instead. The
+     input-end orderings do not reproduce: blur, a hidden tab, a lost pointer
+     lock and a take start or stop with the button down, and V and F during a
+     reach, all end as the semantics say (replay `desktop-reach-interruptions`
+     in `test:xr:object`). Entering AR while a prop was carried froze the hold in
+     the air (`ObjectSystem` returned early for the spectator frame); the AR
+     frame now lets the hold go and steps physics. Not covered: the pointing
+     machine (its own checks), the viewer's reach row and a physical headset.
+     Still not modeled: held modes
      (`packages/xr-ui-core/src/heldMode.ts`,
      `apps/capture/src/xr/HeadsetHolds.ts`).
   The skill and its rules live in
