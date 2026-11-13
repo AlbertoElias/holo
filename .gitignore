@@ -45,3 +45,6 @@ __pycache__/
 
 # agent worktrees
 .worktrees/
+
+# Playwright MCP server scratch output (console logs, page snapshots)
+.playwright-mcp/
