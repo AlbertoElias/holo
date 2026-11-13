@@ -161,35 +161,11 @@ describe("HologramFootControls: the chip (2.3, 5.2, 9.2)", () => {
     await renderer.unmount();
   });
 
-  it("fades in over 0.3 s in VR, and a background that alternates every few frames never makes it flicker", async () => {
-    let wanted = true;
-    const renderer = await mount(hologram({ target: VIEW_TARGETS.vr, chipWanted: wanted }));
-    expect(chipMesh(renderer).visible).toBe(false);
-    await renderer.advanceFrames(30, 0.016);
-    const chip = chipMesh(renderer);
-    expect((chip.material as { opacity: number }).opacity).toBeCloseTo(tokens.chip.opacity.vr, 9);
-
-    // Wavering at a threshold: a few frames asking, a few not, for several seconds.
-    const seen = new Set<number>();
-    for (let round = 0; round < 60; round += 1) {
-      wanted = !wanted;
-      await renderer.update(hologram({ target: VIEW_TARGETS.vr, chipWanted: wanted }));
-      await renderer.advanceFrames(3, 0.016);
-      expect(chip.visible).toBe(true);
-      seen.add((chip.material as { opacity: number }).opacity);
-    }
-    expect([...seen]).toEqual([tokens.chip.opacity.vr]);
-    await renderer.unmount();
-  });
-
-  it("holds at least 2 s after the background last asked, then leaves", async () => {
+  it("fades in through the frame loop in VR (the timing contract lives in xr-ui-core)", async () => {
     const renderer = await mount(hologram({ target: VIEW_TARGETS.vr, chipWanted: true }));
-    await renderer.advanceFrames(30, 0.016);
-    await renderer.update(hologram({ target: VIEW_TARGETS.vr, chipWanted: false }));
-    await renderer.advanceFrames(110, 0.016);
-    expect(chipMesh(renderer).visible).toBe(true);
-    await renderer.advanceFrames(60, 0.016);
     expect(chipMesh(renderer).visible).toBe(false);
+    await renderer.advanceFrames(30, 0.016);
+    expect((chipMesh(renderer).material as { opacity: number }).opacity).toBeCloseTo(tokens.chip.opacity.vr, 9);
     await renderer.unmount();
   });
 });

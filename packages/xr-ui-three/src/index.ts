@@ -1,4 +1,3 @@
-export { ThreeLabelPill, ThreeRecordingActionPanel, type LabelPillStyle } from "./legacy.js";
 
 export * from "./chrome.js";
 export * from "./ThreeChip.js";

@@ -6,7 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createAuthTables } from "./fixtures/auth.js";
+import { applyMigrations } from "./fixtures/db.js";
 
 const ENV_KEYS = [
   "DATABASE_URL",
@@ -47,7 +47,7 @@ describe("sign-in email delivery", () => {
 
     vi.resetModules();
     const { prisma } = (await import("../src/lib/prisma.js")) as { prisma: PrismaClient };
-    await createAuthTables(prisma);
+    await applyMigrations(prisma);
     const { buildApp } = await import("../src/app.js");
     const app: FastifyInstance = buildApp({ logger: false, uploadsRoot: path.join(testRoot, "uploads") });
     await app.ready();

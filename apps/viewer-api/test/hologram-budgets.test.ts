@@ -8,7 +8,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { MAX_HOLOGRAM_BYTES, readGlbChunks, readStoredPlace } from "@holoim/contracts";
 import { validateHoloimObjects } from "@holoim/objects";
 
-import { bearer, createAuthTables, exposeMagicLinksForTests, signIn, type SessionBody } from "./fixtures/auth.js";
+import { bearer, exposeMagicLinksForTests, signIn, type SessionBody } from "./fixtures/auth.js";
+import { applyMigrations } from "./fixtures/db.js";
 import { hologramGlb, MEANING, spz, spzBomb, type HologramGlbSpec } from "./fixtures/hologramGlb.js";
 
 // hologram-budgets (docs/features/hologram-budgets.md), API side, through the
@@ -172,51 +173,7 @@ fs.writeFileSync(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), f
     vi.resetModules();
     const prismaModule = await import("../src/lib/prisma.js");
     prisma = prismaModule.prisma;
-    await createAuthTables(prisma);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE "Hologram" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "filenameOriginal" TEXT NOT NULL,
-        "hologramName" TEXT NOT NULL,
-        "submittedBy" TEXT NOT NULL,
-        "filenameStored" TEXT NOT NULL,
-        "mimeType" TEXT NOT NULL,
-        "sizeBytes" INTEGER NOT NULL,
-        "storagePath" TEXT NOT NULL,
-        "durationSec" REAL,
-        "usdzPath" TEXT,
-        "usdzStatus" TEXT NOT NULL DEFAULT 'none',
-        "usdzClaimedAt" DATETIME,
-        "usdzClaimToken" TEXT,
-        "usdzAttempts" INTEGER NOT NULL DEFAULT 0,
-        "usdzError" TEXT,
-        "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
-        "placeDetailKey" TEXT,
-        "textureDetailKey" TEXT,
-        "servedKey" TEXT,
-        "processStatus" TEXT NOT NULL DEFAULT 'none',
-        "processClaimedAt" DATETIME,
-        "processClaimToken" TEXT,
-        "processAttempts" INTEGER NOT NULL DEFAULT 0,
-        "processError" TEXT,
-        "ownerId" TEXT,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE "UploadIntent" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "storageKey" TEXT NOT NULL,
-        "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
-        "filenameOriginal" TEXT NOT NULL,
-        "hologramName" TEXT NOT NULL,
-        "submittedBy" TEXT NOT NULL,
-        "mimeType" TEXT NOT NULL,
-        "sizeBytes" INTEGER NOT NULL,
-        "expiresAt" DATETIME NOT NULL,
-        "completedHologramId" TEXT,
-        "ownerId" TEXT,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`);
+    await applyMigrations(prisma);
     ({ processNextHologram } = (await import("../src/services/process-worker.js")) as never);
     ({ processNextUsdzConversion } = (await import("../src/services/usdz-worker.js")) as never);
     const { LocalMediaStorage } = await import("../src/services/media-storage.js");

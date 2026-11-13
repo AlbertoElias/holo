@@ -7,12 +7,12 @@ import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bearer,
-  createAuthTables,
   exposeMagicLinksForTests,
   requestMagicToken as requestToken,
   signIn as signInAs,
   type SessionBody
 } from "./fixtures/auth.js";
+import { applyMigrations } from "./fixtures/db.js";
 
 type HologramDto = {
   id: string;
@@ -74,51 +74,7 @@ describe("auth and ownership routes", () => {
     const prismaModule = await import("../src/lib/prisma.js");
     prisma = prismaModule.prisma;
 
-    await createAuthTables(prisma);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE "Hologram" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "filenameOriginal" TEXT NOT NULL,
-        "hologramName" TEXT NOT NULL,
-        "submittedBy" TEXT NOT NULL,
-        "filenameStored" TEXT NOT NULL,
-        "mimeType" TEXT NOT NULL,
-        "sizeBytes" INTEGER NOT NULL,
-        "storagePath" TEXT NOT NULL,
-        "durationSec" REAL,
-        "usdzPath" TEXT,
-        "usdzStatus" TEXT NOT NULL DEFAULT 'none',
-        "usdzClaimedAt" DATETIME,
-        "usdzClaimToken" TEXT,
-        "usdzAttempts" INTEGER NOT NULL DEFAULT 0,
-        "usdzError" TEXT,
-        "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
-        "placeDetailKey" TEXT,
-        "textureDetailKey" TEXT,
-        "servedKey" TEXT,
-        "processStatus" TEXT NOT NULL DEFAULT 'none',
-        "processClaimedAt" DATETIME,
-        "processClaimToken" TEXT,
-        "processAttempts" INTEGER NOT NULL DEFAULT 0,
-        "processError" TEXT,
-        "ownerId" TEXT,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE "UploadIntent" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "storageKey" TEXT NOT NULL,
-        "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
-        "filenameOriginal" TEXT NOT NULL,
-        "hologramName" TEXT NOT NULL,
-        "submittedBy" TEXT NOT NULL,
-        "mimeType" TEXT NOT NULL,
-        "sizeBytes" INTEGER NOT NULL,
-        "expiresAt" DATETIME NOT NULL,
-        "completedHologramId" TEXT,
-        "ownerId" TEXT,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`);
+    await applyMigrations(prisma);
 
     const { buildApp } = await import("../src/app.js");
     app = buildApp({ logger: false, uploadsRoot, searchLimit: 10_000, magicLinkLimit: 10_000 });
