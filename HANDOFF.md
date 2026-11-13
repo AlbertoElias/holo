@@ -5,7 +5,7 @@ Pointer only — do not duplicate state tracked elsewhere. The queue is
 [`docs/features/README.md`](docs/features/README.md)), open defects are in
 [`BUGS.md`](BUGS.md), and history is `git log`.
 
-**Updated:** 2026-11-11
+**Updated:** 2026-11-12
 **Baseline:** `main` after the undo and redo merge (`8a7b7a097905`) — check `git log --oneline -10` before trusting it.
 **Working tree when updated:** clean on `main`. Merged branches and their
 worktrees were cleaned up on 2026-11-11; the stale unmerged branches from
@@ -29,6 +29,28 @@ the B-039 port fix, tray removal and author-marked hand traces v1
 ([`docs/features/archive/authored-traces.md`](docs/features/archive/authored-traces.md)) (merged 2026-11-10);
 their device checks are in each brief's "Physical-device limits". Pick the next
 queue item in [`TODOS.md`](TODOS.md).
+
+## Ready to merge with the next change
+
+- "The way down" showcase hologram (scene `introspection`, notes in
+  [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md)),
+  branch `feature/showcase-introspection`, pushed 2026-11-11. Built, uploaded
+  and played on a local feed with sound; `verify:agent` passed. Capture
+  scripts and docs only, so it rides along with the next merge. Uploaded to
+  production 2026-11-12 (`cmwcte5x20005oeiqsmobz8mf`) and plays on the live
+  feed; its Quick Look conversion failed on the extent budget (B-057).
+- "The way down II" showcase hologram (scene `introspection2`, beat sheet in
+  `apps/capture/scripts/showcase/introspection2/BEATS.md`, lessons in
+  [`docs/product/concepts/agent-authored-holograms.md`](docs/product/concepts/agent-authored-holograms.md)),
+  the [`TODOS.md`](TODOS.md) item "The way down, version 2". Five passes on
+  the user's notes (draft 12: a warm Rothko sea, a breath and a calm before
+  each pass down, quieter music, a red underside in the dark, the traveller
+  home small); 45 MB GLB, 90.4 M point-frames, under the 100 M Quick Look
+  budget the build now checks. It also changes the viewer: the feed's dome
+  follows a `HologramZoom` node, so it grows with the outer layer; holograms
+  without the node are unchanged. Merged to `main` 2026-11-12 after
+  `verify:pr`; uploaded to production as the agent account (standing token in
+  the Keychain, `docs/features/archive/agent-upload-token.md`) after the deploy.
 
 ## Recently merged (grouped)
 

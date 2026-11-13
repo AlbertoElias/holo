@@ -434,19 +434,20 @@ type OrientationPermissionApi = { requestPermission?: () => Promise<"granted" | 
 
 /** Must run inside a user gesture: iOS only shows its motion prompt then. */
 export async function enableTilt(store: PortalStore): Promise<void> {
+  const settle = store.beginTiltRequest();
   if (typeof window === "undefined" || !("DeviceOrientationEvent" in window)) {
-    store.setTiltStatus("unsupported");
+    settle("unsupported");
     return;
   }
   const api = window.DeviceOrientationEvent as unknown as OrientationPermissionApi;
   if (typeof api.requestPermission === "function") {
     try {
       const result = await api.requestPermission();
-      store.setTiltStatus(result === "granted" ? "on" : "denied");
+      settle(result === "granted" ? "on" : "denied");
     } catch {
-      store.setTiltStatus("denied");
+      settle("denied");
     }
     return;
   }
-  store.setTiltStatus("on");
+  settle("on");
 }

@@ -7,6 +7,12 @@
 #   scripts/ci-emulate.sh pnpm run test:xr:viewer
 #   CI_EMULATE_CPUS=0 scripts/ci-emulate.sh pnpm run test:xr:capture
 #   XR_SHARD=1/2 scripts/ci-emulate.sh pnpm run test:xr:capture
+#   CI_EMULATE_LOAD=2 scripts/ci-emulate.sh pnpm --filter @holoim/web exec playwright test e2e/x.spec.ts --repeat-each=5
+#
+# CI_EMULATE_LOAD=N runs N busy loops on the container's CPUs beside the
+# command, a runner starved the way a loaded host starves it. A check whose
+# deadline is wall-clock time while the page's own clock (frames, a mixer, a
+# UI timer) runs slower fails here instead of on hosted CI.
 #
 # CPUs are pinned with --cpuset-cpus rather than --cpus so the harness sees
 # 4 CPUs (os.availableParallelism) and picks the same concurrency as CI.
@@ -26,11 +32,22 @@ if [ "$#" -eq 0 ]; then
 fi
 
 root="$(git rev-parse --show-toplevel)"
+
+# One heavy check at a time on this machine: overlapping emulations starve each
+# other (crashed pages, navigation timeouts), and so does a parallel verify:pr.
+# The lock in scripts/verify-lock.ts waits and prints who holds it.
+# CI_EMULATE_NO_LOCK=1 skips it.
+if [ -z "${CI_EMULATE_NO_LOCK:-}" ] && [ -z "${CI_EMULATE_LOCKED:-}" ]; then
+  export CI_EMULATE_LOCKED=1
+  exec "$root/node_modules/.bin/tsx" "$root/scripts/verify-lock.ts" ci-emulate -- "$0" "$@"
+fi
 cpus="${CI_EMULATE_CPUS:-0-3}"
 # A hosted runner has 16 GB; Docker Desktop may have less, and two emulations
 # at once then overcommit it (crashed pages, navigation timeouts). Run one at
 # a time, or lower this.
 memory="${CI_EMULATE_MEMORY:-16g}"
+load="${CI_EMULATE_LOAD:-0}"
+case "$load" in ''|*[!0-9]*) echo "CI_EMULATE_LOAD must be a whole number" >&2; exit 2 ;; esac
 image="${CI_EMULATE_IMAGE:-node:24-bookworm}"
 platform="${CI_EMULATE_PLATFORM:-linux/amd64}"
 arch="${platform#linux/}"
@@ -91,8 +108,12 @@ docker run --rm --init --platform "$platform" \
     [ -x /root/.venv-usdz/bin/python3 ] || python3 -m venv /root/.venv-usdz
     /root/.venv-usdz/bin/pip install -q -r apps/viewer-api/tools/requirements.txt
     export PATH=/root/.venv-usdz/bin:\$PATH
+    hogs=()
+    for _ in \$(seq 1 ${load}); do (while :; do :; done) & hogs+=(\$!); done
+    [ ${load} -gt 0 ] && echo \"[ci-emulate] ${load} busy loop(s) on the container's CPUs\"
     status=0
     ${cmd} || status=\$?
+    [ \${#hogs[@]} -gt 0 ] && kill \"\${hogs[@]}\" 2>/dev/null || true
     for d in output apps/*/output apps/*/test-results apps/*/playwright-report; do
       [ -d \"\$d\" ] && mkdir -p \"/out/\$d\" && cp -a \"\$d/.\" \"/out/\$d/\"
     done

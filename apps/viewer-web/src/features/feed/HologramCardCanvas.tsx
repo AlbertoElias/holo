@@ -117,6 +117,8 @@ const FOLLOW_DIRECTION = new Vector3().copy(clocheFollowDirection());
 /** Inside end never comes closer than this share of the Follow distance. */
 const MAX_INSIDE_SHARE = 0.6;
 const RIM = tokens.edge.cloche.rim;
+/** The node a hologram that zooms into itself names its zoom by (see the agent-authored holograms concept page). */
+const HOLOGRAM_ZOOM_NODE = "HologramZoom";
 
 /** What the feed's rim (3.4) did, for the e2e checks: ready once its ground field is read. */
 export type RimProbe = {
@@ -416,6 +418,13 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   // (FrameFirst), so the shell and the scene's clip always agree.
   const bubbleNode = useMemo(() => clonedScene.getObjectByName("RecordedBubbleSphere") ?? null, [clonedScene]);
   const bubbleNow = useRef(new Vector3()).current;
+  // A hologram that zooms into itself names its zoom: the node sits at the
+  // zoom's centre and its scale is how far the outermost layer has grown. The
+  // dome wraps that layer, so it grows with it and leaves the view going in.
+  const zoomNode = useMemo(() => clonedScene.getObjectByName(HOLOGRAM_ZOOM_NODE) ?? null, [clonedScene]);
+  const clocheZoom = useRef<{ scale: number; centre: Vector3 } | undefined>(undefined);
+  if (zoomNode && !clocheZoom.current) clocheZoom.current = { scale: 1, centre: new Vector3() };
+  const zoomScale = useRef(new Vector3()).current;
   const driveCloche = useCallback((delta: number) => {
     // The take advances first: everything after reads this frame's pose. Until the dome is fitted the take holds at its
     // first pose, so the dome is the same however long the first frame was (a loaded machine's can be a large part of a
@@ -423,6 +432,12 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
     mixer.update(clocheRef.current || (fitTried.current && placeGate.status === "off") ? delta : 0);
     // The bubble where it is now (a seek between frames included), not where the last draw synced it.
     if (fittedCentre.current && sphereClip.active && bubbleNode) clocheShift.copy(bubbleNode.getWorldPosition(bubbleNow)).sub(fittedCentre.current);
+    const zoom = clocheZoom.current;
+    if (zoomNode && zoom) {
+      zoomNode.updateWorldMatrix(true, false);
+      zoomNode.getWorldPosition(zoom.centre);
+      zoom.scale = zoomNode.getWorldScale(zoomScale).x;
+    }
     const rim = rimRef.current;
     const fittedShape = clocheRef.current;
     if (rim?.take.lifts && fittedShape) {
@@ -440,7 +455,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       rimProbe.raw = rim.motion.raw;
       rimProbe.timing = rim.motion.timing;
     }
-  }, [bubbleNode, bubbleNow, clocheShift, domeClip, domeRim, mixer, placeGate, reducedMotion, rimProbe, rimProp, sphereClip]);
+  }, [bubbleNode, bubbleNow, clocheShift, domeClip, domeRim, mixer, placeGate, reducedMotion, rimProbe, rimProp, sphereClip, zoomNode, zoomScale]);
 
   /** Whether a world point is under the glass where the dome is now, bent onto the rim of a take that lifts. */
   const insideDome = useCallback((point: Vector3): boolean | null => {
@@ -477,10 +492,16 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       const shape = clocheRef.current;
       if (!shape) return false;
       const reach = Math.max(shape.radii.x, shape.radii.y, shape.radii.z);
+      const zoom = clocheZoom.current;
+      const grow = zoom && zoom.scale > 0 ? zoom.scale : 1;
       centre.set(shape.base.x, shape.base.y + shape.radii.y / 2, shape.base.z).add(clocheShift);
+      if (zoom && grow !== 1) centre.sub(zoom.centre).multiplyScalar(grow).add(zoom.centre);
       const nearest = raycaster.ray.direction.dot(sample.copy(centre).sub(raycaster.ray.origin));
       for (let step = 0; step <= GLASS_RAY_SAMPLES; step += 1) {
-        raycaster.ray.at(nearest - reach + (2 * reach * step) / GLASS_RAY_SAMPLES, sample).sub(clocheShift);
+        raycaster.ray.at(nearest - reach * grow + (2 * reach * grow * step) / GLASS_RAY_SAMPLES, sample);
+        // Back into the space the dome was fitted in.
+        if (zoom && grow !== 1) sample.sub(zoom.centre).divideScalar(grow).add(zoom.centre);
+        sample.sub(clocheShift);
         if (clocheInside(shape, rimProp.heights, sample)) return true;
       }
       return false;
@@ -926,7 +947,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       <primitive object={clonedScene} />
       <pointLight ref={stageLightRef} color={tokens.color.glow} decay={2} />
       {cloche && (
-        <Cloche seed={seed} shape={cloche} shift={clocheShift} target={target} recording={false} inFocus={active} reducedMotion={reducedMotion} soot={soot} rim={rimProp} />
+        <Cloche seed={seed} shape={cloche} shift={clocheShift} zoom={clocheZoom.current} target={target} recording={false} inFocus={active} reducedMotion={reducedMotion} soot={soot} rim={rimProp} />
       )}
       {meaningLinks.length > 0 && (
         <PointingHighlights

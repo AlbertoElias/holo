@@ -77,6 +77,15 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the animated sources' clip wraps and the step passes on a 4-CPU runner as it does locally.
 - **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
   Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
+- **Cause (2026-11-12):** two wall-clock judgements of the page's own clock. The wrap poll read the clip time once per
+  `voicesInStep` (5 frames); on a starved runner that period nears the 8 s clip and aliases, so no sample landed after the
+  wrap within its real-time deadline, and the `waitForTimeout(600)` after it landed at an arbitrary clip time. The sync
+  checks allowed a fixed 0.15 s between the motion's time and the audio clock, which are read a frame apart, and a starved
+  frame is longer: under `CI_EMULATE_LOAD=2` the "resumed" check failed at 0.35 s (1 of 5 runs, the old spec).
+- **Fix:** `waitForWrap` watches the clip time every animation frame until it drops and runs on to 0.5 s; the sync
+  tolerance is the larger of 0.15 s and 1.5 frames measured where the voices are read. A real desync is off by seconds.
+- **Evidence:** `scripts/ci-emulate.sh` on `spatial-audio.spec.ts --repeat-each=5`: 5/5 with no load, 5/5 with
+  `CI_EMULATE_LOAD=2` (frames 107–130 ms; before the fix, 4/5 under the same load). Closes after a green hosted run on `main`.
 
 ### B-054 — The summon XR check's `desktop-anytime` phase flakes on "mid-take row: no tray row"
 
@@ -86,6 +95,20 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Evidence:** `SUMMON_ONLY=desktop-anytime` fails at `tray-anytime-take.mjs:204` (`checkRow(rowMid, { filled: 2, ... where: 'mid-take row' })`) with "no tray row": 2 of 3 runs with the B-050 fix, 1 of 4 without it, so the fix does not cause it. It ran at a load average of 30 or more.
 - **Expected:** the tray dock shows its row mid-take on every run.
 - **Reproduction:** `SUMMON_ONLY=desktop-anytime pnpm --filter @holoim/capture run test:xr:summon`, repeated on a loaded machine. Not isolated; suspect the same starved-page timing as B-050 (a wait that ends before the dock re-renders).
+
+### B-056 — Portal tilt: a motion-permission answer that arrives late still writes the tilt state
+
+- **Area:** `apps/viewer-web/src/features/portal/usePortalTriggers.ts` (`enableTilt`), `portalStore.ts` (`tiltStatus`), `PortalControls.tsx`
+- **Severity:** P3 (tilt is the `?portal=tilt` trial variant only; the default `drag` variant has no tilt)
+- **Found by:** `/find-implicit-state-machines` (2026-11-12), replayed 2026-11-12. Model: `tiltStatus` off | on | denied | unsupported, with "requesting" held only in the pending promise; rules "after reset the status is `off` until the viewer asks again" and "an answer to an ask the viewer has since cancelled is ignored".
+- **Replay, reproduced** (`portal.spec.ts`, phone, `?portal=tilt`, `DeviceOrientationEvent.requestPermission` shim that holds each call open):
+  - "an answer that arrives after the card was left does not turn tilt on": press the tilt button, scroll to the next card (the card resets), grant; scroll back and the first card reads `on` with the button pressed, though the viewer never turned tilt on for this visit.
+  - "a denial that arrives after the card was left leaves the card as new": the same order with a denial leaves `denied` (the declined tooltip) on a card that reset.
+  - "with two asks open, the newest answer is the one that counts": two presses before an answer give two asks; a grant to the newer, then a denial to the older, ends `denied`.
+- **Cause:** the ask is an `await` whose continuation writes the store unconditionally; `reset()` (card left) and the off press never cancel it.
+- **Fix:** the store keeps a tilt epoch that every viewer move bumps (an ask, the off press, `reset()`). `enableTilt` takes a `settle` function from `store.beginTiltRequest()`, which drops its answer once the epoch has moved. Nothing else changes: an answer on the card the viewer stayed on works as before (replayed in "the answer on the card the viewer stayed on still works").
+- **Did not reproduce:** unmount while an ask is pending. The store is per card and nothing renders from it afterwards, so the late write is unobservable.
+- **Not done:** emulation in headless Chromium with a shim, no iPhone. Leaving the card while iOS's modal prompt is up needs a scroll glide still running at the press (or a feed change), and a double ask needs two taps before the prompt shows; iOS very likely answers both asks alike, so the differing answers in the third replay are shim-only. The fix covers all three orders regardless.
 
 ### B-055 — The ar-record check's `phone-put-back` phase flakes: "the tray dock is not shown"
 
@@ -98,6 +121,16 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the phase passes at any export speed.
 - **Reproduction:** before the fix, with the slow export forced, `AR_RECORD_ONLY=put-back pnpm --filter @holoim/capture run test:xr:ar-record`.
 - **Fix status:** merged; close this entry once a hosted run of `main` passes shard 1/2.
+
+### B-057 — A long animated showcase piece fails Quick Look conversion on the extent budget
+
+- **Area:** `apps/viewer-api/tools/glb_to_usdz.py`
+- **Severity:** P3 (one piece, "The way down", has no iPhone AR preview; the feed plays it)
+- **Observed:** 2026-11-12. The production upload of "The way down" (`cmwcte5x20005oeiqsmobz8mf`, 19.8 MB, a 60 s loop) ended `usdzStatus: "failed"` with `Animation extent evaluation exceeds conversion budget`.
+- **Evidence:** the extent pass sums mesh points × sampled frames for every moving mesh and refuses above 100 M. A 60 s clip has about 1,800 frames, so roughly 55 k moving vertices (the gas clouds, liquid surfaces and figures) cross it.
+- **Expected:** a piece the feed plays also converts, or the budget is checked before upload so the author can thin the animation first.
+- **Reproduction:** `showcase:build introspection`, then `showcase:upload --api <local API with the USDZ worker on> introspection`.
+- **Options:** sample extents at a coarser rate (the bound only needs to contain the motion), or report the budget at build time in `build.mjs`. A re-upload adds a duplicate, so the live piece stays without a preview until it is replaced.
 
 ## Entry template
 

@@ -195,9 +195,18 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
 - Worktrees isolate files, not runtime. Ports (`3001`, `3174`, `5173`, `5174`,
   `5175`, `4176`), dev servers, and local databases are still shared, so only one agent runs
   the XR harness or a dev server at a time unless ports are reassigned via
-  `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`. A parallel `verify:pr` also needs
-  `E2E_BASE_URL`, `E2E_POLYPIZZA_PORT`, `E2E_POLYHAVEN_PORT`,
-  `E2E_CAPTURE_URL` and `KNOWLEDGE_E2E_PORT` moved off their defaults.
+  `CAPTURE_RUNTIME_PORT` / `E2E_API_PORT`. `verify:pr` and
+  `scripts/ci-emulate.sh` share a machine-wide lock: a second run waits and
+  prints who holds it, so start yours and let it queue. To run beside another
+  anyway, move `E2E_BASE_URL`, `E2E_POLYPIZZA_PORT`, `E2E_POLYHAVEN_PORT`,
+  `E2E_CAPTURE_URL` and `KNOWLEDGE_E2E_PORT` off their defaults and set
+  `VERIFY_PR_NO_LOCK=1`.
+- Test code waits on conditions or the page's own clock, never a fixed
+  wall-clock sleep: `pnpm run doctor` fails a file that gains a
+  `waitForTimeout` or sleep promise beyond `scripts/wall-clock-waits.json`
+  (a sleep that must be real time carries a `wall-clock: <why>` comment). A
+  flake fix is verified under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh …
+  --repeat-each=5` (see "Emulating CI" in `AGENT_CONTRACT.md`).
 - As soon as your change is working and verified, commit and push your branch.
   You are pre-authorized to commit, push your branch, and merge it into
   `main` locally once `pnpm run verify:pr` passes, without asking; do not stop

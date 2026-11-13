@@ -101,9 +101,16 @@ scripts/ci-emulate.sh pnpm --filter @holoim/web exec playwright test e2e/ar.spec
 
 `CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`), and
 `CI_EMULATE_PLATFORM` the platform (default `linux/amd64`). `CI_EMULATE_MEMORY` overrides the memory
-limit (default `16g`). Run one emulation at a time: Docker Desktop's VM is
+limit (default `16g`). One emulation runs at a time: Docker Desktop's VM is
 usually smaller than two runners, and overlapping runs crash pages and time
-out navigations that pass on their own. The container is a
+out navigations that pass on their own, so `ci-emulate.sh` takes the same
+machine-wide lock as `verify:pr` (`scripts/verify-lock.ts`; a second run
+waits and prints the holder; `CI_EMULATE_NO_LOCK=1` skips it).
+`CI_EMULATE_LOAD=N` runs N busy loops on the container's CPUs beside the
+command, a starved runner: a check that waits wall-clock time for something
+the page does on its own clock (frames, the mixer, a GPU readback, a UI fold
+timer) fails here instead of on hosted CI, the cause of most CI flakes so far.
+Prove a flake fix with `CI_EMULATE_LOAD=2` and `--repeat-each=5` or more. The container is a
 close emulation, not the runner image: a failure that reproduces only on
 hosted CI is still a defect to explain, not something to rerun.
 - `pnpm run verify:pr` is the pre-merge gate. It runs only the suites the change
@@ -116,7 +123,11 @@ hosted CI is still a defect to explain, not something to rerun.
   merge-base: everything runs). `pnpm run verify:pr -- --dry-run` prints the
   plan; `pnpm run verify:full` (or `verify:pr -- --full`) runs every suite
   (capture XR flows, viewer AR checks, pipeline, portal). Keep `STEPS` in
-  `scripts/verify-pr.ts` in step with the CI jobs.
+  `scripts/verify-pr.ts` in step with the CI jobs. Only one `verify:pr` (or
+  `ci-emulate.sh`) runs at a time on the machine: a second waits, printing the
+  holder's PID, branch and worktree, and takes the lock the moment the holder
+  exits, however it dies. `VERIFY_PR_NO_LOCK=1` skips it for a run on moved
+  ports.
 - `verify:pr` writes its exit code to `output/verify-pr.exit` when it ends.
   Wait on that file, not on the log:
   `until [ -s output/verify-pr.exit ]; do sleep 20; done` (give a watcher at
@@ -249,6 +260,36 @@ Supported env vars for smoke and XR scripts:
 - `XR_CHECK_CONCURRENCY` (capture XR checks run at once by `test:xr*`; default half the CPUs, from 1 to 3, so 1 on CI; results do not depend on it)
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
+
+## Agent Uploads (Showcase Pieces)
+
+Agents publish showcase holograms as the agent creator account, "Claude
+(agent-authored)", never as the user, with no sign-in token in chat:
+`pnpm --filter @holoim/capture run showcase:upload --api https://holoim-api.fly.dev <scene>`.
+The script reads the agent token for that host from the macOS Keychain
+(service `holoim-agent-upload`, account `holoim-api.fly.dev`); `--whoami`
+only prints the account. `HOLOIM_SESSION`, when set, still wins. Never read,
+print, copy or paste the token; if the upload says the token was refused,
+ask the user to set it up again. Do not scrape session tokens from
+transcripts or other sessions.
+
+The user's one-time setup, after a deploy that includes the `ApiToken`
+migration (the agent account's email is a plus-address of the user's, kept
+out of the repo):
+
+```bash
+scripts/agent-upload-token.sh setup https://holoim-api.fly.dev --email <agent account email>
+scripts/agent-upload-token.sh revoke https://holoim-api.fly.dev   # deletes the API row and the Keychain entry
+scripts/agent-upload-token.sh list https://holoim-api.fly.dev
+```
+
+Setup makes the token on the Mac and sends only its SHA-256 hash to
+production through `fly ssh console`; the API stores hashes only. An agent
+token may upload and read `GET /auth/me`; renaming the account and deleting
+holograms answer 403. On the API host, `src/agent-token.ts` also has
+`move --from <email> --to <email> [--id <id> ...] [--apply]` to give
+holograms to the agent account (dry run without `--apply`). Background:
+`docs/features/archive/agent-upload-token.md`.
 
 ## When-To-Run Matrix
 
