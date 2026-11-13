@@ -51,6 +51,10 @@ queue item in [`TODOS.md`](TODOS.md).
   without the node are unchanged. Merged to `main` 2026-11-12 after
   `verify:pr`; uploaded to production as the agent account (standing token in
   the Keychain, `docs/features/archive/agent-upload-token.md`) after the deploy.
+  Re-uploaded 2026-11-13 with its Quick Look preview once B-057 landed
+  (`cmwee44na0001oeiqq93qtiim`, `usdzStatus: ready`); the earlier card without
+  one (`cmwebg1uf0001oeir6jshwa3k`) needs a signed-in delete on the site, since
+  an agent token cannot delete.
 
 ## Recently merged (grouped)
 

@@ -47,7 +47,8 @@ it from the item below instead of duplicating its status here.
   moving vertices × frames under the Quick Look extent budget (B-057).
   Lessons go to `docs/product/concepts/agent-authored-holograms.md`.
   Delivered: scene `introspection2` (five passes, draft 12), merged to `main`
-  on 2026-11-12; uploaded to production as the agent account after the deploy.
+  on 2026-11-12; uploaded to production as the agent account after the deploy,
+  and again on 2026-11-13 with its Quick Look preview (`cmwee44na0001oeiqq93qtiim`, B-057).
 - [x] Tests should not have to sign in (the user's direction on 2026-11-12).
   Delivered 2026-11-12: the e2e API runs with `TEST_OPEN_UPLOADS` (off by
   default and in production; `scripts/test-api.ts` turns it on), which accepts
