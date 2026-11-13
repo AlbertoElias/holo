@@ -104,15 +104,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   the root renders; a card torn down in between (the search feed replaced by the creator page) leaves the ref null.
   Fix candidate once reproduced: an `events` factory whose `connect` ignores a null target.
 - **Owner:** the CI reliability session (claim in `.git/holoim-ci-owner.json`).
-### B-061 — API tests build their database on several SQLite connections and fail on a stale schema
-
-- **Area:** `apps/viewer-api/test/fixtures/db.ts` (`applyMigrations`), used by five API test files
-- **Severity:** P2 (fails the CI Gate's quality job, which skips every deploy)
-- **Observed:** 2026-11-13 on hosted CI run 43360131531 (`21535ac6446d`): `auth-delivery.test.ts` "answers 503 and stores no token when no mailer is configured…" threw `P2010 … there is already another table or index with this name: Hologram` at `db.ts:27`. Introduced by the test-audit commit `350fee308eb6` (real migrations instead of hand-copied DDL).
-- **Reproduced:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh pnpm --filter @holoim/api exec vitest run`, repeated: about one full run in four failed, in `auth-delivery`, `hologram-routes` and `hologram-budgets` (a one-file loop, and every run without load, passed).
-- **Cause:** `applyMigrations` awaited each statement on `prisma.$executeRawUnsafe`, and Prisma's SQLite pool gives successive statements to different connections. Under load one acts on a stale schema: `ALTER TABLE "new_Hologram" RENAME TO "Hologram"` failed with "already another table" while `sqlite_master` held only `new_Hologram`, and `CREATE INDEX "Hologram_createdAt_idx"` failed with "already exists" while the index was not in `sqlite_master`. The old fixture used `CREATE TABLE IF NOT EXISTS`, which hid it.
-- **Fix:** all statements run in one interactive transaction, which pins one connection (and applies the migrations atomically).
-- **Fix status:** merged; close this entry once a hosted run of `main` passes the quality job.
 
 ## Entry template
 

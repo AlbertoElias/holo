@@ -1237,3 +1237,14 @@ bug above.)
 - **Not a writer:** `VoiceLevel` (the face meter) and `voiceInput.ts` (object search) call `getUserMedia` too but never write `micPermission`; voice input is queue item 8.
 - **Fix:** `21535ac6446d`. Replay `mic-stale` in `test:xr:take`: before the fix both orders failed, after it all five phases pass; `verify:pr` passed locally.
 - **Closed:** 2026-11-13. Hosted CI on `main` run 43459544312 (`634a42ec02b6`, which includes the fix) passed every job, the three deploys included. The run on the fix commit itself (43360131531) failed only in the api tests (`test/fixtures/db.ts` migrations, B-061), not in capture.
+
+### B-061 — API tests build their database on several SQLite connections and fail on a stale schema
+
+- **Area:** `apps/viewer-api/test/fixtures/db.ts` (`applyMigrations`), used by five API test files
+- **Severity:** P2 (fails the CI Gate's quality job, which skips every deploy)
+- **Observed:** 2026-11-13 on hosted CI run 43360131531 (`21535ac6446d`): `auth-delivery.test.ts` "answers 503 and stores no token when no mailer is configured…" threw `P2010 … there is already another table or index with this name: Hologram` at `db.ts:27`. Introduced by the test-audit commit `350fee308eb6` (real migrations instead of hand-copied DDL).
+- **Reproduced:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh pnpm --filter @holoim/api exec vitest run`, repeated: about one full run in four failed, in `auth-delivery`, `hologram-routes` and `hologram-budgets` (a one-file loop, and every run without load, passed).
+- **Cause:** `applyMigrations` awaited each statement on `prisma.$executeRawUnsafe`, and Prisma's SQLite pool gives successive statements to different connections. Under load one acts on a stale schema: `ALTER TABLE "new_Hologram" RENAME TO "Hologram"` failed with "already another table" while `sqlite_master` held only `new_Hologram`, and `CREATE INDEX "Hologram_createdAt_idx"` failed with "already exists" while the index was not in `sqlite_master`. The old fixture used `CREATE TABLE IF NOT EXISTS`, which hid it.
+- **Fix:** all statements run in one interactive transaction, which pins one connection (and applies the migrations atomically).
+- **Landed:** `634a42ec02b6`, 2026-11-13.
+- **Closed:** 2026-11-13. Hosted CI on `main` run 43459544312 (`634a42ec02b6`) passed every job, the three deploys included. The previous run (43454587497, `c1de7fda2104`) had failed on this defect.
