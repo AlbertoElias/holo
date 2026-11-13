@@ -1097,6 +1097,8 @@ class Converter:
                 ancestor = self.parents.get(ancestor)
         joints = sum(len(ordered) for _, ordered in animations)
         for offset, duration, channels in self.clips:
+            if duration * FPS > MAX_SAMPLES:
+                raise ValueError("Baked animation exceeds conversion budget")
             grid = set(np.arange(0, duration, 1/FPS).tolist()) | {duration}
 
             def sample_times(keys):
@@ -1110,11 +1112,24 @@ class Converter:
             by_node = {}
             for key in channels:
                 by_node.setdefault(key[0], []).append(key)
-            node_times = {index: sample_times(by_node.get(index, [])) for index in self.ops if index in self.animated}
+            # Every node's times include the whole grid, so the grid bounds
+            # the work from below before any per-node list is built, and the
+            # lists are built one at a time against the budget: a crafted
+            # scene is refused before it can hold gigabytes of times.
+            moving = [index for index in self.ops if index in self.animated]
+            shared_work = 3 * len(shared & self.animated) + 4 * joints + len(morph_names)
+            if len(grid) > MAX_SAMPLES or len(grid) * (3 * len(moving) + (shared_work if shared else 0)) > 8_000_000:
+                raise ValueError("Baked animation exceeds conversion budget")
             shared_keys = [key for key in channels if key[0] in shared]
             shared_times = sample_times(shared_keys) if shared else []
-            work = 3 * sum(map(len, node_times.values())) + len(shared_times) * (3 * len(shared & self.animated) + 4 * joints + len(morph_names))
-            if max(map(len, [shared_times, *node_times.values()])) > MAX_SAMPLES or work > 8_000_000:
+            work = len(shared_times) * shared_work
+            node_times = {}
+            for index in moving:
+                times = node_times[index] = sample_times(by_node.get(index, []))
+                work += 3 * len(times)
+                if len(times) > MAX_SAMPLES or len(shared_times) > MAX_SAMPLES or work > 8_000_000:
+                    raise ValueError("Baked animation exceeds conversion budget")
+            if len(shared_times) > MAX_SAMPLES or work > 8_000_000:
                 raise ValueError("Baked animation exceeds conversion budget")
             # A node whose scale track reaches 0 (a summoned object before it
             # appears) is hidden by time-sampled visibility, and its scale is
