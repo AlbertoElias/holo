@@ -48,7 +48,15 @@ consume the agreed contract.
 3. **Implementation.** Work within assigned ownership. A discovered scope change
    goes back to the lead before it spreads across modules.
 4. **Independent verification.** Give the verifier the original brief and working
-   tree. The verifier exercises the real workflow where practical and records an
+   tree, never the implementer's account (commit messages, evidence, reports).
+   Use a different vendor from the implementer when one has quota (Codex
+   `-p standard` for a Claude implementer). Otherwise use two same-vendor
+   lenses in fresh contexts, run in parallel: the `verifier` subagent
+   (`.claude/agents/verifier.md`, Opus), given only the brief path and the
+   diff range, and a code review of the diff (`/code-review high` in Claude
+   Code). The lead reproduces each finding before acting on it; only a
+   confirmed defect blocks the merge. Never wait on a vendor's quota. The
+   verifier exercises the real workflow where practical and records an
    inspectable artifact such as a transcript, screenshot, or deterministic output.
    The verifier also records a proof video of the real workflow, per
    "Testing doctrine" in [`../AGENTS.md`](../AGENTS.md): kept under ignored

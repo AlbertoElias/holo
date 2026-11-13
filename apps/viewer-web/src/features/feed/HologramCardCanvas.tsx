@@ -14,7 +14,7 @@ import {
   Vector2,
   Vector3
 } from "three";
-import type { AnimationAction, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
+import type { AnimationAction, Group, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
 import { tokens } from "@holoim/design-tokens";
 import type { ObjectCredit } from "@holoim/objects";
 import { clocheFollowDirection, clocheFraming, clocheInside, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
@@ -27,7 +27,7 @@ import type { DomeClip, SphereClipResult } from "../hologram/useSphereClipping";
 import { useTakeAnimations } from "../hologram/useTakeAnimations";
 import { buildGroundField, cachedGroundField, groundFieldBudget, readRimTake, RimMotion, takeSamples, type RimTake } from "../hologram/groundField";
 import { useGltfAudio } from "../hologram/useGltfAudio";
-import { createEarPose, earFromObject, type ScheduledGltfAudio } from "../hologram/gltfAudio";
+import { createEarPose, earFromObject, type ScheduledGltfAudio, type SoundLayers } from "../hologram/gltfAudio";
 import { portalEar } from "../hologram/portalEar";
 import { drawnBounds, drawnPoints, motionPoints } from "../hologram/drawnPoints";
 import { isCameraTake } from "../hologram/hologramScene";
@@ -42,7 +42,8 @@ import { AuthorCameraMark, createPresenceProbe } from "../presence/AuthorCameraM
 import { identityOf } from "../presence/identityHue";
 import { isInsideRecordedObject, readObjectCredits, readRecordedObjects } from "../objects/recordedObjects";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
-import { INSIDE_DISTANCE, anglesFromPose, freeCameraPose } from "../portal/portalStore";
+import { INSIDE_DISTANCE, RETURN_SECONDS_PER_NEPER, anglesFromPose, freeCameraPose, returnPose } from "../portal/portalStore";
+import { layerIndexOf, outermostDrawn, readDeepZoom, soundLayers as layeredSound } from "../portal/deepZoom";
 import type { PortalStore } from "../portal/portalStore";
 import { usePortalValue } from "../portal/usePortalValue";
 import { DEFAULT_CAMERA_FRAMING_CONFIG, computeDesiredFraming } from "./cameraFraming";
@@ -106,6 +107,9 @@ const CARD_CAMERA_POSITION_OFFSET = new Vector3(0.62, 0.36, 0.18);
 const CARD_CAMERA_LOOK_AT_OFFSET = new Vector3(0, -0.14, 0);
 const BUBBLE_CAMERA_POSITION_OFFSET = new Vector3(0, 0, 0);
 const BUBBLE_CAMERA_LOOK_AT_OFFSET = new Vector3(0, 0, 0);
+/** Inside the layers the near plane is the camera's distance over this, and the far plane its distance times the next. */
+const DEEP_NEAR_SHARE = 100;
+const DEEP_FAR_REACH = 400;
 /** Seconds Return takes to glide from the Free view back to Follow. */
 const RETURN_SECONDS = 0.45;
 /** The stage light sits this share of the way from the author toward the Follow camera, */
@@ -275,9 +279,31 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   const baseHeightRef = useRef(0);
   // The portal's own stage light (8.1): warm light from the hologram's foot.
   const stageLightRef = useRef<PointLight>(null);
+  const clocheGroupRef = useRef<Group>(null);
 
   const { camera, invalidate, gl: renderer, scene: renderScene } = useThree();
   const clonedScene = useMemo(() => cloneSkeleton(scene), [scene]);
+  // Deep zoom (docs/features/archive/deep-zoom.md): the layers the hologram declares
+  // nested inside it, read once; null for one that declares none, which then
+  // zooms exactly as before.
+  const deep = useMemo(() => readDeepZoom(clonedScene, gltf.animations), [clonedScene, gltf.animations]);
+  // How deep the camera is this frame (0 outside the layers), for the sound and the hit test.
+  const depthNow = useRef(0);
+  const soundLayers = useMemo<SoundLayers | null>(() => (deep ? layeredSound(deep, () => depthNow.current) : null), [deep]);
+  // Each layer's own meshes, so the outer ones can be left undrawn deep in;
+  // and the outermost layer drawn last frame (0 = all).
+  const layerMeshes = useMemo(() => {
+    if (!deep) return null;
+    const meshes: Object3D[][] = deep.layers.map(() => []);
+    meshes.push([]);
+    clonedScene.traverse((object) => {
+      if ((object as { isMesh?: boolean }).isMesh) meshes[layerIndexOf(deep, object)]!.push(object);
+    });
+    return meshes;
+  }, [clonedScene, deep]);
+  const drawnFrom = useRef(0);
+  // The meshes deep zoom hid itself: only those come back on the way out, so one hidden for another reason (the recorded bubble's old glass) stays hidden.
+  const deepHidden = useRef(new Set<Object3D>()).current;
   const audioState = useGltfAudio(gltf, clonedScene, active && !paused, muted, getPlaybackTime);
   // The card's sound for the probe: decoded after mount, so read through a ref.
   const soundRef = useRef<ScheduledGltfAudio | null>(null);
@@ -465,14 +491,21 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   useEffect(() => {
     if (testHooks) {
       const observer = (window as Window & { __HOLOIM_FEED_TEST_OBSERVER__?: (value: unknown) => void }).__HOLOIM_FEED_TEST_OBSERVER__;
-      const probe = { url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre }, rim: rimProbe, dome: domeClip, sound: soundRef };
+      const probe = { url, renderer, scene: renderScene, model: clonedScene, camera, bubble: sphereClip, actions, mixer, portal, deep, depthNow, pointing: pointingProbe, traces: tracesProbe, presence: presenceProbe, objects: recordedObjects, credits, cloche: { shape: clocheRef, fitted: fittedCentre, group: clocheGroupRef }, rim: rimProbe, dome: domeClip, sound: soundRef };
       observer?.(probe);
       // Once processed, the API serves `<id>-light.glb` (hologram-budgets) in
       // place of the `<id>.glb` the upload answered with; tests find a card by
       // the upload's URL, whichever of the two the feed fetched first.
       if (/-light\.glb$/.test(url)) observer?.({ ...probe, url: url.replace(/-light\.glb$/, ".glb") });
     }
-  }, [actions, camera, clonedScene, credits, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, rimProbe, domeClip, sphereClip, tracesProbe, url]);
+  }, [actions, camera, clonedScene, credits, deep, mixer, pointingProbe, portal, presenceProbe, recordedObjects, renderScene, renderer, rimProbe, domeClip, sphereClip, tracesProbe, url]);
+
+  useEffect(() => {
+    portal.runtime.maxDepth = deep?.maxDepth ?? 0;
+    return () => {
+      portal.runtime.maxDepth = 0;
+    };
+  }, [deep, portal]);
 
   // The wheel zooms only over the hologram itself (usePortalTriggers): a
   // visible mesh of the recording, not chrome, not clipped away by its
@@ -513,6 +546,8 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       if (rect.width <= 0 || rect.height <= 0) return false;
       ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
       if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return false;
+      // Inside the layers everything in view is the hologram.
+      if (depthNow.current > 0) return true;
       const bubble = sphereClip.active && sphereClip.radius > 0 ? sphereClip : null;
       if (bubble && camera.position.distanceTo(bubble.center) < bubble.radius) return true;
       // A skinned mesh caches its bounds on its first raycast; a body that
@@ -813,6 +848,8 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       preferred.near = Math.max(DEFAULT_CAMERA_FRAMING_CONFIG.minNear, (distance - reach * 1.5) / 40);
       preferred.far = distance + reach * 4;
     }
+    const state = portal.getState();
+    const runtime = portal.runtime;
     const light = stageLightRef.current;
     if (light) {
       light.position.lerpVectors(pose.followTarget, pose.followPosition, STAGE_LIGHT_TOWARD_VIEWER);
@@ -822,12 +859,10 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
     const follow = anglesFromPose(pose.followPosition, pose.followTarget);
     const outsideDistance = follow.distance;
     const insideDistance = Math.min(INSIDE_DISTANCE, outsideDistance * MAX_INSIDE_SHARE);
-    const runtime = portal.runtime;
     runtime.followYaw = follow.yaw;
     runtime.followPitch = follow.pitch;
     runtime.zoomSpan = Math.log(outsideDistance / insideDistance);
 
-    const state = portal.getState();
     const canvasHeight = frameState.size.height;
     if (state.mode === "follow" && runtime.returnBlend === 0) {
       baseHeightRef.current = canvasHeight;
@@ -841,14 +876,24 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       const openRatio = baseHeightRef.current > 0 ? Math.max(canvasHeight / baseHeightRef.current, 1) : 1;
       camera.fov = MathUtils.radToDeg(2 * Math.atan(Math.tan(MathUtils.degToRad(baseFov) / 2) * openRatio));
     }
+    const head = avatarAnchorRef.current?.head;
+    if (head) {
+      head.getWorldPosition(pose.headTarget);
+    } else {
+      pose.headTarget.copy(pose.followTarget);
+    }
+    let depth = 0;
     if (state.mode === "free") {
-      const head = avatarAnchorRef.current?.head;
-      if (head) {
-        head.getWorldPosition(pose.headTarget);
-      } else {
-        pose.headTarget.copy(pose.followTarget);
-      }
-      freeCameraPose(state, pose.followTarget, pose.headTarget, insideDistance, outsideDistance, pose.position, pose.target);
+      depth = deep ? state.depth : 0;
+      freeCameraPose(state, pose.followTarget, pose.headTarget, insideDistance, outsideDistance, pose.position, pose.target, deep);
+    } else if (runtime.returnBlend > 0 && runtime.returnFrom && deep) {
+      // Back out of the layers the way in, in log distance, so each passes by instead of a leap to Follow.
+      const from = runtime.returnFrom;
+      runtime.returnBlend = Math.max(runtime.returnBlend - delta / (RETURN_SECONDS + RETURN_SECONDS_PER_NEPER * from.depth), 0);
+      const way = returnPose(from, easeInOut(1 - runtime.returnBlend), follow, runtime.zoomSpan);
+      depth = way.depth;
+      freeCameraPose(way, pose.followTarget, pose.headTarget, insideDistance, outsideDistance, pose.position, pose.target, deep);
+      if (runtime.returnBlend === 0) runtime.returnFrom = null;
     } else if (runtime.returnBlend > 0 && pose.hasLast) {
       runtime.returnBlend = Math.max(runtime.returnBlend - delta / RETURN_SECONDS, 0);
       const t = easeInOut(1 - runtime.returnBlend);
@@ -869,7 +914,43 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
     runtime.measured.insideDistance = insideDistance;
     runtime.measured.outsideDistance = outsideDistance;
     runtime.measured.target = [pose.target.x, pose.target.y, pose.target.z];
-    if (state.mode === "free" || runtime.returnBlend > 0) {
+    depthNow.current = depth;
+    if (deep && layerMeshes) {
+      // Going in, the cloche is not drawn once the camera is inside its glass
+      // (seen from within, it would be a sliver), and a layer's own meshes
+      // not once the camera is two homes deeper; they come back on the way
+      // out, in the frame the camera crosses back.
+      const clocheGroup = clocheGroupRef.current;
+      if (clocheGroup) {
+        const shape = clocheRef.current;
+        const at = pose.position;
+        clocheGroup.visible = !(depth > 0 && shape
+          && clocheInside(shape, rimProp.heights, { x: at.x - clocheShift.x, y: at.y - clocheShift.y, z: at.z - clocheShift.z }));
+      }
+      const from = outermostDrawn(deep, depth);
+      if (from !== drawnFrom.current) {
+        layerMeshes.forEach((meshes, layer) => {
+          const was = layer >= drawnFrom.current;
+          const now = layer >= from;
+          if (was === now) return;
+          for (const mesh of meshes) {
+            if (!now && mesh.visible) {
+              mesh.visible = false;
+              deepHidden.add(mesh);
+            } else if (now && deepHidden.delete(mesh)) {
+              mesh.visible = true;
+            }
+          }
+        });
+        drawnFrom.current = from;
+      }
+    }
+    if (depth > 0) {
+      // Inside the layers the planes follow the camera down: no floor, or a layer a millimetre across would be cut away.
+      const distance = pose.position.distanceTo(pose.target);
+      camera.near = distance / DEEP_NEAR_SHARE;
+      camera.far = distance * DEEP_FAR_REACH;
+    } else if (state.mode === "free" || runtime.returnBlend > 0) {
       // Inside the bubble the Follow clip planes would cut the scene away.
       const distance = pose.position.distanceTo(pose.target);
       camera.near = Math.max(distance / 200, DEFAULT_CAMERA_FRAMING_CONFIG.minNear);
@@ -886,7 +967,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       camera.updateMatrixWorld();
       const { camera: cameraEar, ear } = earRef.current;
       portalEar(earFromObject(camera, cameraEar), pose.target, insideDistance, outsideDistance, ear);
-      sound.place(ear, delta);
+      sound.place(ear, delta, soundLayers);
     }
   });
 
@@ -943,7 +1024,9 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       <primitive object={clonedScene} />
       <pointLight ref={stageLightRef} color={tokens.color.glow} decay={2} />
       {cloche && (
-        <Cloche seed={seed} shape={cloche} shift={clocheShift} zoom={clocheZoom.current} target={target} recording={false} inFocus={active} reducedMotion={reducedMotion} soot={soot} rim={rimProp} />
+        <group ref={clocheGroupRef}>
+          <Cloche seed={seed} shape={cloche} shift={clocheShift} zoom={clocheZoom.current} target={target} recording={false} inFocus={active} reducedMotion={reducedMotion} soot={soot} rim={rimProp} />
+        </group>
       )}
       {meaningLinks.length > 0 && (
         <PointingHighlights

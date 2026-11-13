@@ -269,6 +269,11 @@ interface Placement {
    * heard from the panner's default spot (the ear itself) before then.
    */
   input: GainNode;
+  /** Its layer's share of the sound (deep zoom), between the emitter's sum and this panner; 1 without layers. */
+  level: GainNode;
+  /** The layer its object belongs to (0 = the hologram itself), read once per set of layers. */
+  layer: number;
+  layersRead: SoundLayers | null;
   panner: PannerNode;
   placed: boolean;
   scale: number;
@@ -276,6 +281,19 @@ interface Placement {
   world: Vector3;
   /** Where the panner was last sent: the object as the ear sees it (ear at the origin, looking down -Z). */
   sent: Vector3;
+}
+
+/**
+ * A hologram's nested layers as its sound hears them (deep zoom,
+ * docs/features/archive/deep-zoom.md): which layer an object belongs to (0 = the
+ * hologram itself), that layer's size against the hologram, and how loud it
+ * is at the viewer's depth now. A layer's distances shrink with its size, so
+ * it sounds from inside as the hologram does from its inside end.
+ */
+export interface SoundLayers {
+  of(node: Object3D): number;
+  size(layer: number): number;
+  gain(layer: number): number;
 }
 
 export interface ScheduledAudioOptions {
@@ -360,15 +378,17 @@ export class ScheduledGltfAudio {
           input.gain.value = 0;
           outputs = [input];
           for (const node of bound) {
+            const level = ctx.createGain();
             const panner = ctx.createPanner();
             panner.panningModel = this.placements.length < MAX_MODEL_PANNERS ? options.panningModel ?? "equalpower" : "equalpower";
             panner.distanceModel = emitter.distance.model;
             panner.refDistance = emitter.distance.ref;
             panner.maxDistance = emitter.distance.max;
             panner.rolloffFactor = emitter.distance.rolloff;
-            input.connect(panner);
+            input.connect(level);
+            level.connect(panner);
             panner.connect(ctx.destination);
-            this.placements.push({ emitter, node, input, panner, placed: false, scale: 1, world: new Vector3(), sent: new Vector3() });
+            this.placements.push({ emitter, node, input, level, layer: 0, layersRead: null, panner, placed: false, scale: 1, world: new Vector3(), sent: new Vector3() });
           }
         }
       }
@@ -452,9 +472,12 @@ export class ScheduledGltfAudio {
    * the hologram's placement (its root's world scale: 1 at recorded scale),
    * so a shrunk hologram sounds like the same scene from proportionally
    * further away; an object's own scale is the author's and is left out.
-   * Call after the frame's motion is applied; `seconds` is the frame's length.
+   * With `layers` (a hologram that declares nesting), each object's
+   * distances shrink further with its layer's size and it sounds at its
+   * layer's gain. Call after the frame's motion is applied; `seconds` is the
+   * frame's length.
    */
-  place(ear: EarPose, seconds: number): void {
+  place(ear: EarPose, seconds: number, layers: SoundLayers | null = null): void {
     if (this.placements.length === 0) return;
     const ctx = getAudioContext();
     this.ear.position.copy(ear.position);
@@ -475,12 +498,19 @@ export class ScheduledGltfAudio {
       node.updateWorldMatrix(true, false);
       placement.world.setFromMatrixPosition(node.matrixWorld);
       placement.sent.copy(placement.world).applyMatrix4(earInverse);
-      if (Math.abs(scale - placement.scale) > 1e-6 || !placement.placed) {
-        placement.scale = scale;
-        panner.refDistance = emitter.distance!.ref * scale;
-        panner.maxDistance = emitter.distance!.max * scale;
+      if (placement.layersRead !== layers) {
+        placement.layersRead = layers;
+        placement.layer = layers ? layers.of(node) : 0;
+      }
+      const placedScale = layers ? scale * layers.size(placement.layer) : scale;
+      if (Math.abs(placedScale - placement.scale) > placedScale * 1e-6 || !placement.placed) {
+        placement.scale = placedScale;
+        panner.refDistance = emitter.distance!.ref * placedScale;
+        panner.maxDistance = emitter.distance!.max * placedScale;
       }
       const jump = !placement.placed;
+      // Without layers the level stays at its default 1, with no automation each frame.
+      if (layers) moveParam(placement.level.gain, layers.gain(placement.layer), ctx, seconds, jump);
       const p = placement.sent;
       if (panner.positionX) {
         moveParam(panner.positionX, p.x, ctx, seconds, jump);
@@ -495,7 +525,7 @@ export class ScheduledGltfAudio {
   }
 
   /** What a probe reads: the ear last used, and each placement's object, where its panner was sent (ear space) and where it is now. */
-  readPlacements(): Array<{ emitter: number; name: string | null; node: string; nodeWorld: Vec3Tuple; placedWorld: Vec3Tuple; sent: Vec3Tuple; panner: Vec3Tuple; refDistance: number; panningModel: string; placed: boolean }> {
+  readPlacements(): Array<{ emitter: number; name: string | null; node: string; nodeWorld: Vec3Tuple; placedWorld: Vec3Tuple; sent: Vec3Tuple; panner: Vec3Tuple; refDistance: number; panningModel: string; placed: boolean; layer: number; level: number }> {
     return this.placements.map((placement) => {
       const { panner } = placement;
       return {
@@ -508,7 +538,9 @@ export class ScheduledGltfAudio {
         panner: panner.positionX ? [panner.positionX.value, panner.positionY.value, panner.positionZ.value] : [Number.NaN, Number.NaN, Number.NaN],
         refDistance: panner.refDistance,
         panningModel: panner.panningModel,
-        placed: placement.placed
+        placed: placement.placed,
+        layer: placement.layer,
+        level: placement.level.gain.value
       };
     });
   }
@@ -572,6 +604,7 @@ export class ScheduledGltfAudio {
     for (const voice of this.voices) voice.gain.disconnect();
     for (const placement of this.placements) {
       placement.input.disconnect();
+      placement.level.disconnect();
       placement.panner.disconnect();
     }
   }

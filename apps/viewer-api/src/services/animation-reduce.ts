@@ -14,6 +14,8 @@ export const ANIMATION_POSITION_BOUND_METERS = 0.001;
 export const ANIMATION_ROTATION_BOUND_DEGREES = 0.5;
 /** Scale tracks: relative error. */
 const SCALE_BOUND = 0.001;
+/** Nodes whose names start with this declare a nested layer (docs/features/archive/deep-zoom.md). */
+const LAYER_NODE_PREFIX = "HologramLayer";
 /** Reduce to this share of the bound, leaving room for float rounding in the viewer. */
 const BOUND_MARGIN = 0.9;
 
@@ -46,7 +48,12 @@ export type AnimationReport = {
   /** Bytes of every animation view, before and after (weights and untouched tracks included). */
   allAnimationBytesBefore: number;
   allAnimationBytesAfter: number;
-  /** Largest error at any recorded frame of any reduced track, in the track's parent space (scaled to meters) and degrees. */
+  /**
+   * Largest error at any recorded frame of any reduced track, in the track's
+   * parent space (scaled to meters) and degrees. Inside a nested layer
+   * (`HologramLayer…`) positions are in that layer's units: as if it were
+   * full size.
+   */
   maxPositionErrorMm: number;
   maxRotationErrorDeg: number;
   maxScaleError: number;
@@ -341,6 +348,32 @@ function parentWorldScales(json: GltfJson, parents: Int32Array, order: number[])
   return scales;
 }
 
+/**
+ * The unit each node's motion is judged in: 1 (metres), or inside a nested
+ * layer (a node named `HologramLayer…`, docs/features/archive/deep-zoom.md) that
+ * layer's world size, so a bound of 1 mm is 1 mm as seen from inside the
+ * layer rather than 1 mm against the whole hologram. A node's unit is that of
+ * its nearest layer at or above it (rest pose); never above 1.
+ */
+function layerUnits(json: GltfJson, parents: Int32Array, order: number[]): Float64Array {
+  const units = new Float64Array(parents.length).fill(1);
+  const worlds: World[] = [];
+  const identity: World = { p: [0, 0, 0], r: [0, 0, 0, 1], s: [1, 1, 1] };
+  for (const index of order) {
+    const node = json.nodes![index]!;
+    const parent = parents[index]!;
+    worlds[index] = compose(parent >= 0 ? worlds[parent]! : identity, restTrs(node));
+    if (typeof node.name === "string" && node.name.startsWith(LAYER_NODE_PREFIX)) {
+      const s = worlds[index]!.s;
+      const size = Math.max(Math.abs(s[0]!), Math.abs(s[1]!), Math.abs(s[2]!));
+      units[index] = size > 0 ? Math.min(size, 1) : 1;
+    } else if (parent >= 0) {
+      units[index] = units[parent]!;
+    }
+  }
+  return units;
+}
+
 function sampleAt(times: Float32Array, values: Float32Array, components: number, kind: Kind, t: number, out: number[]): void {
   const count = times.length;
   if (t <= times[0]! || count === 1) {
@@ -402,6 +435,8 @@ type Candidate = {
   track: Track;
   stored: Float32Array;
   parentScale: number;
+  /** The unit its motion is judged in: 1, or the size of the nested layer it is in. */
+  unit: number;
   /** Rest-pose world distance from the track's node to its farthest descendant (meters). */
   reach: number;
 };
@@ -474,6 +509,7 @@ export async function reduceAnimations(
   const order = topological(parents);
   const scales = parentWorldScales(json, parents, order);
   const reach = reaches(json, parents, order);
+  const units = layerUnits(json, parents, order);
 
   const accessorUses = new Map<number, number>();
   for (const clip of json.animations ?? []) {
@@ -524,6 +560,7 @@ export async function reduceAnimations(
         track: { times, values, components },
         stored: storedValues(kind, values),
         parentScale: nodes.length ? Math.max(...nodes.map((node) => scales[node] ?? 1)) : 1,
+        unit: nodes.length ? Math.min(...nodes.map((node) => units[node] ?? 1)) : 1,
         reach: nodes.length ? Math.max(...nodes.map((node) => reach[node] ?? 0)) : 0
       });
     }
@@ -559,10 +596,10 @@ export async function reduceAnimations(
   const tolerance = (candidate: Candidate, share: number): number => {
     if (candidate.kind === "rotation") {
       const byAngle = rotationBound / chainRotation;
-      const byReach = candidate.reach > 0 ? ANIMATION_POSITION_BOUND_METERS / (chainAll * candidate.reach) : Infinity;
+      const byReach = candidate.reach > 0 ? (ANIMATION_POSITION_BOUND_METERS * candidate.unit) / (chainAll * candidate.reach) : Infinity;
       return Math.min(byAngle, byReach) * share * BOUND_MARGIN;
     }
-    if (candidate.kind === "translation") return ((ANIMATION_POSITION_BOUND_METERS / chainAll) * share * BOUND_MARGIN) / candidate.parentScale;
+    if (candidate.kind === "translation") return ((ANIMATION_POSITION_BOUND_METERS * candidate.unit / chainAll) * share * BOUND_MARGIN) / candidate.parentScale;
     let largest = 1e-6;
     // A loop, not Math.max(...values): a long track overflows the call stack.
     for (const value of candidate.track.values) largest = Math.max(largest, Math.abs(value));
@@ -583,7 +620,7 @@ export async function reduceAnimations(
     candidates.forEach((candidate, i) => {
       for (const node of candidate.nodes) reduced.push({ node, kind: candidate.kind, original: candidate.track, times: tried[i]!.times, values: tried[i]!.values });
     });
-    world = worldError(json, parents, order, reduced);
+    world = worldError(json, parents, order, reduced, units);
     if (world.maxPositionErrorMm <= ANIMATION_POSITION_BOUND_METERS * 1000 && world.maxRotationErrorDeg <= ANIMATION_ROTATION_BOUND_DEGREES) {
       selections = tried;
       break;
@@ -625,7 +662,7 @@ export async function reduceAnimations(
       for (const key of keys) worst = Math.max(worst, angleBetween(stored, key * 4, track.values, key * 4));
       report.maxRotationErrorDeg = Math.max(report.maxRotationErrorDeg, (worst * 180) / Math.PI);
     } else if (kind === "translation") {
-      report.maxPositionErrorMm = Math.max(report.maxPositionErrorMm, worst * candidate.parentScale * 1000);
+      report.maxPositionErrorMm = Math.max(report.maxPositionErrorMm, (worst * candidate.parentScale * 1000) / candidate.unit);
     } else {
       report.maxScaleError = Math.max(report.maxScaleError, worst);
     }
@@ -689,10 +726,10 @@ function nodeFrames(parents: Int32Array, order: number[], candidates: Candidate[
 
 /**
  * Forward kinematics at every recorded frame of the reduced tracks, original
- * against reduced: the largest world-space position (mm) and rotation (deg)
- * difference of any node.
+ * against reduced: the largest world-space position (mm, in the node's layer
+ * unit) and rotation (deg) difference of any node.
  */
-function worldError(json: GltfJson, parents: Int32Array, order: number[], tracks: Reduced[]): AnimationReport["world"] {
+function worldError(json: GltfJson, parents: Int32Array, order: number[], tracks: Reduced[], units: Float64Array): AnimationReport["world"] {
   if (tracks.length === 0) return { frames: 0, maxPositionErrorMm: 0, maxRotationErrorDeg: 0 };
   const frameSet = new Set<number>();
   for (const track of tracks) for (const time of track.original.times) frameSet.add(time);
@@ -727,7 +764,7 @@ function worldError(json: GltfJson, parents: Int32Array, order: number[], tracks
       reduced[index] = compose(parent >= 0 && moving[parent] ? reduced[parent]! : parent >= 0 ? restWorld(parent) : identity, localB);
       const a = original[index]!;
       const b = reduced[index]!;
-      maxPosition = Math.max(maxPosition, Math.hypot(a.p[0]! - b.p[0]!, a.p[1]! - b.p[1]!, a.p[2]! - b.p[2]!));
+      maxPosition = Math.max(maxPosition, Math.hypot(a.p[0]! - b.p[0]!, a.p[1]! - b.p[1]!, a.p[2]! - b.p[2]!) / units[index]!);
       maxRotation = Math.max(maxRotation, angleBetween(a.r, 0, b.r, 0));
     }
   }

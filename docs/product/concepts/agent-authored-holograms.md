@@ -376,3 +376,58 @@ and the music needed a more abstract, MIDI feel.
 - **Chip voices need a pitched body.** Noise-only ticks and clatters
   normalise to a fifth of the loudness of the pulse voices. A short pulse
   note under each one evens them out.
+
+### The nesting: deep zoom (2026-11-13)
+
+The user wanted to go into each layer themselves, at any moment, and find
+the traveller wherever the loop had him. Baking the descent into the clip
+(the passes above) could not give that, so the zoom moved into the viewer
+([deep zoom](../../features/archive/deep-zoom.md)) and the piece was rebuilt
+as a still nesting.
+
+- **Let the viewer zoom; keep the clip for the event.** A piece declares
+  its inner worlds as `HologramLayer_<name>` nodes in one chain (each layer
+  inside the one before, no siblings), at their real nested sizes. Past the
+  portal's inside end the viewer's camera goes on in, in log distance, to
+  each layer's home. The 60 s loop never changes scale, so every layer
+  plays at every moment.
+- **Build each layer in its own units.** A layer node carries the whole
+  scale (1e-2, 2.5e-4, 6.25e-6 of the man); everything under it is rigid,
+  unlit and authored in that layer's units. Vertices in metres at 6e-6
+  would jitter in float32; a static scale on one node does not.
+- **Anchor layers on static nodes.** A layer under an animated joint makes
+  every vertex inside it count as moving for Quick Look and turns the layer
+  under the viewer's orbit. The gas hangs from a static node at his chest.
+- **Keep the aim clear of the outer layer.** A layer's home camera stands
+  inside distance × its size from the layer's origin (1.6 cm for the gas).
+  With the origin 1.4 cm from his chest surface, the man showed in front of
+  the gas sky. The origin moved to the point farthest from his surfaces over
+  the loop (3.6 cm clear), and the gas sky (2.9 gas units) holds the home
+  camera and the puffs.
+- **Going in passes through what holds the layer.** On the way from the
+  inside end to the gas, the camera crosses his suit, and for about half a
+  second the card is the suit's grey. It reads as going into him. Any
+  surface the zoom passes through fills the screen for a moment, so author
+  it knowing that.
+- **A layer is seen at home as the man is at the inside end.** Content much
+  smaller than 1.8 of its layer's units reads as a speck there: the dark's
+  child and traveller fill about a twelfth of the card's height.
+- **Hand the traveller over between per-layer rigs, and check the doors.**
+  Four rigs (man, gas, liquid, dark) each switch on and off by STEP scale
+  keys; the build compares the two rigs' pelvis frames at each of the six
+  doors (all within 0.01 mm). A transient motion must settle before a door:
+  the gust tumble left them 9.6 mm apart until it faded out first.
+- **Estimate Quick Look the way the converter works.** The build now splits
+  its load into deformed (morph targets: points at every frame) and rigid
+  (points at every frame only under an animated node) on the converter's
+  frames (the 30 Hz grid, every key, a pre-sample before each STEP key).
+  It came to 22 M and 45 M against 100 M and 500 M budgets. The real converter
+  took 15 s of CPU.
+- **Sound stays in its layer.** Inner emitters are short range (reference
+  1.8 layer units, silent past 4) and the viewer hands the gain over layer
+  by layer, so each layer's music is heard only in it. AR Quick Look gets
+  the outer layer's sounds only, as placed spatial audio. Whether Quick Look
+  places them is unproven until heard on an iPhone.
+- **Prove inner layers in the feed.** The contact-sheet renderer's near
+  plane is fixed at 1 cm, so it cannot draw a layer whose home camera is
+  micrometres away. Record the feed zooming in instead.

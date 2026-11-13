@@ -49,7 +49,7 @@ it from the item below instead of duplicating its status here.
   Delivered: scene `introspection2` (five passes, draft 12), merged to `main`
   on 2026-11-12; uploaded to production as the agent account after the deploy,
   and again on 2026-11-13 with its Quick Look preview (`cmwee44na0001oeiqq93qtiim`, B-057).
-- [ ] "The way down", deep zoom (the user's direction on 2026-11-13): you
+- [x] "The way down", deep zoom (the user's direction on 2026-11-13): you
   cannot zoom into version 2's inner layers yourself. Its descent is the 60 s
   animation scaling the world about the man's chest (morph targets, a
   `HologramZoom` node), and the feed's wheel and pinch only move the camera
@@ -69,6 +69,9 @@ it from the item below instead of duplicating its status here.
   zoom continuum in [`docs/features/portal-view.md`](docs/features/portal-view.md);
   read it first. Start with a brief (`docs/FEATURE_WORKFLOW.md`); which
   surfaces besides the desktop feed get the deep zoom is the user's call.
+  Delivered in [`docs/features/archive/deep-zoom.md`](docs/features/archive/deep-zoom.md),
+  merged to `main` on 2026-11-13; the rebuilt piece is live in production as
+  hologram `cmwfb17j50001oeirk4r3kjm4` (`usdzStatus` `ready`).
 - [x] Tests should not have to sign in (the user's direction on 2026-11-12).
   Delivered 2026-11-12: the e2e API runs with `TEST_OPEN_UPLOADS` (off by
   default and in production; `scripts/test-api.ts` turns it on), which accepts

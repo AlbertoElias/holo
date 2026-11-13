@@ -1,18 +1,21 @@
 import { SAMPLE_RATE, add, lowpass, noise, normalize, pluck, track } from '../lib/audio.mjs';
-import { BEAT, GUSTS, WAVES } from './events.mjs';
-import { HEART, LOOP, smooth } from './timeline.mjs';
+import { sob } from './acting.mjs';
+import { AMBIENT_WAVES, BEAT, GUSTS, WAVES } from './events.mjs';
+import { HEARTS, LOOP, smooth } from './timeline.mjs';
 
-// The way down II, third pass: the music as a chip sequencer would play it
-// (fifth pass: sparser and quieter, so it sits under the picture)
-// (BEATS.md, "Sound"). Pulse and square leads, a triangle bass, stepped
-// noise for the drums, everything on note grids, nothing natural. One 60 s
-// mono loop per layer plus the heart, and one per demand: each demand's
-// voice is its own short sequence, played from its gust as it gathers and
-// hits (events.mjs), so the gas is heard where it comes from.
+// The way down II's sound (BEATS.md, "Sound"): background, sparse and
+// succinct; it accompanies the picture and never leads it. Chip voices
+// (pulse, triangle, stepped noise) on note grids. Seven 60 s mono loops, each
+// a positional emitter in its layer: the stage's waltz and the man's heart
+// (layer 0), the gas's notes and the traveller's racing heart, the sea's
+// line, and the dark's sobs and lullaby with the child's heart. Every track
+// runs the whole loop and is seamless at the loop point: notes that run past
+// the end wrap to the start, and every steady tone and tempo turns a whole
+// number of times a loop.
 
-const OUT_RATE = 22050;
-function toWav(samples) {
-  const src = lowpass(lowpass(Float32Array.from(samples), 9500), 9500);
+function toWav(samples, OUT_RATE = 16000) {
+  const cut = 0.42 * OUT_RATE;
+  const src = lowpass(lowpass(Float32Array.from(samples), cut), cut);
   const count = Math.round((src.length * OUT_RATE) / SAMPLE_RATE);
   const data = Buffer.alloc(count * 2);
   for (let i = 0; i < count; i += 1) {
@@ -73,9 +76,6 @@ function glide(out, at, dur, f0, f1, amp, env, shape = (p) => (frac(p) < 0.5 ? 0
     out[(start + i) % out.length] += amp * shape(ph) * env(t);
   }
 }
-const gate = (out, a, b, gain = 0) => {
-  for (let i = Math.round(a * SAMPLE_RATE); i < Math.round(b * SAMPLE_RATE); i += 1) out[i] *= gain;
-};
 /** A drum hit on the noise channel. */
 const hit = (out, at, gain, rate, decay, seed) => add(out, at, decay * 6, stepNoise(seed, rate), (u) => gain * Math.exp(-u / decay));
 
@@ -97,140 +97,54 @@ const BARS = [
 ];
 
 // ---------------------------------------------------------------------------
-// stage: the waltz on a thin pulse lead, triangle bass, square chord blips,
-// sagging flat like a slowed cartridge from 7 to 12 s.
+// stage (layer 0): the waltz, quiet, round the man all loop. 132 beats a
+// minute, so the loop is 44 bars exactly. The tune comes twice, at 0 and 30 s
+// (bars 1 and 23); between, only the bass on the downbeats and a chord blip
+// every other bar.
 
 const WALTZ_BEAT = 60 / 132;
-const bendAt = (t) => 2 * smooth(7, 12, t);
-const tapeRate = (t) => 2 ** (-bendAt(t) / 12);
-const waltzTimes = (() => {
-  const times = [0];
-  let t = 0;
-  let b = 0;
-  while (t < 13) {
-    b += (0.001 * tapeRate(t)) / WALTZ_BEAT;
-    t += 0.001;
-    while (b >= times.length) times.push(t);
-  }
-  return times;
-})();
-const waltzAt = (beat) => {
-  const i = Math.floor(beat);
-  return waltzTimes[i] + (waltzTimes[i + 1] - waltzTimes[i]) * (beat - i);
-};
-
 function stage() {
   const out = track(LOOP);
-  const thin = (t) => 1 - 0.75 * smooth(8.5, 12, t);
-  for (const base of [0, 12]) {
+  for (const bar0 of [0, 22]) {
     for (const [b, n, len] of MOTIF) {
-      const t0 = waltzAt(base + b);
-      if (t0 > 12.3) continue;
-      const dur = waltzAt(base + b + len) - t0;
-      const f = hz(n) * tapeRate(t0 + 0.1);
-      note(out, t0, dur * 0.92, (u) => pulse(f * (1 + 0.006 * Math.sin(TAU * 6 * u) * Math.min(1, u / 0.25)), 0.125)(u), 0.36 * thin(t0));
+      const t0 = (bar0 * 3 + b) * WALTZ_BEAT;
+      note(out, t0, len * WALTZ_BEAT * 0.9, tri(hz(n)), 0.3, gateEnv(len * WALTZ_BEAT * 0.9, 0.45, 0.2));
     }
-    BARS.forEach(({ bass, chord }, bar) => {
-      const b0 = base + bar * 3;
-      const t0 = waltzAt(b0);
-      if (t0 > 12.3) return;
-      note(out, t0, WALTZ_BEAT * 0.9, tri(hz(bass) * tapeRate(t0)), 0.5 * thin(t0));
-      for (const k of [1, 2]) {
-        const tk = waltzAt(b0 + k);
-        if (tk > 12.3) continue;
-        for (const n of chord) note(out, tk, 0.07, pulse(hz(n) * tapeRate(tk), 0.25), 0.12 * thin(tk), gateEnv(0.07, 0.3, 0.03));
-      }
-    });
   }
-  // Pickup into the downbeat: A C D, then E at 0.
-  [69, 72, 74].forEach((n, i) => note(out, LOOP - (3 - i) * WALTZ_BEAT, WALTZ_BEAT * 0.9, pulse(hz(n), 0.125), 0.34));
-  // The tritone pedal, A1 on the triangle and Eb2 on a pulse, in with the pickup and out by 12.
-  const pedal = (u) => {
-    const T = (58.5 + u) % LOOP;
-    return smooth(58.5, 60, T < 30 ? T + LOOP : T) * (T < 30 ? 1 - smooth(9.5, 12, T) : 1);
-  };
-  add(out, 58.5, 13.5, (u) => 0.32 * tri(hz(33))(u) + 0.07 * pulse(hz(39), 0.5)(u), pedal);
-  gate(out, 12.6, 58.4, 0);
+  for (let bar = 0; bar < 44; bar += 1) {
+    const { bass, chord } = BARS[bar % 4];
+    const t0 = bar * 3 * WALTZ_BEAT;
+    note(out, t0, WALTZ_BEAT * 0.9, tri(hz(bass)), 0.42, gateEnv(WALTZ_BEAT * 0.9, 0.4, 0.15));
+    if (bar % 2 === 0) for (const n of chord) note(out, t0 + WALTZ_BEAT, 0.07, pulse(hz(n), 0.25), 0.06, gateEnv(0.07, 0.3, 0.03));
+  }
+  return toWav(normalize(out, 0.28));
+}
+
+// ---------------------------------------------------------------------------
+// gas: a soft high note now and then all loop (an A-minor arpeggio with the
+// Eb in it, one note every two beats), one note for every gust as it hits,
+// and his long breath out (22.6–23.9) as a falling triangle.
+
+const ARP = [57, 60, 64, 71, 63, 69, 64, 60];
+function gas() {
+  const out = track(LOOP);
+  const busy = (t) => smooth(9, 12, t) * (1 - smooth(23.5, 25, t));
+  for (let k = 0; k < LOOP / (2 * BEAT); k += 1) {
+    const t = k * 2 * BEAT;
+    note(out, t, 0.3, pulse(hz(ARP[k % ARP.length] + 12), 0.125), 0.05 + 0.04 * busy(t), gateEnv(0.3, 0.3, 0.08));
+  }
+  for (const e of GUSTS) {
+    note(out, e.t, 0.18, pulse(hz(ARP[e.i % ARP.length] + 24), 0.25), 0.07 * e.power, gateEnv(0.18, 0.2, 0.05));
+    hit(out, e.t, 0.05 * e.power, 6000, 0.03, 700 + e.i);
+  }
+  glide(out, 23.25, 1.1, 330, 110, 0.12, (u) => 1 - smooth(0.4, 1.1, u), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
   return toWav(normalize(out, 0.3));
 }
 
 // ---------------------------------------------------------------------------
-// gas: an arpeggio on the grid that tightens from eighths to sixteenths, a
-// tritone bass, hats, and a crash and a falling square for every gust; then
-// the calm, his long breath out as a falling triangle, and the opening.
-
-const ARP = [57, 60, 64, 71, 63, 69, 64, 60]; // A minor with the Eb in it
-function gas() {
-  const out = track(LOOP);
-  const level = (t) => smooth(10.5, 12, t) * (1 - smooth(21.2, 21.6, t));
-  for (let k = 0; ; k += 1) {
-    const t = 11 + k * (BEAT / 4);
-    if (t > 21.6) break;
-    // Fifth pass: eighths throughout (no sixteenths), so the gas is pulse, not clatter.
-    if (k % 2) continue;
-    const g = level(t);
-    if (g < 0.01) continue;
-    note(out, t, BEAT / 4 - 0.02, pulse(hz(ARP[(k / 2) % ARP.length] + 12), 0.25), 0.12 * g, gateEnv(BEAT / 4 - 0.02, 0.4, 0.04));
-    if (k % 4 === 0) hit(out, t, 0.06 * g, 12000, 0.012, 300 + k);
-    if (k % 4 === 0) note(out, t, BEAT * 0.9, tri(hz((k / 4) % 2 ? 39 : 33)), 0.5 * g);
-  }
-  // The gusts: a crash and a falling square, louder as they crowd in.
-  for (const e of GUSTS) {
-    hit(out, e.t, 0.3 * e.power, 6000, 0.07, 700 + e.i);
-    if (e.i % 2 === 0) glide(out, e.t, 0.25, 880, 110, 0.14 * e.power, (u) => Math.exp(-u / 0.1));
-  }
-  // The calm: his breath held (a rising triangle), then let out (a long fall).
-  // (acting: in 22.6–23.2, out to 23.9)
-  glide(out, 22.6, 0.65, 220, 330, 0.2, (u) => smooth(0, 0.5, u) * (1 - smooth(0.6, 0.65, u)), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
-  glide(out, 23.25, 1.1, 330, 110, 0.26, (u) => (1 - smooth(0.4, 1.1, u)), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
-  // The gas opening under him: an arpeggio climbing out of the grid.
-  [57, 64, 69, 76].forEach((n, i) => note(out, 24.1 + i * (BEAT / 2), 0.14, pulse(hz(n), 0.5), 0.14, gateEnv(0.14, 0.5, 0.05)));
-  // The way back: the gas passing, four soft notes (57.2 s).
-  [69, 64, 60, 57].forEach((n, i) => note(out, 56.6 + i * BEAT * 0.6, 0.22, pulse(hz(n + 12), 0.125), 0.15));
-  return toWav(normalize(out, 0.38));
-}
-
-// ---------------------------------------------------------------------------
-// voices: each demand's own little sequence, faster and louder as its gust
-// gathers, cut as it hits.
-
-const VOICE = {
-  chime: (out, t, g, k) => note(out, t, 0.12, pulse(hz(k % 2 ? 88 : 84), 0.5), 0.3 * g, gateEnv(0.12, 0.3, 0.05)),
-  buzz: (out, t, g) => note(out, t, 0.07, pulse(hz(45), 0.125), 0.45 * g, gateEnv(0.07, 0.9, 0.2)),
-  tick: (out, t, g, k) => {
-    note(out, t, 0.04, pulse(hz(k % 2 ? 96 : 91), 0.125), 0.3 * g, gateEnv(0.04, 0.6, 0.01));
-    hit(out, t, 0.25 * g, k % 2 ? 9000 : 15000, 0.008, 900 + k);
-  },
-  kettle: (out, t, g, k) => note(out, t, 0.05, pulse(hz(79 + (k % 12)), 0.25), 0.28 * g, gateEnv(0.05, 0.8, 0.1)),
-  clatter: (out, t, g, k) => {
-    note(out, t, 0.1, pulse(hz([74, 85, 79, 90, 72][k % 5]), 0.25), 0.3 * g, gateEnv(0.1, 0.7, 0.03));
-    if (k % 2) hit(out, t, 0.2 * g, 4000, 0.02, 1100 + k);
-  }
-};
-const GATHER = 0.75;
-
-/** One 60 s track per demand: its gusts, each a run of its sequence. */
-export function voices() {
-  return Object.fromEntries(Object.keys(VOICE).map((id) => {
-    const out = track(LOOP);
-    let k = 0;
-    for (const e of GUSTS.filter((g) => g.demand === id)) {
-      // Eighths, then sixteenths for the last half second, on the grid that lands on the hit.
-      for (let x = -GATHER; x <= 0.001; ) {
-        const g = e.power * (0.35 + 0.65 * smooth(-GATHER, 0, x));
-        VOICE[id](out, e.t + x, g, k);
-        k += 1;
-        x += BEAT / 2;
-      }
-    }
-    return [id, toWav(normalize(out, 0.45))];
-  }));
-}
-
-// ---------------------------------------------------------------------------
-// liquid: a pulse bass running in eighths, a square stab for every rope of
-// paint (its chord from its colour), a sub drop at the two peaks (30, 33),
-// then the calm and a hard cut at 37 s.
+// liquid: the sea's line, a triangle bass every second all loop, a soft
+// swash for every wave (the ambient ones quieter), a two-note stab for the
+// hardest blows, and a sub drop at the two peaks (30, 33).
 
 const STABS = {
   cadmium: [57, 60, 64], orange: [58, 62, 65], lemon: [60, 64, 67], white: [64, 68, 71], viridian: [62, 65, 69],
@@ -241,102 +155,84 @@ export const PEAKS = [30.0, 33.0];
 
 function liquid() {
   const out = track(LOOP);
-  const level = (t) => smooth(26.6, 27.4, t) * (1 - 0.7 * smooth(35.2, 36.2, t));
-  for (let k = 0; ; k += 1) {
-    const t = 27 + k * (BEAT / 2);
-    if (t >= 37) break;
-    if (k % 2) continue; // fifth pass: quarters, not eighths
-    const g = level(t);
-    note(out, t, BEAT / 2 - 0.03, pulse(hz(LINE[k % LINE.length]), 0.25), 0.3 * g, gateEnv(BEAT / 2 - 0.03, 0.5, 0.06));
-    if (k % 4 === 0) hit(out, t, 0.05 * g, 11000, 0.015, 2000 + k);
+  const storm = (t) => smooth(26.6, 27.4, t) * (1 - smooth(35.2, 36.2, t));
+  for (let k = 0; k < LOOP / (2 * BEAT); k += 1) {
+    const t = k * 2 * BEAT;
+    note(out, t, 0.85, tri(hz(LINE[k % LINE.length])), 0.22 + 0.1 * storm(t), gateEnv(0.85, 0.5, 0.2));
   }
-  for (const e of WAVES) {
-    if (e.power >= 0.85) for (const n of STABS[e.hue].slice(0, 2)) note(out, e.t, 0.22, pulse(hz(n + 12), 0.5), 0.1 * e.power, gateEnv(0.22, 0.35, 0.08));
-    hit(out, e.t, 0.2 * e.power, 7000, 0.05, 3000 + e.i);
+  for (const e of [...WAVES, ...AMBIENT_WAVES]) {
+    const g = e.ambient ? 0.3 : 1;
+    add(out, e.t - 0.25, 0.9, stepNoise(3000 + e.i, 3000), (u) => 0.05 * g * e.power * smooth(0, 0.25, u) * Math.exp(-Math.max(0, u - 0.25) / 0.2));
+    if (!e.ambient && e.power >= 0.85) for (const n of STABS[e.hue].slice(0, 2)) note(out, e.t, 0.22, pulse(hz(n + 12), 0.5), 0.05 * e.power, gateEnv(0.22, 0.35, 0.08));
   }
-  for (const c of PEAKS) glide(out, c, 1.3, 70, 28, 0.6, (u) => Math.exp(-u / 0.5), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
-  // The opening: the bass line falls away under him.
-  glide(out, 36.0, 1.0, 220, 55, 0.2, (u) => 1 - smooth(0.7, 1.0, u)); // after his breath out (35.7)
-  gate(out, 37, 54.6, 0);
-  // The way back: the paint at rest, a slow triangle arpeggio.
-  [45, 52, 57, 64, 57, 52].forEach((n, i) => note(out, 54.9 + i * BEAT, BEAT * 0.9, tri(hz(n)), 0.3, gateEnv(BEAT * 0.9, 0.4, 0.3)));
-  return toWav(normalize(out, 0.5));
+  for (const c of PEAKS) glide(out, c, 1.3, 70, 28, 0.25, (u) => Math.exp(-u / 0.5), (p) => 4 * Math.abs(frac(p) - 0.5) - 1);
+  return toWav(normalize(out, 0.32));
 }
 
 // ---------------------------------------------------------------------------
-// dark: one high square note, a sob as falling pulse blips, then the lullaby
-// on a chip music box over a fast-arpeggio open fifth.
+// dark: a faint high note as he falls in (37–46), the child's sobs as falling
+// blips on the picture's own sobs (acting.mjs), and the lullaby on a chip
+// music box over the open fifth (45–55).
 
 function dark() {
   const out = track(LOOP);
-  note(out, 37.2, 8.6, pulse(hz(91), 0.5), 0.03, (u) => smooth(0, 2, u) * (1 - smooth(6, 8.6, u)));
-  // Sob: groups of short falling blips, slowing and fading.
-  let seed = 5;
-  const R = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const amp = (t) => smooth(41, 43.5, t) * (1 - smooth(47, 53, t));
-  for (let t = 41; t < 53; ) {
-    const spasms = 2 + Math.floor(R() * 2);
-    for (let s = 0; s < spasms && t < 53; s += 1) {
-      glide(out, t, 0.16, 300 + 40 * R(), 190, 0.22 * amp(t), (u) => Math.exp(-u / 0.06), (p) => (frac(p) < 0.25 ? 0.6 : -0.6));
-      t += 0.17 + 0.06 * R();
-    }
-    t += (0.55 + 0.4 * R()) * (1 + 1.9 * smooth(47, 53, t));
+  note(out, 37.2, 8.6, pulse(hz(91), 0.5), 0.02, (u) => smooth(0, 2, u) * (1 - smooth(6, 8.6, u)));
+  // A blip on every sob the child makes: each local peak of sob(t) over 0.2.
+  const dt = 0.005;
+  for (let t = dt; t < LOOP - dt; t += dt) {
+    const v = sob(t);
+    if (v > 0.2 && v >= sob(t - dt) && v > sob(t + dt)) glide(out, t, 0.16, 300 + 120 * v, 190, 0.12 * v, (u) => Math.exp(-u / 0.06), (p) => (frac(p) < 0.25 ? 0.6 : -0.6));
   }
-  // The lullaby: half tempo, rubato, the motif on a music box (square and triangle, struck), resolved.
   const beat = 2 * WALTZ_BEAT;
   const t0 = 45.4;
   const tb = (b) => t0 + beat * (b + 0.07 * Math.sin((TAU * b) / 5));
-  const warm = (t) => smooth(45, 52.5, t) * (1 - smooth(55, 58.3, t));
-  const box = (at, midi, g) => add(out, at, 1.6, (u) => 0.5 * pulse(hz(midi + 12), 0.5)(u) + 0.6 * tri(hz(midi))(u), (u) => g * pluck(0.002, 0.35)(u));
-  MOTIF_RESOLVED.forEach(([b, n], j) => box(tb(b), n, 0.3 + 0.1 * warm(tb(b)) + (j === 10 ? 0.05 : 0)));
-  for (let bar = 0; bar < 6; bar += 1) {
-    const root = bar < 4 ? BARS[bar].bass : 45;
+  const warm = (t) => smooth(45, 50, t) * (1 - smooth(53.5, 55.5, t));
+  const box = (at, midi, g) => add(out, at, 1.6, (u) => 0.4 * pulse(hz(midi + 12), 0.5)(u) + 0.6 * tri(hz(midi))(u), (u) => g * pluck(0.002, 0.35)(u));
+  MOTIF_RESOLVED.forEach(([b, n]) => box(tb(b), n, 0.22 * warm(tb(b))));
+  for (let bar = 0; bar < 4; bar += 1) {
     [0, 7, 12].forEach((iv, k) => {
       const at = tb(bar * 3 + k);
-      if (at < 58.3) note(out, at, beat * 0.8, tri(hz(root + iv)), 0.22 + 0.1 * warm(at));
+      note(out, at, beat * 0.8, tri(hz(BARS[bar].bass + iv)), 0.14 * warm(at));
     });
   }
-  box(56.3, 72, 0.26);
-  box(57.2, 74, 0.26);
-  box(58.3, 76, 0.34);
-  // The open fifth as a chip pad: A, E, A cycled in 32nds.
-  const fifth = [57, 64, 69];
-  add(out, 45, 13.5, (u) => pulse(hz(fifth[Math.floor(u / (BEAT / 8)) % 3]), 0.125)(u), (u) => 0.05 * warm(45 + u));
-  return toWav(normalize(out, 0.4));
+  return toWav(normalize(out, 0.3));
 }
 
 // ---------------------------------------------------------------------------
-// heart: a triangle kick, tempo and level from HEART, phase integrated across the loop.
+// The hearts: a soft triangle lub-dub, its tempo from timeline.mjs HEARTS,
+// phase-integrated and scaled to a whole number of beats a loop.
 
-function heart() {
+function heart(bpm, { pitch = 70, gain = 1, decay = 0.05 } = {}) {
   const out = track(LOOP);
   const dt = 1 / SAMPLE_RATE;
   let total = 0;
-  for (let i = 0; i < out.length; i += 1) total += (HEART.bpm(i * dt) / 60) * dt;
+  for (let i = 0; i < out.length; i += 1) total += (bpm(i * dt) / 60) * dt;
   const scale = Math.round(total) / total;
-  const child = (t) => smooth(44.5, 45.5, t) * (1 - smooth(55, 58.5, t));
+  const kick = (f) => (u) => tri(f * (0.6 + 0.4 * Math.exp(-u * 30)))(u);
   let phase = 0;
   let next = 0;
   for (let i = 0; i < out.length; i += 1) {
     const t = i * dt;
-    while (phase >= next) {
-      const lvl = HEART.level(t);
-      const c = child(t);
-      if (lvl > 0.03) {
-        const f = 70 + 40 * c;
-        const g = lvl * (1 - 0.4 * c);
-        const kick = (pitch) => (u) => tri(pitch * (0.6 + 0.4 * Math.exp(-u * 30)))(u);
-        add(out, t, 0.25, kick(f), (u) => 0.8 * g * pluck(0.002, 0.05 - 0.012 * c)(u));
-        const gap = Math.min(0.17, (60 / HEART.bpm(t)) * 0.32);
-        add(out, t + gap, 0.2, kick(f * 1.15), (u) => 0.5 * g * pluck(0.002, 0.04 - 0.01 * c)(u));
-      }
+    if (phase >= next) {
+      add(out, t, 0.25, kick(pitch), (u) => 0.8 * gain * pluck(0.002, decay)(u));
+      const gap = Math.min(0.17, (60 / bpm(t)) * 0.32);
+      add(out, t + gap, 0.2, kick(pitch * 1.15), (u) => 0.5 * gain * pluck(0.002, decay * 0.8)(u));
       next += 1;
     }
-    phase += (HEART.bpm(t) / 60) * dt * scale;
+    phase += (bpm(t) / 60) * dt * scale;
   }
-  return toWav(normalize(out, 0.7));
+  return toWav(normalize(out, 0.5), 11025);
 }
 
+/** The seven loops, by emitter. */
 export function layerSounds() {
-  return { stage: stage(), gas: gas(), liquid: liquid(), dark: dark(), heart: heart() };
+  return {
+    stage: stage(),
+    'heart-man': heart(HEARTS.man, { pitch: 62, decay: 0.06 }),
+    gas: gas(),
+    'heart-gas': heart(HEARTS.gas, { pitch: 78, decay: 0.035 }),
+    liquid: liquid(),
+    dark: dark(),
+    'heart-child': heart(HEARTS.child, { pitch: 96, decay: 0.035 })
+  };
 }

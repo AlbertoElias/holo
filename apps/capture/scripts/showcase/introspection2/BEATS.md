@@ -1,8 +1,9 @@
 # The way down II: beat sheet
 
-Draft for approval, written before any building. It covers a 60 s loop played
-in the feed at Follow. Scale is the world's zoom, where 1 means the man fills
-the dome. Intensity runs from 1 (stillness) to 10 (the storm's peak).
+It covers a 60 s loop played in the feed at Follow, with the inner layers
+reached by the viewer's deep zoom ("The nesting"). Intensity runs from 1
+(stillness) to 10 (the storm's peak). The beats are where the traveller is;
+every layer runs all loop.
 
 ## What the spike showed
 
@@ -25,31 +26,59 @@ the dome. Intensity runs from 1 (stillness) to 10 (the storm's peak).
   fades (linear rolloff, 0.9 to 2.3 m), and the next layer's sound grows in
   from the centre. The crossfade is the zoom itself, not a mix automation.
 
-## The nesting
+## The nesting (sixth pass, 2026-11-13: a still nesting)
 
-Each layer is built at the size where it fills the dome. It waits inside the
-previous one, shrunk by the step factor.
+The clip no longer zooms. Every layer is built once, still, in its own units
+under a static `HologramLayer_*` node, and the viewer zooms into them
+(`docs/features/archive/deep-zoom.md`). The passes below describe the old morph zoom
+and `HologramZoom`; they are history.
 
-| Layer | Lives inside | Step | Walls vs the traveller |
+| Layer node | Inside | World size | Where |
 |---|---|---|---|
-| The man, 1.8 m | the dome | 1 | 45× |
-| Pastel gas, in his torso cavity | his chest | ×100 | about 75× |
-| Rothko liquid, in a knot of gas | a gas vortex | ×40 | about 75× |
-| The dark, with the child | a trap door under the liquid | ×40 | only his light |
+| (layer 0) the man, 1.8 m | the dome | 1 | |
+| `HologramLayer_gas` | the man | 0.01 | C, his heart: the point in his chest farthest from his surfaces |
+| `HologramLayer_liquid` | the gas | 2.5e-4 (×1/40) | a slowly spinning knot under the traveller |
+| `HologramLayer_dark` | the liquid | 6.25e-6 (×1/40) | a dark knot under the sea |
 
-**The traveller is a he, 4 cm on the man's chest; then the camera follows him
-in.** The first zoom carries him through the door until he is 5× that (20 cm
-on screen, about 4% of the frame). Among the gases and liquids he is 12×
-(47 cm, about 10% of the frame): at 5× he was a 12 px speck against the busy
-layers. He shrinks back to 5× as he falls through the last door, and keeps that
-while the dark grows round him. Each zoom grows the walls 40–100× around him,
-so he still gets relatively smaller: that is the descent. At the core, the zoom
-goes into him and the child instead, so the hug fills the frame.
+Each layer's nearest layer ancestor is the one before; no siblings. No layer
+node or ancestor has a track, and nothing is sized for the feed's fit: the
+build checks that the fit is the same with and without the inner layers.
+Meshes in layers are rigid and unlit (morph targets only).
+
+**What always runs.** All four layers are alive all 60 s and loop
+seamlessly: the man's acting; the gas's ambient puffs (whole numbers of
+crossings and turns a loop), its gusts at 12.5–21 s and the spinning knot;
+the sea's swell (whole-loop harmonics), its 21 waves at 27.5–34.5 s and 22
+ambient ones; the child in the dark, sobbing until the hug and resolving in
+it; every sound. A viewer can zoom into any layer at any time.
+
+**The traveller** is one rigid rig per layer, each keyed in its layer's
+units, handed over at the doors by STEP scale keys 0 ↔ 1 on the 30 Hz grid.
+The rigs meet exactly at each door (pelvis frames 0.00 mm apart):
+
+| Rig | Shown | Handover in | Handover out |
+|---|---|---|---|
+| man (on his chest, 4 cm) | 0–9, 57.6–60 | | 9.0 into the gas |
+| gas | 9–25.2, 56.8–57.6 | 9.0 from the man | 25.2 into the knot |
+| liquid | 25.2–37, 56–56.8 | 25.2 from the gas | 37.0 under the sea |
+| dark | 37–56 | 37.0 from the liquid | 56.0 back up |
+
+On the way back (56–57.6) each rig rises out of its layer's door at the size
+it entered with, so the way home reads at every depth.
 
 **Every way down is a trap door, and every door is found by letting go.** He
 cannot fight his way out of the gas or the liquid. Only when he calms down
 and accepts where he is do the gas or the paint relax, and the relaxing
 reveals the door to the next layer.
+
+## Sound (sixth pass)
+
+Background, sparse and succinct: it accompanies the picture and never leads
+it (the user: the audio "is just accompanying the imagery"). Seven seamless
+60 s loops, each a static emitter in its layer, so the viewer's depth mixes
+them: the stage's waltz and the man's heart (layer 0); the gas's notes and
+the traveller's racing heart; the sea's line; the dark's sobs and lullaby
+with the child's heart.
 
 ## Beats
 
@@ -99,20 +128,18 @@ is the music box. The heartbeat stays a body sound, not a MIDI drum.
 - **Acting** is key-framed poses with eased holds and breath on every
   figure. Shoulders and chest rise and settle, with weight shifts before each
   move. There are no looping procedural gestures.
-- **Quick Look budget:** moving vertices × 1,800 frames must stay under 100 M,
-  so roughly 55 k moving vertices in total, split across the layers. It is
-  measured at build time, and the build fails if it is over.
+- **Quick Look budget:** split as the converter splits it, deformed (morph)
+  points × frames under 100 M and rigid moving points × frames under 500 M.
+  It is measured at build time, and the build fails if it is over.
 
 ## Decided with you
 
-1. **The dome is the viewer's, and it wraps the outer layer.** When the
-   piece goes into the man, the dome grows with him and leaves the view, and
-   it closes round him again on the way back. The piece names its zoom with
-   a `HologramZoom` node, which the feed's dome follows.
+1. **The dome is the viewer's, and it wraps the man.** The viewer's deep
+   zoom goes into the layers (sixth pass); the piece no longer zooms itself.
 2. **The child's sobbing is synthesized**, like every other sound.
-3. **The way back zooms out** through the calmed layers: from the hug, held 55–55.5 s,
-   it pauses on the liquid (56.3 s) and the gas (57.2 s), then the man is whole
-   again at 58.5 s for his exhale (58.5–60 s).
+3. **The way back** rises through the calmed layers: out of the dark at 56 s,
+   the liquid at 56.8 s and the gas at 57.6 s, to the pin on his chest by
+   58.4 s for the man's exhale (58.5–60 s).
 
 ## Decided for the gas and the liquid (2026-11-12)
 

@@ -35,9 +35,12 @@ for (const name of names) {
   const quickLook = quickLookLoad(glb);
   const written = await glb.write(file);
   const report = { scene: name, ...scene.meta, file, megabytes: +(written.bytes / 1e6).toFixed(2), clipSeconds: written.duration, quickLook };
-  if (scene.budget?.quickLook && quickLook.pointFrames > scene.budget.quickLook) {
-    console.error(`${name}: Quick Look load ${quickLook.pointFrames.toExponential(2)} moving points × frames is over the budget of ${scene.budget.quickLook.toExponential(2)}`);
-    process.exitCode = 1;
+  for (const kind of ['deformed', 'rigid']) {
+    const limit = scene.budget?.[kind];
+    if (limit && quickLook[kind] > limit) {
+      console.error(`${name}: Quick Look ${kind} load ${quickLook[kind].toExponential(2)} points × frames is over the budget of ${limit.toExponential(2)}`);
+      process.exitCode = 1;
+    }
   }
   if (sheet) {
     const sheetFile = path.join(outDir, `${scene.meta.slug}-sheet.jpg`);
@@ -47,26 +50,42 @@ for (const name of names) {
 }
 
 /**
- * What the USDZ conversion has to bake: every point of a moving mesh (on an
- * animated node or below one, or with morph targets) at every distinct key
- * time in the clip. Measured before write(), which hands the channels over.
+ * What the USDZ conversion has to evaluate for its extents, split as the
+ * converter splits it (apps/viewer-api/tools/glb_to_usdz.py): deformed
+ * meshes (morph targets) cost their points at every frame; rigid meshes cost
+ * their points at every frame when the node or an ancestor is animated, and
+ * once otherwise. The frames are the converter's: the 30 Hz grid over the
+ * clip, every key time, and a pre-sample 10 µs before each STEP key after
+ * the first. Measured before write(), which hands the channels over.
  */
 function quickLookLoad(glb) {
   const { nodes, meshes, accessors } = glb.json;
+  if (glb.channels.length === 0) return { deformed: 0, rigid: 0, frames: 1 };
   const times = new Set();
-  for (const ch of glb.channels) for (const t of ch.times) times.add(Math.round(t * 1e5));
+  const put = (t) => times.add(Math.round(t * 1e5));
+  const duration = Math.max(...glb.channels.flatMap((ch) => [...ch.times]));
+  for (let i = 0; i * 30 < duration * 30 - 1e-6; i += 1) put(i / 30);
+  put(duration);
+  for (const ch of glb.channels) {
+    for (const t of ch.times) put(t);
+    if (ch.interpolation === 'STEP') for (const t of [...ch.times].slice(1)) put(Math.max(0, t - 1e-5));
+  }
+  const frames = times.size;
   const moving = new Set(glb.channels.filter((ch) => ch.path !== 'weights').map((ch) => ch.node));
-  let points = 0;
+  let deformed = 0;
+  let rigid = 0;
   const walk = (i, under) => {
     const node = nodes[i];
     const here = under || moving.has(i);
     if (node.mesh !== undefined) {
       for (const prim of meshes[node.mesh].primitives) {
-        if (here || prim.targets?.length) points += accessors[prim.attributes.POSITION].count;
+        const points = accessors[prim.attributes.POSITION].count;
+        if (prim.targets?.length) deformed += points * frames;
+        else rigid += points * (here ? frames : 1);
       }
     }
     for (const c of node.children ?? []) walk(c, here);
   };
   for (const i of glb.json.scenes[0].nodes) walk(i, false);
-  return { movingPoints: points, frames: times.size, pointFrames: points * times.size };
+  return { deformed, rigid, frames };
 }
