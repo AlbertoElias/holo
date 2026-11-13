@@ -283,7 +283,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
 
   const { camera, invalidate, gl: renderer, scene: renderScene } = useThree();
   const clonedScene = useMemo(() => cloneSkeleton(scene), [scene]);
-  // Deep zoom (docs/features/deep-zoom.md): the layers the hologram declares
+  // Deep zoom (docs/features/archive/deep-zoom.md): the layers the hologram declares
   // nested inside it, read once; null for one that declares none, which then
   // zooms exactly as before.
   const deep = useMemo(() => readDeepZoom(clonedScene, gltf.animations), [clonedScene, gltf.animations]);

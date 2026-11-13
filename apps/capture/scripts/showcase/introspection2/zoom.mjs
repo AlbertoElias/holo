@@ -1,6 +1,6 @@
 // The feed's framing: its dome fit and its Follow direction. Nothing here
 // zooms: the viewer goes in by itself, through the HologramLayer nodes
-// (docs/features/deep-zoom.md). The fit is computed at build time to check
+// (docs/features/archive/deep-zoom.md). The fit is computed at build time to check
 // that the inner layers leave it as the man alone sets it.
 
 // The feed's dome fit (packages/xr-ui-core/src/cloche.ts fitCloche, no floor).

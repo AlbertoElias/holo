@@ -107,7 +107,7 @@ def challenge(doc, binary):
 
 def layered(doc):
     """Puts the first node that places a sound inside a nested layer
-    (docs/features/deep-zoom.md): Quick Look then leaves that sound out."""
+    (docs/features/archive/deep-zoom.md): Quick Look then leaves that sound out."""
     for node in doc.get("nodes", []):
         if isinstance(node.get("extensions", {}).get("KHR_audio", {}).get("emitter"), int):
             node["name"] = "HologramLayer_" + (node.get("name") or "exercise")

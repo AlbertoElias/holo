@@ -25,7 +25,7 @@ export interface HologramRuntime {
   audio: ScheduledGltfAudio | null;
   /** Where the audio was, sampled on the last frame with the clip clock; null when silent. */
   audioOffset: number | null;
-  /** A hologram with nested layers (docs/features/deep-zoom.md) is heard as from outside them: depth 0. */
+  /** A hologram with nested layers (docs/features/archive/deep-zoom.md) is heard as from outside them: depth 0. */
   layers: SoundLayers | null;
 }
 

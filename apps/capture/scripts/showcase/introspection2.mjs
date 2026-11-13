@@ -14,7 +14,7 @@ import { DOORS, FPS, K, LOOP, PI, mix, smooth } from './introspection2/timeline.
 import { scaleGeo } from './introspection2/world.mjs';
 import { FOLLOW, SCREEN, feedFit } from './introspection2/zoom.mjs';
 
-// The way down II (see introspection2/BEATS.md and docs/features/deep-zoom.md).
+// The way down II (see introspection2/BEATS.md and docs/features/archive/deep-zoom.md).
 // A still nesting the viewer zooms into by itself: the man (layer 0), the gas
 // in his chest (HologramLayer_gas, 1 cm), the liquid in a knot of the gas
 // (HologramLayer_liquid), the dark under the liquid's sea

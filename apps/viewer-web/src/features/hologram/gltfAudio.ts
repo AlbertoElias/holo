@@ -285,7 +285,7 @@ interface Placement {
 
 /**
  * A hologram's nested layers as its sound hears them (deep zoom,
- * docs/features/deep-zoom.md): which layer an object belongs to (0 = the
+ * docs/features/archive/deep-zoom.md): which layer an object belongs to (0 = the
  * hologram itself), that layer's size against the hologram, and how loud it
  * is at the viewer's depth now. A layer's distances shrink with its size, so
  * it sounds from inside as the hologram does from its inside end.

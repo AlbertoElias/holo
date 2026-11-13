@@ -14,7 +14,7 @@ export const ANIMATION_POSITION_BOUND_METERS = 0.001;
 export const ANIMATION_ROTATION_BOUND_DEGREES = 0.5;
 /** Scale tracks: relative error. */
 const SCALE_BOUND = 0.001;
-/** Nodes whose names start with this declare a nested layer (docs/features/deep-zoom.md). */
+/** Nodes whose names start with this declare a nested layer (docs/features/archive/deep-zoom.md). */
 const LAYER_NODE_PREFIX = "HologramLayer";
 /** Reduce to this share of the bound, leaving room for float rounding in the viewer. */
 const BOUND_MARGIN = 0.9;
@@ -350,7 +350,7 @@ function parentWorldScales(json: GltfJson, parents: Int32Array, order: number[])
 
 /**
  * The unit each node's motion is judged in: 1 (metres), or inside a nested
- * layer (a node named `HologramLayer…`, docs/features/deep-zoom.md) that
+ * layer (a node named `HologramLayer…`, docs/features/archive/deep-zoom.md) that
  * layer's world size, so a bound of 1 mm is 1 mm as seen from inside the
  * layer rather than 1 mm against the whole hologram. A node's unit is that of
  * its nearest layer at or above it (rest pose); never above 1.

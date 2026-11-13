@@ -1,7 +1,7 @@
 # Feature brief: Deep zoom into nested holograms
 
 **Lead:** Claude Code (Opus)  
-**Status:** Verifying (2026-11-13): built and checked locally; independent verifier, merge and production upload open
+**Status:** Complete (2026-11-13): verified, merged to `main`; the piece re-uploaded to production (see Production below)
 **Layer:** view (how a recorded event is looked at), with an authored piece
 (`introspection2`) as its first user; see
 `docs/product/concepts/what-a-hologram-is.md`.

@@ -8,7 +8,7 @@ import { assertViewerShell, captureEvidence, expect, reachFor, test } from "./bo
 import { DEEP_CLIP_S, deepZoomGlb, FIXTURE_LAYERS, LAYER_SIZES, layerNodeName } from "./deep-zoom-fixture";
 import { animationFrames, cardCenter, feedScrollTop, installProbe, scrollFeedToTop, settleScroll, waitForPortalReady } from "./portal-helpers";
 
-// Deep zoom (docs/features/deep-zoom.md) in the feed portal, driven by the
+// Deep zoom (docs/features/archive/deep-zoom.md) in the feed portal, driven by the
 // real wheel and keys. A hologram declares three layers nested in it, 100,
 // 40 and 40 times smaller in turn; past the portal's inside end the camera
 // goes on in, and at each layer's home it stands from that layer's aim as

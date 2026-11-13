@@ -471,7 +471,7 @@ fs.writeFileSync(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), f
   it("judges motion inside a nested layer in the layer's own units (deep zoom)", async () => {
     // The whole body shrunk a hundredfold under its scene node: the hips sway 5 cm
     // of the body, half a millimetre of the hologram. Declared as a layer
-    // (docs/features/deep-zoom.md), seen from inside that sway is 5 cm and must
+    // (docs/features/archive/deep-zoom.md), seen from inside that sway is 5 cm and must
     // survive; undeclared, it is half a millimetre and flattens, as before.
     const shrunk = (name: string, scale = 0.01): HologramGlbSpec => ({
       mutate: (json) => {

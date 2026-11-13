@@ -18,7 +18,7 @@ export type PortalState = {
   zoom: number;
   /**
    * Nepers past the inside end, into a hologram's declared layers (deep zoom,
-   * docs/features/deep-zoom.md): the camera stands the inside distance ×
+   * docs/features/archive/deep-zoom.md): the camera stands the inside distance ×
    * e^−depth from the aim. Always 0 for a hologram that declares none.
    */
   depth: number;

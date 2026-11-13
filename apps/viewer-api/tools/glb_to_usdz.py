@@ -79,7 +79,7 @@ def _audio_emitters(gltf, scene):
     """KHR_audio emitters Quick Look plays, as (emitter, node): the scene's
     (global, node None), then each one a node names (placed sounds), once
     each. A placed sound inside a nested layer (a `HologramLayer` node at or
-    above it, docs/features/deep-zoom.md) is left out: Quick Look cannot go
+    above it, docs/features/archive/deep-zoom.md) is left out: Quick Look cannot go
     in, and from outside the layer it would only crowd the outer mix."""
     emitters = [(emitter, None) for emitter in (scene.extensions or {}).get("KHR_audio", {}).get("emitters", [])]
     parents = {child: index for index, node in enumerate(gltf.nodes or []) for child in node.children or []}

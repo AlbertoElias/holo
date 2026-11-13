@@ -3,7 +3,7 @@ import type { AnimationClip, Object3D } from "three";
 
 import type { SoundLayers } from "../hologram/gltfAudio";
 
-// Deep zoom (docs/features/deep-zoom.md). A hologram may declare layers
+// Deep zoom (docs/features/archive/deep-zoom.md). A hologram may declare layers
 // nested inside it: nodes named `HologramLayer…`, each at the point the
 // camera aims at in that layer, with a still uniform scale that is the
 // layer's size against the hologram. Past the portal's inside end the

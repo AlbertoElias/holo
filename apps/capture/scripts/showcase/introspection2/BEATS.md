@@ -30,7 +30,7 @@ every layer runs all loop.
 
 The clip no longer zooms. Every layer is built once, still, in its own units
 under a static `HologramLayer_*` node, and the viewer zooms into them
-(`docs/features/deep-zoom.md`). The passes below describe the old morph zoom
+(`docs/features/archive/deep-zoom.md`). The passes below describe the old morph zoom
 and `HologramZoom`; they are history.
 
 | Layer node | Inside | World size | Where |

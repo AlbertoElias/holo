@@ -758,7 +758,7 @@ class Inspection:
         expected = []
         # The scene's emitters, then each one a node names (placed sounds, heard
         # from their node in Quick Look), except those inside a nested layer
-        # (a `HologramLayer` node at or above them, docs/features/deep-zoom.md).
+        # (a `HologramLayer` node at or above them, docs/features/archive/deep-zoom.md).
         nodes = source.doc.get("nodes", [])
 
         def in_layer(index):

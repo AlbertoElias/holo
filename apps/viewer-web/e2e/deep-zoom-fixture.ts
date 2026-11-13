@@ -2,7 +2,7 @@ import { BoxGeometry, CylinderGeometry, SphereGeometry, type BufferGeometry } fr
 
 import { noiseWav } from "./spatial-audio-fixture";
 
-// A hologram with layers nested inside it (docs/features/deep-zoom.md): a
+// A hologram with layers nested inside it (docs/features/archive/deep-zoom.md): a
 // grey body 1.8 m tall holding three `HologramLayer…` nodes, each 100, 40
 // and 40 times smaller than the one before, as "The way down II" nests the
 // gas, the liquid and the dark. Every layer is unlit and rigid: a marker
