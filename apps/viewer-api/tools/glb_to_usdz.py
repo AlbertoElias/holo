@@ -34,6 +34,7 @@ FPS = 30.0
 MAX_INPUT_BYTES = 100 * 1024 * 1024
 MAX_VERTICES = 2_000_000
 MAX_SAMPLES = 20_000
+MAX_CHANNELS = 8192
 # Scale written for a hidden (zero-scale) node; see `animate`.
 HIDDEN_SCALE = 1e-4
 # Bake times closer than this are one time (B-057). A glTF key is float32, so
@@ -323,7 +324,9 @@ class Converter:
         self.clips = []
         offset = 0.0
         for animation in (gltf.animations or [])[:1]:
-            if len(animation.channels) > 2048:
+            # A bound on parsing only: what the channels cost to bake and to
+            # bound is budgeted from their key times (`animate`, `extents`).
+            if len(animation.channels) > MAX_CHANNELS:
                 raise ValueError("Animation exceeds channel limit")
             channels, last = {}, 0.0
             for channel in animation.channels:
@@ -1075,15 +1078,43 @@ class Converter:
                 animation.CreateBlendShapeWeightsAttr().Set(Vt.FloatArray(defaults))
         # 30 Hz baking preserves STEP/CUBICSPLINE and quaternion motion in USD
         # players with different interpolation rules; include every source key.
+        # Each plain node is baked at its own times: the grid, its own keys
+        # and its own STEP pre-samples. Between those its motion is what the
+        # player interpolates anyway, so other nodes' keys add nothing. An
+        # authored particle scene (B-042: hundreds of streaks, each with its
+        # own phase) has thousands of distinct key times, and baking every
+        # node at all of them cost gigabytes. Skeletons, morph weights and
+        # skin spaces share one array or one chain, so they keep the union of
+        # their own nodes' times. When every channel has the same keys (a
+        # recording), both are the old union and the output is unchanged.
+        spaces = [space for space in {str(space[1].GetAttr().GetPath()): space for space in self.skin_spaces.values()}.values() if space[0] is not None]
+        shared = set(self.morphs) if morph_names else set()
+        for _, ordered in animations:
+            shared.update(ordered)
+        for ancestor, _, _ in spaces:
+            while ancestor is not None and ancestor not in shared:
+                shared.add(ancestor)
+                ancestor = self.parents.get(ancestor)
+        joints = sum(len(ordered) for _, ordered in animations)
         for offset, duration, channels in self.clips:
-            times = set(np.arange(0, duration, 1/FPS).tolist()) | {duration}
-            for source_times, _, interpolation in channels.values():
-                times.update(map(float, source_times))
-                if interpolation == "STEP":
-                    times.update(max(0, float(t)-1e-5) for t in source_times[1:])
-            times = _distinct_times(times)
-            work = 3 * len(self.animated) + 4 * sum(len(ordered) for _, ordered in animations) + len(morph_names)
-            if len(times) > MAX_SAMPLES or len(times) * work > 8_000_000:
+            grid = set(np.arange(0, duration, 1/FPS).tolist()) | {duration}
+
+            def sample_times(keys):
+                times = set(grid)
+                for key in keys:
+                    source_times, _, interpolation = channels[key]
+                    times.update(map(float, source_times))
+                    if interpolation == "STEP":
+                        times.update(max(0, float(t)-1e-5) for t in source_times[1:])
+                return _distinct_times(times)
+            by_node = {}
+            for key in channels:
+                by_node.setdefault(key[0], []).append(key)
+            node_times = {index: sample_times(by_node.get(index, [])) for index in self.ops if index in self.animated}
+            shared_keys = [key for key in channels if key[0] in shared]
+            shared_times = sample_times(shared_keys) if shared else []
+            work = 3 * sum(map(len, node_times.values())) + len(shared_times) * (3 * len(shared & self.animated) + 4 * joints + len(morph_names))
+            if max(map(len, [shared_times, *node_times.values()])) > MAX_SAMPLES or work > 8_000_000:
                 raise ValueError("Baked animation exceeds conversion budget")
             # A node whose scale track reaches 0 (a summoned object before it
             # appears) is hidden by time-sampled visibility, and its scale is
@@ -1094,16 +1125,18 @@ class Converter:
                 index for (index, path), (_, source_values, _) in channels.items()
                 if path == "scale" and index in self.ops and np.abs(np.asarray(source_values, dtype=float)).reshape(-1, 3).max(axis=1).min() < 1e-9
             }
-            # Sample each channel at every time in one pass, make each
+            # Sample each channel at all its times in one pass, make each
             # quaternion once, and resolve each node's tracks before the frame
             # loop, instead of per channel per frame.
-            ordered_times = times
-            raw, quats = {}, {}
-            for key, channel in channels.items():
-                rows = _sample_all(*channel, ordered_times, rotation=key[1] == "rotation")
-                raw[key] = rows.tolist()
-                if key[1] == "rotation":
-                    quats[key[0]] = _quats(rows)
+
+            def sampled(keys, times):
+                raw, quats = {}, {}
+                for key in keys:
+                    rows = _sample_all(*channels[key], times, rotation=key[1] == "rotation")
+                    raw[key] = rows.tolist()
+                    if key[1] == "rotation":
+                        quats[key[0]] = _quats(rows)
+                return raw, quats
             rest = {}
 
             def rest_trs(index):
@@ -1111,7 +1144,7 @@ class Converter:
                     rest[index] = _node_trs(self.gltf.nodes[index])
                 return rest[index]
 
-            def tracks(index):
+            def tracks(index, raw, quats):
                 # (sampled rows or None, rest value) for translation, rotation, scale.
                 t, r, s = rest_trs(index)
                 return (
@@ -1119,23 +1152,19 @@ class Converter:
                     (quats.get(index), None if index in quats else _quat(r)),
                     (raw.get((index, "scale")), list(map(float, s))),
                 )
-            nodes = []
-            for index, ops in self.ops.items():
-                if index in self.animated:
-                    visibility = UsdGeom.Imageable(ops[0].GetAttr().GetPrim()).CreateVisibilityAttr() if index in hideable else None
-                    nodes.append((ops, tracks(index), visibility))
+            shared_raw, shared_quats = sampled(shared_keys, shared_times)
             skins = [
-                (animation.CreateTranslationsAttr(), animation.CreateRotationsAttr(), animation.CreateScalesAttr(), [tracks(index) for index in ordered])
+                (animation.CreateTranslationsAttr(), animation.CreateRotationsAttr(), animation.CreateScalesAttr(), [tracks(index, shared_raw, shared_quats) for index in ordered])
                 for animation, ordered in animations if ordered
             ]
-            spaces = [space for space in {str(space[1].GetAttr().GetPath()): space for space in self.skin_spaces.values()}.values() if space[0] is not None]
             weight_attributes = [animation.GetBlendShapeWeightsAttr() for animation, _ in animations] if morph_names else []
             with Sdf.ChangeBlock():
-                for frame_index, time in enumerate(ordered_times):
-                    frame = (offset + time)*FPS
-                    if spaces:
-                        self.animate_spaces(raw, rest_trs, frame_index, frame, spaces)
-                    for ops, ((translations, t), (rotations, r), (scales, s)), visibility in nodes:
+                for index, times in node_times.items():
+                    ops = self.ops[index]
+                    (translations, t), (rotations, r), (scales, s) = tracks(index, *sampled(by_node.get(index, []), times))
+                    visibility = UsdGeom.Imageable(ops[0].GetAttr().GetPrim()).CreateVisibilityAttr() if index in hideable else None
+                    for frame_index, time in enumerate(times):
+                        frame = (offset + time)*FPS
                         ops[0].Set(Gf.Vec3d(*(translations[frame_index] if translations else t)), frame)
                         ops[1].Set(rotations[frame_index] if rotations else r, frame)
                         scale = scales[frame_index] if scales else s
@@ -1145,10 +1174,14 @@ class Converter:
                             if hidden:
                                 scale = [HIDDEN_SCALE] * 3
                         ops[2].Set(Gf.Vec3d(*scale), frame)
+                for frame_index, time in enumerate(shared_times):
+                    frame = (offset + time)*FPS
+                    if spaces:
+                        self.animate_spaces(shared_raw, rest_trs, frame_index, frame, spaces)
                     if weight_attributes:
                         weights = []
                         for index, (names, default) in self.morphs.items():
-                            rows = raw.get((index, "weights"))
+                            rows = shared_raw.get((index, "weights"))
                             value = rows[frame_index] if rows else default
                             if len(value) != len(names):
                                 raise ValueError("Animation morph weights do not match mesh targets")
@@ -1156,10 +1189,10 @@ class Converter:
                         weights = Vt.FloatArray(weights)
                         for attribute in weight_attributes:
                             attribute.Set(weights, frame)
-                    for translations_attribute, rotations_attribute, scales_attribute, joints in skins:
-                        translations_attribute.Set(Vt.Vec3fArray([Gf.Vec3f(*(rows[frame_index] if rows else t)) for (rows, t), _, _ in joints]), frame)
-                        rotations_attribute.Set(Vt.QuatfArray([rows[frame_index] if rows else r for _, (rows, r), _ in joints]), frame)
-                        scales_attribute.Set(Vt.Vec3hArray([Gf.Vec3h(*(rows[frame_index] if rows else s)) for _, _, (rows, s) in joints]), frame)
+                    for translations_attribute, rotations_attribute, scales_attribute, joint_tracks in skins:
+                        translations_attribute.Set(Vt.Vec3fArray([Gf.Vec3f(*(rows[frame_index] if rows else t)) for (rows, t), _, _ in joint_tracks]), frame)
+                        rotations_attribute.Set(Vt.QuatfArray([rows[frame_index] if rows else r for _, (rows, r), _ in joint_tracks]), frame)
+                        scales_attribute.Set(Vt.Vec3hArray([Gf.Vec3h(*(rows[frame_index] if rows else s)) for _, _, (rows, s) in joint_tracks]), frame)
 
     def animate_spaces(self, raw, rest_trs, frame_index, frame, spaces):
         """Author the skinned meshes' animated ancestor transforms at one frame."""
@@ -1356,10 +1389,19 @@ class Converter:
         cache = UsdSkel.Cache()
         cache.Populate(root, Usd.PrimDefaultPredicate)
         meshes = []
-        frames = {0.0, self.duration * FPS}
+        ends = frozenset({0.0, self.duration * FPS})
+        frames = set(ends)
+        # Each prim's sample times with its ancestors': a rigid mesh's
+        # transform only changes at those (nodes bake at their own times,
+        # `animate`), so it is bounded there alone. Traverse visits parents first.
+        chains = {}
         for prim in self.stage.Traverse():
+            own = set()
             for attribute in prim.GetAttributes():
-                frames.update(attribute.GetTimeSamples())
+                own.update(attribute.GetTimeSamples())
+            frames.update(own)
+            inherited = chains.get(prim.GetParent().GetPath(), ends)
+            chains[prim.GetPath()] = inherited | own if own else inherited
             if not prim.IsA(UsdGeom.Mesh) or prim.GetCustomDataByKey("quickLookBackFaces"):
                 continue
             mesh = UsdGeom.Mesh(prim)
@@ -1385,33 +1427,34 @@ class Converter:
             if blend:
                 order = {name: slot for slot, name in enumerate(animation.GetBlendShapeOrder())}
                 shapes = ([order[name] for name in names], blend.ComputeBlendShapePointIndices(), blend.ComputeSubShapePointOffsets())
-            meshes.append((prim, points, skeleton, query, skinning, shapes, blend, animation, moving))
+            meshes.append((prim, points, skeleton, query, skinning, shapes, blend, animation, moving, chains[prim.GetPath()]))
         # Rigid meshes (no skin, no morphs) cost one transform of their points
         # a frame, deformed ones a USD evaluation, so they budget apart. The
         # static rigid ones count once.
         rigid = [entry for entry in meshes if not entry[4] and not entry[6]]
         deformed = [entry for entry in meshes if entry[4] or entry[6]]
 
-        def point_frames(entries):
-            return sum(len(entry[1]) * (len(frames) if entry[8] else 1) for entry in entries)
-        if point_frames(deformed) > 100_000_000 or point_frames(rigid) > RIGID_EXTENT_POINT_FRAMES:
+        def point_frames(entries, own):
+            return sum(len(entry[1]) * ((len(entry[9]) if own else len(frames)) if entry[8] else 1) for entry in entries)
+        if point_frames(deformed, False) > 100_000_000 or point_frames(rigid, True) > RIGID_EXTENT_POINT_FRAMES:
             raise ValueError("Animation extent evaluation exceeds conversion budget")
         lower, upper = np.full(3, np.inf), np.full(3, -np.inf)
         # A rigid mesh's points lie in its local box, so when the box's eight
         # corners land inside the bound so far its points cannot widen it.
         # einsum keeps the product on one thread: the budget counts every one.
         corners = np.array([[x, y, z] for x in (0, 1) for y in (0, 1) for z in (0, 1)], dtype=np.float64)
-        boxes = []
-        for prim, points, *_, moving in rigid:
+        ordered = sorted(frames)
+        due = {}
+        for prim, points, *_, moving, own in rigid:
             points = np.asarray(points, dtype=np.float64)
             low, high = points.min(axis=0), points.max(axis=0)
-            boxes.append((prim, points, low + corners * (high - low), moving))
+            box = (prim, points, low + corners * (high - low))
+            for frame in (own if moving else ordered[:1]):
+                due.setdefault(frame, []).append(box)
         xforms = UsdGeom.XformCache()
-        for index, frame in enumerate(sorted(frames)):
+        for index, frame in enumerate(ordered):
             xforms.SetTime(frame)
-            for prim, points, box, moving in boxes:
-                if index and not moving:
-                    continue
+            for prim, points, box in due.get(frame, ()):
                 matrix = np.asarray(xforms.GetLocalToWorldTransform(prim))
                 ends = np.einsum("ni,ij->nj", box, matrix[:3, :3]) + matrix[3, :3]
                 if np.all(ends.min(axis=0) >= lower) and np.all(ends.max(axis=0) <= upper):
@@ -1419,7 +1462,7 @@ class Converter:
                 world = np.einsum("ni,ij->nj", points, matrix[:3, :3]) + matrix[3, :3]
                 lower = np.minimum(lower, world.min(axis=0))
                 upper = np.maximum(upper, world.max(axis=0))
-            for prim, original, skeleton, query, skinning, shapes, blend, animation, moving in deformed:
+            for prim, original, skeleton, query, skinning, shapes, blend, animation, moving, _ in deformed:
                 if index and not moving:
                     continue
                 points = Vt.Vec3fArray(original)

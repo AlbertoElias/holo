@@ -158,6 +158,7 @@ describe("hologram routes", () => {
   let converterControl: string;
   let usdzFilenameFor: (filename: string) => string;
   let processNextUsdzConversion: (options: { storage: never }) => Promise<boolean>;
+  let requeueInterruptedConversions: (startedAt: Date) => Promise<number>;
   let buildAppFn: (options?: Record<string, unknown>) => FastifyInstance;
   let LocalMediaStorage: new (root: string) => unknown;
   const runWorkerOnce = async () => {
@@ -198,7 +199,7 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
 
     vi.resetModules();
     ({ usdzFilenameFor } = await import("../src/services/usdz-converter.js"));
-    ({ processNextUsdzConversion } = await import("../src/services/usdz-worker.js"));
+    ({ processNextUsdzConversion, requeueInterruptedConversions } = await import("../src/services/usdz-worker.js"));
     ({ LocalMediaStorage } = await import("../src/services/media-storage.js"));
     const prismaModule = await import("../src/lib/prisma.js");
     prisma = prismaModule.prisma;
@@ -479,6 +480,34 @@ const exists = (name) => fs.access(path.join(control, name)).then(() => true, ()
     expect((await app.inject({ method: "GET", url: `/api/holograms/${created.id}/usdz` })).statusCode).toBe(202);
     await runWorkerOnce();
     await expect(prisma.hologram.findUnique({ where: { id: created.id } })).resolves.toMatchObject({ usdzStatus: "ready", usdzAttempts: 5 });
+  });
+
+  it("a restart requeues a conversion its previous process was running", async () => {
+    // Fly stopped the machine mid-conversion: the claim is minutes old, well
+    // inside the stale-claim window, and has no live owner after the restart.
+    const interrupted = await uploadHologram(app, session, { hologramName: "Interrupted", quickLookEnabled: true });
+    const deferred = await uploadHologram(app, session, { hologramName: "Deferred", quickLookEnabled: true });
+    const exhausted = await uploadHologram(app, session, { hologramName: "Keeps dying", quickLookEnabled: true });
+    const minutesAgo = new Date(Date.now() - 5 * 60_000);
+    await prisma.hologram.update({ where: { id: interrupted.id }, data: { usdzStatus: "processing", usdzClaimToken: "dead-process", usdzClaimedAt: minutesAgo, usdzAttempts: 1 } });
+    // A timed-out conversion waits out the window on purpose (no token).
+    await prisma.hologram.update({ where: { id: deferred.id }, data: { usdzStatus: "processing", usdzClaimToken: null, usdzClaimedAt: minutesAgo, usdzAttempts: 1 } });
+    await prisma.hologram.update({ where: { id: exhausted.id }, data: { usdzStatus: "processing", usdzClaimToken: "dead-process", usdzClaimedAt: minutesAgo, usdzAttempts: 3 } });
+    const startedAt = new Date();
+    // A claim taken by this worker after it started is live and stays.
+    const live = await uploadHologram(app, session, { hologramName: "Live", quickLookEnabled: true });
+    await prisma.hologram.update({ where: { id: live.id }, data: { usdzStatus: "processing", usdzClaimToken: "this-process", usdzClaimedAt: new Date(startedAt.getTime() + 1), usdzAttempts: 1 } });
+
+    expect(await requeueInterruptedConversions(startedAt)).toBe(1);
+    await expect(prisma.hologram.findUnique({ where: { id: deferred.id } })).resolves.toMatchObject({ usdzStatus: "processing", usdzClaimedAt: minutesAgo });
+    await expect(prisma.hologram.findUnique({ where: { id: live.id } })).resolves.toMatchObject({ usdzStatus: "processing", usdzClaimToken: "this-process" });
+    const failed = await prisma.hologram.findUnique({ where: { id: exhausted.id } });
+    expect(failed).toMatchObject({ usdzStatus: "failed", usdzClaimToken: null });
+    expect(failed?.usdzError).toContain("interrupted");
+
+    await runWorkerOnce();
+    await expect(prisma.hologram.findUnique({ where: { id: interrupted.id } })).resolves.toMatchObject({ usdzStatus: "ready", usdzAttempts: 2 });
+    expect(await runWorkerOnce().then(() => prisma.hologram.count({ where: { usdzStatus: "ready" } }))).toBe(1);
   });
 
   it("fails a conversion over its CPU budget at once instead of retrying it", async () => {
