@@ -84,7 +84,7 @@ async function main() {
     const m = r.metrics;
     const fails = r.verdicts.filter((v) => !v.pass).map((v) => `${v.metric}=${fmt(v.value, 2)}`);
     console.log(
-      `${r.source.padEnd(8)} ${r.label.padEnd(42)} skate ${fmt(m.footSkateMaxCm)}cm/${fmt((m.footSkateShare ?? NaN) * 100)}% float ${fmt(m.footFloatP95Cm)} pen ${fmt(m.footPenetrationCm)} limits ${fmt((m.jointLimitShare ?? NaN) * 100)}%${m.jointLimitWorst ? ` [${m.jointLimitWorst}]` : ''} jitter ${fmt(m.jitterP95Mm)}mm (input ${fmt(r.inputJitterP95Mm)}) ray ${fmt(m.rayJitterP95Deg)}° (input ${fmt(r.inputRayJitterP95Deg)}) wrist ${fmt(m.wristErrorP95Cm)}cm lag ${fmt(m.latencyMs, 0)}ms jerk× ${fmt(m.jerkRatio, 2)} aim ${fmt(m.aimErrorMedianDeg)}°` +
+      `${r.source.padEnd(8)} ${r.label.padEnd(42)} skate ${fmt(m.footSkateMaxCm)}cm/${fmt((m.footSkateShare ?? NaN) * 100)}% float ${fmt(m.footFloatP95Cm)} pen ${fmt(m.footPenetrationCm)} pop ${fmt(m.popP99MS2, 0)} limits ${fmt((m.jointLimitShare ?? NaN) * 100)}%${m.jointLimitWorst ? ` [${m.jointLimitWorst}]` : ''} jitter ${fmt(m.jitterP95Mm)}mm (input ${fmt(r.inputJitterP95Mm)}) ray ${fmt(m.rayJitterP95Deg)}° (input ${fmt(r.inputRayJitterP95Deg)}) wrist ${fmt(m.wristErrorP95Cm)}cm lag ${fmt(m.latencyMs, 0)}ms jerk× ${fmt(m.jerkRatio, 2)} aim ${fmt(m.aimErrorMedianDeg)}°` +
         (fails.length ? `\n         MISS ${fails.join(' ')}` : '')
     );
   }

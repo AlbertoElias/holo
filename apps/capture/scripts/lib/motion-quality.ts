@@ -24,9 +24,9 @@ export type MotionFrame = {
   // What the avatar should follow this frame, when the source knows it.
   input?: { leftWrist?: Vec3; rightWrist?: Vec3; head?: Vec3; aimRay?: Vec3 };
   // The avatar's own aim ray (unit), for aim error and ray jitter.
-  aimRay?: Vec3;
+  aimRay?: Vec3 | undefined;
   // Direction to a measured target from the fingertip (unit), when known.
-  aimTarget?: Vec3;
+  aimTarget?: Vec3 | undefined;
 };
 export type MotionSource = 'vr-body' | 'vr-hands' | 'ar-quest' | 'ar-phone' | 'camera' | 'desktop';
 
@@ -54,21 +54,26 @@ export type MotionMetrics = {
   latencyMs: number | null;
   // Smoothness against the input: avatar wrist/head jerk RMS over input's.
   jerkRatio: number | null;
+  popP99MS2: number | null;
 };
 
 type Target = { max?: number; min?: number };
 export type Targets = Partial<Record<keyof Omit<MotionMetrics, 'frames' | 'jointLimitWorst'>, Target>>;
 
-// Aggressive, per source. Anchors (brief, "Targets"): mocap cleanup
-// tolerances for feet, the human joint ranges below, the real Quest hand
-// recording's own still-hand noise for headset jitter, and the user's phone
-// clip for camera jitter. A null target means the metric does not apply.
+// Aggressive, per source. Feet and pops are anchored to two CMU motion
+// capture walks (subjects 02 and 07, trial 01; brief "Baselines"), which read
+// skate max 2.6-3.9 cm, skate share 10-16%, pops p99 34-45 m/s^2; the targets
+// sit at or below the better human walk. Penetration and float are mocap
+// cleanup tolerances (the CMU floor drifts, so its own reads are not usable).
+// Headset jitter is anchored to the real Quest hand recording's still-hand
+// noise, camera jitter to the user's phone clip.
 const HUMAN_FEET: Targets = {
-  footSkateMaxCm: { max: 1 },
-  footSkateShare: { max: 0.01 },
+  footSkateMaxCm: { max: 3 },
+  footSkateShare: { max: 0.1 },
   footFloatP95Cm: { max: 1 },
   footPenetrationCm: { max: 0.5 },
-  jointLimitShare: { max: 0 }
+  jointLimitShare: { max: 0 },
+  popP99MS2: { max: 35 }
 };
 export const MOTION_TARGETS: Record<MotionSource, Targets> = {
   'vr-body': { ...HUMAN_FEET, jitterP95Mm: { max: 2 }, wristErrorP95Cm: { max: 1.5 }, latencyMs: { max: 0 }, jerkRatio: { max: 1.2 } },
@@ -87,8 +92,14 @@ const ELBOW_MIN_INNER_DEG = 30;
 const HYPEREXTENSION_M = 0.01;
 const SPINE_TWIST_MAX_DEG = 45;
 
+const PLANTED_SPEED_SHARE = 0.5;
+const PLANTED_MIN_M_S = 0.3;
 const CONTACT_M = 0.02;
-const STILL_FOOT_M_S = 0.05;
+const STILL_FOOT_M_S = 0.15;
+const SPEED_HALF_WINDOW_SEC = 0.033;
+const MIN_CONTACT_SEC = 0.1;
+const REST_SEC = 0.5;
+const POP_HALF_WINDOW_SEC = 0.05;
 const STILL_INPUT_M_S = 0.03; // ~6 deg/s on a 0.3 m ray
 const STILL_MIN_SEC = 1;
 const TRIM_SEC = 0.3;
@@ -116,42 +127,65 @@ function fps(frames: MotionFrame[]) {
   return (frames.length - 1) / Math.max(1e-6, frames[frames.length - 1]!.timeSec - frames[0]!.timeSec);
 }
 
-function feet(frames: MotionFrame[]) {
+function feet(frames: MotionFrame[], options: MotionOptions) {
   const rate = fps(frames);
+  // Speeds over a ±33 ms central difference, so tracker noise at high frame
+  // rates does not read as sliding; contacts shorter than 100 ms are grazes.
+  const k = Math.max(1, Math.round(rate * SPEED_HALF_WINDOW_SEC));
+  const minContact = Math.max(1, Math.round(rate * MIN_CONTACT_SEC));
   const slides: number[] = [];
   const floats: number[] = [];
   let penetration = 0;
   let planted = 0;
   let skating = 0;
+  const offsets = soleOffsets(frames, options);
+  const speedOf = (i: number, joint: JointName) => {
+    const a = frames[Math.max(0, i - k)]?.joints[joint];
+    const b = frames[Math.min(frames.length - 1, i + k)]?.joints[joint];
+    const span = Math.min(frames.length - 1, i + k) - Math.max(0, i - k);
+    return a && b && span > 0 ? (len(flat(sub(b, a))) * rate) / span : 0;
+  };
   for (const side of ['left', 'right'] as const) {
-    let contactStart: Vec3 | null = null;
-    let contactMax = 0;
+    const toeName = `${side}Toe` as const;
+    const ankleName = `${side}Ankle` as const;
+    let run: number[] = [];
+    const closeRun = () => {
+      if (run.length >= minContact) {
+        const toe0 = frames[run[0]!]!.joints[toeName]!;
+        const ankle0 = frames[run[0]!]!.joints[ankleName]!;
+        let slide = 0;
+        for (const i of run) {
+          const f = frames[i]!;
+          // A planted foot pivots on its heel (strike) or its ball (push-off),
+          // so it slid as far as its stiller end did.
+          slide = Math.max(slide, Math.min(len(flat(sub(f.joints[toeName]!, toe0))), len(flat(sub(f.joints[ankleName]!, ankle0)))));
+          const speed = Math.min(speedOf(i, toeName), speedOf(i, ankleName));
+          planted++;
+          if (speed > STILL_FOOT_M_S) skating++;
+          else floats.push(Math.max(0, soleAt(f, side) - offsets[side]));
+        }
+        slides.push(slide);
+      }
+      run = [];
+    };
     for (let i = 0; i < frames.length; i++) {
       const f = frames[i]!;
-      const ankle = f.joints[`${side}Ankle`];
-      const toe = f.joints[`${side}Toe`];
-      if (!ankle || !toe) continue;
-      const ground = f.ground?.[side] ?? 0;
-      // The sole is the lower of toe and ankle, less the ankle's height above
-      // the sole, which the toe joint approximates on standard rigs.
-      const sole = Math.min(ankle[1], toe[1]) - ground;
-      penetration = Math.min(penetration, sole);
-      const prevToe = frames[i - 1]?.joints[`${side}Toe`];
-      const speed = prevToe ? len(flat(sub(toe, prevToe))) * rate : 0;
-      const inContact = sole <= CONTACT_M + firstSoleOffset(frames, side);
-      if (inContact) {
-        planted++;
-        if (speed > STILL_FOOT_M_S) skating++;
-        if (speed <= STILL_FOOT_M_S * 2) floats.push(Math.max(0, sole - firstSoleOffset(frames, side)));
-        contactStart ??= toe;
-        contactMax = Math.max(contactMax, len(flat(sub(toe, contactStart))));
-      } else if (contactStart) {
-        slides.push(contactMax);
-        contactStart = null;
-        contactMax = 0;
+      if (!f.joints[ankleName] || !f.joints[toeName]) {
+        closeRun();
+        continue;
       }
+      const sole = soleAt(f, side);
+      penetration = Math.min(penetration, sole - offsets[side]);
+      // A foot near the floor that moves much slower than the body is planted;
+      // a swing foot skims the floor (human toe clearance is 1-2 cm) but moves
+      // several times faster than the hips.
+      const speed = Math.min(speedOf(i, toeName), speedOf(i, ankleName));
+      const bodySpeed = speedOf(i, 'hips');
+      const inContact = sole <= CONTACT_M + offsets[side] && speed <= Math.max(PLANTED_SPEED_SHARE * bodySpeed, PLANTED_MIN_M_S);
+      if (inContact) run.push(i);
+      else closeRun();
     }
-    if (contactStart) slides.push(contactMax);
+    closeRun();
   }
   return {
     footSkateMaxCm: slides.length ? Math.max(...slides) * 100 : null,
@@ -161,24 +195,44 @@ function feet(frames: MotionFrame[]) {
   };
 }
 
-// The rig's resting sole height (toe joint above the sole), from the first
-// frame, so float is measured from the sole and not the joint.
-const soleOffsets = new WeakMap<MotionFrame[], Record<string, number>>();
-function firstSoleOffset(frames: MotionFrame[], side: 'left' | 'right') {
-  let cached = soleOffsets.get(frames);
-  if (!cached) {
-    cached = {};
-    for (const s of ['left', 'right'] as const) {
-      const lows = frames.flatMap((f) => {
-        const a = f.joints[`${s}Ankle`];
-        const t = f.joints[`${s}Toe`];
-        return a && t ? [Math.min(a[1], t[1]) - (f.ground?.[s] ?? 0)] : [];
-      });
-      cached[s] = Math.max(0, percentile(lows, 0.05) ?? 0);
-    }
-    soleOffsets.set(frames, cached);
+function soleAt(f: MotionFrame, side: 'left' | 'right') {
+  return Math.min(f.joints[`${side}Ankle`]![1], f.joints[`${side}Toe`]![1]) - (f.ground?.[side] ?? 0);
+}
+
+// The rig's resting sole height (lower foot joint above the floor). Taken from
+// the first half second, where every in-app check stands still in its rest
+// pose, so a take that floats throughout still reads as floating. A clip
+// without a rest pose (mocap) passes `soleOffset: 'take'` (its 5th percentile).
+function soleOffsets(frames: MotionFrame[], options: MotionOptions) {
+  const out = { left: 0, right: 0 };
+  const t0 = frames[0]?.timeSec ?? 0;
+  for (const side of ['left', 'right'] as const) {
+    const pool = frames.filter((f) => f.joints[`${side}Ankle`] && f.joints[`${side}Toe`] && (options.soleOffset === 'take' || f.timeSec - t0 <= REST_SEC));
+    const soles = pool.map((f) => soleAt(f, side));
+    out[side] = Math.max(0, (options.soleOffset === 'take' ? percentile(soles, 0.05) : soles.length ? Math.min(...soles) : 0) ?? 0);
   }
-  return cached[side] ?? 0;
+  return out;
+}
+
+// Pops: the p99 joint acceleration (m/s^2) over a ±50 ms stencil, every joint
+// and frame. Pin/release snaps and solver flips show here even without input.
+function pops(frames: MotionFrame[]) {
+  const rate = fps(frames);
+  const k = Math.max(1, Math.round(rate * POP_HALF_WINDOW_SEC));
+  const h = k / rate;
+  const accels: number[] = [];
+  for (let i = k; i < frames.length - k; i++) {
+    const a = frames[i - k]!.joints;
+    const b = frames[i]!.joints;
+    const c = frames[i + k]!.joints;
+    for (const name of Object.keys(b) as JointName[]) {
+      const pa = a[name];
+      const pb = b[name];
+      const pc = c[name];
+      if (pa && pb && pc) accels.push(len([pa[0] - 2 * pb[0] + pc[0], pa[1] - 2 * pb[1] + pc[1], pa[2] - 2 * pb[2] + pc[2]]) / (h * h));
+    }
+  }
+  return { popP99MS2: accels.length ? percentile(accels, 0.99) : null };
 }
 
 function bend(a: Vec3 | undefined, mid: Vec3 | undefined, c: Vec3 | undefined) {
@@ -216,7 +270,10 @@ function jointLimits(frames: MotionFrame[]) {
       if (knee) {
         if (knee.inner < KNEE_MIN_INNER_DEG) issues.push(`${side} knee over-flexed`);
         // A knee bends forward: its offset from hip→ankle points forward.
-        if (len(knee.offset) > HYPEREXTENSION_M && dot(knee.offset, forward) < 0) issues.push(`${side} knee backwards`);
+        // Backwards against both the hips' and the foot's own forward, so hips
+        // yawed over planted feet in a turn do not read as backwards knees.
+        const foot = j[`${side}Toe`] && j[`${side}Ankle`] ? flat(sub(j[`${side}Toe`]!, j[`${side}Ankle`]!)) : forward;
+        if (len(knee.offset) > HYPEREXTENSION_M && dot(knee.offset, forward) < 0 && dot(knee.offset, len(foot) > 1e-3 ? foot : forward) < 0) issues.push(`${side} knee backwards`);
       }
       const elbow = bend(j[`${side}Shoulder`], j[`${side}Elbow`], j[`${side}Wrist`]);
       if (elbow) {
@@ -371,8 +428,10 @@ function following(frames: MotionFrame[]) {
   };
 }
 
-export function measureMotion(frames: MotionFrame[]): MotionMetrics {
-  return { frames: frames.length, ...feet(frames), ...jointLimits(frames), ...jitter(frames), ...following(frames) };
+export type MotionOptions = { soleOffset?: 'rest' | 'take' };
+
+export function measureMotion(frames: MotionFrame[], options: MotionOptions = {}): MotionMetrics {
+  return { frames: frames.length, ...feet(frames, options), ...pops(frames), ...jointLimits(frames), ...jitter(frames), ...following(frames) };
 }
 
 export type MotionVerdict = { metric: string; value: number | null; target: Target; pass: boolean };

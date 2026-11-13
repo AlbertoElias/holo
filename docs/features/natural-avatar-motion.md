@@ -1,7 +1,7 @@
 # Feature brief: The avatar moves naturally, whatever drives it
 
 **Lead:** Claude Code (Opus), session "natural avatar motion"
-**Status:** Draft
+**Status:** Reviewed (scope approved by the user 2026-11-13; design review below)
 **Layer:** event (the recorded body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -43,10 +43,11 @@ samples. It measures what mocap cleanup studios clean up:
 
 | Metric | Definition |
 |---|---|
-| Foot skate (max, share) | Toe horizontal slide across one contact (sole ≤ 2 cm above its own resting offset); share = planted frames moving > 5 cm/s |
-| Float p95 | Sole height above ground during contact |
-| Penetration | Deepest sole below ground |
-| Joint limits | Share of frames with a knee or elbow bent backwards, folded tighter than 25°/30°, or the spine twisted > 45° |
+| Foot contact | Sole (lower of ankle and toe) within 2 cm of its rest height **and** moving under half the hips' speed (floor 0.3 m/s), for at least 100 ms. Speeds are ±33 ms central differences |
+| Foot skate (max, share) | Max horizontal slide of the foot's stiller end (heel at strike, ball at push-off) across one contact; share = contact frames moving faster than 15 cm/s |
+| Float p95 · penetration | Sole height above its rest height while still in contact · deepest sole below it. Rest height comes from the take's first 0.5 s (every in-app check starts standing), so a take that floats throughout still reads as floating |
+| Pops p99 | p99 joint acceleration over a ±50 ms stencil, every joint and frame: pin and release snaps and solver flips, with or without input |
+| Joint limits | Share of frames with a knee bent backwards (against both the hips' and that foot's forward), an elbow bent the wrong way, a knee or elbow folded tighter than 25°/30°, or the spine twisted > 45° |
 | Jitter p95 | The camera spike's definition: p95 deviation from the joint's own centred 1 s moving mean, inside held-still windows (≥ 1 s, trimmed 0.3 s each end); rays the same, in degrees |
 | Following | Wrist error p95 against tracked input, best-fit latency, jerk ratio avatar/input, aim error median |
 
@@ -56,43 +57,52 @@ The tracked input is also run through the instrument, so each row shows the
 
 ## Baselines (2026-11-13) and targets
 
-Targets are aggressive and anchored to real motion: hands to the Quest 3
-recording (`fixtures/input-recordings/headset-open-fist-pinch-point-wave-reach.json`),
-camera to the user's 80 s iPhone clip, feet to a public human walk (pending,
-see Decisions). All body fixtures are IWER-synthetic; the only real headset
-data is hands-only.
+Targets are aggressive and anchored to real motion:
+- **Feet and pops:** two CMU Motion Capture Database walks (subjects 02 and 07, trial 01; BVH in ignored `output/mocap/`), graded by the same instrument. They read skate max 2.6–3.9 cm, skate share 10–16%, pops p99 34–45 m/s², 0% joint limits. Targets sit at or below the better walk: skate ≤ 3 cm / ≤ 10%, pops ≤ 35 m/s². Penetration ≤ 0.5 cm and float ≤ 1 cm are mocap-cleanup tolerances (the CMU floor drifts ~3 cm, so its own reads are unusable).
+- **Hands:** the Quest 3 recording (`fixtures/input-recordings/headset-open-fist-pinch-point-wave-reach.json`).
+- **Camera:** the user's 80 s iPhone clip.
 
-| Source | Feet: skate max / share · float · penetration | Joint limits | Jitter (input floor) | Following | Verdict |
-|---|---|---|---|---|---|
-| **Target, all bodies** | ≤ 1 cm / ≤ 1% · ≤ 1 cm · ≤ 0.5 cm | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
-| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | **165 cm / 37%** · 1.6 · **2.5 cm** | 0% (6% knee backwards on the default terrain) | 0.7 mm | n/a | **worst** |
-| Camera (spike, `bodycam:report`) | unmeasured | unmeasured | ray **5.7–20°** (best variant 2.6°) | aim median **26/41/46°** (rough marks), head yaw p95 8.2° | bad |
-| VR body, walk | 2.9 cm / 10.3% · 1.3 | 0% | 1.6 (1.3) mm | — | miss |
-| VR body, ramp | 4.1 cm / 16.8% · 1.4 | 3.5% left knee backwards | 2.7 mm | — | miss |
-| VR body, turn | 2.5 cm / 6.2% · 0.9 | 0.7% left knee backwards | 2.1 (2.7) mm | — | miss |
-| VR body, small steps and sway | 0.9 cm / 2.9% · 1.0 | 0% | 1.2 mm | — | near |
-| VR body, crouch and lean | 0.1 cm / 0% · 1.0 | 0% | 2.4 mm | — | near |
-| VR hands, real Quest 3 recording | — | 0% | 3.6 (3.4) mm | wrist p95 **3.0 cm**, lag 0, jerk 1.03 | miss |
-| VR hands, IWER | — | 0% | 4.0 (4.0) mm | wrist 0.0 cm | input-bound |
-| Quest passthrough AR | unmeasured (same body solver as VR; to confirm) | | | | gap |
-| Phone AR | unmeasured (avatar placed and driven from the phone; to confirm) | | | | gap |
+Calibrating against the CMU walks changed the instrument: the first version
+scored real walking at 32–50 cm skate (toe clearance in swing is 1–2 cm, so
+height alone took swing for contact) and the hips-forward knee test flagged
+turns. All body fixtures are IWER-synthetic; the only real headset data is
+hands-only.
+
+| Source | Feet: skate max / share · float · penetration | Pops p99 | Joint limits | Jitter (input floor) | Following | Verdict |
+|---|---|---|---|---|---|---|
+| **Target, all bodies** | ≤ 3 cm / ≤ 10% · ≤ 1 cm · ≤ 0.5 cm | ≤ 35 m/s² | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
+| Human reference (CMU 02_01 / 07_01) | 3.9 / 16% · 07_01 2.6 / 10% | 34 / 45 | 0% | — | — | anchor |
+| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | **8.6 cm / 16%** · 0.3 · **5.3 cm** | **116** | 0% | 0.7 mm | n/a | **worst** |
+| Camera (spike, `bodycam:report`) | unmeasured | unmeasured | unmeasured | ray **5.7–20°** (best variant 2.6°) | aim median **26/41/46°** (rough marks), head yaw p95 8.2° | bad |
+| VR body, walk ramp | **4.1 cm** / 3.8% · 1.0 · **1.2 cm** | **43** | 0% | 2.7 mm | — | miss |
+| VR body, walk | 2.9 cm / 3.8% · 1.1 · 0.3 | **37** | 0% | 1.6 (1.3) mm | — | near |
+| VR body, turn | 2.5 cm / 2.5% · 0.6 · 0.3 | 31 | 0% | 2.1 (2.7) mm | — | pass (jitter at input) |
+| VR body, small steps and sway | 0.7 cm / 1.9% · 0.8 · 0.2 | 13 | 0% | 1.2 mm | — | pass |
+| VR body, crouch and lean | 0.1 cm / 0% · 0.7 · 0.3 | 10 | 0% | 2.4 mm (input 0.6) | — | jitter miss |
+| VR hands, real Quest 3 recording | — | — | 0% | 3.6 (3.4) mm | wrist p95 **3.0 cm**, lag 0, jerk 1.03 | miss |
+| VR hands, IWER | — | — | 0% | 4.0 (4.0) mm | wrist 0.0 cm | input-bound |
+| Quest passthrough AR | unmeasured (same body solver as VR; to confirm) | | | | | gap |
+| Phone AR | unmeasured (avatar placed and driven from the phone; to confirm) | | | | | gap |
 
 Jitter at or under the input floor is the tracker's, not the solver's; the
 target there is "no worse than input".
 
 ## Ranked worst gaps (execution order)
 
-1. **Desktop feet skate.** Walking moves the root at 3.24 m/s while the
-   clip's planted foot still slides 0.5–1 m/s; contacts never truly pin. The
-   most-watched path (every desktop and emulated take). Fix in
-   `LocomotionAnimator.ts`: sync clip playback rate to root speed and pin
-   planted feet (or foot-lock IK through the existing `TerrainLegSolver`).
-   Also the knee-backwards frames on terrain.
+1. **Desktop feet and pops.** Walking moves the root at 3.24 m/s while the
+   clip's planted foot still slides 0.5–1 m/s, sinks 5 cm, and pops at 3× human.
+   The most-watched path (every desktop and emulated take). Fix per design
+   review 5–8: measure each clip's stance-foot speed by FK at load and set
+   `timeScale = rootSpeed / clipSpeed`; handle strafe and backward walking
+   (lower-body yaw toward travel, negative timeScale, or directional clips);
+   pin planted feet in `TerrainLegSolver` (one writer per leg) from
+   precomputed stance phases; knees always forward.
 2. **Camera aim and jitter.** Fold in the camera spike (Decision 2): adopt the
    wrist→tip 0.25 s ray (2.6°), record a measured aim clip, and sample avatar
    bones in `bodycam:report` so the body rows above stop being unmeasured.
-3. **VR room-scale feet.** Walk/ramp/turn skating share 6–17% and the
-   knee-backwards frames on ramp and turn (`VrBodySolver.ts`, `legIk.ts`).
+3. **VR room-scale feet and pops.** Ramp skate 4.1 cm and 1.2 cm
+   penetration; walk and ramp pops 37–43 m/s²; crouch jitter 2.4 mm against a
+   0.6 mm input (`VrBodySolver.ts`, `legIk.ts`).
 4. **Real-headset wrist error** 3.0 cm against 2 cm (IK lag over long reaches;
    `ArmIkSolver`).
 5. **AR sources measured.** Add Quest AR and phone AR rows to the existing AR
@@ -140,21 +150,33 @@ and a before/after proof video (ignored `output/`, H.264 MP4, never committed).
 | Implementer | this session, one gap at a time | `src/avatar/`, `src/body/`, `src/xr/` tracking and hands, `src/physics/` locomotion, `scripts/lib/motion-quality.ts`, motion checks |
 | Independent verifier | `verifier` subagent + `/code-review high` | Read-only |
 
-## Decisions for the user
+## Decisions (user, 2026-11-13)
 
-1. **Public mocap for the feet targets.** Download one CMU Motion Capture
-   Database walk clip (BVH, ~1 MB, free for any use) into ignored `output/`
-   to check the skate/float targets against real human feet. Without it the
-   feet targets rest on studio-standard values only.
-2. **Camera spike: take over.** No session is working on it (last commit two
-   days ago). I rebase it onto `main` after gap 1 and finish it under this
-   brief, rather than keeping a separate brief.
+1. **Public mocap for the feet targets: approved.** CMU walks 02_01 and 07_01
+   downloaded to ignored `output/mocap/`; targets above are calibrated on them.
+2. **Camera spike: taken over** by this brief; rebased onto `main` after gap 1.
+
+## Design review (2026-11-13, `design-reviewer`, Opus)
+
+| # | Finding | Resolution |
+|---|---|---|
+| 1 | Float offset from the take's own p05 hides a take that floats throughout | Rest height from the first 0.5 s (in-app checks start standing); mocap passes `soleOffset: 'take'` |
+| 2 | One-frame speed turns tracker noise into skate | ±33 ms central differences |
+| 3 | Height-only toe contact counts heel strikes and grazes | Contact also needs speed under half the hips', ≥ 100 ms; slide measured at the stiller end |
+| 4 | No pop metric for sources without input | `popP99MS2` added for every body source |
+| 5 | Clip rate formula is clip-agnostic (timeScale always 1.4) | Gap 1 plan |
+| 6 | Rate sync cannot fix strafe or backward walking; 3.24 m/s needs ~2.3× a walk clip | Gap 1 plan; lowering desktop walk speed is a product decision for the user if it comes to that |
+| 7 | Pin in `TerrainLegSolver` from precomputed stance phases, release on over-stretch | Gap 1 plan |
+| 8 | `kneesForward` set only when planted or bent | Gap 1 plan |
+| 9 | Knee test against hips forward flags turns | Backwards against both hips and foot forward |
+| 10 | Guard should grade what export bakes | Pin runs in `BodyPoseSystem` (50) before `RecordingSystem` (90), so live bones equal recorded tracks; grading the exported GLB is a follow-up if they ever diverge |
 
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Result |
 |---|---|---|
 | Desktop row | `node --import tsx scripts/run-xr-checks.ts desktop-motion` | baseline above |
+| Human anchor | x | CMU reads above |
 | VR body rows | `pnpm --filter @holoim/capture run test:xr:body` then `scripts/motion-quality-report.ts` | baseline above |
 | Hand rows | hand replay then `scripts/motion-quality-report.ts` | baseline above |
 | Camera row | `bodycam:report` on the clip | pending |
