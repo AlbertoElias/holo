@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { prisma } from "./lib/prisma.js";
 
-// Standing upload tokens for an agent account (docs/features/agent-upload-token.md).
+// Standing upload tokens for an agent account (docs/features/archive/agent-upload-token.md).
 // Run on the API host, never over HTTP; the user's setup script
 // (scripts/agent-upload-token.sh) calls it through `fly ssh console`:
 //
