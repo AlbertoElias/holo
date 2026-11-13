@@ -1,58 +1,57 @@
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 
 import { lin } from '../introspection/common.mjs';
-import { WAVES } from './events.mjs';
+import { AMBIENT_WAVES, WAVES } from './events.mjs';
 import { fbm, noise3 } from './flow.mjs';
 import { SCREEN } from './zoom.mjs';
 import { rng } from './layers.mjs';
-import { mix, smooth } from './timeline.mjs';
-import { runs, worldMorph } from './world.mjs';
+import { FPS, LOOP, PI, mix, smooth, win } from './timeline.mjs';
+import { gridKeys, linearRows, slotMeshes, worldMorph } from './world.mjs';
 
-// The liquid, fourth pass (BEATS.md, "Decided for the fourth pass"): a sea of
-// paint. He stands chest-deep in a dark marbled sea that heaves in long
-// swells, and the waves (events.mjs WAVES) roll in from every side, each one
-// colour, building as they come, curling and breaking on him two and three
-// at once, throwing up spray in their colour and sinking back into the sea.
-// When he lets go the sea falls still and rises over him and the camera.
-// Everything is authored in world space (world.mjs).
+// The liquid (BEATS.md, "The liquid"): a sea of paint that heaves all loop.
+// He stands chest-deep in it while the waves (events.mjs WAVES) roll in from
+// every side, each one colour, curling and breaking on him and throwing up
+// spray in their colour; the rest of the loop the sea's own smaller waves
+// (AMBIENT_WAVES) roll in from the far side. When he lets go the sea falls
+// still. Authored in view metres round the liquid layer's origin and scaled
+// into liquid units by the scene.
 
-/** The sea: its rest level sits `drop` below C (above it when negative), R across. */
+/** The sea: its rest level sits `drop` below the origin, R across. */
 export const POOL = { drop: 0.1, R: 8, rings: 34, segs: 88 };
 
-/** The sea's surface height (world y offset from its rest) at offset (x, z) from its centre. */
-function swell(x, z, t, calmness) {
-  let h =
-    0.075 * Math.sin(0.55 * x + 0.35 * z - 1.1 * t) +
-    0.06 * Math.sin(-0.3 * x + 0.62 * z - 0.95 * t + 1.7) +
-    0.045 * Math.sin(0.48 * x - 0.5 * z - 1.3 * t + 4.1) +
-    0.02 * Math.sin(1.7 * x + 1.1 * z - 2.4 * t) +
-    0.015 * Math.sin(-1.3 * x + 1.9 * z - 2.9 * t + 2);
-  h *= 1 - 0.85 * calmness;
-  // Each wave that breaks on him sends a ring out across the sea.
-  const rho = Math.hypot(x, z);
-  for (const e of WAVES) {
-    const s = t - e.t;
-    if (s <= 0 || s > 3) continue;
-    const d = rho - 1.8 * s;
-    h += 0.1 * e.power * Math.exp(-s / 1.1) * Math.sin(4 * d) * Math.exp(-((d / 0.5) ** 2));
-  }
-  return h;
+// The swell: five travelling waves, each a whole number of periods a loop.
+const SWELL = [
+  { a: 0.075, kx: 0.55, kz: 0.35, n: 11, ph: 0 },
+  { a: 0.06, kx: -0.3, kz: 0.62, n: 9, ph: 1.7 },
+  { a: 0.045, kx: 0.48, kz: -0.5, n: 12, ph: 4.1 },
+  { a: 0.02, kx: 1.7, kz: 1.1, n: 23, ph: 0 },
+  { a: 0.015, kx: -1.3, kz: 1.9, n: 28, ph: 2 }
+].map((c) => ({ ...c, w: (2 * PI * c.n) / LOOP }));
+
+/** The sea falls still when he lets go, and again on the way out. */
+export const calm = (t) => Math.max(win(36.1, 38.5, t, 0.6), win(55.0, 58.5, t, 0.8));
+const heave = (t) => 1 - 0.85 * calm(t);
+
+/** The sea's surface height (y offset from its rest) at (x, z) from its centre. */
+export function swell(x, z, t) {
+  let h = 0;
+  for (const c of SWELL) h += c.a * Math.sin(c.kx * x + c.kz * z - c.w * t + c.ph);
+  return h * heave(t);
 }
 
 /**
- * The sea and its waves, as world-space meshes.
- * ctx: { C, him(t) → his pelvis (world, no knocks), from (the switch into the
- * liquid), to (37), back: [t0, t1] (the way out), sLiq(t), rise(t) (metres
- * the sea climbs as he sinks), calm(t) (0..1) }.
+ * The sea and its waves, in view metres round the origin.
+ * ctx: him(t) → where a wave breaks at t (his pelvis while he is in the sea,
+ * else where he would stand).
+ * Returns { pool: { geo, times, values }, waves: [{ group, geo, times, values }], P0 }.
  */
 export function liquid(ctx) {
-  const { C } = ctx;
-  const P0 = [C[0], C[1] - POOL.drop, C[2]];
-  const seaAt = (x, z, t) => P0[1] + ctx.rise(t) + swell(x - P0[0], z - P0[2], t, ctx.calm(t));
+  const P0 = [0, -POOL.drop, 0];
+  const seaAt = (x, z, t) => P0[1] + swell(x - P0[0], z - P0[2], t);
   const warp = fbm(noise3(97), 3);
   const marble = fbm(noise3(311), 4);
 
-  // --- The sea: a polar grid round him, finer near him. ---
+  // --- The sea: a polar grid round the origin, finer near him. ---
   const { rings, segs, R } = POOL;
   const polar = [[0, 0]];
   for (let i = 1; i <= rings; i += 1) {
@@ -105,70 +104,71 @@ export function liquid(ctx) {
       idx.push(a, b, a + segs, b, b + segs, a + segs);
     }
   }
-  // The fields barely drift (they are the painting).
-  const drift = (r) => 0.012 / (1 + 0.3 * r);
-  const poolAt = (t, back) => {
-    const out = new Float32Array(polar.length * 3);
-    // Coming in, the sea grows out of C with the zoom; going out, it shrinks back into it.
-    const grow = back ? ctx.sLiq(t) / 7.5 : mix(0.04, 1, smooth(ctx.from, ctx.from + 0.9, t) ** 0.7);
-    polar.forEach(([r, a], i) => {
-      const ang = a + drift(r) * (t - 25) * (back ? 0.4 : 1);
-      const x = r * Math.cos(ang);
-      const z = r * Math.sin(ang);
-      const y = back ? P0[1] + 0.25 * swell(x, z, t, 1) : seaAt(P0[0] + x, P0[2] + z, t);
-      const p = [P0[0] + x, y, P0[2] + z];
-      for (let k = 0; k < 3; k += 1) out[i * 3 + k] = C[k] + grow * (p[k] - C[k]);
-    });
-    return out;
-  };
-  const fwd = { start: ctx.from, step: 0.2, count: Math.ceil((ctx.to - ctx.from) / 0.2) + 1 };
-  const bk = { start: ctx.back[0], step: 0.2, count: Math.ceil((ctx.back[1] - ctx.back[0]) / 0.2) + 1 };
-  const track = runs([fwd, bk]);
-  const hidden = new Float32Array(polar.length * 3);
-  polar.forEach((_, i) => {
-    for (let k = 0; k < 3; k += 1) hidden[i * 3 + k] = C[k] + (k === 1 ? 1e-5 * i : 0);
-  });
-  const keys = [hidden, ...track.times.map((t, i) => poolAt(t, i >= fwd.count))];
-  const inside = (t) => (t >= ctx.from && t < ctx.to) || (t >= ctx.back[0] && t < ctx.back[1]);
-  const poolWeights = (t) => (inside(t) ? [0, ...track.weights(t)] : [1, ...track.times.map(() => 0)]);
-  // Base: a small copy of the rest sea round C (inside the skies' ball).
+  // The swell as harmonics: per component, its offsets a·sin θ and a·cos θ (θ = k·x + φ), so the
+  // surface is Σ (a sin θ · cos ωt − a cos θ · sin ωt). Weights stay non-negative: each sign is
+  // its own target.
   const base = new Float32Array(polar.length * 3);
   polar.forEach(([r, a], i) => {
-    const p = [P0[0] + r * Math.cos(a), P0[1], P0[2] + r * Math.sin(a)];
-    for (let k = 0; k < 3; k += 1) base[i * 3 + k] = C[k] + 0.05 * (p[k] - C[k]);
+    base[i * 3] = P0[0] + r * Math.cos(a);
+    base[i * 3 + 1] = P0[1];
+    base[i * 3 + 2] = P0[2] + r * Math.sin(a);
   });
+  const keys = [];
+  for (const c of SWELL) {
+    for (const f of [Math.sin, Math.cos]) {
+      for (const sign of [1, -1]) {
+        const k = Float32Array.from(base);
+        polar.forEach(([r, a], i) => {
+          k[i * 3 + 1] += sign * c.a * f(c.kx * r * Math.cos(a) + c.kz * r * Math.sin(a) + c.ph);
+        });
+        keys.push(k);
+      }
+    }
+  }
+  const poolRow = (t) => {
+    const m = heave(t);
+    return SWELL.flatMap((c) => {
+      const co = Math.cos(c.w * t);
+      const si = Math.sin(c.w * t);
+      return [Math.max(0, co) * m, Math.max(0, -co) * m, Math.max(0, -si) * m, Math.max(0, si) * m];
+    });
+  };
+  const grid = Array.from({ length: LOOP * FPS + 1 }, (_, i) => i / FPS);
+  const poolTrack = linearRows(grid, grid.map(poolRow));
   const pool = new BufferGeometry();
   pool.setAttribute('position', new Float32BufferAttribute(base, 3));
   pool.setAttribute('color', new Float32BufferAttribute(col, 3));
   pool.setIndex(idx);
-  worldMorph(pool, keys, poolWeights(0));
+  worldMorph(pool, keys, poolRow(0));
 
   // --- The waves: one coloured swell per wave, right across the sea, rolling in, curling where it meets him. ---
-  const NA = 36; // along the crest
-  const NS = 10; // across: back foot, up the back, crest, down the face, front foot
+  const NA = 28; // along the crest
+  const NS = 8; // across: back foot, up the back, crest, down the face, front foot
   const DROPS = 18;
   const UC = 0.68; // where the crest sits across the profile
   const SPEED = 2.3;
   const LEAD = 2.8; // seconds from rising far out to breaking on him
+  const TAIL = 1.0; // and from breaking to gone
   const LH = 5.5; // half the crest's length: each wave spans the sea
   const faces = [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]];
   const octa = (p, s) => [[s, 0, 0], [-s, 0, 0], [0, s, 0], [0, -s, 0], [0, 0, s], [0, 0, -s]].flatMap((o) => o.map((v, k) => p[k] + v));
-  // The profile: a long back rising to a sharp crest, a short steep face.
   const TW = (() => {
     const n = Math.hypot(SCREEN.toward[0], SCREEN.toward[2]);
     return [SCREEN.toward[0] / n, 0, SCREEN.toward[2] / n];
   })();
   const CREAM = lin('#f1dcb4');
   const SEA_RED = lin('#6e1918');
+  // The profile: a long back rising to a sharp crest, a short steep face.
   const bump = (u) => (u < UC ? 0.5 - 0.5 * Math.cos(Math.PI * (u / UC)) : Math.cos((Math.PI / 2) * ((u - UC) / (1 - UC))) ** 0.6);
+  const points = NA * NS + DROPS * 6;
 
-  const waves = WAVES.map((e, wi) => {
-    const r = rng(900 + wi);
+  const events = [...WAVES, ...AMBIENT_WAVES].map((e) => {
+    const r = rng(900 + e.i);
     const H = ctx.him(e.t);
     const travel = e.d.map((v) => -v); // the way it rolls: toward him and on past
     const side = [-travel[2], 0, travel[0]];
-    const start = Math.max(e.t - LEAD, ctx.from + 0.9);
-    const end = e.t + 1.0;
+    const times = gridKeys(Math.ceil((e.t - LEAD) * FPS) / FPS, Math.floor((e.t + TAIL) * FPS) / FPS, 5);
+    const start = times[0];
     const Amax = 0.28 + 0.32 * e.power;
     const sheet = (t) => {
       const x = t - e.t;
@@ -229,11 +229,18 @@ export function liquid(ctx) {
         const p = [0, 1, 2].map((k) => crest[k] + d.v[k] * x - (k === 1 ? 4.5 * x * x : 0));
         return octa(p, p[1] < P0[1] ? 0 : d.size * smooth(0, 0.06, x));
       });
-    const track = runs([{ start, step: 0.1, count: Math.ceil((end - start) / 0.1) + 1 }]);
-    const keys = track.times.map((t) => Float32Array.from([...sheet(t), ...spray(t)]));
-    // Colour: the sea's own dark at the foot and the ends, so it rises out of the sea; the full colour
-    // up the face; a pale lip.
-    const c = lin(e.colour);
+    // The first and last keys draw nothing (every vertex at one point under the sea), since the
+    // mesh holds them between its waves.
+    const hide = new Float32Array(points * 3);
+    for (let i = 0; i < points; i += 1) hide.set([H[0], P0[1] - 0.4, H[2]], i * 3);
+    const keys = times.map((t, j) => (j === 0 || j === times.length - 1 ? hide : Float32Array.from([...sheet(t), ...spray(t)])));
+    return { group: e.hue, times, keys, colour: e.colour };
+  });
+
+  // Colour: the sea's own red at the foot and the ends, so it rises out of the sea; the full colour
+  // up the face; a pale lip. One set per hue (its waves share a mesh).
+  const template = (hue) => {
+    const c = lin(events.find((x) => x.group === hue).colour);
     const colours = [];
     for (let i = 0; i < NA; i += 1) {
       const a = (i / (NA - 1)) * 2 - 1;
@@ -242,7 +249,6 @@ export function liquid(ctx) {
         const u = j / (NS - 1);
         const f = bump(u);
         const lip = smooth(0.8, 1, f) * (u >= UC ? 0.45 : 0.2) * (0.3 + 0.7 * Math.exp(-(((a * LH) / 1.8) ** 2))); // palest where it breaks
-        // Out of the sea's own red at the foot and the ends into the wave's colour up its face.
         const k = 0.88 * Math.min(1, (f * end) ** 0.8 * 1.1);
         colours.push(...c.map((v, m) => Math.min(1, mix(mix(SEA_RED[m], v * 0.95, k), CREAM[m], lip * 0.35))));
       }
@@ -255,27 +261,16 @@ export function liquid(ctx) {
       }
     }
     const sheetN = NA * NS;
-    drops.forEach((_, di) => {
+    for (let di = 0; di < DROPS; di += 1) {
       const o = sheetN + di * 6;
       for (const f of faces) index.push(o + f[0], o + f[1], o + f[2]);
       for (let v = 0; v < 6; v += 1) colours.push(...c.map((u) => (v === 2 ? mix(u, 1, 0.35) : u * 0.95)));
-    });
-    // Base: a hair-thin cluster at C (each vertex apart); the keys carry the rest.
-    const base = new Float32Array(keys[0].length);
-    for (let i = 0; i < base.length / 3; i += 1) {
-      base[i * 3] = C[0] + 1e-5 * i;
-      base[i * 3 + 1] = C[1];
-      base[i * 3 + 2] = C[2];
     }
-    const geo = new BufferGeometry();
-    geo.setAttribute('position', new Float32BufferAttribute(base, 3));
-    geo.setAttribute('color', new Float32BufferAttribute(colours, 3));
-    geo.setIndex(index);
-    // Key 0 is the base itself (nothing shows); outside its run the wave is gone.
-    const weights = (t) => (t >= start && t < end ? [0, ...track.weights(t)] : [1, ...track.times.map(() => 0)]);
-    worldMorph(geo, [base, ...keys], weights(0));
-    return { geo, weights, wave: e };
-  });
+    // Base: a hair-thin cluster under the sea (each vertex apart); the keys carry the rest.
+    const base = new Float32Array(points * 3);
+    for (let i = 0; i < points; i += 1) base.set([1e-5 * i, P0[1] - 0.4, 0], i * 3);
+    return { base, colour: [colours, 3], index };
+  };
 
-  return { pool: { geo: pool, weights: poolWeights }, waves, P0 };
+  return { pool: { geo: pool, times: poolTrack.times, values: poolTrack.values }, waves: slotMeshes(events, template), P0 };
 }

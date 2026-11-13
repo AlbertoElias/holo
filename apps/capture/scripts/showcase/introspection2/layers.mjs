@@ -2,12 +2,11 @@ import { BufferAttribute, BufferGeometry, Float32BufferAttribute, SphereGeometry
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 import { lin } from '../introspection/common.mjs';
-import { PI, clamp } from './timeline.mjs';
+import { fbm, noise3 } from './flow.mjs';
+import { PI, clamp, mix, smooth } from './timeline.mjs';
 
-// The layers' geometry, each built at its home size round the zoom centre C,
-// with its moving shapes as per-vertex deltas (see zoom.mjs morphLayer). Every
-// layer stays inside a ball of radius R (the skies' base radius) round C: the
-// feed's dome fit is convex, so nothing inside that ball can widen the dome.
+// The layers' still geometry, each built in its own layer's units under its
+// static HologramLayer node (see BEATS.md, "The nesting").
 
 export const rng = (seed) => () => {
   seed = (seed * 16807) % 2147483647;
@@ -82,88 +81,44 @@ export function sky(C, R, top, bottom) {
   return flip(out);
 }
 
-/** The sky radii at zoom S: each sky grows with its layer up to `cap`, and stays 15% outside the next one in. */
-export function skyRadii(S, R, U, cap) {
-  const own = (layer) => Math.min(cap, (R * S) / U[layer]);
-  const dark = own('dark');
-  const liquid = Math.max(own('liquid'), 1.15 * dark);
-  const gas = Math.max(own('gas'), 1.15 * liquid);
-  return { gas, liquid, dark };
+/**
+ * The dark's sky: black, with Rothko's soft fields (oxblood, a red seam,
+ * plum) dim across its upper half, the sea he sank through seen from under.
+ */
+export function darkSky(C, R) {
+  const FIELDS = [[-1, '#020203'], [0.05, '#030305'], [0.3, '#12040a'], [0.5, '#2a0a10'], [0.62, '#4a1414'], [0.7, '#6a2414'], [0.78, '#3a0c12'], [0.9, '#1a0612'], [1, '#08030a']].map(([y, h]) => [y, lin(h)]);
+  const field = (y) => {
+    let i = 0;
+    while (i < FIELDS.length - 2 && FIELDS[i + 1][0] < y) i += 1;
+    const [y0, c0] = FIELDS[i];
+    const [y1, c1] = FIELDS[i + 1];
+    const x = smooth(y0, y1, y);
+    return c0.map((v, k) => mix(v, c1[k], x));
+  };
+  const n = fbm(noise3(733), 3);
+  const g = new SphereGeometry(R, 40, 28);
+  g.translate(...C);
+  return flip(paint(g, (x, y, z) => {
+    const u = (y - C[1]) / R;
+    return field(u + 0.06 * n(((x - C[0]) / R) * 2, u * 6, ((z - C[2]) / R) * 2)).map((v) => v * (0.85 + 0.15 * n(x * 3, y * 3, z * 3)));
+  }, { amb: 1 }));
 }
-
-// ---------------------------------------------------------------------------
-// The doors, third pass: one door in every layer, and it is the layer itself
-// opening. An iris: a hole (a disc painted the colour of what is behind it,
-// so it reads as a hole and the switch to that layer is seamless) and a rim
-// of pleats round it that untwist as it opens. Built closed (every vertex on
-// the centre, so nothing shows) with STATES open poses as shapes.
-
-export const IRIS_STATES = [0.25, 0.5, 0.75, 1];
 
 /**
- * centre, right, up, normal: its frame; R: the open hole's radius; hole(p):
- * linear RGB of the hole at p (the open pose); rim: hex colours in stripes;
- * (hex, or linear RGB arrays); lift: how far the rim stands off the surface (the hole sits at half that).
+ * A knot: a ball of marbled colour, the door into the next layer, seen from
+ * outside (its inside is that layer's sky). palette: hex stops dark to light.
  */
-export function iris({ centre, right, up, normal, R, hole, rim, lift, N = 48, twist = 1.05, width = 0.3 }) {
-  const place = (x, y, z) => [0, 1, 2].map((k) => centre[k] + x * right[k] + y * up[k] + z * normal[k]);
-  const pose = (o) => {
-    const out = [];
-    const r = o * R;
-    const w = width * R * Math.min(1, 3 * o);
-    out.push(...place(0, 0, lift / 2));
-    for (let i = 0; i < N; i += 1) {
-      const a = (i / N) * 2 * PI;
-      out.push(...place(r * Math.cos(a), r * Math.sin(a), lift / 2));
-    }
-    for (let i = 0; i < N; i += 1) {
-      const a = (i / N) * 2 * PI + (1 - o) * twist;
-      out.push(...place(r * Math.cos(a), r * Math.sin(a), lift));
-    }
-    for (let i = 0; i < N; i += 1) {
-      const a = (i / N) * 2 * PI;
-      out.push(...place((r + w) * Math.cos(a), (r + w) * Math.sin(a), lift));
-    }
-    return Float32Array.from(out);
-  };
-  const open = pose(1);
-  const pt = (i) => [open[i * 3], open[i * 3 + 1], open[i * 3 + 2]];
-  const col = [];
-  for (let i = 0; i <= N; i += 1) col.push(...hole(pt(i)));
-  const rims = rim.map((c) => (typeof c === 'string' ? lin(c) : c));
-  for (let ring = 0; ring < 2; ring += 1) {
-    for (let i = 0; i < N; i += 1) {
-      const c = rims[Math.floor(i / 2) % rims.length];
-      const k = ring === 0 ? 0.62 : 1; // the pleats darken toward the hole
-      col.push(c[0] * k, c[1] * k, c[2] * k);
-    }
-  }
-  const idx = [];
-  for (let i = 0; i < N; i += 1) idx.push(0, 1 + i, 1 + ((i + 1) % N));
-  const a0 = 1 + N;
-  const b0 = 1 + 2 * N;
-  for (let i = 0; i < N; i += 1) {
-    const j = (i + 1) % N;
-    idx.push(a0 + i, b0 + i, a0 + j, a0 + j, b0 + i, b0 + j);
-  }
-  const geo = new BufferGeometry();
-  const base = pose(0);
-  // Closed, every vertex is on the centre: spread them by a hair so no two coincide.
-  for (let i = 0; i < base.length / 3; i += 1) for (let k = 0; k < 3; k += 1) base[i * 3 + k] += 1e-6 * i * normal[k];
-  geo.setAttribute('position', new Float32BufferAttribute(base, 3));
-  geo.setAttribute('color', new BufferAttribute(Float32Array.from(col), 3));
-  geo.setIndex(idx);
-  const shapes = IRIS_STATES.map((o) => {
-    const p = pose(o);
-    return p.map((v, i) => v - base[i]);
-  });
-  return { geo, shapes, states: IRIS_STATES.map(pose) };
-}
-
-/** The shape weights that draw an iris open by o (0..1), linear between its states. */
-export function irisWeights(o) {
-  const x = Math.min(1, Math.max(0, o)) * IRIS_STATES.length;
-  return IRIS_STATES.map((_, k) => Math.max(0, 1 - Math.abs(x - (k + 1))));
+export function knotShell(C, R, palette, seed = 5) {
+  const stops = palette.map(lin);
+  const n = fbm(noise3(seed), 4);
+  const g = new SphereGeometry(R, 32, 22);
+  g.translate(...C);
+  return paint(g, (x, y, z) => {
+    const v = clamp(0.5 + 0.7 * n(((x - C[0]) / R) * 1.6, ((y - C[1]) / R) * 1.6, ((z - C[2]) / R) * 1.6));
+    const f = v * (stops.length - 1);
+    const i = Math.min(stops.length - 2, Math.floor(f));
+    return stops[i].map((c, k) => mix(c, stops[i + 1][k], f - i));
+  }, { amb: 0.65 });
 }
 
 // ---------------------------------------------------------------------------
@@ -239,4 +194,4 @@ export function glowShells(centre, radius) {
   return mergeGeometries(parts);
 }
 
-export { mergeParts, shapeOf };
+export { flip, mergeParts, shapeOf };

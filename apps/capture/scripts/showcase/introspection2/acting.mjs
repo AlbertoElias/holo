@@ -80,8 +80,10 @@ const breathe = (q, amp, t, period, phase = 0) => {
 };
 
 // ---------------------------------------------------------------------------
-// The man: composed, then the hand to the heart and a held breath. His torso
-// is still from 4.5 s to 7 s so his statue (the glass way in) matches him; 58.5–60 is the exhale back into the opening pose.
+// The man: alive all loop (layer 0). Composed, the hand to the heart while
+// the traveller goes in, small checks (his watch, his tie) while the layers
+// inside him run, the hand to the heart again as he comes back, and the
+// exhale into the opening pose. He breathes all loop (4 s, 15 a loop).
 
 const MAN_BASE = {
   ...DEF, pelvisY: 0.935, sp: -0.02, cp: -0.06, hp: -0.05, spread: 0.04,
@@ -102,14 +104,14 @@ const MAN = {
 const manKeys = keyed([
   [0, 'settle'], [0.6, 'neutral'], [0.8, 'neutral'], [1.2, 'tie'], [1.45, 'tieA'], [1.7, 'tieB'], [1.95, 'tieA'],
   [2.2, 'tie'], [2.5, 'neutral'], [2.9, 'watch'], [3.9, 'watch'], [4.3, 'neutral'], [4.4, 'still'], [4.9, 'still'],
-  [5.9, 'chest'], [7, 'chest'],
-  [58.5, 'chest'], [59.1, 'exhale'], [59.6, 'neutral'], [60, 'settle']
+  [5.9, 'chest'], [7, 'chest'], [16, 'chest'], [17, 'neutral'], [25.5, 'neutral'], [26.3, 'watch'], [27.5, 'watch'],
+  [28.2, 'neutral'], [37.6, 'neutral'], [38, 'tie'], [38.4, 'tieA'], [38.8, 'tieB'], [39.2, 'tie'], [39.6, 'neutral'],
+  [49, 'neutral'], [50, 'chest'], [58.5, 'chest'], [59.1, 'exhale'], [59.6, 'neutral'], [60, 'settle']
 ], MAN, MAN_BASE);
 
 export function manPose(rig, t) {
   const q = manKeys(t);
-  const amp = 0.012 * (1 - smooth(4.1, 4.5, t)) * (t < 30 ? 1 : 0) + (t > 58.5 ? 0.012 * smooth(59.3, 60, t) : 0);
-  breathe(q, amp, t, 4);
+  breathe(q, 0.012, t, 4);
   return toP(rig, q);
 }
 
@@ -318,7 +320,7 @@ const travKeys = keyed([
   [39.6, 'limp'], [40.0, 'landed'], [40.6, 'landed'], [41.3, 'careful'], [42.4, 'careful'], [42.8, 'listen'],
   [43.5, 'listen'], [43.9, 'careful'], [44.4, 'careful'], [45.3, 'kneel'], [45.8, 'reach'], [46.3, 'withdraw'],
   [46.7, 'withdraw'], [47.4, 'touch'], [47.8, 'touch'], [48.05, 'withdraw'], [48.7, 'touch'], [49.3, 'hugOpen'],
-  [50.1, 'hug'], [58.4, 'hug'], [58.5, 'pocket'], [60, 'pocket']
+  [50.1, 'hug'], [54.8, 'hug'], [55.3, 'float'], [58.0, 'float'], [58.4, 'pocket'], [60, 'pocket']
 ], T_ALL);
 
 /** The traveller's pose at t in his frame; `ctx` holds the child's points in the hug frame. */
@@ -328,8 +330,14 @@ export function travellerPose(rig, t, place = {}, ctx = null) {
   const hold = smooth(50, 51.5, t);
   // The panting stops for his two big breaths (gas 22.2–24.4, liquid 34.6–36.2), so they read.
   const big = Math.max(win(22.2, 24.4, t, 0.2), win(34.6, 36.2, t, 0.2));
-  if (t < 37) breathe(q, 0.02 * (t > 11 ? 1.6 : 1) * (1 - big), t, t > 11 ? 0.9 : 3.2);
-  else if (t > 40.4) breathe(q, mix(0.015, 0.03, hold), t, mix(2.2, 3.6, hold), 50);
+  // Calm (before the dive and after the hug) he breathes every 3 s, 20 a loop, so the loop point is seamless.
+  const after = smooth(55, 56, t);
+  if (t < 11) breathe(q, 0.02, t, 3);
+  else if (t < 37) breathe(q, 0.032 * (1 - big), t, 0.9);
+  else if (t > 40.4) {
+    breathe(q, mix(0.015, 0.03, hold) * (1 - after), t, mix(2.2, 3.6, hold), 50);
+    breathe(q, 0.02 * after, t, 3);
+  }
   // Gasping heaves at the surface.
   q.cp -= 0.12 * win(30.8, 31.2, t, 0.15) * Math.max(0, Math.sin(2 * PI * 2.4 * t));
   const P = toP(rig, q, place);
@@ -347,7 +355,7 @@ export function travellerPose(rig, t, place = {}, ctx = null) {
   return P;
 }
 
-// His path in the hug frame (37–58.5): he leaves the seam at the frame's
+// His path in the hug frame (37–56): he leaves the seam at the frame's
 // zoom point, falls limp and slow, turning once, lands to the left, walks to
 // the child and kneels. Units are his body's (he is 1.75 tall).
 export const HUG = { centre: [-0.06, 0.5], child: { x: 0.15, z: 0 }, kneel: { x: -0.27, z: 0 }, land: { x: -1.6, z: 0.05 } };
@@ -384,23 +392,24 @@ export function travellerPlace(rig, t) {
 // slow into breathing.
 
 /** Sobbing: irregular bursts, as a 0..1 pulse train. */
-function sob(t) {
-  const env = smooth(40.5, 41.5, t) * (t < 48.2 ? 1 : Math.exp(-(t - 48.2) / 1.6));
+export function sob(t) {
+  // He sobs from 4 s (the dark runs all loop) until the hug, and again once the traveller has gone.
+  const env = smooth(3.5, 4.5, t) * (t < 48.2 ? 1 : Math.exp(-(t - 48.2) / 1.6)) * (1 - smooth(54, 57, t));
   const pulse = Math.max(0, Math.sin(2 * PI * 2.3 * t)) ** 3 * 0.7 + Math.max(0, Math.sin(2 * PI * 1.1 * t + 1)) ** 4 * 0.5;
   return env * pulse * (0.75 + 0.25 * Math.sin(2 * PI * 0.37 * t));
 }
 
-export const childPresence = (t) => smooth(43.5, 44.3, t) * (t < 58.5 ? 1 : 0);
-
 export function childPose(rig, t, ctx) {
-  const look = smooth(48.0, 48.8, t);
-  const turn = smooth(48.4, 49.6, t);
-  const rise = smooth(48.6, 49.8, t);
-  const hug = smooth(48.9, 50.0, t);
+  // After the hug (the traveller lets go at 54.6 and rises out of the dark at 55.3) he settles back
+  // into his hunch, alone again, by 57.5: the loop starts with him there.
+  const look = smooth(48.0, 48.8, t) * (1 - smooth(55.0, 56.5, t));
+  const turn = smooth(48.4, 49.6, t) * (1 - smooth(55.0, 56.5, t));
+  const rise = smooth(48.6, 49.8, t) * (1 - smooth(55.5, 57.5, t));
+  const hug = smooth(48.9, 50.0, t) * (1 - smooth(54.6, 55.2, t));
   const flinch = win(47.75, 48.05, t, 0.12);
   const s = sob(t) * (1 - look * 0.6);
-  const settle = smooth(50, 51.5, t);
-  const breath = 0.025 * settle * Math.sin((2 * PI * (t - 50)) / 3.6);
+  const settle = smooth(50, 51.5, t) * (1 - smooth(55, 56, t));
+  const breath = 0.025 * mix(0.35, 1, settle) * Math.sin((2 * PI * 17 * t) / 60); // 17 a loop
   const base = new Vector3(HUG.child.x + 0.03 * flinch, 0, HUG.child.z);
   const P = { base, floor: 0, yaw: mix(-0.35, -PI / 2, turn) };
   P.pelvisY = mix(0.09, 0.27, rise);

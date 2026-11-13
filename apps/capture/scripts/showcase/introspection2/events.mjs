@@ -1,8 +1,8 @@
 import { SCREEN } from './zoom.mjs';
 
-// The way down II, third pass: one list of blows for picture, acting and
-// sound (see BEATS.md, "Decided for the third pass"). The music runs on a
-// 120 bpm grid, so every gust and hit lands on a quarter of a beat.
+// The way down II: one list of blows for picture, acting and sound (see
+// BEATS.md). The blows aimed at the traveller keep the beat sheet's times on
+// a 120 bpm grid; the sea's ambient waves roll the rest of the loop.
 
 export const BPM = 120;
 export const BEAT = 60 / BPM;
@@ -111,6 +111,25 @@ export const WAVES = [
   [34.0, 230, 'cadmium', 0.6],
   [34.5, 160, 'ultramarine', 0.45]
 ].map(([t, az, hue, power], i) => ({ i, t, az, hue, colour: HUES[hue], power, d: seaDir(az) }));
+
+/**
+ * The sea's own waves, rolling the whole loop where none is aimed at him:
+ * smaller, from the far side, every ~1.6 s (none spans the loop point).
+ */
+export const AMBIENT_WAVES = (() => {
+  const out = [];
+  const hues = Object.keys(HUES);
+  let i = 0;
+  const add = (t) => {
+    const az = 100 + ((i * 67) % 160);
+    const hue = hues[(i * 3) % hues.length];
+    out.push({ i: 100 + i, t, az, hue, colour: HUES[hue], power: 0.35 + 0.2 * (((i * 7) % 5) / 4), d: seaDir(az), ambient: true });
+    i += 1;
+  };
+  for (let t = 4.0; t <= 24.01; t += 1.6) add(Math.round(t * 4) / 4);
+  for (let t = 40.0; t <= 54.01; t += 1.6) add(Math.round(t * 4) / 4);
+  return out;
+})();
 
 /** A blow's push: rises in ~0.12 s, dies away over ~1 s (x = time since the blow). */
 export const knockCurve = (x) => (x <= 0 ? 0 : (1 - Math.exp(-x / 0.12)) * Math.exp(-x / 1.1));
