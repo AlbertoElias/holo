@@ -49,6 +49,26 @@ it from the item below instead of duplicating its status here.
   Delivered: scene `introspection2` (five passes, draft 12), merged to `main`
   on 2026-11-12; uploaded to production as the agent account after the deploy,
   and again on 2026-11-13 with its Quick Look preview (`cmwee44na0001oeiqq93qtiim`, B-057).
+- [ ] "The way down", deep zoom (the user's direction on 2026-11-13): you
+  cannot zoom into version 2's inner layers yourself. Its descent is the 60 s
+  animation scaling the world about the man's chest (morph targets, a
+  `HologramZoom` node), and the feed's wheel and pinch only move the camera
+  between fixed limits (`portalStore.ts` `distanceForZoom`, `MAX_INSIDE_SHARE`
+  in `HologramCardCanvas.tsx`). The user chose free deep zoom: every layer
+  (the man; the gas in his chest, ×100 smaller; the liquid in a gas knot, ×40;
+  the dark with the child, ×40) sits at its real nested size and plays its own
+  action all the time. The traveller keeps running the current 60 s loop down
+  through the layers and back. The viewer can go into any layer at any moment,
+  hear that layer's music, zoom back out, and find the traveller wherever the
+  loop has him. Needs a viewer deep-zoom range for pieces that declare their
+  nesting (aim point and depth per layer, camera near and far that follow the
+  zoom, positional sound scaled to the layer, the dome left behind on the way
+  in), with holograms without the declaration unchanged. Also needs a rebuild of `introspection2`
+  as an always-running nesting (static per-layer node scales, so the feed's fit
+  and float32 precision hold at about 160,000× depth). Overlaps the in-flight
+  zoom continuum in [`docs/features/portal-view.md`](docs/features/portal-view.md);
+  read it first. Start with a brief (`docs/FEATURE_WORKFLOW.md`); which
+  surfaces besides the desktop feed get the deep zoom is the user's call.
 - [x] Tests should not have to sign in (the user's direction on 2026-11-12).
   Delivered 2026-11-12: the e2e API runs with `TEST_OPEN_UPLOADS` (off by
   default and in production; `scripts/test-api.ts` turns it on), which accepts
