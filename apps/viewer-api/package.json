@@ -8,6 +8,7 @@
     "build": "pnpm run prisma:generate && tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "pnpm run prisma:generate && tsc -p tsconfig.typecheck.json --noEmit",
+    "pretest": "pnpm run prisma:generate",
     "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck && pnpm run test",
     "verify:full": "pnpm run verify:fast && pnpm run build",
