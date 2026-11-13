@@ -82,7 +82,7 @@ async function read(page: Page, url: string, declaredNames: boolean): Promise<De
   const names = {
     layers: FIXTURE_LAYERS.map((layer) => layerNodeName(layer, declaredNames)),
     spins: FIXTURE_LAYERS.map((layer) => `Spin_${layer.name}`),
-    visible: ["Body", ...FIXTURE_LAYERS.map((layer) => `Marker_${layer.name}`)]
+    visible: ["Body", "Floor", ...FIXTURE_LAYERS.map((layer) => `Marker_${layer.name}`)]
   };
   return page.evaluate(([modelUrl, nodeNames]) => {
     type Node = { name: string; visible: boolean; getWorldPosition(v: unknown): { x: number; y: number; z: number }; quaternion: { y: number; w: number } };
@@ -207,6 +207,11 @@ test("deep zoom: the wheel stops at the inside end, then the camera goes into ea
   expect(start.layers, "the card reads the three declared layers, outermost first").toEqual(FIXTURE_LAYERS.map((layer, index) => ({ name: layerNodeName(layer, true), size: expect.closeTo(LAYER_SIZES[index]!, 9) })));
   expect(start.maxDepth, "it may go in until 16× past the deepest home").toBeCloseTo(HOMES.at(-1)! + LEAN_NEPERS, 6);
   expect(start.mode).toBe("follow");
+  // A mesh of the hologram itself hidden by another feature (as the recorded bubble's old glass is): deep zoom must leave it hidden.
+  await page.evaluate((modelUrl) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { model: { getObjectByName(name: string): { visible: boolean } | undefined } }> }).__portalProbes;
+    Object.entries(probes).find(([key]) => key.endsWith(modelUrl))![1].model.getObjectByName("Floor")!.visible = false;
+  }, declared.url);
 
   // One wheel gesture from Follow, enough to go far in: it stops at the inside end.
   const scrollBefore = await feedScrollTop(page);
@@ -319,6 +324,7 @@ test("deep zoom: the wheel stops at the inside end, then the camera goes into ea
   expect(back.mode).toBe("follow");
   expect(back.depth).toBe(0);
   expect(back.visible.Body, "the body is drawn again").toBe(true);
+  expect(back.visible.Floor, "a mesh hidden before the zoom stays hidden").toBe(false);
   await expect.poll(async () => (await read(page, declared.url, true)).placements.every((p) => (p.layer === 0 ? p.level > 0.98 : p.level < 0.02)), { message: "only the hologram's own sound is up again" }).toBe(true);
 
   // Scrolling away from a card deep inside resets it.

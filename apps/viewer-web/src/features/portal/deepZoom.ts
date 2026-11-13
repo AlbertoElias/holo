@@ -56,15 +56,17 @@ export function readDeepZoom(root: Object3D, animations: readonly AnimationClip[
   rootScale.setFromMatrixScale(root.matrixWorld);
   const base = Math.abs(rootScale.x) || 1;
   // A layer's size is read once, so its scale (and every parent's) must hold
-  // still over the take: a scale track on one may only repeat one value.
+  // still over the take: a scale track on one may only repeat the scale it
+  // already has (one that holds another value would change it on the first frame).
   const changing = new Set<string>();
   for (const clip of animations) {
     for (const track of clip.tracks) {
       const { nodeName, propertyName } = PropertyBinding.parseTrackName(track.name);
       if (propertyName !== "scale" || !nodeName) continue;
+      const rest = root.getObjectByName(nodeName)?.scale;
       const values = track.values;
-      for (let i = 3; i < values.length; i += 1) {
-        const first = values[i % 3]!;
+      for (let i = 0; i < values.length; i += 1) {
+        const first = rest ? rest.getComponent(i % 3) : values[i % 3]!;
         if (Math.abs(values[i]! - first) > Math.abs(first) * UNIFORM_TOLERANCE) {
           changing.add(nodeName);
           break;

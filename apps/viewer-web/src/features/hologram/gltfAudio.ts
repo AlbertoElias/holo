@@ -509,7 +509,8 @@ export class ScheduledGltfAudio {
         panner.maxDistance = emitter.distance!.max * placedScale;
       }
       const jump = !placement.placed;
-      moveParam(placement.level.gain, layers ? layers.gain(placement.layer) : 1, ctx, seconds, jump);
+      // Without layers the level stays at its default 1, with no automation each frame.
+      if (layers) moveParam(placement.level.gain, layers.gain(placement.layer), ctx, seconds, jump);
       const p = placement.sent;
       if (panner.positionX) {
         moveParam(panner.positionX, p.x, ctx, seconds, jump);

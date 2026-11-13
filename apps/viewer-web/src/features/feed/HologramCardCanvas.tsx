@@ -302,6 +302,8 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
     return meshes;
   }, [clonedScene, deep]);
   const drawnFrom = useRef(0);
+  // The meshes deep zoom hid itself: only those come back on the way out, so one hidden for another reason (the recorded bubble's old glass) stays hidden.
+  const deepHidden = useRef(new Set<Object3D>()).current;
   const audioState = useGltfAudio(gltf, clonedScene, active && !paused, muted, getPlaybackTime);
   // The card's sound for the probe: decoded after mount, so read through a ref.
   const soundRef = useRef<ScheduledGltfAudio | null>(null);
@@ -934,7 +936,15 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
         layerMeshes.forEach((meshes, layer) => {
           const was = layer >= drawnFrom.current;
           const now = layer >= from;
-          if (was !== now) for (const mesh of meshes) mesh.visible = now;
+          if (was === now) return;
+          for (const mesh of meshes) {
+            if (!now && mesh.visible) {
+              mesh.visible = false;
+              deepHidden.add(mesh);
+            } else if (now && deepHidden.delete(mesh)) {
+              mesh.visible = true;
+            }
+          }
         });
         drawnFrom.current = from;
       }
