@@ -12,7 +12,6 @@ import { assertViewerShell, expect, reachFor, test } from "./bootstrap";
 import { animationFrames, installProbe, waitForPortalReady } from "./portal-helpers";
 import { recordWalkTake } from "./pipeline-takes";
 import type { HandTraceTake } from "../../capture/scripts/lib/hand-trace-takes";
-import { signInForUpload } from "./sign-in";
 
 // Author-marked hand traces (PRD-023 v1, docs/features/authored-traces.md).
 // The author turns the headset Halo's Ink on and off while recording; each
@@ -302,7 +301,6 @@ async function mainMeaning(): Promise<null | { validateHoloimMeaning: typeof val
 
 async function upload(page: Page, name: string, glb: Buffer): Promise<{ id: string; url: string }> {
   const response = await page.request.post("/api/holograms", {
-    headers: (await signInForUpload(page, { displayName: "hand-traces-e2e" })).headers,
     multipart: {
       hologramName: `${name} ${Date.now()}`,
       submittedBy: "hand-traces-e2e",

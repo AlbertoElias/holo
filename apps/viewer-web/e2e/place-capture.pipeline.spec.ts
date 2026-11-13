@@ -12,7 +12,6 @@ import { createXrContext, waitForTextContentPrefix } from "@holoim/tooling-testi
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
-import { signInForUpload } from "./sign-in";
 import { makeFixture, type Fixture } from "./place-fixture";
 import { shotStats } from "./place-pixels";
 import { waitForUsdzReady } from "./pipeline-takes";
@@ -399,9 +398,7 @@ async function recordAndDownload(page: Page, during: () => Promise<void>, file: 
 // ---------------------------------------------------------------- viewer
 
 async function upload(page: Page, name: string, glb: Buffer, quickLook = false): Promise<{ id: string; url: string; status: number; body: string }> {
-  const { headers } = await signInForUpload(page, { displayName: "place-capture-e2e" });
   const response = await page.request.post("/api/holograms", {
-    headers,
     multipart: {
       hologramName: `${name} ${Date.now()}`,
       submittedBy: "place-capture-e2e",

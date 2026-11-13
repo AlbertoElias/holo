@@ -32,7 +32,8 @@ import {
   listHolograms,
   transitionUsdzStatus
 } from "../services/hologram-repo.js";
-import { optionalAuthUser } from "../services/auth.js";
+import { env } from "../lib/env.js";
+import { optionalAuthUser, resolveAuth } from "../services/auth.js";
 import { createFeedSnapshotWriter } from "../services/feed-snapshot.js";
 import {
   capMessage,
@@ -48,6 +49,11 @@ import type { MediaStorage } from "../services/media-storage.js";
 import { usdzFilenameFor, usdzFilenamesFor, withHologramLock } from "../services/usdz-converter.js";
 
 const SIGN_IN_TO_UPLOAD = "Sign in to upload a hologram.";
+
+/** An upload needs an account, except in the test-only open-uploads mode (TEST_OPEN_UPLOADS, never on in production). */
+async function mayUpload(headers: { authorization?: string | string[] | undefined }): Promise<boolean> {
+  return env.TEST_OPEN_UPLOADS || (await optionalAuthUser(headers)) != null;
+}
 
 const listQuerySchema = z.object({
   cursor: z.string().optional(),
@@ -139,7 +145,7 @@ export async function registerHologramRoutes(
   void refreshFeedSnapshot();
 
   app.post("/holograms/uploads/initiate", async (request, reply) => {
-    if (!(await optionalAuthUser(request.headers))) {
+    if (!(await mayUpload(request.headers))) {
       return reply.status(401).send({ error: SIGN_IN_TO_UPLOAD });
     }
     const parsed = initiateUploadRequestSchema.safeParse(request.body);
@@ -201,7 +207,7 @@ export async function registerHologramRoutes(
   });
 
   app.post("/holograms/uploads/complete", async (request, reply) => {
-    if (!(await optionalAuthUser(request.headers))) {
+    if (!(await mayUpload(request.headers))) {
       return reply.status(401).send({ error: SIGN_IN_TO_UPLOAD });
     }
     const parsed = completeUploadRequestSchema.safeParse(request.body);
@@ -284,7 +290,7 @@ export async function registerHologramRoutes(
 
   app.post("/holograms", async (request, reply) => {
     // Checked before the body is read, so an anonymous caller streams nothing to disk.
-    if (!(await optionalAuthUser(request.headers))) {
+    if (!(await mayUpload(request.headers))) {
       return reply.status(401).send({ error: SIGN_IN_TO_UPLOAD });
     }
     let tempRoot: string | undefined;
@@ -491,11 +497,15 @@ export async function registerHologramRoutes(
       }
 
       if (item.ownerId) {
-        const authUser = await optionalAuthUser(request.headers);
-        if (!authUser) {
+        const auth = await resolveAuth(request.headers);
+        if (!auth) {
           return reply.status(401).send({ error: "Sign in required to delete this hologram." });
         }
-        if (authUser.id !== item.ownerId) {
+        // A standing agent token only publishes; deleting takes a sign-in on the site.
+        if (auth.via === "apiToken") {
+          return reply.status(403).send({ error: "An agent token cannot delete holograms; sign in on the site instead." });
+        }
+        if (auth.user.id !== item.ownerId) {
           return reply.status(403).send({ error: "Only the creator can delete this hologram." });
         }
       }

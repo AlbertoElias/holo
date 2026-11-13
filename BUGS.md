@@ -68,18 +68,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
   5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
 
-### B-050 — The Poly Haven object-search case fails inside the full pipeline and passes alone
-
-- **Area:** `apps/viewer-web` e2e (`object-search.pipeline.spec.ts`), `apps/capture/scripts/lib/summon-take.mjs`
-- **Severity:** P2 (fails the `pipeline` step of `verify:pr`, which stops there)
-- **Observed:** 2026-11-12, in three full `test:smoke:pipeline` runs: twice on `feature/profiles-and-share` and once on clean `main`
-- **Evidence:** `e2e/object-search.pipeline.spec.ts:168` "found Poly Haven object: search, summon twice, credit survives the GLB, the feed card and the USDZ":
-  `TimeoutError: page.waitForFunction: Timeout 10000ms exceeded` in `trayHolds` (`summon-take.mjs:657`, called from `runDesktopFindApiTake`, `:856`),
-  the tray never reaching the expected count. Run alone it passes on both trees (1 passed in 57 s on `main` `73e9ef6f78aa`, 33 s on the branch).
-- **Expected:** it passes in the full pipeline as it does alone.
-- **Reproduction:** `pnpm run test:smoke:pipeline` from the repository root, with the five ports moved off their defaults when another run holds them.
-  Suspect: the 10 s `trayHolds` wait on a loaded machine after many specs, or state left in the shared database or the stubbed Poly Haven server.
-
 ### B-051 — Feed spatial audio's motion-wrap step flakes on hosted CI
 
 - **Area:** `apps/viewer-web` e2e (`e2e/spatial-audio.spec.ts`), `test:e2e:mocked:shard2`
@@ -89,6 +77,41 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the animated sources' clip wraps and the step passes on a 4-CPU runner as it does locally.
 - **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
   Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
+
+### B-054 — The summon XR check's `desktop-anytime` phase flakes on "mid-take row: no tray row"
+
+- **Area:** `apps/capture` (`scripts/lib/tray-anytime-take.mjs`, `test:xr:summon`)
+- **Severity:** P3 (a phase of the summon XR check; not in `verify:pr`'s pipeline stage)
+- **Observed:** 2026-11-12 on `claude/bug-b-050-object-search-24dbf3`, found while verifying B-050
+- **Evidence:** `SUMMON_ONLY=desktop-anytime` fails at `tray-anytime-take.mjs:204` (`checkRow(rowMid, { filled: 2, ... where: 'mid-take row' })`) with "no tray row": 2 of 3 runs with the B-050 fix, 1 of 4 without it, so the fix does not cause it. It ran at a load average of 30 or more.
+- **Expected:** the tray dock shows its row mid-take on every run.
+- **Reproduction:** `SUMMON_ONLY=desktop-anytime pnpm --filter @holoim/capture run test:xr:summon`, repeated on a loaded machine. Not isolated; suspect the same starved-page timing as B-050 (a wait that ends before the dock re-renders).
+
+### B-056 — Portal tilt: a motion-permission answer that arrives late still writes the tilt state
+
+- **Area:** `apps/viewer-web/src/features/portal/usePortalTriggers.ts` (`enableTilt`), `portalStore.ts` (`tiltStatus`), `PortalControls.tsx`
+- **Severity:** P3 (tilt is the `?portal=tilt` trial variant only; the default `drag` variant has no tilt)
+- **Found by:** `/find-implicit-state-machines` (2026-11-12), replayed 2026-11-12. Model: `tiltStatus` off | on | denied | unsupported, with "requesting" held only in the pending promise; rules "after reset the status is `off` until the viewer asks again" and "an answer to an ask the viewer has since cancelled is ignored".
+- **Replay, reproduced** (`portal.spec.ts`, phone, `?portal=tilt`, `DeviceOrientationEvent.requestPermission` shim that holds each call open):
+  - "an answer that arrives after the card was left does not turn tilt on": press the tilt button, scroll to the next card (the card resets), grant; scroll back and the first card reads `on` with the button pressed, though the viewer never turned tilt on for this visit.
+  - "a denial that arrives after the card was left leaves the card as new": the same order with a denial leaves `denied` (the declined tooltip) on a card that reset.
+  - "with two asks open, the newest answer is the one that counts": two presses before an answer give two asks; a grant to the newer, then a denial to the older, ends `denied`.
+- **Cause:** the ask is an `await` whose continuation writes the store unconditionally; `reset()` (card left) and the off press never cancel it.
+- **Fix:** the store keeps a tilt epoch that every viewer move bumps (an ask, the off press, `reset()`). `enableTilt` takes a `settle` function from `store.beginTiltRequest()`, which drops its answer once the epoch has moved. Nothing else changes: an answer on the card the viewer stayed on works as before (replayed in "the answer on the card the viewer stayed on still works").
+- **Did not reproduce:** unmount while an ask is pending. The store is per card and nothing renders from it afterwards, so the late write is unobservable.
+- **Not done:** emulation in headless Chromium with a shim, no iPhone. Leaving the card while iOS's modal prompt is up needs a scroll glide still running at the press (or a feed change), and a double ask needs two taps before the prompt shows; iOS very likely answers both asks alike, so the differing answers in the third replay are shim-only. The fix covers all three orders regardless.
+
+### B-055 — The ar-record check's `phone-put-back` phase flakes: "the tray dock is not shown"
+
+- **Area:** `apps/capture` (`scripts/ci-ar-record-playwright.ts`, `test:xr:ar-record`, capture XR shard 1/2)
+- **Severity:** P3 (a flaky check; the product behaves correctly)
+- **Observed:** 2026-11-12 on hosted CI run 43330664456 at `main` `03d7961d3c6a`: `ci-ar-record-playwright.ts:518` `tapDock`, called from `putBackPhase`'s Close-ring step, "Error: the tray dock is not shown".
+- **Cause:** a race in the check, not in the app and not in B-050's change. The Stop tap starts the export. While `recordingState` is `exporting`, `PhoneArChrome.update()` hides the tray dock and closes its row. On a runner where the export outlasts the Stop tap's own `drive` (`nextFrame` waits for an animation frame, or 100 ms), `advanceUntilDownload` stops stepping the manual clock the moment the download lands. The state is `idle` by then but no step has run, so `tapDock` read the stale dock (hidden, "Exporting...") and threw. Locally the export finishes inside the tap's `drive`, so the check passed on every normal-speed run (native 9 of 9, ci-emulate 8 of 8).
+- **Reproduced** by forcing the slow export: the next 100 ms timer stretched to 3 s and one animation frame ignored. The probe then read "tray dock right after the download: false, row open false, status Exporting..." and the exact hosted error followed.
+- **Fix:** `tapDock` steps the simulation until the dock is visible (a frame does not step the manual clock). `putBackPhase` now forces a slow export at the Stop tap (`slowNextExport`), so every run exercises the exporting → dock hidden → dock returns path. That exposed a second stale read: after the row reopens it is still sliding out, so the Close-ring step waits until the ring holds still before tapping.
+- **Expected:** the phase passes at any export speed.
+- **Reproduction:** before the fix, with the slow export forced, `AR_RECORD_ONLY=put-back pnpm --filter @holoim/capture run test:xr:ar-record`.
+- **Fix status:** merged; close this entry once a hosted run of `main` passes shard 1/2.
 
 ### B-057 — A long animated showcase piece fails Quick Look conversion on the extent budget
 

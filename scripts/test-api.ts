@@ -185,8 +185,10 @@ export async function launchTestApi(options: TestApiOptions = {}): Promise<TestA
         DATABASE_URL: databaseUrl(databasePath),
         PORT: String(port),
         WEB_ORIGIN: webOrigin,
-        // Uploads need a signed-in creator; tests sign in through the API (e2e/sign-in.ts).
-        AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK ?? "true"
+        // Specs that test ownership sign in through the API (e2e/sign-in.ts); the rest upload without an account.
+        AUTH_DEV_EXPOSE_MAGIC_LINK: process.env.AUTH_DEV_EXPOSE_MAGIC_LINK ?? "true",
+        // Test-only; never set in production config. Set TEST_OPEN_UPLOADS=false to prove the sign-in gate (sign-in-email.spec.ts).
+        TEST_OPEN_UPLOADS: process.env.TEST_OPEN_UPLOADS ?? "true"
       },
       stdio: "inherit"
     });

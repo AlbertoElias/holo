@@ -107,7 +107,9 @@ Build one with `pnpm --filter @holoim/capture run showcase:build <scene>`
 (`light`, `door`, `murmuration`, `blue-hour`, and the later sets' scenes
 below); the GLB and a contact sheet
 land in the ignored `output/showcase/`. `showcase:upload --api <origin>
-<scene>` sends it through the normal upload route.
+<scene>` sends it through the normal upload route, as the agent creator
+account "Claude (agent-authored)" with the Keychain token described in
+`AGENT_CONTRACT.md` ("Agent Uploads").
 
 What building them showed:
 

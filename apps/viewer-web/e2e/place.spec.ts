@@ -7,7 +7,6 @@ import type * as Three from "three";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { assertViewerShell, expect, expectConsoleErrors, test } from "./bootstrap";
-import { signInForUpload } from "./sign-in";
 import { measureFloor } from "./floor-proof";
 import { diagonalFactor, extentLeavesDome, SPLAT_EXTENT_SIGMA } from "@holoim/place";
 import { writeFixture } from "./place-fixture";
@@ -80,8 +79,9 @@ function expectSameDome(actual: Dome, expected: Dome, message: string, shift: [n
   expect([close(actual.base.x - shift[0], expected.base.x), close(actual.base.y - shift[1], expected.base.y), close(actual.base.z - shift[2], expected.base.z), close(actual.radii.x, expected.radii.x), close(actual.radii.y, expected.radii.y), close(actual.radii.z, expected.radii.z), actual.exponent === expected.exponent], message).toEqual(Array(7).fill(true));
 }
 
-function fakeItem(key: string) {
+function fakeItem(key: string, ownedByViewer = false) {
   return {
+    ownedByViewer,
     id: `place-${key}`,
     url: `/uploads/place-${key}.glb`,
     usdzUrl: null,
@@ -429,6 +429,107 @@ test.describe("a scanned place around a take", () => {
     expect(await shotDifference(page, before[first.id]!, onSecond[first.id]!), "and the first card is today's").toBeLessThanOrEqual(noise + 0.0005);
   });
 
+  // The place gate is one decision per card: whether the fit waits for a scan is settled when the card mounts,
+  // and once the dome is fitted the card is what it is (B-053). Both checks replay a path the page can take.
+  test("a scan that is still loading when the fit gives up is not shown late", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const item = fakeItem("g");
+    await installProbes(page);
+    await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items: [item], nextCursor: null } }));
+    await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
+    await page.goto("/");
+    await waitForPortalReady(page, item.id, item.url);
+    await seek(page, 0, false);
+    const first = await cardShot(page, item.id, "late-scan-baseline.png");
+    const baseline = await readCard(page);
+    await page.reload();
+    await waitForPortalReady(page, item.id, item.url);
+    await seek(page, 0, false);
+    const noise = await shotDifference(page, first, await cardShot(page, item.id, "late-scan-baseline-again.png"));
+
+    const radius = Math.max(baseline.dome.radii.x, baseline.dome.radii.z) * 1.06 + 0.1;
+    const fixture = await writeFixture(testInfo.outputPath("fixture"), "late-scan.ply", { half: radius + 1.5, ring: { x: 0, z: 0, radius } });
+    // The scan is held past the fit's wait (1.5 s), then served whole.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === SCAN_PATH, async (route) => {
+      await held;
+      await route.fulfill({ path: fixture.file, contentType: "application/octet-stream" });
+    });
+    const warnings: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "warning" && /Place /.test(message.text())) warnings.push(message.text());
+    });
+    await page.goto(`/?place=${SCAN_PATH}&placeWait=1500`);
+    await waitForPortalReady(page, item.id, item.url);
+    await expect.poll(() => warnings.length, { timeout: 30_000 }).toBe(1);
+    release();
+    await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.splatsLoaded, undefined, { timeout: 60_000 });
+    await animationFrames(page, 30);
+    await seek(page, 0, false);
+    const late = await cardShot(page, item.id, "late-scan-after.png");
+
+    expect((await readPlace(page)).status, "the report says the scan came late").toBe("timeout");
+    expect(await shotDifference(page, first, late), "the card is today's card").toBeLessThanOrEqual(noise + 0.0005);
+    expectSameDome(await readCard(page).then((card) => card.dome), baseline.dome, "and today's dome");
+    expect(warnings, "one warning, the timeout's").toHaveLength(1);
+  });
+
+  test("a card that becomes first once its dome is fitted does not take the place", async ({ page }, testInfo) => {
+    test.setTimeout(240_000);
+    const first = fakeItem("h", true);
+    const second = fakeItem("i", true);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await installProbes(page);
+    let items = [first, second];
+    await page.route("**/api/holograms?*", (route) => route.fulfill({ json: { items, nextCursor: null } }));
+    await page.route("**/uploads/**", (route) => route.fulfill({ path: avatarGlb, contentType: "model/gltf-binary" }));
+    await page.route(`**/api/holograms/${first.id}`, (route) => {
+      if (route.request().method() !== "DELETE") return route.fallback();
+      items = [second];
+      return route.fulfill({ status: 204, body: "" });
+    });
+    page.on("dialog", (dialog) => void dialog.accept());
+
+    await page.goto("/");
+    await assertViewerShell(page);
+    await page.locator(`.feed-card[data-card-id="${second.id}"]`).scrollIntoViewIfNeeded();
+    await waitForPortalReady(page, second.id, second.url);
+    await seek(page, 0, false, second.url);
+    const before = await cardShot(page, second.id, "becomes-first-before.png");
+    const dome = await page.evaluate((url) => {
+      const probe = (window as unknown as { __portalProbes: Record<string, { cloche: { shape: { current: { radii: { x: number; z: number } } } } }> }).__portalProbes[url]!;
+      return probe.cloche.shape.current.radii;
+    }, second.url);
+    await page.reload();
+    await page.locator(`.feed-card[data-card-id="${second.id}"]`).scrollIntoViewIfNeeded();
+    await waitForPortalReady(page, second.id, second.url);
+    await seek(page, 0, false, second.url);
+    const noise = await shotDifference(page, before, await cardShot(page, second.id, "becomes-first-before-again.png"));
+
+    const radius = Math.max(dome.x, dome.z) * 1.06 + 0.1;
+    const fixture = await writeFixture(testInfo.outputPath("fixture"), "becomes-first.ply", { half: radius + 1.5, ring: { x: 0, z: 0, radius } });
+    await serveScan(page, fixture.file);
+    items = [first, second];
+    await page.goto(`/?place=${SCAN_PATH}${WAIT}`);
+    await page.waitForFunction(() => (window as PlaceWindow).__HOLOIM_PLACE__?.status === "ready", undefined, { timeout: 60_000 });
+    await page.locator(`.feed-card[data-card-id="${second.id}"]`).scrollIntoViewIfNeeded();
+    await waitForPortalReady(page, second.id, second.url);
+
+    // The first card is deleted: the second is now the first card in the list.
+    await page.locator(`.feed-card[data-card-id="${first.id}"]`).scrollIntoViewIfNeeded();
+    await page.locator(`.feed-card[data-card-id="${first.id}"]`).getByRole("button", { name: "Delete" }).evaluate((button) => (button as HTMLElement).click());
+    await expect(page.locator(`.feed-card[data-card-id="${first.id}"]`)).toHaveCount(0);
+    await animationFrames(page, 10);
+    // A place that did start now would read 'ready' within a second or two (the scan is cached).
+    await page.waitForTimeout(4000);
+    await seek(page, 0, false, second.url);
+    const after = await cardShot(page, second.id, "becomes-first-after.png");
+
+    expect((await readPlace(page)).status, "no place is loaded for the second card").toBeUndefined();
+    expect(await shotDifference(page, before, after), "the second card is today's card").toBeLessThanOrEqual(noise + 0.0005);
+  });
+
   test("a large splat just inside the dome, whose extent would reach past the glass, is not drawn", async ({ page }, testInfo) => {
     test.setTimeout(180_000);
     const item = fakeItem("g");
@@ -471,9 +572,7 @@ test.describe("a scanned place around a take", () => {
     test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs the capture dev server and a live API.");
     test.setTimeout(420_000);
     const take = await recordWalkTake(browser, testInfo);
-    const { headers } = await signInForUpload(page, { displayName: "place-e2e" });
     const response = await page.request.post("/api/holograms", {
-      headers,
       multipart: {
         hologramName: `Place ${testInfo.testId.slice(0, 6)}-${Date.now()}`,
         submittedBy: "place-e2e",

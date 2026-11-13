@@ -190,10 +190,60 @@ export function bearerToken(headers: { authorization?: string | string[] | undef
   return token.length > 0 ? token : null;
 }
 
-/** Signed-in user for a request, or null for anonymous/invalid sessions. */
+/**
+ * Standing agent credentials start with this, so a session token never
+ * queries the token table and an unknown agent token never matches a session.
+ */
+export const API_TOKEN_PREFIX = "holoim_at_";
+
+/** `lastUsedAt` is written at most this often, so uploads do not add a SQLite write each. */
+const API_TOKEN_TOUCH_MS = 60 * 60_000;
+
+/** Account behind a standing agent token (see `src/agent-token.ts`), or null when unknown, revoked or expired. */
+export async function getApiTokenUser(token: string): Promise<AuthUser | null> {
+  const row = await prisma.apiToken.findUnique({
+    where: { tokenHash: hashToken(token) },
+    include: { user: true }
+  });
+  if (!row || (row.expiresAt && row.expiresAt.getTime() < Date.now())) {
+    return null;
+  }
+  const staleBefore = new Date(Date.now() - API_TOKEN_TOUCH_MS);
+  if (!row.lastUsedAt || row.lastUsedAt < staleBefore) {
+    await prisma.apiToken.updateMany({
+      where: { id: row.id, OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: staleBefore } }] },
+      data: { lastUsedAt: new Date() }
+    });
+  }
+  return row.user;
+}
+
+/** Who a request is, and with which credential: a sign-in session or a standing agent token. */
+export type Authenticated = { user: AuthUser; via: "session" | "apiToken" };
+
+/** The request's account, or null for anonymous requests and invalid, expired or revoked credentials. */
+export async function resolveAuth(headers: {
+  authorization?: string | string[] | undefined;
+}): Promise<Authenticated | null> {
+  const token = bearerToken(headers);
+  if (!token) {
+    return null;
+  }
+  if (token.startsWith(API_TOKEN_PREFIX)) {
+    const user = await getApiTokenUser(token);
+    return user ? { user, via: "apiToken" } : null;
+  }
+  const user = await getSessionUser(token);
+  return user ? { user, via: "session" } : null;
+}
+
+/**
+ * Signed-in user for a request, or null for anonymous/invalid credentials.
+ * Accepts an agent token too; a route an agent token must not reach checks
+ * `resolveAuth(...).via` instead.
+ */
 export async function optionalAuthUser(headers: {
   authorization?: string | string[] | undefined;
 }): Promise<AuthUser | null> {
-  const token = bearerToken(headers);
-  return token ? getSessionUser(token) : null;
+  return (await resolveAuth(headers))?.user ?? null;
 }

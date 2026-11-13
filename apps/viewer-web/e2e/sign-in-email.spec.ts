@@ -9,9 +9,10 @@ import { expect, expectConsoleErrors, test } from "./bootstrap";
 // Creator sign-in by email, against the real API and viewer, with a local
 // stand-in for Cloudflare Email Service. It needs the API started with the
 // mailer pointed at that stand-in and dev link exposure off, so it only runs
-// when E2E_FAKE_MAIL_PORT is set:
+// when E2E_FAKE_MAIL_PORT is set. TEST_OPEN_UPLOADS=false keeps the e2e API's
+// open-uploads test mode off, so the anonymous upload below gets its 401:
 //
-//   E2E_FAKE_MAIL_PORT=3391 AUTH_DEV_EXPOSE_MAGIC_LINK=false \
+//   E2E_FAKE_MAIL_PORT=3391 AUTH_DEV_EXPOSE_MAGIC_LINK=false TEST_OPEN_UPLOADS=false \
 //   CLOUDFLARE_EMAIL_API_ORIGIN=http://127.0.0.1:3391 CLOUDFLARE_EMAIL_ACCOUNT_ID=acct \
 //   CLOUDFLARE_EMAIL_API_TOKEN=test-token AUTH_EMAIL_FROM=signin@example.test \
 //   pnpm --filter @holoim/web exec playwright test sign-in-email

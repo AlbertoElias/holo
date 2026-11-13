@@ -49,6 +49,17 @@ export async function createAuthTables(prisma: PrismaClient): Promise<void> {
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
   await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX "Session_tokenHash_key" ON "Session"("tokenHash")`);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "ApiToken" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "tokenHash" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "label" TEXT NOT NULL,
+      "expiresAt" DATETIME,
+      "lastUsedAt" DATETIME,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX "ApiToken_tokenHash_key" ON "ApiToken"("tokenHash")`);
 }
 
 /** Requests a magic link and returns the dev-exposed token (needs exposeMagicLinksForTests). */

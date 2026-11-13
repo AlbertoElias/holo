@@ -77,6 +77,9 @@ export function createPortalStore() {
     hitTest: null
   };
   const listeners = new Set<() => void>();
+  // Counts the viewer's own tilt moves (asking, turning it off, leaving the
+  // card), so a motion-permission answer that arrives after one is stale.
+  let tiltEpoch = 0;
 
   const set = (next: Partial<PortalState>) => {
     state = { ...state, ...next };
@@ -124,7 +127,20 @@ export function createPortalStore() {
       set({ ...freeFromFollow(), zoom: MathUtils.clamp(base.zoom - Math.log(scale) / span, 0, 1) });
     },
     setTiltStatus: (tiltStatus: TiltStatus) => {
+      tiltEpoch += 1;
       set(tiltStatus === "on" ? { tiltStatus } : { tiltStatus, tiltYaw: 0, tiltPitch: 0 });
+    },
+    /**
+     * Starts a motion-permission ask. The returned function records its answer
+     * only while nothing newer has happened: a later ask, turning tilt off,
+     * or the card being reset all make the answer stale and it is dropped.
+     */
+    beginTiltRequest: () => {
+      const epoch = (tiltEpoch += 1);
+      return (tiltStatus: TiltStatus) => {
+        if (epoch !== tiltEpoch) return;
+        set(tiltStatus === "on" ? { tiltStatus } : { tiltStatus, tiltYaw: 0, tiltPitch: 0 });
+      };
     },
     setTilt: (tiltYaw: number, tiltPitch: number) => {
       set({ ...freeFromFollow(), tiltYaw, tiltPitch });
@@ -136,6 +152,7 @@ export function createPortalStore() {
     },
     /** Back to playing in Follow, as a card is when it first scrolls into view. */
     reset: () => {
+      tiltEpoch += 1;
       runtime.returnBlend = 0;
       state = { ...INITIAL_STATE, hasHighlights: state.hasHighlights };
       listeners.forEach((listener) => listener());

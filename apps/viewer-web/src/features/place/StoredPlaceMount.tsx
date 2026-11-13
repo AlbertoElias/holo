@@ -131,7 +131,9 @@ export default function StoredPlaceMount({ place, readBytes, detailUrl = null, d
       feetY: Number.NaN, outside: 0, shown: 0, dome: null, sorted: false, decodeMs: 0, detail: null
     };
     report.current = state;
-    if (testHooks) window.__HOLOIM_STORED_PLACE__ = state;
+    // A neighbour card mounting later must not take the hook from the focused
+    // card's report once that one carries a detail: the budgets e2e reads it.
+    if (testHooks && !window.__HOLOIM_STORED_PLACE__?.detail) window.__HOLOIM_STORED_PLACE__ = state;
     const fail = (error: unknown) => {
       if (!live) return;
       state.status = "failed";

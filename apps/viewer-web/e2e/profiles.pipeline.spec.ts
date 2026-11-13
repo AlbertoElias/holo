@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
+import { expect, expectConsoleErrors, pressReach, reachFor, test } from "./bootstrap";
 import { signInForUpload } from "./sign-in";
 
 // Creator pages, a page per hologram, and search (docs/features/profiles-and-share.md), through the real API
@@ -48,26 +48,13 @@ const reachOpacity = (control: Locator): Promise<number> =>
   control.evaluate((element) => Number(getComputedStyle(element.closest(".portal-controls-reach") ?? element).opacity));
 
 /**
- * Presses a reach control as a person does: the cursor travels to it over the card (which keeps the row open),
- * and the press lands once the row has stopped unfolding. A fast scripted click would aim at a button still on
- * the move.
+ * Presses a reach control the way `pressReach` does: the cursor moves over the card, and Playwright's click waits
+ * for the control to stop unfolding and to be what a press would hit. The row folds 4 s after the last movement and,
+ * folded, takes no press (B-052, B-043), so a hand-timed press (two equal box readings) could land on the card
+ * while a stalled page had not yet started the unfold.
  */
-async function pressReached(page: Page, card: Locator, name: string): Promise<void> {
-  const control = card.getByRole("button", { name });
-  let last = "";
-  await expect
-    .poll(async () => {
-      const box = await control.boundingBox();
-      const now = JSON.stringify(box);
-      const still = box !== null && now === last;
-      last = now;
-      return still;
-    }, { intervals: [150] })
-    .toBe(true);
-  const box = (await control.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 6 });
-  await page.mouse.down();
-  await page.mouse.up();
+async function pressReached(card: Locator, name: string): Promise<void> {
+  await pressReach(card, card.getByRole("button", { name }));
 }
 
 const cards = (page: Page): Locator => page.locator(".feed-card");
@@ -186,7 +173,7 @@ test.describe("creator pages, hologram pages and search", () => {
     await expect(card.getByRole("button", { name: "Delete" })).toHaveCount(0);
     await page.waitForTimeout(800); // the reach row unfolds over a moment; the frame shows it open
     await shot(page, "06-card-reached");
-    await pressReached(page, card, "Copy link");
+    await pressReached(card, "Copy link");
     await expect(page.getByRole("status")).toContainText("Link copied");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(new URL(`/h/${ada[0]!.id}`, page.url()).toString());
   });
@@ -203,7 +190,7 @@ test.describe("creator pages, hologram pages and search", () => {
 
     // Dismissing the confirmation keeps the hologram.
     page.once("dialog", (dialog) => void dialog.dismiss());
-    await pressReached(page, card, "Delete");
+    await pressReached(card, "Delete");
     await expect(cards(page)).toHaveCount(1);
     expect((await page.request.get(`/api/holograms/${ada[1]!.id}`)).status()).toBe(200);
 
@@ -211,7 +198,7 @@ test.describe("creator pages, hologram pages and search", () => {
       expect(dialog.message()).toContain(`${token} arch`);
       void dialog.accept();
     });
-    await pressReached(page, card, "Delete");
+    await pressReached(card, "Delete");
     await expect(page).toHaveURL(/\/$/);
     expect((await page.request.get(`/api/holograms/${ada[1]!.id}`)).status()).toBe(404);
 
