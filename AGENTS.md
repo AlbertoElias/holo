@@ -186,7 +186,9 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
   `pnpm install` in that directory. If typecheck reports clashing
   `@types/three` copies in a reused worktree, its `node_modules` is stale:
   `rm -rf node_modules apps/*/node_modules packages/*/node_modules && pnpm install`
-  (seconds, from the shared store). One feature or agent per worktree. Branch
+  (seconds, from the shared store). `pnpm install` (`prepare`), `pnpm run hooks:install` and the
+  Claude Code SessionStart hook also create the git-ignored `apps/viewer-api/.env` from its
+  `.env.example`, so a fresh worktree passes `doctor`. One feature or agent per worktree. Branch
   by change type, never by agent: `feature/`, `bug/`, `docs/`, `infra/`
   (e.g. `feature/ar-recenter`, `infra/metavr-setup`). Never edit files another
   agent has modified in a shared tree.

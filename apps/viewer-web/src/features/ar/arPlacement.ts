@@ -213,12 +213,3 @@ export function evaluatePlacementVisibility(
 
   return { visible: true, reason: "visible" };
 }
-
-export function isPlacementLikelyVisible(
-  camPos: Vector3,
-  camForward: Vector3,
-  targetPos: Vector3,
-  options?: PlacementVisibilityOptions
-): boolean {
-  return evaluatePlacementVisibility(camPos, camForward, targetPos, options).visible;
-}

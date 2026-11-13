@@ -20,15 +20,22 @@ type UploadPanelProps = {
   onStatus?: (status: UploadStatus | null) => void;
   /** Uploads are credited to the signed-in account; the sheet shows sign-in until there is one. */
   currentUser: UserDTO;
+  /**
+   * An upload is in flight that this panel did not start: the sheet closed over it and opened again onto a new
+   * panel, which has no memory of it. The feed owns the status, so it says so. (B-057)
+   */
+  uploadInFlight?: boolean;
 };
 
 const UPLOAD_DRAWING = glyphDrawing("upload");
 const DROP_APPEARANCE = glyphAppearance({}, { headset: false });
 
-export function UploadPanel({ onUploaded, onStatus, currentUser }: UploadPanelProps) {
+export function UploadPanel({ onUploaded, onStatus, currentUser, uploadInFlight = false }: UploadPanelProps) {
   const formId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [ownUpload, setOwnUpload] = useState(false);
+  // One upload at a time, whichever panel started it.
+  const isUploading = ownUpload || uploadInFlight;
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [hologramName, setHologramName] = useState("");
   const [quickLookEnabled, setQuickLookEnabled] = useState(false);
@@ -51,7 +58,7 @@ export function UploadPanel({ onUploaded, onStatus, currentUser }: UploadPanelPr
       return;
     }
 
-    setIsUploading(true);
+    setOwnUpload(true);
     onStatus?.({ kind: "uploading", name: trimmedName });
     try {
       const uploaded = await uploadHologram({
@@ -71,7 +78,7 @@ export function UploadPanel({ onUploaded, onStatus, currentUser }: UploadPanelPr
     } catch (caught) {
       onStatus?.({ kind: "error", message: caught instanceof Error ? caught.message : "Upload failed." });
     } finally {
-      setIsUploading(false);
+      setOwnUpload(false);
     }
   }
 

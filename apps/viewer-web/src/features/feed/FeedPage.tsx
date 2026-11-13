@@ -372,7 +372,7 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
       </SideSheet>
       <SideSheet open={uploadOpen} title="Upload a hologram" onClose={() => setUploadOpen(false)} target={target}>
         {user ? (
-          <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} currentUser={user} />
+          <UploadPanel onUploaded={onUploaded} onStatus={setUploadStatus} currentUser={user} uploadInFlight={uploadStatus?.kind === "uploading"} />
         ) : isUserLoading ? null : (
           <SignInForm intro="Sign in to upload. Your holograms are credited to your name, and only you can delete them." />
         )}

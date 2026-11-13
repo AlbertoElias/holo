@@ -143,9 +143,10 @@ describe("hit areas (styleguide 6.1)", () => {
 
 describe("placement and handedness (styleguide 1.2; Q8, Q11)", () => {
   it("head-locks nothing but the periphery status line", () => {
+    const headsets: ViewTarget[] = [VIEW_TARGETS.vr, VIEW_TARGETS.questPassthrough];
     for (const target of ALL_TARGETS) {
       for (const control of ALL_CONTROLS) {
-        expect(placeControl(control, target, "right").followsHead).toBe(target.kind !== "flat" && control === "status" && placeControl(control, target, "right").slot === "periphery");
+        expect(placeControl(control, target, "right").followsHead).toBe(control === "status" && headsets.includes(target));
       }
     }
   });

@@ -31,8 +31,9 @@ if (typeof navigator !== 'undefined' && navigator.xr && !/WebXRViewer\//i.test(n
  */
 export function mountXrEntry(world: World): XrEntry {
   let sessionMode: XrSessionMode = 'none';
-  // The mode a button asked for. World's own offer flow also starts sessions
-  // (always VR), so a request only counts while World reports it pending.
+  // The mode a button asked for. It is cleared only by a session start, so a
+  // refused request leaves it behind, and World's own offer flow also starts
+  // sessions (always VR). It is never trusted over the session's blend mode.
   let requestedMode: Exclude<XrSessionMode, 'none'> | null = null;
   const supported = { vr: 'unknown' as XrEntryOffer, ar: 'unknown' as XrEntryOffer };
   const listeners = new Set<() => void>();

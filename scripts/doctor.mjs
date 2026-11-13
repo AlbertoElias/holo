@@ -204,7 +204,7 @@ async function main() {
   checkPathExists(reporter, rootDir, "apps/capture/package.json");
   checkPathExists(reporter, rootDir, "apps/viewer-api/package.json");
   checkPathExists(reporter, rootDir, "apps/viewer-web/package.json");
-  checkPathExists(reporter, rootDir, "apps/viewer-api/.env", "apps/viewer-api/.env (copy from .env.example)");
+  checkPathExists(reporter, rootDir, "apps/viewer-api/.env", "apps/viewer-api/.env (run `pnpm run hooks:install` to create it from .env.example)");
 
   checkPackageManagerAlignment();
   checkAgentConfigParity();
