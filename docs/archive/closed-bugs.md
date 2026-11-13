@@ -1339,3 +1339,29 @@ bug above.)
 - **Fix:** a side whose controller was reporting and goes silent is written as rest (a side that never reported keeps what the scripted hook wrote, which the hand-traces travel take relies on), and `releaseSticks()` runs when VR ends. Check `loco-states` (in `test:xr`) failed on all three phases before the fix and passes after.
 - **Read but not replayed (no defect found in the code):** the Halo's `stickLocked` is released when no axes are read or the stick rests, and `resetTurn` re-arms the snap turn on every VR entry.
 - **Closed:** 2026-11-13, hosted run 43508562457 (`ff1d30dd868b`) green: both capture XR shards (`loco-states` included) and all pipeline shards passed, and the capture deploy ran.
+
+### B-044 — On the user's table scan, the author's feet end 3 cm off the scan's floor
+
+- **Area:** `apps/viewer-web` e2e and `packages/place` (split capture slice 2a)
+- **Severity:** P3 (the case runs only where the user's own scan is on disk, an ignored file; the
+  committed fixtures pass)
+- **Observed:** 2026-11-11 on the merged slice 1 + 2a tree
+- **Evidence:** `e2e/place-capture.pipeline.spec.ts:1042` "the downloaded scan table.spz", "the author's feet on the
+  scan's floor": 0.029969515228847526 m against the 0.02 m limit, the same value in 2 of 3 runs (the third passed).
+  The scan is a table rather than a room, 472,273 splats, from Scaniverse.
+- **Expected:** the author stands on the scan's floor within 0.02 m, as on the committed fixtures.
+- **Reproduction:** put the scan at `apps/viewer-web/public/local-places/table.spz` (and in the cached e2e build's
+  `local-places/`), then in `apps/viewer-web` run
+  `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/place-capture.pipeline.spec.ts`.
+  Suspect: the floor band of a scan whose floor is sparse around a table, or the end pose landing mid-step.
+- **Closed:** 2026-11-13, not reproducible. The user's scan (`table.spz`) is not on any machine the agents can reach (searched the repo, `~/Downloads` and `~/Desktop`), so the 3 cm miss cannot be investigated. The committed fixtures pass the 0.02 m floor check. Reopen with the scan if it turns up.
+
+### B-054 — The summon XR check's `desktop-anytime` phase flakes on "mid-take row: no tray row"
+
+- **Area:** `apps/capture` (`scripts/lib/tray-anytime-take.mjs`, `test:xr:summon`)
+- **Severity:** P3 (a phase of the summon XR check; not in `verify:pr`'s pipeline stage)
+- **Observed:** 2026-11-12 on `claude/bug-b-050-object-search-24dbf3`, found while verifying B-050
+- **Evidence:** `SUMMON_ONLY=desktop-anytime` fails at `tray-anytime-take.mjs:204` (`checkRow(rowMid, { filled: 2, ... where: 'mid-take row' })`) with "no tray row": 2 of 3 runs with the B-050 fix, 1 of 4 without it, so the fix does not cause it. It ran at a load average of 30 or more.
+- **Expected:** the tray dock shows its row mid-take on every run.
+- **Reproduction:** `SUMMON_ONLY=desktop-anytime pnpm --filter @holoim/capture run test:xr:summon`, repeated on a loaded machine. Not isolated; suspect the same starved-page timing as B-050 (a wait that ends before the dock re-renders).
+- **Closed:** 2026-11-13, not reproducible. 10 of 10 runs of `SUMMON_ONLY=desktop-anytime` passed under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh` (4 CPUs, 16 GB, two busy loops), 12.6 to 18.3 s each. The original failures came at a host load average of 30 or more from parallel sessions, beyond what the emulation reproduces. Reopen if hosted CI or a loaded run shows `mid-take row: no tray row` again; the suspect is the single `readRow` after a fixed `advance(0.4)` at `tray-anytime-take.mjs:203`.
