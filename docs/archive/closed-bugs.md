@@ -1179,3 +1179,23 @@ bug above.)
 - **Not done:** emulation in headless Chromium with a shim, no iPhone. Leaving the card while iOS's modal prompt is up needs a scroll glide still running at the press (or a feed change), and a double ask needs two taps before the prompt shows; iOS very likely answers both asks alike, so the differing answers in the third replay are shim-only. The fix covers all three orders regardless.
 - **Landed:** on `main` as `a24aa75541ac` (2026-11-12). Local `verify:pr` passed doctor, ci-areas, lint+typecheck, unit, build, e2e-shards and knowledge; the pipeline, portal and xr-viewer stages were run apart with ports moved (stale servers from another worktree held 3174, 5175, 3198, 3199). Their failures under a load average near 30 (hand-traces, pointing, bubble-capture, place-capture, spatial-audio, and one `ERR_NETWORK_CHANGED` CDN fetch in the portal spec) all passed when rerun alone. My own check pressed the tilt button with a bare click and tripped B-043's controls-fold race under that load; it now uses `pressReach`.
 - **Closed:** 2026-11-12. Hosted CI on `main` at `d0ad79a8f3dd` passed the gate and all three deploys. The runs for `a24aa75541ac` and two later commits were cancelled by newer pushes, so that run is the first complete one.
+
+### B-051 — Feed spatial audio's motion-wrap step flakes on hosted CI
+
+- **Area:** `apps/viewer-web` e2e (`e2e/spatial-audio.spec.ts`), `test:e2e:mocked:shard2`
+- **Severity:** P2 (fails the CI Gate, which skips every deploy)
+- **Observed:** 2026-11-12 on hosted CI twice: run 43158849962 (`d0182e3c`, "after the motion wraps, every source is where the motion is") and run 43268222950 (`6b531875`, "the motion wraps", the poll at `spatial-audio.spec.ts:364` never seeing the clip time drop within `SPATIAL_CLIP_S + 4` s)
+- **Evidence:** local runs pass (3/3 with `--repeat-each=3` on 2026-11-12); not yet run under `scripts/ci-emulate.sh`.
+- **Expected:** the animated sources' clip wraps and the step passes on a 4-CPU runner as it does locally.
+- **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
+  Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
+- **Cause (2026-11-12):** two wall-clock judgements of the page's own clock. The wrap poll read the clip time once per
+  `voicesInStep` (5 frames); on a starved runner that period nears the 8 s clip and aliases, so no sample landed after the
+  wrap within its real-time deadline, and the `waitForTimeout(600)` after it landed at an arbitrary clip time. The sync
+  checks allowed a fixed 0.15 s between the motion's time and the audio clock, which are read a frame apart, and a starved
+  frame is longer: under `CI_EMULATE_LOAD=2` the "resumed" check failed at 0.35 s (1 of 5 runs, the old spec).
+- **Fix:** `waitForWrap` watches the clip time every animation frame until it drops and runs on to 0.5 s; the sync
+  tolerance is the larger of 0.15 s and 1.5 frames measured where the voices are read. A real desync is off by seconds.
+- **Evidence:** `scripts/ci-emulate.sh` on `spatial-audio.spec.ts --repeat-each=5`: 5/5 with no load, 5/5 with
+  `CI_EMULATE_LOAD=2` (frames 107–130 ms; before the fix, 4/5 under the same load). Closes after a green hosted run on `main`.
+- **Closed:** 2026-11-13. Hosted CI on `main` run 43347464007 (`d0ad79a8f3dd`, with the fix from `86151906f638`) passed the gate and all three deploys.

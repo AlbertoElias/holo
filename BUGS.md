@@ -68,25 +68,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
   5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
 
-### B-051 — Feed spatial audio's motion-wrap step flakes on hosted CI
-
-- **Area:** `apps/viewer-web` e2e (`e2e/spatial-audio.spec.ts`), `test:e2e:mocked:shard2`
-- **Severity:** P2 (fails the CI Gate, which skips every deploy)
-- **Observed:** 2026-11-12 on hosted CI twice: run 43158849962 (`d0182e3c`, "after the motion wraps, every source is where the motion is") and run 43268222950 (`6b531875`, "the motion wraps", the poll at `spatial-audio.spec.ts:364` never seeing the clip time drop within `SPATIAL_CLIP_S + 4` s)
-- **Evidence:** local runs pass (3/3 with `--repeat-each=3` on 2026-11-12); not yet run under `scripts/ci-emulate.sh`.
-- **Expected:** the animated sources' clip wraps and the step passes on a 4-CPU runner as it does locally.
-- **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
-  Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
-- **Cause (2026-11-12):** two wall-clock judgements of the page's own clock. The wrap poll read the clip time once per
-  `voicesInStep` (5 frames); on a starved runner that period nears the 8 s clip and aliases, so no sample landed after the
-  wrap within its real-time deadline, and the `waitForTimeout(600)` after it landed at an arbitrary clip time. The sync
-  checks allowed a fixed 0.15 s between the motion's time and the audio clock, which are read a frame apart, and a starved
-  frame is longer: under `CI_EMULATE_LOAD=2` the "resumed" check failed at 0.35 s (1 of 5 runs, the old spec).
-- **Fix:** `waitForWrap` watches the clip time every animation frame until it drops and runs on to 0.5 s; the sync
-  tolerance is the larger of 0.15 s and 1.5 frames measured where the voices are read. A real desync is off by seconds.
-- **Evidence:** `scripts/ci-emulate.sh` on `spatial-audio.spec.ts --repeat-each=5`: 5/5 with no load, 5/5 with
-  `CI_EMULATE_LOAD=2` (frames 107–130 ms; before the fix, 4/5 under the same load). Closes after a green hosted run on `main`.
-
 ### B-054 — The summon XR check's `desktop-anytime` phase flakes on "mid-take row: no tray row"
 
 - **Area:** `apps/capture` (`scripts/lib/tray-anytime-take.mjs`, `test:xr:summon`)
