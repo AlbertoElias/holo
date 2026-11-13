@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { applyMigrations } from "./fixtures/db.js";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -68,25 +69,7 @@ describe("upload-intent cleanup", () => {
     vi.resetModules();
     const prismaModule = await import("../src/lib/prisma.js");
     prisma = prismaModule.prisma;
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE "UploadIntent" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "storageKey" TEXT NOT NULL,
-        "quickLookEnabled" BOOLEAN NOT NULL DEFAULT false,
-        "filenameOriginal" TEXT NOT NULL,
-        "hologramName" TEXT NOT NULL,
-        "submittedBy" TEXT NOT NULL,
-        "mimeType" TEXT NOT NULL,
-        "sizeBytes" INTEGER NOT NULL,
-        "expiresAt" DATETIME NOT NULL,
-        "completedHologramId" TEXT,
-        "ownerId" TEXT,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await prisma.$executeRawUnsafe(
-      `CREATE UNIQUE INDEX "UploadIntent_storageKey_key" ON "UploadIntent"("storageKey")`
-    );
+    await applyMigrations(prisma);
     ({ cleanupExpiredUploadIntents } = (await import("../src/services/upload-intent-cleanup.js")) as never);
     ({ LocalMediaStorage } = (await import("../src/services/media-storage.js")) as never);
     storage = new LocalMediaStorage(uploadsRoot);

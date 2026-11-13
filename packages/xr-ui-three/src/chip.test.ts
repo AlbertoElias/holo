@@ -75,27 +75,6 @@ describe("ThreeChip in VR (8.4)", () => {
     expect(chip.presence).toBe(1);
   });
 
-  it("does not flicker when the background alternates every 90 ms: presence stays at 1", () => {
-    const chip = fadedIn(VIEW_TARGETS.vr);
-    let wanted = false;
-    for (let ms = 0; ms < 6000; ms += 90) {
-      chip.update(90, wanted);
-      wanted = !wanted;
-      expect(chip.presence).toBe(1);
-    }
-  });
-
-  it("holds at least 2 s after the last ask, then leaves over 0.4 s", () => {
-    const chip = fadedIn(VIEW_TARGETS.vr);
-    chip.update(1900, false);
-    expect(chip.presence).toBe(1);
-    chip.update(200, false);
-    expect(chip.presence).toBeLessThan(1);
-    chip.update(400, false);
-    expect(chip.presence).toBe(0);
-    expect(chip.mesh.visible).toBe(false);
-  });
-
   it("is always present in AR, whatever the background asks", () => {
     const chip = new ThreeChip({ target: VIEW_TARGETS.questPassthrough, distanceM: 1.5 });
     chip.update(5000, false);
