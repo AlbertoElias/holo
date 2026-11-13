@@ -224,7 +224,10 @@ and auth service: `apps/viewer-api/src/routes/auth.ts`,
 `features/auth/`, a share sheet on the hologram page. Capture: the post step
 in `recording/RecordingSession.ts` and its UI; selfie mode in
 `runtime/`, `camera/` and `ui/`. Not owned here: avatar driving (see the
-slice 2 boundary). Shared contract (the grant response) in
+slice 2 boundary). Agreed with the motion owner (2026-11-13): this brief adds
+only an `onTakeExported(blob, name)` hook to `recording/RecordingSession.ts`;
+the motion owner does not edit that file, and messages this session when
+its camera driver lands on `main` behind `?input=camera`. Shared contract (the grant response) in
 `packages/` with the other API contracts.
 
 ## Design decision
