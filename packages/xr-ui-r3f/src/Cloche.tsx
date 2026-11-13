@@ -21,6 +21,13 @@ export interface ClocheProps {
    * stays put.
    */
   shift?: Vector3Like;
+  /**
+   * The hologram's own zoom, read every frame (updated in place): its
+   * outermost layer grown `scale` times about `centre`, in the space the
+   * shape was fitted in. The dome wraps that layer, so it grows with it and
+   * leaves the view when the hologram zooms into itself. Omit when it has none.
+   */
+  zoom?: { scale: number; centre: Vector3Like } | undefined;
   target: ViewTarget;
   /** A take is running: flat screens quiet the edge, headsets draw none (8.5). */
   recording: boolean;
@@ -41,22 +48,25 @@ export interface ClocheProps {
  * space, or inside a placed hologram's group (AR), never under the camera.
  * Its group is named `cloche`.
  */
-export function Cloche({ seed, shape, shift, target: targetProp, recording, inFocus, reducedMotion, soot, rim }: ClocheProps) {
+export function Cloche({ seed, shape, shift, zoom, target: targetProp, recording, inFocus, reducedMotion, soot, rim }: ClocheProps) {
   const target = useStable(targetProp);
   const cloche = useMemo(() => new ThreeCloche({ seed, shape }), [seed, shape]);
   useEffect(() => () => cloche.dispose(), [cloche]);
 
   const invalidate = useThree((state) => state.invalidate);
-  const inputs = useLatest({ target, recording, inFocus, reducedMotion, soot, shift, rim });
+  const inputs = useLatest({ target, recording, inFocus, reducedMotion, soot, shift, rim, zoom });
   const scratch = useMemo(() => ({ eye: new Vector3(), centre: new Vector3(), scale: new Vector3(), buffer: new Vector2() }), []);
 
   const paint = useCallback(
     (state: { camera: Camera; gl: WebGLRenderer; clock: Clock }) => {
-      const { target: at, recording: isRecording, inFocus: focus, reducedMotion: reduced, soot: sootInput, shift: moved, rim: bent } = inputs.current;
+      const { target: at, recording: isRecording, inFocus: focus, reducedMotion: reduced, soot: sootInput, shift: moved, rim: bent, zoom: grown } = inputs.current;
       const { group } = cloche;
       cloche.setRim(bent?.heights ?? null);
       cloche.setShade(bent?.shade ?? true);
       group.position.set(shape.base.x + (moved?.x ?? 0), shape.base.y + (moved?.y ?? 0), shape.base.z + (moved?.z ?? 0));
+      const grow = grown && Number.isFinite(grown.scale) && grown.scale > 0 ? grown.scale : 1;
+      if (grown && grow !== 1) group.position.sub(grown.centre).multiplyScalar(grow).add(grown.centre);
+      group.scale.setScalar(grow);
       group.updateWorldMatrix(true, false);
       const presenting = state.gl.xr?.isPresenting === true;
       const viewer = presenting ? state.gl.xr.getCamera() : state.camera;

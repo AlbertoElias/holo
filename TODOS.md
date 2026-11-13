@@ -33,6 +33,21 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [x] "The way down", version 2 (agent-authored, 2026-11-12): the same
+  introspection, made to go inside and hit harder. Version 1 (scene
+  `introspection`, live as `cmwcte5x20005oeiqsmobz8mf`) reads as a diorama
+  seen from outside, with even pacing and a traveller as large in every layer.
+  Version 2: the world grows around the feed's target so the viewer descends
+  into the man's chest through nested layers (gas inside him, liquid inside
+  the gas, the dark at the core); a traveller about 4 cm tall against the 1.8 m
+  man, the only light in the dark; a beat sheet with an intensity curve
+  approved before building; one heartbeat motif across all layers; the agent
+  animates both figures (the user chose this over captured performances).
+  First prove the feed's framing survives an animated world scale. Keep its
+  moving vertices × frames under the Quick Look extent budget (B-057).
+  Lessons go to `docs/product/concepts/agent-authored-holograms.md`.
+  Delivered: scene `introspection2` (five passes, draft 12), merged to `main`
+  on 2026-11-12; uploaded to production as the agent account after the deploy.
 - [x] Tests should not have to sign in (the user's direction on 2026-11-12).
   Delivered 2026-11-12: the e2e API runs with `TEST_OPEN_UPLOADS` (off by
   default and in production; `scripts/test-api.ts` turns it on), which accepts

@@ -205,3 +205,174 @@ What this set added to the findings above:
   their own light so both sides shade alike.
 - **The punchline can be too small.** The finger to the lips reads only
   when the viewer zooms to about half the first distance.
+
+## A longer piece: The way down (2026-11-11)
+
+One piece made from a person's brief, not a theme of the agent's own: a
+60-second story in four layers, each with its own sound (scene
+`introspection`).
+
+| Piece | Scene | Feeling | What the viewer's position does |
+| --- | --- | --- | --- |
+| The way down | `introspection` | Composure, then anxiety, then overwhelm, then release | A round diorama in four quarters, each a step lower. A man in his thirties stands in front of his house on a 1950s film set, checking his watch. A figure of light leaves his chest and drops through trap doors: into pastel gases that keep colliding, then dark Rothko-coloured liquids crashing like a storm, then a hole in the dark where a child sits crying. It kneels and holds the child; the light climbs back up the well and the man breathes out. Turning to a quarter is going down a layer, and you hear only that layer's music. |
+
+What it added:
+
+- **Positional sound can keep rooms apart.** Each quarter plays its own
+  track from an emitter over its middle, with linear rolloff (full within
+  0.9 m, silent by 2.3 m). The feed's ear stands 2.5 m out from the view's
+  middle at Follow, so it lands about 0.85 m from the emitter of the quarter
+  it faces and about 3 m from the others: from any quarter you hear that
+  layer alone.
+- **Put the emitters where the ear goes, not where the floor is.** The ear
+  rides above the view's middle, and higher still when the viewer looks
+  down. Emitters 1.1 m above each floor left the deepest room, the climax,
+  at half volume from the side and silent from above. All four now sit at
+  one height, 2 m.
+- **The feed fits a wide card by height.** Its framing takes the larger of
+  the height and width fits; on a landscape card the height wins. Each
+  mesh's box is its local box carried into world space, so a big static
+  mesh under a turned parent swings its corners past the rim (3.04 m for a
+  2.6 m diorama). The rooms' static sets are baked into world space so a
+  narrow card, where width wins, is not pushed back.
+
+## The way down II (2026-11-11)
+
+Version 2 of the same brief (scene `introspection2`, beat sheet in
+`apps/capture/scripts/showcase/introspection2/BEATS.md`). Instead of a
+diorama turned by the viewer, the world grows round the point the feed
+looks at: the man fills the dome, a 4 cm figure of light leaves his chest
+through a trap door, and each layer waits inside the one before, small
+enough to hide there, until the zoom brings it to size.
+
+What it added:
+
+- **Zoom the content, not the camera.** The feed's camera is fixed by its
+  fit, so going "in" means scaling the world about one point C (the man's
+  chest at the door). Each layer is still geometry with a morph target per
+  zoom range; one clock S(t) drives every layer's weights, and a layer
+  built at unit U is drawn at S/U. Nested layers hide inside each other's
+  knot or hole until their turn.
+- **Solve the fit so its target lands on C.** The feed fits on static
+  vertices plus eight motion samples (at 60·k/8 s); every mesh that moves
+  between samples adds its box, morph targets included. The build
+  reproduces that fit and bisects the sky radius until the fit's target is
+  exactly C (to 0.1 mm), so the zoom centre stays in the middle of the
+  card. The live feed measured the same distance as the build (6.98 m).
+- **4 cm at 7 m is a dot.** A 4 cm figure at the feed's distance is under
+  1% of the frame; the first proof could not find him after the door. The
+  camera now "follows him in": he grows to 5× through the door (about 4.5%
+  of the frame) and the hug frame scales from there.
+- **Keep a clear corridor between the figure and the camera.** In the gas,
+  clouds whose drift reached the camera ray hid him; in the liquid the
+  camera, 16° above level, looked at the surface in front of him. He now
+  floats waist-deep and sinks only to the chin on the crashes, and the swell
+  calms round C. A ray test from the feed camera to his head at each beat
+  catches this before a recording does.
+- **Contrast is luminance, not hue.** Pale gold on pastel had the same
+  luminance and disappeared even when nothing was in front of him. Amber
+  still reads as light in the dark beats and separates from the pastels,
+  the reds and the grey suit.
+- **Follow the ear when emitters move.** Each layer's emitter rides the zoom
+  toward the ear (2.5 m out along Follow) and the next layer's takes over;
+  a layer whose emitter is held at its arrival position for the length of
+  its beat avoids the silent gaps the first proof had at the hand-offs.
+- **Grow the climax between the feed's motion samples.** Content larger than
+  the sky at a sample time pulls the fit off C, but the feed only samples at
+  60·k/8 s. The hug stays about 1 m from C at 52.5 s and swells to half the
+  frame in the unsampled stretch after it (54–55.5 s). In the gas he drifts
+  beside the knot rather than over its stripes, and stays inside the sky at
+  the 15 s sample for the same reason.
+- **Loudness should follow the intensity curve.** Every stem normalised to
+  the same peak made the calm opening as loud as the stressful gas and the
+  storm no louder than either. Stem peaks now step up from the opening to the
+  storm and down again for the dark. The second critic, working from a
+  contact sheet and a per-second RMS trace, caught this; the sheet at 2.5 s
+  steps missed the door beat (7–9.4 s), so check short beats at finer steps
+  before acting on a "missing" verdict.
+- **Measure Quick Look's load at build time.** The build sums the points of
+  meshes under animated nodes (and meshes with morph targets) times the
+  distinct key times, and fails above the scene's budget (100 M). This
+  piece measured 28,203 points × 1,806 frames = 51 M before the gas and
+  liquid rebuild, and 49,403 × 1,806 = 89 M after it.
+- **The dome wraps the outer layer, so name the zoom.** The gold dome is the
+  viewer's: it wraps the hologram's outermost layer, so when the piece goes
+  into itself, the dome must go with that layer and leave the view. Morph
+  targets give the feed no way to know that, so the piece names its zoom:
+  a node called `HologramZoom`, placed at the zoom's centre, with an animated
+  uniform scale equal to the outermost layer's growth. The feed's dome
+  scales about that centre every frame, sweeps past the camera on the way
+  in, and closes round the man again on the way out. The node has no mesh,
+  so the fit ignores it, and holograms without it are unchanged. Only the
+  desktop feed reads it so far; AR and the XR viewer still draw the dome at
+  home size.
+
+### The gas and liquid rebuild (2026-11-12)
+
+- **Every morph target carries its own normals.** three.js fills a target's
+  missing NORMAL with the base normal, so a wave that moves its vertices
+  but not its normals is lit as if flat. `lib/glb.mjs` now writes a NORMAL
+  accessor for each target when the geometry has one per target (zeros
+  where nothing changes).
+- **Keyed flow starts from the rest shape.** Curl advection that fills its
+  keys from zero leaves every vertex outside a billow at the origin. That
+  hid the hatch's collar and pushed the layer's reach past the sky (1.29
+  against 1.12). Initialise every key from the base positions.
+- **One event list drives a demand's pulse and its voice.** Each nagging
+  billow has its own emitter and its own stem, both read from the same
+  `events` table, so the chime is heard from the pink billow as it swells.
+  Five voices out of step with each other sound like nagging; a shared beat
+  sounds like music.
+- **Grow the figure where nobody sees it.** He has to fit through the
+  hatch, so in the gas he stays small (about 72 cm). The bust and the press
+  read only once he is about 1.2 m, so he grows while he falls into the paint
+  (25.3 to 26.8 s), and the mould, sized from him, grows with him.
+- **A press at his size needs him big enough to see.** At 4% of the frame's
+  height, the paint closing round him was a speck; at about 7% the
+  hat-and-shoulders shell reads. Size the climax against the frame, not the
+  world.
+- **Flying through a lit panel flashes the screen.** The zoom into his chest
+  passes through the doorway's light for about 0.2 s, which reads as a warm
+  flash. That is the doorway by design; a billow would read as a glitch, so
+  billows stay out of the camera's corridor.
+- **Sound adds up fast.** Ten 60 s stems at 22 kHz come to about 26 MB, so
+  this piece is 63 MB, above the API's 25 MB upload limit (which is being
+  raised to 100 MB).
+
+### The third pass (2026-11-12)
+
+The user's notes on the rebuild: the gas looked like satellite clouds and
+barely touched him, the paint needed more colours hitting him harder, a
+silhouette of him showed in the lower layers, the doors opened oddly (and
+one looked like a post-it in his chest), a red line crossed the child scene,
+and the music needed a more abstract, MIDI feel.
+
+- **Author fast things in world space.** A layer authored at home size and
+  grown by the zoom smears anything quicker than its keys. Gusts and paint
+  ropes are now keyed where the feed sees them: one morph target per key,
+  blended by a uniform cubic B-spline, with a hidden key 0 outside the
+  event's window. A 0.4 s blast needs keys every 0.05 s. At 0.15 s it read
+  as a soft blob.
+- **Draw only the layer you are in.** Every sky, the statue and every door
+  collapse outside their own window, and the switch times are solved for
+  the frame where an iris hole fills the view. That fixed both the
+  silhouette in the lower layers and the red line: an inactive layer's sky
+  edge was showing.
+- **A door is the layer opening, not an object on it.** An iris cut into
+  the surface you are on, with its rim taken from that surface's own colours
+  and the next layer's sky in its hole, reads as going through. A panel or
+  hatch reads as a prop.
+- **Impact is streak, spray and recoil together.** A gust reads as a blow
+  when its puffs stretch along the line of travel, spray scatters at
+  contact, and he tumbles and his limbs trail away from it on the same frame.
+- **Saturated paint needs a dark ground.** On a pool of all ten hues at
+  full strength, both he and the ropes were lost. A pool of the deep
+  pigments at about a third of their brightness lets them read. Ropes read
+  as paint, not horns, when they lump along their length and swell at the
+  head.
+- **One event list keeps picture, acting and music in step.** Gusts and
+  hits on a 120 bpm quarter-beat grid drive his knocks, his poses and the
+  sequencer, so adding thirteen hits needed one table edit.
+- **Chip voices need a pitched body.** Noise-only ticks and clatters
+  normalise to a fifth of the loudness of the pulse voices. A short pulse
+  note under each one evens them out.
