@@ -362,9 +362,6 @@ body::before {
 }
 
 .portal-timecode {
-  /* The text and an unseen copy of the paused text share one cell, so the width holds as play and pause swap. */
-  display: inline-grid;
-  justify-items: end;
   font-family: var(--holoim-type-timecode-font-family);
   font-weight: var(--holoim-type-timecode-font-weight);
   font-size: var(--holoim-type-timecode-font-size);
@@ -372,20 +369,6 @@ body::before {
   color: var(--holoim-color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.portal-timecode > span {
-  grid-area: 1 / 1;
-}
-
-.portal-timecode-room {
-  visibility: hidden;
-}
-
-/* On the line above Play the group hangs from its right end, so the text can change width without moving sound;
-   the unseen copy stays measurable (useReachRow) but takes no room. */
-.feed-card-foot[data-reach-row="stacked"] .portal-timecode-room {
-  position: absolute;
 }
 
 /* Hidden until reached for (1.2): the reach controls unfold from Play

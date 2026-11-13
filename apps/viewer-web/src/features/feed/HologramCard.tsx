@@ -148,8 +148,7 @@ function useReachRow(footRef: React.RefObject<HTMLElement | null>): ReachRow {
       resized.observe(reach);
       const gap = parseFloat(getComputedStyle(side).columnGap) || 0;
       // Folded, a side clips its controls to nothing; their own boxes keep their width.
-      // The timecode is as wide as its paused text, even where that unseen copy takes no room.
-      const width = (child: Element) => Math.max(child.getBoundingClientRect().width, child.querySelector(".portal-timecode-room")?.getBoundingClientRect().width ?? 0);
+      const width = (child: Element) => child.getBoundingClientRect().width;
       const span = (children: Element[]) =>
         children.reduce((total, child, index) => total + width(child) + (index > 0 ? gap : 0), 0);
       for (const child of before.children) resized.observe(child);

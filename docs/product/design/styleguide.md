@@ -462,24 +462,23 @@ sized to the controls showing, padded alike at both ends so Play stays in
 the middle.
 
 **Too many for one row.** When either side's reach controls do not fit
-beside Play at the input's hit size (a touch phone: the paused timecode and
-sound already pass half its width), both unfold on a line of their own a
+beside Play at the input's hit size (a touch phone with Return
+and two ways out), both unfold on a line of their own a
 glyph gap (12 apx) above the row: playback ending a glyph gap left of Play's
 axis, the ways out starting a glyph gap right of it, each group on the
 row's chip colour when the row has one (text 14 apx from its chip's end,
-glyphs flush in their hit areas). Return stays right of Play. The timecode
-holds the paused text's width beside Play, so pausing never reflows the row;
-on the line above, the playback group hangs from Play's axis, so the text and
-its chip grow away from the axis on pause and no glyph moves. Play
+glyphs flush in their hit areas). Return stays right of Play. On a flat card the timecode is the time
+alone, with no "Paused" word: Play's own glyph shows the state, so pausing
+never changes the row's width and the chip stays even at both ends. Play
 still never moves, and no glyph shrinks below its input's minimum or enters
 a gesture zone.
 
 | Glyph | Meaning | Label | Drawing (16 × 16 viewBox) |
 | --- | --- | --- | --- |
-| Play / Pause | Play or pause the event | "Paused · 0:08" beside it | Filled triangle `M4 2.5v11l9-5.5z`, drawn at 14 apx inside the 36 apx gold ring |
+| Play / Pause | Play or pause the event | The time, "0:08", beside it; a headset reads "Paused · 0:08" once paused | Filled triangle `M4 2.5v11l9-5.5z`, drawn at 14 apx inside the 36 apx gold ring |
 | Free | Leave Follow; move through time and space yourself. In a headset's foot row only: on a flat card a drag leaves Follow | "Free" | Four-way arrow cross `M8 1.5v13M1.5 8h13M8 1.5 6 3.5M8 1.5l2 2M8 14.5l-2-2M8 14.5l2-2M1.5 8l2-2M1.5 8l2 2M14.5 8l-2-2M14.5 8l-2 2` |
 | Return | Back to the author's view (Follow) | "Return" | Open arc with an arrowhead `M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.5h2.5` |
-| Pause | Shown in the Play ring while the event plays; pauses it | "Paused · 0:08" once paused | Two filled bars `M4.5 3h2.4v10H4.5zM9.1 3h2.4v10H9.1z`, the Play triangle's weight, inside the same ring |
+| Pause | Shown in the Play ring while the event plays; pauses it | The time beside it; a headset reads "Paused · 0:08" once paused | Two filled bars `M4.5 3h2.4v10H4.5zM9.1 3h2.4v10H9.1z`, the Play triangle's weight, inside the same ring |
 | Restart | Back to the event's start, keeping play or pause | None | A back-to-start bar and an open triangle `M3.5 3v10M12.5 3.2 6 8l6.5 4.8z` |
 | Recenter | Put the hologram back in front of the viewer | None | A ring with four ticks `M8 1.5v2.5M8 12v2.5M1.5 8H4M12 8h2.5M8 5a3 3 0 1 0 0 6a3 3 0 1 0 0-6` |
 | Exit | Leave the immersive session | None | An open door frame with an arrow leaving it `M9 2.5H4.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H9M7 8h7.5M12 5.5 14.5 8 12 10.5` |
@@ -643,7 +642,9 @@ sentence case with no tracking.
 ### 7.2 Timecode
 
 Figtree 400, 0.9rem (14.4 px), tabular figures, in muted text, so the digits
-never shift as time runs. It reads "Paused · 0:08" beside Play, and
+never shift as time runs. On a flat card it reads the time alone, "0:08",
+beside Play, whose glyph already shows play or pause; a headset and the AR
+view still read "Paused · 0:08" once paused. It reads
 "Recording 0:12", counting up, in its place while recording.
 
 ### 7.3 Headsets
