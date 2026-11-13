@@ -11,6 +11,10 @@
 //   --dry-run   print the plan and exit
 //   --no-fetch  skip `git fetch origin main` (offline)
 //
+// Only one verify:pr runs at a time on the machine (scripts/verify-lock.ts): a
+// second run waits and prints who holds the lock. VERIFY_PR_NO_LOCK=1 skips it
+// for a run whose suites use moved ports.
+//
 // Progress goes to stdout with NUL bytes made visible (Vite prints module ids
 // prefixed with \0, which makes grep treat a log as binary). The final status
 // is written to output/verify-pr.exit, so a watcher can wait for that file
@@ -19,6 +23,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+import { acquireLock } from "./verify-lock.ts";
 
 type Area =
   | "quality"
@@ -98,15 +104,43 @@ function resolveAreas(full: boolean, fetch: boolean): { areas: Record<string, bo
   }
 }
 
+// Each step runs in its own process group, so a stopped verify:pr takes its dev
+// servers and browsers down with it instead of leaving them on the ports the
+// next lock holder needs.
+const running = new Set<number>();
+
+function stopChildren(signal: NodeJS.Signals): void {
+  for (const pid of running) {
+    try {
+      process.kill(-pid, signal);
+    } catch {
+      // already gone
+    }
+  }
+}
+
+const SIGNAL_EXIT: Record<string, number> = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+  process.on(signal, () => {
+    stopChildren("SIGTERM");
+    process.exit(SIGNAL_EXIT[signal]);
+  });
+}
+
 function runStep(step: Step): Promise<number> {
   return new Promise((resolve) => {
-    const child = spawn(step.command, { shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(step.command, { shell: true, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    if (child.pid) running.add(child.pid);
     const forward = (stream: NodeJS.WriteStream) => (chunk: Buffer) =>
       stream.write(chunk.toString("utf8").replaceAll("\0", "\\0"));
     child.stdout.on("data", forward(process.stdout));
     child.stderr.on("data", forward(process.stderr));
-    child.once("error", () => resolve(1));
-    child.once("exit", (code) => resolve(code ?? 1));
+    const finish = (code: number) => {
+      if (child.pid) running.delete(child.pid);
+      resolve(code);
+    };
+    child.once("error", () => finish(1));
+    child.once("exit", (code) => finish(code ?? 1));
   });
 }
 
@@ -126,6 +160,9 @@ async function main(): Promise<void> {
   if (skipped.length > 0) console.log(`[verify-pr] skipped (unaffected): ${skipped.join(", ")}`);
   if (args.has("--dry-run")) return;
 
+  const lock = process.env.VERIFY_PR_NO_LOCK === "1" ? null : await acquireLock();
+  if (!lock) console.log("[verify-pr] VERIFY_PR_NO_LOCK=1: running without the machine-wide lock");
+
   let status = 0;
   const started = Date.now();
   for (const step of steps) {
@@ -141,6 +178,7 @@ async function main(): Promise<void> {
   }
   console.log(`[verify-pr] ${status === 0 ? "PASSED" : "FAILED"} in ${((Date.now() - started) / 1000).toFixed(0)}s`);
   writeFileSync(exitFile, `${status}\n`, "utf8");
+  await lock?.release();
   process.exitCode = status;
 }
 
