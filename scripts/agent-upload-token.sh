@@ -86,7 +86,14 @@ case "$command" in
     token="holoim_at_$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("base64url"))')"
     agent_token register --email "$email" --name "$name" --hash "$(sha256_hex "$token")" --label "agent uploads ($host)"
     # Only a registered token is kept. -U replaces a stale entry for this host.
-    printf 'add-generic-password -U -s %s -a %s -l "HoloIM agent upload (%s)" -w %s\n' "$SERVICE" "$host" "$host" "$token" | security -i
+    # security -i echoes a failing command line, token included, so its output
+    # is discarded and the result checked by reading the entry back.
+    printf 'add-generic-password -U -s "%s" -a "%s" -l "HoloIM agent upload (%s)" -w "%s"\n' "$SERVICE" "$host" "$host" "$token" | security -i >/dev/null 2>&1 || true
+    if ! keychain_token >/dev/null; then
+      unset token
+      echo "Could not store the token in the Keychain; it is registered but unusable. Revoke it with: $0 list $origin, then agent-token revoke --id <id> on the API host." >&2
+      exit 1
+    fi
     unset token
     echo "Stored in the Keychain as $SERVICE / $host. Checking it:"
     HOLOIM_SESSION="" HOLOIM_KEYCHAIN_SERVICE="$SERVICE" node "$ROOT/apps/capture/scripts/showcase/upload.mjs" --api "$origin" --whoami

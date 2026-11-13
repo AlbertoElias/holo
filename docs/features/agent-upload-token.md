@@ -23,8 +23,9 @@ The user sets this up once with one command and revokes it with another.
   (left empty: the user chose no expiry).
 - API tokens carry a `holoim_at_` prefix. The API accepts one as
   `Authorization: Bearer` for **uploading** (`POST /holograms`, the
-  initiate/complete upload routes) and **`GET /auth/me`**, nothing else.
-  Renaming the account (`PATCH /auth/me`) and deleting holograms answer
+  initiate/complete upload routes) and **`GET /auth/me`**. Public reads
+  (`GET /holograms`, `GET /holograms/:id`) see it as its account, which
+  only sets `ownedByViewer` on its own pieces. Renaming the account (`PATCH /auth/me`) and deleting holograms answer
   `403` to an API token, so a misled agent can neither change the byline on
   every piece nor delete the agent's work. Sessions keep working unchanged;
   no endpoint changes shape.
