@@ -1199,3 +1199,17 @@ bug above.)
 - **Evidence:** `scripts/ci-emulate.sh` on `spatial-audio.spec.ts --repeat-each=5`: 5/5 with no load, 5/5 with
   `CI_EMULATE_LOAD=2` (frames 107–130 ms; before the fix, 4/5 under the same load). Closes after a green hosted run on `main`.
 - **Closed:** 2026-11-13. Hosted CI on `main` run 43347464007 (`d0ad79a8f3dd`, with the fix from `86151906f638`) passed the gate and all three deploys.
+
+### B-058 — Upload panel: closing the sheet mid-upload lets a second upload start beside the first
+
+- **Area:** `apps/viewer-web/src/features/upload/UploadPanel.tsx`, `features/feed/FeedPage.tsx` (`uploadStatus`, `onUploaded`), `packages/ui-dom/src/SideSheet.tsx`
+- **Severity:** P3 (the viewer has to close and reopen the sheet inside one upload; the result is a duplicate or crossed upload, not data loss)
+- **Found by:** `/find-implicit-state-machines` (2026-11-12), replayed 2026-11-12. Model: a panel instance holds idle, chosen and uploading; `SideSheet` unmounts the panel after close, so the instance's state dies while the request and its callbacks into `FeedPage` live on. Rules: "the result shown belongs to the file uploaded", "a reset never discards a choice made after the upload started", "one upload in flight at a time". Model notes: the session notes folder, `upload-panel-model.md`.
+- **Replay, reproduced** (`upload-panel.spec.ts`, mocked API, the multipart request held and released on cue): press Upload, close the sheet, open it again. The new panel has `isUploading` false, so its picker, name and button are live. A second file can be chosen and sent (two requests in flight). When the first answer arrives, `onUploaded` closes the sheet over the second form and the chip changes from "Uploading “second”…" to "Uploaded “first”" while the second is still in flight.
+- **Cause:** "an upload is running" lived only in the panel instance, and the sheet gives the viewer a new instance.
+- **Fix:** `FeedPage` already holds the status chip's `uploading` state across the sheet closing, so it passes `uploadInFlight` to the panel, which treats it like its own flag: picker, name, switch, drops and presses are shut, and the button reads "Uploading…". Nothing else changes: the answer closes the sheet as it does when the upload was watched from the start, and a form closed over an upload is empty on reopening, as it is for any closed sheet.
+- **Did not reproduce (the suspected picker race):** "the picker stays enabled mid-upload and the success reset clears a file chosen after the start". The file input, the name field and the switch are `disabled` while the panel's own request runs, a file dropped on the zone mid-upload is ignored (`onDrop` returns on `isUploading`), and a second press sends nothing. Checks kept: `upload-panel.spec.ts` "in the open panel nothing can change the upload".
+- **Did not reproduce (failure after a new pick):** no new pick is possible in the same panel. A failure keeps the form and a retry sends the same file (check kept).
+- **Not replayed:** success and error both writing state. `onUploaded` is the feed's own callback and cannot throw, so the `try` never reaches the `catch` after a success. The direct-upload path (`/uploads/initiate`, then storage, then `/complete`) was not held step by step: it shares the one `await` the replay holds.
+- **Not done:** emulation in headless Chromium on a mocked API; no real-device run.
+

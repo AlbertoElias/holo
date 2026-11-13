@@ -241,8 +241,11 @@ it from the item below instead of duplicating its status here.
      left, denial after leaving, older denial after a newer grant) and are fixed
      with a request epoch in the portal store; unmount while pending is not
      observable.
-  5. Upload panel (`UploadPanel.tsx`): file picker stays enabled mid-upload and
-     is cleared by the success reset.
+  5. Done (2026-11-12): upload panel, B-058. The suspected picker race did not
+     reproduce (the picker, name, switch and drops are shut mid-upload). The replay
+     found a real one: closing the sheet mid-upload and reopening it gave a live
+     panel that could start a second upload; fixed by passing the feed's
+     "uploading" status to the panel.
   6. XR session mode (`apps/capture/src/runtime/xrEntry.ts`): stale
      `requestedMode`.
   7. Mic permission: independent promise writers and mismatched unions
