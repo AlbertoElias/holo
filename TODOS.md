@@ -296,13 +296,11 @@ it from the item below instead of duplicating its status here.
      `getUserMedia` answer after cancel is already dropped (abort signal,
      generation), so none of those is a defect.
      Locomotion (capture's VR thumbsticks, `VrLocomotionSystem`): Done
-     (2026-11-13), B-064. A controller that stopped reporting (gone, or hands
-     took over) or a session that ended with the stick held left the stick at
-     its last value and the avatar walked on by itself; a side whose
-     controller went silent is now written as rest and the session end releases
-     both sticks
-     (check `loco-states`). Not covered: the viewer's VR gallery locomotion
-     (the IWSDK locomotor, no app-owned mode state) and a physical headset.
+     (2026-11-13), B-064 closed. A stick held while its controller went away
+     (or hands took over, or the session ended) kept the avatar walking by
+     itself; fixed, check `loco-states`. Not covered: the viewer's VR gallery
+     locomotion (the IWSDK locomotor, no app-owned mode state) and a physical
+     headset.
      Still not modeled: desktop reach and held modes
      (`packages/xr-ui-core/src/heldMode.ts`,
      `apps/capture/src/xr/HeadsetHolds.ts`).

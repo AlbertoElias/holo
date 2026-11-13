@@ -7,16 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-064 — The avatar walks on by itself when a controller stops reporting with the stick held
-
-- **Area:** `apps/capture/src/systems/VrLocomotionSystem.ts` (stick poll), `apps/capture/src/input/VrLocomotion.ts`
-- **Severity:** P2 (the author's avatar, and the take being recorded, walks away with nobody pushing; it stops only when a controller reports again)
-- **Found:** 2026-11-13 by `/find-implicit-state-machines` (queue item 8, locomotion), modeled in `Loco.tla` (side-session notes), replayed against the real page
-- **Reproduced (`test:xr:loco-states`, three phases, real IWER controller axes):** the left stick is pushed forward and the avatar walks. Then (1) the controller goes away (`connected = false`), or (2) hands take over (`primaryInputMode = 'hand'`), or (3) the session ends and the next one starts with hands only. `getThumbstickAxes` returns `undefined` for a side with no gamepad, and the poll only wrote the stick when it got a value, so `moveY` stayed 1 and the avatar walked 3.2 to 3.3 m in 60 frames with nobody pushing. A session end left the stick at 1 as well; the next session with no controller walked at once.
-- **Expected:** a side that no controller reports is a stick at rest, and a session end lets go of both sticks.
-- **Fix:** a side whose controller was reporting and goes silent is written as rest (a side that never reported keeps what the scripted hook wrote, which the hand-traces travel take relies on), and `releaseSticks()` runs when VR ends. Check `loco-states` (in `test:xr`) failed on all three phases before the fix and passes after.
-- **Read but not replayed (no defect found in the code):** the Halo's `stickLocked` is released when no axes are read or the stick rests, and `resetTurn` re-arms the snap turn on every VR entry.
-
 ### B-044 — On the user's table scan, the author's feet end 3 cm off the scan's floor
 
 - **Area:** `apps/viewer-web` e2e and `packages/place` (split capture slice 2a)
