@@ -4,7 +4,7 @@ import path from 'node:path';
 import { tokens } from '@holoim/design-tokens';
 
 import { loadTake, objectNodes, readGlb } from './object-glb.mjs';
-import { clickButton, openCapture, readState, saveDownload, setupPage } from './object-take.mjs';
+import { clickButton, openCapture, proofPace, readState, saveDownload, setupPage } from './object-take.mjs';
 import { PIXEL_PNG, STEP_MS, enterIwer, reach, shooter, stepper, summonedItems } from './summon-take.mjs';
 
 // Find an object by asking in a headset (PRD-060 slice 2), in IWER, through
@@ -498,15 +498,19 @@ export async function runDesktopVoiceOrdersTake({ browser, baseUrl, artifactDir,
     });
     await openCapture(page, baseUrl, {});
     await page.evaluate((ms) => window.advanceTime(ms), 60 * STEP_MS);
+    await proofPace(page, 1500);
     await page.getByTestId('dock-find').click();
+    await proofPace(page, 1500);
     await page.getByRole('button', { name: 'Speak to find' }).click();
     await page.getByRole('button', { name: 'Stop listening' }).waitFor();
+    await proofPace(page, 2000);
     await page.evaluate(() => {
       const recognition = window.__recognition;
       recognition.onerror({ error: 'not-allowed' });
       recognition.onend();
     });
     const answered = await page.getByRole('button', { name: 'Speak to find' }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
+    await proofPace(page, 3000);
     const log = await page.evaluate(() => window.__sampleObjectSearch().voiceLog);
     const notice = await page.getByText('Voice search is not available here; type instead.').count();
     if (!answered) fail('after the recognition was refused and nothing could record, the button still says Stop listening');
