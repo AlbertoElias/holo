@@ -76,17 +76,15 @@ it from the item below instead of duplicating its status here.
   microphone in passthrough). Split capture's slice 2d, the place in
   passthrough, waits on it (the user, 2026-11-10, Q1 of
   [`docs/features/splat-capture.md`](docs/features/splat-capture.md)).
-- [ ] Only one `verify:pr` runs at a time across worktrees (user, 2026-11-10).
-  Parallel sessions collided on hardcoded default ports and on CPU: B-039's
-  `verify:pr` passed only on its eighth run, every earlier failure a port
-  clash, and timing checks failed at load averages of 57–77. Take a
-  machine-wide lock (for example a lock file under the shared git dir holding
-  the owner's PID and worktree, freed on exit and taken over when that PID is
-  dead) at the start of `verify:pr`; a second run waits and prints who holds
-  it. The XR harness and other heavy tiers could share the lock later. Moving
-  ports (`AGENTS.md`, "Sharing work between agents") stays the escape hatch.
-  Prove it end to end: two worktrees start `verify:pr` together, one waits,
-  both pass, and a killed holder's lock is taken over.
+- [x] Only one `verify:pr` runs at a time across worktrees (user, 2026-11-10;
+  delivered 2026-11-12 on `infra/ci-reliability`). `scripts/verify-lock.ts`
+  holds a loopback listener on port 39417 (the kernel frees it however the
+  holder dies, so no stale lock to detect); `verify:pr` and
+  `scripts/ci-emulate.sh` take it, and a waiter prints the holder's PID,
+  branch and worktree. Proved: two worktrees started together, one waited
+  205 s and both passed; a holder killed with `kill -9` was taken over in
+  5 s and the waiter passed. Moved ports plus `VERIFY_PR_NO_LOCK=1` stay the
+  escape hatch.
 
 - [ ] Find an object by asking (PRD-060, built overnight 2026-10-27 on the
   user's request; its provisional decisions await their approval): search

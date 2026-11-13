@@ -101,9 +101,16 @@ scripts/ci-emulate.sh pnpm --filter @holoim/web exec playwright test e2e/ar.spec
 
 `CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`), and
 `CI_EMULATE_PLATFORM` the platform (default `linux/amd64`). `CI_EMULATE_MEMORY` overrides the memory
-limit (default `16g`). Run one emulation at a time: Docker Desktop's VM is
+limit (default `16g`). One emulation runs at a time: Docker Desktop's VM is
 usually smaller than two runners, and overlapping runs crash pages and time
-out navigations that pass on their own. The container is a
+out navigations that pass on their own, so `ci-emulate.sh` takes the same
+machine-wide lock as `verify:pr` (`scripts/verify-lock.ts`; a second run
+waits and prints the holder; `CI_EMULATE_NO_LOCK=1` skips it).
+`CI_EMULATE_LOAD=N` runs N busy loops on the container's CPUs beside the
+command, a starved runner: a check that waits wall-clock time for something
+the page does on its own clock (frames, the mixer, a GPU readback, a UI fold
+timer) fails here instead of on hosted CI, the cause of most CI flakes so far.
+Prove a flake fix with `CI_EMULATE_LOAD=2` and `--repeat-each=5` or more. The container is a
 close emulation, not the runner image: a failure that reproduces only on
 hosted CI is still a defect to explain, not something to rerun.
 - `pnpm run verify:pr` is the pre-merge gate. It runs only the suites the change
@@ -116,7 +123,11 @@ hosted CI is still a defect to explain, not something to rerun.
   merge-base: everything runs). `pnpm run verify:pr -- --dry-run` prints the
   plan; `pnpm run verify:full` (or `verify:pr -- --full`) runs every suite
   (capture XR flows, viewer AR checks, pipeline, portal). Keep `STEPS` in
-  `scripts/verify-pr.ts` in step with the CI jobs.
+  `scripts/verify-pr.ts` in step with the CI jobs. Only one `verify:pr` (or
+  `ci-emulate.sh`) runs at a time on the machine: a second waits, printing the
+  holder's PID, branch and worktree, and takes the lock the moment the holder
+  exits, however it dies. `VERIFY_PR_NO_LOCK=1` skips it for a run on moved
+  ports.
 - `verify:pr` writes its exit code to `output/verify-pr.exit` when it ends.
   Wait on that file, not on the log:
   `until [ -s output/verify-pr.exit ]; do sleep 20; done` (give a watcher at
