@@ -246,8 +246,17 @@ it from the item below instead of duplicating its status here.
      found a real one: closing the sheet mid-upload and reopening it gave a live
      panel that could start a second upload; fixed by passing the feed's
      "uploading" status to the panel.
-  6. XR session mode (`apps/capture/src/runtime/xrEntry.ts`): stale
-     `requestedMode`.
+  6. Done (2026-11-12): XR session mode, `xrEntry.ts`. Did not reproduce, no
+     defect recorded. `requestedMode` does go stale (a refused request leaves
+     it set) but it is read only when the session reports no
+     `environmentBlendMode`, which the WebXR spec requires and every browser
+     and IWER supply. With IWER's real blend mode, four held-answer replays
+     (AR refused then a browser-offered VR session, an offer while an AR request
+     waits, a second press while one is pending, VR refused then AR granted)
+     all kept the dock's mode equal to the live session. Only a shim that hides
+     the blend mode shows `ar` over a VR session. The code comment that claimed
+     the request counts only while pending was corrected; the replay was not
+     kept (nothing to regress). Evidence in the shared notes folder.
   7. Mic permission: independent promise writers and mismatched unions
      (`apps/capture/src/types/contracts.ts` vs `packages/xr-ui-core/src/index.ts`).
   8. Voice input (`apps/capture/src/objects/voiceInput.ts`), locomotion,
