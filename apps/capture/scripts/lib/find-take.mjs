@@ -21,6 +21,8 @@ import { PIXEL_PNG, STEP_MS, enterIwer, reach, shooter, stepper, summonedItems }
 //     searched; a 503 says to type instead.
 //   - desktop-voice: the desktop field's Speak with the browser's own
 //     speech API (failing in headless Chromium, so it falls back) logs its path.
+//   - desktop-voice-orders: a refused recognition where nothing can record (an
+//     insecure origin) leaves the Speak button at Speak (B-062).
 
 const REST = { left: [-0.3, 0.9, -0.1], right: [0.3, 0.9, -0.1] };
 const AIM_FROM = [0.15, 1.35, -0.15];
@@ -462,6 +464,56 @@ export async function runDesktopVoiceTake({ browser, baseUrl, captureRoot, artif
     if (!capabilities?.includes('webkitSpeechRecognition')) fail(`the dev capability line is missing (${capabilities})`);
     await page.screenshot({ path: path.join(artifactDir, `${label}.png`) });
     return { label, status: failures.length ? 'fail' : 'pass', failures, capabilities, recognised, fallback, voiceLog };
+  } finally {
+    await context.close();
+  }
+}
+
+/**
+ * Desktop voice, the orders (implicit-state-machine replay, B-062): a
+ * recognition that fails with `not-allowed` where the page has no recorder
+ * to fall back on (an insecure origin has no `navigator.mediaDevices`) must
+ * leave the Speak button back at Speak, not at "Stop listening".
+ */
+export async function runDesktopVoiceOrdersTake({ browser, baseUrl, artifactDir, consoleErrors }) {
+  const label = 'desktop-voice-orders';
+  const failures = [];
+  const fail = (message) => failures.push(message);
+  await mkdir(artifactDir, { recursive: true });
+  const { context, page } = await setupPage(browser, { iwer: false, consoleErrors, label });
+  try {
+    await page.addInitScript(() => {
+      // An insecure origin lists the Web Speech API but has no getUserMedia: recognition is refused and nothing can record.
+      Object.defineProperty(Navigator.prototype, 'mediaDevices', { get: () => undefined });
+      class RefusedRecognition {
+        start() {
+          // The answer is the check's to give, so the order of events is the check's.
+          window.__recognition = this;
+        }
+        stop() {}
+        abort() {}
+      }
+      window.webkitSpeechRecognition = RefusedRecognition;
+      window.SpeechRecognition = RefusedRecognition;
+    });
+    await openCapture(page, baseUrl, {});
+    await page.evaluate((ms) => window.advanceTime(ms), 60 * STEP_MS);
+    await page.getByTestId('dock-find').click();
+    await page.getByRole('button', { name: 'Speak to find' }).click();
+    await page.getByRole('button', { name: 'Stop listening' }).waitFor();
+    await page.evaluate(() => {
+      const recognition = window.__recognition;
+      recognition.onerror({ error: 'not-allowed' });
+      recognition.onend();
+    });
+    const answered = await page.getByRole('button', { name: 'Speak to find' }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
+    const log = await page.evaluate(() => window.__sampleObjectSearch().voiceLog);
+    const notice = await page.getByText('Voice search is not available here; type instead.').count();
+    if (!answered) fail('after the recognition was refused and nothing could record, the button still says Stop listening');
+    if (!notice) fail('no "type instead" line after the recognition was refused and nothing could record');
+    if (log.at(-1)?.detail !== 'no MediaRecorder') fail(`voice log ${JSON.stringify(log)}`);
+    await page.screenshot({ path: path.join(artifactDir, `${label}.png`) });
+    return { label, status: failures.length ? 'fail' : 'pass', failures, answered, notice, voiceLog: log };
   } finally {
     await context.close();
   }

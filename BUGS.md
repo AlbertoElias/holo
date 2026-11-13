@@ -92,6 +92,16 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   Fix candidate once reproduced: an `events` factory whose `connect` ignores a null target.
 - **Owner:** the CI reliability session (claim in `.git/holoim-ci-owner.json`).
 
+### B-062 — Find's Speak button stays on "Stop listening" after a refused recognition that has no recorder to fall back on
+
+- **Area:** `apps/capture/src/objects/voiceInput.ts` (`startRecorder`, reached from `startRecognition`'s `onend`), shown by `ObjectFinder.tsx` and `VrFindPanel.ts`
+- **Severity:** P3 (needs a browser that lists the Web Speech API but has no `navigator.mediaDevices`, i.e. a page served over plain `http://` on a LAN address; production is HTTPS. Typing and Enter still search; closing the sheet resets it)
+- **Found:** 2026-11-13 by `/find-implicit-state-machines` (queue item 8, voice input), modeled in `VoiceInput.tla` (side-session notes), replayed against the real page
+- **Reproduced (`test:xr:summon`, phase `desktop-voice-orders`):** tap Speak (recognition starts), the recognition fails with `not-allowed` and ends. `onend` sets the machine's `state` idle without telling the session, then `startRecorder` finds no `getUserMedia`, logs "no MediaRecorder" and shows "type instead", and returns without a state change. The session's `voice` is still `listening`: the button reads "Stop listening", Find stays disabled, and a tap on Stop calls `stop()` on nothing.
+- **Expected:** the buttons follow the machine: back to "Speak" with the "type instead" line.
+- **Fix:** `startRecorder`'s no-recorder branch sets the state idle through `setState`. Replay `desktop-voice-orders`: failed before the fix, passes after.
+- **Not defects (modeled and replayed, recorded in `TODOS.md` item 8):** a transcription answer arriving after the sheet closed is discarded (abort); a `getUserMedia` answer after cancel is closed (generation).
+
 ## Entry template
 
 ```md
