@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 //   2. the agent upload token for the `--api` host in the macOS Keychain
 //      (service `holoim-agent-upload`, account = the host, e.g.
 //      `holoim-api.fly.dev`), which `scripts/agent-upload-token.sh setup`
-//      stores once (docs/features/agent-upload-token.md);
+//      stores once (docs/features/archive/agent-upload-token.md);
 //   3. nothing: an anonymous upload, which only a test API with
 //      TEST_OPEN_UPLOADS accepts.
 // A Keychain token goes only to the host it was stored for, never over plain

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { bearer, exposeMagicLinksForTests, signIn } from "./fixtures/auth.js";
 
-// Standing agent tokens (docs/features/agent-upload-token.md), driven through
+// Standing agent tokens (docs/features/archive/agent-upload-token.md), driven through
 // the real migrations, the real CLI and the real routes. Cases come from the
 // brief's failure list: a token may upload and read /auth/me only; unknown,
 // revoked and expired tokens are anonymous; the prefix keeps the token table

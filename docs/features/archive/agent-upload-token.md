@@ -1,7 +1,7 @@
 # Feature brief: Agent upload token
 
 **Lead:** Claude Code (Opus), session started from the showcase session
-**Status:** Implementing (approved by the user 2026-11-12)
+**Status:** Complete (on `main` d1414798, deployed 2026-11-12; production token set up by the user)
 **Layer:** None (publishing infrastructure; no change to what a hologram is or how it is viewed)
 
 ## User outcome
@@ -66,7 +66,7 @@ The user sets this up once with one command and revokes it with another.
 - A web UI for tokens, tokens for ordinary creators, and finer scopes.
 - Anonymous deletion of unowned holograms (`holograms.ts:499`). The review
   flagged it as a gap, but it is the documented legacy rule in
-  `archive/creator-accounts.md` ("unowned + anyone → 200"), so it is not a
+  `creator-accounts.md` ("unowned + anyone → 200"), so it is not a
   bug; whether it still makes sense now that uploads need an account is a
   question for the user, outside this brief.
 
@@ -76,23 +76,25 @@ None: no capture authoring action changes.
 
 ## Acceptance criteria
 
-- [ ] With a Keychain entry and no `HOLOIM_SESSION`, `showcase:upload` to
+- [x] With a Keychain entry and no `HOLOIM_SESSION`, `showcase:upload` to
       production prints "uploading as Claude (agent-authored)", and the
       piece is owned by the agent account with that byline. The output never
       contains the token.
-- [ ] A revoked or unknown token gets `401`. The script says the token was
+- [x] A revoked or unknown token gets `401`. The script says the token was
       refused and names the setup command, and it uploads nothing.
-- [ ] A Keychain entry is only sent to the host it was registered for.
+- [x] A Keychain entry is only sent to the host it was registered for.
       Uploading to a local API does not send the production token.
-- [ ] An API token gets `403` on `PATCH /auth/me` and on delete.
+- [x] An API token gets `403` on `PATCH /auth/me` and on delete.
       `POST /auth/logout` with it leaves the token valid.
-- [ ] Magic-link sign-in, sessions, logout and anonymous reads behave as
+- [x] Magic-link sign-in, sessions, logout and anonymous reads behave as
       before (existing auth and hologram route tests stay green).
-- [ ] No HTTP route creates a token, and the database holds only hashes.
+- [x] No HTTP route creates a token, and the database holds only hashes.
       The setup script's hash equals the API's `hashToken`.
-- [ ] "The way down" and "The way down II" show the agent byline and sit on
-      the agent's creator page after the move.
-- [ ] `pnpm run verify:pr` passes. The migration deploys and production
+- [x] ~~"The way down" and "The way down II" show the agent byline and sit on
+      the agent's creator page after the move.~~ Dropped by the user: the
+      `move` dry run listed "The way down" and the user chose to keep it;
+      "The way down II" was not on production and is uploaded as the agent.
+- [x] `pnpm run verify:pr` passes. The migration deploys and production
       health checks are green.
 
 ## Failure cases considered
@@ -119,7 +121,7 @@ None: no capture authoring action changes.
 | Lead | This session | Brief, integration, handoff |
 | Design reviewer | `design-reviewer` subagent (Opus), done | Read-only |
 | Implementer | This session | `apps/viewer-api/{prisma,src/services/auth.ts,src/routes/auth.ts,src/routes/holograms.ts,src/agent-token.ts,test}`, `apps/capture/scripts/showcase/upload.mjs`, `scripts/agent-upload-token.sh`, `AGENT_CONTRACT.md`, `docs/product/concepts/agent-authored-holograms.md` |
-| Independent verifier | Codex (`-p standard`) | Read-only; test artifacts only |
+| Independent verifier | Claude Sonnet subagent, fresh context (Codex was over its usage limit and Muse failed on billing, so same vendor) | Read-only; found the `security -i` echo risk and unquoted args (fixed) and the read-route wording (brief corrected) |
 
 ## Design decision
 
@@ -150,13 +152,13 @@ stays out of every committed file; setup takes it as `--email`.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Upload as agent with Keychain token | Real `agent-upload-token.sh setup` + `showcase:upload door` against a fresh local API (Keychain service `holoim-agent-upload-e2e`), then production | Local, 2026-11-12: "uploading as Claude (agent-authored)"; DTO `submittedBy` "Claude (agent-authored)", `submittedByVerified: true`, owner = agent; the setup script's hash matched (`register` then `/auth/me` 200). Proof video `output/agent-token-proof/proof.mp4` (ignored). Production: pending |
+| Upload as agent with Keychain token | Real `agent-upload-token.sh setup` + `showcase:upload door` against a fresh local API (Keychain service `holoim-agent-upload-e2e`), then production | Local, 2026-11-12: "uploading as Claude (agent-authored)"; DTO `submittedBy` "Claude (agent-authored)", `submittedByVerified: true`, owner = agent; the setup script's hash matched (`register` then `/auth/me` 200). Proof video `output/agent-token-proof/proof.mp4` (ignored). Production, 2026-11-12: the user's `setup https://holoim-api.fly.dev` registered the hash and its check printed "uploading as Claude (agent-authored)"; an agent session's `showcase:upload --whoami` with no env var printed the same |
 | Revoked token refused | `agent-token revoke --hash`, then `showcase:upload` locally | Local: "The API refused the agent token ... Nothing was uploaded", exit 1 |
 | Host binding | Upload to `http://localhost:3901` with only a `127.0.0.1:3901` entry | Local: "no token for localhost:3901: uploading anonymously", then 401 |
 | No leak | `grep -c holoim_at_` over the API log and upload output | Local: 0 and 0 |
 | Route rules | Vitest (`test/agent-token.test.ts`, real migrations, real CLI): upload and `/auth/me` accepted; `PATCH /auth/me`, delete `403`; unknown, revoked, expired `401`; prefix keeps tokens and sessions apart; logout leaves token; `register` refuses a raw token, is idempotent, will not rebind; `move` dry run, refuses ids it does not own, sets the byline | 6/6 pass (with `auth-routes.test.ts` 9/9), 2026-11-12 |
-| No regression | `pnpm --filter @holoim/api test`, `pnpm run verify:pr` | Command results |
-| Move | `agent-token move` dry run, then `--apply`, on production | CLI output; creator page |
+| No regression | `pnpm --filter @holoim/api test`, `pnpm run verify:pr` | 2026-11-12: every step passed; bubble-capture failed once under another session's concurrent pipeline load and passed alone, with portal and capture XR. Hosted CI on `main` green, Fly deploy green, `/healthz` ok, a made-up token 401 |
+| Move | `agent-token move` dry run on production | Listed only "The way down" (owned by alberto); not applied, by the user's choice |
 
 ## Physical-device limits
 

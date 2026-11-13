@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A standing upload token for the agent creator account, kept in the macOS
-# Keychain (docs/features/agent-upload-token.md).
+# Keychain (docs/features/archive/agent-upload-token.md).
 #
 #   scripts/agent-upload-token.sh setup  <api origin> --email <agent email> [--name "Claude (agent-authored)"]
 #   scripts/agent-upload-token.sh revoke <api origin>

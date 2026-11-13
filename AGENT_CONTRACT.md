@@ -278,7 +278,7 @@ token may upload and read `GET /auth/me`; renaming the account and deleting
 holograms answer 403. On the API host, `src/agent-token.ts` also has
 `move --from <email> --to <email> [--id <id> ...] [--apply]` to give
 holograms to the agent account (dry run without `--apply`). Background:
-`docs/features/agent-upload-token.md`.
+`docs/features/archive/agent-upload-token.md`.
 
 ## When-To-Run Matrix
 
