@@ -39,6 +39,15 @@ export class VrLocomotion {
     if (patch.turnY !== undefined) this.thumbstick.turnY = clampUnit(patch.turnY);
   }
 
+  /** Lets go of both sticks (the session ended): stale axes never carry into the next one. */
+  releaseSticks(): void {
+    this.thumbstick.moveX = 0;
+    this.thumbstick.moveY = 0;
+    this.thumbstick.turnX = 0;
+    this.thumbstick.turnY = 0;
+    this.objectPush = 0;
+  }
+
   /**
    * While a prop is held, the turn stick locks to its stronger axis: forward
    * or back pushes and pulls the prop and does not turn.

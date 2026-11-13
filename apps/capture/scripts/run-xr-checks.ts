@@ -34,6 +34,7 @@ const CHECKS = {
   take: 'scripts/ci-take-lifecycle-playwright.ts',
   locomotion: 'scripts/ci-vr-locomotion-playwright.ts',
   terrain: 'scripts/ci-terrain-locomotion.ts',
+  'loco-states': 'scripts/ci-locomotion-states-playwright.mjs',
   hands: 'scripts/ci-hand-replay-playwright.ts',
   height: 'scripts/ci-xr-height-playwright.ts',
   body: 'scripts/ci-body-replay-playwright.ts',
@@ -57,7 +58,7 @@ const CHECKS = {
 type CheckName = keyof typeof CHECKS;
 
 // .mjs checks that import TypeScript workspace sources (the meaning and objects packages) run under tsx too.
-const USES_TSX: ReadonlySet<CheckName> = new Set(['object', 'summon']);
+const USES_TSX: ReadonlySet<CheckName> = new Set(['object', 'summon', 'loco-states']);
 // Checks that import the meaning package from Node resolve its sources.
 const USES_SOURCE_CONDITION: ReadonlySet<CheckName> = new Set(['avatars']);
 
@@ -84,7 +85,7 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
 // (CI run 40472119472; avatars is not in CI and keeps its older estimate).
 // Parallel runs start the longest first and XR_SHARD balances on it. Refresh
 // it on purpose from the xr-checks-shard-*.json timing artifacts.
-const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, recording: 5, take: 15, 'mock-vr': 4, avatars: 120 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, 'loco-states': 10, recording: 5, take: 15, 'mock-vr': 4, avatars: 120 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);

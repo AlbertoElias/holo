@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { type CaptureContext, captureContext } from './captureContext';
 
 const UP = new THREE.Vector3(0, 1, 0);
+const REST = { x: 0, y: 0 };
 
 /**
  * VR thumbstick turning, after session setup and before the room-scale
@@ -14,6 +15,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 export class VrLocomotionSystem extends createSystem() {
   private capture!: CaptureContext;
   private wasVrActive = false;
+  /** Which sides' controllers reported axes last frame. */
+  private readonly reporting = { left: false, right: false };
   private readonly turnQuat = new THREE.Quaternion();
   private readonly pivot = new THREE.Vector3();
   private readonly offset = new THREE.Vector3();
@@ -27,7 +30,11 @@ export class VrLocomotionSystem extends createSystem() {
     if (c.frame.arSpectator) return;
     const loco = c.locomotion;
     if (!c.frame.vrActive) {
+      // The session ended: a stick held at the end is let go, so nothing walks on in the next one.
+      if (this.wasVrActive) loco.releaseSticks();
       this.wasVrActive = false;
+      this.reporting.left = false;
+      this.reporting.right = false;
       return;
     }
     if (!this.wasVrActive) {
@@ -37,9 +44,10 @@ export class VrLocomotionSystem extends createSystem() {
 
     // Real controllers write the state the mock hook writes in checks.
     if (c.frame.xrPresenting && !c.tracking.mock.enabled) {
-      // A stick pointing the Halo, or not yet recentred after it, neither walks nor turns.
-      const move = c.headsetHolds.locomotionBlocked('left') ? { x: 0, y: 0 } : c.tracking.getThumbstickAxes('left');
-      const turn = c.headsetHolds.locomotionBlocked('right') ? { x: 0, y: 0 } : c.tracking.getThumbstickAxes('right');
+      // A side whose controller was reporting and now is not (it went away, or hands took over) is a stick at
+      // rest, not the last value it had. A side that never reported keeps what was written to it.
+      const move = this.readSide(c, 'left');
+      const turn = this.readSide(c, 'right');
       if (move) loco.setThumbstick({ moveX: move.x, moveY: move.y });
       if (turn) loco.setThumbstick({ turnX: turn.x, turnY: turn.y });
     }
@@ -76,5 +84,19 @@ export class VrLocomotionSystem extends createSystem() {
     rig.quaternion.premultiply(this.turnQuat).normalize();
     rig.updateMatrixWorld(true);
     c.tracking.refreshHeadWorldPose();
+  }
+
+  /** This side's stick to write, or null to leave it as it is. */
+  private readSide(c: CaptureContext, side: 'left' | 'right'): { x: number; y: number } | null {
+    // A stick pointing the Halo, or not yet recentred after it, neither walks nor turns.
+    if (c.headsetHolds.locomotionBlocked(side)) return REST;
+    const axes = c.tracking.getThumbstickAxes(side);
+    if (axes) {
+      this.reporting[side] = true;
+      return axes;
+    }
+    if (!this.reporting[side]) return null;
+    this.reporting[side] = false;
+    return REST;
   }
 }
