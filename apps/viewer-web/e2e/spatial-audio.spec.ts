@@ -184,8 +184,17 @@ function toEar(ear: Reading["ear"], world: Vec3): Vec3 {
   return [dot(d, right), dot(d, up), -dot(d, forward)];
 }
 
-/** How far from the motion's time a sound may be: a frame of a loaded machine between the motion's time and the audio clock's read. */
+/**
+ * How far from the motion's time a sound may be: the motion's time and the audio clock are read a frame apart at most,
+ * so the bound is the page's own frame length, measured where it is read, and never less than this floor. A frame is
+ * 16 ms on a free machine and several hundred on a starved runner (B-051); a real desync (a source restarted from 0, or
+ * left behind across a pause) is off by seconds either way.
+ */
 const VOICE_SYNC_TOLERANCE_S = 0.15;
+
+function syncTolerance(step: { frameS: number }): number {
+  return Math.max(VOICE_SYNC_TOLERANCE_S, 1.5 * step.frameS);
+}
 
 /** Every source's place in its buffer against the motion's, read at one instant. */
 /**
@@ -194,14 +203,14 @@ const VOICE_SYNC_TOLERANCE_S = 0.15;
  * motion: read between frames, a stalled frame on a loaded machine would count against the sound. A voice's
  * error is its median over a few frames, so one frame's stall or a restart's first frame is not the measure.
  */
-async function voicesInStep(page: Page, frames = 5): Promise<{ time: number; voices: Array<{ duration: number; offset: number | null; errorS: number }> }> {
-  const samples = await page.evaluate(([url, count]) => new Promise<Array<{ time: number; voices: Voice[] }>>((resolve) => {
+async function voicesInStep(page: Page, frames = 5): Promise<{ time: number; frameS: number; voices: Array<{ duration: number; offset: number | null; errorS: number }> }> {
+  const samples = await page.evaluate(([url, count]) => new Promise<Array<{ time: number; at: number; voices: Voice[] }>>((resolve) => {
     type Probe = { sound: SoundProbe; actions: Record<string, { time: number } | null> };
     const hooks = window as unknown as { __portalProbes: Record<string, Probe> };
     const probe = Object.entries(hooks.__portalProbes).find(([key]) => key.endsWith(url as string))![1];
-    const read: Array<{ time: number; voices: Voice[] }> = [];
+    const read: Array<{ time: number; at: number; voices: Voice[] }> = [];
     const sample = () => {
-      read.push({ time: Object.values(probe.actions).find(Boolean)!.time, voices: probe.sound.current!.readVoices() });
+      read.push({ time: Object.values(probe.actions).find(Boolean)!.time, at: performance.now(), voices: probe.sound.current!.readVoices() });
       if (read.length < (count as number)) requestAnimationFrame(sample);
       else resolve(read);
     };
@@ -214,13 +223,42 @@ async function voicesInStep(page: Page, frames = 5): Promise<{ time: number; voi
     return Math.min(apart, voice.duration - apart);
   }));
   const last = samples.at(-1)!;
+  const intervals = samples.slice(1).map((sample, index) => (sample.at - samples[index]!.at) / 1000).sort((a, b) => a - b);
   return {
     time: last.time,
+    frameS: intervals[Math.floor(intervals.length / 2)] ?? 0,
     voices: last.voices.map((voice, index) => {
       const sorted = errors.map((frame) => frame[index]!).sort((a, b) => a - b);
       return { duration: voice.duration, offset: voice.offset, errorS: sorted[Math.floor(sorted.length / 2)]! };
     })
   };
+}
+
+/**
+ * Wait, on the page's own frames, until the motion has wrapped and run on to `settleS` of clip time. Sampling the clip
+ * time from the test between `voicesInStep` reads aliased on a starved runner (B-051): a read spans 5 frames, and when
+ * that is close to the 8 s clip every read can land just past the wrap and never below where it started. Watching every
+ * frame sees the drop however slow the frames are, and the wall-clock timeout only catches a page that stopped.
+ */
+async function waitForWrap(page: Page, settleS: number): Promise<{ frames: number; wrappedFrom: number; at: number }> {
+  return page.evaluate(([url, settle]) => new Promise<{ frames: number; wrappedFrom: number; at: number }>((resolve) => {
+    type Probe = { actions: Record<string, { time: number } | null> };
+    const hooks = window as unknown as { __portalProbes: Record<string, Probe> };
+    const probe = Object.entries(hooks.__portalProbes).find(([key]) => key.endsWith(url as string))![1];
+    const time = () => Object.values(probe.actions).find(Boolean)!.time;
+    let last = time();
+    let wrappedFrom: number | null = null;
+    let frames = 0;
+    const step = () => {
+      frames += 1;
+      const now = time();
+      if (wrappedFrom === null && now < last) wrappedFrom = last;
+      last = now;
+      if (wrappedFrom !== null && now >= (settle as number)) resolve({ frames, wrappedFrom, at: now });
+      else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }), [item.url, settleS] as const);
 }
 
 /** The context's listener, which the viewer never moves. */
@@ -348,7 +386,7 @@ test("feed spatial audio: placed sounds pan with drag-orbit, grow louder with wh
   await card.getByRole("button", { name: "Unmute audio" }).click();
   await expect.poll(async () => (await read(page, 0)).voices.every((voice) => voice.gain === 1), { message: "unmuted: every voice at 1" }).toBe(true);
   const afterUnmute = await voicesInStep(page);
-  expect(Math.max(...afterUnmute.voices.map((voice) => voice.errorS)), "unmuted, every source is where the motion is").toBeLessThan(VOICE_SYNC_TOLERANCE_S);
+  expect(Math.max(...afterUnmute.voices.map((voice) => voice.errorS)), "unmuted, every source is where the motion is").toBeLessThan(syncTolerance(afterUnmute));
   await page.mouse.click(center.x, center.y);
   await expect(card).toHaveAttribute("data-portal-paused", "true");
   await expect.poll(async () => (await read(page, 0)).voices.every((voice) => !voice.playing), { message: "paused: no source plays" }).toBe(true);
@@ -356,25 +394,26 @@ test("feed spatial audio: placed sounds pan with drag-orbit, grow louder with wh
   await expect(card).toHaveAttribute("data-portal-paused", "false");
   await expect.poll(async () => (await read(page, 0)).voices.every((voice) => voice.playing), { message: "resumed: every source plays" }).toBe(true);
   const afterResume = await voicesInStep(page);
-  expect(Math.max(...afterResume.voices.map((voice) => voice.errorS)), "resumed, every source starts where the motion is").toBeLessThan(VOICE_SYNC_TOLERANCE_S);
+  expect(Math.max(...afterResume.voices.map((voice) => voice.errorS)), "resumed, every source starts where the motion is").toBeLessThan(syncTolerance(afterResume));
   expect(afterResume.voices.map((voice) => Math.round(voice.duration)).sort(), "sources of different lengths").toEqual([SPATIAL_CLIP_S, SPATIAL_CLIP_S, TONE_S].sort());
 
-  // Across a wrap of the motion: the 5 s tone, which has looped on its own by then, restarts with the motion.
-  const beforeWrap = afterResume.time;
-  await expect
-    .poll(async () => (await voicesInStep(page)).time < beforeWrap, { message: "the motion wraps", timeout: (SPATIAL_CLIP_S + 4) * 1000, intervals: [100] })
-    .toBe(true);
-  await page.waitForTimeout(600);
+  // Across a wrap of the motion: the 5 s tone, which has looped on its own by then, restarts with the motion. The wrap
+  // is watched on the page's frames, then the sources get 0.5 s of clip time to restart before they are read.
+  test.setTimeout(test.info().timeout + 60_000);
+  const motionWrap = await waitForWrap(page, 0.5);
   const afterWrap = await voicesInStep(page);
-  expect(afterWrap.time, "read just after the wrap").toBeLessThan(SPATIAL_CLIP_S - TONE_S);
-  expect(Math.max(...afterWrap.voices.map((voice) => voice.errorS)), "after the motion wraps, every source is where the motion is").toBeLessThan(VOICE_SYNC_TOLERANCE_S);
+  // Read within the loop that follows the wrap. Any time in it tells: a tone left running on its own would be
+  // SPATIAL_CLIP_S mod TONE_S (3 s) off the motion at every point of that loop.
+  expect(motionWrap.wrappedFrom, "the motion ran through its second half before it wrapped").toBeGreaterThan(SPATIAL_CLIP_S / 2);
+  expect(afterWrap.time, "read in the loop after the wrap, not one later").toBeGreaterThanOrEqual(motionWrap.at);
+  expect(Math.max(...afterWrap.voices.map((voice) => voice.errorS)), "after the motion wraps, every source is where the motion is").toBeLessThan(syncTolerance(afterWrap));
 
   report.feed = {
     follow: { bell: followBell, ear: follow.ear, camera: follow.camera, portal: follow.portal, earToCameraM: earToCamera },
     orbited: { bell: orbitedBell, ear: orbited.ear, camera: orbited.camera, portal: orbited.portal },
     zoomed: { bell: zoomedBell, ear: zoomed.ear, camera: zoomed.camera, portal: zoomed.portal, louderDb: louder, predictedLouderDb: predictedLouder },
     orbiter: { samples: tracked.length, travelledM: travelled, sentGapM: sentGap, heardGapMedianM: heardGap, heardGapMaxM: heardGapMax, frameStepM: frameStep },
-    sync: { afterUnmute, afterResume, afterWrap },
+    sync: { afterUnmute, afterResume, wrap: motionWrap, afterWrap },
     voices: follow.voices
   };
 });

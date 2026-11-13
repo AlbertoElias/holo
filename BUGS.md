@@ -77,6 +77,15 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the animated sources' clip wraps and the step passes on a 4-CPU runner as it does locally.
 - **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
   Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
+- **Cause (2026-11-12):** two wall-clock judgements of the page's own clock. The wrap poll read the clip time once per
+  `voicesInStep` (5 frames); on a starved runner that period nears the 8 s clip and aliases, so no sample landed after the
+  wrap within its real-time deadline, and the `waitForTimeout(600)` after it landed at an arbitrary clip time. The sync
+  checks allowed a fixed 0.15 s between the motion's time and the audio clock, which are read a frame apart, and a starved
+  frame is longer: under `CI_EMULATE_LOAD=2` the "resumed" check failed at 0.35 s (1 of 5 runs, the old spec).
+- **Fix:** `waitForWrap` watches the clip time every animation frame until it drops and runs on to 0.5 s; the sync
+  tolerance is the larger of 0.15 s and 1.5 frames measured where the voices are read. A real desync is off by seconds.
+- **Evidence:** `scripts/ci-emulate.sh` on `spatial-audio.spec.ts --repeat-each=5`: 5/5 with no load, 5/5 with
+  `CI_EMULATE_LOAD=2` (frames 107–130 ms; before the fix, 4/5 under the same load). Closes after a green hosted run on `main`.
 
 ### B-054 — The summon XR check's `desktop-anytime` phase flakes on "mid-take row: no tray row"
 

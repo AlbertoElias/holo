@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -105,6 +105,67 @@ function checkInstructionFilters() {
   }
 }
 
+// Fixed wall-clock sleeps in test code are the commonest root of the CI flakes
+// (BUGS.md history, B-026 to B-052): a check waits a set number of real
+// milliseconds for something the page does on its own clock, and a starved
+// runner's page has not done it yet. This ratchet stops new ones: a file may not
+// have more `waitForTimeout(` or sleep-promise calls than
+// scripts/wall-clock-waits.json records for it. Wait on a condition (expect.poll,
+// waitForFunction, a probe the app exposes) or on the page's clock instead; a
+// sleep that really must be real time carries a `wall-clock: <why>` comment on
+// its line and is not counted. Lower the baseline when a file loses sleeps.
+const WALL_CLOCK_SLEEP = /waitForTimeout\(|setTimeout\(\s*(?:resolve|r|res|done)\s*,|=>\s*setTimeout\(\s*(?:resolve|r|res|done)\b/g;
+
+function countWallClockSleeps(source) {
+  let count = 0;
+  for (const line of source.split("\n")) {
+    if (line.includes("wall-clock:")) continue;
+    count += [...line.matchAll(WALL_CLOCK_SLEEP)].length;
+  }
+  return count;
+}
+
+function wallClockSleepCounts() {
+  const listed = spawnSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "--", "apps/*/e2e/**", "apps/capture/scripts/**", "packages/tooling-testing/src/**"],
+    { cwd: rootDir, encoding: "utf8" }
+  );
+  const counts = {};
+  for (const file of new Set(listed.stdout.split("\n").filter((name) => /\.(?:[cm]?[jt]s|tsx)$/.test(name)))) {
+    const full = path.join(rootDir, file);
+    if (!existsSync(full)) continue;
+    const count = countWallClockSleeps(readFileSync(full, "utf8"));
+    if (count > 0) counts[file] = count;
+  }
+  return counts;
+}
+
+function checkWallClockWaits() {
+  const baselinePath = path.join(rootDir, "scripts/wall-clock-waits.json");
+  const counts = wallClockSleepCounts();
+  if (process.argv.includes("--write-wall-clock-baseline")) {
+    const sorted = Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
+    writeFileSync(baselinePath, `${JSON.stringify(sorted, null, 2)}\n`, "utf8");
+    console.log(`Wrote ${baselinePath}`);
+    return;
+  }
+  const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, "utf8")) : {};
+  for (const [file, count] of Object.entries(counts)) {
+    const allowed = baseline[file] ?? 0;
+    if (count > allowed) {
+      reporter.fail(
+        `${file} has ${count} fixed wall-clock sleep(s) (waitForTimeout or a setTimeout promise), ${allowed} allowed. ` +
+          "Wait on a condition or the page's own clock instead, or mark a sleep that must be real time with a `wall-clock: <why>` comment on its line."
+      );
+    }
+  }
+  const lowered = Object.entries(baseline).filter(([file, allowed]) => (counts[file] ?? 0) < allowed);
+  if (lowered.length > 0) {
+    reporter.warn(`${lowered.length} file(s) have fewer wall-clock sleeps than scripts/wall-clock-waits.json allows; lower it with \`node scripts/doctor.mjs --write-wall-clock-baseline\`.`);
+  }
+}
+
 // The pre-push hook (scripts/hooks/pre-push-checks.mjs) is installed through core.hooksPath.
 function checkPrePushHook() {
   const read = () => spawnSync("git", ["config", "--get", "core.hooksPath"], { cwd: rootDir, encoding: "utf8" }).stdout.trim();
@@ -149,6 +210,7 @@ async function main() {
   checkAgentConfigParity();
   checkInstructionFilters();
   checkPrePushHook();
+  checkWallClockWaits();
   await checkPorts();
 
   printDoctorResult(reporter, "workspace");
