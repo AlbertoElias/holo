@@ -231,7 +231,7 @@ test.describe("phone", () => {
     await captureEvidence(page, testInfo, "phone-tilt-variant");
   });
 
-  // B-055 (replayed from the tilt-permission state machine): iOS answers the
+  // B-056 (replayed from the tilt-permission state machine): iOS answers the
   // motion prompt through a promise, and the viewer can leave the card first.
   const scrollTo = async (page: Page, id: string) => {
     await page.locator(`.feed-card[data-card-id="${id}"]`).evaluate((element) => element.scrollIntoView({ behavior: "instant" }));

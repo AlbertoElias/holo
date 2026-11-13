@@ -13,9 +13,9 @@ import { env } from "../lib/env.js";
 import { clientKey, createRateLimit } from "../lib/rate-limit.js";
 import {
   bearerToken,
-  getSessionUser,
   MagicLinkDeliveryError,
   requestMagicLink,
+  resolveAuth,
   revokeSession,
   toUserDto,
   updateDisplayName,
@@ -23,17 +23,26 @@ import {
   type AuthUser
 } from "../services/auth.js";
 
+/**
+ * The signed-in account, or null after answering 401. An agent token passes
+ * only where `allowApiToken` is set; elsewhere it gets 403, so a standing
+ * credential cannot rename the account (and with it every later byline).
+ */
 async function requireUser(
   request: { headers: { authorization?: string | string[] | undefined } },
-  reply: { status: (code: number) => { send: (body: unknown) => unknown } }
+  reply: { status: (code: number) => { send: (body: unknown) => unknown } },
+  { allowApiToken = false }: { allowApiToken?: boolean } = {}
 ): Promise<AuthUser | null> {
-  const token = bearerToken(request.headers);
-  const user = token ? await getSessionUser(token) : null;
-  if (!user) {
+  const auth = await resolveAuth(request.headers);
+  if (!auth) {
     reply.status(401).send({ error: "Sign in required." });
     return null;
   }
-  return user;
+  if (auth.via === "apiToken" && !allowApiToken) {
+    reply.status(403).send({ error: "An agent token cannot do this; sign in on the site instead." });
+    return null;
+  }
+  return auth.user;
 }
 
 const MAGIC_LINK_WINDOW_MS = 10 * 60_000;
@@ -96,7 +105,7 @@ export async function registerAuthRoutes(app: FastifyInstance, options: { magicL
   });
 
   app.get("/auth/me", async (request, reply) => {
-    const user = await requireUser(request, reply);
+    const user = await requireUser(request, reply, { allowApiToken: true });
     if (!user) {
       return;
     }

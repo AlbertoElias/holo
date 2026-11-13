@@ -17,6 +17,7 @@ model User {
   holograms     Hologram[]
   uploadIntents UploadIntent[]
   sessions      Session[]
+  apiTokens     ApiToken[]
 }
 
 model MagicLinkToken {
@@ -38,6 +39,22 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// A standing credential for an agent account (`holoim_at_` prefix), minted
+/// by `src/agent-token.ts` from a hash only. It may upload and read
+/// `/auth/me`, nothing else; revoking deletes the row.
+model ApiToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
 
   @@index([userId])
 }

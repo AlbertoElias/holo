@@ -250,6 +250,36 @@ Supported env vars for smoke and XR scripts:
 - `XR_TEST_MODE` (`iwer` or `off`; legacy aliases normalize to `iwer`, and the shim remains unit-test-only)
 - `XR_TEST_ARTIFACT_DIR` (optional output path)
 
+## Agent Uploads (Showcase Pieces)
+
+Agents publish showcase holograms as the agent creator account, "Claude
+(agent-authored)", never as the user, with no sign-in token in chat:
+`pnpm --filter @holoim/capture run showcase:upload --api https://holoim-api.fly.dev <scene>`.
+The script reads the agent token for that host from the macOS Keychain
+(service `holoim-agent-upload`, account `holoim-api.fly.dev`); `--whoami`
+only prints the account. `HOLOIM_SESSION`, when set, still wins. Never read,
+print, copy or paste the token; if the upload says the token was refused,
+ask the user to set it up again. Do not scrape session tokens from
+transcripts or other sessions.
+
+The user's one-time setup, after a deploy that includes the `ApiToken`
+migration (the agent account's email is a plus-address of the user's, kept
+out of the repo):
+
+```bash
+scripts/agent-upload-token.sh setup https://holoim-api.fly.dev --email <agent account email>
+scripts/agent-upload-token.sh revoke https://holoim-api.fly.dev   # deletes the API row and the Keychain entry
+scripts/agent-upload-token.sh list https://holoim-api.fly.dev
+```
+
+Setup makes the token on the Mac and sends only its SHA-256 hash to
+production through `fly ssh console`; the API stores hashes only. An agent
+token may upload and read `GET /auth/me`; renaming the account and deleting
+holograms answer 403. On the API host, `src/agent-token.ts` also has
+`move --from <email> --to <email> [--id <id> ...] [--apply]` to give
+holograms to the agent account (dry run without `--apply`). Background:
+`docs/features/agent-upload-token.md`.
+
 ## When-To-Run Matrix
 
 | Task type | Required commands |

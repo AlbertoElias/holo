@@ -87,7 +87,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the tray dock shows its row mid-take on every run.
 - **Reproduction:** `SUMMON_ONLY=desktop-anytime pnpm --filter @holoim/capture run test:xr:summon`, repeated on a loaded machine. Not isolated; suspect the same starved-page timing as B-050 (a wait that ends before the dock re-renders).
 
-### B-055 — Portal tilt: a motion-permission answer that arrives late still writes the tilt state
+### B-056 — Portal tilt: a motion-permission answer that arrives late still writes the tilt state
 
 - **Area:** `apps/viewer-web/src/features/portal/usePortalTriggers.ts` (`enableTilt`), `portalStore.ts` (`tiltStatus`), `PortalControls.tsx`
 - **Severity:** P3 (tilt is the `?portal=tilt` trial variant only; the default `drag` variant has no tilt)
@@ -100,6 +100,18 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Fix:** the store keeps a tilt epoch that every viewer move bumps (an ask, the off press, `reset()`). `enableTilt` takes a `settle` function from `store.beginTiltRequest()`, which drops its answer once the epoch has moved. Nothing else changes: an answer on the card the viewer stayed on works as before (replayed in "the answer on the card the viewer stayed on still works").
 - **Did not reproduce:** unmount while an ask is pending. The store is per card and nothing renders from it afterwards, so the late write is unobservable.
 - **Not done:** emulation in headless Chromium with a shim, no iPhone. Leaving the card while iOS's modal prompt is up needs a scroll glide still running at the press (or a feed change), and a double ask needs two taps before the prompt shows; iOS very likely answers both asks alike, so the differing answers in the third replay are shim-only. The fix covers all three orders regardless.
+
+### B-055 — The ar-record check's `phone-put-back` phase flakes: "the tray dock is not shown"
+
+- **Area:** `apps/capture` (`scripts/ci-ar-record-playwright.ts`, `test:xr:ar-record`, capture XR shard 1/2)
+- **Severity:** P3 (a flaky check; the product behaves correctly)
+- **Observed:** 2026-11-12 on hosted CI run 43330664456 at `main` `03d7961d3c6a`: `ci-ar-record-playwright.ts:518` `tapDock`, called from `putBackPhase`'s Close-ring step, "Error: the tray dock is not shown".
+- **Cause:** a race in the check, not in the app and not in B-050's change. The Stop tap starts the export. While `recordingState` is `exporting`, `PhoneArChrome.update()` hides the tray dock and closes its row. On a runner where the export outlasts the Stop tap's own `drive` (`nextFrame` waits for an animation frame, or 100 ms), `advanceUntilDownload` stops stepping the manual clock the moment the download lands. The state is `idle` by then but no step has run, so `tapDock` read the stale dock (hidden, "Exporting...") and threw. Locally the export finishes inside the tap's `drive`, so the check passed on every normal-speed run (native 9 of 9, ci-emulate 8 of 8).
+- **Reproduced** by forcing the slow export: the next 100 ms timer stretched to 3 s and one animation frame ignored. The probe then read "tray dock right after the download: false, row open false, status Exporting..." and the exact hosted error followed.
+- **Fix:** `tapDock` steps the simulation until the dock is visible (a frame does not step the manual clock). `putBackPhase` now forces a slow export at the Stop tap (`slowNextExport`), so every run exercises the exporting → dock hidden → dock returns path. That exposed a second stale read: after the row reopens it is still sliding out, so the Close-ring step waits until the ring holds still before tapping.
+- **Expected:** the phase passes at any export speed.
+- **Reproduction:** before the fix, with the slow export forced, `AR_RECORD_ONLY=put-back pnpm --filter @holoim/capture run test:xr:ar-record`.
+- **Fix status:** merged; close this entry once a hosted run of `main` passes shard 1/2.
 
 ## Entry template
 
