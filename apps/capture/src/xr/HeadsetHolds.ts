@@ -100,6 +100,8 @@ export class HeadsetHolds {
   private readonly pinches: Record<VrHandSide, PinchSide> = { left: { on: false, lostSec: 0, seenSec: 0 }, right: { on: false, lostSec: 0, seenSec: 0 } };
   /** Controller selects from the mark's trigger, queued for the next step. */
   private readonly triggerEvents: HeldModeEvent[] = [];
+  /** Which controller triggers are down now, from the selects (a take that is not running never feeds them to the mark). */
+  private readonly triggerDown: Record<VrHandSide, boolean> = { left: false, right: false };
   private unbind: (() => void) | null = null;
 
   private summon: HaloSummon | null = null;
@@ -137,6 +139,7 @@ export class HeadsetHolds {
   private onTrigger(source: XRInputSource | undefined, pressed: boolean): void {
     if (!source || source.hand || (source.handedness !== 'left' && source.handedness !== 'right')) return;
     const side = source.handedness;
+    this.triggerDown[side] = pressed;
     const at = performance.now();
     this.triggerEvents.push(pressed ? { type: 'press', source: `${side}:trigger`, atMs: at, delayMs: 0 } : { type: 'release', source: `${side}:trigger`, atMs: at });
   }
@@ -177,6 +180,9 @@ export class HeadsetHolds {
       this.stickLocked[side] = false;
     }
     this.triggerEvents.length = 0;
+    this.triggerDown.left = false;
+    this.triggerDown.right = false;
+    this.releaseSpentSwallow(timeSec);
   }
 
   update(step: HeadsetHoldsStep): HeadsetMarkStep {
@@ -195,6 +201,7 @@ export class HeadsetHolds {
 
     for (const side of ['left', 'right'] as const) this.updatePinch(side, step.timeSec);
     this.updateMark(step, holder);
+    this.releaseSpentSwallow(step.timeSec);
     this.updateHalo(step, handedness, pointer, holder, nowMs);
 
     if (this.markEndedThisStep) return { state: 'ended' };
@@ -235,6 +242,31 @@ export class HeadsetHolds {
       if (!input.inputSource || input.hand) this.feedMark({ type: 'trackingLost', source: this.mark.source }, step.timeSec);
     }
     if (!step.recording && this.mark.phase === 'held') this.feedMark({ type: 'blur' }, step.timeSec);
+  }
+
+  /**
+   * A mode that ended early (tracking loss, a take that stopped, a session that ended) leaves its source to swallow
+   * its release. That release only ever comes from a trigger's selectend or a pinch opening, and a controller that
+   * went away or a hand that left the pinch never sends one the mark can see, so the swallow is lifted here once
+   * the source is no longer down: the next select on that hand is chrome's again.
+   */
+  private releaseSpentSwallow(timeSec: number): void {
+    const swallow = this.mark.swallow;
+    if (!swallow) return;
+    const side: VrHandSide = swallow.startsWith('left:') ? 'left' : 'right';
+    let down: boolean;
+    if (swallow.endsWith(':trigger')) {
+      const input = this.deps.tracking.getChromeInput(side);
+      if (!input.inputSource || input.hand) this.triggerDown[side] = false;
+      down = this.triggerDown[side];
+    } else {
+      down = this.pinches[side].on;
+    }
+    if (down) return;
+    this.feedMark({ type: 'release', source: swallow, atMs: timeSec * 1000 }, timeSec);
+    // The select a misread release sends right behind it still belongs to the mark.
+    this.lastMarkReleaseSec = timeSec;
+    this.lastMarkSide = side;
   }
 
   private feedMark(event: HeldModeEvent, timeSec: number): void {
