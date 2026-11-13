@@ -251,8 +251,10 @@ every size is 1 and the output is byte-identical.
   the traveller is in the layer the beat sheet puts him in, at every moment;
   the feed's Follow framing fits the man; the local converter produces the
   USDZ within its budgets.
-- [ ] Production: the piece re-uploaded with the agent token, `usdzStatus`
-  `ready`.
+- [x] Production: the piece re-uploaded with the agent token, `usdzStatus`
+  `ready`. Uploaded after the deploy of `b0268bd2dc84` as hologram
+  `cmwfb17j50001oeirk4r3kjm4`, `usdzStatus` `ready`; it supersedes
+  `cmwee44na0001oeiqq93qtiim`, which the user removes while signed in.
 
 ## Failure cases considered
 

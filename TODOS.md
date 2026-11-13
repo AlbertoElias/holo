@@ -70,8 +70,8 @@ it from the item below instead of duplicating its status here.
   read it first. Start with a brief (`docs/FEATURE_WORKFLOW.md`); which
   surfaces besides the desktop feed get the deep zoom is the user's call.
   Delivered in [`docs/features/archive/deep-zoom.md`](docs/features/archive/deep-zoom.md),
-  merged to `main` on 2026-11-13; the rebuilt piece is re-uploaded to
-  production after the deploy (its id is in the brief's Production criterion).
+  merged to `main` on 2026-11-13; the rebuilt piece is live in production as
+  hologram `cmwfb17j50001oeirk4r3kjm4` (`usdzStatus` `ready`).
 - [x] Tests should not have to sign in (the user's direction on 2026-11-12).
   Delivered 2026-11-12: the e2e API runs with `TEST_OPEN_UPLOADS` (off by
   default and in production; `scripts/test-api.ts` turns it on), which accepts
