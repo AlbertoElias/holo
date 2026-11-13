@@ -18,7 +18,6 @@ import type { Group, Material, Object3D } from "three";
 import { tokenColor } from "@holoim/design-tokens/three";
 
 import type { SphereClipResult } from "../hologram/useSphereClipping";
-import type { PortalStore } from "../portal/portalStore";
 import { spanStrength } from "./meaningLinks";
 import type { ResolvedLink } from "./meaningLinks";
 
@@ -98,7 +97,6 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
 
 type Props = {
   links: ResolvedLink[];
-  portal: PortalStore;
   bubble: SphereClipResult;
   falloffWidth: number;
   /** The feed's dome clip (3.4): whether a point is under the bent glass, null while the sphere clips. */
@@ -113,7 +111,7 @@ type Props = {
   authorHex: string;
 };
 
-export function PointingHighlights({ links, portal, bubble, falloffWidth, domeEdge, getPlaybackTime, probe, authorHex }: Props) {
+export function PointingHighlights({ links, bubble, falloffWidth, domeEdge, getPlaybackTime, probe, authorHex }: Props) {
   const groupRef = useRef<Group>(null);
   const visualsRef = useRef<LinkVisuals[]>([]);
   const savedRef = useRef(new Map<EmissiveMaterial, Saved>());
@@ -166,7 +164,6 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, domeEd
   useFrame(() => {
     const visuals = visualsRef.current;
     if (visuals.length !== links.length) return;
-    const enabled = portal.getState().highlights;
     const time = getPlaybackTime();
     const saved = savedRef.current;
     const wanted = new Map<EmissiveMaterial, { level: number; color: Color }>();
@@ -183,7 +180,7 @@ export function PointingHighlights({ links, portal, bubble, falloffWidth, domeEd
 
     links.forEach((link, index) => {
       const entry = visuals[index]!;
-      const strength = enabled ? spanStrength(time, link.mark.span) : 0;
+      const strength = spanStrength(time, link.mark.span);
       const active = strength > 0;
       const { anchor } = link.mark;
       const style = STYLES[link.style];

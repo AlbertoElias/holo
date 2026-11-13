@@ -27,7 +27,6 @@
   "apps/viewer-web/e2e/portal-helpers.ts": 1,
   "apps/viewer-web/e2e/portal.pipeline.spec.ts": 1,
   "apps/viewer-web/e2e/portal.spec.ts": 3,
-  "apps/viewer-web/e2e/profiles.pipeline.spec.ts": 1,
   "apps/viewer-web/e2e/sign-in-email.spec.ts": 1,
   "apps/viewer-web/e2e/spatial-audio.spec.ts": 2,
   "apps/viewer-web/e2e/summon.pipeline.spec.ts": 2,

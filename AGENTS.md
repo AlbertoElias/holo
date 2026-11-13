@@ -233,6 +233,12 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
   `git branch --merged main` afterwards). If a push is
   rejected because another agent landed first, pull with rebase, re-run the
   affected check, and push again. Do not force-push.
+- A red hosted run on `main` has one owner. Before fixing one, read
+  `$(git rev-parse --git-common-dir)/holoim-ci-owner.json` (shared by every
+  worktree): if a session has claimed that run, message it (`SendMessage` to
+  its `owner` id) with what you found instead of starting a fix or a session.
+  Only an unclaimed red run is yours to claim: write the file first, with your
+  session id, the run id and a status.
 - Every push to `main` runs CI and a deploy, so batch within a task: commit
   each step and its follow-up fixes locally, and merge to `main` once, when
   the whole task is finished and verified. That merge happens in the same

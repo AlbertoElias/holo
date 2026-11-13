@@ -30,6 +30,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
 | Deep zoom into nested holograms ("The way down") | Complete | [deep-zoom.md](archive/deep-zoom.md) |
+| Simpler viewer chrome (control row, corner, settings) | Complete | [viewer-chrome.md](archive/viewer-chrome.md) |
 | Agent upload token (standing showcase uploads) | Complete | [agent-upload-token.md](archive/agent-upload-token.md) |
 | Richer holograms (raise the size budgets) | Delivered (2026-11-12); device checks and the KTX2 fallback decision open | [hologram-budgets.md](hologram-budgets.md) |
 | Face and expressions on avatars | Complete | [avatar-face.md](archive/avatar-face.md) |

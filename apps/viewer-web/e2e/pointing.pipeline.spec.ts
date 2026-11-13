@@ -5,7 +5,7 @@ import { chromium, type Page } from "@playwright/test";
 
 import { launchXrBrowser } from "@holoim/tooling-testing/xr-env";
 
-import { assertViewerShell, expect, reachFor, test } from "./bootstrap";
+import { assertViewerShell, expect, test } from "./bootstrap";
 import { animationFrames, cardCenter, installProbe, readPortal, waitForPortalReady } from "./portal-helpers";
 import { MARKS, MIDPOINTS, OUTSIDE_TIMES, buildPointingGlb } from "./pointing-fixture";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
@@ -168,7 +168,7 @@ const REAL_EXPORTS = [
 ] as const;
 
 for (const { label, styles } of REAL_EXPORTS) {
-  test(`real capture export ${label}: highlights follow the links, orbit and toggle`, async ({ page }) => {
+  test(`real capture export ${label}: highlights follow the links and orbit, with no toggle`, async ({ page }) => {
     test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
     // Includes recording the take in capture (11-70 s on a hosted runner).
     test.setTimeout(240_000);
@@ -187,8 +187,6 @@ for (const { label, styles } of REAL_EXPORTS) {
     await expect(card).toHaveAttribute("data-model-bubble", "active");
     await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
     await expect(card).toHaveAttribute("data-portal-paused", "true");
-    const toggle = card.getByRole("button", { name: "Highlight what the author points at" });
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
     // Before the first span and in every gap: nothing shows.
     const gaps = [expected[0]!.start - 0.4, ...expected.slice(1).map((m, i) => (expected[i]!.end + m.start) / 2).filter((t, i) => expected[i + 1]!.start - expected[i]!.end > 0.2)];
@@ -223,23 +221,12 @@ for (const { label, styles } of REAL_EXPORTS) {
     const [orbited] = await settle(page, uploaded.url, (first.start + first.end) / 2, 1);
     expect(orbited).toMatchObject({ referent: first.referent, style: first.style, line: true });
     await shot(page, uploaded.id, `${label}-5-orbited`);
-
-    // The toggle hides and shows them, by keyboard too. It is a reach control,
-    // folded once the cursor has been still for a while (a slow settle), so
-    // reach for it as a cursor would.
-    await reachFor(card);
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await settle(page, uploaded.url, (first.start + first.end) / 2, 0);
-    await shot(page, uploaded.id, `${label}-6-toggled-off`);
-    await toggle.focus();
-    await page.keyboard.press("Enter");
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
-    expect((await settle(page, uploaded.url, (first.start + first.end) / 2, 1))[0]).toMatchObject({ referent: first.referent });
+    // The author's marks always show: there is no control to hide them.
+    await expect(card.getByRole("button", { name: "Highlight what the author points at" })).toHaveCount(0);
   });
 }
 
-test("hand-built take: surface ring, inferred scene link, body part, orbit and toggle", async ({ page }) => {
+test("hand-built take: surface ring, inferred scene link, body part and orbit; the marks always show", async ({ page }) => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
   test.setTimeout(180_000);
 
@@ -257,8 +244,6 @@ test("hand-built take: surface ring, inferred scene link, body part, orbit and t
   await card.getByRole("button", { name: CONTROL_NAMES.pause }).click();
   await expect(card).toHaveAttribute("data-portal-paused", "true");
 
-  const toggle = card.getByRole("button", { name: "Highlight what the author points at" });
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
   // Outside every span nothing shows.
   for (const time of OUTSIDE_TIMES) {
@@ -300,22 +285,9 @@ test("hand-built take: surface ring, inferred scene link, body part, orbit and t
   const [orbited] = await settle(page, uploaded.url, MIDPOINTS[0]!, 1);
   expect(orbited).toMatchObject({ referent: "TargetA", style: "recorded", line: true });
   await shot(page, uploaded.id, "5-orbited");
-
-  // The toggle hides and shows them, by keyboard too. It is a reach control,
-  // folded once the cursor has been still for a while (a slow settle), so
-  // reach for it as a cursor would.
-  await reachFor(card);
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
-  await settle(page, uploaded.url, MIDPOINTS[0]!, 0);
-  await shot(page, uploaded.id, "6-toggled-off");
-  await toggle.focus();
-  await page.keyboard.press("Enter");
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  expect((await settle(page, uploaded.url, MIDPOINTS[0]!, 1))[0]).toMatchObject({ referent: "TargetA" });
 });
 
-test("a recording without the extension renders unchanged, with no pointing control", async ({ page }) => {
+test("a recording without the extension renders unchanged, and no marks", async ({ page }) => {
   test.skip(process.env.RUN_E2E_PIPELINE !== "1", "Needs a live API.");
   test.setTimeout(120_000);
 
@@ -329,7 +301,6 @@ test("a recording without the extension renders unchanged, with no pointing cont
   await waitForPortalReady(page, uploaded.id, uploaded.url);
 
   await expect(card.getByRole("button", { name: CONTROL_NAMES.pause })).toBeVisible();
-  await expect(card.getByRole("button", { name: "Highlight what the author points at" })).toHaveCount(0);
   await seek(page, uploaded.url, MIDPOINTS[0]!);
   await animationFrames(page, 24);
   expect(await links(page, uploaded.url)).toEqual([]);

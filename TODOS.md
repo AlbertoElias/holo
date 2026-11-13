@@ -288,9 +288,16 @@ it from the item below instead of duplicating its status here.
      request and dropping an answer older than one already heard. The union
      mismatch (`unsupported`) is naming only: the shared type had no reader and
      was deleted.
-  8. Voice input (`apps/capture/src/objects/voiceInput.ts`), locomotion,
-     desktop reach and held modes (`packages/xr-ui-core/src/heldMode.ts`,
-     `apps/capture/src/xr/HeadsetHolds.ts`): not yet modeled.
+  8. Voice input, `apps/capture/src/objects/voiceInput.ts`: Done
+     (2026-11-13), B-062. A refused recognition on a page with no
+     `getUserMedia` left Find on "Stop listening"; `startRecorder` now sets the
+     state idle (replay `desktop-voice-orders` in `test:xr:summon`). A result
+     after `abort()` is spec-forbidden, and a late transcript or
+     `getUserMedia` answer after cancel is already dropped (abort signal,
+     generation), so none of those is a defect.
+     Still not modeled: locomotion, desktop reach and held modes
+     (`packages/xr-ui-core/src/heldMode.ts`,
+     `apps/capture/src/xr/HeadsetHolds.ts`).
   The skill and its rules live in
   [`.agents/skills/find-implicit-state-machines/SKILL.md`](.agents/skills/find-implicit-state-machines/SKILL.md).
 

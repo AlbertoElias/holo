@@ -336,10 +336,6 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   const traceSource = useHandTraceSource(gltf, clonedScene, traceAnchors);
   const presenceProbe = useRef(createPresenceProbe()).current;
   const authorHex = useMemo(() => identityOf(author).hex, [author]);
-  useEffect(() => {
-    portal.setHasHighlights(meaningLinks.length > 0);
-    return () => portal.setHasHighlights(false);
-  }, [meaningLinks, portal]);
   const animatedBoundsRef = useRef(new Box3());
   const fullSceneBoundsRef = useRef(new Box3());
   const scratchBoundsRef = useRef(new Box3());
@@ -1035,7 +1031,6 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       {meaningLinks.length > 0 && (
         <PointingHighlights
           links={meaningLinks}
-          portal={portal}
           bubble={sphereClip}
           falloffWidth={SPHERE_CLIP_FALLOFF}
           domeEdge={domeEdge}

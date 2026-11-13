@@ -55,19 +55,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/place-capture.pipeline.spec.ts`.
   Suspect: the floor band of a scan whose floor is sparse around a table, or the end pose landing mid-step.
 
-### B-046 — The face XR check finds no IWER gaze device
-
-- **Area:** `apps/capture` XR checks (`test:xr:smoke` → `test:xr` face, part of `verify:pr`)
-- **Severity:** P2 (fails `verify:pr` locally)
-- **Observed:** 2026-11-11 on `origin/main` `1f4ec3a02077` (clean worktree) and on `feature/undo-redo`
-- **Evidence:** `node --import tsx scripts/run-xr-checks.ts face` fails after about 17 s:
-  `page.evaluate: TypeError: Cannot set properties of undefined (setting 'connected')`, from
-  `window.IWER_DEVICE!.gaze!.connected = true` (`scripts/ci-face-playwright.ts:232`). 3 of 3 runs; every other
-  XR check passes.
-- **Expected:** the face check gets the IWER device with eye gaze and passes.
-- **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
-  5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
-
 ### B-054 — The summon XR check's `desktop-anytime` phase flakes on "mid-take row: no tray row"
 
 - **Area:** `apps/capture` (`scripts/lib/tray-anytime-take.mjs`, `test:xr:summon`)
@@ -89,18 +76,31 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** before the fix, with the slow export forced, `AR_RECORD_ONLY=put-back pnpm --filter @holoim/capture run test:xr:ar-record`.
 - **Fix status:** merged; close this entry once a hosted run of `main` passes shard 1/2.
 
-### B-059 — Capture mic state: an older microphone request that answers last overwrites a newer one
+### B-060 — A feed canvas connects pointer events to a container that is gone
 
-- **Area:** `apps/capture/src/recording/AudioRecorder.ts` (`permissionState`), shown by `CaptureOverlay.tsx` and read by `FaceSystem`
-- **Severity:** P3 (needs the page-load probe and the take's own `getUserMedia` to disagree, a transient device error on one; the replay answers them by hand)
-- **Found:** 2026-11-12 by `/find-implicit-state-machines` (queue item 7), modeled in `MicPermission.tla` (side-session notes), replayed against the real page
-- **Reproduced (`test:xr:take`, phase `mic-stale`):** B-049 made `RecordingSession.publishMicPermission()` the one writer of `ui.micPermission`, but `AudioRecorder` still took whichever request spoke last, the probe included, unless a stream was live. Two orders get past that guard:
-  - (a) the take's request is refused (the take records without sound, the overlay says "No microphone"), then the probe, asked first, is granted: the UI turns `granted` and the line disappears under a take that is still silent;
-  - (b) the take's request is granted, the take stops (the stream is released), then the probe is refused: no stream is live, so the UI turns `denied` and says "No microphone" over a recorder that just recorded sound.
-- **Fix:** every `getUserMedia` call is numbered when asked; an answer older than one already heard is dropped (`hear()`). The probe still releases its own stream.
-- **Union mismatch, not a defect:** `micPermission` in `contracts.ts` (`pending | granted | denied`) against `UiPermissionStatus` in `xr-ui-core` (adds `unsupported`). Nothing used the shared type (`PermissionUiState` had no reader), and a browser without `getUserMedia` throws inside the request and reads as `denied`, which the overlay words correctly. Both were deleted from `xr-ui-core`; no behavior changes.
-- **Not a writer:** `VoiceLevel` (the face meter) and `voiceInput.ts` (object search) call `getUserMedia` too but never write `micPermission`; voice input is queue item 8.
-- **Fix status:** merged; close this entry once a hosted run of `main` passes.
+- **Area:** `apps/viewer-web` (`features/feed/HologramCardCanvas.tsx`, `features/ar/ARView.tsx`; `@react-three/fiber` 8 `Canvas`)
+- **Severity:** P3 (a page error, no visible break; fails any e2e that asserts no runtime errors, which skips every deploy)
+- **Observed:** 2026-11-13 on hosted CI, run 43356706702 (`8f5b5f3e58`), pipeline shard 8, `profiles.pipeline.spec.ts`
+  "a byline name opens that creator's page": `TypeError: Cannot read properties of null (reading 'addEventListener')` in
+  R3F's `events.connect`, called from the `Canvas`'s `onCreated`. The next run (43360131531) passed the shard.
+- **Evidence:** not reproduced in 8 runs of that test under `CI_EMULATE_LOAD=2` (those runs failed twice on the
+  5 s `expect` deadline instead (6/8 passed), fixed in the same change by the pipeline's 20 s `expect` timeout:
+  the whole `profiles.pipeline.spec.ts` ×5 under load 2 then passed 30/30.
+- **Expected:** a card that unmounts while its canvas is still being created leaves no page error.
+- **Suspect:** R3F connects events to the `Canvas`'s wrapper `div` (`divRef.current`) in `onCreated`, which runs after
+  the root renders; a card torn down in between (the search feed replaced by the creator page) leaves the ref null.
+  Fix candidate once reproduced: an `events` factory whose `connect` ignores a null target.
+- **Owner:** the CI reliability session (claim in `.git/holoim-ci-owner.json`).
+
+### B-062 — Find's Speak button stays on "Stop listening" after a refused recognition that has no recorder to fall back on
+
+- **Area:** `apps/capture/src/objects/voiceInput.ts` (`startRecorder`, reached from `startRecognition`'s `onend`), shown by `ObjectFinder.tsx` and `VrFindPanel.ts`
+- **Severity:** P3 (needs a browser that lists the Web Speech API but has no `navigator.mediaDevices`, i.e. a page served over plain `http://` on a LAN address; production is HTTPS. Typing and Enter still search; closing the sheet resets it)
+- **Found:** 2026-11-13 by `/find-implicit-state-machines` (queue item 8, voice input), modeled in `VoiceInput.tla` (side-session notes), replayed against the real page
+- **Reproduced (`test:xr:summon`, phase `desktop-voice-orders`):** tap Speak (recognition starts), the recognition fails with `not-allowed` and ends. `onend` sets the machine's `state` idle without telling the session, then `startRecorder` finds no `getUserMedia`, logs "no MediaRecorder" and shows "type instead", and returns without a state change. The session's `voice` is still `listening`: the button reads "Stop listening", Find stays disabled, and a tap on Stop calls `stop()` on nothing.
+- **Expected:** the buttons follow the machine: back to "Speak" with the "type instead" line.
+- **Fix:** `startRecorder`'s no-recorder branch sets the state idle through `setState`. Replay `desktop-voice-orders`: failed before the fix, passes after. Landed `f73048cc171b` (2026-11-13). Hosted run 43478134507 passed every capture job and the capture deploy; it is red only in a viewer redesign test from the viewer-timecode merge, so this stays open until a green run.
+- **Not defects (modeled and replayed, recorded in `TODOS.md` item 8):** a transcription answer arriving after the sheet closed is discarded (abort); a `getUserMedia` answer after cancel is closed (generation).
 
 ## Entry template
 

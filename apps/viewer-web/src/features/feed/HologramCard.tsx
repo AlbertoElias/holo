@@ -36,8 +36,6 @@ type HologramCardProps = {
   muted: boolean;
   onToggleMute: () => void;
   onDelete?: ((item: HologramDTO) => Promise<void> | void) | undefined;
-  /** Copy the link to this hologram's own page (or open the share sheet on a phone). */
-  onShare?: ((item: HologramDTO) => void) | undefined;
   /** The title opens the hologram's own page; off on that page itself. */
   linkTitle?: boolean;
   /** Whether the card may download its hologram yet, only check the file, or must wait (modelLoadOrder.ts). */
@@ -130,10 +128,10 @@ function useReach(cardRef: React.RefObject<HTMLElement | null>): boolean {
 type ReachRow = "beside" | "stacked";
 
 /**
- * Whether the reach controls fit beside Play at the input's hit size (1.2,
- * 6.1), or unfold above it on a chip of their own: on a touch phone a take
- * with sound already runs into the back-swipe edge. Play holds the middle
- * and never moves either way.
+ * Whether the reach controls fit either side of Play at the input's hit size
+ * (1.2, 6.1), or unfold on a line above it: on a touch phone the paused
+ * timecode and sound already run past the middle's half. Play holds the
+ * middle and never moves either way.
  */
 function useReachRow(footRef: React.RefObject<HTMLElement | null>): ReachRow {
   const [row, setRow] = useState<ReachRow>("beside");
@@ -144,22 +142,35 @@ function useReachRow(footRef: React.RefObject<HTMLElement | null>): ReachRow {
     const measure = () => {
       const play = foot.querySelector<HTMLElement>(".portal-controls-row");
       const side = foot.querySelector<HTMLElement>(".portal-controls-side");
+      const before = foot.querySelector<HTMLElement>(".portal-controls-before");
       const reach = foot.querySelector<HTMLElement>(".portal-controls-after-inner");
-      if (!play || !side || !reach) return;
+      if (!play || !side || !before || !reach) return;
       resized.observe(reach);
       const gap = parseFloat(getComputedStyle(side).columnGap) || 0;
+      // Folded, a side clips its controls to nothing; their own boxes keep their width.
+      const width = (child: Element) => child.getBoundingClientRect().width;
+      const span = (children: Element[]) =>
+        children.reduce((total, child, index) => total + width(child) + (index > 0 ? gap : 0), 0);
+      for (const child of before.children) resized.observe(child);
       // Return stays beside Play in Free; the reach controls follow it.
       const alwaysBeside = [...side.children].filter((child) => !child.classList.contains("portal-controls-after"));
-      const needed = alwaysBeside.reduce((width, child) => width + child.getBoundingClientRect().width + gap, 0) + reach.scrollWidth;
+      const after = span(alwaysBeside) + (alwaysBeside.length > 0 ? gap : 0) + reach.scrollWidth;
       const chip = play.closest<HTMLElement>(".feed-card-foot-chip");
       const chipEnd = chip ? parseFloat(getComputedStyle(chip).paddingInlineEnd) || 0 : 0;
       const room = foot.clientWidth / 2 - play.getBoundingClientRect().width / 2 - gap - chipEnd;
-      setRow(needed > room ? "stacked" : "beside");
+      setRow(Math.max(after, span([...before.children])) > room ? "stacked" : "beside");
+      // The line above Play parts at its axis, wherever it sits in the row.
+      const controls = play.closest<HTMLElement>(".portal-controls");
+      if (controls) {
+        const playBox = play.getBoundingClientRect();
+        controls.style.setProperty("--feed-play-axis", `${playBox.left + playBox.width / 2 - controls.getBoundingClientRect().left}px`);
+      }
     };
     // The controls mount once the model can render, and Return, sound and AR come and go.
     const mutated = new MutationObserver(measure);
     resized.observe(foot);
-    mutated.observe(foot, { childList: true, subtree: true });
+    // The row's own layout change moves Play within it, so the axis is read again once it lands.
+    mutated.observe(foot, { childList: true, subtree: true, attributeFilter: ["data-reach-row", "data-reach", "data-portal-mode"] });
     measure();
     return () => {
       resized.disconnect();
@@ -199,7 +210,9 @@ function usePlayHeldMiddle(footRef: React.RefObject<HTMLElement | null>, chipSho
           const after = button.closest<HTMLElement>(".portal-controls-after");
           return !after || (controls.dataset.reach === "shown" && getComputedStyle(after).position !== "absolute");
         });
-      const startsOnText = controls.dataset.reach === "shown" && controls.querySelector(".portal-timecode") !== null;
+      const before = controls.querySelector<HTMLElement>(".portal-controls-before");
+      const startsOnText = controls.dataset.reach === "shown" && controls.querySelector(".portal-timecode") !== null
+        && before !== null && getComputedStyle(before).position !== "absolute";
       const lead = inset(glyphs.at(-1), "right") - (startsOnText ? 0 : inset(play.querySelector("button") ?? undefined, "left"));
       chip.style.setProperty("--feed-controls-lead", `${lead}px`);
       const shift = parseFloat(chip.style.getPropertyValue("--feed-controls-shift")) || 0;
@@ -223,7 +236,7 @@ function formatDate(item: HologramDTO): string {
   return new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function HologramCard({ item, active, muted, onToggleMute, onDelete, onShare, linkTitle = true, loadTurn, onModelSettled, target, xrFeed, first }: HologramCardProps) {
+export function HologramCard({ item, active, muted, onToggleMute, onDelete, linkTitle = true, loadTurn, onModelSettled, target, xrFeed, first }: HologramCardProps) {
   const modelUrl = resolveMediaUrl(item.url);
   // The detail level split from the upload (hologram-budgets): fetched only for the focused card.
   const placeDetailUrl = item.placeDetailUrl ? resolveMediaUrl(item.placeDetailUrl) : null;
@@ -391,22 +404,10 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, onSh
     // The glyph is the only warning on the card, so ask once before a delete that cannot be undone.
     if (window.confirm(`Delete “${item.hologramName}”? This cannot be undone.`)) void onDelete?.(item);
   };
-  const ownerActions = (
+  // The ways out of the screen this device has: a phone has one (AR, or AR Quick Look on iOS), a desktop none,
+  // and only a headset both, so the row stays short everywhere and Step inside stays reachable in a headset.
+  const enter = (
     <>
-      {onShare && (
-        <span className="copy-link-button">
-          <GlyphControl glyph="copyLink" label={VIEWER_CONTROL_NAMES.copyLink} onPress={() => onShare(item)} />
-        </span>
-      )}
-      {item.ownedByViewer && onDelete && (
-        <span className="delete-button">
-          <GlyphControl glyph="remove" label={VIEWER_CONTROL_NAMES.deleteHologram} onPress={handleDelete} />
-        </span>
-      )}
-    </>
-  );
-  const controls = canRenderModel ? (
-    <PortalControls store={portal} tiltAvailable={portalTriggers.tilt} active={active} reached={reached}>
       {shouldShowArTrigger && (
         <span className="ar-trigger-button">
           <GlyphControl glyph="viewInAr" label={VIEWER_CONTROL_NAMES.viewInAr} onPress={handleEnterAR} />
@@ -418,17 +419,19 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, onSh
         </span>
       )}
       {shouldShowQuickLook && <ARQuickLookLink item={item} />}
-      {hasAudio && (
-        <span className="audio-mute-button">
-          <GlyphControl glyph={muted ? "soundOff" : "soundOn"} label={muted ? VIEWER_CONTROL_NAMES.soundOn : VIEWER_CONTROL_NAMES.soundOff} onPress={onToggleMute} />
-        </span>
-      )}
-      {ownerActions}
-    </PortalControls>
-  ) : (
-    // A hologram that will not load has no Play row; its link and its creator's delete still stand at its foot.
-    <div className="feed-card-foot-actions">{ownerActions}</div>
+    </>
   );
+  const sound = hasAudio ? (
+    <span className="audio-mute-button">
+      <GlyphControl glyph={muted ? "soundOff" : "soundOn"} label={muted ? VIEWER_CONTROL_NAMES.soundOn : VIEWER_CONTROL_NAMES.soundOff} onPress={onToggleMute} />
+    </span>
+  ) : null;
+  // A hologram that will not load has no Play row.
+  const controls = canRenderModel ? (
+    <PortalControls store={portal} tiltAvailable={portalTriggers.tilt} active={active} reached={reached} playback={sound}>
+      {enter}
+    </PortalControls>
+  ) : null;
 
   return (
     <article
@@ -508,6 +511,13 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, onSh
           ) : item.submittedBy}
           {" · "}
           {formatDate(item)}
+          {item.ownedByViewer && onDelete ? (
+            // The creator's alone, in words at the end of the byline, away from the controls a hand lands on by habit.
+            <>
+              {" · "}
+              <button type="button" className="feed-card-link feed-card-delete" onClick={handleDelete}>{VIEWER_CONTROL_NAMES.deleteHologram}</button>
+            </>
+          ) : null}
         </Type>
         {credits.length > 0 ? (
           // Models the author brought in from a registry keep their credit beside the byline (PRD-060).
@@ -525,7 +535,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, onSh
       <div ref={portalRef} className="feed-card-portal" aria-hidden="true" />
 
       <div ref={footRef} className="feed-card-foot" data-reach-row={reachRow}>
-        {portalOpen > 0 ? (
+        {controls && portalOpen > 0 ? (
           // Over the hologram's own picture, text always takes the chip (5.2).
           // The chip pads both ends alike (the row's own padding is for Play at the start) and hugs the controls showing.
           <Chip className="feed-card-foot-chip" target={target} overPicture controlRow style={{ paddingInlineStart: `calc(${controlRowPaddingApx(target).end}px + var(--feed-controls-lead, 0px))` }}>{controls}</Chip>

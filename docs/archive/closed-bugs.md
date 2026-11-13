@@ -1223,3 +1223,43 @@ bug above.)
 - **Validation:** both pieces convert locally: "The way down II" in 21 CPU-seconds (was over 100), "The way down" in 27 (refused before). Their extents are bit-identical to the old pass run with its budget lifted. `check_usdz_tools.sh` passed all six cases on the pipeline walk take; `test_cloche.py` passed; `verify:pr` passed.
 - **Note:** "The way down II"'s extent is about 345 m wide: its floor and figures morph that far out in the GLB itself (evaluated straight from the accessors), so the bound is faithful to the piece.
 - **Landed:** 2026-11-13 in `0a2d56b6fc8c`; CI run 43354945206 passed (Quick Look tool check included) and deployed the API. "The way down II" re-uploaded as `cmwee44na0001oeiqq93qtiim` with `usdzStatus: "ready"`.
+
+### B-059 — Capture mic state: an older microphone request that answers last overwrites a newer one
+
+- **Area:** `apps/capture/src/recording/AudioRecorder.ts` (`permissionState`), shown by `CaptureOverlay.tsx` and read by `FaceSystem`
+- **Severity:** P3 (needs the page-load probe and the take's own `getUserMedia` to disagree, a transient device error on one; the replay answers them by hand)
+- **Found:** 2026-11-12 by `/find-implicit-state-machines` (queue item 7), modeled in `MicPermission.tla` (side-session notes), replayed against the real page
+- **Reproduced (`test:xr:take`, phase `mic-stale`):** B-049 made `RecordingSession.publishMicPermission()` the one writer of `ui.micPermission`, but `AudioRecorder` still took whichever request spoke last, the probe included, unless a stream was live. Two orders get past that guard:
+  - (a) the take's request is refused (the take records without sound, the overlay says "No microphone"), then the probe, asked first, is granted: the UI turns `granted` and the line disappears under a take that is still silent;
+  - (b) the take's request is granted, the take stops (the stream is released), then the probe is refused: no stream is live, so the UI turns `denied` and says "No microphone" over a recorder that just recorded sound.
+- **Change:** every `getUserMedia` call is numbered when asked; an answer older than one already heard is dropped (`hear()`). The probe still releases its own stream.
+- **Union mismatch, not a defect:** `micPermission` in `contracts.ts` (`pending | granted | denied`) against `UiPermissionStatus` in `xr-ui-core` (adds `unsupported`). Nothing used the shared type (`PermissionUiState` had no reader), and a browser without `getUserMedia` throws inside the request and reads as `denied`, which the overlay words correctly. Both were deleted from `xr-ui-core`; no behavior changes.
+- **Not a writer:** `VoiceLevel` (the face meter) and `voiceInput.ts` (object search) call `getUserMedia` too but never write `micPermission`; voice input is queue item 8.
+- **Fix:** `21535ac6446d`. Replay `mic-stale` in `test:xr:take`: before the fix both orders failed, after it all five phases pass; `verify:pr` passed locally.
+- **Closed:** 2026-11-13. Hosted CI on `main` run 43459544312 (`634a42ec02b6`, which includes the fix) passed every job, the three deploys included. The run on the fix commit itself (43360131531) failed only in the api tests (`test/fixtures/db.ts` migrations, B-061), not in capture.
+
+### B-061 — API tests build their database on several SQLite connections and fail on a stale schema
+
+- **Area:** `apps/viewer-api/test/fixtures/db.ts` (`applyMigrations`), used by five API test files
+- **Severity:** P2 (fails the CI Gate's quality job, which skips every deploy)
+- **Observed:** 2026-11-13 on hosted CI run 43360131531 (`21535ac6446d`): `auth-delivery.test.ts` "answers 503 and stores no token when no mailer is configured…" threw `P2010 … there is already another table or index with this name: Hologram` at `db.ts:27`. Introduced by the test-audit commit `350fee308eb6` (real migrations instead of hand-copied DDL).
+- **Reproduced:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh pnpm --filter @holoim/api exec vitest run`, repeated: about one full run in four failed, in `auth-delivery`, `hologram-routes` and `hologram-budgets` (a one-file loop, and every run without load, passed).
+- **Cause:** `applyMigrations` awaited each statement on `prisma.$executeRawUnsafe`, and Prisma's SQLite pool gives successive statements to different connections. Under load one acts on a stale schema: `ALTER TABLE "new_Hologram" RENAME TO "Hologram"` failed with "already another table" while `sqlite_master` held only `new_Hologram`, and `CREATE INDEX "Hologram_createdAt_idx"` failed with "already exists" while the index was not in `sqlite_master`. The old fixture used `CREATE TABLE IF NOT EXISTS`, which hid it.
+- **Fix:** all statements run in one interactive transaction, which pins one connection (and applies the migrations atomically).
+- **Landed:** `634a42ec02b6`, 2026-11-13.
+- **Closed:** 2026-11-13. Hosted CI on `main` run 43459544312 (`634a42ec02b6`) passed every job, the three deploys included. The previous run (43454587497, `c1de7fda2104`) had failed on this defect.
+
+### B-046 — The face XR check finds no IWER gaze device
+
+- **Area:** `apps/capture` XR checks (`test:xr:smoke` → `test:xr` face, part of `verify:pr`)
+- **Severity:** P2 (fails `verify:pr` locally)
+- **Observed:** 2026-11-11 on `origin/main` `1f4ec3a02077` (clean worktree) and on `feature/undo-redo`
+- **Evidence:** `node --import tsx scripts/run-xr-checks.ts face` fails after about 17 s:
+  `page.evaluate: TypeError: Cannot set properties of undefined (setting 'connected')`, from
+  `window.IWER_DEVICE!.gaze!.connected = true` (`scripts/ci-face-playwright.ts:232`). 3 of 3 runs; every other
+  XR check passes.
+- **Expected:** the face check gets the IWER device with eye gaze and passes.
+- **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
+  5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
+- **Investigation (2026-11-13):** not reproduced. On `main` `cd0e705cca87` in a fresh worktree the face check passed 3 of 3 runs (80 s each, also with a stray listener held on `::1:5176`), and under `FACE_VIDEO=1`. The harness gives the face check its own server built with `CAPTURE_IWER_DEVICE=metaQuestPro` (`CHECK_SERVER_ENV` in `run-xr-checks.ts`, `device` in `vite.config.ts`); IWER 2.6.0 creates `gaze` only for a profile whose features include gaze tracking, and the Quest 3 profile (the default build) has none. No IWER, harness or `ci-face-playwright.ts` change between `1f4ec3a02077` and now touches that path. The likeliest cause was the check reaching a Quest 3 default-build server: other sessions' `vite preview` servers (one was still listening on `localhost:5175` during this investigation) share ports 5174-5176. If it recurs, check `lsof -iTCP:5174-5180 -sTCP:LISTEN` first and reopen with the port table.
+- **Closed:** 2026-11-13 as not reproducible, with no code change.

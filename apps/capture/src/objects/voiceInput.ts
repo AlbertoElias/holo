@@ -181,6 +181,8 @@ export class VoiceInput {
     this.path = 'transcribe';
     if (!voiceCapabilities().mediaRecorder) {
       log('transcribe', 'error', 'no MediaRecorder');
+      // Also the end of a refused recognition (it set `state` idle without a word to the handlers): the buttons must follow.
+      this.setState('idle');
       this.handlers.onError('Voice search is not available here; type instead.', true);
       return;
     }
