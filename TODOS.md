@@ -223,8 +223,11 @@ it from the item below instead of duplicating its status here.
      overwritten). The replay found the real defect: a card that becomes
      first after its dome is fitted took the place late. Fixed on `main`; B-053
      is closed (green hosted CI, all three deploys).
-  4. Portal tilt permission (`usePortalTriggers.ts`): a pending `enableTilt`
-     writes `on` after `reset()`.
+  4. Done (2026-11-12): portal tilt permission, B-055. All three orders
+     reproduced under a held `requestPermission` shim (answer after the card was
+     left, denial after leaving, older denial after a newer grant) and are fixed
+     with a request epoch in the portal store; unmount while pending is not
+     observable.
   5. Upload panel (`UploadPanel.tsx`): file picker stays enabled mid-upload and
      is cleared by the success reset.
   6. XR session mode (`apps/capture/src/runtime/xrEntry.ts`): stale

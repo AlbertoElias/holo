@@ -10,6 +10,9 @@ import {
   cardCenter,
   dispatchOrientation,
   animationFrames,
+  answerMotionPermission,
+  installMotionPermissionShim,
+  motionPermissionCalls,
   feedScrollTop,
   installProbe,
   readPortal,
@@ -226,6 +229,75 @@ test.describe("phone", () => {
     await dispatchOrientation(page, 41, 60);
     expect((await readPortal(page, first.url)).mode, "holding still after Return stays in Follow").toBe("follow");
     await captureEvidence(page, testInfo, "phone-tilt-variant");
+  });
+
+  // B-055 (replayed from the tilt-permission state machine): iOS answers the
+  // motion prompt through a promise, and the viewer can leave the card first.
+  const scrollTo = async (page: Page, id: string) => {
+    await page.locator(`.feed-card[data-card-id="${id}"]`).evaluate((element) => element.scrollIntoView({ behavior: "instant" }));
+    await settleScroll(page);
+    await animationFrames(page, 2);
+  };
+  const pressTilt = async (page: Page) => {
+    const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+    await reachFor(card);
+    await card.getByRole("button", { name: /tilting/ }).click();
+  };
+
+  test("tilt permission: an answer that arrives after the card was left does not turn tilt on", async ({ page }, testInfo) => {
+    await installMotionPermissionShim(page);
+    await openFeed(page, "tilt");
+    await pressTilt(page);
+    expect(await motionPermissionCalls(page)).toBe(1);
+    expect((await readPortal(page, first.url)).tiltStatus, "still asking").toBe("off");
+
+    await scrollTo(page, second.id);
+    await answerMotionPermission(page, 0, "granted");
+    await scrollFeedToTop(page);
+    await animationFrames(page, 2);
+    expect((await readPortal(page, first.url)).tiltStatus, "the card starts over, as when first seen").toBe("off");
+    const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
+    await reachFor(card);
+    await expect(card.getByRole("button", { name: "Look around by tilting the phone" })).toHaveAttribute("aria-pressed", "false");
+    await dispatchOrientation(page, 10, 60);
+    await dispatchOrientation(page, 70, 20);
+    expect((await readPortal(page, first.url)).mode, "turning the phone does not move a camera the viewer never enabled tilt on").toBe("follow");
+    await captureEvidence(page, testInfo, "phone-tilt-late-grant");
+  });
+
+  test("tilt permission: a denial that arrives after the card was left leaves the card as new", async ({ page }) => {
+    await installMotionPermissionShim(page);
+    await openFeed(page, "tilt");
+    await pressTilt(page);
+    await scrollTo(page, second.id);
+    await answerMotionPermission(page, 0, "denied");
+    await scrollFeedToTop(page);
+    expect((await readPortal(page, first.url)).tiltStatus).toBe("off");
+  });
+
+  test("tilt permission: with two asks open, the newest answer is the one that counts", async ({ page }) => {
+    await installMotionPermissionShim(page);
+    await openFeed(page, "tilt");
+    await pressTilt(page);
+    await pressTilt(page);
+    expect(await motionPermissionCalls(page), "each press asks").toBe(2);
+    await answerMotionPermission(page, 1, "granted");
+    expect((await readPortal(page, first.url)).tiltStatus).toBe("on");
+    await answerMotionPermission(page, 0, "denied");
+    expect((await readPortal(page, first.url)).tiltStatus, "an older denial does not undo the newer grant").toBe("on");
+  });
+
+  test("tilt permission: the answer on the card the viewer stayed on still works", async ({ page }) => {
+    await installMotionPermissionShim(page);
+    await openFeed(page, "tilt");
+    await pressTilt(page);
+    await answerMotionPermission(page, 0, "granted");
+    expect((await readPortal(page, first.url)).tiltStatus).toBe("on");
+    await pressTilt(page);
+    expect((await readPortal(page, first.url)).tiltStatus, "pressing again turns it off").toBe("off");
+    await pressTilt(page);
+    await answerMotionPermission(page, 1, "error");
+    expect((await readPortal(page, first.url)).tiltStatus, "a refusal reads as declined").toBe("denied");
   });
 });
 

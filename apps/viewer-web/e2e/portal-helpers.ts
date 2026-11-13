@@ -15,6 +15,7 @@ export type PortalReading = {
   pitch: number;
   zoom: number;
   tiltYaw: number;
+  tiltStatus: "off" | "on" | "denied" | "unsupported";
   followYaw: number;
   followPitch: number;
   cameraDistance: number;
@@ -48,7 +49,7 @@ export async function readPortal(page: Page, modelPath: string): Promise<PortalR
       bubble: { active: boolean; radius: number; center: unknown };
       actions: Record<string, { time: number } | null>;
       portal: {
-        getState: () => { mode: "follow" | "free"; paused: boolean; yaw: number; pitch: number; zoom: number; tiltYaw: number };
+        getState: () => { mode: "follow" | "free"; paused: boolean; yaw: number; pitch: number; zoom: number; tiltYaw: number; tiltStatus: "off" | "on" | "denied" | "unsupported" };
         runtime: {
           followYaw: number;
           followPitch: number;
@@ -187,4 +188,49 @@ export async function dispatchOrientation(page: Page, alpha: number, beta: numbe
   await page.evaluate(([a, b]) => {
     window.dispatchEvent(new DeviceOrientationEvent("deviceorientation", { alpha: a ?? null, beta: b ?? null, gamma: 0 }));
   }, [alpha, beta]);
+}
+
+/**
+ * iOS asks for motion access with a promise that settles when the viewer
+ * answers the system prompt. The shim holds each call open so a check can
+ * step the order of the answer against everything else the viewer does.
+ */
+export type MotionPermissionShim = {
+  calls: number;
+  /** Settles call `index` (0 = the first), as the system prompt would. */
+  answer(index: number, outcome: "granted" | "denied" | "error"): void;
+};
+
+export async function installMotionPermissionShim(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const pending: Array<{ resolve: (value: string) => void; reject: (error: Error) => void }> = [];
+    const shim = {
+      calls: 0,
+      answer(index: number, outcome: "granted" | "denied" | "error") {
+        const call = pending[index];
+        if (!call) throw new Error(`no motion permission call ${index}`);
+        if (outcome === "error") call.reject(new Error("NotAllowedError"));
+        else call.resolve(outcome);
+      }
+    };
+    (window as unknown as { __motionShim: typeof shim }).__motionShim = shim;
+    Object.defineProperty(DeviceOrientationEvent, "requestPermission", {
+      configurable: true,
+      value: () => new Promise<string>((resolve, reject) => {
+        shim.calls += 1;
+        pending.push({ resolve, reject });
+      })
+    });
+  });
+}
+
+export async function answerMotionPermission(page: Page, index: number, outcome: "granted" | "denied" | "error"): Promise<void> {
+  await page.evaluate(([i, result]) => {
+    (window as unknown as { __motionShim: MotionPermissionShim }).__motionShim.answer(i as number, result as "granted" | "denied" | "error");
+  }, [index, outcome] as const);
+  await animationFrames(page, 2);
+}
+
+export async function motionPermissionCalls(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __motionShim: MotionPermissionShim }).__motionShim.calls);
 }

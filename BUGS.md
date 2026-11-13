@@ -87,6 +87,20 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the tray dock shows its row mid-take on every run.
 - **Reproduction:** `SUMMON_ONLY=desktop-anytime pnpm --filter @holoim/capture run test:xr:summon`, repeated on a loaded machine. Not isolated; suspect the same starved-page timing as B-050 (a wait that ends before the dock re-renders).
 
+### B-055 — Portal tilt: a motion-permission answer that arrives late still writes the tilt state
+
+- **Area:** `apps/viewer-web/src/features/portal/usePortalTriggers.ts` (`enableTilt`), `portalStore.ts` (`tiltStatus`), `PortalControls.tsx`
+- **Severity:** P3 (tilt is the `?portal=tilt` trial variant only; the default `drag` variant has no tilt)
+- **Found by:** `/find-implicit-state-machines` (2026-11-12), replayed 2026-11-12. Model: `tiltStatus` off | on | denied | unsupported, with "requesting" held only in the pending promise; rules "after reset the status is `off` until the viewer asks again" and "an answer to an ask the viewer has since cancelled is ignored".
+- **Replay, reproduced** (`portal.spec.ts`, phone, `?portal=tilt`, `DeviceOrientationEvent.requestPermission` shim that holds each call open):
+  - "an answer that arrives after the card was left does not turn tilt on": press the tilt button, scroll to the next card (the card resets), grant; scroll back and the first card reads `on` with the button pressed, though the viewer never turned tilt on for this visit.
+  - "a denial that arrives after the card was left leaves the card as new": the same order with a denial leaves `denied` (the declined tooltip) on a card that reset.
+  - "with two asks open, the newest answer is the one that counts": two presses before an answer give two asks; a grant to the newer, then a denial to the older, ends `denied`.
+- **Cause:** the ask is an `await` whose continuation writes the store unconditionally; `reset()` (card left) and the off press never cancel it.
+- **Fix:** the store keeps a tilt epoch that every viewer move bumps (an ask, the off press, `reset()`). `enableTilt` takes a `settle` function from `store.beginTiltRequest()`, which drops its answer once the epoch has moved. Nothing else changes: an answer on the card the viewer stayed on works as before (replayed in "the answer on the card the viewer stayed on still works").
+- **Did not reproduce:** unmount while an ask is pending. The store is per card and nothing renders from it afterwards, so the late write is unobservable.
+- **Not done:** emulation in headless Chromium with a shim, no iPhone. Leaving the card while iOS's modal prompt is up needs a scroll glide still running at the press (or a feed change), and a double ask needs two taps before the prompt shows; iOS very likely answers both asks alike, so the differing answers in the third replay are shim-only. The fix covers all three orders regardless.
+
 ## Entry template
 
 ```md
