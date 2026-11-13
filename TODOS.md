@@ -147,7 +147,9 @@ it from the item below instead of duplicating its status here.
   recorded controller input. Builds on
   [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
 - [x] Clean up expired direct-upload intents and their `incoming/*.glb` objects so abandoned uploads do not leak storage. In flight in [`docs/features/archive/upload-intent-cleanup.md`](docs/features/archive/upload-intent-cleanup.md).
-- [ ] Make all avatar movement look completely natural, in XR and 2D; the
+- [ ] Make all avatar movement look completely natural, in XR and 2D
+  (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)
+  owns it and its measured gaps; the wishlist below feeds its fixes). The
   room-scale body solver
   ([`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md))
   is correct by its metrics but still reads as robotic. Nail the IK and the

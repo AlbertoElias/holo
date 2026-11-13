@@ -34,6 +34,7 @@ const CHECKS = {
   take: 'scripts/ci-take-lifecycle-playwright.ts',
   locomotion: 'scripts/ci-vr-locomotion-playwright.ts',
   terrain: 'scripts/ci-terrain-locomotion.ts',
+  'desktop-motion': 'scripts/ci-desktop-motion-playwright.ts',
   'loco-states': 'scripts/ci-locomotion-states-playwright.mjs',
   hands: 'scripts/ci-hand-replay-playwright.ts',
   height: 'scripts/ci-xr-height-playwright.ts',
