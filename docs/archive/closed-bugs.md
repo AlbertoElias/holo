@@ -1248,3 +1248,18 @@ bug above.)
 - **Fix:** all statements run in one interactive transaction, which pins one connection (and applies the migrations atomically).
 - **Landed:** `634a42ec02b6`, 2026-11-13.
 - **Closed:** 2026-11-13. Hosted CI on `main` run 43459544312 (`634a42ec02b6`) passed every job, the three deploys included. The previous run (43454587497, `c1de7fda2104`) had failed on this defect.
+
+### B-046 — The face XR check finds no IWER gaze device
+
+- **Area:** `apps/capture` XR checks (`test:xr:smoke` → `test:xr` face, part of `verify:pr`)
+- **Severity:** P2 (fails `verify:pr` locally)
+- **Observed:** 2026-11-11 on `origin/main` `1f4ec3a02077` (clean worktree) and on `feature/undo-redo`
+- **Evidence:** `node --import tsx scripts/run-xr-checks.ts face` fails after about 17 s:
+  `page.evaluate: TypeError: Cannot set properties of undefined (setting 'connected')`, from
+  `window.IWER_DEVICE!.gaze!.connected = true` (`scripts/ci-face-playwright.ts:232`). 3 of 3 runs; every other
+  XR check passes.
+- **Expected:** the face check gets the IWER device with eye gaze and passes.
+- **Reproduction:** in `apps/capture`, `node --import tsx scripts/run-xr-checks.ts face` (with `DEV_PORT` moved if
+  5174 is taken). Suspect: the device the check gets no longer has `gaze`, after an IWER or harness change.
+- **Investigation (2026-11-13):** not reproduced. On `main` `cd0e705cca87` in a fresh worktree the face check passed 3 of 3 runs (80 s each, also with a stray listener held on `::1:5176`), and under `FACE_VIDEO=1`. The harness gives the face check its own server built with `CAPTURE_IWER_DEVICE=metaQuestPro` (`CHECK_SERVER_ENV` in `run-xr-checks.ts`, `device` in `vite.config.ts`); IWER 2.6.0 creates `gaze` only for a profile whose features include gaze tracking, and the Quest 3 profile (the default build) has none. No IWER, harness or `ci-face-playwright.ts` change between `1f4ec3a02077` and now touches that path. The likeliest cause was the check reaching a Quest 3 default-build server: other sessions' `vite preview` servers (one was still listening on `localhost:5175` during this investigation) share ports 5174-5176. If it recurs, check `lsof -iTCP:5174-5180 -sTCP:LISTEN` first and reopen with the port table.
+- **Closed:** 2026-11-13 as not reproducible, with no code change.
