@@ -102,14 +102,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Fix:** `startRecorder`'s no-recorder branch sets the state idle through `setState`. Replay `desktop-voice-orders`: failed before the fix, passes after. Landed `f73048cc171b` (2026-11-13). Hosted run 43478134507 passed every capture job and the capture deploy; it is red only in a viewer redesign test from the viewer-timecode merge, so this stays open until a green run.
 - **Not defects (modeled and replayed, recorded in `TODOS.md` item 8):** a transcription answer arriving after the sheet closed is discarded (abort); a `getUserMedia` answer after cancel is closed (generation).
 
-### B-063 — The redesign spec's phone reach-row check fails on a starved runner: the reach controls fold under its layout reads
-
-- **Area:** `apps/viewer-web/e2e/redesign.spec.ts` ("phone by touch › every reach control fits the screen at the touch minimum, clear of the gesture edges")
-- **Severity:** P2 (fails the viewer browser checks shard, so the CI Gate skips every deploy)
-- **Observed:** 2026-11-13 on hosted run 43478134507 (`f73048cc171b`, the first run after the viewer-timecode merge): "Unmute audio: clear of the left back-swipe edge", expected at least 19.5, received 0. The viewer-timecode commit `51841890c8a3` is not the cause; it only made the run slower or later than the earlier one that passed.
-- **Reproduced:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh env VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/redesign.spec.ts --workers=1 --grep "phone by touch" --repeat-each=4`: 3 of 4 runs of this test failed, at three different assertions (sound x, the timecode at x -55, sound moving 105 px). A single unloaded run passes.
-- **Cause:** a race in the check, not in the app. The tap shows the reach controls, which fold again after `tokens.glyph.idleAfter` (4 s of real time). On a starved runner the screenshot, the layout reads and the two Play taps take longer than that, so the reads land on the folded row (a clipped zero-width group), at whatever position the fold transition has reached.
-- **Fix:** the check holds a finger on the card (a periodic touch `pointermove`, `holdReach`) from the first reach until it checks the fold, which it still does with real time. Under load, 6 repeats of both phone-by-touch tests passed.
 
 ## Entry template
 
