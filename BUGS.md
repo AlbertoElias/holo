@@ -89,19 +89,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** before the fix, with the slow export forced, `AR_RECORD_ONLY=put-back pnpm --filter @holoim/capture run test:xr:ar-record`.
 - **Fix status:** merged; close this entry once a hosted run of `main` passes shard 1/2.
 
-### B-059 — Capture mic state: an older microphone request that answers last overwrites a newer one
-
-- **Area:** `apps/capture/src/recording/AudioRecorder.ts` (`permissionState`), shown by `CaptureOverlay.tsx` and read by `FaceSystem`
-- **Severity:** P3 (needs the page-load probe and the take's own `getUserMedia` to disagree, a transient device error on one; the replay answers them by hand)
-- **Found:** 2026-11-12 by `/find-implicit-state-machines` (queue item 7), modeled in `MicPermission.tla` (side-session notes), replayed against the real page
-- **Reproduced (`test:xr:take`, phase `mic-stale`):** B-049 made `RecordingSession.publishMicPermission()` the one writer of `ui.micPermission`, but `AudioRecorder` still took whichever request spoke last, the probe included, unless a stream was live. Two orders get past that guard:
-  - (a) the take's request is refused (the take records without sound, the overlay says "No microphone"), then the probe, asked first, is granted: the UI turns `granted` and the line disappears under a take that is still silent;
-  - (b) the take's request is granted, the take stops (the stream is released), then the probe is refused: no stream is live, so the UI turns `denied` and says "No microphone" over a recorder that just recorded sound.
-- **Fix:** every `getUserMedia` call is numbered when asked; an answer older than one already heard is dropped (`hear()`). The probe still releases its own stream.
-- **Union mismatch, not a defect:** `micPermission` in `contracts.ts` (`pending | granted | denied`) against `UiPermissionStatus` in `xr-ui-core` (adds `unsupported`). Nothing used the shared type (`PermissionUiState` had no reader), and a browser without `getUserMedia` throws inside the request and reads as `denied`, which the overlay words correctly. Both were deleted from `xr-ui-core`; no behavior changes.
-- **Not a writer:** `VoiceLevel` (the face meter) and `voiceInput.ts` (object search) call `getUserMedia` too but never write `micPermission`; voice input is queue item 8.
-- **Fix status:** merged; close this entry once a hosted run of `main` passes.
-
 ### B-060 — A feed canvas connects pointer events to a container that is gone
 
 - **Area:** `apps/viewer-web` (`features/feed/HologramCardCanvas.tsx`, `features/ar/ARView.tsx`; `@react-three/fiber` 8 `Canvas`)

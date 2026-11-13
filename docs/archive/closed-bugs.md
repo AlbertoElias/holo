@@ -1223,3 +1223,17 @@ bug above.)
 - **Validation:** both pieces convert locally: "The way down II" in 21 CPU-seconds (was over 100), "The way down" in 27 (refused before). Their extents are bit-identical to the old pass run with its budget lifted. `check_usdz_tools.sh` passed all six cases on the pipeline walk take; `test_cloche.py` passed; `verify:pr` passed.
 - **Note:** "The way down II"'s extent is about 345 m wide: its floor and figures morph that far out in the GLB itself (evaluated straight from the accessors), so the bound is faithful to the piece.
 - **Landed:** 2026-11-13 in `0a2d56b6fc8c`; CI run 43354945206 passed (Quick Look tool check included) and deployed the API. "The way down II" re-uploaded as `cmwee44na0001oeiqq93qtiim` with `usdzStatus: "ready"`.
+
+### B-059 — Capture mic state: an older microphone request that answers last overwrites a newer one
+
+- **Area:** `apps/capture/src/recording/AudioRecorder.ts` (`permissionState`), shown by `CaptureOverlay.tsx` and read by `FaceSystem`
+- **Severity:** P3 (needs the page-load probe and the take's own `getUserMedia` to disagree, a transient device error on one; the replay answers them by hand)
+- **Found:** 2026-11-12 by `/find-implicit-state-machines` (queue item 7), modeled in `MicPermission.tla` (side-session notes), replayed against the real page
+- **Reproduced (`test:xr:take`, phase `mic-stale`):** B-049 made `RecordingSession.publishMicPermission()` the one writer of `ui.micPermission`, but `AudioRecorder` still took whichever request spoke last, the probe included, unless a stream was live. Two orders get past that guard:
+  - (a) the take's request is refused (the take records without sound, the overlay says "No microphone"), then the probe, asked first, is granted: the UI turns `granted` and the line disappears under a take that is still silent;
+  - (b) the take's request is granted, the take stops (the stream is released), then the probe is refused: no stream is live, so the UI turns `denied` and says "No microphone" over a recorder that just recorded sound.
+- **Change:** every `getUserMedia` call is numbered when asked; an answer older than one already heard is dropped (`hear()`). The probe still releases its own stream.
+- **Union mismatch, not a defect:** `micPermission` in `contracts.ts` (`pending | granted | denied`) against `UiPermissionStatus` in `xr-ui-core` (adds `unsupported`). Nothing used the shared type (`PermissionUiState` had no reader), and a browser without `getUserMedia` throws inside the request and reads as `denied`, which the overlay words correctly. Both were deleted from `xr-ui-core`; no behavior changes.
+- **Not a writer:** `VoiceLevel` (the face meter) and `voiceInput.ts` (object search) call `getUserMedia` too but never write `micPermission`; voice input is queue item 8.
+- **Fix:** `21535ac6446d`. Replay `mic-stale` in `test:xr:take`: before the fix both orders failed, after it all five phases pass; `verify:pr` passed locally.
+- **Closed:** 2026-11-13. Hosted CI on `main` run 43459544312 (`634a42ec02b6`, which includes the fix) passed every job, the three deploys included. The run on the fix commit itself (43360131531) failed only in the api tests (`test/fixtures/db.ts` migrations, B-061), not in capture.
