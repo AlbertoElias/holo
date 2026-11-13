@@ -1,7 +1,7 @@
 # Feature brief: A hologram of yourself from a phone in under 2 minutes
 
 **Lead:** Claude (Opus)  
-**Status:** Draft (awaiting the user's approval, 2026-11-13)
+**Status:** Approved (the user, 2026-11-13, the recommended answer to all three decisions); design review accepted 2026-11-13; implementing
 **Layer:** event (the author's head, face, arms, hands and voice over time),
 plus the path that turns it into a shareable link. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -35,7 +35,7 @@ Physical-device limits). Scripts: `output/phone-capture/boot-timing.mjs`,
 |---|---|---|---|---|---|
 | 1 | Find where to record | The viewer feed (`holoim-viewer.pages.dev`) has Search, Settings and "Upload a hologram" (a file). Nothing links to capture. | - | - | **Dead end without help**: you must know `holoim-capture.pages.dev` |
 | 2 | Open capture | Code 1.9 MB by 1.5 s; scene and avatar GLBs (2.3 MB) by 0.9 s after start in headless; "Loaded" at 5.8 s after `goto` (4.1 s on a second run). Microphone prompt at load. | 4 to 6 s | 3 s (mic prompt) | The in-app browser pane once showed 12 s before the GLBs started; not reproduced headless, so treated as a pane artifact |
-| 3 | Understand what to do | A stock avatar seen **from behind** on a rock. The status line is desktop keyboard help ("WASD + Space, hold C to crouch, V toggles…"). The face camera is off until turned on in Settings. Body moves only by touch joystick. | - | 20 to 40 s | Nothing tells a phone user what to do; the avatar is not them |
+| 3 | Understand what to do | A stock avatar seen **from behind** on a rock. The status line is desktop keyboard help ("WASD + Space, hold C to crouch, V toggles…"). The face camera starts at load on a real phone (`WebcamFace` is off only under `navigator.webdriver`, which is why the emulated run showed it off). Body moves only by touch joystick. | - | 20 to 40 s | Nothing tells a phone user what to do; the avatar is not them |
 | 4 | Record | Tap Record; recording UI 3 s later in headless. 15 s take. | ~3 s | 15 to 30 s | - |
 | 5 | Stop | Tap Stop; the GLB is exported and **downloaded as a file** 3.7 s later (15 s take = 2.9 MB). Nothing else happens. | 3.7 s | - | The take is a file in Downloads; no next step |
 | 6 | Get to the viewer | No link back. Type the viewer's address. | - | 10 to 20 s | Dead end without help |
@@ -89,8 +89,10 @@ Each slice is shippable on its own and ends with the journey script re-timed.
   Backward compatible: a new route; existing upload and auth are unchanged.
 - After Stop, capture shows **Post** (primary) and Save file (the old
   download). Post uploads the take to `POST /api/holograms` with the grant,
-  then goes to the viewer's `/h/<id>` with a **Share** sheet open:
-  `navigator.share` where it exists, Copy link otherwise.
+  then goes to the viewer's `/h/<id>?posted=1`, which shows a prominent
+  **Share** button (one tap: `navigator.share` needs a user gesture, so it
+  cannot open by itself after a navigation); Copy link where share is
+  missing.
 - Capture opened without a grant (the direct address, the headset) behaves
   exactly as today.
 
@@ -171,7 +173,9 @@ posted hologram is deleted from the viewer as today. Save file stays.
   profile, from the viewer feed (signed in) → Record → capture in selfie mode
   → a 20 s take with a fake camera stream of a person → Post → the hologram
   page with Share, finishes with no step that needs typing an address,
-  picking a file or copying a URL. Its machine time (everything except the
+  picking a file or copying a URL, and ends with the Share button shown.
+  It runs with `TEST_OPEN_UPLOADS=false` and asserts the hologram's owner is
+  the signed-in user. Its machine time (everything except the
   take and scripted taps) is reported, and the journey's modeled total
   (machine time + the take + one tap per step at 2 s) is under 2 minutes.
 - [ ] Signed out, Record asks for sign-in before opening capture; after the
@@ -203,7 +207,9 @@ posted hologram is deleted from the viewer as today. Save file stays.
   still works; Post offers to sign in again (opens the viewer) without losing
   the take, which stays in memory until the page closes.
 - Upload fails mid-way on a weak network: retry keeps the same take; the take
-  is never dropped before the server confirms.
+  is never dropped before the server confirms. A replay of a grant that
+  already posted returns that hologram (200), so a lost response or a
+  double tap never makes a second copy or an error.
 - A take over the size cap (existing notice) cannot Post; Save file works.
 - Camera denied: selfie mode falls back to today's avatar with a one-line
   notice; Post still works.
@@ -237,6 +243,46 @@ Recommended: the post grant (above). Rejected: capture keeps its own sign-in
 the viewer's origin (deploy and routing change across two Pages projects, too
 big for the gain); passing the session token itself (a full credential in a
 URL).
+
+## Design review (2026-11-13, accepted)
+
+The `design-reviewer` subagent checked the plan against the code. Accepted:
+
+- **The grant is not a session.** Its own token prefix (`holoim_pg_`);
+  `resolveAuth` returns null for it, so it can never rename a user or delete
+  a hologram; only `POST /api/holograms` checks it, strictly, even when
+  uploads are open. Minted only from a session (no agent token, no grant).
+- **Storage:** a new `PostGrant` table (hash, user, expiry, used-at,
+  hologram id, return origin), not `ApiToken`. Claimed with
+  `updateMany where usedAt = null`, released if storing fails, and the
+  hologram id saved on success, like upload intents.
+- **CORS:** `POST /api/holograms` also allows the capture origins (the bare
+  production origin is not in today's allow list, so this would only have
+  failed in production); an API test sends that origin.
+- **Origins:** the return origin is stored on the grant from the mint
+  request's checked `Origin`, never read from the fragment; capture takes the
+  API origin from its build (`VITE_API_ORIGIN`); the viewer gets a new
+  `VITE_CAPTURE_ORIGIN`.
+- **Upload path:** capture posts multipart to `POST /api/holograms` (not the
+  viewer's direct-to-R2 path, whose bucket CORS lists only viewer origins),
+  with a default title and no naming step; it reads only `id` back.
+- **Sign-in continues to capture:** the magic-link request takes an optional
+  `next: "record"`; the verify page sends it to a viewer route `/record`,
+  which mints the grant and replaces itself with capture in the same tab.
+  This survives a mail app opening the link in another browser.
+- **The hook replaces the download** when a grant is present
+  (`deliverTake`), so iOS shows no download sheet mid-journey; Save file
+  stays available.
+- **Selfie flow:** a third view mode `selfie` (front, waist up, portrait),
+  view-only, so exports are unchanged; turned on by grant plus a coarse
+  pointer, never in phone AR and never as a camera-only take; the countdown
+  lives in the UI before the record toggle and is cancellable; the phone
+  status line stops showing keyboard help (`UIStateStore`).
+- **Cold start:** capture warms the API when it loads with a grant (Fly
+  stops idle machines).
+
+Recorded, not in scope: shared links have no preview card (no `og:` tags),
+which hurts "want to send"; a follow-up.
 
 ## Open decisions for the user
 
