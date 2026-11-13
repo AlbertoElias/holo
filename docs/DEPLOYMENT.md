@@ -54,10 +54,13 @@ Rules that keep this topology correct:
   seconds plus the volume, roughly $1–3/month at demo usage versus ~$12
   always-on. Do not `fly scale count 2`: each machine gets its own volume
   and its own SQLite file.
-- A stop can interrupt a USDZ conversion; the worker reclaims it after
-  `USDZ_STALE_CLAIM_MS` (20 minutes by default, longer than the converter's
-  15-minute wall limit) once the machine runs again. A conversion that times
-  out is retried the same way, up to three attempts, then marked failed.
+- A stop can interrupt a USDZ conversion. The worker requeues it as soon as
+  it starts again, which is when the next request wakes the machine (B-042):
+  with one machine there is one worker, so a claim older than the worker has
+  no live owner. The interrupted attempt counts; the third interrupted start
+  marks it failed. A conversion that times out waits out
+  `USDZ_STALE_CLAIM_MS` instead (20 minutes by default, longer than the
+  converter's 15-minute wall limit), up to three attempts, then is marked failed.
   Asking for the hologram's Quick Look again re-queues it for one more
   attempt; the count is never reset by a request.
 - The embedded USDZ worker runs in the same process (SQLite phase). The

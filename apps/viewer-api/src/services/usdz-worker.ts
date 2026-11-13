@@ -131,15 +131,46 @@ export async function processNextUsdzConversion(options: UsdzWorkerOptions): Pro
   }
 }
 
+/**
+ * Requeue the conversions a previous process was running when it died (B-042).
+ * Fly stops the idle machine (`auto_stop_machines`) even mid-conversion, and
+ * the claim used to block a retry for USDZ_STALE_CLAIM_MS after the next
+ * start: the iPhone that woke the machine waited up to 20 minutes on
+ * "Preparing preview…". A claim with a token (a timed-out deferral has none)
+ * made before this worker started has no live owner, since the API runs one
+ * worker per database (fly.toml: one machine). The interrupted attempt still
+ * counts, so a scene that keeps killing the process fails after
+ * MAX_USDZ_TIMEOUT_ATTEMPTS starts instead of looping.
+ */
+export async function requeueInterruptedConversions(startedAt: Date): Promise<number> {
+  const orphaned = { usdzStatus: "processing", usdzClaimToken: { not: null }, usdzClaimedAt: { lt: startedAt } };
+  await prisma.hologram.updateMany({
+    where: { ...orphaned, usdzAttempts: { gte: MAX_USDZ_TIMEOUT_ATTEMPTS } },
+    data: { usdzStatus: "failed", usdzError: "Quick Look conversion was interrupted too many times", usdzClaimedAt: null, usdzClaimToken: null }
+  });
+  const requeued = await prisma.hologram.updateMany({
+    where: orphaned,
+    data: { usdzStatus: "pending", usdzClaimedAt: null, usdzClaimToken: null }
+  });
+  return requeued.count;
+}
+
 export function startUsdzWorker(options: UsdzWorkerOptions & { pollIntervalMs?: number }): { stop: () => void } {
   const log = options.logger ?? silentLogger;
   let stopped = false;
   let running = false;
+  const startedAt = new Date();
+  let requeued = false;
 
   const tick = async () => {
     if (stopped || running) return;
     running = true;
     try {
+      if (!requeued) {
+        const count = await requeueInterruptedConversions(startedAt);
+        requeued = true;
+        if (count) log.info({ count }, "USDZ conversions interrupted by a restart requeued");
+      }
       // Drain available work one job at a time: the hologram processing
       // (hologram-budgets) first, then the conversions. Serial, so the
       // texture encoder and the USDZ converter never share the machine.

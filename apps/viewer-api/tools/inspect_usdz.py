@@ -29,6 +29,11 @@ from pxr import Usd, UsdGeom, UsdMedia, UsdShade, UsdSkel, Vt
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cloche as cloche_rules  # noqa: E402
 
+# glb_to_usdz: sample times closer than SAME_TIME are one instant, and a STEP
+# key after the first is written as a ramp from STEP_LEAD before it.
+SAME_TIME = 4e-6
+STEP_LEAD = 1e-5
+
 
 class Source:
     def __init__(self, path):
@@ -251,7 +256,18 @@ class Inspection:
                 exact.append(float(times[key_index]))
         exact = sorted(set(exact))
         times = sorted(set(exact + [(a+b)/2 for a, b in zip(exact, exact[1:])]))
-        self.report["sampling"] = {"sourceKeyCount": len(all_keys), "exactKeys": exact, "timesSeconds": times, "policy": "All vertices; all source keys up to 65, otherwise uniform exact keys plus every channel magnitude extrema; adjacent selected-key midpoints"}
+        # USD has no per-attribute held interpolation, so the converter writes
+        # a STEP key as a 10 µs ramp ending at the key (or at a time merged
+        # with it). No frame lands there; a sample inside it, such as another
+        # channel's float32 key a few nanoseconds early, is checked just after.
+        step_keys = np.unique([float(t) for key_times, _, interpolation in source.channels.values() if interpolation == "STEP" for t in key_times[1:]])
+        if len(step_keys):
+            settled = []
+            for time in times:
+                key = step_keys[min(int(np.searchsorted(step_keys, time - SAME_TIME)), len(step_keys) - 1)]
+                settled.append(float(key) + SAME_TIME if key - STEP_LEAD - SAME_TIME < time <= key + SAME_TIME else time)
+            times = sorted(set(settled))
+        self.report["sampling"] = {"sourceKeyCount": len(all_keys), "exactKeys": exact, "timesSeconds": times, "policy": "All vertices; all source keys up to 65, otherwise uniform exact keys plus every channel magnitude extrema; adjacent selected-key midpoints; a time inside a STEP key's ramp is checked just after it"}
         fps = self.stage.GetTimeCodesPerSecond()
         self.check(fps > 0, "Invalid USD time codes per second")
         self.close(self.stage.GetEndTimeCode()/fps, max(all_keys) if max(all_keys) else 1/fps, 1e-5, "animation duration")

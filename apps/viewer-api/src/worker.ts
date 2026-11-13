@@ -10,7 +10,9 @@ import { startUsdzWorker } from "./services/usdz-worker.js";
 
 // Standalone USDZ worker entrypoint (`pnpm --filter @holoim/api worker:usdz`).
 // The production beta embeds the same loop in server.ts; this entry runs it
-// without the HTTP API for local/operator use.
+// without the HTTP API for local/operator use. Never run it beside a server
+// whose worker is enabled on the same database: a starting worker requeues
+// every older in-flight claim as interrupted (requeueInterruptedConversions).
 async function main(): Promise<void> {
   if (env.DATABASE_URL.startsWith("file:")) {
     await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");
