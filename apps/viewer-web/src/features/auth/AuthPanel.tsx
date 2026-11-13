@@ -10,20 +10,19 @@ type AuthPanelProps = {
 };
 
 // The contents of the Settings sheet's Account section; the section and its heading come from the sheet.
+// Who is signed in reads as one block, and Sign out stands on its row: one group, no footer.
 export function AuthPanel({ user, onSignOut }: AuthPanelProps) {
   if (!user) {
     return <SignInForm />;
   }
 
   return (
-    <div className="upload-form">
-      <Type variant="byline" as="p">
-        Signed in as <strong>{user.displayName}</strong>
-      </Type>
-      <Type variant="byline" as="p">{user.email}</Type>
-      <div className="upload-actions">
-        <GlyphControl glyph={null} showLabel label={VIEWER_CONTROL_NAMES.signOut} onPress={() => void onSignOut()} />
+    <div className="account-row">
+      <div className="account-identity">
+        <Type variant="note" as="p" className="account-name">{user.displayName}</Type>
+        <Type variant="byline" as="p">{user.email}</Type>
       </div>
+      <GlyphControl glyph={null} showLabel label={VIEWER_CONTROL_NAMES.signOut} onPress={() => void onSignOut()} />
     </div>
   );
 }

@@ -11,8 +11,8 @@
   --feed-dock-clearance: calc(var(--holoim-hit-touch) + 3 * var(--holoim-glyph-gap) + max(env(safe-area-inset-bottom), var(--holoim-hit-phone-home-bar)));
   /* Controls at the foot stand two glyph gaps apart, so no two crowd. */
   --feed-control-gap: calc(2 * var(--holoim-glyph-gap));
-  /* Room the Settings corner takes from the right of the screen: its word, its chip and the edge it keeps (a notch's inset, or the side edge). */
-  --feed-settings-clearance: calc(max(env(safe-area-inset-right), var(--holoim-hit-phone-side-edge)) + 7rem);
+  /* Room the Search and Settings corner takes from the right of the screen: the edge it keeps (a notch's inset, or the side edge), its chip round two touch-sized glyphs a gap apart, and a gap before a title. */
+  --feed-settings-clearance: calc(max(env(safe-area-inset-right), var(--holoim-hit-phone-side-edge)) + 2 * var(--holoim-chip-padding-inline) + 2 * var(--holoim-hit-touch) + 2 * var(--holoim-glyph-gap));
 }
 
 * {
@@ -146,12 +146,12 @@ body::before {
   transition: opacity var(--holoim-motion-chrome-out) var(--holoim-motion-chrome-easing);
 }
 
-/* A title reaching the right of the screen stops short of the Settings corner. */
+/* A title reaching the right of the screen stops short of the Search and Settings corner. */
 .feed-card-meta {
   padding-inline-end: max(0px, var(--feed-settings-clearance) - max(var(--holoim-hit-phone-side-edge), (100vw - var(--feed-card-max-width)) / 2));
 }
 
-/* ── Settings, in the top corner its side sheet unfolds from ── */
+/* ── Search and Settings, in the top corner their side sheets unfold from ── */
 
 .feed-settings {
   position: fixed;
@@ -159,6 +159,8 @@ body::before {
   top: max(env(safe-area-inset-top), var(--holoim-glyph-gap));
   right: max(env(safe-area-inset-right), var(--holoim-hit-phone-side-edge));
   display: flex;
+  align-items: center;
+  column-gap: var(--holoim-glyph-gap);
 }
 
 /* Where the feed is narrowed to (a creator or a search), top left, mirroring Settings. */
@@ -181,13 +183,6 @@ body::before {
 }
 
 /* A hologram whose model cannot draw has no reach row: its owner's controls sit alone in the foot. */
-.feed-card-foot-actions {
-  display: flex;
-  justify-content: center;
-  column-gap: var(--holoim-glyph-gap);
-  pointer-events: auto;
-}
-
 .feed-card-meta h2,
 .feed-card-meta p {
   margin: 0;
@@ -218,6 +213,15 @@ body::before {
 /* The title is a link without the underline: it reads as the title, and answers hover and focus like the rest. */
 .feed-card-title-link {
   text-decoration: none;
+}
+
+/* The creator's Delete reads as a word of the byline, underlined like its links. */
+.feed-card-delete {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
 }
 
 .feed-card-credit a:hover,
@@ -339,7 +343,17 @@ body::before {
 }
 
 .portal-controls-before {
+  grid-column: 1;
   justify-content: flex-end;
+}
+
+/* Pinned to their columns, so Play keeps the middle when a side leaves the row for the line above. */
+.portal-controls-row {
+  grid-column: 2;
+}
+
+.portal-controls-side {
+  grid-column: 3;
 }
 
 .portal-controls-side,
@@ -348,6 +362,9 @@ body::before {
 }
 
 .portal-timecode {
+  /* The text and an unseen copy of the paused text share one cell, so the width holds as play and pause swap. */
+  display: inline-grid;
+  justify-items: end;
   font-family: var(--holoim-type-timecode-font-family);
   font-weight: var(--holoim-type-timecode-font-weight);
   font-size: var(--holoim-type-timecode-font-size);
@@ -355,6 +372,20 @@ body::before {
   color: var(--holoim-color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.portal-timecode > span {
+  grid-area: 1 / 1;
+}
+
+.portal-timecode-room {
+  visibility: hidden;
+}
+
+/* On the line above Play the group hangs from its right end, so the text can change width without moving sound;
+   the unseen copy stays measurable (useReachRow) but takes no room. */
+.feed-card-foot[data-reach-row="stacked"] .portal-timecode-room {
+  position: absolute;
 }
 
 /* Hidden until reached for (1.2): the reach controls unfold from Play
@@ -383,20 +414,40 @@ body::before {
 }
 
 /* Too narrow for the reach controls beside Play at the input's hit size (a
-   touch phone, a take with sound): they unfold above Play, centred on a chip
-   of the same colour, so Play holds still, no glyph shrinks and none reaches
-   the phone's back-swipe edges (6.1). */
+   touch phone): they unfold on a line above Play, playback left of its axis
+   and the ways out right of it, each group on a chip of the same colour, so
+   Play holds still, no glyph shrinks and none reaches the phone's back-swipe
+   edges (6.1). */
+.feed-card-foot[data-reach-row="stacked"] .portal-controls-before,
 .feed-card-foot[data-reach-row="stacked"] .portal-controls-after {
   position: absolute;
   bottom: calc(100% + var(--holoim-glyph-gap));
-  left: 50%;
-  translate: -50% 0;
   max-width: none;
   padding: var(--holoim-chip-control-row-padding-start);
   border-radius: var(--holoim-chip-radius);
   background: var(--chip-surface, transparent);
 }
 
+/* Text at a chip's end keeps the chip's inline padding (2.3); glyphs sit flush in their hit areas. */
+.feed-card-foot[data-reach-row="stacked"] .portal-controls-before:has(> .portal-timecode:first-child) {
+  padding-inline-start: var(--holoim-chip-padding-inline);
+}
+
+/* Play's axis within the row (useReachRow): the middle, or off it on a chip that hugs the controls. */
+.feed-card-foot[data-reach-row="stacked"] .portal-controls-before {
+  right: calc(100% - var(--feed-play-axis, 50%) + var(--holoim-glyph-gap));
+}
+
+.feed-card-foot[data-reach-row="stacked"] .portal-controls-after {
+  left: calc(var(--feed-play-axis, 50%) + var(--holoim-glyph-gap));
+}
+
+/* Play's column has nothing before it on the row, so no gap is left there. */
+.feed-card-foot[data-reach-row="stacked"] .feed-card-foot-chip .portal-controls-row {
+  margin-inline-start: calc(-1 * var(--feed-control-gap));
+}
+
+.feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="hidden"] .portal-controls-before,
 .feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="hidden"] .portal-controls-after {
   max-width: none;
   transform: translateY(var(--holoim-glyph-gap));
@@ -412,6 +463,7 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .portal-controls-reach,
   .portal-controls[data-reach="hidden"] .portal-controls-reach,
+  .feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="hidden"] .portal-controls-before,
   .feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="hidden"] .portal-controls-after {
     transform: none;
   }
@@ -483,7 +535,7 @@ body::before {
   left: 50%;
   transform: translateX(-50%);
   width: max-content;
-  /* Leaves the Settings chip's corner free, so a long notice never covers it. */
+  /* Leaves the Search and Settings corner free, so a long notice never covers it. */
   max-width: calc(100vw - 2 * var(--feed-settings-clearance));
 }
 
@@ -643,6 +695,24 @@ body::before {
   .upload-switch::before {
     transition: background-color var(--holoim-motion-chrome-in) linear;
   }
+}
+
+/* Settings' Account: who is signed in as one block, Sign out on the same row. */
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: calc(2 * var(--holoim-glyph-gap));
+}
+
+.account-identity {
+  display: grid;
+  min-width: 0;
+}
+
+.account-identity p {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .upload-actions {

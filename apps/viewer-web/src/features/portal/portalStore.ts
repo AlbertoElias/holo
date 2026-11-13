@@ -18,10 +18,6 @@ export type PortalState = {
   tiltStatus: TiltStatus;
   tiltYaw: number;
   tiltPitch: number;
-  /** The viewer's choice to see what the author pointed at (PRD-022); resets with the card. */
-  highlights: boolean;
-  /** The recording carries pointing links, so the toggle is worth showing. A fact about the model, not reset. */
-  hasHighlights: boolean;
 };
 
 /** Per-frame values the canvas writes for the actions to read; not rendered. */
@@ -58,9 +54,7 @@ const INITIAL_STATE: PortalState = {
   zoom: 1,
   tiltStatus: "off",
   tiltYaw: 0,
-  tiltPitch: 0,
-  highlights: true,
-  hasHighlights: false
+  tiltPitch: 0
 };
 
 export type PortalStore = ReturnType<typeof createPortalStore>;
@@ -100,10 +94,6 @@ export function createPortalStore() {
       return () => listeners.delete(listener);
     },
     togglePause: () => set({ paused: !state.paused }),
-    toggleHighlights: () => set({ highlights: !state.highlights }),
-    setHasHighlights: (hasHighlights: boolean) => {
-      if (hasHighlights !== state.hasHighlights) set({ hasHighlights });
-    },
     setPaused: (paused: boolean) => {
       if (paused !== state.paused) set({ paused });
     },
@@ -154,7 +144,7 @@ export function createPortalStore() {
     reset: () => {
       tiltEpoch += 1;
       runtime.returnBlend = 0;
-      state = { ...INITIAL_STATE, hasHighlights: state.hasHighlights };
+      state = { ...INITIAL_STATE };
       listeners.forEach((listener) => listener());
     }
   };

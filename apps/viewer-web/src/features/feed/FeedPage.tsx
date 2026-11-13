@@ -134,11 +134,6 @@ function emptyText(source: FeedSource, creatorName: string | null, creatorMissin
   }
 }
 
-/** The URL a shared hologram opens at. */
-function hologramLink(id: string): string {
-  return new URL(`/h/${id}`, window.location.origin).toString();
-}
-
 /** The word that names where the feed is narrowed to, shown top left; null on the plain feed. */
 function contextLabel(source: FeedSource, creatorName: string | null): string | null {
   if (source.kind === "search") return `“${source.q}”`;
@@ -177,22 +172,6 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
     },
     [removeItem, source.kind, navigate]
   );
-  // The link to the hologram's own page: the phone's share sheet where it has one, else the clipboard.
-  const handleShare = useCallback(async (item: HologramDTO) => {
-    const url = hologramLink(item.id);
-    try {
-      if (typeof navigator.share === "function" && window.matchMedia("(pointer: coarse)").matches) {
-        await navigator.share({ title: item.hologramName, url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      setFlash({ kind: "upload", text: "Link copied" });
-    } catch (caught) {
-      if (caught instanceof DOMException && caught.name === "AbortError") return; // the share sheet was closed
-      // Clipboard refused (a browser setting, an insecure origin): show the link to copy by hand.
-      setFlash({ kind: "error", text: url });
-    }
-  }, []);
   useEffect(() => {
     if (!flash) return undefined;
     // An error here is a link to copy by hand, so it stays longer than a confirmation.
@@ -328,7 +307,6 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
           muted={audioMuted}
           onToggleMute={toggleAudioMute}
           onDelete={handleDelete}
-          onShare={handleShare}
           linkTitle={source.kind !== "one"}
           loadTurn={loadsStarted.has(item.id) ? "load" : loadsNear.has(item.id) ? "check" : "wait"}
           onModelSettled={onModelSettled}
@@ -336,7 +314,7 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
           xrFeed={xrFeed}
         />
       )),
-    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, handleShare, source.kind, loadsStarted, loadsNear, onModelSettled, target, xrFeed]
+    [items, resolvedFocusId, audioMuted, toggleAudioMute, handleDelete, source.kind, loadsStarted, loadsNear, onModelSettled, target, xrFeed]
   );
 
   return (
@@ -345,10 +323,9 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
         {cards}
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
       </section>
-      {/* A sheet answers Upload or Settings; on a phone it covers the screen, and the dock would show through it. */}
+      {/* A sheet answers Upload, Search or Settings; on a phone it covers the screen, and the dock would show through it. */}
       <Dock className="feed-dock" aria-label="Feed" ground="horizon" style={sheetOpen ? { visibility: "hidden" } : undefined}>
         <GlyphControl glyph="upload" label={VIEWER_CONTROL_NAMES.openUpload} onPress={() => setUploadOpen(true)} />
-        <GlyphControl glyph="search" label={VIEWER_CONTROL_NAMES.openSearch} onPress={openSearch} />
       </Dock>
       {/* Where the feed is narrowed to: a creator's name or the search words. The word closes the narrowing. */}
       {context ? (
@@ -357,10 +334,11 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
           <GlyphControl glyph="close" label={VIEWER_CONTROL_NAMES.clearFilter} onPress={() => navigate("/")} />
         </Chip>
       ) : null}
-      {/* Settings waits in the corner its sheet unfolds from (1.2), apart from the dock's making. Its chip all but
-          vanishes on the night sky and keeps the word legible over a hologram's picture. No drawing yet: the word stands in. */}
+      {/* Finding and Settings wait in the corner their sheets unfold from (1.2), apart from the dock's making. Their
+          chip all but vanishes on the night sky and keeps the glyphs legible over a hologram's picture. */}
       <Chip className="feed-settings" style={sheetOpen ? { visibility: "hidden" } : undefined}>
-        <GlyphControl glyph={null} label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
+        <GlyphControl glyph="search" label={VIEWER_CONTROL_NAMES.openSearch} onPress={openSearch} />
+        <GlyphControl glyph="settings" label={VIEWER_CONTROL_NAMES.openSettings} onPress={() => setSettingsOpen(true)} />
       </Chip>
       <SideSheet open={settingsOpen} title="Settings" onClose={() => setSettingsOpen(false)} target={target}>
         <SettingsSection title="Hand">
