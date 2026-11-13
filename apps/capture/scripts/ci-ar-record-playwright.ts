@@ -108,7 +108,7 @@ import {
 // the first step, is the offset with the most covered steps and then the smallest error (`alignmentSec`).
 // A step is covered when a translation key inside its window matches within 1 cm AND a rotation key
 // (rotation has its own times) inside its window matches within 1 degree.
-// AR_RECORD_ONLY=<substring[,substring]> keeps matching phases; AR_RECORD_VIDEO_DIR=<dir> records phone-a
+// AR_RECORD_ONLY=<substring[,substring]> keeps matching phases; AR_RECORD_VIDEO_DIR=<dir> records phone-a and put-back
 // on video at a watchable pace, and marks-low-fps as it runs. Writes output/ci-ar-record/<phase>.glb and ar-record-report.json.
 
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -513,7 +513,10 @@ async function tapDock(page: Page, id: TapDockId, options: { hidden?: boolean; e
   // Two real frames: the XR camera, and the dock hung on it, have taken the head's latest pose.
   await nextXrFrame(page);
   await nextXrFrame(page);
-  const dock = (await phoneChrome(page)).docks[id];
+  // The dock shows what the last simulation step decided, and a frame does not step the manual clock: after an
+  // export the dock still reads "hidden" until a step runs, so step until it shows (B-055).
+  const probe = options.hidden ? await phoneChrome(page) : await chromeUntil(page, (read) => Boolean(read.docks[id]?.visible), 30);
+  const dock = probe.docks[id];
   if (!dock) throw new Error(`the ${id} dock is not built`);
   if (!dock.visible && !options.hidden) throw new Error(`the ${id} dock is not shown`);
   const tap = phoneTap(page, dock.buttons[id]!.worldPosition);
@@ -610,6 +613,35 @@ async function advanceUntilDownload(page: Page, download: Promise<Download | nul
   // On a frozen page a slow export takes more real time, not more page time.
   if (result === undefined && frozenPages.has(page)) result = await download;
   return result ?? null;
+}
+
+/**
+ * Makes the next export take `ms` longer, as on a slow runner: the export waits one frame (`nextFrame`: an animation
+ * frame, or a 100 ms timer when none comes), so the next 100 ms timer is stretched and the next animation frame
+ * ignored. While it runs the take reads "Exporting..." and the dock hides Tray; a check that stops stepping the
+ * moment the download lands then reads a stale dock (B-055).
+ */
+async function slowNextExport(page: Page, ms: number): Promise<void> {
+  await page.evaluate((delayMs) => {
+    const w = window as unknown as { __ignoreRaf?: boolean; __slowDone?: boolean; setTimeout: (fn: TimerHandler, delay?: number, ...rest: unknown[]) => number };
+    const raf = window.requestAnimationFrame.bind(window);
+    const timer = w.setTimeout.bind(window);
+    window.requestAnimationFrame = (callback) => {
+      if (w.__ignoreRaf) {
+        w.__ignoreRaf = false;
+        return 0;
+      }
+      return raf(callback);
+    };
+    w.setTimeout = (fn, delay, ...rest) => {
+      if (!w.__slowDone && delay === 100) {
+        w.__slowDone = true;
+        w.__ignoreRaf = true;
+        return timer(fn, delayMs, ...rest);
+      }
+      return timer(fn, delay, ...rest);
+    };
+  }, ms);
 }
 
 const expectDownload = (page: Page, timeout: number) => page.waitForEvent('download', { timeout }).catch(() => null);
@@ -2017,7 +2049,7 @@ function glbJson(glb: Buffer): { nodes?: Array<{ name?: string }>; extensionsUse
  */
 async function putBackPhase(run: Run): Promise<PhaseReport> {
   const report: PhaseReport = { phase: 'phone-put-back', failures: [], notes: {}, ar: {}, takes: [] };
-  const page = await openPage(run, { phone: true, scene: true, trayUrls: TRAY_URLS, viewport: PHONE_VIEWPORT });
+  const page = await openPage(run, { phone: true, scene: true, trayUrls: TRAY_URLS, viewport: PHONE_VIEWPORT, video: true });
   try {
     await enterAr(page, { position: [0, 1.6, 0], yaw: 0 });
     const frame = toMatrix(await worldFrame(page));
@@ -2093,7 +2125,8 @@ async function putBackPhase(run: Run): Promise<PhaseReport> {
     if (remaining.some((item) => item.id === object.id)) report.failures.push('the object is still in the scene after Put back');
     if (back.docks.putBack?.visible) report.failures.push('Put back still shows once its object is gone');
 
-    // Stop: the export ends the object's presence at the tap.
+    // Stop: the export ends the object's presence at the tap. A slow export keeps the dock's Tray hidden past the download.
+    await slowNextExport(page, 3000);
     const download = expectDownload(page, 30000);
     await tapDock(page, 'record');
     const saved = await advanceUntilDownload(page, download);
@@ -2131,9 +2164,16 @@ async function putBackPhase(run: Run): Promise<PhaseReport> {
     }
     const filledBefore = live.tray.row?.slots.filter((slot) => slot.filled).length ?? 0;
     if (filledBefore !== 2) report.failures.push(`the row shows ${filledBefore} filled slot(s) before the Close tap, expected 2`);
-    await nextXrFrame(page);
-    await nextXrFrame(page);
-    const ring = await page.evaluate(() => window.__phoneTrayClosePosition(1));
+    // A row opened just now is still sliding out: step until the ring holds still, so the tap lands on it (B-055).
+    let ring = await page.evaluate(() => window.__phoneTrayClosePosition(1));
+    for (let i = 0; i < 40; i += 1) {
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
+      const next = await page.evaluate(() => window.__phoneTrayClosePosition(1));
+      const still = ring && next && ring.every((value, axis) => Math.abs(value - next[axis]!) < 1e-4);
+      ring = next;
+      if (still) break;
+    }
     if (!ring) report.failures.push('__phoneTrayClosePosition(1) is null with the row open');
     else {
       await drive(page, phoneTap(page, ring as Vec3));
