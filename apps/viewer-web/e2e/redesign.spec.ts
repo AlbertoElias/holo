@@ -374,14 +374,8 @@ test.describe("phone by touch", () => {
     const controls = card.locator(".portal-controls");
     const play = controls.getByRole("button", { name: new RegExp(`^(${CONTROL_NAMES.play}|${CONTROL_NAMES.pause})$`) });
     const restingPlay = (await play.boundingBox())!;
-    // The paused timecode and sound do not fit half a phone beside Play at the touch size, so the reach controls
-    // wait on a line above it. Folded, that line waits in place: it slides in, except under reduced motion, where it only fades (8.3).
-    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "stacked");
-    const foldedShift = () => controls.locator(".portal-controls-before").evaluate((node) => getComputedStyle(node).transform);
-    expect(await foldedShift(), "folded, the line sits a gap lower").not.toBe("none");
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await expect.poll(foldedShift, { message: "under reduced motion it does not move", timeout: 6000 }).toBe("none");
-    await page.emulateMedia({ reducedMotion: "no-preference" });
+    // The timecode is the time alone, so it and sound fit half a phone beside Play at the touch size: one row.
+    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "beside");
     await card.locator(".feed-card-portal").tap({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
     await expect(controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }), "a take with a voice has its sound control").toHaveCount(1);
@@ -406,31 +400,28 @@ test.describe("phone by touch", () => {
         expect(apart, `${a.name} and ${b.name} do not overlap`).toBe(true);
       }
     }
-    // One line above Play: the timecode and sound left of its axis, the ways into the room right of it; Play holds still.
-    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "stacked");
+    // One row with Play: the timecode and sound left of it, the ways into the room right of it; Play holds still.
+    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "beside");
     const reachedPlay = (await play.boundingBox())!;
     expect(Math.abs(reachedPlay.x - restingPlay.x) + Math.abs(reachedPlay.y - restingPlay.y), "Play does not move").toBeLessThan(1);
     expect(Math.abs(reachedPlay.x + reachedPlay.width / 2 - PHONE.width / 2), "Play holds the middle").toBeLessThan(2);
     const reached = boxes.filter((box) => box.name !== CONTROL_NAMES.play && box.name !== CONTROL_NAMES.pause);
-    const lineMiddle = reached[0]!.y + reached[0]!.height / 2;
-    for (const box of reached) {
-      expect(Math.abs(box.y + box.height / 2 - lineMiddle), `${box.name}: on one line`).toBeLessThan(2);
-      expect(box.y + box.height, `${box.name}: above Play`).toBeLessThanOrEqual(reachedPlay.y);
-    }
-    const axis = PHONE.width / 2;
+    const lineMiddle = reachedPlay.y + reachedPlay.height / 2;
+    for (const box of reached) expect(Math.abs(box.y + box.height / 2 - lineMiddle), `${box.name}: on Play's line`).toBeLessThan(2);
     const sound = reached.find((box) => /^(Mute|Unmute) audio$/.test(box.name ?? ""))!;
-    expect(sound.x + sound.width, "sound is left of Play's axis").toBeLessThanOrEqual(axis);
-    for (const box of reached.filter((one) => one !== sound)) expect(box.x, `${box.name}: right of Play's axis`).toBeGreaterThanOrEqual(axis);
+    expect(sound.x + sound.width, "sound is left of Play").toBeLessThanOrEqual(reachedPlay.x + 0.5);
+    for (const box of reached.filter((one) => one !== sound)) expect(box.x, `${box.name}: right of Play`).toBeGreaterThanOrEqual(reachedPlay.x + reachedPlay.width - 0.5);
     const timecode = (await controls.locator(".portal-timecode").boundingBox())!;
     expect(timecode.x + timecode.width, "the timecode leads sound").toBeLessThanOrEqual(sound.x + 0.5);
     expect(timecode.x, "clear of the left back-swipe edge").toBeGreaterThanOrEqual(tokens.hit.phoneSideEdge - 0.5);
     expect(reachedPlay.y + reachedPlay.height, "the row ends above 75% down").toBeLessThanOrEqual(PHONE.height * 0.75);
-    // Pausing swaps the timecode's words but not its width: the line does not reflow.
+    // The timecode is the time alone, playing or paused, so pausing does not reflow the row.
     const soundX = () => controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }).evaluate((node) => node.getBoundingClientRect().x);
     const wasPaused = await card.getAttribute("data-portal-paused");
     for (const paused of wasPaused === "true" ? ["false", "true"] : ["true", "false"]) {
       await play.tap();
       await expect(card).toHaveAttribute("data-portal-paused", paused);
+      await expect(controls.locator(".portal-timecode"), "no Paused word: Play's glyph shows the state").toHaveText(/^\d+:\d\d$/);
       expect(Math.abs((await soundX()) - sound.x), `sound holds its place (paused: ${paused})`).toBeLessThan(0.5);
     }
     const chip = card.locator(".feed-card-foot-chip");
@@ -449,10 +440,12 @@ test.describe("phone by touch", () => {
     await settleTransitions(page);
     await shot(page, "phone-touch-free-reached");
     expect(await chip.evaluate((node) => getComputedStyle(node).backgroundColor), "over the picture the row is on the chip").not.toBe("rgba(0, 0, 0, 0)");
+    // With Return beside Play the ways out no longer fit half a phone, so both groups unfold on a line above it.
+    await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "stacked");
     // The playback group on the line above starts on text, so its chip keeps text's inline padding (2.3).
     const textInset = await controls.evaluate((node) => {
       const group = node.querySelector(".portal-controls-before")!.getBoundingClientRect();
-      return node.querySelector(".portal-timecode > span")!.getBoundingClientRect().left - group.left;
+      return node.querySelector(".portal-timecode")!.getBoundingClientRect().left - group.left;
     });
     expect(textInset, "the timecode keeps text's padding from its chip's end").toBeGreaterThanOrEqual(14 - 0.5);
     const freePlay = (await play.boundingBox())!;
@@ -476,6 +469,12 @@ test.describe("phone by touch", () => {
     await expect(controls).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
     await expect.poll(endsApart, { message: "folded, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
     expect(Math.abs((await play.boundingBox())!.x + freePlay.width / 2 - PHONE.width / 2), "folded, Play still holds the middle").toBeLessThan(2);
+    // Folded, the line above waits in place: it slides in, except under reduced motion, where it only fades (8.3).
+    const foldedShift = () => controls.locator(".portal-controls-before").evaluate((node) => getComputedStyle(node).transform);
+    expect(await foldedShift(), "folded, the line sits a gap lower").not.toBe("none");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(foldedShift, { message: "under reduced motion it does not move", timeout: 6000 }).toBe("none");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
     for (const button of await controls.locator("button").all()) {
       const box = (await button.boundingBox())!;
       expect(box.x + box.width, "clear of the right back-swipe edge").toBeLessThanOrEqual(PHONE.width - side + 0.5);

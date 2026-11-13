@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { tokens } from "@holoim/design-tokens";
 import { GlyphControl } from "@holoim/ui-dom";
-import { GLYPH_VIEWBOX, formatRunningTime, glyphMetrics, pausedText, type GlyphAppearance } from "@holoim/xr-ui-core";
+import { GLYPH_VIEWBOX, formatRunningTime, glyphMetrics, type GlyphAppearance } from "@holoim/xr-ui-core";
 
 import { ChromeButton } from "../chrome/ChromeButton";
 import { VIEWER_CONTROL_NAMES } from "../chrome/controlNames";
@@ -53,17 +53,14 @@ function useNow(intervalMs: number, running: boolean): number {
 }
 
 /**
- * "Paused · 0:08" beside Play, the running time while it plays (7.2). It keeps
- * the paused text's width either way, so pausing never reflows the row.
+ * The running time beside Play (7.2). Play's own glyph shows whether it is
+ * paused, so the text is the time alone, in tabular digits that never shift.
  */
 function Timecode({ store, paused, active }: { store: PortalStore; paused: boolean; active: boolean }) {
   useNow(250, active && !paused);
   const ms = store.runtime.playbackSeconds * 1000;
   return (
-    <span className="portal-timecode" data-portal-timecode="">
-      <span>{paused ? pausedText(ms) : formatRunningTime(ms)}</span>
-      <span className="portal-timecode-room" aria-hidden="true">{pausedText(ms)}</span>
-    </span>
+    <span className="portal-timecode" data-portal-timecode="">{formatRunningTime(ms)}</span>
   );
 }
 
