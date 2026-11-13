@@ -1,7 +1,7 @@
 # Feature brief: Deep zoom into nested holograms
 
 **Lead:** Claude Code (Opus)  
-**Status:** Approved (2026-11-13); implementing
+**Status:** Verifying (2026-11-13): built and checked locally; independent verifier, merge and production upload open
 **Layer:** view (how a recorded event is looked at), with an authored piece
 (`introspection2`) as its first user; see
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -229,25 +229,25 @@ every size is 1 and the output is byte-identical.
 
 ## Acceptance criteria
 
-- [ ] With the declaration, zooming in from Follow reaches each layer's home
+- [x] With the declaration, zooming in from Follow reaches each layer's home
   in turn (camera distance to that layer's aim within 5% of
   `insideDistance × s_i`, the aim centred within 2% of the view), with the
   layer's own geometry drawn on screen (pixels of its marker colour), and
   its own animation playing there.
-- [ ] Zooming back out from the deepest layer returns to Follow; Return from
+- [x] Zooming back out from the deepest layer returns to Follow; Return from
   any depth retraces to Follow through each layer; scrolling the card away
   and back resets depth; a new wheel gesture at depth over an empty part of
   the frame keeps zooming and does not scroll the feed.
-- [ ] Two homes in, the outermost layer is not drawn; the cloche is not
+- [x] Two homes in, the outermost layer is not drawn; the cloche is not
   drawn once the camera is inside its glass.
-- [ ] Each layer's emitters are at full gain at its home and silent at the
+- [x] Each layer's emitters are at full gain at its home and silent at the
   next layer's home; their distances scale with the layer.
-- [ ] A hologram without the declaration: the zoom clamps at today's inside
+- [x] A hologram without the declaration: the zoom clamps at today's inside
   end (`depth` stays 0); near and far, the dome and the sound are as today.
   Existing portal and spatial-audio checks pass unchanged.
-- [ ] The reducer keeps the deepest layer's motion in the served GLB, and
+- [x] The reducer keeps the deepest layer's motion in the served GLB, and
   reduces an undeclared GLB byte-identically.
-- [ ] The rebuilt piece: every layer animates at every moment of the loop;
+- [x] The rebuilt piece: every layer animates at every moment of the loop;
   the traveller is in the layer the beat sheet puts him in, at every moment;
   the feed's Follow framing fits the man; the local converter produces the
   USDZ within its budgets.
@@ -289,12 +289,12 @@ every size is 1 and the output is byte-identical.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Reaches each layer; out; Return; reset; wheel at depth; undeclared unchanged; sound per layer | New `deep-zoom.spec.ts` beside `portal.spec.ts` in `test:e2e:portal` (run by `verify:pr` as `test:portal`), on a four-layer rigid fixture GLB and an undeclared twin | pending |
-| Reducer | Reducer unit test for byte-identity; the pipeline check uploads the fixture and reads the deepest layer's motion in the served GLB | pending |
-| Existing behaviour | `portal.spec.ts`, `portal.pipeline.spec.ts`, `spatial-audio.spec.ts`, viewer and API unit tests | pending |
-| The piece | `node scripts/showcase/build.mjs introspection2` (fit, layers, split Quick Look estimate) and the local converter | pending |
-| Whole | `pnpm run verify:pr` | pending |
-| Proof | Real-time H.264 recording in the local feed, zooming into each layer and back out to find the traveller | pending (under `output/`) |
+| Reaches each layer; out; Return; reset; wheel at depth; undeclared unchanged; sound per layer | New `deep-zoom.spec.ts` beside `portal.spec.ts` in `test:e2e:portal` (run by `verify:pr` as `test:portal`), on a four-layer rigid fixture GLB and an undeclared twin | `output/test-results/deep-zoom-report.json`: homes at depth 4.77, 8.34, 11.91 with each marker's colour at the aim; Return 89 samples 14.7 → 0 through every home; undeclared camera at the inside distance (2026-11-13) |
+| Reducer | Reducer unit test for byte-identity; the pipeline check uploads the fixture and reads the deepest layer's motion in the served GLB | `hologram-budgets.test.ts`, "judges motion inside a nested layer in the layer's own units": declared keeps the full-size keys within 1 mm of the layer; undeclared flattens as before. Byte identity by construction: with no layer node every unit is 1, an exact multiplier, and the existing reducer tests pass unchanged |
+| Existing behaviour | `portal.spec.ts`, `portal.pipeline.spec.ts`, `spatial-audio.spec.ts`, viewer and API unit tests | `test:e2e:portal` 16/16, `spatial-audio.spec.ts`, viewer vitest 41/41 (2026-11-13) |
+| The piece | `node scripts/showcase/build.mjs introspection2` (fit, layers, split Quick Look estimate) and the local converter | Build: 169 channels on the 30 Hz grid, fit unchanged without the inner layers, Quick Look 22.3 M deformed and 44.8 M rigid; converter 15 s CPU, 15.2 MB USDZ, inspector passed; `check_usdz_tools.sh` passed |
+| Whole | `pnpm run verify:pr` | `verify:pr` passed in 1634 s on the viewer commit (2026-11-13) |
+| Proof | Real-time H.264 recording in the local feed, zooming into each layer and back out to find the traveller | Recorded in the local feed on the rebuilt piece: one gesture stops at the inside end, then in through his chest to the gas, liquid and dark homes, all playing, and Return out (under `output/deep-zoom-proof/`) |
 
 ## Physical-device limits
 
