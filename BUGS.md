@@ -102,6 +102,22 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Not a writer:** `VoiceLevel` (the face meter) and `voiceInput.ts` (object search) call `getUserMedia` too but never write `micPermission`; voice input is queue item 8.
 - **Fix status:** merged; close this entry once a hosted run of `main` passes.
 
+### B-060 — A feed canvas connects pointer events to a container that is gone
+
+- **Area:** `apps/viewer-web` (`features/feed/HologramCardCanvas.tsx`, `features/ar/ARView.tsx`; `@react-three/fiber` 8 `Canvas`)
+- **Severity:** P3 (a page error, no visible break; fails any e2e that asserts no runtime errors, which skips every deploy)
+- **Observed:** 2026-11-13 on hosted CI, run 43356706702 (`8f5b5f3e58`), pipeline shard 8, `profiles.pipeline.spec.ts`
+  "a byline name opens that creator's page": `TypeError: Cannot read properties of null (reading 'addEventListener')` in
+  R3F's `events.connect`, called from the `Canvas`'s `onCreated`. The next run (43360131531) passed the shard.
+- **Evidence:** not reproduced in 8 runs of that test under `CI_EMULATE_LOAD=2` (those runs failed twice on the
+  5 s `expect` deadline instead (6/8 passed), fixed in the same change by the pipeline's 20 s `expect` timeout:
+  the whole `profiles.pipeline.spec.ts` ×5 under load 2 then passed 30/30.
+- **Expected:** a card that unmounts while its canvas is still being created leaves no page error.
+- **Suspect:** R3F connects events to the `Canvas`'s wrapper `div` (`divRef.current`) in `onCreated`, which runs after
+  the root renders; a card torn down in between (the search feed replaced by the creator page) leaves the ref null.
+  Fix candidate once reproduced: an `events` factory whose `connect` ignores a null target.
+- **Owner:** the CI reliability session (claim in `.git/holoim-ci-owner.json`).
+
 ## Entry template
 
 ```md
