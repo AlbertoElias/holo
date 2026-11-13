@@ -510,8 +510,8 @@ it, so design rounds edit one place.
 `xr-ui-core` gains the redesigned parts as pure functions and types, so each
 rule and formula is written and tested once, with tests citing the
 styleguide section they come from. The existing exports
-(`createRecordingUiState`, `resolveArShellNoticeState`,
-`createArImmersiveActions` and the state types) keep their behaviour and
+(`createRecordingUiState`, `resolveArShellNoticeState`
+and the state types) keep their behaviour and
 their tests.
 
 | Contract | What it decides |

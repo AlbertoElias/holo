@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createArImmersiveActions, resolveArShellNoticeState, type ArImmersiveAction } from "./index.js";
+import { resolveArShellNoticeState } from "./index.js";
 
 describe("resolveArShellNoticeState", () => {
   it("maps bubble failures and native depth occlusion warnings", () => {
@@ -23,18 +23,5 @@ describe("resolveArShellNoticeState", () => {
       bubbleWarning: null,
       depthOcclusionWarning: null
     });
-  });
-});
-
-describe("createArImmersiveActions", () => {
-  it("keeps the AR exit/recenter button labels and order", () => {
-    const actions = createArImmersiveActions({
-      onExit: () => undefined,
-      onRecenter: () => undefined
-    });
-
-    expect(actions.map((action: ArImmersiveAction) => action.id)).toEqual(["exit", "recenter"]);
-    expect(actions.map((action: ArImmersiveAction) => action.label)).toEqual(["Exit AR", "Recenter Model"]);
-    expect(actions.map((action: ArImmersiveAction) => action.tone)).toEqual(["danger", "ghost"]);
   });
 });

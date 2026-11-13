@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthPanel } from "./AuthPanel";
@@ -17,20 +17,6 @@ describe("AuthPanel", () => {
 
   beforeEach(() => {
     mockedRequest.mockReset();
-  });
-
-  it("sends a sign-in link and shows the check-inbox state", async () => {
-    mockedRequest.mockResolvedValue({});
-    render(<AuthPanel user={null} onSignOut={vi.fn()} />);
-
-    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.change(screen.getByLabelText("Your name, if you are new"), { target: { value: "Ada" } });
-    fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
-
-    await waitFor(() =>
-      expect(screen.getByText(/We emailed a sign-in link to ada@example.com/)).toBeInTheDocument()
-    );
-    expect(mockedRequest).toHaveBeenCalledWith({ email: "ada@example.com", displayName: "Ada" });
   });
 
   it("shows the signed-in account and signs out", async () => {

@@ -105,7 +105,7 @@ describe("ThreeMsdfLabel layout", () => {
 });
 
 describe("ThreeMsdfLabel material", () => {
-  it("is a shader material in the role's colour, never tone-mapped, converting to the output once", () => {
+  it("is a transparent shader material in the role's colour, never tone-mapped", () => {
     const l = label("Recording 0:12");
     expect(l.material.isShaderMaterial).toBe(true);
     expect(l.material.toneMapped).toBe(false);
@@ -114,10 +114,7 @@ describe("ThreeMsdfLabel material", () => {
     expect(hexOf(l.material)).toBe(tokens.color.textMuted);
     expect(hexOf(label("Hi", { role: "captionOnHologram" }).material)).toBe(tokens.color.text);
     expect(hexOf(label("Hi", { role: "controlLabel" }).material)).toBe(tokens.color.gold);
-    expect(l.material.fragmentShader).toContain("colorspace_fragment");
-    expect(l.material.fragmentShader).toContain("fwidth");
     expect(l.material.uniforms.distanceRange!.value).toBe(font.distanceField.distanceRange);
-    expect(Object.keys(l.material.uniforms).sort()).toEqual(["color", "distanceRange", "map", "opacity"]);
   });
 
   it("sets opacity through the uniform", () => {

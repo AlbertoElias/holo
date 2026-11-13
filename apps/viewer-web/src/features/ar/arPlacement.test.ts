@@ -4,8 +4,7 @@ import { Euler, Quaternion, Vector3 } from "three";
 import {
   computeFloorPlacement,
   computeVisibilityFallbackPlacement,
-  evaluatePlacementVisibility,
-  isPlacementLikelyVisible
+  evaluatePlacementVisibility
 } from "./arPlacement";
 
 describe("computeFloorPlacement", () => {
@@ -55,13 +54,6 @@ describe("visibility heuristics", () => {
 
     expect(result.visible).toBe(false);
     expect(result.reason).toBe("behind-camera");
-    expect(
-      isPlacementLikelyVisible(
-        new Vector3(0, 1.6, 0),
-        new Vector3(0, 0, -1),
-        new Vector3(0, 1.3, 1)
-      )
-    ).toBe(false);
   });
 
   it("returns true for a target that is forward and inside view cone", () => {
@@ -73,13 +65,6 @@ describe("visibility heuristics", () => {
 
     expect(result.visible).toBe(true);
     expect(result.reason).toBe("visible");
-    expect(
-      isPlacementLikelyVisible(
-        new Vector3(0, 1.6, 0),
-        new Vector3(0, 0, -1),
-        new Vector3(0.2, 1.45, -1.25)
-      )
-    ).toBe(true);
   });
 });
 

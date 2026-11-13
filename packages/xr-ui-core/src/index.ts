@@ -86,26 +86,6 @@ export function resolveArShellNoticeState({
   };
 }
 
-export interface ArImmersiveAction {
-  id: "exit" | "recenter";
-  label: string;
-  tone: "danger" | "ghost";
-  onSelect: () => void;
-}
-
-export function createArImmersiveActions({
-  onExit,
-  onRecenter
-}: {
-  onExit: () => void;
-  onRecenter: () => void;
-}): readonly ArImmersiveAction[] {
-  return [
-    { id: "exit", label: "Exit AR", onSelect: onExit, tone: "danger" },
-    { id: "recenter", label: "Recenter Model", onSelect: onRecenter, tone: "ghost" }
-  ];
-}
-
 export interface PlacementUiState {
   anchored: boolean;
   stage: string | null;

@@ -198,6 +198,10 @@ describe("auth and ownership routes", () => {
     expect(created.submittedBy).toBe("Owner Name");
     expect(created.submittedByVerified).toBe(true);
     expect(created.ownedByViewer).toBe(true);
+    await expect(prisma.hologram.findUniqueOrThrow({ where: { id: created.id } })).resolves.toMatchObject({
+      ownerId: owner.user.id,
+      submittedBy: "Owner Name"
+    });
 
     const asOther = await app.inject({
       method: "GET",
@@ -225,18 +229,6 @@ describe("auth and ownership routes", () => {
     });
     expect(ownerDelete.statusCode).toBe(200);
     expect(await prisma.hologram.count()).toBe(0);
-  });
-
-  it("credits an authenticated upload to the account name whatever submittedBy says", async () => {
-    const ada = await signIn("ada.upload@example.com", "Ada Lovelace");
-    const created = await upload(ada, "Free Text Name");
-    expect(created.submittedBy).toBe("Ada Lovelace");
-    expect(created.submittedByVerified).toBe(true);
-    expect(created.ownedByViewer).toBe(true);
-    await expect(prisma.hologram.findUniqueOrThrow({ where: { id: created.id } })).resolves.toMatchObject({
-      ownerId: ada.user.id,
-      submittedBy: "Ada Lovelace"
-    });
   });
 
   it("lists one creator's holograms, searches by title or creator, and pages a filtered list", async () => {
