@@ -78,18 +78,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `scripts/ci-emulate.sh pnpm --filter @holoim/web run test:e2e:mocked:shard2`, or rerun the CI shard.
   Suspect: the feed's clock runs slower than real time on a loaded software-GL runner, so the wrap misses the fixed poll window.
 
-### B-052 — The profiles "copy link" check fails locally and passes on hosted CI
-
-- **Area:** `apps/viewer-web` e2e (`e2e/profiles.pipeline.spec.ts:175`), pipeline shard 8
-- **Severity:** P3 (fails the `pipeline` step of a local `verify:pr`; hosted CI passes it)
-- **Observed:** 2026-11-12 on macOS: inside a full `test:smoke:pipeline` and, run alone twice, on this tree and on clean `origin/main` (`eb9add54d707`), with the ports moved off their defaults; the other four tests of the spec pass
-- **Evidence:** "copy link and delete wait out of sight until the card is reached; delete is the owner's alone": `expect(getByRole("status")).toContainText("Link copied")` times out after 5 s, "element(s) not found" (`profiles.pipeline.spec.ts:190`). Hosted CI shard 8 passed it in runs 43272311181 and 43260608085, then failed it once on run 43319865598 (`37a99105`, no source change) and passed on rerun.
-- **Expected:** the status line appears after "Copy link" is pressed, as on CI.
-- **Reproduction:** `RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/profiles.pipeline.spec.ts --workers=1` from a clean `main` worktree on a Mac.
-  Suspect (disproved): the clipboard write or its permission differs locally (the status appears only after `navigator.clipboard.writeText` resolves), or the moved base URL origin.
-- **Cause (2026-11-12):** reproduced under `scripts/ci-emulate.sh` (the file alone failed 3 of 3; the one test alone passed). The press never reached the button: a debug run showed it landing on a `DIV` and the status never appearing. The reach row folds 4 s after the last cursor movement and, folded, takes no press; the spec's hand-timed `pressReached` (cursor steps, then a press once two box readings 150 ms apart matched) could fire on a row that had folded or not yet started to unfold. The same stall as B-043, which `pressReach` in `e2e/bootstrap.ts` already handles.
-- **Fix:** `pressReached` now calls `pressReach` (cursor over the card, then Playwright's own click, which waits for a stable target that receives the press). A first attempt that only moved the cursor first still failed on hosted CI (run 43330664456). Shard 8's files pass under `ci-emulate` with this version. Close this entry once a hosted run of `main` passes shard 8.
-
 ### B-053 — Place gate: a card that becomes first after its dome is fitted takes the place late
 
 - **Area:** `apps/viewer-web/src/features/feed/HologramCard.tsx` (`placeRequest`), `HologramCardCanvas.tsx` (`placeGate`), `features/place/PlaceMount.tsx`
