@@ -50,6 +50,21 @@ async function settleTransitions(page: Page): Promise<void> {
   await animationFrames(page, 2);
 }
 
+/**
+ * A finger resting on the card: the reach controls fold after their idle time
+ * (tokens.glyph.idleAfter, real time), and a starved runner can take longer
+ * than that between a tap and the layout reads that follow. This keeps the
+ * card reached until the returned stop is called; a check of the fold stops it.
+ */
+async function holdReach(page: Page, cardId: string): Promise<() => Promise<void>> {
+  await page.evaluate((id) => {
+    const card = document.querySelector(`.feed-card[data-card-id="${id}"]`)!;
+    const hold = window.setInterval(() => card.dispatchEvent(new PointerEvent("pointermove", { pointerType: "touch", bubbles: true })), 500);
+    (window as unknown as { __holdReach?: number }).__holdReach = hold;
+  }, cardId);
+  return () => page.evaluate(() => window.clearInterval((window as unknown as { __holdReach?: number }).__holdReach));
+}
+
 async function shot(page: Page, name: string): Promise<void> {
   await mkdir(shotsDir, { recursive: true });
   await page.screenshot({ path: path.join(shotsDir, `${name}.png`) });
@@ -378,12 +393,28 @@ test.describe("phone by touch", () => {
     await expect(card.locator(".feed-card-foot")).toHaveAttribute("data-reach-row", "beside");
     await card.locator(".feed-card-portal").tap({ force: true });
     await expect(controls).toHaveAttribute("data-reach", "shown");
+    const letGo = await holdReach(page, first.id);
     await expect(controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }), "a take with a voice has its sound control").toHaveCount(1);
+    // Beside Play a folded group takes no width, so the boxes are read only while the row is reached and both
+    // groups are open to their content. The row folds again once idle, and a loaded runner can outlast that
+    // between the tap and the read, so a folded row is reached for again.
+    const openBoxes = () => controls.evaluate((row) => {
+      const open = (row as HTMLElement).dataset.reach === "shown" && [...row.querySelectorAll(".portal-controls-before, .portal-controls-after")]
+        .every((group) => group.getBoundingClientRect().width >= group.scrollWidth - 0.5 && group.scrollWidth > 0
+          && getComputedStyle(group).transform === "none");
+      return open ? [...row.querySelectorAll("button, .portal-timecode")].map((mark) => ({ name: mark.getAttribute("aria-label") ?? "timecode", ...mark.getBoundingClientRect().toJSON() as DOMRect })) : null;
+    });
+    let boxes: (DOMRect & { name: string | null })[] = [];
+    let timecode!: DOMRect;
+    await expect(async () => {
+      if (await controls.getAttribute("data-reach") !== "shown") await card.locator(".feed-card-portal").tap({ force: true });
+      const read = await openBoxes();
+      expect(read, "the reach row is open").not.toBeNull();
+      boxes = read!.filter((box) => box.name !== "timecode");
+      timecode = read!.find((box) => box.name === "timecode")!;
+    }).toPass({ timeout: 15_000 });
     await settleTransitions(page);
     await shot(page, "phone-touch-feed-reached");
-    const boxes = await controls.evaluate((row) =>
-      [...row.querySelectorAll("button")].map((button) => ({ name: button.getAttribute("aria-label"), ...button.getBoundingClientRect().toJSON() as DOMRect }))
-    );
     expect(boxes.length, "the reach row shows more than Play").toBeGreaterThan(2);
     const { side, bottom } = { side: tokens.hit.phoneSideEdge, bottom: tokens.hit.phoneHomeBar };
     for (const box of boxes) {
@@ -411,12 +442,19 @@ test.describe("phone by touch", () => {
     const sound = reached.find((box) => /^(Mute|Unmute) audio$/.test(box.name ?? ""))!;
     expect(sound.x + sound.width, "sound is left of Play").toBeLessThanOrEqual(reachedPlay.x + 0.5);
     for (const box of reached.filter((one) => one !== sound)) expect(box.x, `${box.name}: right of Play`).toBeGreaterThanOrEqual(reachedPlay.x + reachedPlay.width - 0.5);
-    const timecode = (await controls.locator(".portal-timecode").boundingBox())!;
     expect(timecode.x + timecode.width, "the timecode leads sound").toBeLessThanOrEqual(sound.x + 0.5);
     expect(timecode.x, "clear of the left back-swipe edge").toBeGreaterThanOrEqual(tokens.hit.phoneSideEdge - 0.5);
     expect(reachedPlay.y + reachedPlay.height, "the row ends above 75% down").toBeLessThanOrEqual(PHONE.height * 0.75);
     // The timecode is the time alone, playing or paused, so pausing does not reflow the row.
-    const soundX = () => controls.getByRole("button", { name: /^(Mute|Unmute) audio$/ }).evaluate((node) => node.getBoundingClientRect().x);
+    const soundX = async () => {
+      let x = NaN;
+      await expect(async () => {
+        const read = await openBoxes();
+        expect(read, "the reach row is open").not.toBeNull();
+        x = read!.find((box) => /^(Mute|Unmute) audio$/.test(box.name ?? ""))!.x;
+      }).toPass({ timeout: 8000 });
+      return x;
+    };
     const wasPaused = await card.getAttribute("data-portal-paused");
     for (const paused of wasPaused === "true" ? ["false", "true"] : ["true", "false"]) {
       await play.tap();
@@ -466,6 +504,7 @@ test.describe("phone by touch", () => {
       return Math.abs(ends.start - ends.end);
     };
     await expect.poll(endsApart, { message: "reached, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
+    await letGo();
     await expect(controls).toHaveAttribute("data-reach", "hidden", { timeout: 8000 });
     await expect.poll(endsApart, { message: "folded, the chip's ends match", timeout: 3000 }).toBeLessThan(3);
     expect(Math.abs((await play.boundingBox())!.x + freePlay.width / 2 - PHONE.width / 2), "folded, Play still holds the middle").toBeLessThan(2);
