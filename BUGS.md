@@ -99,7 +99,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Found:** 2026-11-13 by `/find-implicit-state-machines` (queue item 8, voice input), modeled in `VoiceInput.tla` (side-session notes), replayed against the real page
 - **Reproduced (`test:xr:summon`, phase `desktop-voice-orders`):** tap Speak (recognition starts), the recognition fails with `not-allowed` and ends. `onend` sets the machine's `state` idle without telling the session, then `startRecorder` finds no `getUserMedia`, logs "no MediaRecorder" and shows "type instead", and returns without a state change. The session's `voice` is still `listening`: the button reads "Stop listening", Find stays disabled, and a tap on Stop calls `stop()` on nothing.
 - **Expected:** the buttons follow the machine: back to "Speak" with the "type instead" line.
-- **Fix:** `startRecorder`'s no-recorder branch sets the state idle through `setState`. Replay `desktop-voice-orders`: failed before the fix, passes after.
+- **Fix:** `startRecorder`'s no-recorder branch sets the state idle through `setState`. Replay `desktop-voice-orders`: failed before the fix, passes after. Landed `f73048cc171b` (2026-11-13). Hosted run 43478134507 passed every capture job and the capture deploy; it is red only in a viewer redesign test from the viewer-timecode merge, so this stays open until a green run.
 - **Not defects (modeled and replayed, recorded in `TODOS.md` item 8):** a transcription answer arriving after the sheet closed is discarded (abort); a `getUserMedia` answer after cancel is closed (generation).
 
 ## Entry template
