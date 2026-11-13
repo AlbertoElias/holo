@@ -24,7 +24,7 @@ const WHEEL_GESTURE_GAP_MS = 250;
  * A card decides it on the gesture's first event; a gesture that began
  * anywhere else has no card and only scrolls.
  */
-let wheelGesture: { first: WheelEvent; card: HTMLElement | null; zooms: boolean; lastAt: number } | null = null;
+let wheelGesture: { first: WheelEvent; card: HTMLElement | null; zooms: boolean; stopsInside: boolean; lastAt: number } | null = null;
 let followingWheelGestures = false;
 
 function followWheelGestures(): void {
@@ -34,7 +34,7 @@ function followWheelGestures(): void {
     // A trackpad pinch (ctrl+wheel) zooms wherever it lands; it is no scroll.
     if (event.ctrlKey) return;
     if (!wheelGesture || event.timeStamp - wheelGesture.lastAt > WHEEL_GESTURE_GAP_MS) {
-      wheelGesture = { first: event, card: null, zooms: false, lastAt: event.timeStamp };
+      wheelGesture = { first: event, card: null, zooms: false, stopsInside: false, lastAt: event.timeStamp };
     }
     wheelGesture.lastAt = event.timeStamp;
   }, { capture: true, passive: true });
@@ -80,6 +80,12 @@ const FLICK_WINDOW_MS = 100;
 const FLICK_CARD_FRACTION = 0.2;
 const KEY_ORBIT_RADIANS = 0.15;
 const KEY_ZOOM_SCALE = 1.25;
+/**
+ * Wheel and keys move this many times faster inside a hologram's declared
+ * layers (deep zoom), which span about twelve nepers where the portal's own
+ * range spans one or two; a pinch stays 1:1 under the fingers.
+ */
+const DEEP_ZOOM_RATE = 2;
 /** Device rotation is amplified so a small wrist turn shows a useful new angle. */
 const TILT_GAIN = 1.5;
 const TILT_MAX_RADIANS = MathUtils.degToRad(75);
@@ -314,6 +320,9 @@ export function usePortalTriggers(
         const overHologram = !isInteractive(event.target) && (store.runtime.hitTest?.(event.clientX, event.clientY) ?? false);
         wheelGesture.card = card;
         wheelGesture.zooms = overHologram && ((paused && triggers.wheelZoomWhilePaused) || triggers.wheelZoomOverBubble);
+        // A wheel gesture that starts short of the inside end stops there; the next one goes on into the layers.
+        const { mode, zoom: startZoom } = store.getState();
+        wheelGesture.stopsInside = mode === "follow" || startZoom > 0;
       }
       if (!wheelGesture.zooms || wheelGesture.card !== card) return;
       // Fully zoomed out, wheeling further out belongs to the feed.
@@ -321,7 +330,7 @@ export function usePortalTriggers(
       const atOutsideEnd = mode === "follow" || zoom >= 1;
       if (!paused && event.deltaY > 0 && atOutsideEnd) return;
       event.preventDefault();
-      store.zoomByScale(Math.exp(-event.deltaY * WHEEL_ZOOM_PER_PIXEL));
+      store.zoomByScale(Math.exp(-event.deltaY * WHEEL_ZOOM_PER_PIXEL), event.deltaY < 0 && wheelGesture.stopsInside ? 0 : DEEP_ZOOM_RATE);
     };
 
     // Keyboard works in every variant so the portal stays usable without a pointer.
@@ -350,11 +359,11 @@ export function usePortalTriggers(
             return true;
           case "+":
           case "=":
-            store.zoomByScale(KEY_ZOOM_SCALE);
+            store.zoomByScale(KEY_ZOOM_SCALE, DEEP_ZOOM_RATE);
             return true;
           case "-":
           case "_":
-            store.zoomByScale(1 / KEY_ZOOM_SCALE);
+            store.zoomByScale(1 / KEY_ZOOM_SCALE, DEEP_ZOOM_RATE);
             return true;
           case "Escape":
           case "0":

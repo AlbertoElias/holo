@@ -105,6 +105,16 @@ def challenge(doc, binary):
     return {"transformedAncestor": index, "animatedMorphNodes": morph_nodes, "duration": end}
 
 
+def layered(doc):
+    """Puts the first node that places a sound inside a nested layer
+    (docs/features/deep-zoom.md): Quick Look then leaves that sound out."""
+    for node in doc.get("nodes", []):
+        if isinstance(node.get("extensions", {}).get("KHR_audio", {}).get("emitter"), int):
+            node["name"] = "HologramLayer_" + (node.get("name") or "exercise")
+            return True
+    return False
+
+
 def silent(doc):
     doc.get("extensions", {}).pop("KHR_audio", None)
     # A placed sound names its emitter from a node (a take's voice sits on the
@@ -189,6 +199,8 @@ def main(source, directory):
     cases = [("animated-ancestor-and-face", False, False, False), ("silent-animated-ancestor-and-face", True, False, False), ("alpha-uv-pbr-animated-ancestor-and-face", False, False, True)]
     if doc.get("extensions", {}).get("KHR_audio"):
         cases.append(("once-audio-animated-ancestor-and-face", False, True, False))
+        if layered(copy.deepcopy(challenged)):
+            cases.append(("layered-audio-animated-ancestor-and-face", False, False, False))
     for name, no_audio, once_audio, materials in cases:
         document = copy.deepcopy(challenged)
         case_binary = bytearray(challenged_binary)
@@ -197,6 +209,8 @@ def main(source, directory):
             case_provenance["materials"] = material_challenge(document, case_binary)
         if no_audio:
             silent(document)
+        if name.startswith("layered-audio"):
+            layered(document)
         if once_audio:
             extension = document["extensions"]["KHR_audio"]
             for sound in extension["sources"]:

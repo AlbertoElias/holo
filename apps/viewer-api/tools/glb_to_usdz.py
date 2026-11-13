@@ -72,15 +72,31 @@ def _linear(srgb8):
     return np.concatenate([decoded, values[..., 3:]], axis=-1)
 
 
+LAYER_NODE_PREFIX = "HologramLayer"
+
+
 def _audio_emitters(gltf, scene):
-    """KHR_audio emitters Quick Look plays: the scene's (global), then each
-    one a node names (placed sounds), once each. Quick Look hears a placed
-    sound unplaced, so a hologram's whole mix still plays there."""
-    emitters = list((scene.extensions or {}).get("KHR_audio", {}).get("emitters", []))
-    for node in gltf.nodes or []:
+    """KHR_audio emitters Quick Look plays, as (emitter, node): the scene's
+    (global, node None), then each one a node names (placed sounds), once
+    each. A placed sound inside a nested layer (a `HologramLayer` node at or
+    above it, docs/features/deep-zoom.md) is left out: Quick Look cannot go
+    in, and from outside the layer it would only crowd the outer mix."""
+    emitters = [(emitter, None) for emitter in (scene.extensions or {}).get("KHR_audio", {}).get("emitters", [])]
+    parents = {child: index for index, node in enumerate(gltf.nodes or []) for child in node.children or []}
+
+    def in_layer(index):
+        seen = set()
+        while index is not None and index not in seen:
+            seen.add(index)
+            if (gltf.nodes[index].name or "").startswith(LAYER_NODE_PREFIX):
+                return True
+            index = parents.get(index)
+        return False
+
+    for index, node in enumerate(gltf.nodes or []):
         emitter = (node.extensions or {}).get("KHR_audio", {}).get("emitter")
-        if isinstance(emitter, int) and emitter not in emitters:
-            emitters.append(emitter)
+        if isinstance(emitter, int) and all(emitter != e for e, _ in emitters) and not in_layer(index):
+            emitters.append((emitter, index))
     return emitters
 
 
@@ -1169,8 +1185,12 @@ class Converter:
         if not ffmpeg:
             raise ValueError("Recorded audio conversion requires ffmpeg")
         emitters = _audio_emitters(self.gltf, scene)
-        for emitter_index in emitters:
+        for emitter_index, node_index in emitters:
             emitter = extension["emitters"][emitter_index]
+            # A placed sound is heard from its node (Quick Look's spatial audio
+            # follows the prim's transform); a global one, or one whose node
+            # is not drawn, plays unplaced.
+            placed = emitter.get("type") == "positional" and node_index in self.paths
             if emitter.get("type") not in ("global", "positional"):
                 raise ValueError("Unsupported KHR_audio emitter type")
             for source_index in emitter["sources"]:
@@ -1197,9 +1217,10 @@ class Converter:
                 input_path.unlink()
                 if process.returncode:
                     raise ValueError("Recorded audio could not be transcoded to AAC: " + stderr.decode(errors="replace")[:500])
-                prim = UsdMedia.SpatialAudio.Define(self.stage, f"/Root/Audio_{emitter_index}_{source_index}")
+                parent = self.paths[node_index] if placed else "/Root"
+                prim = UsdMedia.SpatialAudio.Define(self.stage, f"{parent}/Audio_{emitter_index}_{source_index}")
                 prim.CreateFilePathAttr().Set(Sdf.AssetPath(relative))
-                prim.CreateAuralModeAttr().Set("nonSpatial")
+                prim.CreateAuralModeAttr().Set("spatial" if placed else "nonSpatial")
                 prim.CreatePlaybackModeAttr().Set("loopFromStage" if source.get("loop") else "onceFromStart")
                 prim.CreateStartTimeAttr().Set(Sdf.TimeCode(0))
                 prim.CreateMediaOffsetAttr().Set(0.0)

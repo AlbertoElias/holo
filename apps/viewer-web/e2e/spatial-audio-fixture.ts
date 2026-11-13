@@ -15,7 +15,7 @@ export const TONE_S = 5;
 const SAMPLE_RATE = 16000;
 
 /** Deterministic band-limited noise as 16-bit mono WAV. */
-function noiseWav(seconds: number, seed: number, cutoffHz: number, amplitude: number): Buffer {
+export function noiseWav(seconds: number, seed: number, cutoffHz: number, amplitude: number): Buffer {
   const samples = Math.round(seconds * SAMPLE_RATE);
   const wav = Buffer.alloc(44 + samples * 2);
   wav.write("RIFF", 0);

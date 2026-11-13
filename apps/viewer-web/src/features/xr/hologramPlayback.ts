@@ -2,8 +2,9 @@ import { createComponent, createSystem, Types, type Entity } from "@iwsdk/core";
 import { AnimationMixer, LoopRepeat } from "three";
 import type { AnimationAction, AnimationClip, Object3D } from "three";
 
-import { createEarPose, earFromObject, ScheduledGltfAudio, type DecodedGltfAudio } from "../hologram/gltfAudio";
+import { createEarPose, earFromObject, ScheduledGltfAudio, type DecodedGltfAudio, type SoundLayers } from "../hologram/gltfAudio";
 import { rankClipsForPlayback } from "../hologram/hologramScene";
+import { readDeepZoom, soundLayers } from "../portal/deepZoom";
 
 // IWSDK has no animation system and its AudioSystem cannot seek, so each
 // hologram's clip clock, mixer and audio live here. The clock is the single
@@ -24,6 +25,8 @@ export interface HologramRuntime {
   audio: ScheduledGltfAudio | null;
   /** Where the audio was, sampled on the last frame with the clip clock; null when silent. */
   audioOffset: number | null;
+  /** A hologram with nested layers (docs/features/deep-zoom.md) is heard as from outside them: depth 0. */
+  layers: SoundLayers | null;
 }
 
 export const HologramPlayback = createComponent("HologramPlayback", {
@@ -54,7 +57,8 @@ export function createHologramRuntime(
     return action;
   });
   const duration = ranked[0]?.duration ?? 0;
-  return { runtime: { mixer, actions, audio: audio ? new ScheduledGltfAudio(audio, root, { panningModel: XR_PANNING_MODEL }) : null, audioOffset: null }, duration };
+  const deep = audio ? readDeepZoom(root, clips) : null;
+  return { runtime: { mixer, actions, audio: audio ? new ScheduledGltfAudio(audio, root, { panningModel: XR_PANNING_MODEL }) : null, audioOffset: null, layers: deep ? soundLayers(deep) : null }, duration };
 }
 
 export function disposeHologramRuntime(runtime: HologramRuntime): void {
@@ -142,7 +146,7 @@ export class HologramPlaybackSystem extends createSystem({
         if (shouldPlay && audio.spatial) {
           if (!this.earSet) this.hear();
           this.earSet = true;
-          audio.place(this.ear, delta);
+          audio.place(this.ear, delta, runtime.layers);
         }
         runtime.audioOffset = audio.scheduledOffset();
       }

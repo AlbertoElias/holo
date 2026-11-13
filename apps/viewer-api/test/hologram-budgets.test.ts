@@ -468,6 +468,65 @@ fs.writeFileSync(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), f
     expect(served.accessors.every((accessor) => accessor.componentType === 5126), "nothing quantized").toBe(true);
   });
 
+  it("judges motion inside a nested layer in the layer's own units (deep zoom)", async () => {
+    // The whole body shrunk a hundredfold under its scene node: the hips sway 5 cm
+    // of the body, half a millimetre of the hologram. Declared as a layer
+    // (docs/features/deep-zoom.md), seen from inside that sway is 5 cm and must
+    // survive; undeclared, it is half a millimetre and flattens, as before.
+    const shrunk = (name: string, scale = 0.01): HologramGlbSpec => ({
+      mutate: (json) => {
+        const nodes = (json as unknown as { nodes: Array<{ name?: string; scale?: number[] }> }).nodes;
+        const scene = nodes.findIndex((node) => node.name === "Scene");
+        nodes[scene] = { ...nodes[scene], name, scale: [scale, scale, scale] };
+      }
+    });
+    const hips = (served: Json): { times: Float32Array; values: Float32Array } => {
+      const clip = served.animations[0]!;
+      const sampler = clip.samplers[clip.channels.find((channel) => channel.target.node === 1 && channel.target.path === "translation")!.sampler]!;
+      const read = (index: number) => {
+        const accessor = served.accessors[index] as { bufferView: number; byteOffset?: number; count: number; componentType: number };
+        expect(accessor.componentType, "float keys").toBe(5126);
+        const bytes = servedViews.get(served)!(accessor.bufferView);
+        return new Float32Array(bytes.buffer.slice(bytes.byteOffset + (accessor.byteOffset ?? 0), bytes.byteOffset + bytes.byteLength));
+      };
+      return { times: read(sampler.input), values: read(sampler.output) };
+    };
+    const servedViews = new Map<Json, (index: number) => Buffer>();
+    const run = async (name: string, scale?: number) => {
+      const created = (await upload(hologramGlb(shrunk(name, scale)))).json<HologramDto>();
+      const result = await processNextHologram({ storage: localStorage as never });
+      const after = (await app.inject({ method: "GET", url: `/api/holograms/${created.id}` })).json<HologramDto>();
+      const parsed = parse(await stored(after.url));
+      servedViews.set(parsed.json, parsed.view);
+      return { track: hips(parsed.json), report: (result as { report: { animation: AnimationWorld } }).report.animation };
+    };
+    type AnimationWorld = { reducedTracks: number; world: { maxPositionErrorMm: number } };
+
+    const declared = await run("HologramLayer_body");
+    expect(declared.report.reducedTracks, "declared, still reduced").toBeGreaterThan(0);
+    const undeclared = await run("Scene");
+    const fullSize = await run("Scene", 1);
+    expect(undeclared.track.times.length, "undeclared, the sub-millimetre sway is flattened").toBeLessThan(fullSize.track.times.length / 2);
+    expect([...declared.track.times], "declared, it keeps the keys it would keep at full size").toEqual([...fullSize.track.times]);
+    expect(declared.report.world.maxPositionErrorMm, "within 1 mm in the layer's units").toBeLessThanOrEqual(1);
+
+    // Every recorded frame, against the sway as recorded: under 1 mm of the layer (0.1 of the armature's cm).
+    const { times, values } = declared.track;
+    let worst = 0;
+    for (let frame = 0; frame < 240; frame += 1) {
+      const t = Math.fround(frame / 120);
+      let k = 0;
+      while (k < times.length - 2 && times[k + 1]! < t) k += 1;
+      const u = Math.min(Math.max((t - times[k]!) / (times[k + 1]! - times[k]!), 0), 1);
+      const x = values[k * 3]! + (values[k * 3 + 3]! - values[k * 3]!) * u;
+      const y = values[k * 3 + 1]! + (values[k * 3 + 4]! - values[k * 3 + 1]!) * u;
+      const z = values[k * 3 + 2]! + (values[k * 3 + 5]! - values[k * 3 + 2]!) * u;
+      const at = frame / 120;
+      worst = Math.max(worst, Math.hypot(x - Math.sin(at * 3) * 5, y - (100 + Math.sin(at * 6) * 2), z - at * 80));
+    }
+    expect(worst).toBeLessThanOrEqual(0.1);
+  }, 120_000);
+
   it("leaves a track whose accessor runs past its buffer view as recorded, and reduces the rest", async () => {
     const { report, served } = await processOne(
       hologramGlb({ mutate: (json) => void (json.accessors[json.animations[0]!.samplers[0]!.output]!.count = 241) })

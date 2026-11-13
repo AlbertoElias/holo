@@ -82,7 +82,11 @@ capture). Do not reuse another session's servers.
   animation remains untrimmed. This deliberate diorama differs from the moving
   feed bubble and cannot reproduce browser clipping/shader effects.
 - Embedded capture `KHR_audio` WebM/Opus is transcoded to packaged AAC M4A and
-  authored as global `UsdMedia.SpatialAudio` at timeline zero. The stage uses
+  authored as `UsdMedia.SpatialAudio` at timeline zero: a scene (global)
+  emitter as `nonSpatial` under `/Root`, a placed (positional) one as
+  `spatial` under its node's prim, so it follows the node. A placed sound
+  inside a nested layer (a `HologramLayer…` node at or above it,
+  `docs/features/deep-zoom.md`) is left out. The stage uses
   Apple's top-level `autoPlay=true` and `playbackMode="loop"` metadata. Capture's
   looped source uses `loopFromStage`; a nonloop source uses `onceFromStart`.
   Source gain is preserved. Stage autoplay intentionally replaces capture's

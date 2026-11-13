@@ -756,23 +756,38 @@ class Inspection:
         extension = source.doc.get("extensions", {}).get("KHR_audio", {})
         scene = source.doc["scenes"][source.doc.get("scene", 0)]
         expected = []
-        # The scene's emitters, then each one a node names (placed sounds, heard unplaced in Quick Look).
-        emitters = list(scene.get("extensions", {}).get("KHR_audio", {}).get("emitters", []))
-        for node in source.doc.get("nodes", []):
+        # The scene's emitters, then each one a node names (placed sounds, heard
+        # from their node in Quick Look), except those inside a nested layer
+        # (a `HologramLayer` node at or above them, docs/features/deep-zoom.md).
+        nodes = source.doc.get("nodes", [])
+
+        def in_layer(index):
+            seen = set()
+            while index is not None and index not in seen:
+                seen.add(index)
+                if (nodes[index].get("name") or "").startswith("HologramLayer"):
+                    return True
+                index = source.parents.get(index)
+            return False
+
+        emitters = [(e, None) for e in scene.get("extensions", {}).get("KHR_audio", {}).get("emitters", [])]
+        for index, node in enumerate(nodes):
             e = node.get("extensions", {}).get("KHR_audio", {}).get("emitter")
-            if isinstance(e, int) and e not in emitters:
-                emitters.append(e)
-        for e in emitters:
+            if isinstance(e, int) and all(e != seen for seen, _ in emitters) and not in_layer(index):
+                emitters.append((e, index))
+        node_prims = {p.GetCustomDataByKey("gltfNodeIndex"): p for p in self.stage.Traverse() if p.IsA(UsdGeom.Xform) and p.GetCustomDataByKey("gltfNodeIndex") is not None}
+        for e, index in emitters:
             emitter = extension["emitters"][e]
+            placed = emitter.get("type") == "positional" and index in node_prims
             for s in emitter["sources"]:
-                expected.append((e, s, emitter, extension["sources"][s]))
+                expected.append((e, s, emitter, extension["sources"][s], node_prims[index].GetPath() if placed else "/Root"))
         actual = [UsdMedia.SpatialAudio(p) for p in self.stage.Traverse() if p.IsA(UsdMedia.SpatialAudio)]
         self.check(len(actual) == len(expected), "Recorded audio emitters were omitted or duplicated")
         probe = shutil.which("ffprobe")
         self.check(not expected or bool(probe), "ffprobe is required to validate packaged audio")
         with tempfile.TemporaryDirectory(prefix="holoim-usdz-inspect-") as directory:
-            for e, s, emitter, sound in expected:
-                audio = UsdMedia.SpatialAudio.Get(self.stage, f"/Root/Audio_{e}_{s}")
+            for e, s, emitter, sound, parent in expected:
+                audio = UsdMedia.SpatialAudio.Get(self.stage, f"{parent}/Audio_{e}_{s}")
                 self.check(bool(audio), f"Recorded audio {e}/{s} is missing")
                 if not audio:
                     continue
@@ -808,7 +823,7 @@ class Inspection:
                     self.check(durations[1] > 0, "Packaged audio is empty")
                     if durations[0]:
                         self.close(durations[0], durations[1], .15, "audio source/output duration seconds")
-                self.check(audio.GetAuralModeAttr().Get() == "nonSpatial", "Recorded audio must remain global")
+                self.check(audio.GetAuralModeAttr().Get() == ("nonSpatial" if parent == "/Root" else "spatial"), "A placed sound must be spatial at its node, any other global")
                 self.check(audio.GetPlaybackModeAttr().Get() == ("loopFromStage" if sound.get("loop") else "onceFromStart"), "Audio loop behavior differs from source")
                 self.close(float(audio.GetStartTimeAttr().Get().GetValue()), 0, 1e-6, "audio start time")
                 self.close(audio.GetGainAttr().Get(), float(emitter.get("gain", 1)) * float(sound.get("gain", 1)), 1e-6, "audio gain (emitter times source)")
