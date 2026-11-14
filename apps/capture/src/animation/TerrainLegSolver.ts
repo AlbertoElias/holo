@@ -134,7 +134,8 @@ export class TerrainLegSolver {
     if (forward.lengthSq() < 1e-8) forward.set(0, 0, 1);
     forward.normalize();
     const walking = gait?.walking ?? false;
-    this.updateTravel(root, forward, deltaSec, walking, height);
+    // A teleport (respawn, a world swap, leaving XR) drops every plant: a pinned foot would sweep from the old spot.
+    if (this.updateTravel(root, forward, deltaSec, walking, height)) for (const leg of this.legs) this.resetLeg(leg);
     // Sample only around the support plane, never from the top of the room.
     const baseY = root.y + rig.avatarMinLocalY;
     const center = this.surface(rig.worldModel, root.x, baseY, root.z, height);
@@ -170,7 +171,9 @@ export class TerrainLegSolver {
           const posed = foot.clone();
           // A grounded foot never sinks below its resting height, however the crouch or the clip bends the leg.
           posed.y = Math.max(posed.y + leg.correction, surface.point.y + sole);
-          target = gait ? this.place(leg, posed, gait, deltaSec, height, surface.point.y + sole) : posed;
+          // A pinned foot stands on the floor under its anchor, not under where the pose has the foot.
+          const floorAt = (x: number, z: number) => (this.surface(rig.worldModel!, x, baseY, z, height)?.point.y ?? surface.point.y) + sole;
+          target = gait ? this.place(leg, posed, gait, deltaSec, height, surface.point.y + sole, floorAt) : posed;
           // Letting go of a plant eases the foot from where it was held to where the pose has it, not a snap.
           if (leg.release > 0) {
             leg.release = Math.max(0, leg.release - deltaSec / leg.releaseSec);
@@ -224,7 +227,8 @@ export class TerrainLegSolver {
   }
 
   /** The direction of travel, eased, from the root's own motion; facing while not walking. */
-  private updateTravel(root: THREE.Vector3, forward: THREE.Vector3, deltaSec: number, walking: boolean, height: number): void {
+  /** Returns true when the root jumped (a teleport), not walked. */
+  private updateTravel(root: THREE.Vector3, forward: THREE.Vector3, deltaSec: number, walking: boolean, height: number): boolean {
     const moved = new THREE.Vector3(root.x - this.lastRoot.x, 0, root.z - this.lastRoot.z);
     const jumped = !this.hasLastRoot || moved.length() > height * 0.5;
     this.lastRoot.copy(root);
@@ -232,7 +236,7 @@ export class TerrainLegSolver {
     const direction = !jumped && deltaSec > 0 && moved.length() / deltaSec > 0.02 ? moved.normalize() : forward.clone();
     if (!walking) {
       this.travel.copy(direction);
-      return;
+      return jumped;
     }
     // A reversal (walking off backward from a stand facing forward) is taken at once: easing through it would
     // pass the stride through sideways and sweep the feet across each other.
@@ -240,6 +244,20 @@ export class TerrainLegSolver {
     this.travel.lerp(direction, 1 - Math.exp(-20 * Math.max(0, deltaSec)));
     if (this.travel.lengthSq() < 1e-6) this.travel.copy(direction);
     this.travel.normalize();
+    return jumped;
+  }
+
+  private resetLeg(leg: Leg): void {
+    leg.mode = 'free';
+    leg.planted = false;
+    leg.release = 0;
+    leg.wasStance = false;
+    leg.early = false;
+    leg.step = 0;
+    leg.last = undefined;
+    leg.lastQuat = undefined;
+    leg.velocity.set(0, 0, 0);
+    leg.stepVelocity.set(0, 0, 0);
   }
 
   /** The clip's foot with its fore-aft offset from the root laid along the direction of travel. */
@@ -252,7 +270,10 @@ export class TerrainLegSolver {
   }
 
   /** One leg's foot state: pinned through each stance of the walk and while standing, a settling step otherwise. */
-  private place(leg: Leg, posed: THREE.Vector3, gait: GaitState, deltaSec: number, height: number, floorY: number): THREE.Vector3 {
+  private place(
+    leg: Leg, posed: THREE.Vector3, gait: GaitState, deltaSec: number, height: number, floorY: number,
+    floorAt: (x: number, z: number) => number
+  ): THREE.Vector3 {
     const stance = gait.walking ? inStance(gait.gait, leg.side, gait.phase) : true;
     const landing = stance && !leg.wasStance;
     leg.wasStance = stance;
@@ -266,7 +287,13 @@ export class TerrainLegSolver {
     const hip = leg.upper.getWorldPosition(new THREE.Vector3());
     const reach = (leg.upper.getWorldPosition(new THREE.Vector3()).distanceTo(leg.lower.getWorldPosition(new THREE.Vector3())) +
       leg.lower.getWorldPosition(new THREE.Vector3()).distanceTo(leg.foot.getWorldPosition(new THREE.Vector3()))) * OVERSTRETCH;
-    const pinnedAt = () => new THREE.Vector3(leg.anchor.x, Math.max(floorY, leg.anchor.y), leg.anchor.z);
+    // One ray per anchor spot a frame, however often the checks below ask.
+    let cached: { x: number; z: number; y: number } | undefined;
+    const anchorFloor = () => {
+      if (!cached || cached.x !== leg.anchor.x || cached.z !== leg.anchor.z) cached = { x: leg.anchor.x, z: leg.anchor.z, y: floorAt(leg.anchor.x, leg.anchor.z) };
+      return cached.y;
+    };
+    const pinnedAt = () => new THREE.Vector3(leg.anchor.x, Math.max(anchorFloor(), leg.anchor.y), leg.anchor.z);
     const letGo = (from: THREE.Vector3) => {
       leg.mode = 'free';
       leg.heldTarget.copy(from);
@@ -315,7 +342,8 @@ export class TerrainLegSolver {
 
     // A planted foot settles onto the floor rather than keeping the height the clip landed it at.
     if (leg.mode === 'pinned') {
-      leg.anchor.y = floorY + (leg.anchor.y - floorY) * Math.exp(-deltaSec / PIN_SETTLE_SEC);
+      const ground = anchorFloor();
+      leg.anchor.y = ground + (leg.anchor.y - ground) * Math.exp(-deltaSec / PIN_SETTLE_SEC);
       return pinnedAt();
     }
     if (leg.mode === 'step') {

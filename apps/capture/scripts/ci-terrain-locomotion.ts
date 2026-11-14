@@ -160,7 +160,15 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
     assert(travel > 0.08, `${mode}: gait test did not actually travel`);
     assert(Math.abs(traveledSpeed - meanSpeed(states)) < 0.35, `${mode}: reported speed disagrees with physical travel`);
     // The planted foot moves back as fast as the root moves on: cadence is travel over the clip's measured stance speed.
-    const stanceSpeed = states.at(-1)!.locomotion.gait?.stanceSpeed;
+    // On a flat screen the desktop clip's gait must be measured (no silent fallback), at a walking foot's speed;
+    // XR plays its own clips at the speed-scaled cadence, with no measured gait.
+    const stanceSpeed = states.at(-1)!.locomotion.gait?.stanceSpeed ?? undefined;
+    if (mode === 'xr') {
+      assert(stanceSpeed === undefined, `${mode}: the desktop gait drives the XR walk`);
+    } else {
+      assert(stanceSpeed !== undefined, `${mode}: the desktop walk has no measured gait`);
+      assert(stanceSpeed > 0.5 && stanceSpeed < 2.5, `${mode}: measured stance speed ${stanceSpeed} m/s is not a walking foot's`);
+    }
     const expected = Math.max(0.15, Math.min(stanceSpeed ? 3 : 2.4, stanceSpeed ? meanSpeed(states) / stanceSpeed : 1.4 * meanSpeed(states) / 3.24));
     assert(Math.abs(meanCadence(states) - expected) < 0.15, `${mode}: cadence fails to follow actual corrected travel`);
   }

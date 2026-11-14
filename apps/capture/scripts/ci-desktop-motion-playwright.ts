@@ -101,6 +101,9 @@ function toFrames(samples: Array<{ timeMs: number; body: BodySample }>): MotionF
   });
 }
 
+// At least three quarters of the brisk walk, the avatar's height (1.8 m) per second.
+const MIN_WALK_SPEED = 0.75 * 1.8;
+
 await mkdir(artifactDir, { recursive: true });
 const browser = await launchXrBrowser(chromium);
 try {
@@ -112,7 +115,13 @@ try {
   await writeFile(path.join(artifactDir, 'desktop-keyboard-samples.json'), JSON.stringify(samples));
   await writeFile(path.join(artifactDir, 'desktop-keyboard-report.json'), JSON.stringify({ metrics, verdicts }, null, 2));
   console.log(`[desktop-motion] ${JSON.stringify(metrics)}`);
+  // The feet's targets get easier as the walk slows: the walk itself must stay brisk (1.8 m/s at 1.8 m, the owner's call).
+  const walk = samples.filter((sample) => sample.phase === 'walk' && sample.timeMs - samples.find((s) => s.phase === 'walk')!.timeMs >= 500);
+  const from = walk[0]?.body.bones.hips, to = walk.at(-1)?.body.bones.hips;
+  const walkSpeed = from && to ? Math.hypot(to[0] - from[0], to[2] - from[2]) / ((walk.at(-1)!.timeMs - walk[0]!.timeMs) / 1000) : 0;
+  console.log(`[desktop-motion] walk speed ${walkSpeed.toFixed(3)} m/s`);
   const misses = verdicts.filter((v) => !v.pass);
+  if (walkSpeed < MIN_WALK_SPEED) misses.push({ metric: 'walk speed', value: walkSpeed, target: { min: MIN_WALK_SPEED }, pass: false } as (typeof verdicts)[number]);
   for (const miss of misses) console.log(`[desktop-motion] MISS ${miss.metric} = ${miss.value} (target ${JSON.stringify(miss.target)})`);
   if (misses.length && !process.env.MOTION_QUALITY_REPORT_ONLY) process.exitCode = 1;
 } finally {

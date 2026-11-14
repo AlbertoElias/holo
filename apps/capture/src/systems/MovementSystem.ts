@@ -1,15 +1,12 @@
 import { createSystem } from '@iwsdk/core';
 import * as THREE from 'three';
-import { WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
+import { KEYBOARD_WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
 const CROUCH_MOVE_SPEED_AT_FULL = 0.75;
 const CROUCH_MIN_EFFECT_THRESHOLD = 0.05;
 // Keyboard walking reaches full speed in about a quarter second: an instant start or stop reads as a pop on every joint.
 const KEYBOARD_ACCELERATION_MS2 = 12;
-// The keyboard walk is a brisk walk, one avatar height per second (1.8 m/s at 1.8 m): the shipped walk's
-// feet stay planted at it, where the full movement speed would be a jog (the owner's call, 2026-11-13).
-const KEYBOARD_WALK_HEIGHTS_PER_SEC = 1.0;
 
 /**
  * Crouch, then the character motor: input movement, gravity, jumps and the

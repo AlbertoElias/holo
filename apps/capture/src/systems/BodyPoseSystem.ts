@@ -1,4 +1,5 @@
 import { createSystem } from '@iwsdk/core';
+import { KEYBOARD_WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
 /**
@@ -29,7 +30,8 @@ export class BodyPoseSystem extends createSystem() {
       targetHorizontalSpeed: character.targetHorizontalSpeed,
       moveIntent: input.moveState.forward || input.moveState.back || input.moveState.left || input.moveState.right,
       vrMode: frame.vrActive,
-      referenceSpeed: avatar.avatarHeight * 1.8
+      // The walk's own target speed, for a clip without a measured gait.
+      referenceSpeed: avatar.avatarHeight * (frame.vrActive ? WALK_SPEED_HEIGHTS_PER_SEC : KEYBOARD_WALK_HEIGHTS_PER_SEC)
     });
     if (!body.active && body.posed) {
       body.solver.restoreBindPose();

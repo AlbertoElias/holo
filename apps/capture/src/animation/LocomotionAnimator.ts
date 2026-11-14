@@ -271,7 +271,8 @@ export class LocomotionAnimator {
 
   /** The walk's footfall phase this frame, for the leg solver's planted feet; undefined without a measured gait. */
   getGaitState(): GaitState | undefined {
-    if (!this.gait) return undefined;
+    // The gait is measured on the desktop clip; the VR clips keep their own speed-scaled cadence (gap 3).
+    if (!this.gait || this.activeProfile !== 'desktop-full') return undefined;
     const walk = this.actionsByProfile[this.activeProfile].walk;
     const walking = this.state === 'walk' && walk !== undefined && this.activeAction === walk;
     const duration = walk?.getClip().duration ?? 0;
@@ -281,7 +282,7 @@ export class LocomotionAnimator {
 
   /** The planted foot's speed at time scale 1, in world metres per second (the avatar's scale applied). */
   stanceSpeedWorld(): number | undefined {
-    if (!this.gait || !this.root) return undefined;
+    if (!this.gait || !this.root || this.activeProfile !== 'desktop-full') return undefined;
     const scale = this.root.getWorldScale(new THREE.Vector3()).z;
     return this.gait.stanceSpeed * WALK_STRIDE_SCALE * Math.abs(scale);
   }
