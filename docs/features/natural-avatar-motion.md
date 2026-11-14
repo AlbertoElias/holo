@@ -45,10 +45,10 @@ samples. It measures what mocap cleanup studios clean up:
 |---|---|
 | Foot contact | Sole (lower of ankle and toe) within 2 cm of its rest height **and** moving under half the hips' speed (floor 0.3 m/s), for at least 100 ms. Speeds are ±33 ms central differences |
 | Foot skate (max, share) | Max horizontal slide of the foot's stiller end (heel at strike, ball at push-off) across one contact; share = contact frames moving faster than 15 cm/s |
-| Float p95 · penetration | Sole height above its rest height while still in contact · deepest sole below it. Rest height comes from the take's first 0.5 s (every in-app check starts standing), so a take that floats throughout still reads as floating |
-| Pops p99 | p99 joint acceleration over a ±50 ms stencil, every joint and frame: pin and release snaps and solver flips, with or without input. The stencil reads real timestamps (the nearest frames at least 50 ms each side, unequal spacing allowed), so an unevenly stepped take is not read as accelerating; an even take gets the old fixed-step stencil |
+| Float p95 · penetration | Sole height above its rest height while still in contact · deepest sole below it. Rest height comes from the take's first 0.5 s (every in-app check starts standing), so a foot that lifts or sinks after the rest reads; a take that floats from its first frame is offset away, and the body replay's absolute planted-sole guard (≤ 2 cm above the ground raycast) catches that one |
+| Pops p99 | p99 joint acceleration over exactly ±50 ms, every joint and frame: pin and release snaps and solver flips, with or without input. Each side is read at t ± 50 ms by linear interpolation between the frames around it, so a take stepped unevenly (the replay's 32/48 ms frames) is read at the same span as the CMU walks the target came from. Rounding the span to whole frames read only ±34 ms on the replay (inflating pops); taking the nearest frames ≥ 50 ms away read ±64–80 ms (hiding them) |
 | Joint limits | Share of frames with a knee bent backwards (against both the hips' and that foot's forward), an elbow bent the wrong way, a knee or elbow folded tighter than 25°/30°, or the spine twisted > 45° |
-| Jitter p95 | p95 deviation from the joint's own smooth path, a centred 1 s least-squares quadratic (Savitzky–Golay), inside held-still windows (≥ 1 s, trimmed 0.3 s each end), so a held joint that settles along a curve is not counted as noise; rays keep the camera spike's centred 1 s moving mean, in degrees |
+| Jitter p95 | p95 deviation from the joint's own smooth path, a centred 1 s least-squares quadratic fit against timestamps (Savitzky–Golay), inside held-still windows (≥ 1 s, trimmed 0.3 s each end), so a held joint that settles along a curve is not counted as noise. A quadratic also absorbs a slow wobble (period ≳ 1 s) that a moving mean counted; tremor-rate noise is unchanged. Rays keep the camera spike's centred 1 s moving mean, in degrees |
 | Following | Wrist error p95 against tracked input, best-fit latency, jerk ratio avatar/input, aim error median |
 
 Every guard reads the same functions; a source only chooses its target row.
@@ -72,21 +72,23 @@ hands-only.
 |---|---|---|---|---|---|---|
 | **Target, all bodies** | ≤ 3 cm / ≤ 10% · ≤ 1 cm · ≤ 0.5 cm | ≤ 35 m/s² | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
 | Human reference (CMU 02_01 / 07_01) | 3.9 / 16% · 07_01 2.6 / 10% | 34 / 45 | 0% | — | — | anchor |
-| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.7 cm / 4.0% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 28 (was **116**) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
+| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.7 cm / 4.0% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 31 (was **116**; 27.6 on the earlier whole-frame stencil) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
 | Camera (spike, `bodycam:report`) | unmeasured | unmeasured | unmeasured | ray **5.7–20°** (best variant 2.6°) | aim at the lens median **8.6°** (best ray: knuckle, perspective-corrected; target 3.5°), head yaw p95 8.2° | aim miss accepted (Decision 4); body unmeasured |
-| VR body, walk ramp | 0.7 cm / 3.3% · 0.0 · 0.1 (was **4.1 / 3.8% · 1.0 · 1.2**) | 34 (was **43**) | 0% | 0.3 mm (was 2.7) | — | pass (gap 3 done) |
-| VR body, walk | 0.7 cm / 3.8% · 0.0 · 0.0 (was 2.9 / 3.8% · 1.1 · 0.3) | 32 (was **37**) | 0% | 0.6 mm | — | pass |
-| VR body, turn | 0.6 cm / 2.5% · 0.0 · 0.0 (was 2.5 / 2.5% · 0.6 · 0.3) | 25 (was 31) | 0% | 0.6 mm | — | pass |
-| VR body, small steps and sway | 0.7 cm / 1.3% · 0.0 · 0.0 | 8 | 0% | 0.5 mm | — | pass |
-| VR body, crouch and lean | 0.0 cm / 0% · 0.0 · 0.0 | 4 | 0% | 1.2 mm (was **2.4**) | — | pass |
-| VR body, every skeleton (worst of 7 fixtures × 5 rows) | 1.3 cm (Unreal cm, small steps) / 3.8% · 0.0 · 0.1 | 34 | 0% | 1.6 mm (twisted T-pose, ramp) | — | pass |
-| VR hands, real Quest 3 recording | — | — | 0% | 2.4 (2.9) mm | wrist p95 **3.0 cm**, lag 0, jerk 1.03 | wrist miss (gap 4) |
-| VR hands, IWER | — | — | 0% | 1.8 (1.8) mm | wrist 0.0 cm | pass |
+| VR body, walk ramp | 1.6 cm / 5.3% · 0.0 · 0.1 (base **4.1 / 3.8% · 1.0 · 1.2**) | 34 (base **37**) | 0% | 0.3 mm (base 1.8) | — | pass (gap 3 done) |
+| VR body, walk | 2.0 cm / 3.6% · 0.0 · 0.0 (base 2.9 / 3.8% · **1.05** · 0.3) | 34 (base 35) | 0% | 0.6 mm (base 1.3) | — | pass |
+| VR body, turn | 0.6 cm / 2.3% · 0.0 · 0.0 (base 2.5 / 2.5% · 0.6 · 0.3) | 29 (base 28) | 0% | 0.6 mm | — | pass |
+| VR body, small steps and sway | 0.7 cm / 1.2% · 0.0 · 0.0 (base 0.7 / 1.9% · 0.8 · 0.3) | 10 | 0% | 0.4 mm | — | pass |
+| VR body, crouch and lean | 0.0 cm / 0% · 0.0 · 0.0 (base 0.1 / 0% · 0.7 · 0.3) | 5 | 0% | 1.2 mm (base 1.2) | — | pass |
+| VR body, every skeleton (worst of 7 fixtures × 5 rows) | 2.0 cm (walk, every fixture) / 5.4% (twisted T-pose, ramp) · 0.0 · 0.1 | 34 | 0% | 1.2 mm (crouch) | — | pass |
+| VR hands, real Quest 3 recording | — | — | unmeasured (hand samples carry no elbows) | 2.3 (2.9) mm | wrist p95 **3.0 cm**, lag 0, jerk 1.03 | wrist miss (gap 4) |
+| VR hands, IWER | — | — | unmeasured | 1.9 (1.9) mm | wrist 0.0 cm | pass (limits unmeasured) |
 | Quest passthrough AR | unmeasured (same body solver as VR; to confirm) | | | | | gap |
 | Phone AR | unmeasured (avatar placed and driven from the phone; to confirm) | | | | | gap |
 
 Jitter at or under the input floor is the tracker's, not the solver's; the
 target there is "no worse than input".
+"Base" in the VR body rows is the solver before gap 3 (`0594f565`) graded
+by today's instrument, so each pair differs only by the solver.
 
 ## Ranked worst gaps (execution order)
 
@@ -111,25 +113,33 @@ target there is "no worse than input".
    (Decision 4). Remaining: sample avatar bones in `bodycam:report` on every
    supported skeleton so the body row stops being unmeasured, the real-time
    rate, and a phone trial. Runs after gap 3.
-3. **Done (2026-11-14): VR room-scale feet and pops.** Ramp skate 4.1 cm and 1.2 cm
-   penetration; walk and ramp pops 37–43 m/s²; crouch jitter 2.4 mm against a
-   0.6 mm input (`VrBodySolver.ts`, `legIk.ts`).
+3. **Done (2026-11-14): VR room-scale feet and pops.** On today's instrument
+   the solver missed ramp skate 4.1 cm, ramp penetration 1.2 cm, ramp pops
+   37 m/s² and walk float 1.05 cm (`VrBodySolver.ts`, `legIk.ts`).
    How it closed: a rolled foot pivots on its real ball or heel, tilted to the
    ground, and toes stay flat on a heel-up foot. A planted leg reaches at most
    98% before the foot rolls, under the soft end of leg IK, which now starts at
-   98.5% (was 95%), so a planted ankle lands where it is placed instead of
-   floating. The pelvis lowers only past 98.4% with the foot fully rolled. The
-   swing eases in and out over its first and last third. Two instrument fixes
-   were part of the miss: pops read real timestamps (the replay steps 32/48 ms
-   frames, and the fixed-step stencil read that unevenness as 40 m/s²), and
-   jitter is measured against a quadratic smooth path, not a moving mean (a
-   crouch settling was counted as noise). Desktop, CMU and camera reads are
-   unchanged by construction (even timestamps; desktop-motion re-read 27.6
-   m/s², 0.07 mm). The body replay now grades every row strictly against these
-   targets, on the default avatar and on each skeleton the `avatars` check
-   replays. Trade-off: walking eye error p95 on small steps and turn rose from
-   3.2 to 3.8–4.1 cm (Unreal cm small steps 4.2 cm; guard 4.5 cm), because the hips no longer stay up on a
-   floating ankle.
+   98.45% (was 95%), so a planted ankle lands where it is placed instead of
+   floating; the authoring poser's `plantFeet` shares that IK and now places
+   near-straight legs exactly up to the same reach. The pelvis lowers only
+   past 98.4% with the foot fully rolled. Pops came from the swing foot's own
+   travel (about 1 m in 0.3 s): the swing now takes 85% of the step (was 80%)
+   and travels from toe-off, keeping only the 5% settle before landing that
+   stops the heel scuffing in; a still start cost a tenth of the swing time
+   for no less scuffing, and a sin² lift or a bang-bang travel read worse.
+   Instrument fixes, part of the same change: pops read exactly ±50 ms by
+   interpolation (the replay's 32/48 ms frames had read ±34 ms), and jitter
+   fits a quadratic against timestamps (a crouch settling had been counted as
+   noise; the base solver already passes crouch on it, 1.2 mm). The CMU
+   anchors are unchanged by construction (even 120 fps frames); desktop-motion
+   re-reads 31 m/s². The body replay grades every row strictly against these
+   targets on the default avatar; the `avatars` check grades only walk and
+   crouch per skeleton by default, and all five rows with the command in the
+   test plan (all 7 fixtures pass). Trade-off: walking eye error p95 rose on
+   every moving row (walk 2.2 → 3.5 cm, ramp 2.3 → 2.6, small steps and turn
+   3.2 → 3.9; Unreal cm small steps 4.2; guard 4.5), because the hips no
+   longer stay up on a floating ankle and the longer swing holds each foot
+   off the ground longer.
 4. **Real-headset wrist error** 3.0 cm against 2 cm (IK lag over long reaches;
    `ArmIkSolver`).
 5. **AR sources measured.** Add Quest AR and phone AR rows to the existing AR
@@ -217,11 +227,11 @@ report passes on it.
 
 | Acceptance criterion | Workflow or command | Result |
 |---|---|---|
-| Desktop row | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (strict, in `test:xr`) | gap 1 (2026-11-14, with the floor-skin guard): skate 0.72 cm / 4.0%, float 0.87, penetration 0.00, pops p99 27.6 (k=2 stencil), joint limits 0%, jitter 0.1 mm, walk speed 1.799 m/s, all targets met |
+| Desktop row | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (strict, in `test:xr`) | gap 1 (2026-11-14, with the floor-skin guard): skate 0.72 cm / 4.0%, float 0.87, penetration 0.00, pops p99 31.2 (exact ±50 ms; 27.6 on the k=2 stencil), joint limits 0%, jitter 0.07 mm, walk speed 1.799 m/s, all targets met |
 | Human anchor | x | CMU reads above |
-| VR body rows | `pnpm --filter @holoim/capture run test:xr:body` (strict motion grading per row; `BODY_REPLAY_FAULTS=1` for the 12-fault matrix) | gap 3 (2026-11-14): every row meets target (table above); fault matrix 12/12 caught |
+| VR body rows | `pnpm --filter @holoim/capture run test:xr:body` (strict motion grading per row; `BODY_REPLAY_FAULTS=1` for the 12-fault matrix) | gap 3 (2026-11-14, exact ±50 ms pops): every row meets target (table above); fault matrix 12/12 caught |
 | VR body rows, every skeleton | `XR_AVATAR_ONLY=<fixture> XR_AVATAR_BODY_REPLAYS='crouch,small-steps,turn,walk-forward,walk-ramp' pnpm --filter @holoim/capture run test:xr:avatars`, one fixture per run (all five rows take ~200 s a fixture; the default run replays walk-forward and crouch) | 2026-11-14: all 7 fixtures pass every row, strict |
-| Hand rows | hand replay then `scripts/motion-quality-report.ts` | 2026-11-14 re-read with the quadratic jitter: table above |
+| Hand rows | hand replay then `scripts/motion-quality-report.ts` | 2026-11-14 re-read with the time-fit quadratic jitter: table above; joint limits read null (no elbows in hand samples) and grade as a miss |
 | Camera row | `bodycam:report` on the clip | aim 8.6° median, corrected knuckle ray (2026-11-14, Decision 4); body pending |
 | AR rows | existing AR checks with body sampling | pending |
 

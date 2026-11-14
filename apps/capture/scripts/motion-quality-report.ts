@@ -9,7 +9,8 @@ import { framesFromBodySamples, judgeMotion, measureMotion, type BodyLikeSample,
 
 type Loaded = { label: string; source: MotionSource; frames: MotionFrame[]; inputFloor?: MotionFrame[] };
 async function loadDir(dir: string, source: MotionSource): Promise<Loaded[]> {
-  const names = (await readdir(dir).catch(() => [])).filter((n) => n.endsWith('-samples.json')).sort();
+  // `<fixture>--<fault>` samples are the body fault matrix's, not real takes.
+  const names = (await readdir(dir).catch(() => [])).filter((n) => n.endsWith('-samples.json') && !n.includes('--')).sort();
   return Promise.all(
     names.map(async (n) => {
       const samples = JSON.parse(await readFile(path.join(dir, n), 'utf8')) as BodyLikeSample[];
@@ -37,7 +38,7 @@ async function main() {
   const rows = loaded.map((l) => {
     const metrics = measureMotion(l.frames);
     const floor = l.inputFloor ? measureMotion(l.inputFloor) : null;
-    return { label: l.label, source: l.source, metrics, inputJitterP95Mm: floor?.jitterP95Mm ?? null, inputRayJitterP95Deg: floor?.rayJitterP95Deg ?? null, verdicts: judgeMotion(metrics, l.source) };
+    return { label: l.label, source: l.source, metrics, inputJitterP95Mm: floor?.jitterP95Mm ?? null, inputRayJitterP95Deg: floor?.rayJitterP95Deg ?? null, verdicts: judgeMotion(metrics, l.source, { withoutInput: !l.frames.some((f) => f.input?.leftWrist || f.input?.rightWrist) }) };
   });
   for (const r of rows) {
     const m = r.metrics;

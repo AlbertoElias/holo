@@ -3,7 +3,7 @@ import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
 import { clamp } from '../shared/math';
-import { solveTwoBoneLeg } from './legIk';
+import { LEG_SOFT_REACH_START, solveTwoBoneLeg } from './legIk';
 
 // Drives the avatar's whole body from the tracked head while the user moves
 // physically in VR: where the body stands (root), which way it faces (body
@@ -198,11 +198,11 @@ const MAX_FOOT_ROLL_RAD = THREE.MathUtils.degToRad(50);
 // A planted leg reaches at most this share of thigh + shin; past it the foot
 // rolls. It stays under the soft end of leg IK (legIk.ts), which holds the
 // ankle short of its target: there a planted foot would lift off the floor.
-const PLANTED_REACH_SHARE = 0.98;
+const PLANTED_REACH_SHARE = Math.min(0.98, LEG_SOFT_REACH_START - 0.004);
 // The pelvis drops only when a planted foot, fully rolled, still could not
 // reach this share: lowering it sooner pulls the eyes under the tracked head,
-// and past the soft end of leg IK (98.45%) the planted ankle would lift.
-const PELVIS_REACH_SHARE = 0.984;
+// and past the soft end of leg IK the planted ankle would lift.
+const PELVIS_REACH_SHARE = LEG_SOFT_REACH_START - 0.0005;
 const FOOT_ROLL_RATE_RAD = THREE.MathUtils.degToRad(400);
 // A planted foot rolled this far toward its reach limit steps.
 const STRAIN_STEP = 0.6;
@@ -216,13 +216,16 @@ function wrapAngle(angle: number): number {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
-// Horizontal swing progress: the foot lifts before it travels and settles
-// after, which keeps toe-off and landing from scuffing. The travel speeds up,
+// Horizontal swing progress: the foot travels from toe-off (the lift, linear
+// at the start, leads the trapezoid's quadratic start) and settles for the
+// last 5% before landing, which keeps the heel from scuffing in. A still
+// start too cost a tenth of the swing time and raised its peak acceleration
+// past the pop target, with no less scuffing. The travel speeds up,
 // cruises and slows down in thirds (a trapezoid): the same top speed as a
 // smoothstep with three quarters of its peak acceleration.
 const SWING_RAMP = 1 / 3;
 function swingProgress(t: number): number {
-  const u = clamp((t - 0.05) / 0.9, 0, 1);
+  const u = clamp(t / 0.95, 0, 1);
   const a = 1 / (SWING_RAMP * (1 - SWING_RAMP));
   if (u < SWING_RAMP) return 0.5 * a * u * u;
   if (u > 1 - SWING_RAMP) return 1 - 0.5 * a * (1 - u) ** 2;
@@ -323,6 +326,8 @@ export class VrBodySolver {
   private readonly legVec = new THREE.Vector3();
   private readonly legPivot = new THREE.Vector3();
   private readonly legLever = new THREE.Vector3();
+  private readonly rollTilt = new THREE.Quaternion();
+  private readonly rollAxis = new THREE.Vector3();
 
   constructor(private readonly avatarRig: AvatarRig, private readonly forwardOffset: number) {
     const foot = (): FootState => ({
@@ -836,8 +841,10 @@ export class VrBodySolver {
       // Land slightly short of symmetric: the trailing foot has more reach
       // (heel roll) than the leading one.
       // The first steps from standing are quicker, as the body accelerates.
+      // The swing takes most of the step (a short double support): at 0.8 the
+      // swing foot's acceleration read over the pop target on a brisk walk.
       const starting = this.gaitSteps < 2 ? 0.7 : 1;
-      const duration = period * 0.8 * starting;
+      const duration = period * 0.85 * starting;
       this.startStep(side, rootPosition, 0.85 * (period - duration / 2), duration, true, ground);
       this.gaitSteps += 1;
       this.nextGaitSide = side === 'left' ? 'right' : 'left';
@@ -1066,19 +1073,12 @@ export class VrBodySolver {
       const legBind = bind.legs[side];
       const hip = legBind.upLeg.bone.getWorldPosition(this.legHip);
       const maxReach = (legBind.thighLength + legBind.shinLength) * PELVIS_REACH_SHARE;
-      // Best case for this foot: rolled fully toward the hip.
-      const forwardX = -Math.sin(foot.currentYaw);
-      const forwardZ = -Math.cos(foot.currentYaw);
-      const towardHip = Math.sign((hip.x - foot.current.x) * forwardX + (hip.z - foot.current.z) * forwardZ) || 1;
-      // Heel up about the ball joint (trailing foot) or toes up about the heel.
-      const ballHeight = this.ballHeight();
-      const lever = Math.hypot(bind.dims.ankleHeight - ballHeight, legBind.toeForward);
-      const leverAngle = Math.atan2(bind.dims.ankleHeight - ballHeight, legBind.toeForward) + MAX_FOOT_ROLL_RAD;
-      const shift = towardHip > 0 ? legBind.toeForward - lever * Math.cos(leverAngle) : bind.dims.ankleHeight * Math.sin(MAX_FOOT_ROLL_RAD);
-      const rise = towardHip > 0 ? ballHeight + lever * Math.sin(leverAngle) : bind.dims.ankleHeight * Math.cos(MAX_FOOT_ROLL_RAD);
-      const ankleX = foot.current.x + forwardX * towardHip * shift;
-      const ankleZ = foot.current.z + forwardZ * towardHip * shift;
-      const ankleY = foot.current.y + rise;
+      // Best case for this foot: rolled fully toward the hip, as poseLeg would.
+      const towardHip = this.legVec.subVectors(hip, foot.current).dot(this.legForward.set(-Math.sin(foot.currentYaw), 0, -Math.cos(foot.currentYaw))) > 0 ? 1 : -1;
+      const rolled = this.rolledAnkle(side, towardHip * MAX_FOOT_ROLL_RAD, bind.dims.ankleHeight, this.legAnkle, this.legRoll);
+      const ankleX = rolled.x;
+      const ankleZ = rolled.z;
+      const ankleY = rolled.y;
       const horizontal = Math.hypot(hip.x - ankleX, hip.z - ankleZ);
       if (horizontal >= maxReach) continue;
       const maxHipY = ankleY + Math.sqrt(maxReach * maxReach - horizontal * horizontal);
@@ -1164,27 +1164,8 @@ export class VrBodySolver {
     const ankle = this.legAnkle;
     const roll = this.legRoll;
     const trailing = this.legVec.subVectors(hip, foot.current).dot(forward) > 0;
-    const pivot = this.legPivot;
-    const lever = this.legLever;
     const tilt = this.legTilt.setFromUnitVectors(UP, foot.currentNormal);
-    // Positive roll lifts the heel about the ball joint, negative lifts the
-    // toes about the heel. The pivot is where that point sits on the flat
-    // foot tilted to the ground, and the whole foot turns about it, so the
-    // ball neither dips into a slope nor slides forward as the heel rises.
-    const ballHeight = this.ballHeight();
-    const rollAt = (signedAngle: number): THREE.Vector3 => {
-      const flatAnkle = ankle.copy(foot.current);
-      flatAnkle.y += ankleLift;
-      pivot.copy(foot.current);
-      if (signedAngle > 0) {
-        lever.copy(forward).multiplyScalar(legBind.toeForward);
-        lever.y += ballHeight - bind.dims.ankleHeight;
-        pivot.copy(lever.applyQuaternion(tilt)).add(flatAnkle);
-      }
-      lever.subVectors(flatAnkle, pivot);
-      roll.setFromAxisAngle(right, -signedAngle);
-      return ankle.copy(lever).applyQuaternion(roll).add(pivot);
-    };
+    const rollAt = (signedAngle: number) => this.rolledAnkle(side, signedAngle, ankleLift, ankle, roll);
     let wanted = 0;
     if (rollAt(0).distanceTo(hip) > maxReach && !this.faults.has('feet-float')) {
       const sign = trailing ? 1 : -1;
@@ -1218,6 +1199,28 @@ export class VrBodySolver {
         this.setWorldQuaternion(toe.bone, toeQuat);
       }
     }
+  }
+
+  // Where a planted foot's ankle sits rolled by signedAngle; `roll` gets the
+  // rotation. Positive roll lifts the heel about the ball joint, negative
+  // lifts the toes about the heel. The pivot is where that point sits on the
+  // flat foot tilted to the ground, and the whole foot turns about it, so the
+  // ball neither dips into a slope nor slides forward as the heel rises.
+  private rolledAnkle(side: 'left' | 'right', signedAngle: number, ankleLift: number, out: THREE.Vector3, roll: THREE.Quaternion): THREE.Vector3 {
+    const bind = this.bind!;
+    const foot = this.feet[side];
+    const pivot = this.legPivot.copy(foot.current);
+    const lever = this.legLever;
+    const flatAnkle = out.copy(foot.current);
+    flatAnkle.y += ankleLift;
+    if (signedAngle > 0) {
+      lever.set(-Math.sin(foot.currentYaw), 0, -Math.cos(foot.currentYaw)).multiplyScalar(bind.legs[side].toeForward);
+      lever.y += this.ballHeight() - bind.dims.ankleHeight;
+      pivot.copy(lever.applyQuaternion(this.rollTilt.setFromUnitVectors(UP, foot.currentNormal))).add(flatAnkle);
+    }
+    lever.subVectors(flatAnkle, pivot);
+    roll.setFromAxisAngle(this.rollAxis.set(Math.cos(foot.currentYaw), 0, -Math.sin(foot.currentYaw)), -signedAngle);
+    return out.copy(lever).applyQuaternion(roll).add(pivot);
   }
 
   // The ball joint's rest height above the sole, under the ankle's.

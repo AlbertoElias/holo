@@ -210,7 +210,10 @@ function soleAt(f: MotionFrame, side: 'left' | 'right') {
 
 // The rig's resting sole height (lower foot joint above the floor). Taken from
 // the first half second, where every in-app check stands still in its rest
-// pose, so a take that floats throughout still reads as floating. A clip
+// pose, so a foot that lifts or sinks after the rest reads as float or
+// penetration. A take that floats from its first frame is offset away here;
+// the body replay's absolute planted-sole guard (body-fidelity.ts) catches
+// that one. A clip
 // without a rest pose (mocap) passes `soleOffset: 'take'` (its 5th percentile).
 function soleOffsets(frames: MotionFrame[], options: MotionOptions) {
   const out = { left: 0, right: 0 };
@@ -229,28 +232,40 @@ function soleOffsets(frames: MotionFrame[], options: MotionOptions) {
 // timestamp, so a take whose frames land unevenly (a replay stepping 32/48 ms)
 // reads its real acceleration; on an even take it is the old fixed-k stencil.
 function pops(frames: MotionFrame[]) {
+  // Second difference over exactly ±50 ms, reading each side by linear
+  // interpolation between the frames around it. Frames arrive 32–48 ms apart,
+  // so a frame-count stencil reaches only ±34 ms on some takes (inflating
+  // pops) and "the nearest frames ≥ 50 ms away" reaches ±64–80 ms (hiding them).
+  const h = POP_HALF_WINDOW_SEC;
   const accels: number[] = [];
-  const reach = POP_HALF_WINDOW_SEC - 1e-4;
-  let left = 0;
-  let right = 0;
+  if (frames.length < 3) return { popP99MS2: null };
+  const first = frames[0]!.timeSec;
+  const last = frames.at(-1)!.timeSec;
+  // Frame index whose span [index, index + 1] holds the time.
+  let before = 0;
+  let after = 0;
+  const sampleAt = (index: number, time: number, name: JointName): Vec3 | null => {
+    const a = frames[index]!;
+    const b = frames[index + 1]!;
+    const pa = a.joints[name];
+    const pb = b.joints[name];
+    if (!pa || !pb) return null;
+    const u = (time - a.timeSec) / (b.timeSec - a.timeSec || 1);
+    return [pa[0] + (pb[0] - pa[0]) * u, pa[1] + (pb[1] - pa[1]) * u, pa[2] + (pb[2] - pa[2]) * u];
+  };
   for (let i = 0; i < frames.length; i++) {
     const t = frames[i]!.timeSec;
-    while (left + 1 < i && t - frames[left + 1]!.timeSec >= reach) left += 1;
-    if (right < i) right = i;
-    while (right < frames.length - 1 && frames[right]!.timeSec - t < reach) right += 1;
-    const h1 = t - frames[left]!.timeSec;
-    const h2 = frames[right]!.timeSec - t;
-    if (h1 < reach || h2 < reach) continue;
-    const a = frames[left]!.joints;
-    const b = frames[i]!.joints;
-    const c = frames[right]!.joints;
-    for (const name of Object.keys(b) as JointName[]) {
-      const pa = a[name];
-      const pb = b[name];
-      const pc = c[name];
+    if (t - h < first || t + h > last) continue;
+    while (before + 2 < frames.length && frames[before + 1]!.timeSec <= t - h) before += 1;
+    if (after < before) after = before;
+    while (after + 2 < frames.length && frames[after + 1]!.timeSec <= t + h) after += 1;
+    const joints = frames[i]!.joints;
+    for (const name of Object.keys(joints) as JointName[]) {
+      const pb = joints[name];
+      const pa = sampleAt(before, t - h, name);
+      const pc = sampleAt(after, t + h, name);
       if (!pa || !pb || !pc) continue;
-      const accel = [0, 1, 2].map((axis) => (2 * ((pc[axis]! - pb[axis]!) / h2 - (pb[axis]! - pa[axis]!) / h1)) / (h1 + h2));
-      accels.push(Math.hypot(accel[0]!, accel[1]!, accel[2]!));
+      accels.push(Math.hypot(pa[0] - 2 * pb[0] + pc[0], pa[1] - 2 * pb[1] + pc[1], pa[2] - 2 * pb[2] + pc[2]) / (h * h));
     }
   }
   return { popP99MS2: accels.length ? percentile(accels, 0.99) : null };
@@ -336,16 +351,19 @@ function stillWindows(frames: MotionFrame[], speedAt: (i: number) => number | nu
 }
 
 // The joint's own smooth path at frame i: a least-squares quadratic over
-// ±radius frames, centred on i (a Savitzky-Golay smoother). Noise departs
-// from it; a held joint that settles or drifts along a curve does not, where
-// it would from a plain moving mean.
-function smoothPath(series: Vec3[], radius: number, i: number): Vec3 {
+// ±radius frames, centred on i (a Savitzky-Golay smoother) and fit against
+// timestamps, so unevenly stepped frames do not bend it. Noise departs from
+// it; a held joint that settles or drifts along a curve does not, where it
+// would from a plain moving mean.
+function smoothPath(series: Vec3[], times: number[], radius: number, i: number): Vec3 {
   const lo = Math.max(0, i - radius);
   const hi = Math.min(series.length - 1, i + radius);
   let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
   const t0 = [0, 0, 0], t1 = [0, 0, 0], t2 = [0, 0, 0];
+  // In units of the mean frame step, which keeps the normal equations well scaled.
+  const step = hi > lo ? (times[hi]! - times[lo]!) / (hi - lo) : 1;
   for (let q = lo; q <= hi; q++) {
-    const x = q - i;
+    const x = (times[q]! - times[i]!) / (step || 1);
     s0++; s1 += x; s2 += x * x; s3 += x ** 3; s4 += x ** 4;
     for (let c = 0; c < 3; c++) {
       const y = series[q]![c]!;
@@ -386,12 +404,13 @@ function jitter(frames: MotionFrame[]) {
   };
   const deviations: number[] = [];
   const rayDeviations: number[] = [];
+  const times = frames.map((f) => f.timeSec);
   for (const name of JITTER_JOINTS) {
     const series = frames.map((f) => f.joints[name]);
     for (const [a, b] of stillWindows(frames, heldSpeed(series))) {
       if (series.slice(a, b).some((p) => !p)) continue;
       const full = series as Vec3[];
-      for (let i = a; i < b; i++) deviations.push(len(sub(full[i]!, smoothPath(full, radius, i))));
+      for (let i = a; i < b; i++) deviations.push(len(sub(full[i]!, smoothPath(full, times, radius, i))));
     }
   }
   // Rays: the same definition in degrees, where the ray is held (angular
@@ -480,13 +499,14 @@ export function measureMotion(frames: MotionFrame[], options: MotionOptions = {}
 
 export type MotionVerdict = { metric: string; value: number | null; target: Target; pass: boolean };
 
-// Following needs tracked input; a take without any (a body replay with no
-// tracked hands) has nothing to follow, so those metrics are not judged.
-// Every other metric with no value fails: the take did not show it.
+// A metric with no value fails: the take did not show it. The one exception
+// is opt-in: `{ withoutInput: true }` says the take has no tracked input to
+// follow (a body replay with no tracked hands), so its following metrics are
+// not judged.
 const FOLLOWING_METRICS = new Set(['wristErrorP95Cm', 'latencyMs', 'jerkRatio', 'aimErrorMedianDeg']);
 
-export function judgeMotion(metrics: MotionMetrics, source: MotionSource): MotionVerdict[] {
-  return Object.entries(MOTION_TARGETS[source]).filter(([metric]) => !(FOLLOWING_METRICS.has(metric) && metrics[metric as keyof MotionMetrics] === null)).map(([metric, target]) => {
+export function judgeMotion(metrics: MotionMetrics, source: MotionSource, { withoutInput = false }: { withoutInput?: boolean } = {}): MotionVerdict[] {
+  return Object.entries(MOTION_TARGETS[source]).filter(([metric]) => !(withoutInput && FOLLOWING_METRICS.has(metric))).map(([metric, target]) => {
     const value = metrics[metric as keyof MotionMetrics] as number | null;
     const pass = value !== null && (target.max === undefined || value <= target.max + 1e-9) && (target.min === undefined || value >= target.min - 1e-9);
     return { metric, value, target: target as Target, pass };

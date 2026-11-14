@@ -192,8 +192,10 @@ async function replay(fileName: string, { faults = [], video = false, screenshot
   // the next wait on GPU teardown (see ci-vr-locomotion-playwright.mjs).
   await writeFile(path.join(artifactDir, `${label}-samples.json`), JSON.stringify(frames));
   const analysis = analyzeBodyReplay(frames, { stepMs: STEP_MS, recording });
-  const motion = measureMotion(framesFromBodySamples(frames, 'avatar'));
-  const motionMisses = judgeMotion(motion, 'vr-body').filter((verdict) => !verdict.pass);
+  const motionFrames = framesFromBodySamples(frames, 'avatar');
+  const motion = measureMotion(motionFrames);
+  const withoutInput = !motionFrames.some((f) => f.input?.leftWrist || f.input?.rightWrist);
+  const motionMisses = judgeMotion(motion, 'vr-body', { withoutInput }).filter((verdict) => !verdict.pass);
   const report: BodyReport = {
     ...analysis,
     failures: [...analysis.failures, ...motionMisses.map((v) => `motion ${v.metric}: ${v.value === null ? 'not measured' : +v.value.toFixed(3)} (target ${v.target.max !== undefined ? `≤ ${v.target.max}` : `≥ ${v.target.min}`})`)],
@@ -232,7 +234,8 @@ try {
     for (const report of reports) {
       console.log(formatBodyReport(report));
       const m = report.motion;
-      if (m) console.log(`  motion: skate ${m.footSkateMaxCm?.toFixed(2)} cm / ${((m.footSkateShare ?? 0) * 100).toFixed(1)}%, float ${m.footFloatP95Cm?.toFixed(2)}, penetration ${m.footPenetrationCm?.toFixed(2)} cm, pops p99 ${m.popP99MS2?.toFixed(1)} m/s², limits ${((m.jointLimitShare ?? 0) * 100).toFixed(1)}%, jitter ${m.jitterP95Mm?.toFixed(2)} mm`);
+      const f = (v: number | null | undefined, digits: number, scale = 1) => (v === null || v === undefined ? '–' : (v * scale).toFixed(digits));
+      if (m) console.log(`  motion: skate ${f(m.footSkateMaxCm, 2)} cm / ${f(m.footSkateShare, 1, 100)}%, float ${f(m.footFloatP95Cm, 2)}, penetration ${f(m.footPenetrationCm, 2)} cm, pops p99 ${f(m.popP99MS2, 1)} m/s², limits ${f(m.jointLimitShare, 1, 100)}%, jitter ${f(m.jitterP95Mm, 2)} mm`);
     }
     const failures = reports.flatMap((report) => report.failures.map((failure) => `${report.label}: ${failure}`));
     if (consoleErrors.length > 0) failures.push(`console errors:\n${consoleErrors.join('\n')}`);

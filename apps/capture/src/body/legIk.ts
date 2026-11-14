@@ -15,6 +15,10 @@ const BIND_FORWARD = new THREE.Vector3(0, 0, 1);
 // asks for (PLANTED_REACH_SHARE in VrBodySolver), so a planted ankle lands
 // where it is placed and only a leg straining past that falls short.
 const SOFT_REACH = 0.015;
+const FULL_REACH = 0.9995;
+// Share of thigh + shin where the soft end begins; VrBodySolver keeps planted
+// legs and the pelvis under it.
+export const LEG_SOFT_REACH_START = FULL_REACH * (1 - SOFT_REACH);
 const hip = new THREE.Vector3();
 const toAnkle = new THREE.Vector3();
 const reachDir = new THREE.Vector3();
@@ -80,7 +84,7 @@ export function solveTwoBoneLeg(leg: LegBones, ankleTarget: THREE.Vector3, pole:
   // Soft IK: near full extension the knee moves infinitely fast with reach,
   // so the last few percent of reach are approached asymptotically; the foot
   // falls a few millimetres short instead of the knee snapping.
-  const fullReach = (upper + lower) * 0.9995;
+  const fullReach = (upper + lower) * FULL_REACH;
   const softStart = fullReach * (1 - SOFT_REACH);
   const soft = rawDistance > softStart
     ? softStart + (fullReach - softStart) * (1 - Math.exp(-(rawDistance - softStart) / (fullReach - softStart)))
