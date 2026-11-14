@@ -49,7 +49,28 @@ export const userDtoSchema = z.object({
 
 export const requestMagicLinkSchema = z.object({
   email: z.string().trim().email().max(254),
-  displayName: z.string().trim().min(1).max(80).optional()
+  displayName: z.string().trim().min(1).max(80).optional(),
+  // Where the emailed link continues after sign-in. "record" opens capture.
+  next: z.enum(["record"]).optional()
+});
+
+/**
+ * A post grant: a short-lived, upload-only, single-use credential the viewer
+ * mints from a session and hands to capture, so a take posts without a
+ * second sign-in. Never a session: it cannot read or change the account.
+ */
+export const postGrantResponseSchema = z.object({
+  grant: z.string(),
+  expiresAt: z.string().datetime()
+});
+
+/** What capture learns about its grant (it also wakes a stopped API early). */
+export const postGrantInfoSchema = z.object({
+  displayName: z.string(),
+  returnOrigin: z.string().url(),
+  expiresAt: z.string().datetime(),
+  // Set once the grant has posted: a retry returns this hologram.
+  hologramId: z.string().nullable()
 });
 
 export const requestMagicLinkResponseSchema = z.object({
