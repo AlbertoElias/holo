@@ -263,7 +263,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
       {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} addFiles={<TrayFilesPicker bridge={bridge} tray={state.tray} input={input} />} onSummon={summonSlot} onRemove={(slot) => bridge.removeTraySlot(slot)} /> : null}
 
-      <PostPanel input={input} target={target} bottom={aboveDock} hidden={isRecording || findOpen || trayOpen} />
+      <PostPanel input={input} target={target} bottom={aboveDock} hidden={isRecording || findOpen || trayOpen} exporting={state.recordingState === 'exporting'} />
 
       {flat && findOpen ? (
         <FindSheet

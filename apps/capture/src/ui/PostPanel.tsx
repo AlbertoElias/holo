@@ -8,8 +8,11 @@ import { postFlow, type PostState } from '../post/postFlow';
 // Without a grant nothing shows and takes download as before.
 export const POST_CONTROL_NAMES = { post: 'Post', save: 'Save file', retry: 'Try again' } as const;
 
-function line(state: PostState): string | null {
+function line(state: PostState, exporting: boolean): string | null {
   switch (state.kind) {
+    case 'waiting':
+      // Stop to Post takes seconds on a phone; say so rather than show nothing.
+      return exporting ? 'Getting your take ready…' : null;
     case 'ready':
       return 'Your take is ready.';
     case 'posting':
@@ -24,9 +27,9 @@ function line(state: PostState): string | null {
   }
 }
 
-export function PostPanel({ input, target, bottom, hidden }: { input: HitInput; target: ViewTarget; bottom: string; hidden: boolean }) {
+export function PostPanel({ input, target, bottom, hidden, exporting }: { input: HitInput; target: ViewTarget; bottom: string; hidden: boolean; exporting: boolean }) {
   const state = useSyncExternalStore(postFlow.subscribe, postFlow.getSnapshot, postFlow.getSnapshot);
-  const text = line(state);
+  const text = line(state, exporting);
   if (hidden || text === null) return null;
   const hasTake = state.kind === 'ready' || state.kind === 'posting' || state.kind === 'failed';
   const canPost = state.kind === 'ready' || (state.kind === 'failed' && state.retry);
