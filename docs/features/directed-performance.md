@@ -7,7 +7,7 @@ re-scoped 2026-11-14 to a creation system. Slice 1b built and verified
 piece, which reads only as "watering a plant" after one revision. Its gap
 log (props, sets, publishing, gestures) now leads "Not covered yet". Slice 1c
 (props and sets in the beat sheet) built and verified (2026-11-14), not on
-`main` until the user answers open decision 4; neither piece published. The house avatar (slice 2) stays
+`main` until the user answers open decision 4; neither slice 1c build is published (the owner published the slice 1b watering take). The house avatar (slice 2) stays
 gated; the face decision below is the user's  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
@@ -600,7 +600,8 @@ and 7 (its evidence, below); the second 1c piece added item 13.
 
 12. **Life a reader can see.** The life every performer inherits moves
     the card by the numbers, but a held ending still reads as frozen from
-    stills (slice 1b, defaults). Authors give holds a beat for now.
+    stills (slice 1b, defaults), and the owner judged the video frozen
+    too (2026-11-14). Authors give holds a beat for now.
 
 13. **The card shows only the performer's surroundings.** The card fits
     the avatar, so a set more than about half a metre beside her on screen
@@ -723,6 +724,8 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
      brow and lid shapes moving the mesh at least 8 mm.
 
    Recommended: A now, and C as a requirement of slice 2 if it starts.
+
+   **Decided on 2026-11-14:** A now, and C as a requirement of slice 2.
 3. **What comes after slice 1b.** After one revision the second piece
    reads as watering a plant, not as checking whether it needs water. What it could not express was props, sets, tool use,
    gestures and change in the world, not the avatar. The options are:
@@ -733,6 +736,9 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
 
    Recommended: A. Slice 2 stays gated until a piece's reading names
    the avatar as the limit.
+
+   **Decided on 2026-11-14:** A. Props, sets and tool use are being built
+   in their own session; slice 2 stays gated.
 4. **Slice 1c's two product calls** (building with, awaiting the user):
    - **(a)** Sheet objects are written as recorded objects
      (`RecordedObject` nodes in `HOLOIM_objects` v0), so an authored take
@@ -902,7 +908,8 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
   as the brief requires. The numbers say the held ending moves on the card,
   but fresh readers still call it frozen. They judge from stills 0.2 s
   apart, where a slow sway of a few pixels does not show. Whether the video
-  reads as alive is untested: no reader can watch the video. The next try
+  reads as alive was untested until the owner watched it on 2026-11-14:
+  frozen. Bigger sway will not fix it. The next try
   is a different kind of life, not more of the same: occasional weight
   shifts, glances and posture changes, the motion a reader can see in
   stills. It should be judged from the video by a person.
@@ -984,10 +991,11 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
   - **Local upload and render:** `viewer-check.ts` on the revised take shows
     51 of 67 bones moving and 9 of 27 face shapes (peak 0.926), with the
     viewer anchoring on `RecordedAvatar`.
-  - **Not published.** The command is ready and has not been run:
+  - **Published by the owner** on 2026-11-14 as `cmwgvndd90001oeh37kuvfri7`
+    (Quick Look ready), with this command, which the tool does not cover:
 
     ```
-    cp apps/capture/output/authoring/watering/watering-2.glb output/showcase/does-it-need-water.glb
+    mkdir -p output/showcase && cp apps/capture/output/authoring/watering/watering-2.glb output/showcase/does-it-need-water.glb
     cd apps/capture && node scripts/showcase/upload.mjs --api https://holoim-api.fly.dev ../../output/authoring/watering/publish
     ```
 
@@ -1114,7 +1122,7 @@ the neutral title "Take".
   - an absolute local path could be published.
 
   Still open: no check proves the wrist limits or their precedence.
-- **Not published.** Neither piece was uploaded. Open decision 4 (recorded
+- **Not published.** Neither slice 1c build was uploaded (the published watering piece is the slice 1b take). Open decision 4 (recorded
   objects, required credit) waits for the user, and nothing merges before
   that answer.
 
