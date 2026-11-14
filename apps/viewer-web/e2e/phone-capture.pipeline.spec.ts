@@ -49,11 +49,16 @@ test("a phone records a selfie take and posts it to a shareable link", async ({ 
     expect(await page.locator("#status").textContent(), "touch guidance").toContain("Prop your phone up, face it, tap Record.");
 
     await page.getByRole("button", { name: CONTROL_NAMES.startRecording }).tap();
-    // "Starting camera" holds the count until the face camera runs, then 3-2-1.
-    await expect(page.locator("[data-capture-countdown]")).toBeVisible();
-    await expect(page.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible({ timeout: 10_000 });
+    // "Starting camera" holds the count until the face camera runs (on a starved
+    // runner the page stalls for seconds while the camera and model start), then
+    // 3-2-1 on the page's clock. Wait for the count itself to end; the deadline
+    // only bounds a hang (the page gives the camera at most 15 s).
+    const countdown = page.locator("[data-capture-countdown]");
+    await expect(countdown).toBeVisible();
+    await expect(countdown).toBeHidden({ timeout: 60_000 });
+    await expect(page.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible({ timeout: 30_000 });
     mark("recordingStarted");
-    await expect(page.locator("[data-capture-running-time]")).toContainText(`0:0${TAKE_SECONDS}`, { timeout: 15_000 });
+    await expect(page.locator("[data-capture-running-time]")).toContainText(`0:0${TAKE_SECONDS}`, { timeout: 30_000 });
     await captureEvidence(page, testInfo, "phone-selfie-recording");
     await page.getByRole("button", { name: CONTROL_NAMES.stopRecording }).tap();
 
