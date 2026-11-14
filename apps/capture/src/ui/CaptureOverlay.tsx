@@ -227,7 +227,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
           />
           {countdown.running ? (
             <Type variant="timecode" as="span" data-capture-countdown="" aria-live="assertive">
-              {cameraStarting ? 'Starting camera' : countdown.value}
+              {countdown.held ? 'Starting camera' : countdown.value}
             </Type>
           ) : null}
           {isRecording ? (
@@ -524,17 +524,31 @@ function faceCameraProblem(state: UiViewModel['faceCamera']): string | null {
   }
 }
 
+/** How long a selfie countdown waits for the face camera before counting without it. */
+const CAMERA_WAIT_MS = 15_000;
+
 /**
  * Before a selfie take, 3-2-1 in the dock beside Record: time to put the phone
  * down or step back. Record again cancels it.
  */
-/** 3-2-1, then `onDone`; it holds at the start while `hold` is true (the camera is still starting). */
-function useCountdown(from: number, hold: boolean, onDone: () => void): { running: boolean; value: number; start: () => void; cancel: () => void } {
+/**
+ * 3-2-1, then `onDone`. It holds at the start while `hold` is true (the camera
+ * is still starting), but never longer than `maxHoldMs`: a camera that never
+ * starts (a permission prompt left open, a stuck device) must not block Record.
+ */
+function useCountdown(from: number, hold: boolean, onDone: () => void, maxHoldMs = CAMERA_WAIT_MS): { running: boolean; value: number; held: boolean; start: () => void; cancel: () => void } {
   const [value, setValue] = useState<number | null>(null);
+  const [holdExpired, setHoldExpired] = useState(false);
   const done = useRef(onDone);
   done.current = onDone;
+  const held = hold && !holdExpired;
   useEffect(() => {
-    if (value === null || hold) return undefined;
+    if (value === null || !held) return undefined;
+    const timer = window.setTimeout(() => setHoldExpired(true), maxHoldMs);
+    return () => window.clearTimeout(timer);
+  }, [value === null, held, maxHoldMs]);
+  useEffect(() => {
+    if (value === null || held) return undefined;
     const timer = window.setTimeout(() => {
       if (value <= 1) {
         setValue(null);
@@ -542,6 +556,10 @@ function useCountdown(from: number, hold: boolean, onDone: () => void): { runnin
       } else setValue(value - 1);
     }, 1000);
     return () => window.clearTimeout(timer);
-  }, [value, hold]);
-  return { running: value !== null, value: value ?? 0, start: () => setValue(from), cancel: () => setValue(null) };
+  }, [value, held]);
+  const reset = (next: number | null): void => {
+    setHoldExpired(false);
+    setValue(next);
+  };
+  return { running: value !== null, value: value ?? 0, held, start: () => reset(from), cancel: () => reset(null) };
 }
