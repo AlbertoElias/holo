@@ -305,29 +305,35 @@ None: this adds no authoring action inside a capture take.
 
 ## Acceptance criteria
 
-- [ ] The acting report runs on the three baselines and reproduces the
+- [x] The acting report runs on the three baselines and reproduces the
   poem's result (8 of 102 channels, last change at 4.0 s, no face).
+  Evidence: slice 0 below.
 - [ ] The audition report runs on the stock avatar and the house base, and
-  names what each cannot express.
+  names what each cannot express. (Stock avatar done in slice 0; the house
+  base is slice 2.)
 - [ ] The house base passes every audition item and the motion owner's
   report, and the poem's two characters are made from it by parameters
   alone, with no scaled bones.
-- [ ] One beat sheet, solved on two different avatars, plays in
+- [x] One beat sheet, solved on two different avatars, plays in
   `viewer-web` with face shapes and fingers moving (weights read back from
   the GLB), and a hand that stops short of a target stops at the same
-  distance on both.
+  distance on both. Evidence: slice 1 below.
 - [ ] A published authored piece says in its file that it was authored,
   and the viewer's framing and hand traces follow its first performer.
+  (Checked through a local upload, not yet on a published piece: the file
+  carries `authored: synthetic` and the viewer resolves its humanoid on the
+  first performer only; see the framing note in slice 1 below.)
 - [ ] The six-second test: fresh critics shown only the muted directed take
   name the hesitation; the flat take scores lower; the owner's verdict is
   recorded. Orbiting is tested as a second question.
-- [ ] Revising one beat changes only that span in the report, and rebuilds
-  in under 30 s.
+- [x] Revising one beat changes only that span in the report, and rebuilds
+  in under 30 s. Evidence: slice 1 below.
 - [ ] A second agent (Astra) authors a take using only the CLI and its
   README.
 - [ ] Authored pieces stay within the Quick Look extent budget (B-057) and
   the hologram size budgets with two house characters on stage, and
-  `check_usdz_tools.sh` passes on the two-character piece.
+  `check_usdz_tools.sh` passes on the two-character piece. (Passes on the
+  two stock-avatar piece; house characters are slice 2.)
 
 ## Failure cases considered
 
@@ -376,6 +382,102 @@ mandate briefs. Both were answered the same day, so the build can start.
 - `check_usdz_tools.sh` by hand on the two-character piece.
 - The six-second test's critic answers and the owner's verdict.
 - Proof video under ignored `output/`.
+
+### Slice 0 evidence (2026-11-13)
+
+Reports are JSON in the ignored `apps/capture/output/authoring/`.
+
+- **The poem** (`report-poem.json`): 102 channels over 12.0 s, 8 change,
+  the last at 4.0 s; Speaker moves 7 of 51 channels and Traveler 1 of 51,
+  and both are frozen from about 4 s. No morph meshes and no finger bones
+  (17 joints per rig), so face, fingers and eyes never move. Reproduced
+  exactly.
+- **The Way Down II** (`report-way-down-ii.json`): 169 channels, 152
+  change, and no skinned performer: its figures are unskinned, so the
+  report counts them as scene.
+- **A captured phone take** (`report-phone-capture.json`): 141 channels
+  over 17.5 s, 6 change. `RecordedAvatar`'s face moves 6 of 27 shapes and
+  the eyes move, but fingers move 0 of 30, and it is frozen from 13.64 s to
+  15.21 s. A headset take (`report-ci-summon.json`, 2.4 s) changes 14 of
+  144 channels and its fingers never move either.
+- **The audition, stock avatar** (`audition-stock.json`): passes. 55 of 59
+  face channels displace the mesh by at least 1 mm (largest 15.7 mm), and
+  gaze by eye bones moves 7.9 mm at 20°. A fist closes every fingertip to
+  at most 46.8 mm from the palm, and a point holds the index 116.6 mm out.
+  Every reachable target is met exactly; the two targets placed out of
+  reach on purpose miss by 998 mm, as they should. A 75° turn slips the
+  ankles 8.4 mm. Arm-in-torso contact is already there in the rest stance
+  (16 vertices a side) and stays small in the turn (6 and 21 vertices, at
+  most 25.3 mm deep); head in torso is 3 vertices.
+- **The audition, `unreal-cm` fixture** (`audition-unreal-cm.json`): the
+  same, except "FAIL face: nothing turns the eyes". It has no eye bones and
+  no eye-look shapes, so a look on it is head-only.
+- The motion owner's instrument is left out, as slice 0 says.
+
+### Slice 1 evidence (2026-11-13)
+
+- **One beat sheet on two avatars** (`sheets/two-avatars.json`, stock and
+  the `unreal-cm` fixture): 196 frames at 30 fps, 114 channels, 3.6 MB,
+  solved in 0.2 s. Uploaded to a local test API and played in a viewer-web
+  test build (`viewer-check.ts`, `two-avatars-viewer.json`). Weights read
+  back while playing:
+
+  | Performer | Bones moving | Fingers moving | Face shapes moving (peak) | Anchor bones |
+  |---|---|---|---|---|
+  | `RecordedAvatar` (stock) | 51 of 67 | 30 of 40 | 9 of 27 (0.903) | 54 |
+  | `Performer_cm` (`unreal-cm`) | 49 of 73 | 30 of 40 | 18 of 27 (0.971) | 0 |
+
+  The viewer resolved its humanoid from `HOLOIM_humanoid` and tagged only
+  `RecordedAvatar`'s bones. Both performers reach for the `between` mark
+  with `stopShort` 0.1 m: the stock avatar's palm stopped 99.9 mm from it
+  and `unreal-cm`'s 99.8 mm.
+- **The file:** the first performer is `RecordedAvatar`, the only one in
+  `HOLOIM_humanoid` (in `extensionsUsed`, not required);
+  `asset.extras.holoim.authored` is `synthetic`.
+- **Framing:** the anchors (scene origin, hips and head focus, hand-trace
+  scope, AR bounds) follow `RecordedAvatar`, but the card's camera frames
+  the whole cloche, which wraps every performer. So with two performers
+  the card shows both, and only the anchors favour the first. An authored
+  take has no hand traces, since the viewer draws only author `trace`
+  marks.
+- **Revision locality:** changing the goodbye's withheld hand to a fist on
+  one beat changed only 2.27 s to 4.27 s (15 channels) in the `--against`
+  report, and the rebuild took 0.67 s.
+- **`check_usdz_tools.sh`** on `two-avatars.glb`: passed, 4 of 4 cases
+  (animated ancestor and face, silent, alpha UV PBR, unsupported required
+  extension) in 80 s.
+- **The goodbye, flat and directed** (`sheets/goodbye.json`, two stock
+  avatars). In the viewer, the flat take moves 12 of 67 of her bones and 8
+  of his, with no fingers or face; the directed take moves 50 of 67 on each,
+  30 of 40 fingers, and 22 of 27 face shapes on her (peak 0.944). The
+  acting reports agree: the directed take changes 109 of 111 channels, and
+  the flat take changes 24 of 26 but is frozen from 4.7 s to 6 s (her) and
+  2.77 s to 4.4 s (him). Her reach ends 262.9 mm from him against 160 mm
+  asked, because he steps out of reach; the sheet should aim at where he
+  will be.
+- **The early reading:** two fresh critics, Opus and Sonnet, each saw
+  twelve stills per take from the viewer, muted and labelled only by
+  letter, in a different order.
+  - Opus scored the flat take 5 of 10 and the directed take 6 of 10, and
+    would show the directed one. It read the directed take as "a reach is
+    refused, and the woman who made it folds back into herself while the
+    other stands her ground", her hand back to her chest at 3.0 s as
+    self-protective, and a glance back at 5.0 s. It read the flat take as
+    "a woman reaches for someone who has already left, and gives up".
+  - Sonnet scored the directed take 5 of 10 and the flat take 6 of 10, and
+    would show the flat one, because his turn and open arms answer her. It
+    read the directed take as "a woman reaches out once and is met with a
+    folded-arms posture".
+  - Both said the faces and eyes cannot be read at card scale, the last
+    2.5 s are static, and his rest pose reads as hands on hips, an
+    attitude nobody directed. Neither named "she wants him to stay but
+    stops herself".
+
+  No clear difference. As slice 1 says, that does not say why; slice 3
+  settles it. The reading points to three causes for slice 3 to test: the
+  face is too small to read at card scale, the life underneath is too
+  small to carry the aftermath, and the arm rest pose (hands near the
+  hips) reads as intent.
 
 ## Physical-device limits
 
