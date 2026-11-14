@@ -128,6 +128,13 @@ and a before/after proof video (ignored `output/`, H.264 MP4, never committed).
 | Camera spike (`feature/camera-avatar`, `camera-avatar-spike.md`, slices 1–2 done) | Taken over by this brief (Decision 2); its jitter definition is now the instrument's |
 | TODOS "Make all avatar movement look completely natural" | Points here. Its wishlist (full-body IK with comfort costs, arm swing, hip sway, weight shift) is the fix toolbox for the gaps above; "robotic" motion that passes every metric is judged in the proof videos, and a missing metric is added before tuning by eye |
 
+## Consumers
+
+`docs/features/directed-performance.md` imports the solving modules and this
+instrument read-only, grading authored takes as source `authored` (body
+targets, no input). A house avatar becomes capture's default only after this
+report passes on it.
+
 ## Acceptance criteria
 
 - [ ] One report grades every source with the same metrics and per-source targets.

@@ -28,7 +28,7 @@ export type MotionFrame = {
   // Direction to a measured target from the fingertip (unit), when known.
   aimTarget?: Vec3 | undefined;
 };
-export type MotionSource = 'vr-body' | 'vr-hands' | 'ar-quest' | 'ar-phone' | 'camera' | 'desktop';
+export type MotionSource = 'vr-body' | 'vr-hands' | 'ar-quest' | 'ar-phone' | 'camera' | 'desktop' | 'authored';
 
 export type MotionMetrics = {
   frames: number;
@@ -81,7 +81,9 @@ export const MOTION_TARGETS: Record<MotionSource, Targets> = {
   'ar-quest': { ...HUMAN_FEET, jitterP95Mm: { max: 2 }, wristErrorP95Cm: { max: 1.5 }, latencyMs: { max: 0 }, jerkRatio: { max: 1.2 } },
   'ar-phone': { ...HUMAN_FEET, jitterP95Mm: { max: 2 } },
   camera: { ...HUMAN_FEET, jitterP95Mm: { max: 8 }, rayJitterP95Deg: { max: 3.5 }, aimErrorMedianDeg: { max: 3.5 }, latencyMs: { max: 100 } },
-  desktop: { ...HUMAN_FEET, jitterP95Mm: { max: 2 } }
+  desktop: { ...HUMAN_FEET, jitterP95Mm: { max: 2 } },
+  // A take solved from a directed beat sheet (docs/features/directed-performance.md): no input to follow, so bodies only.
+  authored: { ...HUMAN_FEET, jitterP95Mm: { max: 2 } }
 };
 
 // Human joint ranges (degrees between the two bones; 180 = straight).
@@ -127,12 +129,18 @@ function fps(frames: MotionFrame[]) {
   return (frames.length - 1) / Math.max(1e-6, frames[frames.length - 1]!.timeSec - frames[0]!.timeSec);
 }
 
+// Frames spanning `sec` at `rate`, at least 1. The epsilon keeps a 30 Hz take
+// whose timestamps sum to 29.9999 Hz on the same stencil as an exact one.
+function framesFor(rate: number, sec: number) {
+  return Math.max(1, Math.round(rate * sec + 1e-6));
+}
+
 function feet(frames: MotionFrame[], options: MotionOptions) {
   const rate = fps(frames);
   // Speeds over a ±33 ms central difference, so tracker noise at high frame
   // rates does not read as sliding; contacts shorter than 100 ms are grazes.
-  const k = Math.max(1, Math.round(rate * SPEED_HALF_WINDOW_SEC));
-  const minContact = Math.max(1, Math.round(rate * MIN_CONTACT_SEC));
+  const k = framesFor(rate, SPEED_HALF_WINDOW_SEC);
+  const minContact = framesFor(rate, MIN_CONTACT_SEC);
   const slides: number[] = [];
   const floats: number[] = [];
   let penetration = 0;
@@ -218,7 +226,7 @@ function soleOffsets(frames: MotionFrame[], options: MotionOptions) {
 // and frame. Pin/release snaps and solver flips show here even without input.
 function pops(frames: MotionFrame[]) {
   const rate = fps(frames);
-  const k = Math.max(1, Math.round(rate * POP_HALF_WINDOW_SEC));
+  const k = framesFor(rate, POP_HALF_WINDOW_SEC);
   const h = k / rate;
   const accels: number[] = [];
   for (let i = k; i < frames.length - k; i++) {
