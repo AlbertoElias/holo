@@ -2,9 +2,11 @@
 
 **Lead:** Claude (planning session, 2026-11-13)  
 **Status:** In progress: slices 0 and 1 built and verified (2026-11-13);
-re-scoped 2026-11-14 to a creation system: the review loop, the defaults,
-face legibility and a second piece come first (slice 1b); the house avatar
-(slice 2) stays gated on evidence and the user's decision  
+re-scoped 2026-11-14 to a creation system. Slice 1b built and verified
+(2026-11-14): the review loop, three defaults, face numbers and a second
+piece that reads after one revision. Its gap log (props, sets, publishing,
+gestures) now leads "Not covered yet". The house avatar (slice 2) stays
+gated; the face decision below is the user's  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -257,7 +259,7 @@ critics still could not read the intent), that the tool's defaults act when
 nobody directed them, and that faces are too small at feed-card size.
 
 1. **A review step.** A beat sheet states an intent for the piece and for
-   each beat. `direct.ts review` renders a built take in the real viewer at
+   each beat. `review.ts` renders a built take in the real viewer at
    two framings (the feed card's, and a close view) and writes a review pack:
    an H.264 MP4, time-stamped frame sheets dense enough to show timing
    within a beat, and the acting report. The README gives the protocol: a
@@ -342,14 +344,50 @@ reconstruction from images (Astra's local path) as an avatar source.
 
 ## Not covered yet
 
-What a whole creation system needs and this brief leaves out. Candidates,
-each to be confirmed or struck by the second piece's gap log (slice 1b, step
-4): **sets** (floor, walls, furniture, scale references); **props** (objects
-that are held, moved or used, and their contact with a hand); **voice and
-sound** (speech, sound effects, music, and how they ride in the file);
-**titles and captions**; and **one path from a written brief to a published
-link** (today: author a sheet, build, review, upload, each as a separate
-command). To be filled from the evidence below.
+What a whole creation system needs and the tools do not do yet. Confirmed
+by the second piece's gap log (slice 1b evidence, "Does it need water?"):
+each item was a step that needed something outside the CLI and its README.
+Ordered by how much it cost the piece.
+
+1. **Props and sets.** A beat sheet has no objects. The piece's pedestal,
+   pot, plant and watering can were added afterwards by a hand-written
+   gltf-transform script (about 120 lines), placed in absolute metres by
+   trial and error: the first set hid her and the can until 4 s.
+2. **A held prop.** Holding the can needed an attachment node under the hand
+   bone and a grip frame worked out by hand from the finger bones. There is
+   no pick up or put down, so the can is in her hand from the first frame.
+3. **Using a tool.** A hand has four palm facings and no tool axis. The pour
+   is a palm roll, and which roll tips the can depends on how it was
+   attached, which the author sees only in the review. The tip read late in
+   both takes, on the roll back, not the roll asked for.
+4. **Gestures and states with no direction.** No nod or head shake, no
+   "rub the soil between the fingers", no "concerned" or "noticing"
+   expression. "The soil is dry" was staged as looking at a fingertip, and
+   read as checking a watch.
+5. **Change in the world.** No water, particles or plant response: the
+   reader saw "no water" and "the plant looks the same".
+6. **Performer-relative placement.** Marks are absolute metres guessed from
+   the avatar's size; nothing says "at her right hand's height" or "a
+   step in front of her".
+7. **Post-processing keeps the file valid.** Re-writing a take with
+   gltf-transform drops `HOLOIM_humanoid`, so the set script re-declares the
+   performer by node name.
+8. **Publishing.** No publish step: the author writes a showcase `meta`
+   module, copies the GLB to `output/showcase/<slug>.glb` and runs
+   `scripts/showcase/upload.mjs` with a session.
+9. **Review tooling.** A pack takes about eight minutes; the close view
+   crops a long reach and shows the back of a performer who faces away; the
+   README now documents a one-minute framing check (`viewer-check.ts
+   --frames`).
+10. **Revision locality for staging.** Moving the can to the other hand to
+    keep it in view changed beats that had read (lift and pour), so "revise
+    only what did not read" holds for timing, not for staging.
+11. **Faces.** See the face numbers in slice 1b's evidence: on the stock
+    avatar only mouth-led shapes read, and a smile's squint shows an
+    artefact against the glasses in the close view.
+
+Not exercised by the piece, still open: **voice and sound** (speech,
+effects, music) and **titles and captions**.
 
 ## How this lines up with the mandates
 
@@ -400,6 +438,20 @@ None: this adds no authoring action inside a capture take.
   recorded. Orbiting is tested as a second question.
 - [x] Revising one beat changes only that span in the report, and rebuilds
   in under 30 s. Evidence: slice 1 below.
+- [x] Slice 1b's review loop: a review command writes a pack (H.264 video
+  at the card's framing and a close view, frame sheets, the acting report,
+  on-screen sizes) and the README gives the fresh-reader protocol.
+  Evidence: slice 1b below.
+- [x] The three defaults shown before and after, each with its own review
+  pack, on a neutral test sheet: a reach at a moving performer, a neutral
+  rest and life in a held ending. Evidence: slice 1b below. The rest pose
+  still reads as folded arms in profile.
+- [x] Face height at the card and the blind readings recorded, with the
+  options left as a decision for the user. Evidence: slice 1b below.
+- [x] A second piece, different in kind, authored from a three-line brief
+  with the CLI and README. Reviewed, revised, reviewed again, uploaded and
+  rendered locally, not published. Its gap log fills "Not covered yet".
+  Evidence: slice 1b below.
 - [ ] A second agent (Astra) authors a take using only the CLI and its
   README.
 - [ ] Authored pieces stay within the Quick Look extent budget (B-057) and
@@ -434,6 +486,27 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
 
 1. **House style:** picked from the slice 2 sheets. Nothing to answer
    until they exist.
+2. **Faces at card size** (numbers in slice 1b's evidence). On the stock
+   avatar only the smile reads, at any size from 8 to 96 device px, so
+   framing is not the limit. The options are:
+   - **(A)** Keep the card framing, and author emotion through the body
+     and mouth-led shapes. No cost; the README already says so.
+   - **(B)** Frame closer in the viewer. That is not this brief's to
+     change, and the blind readings say it would not help this avatar.
+   - **(C)** An audition bar for any house avatar: brows not hidden, and
+     brow and lid shapes moving the mesh at least 8 mm.
+
+   Recommended: A now, and C as a requirement of slice 2 if it starts.
+3. **What comes after slice 1b.** The second piece read after one
+   revision. What it could not express was props, sets, tool use,
+   gestures and change in the world, not the avatar. The options are:
+   - **(A)** A slice for props and sets in the beat sheet: objects, a
+     held prop with pick-up and put-down, and a tool axis. Then publish
+     as one command.
+   - **(B)** The house avatar (slice 2) as planned.
+
+   Recommended: A. Slice 2 stays gated until a piece's reading names
+   the avatar as the limit.
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.
@@ -562,6 +635,118 @@ Reports are JSON in the ignored `apps/capture/output/authoring/`.
   face is too small to read at card scale, the life underneath is too
   small to carry the aftermath, and the arm rest pose (hands near the
   hips) reads as intent.
+
+### Slice 1b evidence (2026-11-14)
+
+Packs, readers' accounts and comparisons are in the ignored
+`apps/capture/output/authoring/review/<pack>/`; every reader was a fresh
+Claude Sonnet subagent given only the pack's `reader/` folder.
+
+- **The review step.** `review.ts <take.glb> --sheet <sheet>` plays the take
+  in a viewer-web test build and writes the pack: `reader/review.mp4` (H.264,
+  real time, the card framing beside a close view per performer), card and
+  close frame sheets every 0.2 s labelled by time only, `on-screen.json`
+  (the face's height on the card and, per second, how far head and hands
+  travel there; under 1 CSS px is `still`), the acting report and a
+  `comparison.json` to fill per beat. Beat sheets carry an `intent` for the
+  piece and each beat; the README gives the fresh-reader protocol. A pack
+  takes about eight minutes for a nine-second take.
+- **Defaults** (`sheets/defaults-test.json`: A reaches for B's arm as B
+  steps back, then both hold; packs `defaults-before`, `defaults-after`,
+  `defaults-after2`):
+
+  | Default | Before | After | Read by |
+  |---|---|---|---|
+  | A reach at a moving performer lands where they are | Palm 177.4 mm from B's arm (asked 20); the goodbye's 262.9 mm (asked 160) | 18.5 mm (asked 20); the goodbye's 148.6 mm (asked 160) | The reader saw the hand land on B's shoulder; before, "where it lands is hidden" |
+  | A neutral rest | B: "arms clasped or folded tight", an attitude | Elbows 5 cm back, 22° bend, hands at the thighs; from the front reads as standing at rest | See below |
+  | Life under a held ending | B still (under 1 CSS px/s) at 1, 3, 5 and 7 s; "paused mannequins" | LIFE2 | LIFE2READ |
+
+  The rest pose is fixed in its geometry, not yet in every reading. Seen in
+  profile, the readers still call the arms folded. The forearm crosses the
+  torso's silhouette, and the armour's bright trim makes a band across it.
+  A frontal take with no beats (`rest.json`, twelve stills) shows the arms
+  hanging at the sides. Life was doubled after the first after-pack read
+  "held poses with a moving background, not as alive": sway 11 to 22 mm,
+  head drift 1.8° to 3.5°, and breath about half again.
+- **Face legibility at the card** (`face-legibility.ts`, `sheets/expressions.json`):
+  a standing performer's face is 19.7 CSS px tall on a phone's card (29.5
+  device px, 3.3 mm on the glass; the body is 199 CSS px). On a desktop it
+  is 21.6 px at 1× and 32.4 device px at 2×. Fresh readers named seven
+  expressions blind, from a face rendered at a set height (chance about 1 in
+  7):
+
+  | Face height, device px | 8 | 12 | 16 | 24 | 30 (card) | 32 | 48 | 64 | 96 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | Correct of 7 | 1 | 2 | 1 | 2 | 3 | 3 | 2 | 2 | 1 |
+  | At strength 1.8 | | | 1 | | 3 | | 3 | | 2 |
+
+  Only the smile read, at every size; a bigger face did not help. The
+  limit is the avatar, not the framing: its shapes move the mesh too
+  little, and its glasses cover the brows. Mesh travel per channel:
+
+  | Channels | Mesh travel |
+  |---|---|
+  | mouthSmile | 15.7 mm |
+  | eyeBlink | 10.9 mm |
+  | mouthFrown | 10.5 mm |
+  | eyeWide, eyeSquint | 6–7 mm |
+  | brow and cheek shapes | 3.6–4.5 mm |
+  | lip press, jaw forward | 1.2–1.3 mm |
+
+  The options are open decision 2 below.
+- **A second piece**, "Does it need water?", authored from this three-line
+  brief:
+  - **Title:** Does it need water?
+  - **Intent:** How to tell a potted plant needs water: push a finger into
+    the soil, and if it is dry, water it.
+  - **Constraints:** One performer, one watering can, a plant on a stand;
+    practical tone; ten seconds or less.
+
+  Sheet: `sheets/watering.json`, 9 s, eight beats. The set and the can were
+  added after building with a gltf-transform script outside the tool.
+  - **First review** (`watering-1`): the piece read as "watering a plant",
+    but not as checking whether it needs water. Look, lift and pour read;
+    grip, point, poke, the dry check and the satisfied ending did not.
+    The can was hidden behind her body and the set until 4 s.
+  - **Revision:** the can went to the right hand and the set moved, so the
+    can is seen from the start. The check became lifting the finger and
+    looking at it. The reach ends are within 5 mm (poke 4.6, check 0.4,
+    lift 0.9, pour 0.8). `--against` reports 0.03 to 9 s changed, because
+    swapping hands moves every beat that uses them.
+  - **Second review** (`watering-2`): "someone tending a plant: checking it,
+    deciding it needs water, watering it". The piece reads. Five of eight
+    beats read: look, grip, poke, lift and the smile at the end. Three did
+    not:
+    - the check reads as "checking a watch or a wrist device";
+    - the pour reads late, at 6.8 s, on the palm's roll back;
+    - the pointing finger is too small to see.
+  - **Local upload and render:** `viewer-check.ts` on the revised take shows
+    51 of 67 bones moving and 9 of 27 face shapes (peak 0.926), with the
+    viewer anchoring on `RecordedAvatar`.
+  - **Not published.** The command is ready and has not been run:
+
+    ```
+    cp apps/capture/output/authoring/watering/watering-2.glb output/showcase/does-it-need-water.glb
+    cd apps/capture && node scripts/showcase/upload.mjs --api https://holoim-api.fly.dev ../../output/authoring/watering/publish
+    ```
+
+    It needs a session (`HOLOIM_SESSION` or the Keychain agent token).
+    `publish.mjs` holds the slug, the name and "Claude (agent-authored)".
+  - **Gap log:** every step that needed something outside the CLI and its
+    README is now "Not covered yet", above. In short:
+    - props, sets and a held prop's grip;
+    - using a tool (the pour);
+    - gestures with no direction (nod, "this is dry");
+    - no change in the world (water);
+    - performer-relative marks;
+    - post-processing dropping the humanoid declaration;
+    - publishing;
+    - slow packs, and a close view that crops;
+    - staging changes that break revision locality.
+- **What this says about slice 2.** Avatars limit the face only. What kept
+  the second piece from reading was everything around the performer:
+  props, tool use, gestures and the world. That points to building props
+  and sets before a house avatar.
 
 ## Physical-device limits
 

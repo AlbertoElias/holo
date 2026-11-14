@@ -1,0 +1,16 @@
+{
+  "title": "Expressions",
+  "intent": "One person, facing us, shows a series of expressions with a neutral face between them; a test of how small a face can be and still read.",
+  "duration": 14,
+  "performers": [
+    { "id": "p", "avatar": "stock", "at": [0, 0], "facing": 0, "seed": 3 }
+  ],
+  "beats": [
+    { "id": "smile", "performer": "p", "at": 1.0, "hold": 0.9, "intent": "Smiles.", "directions": [ { "kind": "expression", "shape": "smile", "settle": 0.4 } ] },
+    { "id": "sad", "performer": "p", "at": 3.0, "hold": 0.9, "intent": "Looks sad.", "directions": [ { "kind": "expression", "shape": "sad", "settle": 0.4 } ] },
+    { "id": "held", "performer": "p", "at": 5.0, "hold": 0.9, "intent": "Holds something back, lips pressed.", "directions": [ { "kind": "expression", "shape": "held", "settle": 0.4 } ] },
+    { "id": "resolve", "performer": "p", "at": 7.0, "hold": 0.9, "intent": "Looks determined.", "directions": [ { "kind": "expression", "shape": "resolve", "settle": 0.4 } ] },
+    { "id": "hope", "performer": "p", "at": 9.0, "hold": 0.9, "intent": "Looks hopeful.", "directions": [ { "kind": "expression", "shape": "hope", "settle": 0.4 } ] },
+    { "id": "eyes-down", "performer": "p", "at": 11.0, "hold": 0.9, "intent": "Looks down.", "directions": [ { "kind": "expression", "shape": "eyes-down", "settle": 0.4 } ] }
+  ]
+}

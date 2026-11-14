@@ -157,9 +157,11 @@ it from the item below instead of duplicating its status here.
   the first house base, is gated. Re-scoped on 2026-11-14 ("not the best avatar for this hologram,
   but an overall hologram creation system using this hologram as
   reference"): the review loop, defaults every piece inherits, face
-  legibility numbers and a second piece authored from a written brief come
-  first (slice 1b); the house avatar waits for that evidence and the user's
-  decision. Owned by
+  legibility numbers and a second piece authored from a written brief
+  (slice 1b, on `main` 2026-11-14: the second piece read after one
+  revision, and its gap log puts props, sets and tool use ahead of the
+  house avatar). Two decisions wait for the user: how to treat faces at
+  card size, and whether props and sets come before slice 2. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D; the
   room-scale body solver

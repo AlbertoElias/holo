@@ -1,0 +1,17 @@
+{
+  "title": "Defaults test",
+  "intent": "A neutral test of what every piece inherits: two people stand at rest, one reaches to touch the other's arm as the other steps back, then both stand still.",
+  "duration": 8,
+  "performers": [
+    { "id": "a", "avatar": "stock", "at": [-0.3, 0], "facing": 90, "seed": 5 },
+    { "id": "b", "avatar": "stock", "at": [0.3, 0], "facing": -90, "seed": 17 }
+  ],
+  "beats": [
+    { "id": "a-look", "performer": "a", "at": 1.2, "hold": 2.4, "intent": "A looks at B.", "directions": [
+      { "kind": "look", "at": "b.head", "head": 0.6 } ] },
+    { "id": "a-reach", "performer": "a", "at": 1.6, "hold": 1.2, "intent": "A reaches out and touches B's arm.", "directions": [
+      { "kind": "reach", "side": "right", "at": "b.leftUpperArm", "stopShort": 0.02, "palm": "toward", "attack": 0.8, "settle": 1.0 } ] },
+    { "id": "b-step", "performer": "b", "at": 1.9, "intent": "B steps back, away from A.", "directions": [
+      { "kind": "step", "foot": "left", "by": [0, -0.2], "follow": true, "attack": 0.6, "settle": 0.45 } ] }
+  ]
+}
