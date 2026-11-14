@@ -14,6 +14,7 @@ import { DEFAULT_AVATAR_URL, loadRuntimeConfig } from '../config/runtimeConfig';
 import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
 import { ChromeProbe } from '../debug/chromeProbe';
 import { DiagnosticViews } from '../debug/DiagnosticViews';
+import { sampleBodycam } from '../bodycam/snapshot';
 import { FaceDriver } from '../face/FaceDriver';
 import { faceCameraOnByDefault } from '../face/WebcamFace';
 import { DesktopPointAction } from '../input/DesktopPointAction';
@@ -41,7 +42,7 @@ import { HandEmbodiment } from '../xr/HandEmbodiment';
 import { HeightFit } from '../xr/HeightFit';
 import { ScreenHolds } from '../xr/ScreenHolds';
 import { XrTracking } from '../xr/XrTracking';
-import { installAutomationHooks, tracesSnapshot } from './automationHooks';
+import { type BodycamLogEntry, installAutomationHooks, tracesSnapshot } from './automationHooks';
 import { CaptureHistory, type HistoryEntry } from './CaptureHistory';
 import { createHaloActions } from './haloActions';
 import type { PointHistoryEntry } from '../recording/PointSampleStore';
@@ -87,7 +88,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     controllerPitchDeg: config.controllerTrackPitchDeg,
     controllerYawDeg: config.controllerTrackYawDeg,
     controllerRollDeg: config.controllerTrackRollDeg
-  });
+  }, new URLSearchParams(window.location.search).get('input') === 'camera');
   const ui = new UIStateStore();
   ui.setXrEntry(xrEntry.offers);
   xrEntry.onChange(() => ui.setXrEntry(xrEntry.offers));
@@ -274,7 +275,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     crouch: new CrouchState(),
     hands,
     objects,
-    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state)),
+    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state), tracking.camera),
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
@@ -423,6 +424,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       recenterAr
     },
     start: async () => {
+      const bodycamLog: BodycamLogEntry[] = [];
       installAutomationHooks({
         render_game_to_text: () => renderCaptureTextState(capture),
         advanceTime: (ms) => loop.advanceTime(ms),
@@ -458,6 +460,19 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __poseLocomotion: (state, profile, timeSec) => capture.animator.poseForCheck(state, profile, timeSec),
         __sampleAvatarPose: () => sampleAvatarPose(avatar, capture.animator),
         __toggleFaceCamera: () => capture.face.toggleCamera(),
+        __setBodycamFrame: (frame) => {
+          if (!frame) tracking.camera.release();
+          else if (!tracking.isXrPresenting()) tracking.camera.feed(frame);
+        },
+        __sampleBodycam: (includeRecorded) => sampleBodycam(capture, includeRecorded),
+        __bodycamTap: (on) => capture.face.setBodycamTap(on ? (frame, info) => bodycamLog.push({ nowMs: info.nowMs, ran: info.ran, frame }) : null),
+        __bodycamSteppedStart: (url) => capture.face.startStepped(url),
+        __bodycamSteppedFrame: (index, fps) => capture.face.steppedFrame(index, fps),
+        __drainBodycamLog: () => bodycamLog.splice(0),
+        __sampleBodycamTracker: () => {
+          const stats = capture.face.bodycamStats();
+          return stats ? { ...stats, camera: capture.face.webcam.state, cameraDelegate: capture.face.webcam.delegate, nowMs: performance.now() } : null;
+        },
         __samplePhoneChrome: () => phoneChrome.probe(),
         __phoneTraySlotPosition: (slot) => phoneChrome.traySlotPosition(slot),
         __sampleChrome: () => ({ ui: ui.getState(), vr: vrChrome.snapshot(stage.xrCamera), touch: input.touch.snapshot() }),

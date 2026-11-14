@@ -34,6 +34,7 @@
     "test:xr:object": "node --import tsx scripts/run-xr-checks.ts object",
     "test:xr:summon": "node --import tsx scripts/run-xr-checks.ts summon",
     "test:xr:face": "node --import tsx scripts/run-xr-checks.ts face",
+    "test:xr:bodycam": "node --import tsx scripts/run-xr-checks.ts bodycam",
     "test:xr:ui": "node --import tsx scripts/run-xr-checks.ts ui",
     "test:xr:avatars": "node --import tsx scripts/run-xr-checks.ts avatars",
     "test:avatars:bind": "node --conditions=development --import tsx scripts/check-avatar-bindings.ts",
@@ -54,7 +55,8 @@
     "test:vr:mock": "pnpm run test:xr:mock",
     "test:vr:flows": "pnpm run test:xr:flows",
     "check": "pnpm run verify:fast && pnpm run build",
-    "build:avatar-face": "node scripts/build-avatar-face.mjs"
+    "build:avatar-face": "node scripts/build-avatar-face.mjs",
+    "bodycam:report": "node --import tsx scripts/bodycam-clip-report.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
