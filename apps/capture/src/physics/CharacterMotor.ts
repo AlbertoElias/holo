@@ -14,6 +14,8 @@ const SNAG_FRACTION = 0.5;
 // Collision normals at least this vertical are floor (or ceiling), not walls: cos 40°, the steepest walkable slope.
 const SNAG_FLOOR_NORMAL_Y = Math.cos(THREE.MathUtils.degToRad(40));
 const CROUCH_TERRAIN_GUARD_CLEARANCE = 0.02;
+// A sink into the controller's skin smaller than this is the controller's own settling, not a fall through the floor.
+const FLOOR_SKIN_TOLERANCE = 0.004;
 const CROUCH_TERRAIN_GUARD_SAMPLE_RADIUS_RATIO = 0.04;
 const CROUCH_TERRAIN_GUARD_OFFSETS: readonly Readonly<[number, number]>[] = [
   [0, 0],
@@ -39,7 +41,17 @@ interface CharacterMotorUpdateOptions {
   // forward, magnitude ≤ 1 scales speed. Replaces the boolean move state
   // when its magnitude is non-zero.
   analogMove?: { x: number; z: number };
+  // Most horizontal acceleration (m/s^2) toward the input velocity. Without
+  // it the character starts and stops in one step, which every joint reads
+  // as a pop (the keyboard on a flat screen sets it).
+  maxAccelerationMS2?: number;
 }
+
+/** Full movement speed, in avatar heights per second (VR stick; the keyboard walks slower, see MovementSystem). */
+export const WALK_SPEED_HEIGHTS_PER_SEC = 1.8;
+// The keyboard walk is a brisk walk, one avatar height per second (1.8 m/s at 1.8 m): the shipped walk's
+// feet stay planted at it, where the full movement speed would be a jog (the owner's call, 2026-11-13).
+export const KEYBOARD_WALK_HEIGHTS_PER_SEC = 1.0;
 
 export class CharacterMotor {
   private rapierWorld: import('@dimforge/rapier3d-compat').World | undefined;
@@ -70,6 +82,7 @@ export class CharacterMotor {
   private readonly tmpMove = new THREE.Vector3();
   private readonly tmpBody = new THREE.Vector3();
   private readonly lastInputMovement = new THREE.Vector3();
+  private readonly planarVelocity = new THREE.Vector3();
 
   async init(avatarRig: AvatarRig): Promise<boolean> {
     await RAPIER.init();
@@ -90,7 +103,7 @@ export class CharacterMotor {
     // rather than hovering over it.
     this.avatarVisualOffsetY = -(this.capsuleHalfHeight + this.capsuleRadius) - avatarRig.avatarMinLocalY - this.controllerOffset();
     this.jumpSpeed = Math.sqrt(2 * Math.abs(gravity) * avatarRig.avatarHeight * 1.2);
-    this.moveSpeed = avatarRig.avatarHeight * 1.8;
+    this.moveSpeed = avatarRig.avatarHeight * WALK_SPEED_HEIGHTS_PER_SEC;
     this.avatarRigRef = avatarRig;
 
     this.characterBody = this.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
@@ -105,6 +118,7 @@ export class CharacterMotor {
     this.velocityY = 0;
     this.grounded = false;
     this.horizontalSpeed = 0;
+    this.planarVelocity.set(0, 0, 0);
     this.targetHorizontalSpeed = this.moveSpeed;
     this.spawnResolved = false;
 
@@ -114,6 +128,7 @@ export class CharacterMotor {
   update(deltaSec: number, lookYaw: number, moveState: MoveState, jumpQueued: boolean, options?: CharacterMotorUpdateOptions): void {
     if (!this.characterBody || !this.characterCollider || !this.characterController || !this.rapierWorld || !this.spawnResolved) {
       this.horizontalSpeed = 0;
+      this.planarVelocity.set(0, 0, 0);
       this.targetHorizontalSpeed = 0;
       return;
     }
@@ -141,6 +156,16 @@ export class CharacterMotor {
         this.tmpMove.normalize().multiplyScalar(this.targetHorizontalSpeed * deltaSec);
       }
     }
+    const maxAcceleration = options?.maxAccelerationMS2;
+    if (maxAcceleration !== undefined && deltaSec > 0) {
+      // Ease the velocity toward the input's; a stop eases out the same way.
+      const change = this.tmpMove.divideScalar(deltaSec).sub(this.planarVelocity);
+      const limit = maxAcceleration * deltaSec;
+      if (change.length() > limit) change.setLength(limit);
+      this.planarVelocity.add(change);
+      if (this.planarVelocity.lengthSq() < 1e-6) this.planarVelocity.set(0, 0, 0);
+      this.tmpMove.copy(this.planarVelocity).multiplyScalar(deltaSec);
+    }
     const wasGrounded = this.grounded;
     if (allowJump && jumpQueued && this.grounded) {
       this.velocityY = this.jumpSpeed;
@@ -163,6 +188,7 @@ export class CharacterMotor {
     if (isFiniteVector3Like(corrected) && this.snagged(corrected)) corrected = this.moveSplit(corrected, this.velocityY * deltaSec);
     if (!isFiniteVector3Like(corrected)) {
       this.horizontalSpeed = 0;
+      this.planarVelocity.set(0, 0, 0);
       this.lastInputMovement.set(0, 0, 0);
       if (!this.invalidMovementLogged) {
         console.warn('Skipping invalid character movement correction.', corrected);
@@ -201,6 +227,14 @@ export class CharacterMotor {
       this.rapierWorld.propagateModifiedBodyPositionsToColliders();
     }
     this.horizontalSpeed = Math.hypot(total.x, total.z) / Math.max(deltaSec, 1e-6);
+    // A wall that stops the body stops its momentum too. Only the part along the way it was going is kept: the
+    // collider's slide along the wall is recomputed each step, and kept as momentum it would drift the body sideways.
+    if (maxAcceleration !== undefined && hasInput) {
+      const direction = this.tmpMove.setY(0).normalize();
+      const along = Math.max(0, (correctedX * direction.x + correctedZ * direction.z) / Math.max(deltaSec, 1e-6));
+      this.planarVelocity.copy(direction).multiplyScalar(along);
+    }
+    else if (maxAcceleration === undefined) this.planarVelocity.set(0, 0, 0);
 
     this.characterBody.setNextKinematicTranslation({
       x: current.x + total.x,
@@ -213,6 +247,9 @@ export class CharacterMotor {
 
     this.grounded = this.characterController.computedGrounded();
     if (stickToTerrain && this.enforceTerrainClearance()) {
+      this.grounded = true;
+    }
+    else if (wasGrounded && hasInput && this.velocityY <= 0 && this.restoreFloorSkin()) {
       this.grounded = true;
     }
     if (this.grounded && this.velocityY < 0) {
@@ -304,6 +341,7 @@ export class CharacterMotor {
       this.velocityY = groundedStickVelocity;
       this.grounded = true;
       this.horizontalSpeed = 0;
+      this.planarVelocity.set(0, 0, 0);
       return;
     }
 
@@ -314,6 +352,7 @@ export class CharacterMotor {
       this.velocityY = groundedStickVelocity;
       this.grounded = true;
       this.horizontalSpeed = 0;
+      this.planarVelocity.set(0, 0, 0);
       return;
     }
 
@@ -322,6 +361,7 @@ export class CharacterMotor {
     this.velocityY = groundedStickVelocity;
     this.grounded = true;
     this.horizontalSpeed = 0;
+    this.planarVelocity.set(0, 0, 0);
   }
 
   private setCharacterBodyPosition(position: THREE.Vector3): void {
@@ -405,6 +445,7 @@ export class CharacterMotor {
     this.velocityY = 0;
     this.grounded = true;
     this.horizontalSpeed = 0;
+    this.planarVelocity.set(0, 0, 0);
     this.spawnResolved = true;
     return true;
   }
@@ -528,6 +569,29 @@ export class CharacterMotor {
     if (current.y + 1e-4 >= minBodyY) return false;
 
     this.tmpBody.set(current.x, minBodyY, current.z);
+    this.setCharacterBodyPosition(this.tmpBody);
+    this.velocityY = groundedStickVelocity;
+    return true;
+  }
+
+  /**
+   * Lifts a walking capsule that has sunk into its skin back to the controller's offset over the floor under its
+   * centre. Rapier's cast ignores a floor the capsule already touches at time zero, so a step that leaves it a few
+   * millimetres low lets the next steps fall through the floor's surface 8 mm a frame (the scan floor of the place
+   * walk, 3 cm deep). Only a sink within the skin is restored: more is a step's edge under the centre, which the
+   * autostep owns.
+   */
+  private restoreFloorSkin(): boolean {
+    const { characterBody: body, worldCollider: floor } = this;
+    if (!body || !floor) return false;
+    const current = body.translation();
+    const reach = this.capsuleHalfHeight + this.capsuleRadius;
+    const offset = this.controllerOffset();
+    const toi = floor.castRay(new RAPIER.Ray({ x: current.x, y: current.y, z: current.z }, { x: 0, y: -1, z: 0 }), reach + offset, false);
+    if (toi < 0) return false;
+    const sunk = offset - (toi - reach);
+    if (sunk <= FLOOR_SKIN_TOLERANCE || sunk > offset) return false;
+    this.tmpBody.set(current.x, current.y + sunk, current.z);
     this.setCharacterBodyPosition(this.tmpBody);
     this.velocityY = groundedStickVelocity;
     return true;

@@ -76,7 +76,7 @@ runs on a Quest, and the player replays into IWER with deterministic
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Recorder | emulated session against the dev server (same code path as a headset) | `fixtures/input-recordings/iwer-emulated-pinch.json`: 2 hands × 25 joints, 30 Hz; headset: `headset-open-fist-pinch-point-wave-reach.json` (2026-10-18, 279 frames, 100% XRHand) |
-| Fidelity thresholds on real input | same, on the headset fixture (2026-10-19, after shoulder-protraction IK) | 100% XRHand; worst curl error 10.1° (thumb), r ≥ 0.95, lag 0; pinch agreement 0.99; jerk ×1.00; wrist rotation 0.0°; wrist position p95 2.0/3.0 cm (5.9/7.9 cm before protraction; IK lag over 39–45 cm travel) → ceiling recalibrated 2 cm → 4 cm in `scripts/lib/hand-fidelity.mjs` |
+| Fidelity thresholds on real input | same, on the headset fixture (2026-10-19, after shoulder-protraction IK) | 100% XRHand; worst curl error 10.1° (thumb), r ≥ 0.95, lag 0; pinch agreement 0.99; jerk ×1.00; wrist rotation 0.0°; wrist position p95 2.0/3.0 cm (5.9/7.9 cm before protraction; IK lag over 39–45 cm travel) → ceiling recalibrated 2 cm → 4 cm in `apps/capture/scripts/lib/hand-fidelity.ts` |
 | Deterministic replay through XRHand | `pnpm --filter @holoim/capture run test:xr:hands` | Identical metrics on macOS and the 2-vCPU container, with and without video; 100% of tracked frames from XRHand, none from mock input |
 | Fidelity thresholds | same, on `iwer-poses-relaxed-point-pinch.json` | curl ≤ 15°, correlation ≥ 0.9, wrist ≤ 2 cm / 10°, segment jitter ≤ 1.5× (B-005 fixed) |
 | Catches real regressions | reintroduce the B-004 camera parenting | Fails at 2,083 cm wrist error |

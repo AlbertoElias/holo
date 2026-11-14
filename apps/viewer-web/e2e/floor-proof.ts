@@ -468,24 +468,38 @@ export async function measureGlass(page: Page, { control = false, debugImages = 
       return at(i0) + (at(i0 + 1) - at(i0)) * t;
     };
     // Inside the bent dome, with a centimetre's give across each boundary (the depth read back, the half-float
-    // heights): under the floor by 1 cm in the flat dome, which is at most 1 cm in the bent one, and out through
+    // heights): under the floor by 1 cm in the flat dome, which is at most 1 cm in the bent one (normal to it), and out through
     // the wall by at most 1 cm anywhere: the dome scaled about its centre by give over its farthest reach
     // (no point of it is farther than the radii's diagonal), and the bent dome's floor only compresses it. Exactly, with `give` 0.
     const reach = Math.hypot(radii.x, radii.y, radii.z);
     const wallFor = (metres: number) => (1 + metres / reach) ** n;
     let give = 0.01;
     let wall = wallFor(give);
-    const insideExact = (point: Three.Vector3) => {
-      const qx = (point.x - base.x) / radii.x;
-      const qz = (point.z - base.z) / radii.z;
+    // The bent floor's rise over a world (x, z).
+    const riseAt = (x: number, z: number) => {
+      const qx = (x - base.x) / radii.x;
+      const qz = (z - base.z) / radii.z;
       const rho = (Math.abs(qx) ** n + Math.abs(qz) ** n) ** (1 / n);
       const s = Math.min(Math.max((rho - BEND_FROM) / (1 - BEND_FROM), 0), 1);
       let angle = Math.atan2(qz, qx);
       if (angle < 0) angle += Math.PI * 2;
-      const rise = lift(angle) * s * s * (3 - 2 * s);
+      return lift(angle) * s * s * (3 - 2 * s);
+    };
+    const insideExact = (point: Three.Vector3) => {
+      const qx = (point.x - base.x) / radii.x;
+      const qz = (point.z - base.z) / radii.z;
+      const rise = riseAt(point.x, point.z);
       const y = point.y - base.y;
       const flat = y >= radii.y ? y : (y - rise) / (1 - rise / radii.y);
-      if (flat < -give) return false;
+      if (flat < 0) {
+        // The floor's give is normal to the bent floor: a centimetre across it is √(1 + |∇rise|²) cm down. Where the rim
+        // climbs a cliff between two bins (4.8 m/m), a vertical centimetre is under a millimetre of the point's place,
+        // less than the depth read back holds; on flat and gentle floor the factor is 1, as strict as before.
+        const d = 0.005;
+        const gx = (riseAt(point.x + d, point.z) - riseAt(point.x - d, point.z)) / (2 * d);
+        const gz = (riseAt(point.x, point.z + d) - riseAt(point.x, point.z - d)) / (2 * d);
+        if (flat < -give * Math.hypot(1, gx, gz)) return false;
+      }
       return Math.abs(qx) ** n + Math.abs(flat / radii.y) ** n + Math.abs(qz) ** n <= wall;
     };
     const centre = base.clone().add(new Vector3(0, radii.y / 2, 0));

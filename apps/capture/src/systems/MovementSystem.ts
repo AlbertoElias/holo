@@ -1,9 +1,12 @@
 import { createSystem } from '@iwsdk/core';
 import * as THREE from 'three';
+import { KEYBOARD_WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
 const CROUCH_MOVE_SPEED_AT_FULL = 0.75;
 const CROUCH_MIN_EFFECT_THRESHOLD = 0.05;
+// Keyboard walking reaches full speed in about a quarter second: an instant start or stop reads as a pop on every joint.
+const KEYBOARD_ACCELERATION_MS2 = 12;
 
 /**
  * Crouch, then the character motor: input movement, gravity, jumps and the
@@ -33,8 +36,9 @@ export class MovementSystem extends createSystem() {
     const crouchAmount = c.crouch.amount;
     const stick = frame.vrActive ? c.locomotion.moveVector(this.stickMove) : { x: 0, z: 0 };
     motor.update(deltaSec, c.camera.lookYaw, input.moveState, input.consumeJumpQueued(), {
-      moveSpeedMultiplier: 1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount,
+      moveSpeedMultiplier: (1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount) * (frame.vrActive ? 1 : KEYBOARD_WALK_HEIGHTS_PER_SEC / WALK_SPEED_HEIGHTS_PER_SEC),
       allowJump: true,
+      ...(frame.vrActive ? {} : { maxAccelerationMS2: KEYBOARD_ACCELERATION_MS2 }),
       stickToTerrain: crouchAmount >= CROUCH_MIN_EFFECT_THRESHOLD,
       ...(frame.bodyTracking ? { externalDisplacement: body.displacement } : reachStep ? { externalDisplacement: reachStep } : {}),
       ...(stick.x !== 0 || stick.z !== 0 ? { analogMove: stick } : {})

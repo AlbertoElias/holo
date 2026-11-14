@@ -163,7 +163,9 @@ it from the item below instead of duplicating its status here.
   house avatar). Two decisions wait for the user: how to treat faces at
   card size, and whether props and sets come before slice 2. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
-- [ ] Make all avatar movement look completely natural, in XR and 2D; the
+- [ ] Make all avatar movement look completely natural, in XR and 2D
+  (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)
+  owns it and its measured gaps; the wishlist below feeds its fixes). The
   room-scale body solver
   ([`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md))
   is correct by its metrics but still reads as robotic. Nail the IK and the
