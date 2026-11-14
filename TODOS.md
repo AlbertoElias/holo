@@ -152,9 +152,9 @@ it from the item below instead of duplicating its status here.
   poem "The part I didn't say" played but did not act). An agent directs a
   take as a beat sheet, on the same bones and face channels a phone or
   headset drives; an audition every avatar must pass; a first house avatar
-  to replace the stand-in. Reviewed, not started: it begins
-  once the user has answered the phone-capture and natural-avatar-motion
-  briefs. Owned by
+  to replace the stand-in. Reviewed, not started; the user answered the
+  phone-capture and natural-avatar-motion briefs on the same day, so it
+  can start. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D; the
   room-scale body solver

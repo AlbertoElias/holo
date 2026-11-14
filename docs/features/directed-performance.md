@@ -12,8 +12,9 @@ working files in the ignored `output/platform-poem/` of the
 `feature/poem-character-models` worktree), and Astra's own notes on it;
 Claude's showcase pieces (`docs/product/concepts/agent-authored-holograms.md`,
 IDEA-076); the two mandates in flight, `docs/features/phone-capture.md`
-(branch `feature/phone-capture`) and `docs/features/natural-avatar-motion.md`
-(branch `feature/natural-avatar-motion`), both drafts; and the user's
+(approved, slices 1 and 2 on `main`) and
+`docs/features/natural-avatar-motion.md` (reviewed, on branch
+`feature/natural-avatar-motion`, not on `main` yet); and the user's
 direction on avatars (2026-11-13): the shipped avatar is a stand-in found
 online; avatars should be expressive, match the hologram's style and what
 the author is saying, be personalisable, be able to look like the author,
@@ -359,7 +360,7 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
 
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
-mandate briefs.
+mandate briefs. Both were answered the same day, so the build can start.
 
 ## Test plan and evidence
 
