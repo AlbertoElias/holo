@@ -43,7 +43,10 @@ export interface Beat {
   readonly at: number;
   /** Default hold for its directions, seconds. */
   readonly hold?: number;
+  /** The author's working note: what the performer does. */
   readonly note?: string;
+  /** What a viewer should understand from this beat, in a viewer's words. The review compares a fresh reader's account against it. */
+  readonly intent?: string;
   readonly directions: readonly Direction[];
 }
 
@@ -61,6 +64,8 @@ export interface PerformerSpec {
 
 export interface BeatSheet {
   readonly title: string;
+  /** What a viewer should come away with from the whole piece. The review compares a fresh reader's account against it. */
+  readonly intent?: string;
   readonly duration: number;
   readonly fps?: number;
   /** false: no breath, blinks, eye movement or finger settle. Default true. */
@@ -142,6 +147,13 @@ export function envelope(t: number, r: Resolved, depth = 0.08, overshoot = 0.05)
   const s = (t - holdEnd) / r.settle;
   if (r.persistent) return 1;
   return s >= 1 ? 0 : 1 - smoother(s);
+}
+
+/** A beat's span: from its earliest anticipation to the end of its last settle (a persistent direction's ends after its attack plus its settle time). */
+export function beatSpan(beat: Beat): { from: number; to: number } {
+  const rs = beat.directions.map((d) => resolveTiming(beat, d));
+  if (!rs.length) return { from: beat.at, to: beat.at };
+  return { from: Math.max(0, Math.min(...rs.map((r) => r.start))), to: Math.max(...rs.map((r) => r.persistent ? r.at + r.attack + r.settle : r.end)) };
 }
 
 export function validateSheet(sheet: BeatSheet): string[] {

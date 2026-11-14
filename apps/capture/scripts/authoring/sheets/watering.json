@@ -1,0 +1,36 @@
+{
+  "title": "Does it need water?",
+  "intent": "How to tell a potted plant needs water: push a finger into the soil, and if it is dry, water it.",
+  "duration": 9,
+  "performers": [
+    { "id": "p", "avatar": "stock", "at": [0, 0], "facing": 50, "seed": 11 }
+  ],
+  "marks": {
+    "soil": [0.345, 1.04, 0.29],
+    "poke": [0.345, 1.09, 0.29],
+    "fingertip": [0.27, 1.32, 0.13],
+    "pour": [0.27, 1.29, 0.38],
+    "viewer": [0, 1.55, 2.5]
+  },
+  "beats": [
+    { "id": "look", "performer": "p", "at": 0.3, "hold": 1.8, "intent": "She looks at the plant's soil.", "directions": [
+      { "kind": "look", "at": "soil", "head": 0.7 } ] },
+    { "id": "grip", "performer": "p", "at": 0, "hold": 9, "intent": "She holds a watering can in her right hand.", "directions": [
+      { "kind": "hand", "side": "right", "shape": "grip", "attack": 0.01 } ] },
+    { "id": "point", "performer": "p", "at": 0.6, "hold": 2.6, "intent": "She points one finger.", "directions": [
+      { "kind": "hand", "side": "left", "shape": "point" } ] },
+    { "id": "poke", "performer": "p", "at": 0.7, "hold": 0.7, "intent": "She pushes a finger into the soil to feel it.", "directions": [
+      { "kind": "reach", "side": "left", "at": "poke", "stopShort": 0, "palm": "down", "attack": 0.6, "settle": 0.4 } ] },
+    { "id": "check", "performer": "p", "at": 2.1, "hold": 0.9, "intent": "She lifts the finger and looks at it: the soil is dry.", "directions": [
+      { "kind": "reach", "side": "left", "at": "fingertip", "stopShort": 0, "palm": "toward", "attack": 0.5, "settle": 0.7 },
+      { "kind": "look", "at": "p.leftHand", "head": 0.8, "attack": 0.3, "settle": 0.4 } ] },
+    { "id": "lift-can", "performer": "p", "at": 3.6, "hold": 3.0, "intent": "She lifts the can over the pot.", "directions": [
+      { "kind": "reach", "side": "right", "at": "pour", "stopShort": 0, "palm": "in", "attack": 0.9, "settle": 0.9 },
+      { "kind": "look", "at": "soil", "head": 0.6, "attack": 0.4, "settle": 0.5 } ] },
+    { "id": "pour", "performer": "p", "at": 4.5, "hold": 1.7, "intent": "She tips the can and waters the plant.", "directions": [
+      { "kind": "reach", "side": "right", "at": "pour", "stopShort": 0, "palm": "down", "attack": 0.5, "settle": 0.5 } ] },
+    { "id": "done", "performer": "p", "at": 7.4, "hold": 1.2, "intent": "Done; she is satisfied.", "directions": [
+      { "kind": "expression", "shape": "smile" },
+      { "kind": "look", "at": "viewer", "head": 0.7 } ] }
+  ]
+}

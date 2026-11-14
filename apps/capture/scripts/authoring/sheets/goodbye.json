@@ -1,5 +1,6 @@
 {
   "title": "The goodbye",
+  "intent": "Two people part: he leaves, she wants him to stay, nearly stops him, and lets him go.",
   "duration": 6,
   "performers": [
     { "id": "her", "avatar": "stock", "at": [-0.42, 0], "facing": 70, "seed": 11 },
@@ -7,33 +8,33 @@
   ],
   "marks": { "door": [1.6, 1.55, 1.3], "floor": [0.05, 0, 0.55] },
   "beats": [
-    { "id": "h-look", "performer": "him", "at": 0, "hold": 0.8, "note": "He looks at her once more.", "directions": [
+    { "id": "h-look", "performer": "him", "at": 0, "hold": 0.8, "note": "He looks at her once more.", "intent": "He looks at her one last time.", "directions": [
       { "kind": "look", "at": "her.head" } ] },
-    { "id": "r-look", "performer": "her", "at": 0.15, "hold": 1.6, "note": "She holds his eyes, hoping.", "directions": [
+    { "id": "r-look", "performer": "her", "at": 0.15, "hold": 1.6, "note": "She holds his eyes, hoping.", "intent": "She looks back at him, hoping he will stay.", "directions": [
       { "kind": "look", "at": "him.head", "head": 0.5 },
       { "kind": "expression", "shape": "hope", "strength": 0.7, "hold": 1.2 } ] },
-    { "id": "h-turn", "performer": "him", "at": 1.0, "hold": 2.6, "note": "He turns to go.", "directions": [
+    { "id": "h-turn", "performer": "him", "at": 1.0, "hold": 2.6, "note": "He turns to go.", "intent": "He turns away to leave.", "directions": [
       { "kind": "turn", "toward": "door", "body": "whole", "attack": 0.9 },
       { "kind": "look", "at": "door", "head": 0.7, "delay": -0.15 } ] },
-    { "id": "h-step", "performer": "him", "at": 1.75, "note": "One step away.", "directions": [
+    { "id": "h-step", "performer": "him", "at": 1.75, "note": "One step away.", "intent": "He steps away from her.", "directions": [
       { "kind": "step", "foot": "right", "by": [0, 0.32], "follow": true, "attack": 0.55, "settle": 0.45 } ] },
-    { "id": "r-reach", "performer": "her", "at": 1.35, "hold": 0.45, "note": "Her hand goes after him...", "directions": [
+    { "id": "r-reach", "performer": "her", "at": 1.35, "hold": 0.45, "note": "Her hand goes after him...", "intent": "She reaches out to stop him.", "directions": [
       { "kind": "reach", "side": "right", "at": "him.rightUpperArm", "stopShort": 0.16, "palm": "toward", "attack": 0.7, "settle": 1.1 },
       { "kind": "weight", "toward": "forward", "amount": 0.7, "attack": 0.6, "hold": 0.5, "settle": 1.0 } ] },
-    { "id": "r-stop", "performer": "her", "at": 2.2, "hold": 1.2, "note": "...and she stops herself.", "directions": [
+    { "id": "r-stop", "performer": "her", "at": 2.2, "hold": 1.2, "note": "...and she stops herself.", "intent": "She stops herself before touching him.", "directions": [
       { "kind": "hand", "side": "right", "shape": "withheld", "attack": 0.35 },
       { "kind": "expression", "shape": "held", "hold": 1.5 } ] },
-    { "id": "r-down", "performer": "her", "at": 2.6, "hold": 1.1, "note": "She looks down.", "directions": [
+    { "id": "r-down", "performer": "her", "at": 2.6, "hold": 1.1, "note": "She looks down.", "intent": "She looks down, giving in.", "directions": [
       { "kind": "look", "at": "floor", "head": 0.55 },
       { "kind": "expression", "shape": "eyes-down", "strength": 0.6 } ] },
-    { "id": "r-breath", "performer": "her", "at": 3.9, "hold": 0.3, "note": "A breath in.", "directions": [
+    { "id": "r-breath", "performer": "her", "at": 3.9, "hold": 0.3, "note": "A breath in.", "intent": "She takes a breath to steady herself.", "directions": [
       { "kind": "expression", "shape": "breath", "strength": 0.8, "attack": 0.4, "settle": 0.5 } ] },
-    { "id": "h-glance", "performer": "him", "at": 4.4, "hold": 0.5, "note": "He almost looks back.", "directions": [
+    { "id": "h-glance", "performer": "him", "at": 4.4, "hold": 0.5, "note": "He almost looks back.", "intent": "He almost looks back at her, but doesn't.", "directions": [
       { "kind": "look", "at": "her.head", "head": 0.8, "attack": 0.4, "settle": 0.6 } ] },
-    { "id": "r-after", "performer": "her", "at": 4.4, "hold": 1.1, "note": "She lets him go, with a small brave smile.", "directions": [
+    { "id": "r-after", "performer": "her", "at": 4.4, "hold": 1.1, "note": "She lets him go, with a small brave smile.", "intent": "She lets him go with a small, brave smile.", "directions": [
       { "kind": "look", "at": "him.head", "head": 0.3 },
       { "kind": "expression", "shape": "small-smile", "strength": 0.65, "hold": 0.7 } ] },
-    { "id": "r-end", "performer": "her", "at": 5.3, "hold": 0.5, "directions": [
+    { "id": "r-end", "performer": "her", "at": 5.3, "hold": 0.5, "intent": "She is sad once he has gone.", "directions": [
       { "kind": "expression", "shape": "sad", "strength": 0.45, "attack": 0.4 } ] }
   ]
 }

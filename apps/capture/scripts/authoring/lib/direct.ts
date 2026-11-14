@@ -14,7 +14,7 @@ import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
 import { EXPRESSIONS, envelope, resolveTiming, validateSheet, type BeatSheet, type Direction, type PerformerSpec, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
-import { armRestTarget, bodyUp, moveBoneWorld, plantFeet, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE, yawAboutHips } from './pose.ts';
+import { armRestOffset, bodyUp, hangArm, moveBoneWorld, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 
 const SIDES = ['left', 'right'] as const;
 const DEG = Math.PI / 180;
@@ -24,6 +24,30 @@ const STEP_LIFT = 0.06;
 const ROOT_LAG = 0.18;
 const FINGER_STAGGER = 0.03;
 const FINGER_ORDER: Readonly<Record<FingerName, number>> = { index: 0, middle: 1, ring: 2, little: 3, thumb: 1.5 };
+
+// Life every performer has underneath its directions. Sized so a held pose
+// still moves at feed-card size, where a standing performer is about 190 CSS
+// px tall on a phone (about 9 mm per CSS px, measured by `review.ts`): head
+// and hands travel more than a pixel a second. Half these read as frozen to
+// fresh readers.
+/** Hips sway, metres: side to side and front to back. */
+const SWAY = { x: 0.022, z: 0.012 } as const;
+/** Breath, degrees of pitch per spine bone at full inhale. */
+const BREATH_DEG = [['spine', 1.5], ['chest', 2.5], ['upperChest', 1.6]] as const;
+const SHOULDER_LIFT_DEG = 2.5;
+/** The hanging hands rise and fall with the breath, metres. */
+const ARM_BREATH = 0.012;
+/** The head's slow drift, degrees of yaw (pitch is 0.6 of it). */
+const HEAD_DRIFT_DEG = 3.5;
+
+// Leaning into a reach: the palm can go this far from the shoulder before the
+// body leans (a share of the arm, plus the palm's offset from the wrist).
+const COMFORT_REACH = 0.94;
+const PALM_OFFSET = 0.07;
+/** The most the hips move toward a reach, and the most the spine leans. */
+const LEAN_HIPS = 0.04;
+const LEAN_MAX_DEG = 28;
+const LEAN_SHARE: ReadonlyArray<readonly [VrmHumanoidBone, number]> = [['spine', 0.35], ['chest', 0.4], ['upperChest', 0.25]];
 
 export interface PerformerTrack {
   readonly spec: PerformerSpec;
@@ -36,8 +60,8 @@ export interface PerformerTrack {
   readonly weights: Map<THREE.Object3D, { targets: number; values: Float32Array; meshes: THREE.Mesh[] }>;
   /** The performer root (stage placement) per frame. */
   readonly root: { position: Float32Array; rotation: Float32Array };
-  /** Palm-to-target distance at the middle of each reach's hold, by beat id. */
-  readonly reaches: { beat: string; side: Side; targetDistance: number; stopShort: number }[];
+  /** Palm-to-target distance at the middle of each reach's hold, by beat id; `outOfReach`, how far the goal stayed beyond the arm after leaning, at most, over the reach. */
+  readonly reaches: { beat: string; side: Side; targetDistance: number; stopShort: number; outOfReach: number }[];
 }
 
 export interface SolvedTake {
@@ -63,6 +87,11 @@ interface Cast {
   readonly feetMid0: THREE.Vector3;
   /** World positions of humanoid bones after the latest solve, for other performers to look and reach at. */
   readonly seen: Map<VrmHumanoidBone, THREE.Vector3>;
+  /** The solve before that, and the take times of both, so a performer solved later in the frame is seen where it will be now. */
+  readonly seenBefore: Map<VrmHumanoidBone, THREE.Vector3>;
+  seenAt: { t: number; before: number };
+  /** Per reach: the most its palm fell short of its goal after leaning (metres). */
+  readonly shortfall: Map<Resolved, number>;
   readonly morphing: { node: THREE.Object3D; meshes: THREE.Mesh[] }[];
 }
 
@@ -104,10 +133,10 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
       spec, a, live: new LivenessFace(spec.seed ?? 0x5eed + index * 7919), seed: spec.seed ?? index + 1, dirs,
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
-      seen: new Map(), morphing
+      seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing
     };
   });
-  for (const c of cast) see(c);
+  for (const c of cast) see(c, -Infinity);
 
   const tracks: PerformerTrack[] = cast.map((c) => {
     const rotations = new Map<THREE.Object3D, Float32Array>();
@@ -128,6 +157,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
 
   for (let f = 0; f < frames; f += 1) {
     const t = times[f]!;
+    solving.t = t;
     cast.forEach((c, ci) => {
       fixPersistent(cast, c, t);
       solveFrame(cast, c, t, 1 / fps, life, flat);
@@ -137,7 +167,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
       for (const [, w] of tr.weights) w.values.set(w.meshes[0]!.morphTargetInfluences!, f * w.targets);
       c.a.frame.position.toArray(tr.root.position, f * 3);
       c.a.frame.quaternion.toArray(tr.root.rotation, f * 4);
-      see(c);
+      see(c, t);
     });
     // Measured as the file plays: every performer at this frame. (A performer
     // solved earlier in the cast aims at the others' previous frame.)
@@ -145,7 +175,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
       const d = r.direction as Extract<Direction, { kind: 'reach' }>;
       const target = pointOf(cast, cast[c]!.spec, d.at);
       const palm = cast[c]!.a.hands[d.side]?.palmCenter(new THREE.Vector3()) ?? cast[c]!.a.arms[d.side].hand.getWorldPosition(new THREE.Vector3());
-      tracks[c]!.reaches.push({ beat: r.beat.id, side: d.side, targetDistance: Math.round(palm.distanceTo(target) * 10000) / 10000, stopShort: d.stopShort });
+      tracks[c]!.reaches.push({ beat: r.beat.id, side: d.side, targetDistance: Math.round(palm.distanceTo(target) * 10000) / 10000, stopShort: d.stopShort, outOfReach: Math.round((cast[c]!.shortfall.get(r) ?? 0) * 10000) / 10000 });
     }
   }
   return { sheet, fps, times, tracks };
@@ -180,13 +210,19 @@ function fixPersistent(cast: Cast[], c: Cast, t: number): void {
   }
 }
 
-function see(c: Cast): void {
+function see(c: Cast, t: number): void {
   c.a.frame.updateMatrixWorld(true);
-  for (const [name, b] of c.a.bind) c.seen.set(name, b.bone.getWorldPosition(c.seen.get(name) ?? new THREE.Vector3()));
+  for (const [name, b] of c.a.bind) {
+    const now = c.seen.get(name);
+    if (now) c.seenBefore.set(name, (c.seenBefore.get(name) ?? new THREE.Vector3()).copy(now));
+    c.seen.set(name, b.bone.getWorldPosition(now ?? new THREE.Vector3()));
+  }
+  c.seenAt = { t, before: c.seenAt.t };
 }
 
-// Marks of the sheet being solved, set at the start of `solveTake`.
+// Marks of the sheet being solved, set at the start of `solveTake`; and the take time being solved.
 const markTable = new Map<string, THREE.Vector3>();
+const solving = { t: 0 };
 
 function pointOf(cast: Cast[], self: PerformerSpec, p: Point): THREE.Vector3 {
   if (typeof p !== 'string') return new THREE.Vector3(p[0], p[1], p[2]);
@@ -196,8 +232,13 @@ function pointOf(cast: Cast[], self: PerformerSpec, p: Point): THREE.Vector3 {
     if (!m) throw new Error(`no mark ${p}`);
     return m.clone();
   }
-  const at = cast.find((c) => c.spec.id === who)?.seen.get(bone as VrmHumanoidBone);
-  if (!at) throw new Error(`${self.id}: cannot find ${p}`);
+  const other = cast.find((c) => c.spec.id === who);
+  const at = other?.seen.get(bone as VrmHumanoidBone);
+  if (!other || !at) throw new Error(`${self.id}: cannot find ${p}`);
+  // A performer not solved yet this frame is where its last move carries it now, not where it was.
+  const { t, before } = other.seenAt;
+  const was = other.seenBefore.get(bone as VrmHumanoidBone);
+  if (was && Number.isFinite(before) && t < solving.t && t > before) return at.clone().lerp(was, -(solving.t - t) / (t - before));
   return at.clone();
 }
 
@@ -298,11 +339,15 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   }
   const breathT = (2 * Math.PI * t) / (3.8 + (c.seed % 5) * 0.15) + phase;
   if (life) {
-    hipsLocal.x += 0.004 * Math.sin((2 * Math.PI * t) / 7.3 + phase);
-    hipsLocal.z += 0.003 * Math.sin((2 * Math.PI * t) / 9.1 + phase * 2);
+    // Postural sway: a slow drift of the weight between the feet, large enough to see at card size.
+    hipsLocal.x += SWAY.x * (Math.sin((2 * Math.PI * t) / 7.3 + phase) + 0.35 * Math.sin((2 * Math.PI * t) / 3.1 + phase * 3));
+    hipsLocal.z += SWAY.z * Math.sin((2 * Math.PI * t) / 9.1 + phase * 2);
   }
   const hips = a.humanoid.bone('hips')!;
   const bodyQ = a.body.getWorldQuaternion(new THREE.Quaternion());
+  // A reach whose goal is beyond the arm (the other performer moved away) is met by leaning toward it.
+  const lean = flat ? undefined : leanFor(cast, c, t, hipsLocal);
+  if (lean) hipsLocal.addScaledVector(lean.dir.clone().applyQuaternion(bodyQ.clone().invert()), lean.hipShift);
   moveBoneWorld(hips, hipsLocal.clone().applyQuaternion(bodyQ));
   if (pelvisRoll) rotateBoneWorld(hips, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ), -pelvisRoll));
   // The chest counters the pelvis so the head stays over the feet.
@@ -317,15 +362,28 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     // Breath: chest and spine rise and fall; the shoulders lift with the inhale.
     const inhale = Math.sin(breathT);
     const right = new THREE.Vector3(-1, 0, 0).applyQuaternion(bodyQ);
-    for (const [name, deg] of [['spine', 0.5], ['chest', 0.9], ['upperChest', 0.6]] as const) {
+    for (const [name, deg] of BREATH_DEG) {
       const b = a.humanoid.bone(name);
       if (b) rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(right, -deg * DEG * inhale));
     }
     for (const s of SIDES) {
       const b = a.humanoid.bone(`${s}Shoulder`);
       const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ);
-      if (b) rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(fwd, (s === 'left' ? -1 : 1) * 0.8 * DEG * (inhale + 1) / 2));
+      if (b) rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(fwd, (s === 'left' ? -1 : 1) * SHOULDER_LIFT_DEG * DEG * (inhale + 1) / 2));
     }
+  }
+  if (lean && lean.theta > 0) {
+    // Lean from the waist toward the goal, the head kept level enough to hold its look.
+    const axis = new THREE.Vector3().crossVectors(bodyUp(a), lean.dir).normalize();
+    let carry = 0;
+    for (const [name, k] of LEAN_SHARE) {
+      const b = a.humanoid.bone(name);
+      if (!b) { carry += k; continue; }
+      rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(axis, lean.theta * (k + carry)));
+      carry = 0;
+    }
+    const head = a.humanoid.bone('neck') ?? a.humanoid.bone('head')!;
+    rotateBoneWorld(head, new THREE.Quaternion().setFromAxisAngle(axis, -0.5 * lean.theta));
   }
   a.frame.updateMatrixWorld(true);
 
@@ -354,13 +412,26 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(side, -pitch * k));
     }
   }
+  if (life) {
+    // The head is never quite still: a slow drift, less while it holds a look.
+    const head = a.humanoid.bone('head')!;
+    const k = headTarget ? 1 - 0.6 * clamp01(headTarget.weight) : 1;
+    const up = bodyUp(a);
+    const side = new THREE.Vector3(1, 0, 0).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()));
+    const yaw = HEAD_DRIFT_DEG * DEG * k * (Math.sin((2 * Math.PI * t) / 6.7 + phase * 1.3) + 0.4 * Math.sin((2 * Math.PI * t) / 2.9 + phase));
+    const pitch = HEAD_DRIFT_DEG * 0.6 * DEG * k * Math.sin((2 * Math.PI * t) / 8.3 + phase * 0.7);
+    rotateBoneWorld(head, new THREE.Quaternion().setFromAxisAngle(up, yaw));
+    rotateBoneWorld(head, new THREE.Quaternion().setFromAxisAngle(side, pitch));
+  }
   a.frame.updateMatrixWorld(true);
 
   // 7. Arms: hanging (following the torso), or reaching with the palm to a point short of a target.
   const torsoYaw = twist * TURN_SHARE.slice(0, 4).reduce((s, [, w]) => s + w, 0);
   for (const s of SIDES) {
-    const rest = toWorld(a, yawAboutHips(a, armRestTarget(a, s), torsoYaw).add(hipsLocal));
-    if (life) rest.addScaledVector(bodyUp(a), 0.004 * Math.sin(breathT));
+    // The wrist's rest offset from the shoulder, turned with the torso and the body.
+    const local = armRestOffset(a, s).applyAxisAngle(new THREE.Vector3(0, 1, 0), torsoYaw);
+    const rest = toWorld(a, local).sub(toWorld(a, new THREE.Vector3()));
+    if (life) rest.addScaledVector(bodyUp(a), ARM_BREATH * Math.sin(breathT));
     const reaches = c.dirs.filter((r) => r.direction.kind === 'reach' && r.direction.side === s);
     let w = 0;
     let goal: THREE.Vector3 | undefined;
@@ -379,7 +450,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       const p = d.palm === 'up' ? up : d.palm === 'down' ? up.clone().negate() : d.palm === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
       palm = palm ? palm.lerp(p, clamp01(e)).normalize() : p.clone();
     }
-    solveArm(a, s, rest);
+    hangArm(a, s, rest);
     a.frame.updateMatrixWorld(true);
     const hand = a.hands[s];
     if (goal && w !== 0) {
@@ -391,9 +462,11 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       if (!flat) point.addScaledVector(new THREE.Vector3(s === 'left' ? 1 : -1, 0, 0.6).applyQuaternion(bodyQ), 0.04 * arc);
       const toward = restNormal.clone().lerp(palm!, clamp01(w)).normalize();
       const wrist = point.clone();
+      // The elbow turns from hanging (back) to the rig's reaching bend (out) as the arm lifts.
+      const elbowHint = restElbowHint(a, s).lerp(a.arms[s].elbowHintLocal, clamp01(w)).normalize();
       const at = new THREE.Vector3();
       for (let i = 0; i < 6; i += 1) {
-        solveArm(a, s, wrist, { palmToward: toward, wristBend: flat ? 0 : 0.35 * clamp01(w) });
+        solveArm(a, s, wrist, { palmToward: toward, wristBend: flat ? 0 : 0.35 * clamp01(w), elbowHint });
         a.frame.updateMatrixWorld(true);
         if (hand) hand.palmCenter(at); else a.arms[s].hand.getWorldPosition(at);
         const err = point.clone().sub(at);
@@ -462,6 +535,41 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   }
   a.face.apply(weights, gaze);
   a.frame.updateMatrixWorld(true);
+}
+
+/**
+ * How far to lean so each active reach's goal comes within the arm: from the
+ * shoulder as it stands this frame (before leaning), the shortfall beyond a
+ * comfortable reach, met first by the hips (up to `LEAN_HIPS`) and then by
+ * the spine (up to `LEAN_MAX_DEG`). What is still left is recorded per reach,
+ * so the build can say the performers are too far apart.
+ */
+function leanFor(cast: Cast[], c: Cast, t: number, hipsLocal: THREE.Vector3): { dir: THREE.Vector3; hipShift: number; theta: number } | undefined {
+  const a = c.a;
+  let best: { dir: THREE.Vector3; need: number; r: Resolved; e: number } | undefined;
+  for (const r of c.dirs) {
+    const d = r.direction;
+    if (d.kind !== 'reach') continue;
+    const e = clamp01(envelope(t, r));
+    if (e === 0) continue;
+    const target = pointOf(cast, c.spec, d.at);
+    const shoulder = toWorld(a, a.bind.get(`${d.side}UpperArm`)!.rootPosition.clone().add(hipsLocal));
+    const goal = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
+    const arm = a.arms[d.side];
+    const over = goal.distanceTo(shoulder) - (COMFORT_REACH * (arm.upperLength + arm.lowerLength) + PALM_OFFSET);
+    if (over <= 0) { if (e > 0.9 && !c.shortfall.has(r)) c.shortfall.set(r, 0); continue; }
+    const dir = goal.clone().sub(shoulder).setY(0);
+    if (dir.lengthSq() < 1e-8) continue;
+    dir.normalize();
+    if (!best || over * e > best.need) best = { dir, need: over * e, r, e };
+  }
+  if (!best) return undefined;
+  const torso = a.bind.get('leftUpperArm')!.rootPosition.y - a.bind.get('hips')!.rootPosition.y;
+  const hipShift = Math.min(LEAN_HIPS, best.need * 0.35);
+  const rest = best.need - hipShift;
+  const theta = Math.asin(Math.min(Math.sin(LEAN_MAX_DEG * DEG), rest / torso));
+  if (best.e > 0.9) c.shortfall.set(best.r, Math.max(c.shortfall.get(best.r) ?? 0, rest - torso * Math.sin(theta)));
+  return { dir: best.dir, hipShift, theta };
 }
 
 function lookTarget(cast: Cast[], c: Cast, t: number, flat: boolean, by: 'head' | 'eyes'): { point: THREE.Vector3; weight: number; share: number } | undefined {

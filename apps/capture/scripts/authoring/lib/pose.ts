@@ -39,13 +39,42 @@ export function moveBoneWorld(bone: THREE.Object3D, offsetWorld: THREE.Vector3):
   bone.updateMatrixWorld(true);
 }
 
-/** Where a hand hangs when the arm is at rest, slightly bent and off the thigh. */
-export function armRestTarget(a: LoadedAvatar, side: Side, out = new THREE.Vector3()): THREE.Vector3 {
+/**
+ * Where the wrist hangs at rest, from the shoulder, in the avatar's frame: an
+ * arm's length down, a little out from the thigh and forward, so the arm is
+ * nearly straight with the hand at the side.
+ */
+export function armRestOffset(a: LoadedAvatar, side: Side, out = new THREE.Vector3()): THREE.Vector3 {
   const chain = a.arms[side];
-  const shoulder = a.bind.get(`${side}UpperArm`)!.rootPosition;
   const reach = chain.upperLength + chain.lowerLength;
-  const sign = side === 'left' ? 1 : -1;
-  return out.set(shoulder.x + sign * 0.09 * reach, shoulder.y - 0.95 * reach, shoulder.z + 0.06 * reach);
+  return out.set((side === 'left' ? 1 : -1) * 0.18 * reach, -0.965 * reach, 0.05 * reach);
+}
+
+/**
+ * The elbow of a hanging arm points back and only a little out. Capture's
+ * solver bends the elbow outward (right for a tracked controller held in
+ * front), which on a hanging arm reads as hands on hips.
+ */
+export function restElbowHint(a: LoadedAvatar, side: Side, out = new THREE.Vector3()): THREE.Vector3 {
+  // Back and out in the body frame; the solver reads the hint in `a.frame`, so turn it by the facing correction.
+  out.set(side === 'left' ? 0.3 : -0.3, 0, -1).normalize();
+  return a.facingCorrection ? out.applyQuaternion(a.facingCorrection) : out;
+}
+
+/**
+ * Hangs the arm at rest: the wrist `offsetWorld` from wherever the shoulder
+ * settles. Capture's solver swings the clavicle toward a far target (its
+ * shoulder protraction), so the target is re-aimed from the moved shoulder a
+ * few times instead of from the bind shoulder.
+ */
+export function hangArm(a: LoadedAvatar, side: Side, offsetWorld: THREE.Vector3): void {
+  const shoulder = a.arms[side].upperArm;
+  const target = new THREE.Vector3();
+  for (let i = 0; i < 4; i += 1) {
+    a.frame.updateMatrixWorld(true);
+    shoulder.getWorldPosition(target).add(offsetWorld);
+    solveArm(a, side, target, { elbowHint: restElbowHint(a, side) });
+  }
 }
 
 export interface ArmOptions {
@@ -53,12 +82,17 @@ export interface ArmOptions {
   readonly palmToward?: THREE.Vector3 | undefined;
   /** Bend the wrist back up to this much toward `palmToward` (radians), for a hand offered. */
   readonly wristBend?: number;
+  /** Which way the elbow bends, in the avatar's frame; omitted keeps the rig's own hint. */
+  readonly elbowHint?: THREE.Vector3 | undefined;
 }
 
 /** Puts the wrist at a world point with capture's arm solver; the hand keeps its bind wrist unless rolled. */
 export function solveArm(a: LoadedAvatar, side: Side, wristWorld: THREE.Vector3, options: ArmOptions = {}): boolean {
   const chain = a.arms[side];
+  const rigHint = options.elbowHint ? chain.elbowHintLocal.clone() : undefined;
+  if (options.elbowHint) chain.elbowHintLocal.copy(options.elbowHint).normalize();
   const ok = solver.solve(chain, wristWorld, IDENTITY, a.frame);
+  if (rigHint) chain.elbowHintLocal.copy(rigHint);
   chain.hand.quaternion.copy(chain.handBindQuaternion);
   chain.hand.updateMatrixWorld(true);
   const hand = a.hands[side];
@@ -149,8 +183,3 @@ export function turnBody(a: LoadedAvatar, yaw: number, shares: ReadonlyArray<rea
   if (carry > 0) rotateBoneWorld(a.humanoid.bone('head')!, tmpQ.setFromAxisAngle(up, yaw * carry));
 }
 
-/** Rotates a body-frame point about the body's up axis through the hips. */
-export function yawAboutHips(a: LoadedAvatar, local: THREE.Vector3, yaw: number, out = new THREE.Vector3()): THREE.Vector3 {
-  const hips = a.bind.get('hips')!.rootPosition;
-  return out.copy(local).sub(hips).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(hips);
-}

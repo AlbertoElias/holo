@@ -1,0 +1,8 @@
+{
+  "title": "Rest",
+  "intent": "One person standing at rest, facing the viewer.",
+  "duration": 5,
+  "performers": [ { "id": "p", "avatar": "stock", "at": [0, 0], "facing": 0, "seed": 3 } ],
+  "marks": {},
+  "beats": []
+}

@@ -16,7 +16,7 @@ import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import { loadAvatar, resetPose, type LoadedAvatar, type Side } from './lib/avatar.ts';
 import { FINGERS, shapePose, type FingerName } from './lib/hands.ts';
-import { armRestTarget, bindAnkles, bodyUp, moveBoneWorld, plantFeet, solveArm, toWorld, turnBody, yawAboutHips, TURN_SHARE } from './lib/pose.ts';
+import { armRestOffset, bindAnkles, bodyUp, hangArm, moveBoneWorld, plantFeet, solveArm, toWorld, turnBody, TURN_SHARE } from './lib/pose.ts';
 import { meshesOf, skin, type SkinnedSurface } from './lib/skin.ts';
 
 /** Provisional bars, set on the stock avatar; a failing item names itself. */
@@ -225,7 +225,8 @@ export function stance(a: LoadedAvatar, yaw = 0): void {
   moveBoneWorld(a.humanoid.bone('hips')!, bodyUp(a).multiplyScalar(-STANCE_DROP * legLength));
   plantFeet(a, bindAnkles(a));
   const torsoYaw = yaw * TURN_SHARE.slice(0, 4).reduce((s, [, w]) => s + w, 0);
-  for (const side of ['left', 'right'] as const) solveArm(a, side, toWorld(a, yawAboutHips(a, armRestTarget(a, side), torsoYaw)));
+  const origin = toWorld(a, new THREE.Vector3());
+  for (const side of ['left', 'right'] as const) hangArm(a, side, toWorld(a, armRestOffset(a, side).applyAxisAngle(new THREE.Vector3(0, 1, 0), torsoYaw)).sub(origin));
   for (const side of ['left', 'right'] as const) a.hands[side]?.apply(shapePose('relaxed'));
   a.frame.updateMatrixWorld(true);
 }
