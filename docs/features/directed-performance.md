@@ -1,8 +1,8 @@
 # Feature brief: Direct, preview and revise a performance
 
 **Lead:** Claude (planning session, 2026-11-13)  
-**Status:** Reviewed (approved by the user and design-reviewed against the
-code, 2026-11-13; build not started)  
+**Status:** In progress: slices 0 and 1 built and verified (2026-11-13);
+slice 2 next  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -41,7 +41,7 @@ Bodies are made three different ways, and no two share anything.
 |---|---|---|---|
 | Body | A stand-in found online, or any humanoid the resolver binds (`?avatar=<url>`) | Jointed primitives rebuilt per scene (`showcase/introspection/figures.mjs`) | Two meshes reconstructed from images (TRELLIS), simple Blender rigs |
 | Face | 52 ARKit channels tracked, routed onto 21 shapes on the head; the shapes were synthesized because no licensed expressive avatar was found (`archive/avatar-face.md`) | None | None (0 meshes with morph targets) |
-| Fingers | Driven | None | Finger bones present, never keyed |
+| Fingers | Driven | None | None (17 joints per rig, no finger bones) |
 | Acting comes from | Headset, desktop, phone camera (spike, unmerged) | Pose keys written by hand per scene (`introspection2/acting.mjs`, 22 KB for one piece) | 8 of 102 animation channels change; the last change is at 4.0 s of 12.0 s |
 | Looks | One stock character, unrelated to any piece or author | Stylised primitives | Custom and recognisable at scene scale, soft up close (hands, hair, surface) |
 | Cost of a new piece | None | Days of scene code | 9.2 GB working directory, a patched local TRELLIS port, separate head reconstruction and repair |
@@ -172,6 +172,10 @@ modules load in Node and are imported, never edited: `HumanoidSkeleton`,
 `FaceRig`, `LivenessFace` (blinks and eye movement), `ArmIkSolver`,
 `legIk`, `LocomotionAnimator`, `retargetClips`, and `AvatarRig` with a stub
 renderer (`scripts/lib/locomotion-retarget-check.ts` is the precedent).
+Slice 1 imports `AvatarRig`, `HumanoidSkeleton`, `FaceRig`, `LivenessFace`,
+`ArmIkSolver`, `legIk` and `palmFrame`; a step is placed feet solved with
+`legIk`, not `LocomotionAnimator`'s clips, so it can land on a mark, and
+nothing needed `retargetClips`.
 These do not, because they expect a live tracking stream or a browser:
 `HandFingerRetargeter`, `FaceDriver`, `VrBodySolver` and the exporter
 (`GltfExportComposer` uses a Worker). So hand shapes, weight shifts, steps
@@ -192,9 +196,10 @@ on the stock avatar as the first baseline.
 
 The feet and jitter numbers come from the motion owner's instrument, which
 is not on `main` yet. Once it is, a small adapter in the authoring scripts
-samples a GLB into the joint positions it reads. It has no category for an
-authored take, so its numbers are reported without a verdict until the
-motion owner adds one.
+samples a GLB into the joint positions it reads. The motion owner has added
+a category for authored takes (`MotionSource` `authored`, commit
+`5ad3d6c96477` on `feature/natural-avatar-motion`), so the adapter reports a
+verdict once both are on `main`. Slices 0 and 1 leave the adapter out.
 
 ### Slice 1: direction (the agent as driver)
 
