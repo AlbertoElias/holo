@@ -130,11 +130,6 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
     const t = times[f]!;
     cast.forEach((c, ci) => {
       fixPersistent(cast, c, t);
-      // The target a reach is measured against is the one this frame's solve aims at.
-      const measured = (reachChecks.get(f) ?? []).filter((x) => x.c === ci).map(({ r }) => {
-        const d = r.direction as Extract<Direction, { kind: 'reach' }>;
-        return { r, d, target: pointOf(cast, c.spec, d.at) };
-      });
       solveFrame(cast, c, t, 1 / fps, life, flat);
       const tr = tracks[ci]!;
       for (const [o, arr] of tr.rotations) o.quaternion.toArray(arr, f * 4);
@@ -142,12 +137,16 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
       for (const [, w] of tr.weights) w.values.set(w.meshes[0]!.morphTargetInfluences!, f * w.targets);
       c.a.frame.position.toArray(tr.root.position, f * 3);
       c.a.frame.quaternion.toArray(tr.root.rotation, f * 4);
-      for (const { r, d, target } of measured) {
-        const palm = c.a.hands[d.side]?.palmCenter(new THREE.Vector3()) ?? c.a.arms[d.side].hand.getWorldPosition(new THREE.Vector3());
-        tr.reaches.push({ beat: r.beat.id, side: d.side, targetDistance: Math.round(palm.distanceTo(target) * 10000) / 10000, stopShort: d.stopShort });
-      }
       see(c);
     });
+    // Measured as the file plays: every performer at this frame. (A performer
+    // solved earlier in the cast aims at the others' previous frame.)
+    for (const { c, r } of reachChecks.get(f) ?? []) {
+      const d = r.direction as Extract<Direction, { kind: 'reach' }>;
+      const target = pointOf(cast, cast[c]!.spec, d.at);
+      const palm = cast[c]!.a.hands[d.side]?.palmCenter(new THREE.Vector3()) ?? cast[c]!.a.arms[d.side].hand.getWorldPosition(new THREE.Vector3());
+      tracks[c]!.reaches.push({ beat: r.beat.id, side: d.side, targetDistance: Math.round(palm.distanceTo(target) * 10000) / 10000, stopShort: d.stopShort });
+    }
   }
   return { sheet, fps, times, tracks };
 }

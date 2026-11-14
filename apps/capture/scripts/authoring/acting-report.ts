@@ -267,14 +267,46 @@ function channelKeys(doc: GltfDoc): Map<string, Channel> {
   return out;
 }
 
+/** Node index per `<performer>/<node name>` key, for every node. */
+function nodeKeys(doc: GltfDoc): Map<string, number> {
+  const performers = findPerformers(doc);
+  const out = new Map<string, number>();
+  (doc.json.nodes ?? []).forEach((n, i) => {
+    const p = performers.find((q) => q.subtree.has(i));
+    out.set(`${p ? `p${p.index}` : 'scene'}/${n.name ?? i}`, i);
+  });
+  return out;
+}
+
+/**
+ * A take writes no channel for a node that never moves, so a channel present
+ * in one take only is compared with that node's rest value in the other.
+ */
+function restChannel(doc: GltfDoc, keys: Map<string, number>, key: string, like: Channel): Channel | undefined {
+  const node = keys.get(key.slice(0, key.lastIndexOf('/')));
+  const n = node === undefined ? undefined : doc.json.nodes?.[node];
+  if (!n || n.matrix) return undefined;
+  const mesh = n.mesh === undefined ? undefined : (doc.json.meshes?.[n.mesh] as { weights?: number[] } | undefined);
+  const rest = { rotation: n.rotation ?? [0, 0, 0, 1], translation: n.translation ?? [0, 0, 0], scale: n.scale ?? [1, 1, 1], weights: mesh?.weights ?? new Array<number>(like.width).fill(0) }[like.path];
+  if (rest.length !== like.width) return undefined;
+  return { ...like, node: node!, interpolation: 'STEP', times: new Float64Array([0]), values: Float64Array.from(rest) };
+}
+
 export function diffTakes(a: GltfDoc, b: GltfDoc): TakeDiff {
   const ka = channelKeys(a);
   const kb = channelKeys(b);
   const duration = Math.max(durationOf([...ka.values()]), durationOf([...kb.values()]));
   const steps = Math.max(1, Math.round(duration * SAMPLE_HZ));
   const differs = new Array<number>(steps + 1).fill(0);
-  for (const [key, ca] of ka) {
-    const cb = kb.get(key);
+  const na = nodeKeys(a);
+  const nb = nodeKeys(b);
+  const unmatched: string[] = [];
+  const pairs: [string, Channel, Channel | undefined][] = [
+    ...[...ka].map(([key, ca]): [string, Channel, Channel | undefined] => [key, ca, kb.get(key) ?? restChannel(b, nb, key, ca)]),
+    ...[...kb].filter(([key]) => !ka.has(key)).map(([key, cb]): [string, Channel, Channel | undefined] => [key, cb, restChannel(a, na, key, cb)])
+  ];
+  for (const [key, ca, cb] of pairs) {
+    if (!kb.has(key) || !ka.has(key)) unmatched.push(key);
     if (!cb || cb.width !== ca.width) continue;
     const tol = TOLERANCE[ca.path];
     const va = new Float64Array(ca.width);
@@ -297,7 +329,6 @@ export function diffTakes(a: GltfDoc, b: GltfDoc): TakeDiff {
     spans.push({ fromSec: round((i / steps) * duration, 2), toSec: round(((j - 1) / steps) * duration, 2), channels: most });
     i = j;
   }
-  const unmatched = [...[...ka.keys()].filter((k) => !kb.has(k)), ...[...kb.keys()].filter((k) => !ka.has(k))];
   return { spans, unmatched };
 }
 

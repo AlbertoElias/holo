@@ -4,7 +4,7 @@
  * form of time, so changing one beat changes only its own span (a `whole`
  * turn and a step are persistent: they also move everything after them).
  */
-import type { FaceChannel } from '@holoim/avatar-face';
+import { FACE_CHANNELS, type FaceChannel } from '@holoim/avatar-face';
 
 import type { HandShapeName } from './hands.ts';
 import { HAND_SHAPES } from './hands.ts';
@@ -155,8 +155,15 @@ export function validateSheet(sheet: BeatSheet): string[] {
     beatIds.add(b.id);
     if (!ids.has(b.performer)) problems.push(`beat ${b.id}: no performer ${b.performer}`);
     if (!(b.at >= 0)) problems.push(`beat ${b.id}: at must be ≥ 0`);
+    if (b.at >= sheet.duration) problems.push(`beat ${b.id}: at ${b.at} s is not before the take ends (${sheet.duration} s)`);
     for (const d of b.directions) {
       const where = `beat ${b.id} ${d.kind}`;
+      if (!Object.hasOwn(DEFAULT_TIMING, d.kind)) { problems.push(`${where}: no direction kind ${d.kind} (${Object.keys(DEFAULT_TIMING).join(', ')})`); continue; }
+      const side = d.kind === 'reach' || d.kind === 'hand' ? d.side : d.kind === 'step' ? d.foot : undefined;
+      if (side !== undefined && side !== 'left' && side !== 'right' && !(d.kind === 'hand' && side === 'both')) problems.push(`${where}: side ${side} is left or right${d.kind === 'hand' ? ' or both' : ''}`);
+      if (d.kind === 'expression' && typeof d.shape === 'object') {
+        for (const k of Object.keys(d.shape)) if (!FACE_CHANNELS.includes(k as FaceChannel)) problems.push(`${where}: no face channel ${k}`);
+      }
       if (d.kind === 'hand' && !(d.shape in HAND_SHAPES)) problems.push(`${where}: no hand shape ${d.shape} (${Object.keys(HAND_SHAPES).join(', ')})`);
       if (d.kind === 'expression' && typeof d.shape === 'string' && !(d.shape in EXPRESSIONS)) problems.push(`${where}: no expression ${d.shape} (${Object.keys(EXPRESSIONS).join(', ')})`);
       if (d.kind === 'reach' && !(d.stopShort >= 0)) problems.push(`${where}: stopShort must be ≥ 0`);

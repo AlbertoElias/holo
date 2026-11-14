@@ -48,7 +48,8 @@ each under a wrapper node: the first is `RecordedAvatar` and the only one
 declared in `HOLOIM_humanoid` (listed in `extensionsUsed` only), as a captured
 export does. `asset.extras.holoim.authored` is `synthetic`, with the author,
 title and method, as showcase pieces mark themselves. The published format is
-unchanged.
+unchanged. The writer registers no glTF extensions, so an avatar's own (VRM,
+MToon, `KHR_materials_*`) are not carried into the take.
 
 The solver imports capture's `AvatarRig`, `HumanoidSkeleton`, `FaceRig`,
 `LivenessFace`, `ArmIkSolver`, `legIk` and `palmFrame` and never edits them;

@@ -289,6 +289,7 @@ export function summarizeAudition(r: AuditionReport): string {
     `${r.file}: ${r.height} m tall | ${r.fails.length ? `${r.fails.length} audition item(s) fail` : 'passes the audition'}`,
     `  face: ${moving.length}/${r.face.channels.length} channels move the mesh ≥ ${BARS.faceMm} mm (most: ${strongest.join(', ') || 'none'} mm); gaze by ${r.face.gaze.by}, ${r.face.gaze.mm} mm at 20°`
   ];
+  if (r.face.still.length) lines.push(`  face: ${r.face.still.join(', ')} move the mesh less than ${BARS.faceMm} mm`);
   for (const side of ['left', 'right'] as const) {
     const h = r.hands[side];
     if (!h) { lines.push(`  ${side} hand: no finger bones`); continue; }
