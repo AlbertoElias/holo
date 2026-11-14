@@ -4,8 +4,10 @@
 // it runs only when the database lacks a migration that ships in this image.
 // Any doubt (no table, a failed migration, an unreadable database) runs it.
 import { spawnSync } from "node:child_process";
+import console from "node:console";
 import { readdirSync } from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { PrismaClient } from "@prisma/client";
