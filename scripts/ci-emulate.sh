@@ -59,11 +59,12 @@ mkdir -p "$out"
 printf -v cmd '%q ' "$@"
 
 # Test settings set on the host reach the container, so
-# `XR_SHARD=1/2 scripts/ci-emulate.sh pnpm run test:xr:capture` runs one slice.
+# `XR_SHARD=1/2 scripts/ci-emulate.sh pnpm run test:xr:capture` runs one slice and
+# `RUN_E2E_PIPELINE=1 scripts/ci-emulate.sh …` runs the pipeline specs (without it they skip).
 env_args=()
 while IFS= read -r name; do
   case "$name" in
-    XR_*|HOLOIM_*|BODY_REPLAY_*|HAND_REPLAY_*|AR_RECORD_*|FACE_*|CAPTURE_IWER_*|VITE_IWER_*) env_args+=(-e "$name") ;;
+    XR_*|HOLOIM_*|RUN_E2E_*|E2E_*|BODY_REPLAY_*|HAND_REPLAY_*|AR_RECORD_*|FACE_*|CAPTURE_IWER_*|VITE_IWER_*) env_args+=(-e "$name") ;;
   esac
 done < <(compgen -e)
 
