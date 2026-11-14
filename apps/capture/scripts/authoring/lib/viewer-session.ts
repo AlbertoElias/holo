@@ -92,6 +92,15 @@ export async function openTake(servers: ViewerServers, file: string, options: Op
   const glb = await readFile(file);
   const viewport = options.viewport ?? { width: 900, height: 900 };
   const browser = await chromium.launch({ headless: true, args: [...XR_CHROMIUM_ARGS] });
+  try {
+    return await openIn(browser, servers, file, glb, viewport, options);
+  } catch (error) {
+    await browser.close().catch(() => {});
+    throw error;
+  }
+}
+
+async function openIn(browser: Browser, servers: ViewerServers, file: string, glb: Buffer, viewport: { width: number; height: number }, options: OpenOptions): Promise<OpenTake> {
   const context = await browser.newContext({
     ...XR_CONTEXT_OPTIONS, baseURL: servers.web, viewport,
     ...(options.deviceScaleFactor ? { deviceScaleFactor: options.deviceScaleFactor } : {}),

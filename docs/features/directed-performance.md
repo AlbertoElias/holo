@@ -386,6 +386,10 @@ Ordered by how much it cost the piece.
     avatar only mouth-led shapes read, and a smile's squint shows an
     artefact against the glasses in the close view.
 
+12. **Life a reader can see.** The life every performer inherits moves
+    the card by the numbers, but a held ending still reads as frozen from
+    stills (slice 1b, defaults). Authors give holds a beat for now.
+
 Not exercised by the piece, still open: **voice and sound** (speech,
 effects, music) and **titles and captions**.
 
@@ -444,8 +448,9 @@ None: this adds no authoring action inside a capture take.
   Evidence: slice 1b below.
 - [x] The three defaults shown before and after, each with its own review
   pack, on a neutral test sheet: a reach at a moving performer, a neutral
-  rest and life in a held ending. Evidence: slice 1b below. The rest pose
-  still reads as folded arms in profile.
+  rest and life in a held ending. Evidence: slice 1b below. Two are
+  open: life still reads as frozen from stills, and the rest reads as
+  folded arms in profile (neutral from the front).
 - [x] Face height at the card and the blind readings recorded, with the
   options left as a decision for the user. Evidence: slice 1b below.
 - [x] A second piece, different in kind, authored from a three-line brief
@@ -659,12 +664,22 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
   |---|---|---|---|
   | A reach at a moving performer lands where they are | Palm 177.4 mm from B's arm (asked 20); the goodbye's 262.9 mm (asked 160) | 18.5 mm (asked 20); the goodbye's 148.6 mm (asked 160) | The reader saw the hand land on B's shoulder; before, "where it lands is hidden" |
   | A neutral rest | B: "arms clasped or folded tight", an attitude | Elbows 5 cm back, 22° bend, hands at the thighs; from the front reads as standing at rest | See below |
-  | Life under a held ending | B still (under 1 CSS px/s) at 1, 3, 5 and 7 s; "paused mannequins" | LIFE2 | LIFE2READ |
+  | Life under a held ending | B still (under 1 CSS px/s) at 1, 3, 5 and 7 s; "paused mannequins" | No still second for either performer on the card (head 0.9–5.9 and hands 0.6–4.5 CSS px/s in the holds) | Still "mostly frozen" to two readers in a row, from frame sheets 0.2 s apart; **open** |
+
+  Life was checked twice and failed both times, so the loop stopped there
+  as the brief requires. The numbers say the held ending moves on the card,
+  but fresh readers still call it frozen. They judge from stills 0.2 s
+  apart, where a slow sway of a few pixels does not show. Whether the video
+  reads as alive is untested: no reader can watch the video. The next try
+  is a different kind of life, not more of the same: occasional weight
+  shifts, glances and posture changes, the motion a reader can see in
+  stills. It should be judged from the video by a person.
 
   The rest pose is fixed in its geometry, not yet in every reading. Seen in
   profile, the readers still call the arms folded. The forearm crosses the
   torso's silhouette, and the armour's bright trim makes a band across it.
-  A frontal take with no beats (`rest.json`, twelve stills) shows the arms
+  A frontal take with no beats (`rest.json`, twelve stills) read to a fresh
+  reader as "neutral standing at rest; no attitude or emotion", arms
   hanging at the sides. Life was doubled after the first after-pack read
   "held poses with a moving background, not as alive": sway 11 to 22 mm,
   head drift 1.8° to 3.5°, and breath about half again.

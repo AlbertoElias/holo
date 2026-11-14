@@ -74,7 +74,8 @@ async function main(): Promise<void> {
   if (!take) { console.error('usage: face-legibility.ts <take.glb> [--sheet take.beats.json] [--out dir]'); process.exit(2); }
   const sheet = JSON.parse(await readFile(sheetArg ?? take.replace(/\.glb$/, '.beats.json'), 'utf8')) as BeatSheet;
   const peaks = sheet.beats.map((b) => {
-    const r = resolveTiming(b, b.directions[0]!);
+    if (!b.directions[0]) throw new Error(`beat ${b.id}: no directions; give each beat one expression`);
+    const r = resolveTiming(b, b.directions[0]);
     return { name: b.id, t: r.at + r.attack + r.hold / 2 };
   });
   const firstFrom = Math.min(...sheet.beats.map((b) => beatSpan(b).from));
@@ -89,6 +90,7 @@ async function main(): Promise<void> {
       desktop: await cardFace(servers, take, { width: 1440, height: 900 }, 1, false, neutralAt),
       desktopRetina: await cardFace(servers, take, { width: 1440, height: 900 }, 2, false, neutralAt)
     };
+    if (card.phone.devicePx <= 0) throw new Error('no face found on the card: the first performer needs a face mesh, facing the camera');
 
     const open = await openTake(servers, take, { viewport: { width: 600, height: 600 } });
     const tiles: Record<number, Record<string, string>> = {};

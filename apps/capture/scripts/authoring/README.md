@@ -52,8 +52,10 @@ per kind in `DEFAULT_TIMING`).
 
 What every piece inherits: arms hang at the sides with the elbows back (a
 neutral rest), and breath, a slow sway, head drift, blinks, eye movement and
-finger settle run underneath unless `life` is false, large enough that a held
-ending does not read as frozen on the card. `style: "flat"` (or `--style flat`)
+finger settle run underneath unless `life` is false, sized so head and
+hands move more than a CSS pixel a second on the card. Fresh readers judging
+from stills still call a long held ending frozen, so give one a beat (a
+glance, a weight shift) rather than relying on life. `style: "flat"` (or `--style flat`)
 plays the same blocking as straight lines with no life, face or fingers, for
 comparison.
 
