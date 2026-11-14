@@ -144,6 +144,7 @@ report passes on it.
 - [ ] Real-headset wrist p95 ≤ 2 cm.
 - [ ] Quest AR and phone AR rows measured; any miss fixed.
 - [ ] Each gap closes with a before/after proof video sent to the user.
+- [ ] Every supported skeleton meets each row's target: the desktop and VR motion checks grade each avatar fixture the `avatars` check loads (`scripts/ci-avatar-formats-playwright.ts`: reoriented axes, A-pose, T-pose, twisted T-pose, VRM 0 facing −Z, Z-up, Unreal centimetres), not only the default avatar (user direction, 2026-11-14).
 
 ## Failure cases considered
 
