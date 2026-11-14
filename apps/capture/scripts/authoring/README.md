@@ -45,8 +45,8 @@ A point is `[x, y, z]`, a mark's name, or `"<performer>.<humanoid bone>"`.
 A point on a performer is where that bone is at the moment the direction
 plays, so a reach at someone who steps away lands where they are. A
 performer leans into a reach beyond their arm; one that still ends more than
-2 cm from where it was asked is reported when built ("out of reach even
-leaning").
+2 cm from where it was asked because it is beyond reach is reported when
+built ("out of reach even leaning").
 Every direction has `anticipation`, `attack`, `hold` and `settle` (defaults
 per kind in `DEFAULT_TIMING`).
 

@@ -54,11 +54,23 @@ export interface ViewerServers {
   close(): void;
 }
 
-/** Starts the test API and the viewer test build; `close()` stops both. */
+/** Whether something already answers at `url` (a server left by a stopped run). */
+async function answers(url: string): Promise<boolean> {
+  const client = await request.newContext({ ignoreHTTPSErrors: true });
+  try { await client.get(url, { timeout: 2000 }); return true; } catch { return false; } finally { await client.dispose(); }
+}
+
+/** Starts the test API and the viewer test build; `close()` stops both, as does Ctrl-C. */
 export async function startViewer(): Promise<ViewerServers> {
+  for (const [url, variable] of [[API, 'VIEWER_CHECK_API_PORT'], [WEB, 'VIEWER_CHECK_WEB_PORT']] as const) {
+    if (await answers(url)) throw new Error(`${url} is already in use (another review, or one stopped with Ctrl-C): stop it, or set ${variable}`);
+  }
   const api = start('api', 'pnpm', ['--filter', '@holoim/api', 'exec', 'tsx', '../../scripts/test-api.ts'], { TEST_API_PORT: String(API_PORT), WEB_ORIGIN: WEB, USDZ_WORKER_ENABLED: 'false' });
   const web = start('web', 'node', ['packages/tooling-testing/src/test-build.mjs', 'serve', 'web', '--', '--host', '0.0.0.0', '--port', String(WEB_PORT), '--strictPort'], { VITE_API_PROXY_TARGET: API, VITE_HMR_CLIENT_PORT: String(WEB_PORT) });
-  const close = () => { stop(api); stop(web); };
+  const onSignal = () => { stop(api); stop(web); process.exit(130); };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  const close = () => { process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); stop(api); stop(web); };
   try {
     await waitFor(`${API}/api/holograms?limit=1`, 120_000);
     await waitFor(WEB, 240_000);

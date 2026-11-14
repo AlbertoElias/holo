@@ -55,8 +55,10 @@ export function armRestOffset(a: LoadedAvatar, side: Side, out = new THREE.Vecto
  * solver bends the elbow outward (right for a tracked controller held in
  * front), which on a hanging arm reads as hands on hips.
  */
-export function restElbowHint(side: Side, out = new THREE.Vector3()): THREE.Vector3 {
-  return out.set(side === 'left' ? 0.3 : -0.3, 0, -1).normalize();
+export function restElbowHint(a: LoadedAvatar, side: Side, out = new THREE.Vector3()): THREE.Vector3 {
+  // Back and out in the body frame; the solver reads the hint in `a.frame`, so turn it by the facing correction.
+  out.set(side === 'left' ? 0.3 : -0.3, 0, -1).normalize();
+  return a.facingCorrection ? out.applyQuaternion(a.facingCorrection) : out;
 }
 
 /**
@@ -71,7 +73,7 @@ export function hangArm(a: LoadedAvatar, side: Side, offsetWorld: THREE.Vector3)
   for (let i = 0; i < 4; i += 1) {
     a.frame.updateMatrixWorld(true);
     shoulder.getWorldPosition(target).add(offsetWorld);
-    solveArm(a, side, target, { elbowHint: restElbowHint(side) });
+    solveArm(a, side, target, { elbowHint: restElbowHint(a, side) });
   }
 }
 

@@ -125,7 +125,9 @@ function ffmpeg(args: string[]): void {
 export async function review(take: string, options: ReviewOptions = {}): Promise<{ out: string; onScreen: OnScreen }> {
   const started = performance.now();
   const sheetFile = options.sheet ?? `${take.replace(/\.glb$/, '')}.beats.json`;
-  const sheetData = await readFile(sheetFile, 'utf8').then((s) => JSON.parse(s) as BeatSheet).catch(() => undefined);
+  // A sheet beside the take is optional; one named with --sheet must load.
+  const sheetData = await readFile(sheetFile, 'utf8').then((s) => JSON.parse(s) as BeatSheet)
+    .catch((error: unknown) => { if (options.sheet) throw new Error(`--sheet ${options.sheet}: ${String(error)}`); return undefined; });
   const out = resolve(options.out ?? join(OUTPUT, 'review', basename(take, '.glb')));
   const reader = join(out, 'reader');
   const step = options.step ?? 0.2;
@@ -144,7 +146,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
   let onScreen: OnScreen;
   let init: Init;
   try {
-    const open = await openTake(servers, take, { viewport: PHONE, deviceScaleFactor: CARD_PIXEL_RATIO, isMobile: true, title: sheetData?.title ?? basename(take, '.glb') });
+    const open = await openTake(servers, take, { viewport: PHONE, deviceScaleFactor: CARD_PIXEL_RATIO, isMobile: true, title: 'Take' }); // the card shows it: never the piece's title, which tells the reader the intent
     const { page } = open;
     await page.addScriptTag({ content: REVIEW_PAGE });
     init = await page.evaluate((u) => (window as unknown as { __review: { init(u: string): Init } }).__review.init(u), open.url);

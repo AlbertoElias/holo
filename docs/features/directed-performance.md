@@ -662,7 +662,7 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
 
   | Default | Before | After | Read by |
   |---|---|---|---|
-  | A reach at a moving performer lands where they are | Palm 177.4 mm from B's arm (asked 20); the goodbye's 262.9 mm (asked 160) | 18.5 mm (asked 20); the goodbye's 148.6 mm (asked 160) | The reader saw the hand land on B's shoulder; before, "where it lands is hidden" |
+  | A reach at a moving performer lands where they are | Palm 177.4 mm from B's arm (asked 20); the goodbye's 262.9 mm (asked 160) | 18.5 mm (asked 20), 11.8 mm with the doubled life; the goodbye's 148.6 mm (asked 160) | The reader saw the hand land on B's shoulder; before, "where it lands is hidden" |
   | A neutral rest | B: "arms clasped or folded tight", an attitude | Elbows 5 cm back, 22° bend, hands at the thighs; from the front reads as standing at rest | See below |
   | Life under a held ending | B still (under 1 CSS px/s) at 1, 3, 5 and 7 s; "paused mannequins" | No still second for either performer on the card (head 0.9–5.9 and hands 0.6–4.5 CSS px/s in the holds) | Still "mostly frozen" to two readers in a row, from frame sheets 0.2 s apart; **open** |
 
@@ -678,22 +678,22 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
   The rest pose is fixed in its geometry, not yet in every reading. Seen in
   profile, the readers still call the arms folded. The forearm crosses the
   torso's silhouette, and the armour's bright trim makes a band across it.
-  A frontal take with no beats (`rest.json`, twelve stills) read to a fresh
+  A frontal take with no beats (`sheets/rest.json`, twelve stills from `viewer-check.ts --frames`) read to a fresh
   reader as "neutral standing at rest; no attitude or emotion", arms
   hanging at the sides. Life was doubled after the first after-pack read
-  "held poses with a moving background, not as alive": sway 11 to 22 mm,
-  head drift 1.8° to 3.5°, and breath about half again.
+  "held poses with a moving background, not as alive": sway amplitude 11 to 22 mm
+  (peaks near 30 mm), head drift 1.8° to 3.5°, and breath about half again.
 - **Face legibility at the card** (`face-legibility.ts`, `sheets/expressions.json`):
   a standing performer's face is 19.7 CSS px tall on a phone's card (29.5
   device px, 3.3 mm on the glass; the body is 199 CSS px). On a desktop it
-  is 21.6 px at 1× and 32.4 device px at 2×. Fresh readers named seven
+  is 21.6 px at 1×, and 32.4 device px on a 2× display, where the card's canvas is capped at 1.5×. Fresh readers named seven
   expressions blind, from a face rendered at a set height (chance about 1 in
   7):
 
   | Face height, device px | 8 | 12 | 16 | 24 | 30 (card) | 32 | 48 | 64 | 96 |
   |---|---|---|---|---|---|---|---|---|---|
   | Correct of 7 | 1 | 2 | 1 | 2 | 3 | 3 | 2 | 2 | 1 |
-  | At strength 1.8 | | | 1 | | 3 | | 3 | | 2 |
+  | Every expression at strength 1.8 | | | 1 | | 3 | | 3 | | 2 |
 
   Only the smile read, at every size; a bigger face did not help. The
   limit is the avatar, not the framing: its shapes move the mesh too
@@ -725,8 +725,8 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
     The can was hidden behind her body and the set until 4 s.
   - **Revision:** the can went to the right hand and the set moved, so the
     can is seen from the start. The check became lifting the finger and
-    looking at it. The reach ends are within 5 mm (poke 4.6, check 0.4,
-    lift 0.9, pour 0.8). `--against` reports 0.03 to 9 s changed, because
+    looking at it. The reach ends are within 5 mm as built for the
+    review (poke 4.6, check 0.4, lift 0.9, pour 0.8; life was doubled later). `--against` reports 0.03 to 9 s changed, because
     swapping hands moves every beat that uses them.
   - **Second review** (`watering-2`): "someone tending a plant: checking it,
     deciding it needs water, watering it". The piece reads. Five of eight

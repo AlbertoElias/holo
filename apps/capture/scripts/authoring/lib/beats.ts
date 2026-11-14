@@ -149,7 +149,7 @@ export function envelope(t: number, r: Resolved, depth = 0.08, overshoot = 0.05)
   return s >= 1 ? 0 : 1 - smoother(s);
 }
 
-/** A beat's span: from its earliest anticipation to the end of its last settle (persistent directions end when they arrive). */
+/** A beat's span: from its earliest anticipation to the end of its last settle (a persistent direction's ends after its attack plus its settle time). */
 export function beatSpan(beat: Beat): { from: number; to: number } {
   const rs = beat.directions.map((d) => resolveTiming(beat, d));
   if (!rs.length) return { from: beat.at, to: beat.at };

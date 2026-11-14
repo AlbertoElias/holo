@@ -463,7 +463,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       const toward = restNormal.clone().lerp(palm!, clamp01(w)).normalize();
       const wrist = point.clone();
       // The elbow turns from hanging (back) to the rig's reaching bend (out) as the arm lifts.
-      const elbowHint = restElbowHint(s).lerp(a.arms[s].elbowHintLocal, clamp01(w)).normalize();
+      const elbowHint = restElbowHint(a, s).lerp(a.arms[s].elbowHintLocal, clamp01(w)).normalize();
       const at = new THREE.Vector3();
       for (let i = 0; i < 6; i += 1) {
         solveArm(a, s, wrist, { palmToward: toward, wristBend: flat ? 0 : 0.35 * clamp01(w), elbowHint });

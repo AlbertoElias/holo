@@ -140,7 +140,7 @@ async function main(): Promise<void> {
     } finally { await browser.close(); }
     await writeFile(join(out, 'key.json'), `${JSON.stringify(key, null, 2)}\n`);
     await writeFile(join(out, 'face.json'), `${JSON.stringify({ take: basename(take), card, sizes: Object.keys(tiles).map(Number), expressions: peaks.map((p) => p.name) }, null, 2)}\n`);
-    console.log(`card framing, standing performer: phone ${card.phone.cssPx} CSS px (${card.phone.devicePx} device px, ${card.phone.mm} mm), body ${card.phone.bodyCssPx} CSS px; desktop ${card.desktop.cssPx} px (${card.desktopRetina.devicePx} at 2×)`);
+    console.log(`card framing, standing performer: phone ${card.phone.cssPx} CSS px (${card.phone.devicePx} device px, ${card.phone.mm} mm), body ${card.phone.bodyCssPx} CSS px; desktop ${card.desktop.cssPx} px (${card.desktopRetina.devicePx} device px on a 2× display, where the card's canvas is capped at 1.5×)`);
     console.log(`blind sheets: ${out}`);
   } finally { servers.close(); }
 }
