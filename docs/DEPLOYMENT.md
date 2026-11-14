@@ -50,7 +50,10 @@ Rules that keep this topology correct:
 - **One machine, scaled to zero.** HoloIM is a sandbox/demo app, so
   `fly.toml` sets `auto_stop_machines = "stop"` and
   `min_machines_running = 0`: Fly stops the machine when idle and starts it
-  on the next request (a few seconds cold start). You pay for running
+  on the next request (a cold start of about 3 s: the boot skips
+  `prisma migrate deploy` when the database already has every migration the
+  image ships, `apps/viewer-api/scripts/start.mjs`; Fly's proxy gives up on
+  a request after about 8 s of waiting). You pay for running
   seconds plus the volume, roughly $1–3/month at demo usage versus ~$12
   always-on. Do not `fly scale count 2`: each machine gets its own volume
   and its own SQLite file.

@@ -42,6 +42,7 @@ ENV NODE_ENV=production \
 
 EXPOSE 3001
 
-# Migrations run at boot; the Prisma CLI stays in the image for this
+# Migrations run at boot, but only when the database lacks one this image
+# ships (scripts/start.mjs); the Prisma CLI stays in the image for this
 # single-machine beta (documented tradeoff in docs/DEPLOYMENT.md).
-CMD ["sh", "-c", "pnpm --filter @holoim/api exec prisma migrate deploy && node apps/viewer-api/dist/apps/viewer-api/src/server.js"]
+CMD ["node", "apps/viewer-api/scripts/start.mjs"]
