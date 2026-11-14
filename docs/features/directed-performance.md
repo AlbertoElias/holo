@@ -388,7 +388,8 @@ Ordered by how much it cost the piece.
 
 12. **Life a reader can see.** The life every performer inherits moves
     the card by the numbers, but a held ending still reads as frozen from
-    stills (slice 1b, defaults). Authors give holds a beat for now.
+    stills (slice 1b, defaults), and the owner judged the video frozen
+    too (2026-11-14). Authors give holds a beat for now.
 
 Not exercised by the piece, still open: **voice and sound** (speech,
 effects, music) and **titles and captions**.
@@ -504,6 +505,8 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
      brow and lid shapes moving the mesh at least 8 mm.
 
    Recommended: A now, and C as a requirement of slice 2 if it starts.
+
+   **Decided on 2026-11-14:** A now, and C as a requirement of slice 2.
 3. **What comes after slice 1b.** After one revision the second piece
    reads as watering a plant, not as checking whether it needs water. What it could not express was props, sets, tool use,
    gestures and change in the world, not the avatar. The options are:
@@ -514,6 +517,9 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
 
    Recommended: A. Slice 2 stays gated until a piece's reading names
    the avatar as the limit.
+
+   **Decided on 2026-11-14:** A. Props, sets and tool use are being built
+   in their own session; slice 2 stays gated.
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.
@@ -672,7 +678,8 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
   as the brief requires. The numbers say the held ending moves on the card,
   but fresh readers still call it frozen. They judge from stills 0.2 s
   apart, where a slow sway of a few pixels does not show. Whether the video
-  reads as alive is untested: no reader can watch the video. The next try
+  reads as alive was untested until the owner watched it on 2026-11-14:
+  frozen. Bigger sway will not fix it. The next try
   is a different kind of life, not more of the same: occasional weight
   shifts, glances and posture changes, the motion a reader can see in
   stills. It should be judged from the video by a person.

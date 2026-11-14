@@ -160,8 +160,9 @@ it from the item below instead of duplicating its status here.
   legibility numbers and a second piece authored from a written brief
   (slice 1b, on `main` 2026-11-14: the second piece reads only as
   "watering a plant" after one revision, and its gap log puts props, sets and tool use ahead of the
-  house avatar). Two decisions wait for the user: how to treat faces at
-  card size, and whether props and sets come before slice 2. Owned by
+  house avatar). Decided 2026-11-14: faces carried by body and mouth,
+  with a brow bar for any house avatar; props and sets come before slice 2.
+  Still open: life, which the owner judged frozen from the video too. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
   (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)
