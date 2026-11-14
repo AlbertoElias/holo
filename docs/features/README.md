@@ -8,7 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| Direct, preview and revise a performance (one cast, one take format) | Draft (awaiting approval, 2026-11-13) | [directed-performance.md](directed-performance.md) |
+| Direct, preview and revise a performance (one cast, three drivers) | Reviewed (2026-11-13); build not started | [directed-performance.md](directed-performance.md) |
 | A hologram of yourself from a phone in under 2 minutes | Slices 1 and 2 on `main` (2026-11-13); device checks pending | [phone-capture.md](phone-capture.md) |
 | A scanned place around a take (split capture, first attempt) | Complete | [splat-place.md](archive/splat-place.md) |
 | Record a take inside a scanned place (split capture, slice 2) | 2a on `main` (2026-11-11); 2b, 2c not started | [splat-capture.md](splat-capture.md) |

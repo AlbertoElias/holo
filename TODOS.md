@@ -147,6 +147,15 @@ it from the item below instead of duplicating its status here.
   recorded controller input. Builds on
   [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
 - [x] Clean up expired direct-upload intents and their `incoming/*.glb` objects so abandoned uploads do not leak storage. In flight in [`docs/features/archive/upload-intent-cleanup.md`](docs/features/archive/upload-intent-cleanup.md).
+- [ ] Direct, preview and revise a performance, on avatars built to express
+  (the user's direction and approval on 2026-11-13, after the agent-authored
+  poem "The part I didn't say" played but did not act). An agent directs a
+  take as a beat sheet, on the same bones and face channels a phone or
+  headset drives; an audition every avatar must pass; a first house avatar
+  to replace the stand-in. Reviewed, not started: it begins
+  once the user has answered the phone-capture and natural-avatar-motion
+  briefs. Owned by
+  [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D; the
   room-scale body solver
   ([`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md))
