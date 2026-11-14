@@ -693,36 +693,67 @@ const AIM_RAYS: Array<{ name: string; kind: RayKind; perspective: boolean }> = [
   { name: 'wrist-tip', kind: 'wrist-tip', perspective: false },
   { name: 'wrist-tip corrected', kind: 'wrist-tip', perspective: true }
 ];
+/** Signed angle a - b in degrees, wrapped to (-180, 180]: the lens's direction sits near yaw 180, where raw differences wrap. */
+const wrapDeg = (d: number): number => ((((d + 180) % 360) + 360) % 360) - 180;
+const aimStats = (errors: number[], yaws: number[], pitches: number[]) => ({ frames: errors.length, medianErrorDeg: roundOrNull(percentile(errors, 50), 1), p95ErrorDeg: roundOrNull(percentile(errors, 95), 1), medianYawErrorDeg: roundOrNull(percentile(yaws, 50), 1), medianPitchErrorDeg: roundOrNull(percentile(pitches, 50), 1) });
+// Two score floors: 0.35 (frames the pointing path would use) and none (every frame with the hand, since a finger aimed
+// into the lens is foreshortened and the point score often falls below the floor while the author is still pointing).
+const AIM_SCORE_FLOORS = [0.35, 0] as const;
+const aimSegments = (config.segments ?? []).filter((seg) => seg.target);
+const aimPooled = new Map<string, { errors: number[]; yaws: number[]; pitches: number[] }>();
 const aimStudy = {
-  note: 'Raw rays against fingertip-to-target over each aim segment (trimmed 0.3 s each end, score 0.35 or more). Signed: ray minus target, yaw + toward the author\'s left (image right), pitch + up. Corrected: turned by the line of sight to the hand in the picture.',
+  note: 'Raw rays against fingertip-to-target over each aim segment (trimmed 0.3 s each end), at score floor 0.35 and with no floor. Signed: ray minus target, wrapped to +-180, yaw + toward the author\'s left (image right), pitch + up. Corrected: turned by the line of sight to the hand in the picture. pooled: every frame of every aim segment together.',
   camera,
-  segments: (config.segments ?? []).flatMap((seg) => {
-    if (!seg.target) return [];
-    const obs = observations.filter((o) => o.side === (seg.hand ?? 'right') && o.clipSec >= seg.startSec + 0.3 && o.clipSec < seg.endSec - 0.3 && (o.score ?? 0) >= 0.35);
-    return [{
-      label: seg.label,
-      target: seg.target,
-      rays: AIM_RAYS.map((r) => {
-        const errors: number[] = [];
-        const yaws: number[] = [];
-        const pitches: number[] = [];
-        for (const o of obs) {
-          const toTarget = aimDirection(o, seg.target);
-          const raw = rayOf(o, r.kind);
-          if (!toTarget || !raw) continue;
-          const ray = r.perspective ? norm(fromLensAxis(lineOfSight(o.hand.imageWrist), raw)) : raw;
-          errors.push(angleDeg(ray, toTarget));
-          yaws.push(yawDeg(ray) - yawDeg(toTarget));
-          pitches.push(pitchDeg(ray) - pitchDeg(toTarget));
-        }
-        return { ray: r.name, frames: errors.length, medianErrorDeg: roundOrNull(percentile(errors, 50), 1), p95ErrorDeg: roundOrNull(percentile(errors, 95), 1), medianYawErrorDeg: roundOrNull(percentile(yaws, 50), 1), medianPitchErrorDeg: roundOrNull(percentile(pitches, 50), 1) };
-      })
-    }];
-  })
+  segments: aimSegments.map((seg) => ({
+    label: seg.label,
+    target: seg.target,
+    hand: seg.hand ?? 'right',
+    startSec: seg.startSec,
+    endSec: seg.endSec,
+    byScoreFloor: AIM_SCORE_FLOORS.map((floor) => {
+      const obs = observations.filter((o) => o.side === (seg.hand ?? 'right') && o.clipSec >= seg.startSec + 0.3 && o.clipSec < seg.endSec - 0.3 && (o.score ?? 0) >= floor);
+      return {
+        scoreFloor: floor,
+        rays: AIM_RAYS.map((r) => {
+          const errors: number[] = [];
+          const yaws: number[] = [];
+          const pitches: number[] = [];
+          for (const o of obs) {
+            const toTarget = aimDirection(o, seg.target);
+            const raw = rayOf(o, r.kind);
+            if (!toTarget || !raw) continue;
+            const ray = r.perspective ? norm(fromLensAxis(lineOfSight(o.hand.imageWrist), raw)) : raw;
+            errors.push(angleDeg(ray, toTarget));
+            yaws.push(wrapDeg(yawDeg(ray) - yawDeg(toTarget)));
+            pitches.push(pitchDeg(ray) - pitchDeg(toTarget));
+          }
+          const key = `${floor}|${r.name}`;
+          const pool = aimPooled.get(key) ?? { errors: [], yaws: [], pitches: [] };
+          pool.errors.push(...errors);
+          pool.yaws.push(...yaws);
+          pool.pitches.push(...pitches);
+          aimPooled.set(key, pool);
+          return { ray: r.name, ...aimStats(errors, yaws, pitches) };
+        })
+      };
+    })
+  })),
+  pooled: [] as Array<{ scoreFloor: number; ray: string } & ReturnType<typeof aimStats>>
 };
+for (const [key, pool] of aimPooled) {
+  const [floor, ray] = key.split('|') as [string, string];
+  aimStudy.pooled.push({ scoreFloor: Number(floor), ray, ...aimStats(pool.errors, pool.yaws, pool.pitches) });
+}
 if (aimStudy.segments.length) {
   console.log('[bodycam-report] aim study (median error deg, signed yaw/pitch deg; frames)');
-  for (const seg of aimStudy.segments) console.log(`  ${seg.label.padEnd(36)} ${seg.rays.map((r) => `${r.ray} ${r.medianErrorDeg} (${r.medianYawErrorDeg}/${r.medianPitchErrorDeg}) n${r.frames}`).join(' | ')}`);
+  for (const floor of AIM_SCORE_FLOORS) {
+    console.log(`  score floor ${floor}`);
+    for (const seg of aimStudy.segments) {
+      const rays = seg.byScoreFloor.find((b) => b.scoreFloor === floor)!.rays;
+      console.log(`  ${seg.label.padEnd(36)} ${rays.map((r) => `${r.ray} ${r.medianErrorDeg} (${r.medianYawErrorDeg}/${r.medianPitchErrorDeg}) n${r.frames}`).join(' | ')}`);
+    }
+    for (const p of aimStudy.pooled.filter((q) => q.scoreFloor === floor)) console.log(`  pooled ${p.ray.padEnd(24)} median ${p.medianErrorDeg} p95 ${p.p95ErrorDeg} (yaw ${p.medianYawErrorDeg} pitch ${p.medianPitchErrorDeg}) n${p.frames}`);
+  }
 }
 
 // Head, from every frame's head rotation.

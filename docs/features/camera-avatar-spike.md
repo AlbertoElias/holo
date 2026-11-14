@@ -367,7 +367,8 @@ the clip checked by eye.
 these from this brief; the clip and `clip.json` are in `output/bodycam/`, the
 saved landmarks in `apps/capture/output/bodycam-jitter/landmarks.json`):
 
-1. Settle aim on the lens-only aim clip (below). The report's aim study
+1. Settle aim on the lens-only aim clip (below). Measured 2026-11-14: fails
+   3.5 deg (see "Aim clip result"); the go/no-go must weigh that. The report's aim study
    (2026-11-11) measures the knuckle and wrist rays, each as the hand model
    gives it and perspective-corrected (turned by the line of sight to the
    hand in the picture, in case the model reads the finger relative to its
@@ -399,6 +400,48 @@ low (at the hip, pointing up). Then the left hand, mirrored. The clip is
 times: find the ten holds from the tracking (point score at or above 0.6,
 sustained, per hand, in order), write a config with one `lens` segment per
 hold, and re-measure with `--from-landmarks`.
+
+**Aim clip result (2026-11-14): fails the 3.5 deg target by a wide margin.**
+Frame-stepped run (all 1,434 frames, GPU) in
+`apps/capture/output/bodycam-aimclip/`; holds in `output/bodycam/aim-holds.json`;
+re-measured in `apps/capture/output/bodycam-aimclip-holds/report.json`.
+
+- The point score cannot find the holds. It passes 0.6 only for a moment as
+  each hand rises, then falls to about 0 for the rest of the hold. A finger
+  aimed into the lens is foreshortened, and the hand model reads it as curled.
+  The holds were found from where the pose wrist sits still instead (image
+  speed under 0.06 per s), and were checked by eye on a 1 fps sheet. The
+  author did them in the order straight, out, high, low, across, not the
+  protocol's order. Right: 4.25-5.6, 6.75-9.0, 10.25-12.8, 15.0-17.6 and
+  19.25-22.6 s. Left: 24.0-26.15, 27.0-30.9, 32.25-35.3, 36.75-40.6 and
+  41.5-44.4 s.
+- The left straight and left out holds have almost no hand-model frames. The
+  left out hold sits at the frame's edge.
+- Median error in deg (signed yaw/pitch). With score 0.35 or more, only 38
+  frames qualify, in four holds:
+
+  | Hold (n at 0.35) | knuckle | knuckle corr. | wrist | wrist corr. |
+  |---|---|---|---|---|
+  | R1 straight (22) | 14.7 (-14/1) | **8.6** (-8/1) | 25.9 (-24/10) | 20.2 (-17/10) |
+  | R2 out (3) | 21.7 | 32.0 | 32.0 | 23.0 |
+  | R5 across (10) | 15.6 (0/15) | 24.0 (11/22) | 31.7 (-28/8) | 24.2 (-19/15) |
+  | L5 across (2) | 20.2 | 8.2 | 21.8 | 32.9 |
+  | pooled, median / p95 | 15.2 / 22.5 | 8.8 / 33.7 | 26.3 / 32.8 | 20.9 / 28.7 |
+
+  With no score floor (513 frames, eight holds), the knuckle ray flips
+  (median 88 deg, p95 126 deg). On the high, low and across holds it points
+  away from the lens: 92 to 123 deg raw, 97 to 143 deg corrected. The wrist
+  ray holds better: 36.9 deg median and 55 p95 raw, 29.9 and 40.6 corrected.
+  Its yaw is within 1 deg on average, and its pitch errs about 11 deg upward.
+- Verdict: no ray comes near 3.5 deg. The best is the corrected knuckle ray,
+  8.6 deg on the one hold the hand model reads as a point. Single-camera hand
+  tracking cannot read where a finger aims along the camera's own axis.
+  Aiming at the viewer likely needs another cue (head or eye-to-fingertip,
+  not measured here), or pointing kept off the lens axis.
+- Report fixes: the signed yaw is now wrapped to plus or minus 180 deg (the
+  lens sits near yaw 180, where the raw difference read 336 to 346 deg). The
+  aim study now gives every hold at score floors 0.35 and 0, plus pooled
+  median and p95.
 
 Done on 2026-11-11: ray jitter and the head (above), and the script's own server start.
 Two script faults found on this first long clip are both fixed. A whole clip
