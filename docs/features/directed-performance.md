@@ -754,7 +754,8 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
   - **Local upload and render:** `viewer-check.ts` on the revised take shows
     51 of 67 bones moving and 9 of 27 face shapes (peak 0.926), with the
     viewer anchoring on `RecordedAvatar`.
-  - **Not published.** The command is ready and has not been run:
+  - **Published by the owner** on 2026-11-14 as `cmwgvndd90001oeh37kuvfri7`
+    (Quick Look ready), with this command, which the tool does not cover:
 
     ```
     mkdir -p output/showcase && cp apps/capture/output/authoring/watering/watering-2.glb output/showcase/does-it-need-water.glb
