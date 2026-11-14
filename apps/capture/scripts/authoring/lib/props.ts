@@ -128,6 +128,8 @@ export function buildProp(id: string, spec: ObjectSpec, bodies: ReadonlyMap<stri
     source = { loaded, scale, offset };
     bounds.set(lo.clone().multiplyScalar(scale).add(offset), hi.clone().multiplyScalar(scale).add(offset));
     credit = spec.credit && spec.credit !== 'own' ? objectCreditSchema.parse(spec.credit) : loaded.credit;
+    // Someone else's model is never used uncredited: a packed source must bring its credit.
+    if (!credit && spec.credit !== 'own') throw new Error(`object ${id}: ${spec.source} carries no credit; give one in the sheet`);
   } else {
     const specs = spec.parts ?? [{ shape: spec.shape!, size: spec.size!, ...(spec.color !== undefined ? { color: spec.color } : {}) }];
     for (const p of specs) {

@@ -13,6 +13,8 @@
  * under a static child that scales it to size, and its credit rides on the
  * wrapper and in the asset's copyright.
  */
+import { basename } from 'node:path';
+
 import { Document, NodeIO, type Node as GNode } from '@gltf-transform/core';
 import { dedup, mergeDocuments } from '@gltf-transform/functions';
 import { assertHoloimObjects, formatCredit, HOLOIM_CREDIT_EXTRAS_KEY, HOLOIM_OBJECTS_EXTENSION, HOLOIM_OBJECTS_VERSION, RECORDED_OBJECT_NODE_NAME, type HoloimObjects } from '@holoim/objects';
@@ -133,7 +135,7 @@ export async function writeTake(take: SolvedTake, provenance: Provenance): Promi
       node: nodes.indexOf(node),
       name: track.prop.name,
       origin: 'prepared',
-      source: { name: track.prop.spec.source ?? `sheet:${track.prop.id}`, ...(track.prop.source ? { sha256: track.prop.source.loaded.sha256 } : {}) },
+      source: { name: sourceName(track.prop.spec.source) ?? `sheet:${track.prop.id}`, ...(track.prop.source ? { sha256: track.prop.source.loaded.sha256 } : {}) },
       presence: [{ start: 0, end: round3(duration) }],
       // HOLOIM_objects holds are the recorded avatar's: the first performer's.
       holds: track.holdings.filter((h) => h.performer === first).map((h) => ({ hand: h.side, start: round3(h.from), end: round3(Math.min(h.to, duration)) }))
@@ -158,6 +160,9 @@ export async function writeTake(take: SolvedTake, provenance: Provenance): Promi
 }
 
 const round3 = (v: number): number => Math.round(v * 1000) / 1000;
+
+/** A source as published: a Poly Haven id, or a local file's name only, never the author's path. */
+const sourceName = (source: string | undefined): string | undefined => (source === undefined || source.startsWith('polyhaven:') ? source : basename(source));
 
 /** One object: its wrapper (rest pose = first frame; tracks only if it moves), and its parts or its source model. */
 async function writeObject(doc: Document, io: NodeIO, scene: ReturnType<Document['createScene']>, buffer: ReturnType<Document['createBuffer']>, track: PropTrack, add: (node: GNode, path: 'translation' | 'rotation', values: Float32Array) => void): Promise<GNode> {

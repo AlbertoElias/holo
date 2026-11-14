@@ -383,10 +383,16 @@ function placeObjects(cast: Cast[], sheet: BeatSheet, sources: ReadonlyMap<strin
       if (spec.at !== undefined) { const p = pointOf(cast, self, spec.at); prop.position.set(p.x, top.y, p.z); } else prop.position.copy(top);
       defaultYaw = yawOf(support.quaternion);
     } else prop.position.copy(pointOf(cast, self, spec.at!));
-    if (isPlace(spec.at)) {
-      const of = spec.at.of ?? stage.first;
+    // Turned as what it is placed from faces: a mark stands for its own point.
+    const at = typeof spec.at === 'string' && stage.marks.has(spec.at) ? stage.marks.get(spec.at) : spec.at;
+    if (isPlace(at)) {
+      const of = at.of ?? stage.first;
       const c = cast.find((x) => x.spec.id === of);
       defaultYaw = c ? c.spec.facing : yawOf(stage.props.get(of)!.prop.quaternion);
+    } else if (spec.on === undefined) {
+      const from = measuredFrom(sheet, at);
+      const c = from !== undefined ? cast.find((x) => x.spec.id === from) : undefined;
+      if (c) defaultYaw = c.spec.facing;
     }
     let yaw = defaultYaw;
     if (typeof spec.facing === 'number') yaw = spec.facing;

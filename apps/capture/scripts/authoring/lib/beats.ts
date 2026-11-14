@@ -9,6 +9,7 @@ import { FACE_CHANNELS, type FaceChannel } from '@holoim/avatar-face';
 import type { HandShapeName } from './hands.ts';
 import { HAND_SHAPES } from './hands.ts';
 import { measureProblem, placeProblem } from './stage.ts';
+import { objectCreditSchema } from '@holoim/objects';
 
 export type Side = 'left' | 'right';
 /**
@@ -174,7 +175,6 @@ export const DEFAULT_TIMING: Readonly<Record<DirectionKind, Required<Omit<Timing
 /** Directions whose result stays: the performer's place and facing. */
 export const PERSISTENT = (d: Direction): boolean => d.kind === 'step' || (d.kind === 'turn' && d.body === 'whole');
 /** Directions that change the world for the rest of the take: also where an object is (`take` and `put` reach and come back, but the object stays moved). */
-export const CHANGES_AFTER = (d: Direction): boolean => PERSISTENT(d) || d.kind === 'take' || d.kind === 'put';
 
 export interface Resolved {
   readonly beat: Beat;
@@ -224,10 +224,10 @@ export function envelope(t: number, r: Resolved, depth = 0.08, overshoot = 0.05)
 }
 
 /** A beat's span: from its earliest anticipation to the end of its last settle (a persistent direction's ends after its attack plus its settle time). */
-export function beatSpan(beat: Beat): { from: number; to: number; changesAfter?: boolean } {
+export function beatSpan(beat: Beat): { from: number; to: number } {
   const rs = beat.directions.map((d) => resolveTiming(beat, d));
   if (!rs.length) return { from: beat.at, to: beat.at };
-  return { from: Math.max(0, Math.min(...rs.map((r) => r.start))), to: Math.max(...rs.map((r) => r.persistent ? r.at + r.attack + r.settle : r.end)), changesAfter: rs.some((r) => CHANGES_AFTER(r.direction)) };
+  return { from: Math.max(0, Math.min(...rs.map((r) => r.start))), to: Math.max(...rs.map((r) => r.persistent ? r.at + r.attack + r.settle : r.end)) };
 }
 
 /** Names an object answers to after a dot: the built-in anchors, its named parts, its named anchors. */
@@ -350,13 +350,19 @@ export function validateSheet(sheet: BeatSheet): string[] {
     if (o.shape !== undefined && o.size === undefined) problems.push(`${where}: a shape needs a size [width, height, depth]`);
     if (o.height !== undefined && o.source === undefined) problems.push(`${where}: height scales a source; a shape takes its size`);
     if (o.source !== undefined && !o.source.startsWith('polyhaven:') && o.credit === undefined) problems.push(`${where}: a local model needs a credit (or "own" for your own work)`);
+    if (o.credit !== undefined && o.credit !== 'own') {
+      const credit = objectCreditSchema.safeParse(o.credit);
+      if (!credit.success) problems.push(`${where} credit: ${credit.error.issues.map((i) => `${i.path.join('.') || 'credit'} ${i.message}`).join('; ')}`);
+    }
     if (o.source !== undefined && (typeof o.grip === 'string' || typeof o.tool === 'string')) problems.push(`${where}: a source has no parts; give a grip or tool as a point and an axis`);
     const vec = (label: string, v: Vec3Measure | undefined): void => {
       if (v === undefined) return;
       if (!Array.isArray(v) || v.length !== 3) { problems.push(`${where} ${label}: three measures`); return; }
       for (const x of v) { const problem = measureProblem(x, performers); if (problem) problems.push(`${where} ${label}: ${problem}`); }
+      if (label.endsWith('size') && v.some((x) => typeof x === 'number' && !(x > 0))) problems.push(`${where} ${label}: each size is above 0`);
     };
     vec('size', o.size);
+    if (typeof o.height === 'number' && !(o.height > 0)) problems.push(`${where} height: above 0`);
     const measureOf = measureProblem(o.height, performers);
     if (measureOf) problems.push(`${where} height: ${measureOf}`);
     const partNames = new Set<string>();
@@ -435,6 +441,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
       if (d.kind === 'take' && sheet.objects?.[d.object] && !sheet.objects[d.object]!.grip) problems.push(`${where}: ${d.object} has no grip`);
       if (d.kind === 'put' && (d.at === undefined) === (d.on === undefined)) problems.push(`${where}: give at or on`);
       if (d.kind === 'put' && d.on !== undefined && (!objects.has(d.on) || d.on === d.object)) problems.push(`${where}: on ${d.on}: no other object`);
+      if (d.kind === 'put' && pointObjects(d.at, objects, sheet.marks).includes(d.object)) problems.push(`${where}: an object cannot be put down at a point on itself`);
       for (const p of [('at' in d ? d.at : undefined), (d.kind === 'turn' ? d.toward : undefined)]) {
         const problem = pointProblem(p);
         if (problem) problems.push(`${where}: ${problem}`);

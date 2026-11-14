@@ -6,7 +6,8 @@ re-scoped 2026-11-14 to a creation system. Slice 1b built and verified
 (2026-11-14): the review loop, three defaults, face numbers and a second
 piece, which reads only as "watering a plant" after one revision. Its gap
 log (props, sets, publishing, gestures) now leads "Not covered yet". Slice 1c
-(props and sets in the beat sheet) in progress (2026-11-14). The house avatar (slice 2) stays
+(props and sets in the beat sheet) built and verified (2026-11-14), not on
+`main` until the user answers open decision 4; neither piece published. The house avatar (slice 2) stays
 gated; the face decision below is the user's  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
@@ -441,6 +442,21 @@ review (2026-11-14):
   1 m so the fist meets it with the forearm level.
 - **The viewer check reads objects:** each `RecordedObject` the viewer
   loaded, its mesh count, whether the take moves it, and its credit.
+- **Every reach re-solves a little differently.** The reach's arm solve now
+  starts from where the wrist must be for the palm to land, with eight
+  passes, not from the target with six. Every existing reach moves (the
+  goodbye's right arm by up to 25° over frames 33–108, two-avatars by up to
+  14°), and the reports improve or hold: the defaults test's palm lands 19.6
+  mm off, asked 20 (slice 1b's row says 11.8 with the doubled life), the
+  goodbye's stays at 148.6 mm, asked 160, and two-avatars' at 100.0 and
+  100.2 mm, asked 100.
+- **The card frames the performer, not the set.** viewer-web fits the card
+  to the avatar (`HologramCardCanvas.tsx`). The phone card is portrait,
+  about a metre wide at her depth, so an object more than about half a
+  metre beside her on screen is off it; `viewer-check.ts`'s square card
+  shows more, which is how the tallest bar's chart passed the author's
+  check and was missed by the reader. Changing that is the viewer's, not
+  this slice's (gap 13).
 
 **Revision locality.** `take`, `put` and `hold` change where the object is
 for the rest of the take, as a step does. Other directions stay closed forms
@@ -542,7 +558,8 @@ reconstruction from images (Astra's local path) as an avatar source.
 What a whole creation system needs and the tools do not do yet. Confirmed
 by the second piece's gap log (slice 1b evidence, "Does it need water?"):
 each item was a step that needed something outside the CLI and its README.
-Ordered by how much it cost the piece.
+Ordered by how much it cost the piece. Slice 1c covers items 1, 2, 3, 6
+and 7 (its evidence, below); the second 1c piece added item 13.
 
 1. **Props and sets.** A beat sheet has no objects. The piece's pedestal,
    pot, plant and watering can were added afterwards by a hand-written
@@ -584,6 +601,13 @@ Ordered by how much it cost the piece.
 12. **Life a reader can see.** The life every performer inherits moves
     the card by the numbers, but a held ending still reads as frozen from
     stills (slice 1b, defaults). Authors give holds a beat for now.
+
+13. **The card shows only the performer's surroundings.** The card fits
+    the avatar, so a set more than about half a metre beside her on screen
+    is off it: the tallest-bar chart, 1.15 m in front of her side, was never
+    seen, and its reader saw a pointer held out at nothing. Until the
+    viewer frames recorded objects too, stage what matters close to her or
+    in depth (slice 1c evidence).
 
 Not exercised by the piece, still open: **voice and sound** (speech,
 effects, music) and **titles and captions**.
@@ -984,6 +1008,115 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
   the second piece from reading was everything around the performer:
   props, tool use, gestures and the world. That points to building props
   and sets before a house avatar.
+
+### Slice 1c evidence (2026-11-14)
+
+Builds, Quick Look runs and viewer checks are in the ignored
+`apps/capture/output/authoring/c1/` and `c1b/`, and the review packs are in
+`review/watering-1c/` and `review/tallest-bar-1c/`. Both readers were fresh
+Claude Opus subagents. Each was given only the pack's `reader/` folder under
+the neutral title "Take".
+
+- **Two sheets, no outside script.** `sheets/watering.json` now declares its
+  set and props: a Poly Haven pedestal (credited), a plant, a pot and a can.
+  `sheets/tallest-bar.json` is the second piece, and it is different. A side
+  table (Poly Haven, CC0, by James Ray Cock) holds a cup. She takes a pointer
+  from the cup with the left hand, aims its tip at the tallest bar of a bar
+  chart, looks back to the viewer, and puts the pointer back. Each sheet
+  builds with `direct.ts` alone.
+- **Build numbers** (limits: grip 1 cm/5°, put 1 cm/3°, aim 10°):
+
+  | Piece | Reaches (stop-short miss) | Grip | Put | Aim |
+  |---|---|---|---|---|
+  | watering | poke 0.4, check 0.2, lift-can 0.4 mm | none (held from the first frame) | none | 3.3° |
+  | tallest-bar | show 0.2 mm | 0.2 mm / 0.1° | 2.9 mm / 0.1° | 2.5° |
+
+- **Regression.** goodbye and two-avatars rebuild with every reach
+  re-solved (wrist-start, 8 passes):
+  - goodbye: 148.6 mm, asked 160;
+  - two-avatars: 100.0 and 100.2 mm, asked 100;
+  - defaults palm: 19.6 mm, asked 20.
+
+  The wrist turns at most 25° in goodbye and 14° in two-avatars. `--against`
+  with two moving objects keys same-named nodes as `name#k` and reports
+  "0-9.5 s (1 ch)".
+- **File.** Both GLBs keep `RecordedAvatar` as the only performer declared
+  in `HOLOIM_humanoid`, and declare their objects in `HOLOIM_objects` v0.
+  `validateHoloimObjects` passes, and gltf-validator reports 0 errors. Each
+  sourced object is credited in three places:
+  - `holoimCredit` on its node;
+  - `asset.copyright`;
+  - `asset.extras.holoim.sources`, with its sha256 and the origin it was
+    fetched from (a local file publishes only its basename).
+- **Viewer** (`viewer-check.ts` on the `c1b` builds): the humanoid resolves
+  to holoim in both.
+
+  | | Bones moving | Fingers | Face shapes (peak) | Objects |
+  |---|---|---|---|---|
+  | tallest-bar | 50/67 | 30/40 | 9/27 (0.976) | table credited and still; cup still; pointer moves; chart still |
+  | watering | 51/67 | 30/40 | 9/27 (0.926) | pedestal credited; two still objects; can moves |
+
+  viewer-check names objects `RecordedObject_n`, not by their sheet names.
+- **Quick Look.** `apps/viewer-api/tools/check_usdz_tools.sh <glb> [outdir]`,
+  run by hand, passes 4/4 on both GLBs (`c1/quicklook-*/exercise-summary.json`).
+- **Refusals**, each with a message that names the problem:
+  - a mark cycle;
+  - a take whose hand arrives after the take ends;
+  - a place measured from an object held from the first frame;
+  - a size of 0 or below;
+  - a put at a point on the object itself;
+  - a credit that does not parse.
+
+  A mark that names an object declared later in the sheet now builds.
+- **Reader, watering.** Overall: "tending a houseplant". These read:
+  - looking at the plant;
+  - lifting the can.
+
+  These did not:
+  - The touch is hidden behind the leaves.
+  - The wrist check reads as checking a watch.
+  - The pour reads only as "probably meant as pouring". The can is held
+    still at chest height for about 2 s, to her right and never over the
+    pot, and no water comes out.
+  - The face is unreadable on the card (16.8 CSS px).
+
+  The props now place, hold and aim as written, but what decides this piece
+  is the pour's placement and the water, and the water is out of scope here.
+- **Reader, tallest-bar.** Overall: "pick up the pointer, present or gesture
+  with it, put it back". These read:
+  - the take;
+  - the put.
+
+  These did not:
+  - She never points at anything the reader could identify, because the
+    chart was off the phone card and the close view.
+  - The pointer "disappeared" at 2.2–2.6 s. The take's hold (0.3 s) ended
+    before the show reach began, so the hand fell back to her hip. The hold
+    is now 1.6 s, and the pointer's lowest point between 1.5 and 3.2 s rose
+    from 0.73 to 0.98 m. This was not re-reviewed.
+  - It ends leaning about 45° in the cup. A put matches up to 0.1° but has
+    no goal for the turn about vertical, so the shaft keeps the lean the
+    hand gives it.
+  - The shaft is a hairline on the card, and 3.4–6.2 s looks almost frozen.
+
+  The README now covers framing on the phone card and keeping a take's hold
+  until the next reach. "Not covered yet" item 13 records the framing gap.
+- **Review fixes.** A code review and a fresh Opus verifier (given only this
+  brief and the diff) found the following, now fixed:
+  - the grip offset was taken at the rig's scale, so a scaled avatar's prop
+    drifted;
+  - marks were placed out of order;
+  - late takes were accepted;
+  - the source cache was not per origin;
+  - credit was checked late;
+  - non-positive sizes were accepted;
+  - a put at the object itself was accepted;
+  - an absolute local path could be published.
+
+  Still open: no check proves the wrist limits or their precedence.
+- **Not published.** Neither piece was uploaded. Open decision 4 (recorded
+  objects, required credit) waits for the user, and nothing merges before
+  that answer.
 
 ## Physical-device limits
 
