@@ -72,7 +72,7 @@ hands-only.
 |---|---|---|---|---|---|---|
 | **Target, all bodies** | ≤ 3 cm / ≤ 10% · ≤ 1 cm · ≤ 0.5 cm | ≤ 35 m/s² | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
 | Human reference (CMU 02_01 / 07_01) | 3.9 / 16% · 07_01 2.6 / 10% | 34 / 45 | 0% | — | — | anchor |
-| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | **8.6 cm / 16%** · 0.3 · **5.3 cm** | **116** | 0% | 0.7 mm | n/a | **worst** |
+| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.7 cm / 4.4% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 32 (was **116**) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
 | Camera (spike, `bodycam:report`) | unmeasured | unmeasured | unmeasured | ray **5.7–20°** (best variant 2.6°) | aim median **26/41/46°** (rough marks), head yaw p95 8.2° | bad |
 | VR body, walk ramp | **4.1 cm** / 3.8% · 1.0 · **1.2 cm** | **43** | 0% | 2.7 mm | — | miss |
 | VR body, walk | 2.9 cm / 3.8% · 1.1 · 0.3 | **37** | 0% | 1.6 (1.3) mm | — | near |
@@ -89,7 +89,7 @@ target there is "no worse than input".
 
 ## Ranked worst gaps (execution order)
 
-1. **Desktop feet and pops.** Walking moves the root at 3.24 m/s while the
+1. **Done (2026-11-13): desktop feet and pops.** See the evidence table. Walking moved the root at 3.24 m/s while the
    clip's planted foot still slides 0.5–1 m/s, sinks 5 cm, and pops at 3× human.
    The most-watched path (every desktop and emulated take). Fix per design
    review 5–8: measure each clip's stance-foot speed by FK at load and set
@@ -97,6 +97,13 @@ target there is "no worse than input".
    (lower-body yaw toward travel, negative timeScale, or directional clips);
    pin planted feet in `TerrainLegSolver` (one writer per leg) from
    precomputed stance phases; knees always forward.
+   How it closed: the walk speed was lowered to 1.8 m/s (Decision 3). The
+   keyboard ramps at 12 m/s². The 5-key walk is smoothed, its hips bob is
+   rebuilt from the feet, and its stride is laid down 1.2× longer. Cadence
+   comes from the FK stance speed. Feet pin from stance phases where they are.
+   The swing never travels back and lifts clear. Soft reach stops the knee
+   snapping straight. A backward start takes the reversal at once. The desktop
+   crouch key is a spring on a ramped target.
 2. **Camera aim and jitter.** Fold in the camera spike (Decision 2): adopt the
    wrist→tip 0.25 s ray (2.6°), record a measured aim clip, and sample avatar
    bones in `bodycam:report` so the body rows above stop being unmeasured.
@@ -124,7 +131,7 @@ and a before/after proof video (ignored `output/`, H.264 MP4, never committed).
 ## Acceptance criteria
 
 - [ ] One report grades every source with the same metrics and per-source targets.
-- [ ] Desktop keyboard row meets target; guard strict in `desktop-motion`.
+- [x] Desktop keyboard row meets target; guard strict in `desktop-motion`.
 - [ ] Camera row has measured body and aim numbers and meets target, behind `?input=camera`.
 - [ ] VR body walk/ramp/turn rows meet target; strict in the body replay.
 - [ ] Real-headset wrist p95 ≤ 2 cm.
@@ -155,6 +162,9 @@ and a before/after proof video (ignored `output/`, H.264 MP4, never committed).
 1. **Public mocap for the feet targets: approved.** CMU walks 02_01 and 07_01
    downloaded to ignored `output/mocap/`; targets above are calibrated on them.
 2. **Camera spike: taken over** by this brief; rebased onto `main` after gap 1.
+3. **Desktop walk is a brisk walk, ~1.8 m/s (2026-11-13).** The keyboard walks
+   one avatar height per second (1.8 m/s at 1.8 m), down from 3.24 m/s (a jog
+   the shipped walk clip cannot plant). VR stick speed is unchanged.
 
 ## Design review (2026-11-13, `design-reviewer`, Opus)
 
@@ -175,7 +185,7 @@ and a before/after proof video (ignored `output/`, H.264 MP4, never committed).
 
 | Acceptance criterion | Workflow or command | Result |
 |---|---|---|
-| Desktop row | `node --import tsx scripts/run-xr-checks.ts desktop-motion` | baseline above |
+| Desktop row | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (strict, in `test:xr`) | gap 1 (2026-11-13): skate 0.70 cm / 4.4%, float 0.87, penetration 0.00, pops p99 32.1, joint limits 0%, jitter 0.1 mm, all targets met |
 | Human anchor | x | CMU reads above |
 | VR body rows | `pnpm --filter @holoim/capture run test:xr:body` then `scripts/motion-quality-report.ts` | baseline above |
 | Hand rows | hand replay then `scripts/motion-quality-report.ts` | baseline above |

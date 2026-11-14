@@ -8,6 +8,8 @@ import { type CaptureContext, captureContext } from './captureContext';
  */
 export class BodyPoseSystem extends createSystem() {
   private capture!: CaptureContext;
+  /** Travel speed eased for the crouch pose's walk blend, whose band a stop crosses in a frame or two. */
+  private crouchSpeed = 0;
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -42,8 +44,12 @@ export class BodyPoseSystem extends createSystem() {
       const moving = input.moveState.forward || input.moveState.back || input.moveState.left || input.moveState.right;
       // The plant is held through the last of the stand-up, until the crouch is gone, so the feet do not snap as the reach ends.
       const plant = (c.crouch.reach > 0 || (avatar.isPlanted && c.crouch.amount > 0.003)) && !moving;
-      avatar.applyCrouchPose(c.crouch.poseAmount, character.horizontalSpeed, c.crouch.squat, plant, c.crouch.deepExtra);
-      c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, c.crouch.poseAmount > 0.3);
+      this.crouchSpeed += (character.horizontalSpeed - this.crouchSpeed) * (1 - Math.exp(-Math.max(0, deltaSec) / CROUCH_SPEED_EASE_SEC));
+      avatar.applyCrouchPose(c.crouch.poseAmount, this.crouchSpeed, c.crouch.squat, plant, c.crouch.deepExtra);
+      c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, c.crouch.poseAmount > 0.3, c.animator.getGaitState());
     }
   }
 }
+
+// Time constant for the crouch pose's eased travel speed (s).
+const CROUCH_SPEED_EASE_SEC = 0.15;

@@ -126,6 +126,32 @@ export function computeCrouchPoseAmount(
   return clamp(crouchAmount * visualBoost, 0, tuning.maxPoseAmount);
 }
 
+/**
+ * The desktop crouch key's amount, as a critically damped spring: it leaves and arrives at rest, so the whole
+ * body's drop never starts or stops in a single frame (an exponential ease jumps straight to its fastest).
+ */
+export function stepCrouchSpring(
+  current: { amount: number; velocity: number },
+  targetAmount: number,
+  deltaSec: number
+): { amount: number; velocity: number } {
+  const omega = targetAmount < current.amount ? DESKTOP_RELEASE_OMEGA : DESKTOP_ENGAGE_OMEGA;
+  const dt = Math.max(0, deltaSec);
+  const offset = current.amount - targetAmount;
+  const decay = Math.exp(-omega * dt);
+  const term = current.velocity + omega * offset;
+  const amount = targetAmount + (offset + term * dt) * decay;
+  const velocity = (current.velocity - omega * term * dt) * decay;
+  const clamped = clamp(amount, 0, 1);
+  if (clamped < 1e-4 && targetAmount < 1e-4 && Math.abs(velocity) < 1e-3) return { amount: 0, velocity: 0 };
+  return { amount: clamped, velocity: clamped === amount ? velocity : 0 };
+}
+// Spring rates (rad/s) for the desktop key: about 0.15 s to most of the way down or up.
+const DESKTOP_ENGAGE_OMEGA = 14;
+const DESKTOP_RELEASE_OMEGA = 14;
+// The desktop key's target moves at most this much per second (full crouch in 0.25 s).
+const DESKTOP_TARGET_RATE = 4;
+
 // A reach demand up to this fraction takes the crouch to its full pose; the rest becomes a squat.
 const REACH_CROUCH_SHARE = 0.6;
 
@@ -140,6 +166,8 @@ export class CrouchState {
   /** 0 to 1: the extra depth past a full squat a reach's set-down asks for. */
   deepExtra = 0;
   private keyAmount = 0;
+  private keyVelocity = 0;
+  private keyTarget = 0;
   target = 0;
   source: CrouchSource = "none";
   private baseline: VrCrouchBaselineState = { standingHeadY: 0, standingCaptured: false };
@@ -150,7 +178,18 @@ export class CrouchState {
     const resolution = resolveCrouchTargetAndSource(isVrActive, desktopHeld ? 1 : 0, vrCrouch.vrTarget);
     this.target = resolution.target;
     this.source = resolution.source;
-    this.keyAmount = stepCrouchAmount(this.keyAmount, this.target, deltaSec);
+    if (isVrActive) {
+      this.keyAmount = stepCrouchAmount(this.keyAmount, this.target, deltaSec);
+      this.keyVelocity = 0;
+      this.keyTarget = this.keyAmount;
+    } else {
+      // The key's target itself ramps, so the spring never starts at its full pull (a whole-body jolt).
+      const ramp = DESKTOP_TARGET_RATE * Math.max(0, deltaSec);
+      this.keyTarget += clamp(this.target - this.keyTarget, -ramp, ramp);
+      const next = stepCrouchSpring({ amount: this.keyAmount, velocity: this.keyVelocity }, this.keyTarget, deltaSec);
+      this.keyAmount = next.amount;
+      this.keyVelocity = next.velocity;
+    }
     this.amount = this.keyAmount;
     this.poseAmount = computeCrouchPoseAmount(this.amount, isVrActive);
     // A reach is already smoothed by its own rate: it bends the body as far as it asks, past the key's crouch.
@@ -174,6 +213,8 @@ export class CrouchState {
 
   release(): void {
     this.keyAmount = 0;
+    this.keyVelocity = 0;
+    this.keyTarget = 0;
     this.squat = 0;
     this.reach = 0;
     this.deepExtra = 0;

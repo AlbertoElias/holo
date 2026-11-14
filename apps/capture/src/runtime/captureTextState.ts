@@ -46,6 +46,7 @@ export function renderCaptureTextState(c: CaptureContext): string {
       horizontalSpeed: character.horizontalSpeed,
       targetHorizontalSpeed: character.targetHorizontalSpeed,
       timeScale: animator.getCurrentTimeScale(),
+      gait: { ...animator.getGaitState(), gait: animator.getGait(), stanceSpeed: animator.stanceSpeedWorld() ?? null },
       activeProfile: animator.getActiveProfile(),
       legs: c.terrainLegs.getSnapshot(),
       clip: animator.getClipSnapshot()

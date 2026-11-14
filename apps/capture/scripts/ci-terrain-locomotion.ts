@@ -13,7 +13,7 @@ type Leg = { side: string; foot: Vec; groundY: number | null; correction: number
 type State = {
   mode: string;
   character: { position: Vec; grounded: boolean; velocityY: number };
-  locomotion: { state: string; horizontalSpeed: number; timeScale: number; activeProfile: string; legs: Leg[]; clip: { name: string; time: number; duration: number } | null };
+  locomotion: { state: string; horizontalSpeed: number; timeScale: number; gait?: { stanceSpeed: number | null }; activeProfile: string; legs: Leg[]; clip: { name: string; time: number; duration: number } | null };
   crouch: { amount: number };
 };
 type Input = { forward?: boolean; back?: boolean; left?: boolean; right?: boolean; crouch?: boolean; jump?: boolean };
@@ -159,13 +159,16 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
     const traveledSpeed = travel / ((states.length - 1) / 30);
     assert(travel > 0.08, `${mode}: gait test did not actually travel`);
     assert(Math.abs(traveledSpeed - meanSpeed(states)) < 0.35, `${mode}: reported speed disagrees with physical travel`);
-    const expected = Math.max(0.15, Math.min(2.4, 1.4 * meanSpeed(states) / 3.24));
+    // The planted foot moves back as fast as the root moves on: cadence is travel over the clip's measured stance speed.
+    const stanceSpeed = states.at(-1)!.locomotion.gait?.stanceSpeed;
+    const expected = Math.max(0.15, Math.min(stanceSpeed ? 3 : 2.4, stanceSpeed ? meanSpeed(states) / stanceSpeed : 1.4 * meanSpeed(states) / 3.24));
     assert(Math.abs(meanCadence(states) - expected) < 0.15, `${mode}: cadence fails to follow actual corrected travel`);
   }
   if (meanSpeed(crouchWalk) < meanSpeed(walk) * 0.85) {
     assert(meanCadence(crouchWalk) < meanCadence(walk) * 0.85, `${mode}: crouch cadence fails to follow slower travel`);
   }
-  assert(meanSpeed(walk) > 3.24 * 0.75, `${mode}: unobstructed standing walk stuck on ramp`);
+  // The keyboard walks one avatar height per second on a flat screen and 1.8 in XR.
+  assert(meanSpeed(walk) > (mode === 'xr' ? 3.24 : 1.8) * 0.75, `${mode}: unobstructed standing walk stuck on ramp`);
   assert(Math.abs(meanCadence(crouchWalk) - meanCadence(walk)) > 0.1, `${mode}: fixed cadence despite distinct measured speeds`);
   await screenshot(page, `${mode}-crouch-walk.png`);
 
