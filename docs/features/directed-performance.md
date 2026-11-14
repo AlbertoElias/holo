@@ -2,7 +2,7 @@
 
 **Lead:** Claude (planning session, 2026-11-13)  
 **Status:** In progress: slices 0 and 1 built and verified (2026-11-13);
-slice 2 next  
+slice 2 waits for the user's decision on the early reading  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -225,7 +225,10 @@ reading: the goodbye as a flat take and a directed take on two copies of
 the stock avatar, shown to critics. A clear difference says the direction
 works; no difference does not say why, which is what slice 3 settles.
 
-### Slice 2: the first house base (runs beside slice 1)
+### Slice 2: the first house base (after the early reading)
+
+Starts only once the user has decided on it from slice 1's early reading
+(decided 2026-11-13).
 
 - Two or three style directions as 2D sheets, judged against
   `docs/product/design/styleguide.md`; the soft, rounded pair approved for
@@ -362,16 +365,14 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
 
 1. **House style:** picked from the slice 2 sheets. Nothing to answer
    until they exist.
-2. **Does the house base wait for the early reading?** The design review
-   would build it only if the slice 1 reading shows the stock face is the
-   limit. This brief keeps it beside slice 1 (recommended), because the
-   stock avatar is a stand-in whatever the reading says and the phone
-   mandate needs an avatar worth sending. Waiting saves the work only if
-   the stand-in turns out to be good enough to keep.
-
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.
+
+Decided on 2026-11-13: the house base waits for the early reading. The
+brief had recommended building it beside slice 1; the user answered "Wait
+for reading". Slice 2 starts only when the user decides on it from the
+reading recorded in slice 1's evidence.
 
 ## Test plan and evidence
 
@@ -473,8 +474,21 @@ Reports are JSON in the ignored `apps/capture/output/authoring/`.
     attitude nobody directed. Neither named "she wants him to stay but
     stops herself".
 
-  No clear difference. As slice 1 says, that does not say why; slice 3
-  settles it. The reading points to three causes for slice 3 to test: the
+  **The gate for slice 2, plainly:**
+  - **Did the directed take beat the flat one?** No. The critics split
+    one each, by one point (6 to 5 both ways).
+  - **What did they name?** A reach, a refusal and a withdrawal. Opus also
+    saw her hand go back to her chest and a glance back. Neither named
+    the hesitation the sheet directs, "she wants him to stay but stops
+    herself".
+  - **Was the stock face the limit?** Not shown either way. Neither critic
+    could read a face or eyes at card scale, on either take. The directed
+    take does move 22 of 27 face shapes (peak 0.944), and the audition
+    measures up to 15.7 mm of mesh movement. So the reading cannot tell
+    the 21 synthesized shapes apart from the face's size on screen.
+
+  As slice 1 says, no clear difference does not say why; slice 3 settles
+  it. The reading points to three causes for slice 3 to test: the
   face is too small to read at card scale, the life underneath is too
   small to carry the aftermath, and the arm rest pose (hands near the
   hips) reads as intent.

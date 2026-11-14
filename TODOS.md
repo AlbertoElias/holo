@@ -154,7 +154,8 @@ it from the item below instead of duplicating its status here.
   headset drives; an audition every avatar must pass; a first house avatar
   to replace the stand-in. In progress: slices 0 and 1 (the acting report,
   the audition, beat-sheet direction and its CLI) are on `main`; slice 2,
-  the first house base, is next. Owned by
+  the first house base, waits for the user's decision on slice 1's early
+  reading. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D; the
   room-scale body solver
