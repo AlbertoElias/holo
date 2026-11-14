@@ -1,7 +1,7 @@
 # Feature brief: Camera-driven avatar (evaluation spike)
 
 **Lead:** Claude (Fable 5)  
-**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars; ray jitter meets the bar only with a wrist-to-tip ray, which the aim clip must confirm; head readings are correct, and a turn past the face model's range now keeps its yaw from the pose; **aim error is unresolved**; then slice 3)
+**Status:** Implementing (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars; ray jitter meets the bar only with a wrist-to-tip ray, which the aim clip must confirm; head readings are correct, and a turn past the face model's range now keeps its yaw from the pose; **aim error is unresolved**, and a lens-only aim clip is recorded for it (2026-11-14); then slice 3)
 **Layer:** event (the author's head, face, arms and hands over time); see
 `docs/product/concepts/what-a-hologram-is.md`
 
@@ -367,38 +367,38 @@ the clip checked by eye.
 these from this brief; the clip and `clip.json` are in `output/bodycam/`, the
 saved landmarks in `apps/capture/output/bodycam-jitter/landmarks.json`):
 
-1. Settle aim with measured ground truth: the aim clip below. The report's
-   aim study (2026-11-11) measures the knuckle and wrist rays, each as the
-   hand model gives it and perspective-corrected (turned by the line of sight
-   to the hand in the picture, in case the model reads the finger relative
-   to its own view of the hand). On the first clip's rough layout the
-   correction helps the knuckle ray on one aim (26 to 15 deg) and hurts the
-   wrist ray (10 to 20 deg); the two crossing aims miss by 29 to 45 deg,
-   almost all of it in yaw. Only measured geometry can tell tracking error
-   from layout error. Pick the ray, and whether to correct it, on the new
-   clip.
+1. Settle aim on the lens-only aim clip (below). The report's aim study
+   (2026-11-11) measures the knuckle and wrist rays, each as the hand model
+   gives it and perspective-corrected (turned by the line of sight to the
+   hand in the picture, in case the model reads the finger relative to its
+   own view of the hand). On the first clip's rough layout the correction
+   helps the knuckle ray on one aim (26 to 15 deg) and hurts the wrist ray
+   (10 to 20 deg); the two crossing aims miss by 29 to 45 deg, almost all of
+   it in yaw. Rough geometry cannot tell tracking error from layout error, so
+   the new clip aims only at the lens, whose direction needs no measurement.
+   Pick the ray, and whether to correct it, on that clip.
 2. Real-time rate and a trial on a phone, independent verification, then the
    go/no-go.
 
-**Aim clip protocol.** One take, about 2 minutes. Rear main camera at 1x,
-4K 30 fps, phone upright (portrait), fixed and level (screen vertical), not
-handheld. The phone's screen faces a wall; tape three marks on that wall,
-measured from the spot on the wall straight behind the lens with a level:
-`left` 0.6 m to the author's left (as they face the phone), `right` 0.6 m to
-their right, both at lens height, and `above` 0.5 m straight above. Put the
-lens at about nose height. Measure: the lens's distance from the wall
-(`behindLensM`), the distance from the lens to a floor line straight in
-front of it where the author stands toes on the line, about where the first
-clip was framed (`authorToLensM`), and nose height minus lens height
-(`noseAboveLensM`). Then, each aim held 4 s with the hand dropped to the side
-for 2 s between: 0) hands down facing the lens 3 s; A) right arm straight,
-sighting along the arm, at the lens, left, right, above; B) the same with
-the left arm; C) right hand pointing naturally (elbow bent, hand at chest
-height) at the same four. The config template is
-`output/bodycam/aim-template.json` (ignored): fill the measurements and each
-hold's start and end, then run the report on the clip with it. Straight arms
-put the knuckle, wrist and arm rays on one line, so their spread is tracking
-error alone; the natural set is what the product sees.
+**Aim clip protocol (lens only, 2026-11-14).** Measured marks were too much
+setup while the user travels, so every hold points the index fingertip at
+the phone's lens. The direction from the fingertip to the lens is the
+reverse of the camera's line of sight to the fingertip's image point, so it
+needs only the field of view (default: iPhone 15 Pro main camera, 1x, 4K
+portrait, 45.7 by 73.7 deg; `camera` in the config overrides it). Distance,
+lens height and room layout drop out. A segment with `"target": "lens"` uses
+it; the fingertip's image point is the hand model's landmark 8, falling back
+to the pose's index point. The take: phone propped upright, rear camera 1x,
+author 1.5 to 2 m away facing it, each hold about 3 s with the hand dropped
+between. Right hand: straight ahead (arm out at shoulder height), out to the
+right (arm about 45 deg right, finger turned back in), across the body
+(hand in front of the left shoulder), high (above the head, pointing down),
+low (at the hip, pointing up). Then the left hand, mirrored. The clip is
+`output/bodycam/aim.MOV` (ignored, never committed or copied outside
+`output/`; 47.8 s, 4K, 59.94 fps, rotation -90). The user gave no hold
+times: find the ten holds from the tracking (point score at or above 0.6,
+sustained, per hand, in order), write a config with one `lens` segment per
+hold, and re-measure with `--from-landmarks`.
 
 Done on 2026-11-11: ray jitter and the head (above), and the script's own server start.
 Two script faults found on this first long clip are both fixed. A whole clip
