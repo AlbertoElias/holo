@@ -1,0 +1,34 @@
+{
+  "title": "Two avatars, one direction",
+  "duration": 6.5,
+  "performers": [
+    { "id": "stock", "avatar": "stock", "at": [-0.5, 0], "facing": 20 },
+    { "id": "cm", "avatar": "fixture:unreal-cm", "at": [0.5, 0], "facing": -20 }
+  ],
+  "marks": { "between": [0, 1.05, 0.3], "camera": [0, 1.5, 2.5], "floor": [0.3, 0, 0.9] },
+  "beats": [
+    { "id": "s-greet", "performer": "stock", "at": 0.3, "hold": 0.8, "directions": [
+      { "kind": "look", "at": "cm.head" },
+      { "kind": "expression", "shape": "smile", "strength": 0.8 } ] },
+    { "id": "c-greet", "performer": "cm", "at": 0.5, "hold": 0.8, "directions": [
+      { "kind": "look", "at": "stock.head" },
+      { "kind": "expression", "shape": "hope" } ] },
+    { "id": "s-reach", "performer": "stock", "at": 1.2, "hold": 1.0, "directions": [
+      { "kind": "reach", "side": "left", "at": "between", "stopShort": 0.1, "palm": "toward" },
+      { "kind": "weight", "toward": "left", "amount": 0.6 } ] },
+    { "id": "c-reach", "performer": "cm", "at": 1.4, "hold": 1.0, "directions": [
+      { "kind": "reach", "side": "right", "at": "between", "stopShort": 0.1, "palm": "toward" },
+      { "kind": "weight", "toward": "right", "amount": 0.6 } ] },
+    { "id": "s-point", "performer": "stock", "at": 3.4, "hold": 0.9, "directions": [
+      { "kind": "hand", "side": "right", "shape": "point" },
+      { "kind": "look", "at": "camera", "head": 0.8 } ] },
+    { "id": "c-fist", "performer": "cm", "at": 3.4, "hold": 0.9, "directions": [
+      { "kind": "hand", "side": "left", "shape": "fist" },
+      { "kind": "turn", "degrees": 25, "body": "upper" } ] },
+    { "id": "s-step", "performer": "stock", "at": 4.6, "directions": [
+      { "kind": "step", "foot": "left", "by": [0, 0.22], "follow": true } ] },
+    { "id": "c-sad", "performer": "cm", "at": 5.0, "hold": 0.8, "directions": [
+      { "kind": "expression", "shape": "sad", "strength": 0.7 },
+      { "kind": "look", "at": "floor", "head": 0.5 } ] }
+  ]
+}
