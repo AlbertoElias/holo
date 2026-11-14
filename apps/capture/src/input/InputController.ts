@@ -424,7 +424,7 @@ export class InputController {
 
     if (key === 'v' && !this.options.isXrPresenting() && !event.repeat) {
       const look = this.options.look;
-      look.desktopViewMode = look.desktopViewMode === 'third' ? 'first' : 'third';
+      look.desktopViewMode = look.desktopViewMode === 'first' ? 'third' : 'first';
       // Enter first person near neutral to avoid immediately looking into the torso.
       if (look.desktopViewMode === 'first') look.firstPersonPitch = -0.04;
     }
@@ -593,7 +593,7 @@ export class InputController {
       // Held: vertical motion aims the point (first person's view follows it).
       this.pointAimPitch = look.clampFirstPersonPitch(this.pointAimPitch - dy * sensitivity);
       if (look.desktopViewMode === 'first') look.firstPersonPitch = this.pointAimPitch;
-    } else if (look.desktopViewMode === 'third') {
+    } else if (look.desktopViewMode !== 'first') {
       look.thirdPersonPitch = look.clampThirdPersonPitch(look.thirdPersonPitch - dy * sensitivity);
     } else {
       look.firstPersonPitch = look.clampFirstPersonLookPitch(look.firstPersonPitch - dy * sensitivity);

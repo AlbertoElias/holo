@@ -18,6 +18,7 @@ model User {
   uploadIntents UploadIntent[]
   sessions      Session[]
   apiTokens     ApiToken[]
+  postGrants    PostGrant[]
 }
 
 model MagicLinkToken {
@@ -57,6 +58,24 @@ model ApiToken {
   createdAt  DateTime  @default(now())
 
   @@index([userId])
+}
+
+/// An upload-only, single-use credential (`holoim_pg_` prefix) the viewer
+/// mints from a session for capture (docs/features/phone-capture.md). Only
+/// `POST /holograms` accepts it; `resolveAuth` never does.
+model PostGrant {
+  id           String    @id @default(cuid())
+  tokenHash    String    @unique
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  returnOrigin String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  hologramId   String?   @unique
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Hologram {

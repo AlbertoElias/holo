@@ -46,6 +46,7 @@ import {
 } from "../services/hologram-ingest.js";
 import { saveUploadedGlb, UploadValidationError, validateGlbMeta } from "../services/hologram-storage.js";
 import type { MediaStorage } from "../services/media-storage.js";
+import { claimPostGrant, completePostGrant, findPostGrant, postGrantBearer, releasePostGrant, type PostGrantRow } from "../services/post-grant.js";
 import { usdzFilenameFor, usdzFilenamesFor, withHologramLock } from "../services/usdz-converter.js";
 
 const SIGN_IN_TO_UPLOAD = "Sign in to upload a hologram.";
@@ -289,10 +290,29 @@ export async function registerHologramRoutes(
   });
 
   app.post("/holograms", async (request, reply) => {
-    // Checked before the body is read, so an anonymous caller streams nothing to disk.
-    if (!(await mayUpload(request.headers))) {
+    // A post grant from capture (docs/features/phone-capture.md) is checked
+    // strictly, even in open-uploads mode, and before the body is read.
+    const grantBearer = postGrantBearer(request.headers);
+    let grant: PostGrantRow | null = null;
+    if (grantBearer) {
+      grant = await findPostGrant(grantBearer);
+      if (!grant) {
+        return reply.status(401).send({ error: "This recording link has expired. Start again from HoloIM." });
+      }
+      if (grant.hologramId) {
+        // A retry after a lost answer, or a double tap: the take already posted.
+        const existing = await getHologramById(grant.hologramId);
+        if (existing) return reply.status(200).send(hologramDtoSchema.parse(toDto(existing, storage, grant.user.id)));
+        return reply.status(410).send({ error: "This take was posted and then deleted." });
+      }
+      if (!(await claimPostGrant(grant.id))) {
+        return reply.status(409).send({ error: "This take is already uploading." });
+      }
+    } else if (!(await mayUpload(request.headers))) {
+      // Checked before the body is read, so an anonymous caller streams nothing to disk.
       return reply.status(401).send({ error: SIGN_IN_TO_UPLOAD });
     }
+    let posted = false;
     let tempRoot: string | undefined;
     try {
       const parts = request.parts({
@@ -341,7 +361,7 @@ export async function registerHologramRoutes(
         return reply.status(400).send({ error: "Missing or invalid upload fields." });
       }
 
-      const authUser = await optionalAuthUser(request.headers);
+      const authUser = grant ? grant.user : await optionalAuthUser(request.headers);
       const stored = await storeUpload(storage, storedUpload.absolutePath, storedUpload.sizeBytes, stagingRoot);
 
       const created = await createHologram({
@@ -358,6 +378,10 @@ export async function registerHologramRoutes(
         ownerId: authUser?.id ?? null
       });
 
+      if (grant) {
+        await completePostGrant(grant.id, created.id);
+        posted = true;
+      }
       const dto = hologramDtoSchema.parse(toDto(created, storage, authUser?.id));
       await refreshFeedSnapshot();
       return reply.status(201).send(dto);
@@ -369,6 +393,8 @@ export async function registerHologramRoutes(
       request.log.error({ error }, "Failed to upload hologram");
       return reply.status(500).send({ error: "Unexpected upload error." });
     } finally {
+      // A failed post gives its grant back, so the same take can try again.
+      if (grant && !posted) await releasePostGrant(grant.id);
       if (tempRoot) {
         await rm(tempRoot, { recursive: true, force: true });
       }

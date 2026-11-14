@@ -7,6 +7,7 @@ import { AudioRecorder } from './AudioRecorder';
 import { AvatarRecorder } from './AvatarRecorder';
 import { CameraRecorder } from './CameraRecorder';
 import { testHooks } from '../testHooks';
+import { downloadBlob } from '../post/downloadBlob';
 import type { PlaceExportSource } from './GltfExportComposer';
 
 interface RecordingSessionDeps {
@@ -31,6 +32,11 @@ interface RecordingSessionDeps {
   setFrame: THREE.Object3D;
   /** The scanned place the take stands in, when there is one (docs/features/splat-capture.md). */
   getPlace?: () => PlaceExportSource | undefined;
+  /**
+   * A finished take goes here before it downloads (docs/features/phone-capture.md):
+   * true when it was kept for Post, so no download sheet interrupts the journey.
+   */
+  deliverTake?: (blob: Blob, name: string) => boolean;
 }
 
 /** What a take records: a performer (avatar, today) or the phone as a camera. */
@@ -254,7 +260,7 @@ export class RecordingSession {
       }
       await nextFrame();
       const blob = await withTimeout(this.cameraRecorder.exportToGlbBlob(this.deps.setFrame, worldModel, audioData), EXPORT_TIMEOUT_MS, 'GLB export timed out after 60s');
-      this.download(blob, `${baseName}.glb`);
+      this.deliver(blob, `${baseName}.glb`);
       this.cameraRecorder.clear();
       ui.setRecordingState('idle', overCapNotice(blob));
     } catch (err) {
@@ -270,13 +276,9 @@ export class RecordingSession {
     this.deps.ui.setMicPermission(this.audio.getPermissionState());
   }
 
-  private download(blob: Blob, name: string): void {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = name;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  private deliver(blob: Blob, name: string): void {
+    if (this.deps.deliverTake?.(blob, name)) return;
+    downloadBlob(blob, name);
   }
 
   private async stopAndExport(): Promise<void> {
@@ -310,7 +312,7 @@ export class RecordingSession {
       await nextFrame();
       const place = this.deps.getPlace?.();
       const blob = await withTimeout(this.recorder.exportToGlbBlob(avatar, worldModel, audioData, place), EXPORT_TIMEOUT_MS, 'GLB export timed out after 60s');
-      this.download(blob, `${baseName}.glb`);
+      this.deliver(blob, `${baseName}.glb`);
       if (this.retainLastTake) this.lastTake = { avatar, worldModel, audioData, place };
       else this.recorder.clear();
       ui.setRecordingState('idle', overCapNotice(blob));

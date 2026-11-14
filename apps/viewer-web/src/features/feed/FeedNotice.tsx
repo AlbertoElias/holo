@@ -6,7 +6,7 @@ import type { ViewTarget } from "@holoim/xr-ui-core";
 
 
 export type FeedNoticeContent = {
-  kind: "loading" | "empty" | "offline" | "error" | "upload";
+  kind: "loading" | "empty" | "offline" | "error" | "upload" | "posted";
   text: string;
   action?: { label: string; onPress: () => void };
 };

@@ -1,5 +1,5 @@
 import type { SessionResponse, UserDTO } from "@holoim/contracts";
-import { sessionResponseSchema, userDtoSchema } from "@holoim/contracts";
+import { postGrantResponseSchema, sessionResponseSchema, userDtoSchema } from "@holoim/contracts";
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "";
 const apiBase = `${apiOrigin}/api`;
@@ -34,6 +34,8 @@ async function readError(response: Response, fallback: string): Promise<string> 
 export async function requestMagicLink(input: {
   email: string;
   displayName?: string;
+  /** Where the emailed link goes after signing in: "record" opens capture. */
+  next?: "record";
 }): Promise<{ devMagicLinkToken?: string }> {
   const response = await fetch(`${apiBase}/auth/magic-link`, {
     method: "POST",
@@ -83,4 +85,17 @@ export async function signOut(): Promise<void> {
     // Local sign-out still applies when the API is unreachable.
   }
   clearSessionToken();
+}
+
+/**
+ * Mints a single-use post grant (docs/features/phone-capture.md): capture
+ * posts one take with it as this creator. The session token never leaves
+ * this origin; only the grant travels, in a URL fragment.
+ */
+export async function mintPostGrant(): Promise<string> {
+  const response = await fetch(`${apiBase}/auth/post-grant`, { method: "POST", headers: authHeaders() });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Could not open the recorder."));
+  }
+  return postGrantResponseSchema.parse(await response.json()).grant;
 }
