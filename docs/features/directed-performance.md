@@ -4,8 +4,8 @@
 **Status:** In progress: slices 0 and 1 built and verified (2026-11-13);
 re-scoped 2026-11-14 to a creation system. Slice 1b built and verified
 (2026-11-14): the review loop, three defaults, face numbers and a second
-piece that reads after one revision. Its gap log (props, sets, publishing,
-gestures) now leads "Not covered yet". The house avatar (slice 2) stays
+piece, which reads only as "watering a plant" after one revision. Its gap
+log (props, sets, publishing, gestures) now leads "Not covered yet". The house avatar (slice 2) stays
 gated; the face decision below is the user's  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
@@ -456,7 +456,9 @@ None: this adds no authoring action inside a capture take.
 - [x] A second piece, different in kind, authored from a three-line brief
   with the CLI and README. Reviewed, revised, reviewed again, uploaded and
   rendered locally, not published. Its gap log fills "Not covered yet".
-  Evidence: slice 1b below.
+  The loop ran; the piece itself does not read (only "watering a plant"
+  reads, half the beats) for the reasons in the gap log. Evidence: slice 1b
+  below.
 - [ ] A second agent (Astra) authors a take using only the CLI and its
   README.
 - [ ] Authored pieces stay within the Quick Look extent budget (B-057) and
@@ -502,8 +504,8 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
      brow and lid shapes moving the mesh at least 8 mm.
 
    Recommended: A now, and C as a requirement of slice 2 if it starts.
-3. **What comes after slice 1b.** The second piece read after one
-   revision. What it could not express was props, sets, tool use,
+3. **What comes after slice 1b.** After one revision the second piece
+   reads as watering a plant, not as checking whether it needs water. What it could not express was props, sets, tool use,
    gestures and change in the world, not the avatar. The options are:
    - **(A)** A slice for props and sets in the beat sheet: objects, a
      held prop with pick-up and put-down, and a tool axis. Then publish
@@ -728,13 +730,27 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
     looking at it. The reach ends are within 5 mm as built for the
     review (poke 4.6, check 0.4, lift 0.9, pour 0.8; life was doubled later). `--against` reports 0.03 to 9 s changed, because
     swapping hands moves every beat that uses them.
-  - **Second review** (`watering-2`): "someone tending a plant: checking it,
-    deciding it needs water, watering it". The piece reads. Five of eight
-    beats read: look, grip, poke, lift and the smile at the end. Three did
-    not:
-    - the check reads as "checking a watch or a wrist device";
-    - the pour reads late, at 6.8 s, on the palm's roll back;
-    - the pointing finger is too small to see.
+  - **Second review, discarded** (`watering-2`): "someone tending a plant:
+    checking it, deciding it needs water, watering it". The independent
+    verifier found that the card showed the piece's title, "Does it need
+    water?", which tells the reader the intent. Every pack before the fix
+    showed its title the same way: goodbye, the defaults and watering-1.
+    `review.ts` now uploads every take as "Take".
+  - **Second review, neutral title** (`watering-2b`): "someone tending a
+    plant, with a checking pause and then a watering". **The piece does not
+    read:** the reader saw watering, not how to tell that a plant needs
+    water. Four of eight beats read: look, grip, lift and pour (the tilt at
+    4.4 s; no water is seen). Four did not:
+    - the point: the hand at the pot is too small to see;
+    - the poke: "can't tell what the hand does";
+    - the check: "checking a wrist (a watch or device), or holding a
+      thought";
+    - the ending: "finishing and returning", with the face not readable.
+
+    The beats that fail are the ones the gap log names: a gesture with no
+    direction, contact with no change in the world, and a face at card
+    size. Revising the sheet again cannot fix them, so the second piece
+    stops here.
   - **Local upload and render:** `viewer-check.ts` on the revised take shows
     51 of 67 bones moving and 9 of 27 face shapes (peak 0.926), with the
     viewer anchoring on `RecordedAvatar`.
