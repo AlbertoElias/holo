@@ -20,10 +20,12 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 import type {} from '../src/runtime/automationHooks';
 import type { BodycamSnapshot } from '../src/bodycam/snapshot';
 import type { HandLandmarks, LandmarkFrame, Point3, Quat4 } from '../src/bodycam/types';
-import type { TrackedHandJointName, VrHandSide } from '../src/types/contracts';
+import type { BodySample, HandSample, TrackedHandJointName, VrHandSide } from '../src/types/contracts';
+import { cameraMotionFrame, cameraPointRays, lostHandPopMax } from './lib/camera-motion';
+import { judgeMotion, measureMotion } from './lib/motion-quality';
 import { readGlbJson } from './lib/pointing-score.ts';
 
-// Camera avatar, slice 1 (docs/features/camera-avatar-spike.md): no models and no camera. A committed, synthetic
+// Camera avatar, slice 1 (docs/features/archive/camera-avatar-spike.md; now gap 2 of docs/features/natural-avatar-motion.md): no models and no camera. A committed, synthetic
 // landmark stream (generated below from a scripted performance, in the shape MediaPipe's pose and hand landmarkers
 // deliver) goes through __setBodycamFrame on a desktop page opened with ?input=camera, under the manual clock. The
 // avatar's wrists, fingers and head follow, the take is recorded and exported, and the GLB is read back. Then an IWER
@@ -37,6 +39,12 @@ const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
 const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-bodycam';
 const video = process.env.BODYCAM_VIDEO === '1';
 const frameDir = path.join(artifactDir, 'frames');
+/**
+ * The scripted performance's own bar for a lost or returning hand, tighter than a real clip's (LOST_HAND_POP_MAX_MS2 in lib/camera-motion.ts,
+ * which allows for a camera's noisy wrists): under the manual clock it reads 46.4 m/s² every run, and 90.1 when the
+ * arm snapped to rest and back (before ArmRelease blended toward the IK's pose and XrTracking eased the return).
+ */
+const SCRIPTED_LOST_HAND_POP_MAX_MS2 = 65;
 
 // ── The scripted performance ───────────────────────────────────────────────
 // Built in the author's own frame (x right, y up, z back; hips at the origin, metres) for a right hand; the left
@@ -194,7 +202,7 @@ function* stream(): Generator<{ frame: LandmarkFrame; segment: string; segmentIn
 
 // ── The check ───────────────────────────────────────────────────────────────
 
-type Sample = { frame: number; timeSec: number; segment: string; segmentIndex: number; fed: Record<VrHandSide, boolean>; snap: BodycamSnapshot };
+type Sample = { frame: number; timeSec: number; segment: string; segmentIndex: number; fed: Record<VrHandSide, boolean>; snap: BodycamSnapshot; body: BodySample; hands: Record<VrHandSide, HandSample> };
 type Vec3 = [number, number, number];
 const dist = (a: readonly number[] | undefined, b: readonly number[] | undefined): number => (a && b ? Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!) : NaN);
 const round = (n: number, d = 3): number => Math.round(n * 10 ** d) / 10 ** d;
@@ -221,7 +229,7 @@ try {
   url.searchParams.set('manualClock', '1');
   url.searchParams.set('input', 'camera');
   await page.goto(url.href, { waitUntil: 'networkidle' });
-  await waitForPageFunctions(page, ['advanceTime', '__setManualClock', '__setBodycamFrame', '__sampleBodycam', '__sampleHumanoid']);
+  await waitForPageFunctions(page, ['advanceTime', '__setManualClock', '__setBodycamFrame', '__sampleBodycam', '__sampleHumanoid', '__sampleBody', '__sampleHands']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   await page.evaluate(() => window.__setManualClock(true, true));
   await waitForIwerRuntime(page);
@@ -251,8 +259,8 @@ try {
   for (const [i, item] of performance_.entries()) {
     await page.evaluate((f) => window.__setBodycamFrame(f), item.frame);
     await page.evaluate((ms: number) => window.advanceTime(ms), STEP_MS);
-    const snap: BodycamSnapshot = await page.evaluate(() => window.__sampleBodycam());
-    samples.push({ frame: frameIndex, timeSec: item.timeSec, segment: item.segment, segmentIndex: item.segmentIndex, fed: { left: item.leftPresent, right: item.rightPresent }, snap });
+    const { snap, body, hands } = await page.evaluate(() => ({ snap: window.__sampleBodycam(), body: window.__sampleBody(), hands: window.__sampleHands() }));
+    samples.push({ frame: frameIndex, timeSec: item.timeSec, segment: item.segment, segmentIndex: item.segmentIndex, fed: { left: item.leftPresent, right: item.rightPresent }, snap, body, hands });
     const last = performance_[i + 1]?.segmentIndex !== item.segmentIndex;
     if (last && (item.segment === 'right-raised' || item.segment === 'both')) {
       // Where the author sees each wrist: projected through the view camera, then flipped like the canvas is.
@@ -441,6 +449,25 @@ try {
     const encoded = spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-framerate', '30', '-i', path.join(frameDir, '%05d.png'), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', videoPath], { stdio: 'inherit' });
     console.log(encoded.status === 0 ? `[bodycam] video: ${videoPath}` : '[bodycam] ffmpeg unavailable; frames kept as PNGs');
   }
+  // Motion quality, the camera row's lean guard (docs/features/natural-avatar-motion.md, gap 2): bones, wrists
+  // against the fed wrists, and the app's right-hand ray wherever it gives one. The first 0.5 s is left out, where
+  // the avatar settles onto the ground, so the rest window sees it standing. Aim needs a measured target, which
+  // only a real clip has (bodycam:report --avatars); MOTION_QUALITY_REPORT_ONLY=1 reports misses without failing.
+  const graded = samples.filter((s) => s.timeSec >= 0.5);
+  const rays = cameraPointRays(graded);
+  const motionFrames = graded.map((s, i) => ({ ...cameraMotionFrame(s), aimRay: rays[i]!.right }));
+  const motion = measureMotion(motionFrames);
+  const lostPop = lostHandPopMax(graded);
+  const motionVerdicts = [
+    ...judgeMotion(motion, 'camera').filter((v) => v.metric !== 'aimErrorMedianDeg'),
+    // Null when the clip never loses a hand: nothing to judge, not a miss.
+    ...(lostPop === null ? [] : [{ metric: 'lostHandPopMaxMS2', value: lostPop, target: { max: SCRIPTED_LOST_HAND_POP_MAX_MS2 }, pass: lostPop <= SCRIPTED_LOST_HAND_POP_MAX_MS2 }])
+  ];
+  for (const miss of motionVerdicts.filter((v) => !v.pass)) {
+    const line = `motion ${miss.metric} = ${miss.value === null ? 'unmeasured' : round(miss.value, 2)} (target ${JSON.stringify(miss.target)})`;
+    console.log(`[bodycam] MISS ${line}`);
+    if (!process.env.MOTION_QUALITY_REPORT_ONLY) failures.push(line);
+  }
   const sheet = writeContactSheet(frameDir, path.join(artifactDir, 'bodycam-sheet.jpg'));
   if (sheet) console.log(`[bodycam] contact sheet: ${sheet}`);
   const report = {
@@ -458,6 +485,7 @@ try {
     hold: { frozenSec: round(heldSec), sourcesInGap: gapSources, endDistanceToRestM: round(toRest), recovered },
     export: { ...glb.summary, exportMs },
     liveTracker: live.summary,
+    motion: { metrics: { ...motion, lostHandPopMaxMS2: lostPop }, verdicts: motionVerdicts },
     viewer: 'not run: only the viewer-web pipeline specs (RUN_E2E_PIPELINE) upload a take and play it, and they start their own API, viewer and capture servers',
     vrEntry: { canvasFlipped: vr.canvasFlipped, active: vr.active, cameraDriven: vr.cameraDriven, framesIgnored: vr.frames === framesBefore },
     failures

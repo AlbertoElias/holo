@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createHttpsBaseUrl, findAvailablePort, startTestBuildServer, stopProcess, waitForServer } from '@holoim/tooling-testing/dev-server';
 import { ensureTestBuild, testBuildDir } from '@holoim/tooling-testing/test-build';
@@ -15,15 +16,18 @@ import { assignHandSides } from '../src/bodycam/convert';
 import type { HandLandmarks, Point2, Point3, Quat4 } from '../src/bodycam/types';
 import { type FingerChain, scorePointPose } from '../src/xr/pointPose';
 
-// Report-only (docs/features/camera-avatar-spike.md, slice 2): runs the real MediaPipe models on a video clip played
+// Report-only (docs/features/natural-avatar-motion.md, gap 2; history in docs/features/archive/camera-avatar-spike.md, slice 2): runs the real MediaPipe models on a video clip played
 // as Chromium's fake camera, in real time, on a capture page opened with ?input=camera, and measures what the
 // tracker made of it. It asserts nothing about model output and is not part of test:xr.
 //
 //   pnpm --filter @holoim/capture run bodycam:report <clip> [config.json] [--video] [--hflip] [--cpu] [--headed] [--crop43] [--realtime [--offset <sec>]] [--out <dir>]
 //   pnpm --filter @holoim/capture run bodycam:report <clip> [config.json] --from-landmarks <dir>/landmarks.json --out <other dir>
+//   ... [--avatars all|<name substring>]
 //
 // Every run writes landmarks.json: the models' per-frame output and the run's facts. --from-landmarks re-measures that
 // file in seconds without the browser or the models, so a filter or ray change can be tried without a new 12-minute run.
+// --avatars then drives the app's avatar with landmarks.json, once per supported skeleton, and grades bones, the
+// pointing ray and aim through the motion-quality instrument (bodycam-avatar-replay.ts; <out>/avatars/report.json).
 //
 // config.json (all optional): { distances: { authorToLensM, leftMarkM?, rightMarkM?, noseAboveLensM? },
 //   marks?: { <name>: { leftM?, upM?, behindLensM? } }, camera?: { imageXFovDeg, imageYFovDeg },
@@ -41,7 +45,7 @@ const DEG = 180 / Math.PI;
 const args = process.argv.slice(2);
 const flag = (name: string): boolean => args.includes(name);
 const option = (name: string): string | undefined => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--out', '--offset', '--from-landmarks'].includes(args[i - 1]!)));
+const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--out', '--offset', '--from-landmarks', '--avatars'].includes(args[i - 1]!)));
 const clipPath = positional[0] ? path.resolve(positional[0]) : '';
 const configPath = positional[1] ? path.resolve(positional[1]) : null;
 const outDir = path.resolve(option('--out') ?? 'output/bodycam');
@@ -898,3 +902,13 @@ if (videoRel) {
   console.log(result.status === 0 ? `[bodycam-report] side-by-side video: ${sideBySide}` : '[bodycam-report] ffmpeg could not write the side-by-side video');
 }
 console.log(`[bodycam-report] report: ${path.join(outDir, 'report.json')}`);
+const avatarsOption = option('--avatars');
+if (avatarsOption) {
+  const replay = path.join(path.dirname(fileURLToPath(import.meta.url)), 'bodycam-avatar-replay.ts');
+  const graded = spawnSync(
+    process.execPath,
+    ['--import', 'tsx', replay, path.join(outDir, 'landmarks.json'), ...(configPath ? ['--holds', configPath] : []), '--out', path.join(outDir, 'avatars'), ...(avatarsOption === 'all' ? [] : ['--only', avatarsOption])],
+    { stdio: 'inherit' }
+  );
+  if (graded.status !== 0) process.exitCode = graded.status ?? 1;
+}
