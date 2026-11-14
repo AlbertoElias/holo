@@ -11,7 +11,10 @@ interface LegBones {
 }
 
 const BIND_FORWARD = new THREE.Vector3(0, 0, 1);
-const SOFT_REACH = 0.05;
+// The last 1.5% of reach is soft. It starts above the 98% a planted foot
+// asks for (PLANTED_REACH_SHARE in VrBodySolver), so a planted ankle lands
+// where it is placed and only a leg straining past that falls short.
+const SOFT_REACH = 0.015;
 const hip = new THREE.Vector3();
 const toAnkle = new THREE.Vector3();
 const reachDir = new THREE.Vector3();
