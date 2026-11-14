@@ -3,6 +3,7 @@ import { createBrowserRouter, useParams, useSearchParams } from "react-router-do
 
 import { FeedPage } from "../features/feed/FeedPage";
 import { AuthVerifyPage } from "../features/auth/AuthVerifyPage";
+import { RecordPage } from "../features/record/RecordPage";
 
 // The IWSDK World only loads on the immersive routes.
 const XrHologramView = lazy(() => import("../features/xr/XrHologramView").then((m) => ({ default: m.XrHologramView })));
@@ -61,6 +62,10 @@ export const router = createBrowserRouter([
   {
     path: "/vr/:id",
     element: <VrRoute />
+  },
+  {
+    path: "/record",
+    element: <RecordPage />
   },
   {
     path: "/auth/verify",

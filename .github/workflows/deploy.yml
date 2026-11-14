@@ -100,6 +100,8 @@ jobs:
         run: pnpm --filter @holoim/web... run build
         env:
           VITE_API_ORIGIN: https://holoim-api.fly.dev
+          # Record opens capture here (docs/features/phone-capture.md).
+          VITE_CAPTURE_ORIGIN: https://holoim-capture.pages.dev
       - name: Deploy to Pages
         run: pnpm --filter @holoim/web exec wrangler pages deploy dist --project-name holoim-viewer --branch main
         env:

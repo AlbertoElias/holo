@@ -99,6 +99,8 @@ jobs:
         # The viewer and capture bundles built here are the ones deployed.
         env:
           VITE_API_ORIGIN: https://holoim-api.fly.dev
+          # Record opens capture here (docs/features/phone-capture.md).
+          VITE_CAPTURE_ORIGIN: https://holoim-capture.pages.dev
         run: pnpm timed build -- pnpm run build:all
       # The e2e test build differs from this one only by HOLOIM_TEST_BUILD;
       # the deployed viewer must carry neither its test hooks nor IWER.
