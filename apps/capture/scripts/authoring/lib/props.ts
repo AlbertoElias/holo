@@ -78,7 +78,8 @@ export async function loadSources(objects: Readonly<Record<string, ObjectSpec>>,
     if (name.startsWith('polyhaven:')) {
       const id = name.slice('polyhaven:'.length);
       if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error(`source ${name}: not a Poly Haven id`);
-      const cached = join(cacheDir, 'polyhaven', `${id}.glb`);
+      // Cached per origin, so the bytes are always credited to where they came from.
+      const cached = join(cacheDir, 'polyhaven', new URL(OBJECTS_API).host.replace(/[^A-Za-z0-9.-]/g, '_'), `${id}.glb`);
       fetchedFrom = OBJECTS_API;
       try { bytes = new Uint8Array(await readFile(cached)); } catch {
         const res = await fetch(`${OBJECTS_API}/api/objects/polyhaven/${id}.glb`);

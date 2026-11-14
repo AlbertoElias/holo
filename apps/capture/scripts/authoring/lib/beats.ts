@@ -247,9 +247,14 @@ export interface Holding {
 }
 
 /** The objects of a point: `"obj.anchor"` and a place `of` an object. */
-export function pointObjects(p: Point | undefined, objects: ReadonlySet<string>): string[] {
+export function pointObjects(p: Point | undefined, objects: ReadonlySet<string>, marks: Readonly<Record<string, Point>> = {}, seen: ReadonlySet<string> = new Set()): string[] {
   if (p === undefined) return [];
-  if (typeof p === 'string') { const head = p.split('.')[0]!; return p.includes('.') && objects.has(head) ? [head] : []; }
+  if (typeof p === 'string') {
+    // A mark stands for its own point, so it depends on what that point is measured from.
+    if (!p.includes('.')) return Object.hasOwn(marks, p) && !seen.has(p) ? pointObjects(marks[p], objects, marks, new Set([...seen, p])) : [];
+    const head = p.split('.')[0]!;
+    return objects.has(head) ? [head] : [];
+  }
   if (Array.isArray(p)) return [];
   const place = p as Place;
   return place.of !== undefined && objects.has(place.of) ? [place.of] : [];
@@ -274,6 +279,7 @@ export function holdingsOf(sheet: BeatSheet, duration = sheet.duration): { holdi
     const d = r.direction as Extract<Direction, { kind: 'take' | 'put' }>;
     const when = r.at + r.attack;
     const where = `beat ${r.beat.id} ${d.kind} ${d.object}`;
+    if (when >= duration) { problems.push(`${where}: the hand arrives at ${Math.round(when * 100) / 100} s, not before the take ends (${duration} s)`); continue; }
     const held = open.get(d.object);
     const inHand = [...open.entries()].find(([, h]) => h.performer === r.beat.performer && h.side === d.side);
     if (d.kind === 'take') {
@@ -384,7 +390,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
   // An object placed from another may not, through any chain, be placed from itself.
   const deps = (id: string): string[] => {
     const o = sheet.objects![id]!;
-    return [...(o.on !== undefined ? [o.on] : []), ...pointObjects(o.at, objects), ...(typeof o.facing === 'number' ? [] : pointObjects(o.facing, objects))];
+    return [...(o.on !== undefined ? [o.on] : []), ...pointObjects(o.at, objects, sheet.marks), ...(typeof o.facing === 'number' ? [] : pointObjects(o.facing, objects, sheet.marks))];
   };
   const state = new Map<string, 'open' | 'done'>();
   const visit = (id: string, path: string[]): void => {
@@ -395,6 +401,9 @@ export function validateSheet(sheet: BeatSheet): string[] {
     state.set(id, 'done');
   };
   for (const id of objects) visit(id, []);
+  // The set and the marks are fixed on the first frame, before a hand has seated what it holds.
+  for (const id of objects) for (const d of deps(id)) if (held.has(d)) problems.push(`object ${id}: placed from ${d}, which is in a hand from the first frame`);
+  for (const [name, m] of Object.entries(sheet.marks ?? {})) for (const d of pointObjects(m, objects, sheet.marks)) if (held.has(d)) problems.push(`mark ${name}: measured from ${d}, which is in a hand from the first frame`);
   for (const p of sheet.performers) {
     for (const [side, o] of Object.entries(p.hold ?? {})) {
       if (side !== 'left' && side !== 'right') problems.push(`performer ${p.id} hold: side ${side} is left or right`);
@@ -449,7 +458,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
         else {
           const spec = sheet.objects![h.object]!;
           if (!spec.tool) problems.push(`${where}: ${h.object} has no tool axis to aim`);
-          if (pointObjects(d.at, objects).includes(h.object)) problems.push(`${where}: a hand cannot aim the object it holds at itself`);
+          if (pointObjects(d.at, objects, sheet.marks).includes(h.object)) problems.push(`${where}: a hand cannot aim the object it holds at itself`);
           const covered = sheet.beats.filter((x) => x.performer === b.performer).some((x) => x.directions.some((y) => {
             if (y.kind !== 'reach' || y.side !== d.side) return false;
             const q = resolveTiming(x, y);
@@ -460,7 +469,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
       }
       if (d.kind === 'reach') {
         const h = holdingAt(b.performer, d.side, r.at);
-        if (h && pointObjects(d.at, objects).includes(h.object)) problems.push(`${where}: a hand cannot reach for the object it holds`);
+        if (h && pointObjects(d.at, objects, sheet.marks).includes(h.object)) problems.push(`${where}: a hand cannot reach for the object it holds`);
       }
       if (d.kind === 'hand') {
         for (const side of d.side === 'both' ? (['left', 'right'] as const) : [d.side]) {

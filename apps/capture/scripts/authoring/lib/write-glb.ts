@@ -141,7 +141,8 @@ export async function writeTake(take: SolvedTake, provenance: Provenance): Promi
   }) : undefined;
   const credits = [...new Set(take.props.flatMap((t) => (t.prop.credit ? [formatCredit(t.prop.credit)] : [])))];
   glb = patchJson(glb, (json) => {
-    json.asset = { ...json.asset, extras: { ...(json.asset.extras ?? {}), holoim: { authored: 'synthetic', ...provenance } } };
+    const sources = [...new Map(take.props.flatMap((t) => (t.prop.source ? [[t.prop.source.loaded.name, { source: t.prop.source.loaded.name, sha256: t.prop.source.loaded.sha256, ...(t.prop.source.loaded.fetchedFrom ? { fetchedFrom: t.prop.source.loaded.fetchedFrom } : {}) }] as const] : []))).values()];
+    json.asset = { ...json.asset, extras: { ...(json.asset.extras ?? {}), holoim: { authored: 'synthetic', ...provenance, ...(sources.length ? { sources } : {}) } } };
     // mergeDocuments drops a source's asset fields, so the credits are written here.
     if (credits.length) json.asset.copyright = credits.join('; ');
     if (objects) {

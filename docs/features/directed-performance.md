@@ -325,7 +325,8 @@ review (2026-11-14):
      scale; the wrapper itself stays at unit scale, because its scale is the
      presence channel. A sourced model's credit is copied onto the node
      (`holoimCredit`) and into `asset.copyright`, with its `sha256` and, for
-     Poly Haven, the API origin it was fetched from. A local GLB needs a
+     Poly Haven, the API origin it was fetched from (both in
+     `asset.extras.holoim.sources`; the cache is kept per origin). A local GLB needs a
      `credit` unless it is marked as the author's own.
 
    An object's frame has its origin at the bottom centre, +Y up and +Z as its
@@ -708,6 +709,17 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
 
    Recommended: A. Slice 2 stays gated until a piece's reading names
    the avatar as the limit.
+4. **Slice 1c's two product calls** (building with, awaiting the user):
+   - **(a)** Sheet objects are written as recorded objects
+     (`RecordedObject` nodes in `HOLOIM_objects` v0), so an authored take
+     and a captured take show props the same way, beside the body, as
+     the concept's Event layer says.
+   - **(b)** Every object from an outside file carries a credit (source,
+     title, author, licence). A local GLB must name one, or be marked
+     `"own"`. The build refuses one that does neither.
+
+   Slice 1c is built this way. It does not merge to `main` until the
+   user has answered.
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.

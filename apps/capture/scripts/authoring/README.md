@@ -78,20 +78,24 @@ take as capture writes recorded objects (`RecordedObject` nodes declared in
 is a `shape` with a `size` `[width, height, depth]`; `parts`, each a shape
 with its own `name`, `size`, `at` (its bottom centre), `rotate` and `color`;
 or a `source`, a GLB relative to the sheet or `polyhaven:<id>` (packed by the
-API, cached under `output/authoring/objects/`, credited on its node and in
-`asset.copyright`; a local GLB needs a `credit` or `"own"`). `height`
-scales a source.
+API, cached per API origin under `output/authoring/objects/`, credited on
+its node and in `asset.copyright`, with its sha256 and origin in
+`asset.extras.holoim.sources`; a local GLB needs a `credit` or `"own"`).
+`height` scales a source.
 
 An object's frame has its origin at the bottom centre, +Y up and +Z its
 front. It stands `at` a point or `on` another object, turned by `facing`
-(degrees, or toward a point). Its anchors are `top`, `center`, `bottom`,
+(degrees, or toward a point). Objects and marks are placed once, on the
+first frame, in the order they depend on each other (a mark counts as the
+point it names); a circle, or a place measured from an object that is in a
+hand from the first frame, is refused. Its anchors are `top`, `center`, `bottom`,
 `front`, each named part (the far end of its +Y axis) and its own `anchors`.
 
 A prop declares a `grip` (a part, or `{ at, axis }`) where a fist closes
 across it, and a `tool` (a part's tip and +Y axis, or `{ tip, axis }`) that an
 `aim` points. A performer can `hold: { "right": "can" }` from the first
 frame; `take` and `put` pick it up and set it down for the rest of the
-take. A held object hangs about its grip axis, and an aim the wrist cannot
+take, and the hand must arrive (`at` plus `attack`) before the take ends. A held object hangs about its grip axis, and an aim the wrist cannot
 make swings the elbow. Even so, a grip lies across the fist, so the hand
 points what it holds roughly square to the forearm: stage an aim with the
 hand close to the body rather than at arm's length, and lean a prop the hand

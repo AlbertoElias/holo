@@ -365,7 +365,7 @@ function placeObjects(cast: Cast[], sheet: BeatSheet, sources: ReadonlyMap<strin
   const visit = (id: string): void => {
     if (order.includes(id)) return;
     const o = specs[id]!;
-    for (const d of [...(o.on !== undefined ? [o.on] : []), ...pointObjects(o.at, ids), ...(typeof o.facing === 'number' ? [] : pointObjects(o.facing, ids))]) visit(d);
+    for (const d of [...(o.on !== undefined ? [o.on] : []), ...pointObjects(o.at, ids, sheet.marks), ...(typeof o.facing === 'number' ? [] : pointObjects(o.facing, ids, sheet.marks))]) visit(d);
     order.push(id);
   };
   for (const id of ids) visit(id);
@@ -508,7 +508,9 @@ function moveHeld(cast: Cast[], c: Cast, t: number): void {
           const axis = grip.axis.clone().applyQuaternion(st.prop.quaternion);
           stage.report.grips.push({ beat: h.take.beat.id, object: st.prop.id, side: h.side, distance: round(fist.distanceTo(propWorld(st.prop, grip.center)), 10000), angle: round(Math.acos(Math.min(1, Math.abs(across.dot(axis)))) / DEG, 10) });
         }
-        run.offset = hand.matrixWorld.clone().invert().multiply(new THREE.Matrix4().compose(st.prop.position, st.prop.quaternion, new THREE.Vector3(1, 1, 1)));
+        // At unit scale, as `poseInHand` applies it: a rig scaled to centimetres would scale the offset.
+        const handAt = new THREE.Matrix4().compose(hand.getWorldPosition(new THREE.Vector3()), hand.getWorldQuaternion(new THREE.Quaternion()), new THREE.Vector3(1, 1, 1));
+        run.offset = handAt.invert().multiply(new THREE.Matrix4().compose(st.prop.position, st.prop.quaternion, new THREE.Vector3(1, 1, 1)));
       }
       const pose = heldPose(c, h.side, st.prop, run.offset);
       st.prop.position.copy(pose.position);
