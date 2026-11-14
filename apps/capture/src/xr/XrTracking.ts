@@ -97,6 +97,12 @@ export class XrTracking {
   private cameraRig: THREE.Group | null = null;
   // Seconds each hand has gone without camera data.
   private readonly cameraUnseenSec: Record<VrHandSide, number> = { left: 0, right: 0 };
+  // A camera hand that returns while its arm still holds eases from the held pose to the tracked one over
+  // BODYCAM_ARM_RETURN_SEC; without it the wrist jumps there in one frame (35 cm on the aim clip).
+  private readonly cameraReturn: Record<VrHandSide, { sec: number; offset: THREE.Vector3; from: THREE.Quaternion }> = {
+    left: { sec: 0, offset: new THREE.Vector3(), from: new THREE.Quaternion() },
+    right: { sec: 0, offset: new THREE.Vector3(), from: new THREE.Quaternion() }
+  };
   /** How much of each camera arm's IK pose shows (1), against the idle animation's (0): ramps up on a return, down on a release. */
   readonly cameraArmWeight: Record<VrHandSide, number> = { left: 0, right: 0 };
 
@@ -555,11 +561,22 @@ export class XrTracking {
       const target = this.handTargets[side];
       const data = camera.current?.hands[side];
       if (data) {
+        const back = this.cameraUnseenSec[side] > 0 && target.poseValid;
+        const ret = this.cameraReturn[side];
+        if (back) {
+          ret.offset.copy(target.targetPosition);
+          ret.from.copy(target.targetQuaternion);
+        }
         this.cameraUnseenSec[side] = 0;
         this.cameraArmWeight[side] = Math.min(1, this.cameraArmWeight[side] + camera.dtSec / BODYCAM_ARM_RETURN_SEC);
         this.clearTrackedHandJoints(side);
         this.setCameraHand(side, data);
         this.updateLowFingerJointWarning(side, true);
+        if (back) {
+          ret.offset.sub(target.targetPosition);
+          ret.sec = BODYCAM_ARM_RETURN_SEC + camera.dtSec;
+        }
+        this.easeCameraReturn(side, camera.dtSec);
         continue;
       }
       this.updateLowFingerJointWarning(side, false);
@@ -573,10 +590,13 @@ export class XrTracking {
       this.cameraUnseenSec[side] += camera.dtSec;
       const lost = this.cameraUnseenSec[side] - BODYCAM_HAND_HOLD_SEC;
       if (lost <= 0) {
-        // Joints stay as they were, so the fingers hold with the wrist.
+        // Joints stay as they were, so the fingers hold with the wrist; a return in progress keeps easing, since
+        // the camera often drops a hand for single frames.
         this.holdLastValidPose(side, this.tmpEyeAnchor);
+        this.easeCameraReturn(side, camera.dtSec);
         continue;
       }
+      this.cameraReturn[side].sec = 0;
       this.clearTrackedHandJoints(side);
       const eased = THREE.MathUtils.smoothstep(lost / BODYCAM_REST_EASE_SEC, 0, 1);
       if (lost >= BODYCAM_REST_EASE_SEC) {
@@ -597,6 +617,17 @@ export class XrTracking {
       target.poseValid = true;
       this.handPoseSource[side] = 'held';
     }
+  }
+
+  /** Offsets this frame's camera hand target toward where the arm was when the hand returned, fading over the return. */
+  private easeCameraReturn(side: VrHandSide, dtSec: number): void {
+    const ret = this.cameraReturn[side];
+    ret.sec = Math.max(0, ret.sec - dtSec);
+    if (ret.sec <= 0) return;
+    const target = this.handTargets[side];
+    const k = THREE.MathUtils.smoothstep(ret.sec / BODYCAM_ARM_RETURN_SEC, 0, 1);
+    target.targetPosition.addScaledVector(ret.offset, k);
+    target.targetQuaternion.slerp(ret.from, k);
   }
 
   private setCameraHand(side: VrHandSide, data: BodyHand): void {
@@ -654,6 +685,7 @@ export class XrTracking {
       this.lowFingerJointWarned[side] = false;
       this.cameraUnseenSec[side] = 0;
       this.cameraArmWeight[side] = 0;
+      this.cameraReturn[side].sec = 0;
     }
     // Input sources stay: their 'connected' events, which carry handedness,
     // fire before entry and do not fire again for the session.

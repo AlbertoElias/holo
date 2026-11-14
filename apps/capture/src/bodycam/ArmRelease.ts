@@ -8,6 +8,7 @@ const ARM_BONES = ['Shoulder', 'UpperArm', 'LowerArm', 'Hand'];
 const WRITTEN_EPSILON = 1e-6;
 /** After the camera stops, an arm and its fingers go back to the idle pose over this long. */
 const FADE_OUT_SEC = 0.3;
+const ikPose = new THREE.Quaternion();
 
 interface Driven {
   bone: THREE.Bone;
@@ -40,7 +41,9 @@ export class ArmRelease {
   /** Shows `weight` of the pose the IK left on the bones, the rest idle. At 1 the IK pose stands. */
   blend(side: VrHandSide, weight: number): void {
     for (const d of this.driven[side]) {
-      if (weight < 1) d.bone.quaternion.copy(d.rest).slerp(d.bone.quaternion, THREE.MathUtils.smoothstep(weight, 0, 1)).normalize();
+      // From the rest pose toward the IK's, read before the bone is overwritten: slerping toward the bone's own
+      // quaternion after copying the rest into it showed the bare rest at any weight below 1, a snap both ways.
+      if (weight < 1) d.bone.quaternion.slerpQuaternions(d.rest, ikPose.copy(d.bone.quaternion), THREE.MathUtils.smoothstep(weight, 0, 1)).normalize();
       d.written.copy(d.bone.quaternion);
       d.has = true;
     }
