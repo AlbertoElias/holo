@@ -58,7 +58,12 @@ test("a phone records a selfie take and posts it to a shareable link", async ({ 
     await expect(countdown).toBeHidden({ timeout: 60_000 });
     await expect(page.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible({ timeout: 30_000 });
     mark("recordingStarted");
-    await expect(page.locator("[data-capture-running-time]")).toContainText(`0:0${TAKE_SECONDS}`, { timeout: 30_000 });
+    // At least the take's length: a loaded page can step the clock past the exact second between two polls.
+    const runningSeconds = async () => {
+      const match = /(\d+):(\d{2})/.exec((await page.locator("[data-capture-running-time]").textContent()) ?? "");
+      return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
+    };
+    await expect.poll(runningSeconds, { timeout: 30_000 }).toBeGreaterThanOrEqual(TAKE_SECONDS);
     await captureEvidence(page, testInfo, "phone-selfie-recording");
     await page.getByRole("button", { name: CONTROL_NAMES.stopRecording }).tap();
 
