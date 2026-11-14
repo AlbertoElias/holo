@@ -334,7 +334,7 @@ async function avatarWithSound(): Promise<Buffer> {
 test.describe("phone by touch", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
 
-  // Failure modes: Search or Settings back in the dock beside Upload (two
+  // Failure modes: Search or Settings back in the dock beside Record and Upload (two
   // lanterns, one place), lost in the status line's centre or a gesture edge,
   // a long title running under them, a hit under the touch minimum, the
   // sheet unfolding from the other side.
@@ -346,7 +346,8 @@ test.describe("phone by touch", () => {
     await assertViewerShell(page);
     await waitForPortalReady(page, long.id, long.url);
     const dock = page.getByRole("toolbar", { name: "Feed" });
-    await expect(dock.getByRole("button"), "the dock holds Upload alone").toHaveCount(1);
+    await expect(dock.getByRole("button"), "the dock holds making alone: Record, then Upload").toHaveCount(2);
+    await expect(dock.getByRole("button", { name: "Record a hologram" })).toBeVisible();
     await expect(dock.getByRole("button", { name: "Upload a hologram" })).toBeVisible();
     const settings = page.getByRole("button", { name: "Settings" });
     const search = page.getByRole("button", { name: "Search" });

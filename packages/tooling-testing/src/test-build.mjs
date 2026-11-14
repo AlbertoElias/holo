@@ -28,7 +28,7 @@ const RECIPE = 2;
 
 /** Per app: its directory, package, and the environment that selects a bundle variant. */
 export const TEST_BUILD_APPS = {
-  web: { dir: 'apps/viewer-web', pkg: '@holoim/web', variantEnv: ['VITE_IWER_SEM_SCENE'] },
+  web: { dir: 'apps/viewer-web', pkg: '@holoim/web', variantEnv: ['VITE_IWER_SEM_SCENE', 'VITE_CAPTURE_ORIGIN'] },
   capture: { dir: 'apps/capture', pkg: '@holoim/capture', variantEnv: ['CAPTURE_IWER_DEVICE'] }
 };
 

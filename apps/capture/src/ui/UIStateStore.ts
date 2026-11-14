@@ -1,6 +1,8 @@
 import type { Handedness } from '@holoim/xr-ui-core';
 import type { AppMode, UiViewModel } from '../types/contracts';
 import { loadHandedness } from '@holoim/ui-dom';
+import { isTouchDevice } from './captureHelp';
+import { isSelfieJourney } from '../post/postFlow';
 
 /** How long a Halo action's notice stays (slice 5 build plan). */
 const NOTICE_MS = 1500;
@@ -87,8 +89,13 @@ export class UIStateStore {
   }
 
   publishMode(mode: AppMode): void {
+    const flat = mode === 'desktop-third' || mode === 'desktop-first';
     const controls =
-      mode === 'desktop-third' || mode === 'desktop-first'
+      flat && isSelfieJourney()
+        ? 'Prop your phone up, face it, tap Record.'
+        : flat && isTouchDevice()
+        ? 'Touch: drag on the left of the screen to walk, drag elsewhere to look, and tap the record circle to start a take.'
+        : mode === 'desktop-third' || mode === 'desktop-first'
         ? 'Desktop: WASD + Space, hold C to crouch, V toggles 3rd/1st person, R to record, G or a click picks up the object and lets go (moving, it is thrown; Q/E turn it, Z/X tip it), hold T to open the tray and press 1 to 5 to summon, before or during a take; Find searches for more.'
         : mode === 'ar'
           ? 'AR: use Recenter AR to place the scene in front of you again. Tap Tray, then an item to place it where the centre of the screen points.'

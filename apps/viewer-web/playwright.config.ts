@@ -41,7 +41,7 @@ const captureServer = {
 const captureOnly = process.env.E2E_CAPTURE_ONLY === "1";
 const webServers = captureOnly ? [captureServer] : [
   {
-    command: `VITE_HMR_CLIENT_PORT=${e2ePort} VITE_API_PROXY_TARGET=${apiBaseUrl} ${testBuild} web -- --host 0.0.0.0 --port ${e2ePort} --strictPort`,
+    command: `VITE_CAPTURE_ORIGIN=${captureUrl.origin} VITE_HMR_CLIENT_PORT=${e2ePort} VITE_API_PROXY_TARGET=${apiBaseUrl} ${testBuild} web -- --host 0.0.0.0 --port ${e2ePort} --strictPort`,
     ignoreHTTPSErrors: true,
     // Includes a build when the sources changed (about 20 s locally).
     timeout: 180000,

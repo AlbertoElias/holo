@@ -3,7 +3,8 @@ import type { Handedness } from '@holoim/xr-ui-core';
 
 export type AppMode = 'desktop-third' | 'desktop-first' | 'vr' | 'mock-vr' | 'ar';
 
-export type DesktopViewMode = 'third' | 'first';
+/** `selfie`: the phone journey's view (docs/features/phone-capture.md), in front of the avatar, waist up; view only, so exports are unchanged. */
+export type DesktopViewMode = 'third' | 'first' | 'selfie';
 export type VrHandSide = 'left' | 'right';
 
 export const TRACKED_HAND_JOINT_NAMES = [

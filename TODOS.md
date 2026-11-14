@@ -147,6 +147,15 @@ it from the item below instead of duplicating its status here.
   recorded controller input. Builds on
   [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
 - [x] Clean up expired direct-upload intents and their `incoming/*.glb` objects so abandoned uploads do not leak storage. In flight in [`docs/features/archive/upload-intent-cleanup.md`](docs/features/archive/upload-intent-cleanup.md).
+- [ ] Direct, preview and revise a performance, on avatars built to express
+  (the user's direction and approval on 2026-11-13, after the agent-authored
+  poem "The part I didn't say" played but did not act). An agent directs a
+  take as a beat sheet, on the same bones and face channels a phone or
+  headset drives; an audition every avatar must pass; a first house avatar
+  to replace the stand-in. Reviewed, not started; the user answered the
+  phone-capture and natural-avatar-motion briefs on the same day, so it
+  can start. Owned by
+  [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
   (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)
   owns it and its measured gaps; the wishlist below feeds its fixes). The
@@ -247,7 +256,7 @@ it from the item below instead of duplicating its status here.
   tracking drives the rest. Needs a PRD first
   ([IDEA-078](docs/product/IDEAS.md)); depends on the two items above.
 
-- [ ] Replay the implicit state machines `/find-implicit-state-machines`
+- [x] Replay the implicit state machines `/find-implicit-state-machines`
   found but did not yet model (2026-11-12). Each is a hypothesis from a
   read of the code, not a verified defect: model it, replay the bug path
   against the real code, and record a defect in [`BUGS.md`](BUGS.md) only
@@ -313,9 +322,20 @@ it from the item below instead of duplicating its status here.
      the air (`ObjectSystem` returned early for the spectator frame); the AR
      frame now lets the hold go and steps physics. Not covered: the pointing
      machine (its own checks), the viewer's reach row and a physical headset.
-     Still not modeled: held modes
-     (`packages/xr-ui-core/src/heldMode.ts`,
-     `apps/capture/src/xr/HeadsetHolds.ts`).
+     Held modes (`packages/xr-ui-core/src/heldMode.ts`,
+     `apps/capture/src/xr/HeadsetHolds.ts`, the phone's `TouchInput`): Done
+     (2026-11-13), B-066. The statechart skill is user-invoked only, so the
+     machine was read from the code. A mark that ends early (the take
+     stops, the hand or controller leaves) kept its source in `swallow`, and
+     only the release of that source clears it, which a pinch never sends: the
+     holding hand's ray selects stayed eaten until the next mark. Reproduced
+     in three orders and fixed (check `held-states`). The overlap, stale-mode
+     and missed-end suspects on the touch hold, the desktop point holds and
+     the Halo did not reproduce. Not covered: a physical headset.
+  Result: eight machines replayed; defects found in 1 (B-049), 2 (B-048),
+  3 (B-053), 4 (B-056), 5 (B-058), 7 (B-059) and 8 (voice B-062, locomotion
+  B-064, desktop reach B-065, held modes B-066); 6 (XR session mode) did not
+  reproduce.
   The skill and its rules live in
   [`.agents/skills/find-implicit-state-machines/SKILL.md`](.agents/skills/find-implicit-state-machines/SKILL.md).
 

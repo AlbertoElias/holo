@@ -103,7 +103,9 @@ export class CameraController {
     this.deps.avatarRig.setFirstPersonVisualState(firstPersonMode);
 
     if (!isVrActive) {
-      if (this.desktopViewMode === 'third') {
+      if (this.desktopViewMode === 'selfie') {
+        this.updateSelfieCamera(deltaSec);
+      } else if (this.desktopViewMode === 'third') {
         const shouldSnap = this.snapDesktopCameraAfterVrExit || this.postVrExitSnapFrames > 0;
         this.updateThirdPersonCamera(deltaSec, shouldSnap);
         this.snapDesktopCameraAfterVrExit = false;
@@ -164,6 +166,25 @@ export class CameraController {
     if (!this.deps.renderer.xr.isPresenting) {
       this.ensureDesktopRendererState();
     }
+  }
+
+  /**
+   * Selfie (docs/features/phone-capture.md): the third-person orbit turned to
+   * face the avatar, close enough for waist up in a portrait screen, so the
+   * person sees their own face move. View only; nothing recorded changes.
+   */
+  private updateSelfieCamera(delta: number): void {
+    if (!this.deps.avatarRig.avatar) return;
+    const avatarHeight = this.deps.avatarRig.avatarHeight;
+    const aspect = this.deps.desktopCamera.aspect;
+    // Portrait needs more distance to keep the shoulders in frame.
+    const distance = avatarHeight * (aspect < 1 ? 1.15 : 0.85);
+    this.deps.avatarRig.getEyeAnchorWorldPosition(this.tmpTargetCam, this.deps.embodyOffset);
+    this.tmpTargetCam.y -= avatarHeight * 0.12;
+    this.tmpDesiredCam.set(-Math.sin(this.lookYaw) * distance, avatarHeight * 0.02, -Math.cos(this.lookYaw) * distance).add(this.tmpTargetCam);
+    const smoothing = 1 - Math.exp(-8 * delta);
+    this.deps.desktopCamera.position.lerp(this.tmpDesiredCam, smoothing);
+    this.deps.desktopCamera.lookAt(this.tmpTargetCam);
   }
 
   private updateThirdPersonCamera(delta: number, snapInstantly = false): void {

@@ -1,4 +1,5 @@
 import { nonDominantHand, type Handedness } from '@holoim/xr-ui-core';
+import { isSelfieJourney, postFlow } from '../post/postFlow';
 import { ScreenInputSystem } from '@holoim/xr-ui-iwsdk';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Vector3 } from 'three';
@@ -77,6 +78,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     embodyOffset: config.embodyOffset,
     rigYaw: () => locomotion.turnYaw
   });
+  if (isSelfieJourney()) camera.desktopViewMode = 'selfie';
   const tracking = new XrTracking(renderer, config.mockVrEnabledFromQuery, {
     handPitchDeg: config.handTrackPitchDeg,
     handYawDeg: config.handTrackYawDeg,
@@ -132,6 +134,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     getAvatar: () => ({ avatar: avatar.avatar, worldModel: avatar.worldModel }),
     onSizeLocked: () => heightFit.calibration.interrupt(),
     onTakeStart: () => {
+      // Recording again drops a take still waiting for Post.
+      postFlow.discard();
       objects.startTake();
       history.clear();
       history.capped = false;
@@ -140,6 +144,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     recordRefusal: () => (capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
     isPlacementSettled: () => capture.ar.isSettled(),
     setFrame: stage.worldGroup,
+    deliverTake: postFlow.deliverTake,
     getPlace: () => (place?.current ? { prepare: (path, maxSpzBytes) => place.prepareExport(path, maxSpzBytes), glbByteBudget: () => place.glbByteBudget() } : undefined)
   });
   // A mark or trace that began is a meaning entry: undone, it leaves the take as if it never happened.
