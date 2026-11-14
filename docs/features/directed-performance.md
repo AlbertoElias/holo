@@ -757,7 +757,7 @@ Claude Sonnet subagent given only the pack's `reader/` folder.
   - **Not published.** The command is ready and has not been run:
 
     ```
-    cp apps/capture/output/authoring/watering/watering-2.glb output/showcase/does-it-need-water.glb
+    mkdir -p output/showcase && cp apps/capture/output/authoring/watering/watering-2.glb output/showcase/does-it-need-water.glb
     cd apps/capture && node scripts/showcase/upload.mjs --api https://holoim-api.fly.dev ../../output/authoring/watering/publish
     ```
 
