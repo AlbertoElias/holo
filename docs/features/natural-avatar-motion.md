@@ -73,7 +73,7 @@ hands-only.
 | **Target, all bodies** | ≤ 3 cm / ≤ 10% · ≤ 1 cm · ≤ 0.5 cm | ≤ 35 m/s² | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
 | Human reference (CMU 02_01 / 07_01) | 3.9 / 16% · 07_01 2.6 / 10% | 34 / 45 | 0% | — | — | anchor |
 | Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | **8.6 cm / 16%** · 0.3 · **5.3 cm** | **116** | 0% | 0.7 mm | n/a | **worst** |
-| Camera (spike, `bodycam:report`) | unmeasured | unmeasured | unmeasured | ray **5.7–20°** (best variant 2.6°) | aim median **26/41/46°** (rough marks), head yaw p95 8.2° | bad |
+| Camera (`bodycam:report --avatars all`, lens-aim clip, each of the 17 `avatars` skeletons) | 0 / 0% · 0 · 0 (the camera body stands; its legs never move) | 10.1–10.8 | 0% | 1.8–2.0 mm, ray **0.88°** (wrist→tip, 0.25 s) | latency 50 ms, aim median **34.4°** (left 47, right 32; holds 18–51°); lost-hand pop max 116–119 m/s² (bar 150; 325 before the arm-release fix) | aim miss, reason measured |
 | VR body, walk ramp | **4.1 cm** / 3.8% · 1.0 · **1.2 cm** | **43** | 0% | 2.7 mm | — | miss |
 | VR body, walk | 2.9 cm / 3.8% · 1.1 · 0.3 | **37** | 0% | 1.6 (1.3) mm | — | near |
 | VR body, turn | 2.5 cm / 2.5% · 0.6 · 0.3 | 31 | 0% | 2.1 (2.7) mm | — | pass (jitter at input) |
@@ -97,9 +97,46 @@ target there is "no worse than input".
    (lower-body yaw toward travel, negative timeScale, or directional clips);
    pin planted feet in `TerrainLegSolver` (one writer per leg) from
    precomputed stance phases; knees always forward.
-2. **Camera aim and jitter.** Fold in the camera spike (Decision 2): adopt the
-   wrist→tip 0.25 s ray (2.6°), record a measured aim clip, and sample avatar
-   bones in `bodycam:report` so the body rows above stop being unmeasured.
+2. **Camera aim and jitter (2026-11-14: done but aim, which misses for a
+   measured reason).** The spike is folded in (history in
+   `archive/camera-avatar-spike.md`). `bodycam:report --avatars all` replays the
+   clip's landmarks through the app once per skeleton the `avatars` check loads
+   (`scripts/bodycam-avatar-replay.ts`) and grades the avatar's bones, its
+   wrists against the camera's, and the app's own pointing ray through this
+   instrument (`scripts/lib/camera-motion.ts`). The bodycam check grades its
+   synthetic stream the same way, as the lean guard. Results on the lens-aim
+   clip are the camera row above. The 17 skeletons agree closely (jitter
+   1.8–2.0 mm, pops 10.1–10.8), since most fixtures re-rig the shipped mesh
+   and every one is fitted to the same tracked body; they differed only where
+   the arm snapped (below).
+   - **Ray:** `PointDetector` takes a camera hand's ray from wrist to
+     fingertip, filtered over 0.25 s: 0.88° p95. It is opt-in
+     (`cameraHands`) and only grading uses it. A take still records no points
+     from camera hands, so the author's options are unchanged (out of scope
+     here, per Undo).
+   - **Aim misses: 34.4° median, against 3.5°.** One camera cannot read aim
+     along its own axis. A finger aimed at the lens is foreshortened to a few
+     pixels, so the hand model's depth for it is a guess. The spike's best
+     variant (corrected knuckle ray) also missed, at 8.6°. The point score
+     cannot find these holds either: the foreshortened finger reads as curled,
+     and the thumb sits 2–3 cm from the index tip, so it reads as a pinch. The
+     holds were taken from wrist stillness and checked by eye
+     (`output/bodycam/aim-holds.json`). Closing aim needs a second view or
+     depth, which is a product decision, not a tuning fix.
+   - **Fixed on the way: lost hands snapped.** When the camera lost a hand,
+     `ArmRelease.blend` showed the bare rest pose at any weight below 1 (it
+     slerped toward the quaternion it had just overwritten). The arm jumped to
+     rest in one frame, 8 cm on the shipped avatar and 28 cm on rigs with other
+     bone axes, and jumped back on return. A hand that returned within the
+     0.5 s hold also jumped straight to its new position, 35 cm in one frame.
+     It now eases from the held pose over the 0.2 s return
+     (`XrTracking.easeCameraReturn`). That costs some following on the clip's
+     41 returns: wrist error p95 1.9 cm, latency 50 ms (was 17). `popP99`
+     cannot see a few snaps in a clip, so `lostHandPopMaxMS2` (the worst
+     wrist acceleration on frames where a hand is lost or returning, bar
+     150 m/s²; tracked camera motion reaches 126) guards it in the replay. The
+     bodycam check's scripted performance has its own bar of 65: it reads 46.4
+     every run, and 90.1 on the old code, which a bar of 150 let through.
 3. **VR room-scale feet and pops.** Ramp skate 4.1 cm and 1.2 cm
    penetration; walk and ramp pops 37–43 m/s²; crouch jitter 2.4 mm against a
    0.6 mm input (`VrBodySolver.ts`, `legIk.ts`).
@@ -118,7 +155,7 @@ and a before/after proof video (ignored `output/`, H.264 MP4, never committed).
 | `room-scale-body-motion.md` (Verifying) | Close as Complete; its leftover feet and knee gaps become gap 3 here. Its `body-fidelity.ts` thresholds stay as the per-fixture guard; the VR rows above are graded by this instrument |
 | `hand-tracking-fidelity.md` (Verifying) | Close as Complete; the 3.0 cm wrist error becomes gap 4. Fix its stale path `scripts/lib/hand-fidelity.mjs` → `apps/capture/scripts/lib/hand-fidelity.ts` |
 | `archive/avatar-locomotion.md`, `archive/locomotion-retarget.md` (Complete) | Stay closed; their unvalidated headset check and missing VR arm tracks go under Physical-device limits here |
-| Camera spike (`feature/camera-avatar`, `camera-avatar-spike.md`, slices 1–2 done) | Taken over by this brief (Decision 2); its jitter definition is now the instrument's |
+| Camera spike (`feature/camera-avatar`, now `archive/camera-avatar-spike.md`) | Folded in 2026-11-14 as gap 2 (Decision 2); its jitter definition is now the instrument's |
 | TODOS "Make all avatar movement look completely natural" | Points here. Its wishlist (full-body IK with comfort costs, arm swing, hip sway, weight shift) is the fix toolbox for the gaps above; "robotic" motion that passes every metric is judged in the proof videos, and a missing metric is added before tuning by eye |
 
 ## Consumers
@@ -132,7 +169,7 @@ report passes on it.
 
 - [ ] One report grades every source with the same metrics and per-source targets.
 - [ ] Desktop keyboard row meets target; guard strict in `desktop-motion`.
-- [ ] Camera row has measured body and aim numbers and meets target, behind `?input=camera`.
+- [ ] Camera row has measured body and aim numbers and meets target, behind `?input=camera`. Body, ray, feet and latency meet on all 17 skeletons; aim misses at 34.4° for the measured reason in gap 2.
 - [ ] VR body walk/ramp/turn rows meet target; strict in the body replay.
 - [ ] Real-headset wrist p95 ≤ 2 cm.
 - [ ] Quest AR and phone AR rows measured; any miss fixed.
@@ -186,7 +223,7 @@ report passes on it.
 | Human anchor | x | CMU reads above |
 | VR body rows | `pnpm --filter @holoim/capture run test:xr:body` then `scripts/motion-quality-report.ts` | baseline above |
 | Hand rows | hand replay then `scripts/motion-quality-report.ts` | baseline above |
-| Camera row | `bodycam:report` on the clip | pending |
+| Camera row | `pnpm --filter @holoim/capture run bodycam:report <clip> <config> --avatars all` (or `--from-landmarks`); lean guard in `test:xr:bodycam` | every target but aim on 17 skeletons (2026-11-14) |
 | AR rows | existing AR checks with body sampling | pending |
 
 ## Physical-device limits
