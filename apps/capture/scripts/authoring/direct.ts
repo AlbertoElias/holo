@@ -7,7 +7,7 @@
  * A performer's `avatar` is a path relative to the sheet, `stock` (the shipped
  * avatar) or `fixture:<name>` (one of the generated avatar-format fixtures).
  */
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -61,11 +61,14 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
   const file = out ?? join(OUTPUT, `${basename(sheetFile, '.json')}.glb`);
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, written.glb);
-  await copyFile(sheetFile, file.replace(/\.glb$/, '.beats.json'));
+  // The sheet as solved (with any --style override), beside the take.
+  await writeFile(`${file.replace(/\.glb$/, '')}.beats.json`, `${JSON.stringify(sheet, null, 2)}\n`);
   return { out: file, take, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: written.glb.byteLength };
 }
 
 async function main(): Promise<void> {
+  // Output piped into `head` closes early; that is not a failure.
+  process.stdout.on('error', (e: NodeJS.ErrnoException) => { if (e.code === 'EPIPE') process.exit(0); throw e; });
   const args = process.argv.slice(2);
   const flag = (name: string): string | undefined => { const i = args.indexOf(name); return i === -1 ? undefined : args.splice(i, 2)[1]; };
   const out = flag('--out');

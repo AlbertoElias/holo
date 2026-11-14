@@ -452,7 +452,7 @@ Reports are JSON in the ignored `apps/capture/output/authoring/`.
   30 of 40 fingers, and 22 of 27 face shapes on her (peak 0.944). The
   acting reports agree: the directed take changes 109 of 111 channels, and
   the flat take changes 24 of 26 but is frozen from 4.7 s to 6 s (her) and
-  2.77 s to 4.4 s (him). Her reach ends 262.9 mm from him against 160 mm
+  2.77 s to 4.4 s (him). Her reach ends 260.0 mm from him against 160 mm
   asked, because he steps out of reach; the sheet should aim at where he
   will be.
 - **The early reading:** two fresh critics, Opus and Sonnet, each saw

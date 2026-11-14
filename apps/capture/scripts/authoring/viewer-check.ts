@@ -192,7 +192,7 @@ async function main(): Promise<void> {
     await page.waitForFunction((id) => document.querySelector(`.feed-card[data-card-id="${id}"]`)?.getAttribute('data-model-state') === 'rendered', uploaded.id, { timeout: 60_000 });
     await page.waitForFunction((u) => Object.keys((window as unknown as { __feedProbes: Record<string, unknown> }).__feedProbes).some((k) => k.endsWith(u)), uploaded.url, { timeout: 30_000 });
     const result = await read(page, uploaded.url);
-    const shot = resolve(file.replace(/\.glb$/, '-viewer.png'));
+    const shot = resolve(`${file.replace(/\.glb$/, '')}-viewer.png`);
     await card.screenshot({ path: shot });
     if (framesOut) {
       // Twelve stills at exact take times, paused, framed on the cast: what a critic is shown.

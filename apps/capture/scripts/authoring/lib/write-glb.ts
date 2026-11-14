@@ -8,7 +8,7 @@
  */
 import { Document, NodeIO, type Node as GNode } from '@gltf-transform/core';
 import { dedup, mergeDocuments } from '@gltf-transform/functions';
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 import type { PerformerTrack, SolvedTake } from './direct.ts';
 

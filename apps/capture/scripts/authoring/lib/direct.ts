@@ -53,10 +53,12 @@ interface Cast {
   readonly live: LivenessFace;
   readonly seed: number;
   readonly dirs: Resolved[];
-  /** Turn degrees per `toward` turn, fixed at setup. */
+  /** Turn degrees per `toward` turn, fixed when the turn begins. */
   readonly turnDeg: Map<Resolved, number>;
-  /** Step offsets in stage space, fixed at setup. */
+  /** Step offsets in stage space, fixed when the step begins. */
   readonly stepWorld: Map<Resolved, THREE.Vector3>;
+  /** Persistent directions are fixed in start order as the solve reaches them: the next one to fix, and the facing so far. */
+  fixed: { next: number; yaw: number };
   readonly ankles0: Record<Side, THREE.Vector3>;
   readonly feetMid0: THREE.Vector3;
   /** World positions of humanoid bones after the latest solve, for other performers to look and reach at. */
@@ -100,37 +102,12 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
     });
     return {
       spec, a, live: new LivenessFace(spec.seed ?? 0x5eed + index * 7919), seed: spec.seed ?? index + 1, dirs,
-      turnDeg: new Map(), stepWorld: new Map(), ankles0,
+      turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
       seen: new Map(), morphing
     };
   });
   for (const c of cast) see(c);
-
-  // Persistent directions, fixed once from where the performer is when each begins.
-  for (const c of cast) {
-    let yaw = c.spec.facing;
-    for (const r of c.dirs) {
-      const d = r.direction;
-      if (d.kind === 'turn' && d.body === 'whole') {
-        let deg = d.degrees ?? 0;
-        if (d.toward !== undefined) {
-          const from = rootPositionAt(c, r.start);
-          const to = pointOf(cast, c.spec, d.toward);
-          const want = Math.atan2(to.x - from.x, to.z - from.z) / DEG;
-          deg = ((want - yaw + 540) % 360) - 180;
-        }
-        c.turnDeg.set(r, deg);
-        yaw += deg;
-      } else if (d.kind === 'turn' && d.toward !== undefined) {
-        const from = rootPositionAt(c, r.start);
-        const to = pointOf(cast, c.spec, d.toward);
-        c.turnDeg.set(r, ((Math.atan2(to.x - from.x, to.z - from.z) / DEG - yaw + 540) % 360) - 180);
-      } else if (d.kind === 'step') {
-        c.stepWorld.set(r, new THREE.Vector3(d.by[0], 0, d.by[1]).applyQuaternion(yawQuat(yaw)));
-      }
-    }
-  }
 
   const tracks: PerformerTrack[] = cast.map((c) => {
     const rotations = new Map<THREE.Object3D, Float32Array>();
@@ -144,13 +121,20 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
   const reachChecks = new Map<number, { c: number; r: Resolved }[]>();
   cast.forEach((c, ci) => c.dirs.forEach((r) => {
     if (r.direction.kind !== 'reach') return;
-    const f = Math.round((r.at + r.attack + r.hold / 2) * fps);
-    if (f < frames) reachChecks.set(f, [...(reachChecks.get(f) ?? []), { c: ci, r }]);
+    // A reach still on its way at the end of the take is measured on the last frame.
+    const f = Math.min(frames - 1, Math.round((r.at + r.attack + r.hold / 2) * fps));
+    reachChecks.set(f, [...(reachChecks.get(f) ?? []), { c: ci, r }]);
   }));
 
   for (let f = 0; f < frames; f += 1) {
     const t = times[f]!;
     cast.forEach((c, ci) => {
+      fixPersistent(cast, c, t);
+      // The target a reach is measured against is the one this frame's solve aims at.
+      const measured = (reachChecks.get(f) ?? []).filter((x) => x.c === ci).map(({ r }) => {
+        const d = r.direction as Extract<Direction, { kind: 'reach' }>;
+        return { r, d, target: pointOf(cast, c.spec, d.at) };
+      });
       solveFrame(cast, c, t, 1 / fps, life, flat);
       const tr = tracks[ci]!;
       for (const [o, arr] of tr.rotations) o.quaternion.toArray(arr, f * 4);
@@ -158,16 +142,43 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
       for (const [, w] of tr.weights) w.values.set(w.meshes[0]!.morphTargetInfluences!, f * w.targets);
       c.a.frame.position.toArray(tr.root.position, f * 3);
       c.a.frame.quaternion.toArray(tr.root.rotation, f * 4);
+      for (const { r, d, target } of measured) {
+        const palm = c.a.hands[d.side]?.palmCenter(new THREE.Vector3()) ?? c.a.arms[d.side].hand.getWorldPosition(new THREE.Vector3());
+        tr.reaches.push({ beat: r.beat.id, side: d.side, targetDistance: Math.round(palm.distanceTo(target) * 10000) / 10000, stopShort: d.stopShort });
+      }
       see(c);
     });
-    for (const { c, r } of reachChecks.get(f) ?? []) {
-      const d = r.direction as Extract<Direction, { kind: 'reach' }>;
-      const target = pointOf(cast, cast[c]!.spec, d.at);
-      const palm = cast[c]!.a.hands[d.side]?.palmCenter(new THREE.Vector3()) ?? cast[c]!.a.arms[d.side].hand.getWorldPosition(new THREE.Vector3());
-      tracks[c]!.reaches.push({ beat: r.beat.id, side: d.side, targetDistance: Math.round(palm.distanceTo(target) * 10000) / 10000, stopShort: d.stopShort });
-    }
   }
   return { sheet, fps, times, tracks };
+}
+
+/** Signed degrees in [-180, 180). */
+const wrapDeg = (deg: number): number => ((((deg + 180) % 360) + 360) % 360) - 180;
+
+/**
+ * Fixes each persistent direction (and each `toward` turn) once, in start
+ * order, when the solve reaches its start: from where the performer stands
+ * then and where its target is then, so a turn toward a performer who has
+ * moved aims at where they are.
+ */
+function fixPersistent(cast: Cast[], c: Cast, t: number): void {
+  while (c.fixed.next < c.dirs.length && c.dirs[c.fixed.next]!.start <= t) {
+    const r = c.dirs[c.fixed.next]!;
+    c.fixed.next += 1;
+    const d = r.direction;
+    if (d.kind === 'turn') {
+      let deg = d.degrees ?? 0;
+      if (d.toward !== undefined) {
+        const from = rootPositionAt(c, r.start);
+        const to = pointOf(cast, c.spec, d.toward);
+        deg = wrapDeg(Math.atan2(to.x - from.x, to.z - from.z) / DEG - c.fixed.yaw);
+      }
+      c.turnDeg.set(r, deg);
+      if (d.body === 'whole') c.fixed.yaw += deg;
+    } else if (d.kind === 'step') {
+      c.stepWorld.set(r, new THREE.Vector3(d.by[0], 0, d.by[1]).applyQuaternion(yawQuat(c.fixed.yaw)));
+    }
+  }
 }
 
 function see(c: Cast): void {
@@ -234,8 +245,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   let leadYaw = c.spec.facing;
   for (const r of c.dirs) {
     if (r.direction.kind !== 'turn') continue;
-    const deg = r.direction.degrees ?? c.turnDeg.get(r) ?? 0;
-    const turnDeg = c.turnDeg.get(r) ?? deg;
+    const turnDeg = c.turnDeg.get(r) ?? 0;
     if (r.direction.body === 'whole') {
       rootYaw += turnDeg * env(r, t - (flat ? 0 : ROOT_LAG), flat);
       leadYaw += turnDeg * env(r, t, flat);
@@ -251,8 +261,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   const feet = { left: c.ankles0.left.clone(), right: c.ankles0.right.clone() };
   for (const r of c.dirs) {
     const d = r.direction;
-    if (d.kind !== 'step') continue;
-    const by = c.stepWorld.get(r)!;
+    const by = d.kind === 'step' ? c.stepWorld.get(r) : undefined;
+    if (!by || d.kind !== 'step') continue;
     const lead = clamp01((t - r.at) / r.attack);
     feet[d.foot].addScaledVector(by, smooth(lead));
     if (lead > 0 && lead < 1) feet[d.foot].y += STEP_LIFT * Math.sin(Math.PI * lead);
@@ -263,7 +273,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       if (u > 0 && u < 1) feet[other].y += STEP_LIFT * 0.6 * Math.sin(Math.PI * u);
     }
   }
-  const pivot = rootPositionAt(c, t).add(c.feetMid0).sub(new THREE.Vector3(c.spec.at[0], 0, c.spec.at[1]));
+  const pivot = root.clone().add(c.feetMid0).sub(new THREE.Vector3(c.spec.at[0], 0, c.spec.at[1]));
   const feetYaw = (rootYaw - c.spec.facing) * DEG;
   for (const s of SIDES) feet[s].sub(pivot).applyAxisAngle(new THREE.Vector3(0, 1, 0), feetYaw).add(pivot);
 
