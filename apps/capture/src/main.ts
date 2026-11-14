@@ -1,3 +1,5 @@
+// First: a post grant in the fragment leaves the address bar before anything else runs.
+import './post/postFlow';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 

@@ -23,6 +23,8 @@ import { DockGlyphButton, TrayRow, useAboveDock, useTrayGlyph } from './TrayRow'
 import type { UiViewModel, XrEntryOffer } from '../types/contracts';
 import type { CaptureUiBridge } from './captureUiBridge';
 import { captureHelp, isTouchDevice } from './captureHelp';
+import { PostPanel } from './PostPanel';
+import { isSelfieJourney } from '../post/postFlow';
 
 // Capture on a flat screen (styleguide 1.2, 5.2, 8.5; docs/features/ui-redesign.md
 // slice 4): state on the top status line, actions in the bottom dock on its
@@ -110,6 +112,8 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   // True while the tray was opened by the dock glyph: Escape or a press elsewhere then closes it (T held opens it without this).
   const trayOpenedByUi = useRef(false);
   const aboveDock = useAboveDock(input);
+  const selfie = touch && isSelfieJourney();
+  const countdown = useCountdown(3, () => bridge.toggleRecording());
   const trayGlyph = useTrayGlyph(bridge, state.tray.open, touch, trayOpenedByUi);
   const trayOpen = state.tray.open;
 
@@ -210,9 +214,17 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
             label={recording.actionLabel}
             input={input}
             onPress={() => {
-              if (recording.canToggle) bridge.toggleRecording();
+              if (!recording.canToggle) return;
+              if (countdown.running) countdown.cancel();
+              else if (!isRecording && selfie && state.mode !== 'ar') countdown.start();
+              else bridge.toggleRecording();
             }}
           />
+          {countdown.running ? (
+            <Type variant="timecode" as="span" data-capture-countdown="" aria-live="assertive">
+              {countdown.value}
+            </Type>
+          ) : null}
           {isRecording ? (
             <Type variant="timecode" as="time" data-capture-running-time="">
               {recordingText(state.recordingElapsedMs)}
@@ -250,6 +262,8 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
       <KeyHaloRing bridge={bridge} />
 
       {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} addFiles={<TrayFilesPicker bridge={bridge} tray={state.tray} input={input} />} onSummon={summonSlot} onRemove={(slot) => bridge.removeTraySlot(slot)} /> : null}
+
+      <PostPanel input={input} target={target} bottom={aboveDock} hidden={isRecording || findOpen || trayOpen} />
 
       {flat && findOpen ? (
         <FindSheet
@@ -503,4 +517,25 @@ function faceCameraProblem(state: UiViewModel['faceCamera']): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * Before a selfie take, 3-2-1 in the dock beside Record: time to put the phone
+ * down or step back. Record again cancels it.
+ */
+function useCountdown(from: number, onDone: () => void): { running: boolean; value: number; start: () => void; cancel: () => void } {
+  const [value, setValue] = useState<number | null>(null);
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => {
+    if (value === null) return undefined;
+    const timer = window.setTimeout(() => {
+      if (value <= 1) {
+        setValue(null);
+        done.current();
+      } else setValue(value - 1);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [value]);
+  return { running: value !== null, value: value ?? 0, start: () => setValue(from), cancel: () => setValue(null) };
 }
