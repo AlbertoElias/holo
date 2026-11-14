@@ -654,3 +654,22 @@ test("feed renders the edge snapshot while the API sleeps, then takes the API's 
   await expect(page.getByRole("heading", { name: "Uploaded since" })).toBeInViewport();
   await expect(page.getByRole("heading", { name: "From the edge" })).toHaveCount(0);
 });
+
+test("a just-posted hologram's page offers sharing for a few seconds, then lets go, and always offers the way back to the feed", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  await page.route("**/api/holograms/mock-1", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(mockHologram) }));
+  await page.route("**/api/holograms?*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [mockHologram], nextCursor: null }) }));
+  await page.route("**/uploads/**", (route) => route.fulfill({ status: 200, path: mockGlbPath, contentType: "model/gltf-binary", headers: { "accept-ranges": "bytes" } }));
+
+  await page.goto("/h/mock-1?posted=1");
+  const notice = page.locator('[data-notice="posted"]');
+  await expect(notice).toBeVisible();
+  const home = page.getByRole("button", { name: "All holograms" });
+  await expect(home).toBeVisible();
+  await captureEvidence(page, testInfo, "posted-notice-and-home");
+  // It leaves on its own (8 s), unlike before, when it stayed for good.
+  await expect(notice).toHaveCount(0, { timeout: 15_000 });
+  await captureEvidence(page, testInfo, "posted-notice-gone");
+  await home.click();
+  await expect(page).toHaveURL(/\/$/);
+});

@@ -153,6 +153,13 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
   // sends it. Share needs that tap; it cannot open itself after a navigation.
   const posted = source.kind === "one" && new URLSearchParams(location.search).get("posted") === "1";
   const [linkCopied, setLinkCopied] = useState(false);
+  // The invitation to share is a passing notice, not a standing banner: it leaves like the other confirmations.
+  const [postedDismissed, setPostedDismissed] = useState(false);
+  useEffect(() => {
+    if (!posted || postedDismissed) return undefined;
+    const timer = window.setTimeout(() => setPostedDismissed(true), tokens.glyph.idleAfter * 2);
+    return () => window.clearTimeout(timer);
+  }, [posted, postedDismissed, linkCopied]);
   const sharePosted = useCallback(async () => {
     if (source.kind !== "one") return;
     const url = `${window.location.origin}/h/${encodeURIComponent(source.id)}`;
@@ -307,7 +314,7 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
     ? uploadNotice(uploadStatus)
     : flash
       ? flash
-      : posted
+      : posted && !postedDismissed
       ? {
           kind: "posted",
           text: linkCopied ? "Link copied. Paste it anywhere to send your hologram." : "Posted. Send it to someone.",
@@ -361,7 +368,11 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
         <GlyphControl glyph="upload" label={VIEWER_CONTROL_NAMES.openUpload} onPress={() => setUploadOpen(true)} />
       </Dock>
       {/* Where the feed is narrowed to: a creator's name or the search words. The word closes the narrowing. */}
-      {context ? (
+      {source.kind === "one" ? (
+        <Chip className="feed-context" style={sheetOpen ? { visibility: "hidden" } : undefined}>
+          <GlyphControl glyph={null} showLabel label={VIEWER_CONTROL_NAMES.home} word={VIEWER_CONTROL_NAMES.home} onPress={() => navigate("/")} />
+        </Chip>
+      ) : context ? (
         <Chip className="feed-context" style={sheetOpen ? { visibility: "hidden" } : undefined}>
           <Type variant="captionUnderCard" as="p" className="feed-context-text">{context}</Type>
           <GlyphControl glyph="close" label={VIEWER_CONTROL_NAMES.clearFilter} onPress={() => navigate("/")} />

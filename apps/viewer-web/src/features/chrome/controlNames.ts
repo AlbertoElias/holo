@@ -19,6 +19,7 @@ export const VIEWER_CONTROL_NAMES = {
   openUpload: "Upload a hologram",
   openSearch: "Search",
   runSearch: "Search",
+  home: "All holograms",
   clearFilter: "Show all holograms",
   deleteHologram: "Delete",
   openSettings: "Settings",
