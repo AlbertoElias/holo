@@ -238,7 +238,10 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
   worktree): if a session has claimed that run, message it (`SendMessage` to
   its `owner` id) with what you found instead of starting a fix or a session.
   Only an unclaimed red run is yours to claim: write the file first, with your
-  session id, the run id and a status.
+  app session id (`local_…`, from `get_session` with `self`; not the CLI
+  transcript id), the run id and a status. Hand the claim to the session that
+  wrote the failing change when it is still active, and clear it once the run
+  after the fix is green.
 - Every push to `main` runs CI and a deploy, so batch within a task: commit
   each step and its follow-up fixes locally, and merge to `main` once, when
   the whole task is finished and verified. That merge happens in the same
