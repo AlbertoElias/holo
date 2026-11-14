@@ -73,7 +73,7 @@ hands-only.
 | **Target, all bodies** | ≤ 3 cm / ≤ 10% · ≤ 1 cm · ≤ 0.5 cm | ≤ 35 m/s² | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
 | Human reference (CMU 02_01 / 07_01) | 3.9 / 16% · 07_01 2.6 / 10% | 34 / 45 | 0% | — | — | anchor |
 | Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.7 cm / 4.0% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 28 (was **116**) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
-| Camera (spike, `bodycam:report`) | unmeasured | unmeasured | unmeasured | ray **5.7–20°** (best variant 2.6°) | aim median **26/41/46°** (rough marks), head yaw p95 8.2° | bad |
+| Camera (spike, `bodycam:report`) | unmeasured | unmeasured | unmeasured | ray **5.7–20°** (best variant 2.6°) | aim at the lens median **8.6°** (best ray: knuckle, perspective-corrected; target 3.5°), head yaw p95 8.2° | aim miss accepted (Decision 4); body unmeasured |
 | VR body, walk ramp | **4.1 cm** / 3.8% · 1.0 · **1.2 cm** | **43** | 0% | 2.7 mm | — | miss |
 | VR body, walk | 2.9 cm / 3.8% · 1.1 · 0.3 | **37** | 0% | 1.6 (1.3) mm | — | near |
 | VR body, turn | 2.5 cm / 2.5% · 0.6 · 0.3 | 31 | 0% | 2.1 (2.7) mm | — | pass (jitter at input) |
@@ -104,9 +104,12 @@ target there is "no worse than input".
    The swing never travels back and lifts clear. Soft reach stops the knee
    snapping straight. A backward start takes the reversal at once. The desktop
    crouch key is a spring on a ramped target.
-2. **Camera aim and jitter.** Fold in the camera spike (Decision 2): adopt the
-   wrist→tip 0.25 s ray (2.6°), record a measured aim clip, and sample avatar
-   bones in `bodycam:report` so the body rows above stop being unmeasured.
+2. **Camera body and jitter (aim settled).** The measured aim clip
+   (2026-11-14, branch `feature/camera-avatar-on-motion`) puts one camera's
+   aim at 8.6° median at best, against 3.5°; the user accepted rough aim
+   (Decision 4). Remaining: sample avatar bones in `bodycam:report` on every
+   supported skeleton so the body row stops being unmeasured, the real-time
+   rate, and a phone trial. Runs after gap 3.
 3. **VR room-scale feet and pops.** Ramp skate 4.1 cm and 1.2 cm
    penetration; walk and ramp pops 37–43 m/s²; crouch jitter 2.4 mm against a
    0.6 mm input (`VrBodySolver.ts`, `legIk.ts`).
@@ -139,7 +142,7 @@ report passes on it.
 
 - [ ] One report grades every source with the same metrics and per-source targets.
 - [x] Desktop keyboard row meets target; guard strict in `desktop-motion`.
-- [ ] Camera row has measured body and aim numbers and meets target, behind `?input=camera`.
+- [ ] Camera row has measured body numbers that meet target, behind `?input=camera`; aim is measured (8.6° median) and is not held to 3.5° (Decision 4).
 - [ ] VR body walk/ramp/turn rows meet target; strict in the body replay.
 - [ ] Real-headset wrist p95 ≤ 2 cm.
 - [ ] Quest AR and phone AR rows measured; any miss fixed.
@@ -173,6 +176,10 @@ report passes on it.
 3. **Desktop walk is a brisk walk, ~1.8 m/s (2026-11-13).** The keyboard walks
    one avatar height per second (1.8 m/s at 1.8 m), down from 3.24 m/s (a jog
    the shipped walk clip cannot plant). VR stick speed is unchanged.
+4. **Camera aim is rough, not precise (2026-11-14).** One camera aims at
+   8.6° median at best (target 3.5°). The camera avatar ships with rough aim
+   and does not promise precise pointing; the body, head and fingers are
+   still held to target. Execution order is now gap 3, then the camera body.
 
 ## Design review (2026-11-13, `design-reviewer`, Opus)
 
@@ -197,7 +204,7 @@ report passes on it.
 | Human anchor | x | CMU reads above |
 | VR body rows | `pnpm --filter @holoim/capture run test:xr:body` then `scripts/motion-quality-report.ts` | baseline above |
 | Hand rows | hand replay then `scripts/motion-quality-report.ts` | baseline above |
-| Camera row | `bodycam:report` on the clip | pending |
+| Camera row | `bodycam:report` on the clip | aim 8.6° median, corrected knuckle ray (2026-11-14, Decision 4); body pending |
 | AR rows | existing AR checks with body sampling | pending |
 
 ## Physical-device limits
