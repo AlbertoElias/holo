@@ -14,6 +14,8 @@ const SNAG_FRACTION = 0.5;
 // Collision normals at least this vertical are floor (or ceiling), not walls: cos 40°, the steepest walkable slope.
 const SNAG_FLOOR_NORMAL_Y = Math.cos(THREE.MathUtils.degToRad(40));
 const CROUCH_TERRAIN_GUARD_CLEARANCE = 0.02;
+// A sink into the controller's skin smaller than this is the controller's own settling, not a fall through the floor.
+const FLOOR_SKIN_TOLERANCE = 0.004;
 const CROUCH_TERRAIN_GUARD_SAMPLE_RADIUS_RATIO = 0.04;
 const CROUCH_TERRAIN_GUARD_OFFSETS: readonly Readonly<[number, number]>[] = [
   [0, 0],
@@ -245,6 +247,9 @@ export class CharacterMotor {
 
     this.grounded = this.characterController.computedGrounded();
     if (stickToTerrain && this.enforceTerrainClearance()) {
+      this.grounded = true;
+    }
+    else if (wasGrounded && hasInput && this.velocityY <= 0 && this.restoreFloorSkin()) {
       this.grounded = true;
     }
     if (this.grounded && this.velocityY < 0) {
@@ -564,6 +569,29 @@ export class CharacterMotor {
     if (current.y + 1e-4 >= minBodyY) return false;
 
     this.tmpBody.set(current.x, minBodyY, current.z);
+    this.setCharacterBodyPosition(this.tmpBody);
+    this.velocityY = groundedStickVelocity;
+    return true;
+  }
+
+  /**
+   * Lifts a walking capsule that has sunk into its skin back to the controller's offset over the floor under its
+   * centre. Rapier's cast ignores a floor the capsule already touches at time zero, so a step that leaves it a few
+   * millimetres low lets the next steps fall through the floor's surface 8 mm a frame (the scan floor of the place
+   * walk, 3 cm deep). Only a sink within the skin is restored: more is a step's edge under the centre, which the
+   * autostep owns.
+   */
+  private restoreFloorSkin(): boolean {
+    const { characterBody: body, worldCollider: floor } = this;
+    if (!body || !floor) return false;
+    const current = body.translation();
+    const reach = this.capsuleHalfHeight + this.capsuleRadius;
+    const offset = this.controllerOffset();
+    const toi = floor.castRay(new RAPIER.Ray({ x: current.x, y: current.y, z: current.z }, { x: 0, y: -1, z: 0 }), reach + offset, false);
+    if (toi < 0) return false;
+    const sunk = offset - (toi - reach);
+    if (sunk <= FLOOR_SKIN_TOLERANCE || sunk > offset) return false;
+    this.tmpBody.set(current.x, current.y + sunk, current.z);
     this.setCharacterBodyPosition(this.tmpBody);
     this.velocityY = groundedStickVelocity;
     return true;
