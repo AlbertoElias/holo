@@ -72,7 +72,7 @@ hands-only.
 |---|---|---|---|---|---|---|
 | **Target, all bodies** | ≤ 3 cm / ≤ 10% · ≤ 1 cm · ≤ 0.5 cm | ≤ 35 m/s² | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
 | Human reference (CMU 02_01 / 07_01) | 3.9 / 16% · 07_01 2.6 / 10% | 34 / 45 | 0% | — | — | anchor |
-| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.8 cm / 3.6% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 26 (was **116**) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
+| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.7 cm / 4.0% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 28 (was **116**) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
 | Camera (spike, `bodycam:report`) | unmeasured | unmeasured | unmeasured | ray **5.7–20°** (best variant 2.6°) | aim median **26/41/46°** (rough marks), head yaw p95 8.2° | bad |
 | VR body, walk ramp | **4.1 cm** / 3.8% · 1.0 · **1.2 cm** | **43** | 0% | 2.7 mm | — | miss |
 | VR body, walk | 2.9 cm / 3.8% · 1.1 · 0.3 | **37** | 0% | 1.6 (1.3) mm | — | near |
@@ -192,7 +192,7 @@ report passes on it.
 
 | Acceptance criterion | Workflow or command | Result |
 |---|---|---|
-| Desktop row | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (strict, in `test:xr`) | gap 1 (2026-11-13): skate 0.83 cm / 3.6%, float 0.89, penetration 0.00, pops p99 26.4 (k=2 stencil), joint limits 0%, jitter 0.1 mm, all targets met |
+| Desktop row | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (strict, in `test:xr`) | gap 1 (2026-11-14, with the floor-skin guard): skate 0.72 cm / 4.0%, float 0.87, penetration 0.00, pops p99 27.6 (k=2 stencil), joint limits 0%, jitter 0.1 mm, walk speed 1.799 m/s, all targets met |
 | Human anchor | x | CMU reads above |
 | VR body rows | `pnpm --filter @holoim/capture run test:xr:body` then `scripts/motion-quality-report.ts` | baseline above |
 | Hand rows | hand replay then `scripts/motion-quality-report.ts` | baseline above |
