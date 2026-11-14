@@ -74,8 +74,7 @@ async function waitFor(url: string, timeoutMs: number): Promise<void> {
     for (;;) {
       try { if ((await client.get(url, { timeout: 5000 })).status() < 500) return; } catch { /* not up yet */ }
       if (Date.now() > until) throw new Error(`timed out waiting for ${url}`);
-      // wall-clock: polling a server process that is starting up.
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500)); // wall-clock: polling a server process that is starting up.
     }
   } finally {
     await client.dispose();
@@ -221,8 +220,7 @@ async function main(): Promise<void> {
         const p = Object.entries((window as unknown as { __feedProbes: Record<string, { actions: Record<string, { time: number } | null> }> }).__feedProbes).find(([k]) => k.endsWith(u))![1];
         for (const a of Object.values(p.actions)) if (a) a.time = 0;
       }, uploaded.url);
-      // wall-clock: the proof video is a real-time recording of playback.
-      await new Promise((r) => setTimeout(r, (result.duration + 1) * 1000));
+      await new Promise((r) => setTimeout(r, (result.duration + 1) * 1000)); // wall-clock: the proof video records playback in real time.
     }
     const video = page.video();
     await context.close();
