@@ -1329,6 +1329,29 @@ bug above.)
 - **Not done:** not seen on a real iPhone. RealityKit on macOS is the closest check run.
 - **Closed:** 2026-11-13.
 
+### B-066 — A held mode that ends early keeps swallowing its hand's selects
+
+- **Area:** `apps/capture/src/xr/HeadsetHolds.ts` (`ownsSelect`, the mark's `swallow`), `packages/xr-ui-core/src/heldMode.ts`
+- **Severity:** P2 (the holding hand's ray stops pressing the world panel, Find panel and dock after a take stops or the hand leaves the view: with hands, until the next mark; with a controller, the first click after it comes back)
+- **Observed:** 2026-11-13 by the held-modes replay (queue item 8 in `TODOS.md`)
+- **Evidence:** `pnpm --filter @holoim/capture run test:xr:held-states` (`output/ci-held-states/report.json`): `pinch-take-stopped`, `pinch-hand-lost` and `trigger-controller-lost` failed with 0 commits on the left-hand Refit press (1 expected); the controls (`control-no-hold`, `hands-control-no-hold`, `trigger-take-stopped`) passed, and with the fix all six pass.
+- **Expected:** once a mode has ended early, its source's next select reaches chrome as usual.
+- **Reproduction:** with IWER, start a take and hold the mark on the left hand (thumb–middle pinch), then (a) stop the take, or (b) take the hand out of view, and open the pinch; or with a controller hold the left trigger and drop and restore the controller. Aim the left ray at "Refit height" and select: nothing happens. The mark is idle but `swallow` still names the source (`left:thumbMiddle`, `left:trigger`), and only a release of that source clears it: a pinch's release is fed to the mark only while it is held, and a controller that went away sends no `selectend`.
+- **Fix:** `releaseSpentSwallow` feeds the swallowed source's release once the source is no longer down (pinch open, trigger up, controller gone, session reset). Replay `held-states` is in `test:xr`.
+- **Not reproduced:** a hold that never ends or two holds that overlap (the mark blurs when the take stops, `reset` blurs both modes and clears queued trigger events), a stale mode read after a late step (the Halo summon cancels on session end and a handedness change), the phone's touch hold (`onXrEntered` resets it; a second finger or cancel is a trackingLost), and the desktop point holds (ends on blur, hidden tab and lost pointer lock: B-065's replay).
+- **Closed:** 2026-11-13, hosted run 43530064074 (`c627e94d97f5`) green: both capture XR shards (`held-states` included) and all eleven pipeline shards passed, and the capture deploy ran and passed its health check (the viewer and API deploys were skipped: nothing they build changed).
+
+### B-065 — A prop carried when AR starts hangs frozen in the air
+
+- **Area:** `apps/capture` (`ObjectSystem`, `ObjectInteraction`; the AR spectator frame)
+- **Severity:** P2 (a phone that carries a prop and taps Enter AR started its take with the prop hovering at hand height, un-placeable)
+- **Found:** 2026-11-13 by `/find-implicit-state-machines` (queue item 8, desktop reach); replayed against the real page
+- **Reproduced (`test:xr:object`, `desktop-reach-interruptions` / `arEntryWhileCarrying`):** the prop is carried (`heldBy` right, phase `carry`, y 1.32 m), then Enter AR is clicked. `ObjectSystem` returns early on `frame.arSpectator`, so the hold and the reach were never updated or released (VR entry resets both): 30 AR frames later it was still held at y 1.311 m.
+- **Expected:** AR entry lets the hold go like VR entry does, and the prop falls to the floor.
+- **Fix:** the AR frame calls `CaptureObjects.spectate`: `ObjectInteraction.endForSpectator` ends the reach, clears the queued step and releases the hold, then physics steps so the prop lands (asleep at y 0.02 m). The replay failed before and passes after; `ar-record` and `verify:pr` pass.
+- **Not reproduced (same replay, seven scenarios):** blur, a hidden tab, a lost pointer lock (each with the button down on a reach or a carry), a take start or stop mid-gesture, V and F during a reach: all end as the semantics say.
+- **Closed:** 2026-11-13, hosted run 43525061000 (`10ba301b7fa3`) green; the capture deploy ran and passed its health check (the API and viewer deploys were skipped: nothing they build changed).
+
 ### B-064 — The avatar walks on by itself when a controller stops reporting with the stick held
 
 - **Area:** `apps/capture/src/systems/VrLocomotionSystem.ts` (stick poll), `apps/capture/src/input/VrLocomotion.ts`
