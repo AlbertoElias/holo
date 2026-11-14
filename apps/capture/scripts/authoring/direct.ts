@@ -6,6 +6,11 @@
  *
  * A performer's `avatar` is a path relative to the sheet, `stock` (the shipped
  * avatar) or `fixture:<name>` (one of the generated avatar-format fixtures).
+ * An object's `source` is a GLB path relative to the sheet or
+ * `polyhaven:<id>` (packed by the API, cached under output/authoring/objects).
+ * The build fails when a held object or a put lands off its mark: a grip more
+ * than 1 cm or 5° off, a put more than 1 cm off or 3° from upright, or an aim
+ * more than 10° off its target.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -14,8 +19,9 @@ import { fileURLToPath } from 'node:url';
 import { generateAvatarFixtures, SHIPPED_AVATAR } from '../lib/avatar-fixtures.ts';
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { loadAvatar, type LoadedAvatar } from './lib/avatar.ts';
-import type { BeatSheet } from './lib/beats.ts';
-import { solveTake, type SolvedTake } from './lib/direct.ts';
+import { validateSheet, type BeatSheet } from './lib/beats.ts';
+import { solveTake, type ObjectReport, type SolvedTake } from './lib/direct.ts';
+import { loadSources, type LoadedSource } from './lib/props.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { writeTake } from './lib/write-glb.ts';
 
@@ -32,11 +38,27 @@ export async function resolveAvatar(spec: string, sheetFile: string): Promise<st
   return resolve(dirname(sheetFile), spec);
 }
 
-export async function loadSheet(sheetFile: string): Promise<{ sheet: BeatSheet; avatars: Map<string, LoadedAvatar> }> {
+export async function loadSheet(sheetFile: string): Promise<{ sheet: BeatSheet; avatars: Map<string, LoadedAvatar>; sources: Map<string, LoadedSource> }> {
   const sheet = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
+  const problems = validateSheet(sheet);
+  if (problems.length) throw new Error(`${basename(sheetFile)}:\n  ${problems.join('\n  ')}`);
   const avatars = new Map<string, LoadedAvatar>();
   for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(p.avatar, sheetFile)));
-  return { sheet, avatars };
+  const sources = await loadSources(sheet.objects ?? {}, sheetFile, join(OUTPUT, 'objects'));
+  return { sheet, avatars, sources };
+}
+
+/** What a build may miss by before it fails. */
+export const OBJECT_LIMITS = { gripDistance: 0.01, gripAngle: 5, putDistance: 0.01, putTilt: 3, aimResidual: 10 } as const;
+
+/** The lines of an object report, each with whether it is past its limit. */
+export function objectLines(report: ObjectReport): { text: string; failed: boolean }[] {
+  const L = OBJECT_LIMITS;
+  return [
+    ...report.grips.map((g) => ({ text: `${g.object} taken (${g.side}, beat ${g.beat}): fist ${(g.distance * 1000).toFixed(1)} mm from the grip, ${g.angle.toFixed(1)}° off its axis`, failed: g.distance > L.gripDistance || g.angle > L.gripAngle })),
+    ...report.puts.map((p) => ({ text: `${p.object} put (${p.side}, beat ${p.beat}): ${(p.distance * 1000).toFixed(1)} mm from its place, ${p.tilt.toFixed(1)}° from upright`, failed: p.distance > L.putDistance || p.tilt > L.putTilt })),
+    ...report.aims.map((a) => ({ text: `${a.object} aimed (${a.side}, beat ${a.beat}): ${a.residual.toFixed(1)}° off the target`, failed: a.residual > L.aimResidual }))
+  ];
 }
 
 export interface BuildResult {
@@ -51,8 +73,8 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
   const started = performance.now();
   const loaded = await loadSheet(sheetFile);
   const sheet: BeatSheet = style ? { ...loaded.sheet, style } : loaded.sheet;
-  const { avatars } = loaded;
-  const take = solveTake(sheet, avatars);
+  const { avatars, sources } = loaded;
+  const take = solveTake(sheet, avatars, sources);
   const written = await writeTake(take, {
     author: 'HoloIM direction',
     title: sheet.title,
@@ -63,6 +85,7 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
   await writeFile(file, written.glb);
   // The sheet as solved (with any --style override), beside the take.
   await writeFile(`${file.replace(/\.glb$/, '')}.beats.json`, `${JSON.stringify(sheet, null, 2)}\n`);
+  if (take.props.length) await writeFile(`${file.replace(/\.glb$/, '')}.objects.json`, `${JSON.stringify(take.objects, null, 2)}\n`);
   return { out: file, take, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: written.glb.byteLength };
 }
 
@@ -86,12 +109,18 @@ async function main(): Promise<void> {
     console.log(`  ${t.spec.id} reach ${reach.beat} (${reach.side}): palm ${(reach.targetDistance * 1000).toFixed(1)} mm from target, asked ${(reach.stopShort * 1000).toFixed(0)} mm` +
       (reach.targetDistance - reach.stopShort > 0.02 && reach.outOfReach > 0.01 ? `; out of reach even leaning: move the performers closer or add a step` : ''));
   }
+  const lines = objectLines(r.take.objects);
+  for (const l of lines) console.log(`  ${l.failed ? 'FAIL ' : ''}${l.text}`);
   const doc = parseGlb(new Uint8Array(await readFile(r.out)));
   console.log(summarize(actingReport(doc, basename(r.out))));
   if (against) {
     const diff = diffTakes(parseGlb(new Uint8Array(await readFile(against))), doc);
     console.log(`  against ${basename(against)}: ${diff.spans.length ? diff.spans.map((s) => `${s.fromSec}-${s.toSec} s (${s.channels} ch)`).join(', ') : 'no difference'}` +
       (diff.unmatched.length ? `; ${diff.unmatched.length} channels in one take only` : ''));
+  }
+  if (lines.some((l) => l.failed)) {
+    console.error('an object misses its mark: change the reach, the palm or the object, or move the place');
+    process.exit(1);
   }
 }
 

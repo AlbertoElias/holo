@@ -10,13 +10,14 @@ ordinary hologram GLB, and review whether it reads. Run everything from `apps/ca
 |---|---|
 | `acting-report.ts <take.glb> [--against other.glb] [--json out.json]` | Per performer (found by skin): which bones and face shapes move and when, frozen spans, and whether fingers, face and eyes ever move. `--against` lists the spans where two takes differ. |
 | `avatar-audition.ts <avatar.glb> [--json out.json]` | Can this avatar act: face-channel mesh displacement (mm), fingertip-to-palm distance for a fist and a point, reach error against fixed targets, one turn checked for interpenetration. A failing item names itself. |
-| `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb]` | Solves the beat sheet on each performer's avatar, writes the GLB and the sheet beside it, prints each reach's stop-short distance and the acting report. |
+| `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb]` | Solves the beat sheet on each performer's avatar, writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`), prints each reach's stop-short distance, each grip, put and aim's miss, and the acting report. Exits 1 when a grip, put or aim misses past its limit. |
 | `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer, frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
-| `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, and which performer holds the humanoid the viewer anchors on. `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
+| `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
 
 ## A beat sheet
 
-`sheets/goodbye.json` and `sheets/two-avatars.json` are worked examples; the
+`sheets/goodbye.json` and `sheets/two-avatars.json` are worked examples
+(`sheets/watering.json` and `sheets/tallest-bar.json` for objects); the
 types are in `lib/beats.ts`. A sheet has a `duration`, `performers` (an
 `avatar`, a stage position `at: [x, z]` and `facing` degrees about +Y, 0
 facing +Z), named `marks`, and `beats`. A performer's `avatar` is `stock`, a
@@ -39,9 +40,15 @@ Each beat belongs to a performer, starts `at` a time and holds `directions`:
   the mesh under 5 mm and do not (`face-legibility.ts`);
 - `reach` with a hand toward a point, stopping `stopShort` metres from it;
 - `hand` shape (`relaxed`, `open`, `reach`, `fist`, `point`, `grip`, `withheld`);
-- `weight` shift, `turn` (`upper` twists and returns, `whole` stays), `step`.
+- `weight` shift, `turn` (`upper` twists and returns, `whole` stays), `step`;
+- `take` an object by its grip, `put` it `at` a point or `on` another object,
+  and `aim` what a hand holds at a point (below).
 
-A point is `[x, y, z]`, a mark's name, or `"<performer>.<humanoid bone>"`.
+A point is `[x, y, z]`, a mark's name, `"<performer>.<humanoid bone>"`,
+`"<object>.<anchor>"`, or a place: `{ "of": "<performer or object>",
+"forward", "right", "up" or "height" }`, metres or measures of the
+performer (`"0.5 step"`, `"hanging-hand"`; `MEASURES` and `LANDMARKS` in
+`lib/stage.ts`).
 A point on a performer is where that bone is at the moment the direction
 plays, so a reach at someone who steps away lands where they are. A
 performer leans into a reach beyond their arm; one that still ends more than
@@ -62,6 +69,35 @@ comparison.
 Each direction is a closed form of time, so revising one beat changes only its
 own span; a `whole` turn and a step also move what follows. Check with
 `direct.ts <sheet> --out revised.glb --against earlier.glb`.
+
+## Objects and a set
+
+A sheet's `objects`, keyed by id, are the set and the props, written into the
+take as capture writes recorded objects (`RecordedObject` nodes declared in
+`HOLOIM_objects`), so the viewer draws them solid, outside the hologram. Each
+is a `shape` with a `size` `[width, height, depth]`; `parts`, each a shape
+with its own `name`, `size`, `at` (its bottom centre), `rotate` and `color`;
+or a `source`, a GLB relative to the sheet or `polyhaven:<id>` (packed by the
+API, cached under `output/authoring/objects/`, credited on its node and in
+`asset.copyright`; a local GLB needs a `credit` or `"own"`). `height`
+scales a source.
+
+An object's frame has its origin at the bottom centre, +Y up and +Z its
+front. It stands `at` a point or `on` another object, turned by `facing`
+(degrees, or toward a point). Its anchors are `top`, `center`, `bottom`,
+`front`, each named part (the far end of its +Y axis) and its own `anchors`.
+
+A prop declares a `grip` (a part, or `{ at, axis }`) where a fist closes
+across it, and a `tool` (a part's tip and +Y axis, or `{ tip, axis }`) that an
+`aim` points. A performer can `hold: { "right": "can" }` from the first
+frame; `take` and `put` pick it up and set it down for the rest of the
+take. A held object hangs about its grip axis, and an aim the wrist cannot
+make swings the elbow. Even so, a grip lies across the fist, so the hand
+points what it holds roughly square to the forearm: stage an aim with the
+hand close to the body rather than at arm's length, and lean a prop the hand
+must take from low down. The build fails when a grip lands more than 1 cm
+or 5° off, a put more than 1 cm off or 3° from upright, or an aim more than
+10° off its target.
 
 ## Reviewing a take
 
@@ -101,7 +137,8 @@ minute; `node packages/tooling-testing/src/preview.mjs <dir>` (from the
 repository root) tiles them.
 
 Not covered by these tools yet (`docs/features/directed-performance.md`,
-"Not covered yet"): sets and props, a held prop's grip, and publishing.
+"Not covered yet"): change in the world (water, a plant that responds),
+handing an object between performers, collisions, and publishing.
 A take is published like a showcase piece, with
 `scripts/showcase/upload.mjs`.
 

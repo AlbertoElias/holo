@@ -18,6 +18,8 @@ const tmpQ2 = new THREE.Quaternion();
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const IDENTITY = new THREE.Quaternion();
+const DEG = Math.PI / 180;
+const wrapRad = (r: number): number => Math.atan2(Math.sin(r), Math.cos(r));
 
 export const toWorld = (a: LoadedAvatar, local: THREE.Vector3, out = new THREE.Vector3()): THREE.Vector3 => a.body.localToWorld(out.copy(local));
 export const toBody = (a: LoadedAvatar, world: THREE.Vector3, out = new THREE.Vector3()): THREE.Vector3 => a.body.worldToLocal(out.copy(world));
@@ -181,5 +183,58 @@ export function turnBody(a: LoadedAvatar, yaw: number, shares: ReadonlyArray<rea
     carry = 0;
   }
   if (carry > 0) rotateBoneWorld(a.humanoid.bone('head')!, tmpQ.setFromAxisAngle(up, yaw * carry));
+}
+
+
+/** How far a hand turns from its neutral wrist, in degrees: forearm roll either way, then the wrist's bend. */
+export const WRIST_LIMITS = { roll: 85, flex: 60, extend: 55, radial: 20, ulnar: 30 } as const;
+
+/**
+ * Turns a hand toward a wanted world orientation as far as an arm allows: the
+ * part about the forearm is a roll (capped at ±85° from the bind wrist), the
+ * rest a wrist bend within flexion and deviation limits; a turn about the
+ * fingers' own axis is dropped. Returns how many degrees the hand ends short.
+ */
+export function orientHand(a: LoadedAvatar, side: Side, wanted: THREE.Quaternion): number {
+  const chain = a.arms[side];
+  const hand = chain.hand;
+  const rig = a.hands[side];
+  hand.updateMatrixWorld(true);
+  const parent = hand.parent!.getWorldQuaternion(new THREE.Quaternion());
+  const neutral = parent.clone().multiply(chain.handBindQuaternion);
+  const delta = wanted.clone().multiply(neutral.clone().invert());
+  if (delta.w < 0) delta.set(-delta.x, -delta.y, -delta.z, -delta.w);
+  const fore = hand.getWorldPosition(new THREE.Vector3()).sub(chain.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+  // Swing-twist about the forearm: delta = swing · twist.
+  const along = delta.x * fore.x + delta.y * fore.y + delta.z * fore.z;
+  const rollAngle = 2 * Math.atan2(along, delta.w);
+  const twist = new THREE.Quaternion().setFromAxisAngle(fore, rollAngle);
+  const swing = delta.clone().multiply(twist.clone().invert());
+  const roll = THREE.MathUtils.clamp(wrapRad(rollAngle), -WRIST_LIMITS.roll * DEG, WRIST_LIMITS.roll * DEG);
+  const rolled = new THREE.Quaternion().setFromAxisAngle(fore, roll).multiply(neutral);
+  let result = rolled;
+  if (rig) {
+    // The palm's axes in the hand's own frame, then in the rolled neutral frame.
+    const toLocal = hand.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const palm = rig.palmFrame(new THREE.Quaternion());
+    const local = (v: THREE.Vector3) => v.applyQuaternion(palm).applyQuaternion(toLocal).applyQuaternion(rolled);
+    const fingers = local(new THREE.Vector3(0, 1, 0));
+    const thumbSide = local(new THREE.Vector3(1, 0, 0));
+    const normal = local(new THREE.Vector3(0, 0, side === 'right' ? 1 : -1));
+    const flexAxis = new THREE.Vector3().crossVectors(fingers, normal).normalize();
+    const radialAxis = new THREE.Vector3().crossVectors(fingers, thumbSide).normalize();
+    if (swing.w < 0) swing.set(-swing.x, -swing.y, -swing.z, -swing.w);
+    const angle = 2 * Math.acos(THREE.MathUtils.clamp(swing.w, -1, 1));
+    const s = Math.sqrt(Math.max(0, 1 - swing.w * swing.w));
+    const vec = s > 1e-8 ? new THREE.Vector3(swing.x / s, swing.y / s, swing.z / s).multiplyScalar(angle) : new THREE.Vector3();
+    const flex = THREE.MathUtils.clamp(vec.dot(flexAxis), -WRIST_LIMITS.extend * DEG, WRIST_LIMITS.flex * DEG);
+    const radial = THREE.MathUtils.clamp(vec.dot(radialAxis), -WRIST_LIMITS.ulnar * DEG, WRIST_LIMITS.radial * DEG);
+    const bend = flexAxis.multiplyScalar(flex).addScaledVector(radialAxis, radial);
+    const bendAngle = bend.length();
+    if (bendAngle > 1e-8) result = new THREE.Quaternion().setFromAxisAngle(bend.normalize(), bendAngle).multiply(rolled);
+  }
+  hand.quaternion.copy(parent.clone().invert().multiply(result));
+  hand.updateMatrixWorld(true);
+  return result.angleTo(wanted) / DEG;
 }
 
