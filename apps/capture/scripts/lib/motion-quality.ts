@@ -28,7 +28,7 @@ export type MotionFrame = {
   // Direction to a measured target from the fingertip (unit), when known.
   aimTarget?: Vec3 | undefined;
 };
-export type MotionSource = 'vr-body' | 'vr-hands' | 'ar-quest' | 'ar-phone' | 'camera' | 'desktop';
+export type MotionSource = 'vr-body' | 'vr-hands' | 'ar-quest' | 'ar-phone' | 'camera' | 'desktop' | 'authored';
 
 export type MotionMetrics = {
   frames: number;
@@ -81,7 +81,9 @@ export const MOTION_TARGETS: Record<MotionSource, Targets> = {
   'ar-quest': { ...HUMAN_FEET, jitterP95Mm: { max: 2 }, wristErrorP95Cm: { max: 1.5 }, latencyMs: { max: 0 }, jerkRatio: { max: 1.2 } },
   'ar-phone': { ...HUMAN_FEET, jitterP95Mm: { max: 2 } },
   camera: { ...HUMAN_FEET, jitterP95Mm: { max: 8 }, rayJitterP95Deg: { max: 3.5 }, aimErrorMedianDeg: { max: 3.5 }, latencyMs: { max: 100 } },
-  desktop: { ...HUMAN_FEET, jitterP95Mm: { max: 2 } }
+  desktop: { ...HUMAN_FEET, jitterP95Mm: { max: 2 } },
+  // A take solved from a directed beat sheet (docs/features/directed-performance.md): no input to follow, so bodies only.
+  authored: { ...HUMAN_FEET, jitterP95Mm: { max: 2 } }
 };
 
 // Human joint ranges (degrees between the two bones; 180 = straight).
