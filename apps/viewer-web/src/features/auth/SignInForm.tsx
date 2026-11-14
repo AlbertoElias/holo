@@ -8,12 +8,14 @@ import { requestMagicLink } from "./auth";
 type SignInFormProps = {
   /** One line above the fields: why signing in is asked of this person here. */
   intro?: string;
+  /** Where the emailed link returns to after sign-in. */
+  next?: "record";
 };
 
 // The sign-in form, in the same fields and word-and-glyph control as the
 // upload form: Settings and the Upload sheet both show it to anyone not yet
 // signed in. It says "sent" only after the API says the email went out.
-export function SignInForm({ intro }: SignInFormProps) {
+export function SignInForm({ intro, next }: SignInFormProps) {
   const emailId = useId();
   const nameId = useId();
   const [email, setEmail] = useState("");
@@ -37,7 +39,8 @@ export function SignInForm({ intro }: SignInFormProps) {
     try {
       const result = await requestMagicLink({
         email: trimmedEmail,
-        ...(displayName.trim() ? { displayName: displayName.trim() } : {})
+        ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
+        ...(next ? { next } : {})
       });
       setSentTo(trimmedEmail);
       if (result.devMagicLinkToken) {
@@ -89,7 +92,7 @@ export function SignInForm({ intro }: SignInFormProps) {
         </Type>
       ) : null}
       {devToken ? (
-        <a className="auth-dev-link" href={`/auth/verify?token=${encodeURIComponent(devToken)}`}>
+        <a className="auth-dev-link" href={`/auth/verify?token=${encodeURIComponent(devToken)}${next ? `&next=${next}` : ""}`}>
           Continue with the local sign-in link
         </a>
       ) : null}

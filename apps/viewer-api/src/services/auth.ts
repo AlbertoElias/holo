@@ -99,6 +99,7 @@ export async function deliverMagicLink(email: string, url: string): Promise<void
 export async function requestMagicLink(input: {
   email: string;
   displayName?: string;
+  next?: "record";
 }): Promise<{ token: string; url: string }> {
   const token = newToken();
   const email = input.email.toLowerCase();
@@ -110,7 +111,7 @@ export async function requestMagicLink(input: {
       expiresAt: new Date(Date.now() + env.AUTH_MAGIC_LINK_TTL_MS)
     }
   });
-  const url = `${env.WEB_ORIGIN}/auth/verify?token=${encodeURIComponent(token)}`;
+  const url = `${env.WEB_ORIGIN}/auth/verify?token=${encodeURIComponent(token)}${input.next ? `&next=${input.next}` : ""}`;
   try {
     await deliverMagicLink(email, url);
   } catch (error) {
@@ -227,6 +228,11 @@ export async function resolveAuth(headers: {
 }): Promise<Authenticated | null> {
   const token = bearerToken(headers);
   if (!token) {
+    return null;
+  }
+  // A post grant (`holoim_pg_`, services/post-grant.ts) is never an identity
+  // here: only the upload route reads it, so it cannot rename or delete.
+  if (token.startsWith("holoim_pg_")) {
     return null;
   }
   if (token.startsWith(API_TOKEN_PREFIX)) {

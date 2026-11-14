@@ -23,6 +23,8 @@ import { DockGlyphButton, TrayRow, useAboveDock, useTrayGlyph } from './TrayRow'
 import type { UiViewModel, XrEntryOffer } from '../types/contracts';
 import type { CaptureUiBridge } from './captureUiBridge';
 import { captureHelp, isTouchDevice } from './captureHelp';
+import { PostPanel } from './PostPanel';
+import { isSelfieJourney } from '../post/postFlow';
 
 // Capture on a flat screen (styleguide 1.2, 5.2, 8.5; docs/features/ui-redesign.md
 // slice 4): state on the top status line, actions in the bottom dock on its
@@ -55,6 +57,9 @@ function resolveNotice(state: UiViewModel): string | null {
   if (state.object.status === 'error' && state.object.message) return state.object.message;
   if (state.tray.message) return state.tray.message;
   if (state.micPermission === 'denied') return 'No microphone: takes save without sound.';
+  // Selfie mode falls back to the avatar's own face; say why, once, up top.
+  const camera = isSelfieJourney() ? faceCameraProblem(state.faceCamera) : null;
+  if (camera) return `${camera} The avatar keeps its own face.`;
   return null;
 }
 
@@ -110,6 +115,10 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   // True while the tray was opened by the dock glyph: Escape or a press elsewhere then closes it (T held opens it without this).
   const trayOpenedByUi = useRef(false);
   const aboveDock = useAboveDock(input);
+  const selfie = touch && isSelfieJourney();
+  // In selfie mode the count waits for the camera, so the face drives the avatar from the first frame.
+  const cameraStarting = state.faceCamera === 'starting';
+  const countdown = useCountdown(3, cameraStarting, () => bridge.toggleRecording());
   const trayGlyph = useTrayGlyph(bridge, state.tray.open, touch, trayOpenedByUi);
   const trayOpen = state.tray.open;
 
@@ -210,9 +219,17 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
             label={recording.actionLabel}
             input={input}
             onPress={() => {
-              if (recording.canToggle) bridge.toggleRecording();
+              if (!recording.canToggle) return;
+              if (countdown.running) countdown.cancel();
+              else if (!isRecording && selfie && state.mode !== 'ar') countdown.start();
+              else bridge.toggleRecording();
             }}
           />
+          {countdown.running ? (
+            <Type variant="timecode" as="span" data-capture-countdown="" aria-live="assertive">
+              {countdown.held ? 'Starting camera' : countdown.value}
+            </Type>
+          ) : null}
           {isRecording ? (
             <Type variant="timecode" as="time" data-capture-running-time="">
               {recordingText(state.recordingElapsedMs)}
@@ -250,6 +267,8 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
       <KeyHaloRing bridge={bridge} />
 
       {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} addFiles={<TrayFilesPicker bridge={bridge} tray={state.tray} input={input} />} onSummon={summonSlot} onRemove={(slot) => bridge.removeTraySlot(slot)} /> : null}
+
+      <PostPanel input={input} target={target} bottom={aboveDock} hidden={isRecording || findOpen || trayOpen} exporting={state.recordingState === 'exporting'} />
 
       {flat && findOpen ? (
         <FindSheet
@@ -503,4 +522,44 @@ function faceCameraProblem(state: UiViewModel['faceCamera']): string | null {
     default:
       return null;
   }
+}
+
+/** How long a selfie countdown waits for the face camera before counting without it. */
+const CAMERA_WAIT_MS = 15_000;
+
+/**
+ * Before a selfie take, 3-2-1 in the dock beside Record: time to put the phone
+ * down or step back. Record again cancels it.
+ */
+/**
+ * 3-2-1, then `onDone`. It holds at the start while `hold` is true (the camera
+ * is still starting), but never longer than `maxHoldMs`: a camera that never
+ * starts (a permission prompt left open, a stuck device) must not block Record.
+ */
+function useCountdown(from: number, hold: boolean, onDone: () => void, maxHoldMs = CAMERA_WAIT_MS): { running: boolean; value: number; held: boolean; start: () => void; cancel: () => void } {
+  const [value, setValue] = useState<number | null>(null);
+  const [holdExpired, setHoldExpired] = useState(false);
+  const done = useRef(onDone);
+  done.current = onDone;
+  const held = hold && !holdExpired;
+  useEffect(() => {
+    if (value === null || !held) return undefined;
+    const timer = window.setTimeout(() => setHoldExpired(true), maxHoldMs);
+    return () => window.clearTimeout(timer);
+  }, [value === null, held, maxHoldMs]);
+  useEffect(() => {
+    if (value === null || held) return undefined;
+    const timer = window.setTimeout(() => {
+      if (value <= 1) {
+        setValue(null);
+        done.current();
+      } else setValue(value - 1);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [value, held]);
+  const reset = (next: number | null): void => {
+    setHoldExpired(false);
+    setValue(next);
+  };
+  return { running: value !== null, value: value ?? 0, held, start: () => reset(from), cancel: () => reset(null) };
 }

@@ -33,10 +33,21 @@ export function buildApp(options: BuildAppOptions = {}) {
   // offering its models to any other site, so they are not open to all.
   const objectRoutePrefix = `${API_PREFIX}/objects/`;
   const objectOrigins = [...env.WEB_ORIGIN_LIST, ...env.CAPTURE_ORIGIN_LIST];
+  // Capture posts a take with a post grant (docs/features/phone-capture.md)
+  // and reads that grant; both carry it as a bearer header, never a cookie.
+  // Only those methods open to capture: it never reads the feed.
+  const captureGrantRoutes = new Map([
+    [`${API_PREFIX}/holograms`, "POST"],
+    [`${API_PREFIX}/auth/post-grant`, "GET"]
+  ]);
   app.register(cors, {
     delegator(request, callback) {
       const origin = request.headers.origin;
-      const allowed = request.url.startsWith(objectRoutePrefix)
+      const pathOnly = request.url.split("?")[0] ?? "";
+      const preflightMethod = request.headers["access-control-request-method"];
+      const method = request.method === "OPTIONS" && typeof preflightMethod === "string" ? preflightMethod.toUpperCase() : request.method;
+      const captureMayCall = request.url.startsWith(objectRoutePrefix) || captureGrantRoutes.get(pathOnly) === method;
+      const allowed = captureMayCall
         ? isAllowedWebOrigin(origin, env.WEB_ORIGIN, objectOrigins)
         : isAllowedWebOrigin(origin, env.WEB_ORIGIN, env.WEB_ORIGIN_LIST);
       callback(null, { origin: allowed, credentials: false });

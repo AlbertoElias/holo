@@ -522,6 +522,15 @@ body::before {
   max-width: calc(100vw - 2 * var(--feed-settings-clearance));
 }
 
+/* After a post, the share prompt sits above the dock, by the thumb that
+   tapped Post, leaving the hologram's title clear. */
+.feed-notice[data-notice="posted"] {
+  top: auto;
+  bottom: var(--feed-dock-clearance);
+  /* No corner controls down here: one line, between the dock and Play. */
+  max-width: calc(100vw - 4 * var(--holoim-glyph-gap));
+}
+
 .feed-notice-chip {
   display: flex;
   flex-wrap: wrap;

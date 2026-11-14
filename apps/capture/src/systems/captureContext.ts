@@ -93,7 +93,7 @@ export function captureContext(world: World): CaptureContext {
 export function resolveAppMode(c: CaptureContext): AppMode {
   if (c.tracking.isMockVrOnly()) return 'mock-vr';
   if (c.tracking.isVrEmbodimentActive()) return 'vr';
-  return c.camera.desktopViewMode === 'third' ? 'desktop-third' : 'desktop-first';
+  return c.camera.desktopViewMode === 'first' ? 'desktop-first' : 'desktop-third';
 }
 
 /** The camera the frame draws with and recordings sample from. */

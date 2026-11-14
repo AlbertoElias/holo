@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 
 import {
+  postGrantInfoSchema,
+  postGrantResponseSchema,
   requestMagicLinkResponseSchema,
   requestMagicLinkSchema,
   sessionResponseSchema,
@@ -9,6 +11,7 @@ import {
   verifyMagicLinkSchema
 } from "@holoim/contracts";
 
+import { isAllowedWebOrigin, isCaptureOrigin } from "../lib/cors.js";
 import { env } from "../lib/env.js";
 import { clientKey, createRateLimit } from "../lib/rate-limit.js";
 import {
@@ -22,6 +25,7 @@ import {
   verifyMagicLink,
   type AuthUser
 } from "../services/auth.js";
+import { findPostGrant, mintPostGrant, postGrantBearer } from "../services/post-grant.js";
 
 /**
  * The signed-in account, or null after answering 401. An agent token passes
@@ -69,7 +73,8 @@ export async function registerAuthRoutes(app: FastifyInstance, options: { magicL
     try {
       ({ token } = await requestMagicLink({
         email: parsed.data.email,
-        ...(parsed.data.displayName ? { displayName: parsed.data.displayName } : {})
+        ...(parsed.data.displayName ? { displayName: parsed.data.displayName } : {}),
+        ...(parsed.data.next ? { next: parsed.data.next } : {})
       }));
     } catch (error) {
       if (error instanceof MagicLinkDeliveryError) {
@@ -84,6 +89,38 @@ export async function registerAuthRoutes(app: FastifyInstance, options: { magicL
       requestMagicLinkResponseSchema.parse({
         sent: true as const,
         ...(env.AUTH_DEV_EXPOSE_MAGIC_LINK ? { devMagicLinkToken: token } : {})
+      })
+    );
+  });
+
+  // A post grant for capture (docs/features/phone-capture.md). Only a site
+  // session mints one; the page that asked is where capture returns.
+  app.post("/auth/post-grant", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return reply;
+    const origin = request.headers.origin;
+    // The minting page is where capture returns, so it must be the viewer, never capture itself.
+    if (origin && (!isAllowedWebOrigin(origin, env.WEB_ORIGIN, env.WEB_ORIGIN_LIST) || isCaptureOrigin(origin, env.CAPTURE_ORIGIN_LIST))) {
+      return reply.status(403).send({ error: "Post grants are minted only from the site." });
+    }
+    const { grant, expiresAt } = await mintPostGrant(user.id, origin ?? env.WEB_ORIGIN);
+    return reply.status(201).send(postGrantResponseSchema.parse({ grant, expiresAt: expiresAt.toISOString() }));
+  });
+
+  // Capture reads its grant early: it learns where to return, finds an
+  // expired grant before the take, and wakes a stopped API machine.
+  app.get("/auth/post-grant", async (request, reply) => {
+    const bearer = postGrantBearer(request.headers);
+    const row = bearer ? await findPostGrant(bearer) : null;
+    if (!row) {
+      return reply.status(401).send({ error: "This recording link has expired. Start again from HoloIM." });
+    }
+    return reply.send(
+      postGrantInfoSchema.parse({
+        displayName: row.user.displayName,
+        returnOrigin: row.returnOrigin,
+        expiresAt: row.expiresAt.toISOString(),
+        hologramId: row.hologramId
       })
     );
   });

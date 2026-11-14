@@ -114,7 +114,7 @@ describe("object search routes", () => {
     });
     expect(preflight.statusCode).toBe(204);
     expect(preflight.headers["access-control-allow-origin"]).toBe("https://holoim-capture.pages.dev");
-    // Capture joins only the object routes, not the authenticated ones.
+    // Capture joins the object routes and the post-grant calls, never the feed.
     const feed = await app.inject({ method: "GET", url: "/api/holograms", headers: { origin: "https://holoim-capture.pages.dev" } });
     expect(feed.headers["access-control-allow-origin"]).toBeUndefined();
   });

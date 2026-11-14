@@ -6,6 +6,7 @@ import {
   listOldCompletedUploadIntents
 } from "./hologram-repo.js";
 import type { MediaStorage } from "./media-storage.js";
+import { cleanupExpiredPostGrants } from "./post-grant.js";
 
 export type UploadIntentCleanupResult = {
   expiredRemoved: number;
@@ -66,6 +67,10 @@ export async function cleanupExpiredUploadIntents(
       completedPruned += 1;
     }
   }
+
+  // Post grants ride the same sweep (docs/features/phone-capture.md).
+  const postGrantsRemoved = await cleanupExpiredPostGrants(now);
+  if (postGrantsRemoved > 0) log.info({ postGrantsRemoved }, "Expired post grants removed");
 
   if (expiredRemoved > 0 || completedPruned > 0 || storageFailures > 0) {
     log.info({ expiredRemoved, completedPruned, storageFailures }, "Upload-intent cleanup sweep finished");

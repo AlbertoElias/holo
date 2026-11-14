@@ -149,6 +149,29 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
   const location = useLocation();
   const creator = useCreatorName(source);
   const [flash, setFlash] = useState<FeedNoticeContent | null>(null);
+  // Arriving from capture's Post (`/h/<id>?posted=1`): offer the one tap that
+  // sends it. Share needs that tap; it cannot open itself after a navigation.
+  const posted = source.kind === "one" && new URLSearchParams(location.search).get("posted") === "1";
+  const [linkCopied, setLinkCopied] = useState(false);
+  const sharePosted = useCallback(async () => {
+    if (source.kind !== "one") return;
+    const url = `${window.location.origin}/h/${encodeURIComponent(source.id)}`;
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "A hologram on HoloIM", url });
+        return;
+      } catch (caught) {
+        // Closing the sheet is a choice, not a failure.
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+    } catch {
+      setFlash({ kind: "error", text: `Copy this link: ${url}` });
+    }
+  }, [source]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
 
@@ -284,6 +307,15 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
     ? uploadNotice(uploadStatus)
     : flash
       ? flash
+      : posted
+      ? {
+          kind: "posted",
+          text: linkCopied ? "Link copied. Paste it anywhere to send your hologram." : "Posted. Send it to someone.",
+          action: {
+            label: typeof navigator.share === "function" ? VIEWER_CONTROL_NAMES.share : VIEWER_CONTROL_NAMES.copyLink,
+            onPress: () => void sharePosted()
+          }
+        }
       : !online
       ? { kind: "offline", text: "You're offline. The feed loads again when you're back online." }
       : error
@@ -325,6 +357,7 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
       </section>
       {/* A sheet answers Upload, Search or Settings; on a phone it covers the screen, and the dock would show through it. */}
       <Dock className="feed-dock" aria-label="Feed" ground="horizon" style={sheetOpen ? { visibility: "hidden" } : undefined}>
+        <GlyphControl glyph="record" label={VIEWER_CONTROL_NAMES.record} onPress={() => navigate("/record")} />
         <GlyphControl glyph="upload" label={VIEWER_CONTROL_NAMES.openUpload} onPress={() => setUploadOpen(true)} />
       </Dock>
       {/* Where the feed is narrowed to: a creator's name or the search words. The word closes the narrowing. */}
