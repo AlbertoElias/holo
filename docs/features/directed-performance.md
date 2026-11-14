@@ -2,7 +2,9 @@
 
 **Lead:** Claude (planning session, 2026-11-13)  
 **Status:** In progress: slices 0 and 1 built and verified (2026-11-13);
-slice 2 waits for the user's decision on the early reading  
+re-scoped 2026-11-14 to a creation system: the review loop, the defaults,
+face legibility and a second piece come first (slice 1b); the house avatar
+(slice 2) stays gated on evidence and the user's decision  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -19,6 +21,27 @@ direction on avatars (2026-11-13): the shipped avatar is a stand-in found
 online; avatars should be expressive, match the hologram's style and what
 the author is saying, be personalisable, be able to look like the author,
 and come in many design styles.
+
+## Direction (2026-11-14)
+
+The user, in their words: "were not trying to build the best avatar for
+this specific hologram, but an overal hologram creation system using this
+hologram as reference". Consequences, which override the older wording of
+this brief wherever they differ:
+
+- The poem's goodbye is a **reference fixture**, not a goal. It stays as
+  `sheets/goodbye.json`. Repeating the reading on the goodbye is dropped as
+  a next step; slice 3 below is therefore a general test, not the goodbye's.
+- The product is a **system any author (an agent or a person) can use to go
+  from a short brief to a published hologram**, with a loop that says
+  whether it reads before they publish. The poem exposed the gaps; it is not
+  what is optimised.
+- **Slice 1b** (below) comes before the house avatar.
+- **The house avatar (slice 2) stays gated.** It starts only if the evidence
+  of slice 1b shows that avatars are what limits the system, and on the
+  user's decision. Nothing in it is started.
+- "Not covered yet" (below) lists what a whole creation system needs and
+  this brief leaves out, to be filled from the second piece's gap log.
 
 ## User outcome
 
@@ -225,10 +248,44 @@ reading: the goodbye as a flat take and a directed take on two copies of
 the stock avatar, shown to critics. A clear difference says the direction
 works; no difference does not say why, which is what slice 3 settles.
 
-### Slice 2: the first house base (after the early reading)
+### Slice 1b: the review loop, defaults and a second piece (2026-11-14)
 
-Starts only once the user has decided on it from slice 1's early reading
-(decided 2026-11-13).
+All under `apps/capture/scripts/authoring/`; nothing under `apps/capture/src/**`,
+the viewer or the API is edited. Slice 1's early reading showed that the
+acting report measures motion, not meaning (50 of 67 bones moved and two
+critics still could not read the intent), that the tool's defaults act when
+nobody directed them, and that faces are too small at feed-card size.
+
+1. **A review step.** A beat sheet states an intent for the piece and for
+   each beat. `direct.ts review` renders a built take in the real viewer at
+   two framings (the feed card's, and a close view) and writes a review pack:
+   an H.264 MP4, time-stamped frame sheets dense enough to show timing
+   within a beat, and the acting report. The README gives the protocol: a
+   fresh reader who has not seen the intent says what they see; the author
+   compares that with the stated intent per beat and revises only the beats
+   that did not read. The pack and the comparison are files.
+2. **Defaults every piece inherits**, each shown before and after with the
+   review pack on a neutral test sheet (not by scoring the goodbye): a rest
+   pose that reads as neutral; always-on life large enough that a held
+   ending does not read as frozen; a reach or look whose target can be
+   another performer who moves, so it lands where they are at that moment.
+3. **Face legibility at card size, measured, not fixed:** how many pixels
+   tall a standing performer's face is at the card framing, and at what
+   framing an expression becomes readable. The numbers and the options
+   become a decision for the user; the viewer is not changed here.
+4. **A second piece, different in kind from the poem**, authored end to end
+   from a three-line written brief using only the CLI and its README: one
+   performer, one prop, a simple set, a practical tone, ten seconds or less.
+   One full loop: build, review, revise the beats that did not read, review
+   again; then the local upload and render pipeline. Nothing is published
+   to production. A log of every step that needed something outside the tool
+   becomes "Not covered yet".
+
+### Slice 2: the first house base (gated; not started)
+
+Starts only if slice 1b's evidence shows that avatars are what limits the
+system, and on the user's decision. (Earlier text: after the early reading,
+decided 2026-11-13; superseded by the 2026-11-14 direction above.)
 
 - Two or three style directions as 2D sheets, judged against
   `docs/product/design/styleguide.md`; the soft, rounded pair approved for
@@ -249,11 +306,12 @@ Starts only once the user has decided on it from slice 1's early reading
   against the phone journey first (the phone brief measured 2.3 MB of
   avatar and scene load).
 
-### Slice 3: the six-second test
+### Slice 3: the six-second test (general; after slice 1b)
 
-The goodbye, two takes on the same two house characters (one flat, one
-directed), shown muted and without the verse; then the same question after
-orbiting.
+Two takes of one piece on the house characters (one flat, one directed),
+shown muted and without the verse; then the same question after orbiting.
+The goodbye is one fixture for it, not the aim. Slice 1b's review protocol
+is its method.
 
 ### Slice 4: a person's take as input (joins the phone mandate)
 
@@ -281,6 +339,17 @@ finish on the same base, to prove a piece can be re-dressed.
 
 A second family; an imported style (a VRM) as a first-class choice;
 reconstruction from images (Astra's local path) as an avatar source.
+
+## Not covered yet
+
+What a whole creation system needs and this brief leaves out. Candidates,
+each to be confirmed or struck by the second piece's gap log (slice 1b, step
+4): **sets** (floor, walls, furniture, scale references); **props** (objects
+that are held, moved or used, and their contact with a hand); **voice and
+sound** (speech, sound effects, music, and how they ride in the file);
+**titles and captions**; and **one path from a written brief to a published
+link** (today: author a sheet, build, review, upload, each as a separate
+command). To be filled from the evidence below.
 
 ## How this lines up with the mandates
 

@@ -154,8 +154,12 @@ it from the item below instead of duplicating its status here.
   headset drives; an audition every avatar must pass; a first house avatar
   to replace the stand-in. In progress: slices 0 and 1 (the acting report,
   the audition, beat-sheet direction and its CLI) are on `main`; slice 2,
-  the first house base, waits for the user's decision on slice 1's early
-  reading. Owned by
+  the first house base, is gated. Re-scoped on 2026-11-14 ("not the best avatar for this hologram,
+  but an overall hologram creation system using this hologram as
+  reference"): the review loop, defaults every piece inherits, face
+  legibility numbers and a second piece authored from a written brief come
+  first (slice 1b); the house avatar waits for that evidence and the user's
+  decision. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D; the
   room-scale body solver
