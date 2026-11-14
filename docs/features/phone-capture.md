@@ -1,7 +1,7 @@
 # Feature brief: A hologram of yourself from a phone in under 2 minutes
 
 **Lead:** Claude (Opus)  
-**Status:** Approved (the user, 2026-11-13, the recommended answer to all three decisions); design review accepted 2026-11-13; implementing
+**Status:** Approved (the user, 2026-11-13, the recommended answer to all three decisions); design review accepted 2026-11-13; slices 1 and 2 built and verified in emulation (2026-11-13); device checks pending
 **Layer:** event (the author's head, face, arms, hands and voice over time),
 plus the path that turns it into a shareable link. See
 `docs/product/concepts/what-a-hologram-is.md`.
@@ -83,7 +83,8 @@ Each slice is shippable on its own and ends with the journey script re-timed.
 - The handoff: the viewer asks the API for a **post grant**, a new endpoint
   that returns a short-lived (15 min), upload-only, single-use token tied to
   the signed-in creator, and opens capture with it in the URL **fragment**
-  (`#post=<grant>&return=<viewer origin>`). The fragment never reaches a
+  (`#post=<grant>`; the API stores the viewer origin with the grant, so
+  capture never takes a return address from the URL). The fragment never reaches a
   server; capture reads it, removes it from the address bar at once, and
   keeps it in memory only. The session token itself never leaves the viewer.
   Backward compatible: a new route; existing upload and auth are unchanged.
@@ -169,7 +170,7 @@ posted hologram is deleted from the viewer as today. Save file stays.
 
 ## Acceptance criteria
 
-- [ ] **The mandate (automated, emulated):** one Playwright journey on a phone
+- [x] **The mandate (automated, emulated):** one Playwright journey on a phone
   profile, from the viewer feed (signed in) → Record → capture in selfie mode
   → a 20 s take with a fake camera stream of a person → Post → the hologram
   page with Share, finishes with no step that needs typing an address,
@@ -178,22 +179,22 @@ posted hologram is deleted from the viewer as today. Save file stays.
   the signed-in user. Its machine time (everything except the
   take and scripted taps) is reported, and the journey's modeled total
   (machine time + the take + one tap per step at 2 s) is under 2 minutes.
-- [ ] Signed out, Record asks for sign-in before opening capture; after the
+- [x] Signed out, Record asks for sign-in before opening capture; after the
   link, it continues to capture without a second tap on Record.
-- [ ] The post grant: expires after 15 min, is upload-only, works once; a
+- [x] The post grant: expires after 15 min, is upload-only, works once; a
   replayed, expired or forged grant fails with a message in capture and the
   take stays available as Save file. The grant never appears in the address
   bar after capture reads it, and the session token is never sent to
   capture.
-- [ ] Capture without a grant behaves as today (no Post; download only).
-- [ ] Selfie mode: on a phone through Record, the front camera is on, the
+- [x] Capture without a grant behaves as today (no Post; download only).
+- [ ] (Partial: all but the face tracks from a real camera, see Deviations.) Selfie mode: on a phone through Record, the front camera is on, the
   view faces the avatar, the countdown runs, and the exported GLB's face
   tracks move and play in `viewer-web`. (Head, arms and fingers from the
   camera are the motion owner's acceptance, not this brief's.)
-- [ ] A phone never shows the keyboard help.
-- [ ] Desktop and headset unchanged: `pnpm run verify:agent`, the face check
+- [x] A phone never shows the keyboard help.
+- [x] Desktop and headset unchanged: `pnpm run verify:agent`, the face check
   and the hand replay pass.
-- [ ] Proof video: the timed journey, real time, with a running clock.
+- [x] Proof video: the timed journey, real time, with a running clock.
 - [ ] **Pending device (the user, after travel):** the same journey on an
   iPhone and an Android phone, timed with a stopwatch, under 2 minutes, by
   the owner with no help; the owner judges whether the result is worth
@@ -295,6 +296,60 @@ which hurts "want to send"; a follow-up.
    are the only user), or anonymous posting now.
 
 ## Test plan and evidence
+
+### Evidence (2026-11-13)
+
+- `apps/viewer-web/e2e/phone-capture.pipeline.spec.ts` (Pixel 7 profile, in
+  `test:e2e:pipeline` and shard 5) runs the whole journey from signed out:
+  feed → Record → email sign-in (the test API exposes the link) → capture
+  with the grant → selfie hint → Record → "Starting camera" then 3-2-1 → take
+  → Post → `/h/<id>?posted=1` with Share. It asserts the grant left the
+  address bar, the hologram's owner is the signed-in user with a verified
+  name, and no page errors. Timings land in
+  `output/test-results/phone-capture-timings.json`; the latest run, seconds
+  from the Record tap: sign-in link opened 2.1, capture loaded 2.7, recording
+  started 16.3, take ready 30.7, posted 33.3.
+- Modeled total: 33.3 s measured − the 3 s scripted take + a 20 s take +
+  seven taps at 2 s + about 10 s to type an email ≈ 74 s, under 2 minutes.
+  Opening the email on a real phone is not modeled.
+- `apps/viewer-api/test/post-grant.test.ts`: single use and replay, release
+  on a failed post, a stale claim (upload died) taken over after 5 min, never
+  an identity, expired and forged grants refused with open uploads on, mint
+  only from a site session and a site origin (never a capture origin,
+  previews included), CORS for capture on the two routes only, the
+  `next=record` sign-in link.
+- `pnpm run verify:pr` passed on the branch before merging.
+- Proof video (not committed): `output/phone-capture/phone-journey.mp4`.
+
+### Deviations from the criteria
+
+- The take is 3 s, not 20 s; the 20 s take is in the modeled total.
+- No fake camera stream of a person exists in the repo, so face tracks
+  driven from a camera are not exercised by the e2e; the face camera and
+  MediaPipe do start on the timed path. Face motion from a real camera stays
+  a device check (the selfie criterion is marked partial).
+- The e2e runs with `TEST_OPEN_UPLOADS` at its default (true); the owner
+  assertion proves the grant authorized the post, and the API tests prove a
+  grant is checked strictly in open mode.
+- The step-back hint for hands is not shown: it depends on camera hands,
+  which belong to the motion owner.
+- Sign in again after an expired grant opens the viewer's Record in a new
+  tab; posting the same take from there is not built (this tab keeps Save
+  file).
+- Capture origins may POST `/api/holograms` without a grant through CORS;
+  harmless while open uploads are off in production.
+
+### Observed, not in scope
+
+- Headless, the page froze about 6 s after capture loaded (the face camera
+  and model start under software GL), so recording starts about 13 s after
+  load. Unknown on a phone: a device check.
+- Export takes 8 to 14 s headless.
+- On `/h/<id>` the posted avatar stands on top of a statue in the stock
+  scene, which hurts "want to send"; for the motion or scene owner.
+- Follow-up: Open Graph tags for `/h/<id>` so a shared link previews.
+
+### Plan
 
 - One phone-profile Playwright journey (slice 1, extended by slice 2), the
   lean e2e for this brief; no regression corpus.
