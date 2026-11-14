@@ -11,7 +11,7 @@ import {
   verifyMagicLinkSchema
 } from "@holoim/contracts";
 
-import { isAllowedWebOrigin } from "../lib/cors.js";
+import { isAllowedWebOrigin, isCaptureOrigin } from "../lib/cors.js";
 import { env } from "../lib/env.js";
 import { clientKey, createRateLimit } from "../lib/rate-limit.js";
 import {
@@ -99,7 +99,8 @@ export async function registerAuthRoutes(app: FastifyInstance, options: { magicL
     const user = await requireUser(request, reply);
     if (!user) return reply;
     const origin = request.headers.origin;
-    if (origin && !isAllowedWebOrigin(origin, env.WEB_ORIGIN, env.WEB_ORIGIN_LIST)) {
+    // The minting page is where capture returns, so it must be the viewer, never capture itself.
+    if (origin && (!isAllowedWebOrigin(origin, env.WEB_ORIGIN, env.WEB_ORIGIN_LIST) || isCaptureOrigin(origin, env.CAPTURE_ORIGIN_LIST))) {
       return reply.status(403).send({ error: "Post grants are minted only from the site." });
     }
     const { grant, expiresAt } = await mintPostGrant(user.id, origin ?? env.WEB_ORIGIN);

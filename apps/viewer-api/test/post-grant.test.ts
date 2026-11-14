@@ -117,6 +117,16 @@ describe("post grants", () => {
     expect(retried.statusCode, retried.body).toBe(201);
   }, 30_000);
 
+  it("lets a retry take over a claim whose upload died with the process", async () => {
+    const grant = await mint();
+    // A live upload's claim holds; one left by a crash or deploy (no release) goes stale.
+    await prisma.postGrant.updateMany({ data: { usedAt: new Date() } });
+    expect((await post(`Bearer ${grant}`)).statusCode).toBe(409);
+    await prisma.postGrant.updateMany({ data: { usedAt: new Date(Date.now() - 6 * 60_000) } });
+    const retried = await post(`Bearer ${grant}`);
+    expect(retried.statusCode, retried.body).toBe(201);
+  }, 30_000);
+
   it("is never an identity: no /auth/me, no rename, no delete, no minting", async () => {
     const grant = await mint();
     const auth = { authorization: `Bearer ${grant}` };
@@ -144,6 +154,8 @@ describe("post grants", () => {
     expect((await app.inject({ method: "POST", url: "/api/auth/post-grant", headers: { origin: SITE } })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/api/auth/post-grant", headers: { ...bearer(session), origin: "https://evil.example" } })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: "/api/auth/post-grant", headers: { ...bearer(session), origin: CAPTURE } })).statusCode).toBe(403);
+    // A capture preview deploy passes the site's CORS list, but capture is never where a post returns.
+    expect((await app.inject({ method: "POST", url: "/api/auth/post-grant", headers: { ...bearer(session), origin: "https://abc123.holoim-capture.pages.dev" } })).statusCode).toBe(403);
   });
 
   it("lets the production capture origin through CORS on the post routes only", async () => {

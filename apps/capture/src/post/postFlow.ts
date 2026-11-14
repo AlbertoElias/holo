@@ -25,7 +25,7 @@ export type PostState =
 
 type GrantInfo = { displayName: string; returnOrigin: string };
 
-const EXPIRED = 'This recording link has expired. Save the file, then start again from HoloIM.';
+const EXPIRED = 'This recording link has expired. Save the file, or sign in again to record and post.';
 
 function readGrantFromFragment(): string | null {
   if (typeof window === 'undefined') return null;
@@ -60,6 +60,14 @@ class PostFlow {
     return this.grant !== null;
   }
 
+  /**
+   * Where Sign in again goes: the viewer that minted the grant (server-checked),
+   * known once the grant was read; never an origin taken from the page.
+   */
+  get signInAgainUrl(): string | null {
+    return this.info ? `${this.info.returnOrigin.replace(/\/$/, '')}/record` : null;
+  }
+
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -73,7 +81,7 @@ class PostFlow {
    * one, or a take over the upload cap, which the viewer would refuse).
    */
   deliverTake = (blob: Blob, name: string): boolean => {
-    if (!this.grant || this.spent || this.state.kind === 'posted') return false;
+    if (!this.grant || this.spent || this.state.kind === 'posted' || this.state.kind === 'posting') return false;
     if (blob.size > MAX_HOLOGRAM_BYTES) return false;
     this.take = { blob, name };
     this.set({ kind: 'ready' });
@@ -88,6 +96,8 @@ class PostFlow {
 
   /** Record again: the kept take is dropped. */
   discard = (): void => {
+    // A post in flight keeps its take; it leaves the page when it lands.
+    if (this.state.kind === 'posting') return;
     this.take = null;
     if (this.state.kind !== 'expired' && !this.spent) this.set({ kind: 'waiting' });
   };

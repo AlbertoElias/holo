@@ -47,9 +47,17 @@ export async function findPostGrant(grant: string): Promise<PostGrantRow | null>
   return row;
 }
 
-/** Claims the grant for one upload; false when another upload holds it. */
+// An upload that holds its claim longer than this died with the process (a
+// deploy or a crash skips the release), so a retry may take the claim over.
+const STALE_CLAIM_MS = 5 * 60_000;
+
+/** Claims the grant for one upload; false when another live upload holds it. */
 export async function claimPostGrant(id: string): Promise<boolean> {
-  const claimed = await prisma.postGrant.updateMany({ where: { id, usedAt: null, hologramId: null }, data: { usedAt: new Date() } });
+  const now = Date.now();
+  const claimed = await prisma.postGrant.updateMany({
+    where: { id, hologramId: null, OR: [{ usedAt: null }, { usedAt: { lt: new Date(now - STALE_CLAIM_MS) } }] },
+    data: { usedAt: new Date(now) }
+  });
   return claimed.count === 1;
 }
 

@@ -4,6 +4,13 @@ const localNetworkOriginPattern = /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?
 // label (a deploy hash or branch alias) under holoim-viewer or holoim-capture.
 const pagesPreviewOriginPattern = /^https:\/\/[a-z0-9-]+\.holoim-(viewer|capture)\.pages\.dev$/i;
 
+const capturePreviewOriginPattern = /^https:\/\/[a-z0-9-]+\.holoim-capture\.pages\.dev$/i;
+
+/** The capture app (production, listed, or a Pages preview): never a place to return a post to. */
+export function isCaptureOrigin(requestOrigin: string, captureOrigins: string[]): boolean {
+  return captureOrigins.includes(requestOrigin) || capturePreviewOriginPattern.test(requestOrigin);
+}
+
 function matchesWildcardOrigin(requestOrigin: string, pattern: string): boolean {
   if (!pattern.includes("*.")) {
     return false;

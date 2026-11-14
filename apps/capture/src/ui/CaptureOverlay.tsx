@@ -57,6 +57,9 @@ function resolveNotice(state: UiViewModel): string | null {
   if (state.object.status === 'error' && state.object.message) return state.object.message;
   if (state.tray.message) return state.tray.message;
   if (state.micPermission === 'denied') return 'No microphone: takes save without sound.';
+  // Selfie mode falls back to the avatar's own face; say why, once, up top.
+  const camera = isSelfieJourney() ? faceCameraProblem(state.faceCamera) : null;
+  if (camera) return `${camera} The avatar keeps its own face.`;
   return null;
 }
 
@@ -113,7 +116,9 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   const trayOpenedByUi = useRef(false);
   const aboveDock = useAboveDock(input);
   const selfie = touch && isSelfieJourney();
-  const countdown = useCountdown(3, () => bridge.toggleRecording());
+  // In selfie mode the count waits for the camera, so the face drives the avatar from the first frame.
+  const cameraStarting = state.faceCamera === 'starting';
+  const countdown = useCountdown(3, cameraStarting, () => bridge.toggleRecording());
   const trayGlyph = useTrayGlyph(bridge, state.tray.open, touch, trayOpenedByUi);
   const trayOpen = state.tray.open;
 
@@ -222,7 +227,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
           />
           {countdown.running ? (
             <Type variant="timecode" as="span" data-capture-countdown="" aria-live="assertive">
-              {countdown.value}
+              {cameraStarting ? 'Starting camera' : countdown.value}
             </Type>
           ) : null}
           {isRecording ? (
@@ -523,12 +528,13 @@ function faceCameraProblem(state: UiViewModel['faceCamera']): string | null {
  * Before a selfie take, 3-2-1 in the dock beside Record: time to put the phone
  * down or step back. Record again cancels it.
  */
-function useCountdown(from: number, onDone: () => void): { running: boolean; value: number; start: () => void; cancel: () => void } {
+/** 3-2-1, then `onDone`; it holds at the start while `hold` is true (the camera is still starting). */
+function useCountdown(from: number, hold: boolean, onDone: () => void): { running: boolean; value: number; start: () => void; cancel: () => void } {
   const [value, setValue] = useState<number | null>(null);
   const done = useRef(onDone);
   done.current = onDone;
   useEffect(() => {
-    if (value === null) return undefined;
+    if (value === null || hold) return undefined;
     const timer = window.setTimeout(() => {
       if (value <= 1) {
         setValue(null);
@@ -536,6 +542,6 @@ function useCountdown(from: number, onDone: () => void): { running: boolean; val
       } else setValue(value - 1);
     }, 1000);
     return () => window.clearTimeout(timer);
-  }, [value]);
+  }, [value, hold]);
   return { running: value !== null, value: value ?? 0, start: () => setValue(from), cancel: () => setValue(null) };
 }

@@ -6,10 +6,10 @@ import { createXrContext, waitForTextContentPrefix } from "@holoim/tooling-testi
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 import { captureEvidence, expect, test } from "./bootstrap";
-import { signInForUpload } from "./sign-in";
 
-// The phone journey (docs/features/phone-capture.md): a signed-in person on a
-// phone taps Record in the feed, capture opens holding a single-use post
+// The phone journey (docs/features/phone-capture.md): a signed-out person on
+// a phone taps Record in the feed, signs in by email (the test API exposes the
+// link the email would carry), lands in capture holding a single-use post
 // grant, a selfie take records after a 3-2-1 countdown, Post uploads it as
 // them, and the viewer opens the new hologram with Share. The face camera is
 // left on as on a real phone (navigator.webdriver reads false), so its
@@ -28,23 +28,29 @@ test("a phone records a selfie take and posts it to a shareable link", async ({ 
     await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false }));
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
-    const session = await signInForUpload(page, { displayName: "Phone Journey" });
-    const me = await (await page.request.get("/api/auth/me", { headers: session.headers })).json() as { id: string };
-
     await page.goto("/");
     const marks: Record<string, number> = {};
     const started = Date.now();
     const mark = (name: string): void => { marks[name] = (Date.now() - started) / 1000; };
 
+    // Signed out, Record asks for sign-in first, so the round trip happens before a take exists.
     await page.getByRole("button", { name: "Record a hologram" }).tap();
+    const signIn = page.getByRole("form", { name: "Sign in" });
+    await signIn.getByRole("textbox", { name: "Email" }).fill("phone-journey@example.com");
+    await signIn.getByRole("textbox", { name: "Your name, if you are new" }).fill("Phone Journey");
+    await signIn.getByRole("button", { name: "Email me a sign-in link" }).tap();
+    // Stands in for opening the emailed link; it carries next=record, so no second tap on Record.
+    await signIn.getByRole("link", { name: "Continue with the local sign-in link" }).tap();
+    mark("signInLinkOpened");
     await page.waitForURL((url) => url.origin === captureOrigin, { timeout: 30_000 });
     await waitForTextContentPrefix(page, "#status", "loaded", { timeout: 60_000 });
     mark("captureLoaded");
     expect(page.url(), "the grant leaves the address bar").not.toContain("#post=");
-    expect(await page.locator("#status").textContent(), "touch guidance").toContain("Touch:");
+    expect(await page.locator("#status").textContent(), "touch guidance").toContain("Prop your phone up, face it, tap Record.");
 
     await page.getByRole("button", { name: CONTROL_NAMES.startRecording }).tap();
-    await expect(page.locator("[data-capture-countdown]")).toHaveText("3");
+    // "Starting camera" holds the count until the face camera runs, then 3-2-1.
+    await expect(page.locator("[data-capture-countdown]")).toBeVisible();
     await expect(page.getByRole("button", { name: CONTROL_NAMES.stopRecording })).toBeVisible({ timeout: 10_000 });
     mark("recordingStarted");
     await expect(page.locator("[data-capture-running-time]")).toContainText(`0:0${TAKE_SECONDS}`, { timeout: 15_000 });
@@ -63,6 +69,8 @@ test("a phone records a selfie take and posts it to a shareable link", async ({ 
     mark("posted");
     await captureEvidence(page, testInfo, "phone-posted");
 
+    const token = await page.evaluate(() => window.localStorage.getItem("holoim.session"));
+    const me = await (await page.request.get("/api/auth/me", { headers: { authorization: `Bearer ${token}` } })).json() as { id: string };
     const hologram = await (await page.request.get(`/api/holograms/${id}`)).json() as { ownerId: string | null; submittedByVerified: boolean; submittedBy: string };
     expect(hologram.ownerId, "posted as the signed-in person").toBe(me.id);
     expect(hologram.submittedByVerified).toBe(true);
