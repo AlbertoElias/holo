@@ -212,6 +212,24 @@ the hill fixture:
   5 cm steps up to `fillShare` × the wider radius, as the criterion measures
   it. The nearest ground on an oblique cut edge is down the slope: it read
   up to 0.6 m low.
+- **A terrace past a cliff takes the cap** (gap 1, 2026-11-14). Where a
+  bin's edge stands over no joined ground, but over an unjoined terrace of a
+  mesh that is ground elsewhere (`scene.glb`'s `Montanha` past its cliff) at
+  least `maxShare` × the dome's height above the foot, the rim rises to the
+  cap. Reading inward instead put the rim at the grass, buried in the
+  mountain. Props that never join (roofs, the 8 m wall) still drop out, so
+  the connectivity rule (decision 3) holds everywhere else.
+- **A steep or isolated first ledge is kept** (gap 1). Reading inward, the
+  first ground that is too steep for a lip (normal below `lipNormalY`) or has
+  no ground a step further in is no longer skipped. The rim takes the higher
+  of it and the first true lip, so it does not drop to the grass below a
+  ledge on the cliff's flank. A rock's foot under the grass still reads the
+  grass.
+- **The glass check's floor give is normal to the bent floor** (gap 1, lead
+  decision). Where the rim climbs a cliff between two bins (4.8 m/m), a
+  vertical centimetre is less than a millimetre across the floor, under what
+  the depth read-back holds. The 1 cm give is scaled by √(1 + |∇rise|²), so on
+  flat and gentle floor the check stays as strict as before.
 - **Dead-band as a ramp, not a subtraction** (decision 3). Ground less than
   3 cm over the foot lifts nothing; from 3 cm the lift ramps back to the full
   height by 6 cm. Subtracting 3 cm everywhere puts every lifted rim exactly

@@ -33,6 +33,11 @@ export type GroundField = {
   heightAt(x: number, z: number): number;
   /** The normal's y of the ground's top triangle at (x, z), NaN off the ground. */
   normalYAt(x: number, z: number): number;
+  /**
+   * The highest triangle over (x, z) that the flood fill did not join but whose mesh it did (a mountain's terrace
+   * past a cliff), NaN where there is none. A prop of its own (a wall, a roof) never joins, so it never reads here.
+   */
+  unjoinedAt(x: number, z: number): number;
   box: GroundBox;
   columns: number;
   rows: number;
@@ -134,6 +139,9 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
   let triangles = new Float32Array(9 * 1024);
   /** Each triangle's normal's y, for telling a lip from a steep face. */
   let normalsY = new Float32Array(1024);
+  /** Each triangle's mesh, by its index in `meshes`. */
+  let triangleMesh = new Int32Array(1024);
+  let meshIndex = 0;
   let triangleCount = 0;
   const head = new Int32Array(cells).fill(-1);
   let entryTriangle = new Int32Array(4096);
@@ -200,10 +208,14 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
       const nextNormals = new Float32Array(normalsY.length * 2);
       nextNormals.set(normalsY);
       normalsY = nextNormals;
+      const nextMesh = new Int32Array(triangleMesh.length * 2);
+      nextMesh.set(triangleMesh);
+      triangleMesh = nextMesh;
     }
     const triangle = triangleCount;
     triangles.set([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z], triangle * 9);
     normalsY[triangle] = ny / length;
+    triangleMesh[triangle] = meshIndex;
     triangleCount += 1;
     // Into every cell it overlaps, each joining the cell's layers: at the cell's centre where it covers it,
     // else at its nearest point to the centre (the weights clamped onto it), so a sliver stays connected.
@@ -242,7 +254,8 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
   const c = new Vector3();
   const matrix = new Matrix4();
   let drawn = 0;
-  for (const mesh of meshes) {
+  for (const [at, mesh] of meshes.entries()) {
+    meshIndex = at;
     const geometry = mesh.geometry;
     const position = geometry.getAttribute("position");
     const index = geometry.index;
@@ -338,6 +351,9 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     const slot = entrySlot[entry]!;
     if (slot >= 0 && entryGeneration[entry] === slotGeneration[slot] && joined[slot]) ground[entryTriangle[entry]!] = 1;
   }
+  // The meshes the author's ground belongs to: their unjoined triangles are still that ground, past a cliff.
+  const groundMesh = new Uint8Array(meshes.length);
+  for (let triangle = 0; triangle < triangleCount; triangle += 1) if (ground[triangle]) groundMesh[triangleMesh[triangle]!] = 1;
   let reached = 0;
   for (let index = 0; index < cells; index += 1) {
     for (let k = 0; k < counts[index]!; k += 1) {
@@ -349,7 +365,8 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
   if (reached === 0) return null;
 
   let topTriangle = -1;
-  const heightAt = (x: number, z: number): number => {
+  /** The highest triangle over (x, z) of the joined ground, or (`unjoined`) of the ground's meshes' unjoined rest. */
+  const topAt = (x: number, z: number, unjoined: boolean): number => {
     const i = Math.floor((x - box.minX) / cell);
     const j = Math.floor((z - box.minZ) / cell);
     topTriangle = -1;
@@ -357,7 +374,7 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     let top = -Infinity;
     for (let entry = head[j * columns + i]!; entry >= 0; entry = entryNext[entry]!) {
       const triangle = entryTriangle[entry]!;
-      if (!ground[triangle]) continue;
+      if (unjoined ? ground[triangle] || !groundMesh[triangleMesh[triangle]!] : !ground[triangle]) continue;
       const at = triangle * 9;
       const ax = triangles[at]!, ay = triangles[at + 1]!, az = triangles[at + 2]!;
       const bx = triangles[at + 3]!, by = triangles[at + 4]!, bz = triangles[at + 5]!;
@@ -375,13 +392,15 @@ export function buildGroundField(sceneBubble: Object3D, { box, seeds }: { box: G
     }
     return top > -Infinity ? top : Number.NaN;
   };
+  const heightAt = (x: number, z: number): number => topAt(x, z, false);
+  const unjoinedAt = (x: number, z: number): number => topAt(x, z, true);
   const normalYAt = (x: number, z: number): number => {
     heightAt(x, z);
     return topTriangle >= 0 ? normalsY[topTriangle]! : Number.NaN;
   };
 
   lastBuildEnd = performance.now();
-  return { heightAt, normalYAt, box, columns, rows, candidates: drawn, reached, buildMs: lastBuildEnd - started };
+  return { heightAt, normalYAt, unjoinedAt, box, columns, rows, candidates: drawn, reached, buildMs: lastBuildEnd - started };
 }
 
 const fieldCache = new WeakMap<Object3D, Map<string, GroundField | null>>();
@@ -453,22 +472,30 @@ const LIP_STEP = 0.05;
  * The ground under a point of the foot's edge, world: where the edge stands
  * past the ground's edge (a cliff, a terrace), the lip's height measured
  * inward toward the foot's centre, up to `fillShare` of the dome's width.
+ * An edge standing in the ground's own terrace past a cliff, higher than the
+ * lift can reach, takes the cap: the dome never stands inside a mountain.
  */
 function lipHeight(shape: ClocheShape, field: GroundField, x: number, z: number, shift: Vector3): number {
   const here = field.heightAt(x, z);
   if (Number.isFinite(here)) return here;
+  const terrace = field.unjoinedAt(x, z);
+  if (terrace - shift.y - shape.base.y >= RIM.maxShare * shape.radii.y) return terrace;
   const dx = shape.base.x + shift.x - x;
   const dz = shape.base.z + shift.z - z;
   const length = Math.hypot(dx, dz);
   if (length < 1e-6) return Number.NaN;
   const reach = Math.min(RIM.fillShare * Math.max(shape.radii.x, shape.radii.z), length);
+  // The first candidate a lip rule skipped (a steep face, an isolated facet): it is the lip only where it stands
+  // over the continuing ground inward, a ledge or flank falling toward the foot. A prop's sunk foot stands under it.
+  let skipped = Number.NaN;
   for (let along = LIP_STEP; along <= reach + 1e-6; along += LIP_STEP) {
-    let height = field.heightAt(x + (dx / length) * along, z + (dz / length) * along);
+    const px = x + (dx / length) * along;
+    const pz = z + (dz / length) * along;
+    let height = field.heightAt(px, pz);
     if (!Number.isFinite(height)) continue;
-    // A face steeper than a lip can be (a prop's foot sunk beside the ground's edge) is not the lip.
-    if (field.normalYAt(x + (dx / length) * along, z + (dz / length) * along) < RIM.lipNormalY) continue;
-    // The lip is where the ground continues inward: an isolated hit (a facet of a prop's sunk foot under it) is not.
-    if (!Number.isFinite(field.heightAt(x + (dx / length) * (along + LIP_STEP), z + (dz / length) * (along + LIP_STEP)))) continue;
+    // The lip is where the ground continues inward and faces up at least `lipNormalY`: an isolated hit or a face
+    // steeper than a lip can be (a facet of a prop's sunk foot beside the ground's edge) is not, by itself.
+    const lip = field.normalYAt(px, pz) >= RIM.lipNormalY && Number.isFinite(field.heightAt(x + (dx / length) * (along + LIP_STEP), z + (dz / length) * (along + LIP_STEP)));
     // Ground rising more than its run within a step is a flank (a prop's sunk foot beside the ground's edge), not
     // the lip: the lip is the flank's top.
     for (let next = along + LIP_STEP; next <= reach + 1e-6; next += LIP_STEP) {
@@ -476,9 +503,13 @@ function lipHeight(shape: ClocheShape, field: GroundField, x: number, z: number,
       if (!(above - height > LIP_STEP)) break;
       height = above;
     }
-    return height;
+    if (!lip) {
+      if (!Number.isFinite(skipped)) skipped = height;
+      continue;
+    }
+    return Number.isFinite(skipped) ? Math.max(skipped, height) : height;
   }
-  return Number.NaN;
+  return skipped;
 }
 
 /** The path's rims, at load: the framing rim (the lowest per bin) and whether the take's rim lifts at all. */
