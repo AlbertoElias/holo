@@ -1,8 +1,8 @@
 # Feature brief: Direct, preview and revise a performance
 
 **Lead:** Claude (planning session, 2026-11-13)  
-**Status:** Reviewed (approved by the user and design-reviewed against the
-code, 2026-11-13; build not started)  
+**Status:** In progress: slices 0 and 1 built and verified (2026-11-13);
+slice 2 waits for the user's decision on the early reading  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -41,7 +41,7 @@ Bodies are made three different ways, and no two share anything.
 |---|---|---|---|
 | Body | A stand-in found online, or any humanoid the resolver binds (`?avatar=<url>`) | Jointed primitives rebuilt per scene (`showcase/introspection/figures.mjs`) | Two meshes reconstructed from images (TRELLIS), simple Blender rigs |
 | Face | 52 ARKit channels tracked, routed onto 21 shapes on the head; the shapes were synthesized because no licensed expressive avatar was found (`archive/avatar-face.md`) | None | None (0 meshes with morph targets) |
-| Fingers | Driven | None | Finger bones present, never keyed |
+| Fingers | Driven | None | None (17 joints per rig, no finger bones) |
 | Acting comes from | Headset, desktop, phone camera (spike, unmerged) | Pose keys written by hand per scene (`introspection2/acting.mjs`, 22 KB for one piece) | 8 of 102 animation channels change; the last change is at 4.0 s of 12.0 s |
 | Looks | One stock character, unrelated to any piece or author | Stylised primitives | Custom and recognisable at scene scale, soft up close (hands, hair, surface) |
 | Cost of a new piece | None | Days of scene code | 9.2 GB working directory, a patched local TRELLIS port, separate head reconstruction and repair |
@@ -172,6 +172,10 @@ modules load in Node and are imported, never edited: `HumanoidSkeleton`,
 `FaceRig`, `LivenessFace` (blinks and eye movement), `ArmIkSolver`,
 `legIk`, `LocomotionAnimator`, `retargetClips`, and `AvatarRig` with a stub
 renderer (`scripts/lib/locomotion-retarget-check.ts` is the precedent).
+Slice 1 imports `AvatarRig`, `HumanoidSkeleton`, `FaceRig`, `LivenessFace`,
+`ArmIkSolver`, `legIk` and `palmFrame`; a step is placed feet solved with
+`legIk`, not `LocomotionAnimator`'s clips, so it can land on a mark, and
+nothing needed `retargetClips`.
 These do not, because they expect a live tracking stream or a browser:
 `HandFingerRetargeter`, `FaceDriver`, `VrBodySolver` and the exporter
 (`GltfExportComposer` uses a Worker). So hand shapes, weight shifts, steps
@@ -192,9 +196,10 @@ on the stock avatar as the first baseline.
 
 The feet and jitter numbers come from the motion owner's instrument, which
 is not on `main` yet. Once it is, a small adapter in the authoring scripts
-samples a GLB into the joint positions it reads. It has no category for an
-authored take, so its numbers are reported without a verdict until the
-motion owner adds one.
+samples a GLB into the joint positions it reads. The motion owner has added
+a category for authored takes (`MotionSource` `authored`, commit
+`5ad3d6c96477` on `feature/natural-avatar-motion`), so the adapter reports a
+verdict once both are on `main`. Slices 0 and 1 leave the adapter out.
 
 ### Slice 1: direction (the agent as driver)
 
@@ -220,7 +225,10 @@ reading: the goodbye as a flat take and a directed take on two copies of
 the stock avatar, shown to critics. A clear difference says the direction
 works; no difference does not say why, which is what slice 3 settles.
 
-### Slice 2: the first house base (runs beside slice 1)
+### Slice 2: the first house base (after the early reading)
+
+Starts only once the user has decided on it from slice 1's early reading
+(decided 2026-11-13).
 
 - Two or three style directions as 2D sheets, judged against
   `docs/product/design/styleguide.md`; the soft, rounded pair approved for
@@ -300,29 +308,35 @@ None: this adds no authoring action inside a capture take.
 
 ## Acceptance criteria
 
-- [ ] The acting report runs on the three baselines and reproduces the
+- [x] The acting report runs on the three baselines and reproduces the
   poem's result (8 of 102 channels, last change at 4.0 s, no face).
+  Evidence: slice 0 below.
 - [ ] The audition report runs on the stock avatar and the house base, and
-  names what each cannot express.
+  names what each cannot express. (Stock avatar done in slice 0; the house
+  base is slice 2.)
 - [ ] The house base passes every audition item and the motion owner's
   report, and the poem's two characters are made from it by parameters
   alone, with no scaled bones.
-- [ ] One beat sheet, solved on two different avatars, plays in
+- [x] One beat sheet, solved on two different avatars, plays in
   `viewer-web` with face shapes and fingers moving (weights read back from
   the GLB), and a hand that stops short of a target stops at the same
-  distance on both.
+  distance on both. Evidence: slice 1 below.
 - [ ] A published authored piece says in its file that it was authored,
   and the viewer's framing and hand traces follow its first performer.
+  (Checked through a local upload, not yet on a published piece: the file
+  carries `authored: synthetic` and the viewer resolves its humanoid on the
+  first performer only; see the framing note in slice 1 below.)
 - [ ] The six-second test: fresh critics shown only the muted directed take
   name the hesitation; the flat take scores lower; the owner's verdict is
   recorded. Orbiting is tested as a second question.
-- [ ] Revising one beat changes only that span in the report, and rebuilds
-  in under 30 s.
+- [x] Revising one beat changes only that span in the report, and rebuilds
+  in under 30 s. Evidence: slice 1 below.
 - [ ] A second agent (Astra) authors a take using only the CLI and its
   README.
 - [ ] Authored pieces stay within the Quick Look extent budget (B-057) and
   the hologram size budgets with two house characters on stage, and
-  `check_usdz_tools.sh` passes on the two-character piece.
+  `check_usdz_tools.sh` passes on the two-character piece. (Passes on the
+  two stock-avatar piece; house characters are slice 2.)
 
 ## Failure cases considered
 
@@ -351,16 +365,14 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
 
 1. **House style:** picked from the slice 2 sheets. Nothing to answer
    until they exist.
-2. **Does the house base wait for the early reading?** The design review
-   would build it only if the slice 1 reading shows the stock face is the
-   limit. This brief keeps it beside slice 1 (recommended), because the
-   stock avatar is a stand-in whatever the reading says and the phone
-   mandate needs an avatar worth sending. Waiting saves the work only if
-   the stand-in turns out to be good enough to keep.
-
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.
+
+Decided on 2026-11-13: the house base waits for the early reading. The
+brief had recommended building it beside slice 1; the user answered "Wait
+for reading". Slice 2 starts only when the user decides on it from the
+reading recorded in slice 1's evidence.
 
 ## Test plan and evidence
 
@@ -371,6 +383,116 @@ mandate briefs. Both were answered the same day, so the build can start.
 - `check_usdz_tools.sh` by hand on the two-character piece.
 - The six-second test's critic answers and the owner's verdict.
 - Proof video under ignored `output/`.
+
+### Slice 0 evidence (2026-11-13)
+
+Reports are JSON in the ignored `apps/capture/output/authoring/`.
+
+- **The poem** (`report-poem.json`): 102 channels over 12.0 s, 8 change,
+  the last at 4.0 s; Speaker moves 7 of 51 channels and Traveler 1 of 51,
+  and both are frozen from about 4 s. No morph meshes and no finger bones
+  (17 joints per rig), so face, fingers and eyes never move. Reproduced
+  exactly.
+- **The Way Down II** (`report-way-down-ii.json`): 169 channels, 152
+  change, and no skinned performer: its figures are unskinned, so the
+  report counts them as scene.
+- **A captured phone take** (`report-phone-capture.json`): 141 channels
+  over 17.5 s, 6 change. `RecordedAvatar`'s face moves 6 of 27 shapes and
+  the eyes move, but fingers move 0 of 30, and it is frozen from 13.64 s to
+  15.21 s. A headset take (`report-ci-summon.json`, 2.4 s) changes 14 of
+  144 channels and its fingers never move either.
+- **The audition, stock avatar** (`audition-stock.json`): passes. 55 of 59
+  face channels displace the mesh by at least 1 mm (largest 15.7 mm), and
+  gaze by eye bones moves 7.9 mm at 20°. A fist closes every fingertip to
+  at most 46.8 mm from the palm, and a point holds the index 116.6 mm out.
+  Every reachable target is met exactly; the two targets placed out of
+  reach on purpose miss by 998 mm, as they should. A 75° turn slips the
+  ankles 8.4 mm. Arm-in-torso contact is already there in the rest stance
+  (16 vertices a side) and stays small in the turn (6 and 21 vertices, at
+  most 25.3 mm deep); head in torso is 3 vertices.
+- **The audition, `unreal-cm` fixture** (`audition-unreal-cm.json`): the
+  same, except "FAIL face: nothing turns the eyes". It has no eye bones and
+  no eye-look shapes, so a look on it is head-only.
+- The motion owner's instrument is left out, as slice 0 says.
+
+### Slice 1 evidence (2026-11-13)
+
+- **One beat sheet on two avatars** (`sheets/two-avatars.json`, stock and
+  the `unreal-cm` fixture): 196 frames at 30 fps, 114 channels, 3.6 MB,
+  solved in 0.2 s. Uploaded to a local test API and played in a viewer-web
+  test build (`viewer-check.ts`, `two-avatars-viewer.json`). Weights read
+  back while playing:
+
+  | Performer | Bones moving | Fingers moving | Face shapes moving (peak) | Anchor bones |
+  |---|---|---|---|---|
+  | `RecordedAvatar` (stock) | 51 of 67 | 30 of 40 | 9 of 27 (0.903) | 54 |
+  | `Performer_cm` (`unreal-cm`) | 49 of 73 | 30 of 40 | 18 of 27 (0.971) | 0 |
+
+  The viewer resolved its humanoid from `HOLOIM_humanoid` and tagged only
+  `RecordedAvatar`'s bones. Both performers reach for the `between` mark
+  with `stopShort` 0.1 m: the stock avatar's palm stopped 99.9 mm from it
+  and `unreal-cm`'s 99.8 mm.
+- **The file:** the first performer is `RecordedAvatar`, the only one in
+  `HOLOIM_humanoid` (in `extensionsUsed`, not required);
+  `asset.extras.holoim.authored` is `synthetic`.
+- **Framing:** the anchors (hips and head focus, hand-trace scope, AR
+  bounds) follow `RecordedAvatar`; the scene origin is the stage origin,
+  since the wrapper's rest transform is identity. The card's camera
+  frames the whole cloche, which wraps every performer, so with two
+  performers the card shows both, and only the anchors favour the first. An authored
+  take has no hand traces, since the viewer draws only author `trace`
+  marks.
+- **Revision locality:** changing the goodbye's withheld hand to a fist on
+  one beat changed only 2.27 s to 4.27 s (15 channels) in the `--against`
+  report, and the rebuild took 0.67 s.
+- **`check_usdz_tools.sh`** on `two-avatars.glb`: passed, 4 of 4 cases
+  (animated ancestor and face, silent, alpha UV PBR, unsupported required
+  extension) in 80 s.
+- **The goodbye, flat and directed** (`sheets/goodbye.json`, two stock
+  avatars). In the viewer, the flat take moves 12 of 67 of her bones and 8
+  of his, with no fingers or face; the directed take moves 50 of 67 on each,
+  30 of 40 fingers, and 22 of 27 face shapes on her (peak 0.944). The
+  acting reports agree: the directed take changes 109 of 111 channels, and
+  the flat take changes 24 of 26 but is frozen from 4.7 s to 6 s (her) and
+  2.77 s to 4.4 s (him). Her reach ends 262.9 mm from him against 160 mm
+  asked, because he steps out of reach; the sheet should aim at where he
+  will be.
+- **The early reading:** two fresh critics, Opus and Sonnet, each saw
+  twelve stills per take from the viewer, muted and labelled only by
+  letter, in a different order.
+  - Opus scored the flat take 5 of 10 and the directed take 6 of 10, and
+    would show the directed one. It read the directed take as "a reach is
+    refused, and the woman who made it folds back into herself while the
+    other stands her ground", her hand back to her chest at 3.0 s as
+    self-protective, and a glance back at 5.0 s. It read the flat take as
+    "a woman reaches for someone who has already left, and gives up".
+  - Sonnet scored the directed take 5 of 10 and the flat take 6 of 10, and
+    would show the flat one, because his turn and open arms answer her. It
+    read the directed take as "a woman reaches out once and is met with a
+    folded-arms posture".
+  - Both said the faces and eyes cannot be read at card scale, the last
+    2.5 s are static, and his rest pose reads as hands on hips, an
+    attitude nobody directed. Neither named "she wants him to stay but
+    stops herself".
+
+  **The gate for slice 2, plainly:**
+  - **Did the directed take beat the flat one?** No. The critics split
+    one each, by one point (6 to 5 both ways).
+  - **What did they name?** A reach, a refusal and a withdrawal. Opus also
+    saw her hand go back to her chest and a glance back. Neither named
+    the hesitation the sheet directs, "she wants him to stay but stops
+    herself".
+  - **Was the stock face the limit?** Not shown either way. Neither critic
+    could read a face or eyes at card scale, on either take. The directed
+    take does move 22 of 27 face shapes (peak 0.944), and the audition
+    measures up to 15.7 mm of mesh movement. So the reading cannot tell
+    the 21 synthesized shapes apart from the face's size on screen.
+
+  As slice 1 says, no clear difference does not say why; slice 3 settles
+  it. The reading points to three causes for slice 3 to test: the
+  face is too small to read at card scale, the life underneath is too
+  small to carry the aftermath, and the arm rest pose (hands near the
+  hips) reads as intent.
 
 ## Physical-device limits
 
