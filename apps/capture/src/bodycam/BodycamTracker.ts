@@ -168,6 +168,7 @@ export class BodycamTracker {
       hands.push({
         world: world.map((p) => ({ x: p.x, y: p.y, z: p.z })),
         imageWrist: { x: image[0].x, y: image[0].y },
+        ...(image[8] ? { imageIndexTip: { x: image[8].x, y: image[8].y } } : {}),
         ...(result.handedness[i]?.[0]?.categoryName ? { label: result.handedness[i]![0]!.categoryName } : {})
       });
     }

@@ -12,7 +12,7 @@ import type {} from '../src/runtime/automationHooks';
 import { headYawFromPose } from '../src/bodycam/convert';
 import type { BodycamLogEntry } from '../src/runtime/automationHooks';
 import { assignHandSides } from '../src/bodycam/convert';
-import type { HandLandmarks, Point3, Quat4 } from '../src/bodycam/types';
+import type { HandLandmarks, Point2, Point3, Quat4 } from '../src/bodycam/types';
 import { type FingerChain, scorePointPose } from '../src/xr/pointPose';
 
 // Report-only (docs/features/camera-avatar-spike.md, slice 2): runs the real MediaPipe models on a video clip played
@@ -320,6 +320,8 @@ interface HandObs {
   nosePoseWorld: Point3 | null;
   /** Midpoint of the pose model's two eyes (landmarks 2 and 5). */
   eyesPoseWorld: Point3 | null;
+  /** The index fingertip in the picture: the hand model's own when the run kept it, else the pose's index point. */
+  tipImage: Point2 | null;
 }
 const handEntries = entries.filter((e) => e.ran !== 'pose');
 const poseEntries = entries.filter((e) => e.ran !== 'hands');
@@ -358,7 +360,8 @@ for (const entry of handEntries) {
       ray,
       tipPoseWorld,
       nosePoseWorld: pose?.world[0] ?? null,
-      eyesPoseWorld: pose?.world[2] && pose.world[5] ? scaleHalf(add(pose.world[2], pose.world[5])) : null
+      eyesPoseWorld: pose?.world[2] && pose.world[5] ? scaleHalf(add(pose.world[2], pose.world[5])) : null,
+      tipImage: hand.imageIndexTip ?? pose?.image[side === 'left' ? 19 : 20] ?? null
     });
   }
 }
@@ -399,6 +402,24 @@ function jitter(rays: Point3[]) {
   return { frames: rays.length, p50Deg: roundOrNull(percentile(deviations, 50)), p95Deg: roundOrNull(percentile(deviations, 95)) };
 }
 
+// The recorded picture's field of view (default: iPhone 15 Pro main camera, 1x, 4K held upright).
+const camera = config.camera ?? { imageXFovDeg: 45.7, imageYFovDeg: 73.7 };
+/** The lens's line of sight to a point in the picture (normalised image coordinates), in the lens frame. */
+function lineOfSight(p: Point2): Point3 {
+  return norm({ x: Math.tan(camera.imageXFovDeg / 2 / DEG) * (2 * p.x - 1), y: Math.tan(camera.imageYFovDeg / 2 / DEG) * (2 * p.y - 1), z: 1 });
+}
+
+/**
+ * Unit direction from the fingertip to the segment's target, or null. An aim at the lens needs no measurement: it is
+ * the lens's line of sight to the fingertip, reversed. Other targets need the measured layout (targetPointOf).
+ */
+function aimDirection(o: HandObs, target: string | undefined): Point3 | null {
+  if (target === 'lens') return o.tipImage ? scale(lineOfSight(o.tipImage), -1) : null;
+  const point = targetPointOf(target);
+  const tip = fingertipInLensFrame(o);
+  return point && tip ? norm(sub(point, tip)) : null;
+}
+
 /** A segment's target in the lens frame (x image right = the author's left, y down, z away from the lens), or null. */
 function targetPointOf(target: string | undefined): Point3 | null {
   const d = config.distances;
@@ -432,15 +453,14 @@ function describe(from: number, to: number, side: Side, target?: Segment['target
     return { x: round(n.x, 3), y: round(n.y, 3), z: round(n.z, 3) };
   };
   let aim: { frames: number; medianErrorDeg: number | null; p95ErrorDeg: number | null; note: string } | null = null;
-  const targetPoint = targetPointOf(target);
-  if (targetPoint) {
+  if (target) {
     const errors: number[] = [];
     const used: Array<{ ray: Point3; toTarget: Point3 }> = [];
     for (const o of obs) {
-      const tip = fingertipInLensFrame(o);
-      if (!o.ray || !tip || (o.score ?? 0) < 0.35) continue;
-      errors.push(angleDeg(o.ray, sub(targetPoint, tip)));
-      used.push({ ray: o.ray, toTarget: norm(sub(targetPoint, tip)) });
+      const toTarget = aimDirection(o, target);
+      if (!o.ray || !toTarget || (o.score ?? 0) < 0.35) continue;
+      errors.push(angleDeg(o.ray, toTarget));
+      used.push({ ray: o.ray, toTarget });
     }
     aimRays = { meanIndexRay: meanDir(used.map((u) => u.ray)), meanFingertipToTarget: meanDir(used.map((u) => u.toTarget)) };
     aim = { frames: errors.length, medianErrorDeg: roundOrNull(percentile(errors, 50)), p95ErrorDeg: roundOrNull(percentile(errors, 95)), note: 'index ray (proximal to tip, raw) against fingertip-to-target, frames scoring 0.35 or more' };
@@ -554,7 +574,6 @@ function rayStudySegment(seg: Segment, kind: RayKind, filter: RayFilter) {
     });
   const filtered = runFilter(samples, filter);
   // Aim error against the brief's assumed mark layout, as describe() reads it (marks in the lens plane, rough distances).
-  const targetPoint = targetPointOf(seg.target);
   const aimErrors: number[] = [];
   const from = seg.startSec + 0.3;
   const to = seg.endSec - 0.3;
@@ -569,8 +588,8 @@ function rayStudySegment(seg: Segment, kind: RayKind, filter: RayFilter) {
     holdDev.push(angleDeg(filtered[i]!, slow));
     held.push(filtered[i]!);
     const o = samples[i]!.o;
-    const tip = fingertipInLensFrame(o);
-    if (targetPoint && tip && (o.score ?? 0) >= 0.35) aimErrors.push(angleDeg(filtered[i]!, sub(targetPoint, tip)));
+    const toTarget = aimDirection(o, seg.target);
+    if (toTarget && (o.score ?? 0) >= 0.35) aimErrors.push(angleDeg(filtered[i]!, toTarget));
     if (i > 0 && t - samples[i - 1]!.t < 0.1) steps.push(angleDeg(filtered[i]!, filtered[i - 1]!));
   }
   const mean = held.length ? norm(held.reduce((acc, r) => add(acc, r), { x: 0, y: 0, z: 0 })) : null;
@@ -580,7 +599,7 @@ function rayStudySegment(seg: Segment, kind: RayKind, filter: RayFilter) {
     holdP95Deg: roundOrNull(percentile(holdDev, 95)),
     meanDevP95Deg: mean ? roundOrNull(percentile(held.map((r) => angleDeg(r, mean)), 95)) : null,
     stepP95Deg: roundOrNull(percentile(steps, 95)),
-    aimMedianErrorDeg: targetPoint ? roundOrNull(percentile(aimErrors, 50), 1) : null,
+    aimMedianErrorDeg: aimErrors.length ? roundOrNull(percentile(aimErrors, 50), 1) : null,
     mean
   };
 }
@@ -656,11 +675,6 @@ if (rayJitterStudy) {
 // the line of sight to the hand's wrist in the picture. Raw rays (no filter) over the segment trimmed by 0.3 s at each
 // end, frames scoring 0.35 or more. Signed errors: ray minus target direction, yaw positive toward the author's left
 // (image right), pitch positive up.
-const camera = config.camera ?? { imageXFovDeg: 45.7, imageYFovDeg: 73.7 };
-function lineOfSight(o: HandObs): Point3 {
-  const w = o.hand.imageWrist;
-  return norm({ x: Math.tan(camera.imageXFovDeg / 2 / DEG) * (2 * w.x - 1), y: Math.tan(camera.imageYFovDeg / 2 / DEG) * (2 * w.y - 1), z: 1 });
-}
 /** Rotates v by the rotation that takes the lens axis (0, 0, 1) onto the unit vector to. */
 function fromLensAxis(to: Point3, v: Point3): Point3 {
   const axis = { x: -to.y, y: to.x, z: 0 };
@@ -683,8 +697,7 @@ const aimStudy = {
   note: 'Raw rays against fingertip-to-target over each aim segment (trimmed 0.3 s each end, score 0.35 or more). Signed: ray minus target, yaw + toward the author\'s left (image right), pitch + up. Corrected: turned by the line of sight to the hand in the picture.',
   camera,
   segments: (config.segments ?? []).flatMap((seg) => {
-    const targetPoint = targetPointOf(seg.target);
-    if (!targetPoint) return [];
+    if (!seg.target) return [];
     const obs = observations.filter((o) => o.side === (seg.hand ?? 'right') && o.clipSec >= seg.startSec + 0.3 && o.clipSec < seg.endSec - 0.3 && (o.score ?? 0) >= 0.35);
     return [{
       label: seg.label,
@@ -694,11 +707,10 @@ const aimStudy = {
         const yaws: number[] = [];
         const pitches: number[] = [];
         for (const o of obs) {
-          const tip = fingertipInLensFrame(o);
+          const toTarget = aimDirection(o, seg.target);
           const raw = rayOf(o, r.kind);
-          if (!tip || !raw) continue;
-          const ray = r.perspective ? norm(fromLensAxis(lineOfSight(o), raw)) : raw;
-          const toTarget = norm(sub(targetPoint, tip));
+          if (!toTarget || !raw) continue;
+          const ray = r.perspective ? norm(fromLensAxis(lineOfSight(o.hand.imageWrist), raw)) : raw;
           errors.push(angleDeg(ray, toTarget));
           yaws.push(yawDeg(ray) - yawDeg(toTarget));
           pitches.push(pitchDeg(ray) - pitchDeg(toTarget));
