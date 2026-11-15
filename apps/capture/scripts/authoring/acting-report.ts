@@ -259,10 +259,18 @@ export interface TakeDiff {
 function channelKeys(doc: GltfDoc): Map<string, Channel> {
   const nodes = doc.json.nodes ?? [];
   const performers = findPerformers(doc);
+  // Nodes that share a name (every RecordedObject) are told apart by their order.
+  const seen = new Map<string, number>();
+  const names = nodes.map((n, i) => {
+    const name = n.name ?? String(i);
+    const k = seen.get(name) ?? 0;
+    seen.set(name, k + 1);
+    return k ? `${name}#${k}` : name;
+  });
   const out = new Map<string, Channel>();
   for (const ch of readChannels(doc)) {
     const p = performers.find((q) => q.subtree.has(ch.node));
-    out.set(`${p ? `p${p.index}` : 'scene'}/${nodes[ch.node]?.name ?? ch.node}/${ch.path}`, ch);
+    out.set(`${p ? `p${p.index}` : 'scene'}/${names[ch.node] ?? ch.node}/${ch.path}`, ch);
   }
   return out;
 }

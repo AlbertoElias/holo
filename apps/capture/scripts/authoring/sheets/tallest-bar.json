@@ -1,0 +1,110 @@
+{
+  "title": "The tallest bar",
+  "intent": "Showing which bar of a chart is the tallest: take a pointer from its cup, point at the tallest bar, and put the pointer back.",
+  "duration": 9.5,
+  "performers": [
+    { "id": "p", "avatar": "stock", "at": [-0.45, 0], "facing": 60, "seed": 7 }
+  ],
+  "objects": {
+    "table": {
+      "name": "Side table",
+      "source": "polyhaven:side_table_tall_01",
+      "at": {"of": "p", "forward": 0.35, "right": -0.15},
+      "facing": "p.hips",
+      "height": 1.0
+    },
+    "cup": {
+      "name": "Cup",
+      "on": "table",
+      "parts": [
+        { "shape": "cylinder", "size": [0.08, 0.07, 0.08], "color": "#d9cdb4" }
+      ]
+    },
+    "pointer": {
+      "name": "Pointer",
+      "at": "cup.bottom",
+      "parts": [
+        { "name": "shaft", "shape": "cylinder", "size": [0.014, 0.5, 0.014], "at": [0, 0, -0.03], "rotate": [40, 0, 0], "color": "#3b3b40" },
+        { "name": "tip", "shape": "cone", "size": [0.018, 0.03, 0.018], "at": [0, 0.383, 0.2914], "rotate": [40, 0, 0], "color": "#e0b040" }
+      ],
+      "grip": {"at": [0, 0.1226, 0.0728], "axis": [0, 0.766, 0.6428]},
+      "tool": "tip"
+    },
+    "chart": {
+      "name": "Bar chart",
+      "at": {"of": "p", "forward": 1.15, "right": -0.1},
+      "facing": "p.hips",
+      "parts": [
+        { "shape": "box", "size": [0.62, 0.04, 0.16], "color": "#2e3a40" },
+        { "shape": "box", "size": [0.11, 0.62, 0.11], "at": [-0.21, 0.04, 0], "color": "#5f8fa8" },
+        { "shape": "box", "size": [0.11, 0.88, 0.11], "at": [-0.07, 0.04, 0], "color": "#5f8fa8" },
+        { "name": "tallest", "shape": "box", "size": [0.11, 1.22, 0.11], "at": [0.07, 0.04, 0], "color": "#e08a3c" },
+        { "shape": "box", "size": [0.11, 0.74, 0.11], "at": [0.21, 0.04, 0], "color": "#5f8fa8" }
+      ],
+      "anchors": {"peak": [0.07, 1.24, 0]}
+    }
+  },
+  "marks": {
+    "show": {"of": "p", "forward": 0.2, "right": -0.15, "height": 1.2},
+    "viewer": [0, 1.55, 2.5]
+  },
+  "beats": [
+    {
+      "id": "look-cup",
+      "performer": "p",
+      "at": 0.3,
+      "hold": 1.1,
+      "intent": "She glances at the pointer in its cup.",
+      "directions": [{ "kind": "look", "at": "cup.top", "head": 0.7 }]
+    },
+    {
+      "id": "take",
+      "performer": "p",
+      "at": 0.6,
+      "hold": 1.6,
+      "intent": "She takes the pointer out of the cup.",
+      "directions": [{ "kind": "take", "side": "left", "object": "pointer", "palm": "in" }]
+    },
+    {
+      "id": "show",
+      "performer": "p",
+      "at": 2.4,
+      "hold": 3.0,
+      "intent": "She raises the pointer toward the chart.",
+      "directions": [
+        { "kind": "reach", "side": "left", "at": "show", "stopShort": 0, "palm": "in", "attack": 0.8, "settle": 0.8 },
+        { "kind": "look", "at": "chart.peak", "head": 0.6, "attack": 0.4, "settle": 0.5 }
+      ]
+    },
+    {
+      "id": "point",
+      "performer": "p",
+      "at": 3.1,
+      "hold": 2.0,
+      "intent": "She points the pointer's tip at the tallest bar.",
+      "directions": [{ "kind": "aim", "side": "left", "at": "chart.peak", "attack": 0.5, "settle": 0.5 }]
+    },
+    {
+      "id": "turn",
+      "performer": "p",
+      "at": 4.6,
+      "hold": 1.0,
+      "intent": "She looks back to the viewer: that one.",
+      "directions": [
+        { "kind": "look", "at": "viewer", "head": 0.7 },
+        { "kind": "expression", "shape": "smile" }
+      ]
+    },
+    {
+      "id": "put",
+      "performer": "p",
+      "at": 6.6,
+      "hold": 0.3,
+      "intent": "She puts the pointer back in its cup.",
+      "directions": [
+        { "kind": "put", "side": "left", "object": "pointer", "at": "cup.bottom" },
+        { "kind": "look", "at": "cup.top", "head": 0.6, "attack": 0.3, "settle": 0.5 }
+      ]
+    }
+  ]
+}

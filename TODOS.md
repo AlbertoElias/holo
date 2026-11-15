@@ -162,7 +162,9 @@ it from the item below instead of duplicating its status here.
   "watering a plant" after one revision, and its gap log puts props, sets and tool use ahead of the
   house avatar). Decided 2026-11-14: faces carried by body and mouth,
   with a brow bar for any house avatar; props and sets come before slice 2.
-  Still open: life, which the owner judged frozen from the video too. Owned by
+  Props, sets and tool use in the beat sheet (slice 1c) on `main`
+  2026-11-15; the readers' gaps (phone-card framing, a put's facing, the
+  pour over the pot) are in the brief. Still open: life, which the owner judged frozen from the video too. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
   (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)

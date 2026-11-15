@@ -48,6 +48,15 @@ export interface ViewerReading {
   /** How the viewer resolved the humanoid: a declaration format, `names` when found by bone names, `none`. */
   readonly anchorSource: string;
   readonly performers: PerformerReading[];
+  /** The recorded objects the viewer loaded (`RecordedObject` wrappers): their credit and whether the take moves them. */
+  readonly objects: ObjectReading[];
+}
+
+export interface ObjectReading {
+  readonly name: string;
+  readonly credit: string | null;
+  readonly moves: boolean;
+  readonly meshes: number;
 }
 
 export async function read(page: Page, url: string): Promise<ViewerReading> {
@@ -56,6 +65,8 @@ export async function read(page: Page, url: string): Promise<ViewerReading> {
     type Obj = {
       name: string; type: string; isBone?: boolean; isMesh?: boolean; parent: Obj | null;
       quaternion: { x: number; y: number; z: number; w: number };
+      position: { x: number; y: number; z: number };
+      userData: Record<string, unknown>;
       morphTargetInfluences?: number[];
       children: Obj[];
       traverse(cb: (o: Obj) => void): void;
@@ -67,7 +78,12 @@ export async function read(page: Page, url: string): Promise<ViewerReading> {
     const actions = Object.values(probe.actions).filter((a): a is NonNullable<typeof a> => Boolean(a));
     const duration = Math.max(...actions.map((a) => a.getClip().duration));
     const wrappers: Obj[] = [];
-    probe.model.traverse((o) => { if (o.name === 'RecordedAvatar' || o.name.startsWith('Performer_')) wrappers.push(o); });
+    const things: Obj[] = [];
+    probe.model.traverse((o) => {
+      if (o.name === 'RecordedAvatar' || o.name.startsWith('Performer_')) wrappers.push(o);
+      else if (o.name === 'RecordedObject' || o.name.startsWith('RecordedObject_')) things.push(o);
+    });
+    const thingPoses = things.map(() => [] as number[][]);
     const seek = (t: number) => { for (const a of actions) a.time = t; probe.mixer.update(0); probe.model.updateWorldMatrix(true, true); };
     const times = Array.from({ length: 33 }, (_, i) => (duration * i) / 32);
     const per = wrappers.map((w) => {
@@ -82,6 +98,7 @@ export async function read(page: Page, url: string): Promise<ViewerReading> {
         p.bones.forEach((b, i) => p.q[i]!.push([b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w]));
         p.meshes.forEach((m, i) => p.m[i]!.push([...m.morphTargetInfluences!]));
       }
+      things.forEach((o, i) => thingPoses[i]!.push([o.position.x, o.position.y, o.position.z, o.quaternion.x, o.quaternion.y, o.quaternion.z, o.quaternion.w]));
     }
     // The viewer tags the bones it resolved as the humanoid, and the scene with how (humanoidAnchors.ts).
     const tagged = (o: Obj) => typeof (o as unknown as { userData: Record<string, unknown> }).userData?.[boneTag] === 'string';
@@ -112,8 +129,14 @@ export async function read(page: Page, url: string): Promise<ViewerReading> {
         anchoredBones: p.bones.filter(tagged).length
       };
     });
+    const objects = things.map((o, i) => {
+      let meshes = 0;
+      o.traverse((c) => { if (c.isMesh) meshes += 1; });
+      const credit = o.userData?.holoimCredit as { title?: string; author?: string; licence?: string } | undefined;
+      return { name: o.name, credit: credit ? `${credit.title} by ${credit.author} (${credit.licence})` : null, moves: moved(thingPoses[i]!, 1e-4), meshes };
+    });
     seek(0);
-    return { take: target, duration, samples: times.length, anchorSource: String(anchorSource), performers };
+    return { take: target, duration, samples: times.length, anchorSource: String(anchorSource), performers, objects };
   }, [url, FINGER.source, HUMANOID_BONE_TAG, HUMANOID_SOURCE_TAG] as const);
 }
 
@@ -174,6 +197,7 @@ async function main(): Promise<void> {
     for (const p of result.performers) {
       console.log(`  ${p.name}: bones ${p.bonesMoving}/${p.bones} move, fingers ${p.fingerBonesMoving}/${p.fingerBones}, face ${p.morphTargetsMoving}/${p.morphTargets} targets (peak ${p.peakInfluence}), ${p.anchoredBones} anchor bones`);
     }
+    for (const o of result.objects) console.log(`  ${o.name}: ${o.meshes} mesh(es), ${o.moves ? 'moves' : 'still'}, credit ${o.credit ?? 'none'}`);
     console.log(`  card: ${shot}`);
     if (reportOut) await writeFile(reportOut, `${JSON.stringify(result, null, 2)}\n`);
   } finally {

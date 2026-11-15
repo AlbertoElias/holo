@@ -12,9 +12,11 @@ import type { VrmHumanoidBone } from '@holoim/meaning';
 import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
-import { EXPRESSIONS, envelope, resolveTiming, validateSheet, type BeatSheet, type Direction, type PerformerSpec, type Point, type Resolved, type Side } from './beats.ts';
+import { EXPRESSIONS, envelope, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
-import { armRestOffset, bodyUp, hangArm, moveBoneWorld, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
+import { armRestOffset, bodyUp, hangArm, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
+import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
+import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
 
 const SIDES = ['left', 'right'] as const;
 const DEG = Math.PI / 180;
@@ -49,6 +51,12 @@ const LEAN_HIPS = 0.04;
 const LEAN_MAX_DEG = 28;
 const LEAN_SHARE: ReadonlyArray<readonly [VrmHumanoidBone, number]> = [['spine', 0.35], ['chest', 0.4], ['upperChest', 0.25]];
 
+// Held objects: the fingers close over this long before a take's hand arrives, and open over this long after a put's lands.
+const GRIP_CLOSE = 0.2;
+const GRIP_OPEN = 0.25;
+/** A put's object settles from where the hand let it go to upright on its place over this long. */
+const PUT_SETTLE = 0.2;
+
 export interface PerformerTrack {
   readonly spec: PerformerSpec;
   readonly avatar: LoadedAvatar;
@@ -64,11 +72,28 @@ export interface PerformerTrack {
   readonly reaches: { beat: string; side: Side; targetDistance: number; stopShort: number; outOfReach: number }[];
 }
 
+/** An object's world pose per frame, and who held it when. */
+export interface PropTrack {
+  readonly prop: Prop;
+  readonly position: Float32Array;
+  readonly rotation: Float32Array;
+  readonly holdings: readonly Holding[];
+}
+
+/** How close each grip, put and aim came to what the sheet asked: metres and degrees. */
+export interface ObjectReport {
+  readonly grips: { beat: string; object: string; side: Side; distance: number; angle: number }[];
+  readonly puts: { beat: string; object: string; side: Side; distance: number; tilt: number }[];
+  readonly aims: { beat: string; object: string; side: Side; residual: number }[];
+}
+
 export interface SolvedTake {
   readonly sheet: BeatSheet;
   readonly fps: number;
   readonly times: Float32Array;
   readonly tracks: PerformerTrack[];
+  readonly props: PropTrack[];
+  readonly objects: ObjectReport;
 }
 
 interface Cast {
@@ -96,12 +121,22 @@ interface Cast {
 }
 
 const yawQuat = (deg: number) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deg * DEG);
+/** Degrees about +Y that a rotation turns +Z to. */
+const yawOf = (q: THREE.Quaternion): number => { const z = new THREE.Vector3(0, 0, 1).applyQuaternion(q); return Math.atan2(z.x, z.z) / DEG; };
 
-export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>): SolvedTake {
+export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource> = new Map()): SolvedTake {
   const problems = validateSheet(sheet);
   if (problems.length) throw new Error(`beat sheet: ${problems.join('; ')}`);
-  markTable.clear();
-  for (const [k, v] of Object.entries(sheet.marks ?? {})) markTable.set(k, new THREE.Vector3(v[0], v[1], v[2]));
+  stage.marks.clear();
+  stage.fixed = new WeakMap();
+  stage.props.clear();
+  stage.bodies.clear();
+  stage.runs.clear();
+  stage.goals.clear();
+  stage.swivels.clear();
+  stage.report = { grips: [], puts: [], aims: [] };
+  stage.first = sheet.performers[0]!.id;
+  for (const [k, v] of Object.entries(sheet.marks ?? {})) stage.marks.set(k, v);
   const fps = sheet.fps ?? 30;
   const flat = sheet.style === 'flat';
   const life = sheet.life !== false && !flat;
@@ -136,7 +171,16 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
       seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing
     };
   });
+  // Measures and landmarks from each performer's rest pose, then the set, placed on the first frame.
+  for (const c of cast) {
+    solveFrame(cast, { ...c, dirs: [] }, 0, 1 / fps, false, false);
+    stage.bodies.set(c.spec.id, measureBody(c.a));
+  }
   for (const c of cast) see(c, -Infinity);
+  const { holdings } = holdingsOf(sheet);
+  for (const h of holdings) stage.runs.set(h, {});
+  placeObjects(cast, sheet, sources, holdings);
+  for (const k of stage.marks.keys()) pointOf(cast, cast[0]!.spec, k);
 
   const tracks: PerformerTrack[] = cast.map((c) => {
     const rotations = new Map<THREE.Object3D, Float32Array>();
@@ -145,6 +189,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
     const weights = new Map(c.morphing.map((m) => [m.node, { targets: m.meshes[0]!.morphTargetInfluences!.length, values: new Float32Array(frames * m.meshes[0]!.morphTargetInfluences!.length), meshes: m.meshes }]));
     return { spec: c.spec, avatar: c.a, rotations, translations, weights, root: { position: new Float32Array(frames * 3), rotation: new Float32Array(frames * 4) }, reaches: [] };
   });
+  const props: PropTrack[] = [...stage.props.values()].map((st) => ({ prop: st.prop, position: new Float32Array(frames * 3), rotation: new Float32Array(frames * 4), holdings: st.holdings }));
 
   // Reaches are measured at the middle of their hold.
   const reachChecks = new Map<number, { c: number; r: Resolved }[]>();
@@ -153,6 +198,12 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
     // A reach still on its way at the end of the take is measured on the last frame.
     const f = Math.min(frames - 1, Math.round((r.at + r.attack + r.hold / 2) * fps));
     reachChecks.set(f, [...(reachChecks.get(f) ?? []), { c: ci, r }]);
+  }));
+  const aimChecks = new Map<number, { c: number; r: Resolved }[]>();
+  cast.forEach((c, ci) => c.dirs.forEach((r) => {
+    if (r.direction.kind !== 'aim') return;
+    const f = Math.min(frames - 1, Math.round((r.at + r.attack + r.hold / 2) * fps));
+    aimChecks.set(f, [...(aimChecks.get(f) ?? []), { c: ci, r }]);
   }));
 
   for (let f = 0; f < frames; f += 1) {
@@ -177,9 +228,22 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>):
       const palm = cast[c]!.a.hands[d.side]?.palmCenter(new THREE.Vector3()) ?? cast[c]!.a.arms[d.side].hand.getWorldPosition(new THREE.Vector3());
       tracks[c]!.reaches.push({ beat: r.beat.id, side: d.side, targetDistance: Math.round(palm.distanceTo(target) * 10000) / 10000, stopShort: d.stopShort, outOfReach: Math.round((cast[c]!.shortfall.get(r) ?? 0) * 10000) / 10000 });
     }
+    settleReleased(t);
+    for (const { c, r } of aimChecks.get(f) ?? []) {
+      const d = r.direction as Extract<Direction, { kind: 'aim' }>;
+      const st = heldIn(cast[c]!.spec.id, d.side, t);
+      if (!st?.prop.tool) continue;
+      const tip = propWorld(st.prop, st.prop.tool.tip);
+      const axis = st.prop.tool.axis.clone().applyQuaternion(st.prop.quaternion);
+      const want = pointOf(cast, cast[c]!.spec, d.at).sub(tip).normalize();
+      stage.report.aims.push({ beat: r.beat.id, object: st.prop.id, side: d.side, residual: round(axis.angleTo(want) / DEG, 10) });
+    }
+    props.forEach((pt) => { pt.prop.position.toArray(pt.position, f * 3); pt.prop.quaternion.toArray(pt.rotation, f * 4); });
   }
-  return { sheet, fps, times, tracks };
+  return { sheet, fps, times, tracks, props, objects: stage.report };
 }
+
+const round = (v: number, k: number): number => Math.round(v * k) / k;
 
 /** Signed degrees in [-180, 180). */
 const wrapDeg = (deg: number): number => ((((deg + 180) % 360) + 360) % 360) - 180;
@@ -220,18 +284,43 @@ function see(c: Cast, t: number): void {
   c.seenAt = { t, before: c.seenAt.t };
 }
 
-// Marks of the sheet being solved, set at the start of `solveTake`; and the take time being solved.
-const markTable = new Map<string, THREE.Vector3>();
+interface PropState {
+  readonly prop: Prop;
+  readonly holdings: Holding[];
+  /** After a put lets go: from where the hand left it to upright on its place. */
+  release?: { t0: number; fromP: THREE.Vector3; fromQ: THREE.Quaternion; toP: THREE.Vector3; toQ: THREE.Quaternion };
+}
+
+// The sheet being solved, set at the start of `solveTake`: its marks, objects,
+// performer measures, places fixed when first evaluated, per-holding grip
+// offsets, per-direction goals fixed at the direction's start, and the report.
+// And the take time being solved.
+const stage = {
+  first: '',
+  marks: new Map<string, readonly [number, number, number] | Place>(),
+  fixed: new WeakMap<object, THREE.Vector3>(),
+  props: new Map<string, PropState>(),
+  bodies: new Map<string, Body>(),
+  runs: new Map<Holding, { offset?: THREE.Matrix4; released?: boolean }>(),
+  goals: new Map<Direction, { point: THREE.Vector3; axis?: THREE.Vector3; upright?: THREE.Quaternion }>(),
+  report: { grips: [], puts: [], aims: [] } as ObjectReport,
+  swivels: new Map<Direction, number>()
+};
 const solving = { t: 0 };
 
 function pointOf(cast: Cast[], self: PerformerSpec, p: Point): THREE.Vector3 {
-  if (typeof p !== 'string') return new THREE.Vector3(p[0], p[1], p[2]);
-  const [who, bone] = p.split('.');
-  if (bone === undefined) {
-    const m = markTable.get(p);
+  if (typeof p !== 'string') return isPlace(p) ? placeOf(cast, p) : new THREE.Vector3(p[0], p[1], p[2]);
+  const dot = p.indexOf('.');
+  if (dot < 0) {
+    const m = stage.marks.get(p);
     if (!m) throw new Error(`no mark ${p}`);
-    return m.clone();
+    // A mark that is a place is fixed on the first frame (when it is first evaluated, at setup).
+    return pointOf(cast, self, m);
   }
+  const who = p.slice(0, dot);
+  const bone = p.slice(dot + 1);
+  const object = stage.props.get(who);
+  if (object) return propWorld(object.prop, object.prop.anchors.get(bone)!);
   const other = cast.find((c) => c.spec.id === who);
   const at = other?.seen.get(bone as VrmHumanoidBone);
   if (!other || !at) throw new Error(`${self.id}: cannot find ${p}`);
@@ -240,6 +329,239 @@ function pointOf(cast: Cast[], self: PerformerSpec, p: Point): THREE.Vector3 {
   const was = other.seenBefore.get(bone as VrmHumanoidBone);
   if (was && Number.isFinite(before) && t < solving.t && t > before) return at.clone().lerp(was, -(solving.t - t) / (t - before));
   return at.clone();
+}
+
+/** A place, fixed the first time it is evaluated: from its performer as they stand then, or its object as it rests. */
+function placeOf(cast: Cast[], p: Place): THREE.Vector3 {
+  const hit = stage.fixed.get(p);
+  if (hit) return hit.clone();
+  const of = p.of ?? stage.first;
+  const performer = cast.find((c) => c.spec.id === of);
+  let frame: PlaceFrame;
+  if (performer) frame = { origin: performer.a.frame.position.clone().setY(0), yaw: yawOf(performer.a.frame.quaternion) };
+  else {
+    const o = stage.props.get(of)!.prop;
+    frame = { origin: o.position.clone(), yaw: yawOf(o.quaternion) };
+  }
+  const out = resolvePlace(p, frame, stage.bodies, performer ? of : stage.first);
+  stage.fixed.set(p, out);
+  return out.clone();
+}
+
+/** The performer a point is measured from, when it names one. */
+function measuredFrom(sheet: BeatSheet, p: Point | undefined): string | undefined {
+  if (p === undefined || Array.isArray(p)) return undefined;
+  const ids = new Set(sheet.performers.map((x) => x.id));
+  if (isPlace(p)) return p.of !== undefined && ids.has(p.of) ? p.of : undefined;
+  const head = (p as string).split('.')[0]!;
+  return ids.has(head) ? head : undefined;
+}
+
+/** Builds every object and sets it down where the sheet says, supports before what sits on them; one held from the first frame is seated in the hand later. */
+function placeObjects(cast: Cast[], sheet: BeatSheet, sources: ReadonlyMap<string, LoadedSource>, holdings: readonly Holding[]): void {
+  const specs = sheet.objects ?? {};
+  const ids = new Set(Object.keys(specs));
+  const order: string[] = [];
+  const visit = (id: string): void => {
+    if (order.includes(id)) return;
+    const o = specs[id]!;
+    for (const d of [...(o.on !== undefined ? [o.on] : []), ...pointObjects(o.at, ids, sheet.marks), ...(typeof o.facing === 'number' ? [] : pointObjects(o.facing, ids, sheet.marks))]) visit(d);
+    order.push(id);
+  };
+  for (const id of ids) visit(id);
+  const self = cast[0]!.spec;
+  for (const id of order) {
+    const spec: ObjectSpec = specs[id]!;
+    const performer = measuredFrom(sheet, spec.at) ?? stage.first;
+    const prop = buildProp(id, spec, stage.bodies, performer, sources);
+    stage.props.set(id, { prop, holdings: holdings.filter((h) => h.object === id) });
+    if (spec.at === undefined && spec.on === undefined) continue;
+    let defaultYaw = 0;
+    if (spec.on !== undefined) {
+      const support = stage.props.get(spec.on)!.prop;
+      const top = propWorld(support, support.anchors.get('top')!);
+      if (spec.at !== undefined) { const p = pointOf(cast, self, spec.at); prop.position.set(p.x, top.y, p.z); } else prop.position.copy(top);
+      defaultYaw = yawOf(support.quaternion);
+    } else prop.position.copy(pointOf(cast, self, spec.at!));
+    // Turned as what it is placed from faces: a mark stands for its own point.
+    const at = typeof spec.at === 'string' && stage.marks.has(spec.at) ? stage.marks.get(spec.at) : spec.at;
+    if (isPlace(at)) {
+      const of = at.of ?? stage.first;
+      const c = cast.find((x) => x.spec.id === of);
+      defaultYaw = c ? c.spec.facing : yawOf(stage.props.get(of)!.prop.quaternion);
+    } else if (spec.on === undefined) {
+      const from = measuredFrom(sheet, at);
+      const c = from !== undefined ? cast.find((x) => x.spec.id === from) : undefined;
+      if (c) defaultYaw = c.spec.facing;
+    }
+    let yaw = defaultYaw;
+    if (typeof spec.facing === 'number') yaw = spec.facing;
+    else if (spec.facing !== undefined) {
+      const to = pointOf(cast, self, spec.facing).sub(prop.position);
+      yaw = Math.atan2(to.x, to.z) / DEG;
+    }
+    prop.quaternion.copy(yawQuat(yaw));
+  }
+}
+
+/** The object in a performer's hand at `t`, if any. */
+function heldIn(performer: string, side: Side, t: number): PropState | undefined {
+  for (const st of stage.props.values()) {
+    if (st.holdings.some((h) => h.performer === performer && h.side === side && h.from <= t && t <= h.to)) return st;
+  }
+  return undefined;
+}
+
+/** How closed a hand is on an object (0..1) at `t`, with the object: closing before a take arrives, open again after a put lands. */
+function gripOf(performer: string, side: Side, t: number): { weight: number; prop: Prop } | undefined {
+  let best: { weight: number; prop: Prop } | undefined;
+  for (const st of stage.props.values()) {
+    for (const h of st.holdings) {
+      if (h.performer !== performer || h.side !== side) continue;
+      const closing = h.take ? smooth(clamp01((t - (h.from - GRIP_CLOSE)) / GRIP_CLOSE)) : 1;
+      const opening = h.put ? 1 - smooth(clamp01((t - h.to) / GRIP_OPEN)) : 1;
+      const weight = Math.min(closing, opening);
+      if (weight > 0 && (!best || weight > best.weight)) best = { weight, prop: st.prop };
+    }
+  }
+  return best;
+}
+
+/** Where a take's hand goes (the grip, where the object rests when the take begins) and the grip's axis there. */
+function takeGoal(r: Resolved): { point: THREE.Vector3; axis?: THREE.Vector3 } {
+  let g = stage.goals.get(r.direction);
+  if (!g) {
+    const d = r.direction as Extract<Direction, { kind: 'take' }>;
+    const prop = stage.props.get(d.object)!.prop;
+    g = { point: propWorld(prop, prop.grip!.center), axis: prop.grip!.axis.clone().applyQuaternion(prop.quaternion) };
+    stage.goals.set(r.direction, g);
+  }
+  return g;
+}
+
+/** Where a put sets its object's bottom down, and the upright turn it lands in, fixed when the put begins. */
+function putGoal(cast: Cast[], c: Cast, r: Resolved): { point: THREE.Vector3; upright?: THREE.Quaternion } {
+  let g = stage.goals.get(r.direction);
+  if (!g) {
+    const d = r.direction as Extract<Direction, { kind: 'put' }>;
+    const prop = stage.props.get(d.object)!.prop;
+    let point: THREE.Vector3;
+    if (d.on !== undefined) {
+      const support = stage.props.get(d.on)!.prop;
+      point = propWorld(support, support.anchors.get('top')!);
+    } else point = pointOf(cast, c.spec, d.at!);
+    g = { point, upright: yawQuat(yawOf(prop.quaternion)) };
+    stage.goals.set(r.direction, g);
+  }
+  return g;
+}
+
+/**
+ * Turns an object about one of its own axes (through `pivot`, both in its
+ * frame) until its up is as near the world's up as that axis allows: how a
+ * held object hangs from a handle, which turns in the fist.
+ */
+function hangAbout(q: THREE.Quaternion, axisLocal: THREE.Vector3): THREE.Quaternion {
+  const axis = axisLocal.clone().applyQuaternion(q);
+  const u = new THREE.Vector3(0, 1, 0).applyQuaternion(q).projectOnPlane(axis);
+  const w = new THREE.Vector3(0, 1, 0).projectOnPlane(axis);
+  // A handle near vertical (a pen held upright) has no way to hang.
+  if (u.lengthSq() < 0.04 || w.lengthSq() < 0.04) return q.clone();
+  u.normalize(); w.normalize();
+  const angle = Math.atan2(new THREE.Vector3().crossVectors(u, w).dot(axis), u.dot(w));
+  return new THREE.Quaternion().setFromAxisAngle(axis, angle).multiply(q);
+}
+
+/** Where a held object is for a hand pose: rigid in the fist, except that it hangs about its grip's axis. */
+function poseInHand(prop: Prop, handPosition: THREE.Vector3, handQuaternion: THREE.Quaternion, offset: THREE.Matrix4): { position: THREE.Vector3; quaternion: THREE.Quaternion } {
+  const m = new THREE.Matrix4().compose(handPosition, handQuaternion, new THREE.Vector3(1, 1, 1)).multiply(offset);
+  const rigidP = new THREE.Vector3();
+  const rigidQ = new THREE.Quaternion();
+  m.decompose(rigidP, rigidQ, new THREE.Vector3());
+  const grip = prop.grip!;
+  const pivot = grip.center.clone().applyQuaternion(rigidQ).add(rigidP);
+  const quaternion = hangAbout(rigidQ, grip.axis);
+  return { position: pivot.sub(grip.center.clone().applyQuaternion(quaternion)), quaternion };
+}
+
+/** Where a held object is while that hand holds it. */
+function heldPose(c: Cast, side: Side, prop: Prop, offset: THREE.Matrix4): { position: THREE.Vector3; quaternion: THREE.Quaternion } {
+  const hand = c.a.arms[side].hand;
+  return poseInHand(prop, hand.getWorldPosition(new THREE.Vector3()), hand.getWorldQuaternion(new THREE.Quaternion()), offset);
+}
+
+/**
+ * Moves every object this performer holds to its hand, after its arms are
+ * solved: at a take's arrival the offset is fixed where the object rests
+ * (capture's rule); a hold from the first frame seats the object in the fist,
+ * as upright as the grip allows; at a put's arrival the object is let go.
+ */
+function moveHeld(cast: Cast[], c: Cast, t: number): void {
+  c.a.frame.updateMatrixWorld(true);
+  for (const st of stage.props.values()) {
+    for (const h of st.holdings) {
+      if (h.performer !== c.spec.id || t < h.from - 1e-6) continue;
+      const run = stage.runs.get(h)!;
+      if (run.released) continue;
+      const hand = c.a.arms[h.side].hand;
+      const rig = c.a.hands[h.side];
+      const grip = st.prop.grip!;
+      if (!run.offset) {
+        if (!h.take) seat(c, h.side, st.prop);
+        else if (rig) {
+          const fist = rig.fistPoint(grip.radius, new THREE.Vector3());
+          const across = new THREE.Vector3(1, 0, 0).applyQuaternion(rig.palmFrame(new THREE.Quaternion()));
+          const axis = grip.axis.clone().applyQuaternion(st.prop.quaternion);
+          stage.report.grips.push({ beat: h.take.beat.id, object: st.prop.id, side: h.side, distance: round(fist.distanceTo(propWorld(st.prop, grip.center)), 10000), angle: round(Math.acos(Math.min(1, Math.abs(across.dot(axis)))) / DEG, 10) });
+        }
+        // At unit scale, as `poseInHand` applies it: a rig scaled to centimetres would scale the offset.
+        const handAt = new THREE.Matrix4().compose(hand.getWorldPosition(new THREE.Vector3()), hand.getWorldQuaternion(new THREE.Quaternion()), new THREE.Vector3(1, 1, 1));
+        run.offset = handAt.invert().multiply(new THREE.Matrix4().compose(st.prop.position, st.prop.quaternion, new THREE.Vector3(1, 1, 1)));
+      }
+      const pose = heldPose(c, h.side, st.prop, run.offset);
+      st.prop.position.copy(pose.position);
+      st.prop.quaternion.copy(pose.quaternion);
+      if (h.put && t >= h.to - 1e-6) {
+        run.released = true;
+        const goal = putGoal(cast, c, h.put);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(st.prop.quaternion);
+        stage.report.puts.push({ beat: h.put.beat.id, object: st.prop.id, side: h.side, distance: round(st.prop.position.distanceTo(goal.point), 10000), tilt: round(up.angleTo(new THREE.Vector3(0, 1, 0)) / DEG, 10) });
+        st.release = { t0: t, fromP: st.prop.position.clone(), fromQ: st.prop.quaternion.clone(), toP: goal.point.clone(), toQ: yawQuat(yawOf(st.prop.quaternion)) };
+      }
+    }
+  }
+}
+
+/** Seats an object held from the first frame: its grip axis across the palm, turned about it to stand as upright as it can (front forward), the grip in the fist. */
+function seat(c: Cast, side: Side, prop: Prop): void {
+  const rig = c.a.hands[side];
+  const grip = prop.grip!;
+  const palm = rig ? rig.palmFrame(new THREE.Quaternion()) : c.a.arms[side].hand.getWorldQuaternion(new THREE.Quaternion());
+  const across = new THREE.Vector3(1, 0, 0).applyQuaternion(palm);
+  const up = new THREE.Vector3(0, 1, 0);
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(c.a.frame.quaternion);
+  let best: { q: THREE.Quaternion; score: number } | undefined;
+  for (const sign of [1, -1]) {
+    // The grip across the palm, turned about it to hang as upright as it can.
+    const q = hangAbout(new THREE.Quaternion().setFromUnitVectors(grip.axis.clone().multiplyScalar(sign), across), grip.axis);
+    const score = new THREE.Vector3(0, 1, 0).applyQuaternion(q).dot(up) + 0.5 * new THREE.Vector3(0, 0, 1).applyQuaternion(q).dot(forward);
+    if (!best || score > best.score) best = { q, score };
+  }
+  const fist = rig ? rig.fistPoint(grip.radius, new THREE.Vector3()) : c.a.arms[side].hand.getWorldPosition(new THREE.Vector3());
+  prop.quaternion.copy(best!.q);
+  prop.position.copy(fist).sub(grip.center.clone().applyQuaternion(best!.q));
+}
+
+/** An object let go settles upright on its place. */
+function settleReleased(t: number): void {
+  for (const st of stage.props.values()) {
+    const r = st.release;
+    if (!r) continue;
+    const u = smooth(clamp01((t - r.t0) / PUT_SETTLE));
+    st.prop.position.lerpVectors(r.fromP, r.toP, u);
+    st.prop.quaternion.slerpQuaternions(r.fromQ, r.toQ, u);
+    if (u >= 1) delete st.release;
+  }
 }
 
 function rootPositionAt(c: Cast, t: number): THREE.Vector3 {
@@ -273,6 +595,95 @@ function env(r: Resolved, t: number, flat: boolean): number {
   if (t < arrive) return (t - r.at) / r.attack;
   if (t < arrive + r.hold || r.persistent) return 1;
   return Math.max(0, 1 - (t - arrive - r.hold) / r.settle);
+}
+
+/**
+ * Degrees a hand's turn is off, as the hand is now: a take's grip axis
+ * across the fist, a put's object from upright, an aim's tool from its target.
+ */
+function turnError(cast: Cast[], c: Cast, s: Side, r: Resolved): number {
+  const d = r.direction;
+  if (d.kind === 'aim') return aimError(cast, c, s, r);
+  if (d.kind === 'take') {
+    const rig = c.a.hands[s];
+    if (!rig) return 0;
+    const across = new THREE.Vector3(1, 0, 0).applyQuaternion(rig.palmFrame(new THREE.Quaternion()));
+    return Math.acos(Math.min(1, Math.abs(across.dot(takeGoal(r).axis!)))) / DEG;
+  }
+  if (d.kind === 'put') {
+    const offset = holdingRun(r)?.offset;
+    if (!offset) return 0;
+    const o = heldPose(c, s, stage.props.get(d.object)!.prop, offset);
+    return new THREE.Vector3(0, 1, 0).applyQuaternion(o.quaternion).angleTo(new THREE.Vector3(0, 1, 0)) / DEG;
+  }
+  return 0;
+}
+
+/** Degrees between what a hand holds is pointing and its aim's target, as the hand is now. */
+function aimError(cast: Cast[], c: Cast, s: Side, r: Resolved): number {
+  const d = r.direction as Extract<Direction, { kind: 'aim' }>;
+  const st = heldIn(c.spec.id, s, solving.t);
+  const run = st && [...stage.runs].find(([h]) => st.holdings.includes(h) && h.side === s && h.from <= solving.t && solving.t <= h.to)?.[1];
+  if (!st?.prop.tool || !run?.offset) return 0;
+  const o = heldPose(c, s, st.prop, run.offset);
+  const tip = st.prop.tool.tip.clone().applyQuaternion(o.quaternion).add(o.position);
+  const axis = st.prop.tool.axis.clone().applyQuaternion(o.quaternion);
+  return axis.angleTo(pointOf(cast, c.spec, d.at).sub(tip)) / DEG;
+}
+
+/** The holding a take or put direction opens or closes. */
+function holdingRun(r: Resolved): { offset?: THREE.Matrix4; released?: boolean } | undefined {
+  for (const [h, run] of stage.runs) if (h.take?.direction === r.direction || h.put?.direction === r.direction) return run;
+  return undefined;
+}
+
+/**
+ * Turns a hand, after its arm is solved: a take's grip axis across the palm
+ * (whichever way round is nearer), a put's object upright on its place, an
+ * aim's tool axis at its target (the tip moves as the hand turns, so a few
+ * passes). Each by its envelope, within the wrist's limits.
+ */
+function turnHand(cast: Cast[], c: Cast, s: Side, turns: readonly { r: Resolved; e: number }[]): void {
+  const a = c.a;
+  const hand = a.arms[s].hand;
+  const rig = a.hands[s];
+  for (const { r, e } of turns) {
+    const d = r.direction;
+    a.frame.updateMatrixWorld(true);
+    const Hc = hand.getWorldQuaternion(new THREE.Quaternion());
+    let wanted: THREE.Quaternion | undefined;
+    if (d.kind === 'take' && rig) {
+      const across = new THREE.Vector3(1, 0, 0).applyQuaternion(rig.palmFrame(new THREE.Quaternion()));
+      const g = takeGoal(r).axis!.clone();
+      if (g.dot(across) < 0) g.negate();
+      wanted = new THREE.Quaternion().setFromUnitVectors(across, g).multiply(Hc);
+    } else if (d.kind === 'put') {
+      const offset = holdingRun(r)?.offset;
+      if (!offset) continue;
+      const offQ = new THREE.Quaternion();
+      offset.decompose(new THREE.Vector3(), offQ, new THREE.Vector3());
+      wanted = putGoal(cast, c, r).upright!.clone().multiply(offQ.invert());
+    } else if (d.kind === 'aim') {
+      const st = heldIn(c.spec.id, s, solving.t);
+      const run = st && [...stage.runs].find(([h]) => st.holdings.includes(h) && h.side === s && h.from <= solving.t && solving.t <= h.to)?.[1];
+      if (!st?.prop.tool || !run?.offset) continue;
+      const target = pointOf(cast, c.spec, d.at);
+      const Hbase = Hc.clone();
+      let Hcur = Hc.clone();
+      const hp = hand.getWorldPosition(new THREE.Vector3());
+      for (let i = 0; i < 3; i += 1) {
+        const o = poseInHand(st.prop, hp, Hcur, run.offset);
+        const tip = st.prop.tool.tip.clone().applyQuaternion(o.quaternion).add(o.position);
+        const axis = st.prop.tool.axis.clone().applyQuaternion(o.quaternion);
+        const want = target.clone().sub(tip).normalize();
+        Hcur = new THREE.Quaternion().setFromUnitVectors(axis, want).multiply(Hcur);
+      }
+      orientHand(a, s, Hbase.slerp(Hcur, clamp01(e)));
+      continue;
+    }
+    if (wanted) orientHand(a, s, Hc.clone().slerp(wanted, clamp01(e)));
+  }
+  a.frame.updateMatrixWorld(true);
 }
 
 function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean, flat: boolean): void {
@@ -425,66 +836,133 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   }
   a.frame.updateMatrixWorld(true);
 
-  // 7. Arms: hanging (following the torso), or reaching with the palm to a point short of a target.
+  // 7. Arms: hanging (following the torso; out from the thigh round a held object), or reaching
+  //    with the palm to a point short of a target, the fist to a grip, or a held object to its place;
+  //    then the hand turned to the grip, the place, or to aim what it holds.
   const torsoYaw = twist * TURN_SHARE.slice(0, 4).reduce((s, [, w]) => s + w, 0);
   for (const s of SIDES) {
     // The wrist's rest offset from the shoulder, turned with the torso and the body.
-    const local = armRestOffset(a, s).applyAxisAngle(new THREE.Vector3(0, 1, 0), torsoYaw);
+    const local = armRestOffset(a, s);
+    const held = gripOf(c.spec.id, s, t);
+    if (held) local.x += (s === 'left' ? 1 : -1) * held.prop.halfWidth * held.weight;
+    local.applyAxisAngle(new THREE.Vector3(0, 1, 0), torsoYaw);
     const rest = toWorld(a, local).sub(toWorld(a, new THREE.Vector3()));
     if (life) rest.addScaledVector(bodyUp(a), ARM_BREATH * Math.sin(breathT));
-    const reaches = c.dirs.filter((r) => r.direction.kind === 'reach' && r.direction.side === s);
     let w = 0;
     let goal: THREE.Vector3 | undefined;
     let palm: THREE.Vector3 | undefined;
-    for (const r of reaches) {
+    let effector: (out: THREE.Vector3) => THREE.Vector3 = (out) => (a.hands[s] ? a.hands[s]!.palmCenter(out) : a.arms[s].hand.getWorldPosition(out));
+    const turns: { r: Resolved; e: number }[] = [];
+    for (const r of c.dirs) {
+      const d = r.direction;
+      if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'aim') || d.side !== s) continue;
       const e = env(r, t, flat);
       if (e === 0) continue;
-      const d = r.direction as Extract<Direction, { kind: 'reach' }>;
-      const target = pointOf(cast, c.spec, d.at);
+      if (d.kind === 'aim') { turns.push({ r, e }); continue; }
       const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
-      const g = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
+      let g: THREE.Vector3;
+      let target: THREE.Vector3;
+      let palmKind = d.kind === 'put' ? 'in' : d.palm ?? (d.kind === 'take' ? 'in' : 'toward');
+      if (d.kind === 'reach') {
+        target = pointOf(cast, c.spec, d.at);
+        g = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
+        effector = (out) => (a.hands[s] ? a.hands[s]!.palmCenter(out) : a.arms[s].hand.getWorldPosition(out));
+      } else if (d.kind === 'take') {
+        target = takeGoal(r).point;
+        g = target.clone();
+        const radius = stage.props.get(d.object)!.prop.grip!.radius;
+        effector = (out) => (a.hands[s] ? a.hands[s]!.fistPoint(radius, out) : a.arms[s].hand.getWorldPosition(out));
+        turns.push({ r, e });
+      } else {
+        target = putGoal(cast, c, r).point;
+        g = target.clone();
+        const run = holdingRun(r);
+        if (run?.offset) {
+          const offset = run.offset;
+          const held = stage.props.get(d.object)!.prop;
+          effector = (out) => out.copy(heldPose(c, s, held, offset).position);
+          turns.push({ r, e });
+        }
+        palmKind = 'in';
+      }
       goal = goal ? goal.lerp(g, clamp01(e)) : g;
       w = goal === g ? e : Math.max(w, e);
       const up = bodyUp(a);
       const towards = target.clone().sub(shoulder).normalize();
-      const p = d.palm === 'up' ? up : d.palm === 'down' ? up.clone().negate() : d.palm === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
+      const p = palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
       palm = palm ? palm.lerp(p, clamp01(e)).normalize() : p.clone();
     }
     hangArm(a, s, rest);
     a.frame.updateMatrixWorld(true);
     const hand = a.hands[s];
     if (goal && w !== 0) {
-      const restPalm = hand ? hand.palmCenter(new THREE.Vector3()) : a.arms[s].hand.getWorldPosition(new THREE.Vector3());
+      const restAt = effector(new THREE.Vector3());
       const restNormal = hand ? hand.palmNormal(new THREE.Vector3()) : bodyUp(a).negate();
-      const point = restPalm.clone().lerp(goal, w);
+      const point = restAt.clone().lerp(goal, w);
       // A little outward and forward on the way, so the hand clears the thigh.
       const arc = Math.sin(Math.PI * clamp01(w));
       if (!flat) point.addScaledVector(new THREE.Vector3(s === 'left' ? 1 : -1, 0, 0.6).applyQuaternion(bodyQ), 0.04 * arc);
       const toward = restNormal.clone().lerp(palm!, clamp01(w)).normalize();
-      const wrist = point.clone();
+      const wrist = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).add(point.clone().sub(restAt));
       // The elbow turns from hanging (back) to the rig's reaching bend (out) as the arm lifts.
       const elbowHint = restElbowHint(a, s).lerp(a.arms[s].elbowHintLocal, clamp01(w)).normalize();
       const at = new THREE.Vector3();
-      for (let i = 0; i < 6; i += 1) {
-        solveArm(a, s, wrist, { palmToward: toward, wristBend: flat ? 0 : 0.35 * clamp01(w), elbowHint });
-        a.frame.updateMatrixWorld(true);
-        if (hand) hand.palmCenter(at); else a.arms[s].hand.getWorldPosition(at);
-        const err = point.clone().sub(at);
-        if (err.length() < 5e-4) break;
-        wrist.add(err);
+      // The elbow swung about the shoulder-to-hand line (the upper arm's rotation), in the avatar's frame.
+      const solveWith = (swivel: number, withTurns: readonly { r: Resolved; e: number }[]): void => {
+        const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
+        const line = point.clone().sub(shoulder).normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
+        const hint = elbowHint.clone().applyAxisAngle(line, swivel * DEG);
+        const wr = wrist.clone();
+        for (let i = 0; i < 8; i += 1) {
+          solveArm(a, s, wr, { palmToward: toward, wristBend: flat ? 0 : 0.35 * clamp01(w), elbowHint: hint });
+          a.frame.updateMatrixWorld(true);
+          turnHand(cast, c, s, withTurns);
+          effector(at);
+          const err = point.clone().sub(at);
+          if (err.length() < 5e-4) break;
+          wr.add(err);
+        }
+      };
+      // A turn the wrist cannot make alone (an aim, a grip axis, an object set upright)
+      // swings the elbow too, as a pour does: the swing is chosen once per direction,
+      // at its full turn, and eased in with it.
+      let swivel = 0;
+      const lead = turns.find((x) => x.r.direction.kind === 'aim') ?? turns[0];
+      if (lead) {
+        let chosen = stage.swivels.get(lead.r.direction);
+        if (chosen === undefined) {
+          const full = turns.map((x) => (x === lead ? { r: x.r, e: 1 } : x));
+          let best = { swivel: 0, error: Infinity };
+          for (const candidate of [0, 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90]) {
+            solveWith(candidate, full);
+            const error = turnError(cast, c, s, lead.r);
+            if (error < best.error - 0.5) best = { swivel: candidate, error };
+          }
+          chosen = best.swivel;
+          stage.swivels.set(lead.r.direction, chosen);
+        }
+        swivel = chosen * clamp01(lead.e);
       }
-    }
+      solveWith(swivel, turns);
+    } else if (turns.length) turnHand(cast, c, s, turns);
   }
 
-  // A flat take stops here: bind fingers, a still face, eyes fixed in the head.
-  if (flat) return;
+  // A flat take stops here: bind fingers, a still face, eyes fixed in the head (held objects still follow the hands).
+  if (flat) { moveHeld(cast, c, t); return; }
 
   // 8. Hands: relaxed, opened by a reach, shaped by hand directions (fingers arrive one after another).
   for (const s of SIDES) {
     const hand = a.hands[s];
     if (!hand) continue;
-    const reachW = Math.max(0, ...c.dirs.filter((r) => r.direction.kind === 'reach' && r.direction.side === s).map((r) => env(r, t, false)));
+    const reachW = Math.max(0, ...c.dirs.filter((r) => (r.direction.kind === 'reach' || r.direction.kind === 'take' || r.direction.kind === 'put') && r.direction.side === s).map((r) => env(r, t, false)));
     let pose: HandPose = blendPose(HAND_SHAPES.relaxed, HAND_SHAPES.reach, clamp01(reachW) * 0.8);
+    // Closed round what it holds: tighter round a thin handle, looser round a thick one.
+    const held = gripOf(c.spec.id, s, t);
+    if (held) {
+      const k = Math.min(1.3, Math.max(0.6, 1 + (0.015 - held.prop.grip!.radius) * 12));
+      const grip = { curl: Object.fromEntries(FINGERS.map((f) => [f, Math.min(1, HAND_SHAPES.grip.curl[f] * k)])) as Record<FingerName, number>, spread: HAND_SHAPES.grip.spread };
+      pose = blendPose(pose, grip, held.weight);
+    }
     for (const r of c.dirs) {
       const d = r.direction;
       if (d.kind !== 'hand' || (d.side !== s && d.side !== 'both')) continue;
@@ -498,12 +976,14 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     }
     if (life) {
       const curl = { ...pose.curl } as Record<FingerName, number>;
-      FINGERS.forEach((finger, i) => { curl[finger] += 0.025 * Math.sin((2 * Math.PI * t) / (2.7 + i * 0.37) + phase + i * 1.3) + 0.012 * Math.sin((2 * Math.PI * t) / 1.1 + i); });
+      const still = 1 - 0.7 * (held?.weight ?? 0);
+      FINGERS.forEach((finger, i) => { curl[finger] += still * 0.025 * Math.sin((2 * Math.PI * t) / (2.7 + i * 0.37) + phase + i * 1.3) + still * 0.012 * Math.sin((2 * Math.PI * t) / 1.1 + i); });
       pose = { curl, spread: pose.spread };
     }
     hand.apply(pose);
   }
   a.frame.updateMatrixWorld(true);
+  moveHeld(cast, c, t);
 
   // 9. Face: expressions summed, then blinks (always, and on a big look shift), then gaze.
   const weights: FaceWeights = {};
@@ -549,12 +1029,16 @@ function leanFor(cast: Cast[], c: Cast, t: number, hipsLocal: THREE.Vector3): { 
   let best: { dir: THREE.Vector3; need: number; r: Resolved; e: number } | undefined;
   for (const r of c.dirs) {
     const d = r.direction;
-    if (d.kind !== 'reach') continue;
+    if (d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put') continue;
     const e = clamp01(envelope(t, r));
     if (e === 0) continue;
-    const target = pointOf(cast, c.spec, d.at);
     const shoulder = toWorld(a, a.bind.get(`${d.side}UpperArm`)!.rootPosition.clone().add(hipsLocal));
-    const goal = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
+    let goal: THREE.Vector3;
+    if (d.kind === 'reach') {
+      const target = pointOf(cast, c.spec, d.at);
+      goal = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
+    } else if (d.kind === 'take') goal = takeGoal(r).point.clone();
+    else goal = putGoal(cast, c, r).point.clone().add(new THREE.Vector3(0, stage.props.get(d.object)!.prop.grip!.center.y, 0));
     const arm = a.arms[d.side];
     const over = goal.distanceTo(shoulder) - (COMFORT_REACH * (arm.upperLength + arm.lowerLength) + PALM_OFFSET);
     if (over <= 0) { if (e > 0.9 && !c.shortfall.has(r)) c.shortfall.set(r, 0); continue; }

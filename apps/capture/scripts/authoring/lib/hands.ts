@@ -175,6 +175,20 @@ export class HandRig {
     return out.addScaledVector(this.palmNormal(v2), 0.1 * this.length);
   }
 
+  /** The palm's frame in the world: +X from the little finger's knuckle toward the index's (the thumb side), +Y wrist to middle knuckle, +Z their cross. */
+  palmFrame(out: THREE.Quaternion): THREE.Quaternion {
+    const at = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3());
+    return palmFrameQuaternion(at(this.hand), at(this.knuckles.index), at(this.knuckles.middle), at(this.knuckles.little), out) ?? out.identity();
+  }
+
+  /** Where a closed hand holds a handle of `radius`: in front of the palm, under the base of the fingers. */
+  fistPoint(radius: number, out: THREE.Vector3): THREE.Vector3 {
+    const wrist = this.hand.getWorldPosition(v1);
+    const knuckle = this.knuckles.middle.getWorldPosition(v2);
+    out.lerpVectors(wrist, knuckle, 0.95);
+    return out.addScaledVector(this.palmNormal(v2), 0.08 * this.length + radius);
+  }
+
   palmNormal(out: THREE.Vector3): THREE.Vector3 {
     const at = (o: THREE.Object3D, v: THREE.Vector3) => o.getWorldPosition(v);
     const q = palmFrameQuaternion(at(this.hand, new THREE.Vector3()), at(this.knuckles.index, new THREE.Vector3()), at(this.knuckles.middle, new THREE.Vector3()), at(this.knuckles.little, new THREE.Vector3()), q2);
