@@ -6,9 +6,10 @@ re-scoped 2026-11-14 to a creation system. Slice 1b built and verified
 (2026-11-14): the review loop, three defaults, face numbers and a second
 piece, which reads only as "watering a plant" after one revision. Its gap
 log (props, sets, publishing, gestures) now leads "Not covered yet". Slice 1c
-(props and sets in the beat sheet) built and verified (2026-11-14), not on
-`main` until the user answers open decision 4; neither slice 1c build is published (the owner published the slice 1b watering take). The house avatar (slice 2) stays
-gated; the face decision below is the user's  
+(props and sets in the beat sheet) built and verified (2026-11-14), on
+`main` 2026-11-15 after the user approved open decision 4; neither slice 1c
+build is published (the owner published the slice 1b watering take). The
+house avatar (slice 2) stays gated.  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -739,7 +740,7 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
 
    **Decided on 2026-11-14:** A. Props, sets and tool use are being built
    in their own session; slice 2 stays gated.
-4. **Slice 1c's two product calls** (building with, awaiting the user):
+4. **Slice 1c's two product calls:**
    - **(a)** Sheet objects are written as recorded objects
      (`RecordedObject` nodes in `HOLOIM_objects` v0), so an authored take
      and a captured take show props the same way, beside the body, as
@@ -748,8 +749,9 @@ this brief. Not owned here: `apps/capture/src/**`, the viewer and the API.
      title, author, licence). A local GLB must name one, or be marked
      `"own"`. The build refuses one that does neither.
 
-   Slice 1c is built this way. It does not merge to `main` until the
-   user has answered.
+   Slice 1c is built this way.
+
+   **Decided on 2026-11-15:** yes to both ("Sure").
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.
@@ -1122,9 +1124,9 @@ the neutral title "Take".
   - an absolute local path could be published.
 
   Still open: no check proves the wrist limits or their precedence.
-- **Not published.** Neither slice 1c build was uploaded (the published watering piece is the slice 1b take). Open decision 4 (recorded
-  objects, required credit) waits for the user, and nothing merges before
-  that answer.
+- **Not published.** Neither slice 1c build was uploaded (the published
+  watering piece is the slice 1b take). The user approved open decision 4
+  (recorded objects, required credit) on 2026-11-15.
 
 ## Physical-device limits
 
