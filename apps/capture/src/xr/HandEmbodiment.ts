@@ -229,7 +229,8 @@ export class HandEmbodiment {
   private resolveTrackedHandWorldQuaternion(side: VrHandSide, chain: ArmIkChain, out: THREE.Quaternion): THREE.Quaternion | undefined {
     if (!chain.palmInHand) return undefined;
     const source = this.tracking.getHandPoseSource(side);
-    if (source !== 'xr-hand' && source !== 'mock') return undefined;
+    // A held camera hand keeps its joints through the hold; held XR and mock hands have none, so they fall through below.
+    if (source !== 'xr-hand' && source !== 'mock' && source !== 'camera-hand' && source !== 'held') return undefined;
     const [wrist, index, middle, pinky] = this.palmJointScratch;
     if (
       !this.tracking.getTrackedHandJointPosition(side, 'wrist', wrist) ||

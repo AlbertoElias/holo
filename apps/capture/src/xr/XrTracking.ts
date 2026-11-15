@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 import { TRACKED_HAND_JOINT_NAMES, type HandPoseSource, type TrackedHandJointName, type VrHandSide } from '../types/contracts';
+import { BODYCAM_ARM_RELEASE_SEC, BODYCAM_ARM_RETURN_SEC, BODYCAM_HAND_HOLD_SEC, BODYCAM_REST_EASE_SEC, BodycamSource } from '../bodycam/BodycamSource';
+import type { BodyHand } from '../bodycam/convert';
 import { type MockHand, MockVrPose } from './MockVrPose';
+import { palmFrameQuaternion } from './palmFrame';
 
 const SIDES = ['left', 'right'] as const;
 
@@ -82,6 +85,8 @@ export interface XrHeadPose {
  */
 export class XrTracking {
   readonly mock: MockVrPose;
+  /** The camera tracker (`?input=camera`): a hand source beside XR and the mock that never sets VR embodiment. */
+  readonly camera: BodycamSource;
   private readonly slots: Record<SlotKind, InputSlot[]>;
   private readonly handTargets: Record<VrHandSide, HandTarget> = { left: createHandTarget(), right: createHandTarget() };
   private readonly joints: Record<VrHandSide, Record<TrackedHandJointName, TrackedJoint>> = { left: createJointMap(), right: createJointMap() };
@@ -90,6 +95,16 @@ export class XrTracking {
   // Which input produced each hand's pose this frame.
   private readonly handPoseSource: Record<VrHandSide, HandPoseSource> = { left: 'none', right: 'none' };
   private cameraRig: THREE.Group | null = null;
+  // Seconds each hand has gone without camera data.
+  private readonly cameraUnseenSec: Record<VrHandSide, number> = { left: 0, right: 0 };
+  // A camera hand that returns while its arm still holds eases from the held pose to the tracked one over
+  // BODYCAM_ARM_RETURN_SEC; without it the wrist jumps there in one frame (35 cm on the aim clip).
+  private readonly cameraReturn: Record<VrHandSide, { sec: number; offset: THREE.Vector3; from: THREE.Quaternion }> = {
+    left: { sec: 0, offset: new THREE.Vector3(), from: new THREE.Quaternion() },
+    right: { sec: 0, offset: new THREE.Vector3(), from: new THREE.Quaternion() }
+  };
+  /** How much of each camera arm's IK pose shows (1), against the idle animation's (0): ramps up on a return, down on a release. */
+  readonly cameraArmWeight: Record<VrHandSide, number> = { left: 0, right: 0 };
 
   private wasXrPresenting = false;
   private session: XRSession | null = null;
@@ -131,8 +146,9 @@ export class XrTracking {
   private readonly tmpQuat = new THREE.Quaternion();
   private readonly tmpQuatB = new THREE.Quaternion();
 
-  constructor(private readonly renderer: THREE.WebGLRenderer, mockVrEnabled: boolean, rotation: TrackingRotationOptions) {
+  constructor(private readonly renderer: THREE.WebGLRenderer, mockVrEnabled: boolean, rotation: TrackingRotationOptions, cameraInput = false) {
     this.mock = new MockVrPose(mockVrEnabled);
+    this.camera = new BodycamSource(cameraInput);
     const xr = renderer.xr;
     const objectFor: Record<SlotKind, (index: number) => THREE.Group> = {
       grip: (index) => xr.getControllerGrip(index),
@@ -185,6 +201,8 @@ export class XrTracking {
     const exited = this.wasXrPresenting && !isXrPresenting;
     this.wasXrPresenting = isXrPresenting;
     if (entered) {
+      // A headset has its own hands; the camera source lets go.
+      this.camera.release();
       this.session = this.renderer.xr.getSession();
       this.session?.addEventListener('visibilitychange', this.onTrackingSpaceChange);
       this.resetTrackingState();
@@ -206,6 +224,11 @@ export class XrTracking {
 
   isVrEmbodimentActive(): boolean {
     return this.renderer.xr.isPresenting || this.mock.enabled;
+  }
+
+  /** The camera tracker drives the hands: armed by a frame, on a page that opted in, with no XR session or mock pose. Not VR embodiment. */
+  isCameraDriven(): boolean {
+    return this.camera.isActive() && !this.renderer.xr.isPresenting && !this.mock.enabled;
   }
 
   isMockVrOnly(): boolean {
@@ -358,6 +381,11 @@ export class XrTracking {
           this.holdLastValidPose(side, this.tmpEyeAnchor);
         }
       }
+      return;
+    }
+
+    if (this.isCameraDriven()) {
+      this.updateCameraHandTargets(getEyeAnchorWorld);
       return;
     }
 
@@ -520,6 +548,114 @@ export class XrTracking {
     return count;
   }
 
+  /**
+   * Camera hands: the anchor is the avatar's shoulder midpoint and body-frame
+   * points turn with the body's yaw. A hand with no fresh data holds its last
+   * pose for BODYCAM_HAND_HOLD_SEC, then eases to a hanging rest pose and stays
+   * there; unlike the other branches, a camera hand never holds forever.
+   */
+  private updateCameraHandTargets(getAnchorWorld: (out: THREE.Vector3) => THREE.Vector3): void {
+    const camera = this.camera;
+    getAnchorWorld(this.tmpEyeAnchor);
+    for (const side of SIDES) {
+      const target = this.handTargets[side];
+      const data = camera.current?.hands[side];
+      if (data) {
+        const back = this.cameraUnseenSec[side] > 0 && target.poseValid;
+        const ret = this.cameraReturn[side];
+        if (back) {
+          ret.offset.copy(target.targetPosition);
+          ret.from.copy(target.targetQuaternion);
+        }
+        this.cameraUnseenSec[side] = 0;
+        this.cameraArmWeight[side] = Math.min(1, this.cameraArmWeight[side] + camera.dtSec / BODYCAM_ARM_RETURN_SEC);
+        this.clearTrackedHandJoints(side);
+        this.setCameraHand(side, data);
+        this.updateLowFingerJointWarning(side, true);
+        if (back) {
+          ret.offset.sub(target.targetPosition);
+          ret.sec = BODYCAM_ARM_RETURN_SEC + camera.dtSec;
+        }
+        this.easeCameraReturn(side, camera.dtSec);
+        continue;
+      }
+      this.updateLowFingerJointWarning(side, false);
+      if (!target.hasLastValidPose) {
+        this.clearTrackedHandJoints(side);
+        target.poseValid = false;
+        this.handPoseSource[side] = 'none';
+        this.cameraArmWeight[side] = 0;
+        continue;
+      }
+      this.cameraUnseenSec[side] += camera.dtSec;
+      const lost = this.cameraUnseenSec[side] - BODYCAM_HAND_HOLD_SEC;
+      if (lost <= 0) {
+        // Joints stay as they were, so the fingers hold with the wrist; a return in progress keeps easing, since
+        // the camera often drops a hand for single frames.
+        this.holdLastValidPose(side, this.tmpEyeAnchor);
+        this.easeCameraReturn(side, camera.dtSec);
+        continue;
+      }
+      this.cameraReturn[side].sec = 0;
+      this.clearTrackedHandJoints(side);
+      const eased = THREE.MathUtils.smoothstep(lost / BODYCAM_REST_EASE_SEC, 0, 1);
+      if (lost >= BODYCAM_REST_EASE_SEC) {
+        // Rested: the arm hands back to the idle animation over a moment instead of holding a rest target.
+        this.cameraArmWeight[side] = Math.max(0, this.cameraArmWeight[side] - camera.dtSec / BODYCAM_ARM_RELEASE_SEC);
+        if (this.cameraArmWeight[side] <= 0) {
+          target.poseValid = false;
+          this.handPoseSource[side] = 'none';
+          continue;
+        }
+      }
+      const width = camera.shoulderWidth;
+      // Hanging at the side: a little outside the shoulder, about an arm below it.
+      this.tmpVecB.set((side === 'left' ? -0.55 : 0.55) * width, -1.45 * width, -0.05 * width).applyAxisAngle(WORLD_UP, camera.worldYaw);
+      this.tmpVecA.copy(target.lastValidOffsetFromEye).lerp(this.tmpVecB, eased).add(this.tmpEyeAnchor);
+      target.targetPosition.copy(this.tmpVecA);
+      target.targetQuaternion.copy(target.lastValidQuaternion);
+      target.poseValid = true;
+      this.handPoseSource[side] = 'held';
+    }
+  }
+
+  /** Offsets this frame's camera hand target toward where the arm was when the hand returned, fading over the return. */
+  private easeCameraReturn(side: VrHandSide, dtSec: number): void {
+    const ret = this.cameraReturn[side];
+    ret.sec = Math.max(0, ret.sec - dtSec);
+    if (ret.sec <= 0) return;
+    const target = this.handTargets[side];
+    const k = THREE.MathUtils.smoothstep(ret.sec / BODYCAM_ARM_RETURN_SEC, 0, 1);
+    target.targetPosition.addScaledVector(ret.offset, k);
+    target.targetQuaternion.slerp(ret.from, k);
+  }
+
+  private setCameraHand(side: VrHandSide, data: BodyHand): void {
+    const yaw = this.camera.worldYaw;
+    const toWorld = (point: readonly [number, number, number], out: THREE.Vector3): THREE.Vector3 =>
+      out.set(point[0], point[1], point[2]).applyAxisAngle(WORLD_UP, yaw).add(this.tmpEyeAnchor);
+    for (const jointName of TRACKED_HAND_JOINT_NAMES) {
+      const point = data.joints[jointName];
+      if (!point) continue;
+      const joint = this.joints[side][jointName];
+      toWorld(point, joint.positionWorld);
+      joint.positionTracked = isFiniteVector3Like(joint.positionWorld);
+    }
+    toWorld(data.wrist, this.tmpVecA);
+    const joints = this.joints[side];
+    // The wrist's rotation target is the palm frame: with palm joints the avatar's palm is aligned to it exactly.
+    const palm = palmFrameQuaternion(
+      joints.wrist.positionWorld,
+      joints['index-finger-phalanx-proximal'].positionWorld,
+      joints['middle-finger-phalanx-proximal'].positionWorld,
+      joints['pinky-finger-phalanx-proximal'].positionWorld,
+      this.tmpQuat
+    );
+    if (!palm) this.tmpQuat.setFromAxisAngle(WORLD_UP, yaw);
+    setTrackedPose(this.handTargets[side], this.tmpVecA, this.tmpQuat, this.tmpEyeAnchor);
+    this.handPoseSource[side] = 'camera-hand';
+  }
+
   // A tracked pose relative to the tracked head, placed at the eye anchor.
   private setPoseFromHead(target: HandTarget, worldPosition: THREE.Vector3, worldQuaternion: THREE.Quaternion): void {
     this.tmpVecB.copy(worldPosition).sub(this.tmpXrHeadWorld).add(this.tmpEyeAnchor);
@@ -547,6 +683,9 @@ export class XrTracking {
       this.clearTrackedHandJoints(side);
       this.lowFingerJointFrames[side] = 0;
       this.lowFingerJointWarned[side] = false;
+      this.cameraUnseenSec[side] = 0;
+      this.cameraArmWeight[side] = 0;
+      this.cameraReturn[side].sec = 0;
     }
     // Input sources stay: their 'connected' events, which carry handedness,
     // fire before entry and do not fire again for the session.

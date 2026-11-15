@@ -26,8 +26,9 @@ export class RecordingSystem extends createSystem() {
       ? c.headsetHolds.update({ timeSec: c.frame.elapsedSec, presenting: c.frame.xrPresenting && !c.tracking.mock.enabled, recording: c.recording.recorder.isEnabled(), camera: c.stage.xrCamera })
       : c.headsetHolds.update({ timeSec: c.frame.elapsedSec, presenting: false, recording: false, camera: c.stage.xrCamera });
     // What drove each hand, unmasked by chrome: a hand poking chrome still moved as tracked.
-    const handSources = c.frame.vrActive ? { left: c.tracking.getHandPoseSource('left'), right: c.tracking.getHandPoseSource('right') } : undefined;
-    c.recording.recorder.capture(c.frame.elapsedSec, c.avatar.avatar, c.avatar.avatarRoot, activeCamera(c), this.pointingHands(), c.objects.registry.eventObjects(), c.objects.authoringFrame(), held, handSources);
+    const handSources = c.frame.vrActive || c.tracking.isCameraDriven() ? { left: c.tracking.getHandPoseSource('left'), right: c.tracking.getHandPoseSource('right') } : undefined;
+    // A camera avatar's view camera (in front of the avatar, for the author's mirror) is not part of the take.
+    c.recording.recorder.capture(c.frame.elapsedSec, c.avatar.avatar, c.avatar.avatarRoot, c.tracking.isCameraDriven() ? undefined : activeCamera(c), this.pointingHands(), c.objects.registry.eventObjects(), c.objects.authoringFrame(), held, handSources);
   }
 
   // A finger reaching for the wrist's record glyph is pressing chrome, and a
