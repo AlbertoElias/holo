@@ -167,7 +167,10 @@ it from the item below instead of duplicating its status here.
   pour over the pot) are in the brief. Life as events (slice 1d) on `main` 2026-11-17: fresh readers call a
   hold facing the viewer alive, two people in profile still mostly frozen.
   The owner watched the before/after video on 2026-11-17: "its a lot
-  better". Acceptance is still with the owner (the lead has asked); the
+  better" and "theres something in the mouth and eyebrows thats missing,
+  but almost there", so life is not accepted yet. Idle life moves only the
+  eyes and blinks; the face options are open decision 6 in the brief
+  (recommended: the mouth now, the brows wired for the slice 2 base). The
   profile-hold follow-up stays open.
   The owner lifted the house-avatar hold on 2026-11-17 ("we also need to
   figure out the avatar flow"): slice 2 is now the avatar flow, an 80/20

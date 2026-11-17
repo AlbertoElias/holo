@@ -645,9 +645,11 @@ re-drawn around the beats (breaks revision locality).
 resettle and the chest turn for profile views) and landed on `main`. Fresh
 readers call the front-facing holds alive and the profile pair still mostly
 frozen; two designs failed there, so tuning stopped (evidence: slice 1d
-below). The owner watched the before/after video on 2026-11-17: "its a lot
-better". They have not said whether that closes the item, so it stays
-**open**; the lead has asked them.
+below). The owner watched the before/after video on 2026-11-17:
+"its a lot better" and "theres something in the mouth and eyebrows thats
+missing, but almost there". **Not accepted yet:** idle life drives no
+mouth or brow movement today; the options are open decision 6 (evidence:
+"Face in idle life" in slice 1d's evidence).
 
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; not started)
 
@@ -1060,9 +1062,10 @@ and 7 (its evidence, below); the second 1c piece added item 13.
     reads as alive to fresh readers (rest: "mostly frozen" before, "a
     living person" after), but two people in profile through a long held
     ending still read as mostly frozen (defaults, after two designs). The
-    owner judged the slice 1d video on 2026-11-17: "its a lot better";
-    whether that closes this item is still with the owner (the lead has
-    asked). Authors give a profile hold a beat for now (open).
+    owner judged the slice 1d video on 2026-11-17: "its a lot better" and
+    "theres something in the mouth and eyebrows thats missing, but almost
+    there", so life is not accepted yet; the face part is open decision 6.
+    Authors give a profile hold a beat for now (open).
 
 13. **A far object shrinks the performer.** The card frames every recorded
     object, so each widens the dome, and nothing caps it in an authoring
@@ -1271,6 +1274,41 @@ audition scripts, the house base's source and its exported avatar files
    **Decided on 2026-11-17:** every recommendation, (a) to (h) ("Approve
    all"). Next: 2a (the bar) in its own session, and the owner passes the
    Astra request in slice 2 to Astra (2b).
+6. **The face in idle life** (asked 2026-11-17, after the owner's judgement
+   of the slice 1d video: "theres something in the mouth and eyebrows
+   thats missing, but almost there"; numbers in slice 1d's evidence, "Face
+   in idle life"). Today idle life moves only the eyes and the blinks. The
+   options are:
+   - **(A) The mouth now, the brows wired for the base.** Add a face layer
+     to idle life, tied to the events it already has, so it stays seeded,
+     masked and local to a revision:
+     - the lips part a little on the in-breath and through a sigh
+       (`jawOpen`, `mouthFunnel`);
+     - the lips press or roll as a weight shift settles;
+     - a corner tugs now and then;
+     - the brows lift with an upward glance, and the inner brows lift
+       through a sigh.
+
+     Each moves at a fifth to a third of its shape, and a directed
+     `expression` beat masks it, as a held hand masks the fidget. On the
+     stock avatar the mouth should read in the close view and AR, while
+     the brows barely move; the base inherits the brows when it meets the
+     bars. Proof is the same three sheets, with readers on both the close
+     view and the card, and a new video for the owner. The change is
+     small and touches only `life.ts` and the face step in `direct.ts`,
+     with no avatar change.
+   - **(B) Wait for the base.** Build the face part of life with slice 2,
+     once a base meets the bars in 2a. Nothing changes now, and life stays
+     "almost there" until then.
+   - **(C) The mouth now, and make the stock brows readable.** Take the
+     glasses off the stock avatar and deepen its brow shapes to 8 mm. That
+     is avatar work slice 2 owns (glasses become a trait-card choice), and
+     it changes the avatar earlier takes used.
+
+   **Recommended: (A).** It answers the mouth now on the avatar the owner
+   watched, and puts the brows where the base will make them readable,
+   with no avatar work. Caveat: on the phone card itself an idle mouth
+   stays near a pixel, so (A) shows in the close view and AR first.
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.
@@ -1713,8 +1751,58 @@ span plus 0.4 s, and the schedule comes from the seed alone.
 
 **Video.** A before/after H.264 video of the three holds (kept out of the
 repository) went to the owner on 2026-11-17. **Owner's judgement
-(2026-11-17):** "its a lot better". Whether that accepts the item is still
-the owner's call (the lead has asked them), so item 12 stays open.
+(2026-11-17):** "its a lot better" and "theres something in the mouth and
+eyebrows thats missing, but almost there". Life is not accepted yet; item
+12 stays open.
+
+**Face in idle life** (asked after the owner's second line, 2026-11-17;
+nothing built). What idle life drives in the face today:
+
+- **Blinks:** `LivenessFace`'s seeded blinks, plus one on a directed look
+  that turns the head (`head` over 0.3) and one on a glance whose head
+  turn passes 12° (`GLANCE_BLINK_DEG`).
+- **Eyes:** saccades and fixational drift around straight ahead, shrunk
+  while the eyes hold a target; on a glance the eyes lead the head. Gaze
+  is by bones on the stock avatar.
+- **Mouth: nothing.** `LivenessFace`'s jaw follows the voice level, which
+  is 0 in an authored take, and `direct.ts` takes only the blink from it.
+  The mouth moves only in a directed `expression` beat.
+- **Brows, and lids beyond the blink: nothing.**
+
+How far each face channel moves the stock avatar's mesh at full strength
+(`avatar-audition.ts` on `public/gltf/models/avatar.glb`, 1.736 m,
+2026-11-17), against decision 5c's bars, and what that is in pixels: on
+the phone card at 0.17 device px per mm (the body is about 295 device px
+for 1736 mm), and in the review's close view at about 0.65 px per mm
+(estimated from a frame; about 0.4 after the side-by-side video's
+scaling, which is what the owner watched):
+
+| Channel (stock) | mm | Bar (5c) | Card px | Close px |
+|---|---|---|---|---|
+| `browInnerUp` 4.5, `browOuterUp*` 4.0, `browDown*` 3.8 | 3.8–4.5 | 8, and 90% visible: **fail** (glasses cover the brows) | 0.6–0.8 | 2.5–2.9, behind the rim |
+| `eyeBlink*` | 10.8–10.9 | closes the lid: pass | 1.9 | 7.1 |
+| `eyeWide*` 6.7, `eyeSquint*` 5.2–6.0 | 5.2–6.7 | 8: **fail** | 0.9–1.1 | 3.4–4.4 |
+| `mouthSmile*` 15.7, `mouthFrown*` 10.5, `mouthStretch*` 4.2 | 4.2–15.7 | 14: smile passes, frown and stretch **fail** | 0.7–2.7 | 2.7–10.2 |
+| `jawOpen` | 11.5 | 15: **fail** | 2.0 | 7.5 |
+| `mouthPucker` 9.9, `mouthFunnel` 8.6, `mouthRoll*` 3.0, `mouthPress*` 1.3 | 1.3–9.9 | 4: pucker and funnel pass, roll and press **fail** | 0.2–1.7 | 0.8–6.4 |
+
+Idle face motion would use a fifth to a third of a shape, so:
+
+- **On the card, on the stock avatar,** no idle mouth or brow movement can
+  be seen: a third of the smile is under 1 device px, and the brows sit
+  behind the glasses.
+- **In the close view, on a larger screen or walking up to an AR
+  hologram** (the close view is where the owner saw the face), the stock
+  mouth can carry it: a third of the smile, `jawOpen`, `mouthPucker` or
+  `mouthFunnel` moves 2–3.5 px in the close view. The stock brows cannot:
+  they are under the bar and behind the rim.
+- **On the slice 2 base** (brows at least 8 mm and 90% visible, a face box
+  of at least 40 device px), a brow at full is about 1.7 device px on the
+  card and a third of it about 0.6 px. So idle brows read on the base in
+  the close view and AR, and on the card only as an occasional larger
+  event (a brow flash), not as a constant layer.
+
+The options are open decision 6.
 
 **Follow-ups.** A directed `weight` direction rolls the pelvis so the free
 hip rises (sign opposite to life's); a profile hold needs a beat or a different idea
