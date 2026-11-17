@@ -136,6 +136,14 @@ Known edges: the share is compared on unrimmed fits, and in the floor branch
 the result ignores a lifted rim's bend. A far object on a take whose rim
 lifts would frame her by the cast's centre, not the bent frame.
 
+The verifier found one more, probed in math only (no e2e): an object far
+toward the viewer and off to one side (about 3 m across and 10 m toward, or
+5 m and 15 m) puts the pulled-in camera inside the dome fitted to it, and the
+dome then fades on the card as it does when stepping inside. Directly forward
+or to the side it stays fully drawn; so does the 3 m toward-the-viewer case in
+the e2e. Keeping her at 75 % and keeping the eye outside a far dome cannot both
+hold; the owner's floor wins. Not handled.
+
 ## Failure cases considered
 
 | Failure case | Prevention or evidence |
