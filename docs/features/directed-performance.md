@@ -647,9 +647,10 @@ readers call the front-facing holds alive and the profile pair still mostly
 frozen; two designs failed there, so tuning stopped (evidence: slice 1d
 below). The owner watched the before/after video on 2026-11-17:
 "its a lot better" and "theres something in the mouth and eyebrows thats
-missing, but almost there". **Not accepted yet:** idle life drives no
-mouth or brow movement today; the options are open decision 6 (evidence:
-"Face in idle life" in slice 1d's evidence).
+missing, but almost there". The owner chose decision 6 (A) the same day,
+and life now drives the mouth and brows from its events. The close-view
+face video is with the owner. **Not accepted yet** (evidence: "Face in
+idle life" in slice 1d's evidence).
 
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; not started)
 
@@ -1064,7 +1065,8 @@ and 7 (its evidence, below); the second 1c piece added item 13.
     ending still read as mostly frozen (defaults, after two designs). The
     owner judged the slice 1d video on 2026-11-17: "its a lot better" and
     "theres something in the mouth and eyebrows thats missing, but almost
-    there", so life is not accepted yet; the face part is open decision 6.
+    there". The face layer from decision 6 (A) is built and its video is
+    with the owner; life is not accepted until the owner judges it.
     Authors give a profile hold a beat for now (open).
 
 13. **A far object shrinks the performer.** The card frames every recorded
@@ -1761,7 +1763,8 @@ eyebrows thats missing, but almost there". Life is not accepted yet; item
 12 stays open.
 
 **Face in idle life** (asked after the owner's second line, 2026-11-17;
-nothing built). What idle life drives in the face today:
+built the same day as decision 6 (A), below). What idle life drove in the
+face before it:
 
 - **Blinks:** `LivenessFace`'s seeded blinks, plus one on a directed look
   that turns the head (`head` over 0.3) and one on a glance whose head
@@ -1807,7 +1810,50 @@ Idle face motion would use a fifth to a third of a shape, so:
   the close view and AR, and on the card only as an occasional larger
   event (a brow flash), not as a constant layer.
 
-The options are open decision 6.
+The options were open decision 6; the owner chose (A).
+
+**Built (decision 6 (A), 2026-11-17).** `faceAt` in `lib/life.ts` adds a
+face layer under the directed expressions in `direct.ts`. It rides life's
+existing events and draws from two new seeded streams, so the body
+schedule is unchanged:
+
+- **Sigh:** the lips part (`jawOpen` 0.3) and the inner brows lift
+  (`browInnerUp` 0.4) on the in-breath; on the out-breath the jaw closes,
+  the lips round (`mouthFunnel` 0.35) and the brows come down over 0.6 of
+  the out-breath.
+- **Weight shift settling:** at 0.55 of the shift, either a lip press
+  (`mouthPress*` 0.6, `mouthRollLower` 0.45, `mouthPucker` 0.2) or, on
+  some, a one-sided corner tug (`mouthSmile` 0.3 on one side, the other
+  side pressed). Held 0.3–0.8 s, at 0.7–1.0 strength.
+- **Brow flash:** on 60% of glances, the inner and outer brows lift as the
+  glance comes back (life's glances are mostly down or level, so a lift
+  with the glance would not read).
+- **Masks:** a directed `expression` beat owns the face
+  (`MASKED_BY.face`); a directed look masks the flash with the glance.
+
+Locality: the three takes rebuilt with the layer keep every body number
+(jitter 0.65 / 0.69 / 0.95 / 0.71; pops 1.06 / 5.73 / 3.4 / 7.72; B's
+skate 0.69 cm; reach errors 19.6, 0.4, 0.1 and 0.4 mm, all as before).
+Only morph channels change: 15 of 27 face shapes move in the rest hold
+(2 before), 11 and 13 in the defaults pair, 18 in watering (9 before,
+from its directed expressions).
+
+Readers: four fresh readers (Sonnet; rest, the defaults pair and watering
+with the layer, plus rest without it as the control) read the same card
+and close contact sheets as before. Their aliveness readings did not
+change (rest alive, watering alive or mostly alive, the defaults pair
+mostly frozen on the card), and none named a mouth or brow change, with
+or without the layer. A contact-sheet tile shows the face at about 1–3 px
+per mouth movement, which matches the table above. In crops of the close
+view at full size, the lips part, round and press and a corner tugs where
+the schedule says (rest: lips part at 3.1 s, round at 3.4 s, a corner
+tugs at 4.8 s). So the layer is visible close up and not on the card, as
+the decision's caveat said.
+
+**Video.** A before/after H.264 video of face crops from the close view
+(the three holds, without and with the layer, kept out of the repository)
+went to the owner on 2026-11-17. The owner's judgement is the acceptance
+test; item 12 stays open until then.
 
 **Follow-ups.** A directed `weight` direction rolls the pelvis so the free
 hip rises (sign opposite to life's); a profile hold needs a beat or a different idea

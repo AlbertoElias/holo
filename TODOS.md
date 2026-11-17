@@ -169,10 +169,12 @@ it from the item below instead of duplicating its status here.
   hold facing the viewer alive, two people in profile still mostly frozen.
   The owner watched the before/after video on 2026-11-17: "its a lot
   better" and "theres something in the mouth and eyebrows thats missing,
-  but almost there", so life is not accepted yet. Idle life moves only the
-  eyes and blinks; the face options are open decision 6 in the brief
-  (recommended: the mouth now, the brows wired for the slice 2 base). The
-  profile-hold follow-up stays open.
+  but almost there", so life is not accepted yet. The owner chose
+  decision 6 (A) ("A, mouth now"): life's face (lips part through a sigh,
+  press or tug as a weight shift settles, brows flash as a glance returns)
+  is on `main` 2026-11-17, visible in the close view, not on the card.
+  Its close-view face video is with the owner, whose judgement accepts
+  life or not. The profile-hold follow-up stays open.
   The owner lifted the house-avatar hold on 2026-11-17 ("we also need to
   figure out the avatar flow"): slice 2 is now the avatar flow, an 80/20
   of one expressive base read at phone-card size, a trait card, two or
