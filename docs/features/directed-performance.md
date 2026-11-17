@@ -518,8 +518,8 @@ without something; each slot prefers a kind (weight 30%, glance 45%, sigh
 
 | Event | What moves | Spacing, timing |
 |---|---|---|
-| Weight on one leg | Hips toward the standing foot (wherever a step left it), 5 cm at 0.7 to 1.0 of that, and down 6 mm; pelvis rolled 4° so the free hip drops and the free knee bends; the chest counters 0.7 of the roll, so the shoulder line tilts against the hips. Starts on a seeded leg and alternates | at least 2 s on a leg, over 0.9 to 1.3 s (quintic ease) |
-| Glance | Eyes first (0.12 s), head and neck 0.06 s later (0.3 s, 75% of the angle), hold 0.5 to 1.4 s, head back over 0.45 s; 18 to 35° to a side, 65% of them 8 to 15° down; saccades shrink while it lasts; a blink when the head turns more than 12° | from the slots |
+| Weight on one leg | Hips toward the standing foot (wherever a step left it), 5 cm at 0.7 to 1.0 of that, and down 6 mm; pelvis rolled 4° so the free hip drops and the free knee bends; the chest counters 0.7 of the roll, so the shoulder line tilts against the hips. Each shift also resettles the posture (design 2): the spine leans to a new seeded angle, −1.5 to 3.5° forward, spread up the spine with the neck taking 0.6 of it back, and the hips sit up to 1.5 cm forward or back, which is what a weight shift shows from the side. Starts on a seeded leg and alternates | at least 2 s on a leg, over 0.9 to 1.3 s (quintic ease) |
+| Glance | Eyes first (0.12 s), head and neck 0.06 s later (0.3 s, 75% of the angle), hold 0.5 to 1.4 s, head back over 0.45 s; 20 to 40° to a side (design 2; was 18 to 35), and past 10° of head turn the upper chest takes 0.35 of the rest, so the shoulders turn too; 65% of them 8 to 15° down; saccades shrink while it lasts; a blink when the head turns more than 12° | from the slots |
 | Sigh | Shoulders rise 6° and the chest lifts 2° over 0.9 s, then out over 1.5 s to half that below rest, head dipping 4°, back over 1.5 s | at least 3 s apart |
 | Hand fidget | A hanging hand lifts 4 cm (the elbow bends), its forearm rolls 25° and its fingers curl and relax one after another | every 3 to 6 s per hand, in 0.6 s, out 0.9 s |
 
@@ -544,7 +544,11 @@ unchanged; no amplitude is raised.
   hips anyway); a glance to `look` (hold level 0.65) and `reach`, `take`,
   `put`, `aim` (0.8); a hand fidget to that side's `hand`, `reach`, `take`,
   `put`, `aim`, to holding an object, and to another performer reaching to
-  that arm or hand (its lift would move what they touch). A sigh is scaled
+  that arm or hand (its lift would move what they touch). The same goes
+  for the posture and the chest turn: a performer another reaches to keeps
+  the posture it had (a shift in that span plus 0.4 s is skipped, the next
+  one catches up) and turns only its head, because a performer solved
+  earlier in the cast aims at the others' previous frame. A sigh is scaled
   down while a reach leans. Reaches, grips and puts are still solved after
   life moves the body, so a palm still lands and a held object stays in
   the fist.
@@ -572,10 +576,11 @@ design fails with readers and a second design fails too, stop and report.
 stock rig has none and it would not respect masks or seeds); random events
 re-drawn around the beats (breaks revision locality).
 
-**State (2026-11-16):** design reviewed (single slot sequence, hold-level
-masks, bigger weight and glance, sigh slump, fidget lift and roll adopted
-from the review); built and committed on `feature/authoring-life`; review
-packs and fresh readers next.
+**State (2026-11-17):** built in two designs (design 2 added the posture
+resettle and the chest turn for profile views) and landed on `main`. Fresh
+readers call the front-facing holds alive and the profile pair still mostly
+frozen; two designs failed there, so tuning stopped (evidence: slice 1d
+below). **Open** until the owner judges the before/after video.
 
 ### Slice 2: the first house base (gated; not started)
 
@@ -681,10 +686,12 @@ and 7 (its evidence, below); the second 1c piece added item 13.
     avatar only mouth-led shapes read, and a smile's squint shows an
     artefact against the glasses in the close view.
 
-12. **Life a reader can see.** The life every performer inherits moves
-    the card by the numbers, but a held ending still reads as frozen from
-    stills (slice 1b, defaults), and the owner judged the video frozen
-    too (2026-11-14). Authors give holds a beat for now.
+12. **Life a reader can see.** Since slice 1d a hold facing the viewer
+    reads as alive to fresh readers (rest: "mostly frozen" before, "a
+    living person" after), but two people in profile through a long held
+    ending still read as mostly frozen (defaults, after two designs), and
+    the owner has not yet judged the slice 1d video. Authors give a profile
+    hold a beat for now.
 
 13. **The card shows only the performer's surroundings.** The card fits
     the avatar, so a set more than about half a metre beside her on screen
@@ -1209,6 +1216,66 @@ the neutral title "Take".
 - **Not published.** Neither slice 1c build was uploaded (the published
   watering piece is the slice 1b take). The user approved open decision 4
   (recorded objects, required credit) on 2026-11-15.
+
+### Slice 1d evidence (2026-11-17)
+
+Before is `main` at the slice 1c merge; design 1 is the events as first
+built; design 2 adds the posture resettle with each weight shift and the
+chest turn on large glances (kept). Same sheets and seeds throughout. Each
+take had a `review.ts` pack under its neutral title, and a fresh Sonnet
+reader saw only a copy of the reader folder under a random name.
+
+| Sheet | Before | Design 1 | Design 2 |
+|---|---|---|---|
+| `rest.json` (no beats, facing the viewer) | "Mostly frozen ... a posed figure with a faint idle" | "Mostly alive but subtle" (head tilt, arm, torso lean change still to still) | "Reads as a living person ... arms lift and drop, stance changes, head tilts" |
+| `defaults-test.json` (two in profile, held ending 4.4–8 s) | "Frozen, mostly ... statues in a moving scene" | "Mostly frozen ... posed mannequins with occasional micro-adjustments" | "Mostly frozen ... posed statues with a faint sway" |
+| `watering.json` (held pour, can in hand) | "Mostly alive" (the pour hold "slightly more posed") | "Reads as a living person" | "Reads as a living person ... never a locked, mannequin-like pose" |
+
+`watering` was alive before too (its beats keep it busy), so it shows only
+that life does not get in the way of a held prop. Readers of `rest` also
+saw a hand "at the collar"; it is in the before frames too and is the
+costume's shoulder piece, not a hand.
+
+**Why the profile pair still fails.** In profile the weight shift is a
+depth move, the face is about 20 CSS px and turned away half the time, and
+the held ending had few events: A shifts at 2.5 s (under its reach) and 7.9
+s, and B's only shift (2.3 s) falls while A touches it, so B keeps its
+posture. The tail's on-card travel barely changed (A head 1.0/5.9/1.3 →
+1.6/4.8/1.0 CSS px/s at 5–8 s). Larger amplitude was rejected in slice 1b;
+what is left is a beat, or event density keyed to a hold's length, which
+would break the seed-only schedule.
+
+**Body and contact** (`direct.ts` verdicts against the authored targets;
+jitter is P95 in mm, pass under 2):
+
+| Take | Before | Design 2 |
+|---|---|---|
+| defaults A | jitter 2.51 (fail), pen 0.07 cm, pop 5.36 | jitter 2.7 (fail), skate 0.03 cm, pen 0.11 cm, pop 5.01 |
+| defaults B | pen 0.56 cm (fail), jitter 2.27, skate 0.73 cm | jitter 2.21 (fail), skate 0.69 cm, pen 0.13 cm (now passes), pop 3.1 |
+| rest | jitter 2.2 (fail), pen 0.13 cm, pop 0.07 | jitter 2.27 (fail), skate 0.02 cm, pen 0.08 cm, pop 0.9 |
+| watering | jitter 2.29 (fail), pen 0.1 cm, pop 6.61, aim 3.3° | jitter 2.41 (fail), skate 0.02 cm, pen 0.05 cm, pop 6.64, aim 1.6° |
+
+Jitter failed before and still does: the metric counts any slow ease inside
+a "still" window, so an event in a hold counts against it. Reaches are
+unchanged: defaults 19.6 mm (asked 20), watering 0.4, 0.1 and 0.4 mm.
+Penetration for B is fixed by aiming the leg solve past its ankle miss.
+
+**On-card travel** (head / hands CSS px/s per second, from `on-screen.json`;
+no still second in any take before or after): rest before head 1.6–3.9,
+hands 1.4–4.0; design 2 head 1.0–5.9, hands 1.9–8.8 (the fidgets).
+
+**Locality** (checked with `--against` on design 1; design 2 adds no beat
+dependence except that a shift under another performer's reach keeps the
+old posture until the next one): revising a beat changes life within its
+span plus 0.4 s, and the schedule comes from the seed alone.
+
+**Video.** A before/after H.264 video of the three holds (kept out of the
+repository) went to the owner on 2026-11-17; the brief stays open on item
+12 until they judge it.
+
+**Follow-ups.** A directed `weight` direction rolls the pelvis so the free
+hip rises (sign opposite to life's); jitter's still-window rule penalises
+any authored ease; a profile hold needs a beat or a different idea.
 
 ## Physical-device limits
 

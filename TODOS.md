@@ -164,7 +164,9 @@ it from the item below instead of duplicating its status here.
   with a brow bar for any house avatar; props and sets come before slice 2.
   Props, sets and tool use in the beat sheet (slice 1c) on `main`
   2026-11-15; the readers' gaps (phone-card framing, a put's facing, the
-  pour over the pot) are in the brief. Still open: life, which the owner judged frozen from the video too. Owned by
+  pour over the pot) are in the brief. Life as events (slice 1d) on `main` 2026-11-17: fresh readers call a
+  hold facing the viewer alive, two people in profile still mostly frozen;
+  open until the owner judges the before/after video. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
   (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)
