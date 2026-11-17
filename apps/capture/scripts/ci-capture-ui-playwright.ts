@@ -441,22 +441,28 @@ async function headsetPhase(): Promise<void> {
   stage('headset: status line follow');
   // The status line follows lazily: still within 20 degrees, then back.
   // The line eases in when the take starts; measure the follow once it rests.
-  let statusBefore = recording.statusLine.position;
+  // The line sits at the head plus its follow direction, so it is measured
+  // from the head: a starved runner can sample the head a millimetre or two
+  // apart between frames, which is not the line following the turn.
+  const fromHead = (snapshot: VrChromeSnapshot): number[] => snapshot.statusLine!.position.map((v, i) => v - snapshot.head[i]!);
+  let before = recording;
   for (let i = 0; i < 30; i += 1) {
     await frames(page, 5);
-    const now = (await chrome(page)).statusLine!.position;
-    const settled = distance(now, statusBefore) < 1e-4;
-    statusBefore = now;
+    const now = await chrome(page);
+    const settled = distance(fromHead(now), fromHead(before)) < 1e-4;
+    before = now;
     if (settled) break;
   }
+  const statusBefore = fromHead(before);
   await page.evaluate(() => window.IWER_DEVICE!.quaternion.set(0, Math.sin((10 * Math.PI) / 360), 0, Math.cos((10 * Math.PI) / 360)));
   await frames(page, 10);
   const small = await chrome(page);
   await page.evaluate(() => window.IWER_DEVICE!.quaternion.set(0, Math.sin((40 * Math.PI) / 360), 0, Math.cos((40 * Math.PI) / 360)));
   await frames(page, 60);
   const large = await chrome(page);
-  assert(distance(small.statusLine!.position, statusBefore) < 1e-3, `headset: a 10° turn leaves the status line where it is (moved ${distance(small.statusLine!.position, statusBefore).toFixed(4)} m)`);
-  assert(distance(large.statusLine!.position, statusBefore) > 0.3, 'headset: a 40° turn brings the status line back');
+  const smallMove = distance(fromHead(small), statusBefore);
+  assert(smallMove < 1e-3, `headset: a 10° turn leaves the status line where it is (moved ${smallMove.toFixed(4)} m from the head; the head moved ${distance(small.head, before.head).toFixed(4)} m)`);
+  assert(distance(fromHead(large), statusBefore) > 0.3, 'headset: a 40° turn brings the status line back');
   await page.evaluate(() => window.IWER_DEVICE!.quaternion.set(0, 0, 0, 1));
   await frames(page, 60);
 
