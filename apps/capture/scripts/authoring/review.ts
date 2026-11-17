@@ -9,7 +9,17 @@
  * - card: the feed card on a phone (390×844 CSS px; the card canvas draws at
  *   1.5 device px per CSS px, the most viewer-web allows), the card's own
  *   camera, as a viewer scrolling the feed sees it;
- * - close: one per performer, head to hips, from the side the card sees.
+ * - close: one per performer, head to hips, from the side the card sees,
+ *   widening to hold the recorded objects the performer acts on while they
+ *   act on them (below).
+ *
+ * The card stills are cropped to the cast and every recorded object on the
+ * card, so a stage the card shows is never cut from the stills. A performer
+ * acts on an object while a beat of theirs names it (take, put, aim, look,
+ * reach or turn toward it, its anchors, a place or mark measured from it),
+ * from half a second before the beat to half a second after, and while it
+ * is in their hand. Without a sheet, an object is acted on while
+ * `HOLOIM_objects` says it is held, by the performer the viewer frames.
  *
  * The pack (default `output/authoring/review/<take>/`):
  * - `reader/`: what the fresh reader is given and nothing else: `review.mp4`
@@ -18,7 +28,8 @@
  *   (`sheet-card-NN.jpg`, `sheet-close-<performer>-NN.jpg`), and
  *   `README.md`, the reader's instructions. No intent, no beat names.
  * - `acting-report.json`: what moves and when (`acting-report.ts`).
- * - `on-screen.json`: per performer, the face's height at card framing in
+ * - `on-screen.json`: each recorded object's size on the card and how much
+ *   of the take it is wholly on it; per performer, the face's height at card framing in
  *   CSS and device px, and per second how far the head and hands travel on
  *   the card, in CSS px (a hold under 1 px reads as frozen at card size).
  * - `comparison.json`: the stated intent per beat with empty `seen`,
@@ -35,7 +46,7 @@ import { chromium, type Page } from 'playwright';
 import { tokens } from '@holoim/design-tokens';
 
 import { actingReport, summarize } from './acting-report.ts';
-import { beatSpan, type BeatSheet } from './lib/beats.ts';
+import { beatSpan, holdingsOf, pointObjects, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
 import { openTake, startViewer } from './lib/viewer-session.ts';
@@ -54,9 +65,14 @@ const STILL_PX = 1;
 
 type Vec = [number, number, number];
 interface CardPerformer { name: string; points: Record<string, [number, number]>; face: [number, number, number, number] | null }
-interface CardReading { canvas: { width: number; height: number; pixelRatio: number }; performers: CardPerformer[] }
-interface Bodies { camera: Vec; performers: { head: Vec; hips: Vec }[] }
-interface Init { duration: number; performers: { name: string; bones: string[]; faceVertices: number }[]; fov: number; pixelRatio: number }
+type ScreenBox = [number, number, number, number];
+interface CardReading { canvas: { width: number; height: number; pixelRatio: number }; performers: CardPerformer[]; objects: { name: string; box: ScreenBox | null }[] }
+interface WorldBox { name: string; min: Vec; max: Vec }
+interface Bodies { camera: Vec; performers: { head: Vec; hips: Vec }[]; objects: WorldBox[] }
+interface InitObject { name: string; source?: string; holds: { hand: string; start: number; end: number }[] }
+interface Init { duration: number; performers: { name: string; bones: string[]; faceVertices: number }[]; fov: number; pixelRatio: number; objects: InitObject[] }
+/** How long before and after a beat the close view holds the objects it names. */
+const ACT_MARGIN_S = 0.5;
 
 export interface ReviewOptions {
   readonly sheet?: string;
@@ -67,6 +83,8 @@ export interface ReviewOptions {
 
 export interface OnScreen {
   readonly framing: string;
+  /** Each recorded object's box on the card, CSS px (median over the take), and the share of the take it is wholly on the card. */
+  readonly objects: { readonly name: string; readonly cssPx: { readonly width: number; readonly height: number }; readonly wholeOnCard: number }[];
   readonly performers: {
     readonly name: string;
     /** Height of the part of the mesh the face channels move (brow to chin), at the card's framing. */
@@ -96,15 +114,79 @@ function smoothed(xs: Vec[], half: number): Vec[] {
   });
 }
 
-/** Head to hips, from the side the card sees, a little above the eyes. */
-export function closeView(head: Vec, hips: Vec, camera: Vec, fov = CLOSE_FOV): { position: Vec; target: Vec } {
+const dot = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Vec, b: Vec): Vec => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+/**
+ * Head to hips, from the side the card sees, a little above the eyes. With
+ * `objects` (world boxes of what the performer acts on), the view widens and
+ * recentres, from the same side, until they are in it too.
+ */
+export function closeView(head: Vec, hips: Vec, camera: Vec, fov = CLOSE_FOV, objects: readonly WorldBox[] = []): { position: Vec; target: Vec } {
   const top = head[1] + 0.22;
   const bottom = hips[1] - 0.14;
-  const target: Vec = [(head[0] + hips[0]) / 2, (top + bottom) / 2, (head[2] + hips[2]) / 2];
-  const flat = norm([camera[0] - target[0], 0, camera[2] - target[2]]);
+  const body: Vec = [(head[0] + hips[0]) / 2, (top + bottom) / 2, (head[2] + hips[2]) / 2];
+  const flat = norm([camera[0] - body[0], 0, camera[2] - body[2]]);
   const dir = norm([flat[0], 0.14, flat[2]]);
-  const distance = ((top - bottom) / 2 / Math.tan((fov * Math.PI) / 360)) * 1.08;
-  return { position: add(target, dir, distance), target };
+  const tan = Math.tan((fov * Math.PI) / 360);
+  if (!objects.length) return { position: add(body, dir, ((top - bottom) / 2 / tan) * 1.08), target: body };
+  // The column head to hips and every corner of the objects, seen along -dir (a square view, so one tangent).
+  const points: Vec[] = [[body[0], top, body[2]], [body[0], bottom, body[2]]];
+  for (const o of objects) for (let k = 0; k < 8; k += 1) points.push([(k & 1 ? o.max : o.min)[0], (k & 2 ? o.max : o.min)[1], (k & 4 ? o.max : o.min)[2]]);
+  const right = norm(cross([0, 1, 0], dir));
+  const up = cross(dir, right);
+  const span = (axis: Vec) => { const xs = points.map((q) => dot(q, axis)); return [Math.min(...xs), Math.max(...xs)] as const; };
+  const [r0, r1] = span(right); const [u0, u1] = span(up); const [d0, d1] = span(dir);
+  const target = add(add(add([0, 0, 0], right, (r0 + r1) / 2), up, (u0 + u1) / 2), dir, (d0 + d1) / 2);
+  let distance = 0;
+  for (const q of points) {
+    const o: Vec = [q[0] - target[0], q[1] - target[1], q[2] - target[2]];
+    // The camera stands at target + dir·distance; a point nearer the camera by dot(o, dir) needs that much more.
+    distance = Math.max(distance, dot(o, dir) + Math.max(Math.abs(dot(o, right)), Math.abs(dot(o, up))) / tan);
+  }
+  return { position: add(target, dir, distance * 1.08), target };
+}
+
+/** The point fields a direction names (where it reaches, looks, aims, turns toward, puts). */
+function directionPoints(d: Direction): (Point | undefined)[] {
+  switch (d.kind) {
+    case 'look': case 'reach': case 'aim': return [d.at];
+    case 'turn': return [d.toward];
+    case 'put': return [d.at, d.on];
+    default: return [];
+  }
+}
+
+/**
+ * For each performer (by the viewer's wrapper name), the times at which they
+ * act on each declared object: what the module comment says.
+ */
+export function actedOn(sheet: BeatSheet | undefined, performers: readonly string[], objects: readonly InitObject[]): (performer: number, t: number) => string[] {
+  const spans: { performer: number; object: string; from: number; to: number }[] = [];
+  if (sheet?.objects && Object.keys(sheet.objects).length) {
+    const ids = new Set(Object.keys(sheet.objects));
+    const declared = (id: string) => sheet.objects![id]!.name ?? id;
+    // The viewer names the first performer's wrapper RecordedAvatar and the others Performer_<id>.
+    const index = (id: string) => performers.findIndex((w, i) => (i === 0 ? w === 'RecordedAvatar' && sheet.performers[0]?.id === id : w === `Performer_${id}`));
+    for (const beat of sheet.beats) {
+      const p = index(beat.performer);
+      if (p < 0) continue;
+      const span = beatSpan(beat);
+      const named = new Set(beat.directions.flatMap((d) => [
+        ...(d.kind === 'take' || d.kind === 'put' ? [d.object] : []),
+        ...directionPoints(d).flatMap((pt) => (typeof pt === 'string' && ids.has(pt) ? [pt] : pointObjects(pt, ids, sheet.marks ?? {})))
+      ]));
+      for (const id of named) spans.push({ performer: p, object: declared(id), from: span.from - ACT_MARGIN_S, to: span.to + ACT_MARGIN_S });
+    }
+    for (const h of holdingsOf(sheet).holdings) {
+      const p = index(h.performer);
+      if (p >= 0) spans.push({ performer: p, object: declared(h.object), from: h.from, to: h.to });
+    }
+  } else {
+    for (const o of objects) for (const h of o.holds) spans.push({ performer: 0, object: o.name, from: h.start, to: h.end });
+  }
+  const known = new Set(objects.map((o) => o.name));
+  return (performer, t) => [...new Set(spans.filter((s) => s.performer === performer && t >= s.from && t <= s.to && known.has(s.object)).map((s) => s.object))];
 }
 
 async function dataUrlTo(file: string, dataUrl: string): Promise<void> {
@@ -164,11 +246,15 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       await page.screenshot({ path: join(frameDir, 'card', `${String(f).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 88 });
     }
 
+    const acts = actedOn(sheetData, init.performers.map((x) => x.name), init.objects);
     // Pass 2: a close view per performer, its camera smoothed over a second so it does not hide small movement.
     for (let p = 0; p < init.performers.length; p += 1) {
       const dir = join(frameDir, `close-${p}`);
       await mkdir(dir, { recursive: true });
-      const plan = bodies.map((b) => closeView(b.performers[p]!.head, b.performers[p]!.hips, b.camera));
+      const plan = bodies.map((b, f) => {
+        const acting = new Set(acts(p, times[f]!));
+        return closeView(b.performers[p]!.head, b.performers[p]!.hips, b.camera, CLOSE_FOV, b.objects.filter((o) => acting.has(o.name)));
+      });
       const pos = smoothed(plan.map((x) => x.position), Math.round(fps / 2));
       const tgt = smoothed(plan.map((x) => x.target), Math.round(fps / 2));
       for (let f = 0; f < frames; f += 1) {
@@ -192,8 +278,12 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     // Frame sheets every `step` s: the card cropped to the cast at true device pixels, and each close view.
     const pr = init.pixelRatio;
     let box: number[] | undefined;
-    for (const c of cards) for (const p of c.performers) for (const [x, y] of Object.values(p.points)) {
-      box = box ? [Math.min(box[0]!, x), Math.min(box[1]!, y), Math.max(box[2]!, x), Math.max(box[3]!, y)] : [x, y, x, y];
+    for (const c of cards) {
+      // The cast, and every recorded object the card shows (its box's corners): the stills keep what the card frames.
+      const corners = c.objects.flatMap((o) => (o.box ? [[o.box[0], o.box[1]], [o.box[2], o.box[3]]] as [number, number][] : []));
+      for (const [x, y] of [...c.performers.flatMap((p) => Object.values(p.points)), ...corners]) {
+        box = box ? [Math.min(box[0]!, x), Math.min(box[1]!, y), Math.max(box[2]!, x), Math.max(box[3]!, y)] : [x, y, x, y];
+      }
     }
     const pad = box ? Math.max(box[2]! - box[0]!, box[3]! - box[1]!) * 0.15 + 12 : 0;
     const crop = box
@@ -222,6 +312,12 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     // On screen: the face's size at card framing, and how far head and hands travel per second.
     onScreen = {
       framing: `feed card on a phone, ${PHONE.width}×${PHONE.height} CSS px, canvas at ${pr} device px per CSS px`,
+      objects: init.objects.map((o, j) => {
+        const boxes = cards.map((c) => c.objects[j]?.box ?? null);
+        const sized = boxes.filter((b): b is ScreenBox => Boolean(b));
+        const whole = boxes.filter((b) => b && b[0] >= 0 && b[1] >= 0 && b[2] <= PHONE.width && b[3] <= PHONE.height).length;
+        return { name: o.name, cssPx: { width: round(median(sized.map((b) => b[2] - b[0]))), height: round(median(sized.map((b) => b[3] - b[1]))) }, wholeOnCard: round(whole / Math.max(1, boxes.length), 100) };
+      }),
       performers: init.performers.map((perf, p) => {
         const faces = cards.map((c) => c.performers[p]!.face).filter((b): b is [number, number, number, number] => Boolean(b)).map((b) => b[3] - b[1]);
         const bodiesPx = cards.map((c) => { const q = c.performers[p]!.points; const feet = [q.leftFoot, q.rightFoot].filter(Boolean).map((x) => x![1]); return q.headTop && feet.length ? Math.max(...feet) - q.headTop[1] : 0; });
@@ -255,7 +351,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     '',
     `A short hologram, ${init.duration.toFixed(1)} s, muted. You have not been told what it is meant to show; please do not guess at what the author intended, only say what you see.`,
     '',
-    '- `review.mp4`: the take in real time. Left: as it appears on a feed card on a phone. Right: a closer view of each performer.',
+    '- `review.mp4`: the take in real time. Left: as it appears on a feed card on a phone. Right: a closer view of each performer, which widens to show what they are handling or directing attention to.',
     `- \`sheet-card-NN.jpg\`: the card framing at true size, one still every ${step} s, the time on each still.`,
     '- `sheet-close-<performer>-NN.jpg`: the close view at the same times.',
     '',
@@ -285,7 +381,8 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
   const missing = sheetData ? sheetData.beats.filter((b) => !b.intent).map((b) => b.id) : [];
   await writeFile(join(out, 'pack.json'), `${JSON.stringify({
     take: resolve(take), sheet: sheetData ? resolve(sheetFile) : null, duration: init.duration, fps, step,
-    framings: { card: { viewport: PHONE, pixelRatio: CARD_PIXEL_RATIO, camera: 'the card\'s own' }, close: { size: CLOSE_SIZE, fov: CLOSE_FOV, camera: 'head to hips from the card\'s side, smoothed over 1 s' } },
+    framings: { card: { viewport: PHONE, pixelRatio: CARD_PIXEL_RATIO, camera: 'the card\'s own' }, close: { size: CLOSE_SIZE, fov: CLOSE_FOV, camera: `head to hips from the card's side, widened to the objects the performer acts on (beats naming them ±${ACT_MARGIN_S} s, and while held), smoothed over 1 s` }, cardStills: 'cropped to the cast and every recorded object on the card' },
+    objects: init.objects,
     performers: init.performers, beatsWithoutIntent: missing, seconds: round((performance.now() - started) / 1000)
   }, null, 2)}\n`);
   await rm(frameDir, { recursive: true, force: true });
