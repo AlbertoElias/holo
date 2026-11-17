@@ -193,7 +193,8 @@ and an avatar that fails part of it says which part.
 
 1. **Finish:** material and palette on the same body (for example clay,
    ink line, a body of light). The cheapest way to match a piece's style.
-   The styleguide's identity-hue rim stays on every finish.
+   The styleguide's identity-hue rim on avatars is not drawn by the viewer
+   yet and is left to a later viewer change (open decision 5h).
 2. **Identity:** proportions, face shape, hair, clothing and colours within
    one base. Personalisation lives here.
 3. **Family:** a new base with its own design language (soft and rounded,
@@ -585,23 +586,33 @@ reconstruction from images. Each is "Later", against the same audition.
 One body, built for expression at card size rather than for close-up
 realism:
 
-- **A larger head, eyes and brows.** The head is at least a sixth of the
-  standing height (to be measured on the stock avatar in 2a), so the face
-  box on the phone card grows from 29.5 device px (19.7 CSS px) to at
-  least 40. Eyes and brows are drawn larger than human proportion; a
-  mouth with clear corners.
-- **All 52 face channels as real shapes,** not routed from 21 synthesized
-  ones as on the stock avatar (`archive/avatar-face.md`). Eyes turn by
-  bones, so gaze does not depend on shapes.
+- **A larger head, eyes and brows.** The face (brow line to chin) is
+  about 10% of the body's height on the card today: 29.5 of about 298
+  device px. Reaching a 40 device px face means a face of about 13.5% of
+  the height, a head of roughly a fifth of it, measured on the base, not
+  assumed. A bigger face alone did not help the stock avatar (slice 1b's
+  blind readings), so size is necessary, not enough. Eyes and brows are
+  drawn larger than human proportion; a mouth with clear corners.
+- **Real shapes for the 44 ARKit channels that are not gaze,** not routed
+  from 21 synthesized ones as on the stock avatar (`archive/avatar-face.md`).
+  The 8 `eyeLook*` channels turn eye bones; the 15 visemes route to jaw and
+  lip shapes through `FaceRig`, as today (`FACE_CHANNELS` is the 52 ARKit
+  channels plus 15 visemes).
 - **Brows never hidden:** no glasses, fringe or hat over them in any
   trait, measured (below).
 - **Hands** with all 30 finger bones, which the audition already checks.
 - **The canonical humanoid bones** so `HumanoidSkeleton`, every capture
-  driver and `direct.ts` bind it unchanged. Bones are never scaled:
-  `retargetClips.ts` rejects a rig with uneven scale.
-- **Budget:** no larger than the stock `avatar.glb` (1.8 MB with its
-  textures) and no more vertices than it, measured in 2a; the phone
-  journey measured 2.3 MB of avatar and scene load.
+  driver and `direct.ts` bind it unchanged. Bones are never scaled
+  unevenly: `retargetClips.ts` rejects a chain that mirrors or scales
+  unevenly; a uniform scale of the whole avatar is allowed.
+- **Budget,** measured where the feed pays it: the exported take and its
+  USDZ, not only the source file, since capture re-exports the avatar
+  with GLTFExporter (`GltfExportComposer.ts`). The stock's 21 shapes alone
+  added 570 KB (`archive/avatar-face.md`), so 44 dense shapes would blow
+  past the stock `avatar.glb`'s 1.8 MB: morph targets are sparse (only
+  the face's vertices), and the base file stays within 1.8 MB including
+  its build variants' shared textures. The phone journey measured 2.3 MB
+  of avatar and scene load; 2g measures it again.
 
 #### The audition bar, in numbers
 
@@ -611,18 +622,43 @@ anything turns the eyes; a fist and a point against hand length; reach to
 seven targets (10 mm); and pass-through in a 75° turn. It runs on any GLB
 in Node in seconds. 2a adds the rows below, all provisional until a house
 base meets them and the blind reading confirms them; an avatar that fails
-one says which. Numbers are for an avatar 1.7 m tall, and the mm rows are
-also reported as device px on the phone card (mm × the card's face-box px
-÷ the face box's height in mm), which is what a reader sees.
+one says which.
+
+The rows fall in two tiers:
+
+- **Geometry, in Node, seconds per avatar:** the mm rows, symmetry, brow
+  visibility (a ray cast from the card's camera direction) and face
+  against accessories. Travel is the 90th percentile of the vertices a
+  shape moves by 1 mm or more, not the single largest, so one stray
+  vertex cannot pass a row. Regions come from the shapes themselves (the
+  brow region is what the brow shapes move; the lids are what
+  `eyeBlink*` moves, around the eye bones), so an outside avatar needs no
+  landmarks.
+- **Render, in the viewer through Playwright, about a minute per avatar
+  and finish:** brow contrast, eyes at the card and the face box, from a
+  short take solved from `sheets/expressions.json` (`face-legibility.ts`
+  already does this). The blind reading is run by fresh readers on top.
+
+The reader sees card pixels, and the card frames the content's bounds
+(`viewer-web` `cameraFraming.ts`, margin 1.35), so mm change with height
+while pixels do not. The pixel rows are the gate; the mm rows are the
+fast loop, stated for an avatar 1.7 m tall with its face box at 40 device
+px on the card, and scaled by the base's own face box. The face box is
+measured from brow line to chin, not from every vertex a shape moves (as
+`lib/review-page.ts` does now), so adding shapes cannot grow it. Height
+for the card and for capture's height fit is taken from the head-top
+bone without trait parts: today `AvatarRig` fits height and places the
+eye at 0.92 of the whole model's box, so a tall hairstyle would shrink
+the avatar and misplace the eye (2e changes this with the motion owner).
 
 | Row | Today | Bar (any avatar the flow offers) | Stock avatar |
 |---|---|---|---|
 | Brows (`browInnerUp`, `browDown*`, `browOuterUp*`) | 1 mm | each at least **8 mm** (decided 2026-11-14) | 3.6–4.5 mm: fails |
 | Lids (`eyeWide*`, `eyeSquint*`) | 1 mm | each at least **8 mm** (decided 2026-11-14); `eyeBlink*` closes the lid fully (upper lid meets lower, within 1 mm) | wide and squint 6–7 mm: fail; blink 10.9 mm |
-| Mouth corners (`mouthSmile*`, `mouthFrown*`, `mouthStretch*`) | 1 mm | each at least **14 mm** (the smile, the one shape that read, moves 15.7 mm) | frown 10.5 mm: fails |
+| Mouth corners (`mouthSmile*`, `mouthFrown*`, `mouthStretch*`) | 1 mm | each at least **14 mm** (the smile, the one shape that read, moves 15.7 mm at its largest vertex) | frown 10.5 mm: fails |
 | `jawOpen` | 1 mm | at least **15 mm** | measured in 2a |
 | Lip shapes (`mouthPress*`, `mouthPucker`, `mouthFunnel`, `mouthRoll*`) | 1 mm | each at least **4 mm** | press 1.2–1.3 mm: fails |
-| Every other channel | not barred | at least 1 mm, reported | reported |
+| The other non-gaze ARKit channels (cheeks, nose, jaw sideways, tongue) | not barred | at least 1 mm, reported | reported |
 | Left and right | not checked | each pair within 15% of each other | measured in 2a |
 | **Brow visibility** (new) | none | of the vertices the brow shapes move by 1 mm or more, at least **90% visible** from the card's camera, at neutral and at `browInnerUp` 1, with every other mesh (glasses, hair) as an occluder | glasses cover the brows: fails |
 | **Brow contrast** (new, per finish) | none | in a front render at card framing, the brow region differs from the skin around it by at least **0.25 in OKLab L** | measured in 2a |
@@ -631,37 +667,46 @@ also reported as device px on the phone card (mm × the card's face-box px
 | **Face box on the card** (new, from `face-legibility.ts`) | reported only | at least **40 device px** tall on the phone card | 29.5: fails |
 | **The blind reading** (new, the gate) | run by hand in 1b | `face-legibility.ts` at the card's face size, `sheets/expressions.json`: three fresh readers, **each at least 5 of 7** (chance about 1 in 7) | 3 of 7, one reader |
 | Gaze, fist, point, reach, turn | as today | unchanged | passes |
-| Size | none | GLB no larger than 1.8 MB and no more vertices than the stock avatar | the reference |
+| Size | none | sparse morph targets; base no larger than 1.8 MB; the exported take and its USDZ measured against the hologram budgets | the reference |
 
 Two more, outside the script: the motion owner's report on a directed
 take and a captured take on the base (their instrument, when it is on
 `main`), and `check_usdz_tools.sh` by hand on a take with it, since
 Quick Look is not in `verify:pr`.
 
-The mm rows are the fast loop; the blind reading is the gate. If the base
+The blind reading is the final gate. If the base
 meets every mm row and still fails the reading, the bars are wrong and are
 raised; if it passes the reading while missing a row, that row is lowered
 and the change recorded here.
 
 #### Finishes
 
-A finish is a material set on the same mesh and bones: no change to the
-face shapes, so the audition's mm rows hold for every finish and only
-brow contrast and the blind reading are re-run per finish. Three are
-proposed, to be chosen from the style sheets (open decision 1):
+A finish is a set of materials on the same mesh and bones, plus at most
+one extra mesh (the ink line's outline), with no change to the face
+shapes: the mm rows hold for every finish and only the render tier and
+the blind reading are re-run per finish. A finish is a property of the
+base's files, chosen when the take is made, and the take's GLB carries it.
+Three are proposed, to be chosen from the style sheets (open decision 1):
 
 1. **Soft clay:** matte, rounded, the soft pair approved for the poem.
-2. **Ink line:** flat colour with an outline (an inverted-hull mesh baked
-   into the GLB, so it needs no viewer change and survives Quick Look);
-   brows drawn as line.
-3. **Light:** a translucent, lit-from-within body. The riskiest for faces,
-   since translucency lowers contrast; it ships only if it passes brow
-   contrast and the reading.
+2. **Ink line:** flat colour with an outline, an inverted-hull mesh that
+   carries the same skin and face shapes as the body (so it moves with
+   them), within the size budget, checked in Quick Look; brows drawn as
+   line.
+3. **Light:** a lit-from-within body made with alpha blend and emissive
+   only, not transmission, which the USDZ path may not carry (checked in
+   Quick Look). The riskiest for faces, since translucency lowers
+   contrast; it ships only if it passes brow contrast and the reading.
 
-The styleguide's rule stands on every finish: each person's identity hue
-as a rim on their avatar (`styleguide.md` 1.1). A finish is baked into
-the avatar file the take is recorded on, so the published GLB carries it
-and the viewer needs nothing new.
+Every finish is auditioned twice in the render tier: on an authored take
+and on a captured take with a bubble, because the viewer makes every
+material transparent when a take has one (`sphereClipping.ts`).
+
+The styleguide's identity-hue rim on each person's avatar (`styleguide.md`
+1.1) is not drawn by the viewer today, and cannot be baked into a file:
+the hue is worked out when the take is viewed, from who submitted it
+(`presence/identityHue.ts`), and a two-performer authored piece has no
+single author. It stays a later viewer change, out of slice 2.
 
 #### Traits: likeness without an editor
 
@@ -677,11 +722,22 @@ The trait card is a small JSON object, the same in every flow:
 | Glasses | none, round, square; frames sit below the brows | a swapped part, checked by brow visibility and face against accessories |
 | Clothing colours | top and bottom, from the finish's palette | material colour |
 
-Everything but build is applied at load, in the browser or in Node, so no
-combination needs its own file and no service bakes avatars. The audition
-runs on every value of every trait at its extreme (all hair styles, all
-glasses, all builds), not on every combination; that is about 20 runs of
-seconds each. The poem's two characters must come from the card alone.
+The card is applied to the glTF file before it is loaded, by one shared
+function in a workspace package (gltf-transform runs in Node and in the
+browser): it picks the build's file and finish, adds the hair and glasses
+parts, and sets the colours. Both flows use it, so there is one trait
+implementation, and the take carries the dressed avatar: `direct.ts`
+writes the avatar file it was given (`lib/write-glb.ts`), not the scene it
+loaded, and capture exports what it loaded. No combination needs its own
+file and no service bakes avatars. Height is a uniform scale of the
+performer's wrapper, applied before solving in `direct.ts` (a `height` on
+the performer) and by capture's height fit in a headset.
+
+The audition runs on every value of every trait at its extreme (all hair
+styles, all glasses, all builds), not on every combination: about 20
+geometry runs of seconds each, and the render tier on the hair and
+glasses values only, about a minute each. The poem's two characters must
+come from the card alone.
 
 How a creator sets it:
 
@@ -753,8 +809,8 @@ bars in the brief to the artist.
 | **2a: the bar** | The new audition rows above, in `avatar-audition.ts` and `face-legibility.ts`; run on the stock avatar and the avatar-format fixtures | Audition JSON per avatar; the stock avatar fails the brow, lid, mouth, visibility and face-box rows by name; three readers' blind scores on the stock | **Yes.** Scripts under `apps/capture/scripts/authoring/` only |
 | **2b: the sheets** | Astra draws the style sheets from the request below; the owner picks a finish set (open decision 1) | The sheets, judged against the acceptance list in the request; the owner's pick recorded here | **Yes.** No code |
 | **2c: the base** | One base in the picked style, neutral finish, neutral card, made the recommended way | Every audition row passes; three blind readers at 5 of 7 or better at card size; a review pack of `sheets/expressions.json` and the watering piece on the base beside the stock; the motion owner's report; `check_usdz_tools.sh`; a proof video | **Yes.** Loads through `?avatar=` and beat sheets only; edits nothing the mandates own |
-| **2d: traits** | Card applied at load; three builds; hair and glasses parts; the poem's two characters from cards | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone | **Yes.** Authoring scripts and avatar files |
-| **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow) and capture's avatar loading: built with the phone mandate's owner, after its device checks |
+| **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
+| **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
 
@@ -790,11 +846,14 @@ versioned with the bars it must meet.
 >    2048 × 1024 px, with a height line.
 > 4. **An expression sheet per finish:** neutral, smile, sad, holding
 >    something back (lips pressed), determined, hopeful, looking down, and
->    also surprised, worried, noticing something. Each as a head at
->    512 px tall, and the same row again shrunk so each face is 30 px
->    tall, side by side with the large row. The 30 px row is the one that
->    matters: each expression must be tellable from the others at that
->    size, by the brows, lids and mouth, not by colour or a caption.
+>    also surprised, worried, noticing something (the last three are for
+>    later gestures; only the first seven are judged). Each as a head at
+>    512 px tall, then the same row again twice, shrunk so each face
+>    (brow line to chin) is 30 px and 40 px tall in image pixels. The
+>    small rows are the ones that matter: 30 px is today's face on a
+>    phone's card, 40 px the size the new character is built for. Each
+>    expression must be tellable from the others at those sizes by the
+>    brows, lids and mouth, not by colour or a caption.
 > 5. **Trait variations** on the soft-clay finish, as a grid of heads and
 >    one full body per build: 8 skin tones; 6 hair styles (none may
 >    cover the brows) each in 2 of 8 colours, with the 8 colours as
@@ -808,8 +867,11 @@ versioned with the bars it must meet.
 > `<finish>-<sheet>.png` (for example `clay-expressions.png`), with the
 > trait values written under each head.
 >
-> **A sheet is acceptable when:** the 30 px row reads (a person shown only
-> that row can name most expressions); the brows are visible in every
+> **A sheet is acceptable when:** the 40 px row reads by this test: three
+> people who have not seen the sheet each get the seven judged faces
+> from it, shuffled and without captions, with the list of seven names,
+> and each names at least 5 of 7 (the same test the 3D character must
+> pass); the brows are visible in every
 > drawing; the three finishes are clearly the same character; every trait
 > value is drawn and labelled; the backgrounds are plain; and nothing
 > copies an existing game, film or brand character.
@@ -925,12 +987,13 @@ effects, music) and **titles and captions**.
 | Session | It owns | This brief touches | This brief needs from it |
 |---|---|---|---|
 | Phone capture mandate | The journey: Record, post grant, selfie mode, share | None of its files until 2e | Nothing until 2e and slice 4. Slice 2 gives it an expressive default avatar and "an avatar that looks like you" from traits (slice 5 later from a photo), both of which its "want to send" needs and its brief excludes. 2e adds a "your look" step before Record, built with its owner after its device checks |
-| Natural avatar motion (motion owner) | Driving, IK, retargeting, smoothing, `motion-quality.ts`, the camera driver | Imports its solving modules and the instrument; edits none of its files | Notice when the instrument is on `main`; a category for authored takes in it, or agreement that their numbers carry no verdict; its report run on the house base before that becomes the default (2c), and its agreement before `DEFAULT_AVATAR_URL` changes (2g); notice when `?input=camera` is on `main`; at slice 4, whether a recording can keep raw face channels and hand goals |
+| Natural avatar motion (motion owner) | Driving, IK, retargeting, smoothing, `motion-quality.ts`, the camera driver | Imports its solving modules and the instrument; edits none of its files | Notice when the instrument is on `main`; a category for authored takes in it, or agreement that their numbers carry no verdict; its report run on the house base before that becomes the default (2c), and its agreement before `DEFAULT_AVATAR_URL` changes (2g); 2e edits its `src/avatar/` (loading and the height fit) with it; notice when `?input=camera` is on `main`; at slice 4, whether a recording can keep raw face channels and hand goals |
 
 The mandates come first. Slices 0 to 3 and 2a to 2d and 2f add scripts
 under `apps/capture/scripts/` and avatar files; they change no file either
-session owns. 2e and 2g are the only parts that edit `apps/capture/src/`,
-and each joins the owning session when it starts.
+session owns. 2e and 2g are the only parts that edit `apps/capture/src/`
+(the phone journey's files and the motion owner's `src/avatar/`), and
+each joins both owning sessions when it starts.
 
 ## Scope
 
@@ -1021,7 +1084,7 @@ is not in a take's undo history; changing the look again is its undo.
 | A trait hides the face (a fringe or frames over the brows) | Brow visibility and face against accessories run on every trait value at its extreme; a value that fails is dropped |
 | A finish loses the face (translucency, an outline over the brows) | Brow contrast and the blind reading are re-run per finish; one that fails does not ship |
 | The mm bars pass but faces still do not read | The blind reading is the gate; the bars are raised and the change recorded |
-| 52 real shapes make the avatar too heavy for a phone | Size row: no larger than the stock 1.8 MB; the phone journey's load measured in 2g |
+| 44 real shapes and an outline mesh make the avatar too heavy for a phone | Sparse morph targets; the exported take and its USDZ measured, not only the source; the phone journey's load measured in 2g |
 | An outside avatar with an unclear licence | A credit or `"own"`, read from VRM metadata where present, as for slice 1c's objects; refused otherwise |
 | A headset take has less face than a phone take | Stated, not fixed: WebXR exposes no expressions; the headset adds body and hands |
 | The house base changes the motion owner's numbers or breaks fixtures generated from the shipped rig | `?avatar=` only until its report passes; the stock avatar stays in the repo for the fixtures |
@@ -1109,6 +1172,9 @@ audition scripts, the house base's source and its exported avatar files
    - **(g) Start now:** 2a (the bar, scripts only) and 2b (you pass the
      Astra request in slice 2 to Astra) together, beside the motion and
      phone work. Recommended: yes.
+   - **(h) The identity-hue rim on avatars** (styleguide 1.1) is not
+     drawn by the viewer today and cannot live in the avatar file.
+     Recommended: leave it out of slice 2, as a later viewer change.
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.
