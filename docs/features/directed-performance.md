@@ -504,18 +504,24 @@ video frozen. A person standing still is not oscillating; they **hold, then
 do something small**: put their weight on the other leg, glance away and
 back, take a deeper breath, fidget a hand. Each is a change of shape a
 viewer sees, separated by real stillness. This slice replaces most of the
-oscillation with those events. All in `apps/capture/scripts/authoring/lib/direct.ts`;
+oscillation with those events. The schedule is in
+`apps/capture/scripts/authoring/lib/life.ts`, applied in `lib/direct.ts`;
 nothing under `apps/capture/src/**`, the viewer or the API changes, and
 `life: false` and `style: "flat"` still turn it all off.
 
 **The events** (per performer, seeded by its `seed`):
 
-| Event | What moves | How often, how long |
+Weight, glance and sigh share one seeded sequence of slots (the first at
+0.4 to 1.0 s, then every 1.0 to 2.0 s), so no stretch of a hold goes long
+without something; each slot prefers a kind (weight 30%, glance 45%, sigh
+25%) and gives way to another while that kind is still under way.
+
+| Event | What moves | Spacing, timing |
 |---|---|---|
-| Weight on one leg | Hips over one foot (4.5 cm, 0.55 to 0.85 of that), pelvis rolled toward the free leg, chest countering; the free knee bends because its hip drops. A performer starts on a seeded leg and changes legs | every 2.8 to 4.8 s, over 0.9 to 1.3 s |
-| Glance | Eyes first (arrive in 0.12 s), head and neck follow (0.3 s, 75% of the angle), hold 0.6 to 1.6 s, return; 10 to 25° to a side, mostly level or down; a blink when the head turns more than 12° | every 2 to 4 s |
-| Sigh | Shoulders rise 6° and the chest lifts 2° over 0.9 s, out over 1.5 s | every 5 to 8 s |
-| Hand fidget | A hanging hand's fingers curl a little more and relax, one after another, with a small wrist turn | every 3 to 6 s per hand |
+| Weight on one leg | Hips toward the standing foot (wherever a step left it), 5 cm at 0.7 to 1.0 of that, and down 6 mm; pelvis rolled 4° so the free hip drops and the free knee bends; the chest counters 0.7 of the roll, so the shoulder line tilts against the hips. Starts on a seeded leg and alternates | at least 2 s on a leg, over 0.9 to 1.3 s (quintic ease) |
+| Glance | Eyes first (0.12 s), head and neck 0.06 s later (0.3 s, 75% of the angle), hold 0.5 to 1.4 s, head back over 0.45 s; 18 to 35° to a side, 65% of them 8 to 15° down; saccades shrink while it lasts; a blink when the head turns more than 12° | from the slots |
+| Sigh | Shoulders rise 6° and the chest lifts 2° over 0.9 s, then out over 1.5 s to half that below rest, head dipping 4°, back over 1.5 s | at least 3 s apart |
+| Hand fidget | A hanging hand lifts 4 cm (the elbow bends), its forearm rolls 25° and its fingers curl and relax one after another | every 3 to 6 s per hand, in 0.6 s, out 0.9 s |
 
 Under them, the continuous life drops to realistic postural noise: hips sway
 6 by 4 mm (was 22 by 12) and head drift 1.5° (was 3.5°). Breath
@@ -527,20 +533,27 @@ unchanged; no amplitude is raised.
 - **Deterministic and local.** Each performer's schedule is drawn from its
   seed alone, event by event from t = 0, so it never depends on the beats
   or the duration. Directions only *mask* life near them: a life channel is
-  scaled by 1 minus how busy that channel is at t, where "busy" is 1 over a
-  direction's span and eases to 0 over 0.4 s either side. So revising a beat
-  changes life only within its own span plus 0.4 s, and `--against`
-  confirms it.
-- **Under directions, never against them.** Weight life is masked by
-  `weight`, `step`, `reach`, `take`, `put` and `aim`; a glance by `look`,
-  `reach`, `take`, `put` and `aim`; a hand fidget by that side's `hand`,
-  `reach`, `take`, `put`, `aim` and while it holds an object; a sigh is
-  scaled down while a reach leans. Reaches, grips and puts are still solved
-  after life moves the body, so a palm still lands and a held object stays
-  in the fist.
+  scaled by 1 minus how busy that channel is at t, where "busy" is 1 while
+  a direction moves, eases to a hold level while it holds (so a held look
+  still glances, smaller), and eases to 0 over 0.4 s either side. So
+  revising a beat changes life only within its own span plus 0.4 s, and
+  `--against` confirms it.
+- **Under directions, never against them.** Weight life gives way fully to
+  `weight`, `step` and `aim` (and not to reaches: a level easing in and out
+  under every reach moved the hips in jerks; the reach is solved after the
+  hips anyway); a glance to `look` (hold level 0.65) and `reach`, `take`,
+  `put`, `aim` (0.8); a hand fidget to that side's `hand`, `reach`, `take`,
+  `put`, `aim`, to holding an object, and to another performer reaching to
+  that arm or hand (its lift would move what they touch). A sigh is scaled
+  down while a reach leans. Reaches, grips and puts are still solved after
+  life moves the body, so a palm still lands and a held object stays in
+  the fist.
 - **Feet planted.** Weight shifts move the hips only; the legs are solved to
-  the same planted ankles, and the authored source's motion-quality targets
-  (skate, float, penetration, pops, joint limits, jitter) must still pass.
+  the same planted ankles (now aimed past the two-bone solve's few-millimetre
+  miss when the pelvis rolls), and the body targets (skate, float,
+  penetration, pops, joint limits) must not get worse. `direct.ts` now
+  prints each performer's motion-quality verdicts against the authored
+  targets.
 - `direct.ts` prints each performer's life events in the take, so an author
   knows what a hold already has.
 
@@ -559,8 +572,10 @@ design fails with readers and a second design fails too, stop and report.
 stock rig has none and it would not respect masks or seeds); random events
 re-drawn around the beats (breaks revision locality).
 
-**State (2026-11-16):** designed; review and build in progress on
-`feature/authoring-life`.
+**State (2026-11-16):** design reviewed (single slot sequence, hold-level
+masks, bigger weight and glance, sigh slump, fidget lift and roll adopted
+from the review); built and committed on `feature/authoring-life`; review
+packs and fresh readers next.
 
 ### Slice 2: the first house base (gated; not started)
 
