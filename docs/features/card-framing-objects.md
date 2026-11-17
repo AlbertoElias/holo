@@ -73,7 +73,7 @@ same shrinking happens there for an object up to 6 m away.
 
 Stills of A and B for the chart at 3 m (today, a 90 % floor, a 75 % floor),
 simulated with the card's renderer and camera direction:
-`apps/capture/output/authoring/framing/stills-far-3/compare-crop.jpg`.
+`output/card-framing-objects/cap-options-chart-at-3m.jpg` in the main checkout (ignored; made by `stills.ts` beside `measure.ts`).
 
 **Recommendation: B at 75 %.** It changes no hologram on the feed today,
 keeps the performer's face readable however far an object is placed, and
