@@ -649,7 +649,7 @@ below). The owner watched the before/after video on 2026-11-17: "its a lot
 better". They have not said whether that closes the item, so it stays
 **open**; the lead has asked them.
 
-### Slice 2: the avatar flow (designed and approved 2026-11-17; not started)
+### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
 house base is kept and narrowed: one base, a short list of traits, two or
@@ -742,18 +742,18 @@ the avatar and misplace the eye (2e changes this with the motion owner).
 
 | Row | Today | Bar (any avatar the flow offers) | Stock avatar |
 |---|---|---|---|
-| Brows (`browInnerUp`, `browDown*`, `browOuterUp*`) | 1 mm | each at least **8 mm** (decided 2026-11-14) | 3.6–4.5 mm: fails |
-| Lids (`eyeWide*`, `eyeSquint*`) | 1 mm | each at least **8 mm** (decided 2026-11-14); `eyeBlink*` closes the lid fully (upper lid meets lower, within 1 mm) | wide and squint 6–7 mm: fail; blink 10.9 mm |
-| Mouth corners (`mouthSmile*`, `mouthFrown*`, `mouthStretch*`) | 1 mm | each at least **14 mm** (the smile, the one shape that read, moves 15.7 mm at its largest vertex) | frown 10.5 mm: fails |
-| `jawOpen` | 1 mm | at least **15 mm** | measured in 2a |
-| Lip shapes (`mouthPress*`, `mouthPucker`, `mouthFunnel`, `mouthRoll*`) | 1 mm | each at least **4 mm** | press 1.2–1.3 mm: fails |
+| Brows (`browInnerUp`, `browDown*`, `browOuterUp*`) | 1 mm | each at least **8 mm** (decided 2026-11-14) | 3.8–4.5 mm: fails |
+| Lids (`eyeWide*`, `eyeSquint*`) | 1 mm | each at least **8 mm** (decided 2026-11-14); `eyeBlink*` closes the lid fully (upper lid meets lower, within 1 mm) | wide and squint 3.5–4.0 mm: fail; blink leaves 6 mm of eye showing: fails |
+| Mouth corners (`mouthSmile*`, `mouthFrown*`, `mouthStretch*`) | 1 mm | each at least **14 mm** (the smile, the one shape that read, moves 15.7 mm at its largest vertex) | smile 12.9, frown 8.7, stretch 4.2 mm: fail |
+| `jawOpen` | 1 mm | at least **15 mm** | 9.5 mm: fails |
+| Lip shapes (`mouthPress*`, `mouthPucker`, `mouthFunnel`, `mouthRoll*`) | 1 mm | each at least **4 mm** | press 1.3, roll 2.8 mm: fail |
 | The other non-gaze ARKit channels (cheeks, nose, jaw sideways, tongue) | not barred | at least 1 mm, reported | reported |
-| Left and right | not checked | each pair within 15% of each other | measured in 2a |
-| **Brow visibility** (new) | none | of the vertices the brow shapes move by 1 mm or more, at least **90% visible** from the card's camera, at neutral and at `browInnerUp` 1, with every other mesh (glasses, hair) as an occluder | glasses cover the brows: fails |
-| **Brow contrast** (new, per finish) | none | in a front render at card framing, the brow region differs from the skin around it by at least **0.25 in OKLab L** | measured in 2a |
-| **Eyes at the card** (new) | none | the neutral eye opening at least **3 device px** on the phone card | measured in 2a |
-| **Face against accessories** (new) | none | no face vertex more than 2 mm inside a glasses or hair mesh at any channel at 1 (the smile's squint against the glasses, seen in 1b) | measured in 2a |
-| **Face box on the card** (new, from `face-legibility.ts`) | reported only | at least **40 device px** tall on the phone card | 29.5: fails |
+| Left and right | not checked | each pair within 15% of each other | within 3%: passes |
+| **Brow visibility** (new) | none | of the vertices the brow shapes move by 1 mm or more, at least **90% visible** from the card's camera, at neutral and at `browInnerUp` 1, with every other mesh (glasses, hair) as an occluder | 75%, the hair hides the rest: fails |
+| **Brow contrast** (new, per finish) | none | in a front render at card framing, the brow region differs from the skin around it by at least **0.25 in OKLab L** | 0.353: passes |
+| **Eyes at the card** (new) | none | the neutral eye opening at least **3 device px** on the phone card | 2.7–2.9 px: fails |
+| **Face against accessories** (new) | none | no face vertex more than 2 mm inside a glasses or hair mesh at any channel at 1 (the smile's squint against the glasses, seen in 1b) | 9 vertices up to 4 mm into the hair: fails |
+| **Face box on the card** (new, from `face-legibility.ts`) | reported only | at least **40 device px** tall on the phone card | 24.8 brow to chin: fails |
 | **The blind reading** (new, the gate) | run by hand in 1b | `face-legibility.ts` at the card's face size, `sheets/expressions.json`: three fresh readers, **each at least 5 of 7** (chance about 1 in 7) | 3 of 7, one reader |
 | Gaze, fist, point, reach, turn | as today | unchanged | passes |
 | Size | none | sparse morph targets; base no larger than 1.8 MB; the exported take and its USDZ measured against the hologram budgets | the reference |
@@ -1719,6 +1719,74 @@ the owner's call (the lead has asked them), so item 12 stays open.
 **Follow-ups.** A directed `weight` direction rolls the pelvis so the free
 hip rises (sign opposite to life's); a profile hold needs a beat or a different idea
 (open).
+
+### Slice 2a evidence (2026-11-17)
+
+**The command.** `avatar-audition.ts <avatar.glb|.gltf>` grades any avatar
+against every row of the bar and writes `audition.json` with each row's id,
+tier, bar, value and pass (README, "Auditioning an avatar"). Geometry tier
+2.6 s on the stock; with the render tier about 30 s.
+
+**The stock avatar** (sanity check; 1.736 m, so mm bars × 1.02): 30 of 61
+binding rows fail, by name:
+
+- brows: `browInnerUp` 4.5 mm, `browDown*` 3.8, `browOuterUp*` 4.0 (bar 8.2);
+  visibility 75% at neutral and at `browInnerUp` 1 (bar 90%): the **hair**
+  hides 25%. The glasses hide none from the card's camera, which sits below
+  the face (y 1.30 m); the brows sit above the frame. The 1b reading "the
+  glasses cover the brows" was a close-up's;
+- lids: `eyeWide*` 3.9–4.0 mm, `eyeSquint*` 3.5–3.6; `eyeBlink*` 1 leaves
+  **6 mm of eye showing** (14–14.5 mm open at neutral): the upper lid stops
+  above the lower one. The old row's "blink 10.9 mm" was one vertex's
+  travel. Eye opening on the card 2.9 and 2.7 device px (bar 3);
+- mouth corners: smile 12.8–12.9 mm, frown 8.4–8.7, stretch 4.2 (bar 14.3);
+  `jawOpen` 9.5 (bar 15.3); lip shapes: press 1.3, roll 2.8 (bar 4.1;
+  pucker 9.4 and funnel 8.2 pass);
+- face box on the card, brow line to chin: **24.8 device px** (bar 40). The
+  old box (every vertex a shape moves) read 29.5;
+- face against accessories: smile, `browOuterUpRight` and `cheekPuff` push 9
+  vertices up to 4 mm into the hair;
+- size 1.83 MB (bar 1.8); the existing turn row (right arm 32 vertices into
+  the torso, up to 26.9 mm), as before 2a.
+
+Passing rows: symmetry (all pairs within 3%), brow contrast 0.353 OKLab L,
+gaze, fist, point, reach. Other channels, reported: `mouthClose` and
+`tongueOut` move nothing.
+
+**The avatar-format fixtures** (all 17 from `scripts/lib/avatar-fixtures.ts`,
+the stock remapped): each runs; `unmappable` gets one `file.binds` row
+naming the missing bones. Formats without eye bones (`biped`, `unreal-cm`)
+fail the blink and gaze rows with "no eye found". The render tier on
+`mixamo-prefixed` and `vrm0-minus-z` finds the same face (box 24.8 and 23.9
+px); brow contrast fails there (0.12–0.15) because fixtures carry no
+textures. `vrm0-minus-z` first read every brow hidden: its `HumanoidFacing`
+node is turned 180°, so the geometry tier now measures in that node's
+parent frame (follow-up below).
+
+**Choices made in 2a.**
+
+- **Height, not face box, scales the mm bars** (height / 1.7). The bar's
+  text above says "scaled by the base's own face box"; that needs the render
+  tier, and the mm rows are the fast loop. The pixel rows already grade
+  what the card shows.
+- **Eye opening** is measured with rays from the card's direction over the
+  eye's middle columns (the iris, not the corners): the eye shows where the
+  first surface a ray meets is carried by the eye bone. The stock head has
+  no hole around its eyes, so an edge-loop method found nothing.
+- **Brow contrast** is the spread (90th − 10th percentile) of OKLab L at the
+  brow vertices in a front render, so a dark brow on light skin and a light
+  brow on dark skin both count. Hair in front of a brow vertex is sampled
+  too.
+- **Accessories** are head-skinned meshes with no face shapes, other than
+  eyes, teeth and tongue.
+- `face-legibility.ts` now measures the same brow-to-chin box (its
+  `face.json` reads 25.3 device px on the stock's expressions take).
+
+**Follow-up.** In `lib/avatar.ts` the body frame of an avatar with a
+`HumanoidFacing` node is that node's own frame, which faces −Z for VRM 0
+(`vrm0-minus-z`: the left hand at −X). Bind data, reach targets and
+direction may be mirrored for such avatars; owner: the slice that next
+directs a VRM 0 avatar.
 
 ## Physical-device limits
 

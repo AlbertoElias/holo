@@ -9,10 +9,45 @@ ordinary hologram GLB, and review whether it reads. Run everything from `apps/ca
 | Script | What it does |
 |---|---|
 | `acting-report.ts <take.glb> [--against other.glb] [--json out.json]` | Per performer (found by skin): which bones and face shapes move and when, frozen spans, and whether fingers, face and eyes ever move. `--against` lists the spans where two takes differ. |
-| `avatar-audition.ts <avatar.glb> [--json out.json]` | Can this avatar act: face-channel mesh displacement (mm), fingertip-to-palm distance for a fist and a point, reach error against fixed targets, one turn checked for interpenetration. A failing item names itself. |
+| `avatar-audition.ts <avatar.glb\|.gltf> [--geometry] [--out dir] [--json out.json]` | Grades any avatar against the audition bar (`lib/audition-bar.ts`): one row per bar with its measured value and pass or fail, in `audition.json` (below). Exits 1 when a binding row fails. |
 | `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb]` | Solves the beat sheet on each performer's avatar, writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`), prints each reach's stop-short distance, each grip, put and aim's miss, and the acting report. Exits 1 when a grip, put or aim misses past its limit (the files are still written). |
 | `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer, frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
 | `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
+
+## Auditioning an avatar
+
+```
+node --conditions=development --import tsx scripts/authoring/avatar-audition.ts <avatar.glb|.gltf> [--geometry] [--out dir]
+```
+
+One command grades any humanoid glTF/GLB: the house base (slice 2c), each
+finish (2f), every trait value (2d) and an outside avatar (2g). It writes
+`output/authoring/audition/<name>/audition.json` (or `--out`); `rows` holds
+every row of the bar with `id`, `tier`, `bar`, `value` and `pass`, and
+`fails` names each binding row that fails. An avatar that does not load or
+bind gets one failing `file.binds` row that says why. Exit code 1 means a
+binding row failed.
+
+- **File:** size against the base's 1.8 MB.
+- **Geometry** (Node, seconds; `lib/face-geometry.ts`): each face shape's
+  travel (the 90th percentile of the vertices it moves by 1 mm or more),
+  left/right symmetry, whether `eyeBlink*` closes the lid, how much of the
+  brow the card's camera sees past other meshes, and whether any face
+  vertex goes into glasses or hair. Regions come from the shapes and the eye
+  bones, so an outside avatar needs nothing marked up. Millimetre bars are
+  stated for 1.7 m and scale with the avatar's height.
+- **Render** (the viewer, about 30 s; `lib/audition-render.ts`): a still
+  take of the avatar on the phone card for the face box (brow line to chin)
+  and the eye opening in device px, and a front render for brow contrast
+  (OKLab L). `--geometry` skips it; its rows then read `pass: null`. Same
+  ports as `viewer-check.ts`.
+- **Motion:** gaze, fist, point, reach and the turn, as before.
+
+**The base (2c)** is graded with the full command and passes when `fails`
+is empty; then the blind reading (`face-legibility.ts`) is the gate. **An
+outside avatar** runs the same command; its verdict is `fails`, each row
+named. The bar's numbers are provisional (`docs/features/directed-performance.md`,
+"The audition bar, in numbers").
 
 ## A beat sheet
 

@@ -6,7 +6,8 @@
  *
  * The take is one performer facing +Z with one expression per beat (as
  * `sheets/expressions.json`). It writes to `output/authoring/face/`:
- * - `face.json`: the face's height at feed-card framing on a phone
+ * - `face.json`: the face's height (the brow line's top to the chin's
+ *   bottom, the regions `lib/face-geometry.ts` finds) at feed-card framing on a phone
  *   (390×844 CSS px, canvas at 1.5×) and on a desktop (1440×900 at 1× and
  *   2×), in CSS px, device px and, on the phone, mm;
  * - `blind-NN.jpg`: per face height (device px), each expression and a
@@ -24,7 +25,10 @@ import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Page } from 'playwright';
 
+import { resolveAvatar } from './direct.ts';
+import { loadAvatar } from './lib/avatar.ts';
 import { beatSpan, resolveTiming, type BeatSheet } from './lib/beats.ts';
+import { faceGeometry, type FaceRegions } from './lib/face-geometry.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
 import { openTake, startViewer, type ViewerServers } from './lib/viewer-session.ts';
 import { BACKGROUND, CARD_PIXEL_RATIO, MM_PER_CSS_PX, PHONE } from './review.ts';
@@ -42,16 +46,17 @@ const round = (x: number) => Math.round(x * 10) / 10;
 
 interface CardFace { cssPx: number; devicePx: number; mm?: number; bodyCssPx: number }
 
-async function cardFace(servers: ViewerServers, take: string, viewport: { width: number; height: number }, scale: number, mobile: boolean, at: number): Promise<CardFace> {
+async function cardFace(servers: ViewerServers, take: string, regions: FaceRegions, viewport: { width: number; height: number }, scale: number, mobile: boolean, at: number): Promise<CardFace> {
   const open = await openTake(servers, take, { viewport, deviceScaleFactor: scale, isMobile: mobile });
   try {
     await open.page.addScriptTag({ content: REVIEW_PAGE });
-    await call(open.page, 'init', open.url);
+    await call(open.page, 'init', open.url, regions);
     await call(open.page, 'seek', at);
     await call(open.page, 'seek', at); // twice: the card's camera damps toward its framing
-    const c = await call(open.page, 'card') as { canvas: { pixelRatio: number }; performers: { points: Record<string, [number, number]>; face: number[] | null }[] };
+    const c = await call(open.page, 'card') as { canvas: { pixelRatio: number }; performers: { points: Record<string, [number, number]> }[] };
+    const r = await call(open.page, 'regions', 0) as { browTop: number | null; chinBottom: number | null };
     const p = c.performers[0]!;
-    const css = p.face ? p.face[3]! - p.face[1]! : 0;
+    const css = r.browTop !== null && r.chinBottom !== null ? r.chinBottom - r.browTop : 0;
     const feet = Math.max(p.points.leftFoot?.[1] ?? 0, p.points.rightFoot?.[1] ?? 0);
     return { cssPx: round(css), devicePx: round(css * c.canvas.pixelRatio), ...(mobile ? { mm: Math.round(css * MM_PER_CSS_PX * 100) / 100 } : {}), bodyCssPx: round(feet - (p.points.headTop?.[1] ?? 0)) };
   } finally { await open.close(); }
@@ -72,7 +77,11 @@ async function main(): Promise<void> {
   const out = resolve(flag('--out') ?? OUTPUT);
   const take = args[0];
   if (!take) { console.error('usage: face-legibility.ts <take.glb> [--sheet take.beats.json] [--out dir]'); process.exit(2); }
-  const sheet = JSON.parse(await readFile(sheetArg ?? take.replace(/\.glb$/, '.beats.json'), 'utf8')) as BeatSheet;
+  const sheetFile = sheetArg ?? take.replace(/\.glb$/, '.beats.json');
+  const sheet = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
+  const performer = sheet.performers[0];
+  if (!performer) throw new Error(`${sheetFile}: no performer`);
+  const { regions } = faceGeometry(await loadAvatar(await resolveAvatar(performer.avatar, sheetFile)));
   const peaks = sheet.beats.map((b) => {
     if (!b.directions[0]) throw new Error(`beat ${b.id}: no directions; give each beat one expression`);
     const r = resolveTiming(b, b.directions[0]);
@@ -86,11 +95,11 @@ async function main(): Promise<void> {
   try {
     const neutralAt = peaks.at(-1)!.t;
     const card = {
-      phone: await cardFace(servers, take, PHONE, CARD_PIXEL_RATIO, true, neutralAt),
-      desktop: await cardFace(servers, take, { width: 1440, height: 900 }, 1, false, neutralAt),
-      desktopRetina: await cardFace(servers, take, { width: 1440, height: 900 }, 2, false, neutralAt)
+      phone: await cardFace(servers, take, regions, PHONE, CARD_PIXEL_RATIO, true, neutralAt),
+      desktop: await cardFace(servers, take, regions, { width: 1440, height: 900 }, 1, false, neutralAt),
+      desktopRetina: await cardFace(servers, take, regions, { width: 1440, height: 900 }, 2, false, neutralAt)
     };
-    if (card.phone.devicePx <= 0) throw new Error('no face found on the card: the first performer needs a face mesh, facing the camera');
+    if (card.phone.devicePx <= 0) throw new Error('no face found on the card: the first performer needs brow and jaw shapes, facing the camera');
 
     const open = await openTake(servers, take, { viewport: { width: 600, height: 600 } });
     const tiles: Record<number, Record<string, string>> = {};
@@ -145,4 +154,4 @@ async function main(): Promise<void> {
   } finally { servers.close(); }
 }
 
-await main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();
