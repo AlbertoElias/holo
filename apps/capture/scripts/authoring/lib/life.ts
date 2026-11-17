@@ -29,11 +29,18 @@ const WEIGHT_OVER: Range = [0.9, 1.3];
 const WEIGHT_AMOUNT: Range = [0.7, 1.0];
 /** The least time on one leg before the next shift. */
 const WEIGHT_REST = 2.0;
+/** Each change of legs also resettles the posture, which is what reads from the side: the spine leans
+ *  forward (degrees, + forward) and the hips sit forward or back (metres, + forward). */
+const POSTURE_LEAN: Range = [-1.5, 3.5];
+const POSTURE_HIPS: Range = [-0.015, 0.015];
 
 /** A glance: degrees off where the performer faces; the head takes `GLANCE_HEAD_SHARE`, the eyes the rest and lead. */
-const GLANCE_YAW: Range = [18, 35];
+const GLANCE_YAW: Range = [20, 40];
 const GLANCE_HOLD: Range = [0.5, 1.4];
 export const GLANCE_HEAD_SHARE = 0.75;
+/** Of the head's share, beyond `GLANCE_CHEST_FROM` degrees the upper chest turns this part with it (so the shoulders change from the side). */
+export const GLANCE_CHEST_SHARE = 0.35;
+const GLANCE_CHEST_FROM = 10;
 const EYES_ATTACK = 0.12;
 const EYES_LEAD = 0.06;
 const HEAD_ATTACK = 0.3;
@@ -59,13 +66,15 @@ const FIDGET_OUT = 0.9;
 
 type Range = readonly [number, number];
 
-interface WeightShift { readonly at: number; readonly over: number; readonly to: number }
+interface WeightShift { readonly at: number; readonly over: number; readonly to: number; readonly lean: number; readonly hips: number }
 interface Glance { readonly at: number; readonly yaw: number; readonly pitch: number; readonly hold: number }
 interface Pulse { readonly at: number; readonly hold: number }
 
 export interface LifeSchedule {
   /** Signed amount on the left leg (+) or the right (−) before the first shift. */
   readonly startWeight: number;
+  /** The posture before the first shift: spine lean (degrees) and hips forward (metres). */
+  readonly startPosture: { readonly lean: number; readonly hips: number };
   readonly weight: readonly WeightShift[];
   readonly glances: readonly Glance[];
   readonly sighs: readonly Pulse[];
@@ -100,6 +109,9 @@ export function lifeSchedule(seed: number, until: number): LifeSchedule {
   const slots = stream(seed, 0);
   const rw = stream(seed, 1);
   const rg = stream(seed, 2);
+  const rp = stream(seed, 6);
+  const posture = (): { lean: number; hips: number } => ({ lean: pick(rp, POSTURE_LEAN), hips: pick(rp, POSTURE_HIPS) });
+  const startPosture = posture();
   let side = rw() < 0.5 ? 1 : -1;
   const startWeight = side * pick(rw, WEIGHT_AMOUNT);
   const weight: WeightShift[] = [];
@@ -113,7 +125,7 @@ export function lifeSchedule(seed: number, until: number): LifeSchedule {
     if (!kind) continue;
     if (kind === 'weight') {
       side = -side;
-      const w = { at: t, over: pick(rw, WEIGHT_OVER), to: side * pick(rw, WEIGHT_AMOUNT) };
+      const w = { at: t, over: pick(rw, WEIGHT_OVER), to: side * pick(rw, WEIGHT_AMOUNT), ...posture() };
       weight.push(w);
       freeAt.weight = t + w.over + WEIGHT_REST;
     } else if (kind === 'glance') {
@@ -134,7 +146,7 @@ export function lifeSchedule(seed: number, until: number): LifeSchedule {
     for (let t = pick(rf, FIDGET_FIRST); t < until; t += pick(rf, FIDGET_EVERY)) out.push({ at: t, hold: pick(rf, FIDGET_HOLD) });
     return out;
   };
-  return { startWeight, weight, glances, sighs, fidgets: { left: fidget(4), right: fidget(5) } };
+  return { startWeight, startPosture, weight, glances, sighs, fidgets: { left: fidget(4), right: fidget(5) } };
 }
 
 /** Signed weight at t: + on the left leg, − on the right, about 0.55 to 0.85 in magnitude. */
@@ -145,6 +157,29 @@ export function weightAt(s: LifeSchedule, t: number): number {
     level += (w.to - level) * smoother((t - w.at) / w.over);
   }
   return level;
+}
+
+/**
+ * The posture at t, easing with each weight shift: spine lean (degrees, + forward) and hips
+ * forward (metres). A shift whose span `still` says to keep still leaves the posture as it was
+ * (the next shift catches up), so someone being reached for is not moving under the hand.
+ */
+export function postureAt(s: LifeSchedule, t: number, still?: (from: number, to: number) => boolean): { lean: number; hips: number } {
+  let { lean, hips } = s.startPosture;
+  for (const w of s.weight) {
+    if (t <= w.at) break;
+    if (still?.(w.at, w.at + w.over)) continue;
+    const k = smoother((t - w.at) / w.over);
+    lean += (w.lean - lean) * k;
+    hips += (w.hips - hips) * k;
+  }
+  return { lean, hips };
+}
+
+/** How far a glance turns the upper chest, degrees, from the head's yaw. */
+export function glanceChest(headYaw: number): number {
+  const over = Math.max(0, Math.abs(headYaw) - GLANCE_CHEST_FROM);
+  return Math.sign(headYaw) * over * GLANCE_CHEST_SHARE;
 }
 
 /** Up over `attack`, held, back over `release`. */
