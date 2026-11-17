@@ -1,30 +1,49 @@
 /**
- * The audition: can this avatar act? It adds only what capture's binding
- * reports cannot say (they say whether bones, face channels and fingers
- * bind): how far each face channel moves the mesh, whether a fist and a
- * point close and open the hand, how far a reach lands from fixed targets,
- * and whether one turn drives parts through each other.
+ * The audition: can this avatar act, and does its face read on a phone
+ * card? It grades any avatar glTF/GLB against the audition bar
+ * (`lib/audition-bar.ts`): one row per bar, each with its measured value
+ * and pass or fail. It adds only what capture's binding reports cannot say
+ * (they say whether bones, face channels and fingers bind).
  *
- *   node --conditions=development --import tsx scripts/authoring/avatar-audition.ts <avatar.glb> [--json out.json]
+ * - file: size.
+ * - geometry (Node, `lib/face-geometry.ts`): each face shape's travel,
+ *   left/right symmetry, whether the blink closes the lid, whether the card
+ *   camera sees the brows past hair and glasses, and whether the face
+ *   passes into them.
+ * - render (the real viewer, `lib/audition-render.ts`): face box and eye
+ *   opening on the phone card, brow contrast in a front render.
+ * - motion: a fist and a point close and open the hand, a reach lands on
+ *   fixed targets, one turn does not drive parts through each other, and
+ *   something turns the eyes.
+ *
+ *   node --conditions=development --import tsx scripts/authoring/avatar-audition.ts <avatar.glb|.gltf> [--geometry] [--out dir] [--json out.json]
+ *
+ * It writes `audition.json` (and the render tier's take, card and brow
+ * render) to `output/authoring/audition/<name>/`, or `--out`. `--geometry`
+ * skips the render tier (its rows then read "not run"). Exits 1 when a
+ * binding row fails.
  */
-import { writeFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { basename, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { FACE_CHANNELS, type FaceChannel } from '@holoim/avatar-face';
 import type { VrmHumanoidBone } from '@holoim/meaning';
 
+import { fileRows, geometryRows, renderRows, type AuditionRow } from './lib/audition-bar.ts';
+import { renderTier } from './lib/audition-render.ts';
 import { loadAvatar, resetPose, type LoadedAvatar, type Side } from './lib/avatar.ts';
+import { faceGeometry, type FaceGeometry } from './lib/face-geometry.ts';
 import { FINGERS, shapePose, type FingerName } from './lib/hands.ts';
 import { armRestOffset, bindAnkles, bodyUp, hangArm, moveBoneWorld, plantFeet, solveArm, toWorld, turnBody, TURN_SHARE } from './lib/pose.ts';
 import { meshesOf, skin, type SkinnedSurface } from './lib/skin.ts';
 
-/** Provisional bars, set on the stock avatar; a failing item names itself. */
+const OUTPUT = fileURLToPath(new URL('../../output/authoring/audition/', import.meta.url));
+
+/** The motion rows' bars (the face's are in `lib/audition-bar.ts`); a failing item names itself. */
 export const BARS = {
-  /** A face channel that moves the mesh less than this cannot be read. */
+  /** Gaze: turning the eyes 20° moves something at least this much. */
   faceMm: 1,
-  /** Channels a performance cannot do without. */
-  keyChannels: ['eyeBlinkLeft', 'eyeBlinkRight', 'jawOpen', 'mouthSmileLeft', 'mouthSmileRight', 'browInnerUp', 'mouthFrownLeft', 'mouthFrownRight', 'mouthPressLeft', 'mouthPressRight'] as FaceChannel[],
   /** Fist: every fingertip within this share of hand length of the palm. */
   fistReach: 0.45,
   /** Point: the index fingertip at least this far out, the others within `fistReach`. */
@@ -68,7 +87,20 @@ export interface AuditionReport {
   }>;
   readonly reach: { side: Side; target: string; reachable: boolean; errorMm: number }[];
   readonly turn: { degrees: number; ankleSlipMm: number; pairs: { pair: string; vertices: number; stance: number; turn: number; maxDepthMm: number }[] };
+  /** The geometry tier's measures (regions left out). */
+  readonly geometry: Omit<FaceGeometry, 'regions'>;
+  /** Every row of the bar. */
+  readonly rows: AuditionRow[];
+  /** The binding rows that fail, as `id: value (bar)`. */
   readonly fails: string[];
+}
+
+export interface AuditionOptions {
+  /** Run the render tier (builds a take and opens it in the viewer). Default true. */
+  readonly render?: boolean;
+  /** Where the render tier writes its take, card and brow render. */
+  readonly out?: string;
+  readonly recordVideoDir?: string;
 }
 
 const mm = (m: number): number => Math.round(m * 10000) / 10;
@@ -251,71 +283,117 @@ function turnAudition(a: LoadedAvatar): AuditionReport['turn'] {
   return { degrees: TURN_DEG, ankleSlipMm: mm(slip), pairs };
 }
 
-export async function audition(file: string): Promise<AuditionReport> {
+/** A .gltf (with its buffers beside it) as a GLB, so every avatar loads one way. */
+async function asGlb(file: string, out: string): Promise<string> {
+  if (extname(file).toLowerCase() !== '.gltf') return file;
+  const { NodeIO } = await import('@gltf-transform/core');
+  const io = new NodeIO();
+  const glb = await io.writeBinary(await io.read(file));
+  await mkdir(out, { recursive: true });
+  const to = join(out, `${basename(file, extname(file))}.glb`);
+  await writeFile(to, glb);
+  return to;
+}
+
+function motionRows(face: AuditionReport['face'], hands: AuditionReport['hands'], reach: AuditionReport['reach'], turn: AuditionReport['turn']): AuditionRow[] {
+  const rows: AuditionRow[] = [];
+  const row = (id: string, group: string, bar: string, value: AuditionRow['value'], pass: boolean, note?: string) => rows.push({ id, group, tier: 'motion', bar, value, pass, binding: true, ...(note ? { note } : {}) });
+  row('gaze', 'gaze', `eyes turn ≥ ${BARS.faceMm} mm at 20°`, face.gaze.mm, face.gaze.mm >= BARS.faceMm, `by ${face.gaze.by}`);
+  for (const side of ['left', 'right'] as const) {
+    const h = hands[side];
+    if (!h) { row(`hands.${side}.fist`, 'hands', 'finger bones', null, false, 'no finger bones'); row(`hands.${side}.point`, 'hands', 'finger bones', null, false, 'no finger bones'); continue; }
+    const far = (r: Record<FingerName, number | null>, fingers: readonly FingerName[]) => fingers.filter((f) => r[f] === null || r[f]! > BARS.fistReach * h.lengthMm);
+    const fist = far(h.fist, FINGERS);
+    row(`hands.${side}.fist`, 'hands', `fingertips ≤ ${BARS.fistReach} hand from the palm`, Math.max(...FINGERS.map((f) => h.fist[f] ?? Infinity)), !fist.length, fist.length ? `${fist.join(', ')} open` : undefined);
+    const pointOut = (h.point.index ?? 0) >= BARS.pointReach * h.lengthMm;
+    const pointRest = far(h.point, ['middle', 'ring', 'little']);
+    row(`hands.${side}.point`, 'hands', `index ≥ ${BARS.pointReach} hand out, others closed`, h.point.index, pointOut && !pointRest.length, !pointOut ? 'index not out' : pointRest.length ? `${pointRest.join(', ')} open` : undefined);
+  }
+  const reachable = reach.filter((r) => r.reachable);
+  const missed = reachable.filter((r) => r.errorMm > BARS.reachMm);
+  row('reach', 'reach', `wrist within ${BARS.reachMm} mm of each reachable target`, Math.max(0, ...reachable.map((r) => r.errorMm)), !missed.length, missed.length ? missed.map((r) => `${r.side} ${r.target} by ${r.errorMm} mm`).join(', ') : undefined);
+  for (const p of turn.pairs) {
+    const added = p.turn - p.stance;
+    row(`turn.${p.pair.replace(/ /g, '-')}`, 'turn', `${TURN_DEG}° turn adds ≤ ${BARS.turnShare * 100}% of vertices > ${BARS.depthMm} mm deep`, added, !(p.vertices && added > BARS.turnShare * p.vertices), added > 0 ? `up to ${p.maxDepthMm} mm` : undefined);
+  }
+  row('turn.feet', 'turn', 'feet slip ≤ 10 mm', turn.ankleSlipMm, turn.ankleSlipMm <= 10);
+  return rows;
+}
+
+const failText = (r: AuditionRow): string => `${r.id}: ${r.value ?? 'none'} (${r.bar})${r.note ? ` — ${r.note}` : ''}`;
+
+export async function audition(input: string, options: AuditionOptions = {}): Promise<AuditionReport> {
+  const out = resolve(options.out ?? join(OUTPUT, basename(input, extname(input))));
+  const file = await asGlb(input, out);
+  const bytes = (await stat(file)).size;
   const a = await loadAvatar(file);
+  const geometry = faceGeometry(a);
+  resetPose(a);
   const face = faceAudition(a);
   const hands = { left: handAudition(a, 'left'), right: handAudition(a, 'right') };
   const reach = reachAudition(a);
   const turn = turnAudition(a);
   resetPose(a);
 
-  const fails: string[] = [];
-  const stillKey = BARS.keyChannels.filter((c) => face.still.includes(c) || !face.channels.some((x) => x.channel === c));
-  if (stillKey.length) fails.push(`face: ${stillKey.join(', ')} move the mesh less than ${BARS.faceMm} mm`);
-  if (face.gaze.mm < BARS.faceMm) fails.push('face: nothing turns the eyes');
-  for (const side of ['left', 'right'] as const) {
-    const h = hands[side];
-    if (!h) { fails.push(`hands: no ${side} finger bones`); continue; }
-    const far = (r: Record<FingerName, number | null>, fingers: readonly FingerName[]) => fingers.filter((f) => r[f] === null || r[f]! > BARS.fistReach * h.lengthMm);
-    const fist = far(h.fist, FINGERS);
-    if (fist.length) fails.push(`hands: ${side} fist leaves ${fist.join(', ')} open`);
-    const pointOut = (h.point.index ?? 0) >= BARS.pointReach * h.lengthMm;
-    const pointRest = far(h.point, ['middle', 'ring', 'little']);
-    if (!pointOut || pointRest.length) fails.push(`hands: ${side} point does not read (${!pointOut ? 'index not out' : `${pointRest.join(', ')} open`})`);
+  let render: Awaited<ReturnType<typeof renderTier>> | null = null;
+  let why = 'render tier not run (--geometry)';
+  if (options.render !== false) {
+    try { render = await renderTier(file, geometry.regions, out, options.recordVideoDir ? { recordVideoDir: options.recordVideoDir } : {}); }
+    catch (error) { why = `render tier failed: ${(error as Error).message.split('\n')[0]}`; }
   }
-  const missed = reach.filter((r) => r.reachable && r.errorMm > BARS.reachMm);
-  if (missed.length) fails.push(`reach: ${missed.map((r) => `${r.side} ${r.target} by ${r.errorMm} mm`).join(', ')}`);
-  for (const p of turn.pairs) {
-    const added = p.turn - p.stance;
-    if (p.vertices && added > BARS.turnShare * p.vertices) fails.push(`turn: ${p.pair} by ${added} vertices (up to ${p.maxDepthMm} mm)`);
-  }
-  if (turn.ankleSlipMm > 10) fails.push(`turn: feet slip ${turn.ankleSlipMm} mm`);
-  return { file: basename(file), height: Math.round(a.height * 1000) / 1000, face, hands, reach, turn, fails };
+  const rows = [...fileRows(bytes), ...geometryRows(geometry, a.height), ...renderRows(render, why), ...motionRows(face, hands, reach, turn)];
+  const fails = rows.filter((r) => r.binding && r.pass === false).map(failText);
+  const { regions: _regions, ...measures } = geometry;
+  return { file: basename(input), height: Math.round(a.height * 1000) / 1000, face, hands, reach, turn, geometry: measures, rows, fails };
 }
 
 export function summarizeAudition(r: AuditionReport): string {
-  const moving = r.face.channels.filter((c) => c.mm >= BARS.faceMm);
-  const strongest = [...moving].sort((x, y) => y.mm - x.mm).slice(0, 4).map((c) => `${c.channel} ${c.mm}`);
-  const lines = [
-    `${r.file}: ${r.height} m tall | ${r.fails.length ? `${r.fails.length} audition item(s) fail` : 'passes the audition'}`,
-    `  face: ${moving.length}/${r.face.channels.length} channels move the mesh ≥ ${BARS.faceMm} mm (most: ${strongest.join(', ') || 'none'} mm); gaze by ${r.face.gaze.by}, ${r.face.gaze.mm} mm at 20°`
-  ];
-  if (r.face.still.length) lines.push(`  face: ${r.face.still.join(', ')} move the mesh less than ${BARS.faceMm} mm`);
-  for (const side of ['left', 'right'] as const) {
-    const h = r.hands[side];
-    if (!h) { lines.push(`  ${side} hand: no finger bones`); continue; }
-    const max = (o: Record<string, number | null>, ks: readonly string[]) => Math.max(...ks.map((k) => o[k] ?? Infinity));
-    lines.push(`  ${side} hand (${h.lengthMm} mm): fist fingertips ≤ ${max(h.fist, FINGERS)} mm from the palm; point index ${h.point.index} mm out, others ≤ ${max(h.point, ['middle', 'ring', 'little'])} mm`);
+  const binding = r.rows.filter((x) => x.binding);
+  const failed = binding.filter((x) => x.pass === false);
+  const unrun = binding.filter((x) => x.pass === null);
+  const lines = [`${r.file}: ${r.height} m tall | ${failed.length ? `${failed.length} of ${binding.length} rows fail` : 'passes the audition'}${unrun.length ? `, ${unrun.length} not run` : ''}`];
+  const groups = [...new Set(r.rows.map((x) => x.group))];
+  for (const g of groups) {
+    const rows = r.rows.filter((x) => x.group === g);
+    const bad = rows.filter((x) => x.pass === false);
+    const mark = rows.every((x) => !x.binding) ? 'info' : bad.some((x) => x.binding) ? 'FAIL' : rows.some((x) => x.pass === null) ? '  --' : '  ok';
+    lines.push(`  ${mark} ${g}: ${rows.map((x) => `${x.id.split('.').slice(1).join('.') || x.id} ${x.value ?? '–'}${x.pass === false ? '✗' : ''}`).join(', ')}`);
   }
-  const reachable = r.reach.filter((x) => x.reachable);
-  lines.push(`  reach: ${reachable.length}/${r.reach.length} targets in reach, worst miss ${Math.max(0, ...reachable.map((x) => x.errorMm))} mm`);
-  lines.push(`  turn ${r.turn.degrees}°: ${r.turn.pairs.map((p) => `${p.pair} ${p.stance}→${p.turn}`).join(', ')}; feet slip ${r.turn.ankleSlipMm} mm`);
   for (const f of r.fails) lines.push(`  FAIL ${f}`);
   return lines.join('\n');
 }
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const i = args.indexOf('--json');
-  const jsonOut = i === -1 ? undefined : args.splice(i, 2)[1];
-  const file = args[0];
+  const flag = (n: string) => { const i = args.indexOf(n); return i === -1 ? undefined : args.splice(i, 2)[1]; };
+  const jsonOut = flag('--json');
+  const outArg = flag('--out');
+  const geometryOnly = args.includes('--geometry');
+  const file = args.filter((x) => !x.startsWith('--'))[0];
   if (!file) {
-    console.error('usage: avatar-audition.ts <avatar.glb> [--json <out.json>]');
+    console.error('usage: avatar-audition.ts <avatar.glb|.gltf> [--geometry] [--out dir] [--json out.json]');
     process.exit(2);
   }
-  const report = await audition(file);
+  const out = resolve(outArg ?? join(OUTPUT, basename(file, extname(file))));
+  let report: AuditionReport;
+  try {
+    report = await audition(file, { render: !geometryOnly, out });
+  } catch (error) {
+    // An avatar that does not load or bind still gets an audition: one failing row that says why.
+    const why = (error as Error).message.split('\n')[0]!;
+    const row: AuditionRow = { id: 'file.binds', group: 'binds', tier: 'file', bar: 'loads and binds a humanoid', value: null, pass: false, binding: true, note: why };
+    await mkdir(out, { recursive: true });
+    await writeFile(join(out, 'audition.json'), `${JSON.stringify({ file: basename(file), rows: [row], fails: [failText(row)] }, null, 2)}\n`);
+    console.log(`${basename(file)}: FAIL ${failText(row)}`);
+    process.exit(1);
+  }
   console.log(summarizeAudition(report));
-  if (jsonOut) await writeFile(jsonOut, `${JSON.stringify(report, null, 2)}\n`);
+  await mkdir(out, { recursive: true });
+  const json = `${JSON.stringify(report, null, 2)}\n`;
+  await writeFile(join(out, 'audition.json'), json);
+  if (jsonOut) await writeFile(jsonOut, json);
+  console.log(`  ${join(out, 'audition.json')}`);
+  if (report.fails.length) process.exitCode = 1;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();
