@@ -106,12 +106,17 @@ or 5° off, a put more than 1 cm off or 3° from upright, or an aim more than
 Keep a held prop's take `hold` until the next reach starts, or the hand
 falls back to the thigh in between and hides what it holds.
 
-The feed card fits the performer. On a phone it is portrait, about a metre
-wide at her depth, so an object more than about half a metre beside her on
-screen is off the card, and the close view crops tighter. Stage what the
-reader must see close to her, or behind or in front of her. `viewer-check.ts`
-renders a square card, which shows more at the sides: judge framing from
-the review pack's `card` stills, not from it.
+The feed card frames the whole dome, and the dome is fitted around everything
+the take draws, recorded objects included, so a set the sheet places is on
+the card. The tallest-bar chart, 1.15 m from her, fills about 58×154 CSS px
+of a phone card. Each object widens the dome, so the performer gets smaller:
+about 160 CSS px tall with that chart against about 178 without it, and
+nothing caps how far an object can widen it yet. The review pack's card
+stills keep the cast and every object on the card. Its close view widens to
+an object while a beat names it, and while it is held. `on-screen.json`
+gives each object's size on the card. The 1c reader who saw the pointer
+aimed at nothing was given stills cropped to the cast, a fault in the review
+tool, not in the viewer (fixed).
 
 ## Reviewing a take
 

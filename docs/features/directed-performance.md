@@ -451,13 +451,20 @@ review (2026-11-14):
   mm off, asked 20 (slice 1b's row says 11.8 with the doubled life), the
   goodbye's stays at 148.6 mm, asked 160, and two-avatars' at 100.0 and
   100.2 mm, asked 100.
-- **The card frames the performer, not the set.** viewer-web fits the card
-  to the avatar (`HologramCardCanvas.tsx`). The phone card is portrait,
-  about a metre wide at her depth, so an object more than about half a
-  metre beside her on screen is off it; `viewer-check.ts`'s square card
-  shows more, which is how the tallest bar's chart passed the author's
-  check and was missed by the reader. Changing that is the viewer's, not
-  this slice's (gap 13).
+- **The card frames the set; the review stills did not.** Corrected
+  2026-11-16; this line first said the card frames only the performer.
+  - viewer-web's card frames the whole dome (`clocheFraming`), and the dome
+    is fitted around everything drawn, recorded objects included
+    (`drawnPoints`, `HologramCardCanvas.tsx`).
+  - On a phone card the tallest-bar chart is wholly visible, about 58×154
+    CSS px, at every time measured.
+  - The reader missed it because `review.ts` cropped its card stills to the
+    cast's key points, leaving 15% of the chart's box, and its close view
+    framed head to hips. That was a review-tool fault, not a viewer one.
+  - The stills now keep every object on the card, and the close view widens
+    to the objects a beat names (`docs/features/card-framing-objects.md`).
+  - Objects do cost performer size: about 160 CSS px with the chart against
+    about 178 without it. Nothing caps that yet (gap 13).
 
 **Revision locality.** `take`, `put` and `hold` change where the object is
 for the rest of the take, as a step does. Other directions stay closed forms
@@ -604,12 +611,12 @@ and 7 (its evidence, below); the second 1c piece added item 13.
     stills (slice 1b, defaults), and the owner judged the video frozen
     too (2026-11-14). Authors give holds a beat for now.
 
-13. **The card shows only the performer's surroundings.** The card fits
-    the avatar, so a set more than about half a metre beside her on screen
-    is off it: the tallest-bar chart, 1.15 m in front of her side, was never
-    seen, and its reader saw a pointer held out at nothing. Until the
-    viewer frames recorded objects too, stage what matters close to her or
-    in depth (slice 1c evidence).
+13. **A far object shrinks the performer.** The card frames every recorded
+    object, so each widens the dome, and nothing caps it in an authoring
+    take, which has no bubble. This item first said the card showed only
+    the performer's surroundings. That was the review pack's crop, a
+    review-tool fault fixed on 2026-11-16, not the viewer. Whether to cap
+    the widening is open for the owner in `docs/features/card-framing-objects.md`.
 
 Not exercised by the piece, still open: **voice and sound** (speech,
 effects, music) and **titles and captions**.
@@ -1098,8 +1105,11 @@ the neutral title "Take".
   - the put.
 
   These did not:
-  - She never points at anything the reader could identify, because the
-    chart was off the phone card and the close view.
+  - She never points at anything the reader could identify. The card
+    showed the chart; the pack's card stills were cropped to the cast and
+    the close view framed head to hips, so neither showed it. This was a
+    review-tool fault, fixed on 2026-11-16; a fresh reading of the fixed
+    pack is in `docs/features/card-framing-objects.md`.
   - The pointer "disappeared" at 2.2–2.6 s. The take's hold (0.3 s) ended
     before the show reach began, so the hand fell back to her hip. The hold
     is now 1.6 s, and the pointer's lowest point between 1.5 and 3.2 s rose
@@ -1110,7 +1120,8 @@ the neutral title "Take".
   - The shaft is a hairline on the card, and 3.4–6.2 s looks almost frozen.
 
   The README now covers framing on the phone card and keeping a take's hold
-  until the next reach. "Not covered yet" item 13 records the framing gap.
+  until the next reach. "Not covered yet" item 13 now records the open
+  question of capping how far objects widen the card.
 - **Review fixes.** A code review and a fresh Opus verifier (given only this
   brief and the diff) found the following, now fixed:
   - the grip offset was taken at the rig's scale, so a scaled avatar's prop
