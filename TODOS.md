@@ -169,8 +169,8 @@ it from the item below instead of duplicating its status here.
   figure out the avatar flow"): slice 2 is now the avatar flow, an 80/20
   of one expressive base read at phone-card size, a trait card, two or
   three finishes and the audition as the bar for any avatar, in
-  sub-slices 2a to 2g; designed and waiting for the owner's approval
-  (open decision 5), nothing built. Owned by
+  sub-slices 2a to 2g; approved by the owner on 2026-11-17 ("Approve
+  all", open decision 5); 2a (the bar) and 2b (Astra's sheets) next, nothing built. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
   (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)
