@@ -139,7 +139,27 @@ capture authoring action.
 
 ### Fresh reading, tallest-bar (fixed pack)
 
-Pending.
+2026-11-17: a fresh Opus subagent, given only the fixed pack's `reader/`
+under the title "Take" (account and filled `comparison.json` beside the
+ignored pack, `apps/capture/output/authoring/framing/review/tallest-bar-fixed2/`).
+
+- **Now seen:** the chart, "one tall orange bar among shorter blue ones",
+  on the card and in the close view, which "widens ... and the chart comes
+  into frame" while she acts on it. The glance at the cup, the take and the
+  put read.
+- **Still not read: the point.** "I never clearly see her point at the
+  chart." The pointer is level at chest height, aimed along the line of
+  sight, so it is "a short dark line seen end-on" even in the close view;
+  her head faces the viewer through 3–6 s, so the look back does not read
+  as a turn; the pose holds for three seconds and reads as frozen on the
+  card.
+- **Verdict:** the piece does not read, but no longer because of the review
+  tool. The miss is the staging of the aim (across the line of sight, head
+  to the bar before back to the viewer), which is the life-rework and
+  directing work, not framing.
+- The reader also saw the close view crop her and the orange bar mid-zoom
+  (1.4–1.6 s, 7.6–7.8 s): the second of smoothing lags the widening. Noted,
+  not fixed.
 
 ## Physical-device limits
 
