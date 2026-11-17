@@ -253,7 +253,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       await mkdir(dir, { recursive: true });
       const plan = bodies.map((b, f) => {
         const acting = new Set(acts(p, times[f]!));
-        return closeView(b.performers[p]!.head, b.performers[p]!.hips, b.camera, CLOSE_FOV, b.objects.filter((o) => acting.has(o.name)));
+        return closeView(b.performers[p]!.head, b.performers[p]!.hips, b.camera, CLOSE_FOV, b.objects.filter((o) => acting.has(o.name) && Number.isFinite(o.min[0]!)));
       });
       const pos = smoothed(plan.map((x) => x.position), Math.round(fps / 2));
       const tgt = smoothed(plan.map((x) => x.target), Math.round(fps / 2));

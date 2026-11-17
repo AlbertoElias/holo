@@ -156,6 +156,9 @@ export const REVIEW_PAGE = String.raw`
     close(i, view) {
       const r = state.probe.renderer;
       const cam = state.probe.camera.clone();
+      // The card camera carries the card's view offset (its frame inside the canvas); the close view is a plain square camera.
+      if (cam.clearViewOffset) cam.clearViewOffset();
+      cam.zoom = 1;
       cam.fov = view.fov; cam.aspect = view.width / view.height; cam.near = 0.01; cam.far = 100;
       cam.position.set(...view.position); cam.lookAt(V().set(...view.target));
       cam.updateProjectionMatrix(); cam.updateMatrixWorld();
