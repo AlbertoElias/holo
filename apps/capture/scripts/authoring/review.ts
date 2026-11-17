@@ -166,8 +166,12 @@ export function actedOn(sheet: BeatSheet | undefined, performers: readonly strin
   if (sheet?.objects && Object.keys(sheet.objects).length) {
     const ids = new Set(Object.keys(sheet.objects));
     const declared = (id: string) => sheet.objects![id]!.name ?? id;
-    // The viewer names the first performer's wrapper RecordedAvatar and the others Performer_<id>.
-    const index = (id: string) => performers.findIndex((w, i) => (i === 0 ? w === 'RecordedAvatar' && sheet.performers[0]?.id === id : w === `Performer_${id}`));
+    // The writer names the first performer's wrapper RecordedAvatar and the others Performer_<id>,
+    // which the viewer's loader sanitises as three's PropertyBinding does (whitespace to _, []./: dropped).
+    const loaded = (name: string) => name.replace(/\s/g, '_').replace(/[[\]./:]/g, '');
+    const index = (id: string) => (sheet.performers[0]?.id === id
+      ? performers.indexOf('RecordedAvatar')
+      : performers.indexOf(loaded(`Performer_${id}`)));
     for (const beat of sheet.beats) {
       const p = index(beat.performer);
       if (p < 0) continue;

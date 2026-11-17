@@ -1109,8 +1109,9 @@ the neutral title "Take".
 
   These did not:
   - She never points at anything the reader could identify. The card
-    showed the chart; the pack's card stills were cropped to the cast and
-    the close view framed head to hips, so neither showed it. This was a
+    showed the chart; the pack's card stills were cropped to the cast, and
+    the close view, planned around her alone, rendered off centre through
+    the card's view offset. This was a
     review-tool fault, fixed on 2026-11-16; a fresh reading of the fixed
     pack is in `docs/features/card-framing-objects.md`.
   - The pointer "disappeared" at 2.2–2.6 s. The take's hold (0.3 s) ended

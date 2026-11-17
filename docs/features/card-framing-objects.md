@@ -37,7 +37,8 @@ Fixed on branch `bug/review-pack-framing`:
   every pack's close view was about twice as wide as planned and sat off
   centre: a whole body small in the frame rather than head to hips.
 
-Holograms without objects review exactly as before.
+For a hologram without objects the card stills are as before; its close
+view changes only by losing the view offset (below).
 
 ## Measurement
 
@@ -114,7 +115,9 @@ capture authoring action.
 | The close view jumps when a beat names an object | Its target and distance are smoothed over ±fps/2 frames as before |
 | A sheet object's id differs from its name in the GLB | Matched through `spec.name ?? id`, the name the writer gives the node |
 | A take without a sheet | Holds come from `HOLOIM_objects` and belong to the first performer |
-| A take without objects changes | The close view with no objects is the old head-to-hips framing; the crop is the old cast crop |
+| A take without objects changes | The close view with no objects plans the old head-to-hips framing (now rendered without the offset); the crop is the old cast crop |
+| A performer id with spaces or `/` | The wrapper name is matched as the loader sanitises it |
+| Two objects share a name, or a mesh over 3000 vertices | Known: both widen the close view together; a box thinned per mesh can read slightly small, inside the crop's pad. Not fixed |
 | A cap shrinks takes that read today | B and C leave every current take unchanged (measured above) |
 
 ## Ownership
