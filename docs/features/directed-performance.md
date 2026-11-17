@@ -1309,6 +1309,11 @@ audition scripts, the house base's source and its exported avatar files
    watched, and puts the brows where the base will make them readable,
    with no avatar work. Caveat: on the phone card itself an idle mouth
    stays near a pixel, so (A) shows in the close view and AR first.
+   **Decided on 2026-11-17:** (A) ("A, mouth now"). Built the same day
+   (evidence: "Face in idle life" in slice 1d's evidence), with one change
+   from the list above: life's glances are mostly down or level, so the
+   brows flash as a glance comes back rather than lifting with an upward
+   glance.
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.

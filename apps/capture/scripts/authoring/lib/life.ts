@@ -10,6 +10,8 @@
  * the duration. Directions only mask it (`busy`), each within its own span
  * plus `MASK_PAD`, so revising a beat changes life only near that beat.
  */
+import type { FaceChannel } from '@holoim/avatar-face';
+
 import type { DirectionKind, Resolved, Side } from './beats.ts';
 
 /** How far either side of a direction's span life eases out and back in, seconds. */
@@ -64,11 +66,44 @@ const FIDGET_IN = 0.6;
 const FIDGET_HOLD: Range = [0.3, 0.9];
 const FIDGET_OUT = 0.9;
 
+/**
+ * The face's share (decision 6, 2026-11-17): the mouth moves with a sigh and as a weight shift
+ * settles, and the brows lift through a sigh and flash as a glance comes back. Weights are a
+ * fifth to two fifths of a shape, so the mouth reads close up on any avatar and the brows on one
+ * whose brows meet the audition's bars.
+ */
+export const LIFE_FACE = {
+  /** In the in-breath the lips part and the inner brows lift; the breath goes out through rounded lips. */
+  sigh: { jawOpen: 0.3, mouthFunnel: 0.35, browInnerUp: 0.4 },
+  /** A settle the lips press and roll in. */
+  press: { mouthPressLeft: 0.6, mouthPressRight: 0.6, mouthRollLower: 0.45, mouthPucker: 0.2 },
+  /** Or one corner tugs, the other side pressing. */
+  tug: { corner: 0.3, press: 0.4 },
+  /** The brows' flash as the eyes come back. */
+  flash: { browInnerUp: 0.4, browOuter: 0.35 }
+} as const;
+/** The mouth's settle starts this far into a weight shift's ease, eases in, holds, eases out (seconds). */
+const SETTLE_AT = 0.55;
+const SETTLE_IN = 0.25;
+const SETTLE_HOLD: Range = [0.3, 0.8];
+const SETTLE_OUT = 0.5;
+const SETTLE_AMOUNT: Range = [0.7, 1.0];
+/** Share of settles that press rather than tug; share of glances whose return brings a flash. */
+const SETTLE_PRESS = 0.55;
+const FLASH_SHARE = 0.6;
+const FLASH_IN = 0.15;
+const FLASH_HOLD = 0.12;
+const FLASH_OUT = 0.4;
+/** Of the out-breath, the lips round over this long and the brows come down over this share. */
+const SIGH_FUNNEL_IN = 0.3;
+const SIGH_BROW_OUT = 0.6;
+
 type Range = readonly [number, number];
 
 interface WeightShift { readonly at: number; readonly over: number; readonly to: number; readonly lean: number; readonly hips: number }
 interface Glance { readonly at: number; readonly yaw: number; readonly pitch: number; readonly hold: number }
 interface Pulse { readonly at: number; readonly hold: number }
+interface Settle { readonly at: number; readonly hold: number; readonly amount: number; readonly tug?: Side }
 
 export interface LifeSchedule {
   /** Signed amount on the left leg (+) or the right (−) before the first shift. */
@@ -79,6 +114,8 @@ export interface LifeSchedule {
   readonly glances: readonly Glance[];
   readonly sighs: readonly Pulse[];
   readonly fidgets: Readonly<Record<Side, readonly Pulse[]>>;
+  /** The mouth's settle under each weight shift, and the brows' flash as a glance comes back (start times). */
+  readonly face: { readonly settles: readonly Settle[]; readonly flashes: readonly number[] };
 }
 
 /** mulberry32 on a hashed seed: a small seeded stream, one per use. */
@@ -146,7 +183,16 @@ export function lifeSchedule(seed: number, until: number): LifeSchedule {
     for (let t = pick(rf, FIDGET_FIRST); t < until; t += pick(rf, FIDGET_EVERY)) out.push({ at: t, hold: pick(rf, FIDGET_HOLD) });
     return out;
   };
-  return { startWeight, startPosture, weight, glances, sighs, fidgets: { left: fidget(4), right: fidget(5) } };
+  // The face rides the events above, each kind's choices from its own stream, so the body's schedule is unchanged.
+  const rs = stream(seed, 7);
+  const settles: Settle[] = weight.map((w) => {
+    const press = rs() < SETTLE_PRESS;
+    const tug: Side = rs() < 0.5 ? 'left' : 'right';
+    return { at: w.at + w.over * SETTLE_AT, hold: pick(rs, SETTLE_HOLD), amount: pick(rs, SETTLE_AMOUNT), ...(press ? {} : { tug }) };
+  });
+  const rb = stream(seed, 8);
+  const flashes = glances.filter(() => rb() < FLASH_SHARE).map((g) => g.at + EYES_LEAD + HEAD_ATTACK + g.hold);
+  return { startWeight, startPosture, weight, glances, sighs, fidgets: { left: fidget(4), right: fidget(5) }, face: { settles, flashes } };
 }
 
 /** Signed weight at t: + on the left leg, − on the right, about 0.55 to 0.85 in magnitude. */
@@ -233,6 +279,51 @@ export function fidgetAt(s: LifeSchedule, side: Side, t: number, delay = 0): num
   return v;
 }
 
+type FaceWeights = Partial<Record<FaceChannel, number>>;
+
+function add(out: FaceWeights, shape: Readonly<Partial<Record<FaceChannel, number>>>, k: number): void {
+  if (k <= 0) return;
+  for (const [ch, v] of Object.entries(shape) as [FaceChannel, number][]) out[ch] = (out[ch] ?? 0) + v * k;
+}
+
+/**
+ * The face's life at t, as channel weights to add to the face: a sigh's mouth and brows, the
+ * mouth's settle under a weight shift, and the brows' flash as a glance comes back, the flash
+ * scaled by `glanceK` (how free the glance channel is).
+ */
+export function faceAt(s: LifeSchedule, t: number, glanceK = 1): FaceWeights {
+  const out: FaceWeights = {};
+  for (const p of s.sighs) {
+    if (t <= p.at) break;
+    const u = t - p.at;
+    if (u < SIGH_IN) {
+      const k = smoother(u / SIGH_IN);
+      add(out, { jawOpen: LIFE_FACE.sigh.jawOpen, browInnerUp: LIFE_FACE.sigh.browInnerUp }, k);
+    } else if (u < SIGH_IN + SIGH_OUT) {
+      const v = u - SIGH_IN;
+      add(out, { jawOpen: LIFE_FACE.sigh.jawOpen }, 1 - smoother(v / SIGH_OUT));
+      add(out, { mouthFunnel: LIFE_FACE.sigh.mouthFunnel }, v < SIGH_FUNNEL_IN ? smoother(v / SIGH_FUNNEL_IN) : 1 - smoother((v - SIGH_FUNNEL_IN) / (SIGH_OUT - SIGH_FUNNEL_IN)));
+      add(out, { browInnerUp: LIFE_FACE.sigh.browInnerUp }, 1 - smoother(v / (SIGH_OUT * SIGH_BROW_OUT)));
+    }
+  }
+  for (const m of s.face.settles) {
+    if (t <= m.at) break;
+    const k = m.amount * pulse(t, m.at, SETTLE_IN, m.hold, SETTLE_OUT);
+    if (k <= 0) continue;
+    if (!m.tug) add(out, LIFE_FACE.press, k);
+    else {
+      const other = m.tug === 'left' ? 'Right' : 'Left';
+      const side = m.tug === 'left' ? 'Left' : 'Right';
+      add(out, { [`mouthSmile${side}`]: LIFE_FACE.tug.corner, [`mouthPress${other}`]: LIFE_FACE.tug.press }, k);
+    }
+  }
+  for (const at of s.face.flashes) {
+    if (t <= at) break;
+    add(out, { browInnerUp: LIFE_FACE.flash.browInnerUp, browOuterUpLeft: LIFE_FACE.flash.browOuter, browOuterUpRight: LIFE_FACE.flash.browOuter }, glanceK * pulse(t, at, FLASH_IN, FLASH_HOLD, FLASH_OUT));
+  }
+  return out;
+}
+
 /**
  * What masks each life channel, by direction kind: 1 while the direction
  * moves, easing to its hold level while it holds (life goes on, smaller,
@@ -243,7 +334,9 @@ export function fidgetAt(s: LifeSchedule, side: Side, t: number, delay = 0): num
 export const MASKED_BY = {
   weight: { weight: 1, step: 1, aim: 1 },
   glance: { look: 0.65, reach: 0.8, take: 0.8, put: 0.8, aim: 0.8 },
-  hand: { hand: 1, reach: 1, take: 1, put: 1, aim: 1 }
+  hand: { hand: 1, reach: 1, take: 1, put: 1, aim: 1 },
+  /** A directed expression owns the face while it plays. */
+  face: { expression: 1 }
 } as const satisfies Record<string, Partial<Record<DirectionKind, number>>>;
 
 /**
@@ -277,5 +370,7 @@ export function busy(dirs: readonly Resolved[], t: number, kinds: Partial<Record
 /** The events in words, for the build's printout. */
 export function describeLife(s: LifeSchedule, duration: number): string {
   const at = (xs: readonly { at: number }[]): string => xs.filter((x) => x.at < duration).map((x) => x.at.toFixed(1)).join(', ') || 'none';
-  return `weight on the ${s.startWeight > 0 ? 'left' : 'right'} leg, shifts at ${at(s.weight)} s; glances at ${at(s.glances)} s; sighs at ${at(s.sighs)} s`;
+  const settles = s.face.settles.filter((m) => m.at < duration).map((m) => `${m.at.toFixed(1)}${m.tug ? ` (${m.tug} corner)` : ''}`).join(', ') || 'none';
+  const flashes = s.face.flashes.filter((x) => x < duration).map((x) => x.toFixed(1)).join(', ') || 'none';
+  return `weight on the ${s.startWeight > 0 ? 'left' : 'right'} leg, shifts at ${at(s.weight)} s; glances at ${at(s.glances)} s; sighs at ${at(s.sighs)} s; mouth settles at ${settles} s; brow flashes at ${flashes} s`;
 }
