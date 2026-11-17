@@ -17,10 +17,12 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { generateAvatarFixtures, SHIPPED_AVATAR } from '../lib/avatar-fixtures.ts';
+import { judgeMotion, measureMotion } from '../lib/motion-quality.ts';
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { loadAvatar, type LoadedAvatar } from './lib/avatar.ts';
 import { validateSheet, type BeatSheet } from './lib/beats.ts';
 import { solveTake, type ObjectReport, type SolvedTake } from './lib/direct.ts';
+import { describeLife } from './lib/life.ts';
 import { loadSources, type LoadedSource } from './lib/props.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { writeTake } from './lib/write-glb.ts';
@@ -59,6 +61,14 @@ export function objectLines(report: ObjectReport): { text: string; failed: boole
     ...report.puts.map((p) => ({ text: `${p.object} put (${p.side}, beat ${p.beat}): ${(p.distance * 1000).toFixed(1)} mm from its place, ${p.tilt.toFixed(1)}° from upright`, failed: p.distance > L.putDistance || p.tilt > L.putTilt })),
     ...report.aims.map((a) => ({ text: `${a.object} aimed (${a.side}, beat ${a.beat}): ${a.residual.toFixed(1)}° off the target`, failed: a.residual > L.aimResidual }))
   ];
+}
+
+/** The authored source's body targets (feet, pops, joint limits, jitter) for one performer, one line. */
+export function bodyLine(motion: Parameters<typeof measureMotion>[0]): string {
+  const verdicts = judgeMotion(measureMotion(motion), 'authored');
+  const failed = verdicts.filter((v) => !v.pass);
+  return `${failed.length ? `FAIL ${failed.map((v) => v.metric).join(', ')}; ` : 'body targets pass; '}` +
+    verdicts.map((v) => `${v.metric} ${v.value === null ? 'n/a' : Number(v.value.toFixed(v.metric.endsWith('Share') ? 3 : 2))}`).join(', ');
 }
 
 export interface BuildResult {
@@ -108,6 +118,10 @@ async function main(): Promise<void> {
   for (const t of r.take.tracks) for (const reach of t.reaches) {
     console.log(`  ${t.spec.id} reach ${reach.beat} (${reach.side}): palm ${(reach.targetDistance * 1000).toFixed(1)} mm from target, asked ${(reach.stopShort * 1000).toFixed(0)} mm` +
       (reach.targetDistance - reach.stopShort > 0.02 && reach.outOfReach > 0.01 ? `; out of reach even leaning: move the performers closer or add a step` : ''));
+  }
+  for (const t of r.take.tracks) {
+    if (t.life) console.log(`  ${t.spec.id} life: ${describeLife(t.life, r.take.sheet.duration)}`);
+    console.log(`  ${t.spec.id} body: ${bodyLine(t.motion)}`);
   }
   const lines = objectLines(r.take.objects);
   for (const l of lines) console.log(`  ${l.failed ? 'FAIL ' : ''}${l.text}`);
