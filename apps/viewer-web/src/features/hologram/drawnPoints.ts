@@ -5,6 +5,7 @@
 import { isInChrome } from "@holoim/xr-ui-core";
 import { AnimationMixer, Box3, LoopRepeat, Matrix4, Sphere, Vector3 } from "three";
 
+import { isInsideRecordedObject } from "../objects/recordedObjects";
 import { compareTakeClips, TAKE_CLIP_WEIGHT } from "./takePlayback";
 import type { AnimationClip, Bone, Mesh, Object3D, SkinnedMesh } from "three";
 
@@ -49,14 +50,19 @@ export function drawnBounds(root: Object3D): Box3 {
   return new Box3().setFromPoints(drawnPoints(root, null));
 }
 
-/** `bubble` is in the same space as the points: world, or `into`'s. */
-export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D): Vector3[] {
+/**
+ * `bubble` is in the same space as the points: world, or `into`'s. With
+ * `withoutObjects`, what the author handled (the recorded objects) is left
+ * out: the cast and its set alone.
+ */
+export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D, { withoutObjects = false }: { withoutObjects?: boolean } = {}): Vector3[] {
   const points: Vector3[] = [];
   root.updateWorldMatrix(true, true);
   const space = toSpace(into);
   root.traverse((child) => {
     const mesh = child as Mesh & Partial<SkinnedMesh>;
     if (!mesh.isMesh || !mesh.geometry || isHidden(child, root) || isInChrome(child)) return;
+    if (withoutObjects && isInsideRecordedObject(child)) return;
     const position = mesh.geometry.getAttribute("position");
     if (!position) return;
     const step = Math.max(1, Math.floor(position.count / POINTS_PER_MESH));
@@ -80,7 +86,8 @@ export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D
  * Where the take moves through, at evenly spaced times: the bones' world
  * positions, with head room over the highest, and the box corners of every
  * mesh the take moves by its own transform (a recorded object, a walk not
- * driven by bones), kept to `bubble` when there is one. With `anchor` (a
+ * driven by bones; not the objects with `withoutObjects`), kept to `bubble`
+ * when there is one. With `anchor` (a
  * bubble that follows its author), each sample is taken relative to where
  * the anchor is then, and put back where it is now: the dome travels with the
  * bubble, so only the author's reach inside it matters.
@@ -94,7 +101,7 @@ export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D
 export function motionPoints(
   root: Object3D,
   clips: readonly AnimationClip[],
-  { into, anchor, bubble = null }: { into?: Object3D | undefined; anchor?: Object3D | undefined; bubble?: DrawnBubble } = {}
+  { into, anchor, bubble = null, withoutObjects = false }: { into?: Object3D | undefined; anchor?: Object3D | undefined; bubble?: DrawnBubble; withoutObjects?: boolean } = {}
 ): Vector3[] {
   const played = clips.filter((clip) => clip.duration > 0);
   if (played.length === 0) return [];
@@ -103,7 +110,7 @@ export function motionPoints(
   root.traverse((child) => {
     const mesh = child as Mesh & Partial<SkinnedMesh>;
     if ((child as Bone).isBone) bones.push(child as Bone);
-    else if (mesh.isMesh && !mesh.isSkinnedMesh && mesh.geometry && !isHidden(child, root) && !isInChrome(child)) meshes.push(mesh);
+    else if (mesh.isMesh && !mesh.isSkinnedMesh && mesh.geometry && !isHidden(child, root) && !isInChrome(child) && !(withoutObjects && isInsideRecordedObject(child))) meshes.push(mesh);
   });
   const points: Vector3[] = [];
   const space = toSpace(into);

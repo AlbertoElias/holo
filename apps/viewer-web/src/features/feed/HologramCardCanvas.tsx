@@ -17,7 +17,7 @@ import {
 import type { AnimationAction, Group, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
 import { tokens } from "@holoim/design-tokens";
 import type { ObjectCredit } from "@holoim/objects";
-import { clocheFollowDirection, clocheFraming, clocheInside, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
+import { clocheFollowDirection, clocheFraming, clocheFramingFloor, clocheInside, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
 import { Cloche } from "@holoim/xr-ui-r3f";
 import { ClocheRimTexture } from "@holoim/xr-ui-three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -40,7 +40,7 @@ import { readMeaningLinks } from "../meaning/meaningLinks";
 import type { MeaningGltf } from "../meaning/meaningLinks";
 import { AuthorCameraMark, createPresenceProbe } from "../presence/AuthorCameraMark";
 import { identityOf } from "../presence/identityHue";
-import { isInsideRecordedObject, readObjectCredits, readRecordedObjects } from "../objects/recordedObjects";
+import { hasRecordedObjects, isInsideRecordedObject, readObjectCredits, readRecordedObjects } from "../objects/recordedObjects";
 import { getTopLevelAncestor, isFiniteVector3, prepareAnimatedScene } from "../hologram/object3dUtils";
 import { INSIDE_DISTANCE, RETURN_SECONDS_PER_NEPER, anglesFromPose, freeCameraPose, returnPose } from "../portal/portalStore";
 import { layerIndexOf, outermostDrawn, readDeepZoom, soundLayers as layeredSound } from "../portal/deepZoom";
@@ -351,6 +351,8 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   // the dome follows it by the centre's shift since the fit.
   const [cloche, setCloche] = useState<ClocheShape | null>(null);
   const clocheRef = useRef<ClocheShape | null>(null);
+  // The dome fitted to the cast alone, only for a take with recorded objects: the performer's size without them (the far-object floor).
+  const castClocheRef = useRef<ClocheShape | null>(null);
   const clocheShift = useRef(new Vector3()).current;
   const fittedCentre = useRef<Vector3 | null>(null);
   const frameRectRef = useRef(frameRect);
@@ -416,6 +418,12 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
     if (!shape) return;
     fittedCentre.current = bubble ? bubble.center : null;
     clocheRef.current = shape;
+    castClocheRef.current = null;
+    if (hasRecordedObjects(clonedScene)) {
+      const without = { withoutObjects: true };
+      const castPoints = [...drawnPoints(clonedScene, bubble, undefined, without), ...motionPoints(clonedScene, animations, { anchor, bubble, ...without })];
+      castClocheRef.current = fitCloche(castPoints, { floorY: isCameraTake(clonedScene) ? clonedScene.getWorldPosition(new Vector3()).y : undefined });
+    }
     setCloche(shape);
     // A scanned place replaces the recorded set: the dome was fitted with the set in, so it is the same dome, and the set is hidden after.
     const showsPlace = placeGate.status === "ready";
@@ -839,7 +847,12 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       if (framingRef.current?.key !== key) {
         // A take whose rim lifts is framed bent by its lowest rim over the path, fixed for the take.
         const rimFraming = rimRef.current?.take.lifts ? rimRef.current.take.framing : null;
-        framingRef.current = { key, framing: clocheFraming(shape, { fovY: MathUtils.degToRad(baseFov), aspect: rect.width / rect.height, rim: rimFraming }) };
+        const view = { fovY: MathUtils.degToRad(baseFov), aspect: rect.width / rect.height };
+        let framing = clocheFraming(shape, { ...view, rim: rimFraming });
+        // A far recorded object must not shrink her below the floor: the camera stops pulling back (the far-object rule, 3.4).
+        const castShape = castClocheRef.current;
+        if (castShape) framing = clocheFramingFloor(framing, { cast: clocheFraming(castShape, view), plainFull: clocheFraming(shape, view) });
+        framingRef.current = { key, framing };
       }
       const { target: middle, distance } = framingRef.current.framing;
       pose.followTarget.set(middle.x, middle.y, middle.z).add(clocheShift);
