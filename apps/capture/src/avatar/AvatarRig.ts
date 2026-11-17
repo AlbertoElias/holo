@@ -28,6 +28,11 @@ export interface ArmIkChain {
   // undefined when the rig lacks the index, middle, or pinky knuckle bones.
   palmInHand: THREE.Quaternion | undefined;
   elbowHintLocal: THREE.Vector3;
+  // Bind local positions of the lower arm and hand, and the stretch the last
+  // solve left on them (1 = bind lengths; see ArmIkSolver's reach stretch).
+  foreBindPosition: THREE.Vector3;
+  handBindPosition: THREE.Vector3;
+  stretch: number;
 }
 
 export interface HandFingerRetargetEntry {
@@ -536,7 +541,10 @@ export class AvatarRig {
       handGripRotationOffset,
       palmInHand,
       // Avatar space (ArmIkSolver applies the avatar root's rotation), so it holds once facing is normalized.
-      elbowHintLocal: new THREE.Vector3(side === 'left' ? 1 : -1, -0.05, 0.25).normalize()
+      elbowHintLocal: new THREE.Vector3(side === 'left' ? 1 : -1, -0.05, 0.25).normalize(),
+      foreBindPosition: foreArm.position.clone(),
+      handBindPosition: hand.position.clone(),
+      stretch: 1
     };
   }
 

@@ -12,6 +12,9 @@ import { palmFrameQuaternion } from './palmFrame';
 import type { XrTracking } from './XrTracking';
 
 const SIDES = ['left', 'right'] as const;
+// Tracked hands may stretch an arm up to 8% past full reach (ArmIkSolver).
+// Controllers keep the unstretched arm: their grip and resize checks are tuned on it.
+const ARM_REACH_STRETCH = 0.08;
 
 // Avatar bones that sit on the same anatomical joint as each WebXR hand joint;
 // tips are the distal bones' end sites, when the rig has them.
@@ -47,6 +50,8 @@ export class HandEmbodiment {
   private readonly armChains: Partial<Record<VrHandSide, ArmIkChain>> = {};
   private readonly fingerChains: Partial<Record<VrHandSide, HandFingerRetargetChain>> = {};
   private readonly ikSolver = new ArmIkSolver();
+  /** Whether each arm is solved with the tracked-hand reach (an XR hand drives it). */
+  private readonly handReach: Record<VrHandSide, boolean> = { left: false, right: false };
   readonly fingerRetargeter: HandFingerRetargeter;
   private readonly legacyRetargeter: LegacyFingerRetargeter | undefined;
   private readonly sensors: Record<VrHandSide, { body?: RAPIER.RigidBody; radius: number }> = {
@@ -106,6 +111,14 @@ export class HandEmbodiment {
     this.legacyRetargeter?.reset();
   }
 
+  /** Arms nothing tracks any more (out of VR) go back to their bind lengths. */
+  restArmLengths(): void {
+    for (const side of SIDES) {
+      const chain = this.armChains[side];
+      if (chain) this.ikSolver.restLengths(chain);
+    }
+  }
+
   /** Arm lengths are cached in world units; refitting the avatar rescales them. */
   rescale(ratio: number): void {
     for (const side of SIDES) {
@@ -129,10 +142,18 @@ export class HandEmbodiment {
     for (const side of SIDES) {
       const chain = this.armChains[side];
       const trackingState = this.tracking.getHandTrackingState(side);
-      if (!chain || !trackingState.poseValid) continue;
+      if (!chain) continue;
+      if (!trackingState.poseValid) {
+        this.ikSolver.restLengths(chain);
+        continue;
+      }
 
       const handWorld = this.resolveTrackedHandWorldQuaternion(side, chain, this.handWorldScratch);
-      if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, handWorld)) {
+      // A held pose keeps the reach of the source it holds, so a lost hand's arm does not snap.
+      const source = this.tracking.getHandPoseSource(side);
+      if (source !== 'held') this.handReach[side] = source === 'xr-hand';
+      const maxStretch = this.handReach[side] ? ARM_REACH_STRETCH : 0;
+      if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, { handWorldQuaternion: handWorld, maxStretch })) {
         if (!this.ikWarningLogged) {
           console.warn('VR arm IK solve produced invalid output; skipping frame write.');
           this.ikWarningLogged = true;

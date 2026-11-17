@@ -259,7 +259,7 @@ export class DesktopPointAction {
     chain.upperArm.getWorldPosition(this.tmpA);
     this.tmpB.copy(this.tmpA).addScaledVector(this.reach, (chain.upperLength + chain.lowerLength) * REACH_FRACTION);
     chain.hand.getWorldQuaternion(this.tmpHandQuat);
-    if (this.solver.solve(chain, this.tmpB, this.tmpHandQuat, this.deps.avatar.avatarRoot, this.tmpHandQuat)) {
+    if (this.solver.solve(chain, this.tmpB, this.tmpHandQuat, this.deps.avatar.avatarRoot, { handWorldQuaternion: this.tmpHandQuat })) {
       // Turn the hand so the index finger runs along the aim.
       this.orientHand(arm);
       for (const driven of arm.armDriven) driven.target.copy(driven.bone.quaternion);

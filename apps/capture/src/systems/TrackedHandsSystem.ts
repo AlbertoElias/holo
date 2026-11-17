@@ -34,6 +34,7 @@ export class TrackedHandsSystem extends createSystem() {
       }
       this.head.apply(c.avatar, null, 0, c.frame.deltaSec);
       this.arms.fadeOut(c.frame.deltaSec);
+      c.hands.restArmLengths();
       // Desktop has no tracked hands: the point action drives the right arm.
       c.point.update({
         held: c.input.isPointHeld(),
