@@ -2,11 +2,26 @@ import * as THREE from 'three';
 import { clamp, isFiniteQuaternionLike } from '../shared/math';
 import type { ArmIkChain } from '../avatar/AvatarRig';
 
+export type ArmIkOptions = {
+  // handWorldQuaternion, when given, is the exact world rotation for the hand
+  // bone (palm-aligned from tracked joints); otherwise the target rotation is
+  // mapped through the rig's grip offset, as for controllers.
+  handWorldQuaternion?: THREE.Quaternion | undefined;
+  // Reach stretch: past full reach the arm may lengthen by up to this share
+  // of its length, easing in (tanh, slope 1 at full reach, so the wrist never
+  // snaps) instead of stopping dead. A height-fitted avatar's arm is about
+  // 0.30 of its height against a person's 0.33, so a real long reach runs
+  // past it: the Quest 3 hand recording reaches 4-6% (and briefly 19%) past
+  // full protraction. Only tracked hands pass it.
+  maxStretch?: number;
+};
+
 export class ArmIkSolver {
   private readonly worldUp = new THREE.Vector3(0, 1, 0);
   private readonly tmpUpperWorld = new THREE.Vector3();
   private readonly tmpElbowWorld = new THREE.Vector3();
   private readonly tmpVecA = new THREE.Vector3();
+  private readonly tmpPlace = new THREE.Vector3();
   private readonly tmpVecB = new THREE.Vector3();
   private readonly tmpClampedTarget = new THREE.Vector3();
   private readonly tmpUpperDirWorld = new THREE.Vector3();
@@ -18,19 +33,18 @@ export class ArmIkSolver {
   private readonly tmpQuatB = new THREE.Quaternion();
   private readonly tmpQuatC = new THREE.Quaternion();
 
-  // handWorldQuaternion, when given, is the exact world rotation for the hand
-  // bone (palm-aligned from tracked joints); otherwise the target rotation is
-  // mapped through the rig's grip offset, as for controllers.
   solve(
     chain: ArmIkChain,
     targetPositionWorld: THREE.Vector3,
     targetQuaternionWorld: THREE.Quaternion,
     avatarRoot: THREE.Group,
-    handWorldQuaternion?: THREE.Quaternion
+    { handWorldQuaternion, maxStretch = 0 }: ArmIkOptions = {}
   ): boolean {
     // Shoulder protraction: as the target nears full reach, swing the
-    // clavicle toward it (as a real shoulder does). Without this the pinned
-    // shoulder runs out of arm ~10 cm early on a stretch.
+    // clavicle toward it (as a real shoulder does), all the way at full
+    // reach. Without this the pinned shoulder runs out of arm ~10 cm early on
+    // a stretch; stopping at 90% of the swing left the Quest 3 recording's
+    // wrists 1-2 cm short on every long reach.
     chain.upperArm.getWorldPosition(this.tmpUpperWorld);
     if (chain.shoulderBindAimInParent) {
       const reach = chain.upperLength + chain.lowerLength;
@@ -38,7 +52,7 @@ export class ArmIkSolver {
       const factor = THREE.MathUtils.smoothstep(dist / Math.max(reach, 1e-5), 0.75, 1.0);
       this.tmpVecA.subVectors(targetPositionWorld, this.tmpUpperWorld).normalize();
       if (this.aimBoneAtDirection(chain.shoulder, chain.shoulderBindQuaternion, chain.shoulderBindAimInParent, this.tmpVecA)) {
-        chain.shoulder.quaternion.slerp(chain.shoulderBindQuaternion, 1 - factor * 0.9);
+        chain.shoulder.quaternion.slerp(chain.shoulderBindQuaternion, 1 - factor);
         chain.shoulder.updateMatrixWorld(true);
       }
     }
@@ -50,8 +64,17 @@ export class ArmIkSolver {
     if (!Number.isFinite(targetDistanceRaw) || targetDistanceRaw < 1e-5) return false;
 
     const minReach = Math.max(0.02, Math.abs(chain.upperLength - chain.lowerLength) + 0.01);
-    const maxReach = Math.max(minReach + 0.01, chain.upperLength + chain.lowerLength - 0.01);
-    const targetDistance = clamp(targetDistanceRaw, minReach, maxReach);
+    // 1 mm short of straight keeps the elbow's bend plane defined; a 1 cm
+    // margin cost a centimetre on every full reach.
+    const maxReach = Math.max(minReach + 0.01, chain.upperLength + chain.lowerLength - 0.001);
+    let stretch = 1;
+    if (maxStretch > 0 && targetDistanceRaw > maxReach) {
+      const room = maxStretch * (chain.upperLength + chain.lowerLength);
+      stretch = (maxReach + room * Math.tanh((targetDistanceRaw - maxReach) / room)) / maxReach;
+    }
+    const upperLength = chain.upperLength * stretch;
+    const lowerLength = chain.lowerLength * stretch;
+    const targetDistance = clamp(targetDistanceRaw, minReach, maxReach * stretch);
     this.tmpVecA.multiplyScalar(1 / targetDistanceRaw);
     this.tmpClampedTarget.copy(this.tmpUpperWorld).addScaledVector(this.tmpVecA, targetDistance);
 
@@ -68,21 +91,24 @@ export class ArmIkSolver {
     this.tmpVecB.normalize();
 
     const cosAtShoulder = clamp(
-      (targetDistance * targetDistance + chain.upperLength * chain.upperLength - chain.lowerLength * chain.lowerLength) /
-        (2 * targetDistance * chain.upperLength),
+      (targetDistance * targetDistance + upperLength * upperLength - lowerLength * lowerLength) /
+        (2 * targetDistance * upperLength),
       -1,
       1
     );
-    const along = chain.upperLength * cosAtShoulder;
-    const perpendicular = Math.sqrt(Math.max(0, chain.upperLength * chain.upperLength - along * along));
+    const along = upperLength * cosAtShoulder;
+    const perpendicular = Math.sqrt(Math.max(0, upperLength * upperLength - along * along));
 
     this.tmpElbowWorld.copy(this.tmpUpperWorld).addScaledVector(this.tmpVecA, along).addScaledVector(this.tmpVecB, perpendicular);
     this.tmpUpperDirWorld.subVectors(this.tmpElbowWorld, this.tmpUpperWorld).normalize();
     this.tmpForeDirWorld.subVectors(this.tmpClampedTarget, this.tmpElbowWorld).normalize();
 
     const upperOk = this.aimBoneAtDirection(chain.upperArm, chain.upperBindQuaternion, chain.upperBindAimInParent, this.tmpUpperDirWorld);
+    if (upperOk && (stretch > 1 || chain.stretch > 1)) this.placeChild(chain.foreArm, chain.foreBindPosition, stretch, this.tmpElbowWorld);
     const foreOk = this.aimBoneAtDirection(chain.foreArm, chain.foreBindQuaternion, chain.foreBindAimInParent, this.tmpForeDirWorld);
     if (!upperOk || !foreOk) return false;
+    if (stretch > 1 || chain.stretch > 1) this.placeChild(chain.hand, chain.handBindPosition, stretch, this.tmpClampedTarget);
+    chain.stretch = stretch;
 
     chain.foreArm.getWorldQuaternion(this.tmpQuatC);
     if (handWorldQuaternion) this.tmpQuat.copy(handWorldQuaternion);
@@ -94,6 +120,23 @@ export class ArmIkSolver {
 
     chain.hand.updateMatrixWorld(true);
     return true;
+  }
+
+  /** Puts the arm back at its bind lengths (a stretched arm that stops being solved). */
+  restLengths(chain: ArmIkChain): void {
+    if (chain.stretch === 1) return;
+    chain.foreArm.position.copy(chain.foreBindPosition);
+    chain.hand.position.copy(chain.handBindPosition);
+    chain.stretch = 1;
+    chain.upperArm.updateMatrixWorld(true);
+  }
+
+  // A stretched arm puts the joint at its solved world point (any twist bones
+  // in between keep their offsets); an unstretched one restores the bind.
+  private placeChild(bone: THREE.Bone, bindPosition: THREE.Vector3, stretch: number, worldPoint: THREE.Vector3): void {
+    if (stretch > 1 && bone.parent) bone.position.copy(bone.parent.worldToLocal(this.tmpPlace.copy(worldPoint)));
+    else bone.position.copy(bindPosition);
+    bone.updateMatrixWorld(true);
   }
 
   private aimBoneAtDirection(

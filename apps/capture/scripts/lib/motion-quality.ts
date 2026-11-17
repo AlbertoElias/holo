@@ -502,14 +502,16 @@ export type MotionVerdict = { metric: string; value: number | null; target: Targ
 // A metric with no value fails: the take did not show it. The one exception
 // is opt-in: `{ withoutInput: true }` says the take has no tracked input to
 // follow (a body replay with no tracked hands), so its following metrics are
-// not judged.
+// not judged. `inputJitterP95Mm` is the tracked input's own jitter: jitter at
+// or under it is the tracker's, so the bar is the target or that floor.
 const FOLLOWING_METRICS = new Set(['wristErrorP95Cm', 'latencyMs', 'jerkRatio', 'aimErrorMedianDeg']);
 
-export function judgeMotion(metrics: MotionMetrics, source: MotionSource, { withoutInput = false }: { withoutInput?: boolean } = {}): MotionVerdict[] {
-  return Object.entries(MOTION_TARGETS[source]).filter(([metric]) => !(withoutInput && FOLLOWING_METRICS.has(metric))).map(([metric, target]) => {
+export function judgeMotion(metrics: MotionMetrics, source: MotionSource, { withoutInput = false, inputJitterP95Mm = null }: { withoutInput?: boolean; inputJitterP95Mm?: number | null } = {}): MotionVerdict[] {
+  return Object.entries(MOTION_TARGETS[source]).filter(([metric]) => !(withoutInput && FOLLOWING_METRICS.has(metric))).map(([metric, rowTarget]) => {
     const value = metrics[metric as keyof MotionMetrics] as number | null;
+    const target: Target = metric === 'jitterP95Mm' && inputJitterP95Mm !== null && rowTarget.max !== undefined ? { max: Math.max(rowTarget.max, inputJitterP95Mm) } : rowTarget;
     const pass = value !== null && (target.max === undefined || value <= target.max + 1e-9) && (target.min === undefined || value >= target.min - 1e-9);
-    return { metric, value, target: target as Target, pass };
+    return { metric, value, target, pass };
   });
 }
 

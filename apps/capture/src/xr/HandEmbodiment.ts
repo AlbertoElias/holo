@@ -12,6 +12,8 @@ import { palmFrameQuaternion } from './palmFrame';
 import type { XrTracking } from './XrTracking';
 
 const SIDES = ['left', 'right'] as const;
+// Tracked hands may stretch an arm up to 8% past full reach (ArmIkSolver).
+const ARM_REACH_STRETCH = 0.08;
 
 // Avatar bones that sit on the same anatomical joint as each WebXR hand joint;
 // tips are the distal bones' end sites, when the rig has them.
@@ -106,6 +108,14 @@ export class HandEmbodiment {
     this.legacyRetargeter?.reset();
   }
 
+  /** Arms nothing tracks any more (out of VR) go back to their bind lengths. */
+  restArmLengths(): void {
+    for (const side of SIDES) {
+      const chain = this.armChains[side];
+      if (chain) this.ikSolver.restLengths(chain);
+    }
+  }
+
   /** Arm lengths are cached in world units; refitting the avatar rescales them. */
   rescale(ratio: number): void {
     for (const side of SIDES) {
@@ -129,10 +139,14 @@ export class HandEmbodiment {
     for (const side of SIDES) {
       const chain = this.armChains[side];
       const trackingState = this.tracking.getHandTrackingState(side);
-      if (!chain || !trackingState.poseValid) continue;
+      if (!chain) continue;
+      if (!trackingState.poseValid) {
+        this.ikSolver.restLengths(chain);
+        continue;
+      }
 
       const handWorld = this.resolveTrackedHandWorldQuaternion(side, chain, this.handWorldScratch);
-      if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, handWorld)) {
+      if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, { handWorldQuaternion: handWorld, maxStretch: ARM_REACH_STRETCH })) {
         if (!this.ikWarningLogged) {
           console.warn('VR arm IK solve produced invalid output; skipping frame write.');
           this.ikWarningLogged = true;

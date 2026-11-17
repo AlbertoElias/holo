@@ -24,6 +24,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import type {} from '../src/runtime/automationHooks';
 import { analyzeHandReplay, formatHandReport, type HandReplayFrame, type HandReplayReport } from './lib/hand-fidelity.ts';
+import { framesFromBodySamples, judgeMotion, measureMotion } from './lib/motion-quality.ts';
 
 declare global {
   interface Window {
@@ -73,7 +74,7 @@ async function replay(fileName: string): Promise<HandReplayReport> {
   // XR_AVATAR_URL: run the same check on another avatar (the avatars check sets it per fixture).
   if (process.env.XR_AVATAR_URL) pageUrl.searchParams.set('avatar', process.env.XR_AVATAR_URL);
   await page.goto(pageUrl.href, { waitUntil: 'networkidle' });
-  await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__sampleHands', '__setHandOverlay']);
+  await waitForPageFunctions(page, ['__setManualClock', '__setFrameStepping', '__sampleHands', '__sampleBody', '__setHandOverlay']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   // Released frames only deliver XR input unless a video needs them drawn.
   await page.evaluate((draw: boolean) => {
@@ -120,6 +121,7 @@ async function replay(fileName: string): Promise<HandReplayReport> {
       return {
         timeMs: window.__replayPlayer!.currentTime,
         hands: window.__sampleHands(),
+        body: window.__sampleBody(),
         state: { mode: state.mode, avatar: state.avatar, character: state.character.position, tracking: { left: { poseValid: state.tracking.left.poseValid, target: state.tracking.left.targetPosition, bone: state.tracking.left.bonePosition, sensor: state.tracking.left.sensorPosition }, right: { poseValid: state.tracking.right.poseValid, target: state.tracking.right.targetPosition, bone: state.tracking.right.bonePosition, sensor: state.tracking.right.sensorPosition } } }
       };
     });
@@ -145,7 +147,20 @@ async function replay(fileName: string): Promise<HandReplayReport> {
     if (sheet) console.log(`[hand-replay] contact sheet: ${sheet}`);
   }
   await writeFile(path.join(artifactDir, `${label}-samples.json`), JSON.stringify(frames));
-  const report = Object.assign(analyzeHandReplay(frames, { stepMs: STEP_MS }), { label, durationMs });
+  // Motion grading, strictly against the vr-hands row (natural-avatar-motion
+  // brief): wrist error and latency against the tracked wrists, jerk, jitter
+  // (bar: the target or the tracked input's own jitter), and joint limits on
+  // the solved avatar's arms.
+  const motion = measureMotion(framesFromBodySamples(frames, 'avatar'));
+  const inputJitterP95Mm = measureMotion(framesFromBodySamples(frames, 'tracked')).jitterP95Mm;
+  const motionMisses = judgeMotion(motion, 'vr-hands', { inputJitterP95Mm }).filter((verdict) => !verdict.pass);
+  const analysis = analyzeHandReplay(frames, { stepMs: STEP_MS });
+  const report = Object.assign(analysis, {
+    label,
+    durationMs,
+    motion: { ...motion, inputJitterP95Mm },
+    failures: [...analysis.failures, ...motionMisses.map((v) => `motion ${v.metric}: ${v.value === null ? 'not measured' : +v.value.toFixed(3)} (target ≤ ${v.target.max})`)]
+  });
   await writeFile(path.join(artifactDir, `${label}-report.json`), JSON.stringify(report, null, 2));
   return report;
 }

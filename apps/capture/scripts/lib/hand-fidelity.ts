@@ -7,7 +7,8 @@
 // positions. Wrist pose is compared in world space because the avatar arm is
 // expected to put the hand where the user's hand is.
 
-import type { HandSample, VrHandSide } from '../../src/types/contracts';
+import type { BodySample, HandSample, VrHandSide } from '../../src/types/contracts';
+import type { MotionMetrics } from './motion-quality';
 
 type Vec3 = [number, number, number];
 type Joints = Partial<Record<string, Vec3>>;
@@ -33,7 +34,9 @@ export type SideResult = {
   wrist: { positionErrorP95M: number | null; rotationErrorP95Deg: number | null };
   jerk: { ratio: number | null; segment: string | null };
 };
-export type HandReplayFrame = { hands?: Partial<Record<VrHandSide, HandSample>> };
+// timeMs and body (the solved avatar's bones) feed the motion grading; the
+// fidelity metrics here read only the hands.
+export type HandReplayFrame = { timeMs: number; hands?: Partial<Record<VrHandSide, HandSample>>; body?: BodySample };
 export type HandReplayAnalysis = {
   frames: number;
   stepMs: number | undefined;
@@ -42,7 +45,7 @@ export type HandReplayAnalysis = {
   failures: string[];
 };
 // analyzeHandReplay's result once the check has labelled it.
-export type HandReplayReport = HandReplayAnalysis & { label: string; durationMs: number };
+export type HandReplayReport = HandReplayAnalysis & { label: string; durationMs: number; motion?: MotionMetrics & { inputJitterP95Mm: number | null } };
 
 export const THRESHOLDS = Object.freeze({
   // Fraction of tracked frames that must arrive through real XRHand input
@@ -63,11 +66,11 @@ export const THRESHOLDS = Object.freeze({
   pinchContactRatio: 0.25,
   minPinchAgreement: 0.9,
   // Wrist placement in world space (p95): the avatar hand sits on the tracked
-  // wrist joint with its palm aligned to the tracked palm. The wrist is
-  // IK-driven, so moving real hands (39-45 cm travel in the headset fixture)
-  // lag the tracked wrist by cm; the synthetic fixture's wrist is static
-  // (0 cm). Headset p95 was 5.9/7.9 cm before shoulder-protraction IK;
-  // with it, 2.0/3.0 cm (2026-10-19). Ceiling set to 4 cm.
+  // wrist joint with its palm aligned to the tracked palm. Headset p95 was
+  // 5.9/7.9 cm before shoulder-protraction IK, 2.0/3.0 cm with it
+  // (2026-10-19): the height-fitted arm ran out of reach, not lagged. Full
+  // protraction and the reach stretch put it at 0.0/0.2 cm (2026-11-17). The
+  // motion grading (vr-hands row, 2 cm) is the strict bar; this ceiling stays.
   maxWristPositionErrorM: 0.04,
   maxWristRotationErrorDeg: 10,
   // Jerk of each finger segment's direction (hand frame), avatar relative to
@@ -323,6 +326,11 @@ export function formatHandReport(report: HandReplayReport): string {
     const sources = Object.entries(result.sourceCounts).map(([source, count]) => `${source} ${count}`).join(', ');
     lines.push(`  ${side}: xr-hand ${(result.xrHandCoverage! * 100).toFixed(0)}% (${sources}); curl ${fingers}`);
     lines.push(`  ${side}: pinch agreement ${result.pinch.agreement?.toFixed(2) ?? '-'} (${result.pinch.trackedContactFrames} contact frames); wrist p95 ${result.wrist.positionErrorP95M !== null ? (result.wrist.positionErrorP95M * 100).toFixed(1) : '-'} cm / ${result.wrist.rotationErrorP95Deg?.toFixed(1) ?? '-'}°; worst segment jerk ×${result.jerk.ratio?.toFixed(2) ?? '-'}`);
+  }
+  const m = report.motion;
+  if (m) {
+    const f = (v: number | null, digits = 1) => (v === null ? '-' : v.toFixed(digits));
+    lines.push(`  motion: wrist p95 ${f(m.wristErrorP95Cm)} cm, latency ${f(m.latencyMs, 0)} ms, jerk ×${f(m.jerkRatio, 2)}, jitter ${f(m.jitterP95Mm)} mm (input ${f(m.inputJitterP95Mm)}), joint limits ${m.jointLimitShare === null ? '-' : (m.jointLimitShare * 100).toFixed(1)}%${m.jointLimitWorst ? ` [${m.jointLimitWorst}]` : ''}`);
   }
   return lines.join('\n');
 }

@@ -38,7 +38,7 @@ async function main() {
   const rows = loaded.map((l) => {
     const metrics = measureMotion(l.frames);
     const floor = l.inputFloor ? measureMotion(l.inputFloor) : null;
-    return { label: l.label, source: l.source, metrics, inputJitterP95Mm: floor?.jitterP95Mm ?? null, inputRayJitterP95Deg: floor?.rayJitterP95Deg ?? null, verdicts: judgeMotion(metrics, l.source, { withoutInput: !l.frames.some((f) => f.input?.leftWrist || f.input?.rightWrist) }) };
+    return { label: l.label, source: l.source, metrics, inputJitterP95Mm: floor?.jitterP95Mm ?? null, inputRayJitterP95Deg: floor?.rayJitterP95Deg ?? null, verdicts: judgeMotion(metrics, l.source, { withoutInput: !l.frames.some((f) => f.input?.leftWrist || f.input?.rightWrist), inputJitterP95Mm: floor?.jitterP95Mm ?? null }) };
   });
   for (const r of rows) {
     const m = r.metrics;
