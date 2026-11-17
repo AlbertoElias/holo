@@ -1329,6 +1329,16 @@ bug above.)
 - **Not done:** not seen on a real iPhone. RealityKit on macOS is the closest check run.
 - **Closed:** 2026-11-13.
 
+### B-067 — The status-line follow check reads a head that moved as the line following
+
+- **Area:** `apps/capture/scripts/ci-capture-ui-playwright.ts` (stage "headset: status line follow")
+- **Severity:** P2 (test flake: hosted run 44078529555 on `cc82b30c10c1` went red in Capture XR checks shard 2/2, blocking nothing it had changed)
+- **Observed:** 2026-11-17, hosted CI only: `headset: a 10° turn leaves the status line where it is (moved 0.0018 m)`, limit 1 mm
+- **Evidence:** the line sits at the head plus its follow direction (`StatusLine.update`), so while it rests, any head translation moves it by the same amount. Shifting the IWER device 2 mm before the 10° turn moved the line 2.0 mm in world space (the old check fails) and 0.0000 m relative to the head.
+- **Expected:** the check judges the follow (the line's place relative to the head), not the head's own position.
+- **Reproduction:** not reproduced by repetition (6/6 passes under `CI_EMULATE_LOAD=2`); reproduced deterministically by the 2 mm device shift above.
+- **Fix:** the settle loop and both turn assertions measure the line from the head, and the 10° message reports how far the head itself moved, so a recurrence names its cause. Six `ui` runs under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh` passed; the 40° assertion still requires the line to follow.
+
 ### B-066 — A held mode that ends early keeps swallowing its hand's selects
 
 - **Area:** `apps/capture/src/xr/HeadsetHolds.ts` (`ownsSelect`, the mark's `swallow`), `packages/xr-ui-core/src/heldMode.ts`
