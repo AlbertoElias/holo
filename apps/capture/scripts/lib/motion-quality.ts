@@ -8,8 +8,9 @@
 //
 // Input is source-agnostic: per-frame world positions of named joints, the
 // ground height under each foot, and optionally the input the avatar should
-// follow (tracked wrists, head, or an aim ray). Adapters for each source's
-// saved samples live in scripts/motion-quality-report.ts.
+// follow (tracked wrists, head, or an aim ray). `framesFromBodySamples`
+// adapts the body and hand replays' saved samples; the report CLI is
+// scripts/motion-quality-report.ts.
 
 export type Vec3 = [number, number, number];
 export type JointName =
@@ -209,7 +210,10 @@ function soleAt(f: MotionFrame, side: 'left' | 'right') {
 
 // The rig's resting sole height (lower foot joint above the floor). Taken from
 // the first half second, where every in-app check stands still in its rest
-// pose, so a take that floats throughout still reads as floating. A clip
+// pose, so a foot that lifts or sinks after the rest reads as float or
+// penetration. A take that floats from its first frame is offset away here;
+// the body replay's absolute planted-sole guard (body-fidelity.ts) catches
+// that one. A clip
 // without a rest pose (mocap) passes `soleOffset: 'take'` (its 5th percentile).
 function soleOffsets(frames: MotionFrame[], options: MotionOptions) {
   const out = { left: 0, right: 0 };
@@ -224,20 +228,44 @@ function soleOffsets(frames: MotionFrame[], options: MotionOptions) {
 
 // Pops: the p99 joint acceleration (m/s^2) over a ±50 ms stencil, every joint
 // and frame. Pin/release snaps and solver flips show here even without input.
+// The stencil reaches the nearest frames at least 50 ms either side by
+// timestamp, so a take whose frames land unevenly (a replay stepping 32/48 ms)
+// reads its real acceleration; on an even take it is the old fixed-k stencil.
 function pops(frames: MotionFrame[]) {
-  const rate = fps(frames);
-  const k = framesFor(rate, POP_HALF_WINDOW_SEC);
-  const h = k / rate;
+  // Second difference over exactly ±50 ms, reading each side by linear
+  // interpolation between the frames around it. Frames arrive 32–48 ms apart,
+  // so a frame-count stencil reaches only ±34 ms on some takes (inflating
+  // pops) and "the nearest frames ≥ 50 ms away" reaches ±64–80 ms (hiding them).
+  const h = POP_HALF_WINDOW_SEC;
   const accels: number[] = [];
-  for (let i = k; i < frames.length - k; i++) {
-    const a = frames[i - k]!.joints;
-    const b = frames[i]!.joints;
-    const c = frames[i + k]!.joints;
-    for (const name of Object.keys(b) as JointName[]) {
-      const pa = a[name];
-      const pb = b[name];
-      const pc = c[name];
-      if (pa && pb && pc) accels.push(len([pa[0] - 2 * pb[0] + pc[0], pa[1] - 2 * pb[1] + pc[1], pa[2] - 2 * pb[2] + pc[2]]) / (h * h));
+  if (frames.length < 3) return { popP99MS2: null };
+  const first = frames[0]!.timeSec;
+  const last = frames.at(-1)!.timeSec;
+  // Frame index whose span [index, index + 1] holds the time.
+  let before = 0;
+  let after = 0;
+  const sampleAt = (index: number, time: number, name: JointName): Vec3 | null => {
+    const a = frames[index]!;
+    const b = frames[index + 1]!;
+    const pa = a.joints[name];
+    const pb = b.joints[name];
+    if (!pa || !pb) return null;
+    const u = (time - a.timeSec) / (b.timeSec - a.timeSec || 1);
+    return [pa[0] + (pb[0] - pa[0]) * u, pa[1] + (pb[1] - pa[1]) * u, pa[2] + (pb[2] - pa[2]) * u];
+  };
+  for (let i = 0; i < frames.length; i++) {
+    const t = frames[i]!.timeSec;
+    if (t - h < first || t + h > last) continue;
+    while (before + 2 < frames.length && frames[before + 1]!.timeSec <= t - h) before += 1;
+    if (after < before) after = before;
+    while (after + 2 < frames.length && frames[after + 1]!.timeSec <= t + h) after += 1;
+    const joints = frames[i]!.joints;
+    for (const name of Object.keys(joints) as JointName[]) {
+      const pb = joints[name];
+      const pa = sampleAt(before, t - h, name);
+      const pc = sampleAt(after, t + h, name);
+      if (!pa || !pb || !pc) continue;
+      accels.push(Math.hypot(pa[0] - 2 * pb[0] + pc[0], pa[1] - 2 * pb[1] + pc[1], pa[2] - 2 * pb[2] + pc[2]) / (h * h));
     }
   }
   return { popP99MS2: accels.length ? percentile(accels, 0.99) : null };
@@ -322,6 +350,32 @@ function stillWindows(frames: MotionFrame[], speedAt: (i: number) => number | nu
   return windows.filter(([a, b]) => b - a >= 3);
 }
 
+// The joint's own smooth path at frame i: a least-squares quadratic over
+// ±radius frames, centred on i (a Savitzky-Golay smoother) and fit against
+// timestamps, so unevenly stepped frames do not bend it. Noise departs from
+// it; a held joint that settles or drifts along a curve does not, where it
+// would from a plain moving mean.
+function smoothPath(series: Vec3[], times: number[], radius: number, i: number): Vec3 {
+  const lo = Math.max(0, i - radius);
+  const hi = Math.min(series.length - 1, i + radius);
+  let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
+  const t0 = [0, 0, 0], t1 = [0, 0, 0], t2 = [0, 0, 0];
+  // In units of the mean frame step, which keeps the normal equations well scaled.
+  const step = hi > lo ? (times[hi]! - times[lo]!) / (hi - lo) : 1;
+  for (let q = lo; q <= hi; q++) {
+    const x = (times[q]! - times[i]!) / (step || 1);
+    s0++; s1 += x; s2 += x * x; s3 += x ** 3; s4 += x ** 4;
+    for (let c = 0; c < 3; c++) {
+      const y = series[q]![c]!;
+      t0[c]! += y; t1[c]! += x * y; t2[c]! += x * x * y;
+    }
+  }
+  // Value at x = 0 by Cramer's rule on the 3x3 normal equations.
+  const det = s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2);
+  if (Math.abs(det) < 1e-9) return movingMean(series, radius, i);
+  return [0, 1, 2].map((c) => (t0[c]! * (s2 * s4 - s3 * s3) - s1 * (t1[c]! * s4 - s3 * t2[c]!) + s2 * (t1[c]! * s3 - s2 * t2[c]!)) / det) as Vec3;
+}
+
 function movingMean(series: Vec3[], radius: number, i: number): Vec3 {
   const sum: Vec3 = [0, 0, 0];
   let n = 0;
@@ -350,12 +404,13 @@ function jitter(frames: MotionFrame[]) {
   };
   const deviations: number[] = [];
   const rayDeviations: number[] = [];
+  const times = frames.map((f) => f.timeSec);
   for (const name of JITTER_JOINTS) {
     const series = frames.map((f) => f.joints[name]);
     for (const [a, b] of stillWindows(frames, heldSpeed(series))) {
       if (series.slice(a, b).some((p) => !p)) continue;
       const full = series as Vec3[];
-      for (let i = a; i < b; i++) deviations.push(len(sub(full[i]!, movingMean(full, radius, i))));
+      for (let i = a; i < b; i++) deviations.push(len(sub(full[i]!, smoothPath(full, times, radius, i))));
     }
   }
   // Rays: the same definition in degrees, where the ray is held (angular
@@ -444,10 +499,66 @@ export function measureMotion(frames: MotionFrame[], options: MotionOptions = {}
 
 export type MotionVerdict = { metric: string; value: number | null; target: Target; pass: boolean };
 
-export function judgeMotion(metrics: MotionMetrics, source: MotionSource): MotionVerdict[] {
-  return Object.entries(MOTION_TARGETS[source]).map(([metric, target]) => {
+// A metric with no value fails: the take did not show it. The one exception
+// is opt-in: `{ withoutInput: true }` says the take has no tracked input to
+// follow (a body replay with no tracked hands), so its following metrics are
+// not judged.
+const FOLLOWING_METRICS = new Set(['wristErrorP95Cm', 'latencyMs', 'jerkRatio', 'aimErrorMedianDeg']);
+
+export function judgeMotion(metrics: MotionMetrics, source: MotionSource, { withoutInput = false }: { withoutInput?: boolean } = {}): MotionVerdict[] {
+  return Object.entries(MOTION_TARGETS[source]).filter(([metric]) => !(withoutInput && FOLLOWING_METRICS.has(metric))).map(([metric, target]) => {
     const value = metrics[metric as keyof MotionMetrics] as number | null;
     const pass = value !== null && (target.max === undefined || value <= target.max + 1e-9) && (target.min === undefined || value >= target.min - 1e-9);
     return { metric, value, target: target as Target, pass };
+  });
+}
+
+// Body replay and hand replay samples share one shape: body bones (when the
+// solver ran) plus per-hand tracked and avatar joints. `avatar` reads the
+// avatar's joints; `tracked` the tracked input, whose jitter is the floor a
+// solver cannot beat.
+export const BODY_JOINTS: JointName[] = ['head', 'neck', 'chest', 'hips', 'leftShoulder', 'rightShoulder', 'leftElbow', 'rightElbow', 'leftWrist', 'rightWrist', 'leftHip', 'rightHip', 'leftKnee', 'rightKnee', 'leftAnkle', 'rightAnkle', 'leftToe', 'rightToe'];
+export type BodyLikeSample = {
+  timeMs: number;
+  body?: { bones: Partial<Record<string, Vec3>>; ground?: Partial<Record<string, { y: number }>>; trackedHead?: { world: Vec3 } | null } | null;
+  hands?: Partial<Record<string, { source?: string; tracked?: Partial<Record<string, Vec3>>; avatar?: Partial<Record<string, Vec3>> }>>;
+};
+
+const unitBetween = (a: Vec3, b: Vec3): Vec3 => {
+  const d = sub(b, a);
+  const l = len(d) || 1;
+  return [d[0] / l, d[1] / l, d[2] / l];
+};
+const indexRay = (hand?: Partial<Record<string, Vec3>>) => {
+  const base = hand?.['index-finger-phalanx-proximal'];
+  const tip = hand?.['index-finger-tip'];
+  return base && tip ? unitBetween(base, tip) : undefined;
+};
+
+export function framesFromBodySamples(samples: BodyLikeSample[], side: 'avatar' | 'tracked'): MotionFrame[] {
+  return samples.map((s) => {
+    const joints: MotionFrame['joints'] = {};
+    for (const name of side === 'avatar' ? BODY_JOINTS : []) {
+      const v = s.body?.bones?.[name];
+      if (v) joints[name] = v;
+    }
+    const input: NonNullable<MotionFrame['input']> = {};
+    for (const hand of ['left', 'right'] as const) {
+      const h = s.hands?.[hand];
+      if (!h || (h.source && h.source !== 'xr-hand' && h.source !== 'controller' && h.source !== 'camera-hand')) continue;
+      const own = side === 'avatar' ? h.avatar : h.tracked;
+      if (own?.wrist) joints[`${hand}Wrist`] = own.wrist;
+      if (h.tracked?.wrist) input[`${hand}Wrist`] = h.tracked.wrist;
+    }
+    if (s.body?.trackedHead?.world) input.head = s.body.trackedHead.world;
+    const g = s.body?.ground;
+    const ray = indexRay(side === 'avatar' ? s.hands?.right?.avatar : s.hands?.right?.tracked);
+    return {
+      timeSec: s.timeMs / 1000,
+      joints,
+      input,
+      ...(g ? { ground: { left: g.leftToe?.y ?? g.leftAnkle?.y ?? 0, right: g.rightToe?.y ?? g.rightAnkle?.y ?? 0 } } : {}),
+      ...(ray ? { aimRay: ray } : {})
+    };
   });
 }

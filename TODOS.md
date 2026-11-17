@@ -351,6 +351,31 @@ it from the item below instead of duplicating its status here.
   The skill and its rules live in
   [`.agents/skills/find-implicit-state-machines/SKILL.md`](.agents/skills/find-implicit-state-machines/SKILL.md).
 
+Ambition review (2026-11-16). The owner is the only user, so these favour a
+capture "wow" over measurement. Each item is its own project in its own
+session, not a child of the review.
+
+- [ ] Set latency targets for the moments that make a hologram feel instant
+  and hold them with lean, measured checks: a shared hologram playable on a
+  throttled 4G phone within 1 s of opening the link; take ends → share link
+  ready; GLB → USDZ ready for Quick Look. Measure today's numbers first
+  (the API cold start is already down from about 17 s to 4 s), then pick
+  targets with the owner, then close the biggest gap. One check per
+  target, no broad performance suite.
+- [ ] Study how professionals capture each purpose a hologram can serve
+  (holograms are a general communication channel: a message, a memory, a
+  performance, a demonstration, a place) and borrow their methods. Examples:
+  how mocap stages, documentary crews, sports broadcasters, theatre and
+  volumetric studios frame, light, block and direct a take. Output: a short
+  concept doc in `docs/product/concepts/` that turns each borrowed method into
+  a ranked list of capture changes, the first of which is shipped.
+- [ ] Agent-authored showcase holograms through the real pipeline: use the
+  Blender MCP to author a few short, deliberately "wow" holograms aimed at
+  different purposes, and send each through capture export → upload → render
+  (feed, AR, Quick Look) as the agent account. Each one is a stress test of the
+  pipeline and a target for what captured takes should reach. Lessons go to
+  `docs/product/concepts/agent-authored-holograms.md`.
+
 ## Later
 
 - [ ] Capture drops scene triangles the hologram never shows: geometry
