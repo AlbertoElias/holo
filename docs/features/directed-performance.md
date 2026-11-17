@@ -648,9 +648,11 @@ frozen; two designs failed there, so tuning stopped (evidence: slice 1d
 below). The owner watched the before/after video on 2026-11-17:
 "its a lot better" and "theres something in the mouth and eyebrows thats
 missing, but almost there". The owner chose decision 6 (A) the same day,
-and life now drives the mouth and brows from its events. The close-view
-face video is with the owner. **Not accepted yet** (evidence: "Face in
-idle life" in slice 1d's evidence).
+and life now drives the mouth and brows from its events. Asked whether
+the mouth and brows now read as alive in the close-view face video, the
+owner answered "Yes, accept" (2026-11-17). **Life is accepted**
+(evidence: "Face in idle life" in slice 1d's evidence); the profile-hold
+follow-up stays open.
 
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; not started)
 
@@ -1065,9 +1067,10 @@ and 7 (its evidence, below); the second 1c piece added item 13.
     ending still read as mostly frozen (defaults, after two designs). The
     owner judged the slice 1d video on 2026-11-17: "its a lot better" and
     "theres something in the mouth and eyebrows thats missing, but almost
-    there". The face layer from decision 6 (A) is built and its video is
-    with the owner; life is not accepted until the owner judges it.
-    Authors give a profile hold a beat for now (open).
+    there". With the face layer from decision 6 (A), the owner accepted
+    life on the face video: "Yes, accept" (2026-11-17). Still open: two
+    people in profile through a long held ending read as mostly frozen to
+    readers; authors give a profile hold a beat for now.
 
 13. **A far object shrinks the performer.** The card frames every recorded
     object, so each widens the dome, and nothing caps it in an authoring
@@ -1759,8 +1762,8 @@ span plus 0.4 s, and the schedule comes from the seed alone.
 **Video.** A before/after H.264 video of the three holds (kept out of the
 repository) went to the owner on 2026-11-17. **Owner's judgement
 (2026-11-17):** "its a lot better" and "theres something in the mouth and
-eyebrows thats missing, but almost there". Life is not accepted yet; item
-12 stays open.
+eyebrows thats missing, but almost there". Life was not accepted on that
+video; the owner accepted it with the face layer (below).
 
 **Face in idle life** (asked after the owner's second line, 2026-11-17;
 built the same day as decision 6 (A), below). What idle life drove in the
@@ -1852,8 +1855,9 @@ the decision's caveat said.
 
 **Video.** A before/after H.264 video of face crops from the close view
 (the three holds, without and with the layer, kept out of the repository)
-went to the owner on 2026-11-17. The owner's judgement is the acceptance
-test; item 12 stays open until then.
+went to the owner on 2026-11-17. Asked "Do the mouth and brows now read
+as alive in the after clip?", the owner answered **"Yes, accept"**
+(2026-11-17): life is accepted. The profile hold stays open (item 12).
 
 **Follow-ups.** A directed `weight` direction rolls the pelvis so the free
 hip rises (sign opposite to life's); a profile hold needs a beat or a different idea
