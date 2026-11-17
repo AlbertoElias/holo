@@ -1,7 +1,7 @@
 # Feature brief: a far object on the feed card
 
 **Lead:** Claude Code session card-framing-objects (2026-11-16)  
-**Status:** Approved 2026-11-17: the owner picked B at 75 %; the review-tool fix is merged, the cap is not built yet  
+**Status:** Done 2026-11-17: option B (the owner's 75 % performer floor) is built, verified and merged  
 **Layer:** view (`docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -106,11 +106,35 @@ capture authoring action.
   plainly that the 1c reading was a review-tool fault.
 - [x] A fresh reader reviews tallest-bar from the fixed pack under a neutral
   title, recorded below whether or not it reads.
-- [x] The owner picks A, B or C: B, a floor at 75 % (2026-11-17).
-- [ ] With the floor built: tallest-bar, watering, goodbye and tallest-bar
-  without the chart frame exactly as today (sizes in the table above), and
-  the chart moved 2, 3 and 5 m keeps the performer at 75 % or more of her
-  no-chart height (about 134 px of 178), the chart partly on the card.
+- [x] The owner picks A, B or C: **B at 75 %**, approved 2026-11-17.
+- [x] Holograms without objects, and tallest-bar, watering, goodbye and
+  tallest-bar without the chart, frame exactly as today (measured below).
+- [x] With the chart 2, 3 and 5 m forward the performer stays at 75 % or more
+  of her height without objects (measured 135–136 px of about 178; e2e below).
+  The chart is partly on the card at 2 and 3 m; **at 5 m it is wholly off the
+  card**: keeping her at 75 % centres the frame so close to her that nothing
+  that far fits. This is the rule's own trade (the owner's "partly off"
+  becomes "off" past about 4 m), not a defect.
+
+## Option B as built
+
+`clocheFramingFloor` (`packages/xr-ui-core/src/cloche.ts`, token
+`edge.cloche.performerFloor` 0.75, styleguide 3.4) takes the card's normal
+framing and a second one fitted to the cast alone (`HologramCardCanvas.tsx`
+fits it when `hasRecordedObjects`; `drawnPoints`/`motionPoints` take
+`withoutObjects`). Her share is the cast framing's distance over her depth in
+the full framing (size goes as 1 / depth from the eye, not 1 / distance).
+At or above the floor nothing changes; below it the target slides from the
+full dome's centre toward the cast's, and the distance is set so her depth is
+the cast's distance / 0.75. A take without objects never fits the second dome.
+
+Measured (`measure.ts`, same card as above): tallest-bar, no-chart, watering
+and goodbye identical to the table; chart 2 m, 3 m, 5 m forward: performer
+135–136 px (was 128, 85, 52), 76 % of her 178 px.
+
+Known edges: the share is compared on unrimmed fits, and in the floor branch
+the result ignores a lifted rim's bend. A far object on a take whose rim
+lifts would frame her by the cast's centre, not the bent frame.
 
 ## Failure cases considered
 
@@ -140,7 +164,8 @@ capture authoring action.
 |---|---|---|
 | Card stills and close view show the objects | `review.ts output/authoring/framing/tallest-bar.glb --out …/review/tallest-bar-fixed` | `sheet-card-NN.jpg`, `sheet-close-1-NN.jpg`, `on-screen.json` (ignored output) |
 | Fresh reading | A reader subagent given only `reader/` | `reader.md`, `comparison.json` beside the pack; summary below |
-| Far-object sizes | `measure.ts` on the far variants | `today-far-{2,3,5}/summary.json` |
+| Far-object sizes | `measure.ts` on the far variants | `today-far-{2,3,5}/summary.json`, `floor3-*` (ignored) |
+| Option B holds on the card | `e2e/card-framing-floor.spec.ts` (same performer, chart inside her, 0.5, 2, 3, 5 m to her side and toward the viewer, one card title so the viewing box is the same) | `output/card-framing-floor/report.json`: performer 251 px reference; 233, 189, 189, 189 px (75.3 %), 189, 189; wholly on the card in all |
 
 ### Fresh reading, tallest-bar (fixed pack)
 

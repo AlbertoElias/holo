@@ -153,6 +153,38 @@ export function clocheFraming(shape: ClocheShape, { fovY, aspect, direction = cl
 }
 
 /**
+ * The Follow framing with a floor under the performer's size (the card's
+ * far-object rule). `cast` is the framing of a dome fitted to the cast alone
+ * and `plainFull` that of the dome with the recorded objects, both without a
+ * rim, so they compare like for like. Her size on the card goes as one over
+ * her depth from the eye: `cast.distance` without objects, and with them the
+ * depth of the cast's middle in `plainFull`. Her share is the first over the
+ * second. At or over `floor` the framing is returned as it is. Under it the
+ * camera stops pulling back, at `cast.distance / floor` from her, and its
+ * target eases from the dome's middle toward the cast's as the share falls,
+ * so a far object slides off the card instead of her shrinking, and nothing
+ * jumps at the floor.
+ */
+export function clocheFramingFloor(
+  framing: ClocheFraming,
+  { cast, plainFull }: { cast: ClocheFraming; plainFull: ClocheFraming },
+  { floor = cloche.performerFloor, direction = clocheFollowDirection() }: { floor?: number; direction?: Vector3Like } = {}
+): ClocheFraming {
+  const toward = normalize(direction);
+  const offset = (from: Vector3Like, to: Vector3Like) => ({ x: to.x - from.x, y: to.y - from.y, z: to.z - from.z });
+  const herDepth = plainFull.distance - dot(offset(plainFull.target, cast.target), toward);
+  const share = herDepth > 0 ? cast.distance / herDepth : 1;
+  if (share >= floor) return framing;
+  const weight = share / floor;
+  const target = {
+    x: cast.target.x + (framing.target.x - cast.target.x) * weight,
+    y: cast.target.y + (framing.target.y - cast.target.y) * weight,
+    z: cast.target.z + (framing.target.z - cast.target.z) * weight
+  };
+  return { target, distance: cast.distance / floor + dot(offset(target, cast.target), toward) };
+}
+
+/**
  * How much of the dome is drawn with the eye at `eye`: 1 outside, easing to 0
  * as the viewer goes in, so inside the hologram nothing of the dome stands
  * between them and the event. With `rim`, against the bent dome.
