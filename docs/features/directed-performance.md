@@ -460,7 +460,10 @@ review (2026-11-14):
     CSS px, at every time measured.
   - The reader missed it because `review.ts` cropped its card stills to the
     cast's key points, leaving 15% of the chart's box, and its close view
-    framed head to hips. That was a review-tool fault, not a viewer one.
+    was planned head to hips, around her alone. That was a review-tool fault, not a viewer one.
+  - Nor did the close view show that plan: its
+    camera kept the card's view offset, so since 2026-10-25 it showed a whole
+    body small and off centre. Fixed with the crop.
   - The stills now keep every object on the card, and the close view widens
     to the objects a beat names (`docs/features/card-framing-objects.md`).
   - Objects do cost performer size: about 160 CSS px with the chart against

@@ -31,7 +31,11 @@ Fixed on branch `bug/review-pack-framing`:
 - the close view widens to an object while a beat names it (look, reach, aim,
   turn, put, take, with 0.5 s either side) and while the performer holds it;
 - `on-screen.json` gives each object's size on the card and whether it is
-  whole on it; `lib/review-page.ts` reads objects from the viewer probe.
+  whole on it; `lib/review-page.ts` reads objects from the viewer probe;
+- the close view's camera, a clone of the card's, dropped the card's view
+  offset (its frame inside the canvas, there since 2026-10-25). Until now
+  every pack's close view was about twice as wide as planned and sat off
+  centre: a whole body small in the frame rather than head to hips.
 
 Holograms without objects review exactly as before.
 
