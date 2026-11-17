@@ -645,7 +645,9 @@ re-drawn around the beats (breaks revision locality).
 resettle and the chest turn for profile views) and landed on `main`. Fresh
 readers call the front-facing holds alive and the profile pair still mostly
 frozen; two designs failed there, so tuning stopped (evidence: slice 1d
-below). **Open** until the owner judges the before/after video.
+below). The owner watched the before/after video on 2026-11-17: "its a lot
+better". They have not said whether that closes the item, so it stays
+**open**; the lead has asked them.
 
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; not started)
 
@@ -1057,9 +1059,10 @@ and 7 (its evidence, below); the second 1c piece added item 13.
 12. **Life a reader can see.** Since slice 1d a hold facing the viewer
     reads as alive to fresh readers (rest: "mostly frozen" before, "a
     living person" after), but two people in profile through a long held
-    ending still read as mostly frozen (defaults, after two designs), and
-    the owner has not yet judged the slice 1d video. Authors give a profile
-    hold a beat for now.
+    ending still read as mostly frozen (defaults, after two designs). The
+    owner judged the slice 1d video on 2026-11-17: "its a lot better";
+    whether that closes this item is still with the owner (the lead has
+    asked). Authors give a profile hold a beat for now (open).
 
 13. **A far object shrinks the performer.** The card frames every recorded
     object, so each widens the dome, and nothing caps it in an authoring
@@ -1709,11 +1712,13 @@ old posture until the next one): revising a beat changes life within its
 span plus 0.4 s, and the schedule comes from the seed alone.
 
 **Video.** A before/after H.264 video of the three holds (kept out of the
-repository) went to the owner on 2026-11-17; the brief stays open on item
-12 until they judge it.
+repository) went to the owner on 2026-11-17. **Owner's judgement
+(2026-11-17):** "its a lot better". Whether that accepts the item is still
+the owner's call (the lead has asked them), so item 12 stays open.
 
 **Follow-ups.** A directed `weight` direction rolls the pelvis so the free
-hip rises (sign opposite to life's); a profile hold needs a beat or a different idea.
+hip rises (sign opposite to life's); a profile hold needs a beat or a different idea
+(open).
 
 ## Physical-device limits
 
