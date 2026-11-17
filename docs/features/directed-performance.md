@@ -495,6 +495,73 @@ recorded objects until decided.
 - collisions (an object can pass through a body or a table; the review is
   what catches it).
 
+### Slice 1d: life as events, not oscillation (2026-11-16)
+
+"Not covered yet" item 12. Life was tried twice as continuous sines (sway,
+head drift, breath) and failed both times, the second time doubled: a few
+pixels of slow drift do not show between stills, and the owner judged the
+video frozen. A person standing still is not oscillating; they **hold, then
+do something small**: put their weight on the other leg, glance away and
+back, take a deeper breath, fidget a hand. Each is a change of shape a
+viewer sees, separated by real stillness. This slice replaces most of the
+oscillation with those events. All in `apps/capture/scripts/authoring/lib/direct.ts`;
+nothing under `apps/capture/src/**`, the viewer or the API changes, and
+`life: false` and `style: "flat"` still turn it all off.
+
+**The events** (per performer, seeded by its `seed`):
+
+| Event | What moves | How often, how long |
+|---|---|---|
+| Weight on one leg | Hips over one foot (4.5 cm, 0.55 to 0.85 of that), pelvis rolled toward the free leg, chest countering; the free knee bends because its hip drops. A performer starts on a seeded leg and changes legs | every 2.8 to 4.8 s, over 0.9 to 1.3 s |
+| Glance | Eyes first (arrive in 0.12 s), head and neck follow (0.3 s, 75% of the angle), hold 0.6 to 1.6 s, return; 10 to 25° to a side, mostly level or down; a blink when the head turns more than 12° | every 2 to 4 s |
+| Sigh | Shoulders rise 6° and the chest lifts 2° over 0.9 s, out over 1.5 s | every 5 to 8 s |
+| Hand fidget | A hanging hand's fingers curl a little more and relax, one after another, with a small wrist turn | every 3 to 6 s per hand |
+
+Under them, the continuous life drops to realistic postural noise: hips sway
+6 by 4 mm (was 22 by 12) and head drift 1.5° (was 3.5°). Breath
+(`BREATH_DEG`, `SHOULDER_LIFT_DEG`, `ARM_BREATH`), blinks and saccades are
+unchanged; no amplitude is raised.
+
+**Rules it keeps:**
+
+- **Deterministic and local.** Each performer's schedule is drawn from its
+  seed alone, event by event from t = 0, so it never depends on the beats
+  or the duration. Directions only *mask* life near them: a life channel is
+  scaled by 1 minus how busy that channel is at t, where "busy" is 1 over a
+  direction's span and eases to 0 over 0.4 s either side. So revising a beat
+  changes life only within its own span plus 0.4 s, and `--against`
+  confirms it.
+- **Under directions, never against them.** Weight life is masked by
+  `weight`, `step`, `reach`, `take`, `put` and `aim`; a glance by `look`,
+  `reach`, `take`, `put` and `aim`; a hand fidget by that side's `hand`,
+  `reach`, `take`, `put`, `aim` and while it holds an object; a sigh is
+  scaled down while a reach leans. Reaches, grips and puts are still solved
+  after life moves the body, so a palm still lands and a held object stays
+  in the fist.
+- **Feet planted.** Weight shifts move the hips only; the legs are solved to
+  the same planted ankles, and the authored source's motion-quality targets
+  (skate, float, penetration, pops, joint limits, jitter) must still pass.
+- `direct.ts` prints each performer's life events in the take, so an author
+  knows what a hold already has.
+
+**Proof, on holds** (before and after, same sheets and seeds):
+`sheets/defaults-test.json` (the held ending after B's step),
+`sheets/rest.json` (no beats at all) and `sheets/watering.json` (the held
+ending with the can in hand under a directed look). For each: a `review.ts`
+pack under the neutral title; a fresh reader who sees only the reader folder
+says whether the hold is alive; the on-card numbers and the motion-quality
+body targets before and after; the reach and grip numbers unchanged within
+a millimetre or two; a side-by-side before/after H.264 video of the holds
+for the owner, whose judgement of the video is the acceptance test. If this
+design fails with readers and a second design fails too, stop and report.
+
+**Rejected:** more amplitude (failed twice); a recorded idle clip (the
+stock rig has none and it would not respect masks or seeds); random events
+re-drawn around the beats (breaks revision locality).
+
+**State (2026-11-16):** designed; review and build in progress on
+`feature/authoring-life`.
+
 ### Slice 2: the first house base (gated; not started)
 
 Starts only if slice 1b's evidence shows that avatars are what limits the
