@@ -59,11 +59,20 @@ Every direction has `anticipation`, `attack`, `hold` and `settle` (defaults
 per kind in `DEFAULT_TIMING`).
 
 What every piece inherits: arms hang at the sides with the elbows back (a
-neutral rest), and breath, a slow sway, head drift, blinks, eye movement and
-finger settle run underneath unless `life` is false, sized so head and
-hands move more than a CSS pixel a second on the card. Fresh readers judging
-from stills still call a long held ending frozen, so give one a beat (a
-glance, a weight shift) rather than relying on life. `style: "flat"` (or `--style flat`)
+neutral rest), and unless `life` is false a held pose keeps living through
+seeded events (`lib/life.ts`): the weight moves to the other leg and the
+posture resettles, the eyes and then the head glance away and back (a large
+glance turns the chest too), a sigh lifts and drops the shoulders, and a
+hanging hand lifts and fidgets. Under them run quiet breath, sway, head
+drift, blinks and eye movement. Life gives way to directions (fully while
+one moves, partly while it holds) and never moves a hand that holds
+something or that another performer reaches to. Each performer's schedule
+comes from its `seed` alone, so revising a beat changes life only near that
+beat. `direct.ts` prints each performer's life events and motion-quality
+verdicts. Fresh readers call a hold facing the viewer alive, but two people
+in profile still read as mostly frozen through a long held ending, so give
+that one a beat (a glance at the other, a step) rather than relying on life.
+`style: "flat"` (or `--style flat`)
 plays the same blocking as straight lines with no life, face or fingers, for
 comparison.
 

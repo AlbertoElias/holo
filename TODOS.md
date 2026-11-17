@@ -164,7 +164,9 @@ it from the item below instead of duplicating its status here.
   with a brow bar for any house avatar; props and sets come before slice 2.
   Props, sets and tool use in the beat sheet (slice 1c) on `main`
   2026-11-15; the readers' gaps (phone-card framing, a put's facing, the
-  pour over the pot) are in the brief. Still open: life, which the owner judged frozen from the video too.
+  pour over the pot) are in the brief. Life as events (slice 1d) on `main` 2026-11-17: fresh readers call a
+  hold facing the viewer alive, two people in profile still mostly frozen;
+  open until the owner judges the before/after video.
   The owner lifted the house-avatar hold on 2026-11-17 ("we also need to
   figure out the avatar flow"): slice 2 is now the avatar flow, an 80/20
   of one expressive base read at phone-card size, a trait card, two or

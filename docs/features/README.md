@@ -8,7 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| Direct, preview and revise a performance (one cast, three drivers) | In progress: slices 0, 1, 1b and 1c on `main`; the owner lifted the house-avatar hold on 2026-11-17, and slice 2 is now the avatar flow (one expressive base, a trait card, finishes, the audition bar in numbers), approved 2026-11-17 (open decision 5); 2a (the audition bar) and 2b (Astra's style sheets) next | [directed-performance.md](directed-performance.md) |
+| Direct, preview and revise a performance (one cast, three drivers) | In progress: slices 0, 1, 1b, 1c and 1d on `main` (1d on 2026-11-17: life as events, alive facing the viewer, still mostly frozen in profile; open on the owner's video judgement); the owner lifted the house-avatar hold on 2026-11-17, and slice 2 is now the avatar flow (one expressive base, a trait card, finishes, the audition bar in numbers), approved 2026-11-17 (open decision 5); 2a (the audition bar) and 2b (Astra's style sheets) next | [directed-performance.md](directed-performance.md) |
 | A hologram of yourself from a phone in under 2 minutes | Slices 1 and 2 on `main` (2026-11-13); device checks pending | [phone-capture.md](phone-capture.md) |
 | A scanned place around a take (split capture, first attempt) | Complete | [splat-place.md](archive/splat-place.md) |
 | Record a take inside a scanned place (split capture, slice 2) | 2a on `main` (2026-11-11); 2b, 2c not started | [splat-capture.md](splat-capture.md) |

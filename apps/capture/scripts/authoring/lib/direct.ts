@@ -2,7 +2,8 @@
  * Solves a beat sheet on its avatars, frame by frame: each performer is
  * reset to bind, placed, posed by its directions (closed forms of time, so a
  * revised beat changes only its span), and given the life that always runs
- * underneath (breath, sway, blinks, saccades, finger drift). Each frame is
+ * underneath (weight shifts, glances, sighs and hand fidgets as events, over
+ * breath, a little sway, blinks, saccades and finger drift). Each frame is
  * recorded as local transforms and morph weights, ready for the writer.
  */
 import * as THREE from 'three';
@@ -10,11 +11,13 @@ import type { FaceChannel } from '@holoim/avatar-face';
 import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import { LivenessFace } from '../../../src/face/LivenessFace.ts';
+import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
 import { EXPRESSIONS, envelope, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { armRestOffset, bodyUp, hangArm, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
+import { busy, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, type LifeSchedule } from './life.ts';
 import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
 
@@ -27,20 +30,19 @@ const ROOT_LAG = 0.18;
 const FINGER_STAGGER = 0.03;
 const FINGER_ORDER: Readonly<Record<FingerName, number>> = { index: 0, middle: 1, ring: 2, little: 3, thumb: 1.5 };
 
-// Life every performer has underneath its directions. Sized so a held pose
-// still moves at feed-card size, where a standing performer is about 190 CSS
-// px tall on a phone (about 9 mm per CSS px, measured by `review.ts`): head
-// and hands travel more than a pixel a second. Half these read as frozen to
-// fresh readers.
+// Continuous life under the events of `life.ts` (weight shifts, glances,
+// sighs, fidgets), which carry what a viewer sees. Sway and drift are kept to
+// a standing person's postural noise: as the only life, at 22 mm and 3.5°,
+// two fresh readers and the owner still called a held ending frozen.
 /** Hips sway, metres: side to side and front to back. */
-const SWAY = { x: 0.022, z: 0.012 } as const;
+const SWAY = { x: 0.006, z: 0.004 } as const;
 /** Breath, degrees of pitch per spine bone at full inhale. */
 const BREATH_DEG = [['spine', 1.5], ['chest', 2.5], ['upperChest', 1.6]] as const;
 const SHOULDER_LIFT_DEG = 2.5;
 /** The hanging hands rise and fall with the breath, metres. */
 const ARM_BREATH = 0.012;
 /** The head's slow drift, degrees of yaw (pitch is 0.6 of it). */
-const HEAD_DRIFT_DEG = 3.5;
+const HEAD_DRIFT_DEG = 1.5;
 
 // Leaning into a reach: the palm can go this far from the shoulder before the
 // body leans (a share of the arm, plus the palm's offset from the wrist).
@@ -70,6 +72,29 @@ export interface PerformerTrack {
   readonly root: { position: Float32Array; rotation: Float32Array };
   /** Palm-to-target distance at the middle of each reach's hold, by beat id; `outOfReach`, how far the goal stayed beyond the arm after leaning, at most, over the reach. */
   readonly reaches: { beat: string; side: Side; targetDistance: number; stopShort: number; outOfReach: number }[];
+  /** World joint positions per frame, as `scripts/lib/motion-quality.ts` measures a body. */
+  readonly motion: MotionFrame[];
+  /** The performer's life events (`life.ts`); undefined when the take has no life. */
+  readonly life?: LifeSchedule;
+}
+
+/** The motion-quality joints, by the humanoid bone each is read from (as capture's body samples). */
+const MOTION_JOINTS: ReadonlyArray<readonly [JointName, VrmHumanoidBone]> = [
+  ['head', 'head'], ['neck', 'neck'], ['chest', 'upperChest'], ['hips', 'hips'],
+  ['leftShoulder', 'leftUpperArm'], ['rightShoulder', 'rightUpperArm'], ['leftElbow', 'leftLowerArm'], ['rightElbow', 'rightLowerArm'],
+  ['leftWrist', 'leftHand'], ['rightWrist', 'rightHand'], ['leftHip', 'leftUpperLeg'], ['rightHip', 'rightUpperLeg'],
+  ['leftKnee', 'leftLowerLeg'], ['rightKnee', 'rightLowerLeg'], ['leftAnkle', 'leftFoot'], ['rightAnkle', 'rightFoot'],
+  ['leftToe', 'leftToes'], ['rightToe', 'rightToes']
+];
+
+function motionFrame(a: LoadedAvatar, t: number): MotionFrame {
+  const joints: MotionFrame['joints'] = {};
+  const v = new THREE.Vector3();
+  for (const [name, bone] of MOTION_JOINTS) {
+    const b = a.humanoid.bone(bone) ?? (name === 'chest' ? a.humanoid.bone('chest') : undefined);
+    if (b) joints[name] = b.getWorldPosition(v).toArray() as Vec3;
+  }
+  return { timeSec: t, joints };
 }
 
 /** An object's world pose per frame, and who held it when. */
@@ -101,7 +126,10 @@ interface Cast {
   readonly a: LoadedAvatar;
   readonly live: LivenessFace;
   readonly seed: number;
+  readonly events: LifeSchedule;
   readonly dirs: Resolved[];
+  /** Other performers' reaches to this performer's left or right arm or hand, which hold that hand's life still. */
+  readonly touched: Record<Side, Resolved[]>;
   /** Turn degrees per `toward` turn, fixed when the turn begins. */
   readonly turnDeg: Map<Resolved, number>;
   /** Step offsets in stage space, fixed when the step begins. */
@@ -165,12 +193,21 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
       morphing.push({ node, meshes: [m] });
     });
     return {
-      spec, a, live: new LivenessFace(spec.seed ?? 0x5eed + index * 7919), seed: spec.seed ?? index + 1, dirs,
+      spec, a, live: new LivenessFace(spec.seed ?? 0x5eed + index * 7919), seed: spec.seed ?? index + 1,
+      events: lifeSchedule(spec.seed ?? index + 1, sheet.duration + 1), dirs, touched: { left: [], right: [] },
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
       seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing
     };
   });
+  // A hand someone reaches to keeps still while they do (its fidget would move what they touch).
+  for (const c of cast) for (const r of c.dirs) {
+    const d = r.direction;
+    if (d.kind !== 'reach' || typeof d.at !== 'string') continue;
+    const m = /^([^.]+)\.(left|right)(Shoulder|UpperArm|LowerArm|Hand|\w*(Proximal|Intermediate|Distal|Metacarpal))$/.exec(d.at);
+    const other = m && cast.find((o) => o.spec.id === m[1]);
+    if (other && other !== c) other.touched[m[2] as Side].push(r);
+  }
   // Measures and landmarks from each performer's rest pose, then the set, placed on the first frame.
   for (const c of cast) {
     solveFrame(cast, { ...c, dirs: [] }, 0, 1 / fps, false, false);
@@ -187,7 +224,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     const translations = new Map<THREE.Object3D, Float32Array>();
     for (const o of c.a.rest.keys()) { rotations.set(o, new Float32Array(frames * 4)); translations.set(o, new Float32Array(frames * 3)); }
     const weights = new Map(c.morphing.map((m) => [m.node, { targets: m.meshes[0]!.morphTargetInfluences!.length, values: new Float32Array(frames * m.meshes[0]!.morphTargetInfluences!.length), meshes: m.meshes }]));
-    return { spec: c.spec, avatar: c.a, rotations, translations, weights, root: { position: new Float32Array(frames * 3), rotation: new Float32Array(frames * 4) }, reaches: [] };
+    return { spec: c.spec, avatar: c.a, rotations, translations, weights, root: { position: new Float32Array(frames * 3), rotation: new Float32Array(frames * 4) }, reaches: [], motion: [], ...(life ? { life: c.events } : {}) };
   });
   const props: PropTrack[] = [...stage.props.values()].map((st) => ({ prop: st.prop, position: new Float32Array(frames * 3), rotation: new Float32Array(frames * 4), holdings: st.holdings }));
 
@@ -218,6 +255,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
       for (const [, w] of tr.weights) w.values.set(w.meshes[0]!.morphTargetInfluences!, f * w.targets);
       c.a.frame.position.toArray(tr.root.position, f * 3);
       c.a.frame.quaternion.toArray(tr.root.rotation, f * 4);
+      tr.motion.push(motionFrame(c.a, t));
       see(c, t);
     });
     // Measured as the file plays: every performer at this frame. (A performer
@@ -732,6 +770,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   const legLength = a.legs.left.thighLength + a.legs.left.shinLength;
   const hipsLocal = new THREE.Vector3(0, -STANCE_DROP * legLength, 0);
   let pelvisRoll = 0;
+  let lifeRoll = 0;
+  let postureLean = 0;
   for (const r of c.dirs) {
     const d = r.direction;
     if (d.kind !== 'weight') continue;
@@ -753,6 +793,26 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     // Postural sway: a slow drift of the weight between the feet, large enough to see at card size.
     hipsLocal.x += SWAY.x * (Math.sin((2 * Math.PI * t) / 7.3 + phase) + 0.35 * Math.sin((2 * Math.PI * t) / 3.1 + phase * 3));
     hipsLocal.z += SWAY.z * Math.sin((2 * Math.PI * t) / 9.1 + phase * 2);
+    // Weight on one leg, changing legs now and then: the hips go toward the standing foot
+    // (wherever a step left it), the pelvis rolls so the free hip drops, and the free knee bends.
+    const w = weightAt(c.events, t) * (1 - busy(c.dirs, t, MASKED_BY.weight));
+    if (w !== 0) {
+      const stand = w > 0 ? feet.left : feet.right;
+      const toward = stand.clone().sub(feet.left.clone().add(feet.right).multiplyScalar(0.5)).applyQuaternion(a.body.getWorldQuaternion(new THREE.Quaternion()).invert());
+      toward.y = 0;
+      if (toward.lengthSq() < 1e-6) toward.set(w > 0 ? 1 : -1, 0, 0);
+      hipsLocal.addScaledVector(toward.normalize(), LIFE_WEIGHT.shift * Math.abs(w));
+      hipsLocal.y -= LIFE_WEIGHT.drop * Math.abs(w);
+      lifeRoll = -LIFE_WEIGHT.rollDeg * DEG * w;
+    }
+    // The posture resettles with each change of legs: the hips sit forward or back and the spine
+    // leans a little, which is what a weight shift shows from the side.
+    // Not while another performer reaches to this one (their hand would chase a moving arm).
+    const pk = 1 - busy(c.dirs, t, MASKED_BY.weight);
+    const touched = [...c.touched.left, ...c.touched.right];
+    const posture = postureAt(c.events, t, (from, to) => touched.some((r) => from < r.end + MASK_PAD && to > r.start - MASK_PAD));
+    hipsLocal.z += posture.hips * pk;
+    postureLean = posture.lean * DEG * pk;
   }
   const hips = a.humanoid.bone('hips')!;
   const bodyQ = a.body.getWorldQuaternion(new THREE.Quaternion());
@@ -760,15 +820,17 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   const lean = flat ? undefined : leanFor(cast, c, t, hipsLocal);
   if (lean) hipsLocal.addScaledVector(lean.dir.clone().applyQuaternion(bodyQ.clone().invert()), lean.hipShift);
   moveBoneWorld(hips, hipsLocal.clone().applyQuaternion(bodyQ));
-  if (pelvisRoll) rotateBoneWorld(hips, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ), -pelvisRoll));
-  // The chest counters the pelvis so the head stays over the feet.
-  if (pelvisRoll) {
+  if (pelvisRoll || lifeRoll) rotateBoneWorld(hips, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ), -(pelvisRoll + lifeRoll)));
+  // The chest counters the pelvis so the head stays over the feet; under life's weight shift
+  // only partly, so the shoulder line tilts against the hips.
+  if (pelvisRoll || lifeRoll) {
     const chest = a.humanoid.bone('chest') ?? a.humanoid.bone('spine')!;
-    rotateBoneWorld(chest, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ), pelvisRoll * 1.1));
+    rotateBoneWorld(chest, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ), pelvisRoll * 1.1 + lifeRoll * LIFE_WEIGHT.chestCounter));
   }
 
   // 4. Twist: the upper body leads a whole turn and makes an upper turn.
   if (Math.abs(twist) > 1e-5) turnBody(a, twist);
+  let sigh = 0;
   if (life) {
     // Breath: chest and spine rise and fall; the shoulders lift with the inhale.
     const inhale = Math.sin(breathT);
@@ -782,6 +844,31 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ);
       if (b) rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(fwd, (s === 'left' ? -1 : 1) * SHOULDER_LIFT_DEG * DEG * (inhale + 1) / 2));
     }
+    // A sigh now and then: the shoulders rise and the chest lifts, then the breath goes out and
+    // the body settles a little below its rest before coming back; less while a reach leans.
+    sigh = sighAt(c.events, t) * (lean ? 1 - clamp01(lean.theta / (8 * DEG)) : 1);
+    if (sigh !== 0) {
+      const chest = a.humanoid.bone('upperChest') ?? a.humanoid.bone('chest');
+      if (chest) rotateBoneWorld(chest, new THREE.Quaternion().setFromAxisAngle(right, -LIFE_SIGH.chestDeg * DEG * sigh));
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ);
+      for (const s of SIDES) {
+        const b = a.humanoid.bone(`${s}Shoulder`);
+        if (b) rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(fwd, (s === 'left' ? -1 : 1) * LIFE_SIGH.shoulderDeg * DEG * sigh));
+      }
+    }
+  }
+  if (postureLean !== 0) {
+    // The posture's lean, spread up the spine; the neck takes most of it back so the gaze stays level.
+    const axis = new THREE.Vector3().crossVectors(bodyUp(a), new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ)).normalize();
+    let carry = 0;
+    for (const [name, k] of LEAN_SHARE) {
+      const b = a.humanoid.bone(name);
+      if (!b) { carry += k; continue; }
+      rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(axis, postureLean * (k + carry)));
+      carry = 0;
+    }
+    const neck = a.humanoid.bone('neck') ?? a.humanoid.bone('head')!;
+    rotateBoneWorld(neck, new THREE.Quaternion().setFromAxisAngle(axis, -0.6 * postureLean));
   }
   if (lean && lean.theta > 0) {
     // Lean from the waist toward the goal, the head kept level enough to hold its look.
@@ -798,10 +885,35 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   }
   a.frame.updateMatrixWorld(true);
 
-  // 5. Legs: planted feet, each foot in the lagging yaw of the root.
+  // 5. Legs: planted feet, each foot in the lagging yaw of the root. The two-bone solve misses
+  //    the ankle by a few millimetres when the pelvis rolls, so aim past the miss and solve again.
   plantFeet(a, feet);
+  const aim = { left: feet.left.clone(), right: feet.right.clone() };
+  for (let i = 0; i < 2; i++) {
+    let miss = 0;
+    for (const s of SIDES) {
+      const off = feet[s].clone().sub(a.legs[s].foot.bone.getWorldPosition(new THREE.Vector3()));
+      miss = Math.max(miss, off.length());
+      aim[s].add(off);
+    }
+    if (miss < 2e-4) break;
+    plantFeet(a, aim);
+  }
 
-  // 6. Head: looks (the head takes its share; the eyes take the rest and lead).
+  // 6. Head: a large glance turns the upper chest first (not on someone another performer
+  //    reaches to); then looks (the head takes its share; the eyes take the rest and lead).
+  const glance = life ? glanceAt(c.events, t) : undefined;
+  const glanceK = glance ? 1 - busy(c.dirs, t, MASKED_BY.glance) : 0;
+  let chestYaw = 0;
+  if (glance && glanceK > 0) {
+    const touchedK = 1 - Math.max(busy(c.touched.left, t, { reach: 1 }), busy(c.touched.right, t, { reach: 1 }));
+    chestYaw = glanceChest(glance.head.yaw) * DEG * glanceK * touchedK;
+    const chest = a.humanoid.bone('upperChest') ?? a.humanoid.bone('chest');
+    if (chest && chestYaw !== 0) {
+      rotateBoneWorld(chest, new THREE.Quaternion().setFromAxisAngle(bodyUp(a), chestYaw));
+      a.frame.updateMatrixWorld(true);
+    }
+  }
   const headTarget = lookTarget(cast, c, t, flat, 'head');
   if (headTarget) {
     const { point, weight, share } = headTarget;
@@ -810,7 +922,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const from = head.getWorldPosition(new THREE.Vector3());
     const local = point.clone().sub(from).applyQuaternion(bodyQ.clone().invert());
     // Relative to where the twisted upper body already faces.
-    const faced = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), twist);
+    const faced = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), twist + chestYaw);
     const yaw = THREE.MathUtils.clamp(Math.atan2(local.x, local.z) - Math.atan2(faced.x, faced.z), -70 * DEG, 70 * DEG) * share * weight;
     const pitch = THREE.MathUtils.clamp(Math.atan2(local.y, Math.hypot(local.x, local.z)), -35 * DEG, 35 * DEG) * share * weight;
     const up = bodyUp(a);
@@ -819,7 +931,21 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       if (!bone) continue;
       rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(up, yaw * k));
       // Pitch about the performer's left axis as the head now faces (+X of the body, turned by twist and yaw).
-      const side = new THREE.Vector3(1, 0, 0).applyQuaternion(bodyQ).applyAxisAngle(up, twist + yaw);
+      const side = new THREE.Vector3(1, 0, 0).applyQuaternion(bodyQ).applyAxisAngle(up, twist + chestYaw + yaw);
+      rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(side, -pitch * k));
+    }
+  }
+  if (glance && glanceK > 0) {
+    // A glance: the head and neck take the rest of their share, about the body's up and then its side as the head now faces.
+    const up = bodyUp(a);
+    const yaw = glance.head.yaw * DEG * glanceK - chestYaw;
+    const pitch = glance.head.pitch * DEG * glanceK;
+    const neck = a.humanoid.bone('neck');
+    const head = a.humanoid.bone('head')!;
+    for (const [bone, k] of [[neck, 0.4], [head, neck ? 0.6 : 1]] as const) {
+      if (!bone) continue;
+      rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(up, yaw * k));
+      const side = new THREE.Vector3(1, 0, 0).applyQuaternion(bodyQ).applyAxisAngle(up, twist + chestYaw + yaw);
       rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(side, -pitch * k));
     }
   }
@@ -833,6 +959,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const pitch = HEAD_DRIFT_DEG * 0.6 * DEG * k * Math.sin((2 * Math.PI * t) / 8.3 + phase * 0.7);
     rotateBoneWorld(head, new THREE.Quaternion().setFromAxisAngle(up, yaw));
     rotateBoneWorld(head, new THREE.Quaternion().setFromAxisAngle(side, pitch));
+    // As a sigh goes out, the head dips with the body.
+    if (sigh < 0) rotateBoneWorld(head, new THREE.Quaternion().setFromAxisAngle(side, LIFE_SIGH.headDipDeg * DEG * (-sigh / LIFE_SIGH.slump)));
   }
   a.frame.updateMatrixWorld(true);
 
@@ -847,7 +975,9 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     if (held) local.x += (s === 'left' ? 1 : -1) * held.prop.halfWidth * held.weight;
     local.applyAxisAngle(new THREE.Vector3(0, 1, 0), torsoYaw);
     const rest = toWorld(a, local).sub(toWorld(a, new THREE.Vector3()));
-    if (life) rest.addScaledVector(bodyUp(a), ARM_BREATH * Math.sin(breathT));
+    // A hanging hand that fidgets lifts a little (the elbow bends) while its fingers move.
+    const fidget = life ? handFree(c, s, t, held?.weight ?? 0) * fidgetAt(c.events, s, t) : 0;
+    if (life) rest.addScaledVector(bodyUp(a), ARM_BREATH * Math.sin(breathT) + LIFE_FIDGET.lift * fidget);
     let w = 0;
     let goal: THREE.Vector3 | undefined;
     let palm: THREE.Vector3 | undefined;
@@ -977,8 +1107,18 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     if (life) {
       const curl = { ...pose.curl } as Record<FingerName, number>;
       const still = 1 - 0.7 * (held?.weight ?? 0);
-      FINGERS.forEach((finger, i) => { curl[finger] += still * 0.025 * Math.sin((2 * Math.PI * t) / (2.7 + i * 0.37) + phase + i * 1.3) + still * 0.012 * Math.sin((2 * Math.PI * t) / 1.1 + i); });
+      // A hanging hand fidgets now and then: the fingers curl a little more one after another, and the forearm rolls.
+      const free = handFree(c, s, t, held?.weight ?? 0);
+      FINGERS.forEach((finger, i) => {
+        curl[finger] += still * 0.025 * Math.sin((2 * Math.PI * t) / (2.7 + i * 0.37) + phase + i * 1.3) + still * 0.012 * Math.sin((2 * Math.PI * t) / 1.1 + i);
+        if (free > 0) curl[finger] += free * LIFE_FIDGET.curl * fidgetAt(c.events, s, t, FINGER_ORDER[finger] * LIFE_FIDGET.stagger);
+      });
       pose = { curl, spread: pose.spread };
+      const roll = free * fidgetAt(c.events, s, t);
+      if (roll > 0) {
+        const forearm = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).sub(a.arms[s].foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+        rotateBoneWorld(a.arms[s].hand, new THREE.Quaternion().setFromAxisAngle(forearm, (s === 'left' ? 1 : -1) * LIFE_FIDGET.rollDeg * DEG * roll));
+      }
     }
     hand.apply(pose);
   }
@@ -998,6 +1138,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   if (liveSample) {
     let blink = liveSample.weights.eyeBlinkLeft ?? 0;
     for (const r of c.dirs) if (r.direction.kind === 'look' && (r.direction.head ?? 0.6) > 0.3) blink = Math.max(blink, blinkAt(t - r.at + 0.02));
+    // A glance that turns the head far brings a blink with it.
+    if (glance?.onset !== undefined && glance.size * glanceK > GLANCE_BLINK_DEG) blink = Math.max(blink, blinkAt(t - glance.onset - 0.02));
     weights.eyeBlinkLeft = Math.max(weights.eyeBlinkLeft ?? 0, blink);
     weights.eyeBlinkRight = Math.max(weights.eyeBlinkRight ?? 0, blink);
   }
@@ -1008,9 +1150,24 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const g = a.face.gazeTowardPoint(eyeTarget.point);
     if (g) gaze = mixGaze(neutral, g, eyeTarget.weight);
   }
+  if (glance && glanceK > 0) {
+    // The eyes lead a glance: where they look, from the body's facing, weighted in only while a glance is under way.
+    const e = glance.eyes;
+    const on = clamp01(Math.max(Math.abs(e.yaw), Math.abs(e.pitch)) / 3) * glanceK;
+    if (on > 0) {
+      const up = bodyUp(a);
+      const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ).applyAxisAngle(up, twist + e.yaw * DEG);
+      const side = new THREE.Vector3().crossVectors(up, dir).normalize();
+      dir.applyAxisAngle(side, -e.pitch * DEG);
+      const from = a.humanoid.bone('head')!.getWorldPosition(new THREE.Vector3());
+      const g = a.face.gazeTowardPoint(from.addScaledVector(dir, 3));
+      if (g) gaze = mixGaze(gaze, g, on);
+    }
+  }
   if (liveSample) {
-    // Saccades shrink to fixational jitter while the eyes hold a target.
-    const k = eyeTarget ? 1 - 0.7 * clamp01(eyeTarget.weight) : 1;
+    // Saccades shrink to fixational jitter while the eyes hold a target or lead a glance.
+    const glancing = glance && glanceK > 0 ? clamp01(Math.max(Math.abs(glance.eyes.yaw), Math.abs(glance.eyes.pitch)) / 3) * glanceK : 0;
+    const k = (eyeTarget ? 1 - 0.7 * clamp01(eyeTarget.weight) : 1) * (1 - 0.7 * glancing);
     gaze = { left: { yaw: gaze.left.yaw + liveSample.gaze.left.yaw * k, pitch: gaze.left.pitch + liveSample.gaze.left.pitch * k }, right: { yaw: gaze.right.yaw + liveSample.gaze.right.yaw * k, pitch: gaze.right.pitch + liveSample.gaze.right.pitch * k } };
   }
   a.face.apply(weights, gaze);
@@ -1081,6 +1238,11 @@ function mixGaze(a: FaceGaze, b: FaceGaze, f: number): FaceGaze {
     left: { yaw: lerp(a.left.yaw, b.left.yaw, f), pitch: lerp(a.left.pitch, b.left.pitch, f) },
     right: { yaw: lerp(a.right.yaw, b.right.yaw, f), pitch: lerp(a.right.pitch, b.right.pitch, f) }
   };
+}
+
+/** How free a hand is for life's fidgets, 0 to 1: not directed, not holding, not being reached to. */
+function handFree(c: Cast, s: Side, t: number, holding: number): number {
+  return (1 - busy(c.dirs, t, MASKED_BY.hand, s)) * (1 - busy(c.touched[s], t, { reach: 1 })) * (1 - holding);
 }
 
 function blinkAt(u: number): number {
