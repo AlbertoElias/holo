@@ -53,9 +53,9 @@ const SIGH_REST = 3;
 export const LIFE_FIDGET = { curl: 0.22, lift: 0.04, rollDeg: 25, stagger: 0.05 } as const;
 const FIDGET_EVERY: Range = [3, 6];
 const FIDGET_FIRST: Range = [1.2, 3.5];
-const FIDGET_IN = 0.35;
+const FIDGET_IN = 0.6;
 const FIDGET_HOLD: Range = [0.3, 0.9];
-const FIDGET_OUT = 0.6;
+const FIDGET_OUT = 0.9;
 
 type Range = readonly [number, number];
 
@@ -201,10 +201,12 @@ export function fidgetAt(s: LifeSchedule, side: Side, t: number, delay = 0): num
 /**
  * What masks each life channel, by direction kind: 1 while the direction
  * moves, easing to its hold level while it holds (life goes on, smaller,
- * under a held look or reach), and to 0 over `MASK_PAD` either side.
+ * under a held look or reach), and to 0 over `MASK_PAD` either side. Weight
+ * gives way only to directions that place the legs or aim a held thing: a
+ * level easing in and out under every reach moved the hips in jerks.
  */
 export const MASKED_BY = {
-  weight: { weight: 1, step: 1, reach: 0.4, take: 0.4, put: 0.4, aim: 0.4 },
+  weight: { weight: 1, step: 1, aim: 1 },
   glance: { look: 0.65, reach: 0.8, take: 0.8, put: 0.8, aim: 0.8 },
   hand: { hand: 1, reach: 1, take: 1, put: 1, aim: 1 }
 } as const satisfies Record<string, Partial<Record<DirectionKind, number>>>;
