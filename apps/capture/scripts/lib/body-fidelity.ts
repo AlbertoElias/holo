@@ -10,6 +10,7 @@
 // normalize.
 
 import type { BodySample, HandPoseSource, Vec3Tuple } from '../../src/types/contracts';
+import type { MotionMetrics } from './motion-quality';
 
 type Vec3 = Vec3Tuple;
 type Quat = [number, number, number, number];
@@ -47,7 +48,8 @@ export type BodyMetrics = Partial<Record<CheckId, number | null | undefined>> & 
   phases?: Record<string, number>;
 };
 export type BodyAnalysis = { failures: string[]; metrics: BodyMetrics };
-export type BodyReport = BodyAnalysis & { label: string; frames: number; durationMs: number; source: string };
+// `motion` is the motion-quality grade (body replays grade it strictly).
+export type BodyReport = BodyAnalysis & { label: string; frames: number; durationMs: number; source: string; motion?: MotionMetrics };
 
 export const THRESHOLDS = Object.freeze({
   minActiveShare: 0.95,
@@ -456,7 +458,9 @@ export function analyzeBodyReplay(rawFrames: BodyFrame[], { stepMs, recording }:
   check('pelvisOvershootM', stops.length ? overshoot(bones.map((b) => b.hips)) : null, (v) => v <= THRESHOLDS.maxOvershootM, (v) => `pelvis overshoots by ${(v * 100).toFixed(1)} cm after stopping`);
 
   // Feet: heel (sole under the ankle, rolled with the foot) and ball of the
-  // foot, against the ground raycast under each.
+  // foot, against the ground raycast under each. A heel-up foot bends its
+  // toes at the ball and keeps them flat, so its ball sits straight under the
+  // toe joint; a flat or toe-up foot is rigid, so the ball rolls with it.
   const footPoints: Record<Side, FootPoint[]> = { left: [], right: [] };
   let missingGround = 0;
   for (const frame of samples) {
@@ -468,7 +472,7 @@ export function analyzeBodyReplay(rawFrames: BodyFrame[], { stepMs, recording }:
       const u: Vec3 = [d[0] / horizontal, 0, d[2] / horizontal];
       const roll = Math.atan2(d[1], horizontal) - Math.atan2(dims.toeHeight - dims.ankleHeight, dims.toeForward);
       const heel = add(add(ankle, scale(u, dims.ankleHeight * Math.sin(roll))), [0, -dims.ankleHeight * Math.cos(roll), 0]);
-      const ball = add(add(toe, scale(u, dims.toeHeight * Math.sin(roll))), [0, -dims.toeHeight * Math.cos(roll), 0]);
+      const ball = roll < 0 ? add(toe, [0, -dims.toeHeight, 0]) : add(add(toe, scale(u, dims.toeHeight * Math.sin(roll))), [0, -dims.toeHeight * Math.cos(roll), 0]);
       // A missing ground sample is not contact: it counts against coverage
       // and leaves the point out of every contact measure.
       const groundHeel = frame.body.ground[`${side}Ankle`]?.y;

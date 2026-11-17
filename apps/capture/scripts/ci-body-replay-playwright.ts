@@ -24,6 +24,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import type {} from '../src/runtime/automationHooks';
 import { analyzeBodyReplay, formatBodyReport, type BodyFrame, type BodyRecording, type BodyReport } from './lib/body-fidelity.ts';
+import { framesFromBodySamples, judgeMotion, measureMotion } from './lib/motion-quality.ts';
 
 declare global {
   interface Window {
@@ -41,6 +42,12 @@ declare global {
 // can catch it; BODY_REPLAY_FAULT=<name> runs one. BODY_REPLAY_CONCURRENCY sets
 // how many replays run at once (default 2). XR_REPLAY_ONLY=<substring> keeps
 // only matching fixtures (and, with faults, the faults that replay them).
+//
+// Every replay is also graded by the motion-quality instrument against the
+// VR body targets (scripts/lib/motion-quality.ts; feet, pops, joint limits,
+// jitter), strictly: a miss fails the check as `motion <metric>`. The avatars
+// check runs this script on each supported skeleton, so every skeleton is
+// held to the same targets.
 
 const STEP_MS = 1000 / 30;
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -184,8 +191,15 @@ async function replay(fileName: string, { faults = [], video = false, screenshot
   // Contexts stay open until the browser closes: closing one mid-run makes
   // the next wait on GPU teardown (see ci-vr-locomotion-playwright.mjs).
   await writeFile(path.join(artifactDir, `${label}-samples.json`), JSON.stringify(frames));
+  const analysis = analyzeBodyReplay(frames, { stepMs: STEP_MS, recording });
+  const motionFrames = framesFromBodySamples(frames, 'avatar');
+  const motion = measureMotion(motionFrames);
+  const withoutInput = !motionFrames.some((f) => f.input?.leftWrist || f.input?.rightWrist);
+  const motionMisses = judgeMotion(motion, 'vr-body', { withoutInput }).filter((verdict) => !verdict.pass);
   const report: BodyReport = {
-    ...analyzeBodyReplay(frames, { stepMs: STEP_MS, recording }),
+    ...analysis,
+    failures: [...analysis.failures, ...motionMisses.map((v) => `motion ${v.metric}: ${v.value === null ? 'not measured' : +v.value.toFixed(3)} (target ${v.target.max !== undefined ? `≤ ${v.target.max}` : `≥ ${v.target.min}`})`)],
+    motion,
     label,
     frames: frames.length,
     durationMs,
@@ -217,7 +231,12 @@ try {
     const reports = await mapWithConcurrency(fixtures, concurrency, (fileName) => (
       replay(fileName, { video: Boolean(videoFrameDir), screenshot: captureScreenshots })
     ));
-    for (const report of reports) console.log(formatBodyReport(report));
+    for (const report of reports) {
+      console.log(formatBodyReport(report));
+      const m = report.motion;
+      const f = (v: number | null | undefined, digits: number, scale = 1) => (v === null || v === undefined ? '–' : (v * scale).toFixed(digits));
+      if (m) console.log(`  motion: skate ${f(m.footSkateMaxCm, 2)} cm / ${f(m.footSkateShare, 1, 100)}%, float ${f(m.footFloatP95Cm, 2)}, penetration ${f(m.footPenetrationCm, 2)} cm, pops p99 ${f(m.popP99MS2, 1)} m/s², limits ${f(m.jointLimitShare, 1, 100)}%, jitter ${f(m.jitterP95Mm, 2)} mm`);
+    }
     const failures = reports.flatMap((report) => report.failures.map((failure) => `${report.label}: ${failure}`));
     if (consoleErrors.length > 0) failures.push(`console errors:\n${consoleErrors.join('\n')}`);
     if (failures.length > 0) throw new Error(`Body replay fidelity failed:\n- ${failures.join('\n- ')}`);
