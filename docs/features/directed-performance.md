@@ -10,8 +10,8 @@ log (props, sets, publishing, gestures) now leads "Not covered yet". Slice 1c
 `main` 2026-11-15 after the user approved open decision 4; neither slice 1c
 build is published (the owner published the slice 1b watering take). The
 owner lifted the hold on the house avatar on 2026-11-17: slice 2 is now
-the avatar flow, designed and waiting for the owner's approval (open
-decision 5); nothing in it is built.  
+the avatar flow, approved by the owner on 2026-11-17 ("Approve all",
+open decision 5); 2a and 2b come next, and nothing in it is built yet.  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -560,7 +560,7 @@ recorded objects until decided.
 - collisions (an object can pass through a body or a table; the review is
   what catches it).
 
-### Slice 2: the avatar flow (designed 2026-11-17; waiting for approval)
+### Slice 2: the avatar flow (designed and approved 2026-11-17; not started)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
 house base is kept and narrowed: one base, a short list of traits, two or
@@ -1175,6 +1175,10 @@ audition scripts, the house base's source and its exported avatar files
    - **(h) The identity-hue rim on avatars** (styleguide 1.1) is not
      drawn by the viewer today and cannot live in the avatar file.
      Recommended: leave it out of slice 2, as a later viewer change.
+
+   **Decided on 2026-11-17:** every recommendation, (a) to (h) ("Approve
+   all"). Next: 2a (the bar) in its own session, and the owner passes the
+   Astra request in slice 2 to Astra (2b).
 Decided on 2026-11-13: Astra draws the style sheets; Astra authors a second
 take with the CLI; the build starts after the user has answered the two
 mandate briefs. Both were answered the same day, so the build can start.
@@ -1183,7 +1187,8 @@ Decided on 2026-11-13: the house base waits for the early reading. The
 brief had recommended building it beside slice 1; the user answered "Wait
 for reading". Slice 2 starts only when the user decides on it from the
 reading recorded in slice 1's evidence. **Lifted on 2026-11-17** ("yes,
-lift the hold"); slice 2 is now the avatar flow, waiting on decision 5.
+lift the hold"); slice 2 is now the avatar flow, approved the same day
+(decision 5).
 
 ## Test plan and evidence
 
