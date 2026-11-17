@@ -1255,8 +1255,13 @@ jitter is P95 in mm, pass under 2):
 | rest | jitter 2.2 (fail), pen 0.13 cm, pop 0.07 | jitter 2.27 (fail), skate 0.02 cm, pen 0.08 cm, pop 0.9 |
 | watering | jitter 2.29 (fail), pen 0.1 cm, pop 6.61, aim 3.3° | jitter 2.41 (fail), skate 0.02 cm, pen 0.05 cm, pop 6.64, aim 1.6° |
 
-Jitter failed before and still does: the metric counts any slow ease inside
-a "still" window, so an event in a hold counts against it. Reaches are
+Jitter failed before and with design 2 under the measure of the time,
+which counted any slow ease inside a "still" window. Measured again after
+merging `main` (whose motion-quality measure changed for gap 3 of
+`natural-avatar-motion.md`), every take passes every body target: jitter
+0.69 and 0.95 mm (defaults A, B), 0.65 (rest), 0.71 (watering); no float or
+penetration; pops 5.73, 3.4, 1.06 and 7.72 m/s²; B's skate 0.69 cm (the
+step). Reaches are
 unchanged: defaults 19.6 mm (asked 20), watering 0.4, 0.1 and 0.4 mm.
 Penetration for B is fixed by aiming the leg solve past its ankle miss.
 
@@ -1274,8 +1279,7 @@ repository) went to the owner on 2026-11-17; the brief stays open on item
 12 until they judge it.
 
 **Follow-ups.** A directed `weight` direction rolls the pelvis so the free
-hip rises (sign opposite to life's); jitter's still-window rule penalises
-any authored ease; a profile hold needs a beat or a different idea.
+hip rises (sign opposite to life's); a profile hold needs a beat or a different idea.
 
 ## Physical-device limits
 
