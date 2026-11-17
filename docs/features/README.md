@@ -8,7 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| Direct, preview and revise a performance (one cast, three drivers) | In progress: slices 0, 1 and 1b built (1b on 2026-11-14: review loop, three defaults, face numbers, a second piece and its gap log); waiting on the user's face and next-slice decisions; the house avatar stays gated | [directed-performance.md](directed-performance.md) |
+| Direct, preview and revise a performance (one cast, three drivers) | In progress: slices 0, 1, 1b and 1c on `main`; the owner lifted the house-avatar hold on 2026-11-17, and slice 2 is now the avatar flow (one expressive base, a trait card, finishes, the audition bar in numbers), designed and waiting for approval (open decision 5) | [directed-performance.md](directed-performance.md) |
 | A hologram of yourself from a phone in under 2 minutes | Slices 1 and 2 on `main` (2026-11-13); device checks pending | [phone-capture.md](phone-capture.md) |
 | A scanned place around a take (split capture, first attempt) | Complete | [splat-place.md](archive/splat-place.md) |
 | Record a take inside a scanned place (split capture, slice 2) | 2a on `main` (2026-11-11); 2b, 2c not started | [splat-capture.md](splat-capture.md) |
