@@ -141,6 +141,29 @@ export function flatGroundGltf(): Buffer {
   });
 }
 
+/**
+ * A take with no bubble, like a directed one: a performer (the avatar node, a
+ * 1.8 m figure that sways) and a recorded object, a 0.5 × 1.2 m chart, at
+ * `chartAt` ([x, z] in metres from her).
+ */
+export function chartTakeGltf(chartAt: readonly [number, number]): Buffer {
+  return unlitGlb((attribute, primitive) => {
+    const meshes = [
+      { primitives: [primitive(new BoxGeometry(0.5, 1.8, 0.3).translate(0, 0.9, 0), 0)] },
+      { primitives: [primitive(new BoxGeometry(0.5, 1.2, 0.1).translate(0, 0.6, 0), 1)] }
+    ];
+    const input = attribute(new Float32Array([0, 1, 2]), 1);
+    const output = attribute(new Float32Array([-0.05, 0, 0, 0.05, 0, 0, -0.05, 0, 0]), 3);
+    return {
+      scenes: [{ nodes: [0, 1] }],
+      nodes: [{ name: "RecordedAvatar", mesh: 0 }, { name: "RecordedObject", mesh: 1, translation: [chartAt[0], 0, chartAt[1]] }],
+      meshes,
+      materials: [[0, 1, 0, 1], [1, 0.5, 0, 1]].map((color) => ({ pbrMetallicRoughness: { baseColorFactor: color }, extensions: { KHR_materials_unlit: {} }, alphaMode: "OPAQUE" })),
+      animations: [{ name: "RecordedMotion", samplers: [{ input, output }], channels: [{ sampler: 0, target: { node: 0, path: "translation" } }] }]
+    };
+  });
+}
+
 type Attribute = (values: Float32Array | Uint16Array | Uint32Array, size: number) => number;
 type Primitive = (geometry: BufferGeometry, material: number) => object;
 type GltfBody = { scenes: object[]; nodes: object[]; meshes: object[]; materials: object[]; animations: object[] };

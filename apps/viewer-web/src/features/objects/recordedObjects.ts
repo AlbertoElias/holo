@@ -29,6 +29,15 @@ export function isInsideRecordedObject(object: Object3D): boolean {
   return false;
 }
 
+/** Whether the take carries any recorded object. */
+export function hasRecordedObjects(root: Object3D): boolean {
+  let found = false;
+  root.traverse((child) => {
+    if (!found && isRecordedObjectNode(child)) found = true;
+  });
+  return found;
+}
+
 export function readRecordedObjects(gltf: MeaningGltf, clone: Object3D): ResolvedObject[] {
   const extensions = gltf.userData?.gltfExtensions as Record<string, unknown> | undefined;
   const raw = extensions?.[HOLOIM_OBJECTS_EXTENSION];
