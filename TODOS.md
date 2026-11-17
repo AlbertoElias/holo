@@ -154,7 +154,7 @@ it from the item below instead of duplicating its status here.
   headset drives; an audition every avatar must pass; a first house avatar
   to replace the stand-in. In progress: slices 0 and 1 (the acting report,
   the audition, beat-sheet direction and its CLI) are on `main`; slice 2,
-  the first house base, is gated. Re-scoped on 2026-11-14 ("not the best avatar for this hologram,
+  the first house base, was gated until 2026-11-17. Re-scoped on 2026-11-14 ("not the best avatar for this hologram,
   but an overall hologram creation system using this hologram as
   reference"): the review loop, defaults every piece inherits, face
   legibility numbers and a second piece authored from a written brief
@@ -166,7 +166,13 @@ it from the item below instead of duplicating its status here.
   2026-11-15; the readers' gaps (phone-card framing, a put's facing, the
   pour over the pot) are in the brief. Life as events (slice 1d) on `main` 2026-11-17: fresh readers call a
   hold facing the viewer alive, two people in profile still mostly frozen;
-  open until the owner judges the before/after video. Owned by
+  open until the owner judges the before/after video.
+  The owner lifted the house-avatar hold on 2026-11-17 ("we also need to
+  figure out the avatar flow"): slice 2 is now the avatar flow, an 80/20
+  of one expressive base read at phone-card size, a trait card, two or
+  three finishes and the audition as the bar for any avatar, in
+  sub-slices 2a to 2g; approved by the owner on 2026-11-17 ("Approve
+  all", open decision 5); 2a (the bar) and 2b (Astra's sheets) next, nothing built. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
   (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)

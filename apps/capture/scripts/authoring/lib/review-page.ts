@@ -6,14 +6,17 @@
  * `window.__review`:
  * - `init(url)`: finds the card's probe and the performers (wrappers named
  *   `RecordedAvatar` or `Performer_*`), their key bones and face vertices
- *   (the vertices any face shape moves by more than 0.5 mm).
+ *   (the vertices any face shape moves by more than 0.5 mm), and the
+ *   recorded objects `HOLOIM_objects` declares (name, source, holds).
  * - `seek(t)`: pauses the take at `t` and waits two frames so the card's
  *   camera and dome follow, as they would in playback.
  * - `card()`: per performer, key points and the face's box projected with
- *   the card's own camera, in CSS pixels of the card canvas.
+ *   the card's own camera, in CSS pixels of the card canvas; per recorded
+ *   object, its box the same way.
  * - `close(i, view)`: renders performer `i` with the viewer's renderer and
  *   scene from a camera placed by `view`, returns a JPEG data URL.
- * - `bodies()`: world head and hips per performer, for planning `view`.
+ * - `bodies()`: world head and hips per performer and each recorded
+ *   object's world box, for planning `view`.
  */
 import { tokens } from '@holoim/design-tokens';
 
@@ -26,13 +29,23 @@ export const REVIEW_PAGE = String.raw`
     leftHand: /left_?hand$/i, rightHand: /right_?hand$/i,
     leftFoot: /left_?foot$/i, rightFoot: /right_?foot$/i
   };
-  const state = { probe: null, performers: [] };
+  const state = { probe: null, performers: [], objects: [] };
   const V = () => new (state.probe.camera.position.constructor)();
   const vertex = (mesh, i, out) => {
     mesh.getVertexPosition ? mesh.getVertexPosition(i, out) : out.fromBufferAttribute(mesh.geometry.attributes.position, i);
     if (mesh.isSkinnedMesh && mesh.applyBoneTransform) mesh.applyBoneTransform(i, out);
     else if (mesh.isSkinnedMesh && mesh.boneTransform) mesh.boneTransform(i, out);
     return out.applyMatrix4(mesh.matrixWorld);
+  };
+  // Every vertex of a recorded object, thinned to about 1500 per object: enough for its box.
+  const objectPoints = (node, each) => {
+    const v = V();
+    node.traverse((m) => {
+      if (!m.isMesh || !m.geometry || !m.geometry.attributes.position) return;
+      const n = m.geometry.attributes.position.count;
+      const step = Math.max(1, Math.floor(n / 1500));
+      for (let i = 0; i < n; i += step) each(vertex(m, i, v));
+    });
   };
   const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
   window.__review = {
@@ -71,9 +84,10 @@ export const REVIEW_PAGE = String.raw`
         });
         return { name: w.name, wrapper: w, bones, face };
       });
+      state.objects = (state.probe.objects || []).map(({ entry, node }) => ({ name: entry.name, source: entry.source && entry.source.name, holds: entry.holds || [], node }));
       const actions = Object.values(state.probe.actions).filter(Boolean);
       const duration = Math.max(...actions.map((a) => a.getClip().duration));
-      return { duration, performers: state.performers.map((p) => ({ name: p.name, bones: Object.keys(p.bones), faceVertices: p.face.reduce((s, f) => s + f.idx.length, 0) })), fov: state.probe.camera.fov, pixelRatio: state.probe.renderer.getPixelRatio() };
+      return { duration, performers: state.performers.map((p) => ({ name: p.name, bones: Object.keys(p.bones), faceVertices: p.face.reduce((s, f) => s + f.idx.length, 0) })), fov: state.probe.camera.fov, pixelRatio: state.probe.renderer.getPixelRatio(), objects: state.objects.map((o) => ({ name: o.name, source: o.source, holds: o.holds })) };
     },
     async seek(t) {
       for (const a of Object.values(state.probe.actions)) if (a) { a.paused = true; a.time = t; }
@@ -104,6 +118,14 @@ export const REVIEW_PAGE = String.raw`
             box = box ? [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)] : [x, y, x, y];
           }
           return { name: p.name, points, face: box };
+        }),
+        objects: state.objects.map((o) => {
+          let box = null;
+          objectPoints(o.node, (w) => {
+            const [x, y] = project(w);
+            box = box ? [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)] : [x, y, x, y];
+          });
+          return { name: o.name, box };
         })
       };
     },
@@ -116,6 +138,14 @@ export const REVIEW_PAGE = String.raw`
           const h = p.bones.head ? p.bones.head.getWorldPosition(V()) : V();
           const hip = p.bones.hips ? p.bones.hips.getWorldPosition(V()) : h.clone();
           return { head: [h.x, h.y, h.z], hips: [hip.x, hip.y, hip.z] };
+        }),
+        objects: state.objects.map((o) => {
+          const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+          objectPoints(o.node, (w) => {
+            const a = [w.x, w.y, w.z];
+            for (let k = 0; k < 3; k += 1) { min[k] = Math.min(min[k], a[k]); max[k] = Math.max(max[k], a[k]); }
+          });
+          return { name: o.name, min, max };
         })
       };
     },
@@ -126,6 +156,9 @@ export const REVIEW_PAGE = String.raw`
     close(i, view) {
       const r = state.probe.renderer;
       const cam = state.probe.camera.clone();
+      // The card camera carries the card's view offset (its frame inside the canvas); the close view is a plain square camera.
+      if (cam.clearViewOffset) cam.clearViewOffset();
+      cam.zoom = 1;
       cam.fov = view.fov; cam.aspect = view.width / view.height; cam.near = 0.01; cam.far = 100;
       cam.position.set(...view.position); cam.lookAt(V().set(...view.target));
       cam.updateProjectionMatrix(); cam.updateMatrixWorld();

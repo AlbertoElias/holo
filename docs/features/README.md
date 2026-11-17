@@ -8,7 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| Direct, preview and revise a performance (one cast, three drivers) | In progress: slices 0, 1, 1b, 1c and 1d built (1d on 2026-11-17: life as events, alive facing the viewer, still mostly frozen in profile; open on the owner's video judgement); waiting on the user's face and next-slice decisions; the house avatar stays gated | [directed-performance.md](directed-performance.md) |
+| Direct, preview and revise a performance (one cast, three drivers) | In progress: slices 0, 1, 1b, 1c and 1d on `main` (1d on 2026-11-17: life as events, alive facing the viewer, still mostly frozen in profile; open on the owner's video judgement); the owner lifted the house-avatar hold on 2026-11-17, and slice 2 is now the avatar flow (one expressive base, a trait card, finishes, the audition bar in numbers), approved 2026-11-17 (open decision 5); 2a (the audition bar) and 2b (Astra's style sheets) next | [directed-performance.md](directed-performance.md) |
 | A hologram of yourself from a phone in under 2 minutes | Slices 1 and 2 on `main` (2026-11-13); device checks pending | [phone-capture.md](phone-capture.md) |
 | A scanned place around a take (split capture, first attempt) | Complete | [splat-place.md](archive/splat-place.md) |
 | Record a take inside a scanned place (split capture, slice 2) | 2a on `main` (2026-11-11); 2b, 2c not started | [splat-capture.md](splat-capture.md) |
@@ -31,6 +31,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Resize and move props on every device | Complete | [object-resize-and-move.md](archive/object-resize-and-move.md) |
 | The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
+| A far object on the feed card (review-pack framing fixed; cap decision) | Draft: review-tool fix built 2026-11-16; the cap waits on the owner | [card-framing-objects.md](card-framing-objects.md) |
 | Deep zoom into nested holograms ("The way down") | Complete | [deep-zoom.md](archive/deep-zoom.md) |
 | Simpler viewer chrome (control row, corner, settings) | Complete | [viewer-chrome.md](archive/viewer-chrome.md) |
 | Agent upload token (standing showcase uploads) | Complete | [agent-upload-token.md](archive/agent-upload-token.md) |
