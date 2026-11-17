@@ -1,7 +1,7 @@
 # Feature brief: a far object on the feed card
 
 **Lead:** Claude Code session card-framing-objects (2026-11-16)  
-**Status:** Draft: the review-tool fix is built; the cap waits on the owner's choice  
+**Status:** Approved 2026-11-17: the owner picked B at 75 %; the review-tool fix is merged, the cap is not built yet  
 **Layer:** view (`docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -44,8 +44,8 @@ view changes only by losing the view offset (below).
 
 Phone card as `review.ts` opens it (390×844 CSS px, DPR 1.5, mobile), the
 current viewer test build, 21 times through each take, through the card's own
-camera. Script and outputs are ignored, under
-`apps/capture/output/authoring/framing/` (`measure.ts`, `today-<take>/`).
+camera. Scripts and outputs are ignored; a copy is in the main checkout under
+`output/card-framing-objects/framing/` (`measure.ts`, `today-<take>/`).
 
 | Take | Performer (CSS px) | Face (CSS px) | Objects on the card |
 |---|---|---|---|
@@ -80,6 +80,8 @@ keeps the performer's face readable however far an object is placed, and
 lets a far object stay partly in view rather than vanish. C is simpler, but
 drops the object outright past a hard line.
 
+**Decision (owner, 2026-11-17): B at 75 %.**
+
 A is reasonable while no real take has a far object: none of the authored
 pieces does, and a captured take with an object several metres off is the
 case that would show it.
@@ -104,8 +106,11 @@ capture authoring action.
   plainly that the 1c reading was a review-tool fault.
 - [x] A fresh reader reviews tallest-bar from the fixed pack under a neutral
   title, recorded below whether or not it reads.
-- [ ] The owner picks A, B or C. If B or C: holograms without objects frame
-  exactly as today, and the far-chart variants give the measured sizes above.
+- [x] The owner picks A, B or C: B, a floor at 75 % (2026-11-17).
+- [ ] With the floor built: tallest-bar, watering, goodbye and tallest-bar
+  without the chart frame exactly as today (sizes in the table above), and
+  the chart moved 2, 3 and 5 m keeps the performer at 75 % or more of her
+  no-chart height (about 134 px of 178), the chart partly on the card.
 
 ## Failure cases considered
 
@@ -141,7 +146,8 @@ capture authoring action.
 
 2026-11-17: a fresh Opus subagent, given only the fixed pack's `reader/`
 under the title "Take" (account and filled `comparison.json` beside the
-ignored pack, `apps/capture/output/authoring/framing/review/tallest-bar-fixed2/`).
+ignored pack, copied to `output/card-framing-objects/framing/review/tallest-bar-fixed2/`
+in the main checkout).
 
 - **Now seen:** the chart, "one tall orange bar among shorter blue ones",
   on the card and in the close view, which "widens ... and the chart comes
