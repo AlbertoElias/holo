@@ -12,7 +12,10 @@ export type ArmIkOptions = {
   // snaps) instead of stopping dead. A height-fitted avatar's arm is about
   // 0.30 of its height against a person's 0.33, so a real long reach runs
   // past it: the Quest 3 hand recording reaches 4-6% (and briefly 19%) past
-  // full protraction. Only tracked hands pass it.
+  // full protraction. A stretching solve also swings the clavicle all the
+  // way and stops 1 mm short of straight (not 90% and 1 cm), so the wrist
+  // lands on the tracked one. Only tracked hands pass it; controllers,
+  // desktop and camera keep the reach their object and aim checks are tuned on.
   maxStretch?: number;
 };
 
@@ -41,10 +44,11 @@ export class ArmIkSolver {
     { handWorldQuaternion, maxStretch = 0 }: ArmIkOptions = {}
   ): boolean {
     // Shoulder protraction: as the target nears full reach, swing the
-    // clavicle toward it (as a real shoulder does), all the way at full
-    // reach. Without this the pinned shoulder runs out of arm ~10 cm early on
-    // a stretch; stopping at 90% of the swing left the Quest 3 recording's
-    // wrists 1-2 cm short on every long reach.
+    // clavicle toward it (as a real shoulder does). Without this the pinned
+    // shoulder runs out of arm ~10 cm early on a stretch. A stretching
+    // (tracked-hand) solve swings all the way: stopping at 90% left the
+    // Quest 3 recording's wrists 1-2 cm short on every long reach.
+    const fullReach = maxStretch > 0;
     chain.upperArm.getWorldPosition(this.tmpUpperWorld);
     if (chain.shoulderBindAimInParent) {
       const reach = chain.upperLength + chain.lowerLength;
@@ -52,7 +56,7 @@ export class ArmIkSolver {
       const factor = THREE.MathUtils.smoothstep(dist / Math.max(reach, 1e-5), 0.75, 1.0);
       this.tmpVecA.subVectors(targetPositionWorld, this.tmpUpperWorld).normalize();
       if (this.aimBoneAtDirection(chain.shoulder, chain.shoulderBindQuaternion, chain.shoulderBindAimInParent, this.tmpVecA)) {
-        chain.shoulder.quaternion.slerp(chain.shoulderBindQuaternion, 1 - factor);
+        chain.shoulder.quaternion.slerp(chain.shoulderBindQuaternion, 1 - factor * (fullReach ? 1 : 0.9));
         chain.shoulder.updateMatrixWorld(true);
       }
     }
@@ -64,9 +68,9 @@ export class ArmIkSolver {
     if (!Number.isFinite(targetDistanceRaw) || targetDistanceRaw < 1e-5) return false;
 
     const minReach = Math.max(0.02, Math.abs(chain.upperLength - chain.lowerLength) + 0.01);
-    // 1 mm short of straight keeps the elbow's bend plane defined; a 1 cm
-    // margin cost a centimetre on every full reach.
-    const maxReach = Math.max(minReach + 0.01, chain.upperLength + chain.lowerLength - 0.001);
+    // 1 mm short of straight keeps the elbow's bend plane defined; the 1 cm
+    // margin cost a tracked wrist a centimetre on every full reach.
+    const maxReach = Math.max(minReach + 0.01, chain.upperLength + chain.lowerLength - (fullReach ? 0.001 : 0.01));
     let stretch = 1;
     if (maxStretch > 0 && targetDistanceRaw > maxReach) {
       const room = maxStretch * (chain.upperLength + chain.lowerLength);

@@ -73,15 +73,15 @@ hands-only.
 | **Target, all bodies** | ≤ 3 cm / ≤ 10% · ≤ 1 cm · ≤ 0.5 cm | ≤ 35 m/s² | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
 | Human reference (CMU 02_01 / 07_01) | 3.9 / 16% · 07_01 2.6 / 10% | 34 / 45 | 0% | — | — | anchor |
 | Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.7 cm / 4.0% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 31 (was **116**; 27.6 on the earlier whole-frame stencil) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
-| Camera (`bodycam:report --avatars all`, lens-aim clip, each of the 17 `avatars` skeletons) | 0 / 0% · 0 · 0 (the camera body stands; its legs never move) | 10.1–10.8 | 0% | 1.8–2.0 mm, ray **0.88°** (wrist→tip, 0.25 s) | latency 50 ms, aim median **34.4°** (left 47, right 32; holds 18–51°); lost-hand pop max 116–119 m/s² (bar 150; 325 before the arm-release fix) | pass but aim (rough aim accepted, Decision 4) |
+| Camera (`bodycam:report --avatars all`, lens-aim clip, each of the 17 `avatars` skeletons) | 0 / 0% · 0 · 0 (the camera body stands; its legs never move) | 13.5–14.5 (10.1–10.8 before gap 3's exact ±50 ms pops; same solver) | 0% | 1.0–1.1 mm (1.8–2.0 before gap 3's time-fit jitter), ray **0.88°** (wrist→tip, 0.25 s) | latency 50 ms, aim median **34.4°** (left 47, right 32; holds 18–51°); lost-hand pop max 116–119 m/s² (bar 150; 325 before the arm-release fix) | pass but aim (rough aim accepted, Decision 4) |
 | VR body, walk ramp | 1.6 cm / 5.3% · 0.0 · 0.1 (base **4.1 / 3.8% · 1.0 · 1.2**) | 34 (base **37**) | 0% | 0.3 mm (base 1.8) | — | pass (gap 3 done) |
 | VR body, walk | 2.0 cm / 3.6% · 0.0 · 0.0 (base 2.9 / 3.8% · **1.05** · 0.3) | 34 (base 35) | 0% | 0.6 mm (base 1.3) | — | pass |
 | VR body, turn | 0.6 cm / 2.3% · 0.0 · 0.0 (base 2.5 / 2.5% · 0.6 · 0.3) | 29 (base 28) | 0% | 0.6 mm | — | pass |
 | VR body, small steps and sway | 0.7 cm / 1.2% · 0.0 · 0.0 (base 0.7 / 1.9% · 0.8 · 0.3) | 10 | 0% | 0.4 mm | — | pass |
 | VR body, crouch and lean | 0.0 cm / 0% · 0.0 · 0.0 (base 0.1 / 0% · 0.7 · 0.3) | 5 | 0% | 1.2 mm (base 1.2) | — | pass |
 | VR body, every skeleton (worst of 7 fixtures × 5 rows) | 2.0 cm (walk, every fixture) / 5.4% (twisted T-pose, ramp) · 0.0 · 0.1 | 34 | 0% | 1.2 mm (crouch) | — | pass |
-| VR hands, real Quest 3 recording | — | — | unmeasured (hand samples carry no elbows) | 2.3 (2.9) mm | wrist p95 **3.0 cm**, lag 0, jerk 1.03 | wrist miss (gap 4) |
-| VR hands, IWER | — | — | unmeasured | 1.9 (1.9) mm | wrist 0.0 cm | pass (limits unmeasured) |
+| VR hands, real Quest 3 recording (each of the 7 `avatars` skeletons) | — | — | 0% (was unmeasured: hand samples carried no elbows) | 1.1 (2.9) mm (base 1.4) | wrist p95 0.2 cm (base **3.0**), latency 0, jerk 0.99 (base 1.03) | pass (gap 4 done) |
+| VR hands, IWER | — | — | 0% | 0.5 (1.9) mm | wrist 0.0 cm, latency 0, jerk 1.00 | pass |
 | Quest passthrough AR | unmeasured (same body solver as VR; to confirm) | | | | | gap |
 | Phone AR | unmeasured (avatar placed and driven from the phone; to confirm) | | | | | gap |
 
@@ -174,8 +174,28 @@ by today's instrument, so each pair differs only by the solver.
    3.2 → 3.9; Unreal cm small steps 4.2; guard 4.5), because the hips no
    longer stay up on a floating ankle and the longer swing holds each foot
    off the ground longer.
-4. **Real-headset wrist error** 3.0 cm against 2 cm (IK lag over long reaches;
-   `ArmIkSolver`).
+4. **Done (2026-11-17): real-headset wrist error.** The Quest 3 hand
+   recording read wrist p95 3.0 cm against 2 cm on every skeleton. It was
+   reach, not lag (latency already read 0): the height fit scales the arm
+   with the avatar (bind 0.53 m → 0.44 m at the recording's 1.34 m eyes), and
+   a fitted arm is about 0.30 of the height against a person's 0.33, so long
+   reaches ran 4-6% (briefly 19%) past full reach and the hand stopped short.
+   How it closed: for arms an XR hand drives, `ArmIkSolver` swings the
+   clavicle all the way at full reach (was 90%), stops 1 mm short of straight
+   (was 1 cm), and past that stretches the forearm and hand bones by up to 8%
+   of the arm, easing in with a tanh whose slope is 1 at full reach, so the
+   wrist never snaps. Those two alone read 1.1/2.1 cm; with the stretch, 0.0/0.2.
+   Bone positions are baked into the export, so the stretch survives
+   playback; an arm nothing tracks goes back to its bind lengths. Controllers,
+   desktop and camera keep the unstretched solve: with it, the IWER resize
+   take doubles the prop in fewer frames than its GLB comparison samples, and
+   desktop reach-interruptions on the default avatar stop starting a reach.
+   The hand replay now samples the body too and grades the `vr-hands` motion
+   targets strictly (jitter: no worse than the input), so elbow joint limits
+   are measured (0%). Camera, desktop-motion and every VR body row read the
+   same before and after. Trade-off: on an overreach the avatar's forearm
+   visibly lengthens, up to 8%; the end of the recording's 7-19% overreach
+   still misses by 4-5 cm on 7 frames, under the p95.
 5. **AR sources measured.** Add Quest AR and phone AR rows to the existing AR
    checks; fix only if they miss.
 
@@ -187,7 +207,7 @@ and a before/after proof video (ignored `output/`, H.264 MP4, never committed).
 | Item | Action |
 |---|---|
 | `room-scale-body-motion.md` (Verifying) | Close as Complete; its leftover feet and knee gaps become gap 3 here. Its `body-fidelity.ts` thresholds stay as the per-fixture guard; the VR rows above are graded by this instrument |
-| `hand-tracking-fidelity.md` (Verifying) | Close as Complete; the 3.0 cm wrist error becomes gap 4. Fix its stale path `scripts/lib/hand-fidelity.mjs` → `apps/capture/scripts/lib/hand-fidelity.ts` |
+| `hand-tracking-fidelity.md` (Verifying) | Close as Complete; the 3.0 cm wrist error becomes gap 4 (closed 2026-11-17). Fix its stale path `scripts/lib/hand-fidelity.mjs` → `apps/capture/scripts/lib/hand-fidelity.ts` |
 | `archive/avatar-locomotion.md`, `archive/locomotion-retarget.md` (Complete) | Stay closed; their unvalidated headset check and missing VR arm tracks go under Physical-device limits here |
 | Camera spike (`feature/camera-avatar`, now `archive/camera-avatar-spike.md`) | Folded in 2026-11-14 as gap 2 (Decision 2); its jitter definition is now the instrument's |
 | TODOS "Make all avatar movement look completely natural" | Points here. Its wishlist (full-body IK with comfort costs, arm swing, hip sway, weight shift) is the fix toolbox for the gaps above; "robotic" motion that passes every metric is judged in the proof videos, and a missing metric is added before tuning by eye |
@@ -205,10 +225,10 @@ report passes on it.
 - [x] Desktop keyboard row meets target; guard strict in `desktop-motion`.
 - [x] Camera row has measured body and aim numbers, behind `?input=camera`. Body, ray, feet and latency meet on all 17 skeletons; aim misses at 34.4° for the measured reason in gap 2, accepted as rough aim (Decision 4).
 - [x] VR body walk/ramp/turn rows meet target; strict in the body replay (2026-11-14, gap 3; crouch and small steps too).
-- [ ] Real-headset wrist p95 ≤ 2 cm.
+- [x] Real-headset wrist p95 ≤ 2 cm (2026-11-17, gap 4): 0.2 cm on all 7 skeletons (was 3.0), strict in the hand replay.
 - [ ] Quest AR and phone AR rows measured; any miss fixed.
 - [ ] Each gap closes with a before/after proof video sent to the user.
-- [ ] Every supported skeleton meets each row's target: the desktop and VR motion checks grade each avatar fixture the `avatars` check loads (`scripts/ci-avatar-formats-playwright.ts`: reoriented axes, A-pose, T-pose, twisted T-pose, VRM 0 facing −Z, Z-up, Unreal centimetres), not only the default avatar (user direction, 2026-11-14). VR part done (2026-11-14): all 5 VR body rows meet target on all 7 fixtures. Camera part done (17 skeletons, gap 2). Desktop part pending.
+- [ ] Every supported skeleton meets each row's target: the desktop and VR motion checks grade each avatar fixture the `avatars` check loads (`scripts/ci-avatar-formats-playwright.ts`: reoriented axes, A-pose, T-pose, twisted T-pose, VRM 0 facing −Z, Z-up, Unreal centimetres), not only the default avatar (user direction, 2026-11-14). VR part done (2026-11-14): all 5 VR body rows meet target on all 7 fixtures; both VR hand rows too (2026-11-17, gap 4). Camera part done (17 skeletons, gap 2). Desktop part pending.
 
 ## Failure cases considered
 
@@ -265,7 +285,7 @@ report passes on it.
 | Human anchor | x | CMU reads above |
 | VR body rows | `pnpm --filter @holoim/capture run test:xr:body` (strict motion grading per row; `BODY_REPLAY_FAULTS=1` for the 12-fault matrix) | gap 3 (2026-11-14, exact ±50 ms pops): every row meets target (table above); fault matrix 12/12 caught |
 | VR body rows, every skeleton | `XR_AVATAR_ONLY=<fixture> XR_AVATAR_BODY_REPLAYS='crouch,small-steps,turn,walk-forward,walk-ramp' pnpm --filter @holoim/capture run test:xr:avatars`, one fixture per run (all five rows take ~200 s a fixture; the default run replays walk-forward and crouch) | 2026-11-14: all 7 fixtures pass every row, strict |
-| Hand rows | hand replay then `scripts/motion-quality-report.ts` | 2026-11-14 re-read with the time-fit quadratic jitter: table above; joint limits read null (no elbows in hand samples) and grade as a miss |
+| Hand rows | `pnpm --filter @holoim/capture run test:xr:hands` (strict `vr-hands` motion grading; the `avatars` check runs it per skeleton) | gap 4 (2026-11-17): every target met on all 7 skeletons, joint limits measured from the sampled body |
 | Camera row | `pnpm --filter @holoim/capture run bodycam:report <clip> <config> --avatars all` (or `--from-landmarks`); lean guard in `test:xr:bodycam` | every target but aim on 17 skeletons (2026-11-14) |
 | AR rows | existing AR checks with body sampling | pending |
 

@@ -17,8 +17,9 @@ it from the item below instead of duplicating its status here.
 - [x] Record real Quest hand input for `test:xr:hands` and recalibrate the
   fidelity thresholds against it. Delivered 2026-10-18:
   `apps/capture/fixtures/input-recordings/headset-open-fist-pinch-point-wave-reach.json`
-  passes with the wrist-position ceiling recalibrated 2 cm → 4 cm (IK lag on
-  moving hands; the synthetic wrist is static) after adding shoulder
+  passes with the wrist-position ceiling recalibrated 2 cm → 4 cm (the tracked
+  wrist out-reached the height-fitted arm; fixed 2026-11-17 by a reach stretch,
+  gap 4 of `docs/features/natural-avatar-motion.md`) after adding shoulder
   protraction to the arm IK. Owned by
   [`docs/features/hand-tracking-fidelity.md`](docs/features/hand-tracking-fidelity.md).
 - [ ] On a physical headset, check only what IWER cannot emulate: real-tracking
