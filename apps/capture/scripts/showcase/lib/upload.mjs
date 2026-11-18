@@ -51,8 +51,10 @@ export async function checkAccount(apiUrl, credential) {
   const response = await fetch(new URL('/api/auth/me', apiUrl), { headers: { authorization: `Bearer ${credential.token}` }, redirect: 'error' });
   if (response.status === 401) {
     return {
-      error: credential.source.startsWith('HOLOIM_')
-        ? `The API refused ${credential.source} (signed out, revoked or expired). Nothing was uploaded.`
+      error: credential.source === 'HOLOIM_SESSION'
+        ? 'The API refused HOLOIM_SESSION (signed out or expired). Sign in again, or unset it to use the Keychain token.'
+        : credential.source.startsWith('HOLOIM_')
+        ? `The API refused ${credential.source} (revoked or never registered). Nothing was uploaded.`
         : `The API refused the agent token from ${credential.source} (revoked or never registered). Nothing was uploaded. Set up a new one with: scripts/agent-upload-token.sh revoke ${apiUrl.origin}; ${setupHint(apiUrl)}`
     };
   }

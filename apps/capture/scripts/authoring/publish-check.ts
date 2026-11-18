@@ -95,6 +95,7 @@ try {
   const big = join(OUT, 'oversize.glb');
   await writeFile(big, Buffer.concat([take, Buffer.alloc(100 * 1048576)]));
   await refused('over the size cap', () => publish({ input: big, api: origin, title: 'x', quickLook: false }), /at most 100 MB/);
+  await refused('credit too long', () => publish({ input: takeFile, api: origin, credit: 'x'.repeat(81), quickLook: false }), /credit must be/);
   const untitled = join(OUT, 'untitled.glb');
   await writeFile(untitled, take);
   await refused('no title', () => publish({ input: untitled, api: origin, quickLook: false }), /no title/);

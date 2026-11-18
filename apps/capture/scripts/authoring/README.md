@@ -22,7 +22,8 @@ HOLOIM_AGENT_TOKEN=… node --conditions=development --import tsx scripts/author
 ```
 
 Takes a `.glb` (title, `description` and `credit` come from the sheet beside
-it, `<take>.beats.json`) or a sheet, which it builds first. Flags win.
+it, `<take>.beats.json`) or a sheet, which it builds first (refused when a
+grip, put or aim misses its mark, as `direct.ts` exits 1). Flags win.
 Before any network call it refuses, listing every problem, a take that is
 over the API's 100 MB cap, has no declared performer (`HOLOIM_humanoid`), has
 a performer no animation reaches, or (unless `--no-quick-look`) is over the

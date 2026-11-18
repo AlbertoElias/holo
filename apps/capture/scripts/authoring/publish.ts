@@ -29,7 +29,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { MAX_HOLOGRAM_BYTES } from '@holoim/contracts';
 
 import { checkAccount, findCredential, insecureTarget, isLoopback, QUICK_LOOK_BUDGET, quickLookLoad, setupHint, uploadHologram, waitForPreview } from '../showcase/lib/upload.mjs';
-import { build } from './direct.ts';
+import { build, objectLines } from './direct.ts';
 import { findPerformers, parseGlb, readChannels } from './lib/gltf-read.ts';
 
 export const LOCAL_API = 'http://127.0.0.1:3001';
@@ -129,7 +129,10 @@ export async function publish(options: PublishOptions): Promise<PublishReport | 
   let glbFile = input;
   let sheetMeta: SheetMeta;
   if (input.endsWith('.json')) {
-    glbFile = (await build(input)).out;
+    const built = await build(input);
+    const missed = objectLines(built.take.objects).filter((l) => l.failed);
+    if (missed.length) throw new Refusal(`${basename(input)} builds, but an object misses its mark; nothing was uploaded:\n  - ${missed.map((l) => l.text).join('\n  - ')}`);
+    glbFile = built.out;
     sheetMeta = await readSheetMeta(input);
   } else {
     sheetMeta = await readSheetMeta(join(dirname(input), `${basename(input, '.glb')}.beats.json`));
@@ -142,6 +145,12 @@ export async function publish(options: PublishOptions): Promise<PublishReport | 
 
   const title = options.title ?? sheetMeta.title;
   if (!title) throw new Refusal('no title: pass --title, or publish from a sheet that has one. Nothing was uploaded.');
+  const credit0 = options.credit ?? sheetMeta.credit;
+  const fieldProblems = [
+    ...(title.length > 120 ? [`the title is ${title.length} characters; the API accepts at most 120`] : []),
+    ...(credit0 !== undefined && (credit0.trim() === '' || credit0.length > 80) ? ['the credit must be 1 to 80 characters'] : [])
+  ];
+  if (fieldProblems.length) throw new Refusal(`${fieldProblems.join('; ')}. Nothing was uploaded.`);
   const description = options.description ?? sheetMeta.description ?? null;
   const credit = options.credit ?? sheetMeta.credit ?? null;
 
@@ -163,8 +172,9 @@ export async function publish(options: PublishOptions): Promise<PublishReport | 
   const dto = uploaded.dto;
   let appearsOnFeed = false;
   for (const deadline = Date.now() + FEED_WAIT_MS; !appearsOnFeed && Date.now() < deadline; await sleep(500)) {
-    const feed = await fetch(new URL(`/api/holograms?limit=20&q=${encodeURIComponent(title)}`, apiUrl));
-    if (feed.ok) appearsOnFeed = ((await feed.json()) as { items: { id: string }[] }).items.some((i) => i.id === dto.id);
+    // The feed's search caps its query at 100 characters.
+    const feed = await fetch(new URL(`/api/holograms?limit=20&q=${encodeURIComponent(title.slice(0, 100))}`, apiUrl)).catch(() => null);
+    if (feed?.ok) appearsOnFeed = ((await feed.json()) as { items: { id: string }[] }).items.some((i) => i.id === dto.id);
   }
   let previewStatus = 'not requested';
   if (quickLook) previewStatus = (await waitForPreview(apiUrl, dto.id)).usdzStatus;
