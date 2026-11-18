@@ -160,7 +160,7 @@ dependency for what a 150-line vertical-only grid does).
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Arms, knees, gait, terrain, cost | `pnpm --filter @holoim/capture run test:xr:desktop-motion` | `output/ci-desktop-motion/summary.json`: PASS on all 9 rows (2026-11-18). Shipped, flat floor: cadence 116 steps/min, arm swing 43.8 cm at correlation −0.956, knee swing 77.4°, mid-stance 38.8°, stance 0.45/0.45, asymmetry 0.065, pops 44.8 m/s², jitter 0.43 mm. Terrain: deepest foot joint under the ground 0.00 cm (was 20 cm), planted float p95 0.81 cm. Pose cost median 0.1–0.2 ms, p95 0.2–0.3 ms on every row (the terrain probes were 1.8 ms before the height index) |
-| All sources still pass | `test:xr:avatars`, `test:xr:body`, `test:xr:hands`, `test:xr:ar-record`, `pnpm run verify:pr` | All pass (2026-11-18). In `verify:pr`, two pipeline specs timed out under load on shared ports and passed when rerun alone. The desktop and phone object checks outside `verify:pr` fail on `main` as well (B-068) |
+| All sources still pass | `test:xr:avatars`, `test:xr:body`, `test:xr:hands`, `test:xr:ar-record`, `pnpm run verify:pr` | All pass (2026-11-18). In `verify:pr`, two pipeline specs timed out under load on shared ports and passed when rerun alone. The desktop and phone object checks outside `verify:pr` fail on `main` as well (B-069) |
 | Looks right | proof video (ignored `output/`, not linked) | A 14 s desktop keyboard walk over the default terrain: arms hang and swing opposite the legs, knees bend through the stride, and the feet stay on the slopes |
 
 ## Physical-device limits

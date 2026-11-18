@@ -3,23 +3,31 @@
  * from CC0 parts, every value from `house-base/base.json`, so the base is
  * re-made by this command and never edited by hand.
  *
- *   node --conditions=development --import tsx scripts/authoring/house-base.ts [--params file] [--out file.glb] [--blender path] [--install-mpfb]
+ *   node --conditions=development --import tsx scripts/authoring/house-base.ts [--params file] [--build name] [--out file.glb] [--blender path] [--install-mpfb]
  *
  * It fetches the pinned parts into the ignored `output/authoring/house-base/cache/`
  * and checks their sha256: MPFB 2.0.18 (the Blender add-on that makes the
- * MakeHuman human; GPL-3.0, its output CC0) and the faceunits01 pack (the
- * 52 ARKit face shapes, CC0). Blender (5.x) runs `house-base/build.py`
+ * MakeHuman human; GPL-3.0, its output CC0) and the faceunits01 pack (ARKit
+ * face shapes, CC0; the base keeps its jaw and cheek units, and its stylised
+ * face's other shapes are built in `build.py`). Blender (5.x) runs `house-base/build.py`
  * headless; MPFB must be installed in it as the `user_default` extension at
  * the pinned version (`--install-mpfb` installs it from the checked zip).
  * The credits `build.py` records go into `asset.copyright` and the scene's
- * `holoimAvatar` extras. Writes `public/gltf/models/house-base.glb` (or
- * `--out`) and `<out>.report.json` beside it in the cache folder.
+ * `holoimAvatar` extras. One wardrobe per build in base.json's `builds`
+ * (every hair style and glasses kind, for `@holoim/avatar-look` to dress):
+ * `assets/house-base/wardrobe-<build>.glb`, and `<name>.report.json` in the
+ * cache folder. `public/gltf/models/house-base.glb` is the medium wardrobe
+ * dressed in base.json's `defaultLook`. `--build` makes only that wardrobe
+ * (to `--out` if given) and leaves the public file alone.
  */
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { NodeIO } from '@gltf-transform/core';
+import { dressAvatar, lookKey, parseLook, type Build } from '@holoim/avatar-look';
+import { wardrobeFile } from './lib/house-look.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../../../..');
@@ -64,8 +72,12 @@ async function part(p: { url: string; sha256: string; file: string }): Promise<s
 
 const blender = arg('--blender') ?? process.env.BLENDER ?? '/Applications/Blender.app/Contents/MacOS/Blender';
 const params = resolve(arg('--params') ?? join(HERE, 'house-base/base.json'));
-const out = resolve(arg('--out') ?? join(ROOT, 'apps/capture/public/gltf/models/house-base.glb'));
-const report = join(CACHE, `${basename(out, '.glb')}.report.json`);
+const base = JSON.parse(await readFile(params, 'utf8')) as { builds: Record<string, unknown>; defaultLook: unknown };
+const builds = Object.keys(base.builds).filter((k) => !k.startsWith('$'));
+const only = arg('--build');
+if (only && !builds.includes(only)) throw new Error(`no build "${only}" in ${params}; builds: ${builds.join(', ')}`);
+if (arg('--out') && !only) throw new Error('--out needs --build');
+const fileFor = (build: string) => wardrobeFile(build as Build);
 
 const mpfbZip = await part(PARTS.mpfb);
 const fuZip = await part(PARTS.faceunits);
@@ -92,36 +104,51 @@ if (mpfbVersion !== PARTS.mpfb.version) {
   execFileSync(blender, ['--command', 'extension', 'install-file', '-r', 'user_default', '-e', mpfbZip], { stdio: 'inherit' });
 }
 
-const tmp = join(CACHE, `${basename(out, '.glb')}.blender.glb`);
-const log = execFileSync(blender, ['-b', '--python', join(HERE, 'house-base/build.py'), '--', params, faceunits, tmp, report], { encoding: 'utf8', maxBuffer: 64 << 20 });
-if (!log.includes('HOUSE_BASE_DONE')) throw new Error(`build.py did not finish:\n${log.slice(-4000)}`);
+async function make(build: string, out: string): Promise<void> {
+  const report = join(CACHE, `${basename(out, '.glb')}.report.json`);
+  const tmp = join(CACHE, `${basename(out, '.glb')}.blender.glb`);
+  const log = execFileSync(blender, ['-b', '--python', join(HERE, 'house-base/build.py'), '--', params, faceunits, tmp, report, build], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  if (!log.includes('HOUSE_BASE_DONE')) throw new Error(`build.py did not finish:\n${log.slice(-4000)}`);
 
-// Credits into asset.copyright; the scene's holoimAvatar extras already carry them (build.py).
-const glb = new Uint8Array(await readFile(tmp));
-const view = new DataView(glb.buffer, glb.byteOffset, glb.byteLength);
-const jsonLength = view.getUint32(12, true);
-const json = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLength))) as {
-  asset: { copyright?: string; generator?: string };
-  scenes?: { extras?: { holoimAvatar?: string } }[];
-};
-const avatar = JSON.parse(json.scenes?.[0]?.extras?.holoimAvatar ?? 'null') as { credits: { title: string; author: string; source: string; licence: string }[] } | null;
-if (!avatar?.credits?.length) throw new Error('build.py wrote no credits');
-json.asset.copyright = avatar.credits.map((c) => `“${c.title}” by ${c.author}, ${c.source}, ${c.licence}`).join('; ');
-// The JSON chunk is padded in bytes (the credits hold non-ASCII quotes), with spaces, to a multiple of 4.
-const encoded = new TextEncoder().encode(JSON.stringify(json));
-const head = new Uint8Array(encoded.length + ((4 - (encoded.length % 4)) % 4)).fill(0x20);
-head.set(encoded);
-const rest = glb.subarray(20 + jsonLength);
-const outBytes = new Uint8Array(12 + 8 + head.length + rest.length);
-const w = new DataView(outBytes.buffer);
-w.setUint32(0, 0x46546c67, true);
-w.setUint32(4, 2, true);
-w.setUint32(8, outBytes.length, true);
-w.setUint32(12, head.length, true);
-w.setUint32(16, 0x4e4f534a, true);
-outBytes.set(head, 20);
-outBytes.set(rest, 20 + head.length);
-await mkdir(dirname(out), { recursive: true });
-await writeFile(out, outBytes);
-await rm(tmp, { force: true });
-console.log(`house base: ${out} (${(outBytes.length / 1e6).toFixed(2)} MB, sha256 ${sha256(outBytes)}); report ${report}`);
+  // Credits into asset.copyright; the scene's holoimAvatar extras already carry them (build.py).
+  const glb = new Uint8Array(await readFile(tmp));
+  const view = new DataView(glb.buffer, glb.byteOffset, glb.byteLength);
+  const jsonLength = view.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLength))) as {
+    asset: { copyright?: string; generator?: string };
+    scenes?: { extras?: { holoimAvatar?: string } }[];
+  };
+  const avatar = JSON.parse(json.scenes?.[0]?.extras?.holoimAvatar ?? 'null') as { credits: { title: string; author: string; source: string; licence: string }[] } | null;
+  if (!avatar?.credits?.length) throw new Error('build.py wrote no credits');
+  json.asset.copyright = avatar.credits.map((c) => `“${c.title}” by ${c.author}, ${c.source}, ${c.licence}`).join('; ');
+  // The JSON chunk is padded in bytes (the credits hold non-ASCII quotes), with spaces, to a multiple of 4.
+  const encoded = new TextEncoder().encode(JSON.stringify(json));
+  const head = new Uint8Array(encoded.length + ((4 - (encoded.length % 4)) % 4)).fill(0x20);
+  head.set(encoded);
+  const rest = glb.subarray(20 + jsonLength);
+  const outBytes = new Uint8Array(12 + 8 + head.length + rest.length);
+  const w = new DataView(outBytes.buffer);
+  w.setUint32(0, 0x46546c67, true);
+  w.setUint32(4, 2, true);
+  w.setUint32(8, outBytes.length, true);
+  w.setUint32(12, head.length, true);
+  w.setUint32(16, 0x4e4f534a, true);
+  outBytes.set(head, 20);
+  outBytes.set(rest, 20 + head.length);
+  await mkdir(dirname(out), { recursive: true });
+  await writeFile(out, outBytes);
+  await rm(tmp, { force: true });
+  console.log(`house base (${build}): ${out} (${(outBytes.length / 1e6).toFixed(2)} MB, sha256 ${sha256(outBytes)}); report ${report}`);
+}
+
+for (const build of only ? [only] : builds) await make(build, only ? resolve(arg('--out') ?? fileFor(build)) : fileFor(build));
+
+if (!only) {
+  const look = parseLook(Object.fromEntries(Object.entries(base.defaultLook as object).filter(([k]) => !k.startsWith('$'))), 'defaultLook');
+  const io = new NodeIO();
+  const doc = await io.read(wardrobeFile(look.build));
+  dressAvatar(doc, look);
+  const pub = join(ROOT, 'apps/capture/public/gltf/models/house-base.glb');
+  await io.write(pub, doc);
+  console.log(`house base (dressed ${lookKey(look)}): ${pub} (${((await stat(pub)).size / 1e6).toFixed(2)} MB)`);
+}

@@ -735,6 +735,91 @@ authors to add a beat (the default fails every two-hander that forgets).
 
 **Evidence:** "Slice 1e evidence", below.
 
+### Slice 1f: change in the world (2026-11-18)
+
+"Not covered yet" item 5. Built under `apps/capture/scripts/authoring/`
+only (`lib/beats.ts` additively, a new `lib/world.ts`, `lib/write-glb.ts`,
+`direct.ts`'s printout, the watering sheet); nothing under
+`apps/capture/src/**`, the viewer, the API or `@holoim/objects` changes.
+The set's change is plain glTF node animation (translation, rotation,
+scale, STEP presence), which the viewer's mixer plays unfiltered and the
+USDZ converter bakes (`glb_to_usdz.py` carries node TRS and turns a scale
+of 0 into USD visibility); no morph target, material animation or new
+extension is used.
+
+**What.** A sheet may give `world`: a list of changes, one line each, the
+rest defaulted.
+
+1. **Poured.** `{ "kind": "pour", "object": "can" }`: while the object's
+   tool axis points below the horizontal (`tilt`, default 0°), drops leave
+   its tip (`rate` 60 a second at full tilt, fewer near the threshold),
+   fall under gravity from the tip's speed along the axis, and land on
+   `onto` (default: the target of the `aim` that points that object),
+   scattered over a third of the wet patch. Each drop is a small blue
+   (`color`) stretched sphere, along its velocity, present only in flight.
+   Drops take turns on a pool of nodes (about 15 are in flight at once),
+   keyed on the take's frames: one node per drop (132 in watering) took
+   the Quick Look readback (`inspect_usdz.py`) 314 s against the tool
+   check's 180 s limit; pooled, it is 16 nodes and 115 channels.
+   Where they land, a wet patch (`wet`, default on, radius 0.06 m) grows
+   with the water landed and stays to the end, darker than the part it
+   lies on.
+2. **Particles.** `{ "kind": "burst", "at": <point>, "when": <cue> }`:
+   `count` (24) seeded motes fly out to `spread` (0.25 m) and shrink away
+   over `life` (1.2 s). `{ "kind": "drift", "at", "when", "until" }`:
+   motes rise slowly (`rise` 0.3 m) and fade, a few at a time, over the span.
+3. **An object responds.** `{ "kind": "change", "object": "plant",
+   "when": <cue>, "over": 1.5, "from": { "turn": [24, 0, 8], "scale":
+   [1, 0.8, 1], "color": "#8a8a45" } }`: the object's shape turns about
+   its own origin (the bottom centre), scales, lifts (`lift`, metres)
+   and changes colour from `from` to the change's own values (default:
+   as the sheet made it), eased over `over`. Colour is a swap in `steps`
+   (4) whole-object copies, since neither glTF without an extension nor
+   Quick Look animates a material. `"show": false` makes it disappear at
+   the cue and `"show": true` appear (absent before), with the object's
+   `HOLOIM_objects` presence spans written to match. A change ends at the
+   state it names; what it leaves out returns to as-made, so a later
+   change restates a colour it keeps.
+
+A cue is seconds, a beat id (its start) or `<beat>.end`. Points are
+object points (`pot.soil`), numeric marks or `[x, y, z]`; a performer
+point or a place is refused, since the change is computed after the
+solve from the objects' tracks. Each pour, burst and drift is one
+`summoned` `RecordedObject` (source `effect:<kind>`) whose presence spans
+cover its motes, so the viewer's cast-only framing leaves it out; a
+sheet without `world` writes the same file as before.
+
+**What Quick Look cannot show:** a colour fades only in its steps; drops
+are separate rigid nodes, not a fluid; nothing splashes or soaks in.
+
+**Rejected:** a morph-target stream (one long mesh deformed per frame:
+heavier on the deformed extent budget, B-057, which counts every frame);
+`KHR_animation_pointer` colour (the converter and Quick Look drop it);
+a particle extension the viewer would have to learn.
+
+**Acceptance.**
+
+- `sheets/watering.json` revised: the plant starts wilted and perks up
+  after the water lands; the pour leaves a wet patch. It builds with no
+  miss, and the converter's extent load (`publish.ts --check`) stays under
+  budget.
+- **Blind reading, bar set before running:** three fresh Sonnet readers,
+  each given only the review pack's `reader/` folder (never the sheet),
+  describe the piece. It passes when at least 2 of 3 say water was poured
+  (pours, waters, watering, water, drops, stream, sprinkles) and at least
+  2 of 3 say the plant changed (perks up, lifts, straightens, revives,
+  stands up, grows, greener, healthier). Not tuned past two tries; a
+  failure is reported.
+- `viewer-check` on the card frames the piece with the water in view; the
+  Quick Look check (`check_usdz_tools.sh`) passes on it, its readback
+  matching every node's world transform (drops' visibility as scale 0, the
+  plant's change node) at the sampled times. `sheets/world-test.json`
+  (burst, drift, colour, lift, appear and disappear) passes the same two.
+- **Nothing else moves:** `rest`, `expressions`, `gestures`,
+  `defaults-test` and `goodbye` write byte-identical GLBs to `main`'s.
+
+**Evidence:** "Slice 1f evidence", below.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
@@ -984,7 +1069,7 @@ bars in the brief to the artist.
 | **2a: the bar** | The new audition rows above, in `avatar-audition.ts` and `face-legibility.ts`; run on the stock avatar and the avatar-format fixtures | One command that audits any avatar file and writes audition JSON with every row; it is what grades the new base (2c), outside avatars and each finish. Sanity check only: the stock avatar, known to be poor, fails the brow, lid, mouth, visibility and face-box rows by name | **Yes.** Scripts under `apps/capture/scripts/authoring/` only |
 | **2b: the sheets** | Astra draws the style sheets from the request below; the owner picks a finish set (open decision 1) | The sheets, judged against the acceptance list in the request; the owner's pick recorded here | **Yes.** No code |
 | **2c: the base** | One base in the picked style, neutral finish, neutral card, made the recommended way | Every audition row passes; three blind readers at 5 of 7 or better at card size; a review pack of `sheets/expressions.json` and the watering piece on the base beside the stock; the motion owner's report; `check_usdz_tools.sh`; a proof video | **Yes.** Loads through `?avatar=` and beat sheets only; edits nothing the mandates own |
-| **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
+| **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards. Built 2026-11-18 (see "Slice 2d evidence"); the turn row still fails, worse with garments | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
@@ -1119,6 +1204,69 @@ Two takes of one piece on the house characters (one flat, one directed),
 shown muted and without the verse; then the same question after orbiting.
 The goodbye is one fixture for it, not the aim. Slice 1b's review protocol
 is its method.
+
+#### Slice 3 as a command (2026-11-18)
+
+Decided by the agent in the owner's absence on 2026-11-18, for the owner to
+review. All under `apps/capture/scripts/authoring/`; nothing under `src/`.
+
+**What it is.** `six-second-test.ts prepare <sheet.json> [--avatars stock,house-base]`
+builds the sheet twice per avatar, `--style flat` and `--style directed`,
+with every performer on that avatar (the house base is
+`public/gltf/models/house-base.glb`, the sheet's `avatar` field), and runs
+`review.ts` on each take with three additive options: `--until 6` (only
+the first six seconds), `--card-only` (no close views, no video: the card
+framing alone, as the feed shows it) and `--orbit 90` (the same moments again
+from a camera swung 90° about the cast, at the card's distance and field of
+view, in a 360-px crop). Each take then gets a code, a blind folder of
+frames and a reader brief that carries no style, avatar or intent
+(`blind/<code>/`), and the key stays in `manifest.json`. The author (an agent
+session, since the readers are subagents) gives each blind folder to three
+fresh Sonnet readers who see frames only, asks the card question first and
+the orbit question second, then gives each take's three accounts to one
+fresh grader who has the sheet's beat intents but not which take is which.
+`six-second-test.ts score <dir>` reads the answers and grades, and writes
+`report.json` and `report.md`: each take scored against the sheet's intent
+and the pass bar below, per avatar.
+
+**The question.** "What is happening, and what does the person feel?"
+(`what do the people feel` for two). The first six seconds, muted, no
+verse, caption or title. Card framing first, then the orbit.
+
+**Scoring.** The grader marks each beat of the sheet that falls in the first
+six seconds `yes` (the account names it, in any words), `partly` or `no`,
+with the reader's words as evidence. The beat score is the mean over beats
+(yes 1, partly 0.5). Two beats are named in the sheet as the point of the
+piece and graded on their own: for the goodbye, the **hesitation** (she
+reaches to stop him and stops herself) and the **feeling** (she wants him to
+stay, and lets him go sad). The sheet's sidecar `<sheet>.six-second.json` names them
+(`hesitation: [beat ids]`, `feeling: [beat ids]`), so `lib/beats.ts` is not
+touched; without one, the tool refuses.
+
+A reader **names the hesitation** when the mean mark over the hesitation beats
+is at least 0.5 and at least one of them is `yes`; **names the feeling** when
+the mean over the feeling beats is at least 0.5. Both are computed from the
+marks, not judged again. The goodbye's sidecar is `hesitation: r-reach, r-stop`
+and `feeling: r-look, r-after, r-end`.
+
+**The pass bar (fixed before the first run; not changed after it).** For each
+avatar, on the card framing:
+
+1. the directed take's hesitation is named by at least 2 of 3 readers;
+2. the directed take's feeling is named by at least 2 of 3 readers;
+3. the directed take's beat score is at least 0.15 above the flat take's
+   (the flat take "scores lower", with a margin that is not noise);
+4. the directed take's beat score is at least 0.5.
+
+After the orbit, reported and not a pass condition on its own, except:
+5. the directed take's orbit beat score is no more than 0.15 below its card
+   score (orbiting does not destroy the reading).
+
+A take that fails a row fails; the report says which row and what the readers
+said. A pass is not the owner's verdict: the owner watches the directed take
+muted and records theirs in the evidence section. Nothing is loosened to pass.
+The readers are fallible and few (three): a result of 2 of 3 is a reading,
+not a measurement, and the report says so.
 
 ### Slice 4: a person's take as input (joins the phone mandate)
 
@@ -1307,8 +1455,12 @@ and 7 (its evidence, below); the second 1c piece added item 13.
    concerned do not. The GLB moves as asked (the shake swings ±20° in the
    head every 0.8 s), but readers judge 0.2 s stills, about two per swing.
    Still open: a way for a quick head or finger motion to read.
-5. **Change in the world.** No water, particles or plant response: the
-   reader saw "no water" and "the plant looks the same".
+5. **Change in the world.** Closed by slice 1f: a beat sheet's `world`
+   lines direct a pour from a held tool's tip, a burst or drift of motes,
+   and an object that changes over time (turn, scale, lift, colour, show
+   or hide). All are node and mesh-swap animation, so the GLB, card, AR
+   viewer and Quick Look all show them. Was: "no water" and "the plant
+   looks the same".
 6. **Performer-relative placement.** Marks are absolute metres guessed from
    the avatar's size; nothing says "at her right hand's height" or "a
    step in front of her".
@@ -1416,7 +1568,10 @@ is not in a take's undo history; changing the look again is its undo.
   first performer only; see the framing note in slice 1 below.)
 - [ ] The six-second test: fresh critics shown only the muted directed take
   name the hesitation; the flat take scores lower; the owner's verdict is
-  recorded. Orbiting is tested as a second question.
+  recorded. Orbiting is tested as a second question. Tool built and run on
+  `goodbye` (2026-11-18): **the bar is not met**, the directed take does not
+  beat the flat one; see "Slice 3 evidence" below. Stays open for the owner
+  and for a rework of the directed acting.
 - [x] Revising one beat changes only that span in the report, and rebuilds
   in under 30 s. Evidence: slice 1 below.
 - [x] Slice 1b's review loop: a review command writes a pack (H.264 video
@@ -1621,6 +1776,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    yet passing 2c; `DEFAULT_AVATAR_URL` is unchanged. Reverting is one
    commit (the mixes) and one file (the base).
 
+   **Then, decided by the agent in the owner's absence on 2026-11-18, for
+   the owner to review:** a face for big eyes built in `house-base.ts`, with
+   no spend, instead of a commission (A). The body, joints and build
+   settings stay (the eye bones move to the new eyes). The head is reshaped into a stylised clay-sheet face:
+   - eyes about a quarter of the face wide, with a big iris and visible white;
+   - upper lids with a lash line;
+   - thick separate brows;
+   - a wide dark mouth;
+   - a simple nose.
+
+   Its face shapes are authored for it on the channels the base already
+   declared. The shared mixes are unchanged. It passes the blind reading at
+   5, 5 and 5 of 7 (slice 2c evidence, "The stylised face"). The base stays
+   behind `?avatar=`, and `DEFAULT_AVATAR_URL` is unchanged. Reverting is
+   the face block of `house-base/base.json`, `house-base/build.py` and the
+   base file.
+
    The question as first asked: The adapted
    MPFB base passes every face row of the audition but not the blind
    reading. After two rounds, three readers each scored 5, 3, 3 and then
@@ -1667,6 +1839,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      five 0.4 s cycles, hand at chest height in view; concerned pitch 14°,
      roll 8°). They still do not read in stills (evidence); the next idea
      is a change to the reading medium, not more size.
+9. **Slice 1f's calls** (decided by the agent in the owner's absence on
+   2026-11-18, for the owner to review; each is reversible):
+   - Drops are pooled onto reusable nodes (a node takes the next drop
+     that starts after its last ends): 132 drops on 16 nodes. One node per
+     drop made the Quick Look readback take 314 s against its 180 s limit.
+   - A change ends at the state it names; anything it leaves out returns
+     to as-made. Overlapping changes on one object, and a show and hide
+     at the same time, are refused.
+   - Watering uses drops of 16 mm and a stronger wilt (36° turn, 0.7
+     height, olive `#8e8644`). At first the readers saw a thin stream at
+     card size and a mild wilt.
+   - Drop and mote keys sit on the take's frame grid, so they add no new
+     key times to the file.
+   - `sheets/world-test.json` covers burst, drift, show and hide, and a
+     colour, lift and scale change on a two-part lamp.
+   - A pour whose tool never tips below its threshold is an info line,
+     not a failure (the brief does not ask either way).
 
 ## Test plan and evidence
 
@@ -1675,7 +1864,7 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
 - One pipeline check: a directed take on two avatars through upload and
   render, with the stop-short distance and the viewer's anchors read back.
 - `check_usdz_tools.sh` by hand on the two-character piece.
-- The six-second test's critic answers and the owner's verdict.
+- The owner's verdict on the six-second test, and what to change after its FAIL on `goodbye`.
 - Proof video under ignored `output/`.
 
 ### Slice 0 evidence (2026-11-13)
@@ -2268,6 +2457,70 @@ show at card size (decision 2).
 items as try 0 (wave and shrug drop from 3/3 to 2/3, still passing), and
 a slower, larger nod and shake are closer to what a person does on video.
 
+### Slice 1f evidence (2026-11-18)
+
+**Build.** `sheets/watering.json` now has two world lines (a pour from the
+can, the plant changing from 5.3 s over 2.4 s). It builds with no miss:
+132 drops on 16 nodes from 4.774 to 7.196 s, landing within 20 mm of
+`pot.soil`; a wet patch 12 cm across that stays to the end; the plant in
+4 colour steps from 5.3 to 7.7 s; 115 channels, 3.8 MB. `publish.ts
+--check` gives valid, with a deformed load of 686,136 and rigid 4,817,839
+(budgets 100M and 500M). `sheets/world-test.json` builds: a burst of 24
+motes (1 to 2.2 s), a drift of 12 (2.5 to 4.5 s), the lamp present 1 to
+6.2 s in 4 colour steps, 140 channels; `--check` gives valid.
+
+**Quick Look.** `check_usdz_tools.sh` passes all four cases (animated ancestor and face,
+silent, alpha/UV/PBR, unsupported required extension) on the final builds of
+both `watering` (138 s of CPU for the whole check) and `world-test`
+(133 s). The readback matches every node's world transform at the sampled
+times.
+
+**Nothing else moves.** `rest`, `expressions`, `gestures`, `defaults-test`,
+`goodbye`, `two-avatars` and `tallest-bar` rebuild byte-identical to
+`main`. A sheet without `world` writes the same file.
+
+**Viewer.** viewer-check on watering showed the thin stream from the spout
+and the plant going from olive and slumped to green and upright. From the
+side, the pot rim hides the wet patch. On world-test it showed the lamp
+appear, turn gold, lift and shrink, and disappear.
+
+**Refusals.** Each was tested: a pour aimed at a performer point or a place
+("its aim's target; give onto"), overlapping changes ("changes again at
+2.80 s, before the change before it ends"), and a colour on a sourced
+model.
+
+**Blind reading (bar: 2 of 3 say water was poured and 2 of 3 say the plant
+changed).** Three fresh Sonnet readers saw the review pack's frames only.
+
+| Reader | Water poured | Plant changed |
+|---|---|---|
+| 1 | yes: "a visible stream falls into the pot" | yes: "upright and bright green" |
+| 2 | yes: "a thin blue stream running into the plant" | yes: "a wilted yellow-green plant turns into a healthy bright green one" |
+| 3 | yes: "a thin stream of water falls onto the plant" | yes: "turns green and grows upright" |
+
+**The bar is met, 3 of 3 on both.** All three readers called the stream
+thin and hard to see at card size before about 5 s. The check at 2.1 s
+reads as a wrist check, not a finger in the soil (slice 1e's
+finding).
+
+**Review.** The code review found three issues, all fixed and retested:
+the aim target was not validated, overlapping changes were not refused,
+and a span that ends within 1 ms of a float32 last frame lost the object
+on that frame. The independent verifier also found four, all fixed:
+the default `onto` (the same fix), overlap (the same fix), a duplicate
+final colour copy, and a wet patch whose first key had a zero area but
+was not all zero. A show and hide at the same time is now refused. One of
+the verifier's Quick Look runs went over the 100 s CPU budget. Converting
+the same file alone takes 3.6 s of CPU (main's watering takes 3.1 s), so
+that run did not reproduce. Its notes on limits are in the README:
+world points follow the object's track, not its change, and a drop's
+target is sampled at departure.
+
+**What Quick Look cannot show.** The colour change is mesh swaps, so
+Quick Look shows it in steps (as the viewer does). Drops and motes are
+node scale and translation, which Quick Look plays. Nothing in a world
+line depends on a material animation or a shader.
+
 ### Slice 2a evidence (2026-11-17)
 
 **The command.** `avatar-audition.ts <avatar.glb|.gltf>` grades any avatar
@@ -2560,6 +2813,177 @@ What would meet it is a face made for big eyes: decision 7's option A, a
 commission, which is spend and so the owner's. The side-by-side is the
 worktree's ignored `output/house-base-2c/mixes-side-by-side.jpg`.
 
+#### The stylised face (2026-11-18): the blind gate met
+
+Decided by the agent with the owner away, for the owner to review
+(decision 7): rather than commission a face, `build.py` reshapes the head
+into one made for big eyes, in the clay sheet's style. All its values are
+in the `face` block of `base.json`. The body, joints and build settings are
+unchanged, apart from the eye bones, which now sit at the new eyes. The ears
+are MPFB's own, unchanged.
+
+- **The front of the face** is smoothed through a depth map, which takes
+  off MPFB's lip and nose creases.
+- **The eyes** are spheres at x ±47 mm with a 24 mm radius, a big iris and
+  white around it.
+- **The lids** are shells over each eye, with a dark lash line on the
+  upper lid. Their shapes move the lid edge, pushed out so a part-way blink
+  never cuts into the eye. The blink is mostly the upper lid: at the 0.55
+  of looking down, the eye reads lowered, not as a slit.
+- **The brows** are separate dark ribbons well above the eyes. Down makes a
+  V, and inner-up and outer-up raise them.
+- **The nose** is a small ball.
+- **The mouth** is a dark three-row shape with teeth, carrying every mouth
+  shape (smile, frown, press, roll, funnel, pucker and the jaw's).
+
+The skin keeps only faceunits01's jaw and cheek units. The shared mixes
+in `lib/beats.ts` are unchanged.
+
+The blind reading at card size (`blind-05.jpg`, 43 device px; the phone
+card is 42.8 to 44.8): `face-legibility.ts` on `sheets/expressions.json`
+re-pointed at the base, three fresh AI readers each round. From f5 on,
+each round's answers and scores are in `readers.json` beside its
+`key.json`, in the worktree's ignored
+`output/authoring/house-base/face/<round>/`.
+
+| Round | Scores | What changed, what read |
+|---|---|---|
+| f1 | 2, 2, 3 of 7 | first face; smile, sad and hopeful clear |
+| f2 to f4 | 4, 2, 3 and 3, 3, 4 | lids no longer cut the eye; V brows (determined 3 of 3) |
+| f5 | 5, 3, 7 | lower neutral lid; held and looking down swap |
+| f6, f7 | 3, 3, 3 and 4, 4, 3 | wider hope brows, thinner held mouth: worse, all readers alike |
+| f8 | not read | checked at 96 px only: the held mouth had vanished, so it was reverted |
+| f9 | 5, 5, 4 | blink mostly the upper lid; held mouth as in f5 |
+| **f10** | **5, 5, 5** | held mouth corners tucked down |
+
+**The gate is met.** Every reader in f10 reads smiling, sad, determined,
+hopeful and neutral, and swaps holding something back with looking down.
+So those two are still the weak pair. Holding back has a 0.2 blink in the
+shared mix, and its pressed mouth is small at 40 px.
+
+- **Audition.** 60 of 61 rows pass:
+  - brows 23 to 25.6 mm, brow contrast 0.3;
+  - lids wide 27.6 and squint 9.7 mm, eye opening 4.3 device px;
+  - corners 18.2 to 23.1, jaw 45.5, lips 6.8 to 17.5;
+  - symmetry 0;
+  - face box 41.8 device px;
+  - 1.1 MB, under 1.8 MB.
+
+  The miss is `turn.armR-in-torso` (33), which the earlier base also fails
+  identically: a body issue, not the face. So 2c is not complete, and the
+  base stays behind `?avatar=`.
+- **Card.** The review pack gives the face 44.8 device px on the phone
+  card, against the stock's 31. Its pack (`output/authoring/review/house-face-f10/`)
+  and the stock's (`stock-expr/`) are in the worktree's ignored `output/`.
+- **Quick Look.** `check_usdz_tools.sh` still cannot run its material
+  challenge (no textures; see above). The f10 take converts with
+  `glb_to_usdz.py` (4.2 MB USDZ). `inspect_usdz.py` passes, and
+  `usdchecker --arkit` reports success.
+- **Not done:** the motion owner's report on the base, and people (not AI)
+  as readers.
+
+### Slice 2d evidence (2026-11-18): traits built, the turn row still fails
+
+Built with the owner away; every choice below was decided by the agent in
+the owner's absence on 2026-11-18, for review.
+
+**What was built:**
+
+- **`packages/avatar-look`**: the trait card (`traits.ts`, `card.ts`) and
+  the one dressing function (`dress.ts`, gltf-transform). It reads a
+  build's wardrobe file, keeps only the card's hair and glasses parts, and
+  sets the skin, eye, hair, brow and clothing colours. `direct.ts` is its
+  only caller (`avatar: "house:clay"` plus a `look` on the performer); the
+  capture side waits for 2e.
+- **Three builds** (`house-base.ts --build slight|medium|broad`), each
+  written as `apps/capture/assets/house-base/wardrobe-<build>.glb` (about
+  1.55 MB) with every hair style and both glasses frames as parts. A dressed
+  file is 1.08 to 1.17 MB. `public/gltf/models/house-base.glb` is the
+  default look (medium, caramel, dark brown eyes, swept crop in espresso,
+  no glasses, oatmeal and slate) and is still reached only through
+  `?avatar=`.
+- **Loose garments as geometry**: the jumper, trousers and shoes are now
+  meshes over the body, hanging straight (Taubin-smoothed, a symmetric
+  neckline, a bounded push-out), with thigh and hem ease kept slim so a
+  hanging hand stays clear. This answers the 2c "Clothing" gap.
+- **Hair and glasses**: six styles and two frames, skinned to the head, none
+  crossing the brow line; frames sit below the brows.
+- **Brows follow the hair, a step darker than the skin.** The brow colour
+  is 0.55 of the hair colour, darkened until its OKLab lightness is at most
+  the skin's minus `BROW_STEP` (0.42). Without the step, light hair on light
+  skin and dark hair on dark skin missed the brow-contrast bar (0.18 to
+  0.25); with it every look passes. The default look is unchanged (its
+  brows already sat lower).
+- **The take carries the look**: `lib/write-glb.ts` writes each house
+  performer's card in `asset.extras.holoim.looks`.
+- **`house-traits.ts`**: auditions eight looks that between them cover
+  every trait value at its extreme, and fails if any value is left out.
+
+**Audition on every trait value** (`house-traits.ts`, geometry and render
+tiers, bars unchanged; `output/authoring/house-traits/report.json`):
+
+| Look | Size | Fails |
+|---|---|---|
+| 1 slight, porcelain, blue, centre part wheat, square | 1.17 MB | armR-in-torso 48 |
+| 2 broad, espresso, dark brown, tight coils black, round | 1.11 MB | armR-in-torso 52, armR-in-legR 21 |
+| 3 medium, linen, cool grey, high bun silver, none | 1.08 MB | armR-in-torso 47 |
+| 4 slight, umber, amber, wavy bob espresso, round | 1.17 MB | armR-in-torso 48 |
+| 5 broad, golden sand, hazel, short twists plum, square | 1.11 MB | armR-in-torso 52, armR-in-legR 21 |
+| 6 medium, honey, moss green, swept crop ash brown, square | 1.11 MB | armR-in-torso 48 |
+| 7 broad, caramel, blue, centre part copper, none | 1.14 MB | armR-in-torso 52, armR-in-legR 21 |
+| 8 slight, copper, dark brown, swept crop chestnut, none | 1.08 MB | armR-in-torso 47 |
+
+Every face, brow, lid, mouth, visibility, contrast (0.29 to 0.39 L) and
+size row passes on every look. The only misses are the turn rows (bar: the
+75° turn adds at most 0.5% of the arm's vertices, about 10, deeper than
+5 mm).
+
+**The turn row is not cleared, and 2d made it worse.** The stance is the
+root: the stock fails the row too (32), and origin/main's base failed it at
+33. In the stance the hanging arm is offset from the shoulder and turned
+with the torso (0.65 of the yaw) while the hips turn 0.25, so at 75° the
+right arm swings into the side. The loose garments then add to it: the
+default look scores 47 (the eight looks 47 to 52), and the broad build also
+fails `armR-in-legR` (21; the leg row's margin on medium shrank from −461
+to −49). Tried and reverted: a wider hang (0.26 of reach) clears the house
+base but worsens the stock (40); a smaller arm share trades the torso row
+for the leg rows. A real fix belongs in the stance (turn the arm with the
+hips, or swing it out in a turn), which is pose work shared with the motion
+owner, and then in the jumper's and trousers' ease at the side. So the base
+is still not passing and stays behind `?avatar=`; the bar was not loosened.
+
+**Contact sheet** (`output/authoring/house-traits/sheet/traits-beside-sheet.jpg`):
+every skin tone, eye colour, hair style and colour, glasses value and build,
+rendered front-on in `clay-traits.png`'s layout, beside the sheet. Its render and
+layout scripts are working files in that ignored folder, so the sheet is
+evidence, not a repeatable check.
+
+**Blind reading with hair and glasses on**
+(`output/authoring/house-traits/reading/`): `sheets/expressions.json` on
+look 4 (wavy bob, round glasses), the card-size sheet (`blind-05.jpg`, face
+43 device px), three fresh readers with three fixed wordings: 5, 5, 5 of 7.
+Hair and glasses cost nothing. Holding something back and looking down
+still swap for every reader. Holding back's 0.2 blink and small pressed
+mouth read as lowered lids at 43 px, while looking down's 0.55 lid reads
+calm. Not attempted: fixing it changes shared expression mixes or the base
+face, and needs another reader round.
+
+**The poem's two characters from cards alone** (`sheets/poem-pair.json`,
+target `clay-poem-pair`): her (slight, honey, dark brown, wavy bob in
+chestnut, no glasses, rust and walnut) and him (medium, golden sand, moss
+green, swept crop in espresso, no glasses, storm and graphite). The take
+is 2.6 MB, and its `asset.extras.holoim.looks` holds both cards. One reach
+note: her reach stops 183.6 mm short against 160 asked ("out of reach even
+leaning").
+
+**Quick Look:** the poem take converts with `glb_to_usdz.py` (6.28 MB
+USDZ), and `inspect_usdz.py` passes with no failures. `check_usdz_tools.sh`
+still cannot run its material challenge (no textures; see 2c).
+
+**Not done:** the turn row (above), the held and looking-down swap, tests
+for `@holoim/avatar-look` (only the manual `house-traits.ts` exercises it), the
+motion owner's report on the base, and people (not AI) as readers.
+
 ### Slice 6 evidence (2026-11-18)
 
 `publish-check.ts` (14 of 14 rows pass; report in
@@ -2635,6 +3059,50 @@ the first, because the mixer looped; the chest joint fell back differently
 on import and recast; the untouched check was circular; edit overlap
 depended on list order; leg length was measured two ways; hold lengths
 were one frame short.
+
+### Slice 3 evidence: caveats found by the verifier (2026-11-18)
+
+The recorded goodbye run was not cleanly blind and asked the singular question.
+Its readers were given `.../six-second/goodbye/blind/<code>/…`, so the path
+named the piece (five of twelve answers contain "goodbye") and the key sat in
+the folder above; and they were asked "what does the person feel?" for two
+performers. Both can only help a take read, so the FAIL stands, but the run is
+not a clean measurement. The tool now writes reader folders to an opaque
+`readers/` beside the sheet's folder, asks "people" for two performers, and
+compares to the bar with float tolerance on unrounded scores; the goodbye run
+was not repeated (no spend). The hesitation column counts a take as naming it
+with "reach yes, stop no" (mean 0.5 with one yes), so it mostly measures the
+reach, not the stop. `review.ts` now takes `--until`, `--card-only` and
+`--orbit` on the command line too.
+
+### Slice 3 evidence (2026-11-18, run by the agent in the owner's absence)
+
+`six-second-test.ts prepare sheets/goodbye.json --avatars stock,house-base`,
+twelve fresh Sonnet readers (three per take, frames only, blind codes), four
+fresh Sonnet graders (one per take), then `score`. Report:
+`apps/capture/output/authoring/six-second/goodbye/report.md` (ignored). The bar
+above was fixed before the run and not changed after it.
+
+| avatar | style | beat score, card | hesitation | feeling | beat score, orbit |
+|---|---|---|---|---|---|
+| stock | directed | 0.26 | 1/3 | 0/3 | 0.24 |
+| stock | flat | 0.29 | 3/3 | 0/3 | 0.30 |
+| house-base | directed | 0.42 | 3/3 | 0/3 | 0.38 |
+| house-base | flat | 0.47 | 3/3 | 2/3 | 0.50 |
+
+**Result: FAIL on both avatars.** The directed take is 0.03 (stock) and 0.05
+(house base) *below* the flat one, under the 0.5 floor, and its feeling is named
+by 0 of 3 readers. Orbiting passes (the reading survives the swing, drops of
+0.02 and 0.04), and the house base reads better than the stock avatar in both
+styles. Readers of every take saw a quiet, tender parting with a touch, and
+none saw "she stops herself before touching him" or "he turns away to leave" as
+such: they read one figure reaching and touching a shoulder, then both standing.
+Readers also could not tell which of two near-identical figures is "he"; the
+graders marked by who reached. Three readers per take is a reading, not a
+measurement, and one grader per take is a single judge. Open question for the
+owner: whether the directed acting needs to change, or the sheet's beats
+(restraint and a turn-away) need a staging the card framing can show. The
+result is recorded as measured; the bar was not loosened.
 
 ## Physical-device limits
 

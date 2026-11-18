@@ -21,61 +21,180 @@
   "targets": {
     "head-round": 0.9
   },
-  "neutral": {
-    "$comment": "Face units baked into the neutral face, as weights (eyeBlink is compensated so it still closes).",
-    "eyeWideLeft": 0.5,
-    "eyeWideRight": 0.5
-  },
   "proportions": {
-    "$comment": "Scales about a pivot, weighted by the MPFB mixamo weights of the bones named, so the rig is fitted to the scaled mesh and no bone is ever scaled. head: about the neck joint; eyes: about each eyeball, falling off from inner to outer (eye radii); hands: about the wrist.",
+    "$comment": "Scales about a pivot, weighted by the MPFB mixamo weights of the bones named, so the rig is fitted to the scaled mesh and no bone is ever scaled. head: about the neck joint; hands: about the wrist.",
     "head": {
       "scale": 1.4,
       "neckShare": 0.35
-    },
-    "eyes": {
-      "scale": 1.5,
-      "inner": 1.0,
-      "outer": 4.5
     },
     "hands": {
       "scale": 1.15
     }
   },
-  "gains": {
-    "$comment": "Each face unit's offsets are multiplied by its gain after the proportions, to reach the audition bar's millimetres at card size (lib/audition-bar.ts). 1 when omitted.",
-    "browInnerUp": 3.1,
-    "browDownLeft": 2.6,
-    "browDownRight": 2.6,
-    "browOuterUpLeft": 2.05,
-    "browOuterUpRight": 2.05,
-    "eyeWideLeft": 1.8,
-    "eyeWideRight": 1.8,
-    "eyeSquintLeft": 1.9,
-    "eyeSquintRight": 1.9,
-    "mouthFrownLeft": 2.0,
-    "mouthFrownRight": 2.0,
-    "mouthStretchLeft": 1.6,
-    "mouthStretchRight": 1.6
-  },
-  "brows": {
-    "$comment": "Each brow is a ribbon just in front of the skin above its eye, in eye radii from the eyeball centre: x from the inner to the outer end, the lower edge at the inner end, its rise toward the outer end, the arch, the thickness (tapering toward the outer end by taper), how far in front of the skin (lift, m) and its segments.",
-    "inner": 0.55,
-    "outer": 1.4,
-    "low": 1.55,
-    "rise": 0.05,
-    "thick": 0.6,
-    "arch": 0.25,
-    "taper": 0.45,
-    "lift": 0.0022,
-    "segments": 14
-  },
-  "eye": {
-    "$comment": "Eyeballs: a share of MPFB's eye helper radius, no bigger than the skin in front of the eye's centre less lidGap (m), set back by back (m); the iris and pupil as angles (radians) from the eye's forward pole.",
-    "radiusShare": 0.98,
-    "lidGap": 0.0008,
-    "iris": 0.65,
-    "pupil": 0.3,
-    "back": 0.001
+  "face": {
+    "$comment": "The stylised face (decided by the agent on 2026-11-18, the owner away, for the owner to review; decision 7 of docs/features/directed-performance.md), drawn from the clay sheets: lengths in metres, angles in degrees unless named.",
+    "skinUnits": {
+      "$comment": "The faceunits01 units kept on the skin, with their gains; every other face shape is authored on the parts below.",
+      "jawOpen": 1.0,
+      "jawForward": 1.0,
+      "jawLeft": 1.0,
+      "jawRight": 1.0,
+      "cheekPuff": 1.0
+    },
+    "jawMask": {
+      "$comment": "The jaw units fade out from `from` below the mouth up to `to` below it, so they move the chin and leave the mouth to the mouth's own shapes.",
+      "from": 0.03,
+      "to": 0.01
+    },
+    "smooth": {
+      "$comment": "The front of the face as a depth map on a grid of `grid` cells (m), halfWidth either side of the midline and from `above` the eyes to `below` them: holes up to about twice `holes` across filled, bumps up to about twice `bumps` across taken off (morphological windows of 2\u00b7round(x/grid)+1 cells), blurred by sigma; applied in the `core` ellipse about the eyes' midline, `centre` below eye height, fading out from `fade` of it. A vertex within `tolerance` of the front surface goes onto the smoothed one, one further behind keeps its depth less that. Only head vertices in front of y frontOf move.",
+      "grid": 0.0015,
+      "halfWidth": 0.12,
+      "above": 0.08,
+      "below": 0.16,
+      "holes": 0.012,
+      "bumps": 0.02,
+      "sigma": 0.008,
+      "frontOf": -0.05,
+      "core": {
+        "centre": -0.02,
+        "x": 0.08,
+        "above": 0.08,
+        "below": 0.12,
+        "fade": 0.7
+      },
+      "tolerance": 0.003
+    },
+    "eyes": {
+      "$comment": "Each eye's centre `x` from the midline at eye height, its radius, its centre `depth` eye radii behind the smoothed skin; the iris and pupil as angles (radians) from the forward pole.",
+      "x": 0.047,
+      "radius": 0.024,
+      "depth": 0.45,
+      "iris": 0.62,
+      "pupil": 0.3
+    },
+    "lids": {
+      "$comment": "Shells about each eye (radius in eye radii), `columns` across, from the edge angle (up from straight ahead) to the back angle in `rows`; the upper lid's rows within `lash` degrees of its edge are the dark lash line. shapes: the edge angles [upper, lower] each shape moves to (null: that lid stays). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre.",
+      "columns": 13,
+      "upper": {
+        "radius": 1.08,
+        "edge": 8,
+        "back": 160,
+        "rows": 8,
+        "lash": 20
+      },
+      "lower": {
+        "radius": 1.05,
+        "edge": -50,
+        "back": -160,
+        "rows": 6
+      },
+      "shapes": {
+        "eyeBlink": [
+          -60,
+          -40
+        ],
+        "eyeSquint": [
+          -5,
+          -20
+        ],
+        "eyeWide": [
+          80,
+          -68
+        ],
+        "cheekSquint": [
+          null,
+          -32
+        ]
+      },
+      "clear": 1.03
+    },
+    "brows": {
+      "$comment": "In eye radii from the eye centre: x from the inner to the outer end, the lower edge at the inner end, its rise toward the outer end, the arch, the thickness (tapering toward the outer end); lift (m) in front of the skin; segments along and rows across.",
+      "inner": 0.9,
+      "outer": 1.2,
+      "low": 1.6,
+      "rise": 0.05,
+      "arch": 0.25,
+      "thick": 0.72,
+      "taper": 0.4,
+      "lift": 0.0025,
+      "segments": 14,
+      "rows": 3
+    },
+    "browShapes": {
+      "$comment": "Moves (m) in the face's plane, then back onto the skin: browDown lowers the inner end by downInner and the outer by downOuter and draws it in by downIn; browInnerUp raises the inner end and draws it out; browOuterUp raises the outer end.",
+      "downInner": 0.026,
+      "downOuter": 0.0,
+      "downIn": 0.009,
+      "innerUp": 0.024,
+      "innerOut": 0.002,
+      "outerUp": 0.024
+    },
+    "nose": {
+      "$comment": "An ellipsoid (radii, m) `at` of the way from the eyes down to the mouth, `out` of it in front of the skin; noseSneer lifts it.",
+      "at": 0.5,
+      "radii": [
+        0.007,
+        0.006,
+        0.0065
+      ],
+      "out": 0.6,
+      "sneer": 0.003
+    },
+    "mouth": {
+      "$comment": "A dark shape on the skin, `columns` across, halfWidth across, thick at the middle (the corners keep `corner` of it), lift in front of the skin, `raise` above the mouth corners the faceunits find.",
+      "columns": 17,
+      "halfWidth": 0.034,
+      "thick": 0.007,
+      "corner": 0.25,
+      "lift": 0.003,
+      "raise": 0.0
+    },
+    "mouthShapes": {
+      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the middle open, the teeth row dropping `teeth` (a fraction) of the way; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in and the mouth forward (depth); roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units.",
+      "smile": {
+        "up": 0.022,
+        "out": 0.01,
+        "open": 0.02,
+        "teeth": 0.45
+      },
+      "frown": {
+        "down": 0.022,
+        "out": 0.004
+      },
+      "stretch": {
+        "out": 0.016,
+        "down": 0.002
+      },
+      "press": {
+        "out": 0.006,
+        "thin": 0.0015,
+        "down": 0.006
+      },
+      "lowerDown": 0.006,
+      "upperUp": 0.006,
+      "dimple": 0.004,
+      "funnel": {
+        "in": 0.015,
+        "up": 0.007,
+        "down": 0.008
+      },
+      "pucker": {
+        "in": 0.012,
+        "forward": 0.006
+      },
+      "roll": {
+        "in": 0.0055,
+        "down": 0.002,
+        "thin": 0.0015
+      },
+      "shrug": 0.003,
+      "side": 0.006,
+      "jawSide": 0.006,
+      "jawForward": 0.004,
+      "jawOpen": 0.02
+    }
   },
   "colours": {
     "skin": [
@@ -88,15 +207,10 @@
       0.026,
       0.017
     ],
-    "lips": [
-      0.578,
-      0.15,
-      0.076
-    ],
     "mouth": [
-      0.127,
-      0.021,
-      0.01
+      0.03,
+      0.008,
+      0.005
     ],
     "sclera": [
       0.871,
@@ -127,34 +241,29 @@
       0.127,
       0.051,
       0.025
+    ],
+    "teeth": [
+      0.871,
+      0.807,
+      0.716
+    ],
+    "lash": [
+      0.012,
+      0.006,
+      0.004
+    ],
+    "hair": [
+      0.056,
+      0.03,
+      0.019
+    ],
+    "frames": [
+      0.025,
+      0.016,
+      0.013
     ]
   },
   "roughness": 0.65,
-  "lips": {
-    "$comment": "The lips: an ellipse through the mouth corners (the vertices mouthSmile moves most), its width and its heights above and below the corners relative to the corners' half-distance, seen from the front; faces deeper than depth (m) behind the corners are left alone. Faces in it turned toward the front (facing: -normal.y) and no deeper than inside (m) behind the corners are lips, the rest the mouth, which draws the mouth line.",
-    "width": 0.95,
-    "above": 0.42,
-    "below": 0.42,
-    "depth": 0.06,
-    "facing": 0.0,
-    "inside": 0.004
-  },
-  "mouthBag": {
-    "$comment": "A dark ellipsoid behind the lips (MPFB's mouth opens onto the hollow head): its centre behind the mouth corners (back, m, +Y is back) and below them (drop, m), its radii relative to the corners' half-distance, shrunk until it lies inside the skin by margin (m).",
-    "back": 0.02,
-    "drop": 0.008,
-    "radii": [
-      0.95,
-      0.7,
-      0.8
-    ],
-    "margin": 0.002
-  },
-  "browShapes": {
-    "$comment": "The brow shapes fade out below a band above each eye, from `from` to `to` eye radii above its centre, so they move the brow and leave the lids to the lid shapes.",
-    "from": 0.9,
-    "to": 1.2
-  },
   "sheetSRGB": {
     "$comment": "sRGB read off clay-turnaround.png's front view (lit midtones); `colours` is these in linear.",
     "skin": [
@@ -167,15 +276,10 @@
       45,
       35
     ],
-    "lips": [
-      200,
-      108,
-      78
-    ],
     "mouth": [
-      100,
-      40,
-      25
+      48,
+      20,
+      12
     ],
     "sclera": [
       240,
@@ -206,6 +310,468 @@
       100,
       64,
       44
+    ],
+    "teeth": [
+      240,
+      232,
+      220
+    ],
+    "lash": [
+      28,
+      20,
+      16
+    ],
+    "hair": [
+      67,
+      48,
+      38
     ]
+  },
+  "builds": {
+    "$comment": "Three pre-built bodies (the build trait), each its own wardrobe file (assets/house-base/wardrobe-<build>.glb, every hair style and glasses kind): MPFB macro values over `macro`. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "slight": {
+      "macro": {
+        "weight": 0.3,
+        "muscle": 0.4
+      }
+    },
+    "medium": {
+      "macro": {}
+    },
+    "broad": {
+      "macro": {
+        "weight": 0.72,
+        "muscle": 0.62
+      }
+    }
+  },
+  "garments": {
+    "$comment": "A loose jumper and trousers made from the body's top and trouser faces (painted by bone): each vertex eased out along the body's normal (m; limb = sleeves or trouser legs), the ease tapering to nothing over `taper` (m) from the openings that close on the body (dominant bone named in taperAt), kept under gapShare of the gap to another part (inner thighs, arms by the side), then smoothed (`rounds` of `smooth` passes) and pushed back out to `clear` of the ease from the body; the jumper's hem takes the trouser faces within `hem` (m) of the waist and stays `overTrousers` (m) outside them. The body under both is removed.",
+    "top": {
+      "easeBody": 0.016,
+      "easeLimb": 0.016,
+      "easeHem": 0.016,
+      "hem": 0.07,
+      "overTrousers": 0.004,
+      "taper": 0.06,
+      "taperAt": [
+        "Neck",
+        "Head",
+        "LeftHand",
+        "RightHand"
+      ],
+      "limbBones": [
+        "LeftArm",
+        "RightArm",
+        "LeftForeArm",
+        "RightForeArm"
+      ],
+      "gapShare": 0.4,
+      "smooth": 14,
+      "rounds": 6,
+      "clear": 0.6,
+      "taubin": -0.53,
+      "reach": 0.06,
+      "hang": {
+        "$comment": "The jumper falls from the chest: from `fromKnee` (share of chest to hips) down, the cloth stands off the spine's line as far as it does higher up. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+        "chains": [
+          [
+            "Spine2",
+            "Spine1",
+            "Spine",
+            "Hips"
+          ]
+        ],
+        "fromKnee": 0.2,
+        "angleBins": 32,
+        "heightBins": 30
+      }
+    },
+    "trousers": {
+      "easeBody": 0.016,
+      "easeLimb": 0.008,
+      "taper": 0.05,
+      "taperAt": [
+        "LeftFoot",
+        "RightFoot",
+        "Spine",
+        "Hips"
+      ],
+      "limbBones": [
+        "LeftUpLeg",
+        "RightUpLeg",
+        "LeftLeg",
+        "RightLeg"
+      ],
+      "gapShare": 0.4,
+      "smooth": 14,
+      "rounds": 6,
+      "clear": 0.6,
+      "taubin": -0.53,
+      "hang": {
+        "$comment": "Straight legs: from `fromKnee` (share of hip to foot) down, the cloth stands off the leg's line as far as it does higher up. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+        "chains": [
+          [
+            "LeftUpLeg",
+            "LeftLeg",
+            "LeftFoot"
+          ],
+          [
+            "RightUpLeg",
+            "RightLeg",
+            "RightFoot"
+          ]
+        ],
+        "fromKnee": 0.45,
+        "angleBins": 24,
+        "heightBins": 40
+      },
+      "reach": 0.06
+    },
+    "collar": {
+      "$comment": "The jumper's neckline: across the shoulders (|x| under `halfWidth` m, from `below` m under the neck's base up), faces below a plane through the neck's base (raised `raise` m), tilting down to the front by `tilt` (m per m), are jumper; above it, skin.",
+      "raise": 0.006,
+      "tilt": 0.45,
+      "halfWidth": 0.17,
+      "below": 0.12
+    }
+  },
+  "hair": {
+    "$comment": "Hair styles (clay-traits.png): shells cast from the head's centre onto the scalp, `columns` round and `rows` up to `poleRow` degrees, tucked `tuck` (m) under the scalp at the hairline. line: the hairline as [degrees round from the front, degrees up from level]; over the brows it is raised until it sits browMargin (m) above the brows raised all the way (no style crosses the brow line). Thickness (m): sides, top (reached `rise` degrees above the hairline), back, a front volume over frontWidth degrees; locks ripple the thickness (ridges: n round, swept; bumps: n round by m up). A curtain hangs from the hairline from `from` degrees round (ramping over `ramp`), to an end per angle [degrees, landmark, offset m], `clear` (m) outside the body, flaring and waving; below the chin it is carried by the chest. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "columns": 56,
+    "rows": 14,
+    "poleRow": 86,
+    "tuck": 0.004,
+    "browMargin": 0.008,
+    "styles": {
+      "sweptCrop": {
+        "line": [
+          [
+            0,
+            30
+          ],
+          [
+            45,
+            22
+          ],
+          [
+            80,
+            8
+          ],
+          [
+            100,
+            -2
+          ],
+          [
+            140,
+            -25
+          ],
+          [
+            180,
+            -32
+          ]
+        ],
+        "sides": 0.008,
+        "top": 0.024,
+        "rise": 30,
+        "back": 0.0,
+        "front": 0.03,
+        "frontWidth": 55,
+        "locks": {
+          "kind": "ridges",
+          "n": 13,
+          "sweep": 2.5,
+          "depth": 0.9
+        }
+      },
+      "wavyBob": {
+        "line": [
+          [
+            0,
+            28
+          ],
+          [
+            40,
+            24
+          ],
+          [
+            75,
+            14
+          ],
+          [
+            110,
+            6
+          ],
+          [
+            180,
+            0
+          ]
+        ],
+        "sides": 0.02,
+        "top": 0.026,
+        "rise": 25,
+        "back": 0.004,
+        "front": 0.012,
+        "frontWidth": 70,
+        "locks": {
+          "kind": "ridges",
+          "n": 11,
+          "sweep": 3.0,
+          "depth": 0.7
+        },
+        "curtain": {
+          "rows": 9,
+          "from": 62,
+          "ramp": 28,
+          "end": [
+            [
+              60,
+              "chinZ",
+              0.0
+            ],
+            [
+              180,
+              "chinZ",
+              -0.01
+            ]
+          ],
+          "clear": 0.008,
+          "flare": 0.03,
+          "thick": 0.02,
+          "wave": 0.012,
+          "waves": 11
+        }
+      },
+      "tightCoils": {
+        "line": [
+          [
+            0,
+            30
+          ],
+          [
+            45,
+            24
+          ],
+          [
+            80,
+            10
+          ],
+          [
+            110,
+            0
+          ],
+          [
+            180,
+            -12
+          ]
+        ],
+        "sides": 0.034,
+        "top": 0.046,
+        "rise": 30,
+        "back": 0.004,
+        "locks": {
+          "kind": "bumps",
+          "n": 17,
+          "m": 14,
+          "twist": 1.5,
+          "depth": 0.7
+        }
+      },
+      "highBun": {
+        "line": [
+          [
+            0,
+            30
+          ],
+          [
+            45,
+            24
+          ],
+          [
+            80,
+            8
+          ],
+          [
+            100,
+            -2
+          ],
+          [
+            140,
+            -22
+          ],
+          [
+            180,
+            -30
+          ]
+        ],
+        "sides": 0.004,
+        "top": 0.006,
+        "rise": 30,
+        "locks": {
+          "kind": "ridges",
+          "n": 20,
+          "sweep": 0.0,
+          "depth": 0.25
+        },
+        "bun": {
+          "at": [
+            180,
+            62
+          ],
+          "radius": 0.042,
+          "squash": 0.82,
+          "sink": 0.55,
+          "segments": 14,
+          "rings": 9,
+          "twist": 0.08
+        }
+      },
+      "centrePart": {
+        "line": [
+          [
+            0,
+            32
+          ],
+          [
+            40,
+            26
+          ],
+          [
+            75,
+            12
+          ],
+          [
+            110,
+            4
+          ],
+          [
+            180,
+            0
+          ]
+        ],
+        "sides": 0.01,
+        "top": 0.009,
+        "rise": 30,
+        "back": 0.004,
+        "locks": {
+          "kind": "ridges",
+          "n": 2,
+          "sweep": 0.0,
+          "depth": -0.6
+        },
+        "curtain": {
+          "rows": 10,
+          "from": 64,
+          "ramp": 26,
+          "end": [
+            [
+              60,
+              "chinZ",
+              -0.02
+            ],
+            [
+              100,
+              "shoulderZ",
+              0.015
+            ],
+            [
+              180,
+              "shoulderZ",
+              -0.09
+            ]
+          ],
+          "clear": 0.008,
+          "flare": 0.012,
+          "thick": 0.014,
+          "wave": 0.006,
+          "waves": 13
+        }
+      },
+      "shortTwists": {
+        "line": [
+          [
+            0,
+            30
+          ],
+          [
+            45,
+            22
+          ],
+          [
+            80,
+            8
+          ],
+          [
+            100,
+            -2
+          ],
+          [
+            140,
+            -22
+          ],
+          [
+            180,
+            -30
+          ]
+        ],
+        "sides": 0.016,
+        "top": 0.03,
+        "rise": 30,
+        "back": 0.0,
+        "locks": {
+          "kind": "bumps",
+          "n": 22,
+          "m": 10,
+          "twist": 0.8,
+          "depth": 0.8
+        }
+      }
+    }
+  },
+  "glasses": {
+    "$comment": "Frames (no lenses) in eye radii from each eye centre: `forward` in front, `out` sideways, `drop` down; rims as superellipses width x height with an exponent (2 round, higher squarer), tops below the brows' lower edge; a tube of radius `tube` (m); the bridge from each rim's point bridgeAt (share of the rim round from the outer side) over the nose; temples from templeAt, out past the head's side (ears included) by templeClear (m), back to earBack (m) behind the head's centre, hooking down. Colour sRGB. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "forward": 1.55,
+    "out": 0.04,
+    "drop": 0.08,
+    "tube": 0.0028,
+    "tubeSides": 6,
+    "rimPoints": 28,
+    "bridgeAt": 0.32,
+    "bridgeForward": 0.004,
+    "bridgeRise": 0.002,
+    "templeAt": 0.04,
+    "templePoints": 9,
+    "templeClear": 0.004,
+    "earBack": 0.01,
+    "hook": 0.012,
+    "kinds": {
+      "round": {
+        "width": 1.2,
+        "height": 1.15,
+        "exponent": 2
+      },
+      "square": {
+        "width": 1.3,
+        "height": 1.0,
+        "exponent": 5
+      }
+    },
+    "sRGB": [
+      44,
+      34,
+      30
+    ]
+  },
+  "defaultLook": {
+    "$comment": "The look public/gltf/models/house-base.glb is dressed in (a card, see packages/avatar-look). Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "build": "medium",
+    "skin": "caramel",
+    "eyes": "darkBrown",
+    "hair": {
+      "style": "sweptCrop",
+      "colour": "espresso"
+    },
+    "glasses": "none",
+    "clothing": "oatmealSlate"
   }
 }

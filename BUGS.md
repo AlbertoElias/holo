@@ -7,7 +7,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-068 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
+### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 
 - **Area:** apps/capture (objects)
 - **Severity:** P2
@@ -25,6 +25,14 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** every object check passes, and the suite runs in `verify:pr`.
 - **Reproduction:** `cd apps/capture && OBJECT_ONLY=desktop,mouse,phone,reach,trench,fetchDesktop node --import tsx scripts/run-xr-checks.ts object`
 
+### B-068 — post-grant retry test returns 409 under load
+
+- **Area:** apps/viewer-api
+- **Severity:** P3 (test flake; product behavior not shown wrong)
+- **Observed:** 2026-11-18
+- **Evidence:** `test/post-grant.test.ts:117` "gives the grant back when a post fails, so the same take can retry": `{"error":"This take is already uploading."}: expected 409 to be 201`, in `verify:pr`'s unit step on `feature/world-change` (no viewer-api changes).
+- **Expected:** the failed post releases the grant before the retry, every run.
+- **Reproduction:** not reproduced in isolation (3 of 3 pass with `npx vitest run test/post-grant.test.ts`); seen once in the full `test:unit:all` under machine load. Try `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh` with `--repeat-each`.
 
 ## Entry template
 
