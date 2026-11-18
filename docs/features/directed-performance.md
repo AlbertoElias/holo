@@ -654,6 +654,76 @@ owner answered "Yes, accept" (2026-11-17). **Life is accepted**
 (evidence: "Face in idle life" in slice 1d's evidence); the profile-hold
 follow-up stays open.
 
+### Slice 1e: gestures, states and the profile hold (2026-11-18)
+
+"Not covered yet" items 4 and 12. Built under `apps/capture/scripts/authoring/`
+only (`lib/beats.ts` additively, `lib/direct.ts`, `lib/life.ts`, a new sheet);
+nothing under `apps/capture/src/**`, the viewer or the API changes, and no
+existing expression mix value changes.
+
+**What.**
+
+1. **Gestures by name.** One direction, `{ "kind": "gesture", "name": … }`,
+   with defaults for everything else: `nod`, `head-shake`, `shrug`, `wave`
+   (a small wave, optionally `at` someone), `rub` (rub something between
+   the thumb and fingers, the eyes on the hand), `hand-to-chest`. A hand
+   gesture takes `side` (default right); a repeated one takes `count`;
+   every one takes `strength` and the usual timing. Each layers over idle
+   life the way directions already do: it masks only the life channels it
+   uses (a nod the glances, a wave that hand's fidget), within its span
+   plus 0.4 s.
+2. **States by name.** `{ "kind": "state", "name": "noticing" | "concerned" }`
+   for as long as the beat holds: a body and head attitude plus a face mix
+   (new `EXPRESSIONS` names `noticing` and `concerned`). *Noticing*: a quick
+   orienting turn of the head to `at` if given, the head and chest come up,
+   the eyes widen, and the body goes still (glances, fidgets and the
+   attending layer give way). *Concerned*: the head drops and tilts, the
+   upper back rounds forward, the shoulders draw up a little, the brows
+   knit and the lips press; glances go on, smaller.
+3. **The profile hold: attending life, a default.** A performer facing
+   another (head within 35° of straight ahead, eased out by 55°) gets a
+   second seeded layer over slice 1d's events, drawn from its seed on new
+   streams (so no existing event moves): small listening nods (one or two,
+   6 to 10°, every 2.2 to 4.5 s), and the arms changing posture now and
+   then, from hanging to the hands loosely together in front of the waist
+   and back (held 2.5 to 5 s). Both are motions in the plane a side view
+   sees, which slice 1d's lateral weight shifts and yaw glances are not.
+   It gives way to every direction that moves the head or the hands, to a
+   held object and to being reached for, as life does. `attend: false` on
+   a performer turns it off.
+
+**Rejected:** larger amplitude of slice 1d's events (failed twice); event
+density keyed to a hold's length (breaks the seed-only schedule); asking
+authors to add a beat (the default fails every two-hander that forgets).
+
+**Acceptance.**
+
+- A new sheet `sheets/gestures.json` exercises every gesture and state,
+  each with a neutral rest between, builds with no miss, and its acting
+  report shows the bones each one moves.
+- **Blind reading, bar set before running:** three fresh Sonnet reader
+  subagents, each given only the review pack's `reader/` folder (frames,
+  video, its README; never the sheet), describe each time span. A gesture
+  or state passes when at least 2 of 3 readers name it or a listed synonym
+  (nod: nod, yes, agree; head shake: shake, no, disagree; shrug: shrug,
+  "don't know"; wave: wave, hello, goodbye, greet; rub: rubs or feels
+  something between fingers, fingertips, texture; hand to chest: hand on
+  chest or heart; noticing: notices, something catches the eye, alert,
+  turns to look, startled; concerned: worried, concerned, troubled,
+  uneasy, anxious). The slice passes when all six gestures pass and at
+  least one state does; a failing state is reported, not tuned past two
+  tries.
+- **The profile hold:** `defaults-test.json` rebuilt, reviewed, and read by
+  three fresh readers who see only its reader folder; at least 2 of 3 call
+  the held ending (4.4 to 8 s) alive rather than frozen or mostly frozen.
+- **Nothing else moves:** `rest`, `watering` and `expressions` (no
+  performer faces another) keep identical acting reports and life
+  printouts; `defaults-test` changes only by the attending layer, and its
+  reach still lands within a millimetre of before; every body target still
+  passes on every take.
+
+**Evidence:** "Slice 1e evidence", below.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
