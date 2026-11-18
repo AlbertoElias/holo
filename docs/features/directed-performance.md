@@ -754,7 +754,7 @@ the avatar and misplace the eye (2e changes this with the motion owner).
 | Lip shapes (`mouthPress*`, `mouthPucker`, `mouthFunnel`, `mouthRoll*`) | 1 mm | each at least **4 mm** | press 1.3, roll 2.8 mm: fail |
 | The other non-gaze ARKit channels (cheeks, nose, jaw sideways, tongue) | not barred | at least 1 mm, reported | reported |
 | Left and right | not checked | each pair within 15% of each other | within 3%: passes |
-| **Brow visibility** (new) | none | of the vertices the brow shapes move by 1 mm or more, at least **90% visible** from the card's camera, at neutral and at `browInnerUp` 1, with every other mesh (glasses, hair) as an occluder | 75%, the hair hides the rest: fails |
+| **Brow visibility** (new) | none | of the vertices the brow shapes move by 1 mm or more, at least **90% visible** from the card's camera, at neutral and at `browInnerUp` 1, with every other mesh (glasses, hair) as an occluder except the meshes the brow shapes move (the brow itself) | 75%, the hair hides the rest: fails |
 | **Brow contrast** (new, per finish) | none | in a front render at card framing, the brow region differs from the skin around it by at least **0.25 in OKLab L** | 0.353: passes |
 | **Eyes at the card** (new) | none | the neutral eye opening at least **3 device px** on the phone card | 2.7–2.9 px: fails |
 | **Face against accessories** (new) | none | no face vertex more than 2 mm inside a glasses or hair mesh at any channel at 1 (the smile's squint against the glasses, seen in 1b) | 9 vertices up to 4 mm into the hair: fails |
@@ -1329,6 +1329,21 @@ for reading". Slice 2 starts only when the user decides on it from the
 reading recorded in slice 1's evidence. **Lifted on 2026-11-17** ("yes,
 lift the hold"); slice 2 is now the avatar flow, approved the same day
 (decision 5).
+
+7. **The house base's face (asked 2026-11-18, slice 2c).** The adapted
+   MPFB base passes every face row of the audition but not the blind
+   reading. After two rounds, three readers each scored 5, 3, 3 and then
+   3, 1, 1 of 7. Options:
+   - A. Commission the face (a sculpted head with blendshapes made for the
+     card), keeping the generated body and rig. It costs money, and
+     `house-base.ts` already takes everything else.
+   - B. Make the expression mixes in `lib/beats.ts` stronger for every
+     avatar, then read again. It costs nothing, but it changes how the stock
+     and every directed piece act.
+   - C. Wait for the style sheets (2b) and redo the face from them.
+
+   Recommended: B first, because it is cheap and tests whether the mixes
+   are the limit, then A if a third reading still misses.
 
 ## Test plan and evidence
 
@@ -1930,6 +1945,96 @@ parent frame (follow-up below).
 (`vrm0-minus-z`: the left hand at −X). Bind data, reach targets and
 direction may be mirrored for such avatars; owner: the slice that next
 directs a VRM 0 avatar.
+
+### Slice 2c evidence (2026-11-18): stopped at the blind gate
+
+**Status: not done.** The base passes every face row of the audition. It
+fails the blind reading in two rounds, so work stopped as the slice
+requires. Commissioning the face is the owner's decision (open decision
+below). The branch `feature/house-base-2c` is not merged.
+
+**The base.** `house-base.ts` makes `public/gltf/models/house-base.glb`
+(1.61 MB, under the 1.8 MB budget) in headless Blender, and every value
+comes from `house-base/base.json`. Its parts and credits are in
+`asset.copyright` and in the scene's `holoimAvatar` extras:
+
+- the MakeHuman human from MPFB 2.0.18 (CC0 output; GPL-3.0 add-on, pinned by sha256);
+- the 52 ARKit face shapes from faceunits01 (CC0, pinned by sha256);
+- the ribbon brows, the eyeballs, the lips and the clay materials, made by
+  `build.py` (the project's own).
+
+No generated hair or clothing yet. The base has a bald head, a plain top,
+trousers and shoes. The proportions are a 1.55× head, 1.5× eyes and
+1.12× hands, and the brows are never covered. The rig and channels are
+the stock's: 53 bones and the ARKit face set, driven by `direct.ts`
+(directed takes of `expressions` and `watering`).
+
+**Audition** (round 1, the base on the branch): 81 rows, all pass except:
+
+- `turn.armR-in-torso`: 38 vertices, up to 28.1 mm. It is binding, and
+  the stock fails it the same way (32, 26.9 mm). The vertices are at the
+  shoulder and armpit, and no macro or proportion change moved them, so
+  the row tests the point-cloud check, not this mesh. Owner: the motion owner.
+- `other.tongueOut`: 0 mm, reported only (no tongue).
+
+The key values:
+
+| Rows | Values |
+|---|---|
+| Brows | browInnerUp 12.3, browDown 11.7, browOuterUp 9.4 mm |
+| Lids | wide 13.5, squint 13.4 mm; blink closes |
+| Jaw and mouth corners | jaw 39.4 mm; smile 21.4, frown 15.9, stretch 15.5 mm |
+| Lip shapes | press 11.3, pucker 11.7, funnel 8, roll 7.5 mm |
+| Brow visibility | 100% |
+| The card render | brow contrast 0.366; eye opening 4.2 device px; face box 42.8 device px |
+
+On the phone card in `review.ts`, the face is 54.3 device px (the stock's is 30.9).
+
+**Blind reading at card size** (`face-legibility.ts`, 42 device px,
+`sheets/expressions.json`; one Opus and two Sonnet readers, each fresh;
+the list of names came with a one-line gloss each):
+
+| Round | Change | Readers (of 7) |
+|---|---|---|
+| 1 | as above | 5, 3, 3 |
+| 2 | smaller eye scale (1.4) with a wider falloff, browDown gain 2.6, mouthPress 1.7, jawOpen 0.5, lighter lips | 3, 1, 1 |
+
+Only the smile read for every reader. Held, resolve and neutral were
+confused with each other, and hope with eyes-down and sad. At round 1 the
+eye-scale falloff left a ring that reads as glasses at card size, and the
+dark lips read as an open mouth. Round 2 removed both, and the score
+fell. Round 1 stays on the branch. The weak expressions are mixes of
+channels at 0.25–0.6 (`EXPRESSIONS` in `lib/beats.ts`), so a channel can
+pass its millimetres at 1 and still move too little in the mix. Making
+those mixes stronger would change every avatar, so that is not 2c's to
+do.
+
+**Other findings.**
+
+- **Reach.** The 1.55× head takes height from a 1.7 m figure: the
+  shoulders are 1.25 m (the stock's 1.44 m) and the arms 7 cm shorter. In
+  the watering take two reaches stop 17.5 mm and 23.1 mm short (stock
+  under 1 mm), within `direct.ts`'s limits.
+- **Quick Look.** `check_usdz_tools.sh` cannot run its material challenge
+  on the base. The challenge needs two materials with embedded base-colour
+  textures, and the clay base has colour factors and no UVs. The stock's
+  expressions take passes all four cases. A base needs UVs and a texture,
+  or the check needs a factor-only path.
+- **The build.** It gives the same geometry on each run, but Blender can
+  order the eye and mouth triangles differently, so the sha256 can change.
+
+**Measure fixes found on the way** (in this branch; the stock's rows are
+unchanged by them):
+
+- the eye radius now spans every mesh the eye bone carries (it took the pupil);
+- brow visibility no longer counts the brow's own meshes as occluders (the
+  bar's row above is updated);
+- the close-up aims at the face's centre and drops brow samples outside the frame.
+
+**Revisit when the style sheets (2b) arrive:** the head, eye and hand
+scales, the brow shape and colour, the lips and their colour, the skin and
+clothing colours, and the height the head takes from the body (reach).
+Hair and clothing are still to be generated.
 
 ## Physical-device limits
 

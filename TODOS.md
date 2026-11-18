@@ -181,7 +181,10 @@ it from the item below instead of duplicating its status here.
   of one expressive base read at phone-card size, a trait card, two or
   three finishes and the audition as the bar for any avatar, in
   sub-slices 2a to 2g; approved by the owner on 2026-11-17 ("Approve
-  all", open decision 5); 2a (the bar) and 2b (Astra's sheets) next, nothing built. Owned by
+  all", open decision 5). 2a (the bar) is built. 2c (the house base, on
+  `feature/house-base-2c`, not merged) passes the audition's face rows
+  but missed the blind reading twice, so it waits for open decision 7.
+  Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
   (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)
