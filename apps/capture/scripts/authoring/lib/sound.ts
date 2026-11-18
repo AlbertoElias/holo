@@ -46,7 +46,8 @@ const text = words.join(' ');
 const tts = await KokoroTTS.from_pretrained('${KOKORO.model}', { dtype: '${KOKORO.dtype}', device: 'cpu', revision: '${KOKORO.revision}' });
 const audio = await tts.generate(text, { voice });
 await audio.save(out);
-process.stdout.write(JSON.stringify({ phrases: await phonemize(text) }));
+// The phonemiser's language as kokoro-js picks it for the voice ('a…' American, else British), so the lips read the phones it spoke.
+process.stdout.write(JSON.stringify({ phrases: await phonemize(text, voice.startsWith('a') ? 'en-us' : 'en') }));
 `;
 const PHONEMIZE_SCRIPT = `import { phonemize } from 'phonemizer';
 process.stdout.write(JSON.stringify({ phrases: await phonemize(process.argv.slice(2).join(' ')) }));
@@ -120,7 +121,7 @@ export async function prepareLine(beat: Beat, sheetFile: string, cacheDir: strin
   if (say.voice.startsWith('local:')) {
     await ensureKokoro();
     const voice = say.voice.slice('local:'.length);
-    const key = createHash('sha256').update(JSON.stringify([KOKORO.version, KOKORO.model, KOKORO.dtype, voice, say.text])).digest('hex').slice(0, 16);
+    const key = createHash('sha256').update(JSON.stringify([KOKORO.version, KOKORO.model, KOKORO.revision, KOKORO.dtype, voice, say.text])).digest('hex').slice(0, 16);
     file = join(cacheDir, `line-${key}.wav`);
     const phrasesFile = `${file}.json`;
     if (!existsSync(file) || !existsSync(phrasesFile)) {

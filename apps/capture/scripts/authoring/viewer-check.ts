@@ -169,7 +169,7 @@ async function hear(file: string, recording: string, motionAt: number, soundAt: 
   // The sound clock is what the card plays by; motion runs beside it.
   const from = soundAt ?? motionAt;
   const take = (t: number): number => (from + t) % duration;
-  const spans = voicedSpans(envelopeOf(pcm, RATE)).map((sp) => ({ start: take(sp.start), end: take(sp.end) }));
+  const spans = voicedSpans(envelopeOf(pcm, RATE)).map((sp) => ({ start: take(sp.start), end: take(sp.start) + (sp.end - sp.start) }));
   const report = await speechReport(file);
   const sources = report.sources.map((src) => {
     const onset = src.onset;

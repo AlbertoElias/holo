@@ -15,9 +15,7 @@
  * loudness with a correlation of at least 0.4.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { parseGlb, readAccessor, readChannels, sampleChannel, targetNames, type GltfDoc } from './lib/gltf-read.ts';
@@ -97,7 +95,6 @@ export async function speechReport(file: string): Promise<SpeechReport> {
   const channels = readChannels(doc);
   const clip = Math.max(...channels.map((c) => c.times[c.times.length - 1] ?? 0));
   const fps = Math.round(1 / ((channels[0]!.times[1] ?? 1) - channels[0]!.times[0]!));
-  const dir = await mkdtemp(join(tmpdir(), 'speech-report-'));
   const sources: SourceReport[] = [];
   const pcm = new Map<string, Float32Array>();
   for (const [i, s] of (khr?.sources ?? []).entries()) {
@@ -107,9 +104,7 @@ export async function speechReport(file: string): Promise<SpeechReport> {
     const emitter = khr!.emitters.findIndex((e) => e.sources.includes(i));
     const nodes = json.nodes as { extensions?: { KHR_audio?: { emitter: number } } }[];
     const node = nodes.findIndex((n) => n.extensions?.KHR_audio?.emitter === emitter);
-    const file0 = join(dir, `${name}.webm`);
-    await writeFile(file0, bytes);
-    const r = spawnSync(ffmpegPath(), ['-v', 'error', '-i', file0, '-ac', '1', '-ar', String(RATE), '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });
+    const r = spawnSync(ffmpegPath(), ['-v', 'error', '-i', 'pipe:0', '-ac', '1', '-ar', String(RATE), '-f', 'f32le', '-'], { input: bytes, maxBuffer: 1 << 30 });
     if (r.status !== 0) throw new Error(`decode ${name}: ${r.stderr.toString()}`);
     const samples = new Float32Array(r.stdout.buffer.slice(r.stdout.byteOffset, r.stdout.byteOffset + r.stdout.byteLength));
     pcm.set(name, samples);
