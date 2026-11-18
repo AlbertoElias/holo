@@ -1069,7 +1069,7 @@ bars in the brief to the artist.
 | **2a: the bar** | The new audition rows above, in `avatar-audition.ts` and `face-legibility.ts`; run on the stock avatar and the avatar-format fixtures | One command that audits any avatar file and writes audition JSON with every row; it is what grades the new base (2c), outside avatars and each finish. Sanity check only: the stock avatar, known to be poor, fails the brow, lid, mouth, visibility and face-box rows by name | **Yes.** Scripts under `apps/capture/scripts/authoring/` only |
 | **2b: the sheets** | Astra draws the style sheets from the request below; the owner picks a finish set (open decision 1) | The sheets, judged against the acceptance list in the request; the owner's pick recorded here | **Yes.** No code |
 | **2c: the base** | One base in the picked style, neutral finish, neutral card, made the recommended way | Every audition row passes; three blind readers at 5 of 7 or better at card size; a review pack of `sheets/expressions.json` and the watering piece on the base beside the stock; the motion owner's report; `check_usdz_tools.sh`; a proof video | **Yes.** Loads through `?avatar=` and beat sheets only; edits nothing the mandates own |
-| **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
+| **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards. Built 2026-11-18 (see "Slice 2d evidence"); the turn row still fails, worse with garments | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
@@ -2881,6 +2881,108 @@ shared mix, and its pressed mouth is small at 40 px.
   `usdchecker --arkit` reports success.
 - **Not done:** the motion owner's report on the base, and people (not AI)
   as readers.
+
+### Slice 2d evidence (2026-11-18): traits built, the turn row still fails
+
+Built with the owner away; every choice below was decided by the agent in
+the owner's absence on 2026-11-18, for review.
+
+**What was built:**
+
+- **`packages/avatar-look`**: the trait card (`traits.ts`, `card.ts`) and
+  the one dressing function (`dress.ts`, gltf-transform). It reads a
+  build's wardrobe file, keeps only the card's hair and glasses parts, and
+  sets the skin, eye, hair, brow and clothing colours. `direct.ts` is its
+  only caller (`avatar: "house:clay"` plus a `look` on the performer); the
+  capture side waits for 2e.
+- **Three builds** (`house-base.ts --build slight|medium|broad`), each
+  written as `apps/capture/assets/house-base/wardrobe-<build>.glb` (about
+  1.55 MB) with every hair style and both glasses frames as parts. A dressed
+  file is 1.08 to 1.17 MB. `public/gltf/models/house-base.glb` is the
+  default look (medium, caramel, dark brown eyes, swept crop in espresso,
+  no glasses, oatmeal and slate) and is still reached only through
+  `?avatar=`.
+- **Loose garments as geometry**: the jumper, trousers and shoes are now
+  meshes over the body, hanging straight (Taubin-smoothed, a symmetric
+  neckline, a bounded push-out), with thigh and hem ease kept slim so a
+  hanging hand stays clear. This answers the 2c "Clothing" gap.
+- **Hair and glasses**: six styles and two frames, skinned to the head, none
+  crossing the brow line; frames sit below the brows.
+- **Brows follow the hair, a step darker than the skin.** The brow colour
+  is 0.55 of the hair colour, darkened until its OKLab lightness is at most
+  the skin's minus `BROW_STEP` (0.42). Without the step, light hair on light
+  skin and dark hair on dark skin missed the brow-contrast bar (0.18 to
+  0.25); with it every look passes. The default look is unchanged (its
+  brows already sat lower).
+- **The take carries the look**: `lib/write-glb.ts` writes each house
+  performer's card in `asset.extras.holoim.looks`.
+- **`house-traits.ts`**: auditions eight looks that between them cover
+  every trait value at its extreme, and fails if any value is left out.
+
+**Audition on every trait value** (`house-traits.ts`, geometry and render
+tiers, bars unchanged; `output/authoring/house-traits/report.json`):
+
+| Look | Size | Fails |
+|---|---|---|
+| 1 slight, porcelain, blue, centre part wheat, square | 1.17 MB | armR-in-torso 48 |
+| 2 broad, espresso, dark brown, tight coils black, round | 1.11 MB | armR-in-torso 52, armR-in-legR 21 |
+| 3 medium, linen, cool grey, high bun silver, none | 1.08 MB | armR-in-torso 47 |
+| 4 slight, umber, amber, wavy bob espresso, round | 1.17 MB | armR-in-torso 48 |
+| 5 broad, golden sand, hazel, short twists plum, square | 1.11 MB | armR-in-torso 52, armR-in-legR 21 |
+| 6 medium, honey, moss green, swept crop ash brown, square | 1.11 MB | armR-in-torso 48 |
+| 7 broad, caramel, blue, centre part copper, none | 1.14 MB | armR-in-torso 52, armR-in-legR 21 |
+| 8 slight, copper, dark brown, swept crop chestnut, none | 1.08 MB | armR-in-torso 47 |
+
+Every face, brow, lid, mouth, visibility, contrast (0.29 to 0.39 L) and
+size row passes on every look. The only misses are the turn rows (bar: the
+75° turn adds at most 0.5% of the arm's vertices, about 10, deeper than
+5 mm).
+
+**The turn row is not cleared, and 2d made it worse.** The stance is the
+root: the stock fails the row too (32), and origin/main's base failed it at
+33. In the stance the hanging arm is offset from the shoulder and turned
+with the torso (0.65 of the yaw) while the hips turn 0.25, so at 75° the
+right arm swings into the side. The loose garments then add to it: the
+default look scores 47 (the eight looks 47 to 52), and the broad build also
+fails `armR-in-legR` (21; the leg row's margin on medium shrank from −461
+to −49). Tried and reverted: a wider hang (0.26 of reach) clears the house
+base but worsens the stock (40); a smaller arm share trades the torso row
+for the leg rows. A real fix belongs in the stance (turn the arm with the
+hips, or swing it out in a turn), which is pose work shared with the motion
+owner, and then in the jumper's and trousers' ease at the side. So the base
+is still not passing and stays behind `?avatar=`; the bar was not loosened.
+
+**Contact sheet** (`output/authoring/house-traits/sheet/traits-beside-sheet.jpg`):
+every skin tone, eye colour, hair style and colour, glasses value and build,
+rendered front-on in `clay-traits.png`'s layout, beside the sheet. Its render and
+layout scripts are working files in that ignored folder, so the sheet is
+evidence, not a repeatable check.
+
+**Blind reading with hair and glasses on**
+(`output/authoring/house-traits/reading/`): `sheets/expressions.json` on
+look 4 (wavy bob, round glasses), the card-size sheet (`blind-05.jpg`, face
+43 device px), three fresh readers with three fixed wordings: 5, 5, 5 of 7.
+Hair and glasses cost nothing. Holding something back and looking down
+still swap for every reader. Holding back's 0.2 blink and small pressed
+mouth read as lowered lids at 43 px, while looking down's 0.55 lid reads
+calm. Not attempted: fixing it changes shared expression mixes or the base
+face, and needs another reader round.
+
+**The poem's two characters from cards alone** (`sheets/poem-pair.json`,
+target `clay-poem-pair`): her (slight, honey, dark brown, wavy bob in
+chestnut, no glasses, rust and walnut) and him (medium, golden sand, moss
+green, swept crop in espresso, no glasses, storm and graphite). The take
+is 2.6 MB, and its `asset.extras.holoim.looks` holds both cards. One reach
+note: her reach stops 183.6 mm short against 160 asked ("out of reach even
+leaning").
+
+**Quick Look:** the poem take converts with `glb_to_usdz.py` (6.28 MB
+USDZ), and `inspect_usdz.py` passes with no failures. `check_usdz_tools.sh`
+still cannot run its material challenge (no textures; see 2c).
+
+**Not done:** the turn row (above), the held and looking-down swap, tests
+for `@holoim/avatar-look` (only the manual `house-traits.ts` exercises it), the
+motion owner's report on the base, and people (not AI) as readers.
 
 ### Slice 6 evidence (2026-11-18)
 
