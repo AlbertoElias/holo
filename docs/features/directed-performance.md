@@ -735,6 +735,91 @@ authors to add a beat (the default fails every two-hander that forgets).
 
 **Evidence:** "Slice 1e evidence", below.
 
+### Slice 1f: change in the world (2026-11-18)
+
+"Not covered yet" item 5. Built under `apps/capture/scripts/authoring/`
+only (`lib/beats.ts` additively, a new `lib/world.ts`, `lib/write-glb.ts`,
+`direct.ts`'s printout, the watering sheet); nothing under
+`apps/capture/src/**`, the viewer, the API or `@holoim/objects` changes.
+The set's change is plain glTF node animation (translation, rotation,
+scale, STEP presence), which the viewer's mixer plays unfiltered and the
+USDZ converter bakes (`glb_to_usdz.py` carries node TRS and turns a scale
+of 0 into USD visibility); no morph target, material animation or new
+extension is used.
+
+**What.** A sheet may give `world`: a list of changes, one line each, the
+rest defaulted.
+
+1. **Poured.** `{ "kind": "pour", "object": "can" }`: while the object's
+   tool axis points below the horizontal (`tilt`, default 0°), drops leave
+   its tip (`rate` 60 a second at full tilt, fewer near the threshold),
+   fall under gravity from the tip's speed along the axis, and land on
+   `onto` (default: the target of the `aim` that points that object),
+   scattered over a third of the wet patch. Each drop is a small blue
+   (`color`) stretched sphere, along its velocity, present only in flight.
+   Drops take turns on a pool of nodes (about 15 are in flight at once),
+   keyed on the take's frames: one node per drop (132 in watering) took
+   the Quick Look readback (`inspect_usdz.py`) 314 s against the tool
+   check's 180 s limit; pooled, it is 16 nodes and 115 channels.
+   Where they land, a wet patch (`wet`, default on, radius 0.06 m) grows
+   with the water landed and stays to the end, darker than the part it
+   lies on.
+2. **Particles.** `{ "kind": "burst", "at": <point>, "when": <cue> }`:
+   `count` (24) seeded motes fly out to `spread` (0.25 m) and shrink away
+   over `life` (1.2 s). `{ "kind": "drift", "at", "when", "until" }`:
+   motes rise slowly (`rise` 0.3 m) and fade, a few at a time, over the span.
+3. **An object responds.** `{ "kind": "change", "object": "plant",
+   "when": <cue>, "over": 1.5, "from": { "turn": [24, 0, 8], "scale":
+   [1, 0.8, 1], "color": "#8a8a45" } }`: the object's shape turns about
+   its own origin (the bottom centre), scales, lifts (`lift`, metres)
+   and changes colour from `from` to the change's own values (default:
+   as the sheet made it), eased over `over`. Colour is a swap in `steps`
+   (4) whole-object copies, since neither glTF without an extension nor
+   Quick Look animates a material. `"show": false` makes it disappear at
+   the cue and `"show": true` appear (absent before), with the object's
+   `HOLOIM_objects` presence spans written to match. A change ends at the
+   state it names; what it leaves out returns to as-made, so a later
+   change restates a colour it keeps.
+
+A cue is seconds, a beat id (its start) or `<beat>.end`. Points are
+object points (`pot.soil`), numeric marks or `[x, y, z]`; a performer
+point or a place is refused, since the change is computed after the
+solve from the objects' tracks. Each pour, burst and drift is one
+`summoned` `RecordedObject` (source `effect:<kind>`) whose presence spans
+cover its motes, so the viewer's cast-only framing leaves it out; a
+sheet without `world` writes the same file as before.
+
+**What Quick Look cannot show:** a colour fades only in its steps; drops
+are separate rigid nodes, not a fluid; nothing splashes or soaks in.
+
+**Rejected:** a morph-target stream (one long mesh deformed per frame:
+heavier on the deformed extent budget, B-057, which counts every frame);
+`KHR_animation_pointer` colour (the converter and Quick Look drop it);
+a particle extension the viewer would have to learn.
+
+**Acceptance.**
+
+- `sheets/watering.json` revised: the plant starts wilted and perks up
+  after the water lands; the pour leaves a wet patch. It builds with no
+  miss, and the converter's extent load (`publish.ts --check`) stays under
+  budget.
+- **Blind reading, bar set before running:** three fresh Sonnet readers,
+  each given only the review pack's `reader/` folder (never the sheet),
+  describe the piece. It passes when at least 2 of 3 say water was poured
+  (pours, waters, watering, water, drops, stream, sprinkles) and at least
+  2 of 3 say the plant changed (perks up, lifts, straightens, revives,
+  stands up, grows, greener, healthier). Not tuned past two tries; a
+  failure is reported.
+- `viewer-check` on the card frames the piece with the water in view; the
+  Quick Look check (`check_usdz_tools.sh`) passes on it, its readback
+  matching every node's world transform (drops' visibility as scale 0, the
+  plant's change node) at the sampled times. `sheets/world-test.json`
+  (burst, drift, colour, lift, appear and disappear) passes the same two.
+- **Nothing else moves:** `rest`, `expressions`, `gestures`,
+  `defaults-test` and `goodbye` write byte-identical GLBs to `main`'s.
+
+**Evidence:** "Slice 1f evidence", below.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
@@ -1370,8 +1455,12 @@ and 7 (its evidence, below); the second 1c piece added item 13.
    concerned do not. The GLB moves as asked (the shake swings ±20° in the
    head every 0.8 s), but readers judge 0.2 s stills, about two per swing.
    Still open: a way for a quick head or finger motion to read.
-5. **Change in the world.** No water, particles or plant response: the
-   reader saw "no water" and "the plant looks the same".
+5. **Change in the world.** Closed by slice 1f: a beat sheet's `world`
+   lines direct a pour from a held tool's tip, a burst or drift of motes,
+   and an object that changes over time (turn, scale, lift, colour, show
+   or hide). All are node and mesh-swap animation, so the GLB, card, AR
+   viewer and Quick Look all show them. Was: "no water" and "the plant
+   looks the same".
 6. **Performer-relative placement.** Marks are absolute metres guessed from
    the avatar's size; nothing says "at her right hand's height" or "a
    step in front of her".
@@ -1750,6 +1839,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      five 0.4 s cycles, hand at chest height in view; concerned pitch 14°,
      roll 8°). They still do not read in stills (evidence); the next idea
      is a change to the reading medium, not more size.
+9. **Slice 1f's calls** (decided by the agent in the owner's absence on
+   2026-11-18, for the owner to review; each is reversible):
+   - Drops are pooled onto reusable nodes (a node takes the next drop
+     that starts after its last ends): 132 drops on 16 nodes. One node per
+     drop made the Quick Look readback take 314 s against its 180 s limit.
+   - A change ends at the state it names; anything it leaves out returns
+     to as-made. Overlapping changes on one object, and a show and hide
+     at the same time, are refused.
+   - Watering uses drops of 16 mm and a stronger wilt (36° turn, 0.7
+     height, olive `#8e8644`). At first the readers saw a thin stream at
+     card size and a mild wilt.
+   - Drop and mote keys sit on the take's frame grid, so they add no new
+     key times to the file.
+   - `sheets/world-test.json` covers burst, drift, show and hide, and a
+     colour, lift and scale change on a two-part lamp.
+   - A pour whose tool never tips below its threshold is an info line,
+     not a failure (the brief does not ask either way).
 
 ## Test plan and evidence
 
@@ -2350,6 +2456,70 @@ show at card size (decision 2).
 **Kept:** sizes from try 2 (agent decision 8). They pass the same
 items as try 0 (wave and shrug drop from 3/3 to 2/3, still passing), and
 a slower, larger nod and shake are closer to what a person does on video.
+
+### Slice 1f evidence (2026-11-18)
+
+**Build.** `sheets/watering.json` now has two world lines (a pour from the
+can, the plant changing from 5.3 s over 2.4 s). It builds with no miss:
+132 drops on 16 nodes from 4.774 to 7.196 s, landing within 20 mm of
+`pot.soil`; a wet patch 12 cm across that stays to the end; the plant in
+4 colour steps from 5.3 to 7.7 s; 115 channels, 3.8 MB. `publish.ts
+--check` gives valid, with a deformed load of 686,136 and rigid 4,817,839
+(budgets 100M and 500M). `sheets/world-test.json` builds: a burst of 24
+motes (1 to 2.2 s), a drift of 12 (2.5 to 4.5 s), the lamp present 1 to
+6.2 s in 4 colour steps, 140 channels; `--check` gives valid.
+
+**Quick Look.** `check_usdz_tools.sh` passes all four cases (animated ancestor and face,
+silent, alpha/UV/PBR, unsupported required extension) on the final builds of
+both `watering` (138 s of CPU for the whole check) and `world-test`
+(133 s). The readback matches every node's world transform at the sampled
+times.
+
+**Nothing else moves.** `rest`, `expressions`, `gestures`, `defaults-test`,
+`goodbye`, `two-avatars` and `tallest-bar` rebuild byte-identical to
+`main`. A sheet without `world` writes the same file.
+
+**Viewer.** viewer-check on watering showed the thin stream from the spout
+and the plant going from olive and slumped to green and upright. From the
+side, the pot rim hides the wet patch. On world-test it showed the lamp
+appear, turn gold, lift and shrink, and disappear.
+
+**Refusals.** Each was tested: a pour aimed at a performer point or a place
+("its aim's target; give onto"), overlapping changes ("changes again at
+2.80 s, before the change before it ends"), and a colour on a sourced
+model.
+
+**Blind reading (bar: 2 of 3 say water was poured and 2 of 3 say the plant
+changed).** Three fresh Sonnet readers saw the review pack's frames only.
+
+| Reader | Water poured | Plant changed |
+|---|---|---|
+| 1 | yes: "a visible stream falls into the pot" | yes: "upright and bright green" |
+| 2 | yes: "a thin blue stream running into the plant" | yes: "a wilted yellow-green plant turns into a healthy bright green one" |
+| 3 | yes: "a thin stream of water falls onto the plant" | yes: "turns green and grows upright" |
+
+**The bar is met, 3 of 3 on both.** All three readers called the stream
+thin and hard to see at card size before about 5 s. The check at 2.1 s
+reads as a wrist check, not a finger in the soil (slice 1e's
+finding).
+
+**Review.** The code review found three issues, all fixed and retested:
+the aim target was not validated, overlapping changes were not refused,
+and a span that ends within 1 ms of a float32 last frame lost the object
+on that frame. The independent verifier also found four, all fixed:
+the default `onto` (the same fix), overlap (the same fix), a duplicate
+final colour copy, and a wet patch whose first key had a zero area but
+was not all zero. A show and hide at the same time is now refused. One of
+the verifier's Quick Look runs went over the 100 s CPU budget. Converting
+the same file alone takes 3.6 s of CPU (main's watering takes 3.1 s), so
+that run did not reproduce. Its notes on limits are in the README:
+world points follow the object's track, not its change, and a drop's
+target is sampled at departure.
+
+**What Quick Look cannot show.** The colour change is mesh swaps, so
+Quick Look shows it in steps (as the viewer does). Drops and motes are
+node scale and translation, which Quick Look plays. Nothing in a world
+line depends on a material animation or a shader.
 
 ### Slice 2a evidence (2026-11-17)
 
