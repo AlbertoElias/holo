@@ -121,8 +121,8 @@ async function main(): Promise<void> {
   }
   for (const t of r.take.tracks) {
     if (t.life) console.log(`  ${t.spec.id} life: ${describeLife(t.life, r.take.sheet.duration)}`);
-    // Attending plays only facing someone: printed when there is someone to face.
-    if (t.attend && r.take.tracks.length > 1) console.log(`  ${t.spec.id} attending: ${describeAttend(t.attend, r.take.sheet.duration)}`);
+    // Attending plays only facing someone: printed when there is someone who could be faced; the schedule, not what plays.
+    if (t.attend && r.take.tracks.length > 1) console.log(`  ${t.spec.id} attending (plays only while facing another performer, within 55°): ${describeAttend(t.attend, r.take.sheet.duration)}`);
     console.log(`  ${t.spec.id} body: ${bodyLine(t.motion)}`);
   }
   const lines = objectLines(r.take.objects);

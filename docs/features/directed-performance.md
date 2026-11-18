@@ -674,9 +674,10 @@ existing expression mix value changes.
    the thumb and fingers, the eyes on the hand), `hand-to-chest`. A hand
    gesture takes `side` (default right); a repeated one takes `count`;
    every one takes `strength` and the usual timing. Each layers over idle
-   life the way directions already do: it masks only the life channels it
-   uses (a nod the glances, a wave that hand's fidget), within its span
-   plus 0.4 s.
+   life the way directions already do: it masks the life channels it
+   uses (a wave that hand's fidget), within its span plus 0.4 s. As built,
+   every gesture also masks the glances, so the eyes stay on the gesture,
+   and the shrug takes over the life face too.
 2. **States by name.** `{ "kind": "state", "name": "noticing" | "concerned" }`
    for as long as the beat holds: a body and head attitude plus a face mix
    (new face-mix names `noticing` and `concerned`, in `STATE_FACES`, which
@@ -2210,15 +2211,20 @@ capture typecheck passes.
 
 **Nothing else moves.** Rebuilt from their `sheets/` paths, `rest`,
 `watering` and `expressions` are byte-identical to `main`. `defaults-test`
-changes only by the attending layer: the reach still lands 19.6 mm from
-its target (asked 20, the same as before), and every body target passes.
-`goodbye` also changes, because its two performers face each other. Her
-p99 pose speed rises from 8.1 to 11.5 (no attending vs attending), and
-every body target passes. His foot skate (2.4 cm max) is the same without
+changes only by the attending layer (with `attend: false` it is
+identical to before): the reach still lands 19.6 mm from its target
+(asked 20, the same as before), and every body target passes. The p99
+pose acceleration rises from 5.7 to 8.8 (a) and from 3.4 to 8.4 (b), from
+the nods and the hands coming together. `goodbye` also changes, because
+its two performers face each other. Her p99 pose acceleration rises from
+8.1 to 11.5 (no attending vs attending), and every body target passes. His foot skate (2.4 cm max) is the same without
 attending.
 
 **The profile hold** (bar: 2 of 3 call 4.4 to 8 s alive). Readers each
 saw only the reader folder.
+
+In the first try every reader called 4.4 to 6 s alive, so the quotes
+are on 6 to 8 s, the part that had read as frozen.
 
 | Try | Readers on 6 to 8 s | Result |
 |---|---|---|

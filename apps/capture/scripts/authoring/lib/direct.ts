@@ -1163,7 +1163,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         const [x, y, z] = GESTURE_HAND.wave;
         const cyc = gestureCycle(d, r.attack)!;
         const tau = t - r.at - cyc.from;
-        const swing = tau > 0 && tau < cyc.count * cyc.cycle ? Math.sin((2 * Math.PI * tau) / cyc.cycle) * WAVE_SWING * k : 0;
+        const swing = tau > 0 && tau < Math.min(cyc.count * cyc.cycle, r.attack + r.hold - cyc.from) ? Math.sin((2 * Math.PI * tau) / cyc.cycle) * WAVE_SWING * k : 0;
         const toward = d.at !== undefined ? pointOf(cast, c.spec, d.at).sub(shoulder).normalize() : bodyVec(0, 0, 1);
         add(shoulder.clone().add(bodyVec(out * (x * L + swing), y * L, z * L)), e, toward, 1);
       } else if (d.name === 'rub') {
@@ -1446,7 +1446,7 @@ function lookTarget(cast: Cast[], c: Cast, t: number, flat: boolean, by: 'head' 
   return point ? { point, weight, share } : undefined;
 }
 
-/** How much attending life plays: the nearest other performer's head off the upper body's facing (`attendGate`), as last solved. */
+/** How much attending life plays: the strongest `attendGate` over the other performers' heads off the upper body's facing, as last solved. */
 function attendFacing(cast: Cast[], c: Cast, yaw: number): number {
   const me = c.seen.get('head') ?? c.a.frame.position;
   let k = 0;
