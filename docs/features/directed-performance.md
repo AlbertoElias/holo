@@ -1003,8 +1003,34 @@ confusion the 3D base showed in 2c (see open decision 7). The readers were
 AI models; Astra's protocol asks for people, so this is evidence, not the
 protocol's verdict. At the owner's request the lead drafted a revision
 request to Astra for those four expressions
-(`output/avatar-sheets/astra-revision-request.md` in the main checkout);
-the owner has not sent it yet.
+(`output/avatar-sheets/astra-revision-request.md` in the main checkout),
+which went to Astra.
+
+**Round 2 of the expression sheets (2026-11-18).** Astra redrew the four
+expressions; the new sheets are in the main checkout's ignored
+`output/avatar-sheets/round-2/`:
+- `clay-expressions.png`, `ink-expressions.png` and
+  `light-expressions.png`, each 5000 × 950;
+- `expression-revision.zip`;
+- `blind-reading-test.zip`, with a new shuffle and key.
+
+These round 2 sheets are now the reference for neutral, hopeful, holding
+something back and looking down. The other expressions still come from
+round 1.
+
+The lead reran Astra's blind test with three fresh Sonnet readers. Each saw
+only its own three 40 px pages, in Astra's rotation order. Every reader
+named all 7 on every finish:
+
+| Finish | Round 1 (readers 1, 2, 3) | Round 2 (readers 1, 2, 3) |
+|---|---|---|
+| clay | 3, 7, 4 | 7, 7, 7 |
+| ink | 5, 7, 4 | 7, 7, 7 |
+| light | 3, 3, 4 | 7, 7, 7 |
+
+All three readers said the pair they were least sure of was neutral against
+holding something back. As in round 1, the readers were AI models, while
+Astra's protocol asks for people.
 
 ### Slice 3: the six-second test (general; after slice 1b)
 
@@ -1383,9 +1409,15 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    holding something back, looking down; three AI readers per finish, see
    slice 2b, "Sheets returned"). So the expression designs, not the
    modelled face, look like the cause: commissioning a face (A) or redoing
-   it from the sheets (C) would likely meet the same misses. A revision
-   request to Astra for those four is drafted and unsent. The readers were
-   AI models, not the people Astra's protocol asks for.
+   it from the sheets (C) would likely meet the same misses. The readers
+   were AI models, not the people Astra's protocol asks for.
+
+   Round 2 (2026-11-18): Astra redrew those four, and the redrawn sheets
+   read 7 of 7 for every reader on every finish, again with three AI readers
+   at 40 px (slice 2b, "Round 2 of the expression sheets"). The readers were
+   least sure of neutral against holding something back. So a 7-of-7 design
+   for the four now exists to aim the base's face at. The decision itself
+   is unchanged and still the owner's.
 
 ## Test plan and evidence
 
