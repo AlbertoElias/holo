@@ -4,7 +4,9 @@ parameter file, so the base is re-made by a command and never edited by hand.
 
 Run by `house-base.ts` (which fetches and checks the parts), as:
 
-  Blender -b --python build.py -- <base.json> <faceunits dir> <out.glb> <report.json>
+  Blender -b --python build.py -- <base.json> <faceunits dir> <out.glb> <report.json> [build]
+
+where build is one of base.json's `builds` (default medium).
 
 Parts (credits are written into the file): the MakeHuman base mesh, its
 mixamo rig and weights, from MPFB 2 (the add-on is GPL; its output is CC0),
@@ -19,7 +21,9 @@ face smoothed (nose, lips and sockets taken out), then big eyes, lids with a
 lash line, brows, a nose and a mouth built on it, with every face shape the
 audition and the mixes use authored for this face; the rig, renamed to the
 stock avatar's bone names, with eye and head-top bones added; materials
-painted on the body by bone (clothes); helper geometry removed; exported as GLB.
+painted on the body by bone; helper geometry removed; the traits that are geometry (`dress.py`):
+loose garments in place of the painted clothes, every hair style and both glasses frames, each its
+own mesh for the dressing function to keep or remove; exported as GLB.
 
 Blender: +Z up, the human faces -Y, its left is +X. glTF export turns that
 into +Y up, facing +Z.
@@ -32,7 +36,11 @@ from mathutils.bvhtree import BVHTree
 argv = sys.argv[sys.argv.index("--") + 1:]
 P = json.load(open(argv[0]))
 FU_DIR, OUT, REPORT = argv[1], argv[2], argv[3]
+BUILD = argv[4] if len(argv) > 4 else "medium"
+P["macro"] = {**P["macro"], **P["builds"][BUILD]["macro"]}
 F = P["face"]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dress
 
 from bl_ext.user_default.mpfb.services.humanservice import HumanService
 from bl_ext.user_default.mpfb.services.targetservice import TargetService
@@ -545,6 +553,19 @@ for poly in human.data.polygons:
         slot = "trousers"
     poly.material_index = slots.index(slot)
 
+# The neckline: round the neck the voting above leaves a ragged edge, so a plane through the neck's base,
+# tilting down to the front, decides there instead (jumper below, skin above).
+cl = P["garments"]["collar"]
+neck_v = np.array([v.co[:] for v in human.data.vertices if vbone[v.index] == "Neck"])
+z0, y0 = float(neck_v[:, 2].min()) + cl["raise"], float(neck_v[:, 1].mean())
+NECK = ("Neck", "Spine2", "LeftShoulder", "RightShoulder")
+for poly in human.data.polygons:
+    if poly.index >= n_body_polys or not all(vbone[i] in NECK for i in poly.vertices):
+        continue
+    c = poly.center
+    if slots[poly.material_index] in ("skin", "top"):
+        poly.material_index = slots.index("top" if c.z < z0 + cl["tilt"] * (c.y - y0) else "skin")
+
 # --- Remove helper geometry and joint cubes -----------------------------------------------
 drop = set(members["HelperGeometry"].tolist()) | set(members["JointCubes"].tolist())
 bm = bmesh.new()
@@ -560,6 +581,37 @@ for m in list(human.modifiers):
     if m.type != "ARMATURE":
         human.modifiers.remove(m)
 human.name = human.data.name = "HouseBase_Body"
+
+# --- The traits that are geometry: garments, hair, glasses (dress.py) ----------------------------
+vb = np.array([v.co[:] for v in human.data.vertices])  # the body before the garments replace its clothed faces
+gw = lambda name: np.array([next((g.weight for g in v.groups if g.group == human.vertex_groups[name].index), 0.0) for v in human.data.vertices])
+w_hd, w_arm = gw("Head"), gw("LeftArm")
+brow_v = np.array(ex_v)[[i for f, m in zip(ex_f, ex_m) if m == "brow" for i in (np.array(f) - N)]]
+H = P["hair"]
+land = {
+    "hairlineZ": float(brow_v[:, 2].max()) + max(F["browShapes"]["innerUp"], F["browShapes"]["outerUp"]) + H["browMargin"],
+    "browHalfWidth": ey["x"] + F["brows"]["outer"] * R + 0.012,
+    "chinZ": float(vb[(w_hd > 0.99) & (vb[:, 1] < eyes["Left"][1] + 0.02), 2].min()),
+    "shoulderZ": float(vb[w_arm > 0.5, 2].max()),
+}
+wear, garment_report = dress.garments(human, rig, slots, P["garments"])
+bvh = dress.mesh_bvh(np.array([v.co[:] for v in human.data.vertices]), [list(p.vertices) for p in human.data.polygons])
+C = dress.head_centre(bvh, cx, ze, eyes["Left"][1])
+hair_mat = material("HouseBase_hair", col["hair"])
+hair_mat.use_backface_culling = False  # a curtain's inside shows
+frames_mat = material("HouseBase_frames", col["frames"])
+hair_report = {}
+for style, S in H["styles"].items():
+    if style.startswith("$"):
+        continue
+    hv, hf, hw = dress.hair(S, H, bvh, C, land)
+    wear.append(dress.skinned(f"Hair_{style}", hv, hf, hw, [hair_mat], rig, human))
+    hair_report[style] = {"vertices": len(hv), "lowestZ": round(float(hv[:, 2].min()), 4)}
+glasses_report = {}
+for kind in P["glasses"]["kinds"]:
+    gv, gf, gwts = dress.glasses(kind, P["glasses"], eyes, R, bvh, C, cx)
+    wear.append(dress.skinned(f"Glasses_{kind}", gv, gf, gwts, [frames_mat], rig, human))
+    glasses_report[kind] = {"vertices": len(gv), "rimTopAboveEye": round(float(gv[:, 2].max() - ze), 4)}
 
 # --- Eyeballs, each carried by its eye bone ----------------------------------------------
 for side, E in eyes.items():
@@ -585,9 +637,9 @@ for side, E in eyes.items():
 credits = [
     {"part": "body mesh, proportions targets, rig and weights", "title": "MakeHuman base mesh (hm08), mixamo rig", "author": "MakeHuman team", "source": "MPFB 2.0.18 (extensions.blender.org/add-ons/mpfb)", "sourceUrl": "https://extensions.blender.org/add-ons/mpfb/", "licence": "CC0-1.0", "note": "MPFB is GPL-3.0; the human it outputs is CC0"},
     {"part": "the jaw and cheek face shapes", "title": "Faceunits 01", "author": "Mika Suominen", "source": "MakeHuman asset packs", "sourceUrl": "https://static.makehumancommunity.org/assets/assetpacks/faceunits01.html", "licence": "CC0-1.0"},
-    {"part": "proportions, the stylised face (eyes, lids, brows, nose, mouth) and its face shapes, materials", "title": "HoloIM house base build script", "author": "HoloIM", "source": "apps/capture/scripts/authoring/house-base", "sourceUrl": "https://github.com/AlbertoElias/holo/tree/main/apps/capture/scripts/authoring/house-base", "licence": "CC0-1.0", "note": "own"},
+    {"part": "proportions, the stylised face (eyes, lids, brows, nose, mouth) and its face shapes, the garments, hair styles and glasses frames, materials", "title": "HoloIM house base build script", "author": "HoloIM", "source": "apps/capture/scripts/authoring/house-base", "sourceUrl": "https://github.com/AlbertoElias/holo/tree/main/apps/capture/scripts/authoring/house-base", "licence": "CC0-1.0", "note": "own"},
 ]
-bpy.context.scene["holoimAvatar"] = json.dumps({"name": P["name"], "finish": P["finish"], "card": "neutral", "provisional": True, "credits": credits})
+bpy.context.scene["holoimAvatar"] = json.dumps({"name": P["name"], "finish": P["finish"], "build": BUILD, "card": "neutral", "provisional": True, "credits": credits})
 
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.export_scene.gltf(
@@ -603,7 +655,8 @@ report = {
     "headTop": round(float(head_top[2]), 4), "mouth": round(zm, 4),
     "bones": [b.name for b in rig.data.bones],
     "materials": {n: sum(1 for p in human.data.polygons if p.material_index == i) for i, n in enumerate(slots)},
-    "credits": credits,
+    "credits": credits, "build": BUILD, "landmarks": {k: round(v, 4) for k, v in land.items()},
+    "garments": garment_report, "hair": hair_report, "glasses": glasses_report,
 }
 json.dump(report, open(REPORT, "w"), indent=2)
 print("HOUSE_BASE_DONE", OUT)

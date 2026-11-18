@@ -251,6 +251,16 @@
       0.012,
       0.006,
       0.004
+    ],
+    "hair": [
+      0.056,
+      0.03,
+      0.019
+    ],
+    "frames": [
+      0.025,
+      0.016,
+      0.013
     ]
   },
   "roughness": 0.65,
@@ -310,6 +320,410 @@
       28,
       20,
       16
+    ],
+    "hair": [
+      67,
+      48,
+      38
+    ]
+  },
+  "builds": {
+    "$comment": "Three pre-built bodies (the build trait), each its own file: MPFB macro values over `macro`. medium is house-base.glb; the others house-base-<build>.glb. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "slight": {
+      "macro": {
+        "weight": 0.3,
+        "muscle": 0.4
+      }
+    },
+    "medium": {
+      "macro": {}
+    },
+    "broad": {
+      "macro": {
+        "weight": 0.72,
+        "muscle": 0.62
+      }
+    }
+  },
+  "garments": {
+    "$comment": "A loose jumper and trousers made from the body's top and trouser faces (painted by bone): each vertex eased out along the body's normal (m; limb = sleeves or trouser legs), the ease tapering to nothing over `taper` (m) from the openings that close on the body (dominant bone named in taperAt), kept under gapShare of the gap to another part (inner thighs, arms by the side), then smoothed (`rounds` of `smooth` passes) and pushed back out to `clear` of the ease from the body; the jumper's hem takes the trouser faces within `hem` (m) of the waist and stays `overTrousers` (m) outside them. The body under both is removed.",
+    "top": {
+      "easeBody": 0.022,
+      "easeLimb": 0.016,
+      "easeHem": 0.026,
+      "hem": 0.07,
+      "overTrousers": 0.004,
+      "taper": 0.06,
+      "taperAt": [
+        "Neck",
+        "Head",
+        "LeftHand",
+        "RightHand"
+      ],
+      "limbBones": [
+        "LeftArm",
+        "RightArm",
+        "LeftForeArm",
+        "RightForeArm"
+      ],
+      "gapShare": 0.4,
+      "smooth": 14,
+      "rounds": 6,
+      "clear": 0.6
+    },
+    "trousers": {
+      "easeBody": 0.016,
+      "easeLimb": 0.02,
+      "taper": 0.05,
+      "taperAt": [
+        "LeftLeg",
+        "RightLeg",
+        "LeftFoot",
+        "RightFoot",
+        "Spine",
+        "Hips"
+      ],
+      "limbBones": [
+        "LeftUpLeg",
+        "RightUpLeg",
+        "LeftLeg",
+        "RightLeg"
+      ],
+      "gapShare": 0.4,
+      "smooth": 14,
+      "rounds": 6,
+      "clear": 0.6
+    },
+    "collar": {
+      "$comment": "The jumper's neckline: round the neck, faces below a plane through the neck's base (raised `raise` m), tilting down to the front by `tilt` (m per m), are jumper; above it, skin.",
+      "raise": 0.006,
+      "tilt": 0.45
+    }
+  },
+  "hair": {
+    "$comment": "Hair styles (clay-traits.png): shells cast from the head's centre onto the scalp, `columns` round and `rows` up to `poleRow` degrees, tucked `tuck` (m) under the scalp at the hairline. line: the hairline as [degrees round from the front, degrees up from level]; over the brows it is raised until it sits browMargin (m) above the brows raised all the way (no style crosses the brow line). Thickness (m): sides, top (reached `rise` degrees above the hairline), back, a front volume over frontWidth degrees; locks ripple the thickness (ridges: n round, swept; bumps: n round by m up). A curtain hangs from the hairline from `from` degrees round (ramping over `ramp`), to an end per angle [degrees, landmark, offset m], `clear` (m) outside the body, flaring and waving; below the chin it is carried by the chest. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "columns": 56,
+    "rows": 14,
+    "poleRow": 86,
+    "tuck": 0.004,
+    "browMargin": 0.008,
+    "styles": {
+      "sweptCrop": {
+        "line": [
+          [
+            0,
+            30
+          ],
+          [
+            45,
+            22
+          ],
+          [
+            80,
+            8
+          ],
+          [
+            100,
+            -2
+          ],
+          [
+            140,
+            -25
+          ],
+          [
+            180,
+            -32
+          ]
+        ],
+        "sides": 0.008,
+        "top": 0.024,
+        "rise": 30,
+        "back": 0.0,
+        "front": 0.03,
+        "frontWidth": 55,
+        "locks": {
+          "kind": "ridges",
+          "n": 13,
+          "sweep": 2.5,
+          "depth": 0.9
+        }
+      },
+      "wavyBob": {
+        "line": [
+          [
+            0,
+            28
+          ],
+          [
+            40,
+            24
+          ],
+          [
+            75,
+            14
+          ],
+          [
+            110,
+            6
+          ],
+          [
+            180,
+            0
+          ]
+        ],
+        "sides": 0.02,
+        "top": 0.026,
+        "rise": 25,
+        "back": 0.004,
+        "front": 0.012,
+        "frontWidth": 70,
+        "locks": {
+          "kind": "ridges",
+          "n": 11,
+          "sweep": 3.0,
+          "depth": 0.7
+        },
+        "curtain": {
+          "rows": 9,
+          "from": 62,
+          "ramp": 28,
+          "end": [
+            [
+              60,
+              "chinZ",
+              0.0
+            ],
+            [
+              180,
+              "chinZ",
+              -0.01
+            ]
+          ],
+          "clear": 0.008,
+          "flare": 0.03,
+          "thick": 0.02,
+          "wave": 0.012,
+          "waves": 11
+        }
+      },
+      "tightCoils": {
+        "line": [
+          [
+            0,
+            30
+          ],
+          [
+            45,
+            24
+          ],
+          [
+            80,
+            10
+          ],
+          [
+            110,
+            0
+          ],
+          [
+            180,
+            -12
+          ]
+        ],
+        "sides": 0.034,
+        "top": 0.046,
+        "rise": 30,
+        "back": 0.004,
+        "locks": {
+          "kind": "bumps",
+          "n": 17,
+          "m": 14,
+          "twist": 1.5,
+          "depth": 0.7
+        }
+      },
+      "highBun": {
+        "line": [
+          [
+            0,
+            30
+          ],
+          [
+            45,
+            24
+          ],
+          [
+            80,
+            8
+          ],
+          [
+            100,
+            -2
+          ],
+          [
+            140,
+            -22
+          ],
+          [
+            180,
+            -30
+          ]
+        ],
+        "sides": 0.004,
+        "top": 0.006,
+        "rise": 30,
+        "locks": {
+          "kind": "ridges",
+          "n": 20,
+          "sweep": 0.0,
+          "depth": 0.25
+        },
+        "bun": {
+          "at": [
+            180,
+            62
+          ],
+          "radius": 0.042,
+          "squash": 0.82,
+          "sink": 0.55,
+          "segments": 14,
+          "rings": 9,
+          "twist": 0.08
+        }
+      },
+      "centrePart": {
+        "line": [
+          [
+            0,
+            32
+          ],
+          [
+            40,
+            26
+          ],
+          [
+            75,
+            12
+          ],
+          [
+            110,
+            4
+          ],
+          [
+            180,
+            0
+          ]
+        ],
+        "sides": 0.01,
+        "top": 0.009,
+        "rise": 30,
+        "back": 0.004,
+        "locks": {
+          "kind": "ridges",
+          "n": 2,
+          "sweep": 0.0,
+          "depth": -0.6
+        },
+        "curtain": {
+          "rows": 10,
+          "from": 64,
+          "ramp": 26,
+          "end": [
+            [
+              60,
+              "chinZ",
+              -0.02
+            ],
+            [
+              100,
+              "shoulderZ",
+              0.015
+            ],
+            [
+              180,
+              "shoulderZ",
+              -0.09
+            ]
+          ],
+          "clear": 0.008,
+          "flare": 0.012,
+          "thick": 0.014,
+          "wave": 0.006,
+          "waves": 13
+        }
+      },
+      "shortTwists": {
+        "line": [
+          [
+            0,
+            30
+          ],
+          [
+            45,
+            22
+          ],
+          [
+            80,
+            8
+          ],
+          [
+            100,
+            -2
+          ],
+          [
+            140,
+            -22
+          ],
+          [
+            180,
+            -30
+          ]
+        ],
+        "sides": 0.016,
+        "top": 0.03,
+        "rise": 30,
+        "back": 0.0,
+        "locks": {
+          "kind": "bumps",
+          "n": 22,
+          "m": 10,
+          "twist": 0.8,
+          "depth": 0.8
+        }
+      }
+    }
+  },
+  "glasses": {
+    "$comment": "Frames (no lenses) in eye radii from each eye centre: `forward` in front, `out` sideways, `drop` down; rims as superellipses width x height with an exponent (2 round, higher squarer), tops below the brows' lower edge; a tube of radius `tube` (m); the bridge from each rim's point bridgeAt (share of the rim round from the outer side) over the nose; temples from templeAt, out past the head's side (ears included) by templeClear (m), back to earBack (m) behind the head's centre, hooking down. Colour sRGB. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "forward": 1.55,
+    "out": 0.04,
+    "drop": 0.08,
+    "tube": 0.0028,
+    "tubeSides": 6,
+    "rimPoints": 28,
+    "bridgeAt": 0.32,
+    "bridgeForward": 0.004,
+    "bridgeRise": 0.002,
+    "templeAt": 0.04,
+    "templePoints": 9,
+    "templeClear": 0.004,
+    "earBack": 0.01,
+    "hook": 0.012,
+    "kinds": {
+      "round": {
+        "width": 1.2,
+        "height": 1.15,
+        "exponent": 2
+      },
+      "square": {
+        "width": 1.3,
+        "height": 1.0,
+        "exponent": 5
+      }
+    },
+    "sRGB": [
+      44,
+      34,
+      30
     ]
   }
 }
