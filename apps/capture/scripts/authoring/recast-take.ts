@@ -149,7 +149,7 @@ export function lossMarkdown(take: Take, losses: Loss[]): string {
   const lines = [
     `# Recast: ${take.source.file}`,
     '',
-    `The take as recorded, each recast (hips follow the take scaled by leg length) and what rotation-only retargeting (capture's \`retargetClips\` today: hips fixed at bind) keeps on the same avatar.`,
+    `The take as recorded, each recast (hips follow the take scaled by leg length) and what rotation-only retargeting (hips fixed at bind, as capture's \`retargetClips\` keeps them; this tool's bind correction on every limb, where \`retargetClips\` corrects the arms and hands only) keeps on the same avatar.`,
     '',
     `| | ${cols.join(' | ')} |`,
     `|---|${cols.map(() => '---').join('|')}|`,

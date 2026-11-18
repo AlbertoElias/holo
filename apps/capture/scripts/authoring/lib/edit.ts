@@ -7,12 +7,16 @@
  * - `retime` plays [from, to] over `duration` seconds.
  * - `hold` stops the take at `at` for `add` seconds; with `life` (default
  *   true) the hold is filled by the life of `lib/life.ts`: glances, a sigh,
- *   breath and blinks, eased in and out so the hold joins the recording with
+ *   breath, and blinks when the hold is long enough for one, eased in and out so the hold joins the recording with
  *   no pop. Weight shifts are left out: they move the hips, and with the legs'
  *   rotations copied from the recording the feet would slide.
  * - `look` turns the head (and the neck, a little of the chest, and the eyes
  *   fully) toward a direction over [from, to], eased in and out over `ease`
- *   seconds, on top of whatever the recording does there.
+ *   seconds. At full weight the head points exactly where asked (its
+ *   recorded direction is replaced, pitch included, not added to); the eased
+ *   edges blend from the recording's own direction.
+ * - Only the time edits (retime, hold) may not overlap each other; a look
+ *   may span them, since it is placed in the take's own time.
  */
 import * as THREE from 'three';
 import type { FaceChannel } from '@holoim/avatar-face';
@@ -72,8 +76,10 @@ const snap = (v: number, fps: number): number => Math.round(v * fps) / fps;
 export function timeMap(take: Take, edits: readonly Edit[]): TimePiece[] {
   const fps = take.fps;
   const cuts = edits.flatMap((e, i) => {
+    if (e.kind === 'retime' && !(e.duration > 0)) throw new Error(`edit ${i + 1}: a retime needs a duration above 0`);
+    if (e.kind === 'hold' && !(e.add > 0)) throw new Error(`edit ${i + 1}: a hold needs add above 0`);
     if (e.kind === 'retime') { const [a, b] = spanOf(take, e); return [{ i, from: snap(a, fps), to: snap(b, fps), out: snap(e.duration, fps) }]; }
-    if (e.kind === 'hold') { const at = snap(e.beat ? (() => { const [a, b] = spanOf(take, e); return (a + b) / 2; })() : e.at ?? NaN, fps); if (!Number.isFinite(at)) throw new Error('a hold needs a beat or at'); return [{ i, from: at, to: at, out: snap(e.add, fps) }]; }
+    if (e.kind === 'hold') { const at = snap(e.beat ? (() => { const [a, b] = spanOf(take, e); return (a + b) / 2; })() : e.at ?? NaN, fps); if (!Number.isFinite(at)) throw new Error('a hold needs a beat or at'); if (at < 0 || at > take.duration) throw new Error(`edit ${i + 1}: the hold at ${at} s is outside the take (0–${take.duration} s)`); return [{ i, from: at, to: at, out: snap(e.add, fps) }]; }
     return [];
   }).sort((x, y) => x.from - y.from || x.to - y.to);
   for (let k = 1; k < cuts.length; k += 1) if (cuts[k]!.from < cuts[k - 1]!.to) throw new Error(`edits ${cuts[k - 1]!.i + 1} and ${cuts[k]!.i + 1} overlap`);

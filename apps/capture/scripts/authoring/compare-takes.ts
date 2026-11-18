@@ -40,17 +40,28 @@ export function motionNumbers(take: Take): Record<string, number | string> {
   const moves = take.beats.filter((b) => b.kind === 'move');
   const inHolds: number[] = [];
   for (const h of holds) for (let f = Math.round(h.from * take.fps); f <= Math.round(h.to * take.fps); f += 1) inHolds.push(wrist[f]!);
-  // A hesitation: inside a move of at least 0.5 s, the hands slow below a third of that move's peak and speed up again.
-  let hesitations = 0;
+  // Inside a move of at least 0.5 s, the hands slow below a third of that move's peak and speed up again.
+  // When the faster wrist comes out of the dip heading the other way it is a stroke (a wave, a shake);
+  // when it carries on the same way, a hesitation.
+  const sideAt = (f: number): 'leftWrist' | 'rightWrist' => (jointSpeed(take, 'leftWrist', f) > jointSpeed(take, 'rightWrist', f) ? 'leftWrist' : 'rightWrist');
+  const vel = (f: number, side: 'leftWrist' | 'rightWrist'): [number, number, number] => {
+    const t = take.joints[side]!; const a = Math.max(0, f - 1); const b = Math.min(take.frames - 1, f + 1);
+    return [t[b * 3]! - t[a * 3]!, t[b * 3 + 1]! - t[a * 3 + 1]!, t[b * 3 + 2]! - t[a * 3 + 2]!];
+  };
+  let hesitations = 0; let strokes = 0;
   for (const m of moves) {
     if (m.to - m.from < 0.5) continue;
     const a = Math.round(m.from * take.fps); const b = Math.round(m.to * take.fps);
     const seg = wrist.slice(a, b + 1); const peak = Math.max(...seg);
-    let low = false; let rose = false;
+    let fast = -1; let low = false;
     for (let i = 1; i < seg.length; i += 1) {
-      if (!rose && seg[i]! > peak * 0.6) rose = true;
-      if (rose && !low && seg[i]! < peak / 3) low = true;
-      if (low && seg[i]! > peak * 0.6) { hesitations += 1; low = false; }
+      if (!low && seg[i]! > peak * 0.6) fast = i;
+      if (fast >= 0 && !low && seg[i]! < peak / 3) low = true;
+      if (low && seg[i]! > peak * 0.6) {
+        const side = sideAt(a + fast); const u = vel(a + fast, side); const w = vel(a + i, side);
+        if (u[0] * w[0] + u[1] * w[1] + u[2] * w[2] < 0) strokes += 1; else hesitations += 1;
+        low = false; fast = i;
+      }
     }
   }
   const firstMove = wrist.findIndex((s) => s > 0.3);
@@ -73,7 +84,8 @@ export function motionNumbers(take: Take): Record<string, number | string> {
     'hand speed peak m/s': round(Math.max(...wrist)),
     'hand speed p95 m/s': round(quantile(wrist, 0.95)),
     'hand speed in holds, median m/s': round(quantile(inHolds, 0.5), 3),
-    'hesitations inside moves': hesitations,
+    'hesitations inside moves (slow, then on the same way)': hesitations,
+    'strokes inside moves (slow, then back the other way)': strokes,
     'head yaw range °': round(Math.max(...yaws) - Math.min(...yaws), 1),
     'head pitch range °': round(Math.max(...pitches) - Math.min(...pitches), 1),
     'head turn peak °/s': round(Math.max(...head), 0),

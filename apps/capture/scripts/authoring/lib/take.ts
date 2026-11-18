@@ -108,9 +108,10 @@ interface Rig {
   readonly duration: number;
 }
 
+/** Runs the loader with its texture and sparse-accessor warnings quiet (textures are stripped on purpose); every other warning still shows. */
 const silence = async <T>(fn: () => Promise<T>): Promise<T> => {
   const warn = console.warn;
-  console.warn = () => {};
+  console.warn = (...args: unknown[]) => { if (!/texture|image|sparse/i.test(String(args[0]))) warn(...args); };
   try { return await fn(); } finally { console.warn = warn; }
 };
 

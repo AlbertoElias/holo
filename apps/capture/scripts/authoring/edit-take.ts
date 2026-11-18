@@ -75,7 +75,7 @@ async function main(): Promise<void> {
   const a = await loadAvatar(await resolveAvatar(spec, resolve(editFile)));
   for (const [t, suffix, method] of [[take, '', 'imported take recast'], [edited, '.edited', 'imported take edited by beat']] as const) {
     const recast = recastTake(t, a, { avatarSpec: spec, title: `${name}${suffix} on ${spec}` });
-    const written = await writeTake(recast.solved, { author: 'recorded performer, edited by the authoring tool', title: `${name}${suffix} on ${spec}`, method, source: take.source.file, sourceSha256: take.source.sha256, ...(suffix ? { edits: file.edits } : {}) });
+    const written = await writeTake(recast.solved, { author: suffix ? 'recorded performer, edited by the authoring tool' : 'recorded performer, recast by the authoring tool', title: `${name}${suffix} on ${spec}`, method, source: take.source.file, sourceSha256: take.source.sha256, ...(suffix ? { edits: file.edits } : {}) });
     const glb = join(out, `${name}${suffix}.${slug(spec)}.glb`);
     await writeFile(glb, written.glb);
     console.log(`wrote ${glb}`);

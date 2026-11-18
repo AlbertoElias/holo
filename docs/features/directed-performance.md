@@ -1,7 +1,7 @@
 # Feature brief: Direct, preview and revise a performance
 
 **Lead:** Claude (planning session, 2026-11-13)  
-**Status:** In progress: slices 0 and 1 built and verified (2026-11-13);
+**Status:** In progress. Slice 4a (a recorded take as input: import, recast, edit by beat, compare) built and verified 2026-11-18, except that the edited hold reads as frozen to frame readers (see Slice 4a evidence). Slices 0 and 1 built and verified (2026-11-13);
 re-scoped 2026-11-14 to a creation system. Slice 1b built and verified
 (2026-11-14): the review loop, three defaults, face numbers and a second
 piece, which reads only as "watering a plant" after one revision. Its gap
@@ -1089,12 +1089,12 @@ what needs the recording owners.
    Everything outside the edited spans plays exactly as recorded (shifted in
    time where a retime moves it), checked frame by frame. A lengthened hold
    is filled by idle life from `lib/life.ts`'s schedule (breath, glances,
-   sighs, blinks), so it does not freeze; a weight shift would move the hips
+   sighs, and blinks in a hold long enough for one), so it does not freeze; a weight shift would move the hips
    and feet the recording planted, so the hold does not shift weight.
 4. **The same report on both** (`compare-takes.ts`): the acting report and
    motion numbers on a person's take and on an agent-directed take of the
    same action, side by side: when each move starts and peaks, how many
-   hesitations (velocity dips) a move has, how still a hold is, how far the
+   hesitations and back-and-forth strokes (velocity dips, told apart by whether the hand comes out going the same way) a move has, how still a hold is, how far the
    hips and chest carry weight.
 
 The inputs are takes the repository's own checks record (no device): the
@@ -2338,42 +2338,50 @@ camera-driven take (`test:xr:bodycam`) and the phone selfie take.
 
 1. **Import** (`import-take.ts`). Headset: 275 frames at 30 fps from a
    9.23 s recording at 63 fps, 54 humanoid bones, 21 of 52 ARKit channels
-   (only the blinks move), the hips 0.28 m below standing: the owner sat.
+   (only the blinks move), the hips 0.28 m below standing: the owner was
+   seated or crouched.
    The recorder's start and stop snaps (a wrist at 25 m/s) are trimmed,
    one frame at each end. Nine beats found (five moves, four holds). The
-   camera take's two head turns read as holds at ±30° yaw, the phone
+   camera take's head turns read as holds at ±30° yaw (three of them), the phone
    selfie as a single hold (it animates two bones).
 2. **Recast** (`recast-take.ts`, headset take onto the stock, the
    `unreal-cm` fixture and the house base). On the stock and `unreal-cm`
    the limbs match to 0.4° p95 and the hips keep their 0.038 m travel and
-   0.279 m drop. The house base (legs 0.868 of the source, bind arms 41°
-   off) keeps the hips scaled (0.242 m drop) with the wrists 4.2% of an
-   arm off where the performer's were. Rotation-only retargeting, as
-   `retargetClips.ts` does today, loses all hips travel and the drop: the
-   feet float 28.1 cm (24.3 cm on the house base). Lost on every target:
+   0.279 m drop. The house base (legs 0.868 of the source; bind limbs
+   7–26° off, the thumbs 41°) keeps the hips scaled (0.242 m drop) with
+   the wrists 4.2% of an arm off where the performer's were, and its feet
+   sink 1.15 cm into the floor (the recording: 0). Rotation-only
+   retargeting (hips at bind, as `retargetClips.ts` keeps them; this
+   tool's bind correction on every limb, where `retargetClips.ts` corrects
+   only the arms and hands) loses all hips travel and the drop: the feet
+   float 28.1 cm (24.3 cm on the house base). Lost on every target:
    31 of 52 face channels, dropped at record time; any contact or hand
    goal, which the recording never had; on `unreal-cm` (no eye bones, no
    gaze shapes), the gaze.
 3. **Edit by beat** (`edit-take.ts scripts/authoring/takes/headset-reach.edit.json`):
    a 1.5 s hold in the open hands, filled with life (a glance and breath),
    the point retimed from 1.2 s to 2.4 s, and the head turned to yaw −35°
-   during the wave (the recording looks at −5.9°; the edited take reaches
-   −35.0°). The 193 frames outside the edits match the recording to
-   0.0008° (the take's rounding), 0 mm and 0 face weight, checked against
-   the edit file's own time map.
+   during the wave (the recording looks at −5.9°; at full weight the edit
+   replaces that direction, so the head points at −35.0° by construction:
+   the readers below judge whether it reads). The 193 frames outside the
+   edits match the imported take to 0.0008° (its rounding), 0 mm and 0
+   face weight, at the shift the edit file's time map gives them. The beat
+   finder reads the hold's glance as a short move, and the 1.5 s hold is
+   too short for a blink of its own.
 4. **Person and agent** (`compare-takes.ts` on the recording and on
    `takes/headset-reach.agent.json`, the same action directed). The agent
-   cannot say the pinch, the wave or the crouch. Side by side, the person
+   cannot say the pinch, the wave or the lowered body. Side by side, the person
    raises the hands at 0.37 s (the agent's arms first move at 3.57 s,
    because a hand shape moves only the fingers), peaks at 0.78 m/s (agent
-   2.17), has 7 hesitations inside moves (agent 0), and holds the head
+   2.17), strokes back and forth 7 times inside its moves, the wave (agent 0), and
+   holds the head
    within 2.1° of yaw (agent 43°, from life's glances). Holds take the
    same share of time (0.52 against 0.53), but the person's longest is
    2.33 s and the agent's 1.17 s. Read as direction for slice 3: the
    vocabulary lacks raising the hands to show them, a wave and a pinch,
-   and its moves are faster and cleaner than a person's.
+   and its moves are nearly three times as fast as the person's.
 
-Readers: READERS-PENDING
+Readers (three fresh Sonnet subagents, frames only, bar in `output/take-input/reader-bar.md` stated first): **partial, the hold fails.** (b) look: 3/3 saw the head turn to the figure's right (the viewer's left) at 10.0–10.6 s while the open hands carried on, matching the authored span (full turn 10.0–10.65 s between 0.45 s eases). (a) hold: 3/3 saw the open/claw pose held about 1.8 s longer, but all three called it "frozen" or "almost frozen": one glance and breath do not read in 0.2 s stills, and the 1.5 s hold is too short for a blink. (c) half: the chest share of the look read as a torso shift, and one reader saw the arms "swing more". Open for later: hold life that reads in stills (a blink allowed in a shorter hold, a visible weight or hand drift), re-graded on the same bar.
 
 The code review in a fresh context found seven issues, all fixed before
 merge: the bind and take floors used different rules; the last frame read
