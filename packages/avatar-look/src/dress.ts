@@ -60,6 +60,7 @@ export function dressAvatar(doc: Document, card: LookCard): void {
         for (const a of p.listAttributes()) a.dispose();
         p.getIndices()?.dispose();
         for (const t of p.listTargets()) for (const a of t.listAttributes()) a.dispose();
+        p.dispose(); // else the primitive keeps its material alive below
       }
       mesh.dispose();
     }

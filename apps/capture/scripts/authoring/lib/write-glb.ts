@@ -4,8 +4,9 @@
  * its stage placement; the first is `RecordedAvatar` and the only one declared
  * in `HOLOIM_humanoid`, exactly as a captured export does, so the viewer frames
  * and anchors on it. The published format is unchanged; the asset says the
- * take was authored, the way showcase pieces do, and (`looks`) each house-base
- * performer's look card.
+ * take was authored, the way showcase pieces do, and (`looks`) the look card of
+ * each house-base performer given one (one without wears base.json's
+ * `defaultLook`, which is not repeated here).
  *
  * Each object the sheet declares is a unit-scale `RecordedObject` wrapper at
  * the scene root with its own position and rotation tracks (none when it
@@ -181,7 +182,7 @@ export async function writeTake(take: SolvedTake, provenance: Provenance, world?
   const credits = [...new Set(take.props.flatMap((t) => (t.prop.credit ? [formatCredit(t.prop.credit)] : [])))];
   glb = patchJson(glb, (json) => {
     const sources = [...new Map(take.props.flatMap((t) => (t.prop.source ? [[t.prop.source.loaded.name, { source: t.prop.source.loaded.name, sha256: t.prop.source.loaded.sha256, ...(t.prop.source.loaded.fetchedFrom ? { fetchedFrom: t.prop.source.loaded.fetchedFrom } : {}) }] as const] : []))).values()];
-    // Each house-base performer's look card, so the take says how its people were dressed.
+    // The look card of each house-base performer given one, so the take says how its people were dressed.
     const looks = take.tracks.flatMap((t) => (t.spec.look ? [{ performer: t.spec.id, look: t.spec.look }] : []));
     json.asset = { ...json.asset, extras: { ...(json.asset.extras ?? {}), holoim: { authored: 'synthetic', ...provenance, ...(sources.length ? { sources } : {}), ...(looks.length ? { looks } : {}) } } };
     // mergeDocuments drops a source's asset fields, so the credits are written here.
