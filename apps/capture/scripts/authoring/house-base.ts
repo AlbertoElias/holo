@@ -76,16 +76,18 @@ const faceunits = join(fuDir, 'targets/faceunits');
 await stat(faceunits);
 
 // MPFB as Blender's user_default extension, at the pinned version.
-const probe = 'import importlib; m = importlib.import_module("bl_ext.user_default.mpfb"); print("MPFB_VERSION", getattr(m, "bl_info", {}).get("version", ""))';
-const installed = () => {
+// An extension has no bl_info, so the version is read from its manifest.
+const probe = 'import importlib, os, re; m = importlib.import_module("bl_ext.user_default.mpfb"); t = open(os.path.join(os.path.dirname(m.__file__), "blender_manifest.toml")).read(); print("MPFB_VERSION", re.search(r"^version\\s*=\\s*\\"([^\\"]+)\\"", t, re.M).group(1))';
+const installedVersion = () => {
   try {
     const text = execFileSync(blender, ['-b', '--factory-startup', '--python-expr', probe], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    return /MPFB_VERSION/.test(text);
-  } catch { return false; }
+    return /MPFB_VERSION (\S+)/.exec(text)?.[1] ?? null;
+  } catch { return null; }
 };
-if (!installed()) {
+const mpfbVersion = installedVersion();
+if (mpfbVersion !== PARTS.mpfb.version) {
   if (!process.argv.includes('--install-mpfb')) {
-    throw new Error(`MPFB is not installed in ${blender}; run again with --install-mpfb to install it from ${mpfbZip}`);
+    throw new Error(`MPFB ${mpfbVersion ?? 'is not installed'}${mpfbVersion ? ' is installed' : ''} in ${blender}, not the pinned ${PARTS.mpfb.version}; run again with --install-mpfb to install it from ${mpfbZip}`);
   }
   execFileSync(blender, ['--command', 'extension', 'install-file', '-r', 'user_default', '-e', mpfbZip], { stdio: 'inherit' });
 }
@@ -105,9 +107,10 @@ const json = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLengt
 const avatar = JSON.parse(json.scenes?.[0]?.extras?.holoimAvatar ?? 'null') as { credits: { title: string; author: string; source: string; licence: string }[] } | null;
 if (!avatar?.credits?.length) throw new Error('build.py wrote no credits');
 json.asset.copyright = avatar.credits.map((c) => `“${c.title}” by ${c.author}, ${c.source}, ${c.licence}`).join('; ');
-let text = JSON.stringify(json);
-text += ' '.repeat((4 - (text.length % 4)) % 4);
-const head = new TextEncoder().encode(text);
+// The JSON chunk is padded in bytes (the credits hold non-ASCII quotes), with spaces, to a multiple of 4.
+const encoded = new TextEncoder().encode(JSON.stringify(json));
+const head = new Uint8Array(encoded.length + ((4 - (encoded.length % 4)) % 4)).fill(0x20);
+head.set(encoded);
 const rest = glb.subarray(20 + jsonLength);
 const outBytes = new Uint8Array(12 + 8 + head.length + rest.length);
 const w = new DataView(outBytes.buffer);
