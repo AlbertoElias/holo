@@ -348,9 +348,9 @@
   "garments": {
     "$comment": "A loose jumper and trousers made from the body's top and trouser faces (painted by bone): each vertex eased out along the body's normal (m; limb = sleeves or trouser legs), the ease tapering to nothing over `taper` (m) from the openings that close on the body (dominant bone named in taperAt), kept under gapShare of the gap to another part (inner thighs, arms by the side), then smoothed (`rounds` of `smooth` passes) and pushed back out to `clear` of the ease from the body; the jumper's hem takes the trouser faces within `hem` (m) of the waist and stays `overTrousers` (m) outside them. The body under both is removed.",
     "top": {
-      "easeBody": 0.022,
+      "easeBody": 0.016,
       "easeLimb": 0.016,
-      "easeHem": 0.026,
+      "easeHem": 0.016,
       "hem": 0.07,
       "overTrousers": 0.004,
       "taper": 0.06,
@@ -389,7 +389,7 @@
     },
     "trousers": {
       "easeBody": 0.016,
-      "easeLimb": 0.02,
+      "easeLimb": 0.008,
       "taper": 0.05,
       "taperAt": [
         "LeftFoot",
