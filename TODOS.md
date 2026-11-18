@@ -182,10 +182,13 @@ it from the item below instead of duplicating its status here.
   three finishes and the audition as the bar for any avatar, in
   sub-slices 2a to 2g; approved by the owner on 2026-11-17 ("Approve
   all", open decision 5). 2a (the bar) is built. 2c (the house base) is on
-  `main` behind `?avatar=`, not yet passing: the mixes were reworked to
-  the round 2 sheets (decision 7) and the blind reading still misses
-  (1, 3, 4 and 2, 1, 4 of 7); the face's eye and mouth size is the limit,
-  so a commissioned face (spend) waits for the owner.
+  `main` behind `?avatar=`. Its face is now a stylised one built for big
+  eyes (2026-11-18, decided by the agent with the owner away, for the
+  owner to review; decision 7), with no spend, and the blind reading passes
+  (5, 5, 5 of 7; holding back and looking down still swap). 2c is not
+  complete: the audition's turn row (the right arm in the torso, a body
+  issue also on the earlier base) still fails, and the motion owner's
+  report is pending.
   Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
