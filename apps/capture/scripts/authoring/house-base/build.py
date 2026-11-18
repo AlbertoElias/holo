@@ -382,12 +382,15 @@ for poly in human.data.polygons:
     bones = [vbone[i] if i < N else "Head" for i in vs]
     p = base[vs].mean(axis=0)
     slot = "skin"
-    if sum(b in TOP for b in bones) * 2 > len(bones):
-        slot = "top"
-    elif sum(b in LEGS for b in bones) * 2 > len(bones):
-        slot = "trousers"
-    elif sum(b in FEET for b in bones) * 2 > len(bones):
+    # Half or more decides, so a face split between two garments (the waist) or a garment and the neck
+    # (the collar) is cloth, not a strip of skin; the feet win, and the toe tips (weighted to no rig bone) are shoe.
+    t, l, f = (sum(b in g for b in bones) for g in (TOP, LEGS, FEET))
+    if f and (f * 2 >= len(bones) or all(b in FEET or b == "" for b in bones)):
         slot = "shoes"
+    elif t * 2 >= len(bones) and t >= l:
+        slot = "top"
+    elif l * 2 >= len(bones):
+        slot = "trousers"
     if min(vs) >= N + n_brow:
         slot = "mouth"
     elif max(vs) >= N:
@@ -423,6 +426,9 @@ for side, (c, r) in eyes.items():
     front = d[:, 1] < 0
     fit = float(np.linalg.norm(d[front], axis=1).min()) - ep["lidGap"]
     eye_radius[side] = min(r * ep["radiusShare"], fit)
+# Both eyes the smaller size: the lids' nearest vertex can differ by side once the eyes are scaled up.
+eye_radius = dict.fromkeys(eye_radius, min(eye_radius.values()))
+for side, (c, r) in eyes.items():
     bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=16, radius=eye_radius[side], location=c + np.array([0.0, ep.get("back", 0.0), 0.0]))
     eye = bpy.context.active_object
     eye.rotation_euler = (math.pi / 2, 0, 0)  # the pole faces -Y, the way the human looks

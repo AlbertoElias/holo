@@ -982,6 +982,12 @@ above: every sheet is there at the asked size, every trait value is drawn
 and labelled, and the brows are clear. The owner has not picked a finish
 yet (open decision 1), so no look work starts.
 
+**The owner's pick (2026-11-18): "Clay, then ink."** Asked which finishes
+the base build takes its look from, the owner picked soft clay first and ink
+line second; light is not picked. 2c takes its proportions, colours and
+surface from `clay-turnaround.png`, `base-finishes.png` and
+`clay-traits.png`; ink (2f) waits until clay is through.
+
 The lead ran Astra's blind test with three fresh Sonnet readers at 40 px.
 No finish passes the 5-of-7 bar:
 
@@ -1232,9 +1238,8 @@ audition scripts, the house base's source and its exported avatar files
 
 ## Open decisions for the user
 
-1. **House style:** picked from the slice 2 sheets (2b). The sheets
-   arrived on 2026-11-18 (slice 2b, "Sheets returned"); the pick is the
-   owner's, and no finish passed the lead's AI blind reading at 40 px.
+1. **House style:** answered 2026-11-18: "Clay, then ink" (slice 2b,
+   "The owner's pick"). Light is not picked.
 2. **Faces at card size** (numbers in slice 1b's evidence). On the stock
    avatar only the smile reads, at any size from 8 to 96 device px, so
    framing is not the limit. The options are:
@@ -2071,7 +2076,99 @@ unchanged by them):
 **Revisit when the style sheets (2b) arrive:** the head, eye and hand
 scales, the brow shape and colour, the lips and their colour, the skin and
 clothing colours, and the height the head takes from the body (reach).
-Hair and clothing are still to be generated.
+Hair and clothing are still to be generated. (Done for clay on 2026-11-18;
+see "The clay look" below.)
+
+#### The clay look (2026-11-18)
+
+After the owner picked "Clay, then ink" (slice 2b), the base took its look
+from Astra's `clay-turnaround.png`, `base-finishes.png` and
+`clay-traits.png`. Every value is in `house-base/base.json`; the sRGB values
+read from the sheets' lit midtones are kept there as `sheetSRGB`, beside the
+linear `colours` the build uses.
+
+- **Colours:**
+  - skin is terracotta, sRGB 214, 128, 80 (it was a pale tan);
+  - the brows are dark brown;
+  - the lips are close to the skin, as drawn;
+  - the eyes have warm whites and amber-brown irises;
+  - the jumper is oatmeal, the trousers slate and the shoes brown.
+- **Surface:** roughness 0.65 (was 0.85) for the soft clay sheen.
+- **Head:**
+  - scale 1.4 (was 1.55), toward the sheet's head of about 1/7.2 of the
+    height;
+  - `head-round` 0.9 (was 0.4) for the sheet's rounder skull.
+- **Brows:** higher and thicker, as drawn: `low` 1.55, `thick` 0.6,
+  `outer` 1.4.
+- **Hands:** 1.15.
+- **Eyes:** the iris is larger (0.65 rad).
+- **Eye falloff:** eased (inner 1.0, outer 4.5), so the scaled eye region no
+  longer leaves the ring that read as glasses.
+- **Two build fixes in `build.py`:**
+  - Both eyeballs now take the smaller fitted size. With the eyes scaled up,
+    the lids' nearest vertex differed by side, and the eyeballs came out at
+    18.5 and 26.7 mm.
+  - A face split evenly between two garments, or between a garment and the
+    neck, is now cloth, and toe tips weighted to no rig bone are now shoe.
+    This removes the strip of skin at the waist and the bare toes.
+
+The audition passes 79 of 81 rows. The same two miss as before:
+`turn.armR-in-torso` (33 vertices, up to 28.2 mm), which the stock also
+fails, and `tongueOut`, which is reported only. Key values:
+
+| Row | Value | Bar |
+|---|---|---|
+| browInnerUp | 14.6 mm | ≥ 8 |
+| browDown | 12.1 mm | ≥ 8 |
+| eyeWide / eyeSquint | 12.7 / 12.8 mm | ≥ 8 |
+| mouthSmile | 16.5 mm | ≥ 14 |
+| jawOpen | 37.1 mm | ≥ 15 |
+| brow visibility | 100% | ≥ 90% |
+| brow contrast | 0.328 L | ≥ 0.25 |
+| eye opening | 4.1 device px | ≥ 3 |
+| face box | 40.4 device px | ≥ 40 |
+| file size | 1.60 MB | ≤ 1.8 |
+
+The blind reading was not rerun: decision 7 is open, and a revision of the
+four confused expressions has been asked of Astra.
+
+**What the build cannot match from the clay sheets:**
+
+- **Clothing.** The jumper, trousers and shoes are colour regions painted on
+  the body. They are skin-tight, show the chest, and the collar edge is
+  uneven. The sheet's loose jumper, straight wide trousers and modelled
+  shoes need garment meshes, which slice 2c leaves to generation (still not
+  done).
+- **Eye size.**
+  - The sheet's eyes are about twice life size; the base's are 15 mm
+    eyeballs in MPFB's sockets.
+  - The eyeball is fitted to the nearest lid vertex.
+  - Scaling the eye region past 1.5 brings back the glasses ring (tried at
+    1.7).
+  - Matching the sheet needs a face with sockets and lids made for big eyes:
+    the commissioned face of decision 7 (A), or a new eye region.
+- **The head and the face box.**
+  - The sheet's head is smaller than the base's.
+  - At the sheet's proportions the brow-to-chin height would be about
+    177 mm. That is 36 device px on the card, under the bar's 40.
+  - Head 1.4 with raised brows is the smallest head that passes, at
+    40.4 px, with almost no margin.
+- **Face detail:**
+  - the sheet's large ears;
+  - the soft cheeks and blush;
+  - the eyelid lines and lashes;
+  - the thin smiling mouth (the sheet's neutral face smiles);
+  - the clay's fine surface texture (the base has no textures or UVs).
+- **Body:**
+  - The sheet's figure is flat-chested and narrow-hipped under loose
+    clothes.
+  - The MPFB macros at 0.5 give a mixed body that tight painted clothes
+    show.
+  - Garments would hide this; the macros are left for the trait builds
+    (2d).
+
+The side-by-side of the sheet and the base is in the worktree's ignored
+`output/house-base-2c/clay-side-by-side.jpg`.
 
 ## Physical-device limits
 
