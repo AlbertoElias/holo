@@ -2,8 +2,35 @@ import type { Document } from '@gltf-transform/core';
 import type { LookCard } from './card.js';
 import { CLOTHING, EYES, HAIR_COLOUR, linear, SKIN } from './traits.js';
 
-/** The brows take the hair's colour, darker, so they read on every skin. */
+/** The brows take the hair's colour, darker. */
 export const BROW_SHARE = 0.55;
+
+/**
+ * How far below the skin the brows' OKLab lightness must sit (unlit base
+ * colours), so the audition's rendered brow contrast holds on every skin and
+ * hair pair: light hair on light skin and dark hair on the darkest skin both
+ * lost it at the plain share. Decided by the agent in the owner's absence on
+ * 2026-11-18, for review.
+ */
+export const BROW_STEP = 0.42;
+
+/** OKLab lightness of a linear sRGB colour. */
+export function oklabL(c: readonly number[]): number {
+  const [r, g, b] = [c[0]!, c[1]!, c[2]!];
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+}
+
+/** The brows' linear colour: the hair's hue at BROW_SHARE, darkened further until it sits BROW_STEP below the skin. */
+export function browColour(hair: readonly number[], skin: readonly number[]): [number, number, number] {
+  const brow = hair.slice(0, 3).map((v) => v * BROW_SHARE) as [number, number, number];
+  const target = Math.max(0.02, oklabL(skin) - BROW_STEP);
+  const now = oklabL(brow);
+  // Scaling a linear colour by k scales its OKLab lightness by cbrt(k).
+  return now <= target ? brow : (brow.map((v) => v * (target / now) ** 3) as [number, number, number]);
+}
 
 /**
  * Dresses a house-base wardrobe (every hair style and glasses kind, one
@@ -40,11 +67,12 @@ export function dressAvatar(doc: Document, card: LookCard): void {
   for (const skin of root.listSkins()) if (!root.listNodes().some((n) => n.getSkin() === skin)) skin.dispose();
 
   const hair = linear(HAIR_COLOUR[card.hair.colour]);
+  const skin = linear(SKIN[card.skin]);
   const colours: Record<string, readonly number[]> = {
-    HouseBase_skin: linear(SKIN[card.skin]),
+    HouseBase_skin: skin,
     HouseBase_eye_iris: linear(EYES[card.eyes]),
     HouseBase_hair: hair,
-    HouseBase_brow: hair.map((v) => v * BROW_SHARE),
+    HouseBase_brow: browColour(hair, skin),
     HouseBase_top: linear(CLOTHING[card.clothing].top),
     HouseBase_trousers: linear(CLOTHING[card.clothing].trousers)
   };

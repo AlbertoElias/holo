@@ -1,9 +1,10 @@
 /**
  * The house base on disk: one wardrobe per build (every hair style and
- * glasses kind; `house-base.ts` makes them) and the looks dressed from them,
- * cached under output/authoring/avatars/ by card.
+ * glasses kind; `house-base.ts` makes them) and the looks dressed from them
+ * into output/authoring/avatars/, one file per card, re-dressed on every call
+ * (about a second) so a change to the dressing is never missed.
  */
-import { mkdir, stat } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,14 +19,9 @@ export const HOUSE_BASE = fileURLToPath(new URL('../../../public/gltf/models/hou
 
 export const wardrobeFile = (build: Build): string => join(ASSETS, `wardrobe-${build}.glb`);
 
-const newer = async (a: string, b: string): Promise<boolean> => {
-  try { return (await stat(a)).mtimeMs >= (await stat(b)).mtimeMs; } catch { return false; }
-};
-
-/** The house base dressed as the card says: a cached GLB, re-dressed when its wardrobe is newer. */
+/** The house base dressed as the card says, written to its own GLB. */
 export async function dressedFile(card: LookCard): Promise<string> {
   const file = join(DRESSED, `house-${lookKey(card)}.glb`);
-  if (await newer(file, wardrobeFile(card.build))) return file;
   const io = new NodeIO();
   const doc = await io.read(wardrobeFile(card.build));
   dressAvatar(doc, card);
