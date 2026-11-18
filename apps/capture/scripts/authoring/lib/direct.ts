@@ -7,7 +7,7 @@
  * recorded as local transforms and morph weights, ready for the writer.
  */
 import * as THREE from 'three';
-import type { FaceChannel } from '@holoim/avatar-face';
+import { gazeFromArkit, MAX_PITCH, MAX_YAW, type FaceChannel } from '@holoim/avatar-face';
 import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import { LivenessFace } from '../../../src/face/LivenessFace.ts';
@@ -1175,6 +1175,15 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const k = (eyeTarget ? 1 - 0.7 * clamp01(eyeTarget.weight) : 1) * (1 - 0.7 * glancing);
     gaze = { left: { yaw: gaze.left.yaw + liveSample.gaze.left.yaw * k, pitch: gaze.left.pitch + liveSample.gaze.left.pitch * k }, right: { yaw: gaze.right.yaw + liveSample.gaze.right.yaw * k, pitch: gaze.right.pitch + liveSample.gaze.right.pitch * k } };
   }
+  // An expression's eyeLook channels (looking down) turn the eyes on top of the gaze, since FaceRig.apply leaves them out of the morphs;
+  // a look target the eyes hold wins over them, and the sum stays within the eyes' range (eye bones are not clamped).
+  const looked = gazeFromArkit(weights);
+  const free = eyeTarget ? 1 - clamp01(eyeTarget.weight) : 1;
+  const turn = (g: { yaw: number; pitch: number }, l: { yaw: number; pitch: number }) => ({
+    yaw: Math.max(-MAX_YAW, Math.min(MAX_YAW, g.yaw + l.yaw * free)),
+    pitch: Math.max(-MAX_PITCH, Math.min(MAX_PITCH, g.pitch + l.pitch * free))
+  });
+  gaze = { left: turn(gaze.left, looked.left), right: turn(gaze.right, looked.right) };
   a.face.apply(weights, gaze);
   a.frame.updateMatrixWorld(true);
 }

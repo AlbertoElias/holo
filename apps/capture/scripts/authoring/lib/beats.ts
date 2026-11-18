@@ -147,15 +147,19 @@ export interface BeatSheet {
 }
 
 export const EXPRESSIONS = {
-  // Lips held together, inner brows up: wanting and holding it in.
-  held: { mouthPressLeft: 0.55, mouthPressRight: 0.55, browInnerUp: 0.6, mouthRollLower: 0.2, mouthShrugLower: 0.25 },
-  hope: { browInnerUp: 0.45, eyeWideLeft: 0.25, eyeWideRight: 0.25, mouthSmileLeft: 0.2, mouthSmileRight: 0.2, jawOpen: 0.06 },
-  sad: { browInnerUp: 0.7, mouthFrownLeft: 0.45, mouthFrownRight: 0.45, eyeSquintLeft: 0.15, eyeSquintRight: 0.15, mouthLowerDownLeft: 0.1, mouthLowerDownRight: 0.1 },
+  // Each mix follows Astra's round 2 clay expression sheet (docs/features/directed-performance.md, slice 2b), the drawing that read 7 of 7 at 40 px.
+  // Holding something back: lips rolled in and pressed, inner brows knit and a little raised (worry, not anger), lids a little lowered.
+  held: { browInnerUp: 0.4, eyeBlinkLeft: 0.2, eyeBlinkRight: 0.2, mouthPressLeft: 0.5, mouthPressRight: 0.5, mouthRollLower: 0.65, mouthRollUpper: 0.5, mouthShrugLower: 0.3 },
+  // Hopeful: inner and outer brows high, eyes wide, the mouth a little open; no smile.
+  hope: { browInnerUp: 0.75, browOuterUpLeft: 0.6, browOuterUpRight: 0.6, eyeWideLeft: 0.6, eyeWideRight: 0.6, jawOpen: 0.14, mouthFunnel: 0.15 },
+  sad: { browInnerUp: 0.85, mouthFrownLeft: 0.55, mouthFrownRight: 0.55, eyeSquintLeft: 0.15, eyeSquintRight: 0.15, mouthLowerDownLeft: 0.1, mouthLowerDownRight: 0.1 },
   smile: { mouthSmileLeft: 0.7, mouthSmileRight: 0.7, cheekSquintLeft: 0.35, cheekSquintRight: 0.35, eyeSquintLeft: 0.2, eyeSquintRight: 0.2 },
   'small-smile': { mouthSmileLeft: 0.3, mouthSmileRight: 0.25, mouthPressLeft: 0.15, mouthPressRight: 0.15 },
   breath: { jawOpen: 0.12, mouthFunnel: 0.08, browInnerUp: 0.3 },
-  resolve: { mouthPressLeft: 0.4, mouthPressRight: 0.4, browDownLeft: 0.25, browDownRight: 0.25, jawForward: 0.05 },
-  'eyes-down': { eyeBlinkLeft: 0.35, eyeBlinkRight: 0.35, browInnerUp: 0.35 }
+  // Determined: brows hard down toward the nose, eyes narrowed, mouth pressed straight.
+  resolve: { browDownLeft: 1, browDownRight: 1, eyeSquintLeft: 0.6, eyeSquintRight: 0.6, mouthPressLeft: 0.5, mouthPressRight: 0.5, noseSneerLeft: 0.2, noseSneerRight: 0.2, jawForward: 0.1 },
+  // Looking down: lids lowered, irises low, brows at rest, head upright.
+  'eyes-down': { eyeBlinkLeft: 0.55, eyeBlinkRight: 0.55, eyeLookDownLeft: 0.8, eyeLookDownRight: 0.8 }
 } as const satisfies Record<string, Partial<Record<FaceChannel, number>>>;
 export type ExpressionName = keyof typeof EXPRESSIONS;
 
