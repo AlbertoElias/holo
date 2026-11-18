@@ -16,7 +16,8 @@ ordinary hologram GLB, and review whether it reads. Run everything from `apps/ca
 | `recast-take.ts <take.json\|recorded.glb> --to <avatar> [--to …] [--out dir]` | Plays the take on each avatar (`stock`, `fixture:<name>` or a path) as an ordinary hologram GLB, and writes `<name>.recast.md` / `.json`: what survives and what is lost (hips, feet, limbs, wrist placement, face, gaze), against rotation-only retargeting on the same avatar. |
 | `edit-take.ts <edit.json> [--to <avatar>] [--out dir]` | Applies an edit file (`lib/edit.ts`: retime, hold, look) to a take, writes the edited take and both the original and edited takes on the avatar, and `<name>.edit.md` / `.json`. Exits 1 when a frame outside the edits differs from the recording. |
 | `compare-takes.ts <person.glb> <agent.glb> [--out dir]` | The acting report and motion numbers (beats, hold stillness, hand speed, hesitations and back-and-forth strokes, head range, travel) on two takes side by side, in `<a>-vs-<b>.compare.md` / `.json`. |
-| `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer (with sound: the take's own, mixed from clip time 0, and a face view per performer so the lips can be read), frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
+| `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30] [--until s] [--card-only] [--orbit deg]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer (with sound: the take's own, mixed from clip time 0, and a face view per performer so the lips can be read), frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
+| `six-second-test.ts prepare <sheet.json> [--avatars stock,house-base] [--until 6] [--orbit 90] [--out dir]` / `score <dir>` | The six-second test (below): builds a flat and a directed take per avatar, renders the first six seconds muted at card size and after an orbit as blind frame sheets, and, after fresh readers and graders have answered, scores each take against the sheet's intent. |
 | `publish.ts <take.glb\|sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--production] [--no-quick-look] [--check]` | Validates a take and publishes it through the normal upload route (below). |
 | `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times; `--audio out.webm` presses the card's unmute control, records what the card sends to its speakers over one real-time pass, and prints where each sound in the file is heard (exit 1 when one is not heard within 100 ms of its place); with `--video` that recording is the video's soundtrack. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
 | `speech-report.ts <take.glb> [--json out.json]` | Reads a take with sound from the GLB alone: decodes each `KHR_audio` source as embedded (its length against the clip, where it sounds) and measures the mouth opening (mm along each face mesh's own `jawOpen`, else `mouthOpen`, else `viseme_aa`) against the voice: each phrase's mouth onset against its sound, the mouth in the voice's pauses, and how closely it follows the loudness; with the sheet beside the take, each line's first sound against its beat. Exits 1 past its bars (below). |
@@ -278,6 +279,59 @@ gives each object's size on the card. The 1c reader who saw the pointer
 aimed at nothing was given stills cropped to the cast, a fault in the review
 tool, not in the viewer (fixed).
 
+## Change in the world
+
+A sheet's `world` lists what changes in the set, one line each:
+
+- `{ "kind": "pour", "object": "can" }`: drops leave a held tool's tip while
+  its axis points below `tilt` (degrees under the horizontal, 0), more of
+  them the further it tips (`rate` 60 a second at full flow), at `speed`
+  0.8 m/s along the axis, and fall under gravity to land where the aim
+  points (`onto`, else the target of the beat that aims that object).
+  Each drop is a stretched `size` 0.012 m bead (`color` a pale water blue).
+  `wet` (0.06 m, or `false`) leaves a darker disc on the surface that grows as
+  water lands and stays to the end.
+- `{ "kind": "burst", "at", "when" }`: `count` 24 sparks thrown `spread`
+  0.25 m out over the upper half, gone within `life` 1.2 s.
+- `{ "kind": "drift", "at", "when", "until" }`: `count` 12 motes released
+  between the two cues, each rising `rise` 0.3 m over about `life` 2 s.
+- `{ "kind": "change", "object", "when" }`: the object turns (`turn`
+  `[x, y, z]` degrees), scales (`scale`, one number or three), lifts (`lift`
+  m) or changes colour (`color`, in `steps` 4) over `over` 1.5 s, eased, from
+  `from` (or where its last change left it) to the state the line names.
+  What a line leaves out returns to how the sheet made the object, so
+  `{ "when": 5.3, "from": { "turn": [36, 0, 16] } }` stands a slumped plant
+  back up. A line with `show` (`true` or `false`) and nothing else makes the
+  object appear or disappear at its cue.
+
+A cue is seconds, a beat id (its `at`) or `<beat>.end`. A point is an
+object's anchor, a mark or `[x, y, z]`. The build prints a line per change
+(how many drops, where they land, the colour steps, when the object is
+present) and fails on a cue outside the take, a pour with no tool axis, a
+held object made to appear or disappear, a colour change on a sourced
+model (it keeps its own materials), a pour aimed at a performer point or a
+place (give `onto`), an object that changes again before its last change
+ends, or one shown and hidden at the same time. A pour whose tool never
+tips far enough only says so (`no water`).
+
+Limits: a world point follows its object's own track, not its change, so
+a drift at `lamp.top` after the lamp lifts starts where the lamp was, and
+an object `on` a changing one does not follow the change. A drop aims at
+where its target is when it leaves the spout. Unknown keys are refused
+only on `change` lines.
+
+Everything is node animation, so it plays on the card, in AR and in
+Quick Look: each pour, burst or drift is a summoned `RecordedObject` whose
+children are the drops or motes (a pour's drops take turns on about sixteen
+nodes, keyed on the take's own frames, which keeps the Quick Look readback
+within its time limit), and a changing object gains a
+`<id>-change` node between its wrapper and its shape. Quick Look cannot
+blend a colour: a colour change is `steps` copies of the shape, one shown at
+a time, so it changes in visible steps everywhere. Drops are rigid beads,
+not a fluid; nothing splashes or soaks in beyond the wet disc.
+`sheets/world-test.json` exercises every line but the pour; `watering.json`
+pours.
+
 ## A recorded take as input
 
 Slice 4a of the brief: a person's take, recorded by capture, becomes
@@ -323,6 +377,26 @@ output/take-input/sources/headset-reach.glb`), or edit the path.
   Everything outside the edits is the imported take's own frames, shifted
   in time, checked frame by frame.
 
+## The six-second test
+
+Does a stranger, shown only the first six seconds muted at card size, see
+what the sheet intends, and does the directed take read better than the flat
+one? Slice 3 of the directed-performance brief; the pass bar is in the brief
+and in `manifest.json`.
+
+1. A sheet needs a sidecar `sheets/<name>.six-second.json` naming the
+   hesitation and feeling beat ids (see `goodbye.six-second.json`).
+2. `six-second-test.ts prepare sheets/goodbye.json` builds each avatar x
+   {flat, directed} take, reviews it with `review.ts --until 6 --card-only
+   --orbit 90`, and writes blind frame sheets (`../readers/<code>/card`, `/orbit`, outside the sheet's folder so the path and the key stay out of a reader's reach;
+   the code hides style and avatar), `manifest.json` (the key) and
+   `prompts.md`.
+3. Follow `prompts.md`: three fresh Sonnet readers per code (card question,
+   then the orbit as a follow-up) and one fresh grader per code; save
+   `answers/<code>/reader-<n>.json` and `grades/<code>.json`.
+4. `six-second-test.ts score <dir>` writes `report.md` / `report.json` and exits
+   1 if a row of the bar fails. Never change the bar after seeing a run.
+
 ## Reviewing a take
 
 A take reads when someone who was not told the intent sees it. The loop:
@@ -330,7 +404,7 @@ A take reads when someone who was not told the intent sees it. The loop:
 1. **Build:** `direct.ts sheets/<piece>.json`.
 2. **Review:** `review.ts output/authoring/<piece>.glb`. The pack goes to
    `output/authoring/review/<piece>/`:
-   - `reader/`: `review.mp4` (card left, close views right, real time),
+   - `reader/`: `review.mp4` (card left, close views right, real time; for a take with sound, the take's sound and a face view per performer, rightmost, with `sheet-face-<performer>-NN.jpg`; not written with `--card-only`, which also skips the close and face sheets, and `--until` cuts the take short),
      `sheet-card-NN.jpg` (the card framing cropped to the cast at the
      phone's true device pixels), `sheet-close-<n>-NN.jpg`, one still every
      0.2 s labelled with the time only, and the reader's `README.md`;
@@ -361,10 +435,8 @@ minute; `node packages/tooling-testing/src/preview.mjs <dir>` (from the
 repository root) tiles them.
 
 Not covered by these tools yet (`docs/features/directed-performance.md`,
-"Not covered yet"): change in the world (water, a plant that responds),
-handing an object between performers, collisions, and publishing.
-A take is published like a showcase piece, with
-`scripts/showcase/upload.mjs`.
+"Not covered yet"): handing an object between performers and collisions.
+Publishing is `publish.ts` ("Publishing a take" above).
 
 ## The file
 

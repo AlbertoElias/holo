@@ -735,6 +735,91 @@ authors to add a beat (the default fails every two-hander that forgets).
 
 **Evidence:** "Slice 1e evidence", below.
 
+### Slice 1f: change in the world (2026-11-18)
+
+"Not covered yet" item 5. Built under `apps/capture/scripts/authoring/`
+only (`lib/beats.ts` additively, a new `lib/world.ts`, `lib/write-glb.ts`,
+`direct.ts`'s printout, the watering sheet); nothing under
+`apps/capture/src/**`, the viewer, the API or `@holoim/objects` changes.
+The set's change is plain glTF node animation (translation, rotation,
+scale, STEP presence), which the viewer's mixer plays unfiltered and the
+USDZ converter bakes (`glb_to_usdz.py` carries node TRS and turns a scale
+of 0 into USD visibility); no morph target, material animation or new
+extension is used.
+
+**What.** A sheet may give `world`: a list of changes, one line each, the
+rest defaulted.
+
+1. **Poured.** `{ "kind": "pour", "object": "can" }`: while the object's
+   tool axis points below the horizontal (`tilt`, default 0°), drops leave
+   its tip (`rate` 60 a second at full tilt, fewer near the threshold),
+   fall under gravity from the tip's speed along the axis, and land on
+   `onto` (default: the target of the `aim` that points that object),
+   scattered over a third of the wet patch. Each drop is a small blue
+   (`color`) stretched sphere, along its velocity, present only in flight.
+   Drops take turns on a pool of nodes (about 15 are in flight at once),
+   keyed on the take's frames: one node per drop (132 in watering) took
+   the Quick Look readback (`inspect_usdz.py`) 314 s against the tool
+   check's 180 s limit; pooled, it is 16 nodes and 115 channels.
+   Where they land, a wet patch (`wet`, default on, radius 0.06 m) grows
+   with the water landed and stays to the end, darker than the part it
+   lies on.
+2. **Particles.** `{ "kind": "burst", "at": <point>, "when": <cue> }`:
+   `count` (24) seeded motes fly out to `spread` (0.25 m) and shrink away
+   over `life` (1.2 s). `{ "kind": "drift", "at", "when", "until" }`:
+   motes rise slowly (`rise` 0.3 m) and fade, a few at a time, over the span.
+3. **An object responds.** `{ "kind": "change", "object": "plant",
+   "when": <cue>, "over": 1.5, "from": { "turn": [24, 0, 8], "scale":
+   [1, 0.8, 1], "color": "#8a8a45" } }`: the object's shape turns about
+   its own origin (the bottom centre), scales, lifts (`lift`, metres)
+   and changes colour from `from` to the change's own values (default:
+   as the sheet made it), eased over `over`. Colour is a swap in `steps`
+   (4) whole-object copies, since neither glTF without an extension nor
+   Quick Look animates a material. `"show": false` makes it disappear at
+   the cue and `"show": true` appear (absent before), with the object's
+   `HOLOIM_objects` presence spans written to match. A change ends at the
+   state it names; what it leaves out returns to as-made, so a later
+   change restates a colour it keeps.
+
+A cue is seconds, a beat id (its start) or `<beat>.end`. Points are
+object points (`pot.soil`), numeric marks or `[x, y, z]`; a performer
+point or a place is refused, since the change is computed after the
+solve from the objects' tracks. Each pour, burst and drift is one
+`summoned` `RecordedObject` (source `effect:<kind>`) whose presence spans
+cover its motes, so the viewer's cast-only framing leaves it out; a
+sheet without `world` writes the same file as before.
+
+**What Quick Look cannot show:** a colour fades only in its steps; drops
+are separate rigid nodes, not a fluid; nothing splashes or soaks in.
+
+**Rejected:** a morph-target stream (one long mesh deformed per frame:
+heavier on the deformed extent budget, B-057, which counts every frame);
+`KHR_animation_pointer` colour (the converter and Quick Look drop it);
+a particle extension the viewer would have to learn.
+
+**Acceptance.**
+
+- `sheets/watering.json` revised: the plant starts wilted and perks up
+  after the water lands; the pour leaves a wet patch. It builds with no
+  miss, and the converter's extent load (`publish.ts --check`) stays under
+  budget.
+- **Blind reading, bar set before running:** three fresh Sonnet readers,
+  each given only the review pack's `reader/` folder (never the sheet),
+  describe the piece. It passes when at least 2 of 3 say water was poured
+  (pours, waters, watering, water, drops, stream, sprinkles) and at least
+  2 of 3 say the plant changed (perks up, lifts, straightens, revives,
+  stands up, grows, greener, healthier). Not tuned past two tries; a
+  failure is reported.
+- `viewer-check` on the card frames the piece with the water in view; the
+  Quick Look check (`check_usdz_tools.sh`) passes on it, its readback
+  matching every node's world transform (drops' visibility as scale 0, the
+  plant's change node) at the sampled times. `sheets/world-test.json`
+  (burst, drift, colour, lift, appear and disappear) passes the same two.
+- **Nothing else moves:** `rest`, `expressions`, `gestures`,
+  `defaults-test` and `goodbye` write byte-identical GLBs to `main`'s.
+
+**Evidence:** "Slice 1f evidence", below.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
@@ -1120,6 +1205,69 @@ shown muted and without the verse; then the same question after orbiting.
 The goodbye is one fixture for it, not the aim. Slice 1b's review protocol
 is its method.
 
+#### Slice 3 as a command (2026-11-18)
+
+Decided by the agent in the owner's absence on 2026-11-18, for the owner to
+review. All under `apps/capture/scripts/authoring/`; nothing under `src/`.
+
+**What it is.** `six-second-test.ts prepare <sheet.json> [--avatars stock,house-base]`
+builds the sheet twice per avatar, `--style flat` and `--style directed`,
+with every performer on that avatar (the house base is
+`public/gltf/models/house-base.glb`, the sheet's `avatar` field), and runs
+`review.ts` on each take with three additive options: `--until 6` (only
+the first six seconds), `--card-only` (no close views, no video: the card
+framing alone, as the feed shows it) and `--orbit 90` (the same moments again
+from a camera swung 90° about the cast, at the card's distance and field of
+view, in a 360-px crop). Each take then gets a code, a blind folder of
+frames and a reader brief that carries no style, avatar or intent
+(`blind/<code>/`), and the key stays in `manifest.json`. The author (an agent
+session, since the readers are subagents) gives each blind folder to three
+fresh Sonnet readers who see frames only, asks the card question first and
+the orbit question second, then gives each take's three accounts to one
+fresh grader who has the sheet's beat intents but not which take is which.
+`six-second-test.ts score <dir>` reads the answers and grades, and writes
+`report.json` and `report.md`: each take scored against the sheet's intent
+and the pass bar below, per avatar.
+
+**The question.** "What is happening, and what does the person feel?"
+(`what do the people feel` for two). The first six seconds, muted, no
+verse, caption or title. Card framing first, then the orbit.
+
+**Scoring.** The grader marks each beat of the sheet that falls in the first
+six seconds `yes` (the account names it, in any words), `partly` or `no`,
+with the reader's words as evidence. The beat score is the mean over beats
+(yes 1, partly 0.5). Two beats are named in the sheet as the point of the
+piece and graded on their own: for the goodbye, the **hesitation** (she
+reaches to stop him and stops herself) and the **feeling** (she wants him to
+stay, and lets him go sad). The sheet's sidecar `<sheet>.six-second.json` names them
+(`hesitation: [beat ids]`, `feeling: [beat ids]`), so `lib/beats.ts` is not
+touched; without one, the tool refuses.
+
+A reader **names the hesitation** when the mean mark over the hesitation beats
+is at least 0.5 and at least one of them is `yes`; **names the feeling** when
+the mean over the feeling beats is at least 0.5. Both are computed from the
+marks, not judged again. The goodbye's sidecar is `hesitation: r-reach, r-stop`
+and `feeling: r-look, r-after, r-end`.
+
+**The pass bar (fixed before the first run; not changed after it).** For each
+avatar, on the card framing:
+
+1. the directed take's hesitation is named by at least 2 of 3 readers;
+2. the directed take's feeling is named by at least 2 of 3 readers;
+3. the directed take's beat score is at least 0.15 above the flat take's
+   (the flat take "scores lower", with a margin that is not noise);
+4. the directed take's beat score is at least 0.5.
+
+After the orbit, reported and not a pass condition on its own, except:
+5. the directed take's orbit beat score is no more than 0.15 below its card
+   score (orbiting does not destroy the reading).
+
+A take that fails a row fails; the report says which row and what the readers
+said. A pass is not the owner's verdict: the owner watches the directed take
+muted and records theirs in the evidence section. Nothing is loosened to pass.
+The readers are fallible and few (three): a result of 2 of 3 is a reading,
+not a measurement, and the report says so.
+
 ### Slice 4: a person's take as input (joins the phone mandate)
 
 Starts only when the motion owner lands camera driving on `main` behind
@@ -1307,8 +1455,12 @@ and 7 (its evidence, below); the second 1c piece added item 13.
    concerned do not. The GLB moves as asked (the shake swings ±20° in the
    head every 0.8 s), but readers judge 0.2 s stills, about two per swing.
    Still open: a way for a quick head or finger motion to read.
-5. **Change in the world.** No water, particles or plant response: the
-   reader saw "no water" and "the plant looks the same".
+5. **Change in the world.** Closed by slice 1f: a beat sheet's `world`
+   lines direct a pour from a held tool's tip, a burst or drift of motes,
+   and an object that changes over time (turn, scale, lift, colour, show
+   or hide). All are node and mesh-swap animation, so the GLB, card, AR
+   viewer and Quick Look all show them. Was: "no water" and "the plant
+   looks the same".
 6. **Performer-relative placement.** Marks are absolute metres guessed from
    the avatar's size; nothing says "at her right hand's height" or "a
    step in front of her".
@@ -1416,7 +1568,10 @@ is not in a take's undo history; changing the look again is its undo.
   first performer only; see the framing note in slice 1 below.)
 - [ ] The six-second test: fresh critics shown only the muted directed take
   name the hesitation; the flat take scores lower; the owner's verdict is
-  recorded. Orbiting is tested as a second question.
+  recorded. Orbiting is tested as a second question. Tool built and run on
+  `goodbye` (2026-11-18): **the bar is not met**, the directed take does not
+  beat the flat one; see "Slice 3 evidence" below. Stays open for the owner
+  and for a rework of the directed acting.
 - [x] Revising one beat changes only that span in the report, and rebuilds
   in under 30 s. Evidence: slice 1 below.
 - [x] Slice 1b's review loop: a review command writes a pack (H.264 video
@@ -1684,6 +1839,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      five 0.4 s cycles, hand at chest height in view; concerned pitch 14°,
      roll 8°). They still do not read in stills (evidence); the next idea
      is a change to the reading medium, not more size.
+9. **Slice 1f's calls** (decided by the agent in the owner's absence on
+   2026-11-18, for the owner to review; each is reversible):
+   - Drops are pooled onto reusable nodes (a node takes the next drop
+     that starts after its last ends): 132 drops on 16 nodes. One node per
+     drop made the Quick Look readback take 314 s against its 180 s limit.
+   - A change ends at the state it names; anything it leaves out returns
+     to as-made. Overlapping changes on one object, and a show and hide
+     at the same time, are refused.
+   - Watering uses drops of 16 mm and a stronger wilt (36° turn, 0.7
+     height, olive `#8e8644`). At first the readers saw a thin stream at
+     card size and a mild wilt.
+   - Drop and mote keys sit on the take's frame grid, so they add no new
+     key times to the file.
+   - `sheets/world-test.json` covers burst, drift, show and hide, and a
+     colour, lift and scale change on a two-part lamp.
+   - A pour whose tool never tips below its threshold is an info line,
+     not a failure (the brief does not ask either way).
 
 ## Test plan and evidence
 
@@ -1692,7 +1864,7 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
 - One pipeline check: a directed take on two avatars through upload and
   render, with the stop-short distance and the viewer's anchors read back.
 - `check_usdz_tools.sh` by hand on the two-character piece.
-- The six-second test's critic answers and the owner's verdict.
+- The owner's verdict on the six-second test, and what to change after its FAIL on `goodbye`.
 - Proof video under ignored `output/`.
 
 ### Slice 0 evidence (2026-11-13)
@@ -2285,6 +2457,70 @@ show at card size (decision 2).
 items as try 0 (wave and shrug drop from 3/3 to 2/3, still passing), and
 a slower, larger nod and shake are closer to what a person does on video.
 
+### Slice 1f evidence (2026-11-18)
+
+**Build.** `sheets/watering.json` now has two world lines (a pour from the
+can, the plant changing from 5.3 s over 2.4 s). It builds with no miss:
+132 drops on 16 nodes from 4.774 to 7.196 s, landing within 20 mm of
+`pot.soil`; a wet patch 12 cm across that stays to the end; the plant in
+4 colour steps from 5.3 to 7.7 s; 115 channels, 3.8 MB. `publish.ts
+--check` gives valid, with a deformed load of 686,136 and rigid 4,817,839
+(budgets 100M and 500M). `sheets/world-test.json` builds: a burst of 24
+motes (1 to 2.2 s), a drift of 12 (2.5 to 4.5 s), the lamp present 1 to
+6.2 s in 4 colour steps, 140 channels; `--check` gives valid.
+
+**Quick Look.** `check_usdz_tools.sh` passes all four cases (animated ancestor and face,
+silent, alpha/UV/PBR, unsupported required extension) on the final builds of
+both `watering` (138 s of CPU for the whole check) and `world-test`
+(133 s). The readback matches every node's world transform at the sampled
+times.
+
+**Nothing else moves.** `rest`, `expressions`, `gestures`, `defaults-test`,
+`goodbye`, `two-avatars` and `tallest-bar` rebuild byte-identical to
+`main`. A sheet without `world` writes the same file.
+
+**Viewer.** viewer-check on watering showed the thin stream from the spout
+and the plant going from olive and slumped to green and upright. From the
+side, the pot rim hides the wet patch. On world-test it showed the lamp
+appear, turn gold, lift and shrink, and disappear.
+
+**Refusals.** Each was tested: a pour aimed at a performer point or a place
+("its aim's target; give onto"), overlapping changes ("changes again at
+2.80 s, before the change before it ends"), and a colour on a sourced
+model.
+
+**Blind reading (bar: 2 of 3 say water was poured and 2 of 3 say the plant
+changed).** Three fresh Sonnet readers saw the review pack's frames only.
+
+| Reader | Water poured | Plant changed |
+|---|---|---|
+| 1 | yes: "a visible stream falls into the pot" | yes: "upright and bright green" |
+| 2 | yes: "a thin blue stream running into the plant" | yes: "a wilted yellow-green plant turns into a healthy bright green one" |
+| 3 | yes: "a thin stream of water falls onto the plant" | yes: "turns green and grows upright" |
+
+**The bar is met, 3 of 3 on both.** All three readers called the stream
+thin and hard to see at card size before about 5 s. The check at 2.1 s
+reads as a wrist check, not a finger in the soil (slice 1e's
+finding).
+
+**Review.** The code review found three issues, all fixed and retested:
+the aim target was not validated, overlapping changes were not refused,
+and a span that ends within 1 ms of a float32 last frame lost the object
+on that frame. The independent verifier also found four, all fixed:
+the default `onto` (the same fix), overlap (the same fix), a duplicate
+final colour copy, and a wet patch whose first key had a zero area but
+was not all zero. A show and hide at the same time is now refused. One of
+the verifier's Quick Look runs went over the 100 s CPU budget. Converting
+the same file alone takes 3.6 s of CPU (main's watering takes 3.1 s), so
+that run did not reproduce. Its notes on limits are in the README:
+world points follow the object's track, not its change, and a drop's
+target is sampled at departure.
+
+**What Quick Look cannot show.** The colour change is mesh swaps, so
+Quick Look shows it in steps (as the viewer does). Drops and motes are
+node scale and translation, which Quick Look plays. Nothing in a world
+line depends on a material animation or a shader.
+
 ### Slice 2a evidence (2026-11-17)
 
 **The command.** `avatar-audition.ts <avatar.glb|.gltf>` grades any avatar
@@ -2721,6 +2957,50 @@ the first, because the mixer looped; the chest joint fell back differently
 on import and recast; the untouched check was circular; edit overlap
 depended on list order; leg length was measured two ways; hold lengths
 were one frame short.
+
+### Slice 3 evidence: caveats found by the verifier (2026-11-18)
+
+The recorded goodbye run was not cleanly blind and asked the singular question.
+Its readers were given `.../six-second/goodbye/blind/<code>/…`, so the path
+named the piece (five of twelve answers contain "goodbye") and the key sat in
+the folder above; and they were asked "what does the person feel?" for two
+performers. Both can only help a take read, so the FAIL stands, but the run is
+not a clean measurement. The tool now writes reader folders to an opaque
+`readers/` beside the sheet's folder, asks "people" for two performers, and
+compares to the bar with float tolerance on unrounded scores; the goodbye run
+was not repeated (no spend). The hesitation column counts a take as naming it
+with "reach yes, stop no" (mean 0.5 with one yes), so it mostly measures the
+reach, not the stop. `review.ts` now takes `--until`, `--card-only` and
+`--orbit` on the command line too.
+
+### Slice 3 evidence (2026-11-18, run by the agent in the owner's absence)
+
+`six-second-test.ts prepare sheets/goodbye.json --avatars stock,house-base`,
+twelve fresh Sonnet readers (three per take, frames only, blind codes), four
+fresh Sonnet graders (one per take), then `score`. Report:
+`apps/capture/output/authoring/six-second/goodbye/report.md` (ignored). The bar
+above was fixed before the run and not changed after it.
+
+| avatar | style | beat score, card | hesitation | feeling | beat score, orbit |
+|---|---|---|---|---|---|
+| stock | directed | 0.26 | 1/3 | 0/3 | 0.24 |
+| stock | flat | 0.29 | 3/3 | 0/3 | 0.30 |
+| house-base | directed | 0.42 | 3/3 | 0/3 | 0.38 |
+| house-base | flat | 0.47 | 3/3 | 2/3 | 0.50 |
+
+**Result: FAIL on both avatars.** The directed take is 0.03 (stock) and 0.05
+(house base) *below* the flat one, under the 0.5 floor, and its feeling is named
+by 0 of 3 readers. Orbiting passes (the reading survives the swing, drops of
+0.02 and 0.04), and the house base reads better than the stock avatar in both
+styles. Readers of every take saw a quiet, tender parting with a touch, and
+none saw "she stops herself before touching him" or "he turns away to leave" as
+such: they read one figure reaching and touching a shoulder, then both standing.
+Readers also could not tell which of two near-identical figures is "he"; the
+graders marked by who reached. Three readers per take is a reading, not a
+measurement, and one grader per take is a single judge. Open question for the
+owner: whether the directed acting needs to change, or the sheet's beats
+(restraint and a turn-away) need a staging the card framing can show. The
+result is recorded as measured; the bar was not loosened.
 
 ## Physical-device limits
 

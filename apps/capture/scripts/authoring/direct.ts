@@ -29,6 +29,7 @@ import { describeAttend, describeLife } from './lib/life.ts';
 import { loadSources, type LoadedSource } from './lib/props.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { addAudio, padAndEncode, prepareEffects, prepareLine, probeSeconds, type AudioSource, type Effect, type Line } from './lib/sound.ts';
+import { solveWorld } from './lib/world.ts';
 import { writeTake } from './lib/write-glb.ts';
 
 const OUTPUT = fileURLToPath(new URL('../../output/authoring/', import.meta.url));
@@ -78,6 +79,8 @@ export function bodyLine(motion: Parameters<typeof measureMotion>[0]): string {
 export interface BuildResult {
   readonly out: string;
   readonly take: SolvedTake;
+  /** One line per world change (slice 1f). */
+  readonly world: readonly string[];
   readonly channels: number;
   readonly seconds: number;
   readonly bytes: number;
@@ -98,12 +101,13 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
   const speech = new Map<string, { at: number; lips: Line['lips'] }[]>();
   for (const l of lines) speech.set(l.performer, [...(speech.get(l.performer) ?? []), { at: l.at, lips: l.lips }]);
   const take = solveTake(sheet, avatars, sources, speech);
+  const world = solveWorld(sheet, take);
   const effects = await prepareEffects(take, sheetFile, soundCache);
   const written = await writeTake(take, {
     author: 'HoloIM direction',
     title: sheet.title,
     method: `beat sheet ${basename(sheetFile)} solved on ${sheet.performers.map((p) => `${p.id} (${p.avatar})`).join(', ')}; ${sheet.style ?? 'directed'}`
-  });
+  }, world);
   const file = out ?? join(OUTPUT, `${basename(sheetFile, '.json')}.glb`);
   await mkdir(dirname(file), { recursive: true });
   // Sound: every source padded to the clip and looping with it (brief, decision 0).
@@ -135,7 +139,7 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
   // The sheet as solved (with any --style override), beside the take.
   await writeFile(`${file.replace(/\.glb$/, '')}.beats.json`, `${JSON.stringify(sheet, null, 2)}\n`);
   if (take.props.length) await writeFile(`${file.replace(/\.glb$/, '')}.objects.json`, `${JSON.stringify(take.objects, null, 2)}\n`);
-  return { out: file, take, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: glb.byteLength, lines, effects, audio };
+  return { out: file, take, world: world.lines, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: glb.byteLength, lines, effects, audio };
 }
 
 async function main(): Promise<void> {
@@ -168,6 +172,7 @@ async function main(): Promise<void> {
   }
   const lines = objectLines(r.take.objects);
   for (const l of lines) console.log(`  ${l.failed ? 'FAIL ' : ''}${l.text}`);
+  for (const l of r.world) console.log(`  ${l}`);
   const doc = parseGlb(new Uint8Array(await readFile(r.out)));
   console.log(summarize(actingReport(doc, basename(r.out))));
   if (against) {
