@@ -56,7 +56,8 @@ procedural gait.
   starts walking): its sway, torso and head lean moved the hand, shoulders and
   eyes the desktop reach, carry, set-down and aim are tuned from (holding the
   carry pose over it, or blending the arms or the whole upper body back to
-  bind, still broke those checks). The Idle drives the VR lower body.
+  bind, still broke those checks). VR plays no idle: the legs stand at rest
+  while the headset stands still.
 - `scripts/mocap/amc-to-dump.ts` (ASF/AMC → JSON) and
   `scripts/build-mocap-clips.ts` (JSON → the shipped avatar's clips, then
   `build-locomotion-library.ts` rebuilds `locomotion.glb`). Sources and dumps

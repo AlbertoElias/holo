@@ -537,7 +537,8 @@ export class LocomotionAnimator {
   }
 
   private preprocessClip(clip: THREE.AnimationClip, profile: LocomotionProfile): THREE.AnimationClip | undefined {
-    const isIdleClip = CLIP_MATCHERS.idle.test(clip.name);
+    // "Standing Jump" or "Stand To Fall" is not an idle.
+    const isIdleClip = CLIP_MATCHERS.idle.test(clip.name) && !LOCOMOTION_STATES.some((state) => state !== 'idle' && CLIP_MATCHERS[state].test(clip.name));
     const isWalkClip = CLIP_MATCHERS.walk.test(clip.name);
     const tracks = clip.tracks
       .filter((track) => this.shouldKeepTrack(track.name, profile, isIdleClip))
@@ -561,8 +562,8 @@ export class LocomotionAnimator {
       return false;
     }
     if (profile === 'desktop-full') {
-      // On desktop the idle only lowers the arms (holdFirstKey); its legs drive the VR lower body instead, and its
-      // torso and head lean would move the shoulder and eyes the desktop reach, carry and aim are tuned from.
+      // On desktop the idle only lowers the arms (holdFirstKey): its torso and head lean would move the shoulder and
+      // eyes the desktop reach, carry and aim are tuned from, and the legs stand on the terrain IK. (VR plays no idle.)
       if (isIdleClip) return parts.property === 'quaternion' && this.isArmTarget(parts.nodeName);
       return true;
     }

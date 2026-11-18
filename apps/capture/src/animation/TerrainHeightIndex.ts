@@ -19,11 +19,15 @@ export const WALKABLE_NORMAL_Y = 0.2;
 export class TerrainHeightIndex {
   private static readonly cache = new WeakMap<THREE.Object3D, TerrainHeightIndex>();
 
-  /** The index of `world`, built on first use and again whenever `world` has moved. */
+  /**
+   * The index of `world`, built on first use. When `world` moves by a translation, a turn about the vertical and a
+   * uniform scale (AR placement and recentering move it every frame) the index follows it without rebuilding; any
+   * other move rebuilds it.
+   */
   static of(world: THREE.Object3D): TerrainHeightIndex {
     world.updateWorldMatrix(true, false);
     const cached = TerrainHeightIndex.cache.get(world);
-    if (cached && cached.builtFor.equals(world.matrixWorld)) return cached;
+    if (cached && (cached.seen.equals(world.matrixWorld) || cached.follow(world.matrixWorld))) return cached;
     const index = new TerrainHeightIndex(world);
     TerrainHeightIndex.cache.set(world, index);
     return index;
@@ -34,7 +38,14 @@ export class TerrainHeightIndex {
     TerrainHeightIndex.cache.delete(world);
   }
 
-  private readonly builtFor = new THREE.Matrix4();
+  private readonly builtInverse = new THREE.Matrix4();
+  private readonly seen = new THREE.Matrix4();
+  // How `world` has moved since the build: world now = move + scale * turn(yaw) * world at build.
+  private readonly move = new THREE.Vector3();
+  private scale = 1;
+  private cos = 1;
+  private sin = 0;
+  private moved = false;
   // Per triangle: its three corners (x, y, z) and its unit normal.
   private readonly corners: Float32Array;
   private readonly normals: Float32Array;
@@ -49,7 +60,8 @@ export class TerrainHeightIndex {
 
   private constructor(world: THREE.Object3D) {
     world.updateWorldMatrix(true, true);
-    this.builtFor.copy(world.matrixWorld);
+    this.builtInverse.copy(world.matrixWorld).invert();
+    this.seen.copy(world.matrixWorld);
     const corners: number[] = [];
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     const toWorld = new THREE.Matrix4();
@@ -66,12 +78,15 @@ export class TerrainHeightIndex {
       for (let n = 0; n < instances; n++) {
         if (instanced.isInstancedMesh) { instanced.getMatrixAt(n, toWorld); toWorld.premultiply(mesh.matrixWorld); }
         else toWorld.copy(mesh.matrixWorld);
+        const mirrored = toWorld.determinant() < 0;
         for (let i = 0; i + 2 < count; i += 3) {
           const ia = index ? index.getX(i) : i, ib = index ? index.getX(i + 1) : i + 1, ic = index ? index.getX(i + 2) : i + 2;
           a.fromBufferAttribute(position, ia).applyMatrix4(toWorld);
           b.fromBufferAttribute(position, ib).applyMatrix4(toWorld);
           c.fromBufferAttribute(position, ic).applyMatrix4(toWorld);
-          corners.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+          // A mirrored transform reverses the winding; keep the face's normal on the side it faces.
+          if (mirrored) corners.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z);
+          else corners.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
         }
       }
     });
@@ -116,6 +131,37 @@ export class TerrainHeightIndex {
    * `outNormal`, when given, receives that face's normal.
    */
   heightAt(x: number, z: number, topY: number, bottomY: number, minNormalY: number, outNormal?: THREE.Vector3): number | undefined {
+    if (!this.moved) return this.heightAtBuilt(x, z, topY, bottomY, minNormalY, outNormal);
+    // Into the frame the index was built in, and the height and normal back out (the normal's y is unchanged).
+    const dx = (x - this.move.x) / this.scale, dz = (z - this.move.z) / this.scale;
+    const lx = dx * this.cos - dz * this.sin, lz = dx * this.sin + dz * this.cos;
+    const y = this.heightAtBuilt(lx, lz, (topY - this.move.y) / this.scale, (bottomY - this.move.y) / this.scale, minNormalY, outNormal);
+    if (y === undefined) return undefined;
+    if (outNormal) outNormal.set(outNormal.x * this.cos + outNormal.z * this.sin, outNormal.y, -outNormal.x * this.sin + outNormal.z * this.cos);
+    return this.move.y + this.scale * y;
+  }
+
+  /** `world` moved to `matrix`: follows it when the move keeps the vertical vertical and scales evenly. */
+  private follow(matrix: THREE.Matrix4): boolean {
+    const delta = TerrainHeightIndex.delta.multiplyMatrices(matrix, this.builtInverse);
+    const q = TerrainHeightIndex.turn, s = TerrainHeightIndex.stretch;
+    delta.decompose(this.move, q, s);
+    const tolerance = 1e-6 * Math.max(1, Math.abs(s.x));
+    if (s.x <= 0 || Math.abs(s.y - s.x) > tolerance || Math.abs(s.z - s.x) > tolerance || Math.abs(q.x) > 1e-6 || Math.abs(q.z) > 1e-6) return false;
+    const yaw = 2 * Math.atan2(q.y, q.w);
+    this.scale = s.x;
+    this.cos = Math.cos(yaw);
+    this.sin = Math.sin(yaw);
+    this.moved = true;
+    this.seen.copy(matrix);
+    return true;
+  }
+
+  private static readonly delta = new THREE.Matrix4();
+  private static readonly turn = new THREE.Quaternion();
+  private static readonly stretch = new THREE.Vector3();
+
+  private heightAtBuilt(x: number, z: number, topY: number, bottomY: number, minNormalY: number, outNormal?: THREE.Vector3): number | undefined {
     const col = this.col(x), row = this.row(z);
     if (x < this.minX || z < this.minZ || col >= this.cols || row >= this.rows) return undefined;
     const k = row * this.cols + col;
