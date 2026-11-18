@@ -973,6 +973,33 @@ versioned with the bars it must meet.
 The owner returns the sheets; 2b records the pick here and keeps the files
 in the ignored `output/avatar-sheets/` of the main checkout.
 
+**Sheets returned (2026-11-18).** The owner returned Astra's sheets; they
+are in the main checkout's ignored `output/avatar-sheets/`: nine PNGs
+(`base-finishes`; `<finish>-turnaround` and `<finish>-expressions` for
+clay, ink and light; `clay-traits`; `clay-poem-pair`) and Astra's
+`blind-reading-test.zip`. The lead checked them against the request
+above: every sheet is there at the asked size, every trait value is drawn
+and labelled, and the brows are clear. The owner has not picked a finish
+yet (open decision 1), so no look work starts.
+
+The lead ran Astra's blind test with three fresh Sonnet readers at 40 px.
+No finish passes the 5-of-7 bar:
+
+| Finish | Reader 1 | Reader 2 | Reader 3 |
+|---|---|---|---|
+| clay | 3 | 7 | 4 |
+| ink | 5 | 7 | 4 |
+| light | 3 | 3 | 4 |
+
+Smile, sad and determined read reliably; the misses fall among neutral,
+hopeful, holding something back and looking down. That is the same
+confusion the 3D base showed in 2c (see open decision 7). The readers were
+AI models; Astra's protocol asks for people, so this is evidence, not the
+protocol's verdict. At the owner's request the lead drafted a revision
+request to Astra for those four expressions
+(`output/avatar-sheets/astra-revision-request.md` in the main checkout);
+the owner has not sent it yet.
+
 ### Slice 3: the six-second test (general; after slice 1b)
 
 Two takes of one piece on the house characters (one flat, one directed),
@@ -1205,8 +1232,9 @@ audition scripts, the house base's source and its exported avatar files
 
 ## Open decisions for the user
 
-1. **House style:** picked from the slice 2 sheets (2b). Nothing to
-   answer until they exist.
+1. **House style:** picked from the slice 2 sheets (2b). The sheets
+   arrived on 2026-11-18 (slice 2b, "Sheets returned"); the pick is the
+   owner's, and no finish passed the lead's AI blind reading at 40 px.
 2. **Faces at card size** (numbers in slice 1b's evidence). On the stock
    avatar only the smile reads, at any size from 8 to 96 device px, so
    framing is not the limit. The options are:
@@ -1344,6 +1372,15 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
 
    Recommended: B first, because it is cheap and tests whether the mixes
    are the limit, then A if a third reading still misses.
+
+   Evidence since (2026-11-18): Astra's drawn sheets, the ideal the base
+   would copy, blur the same four expressions at 40 px (neutral, hopeful,
+   holding something back, looking down; three AI readers per finish, see
+   slice 2b, "Sheets returned"). So the expression designs, not the
+   modelled face, look like the cause: commissioning a face (A) or redoing
+   it from the sheets (C) would likely meet the same misses. A revision
+   request to Astra for those four is drafted and unsent. The readers were
+   AI models, not the people Astra's protocol asks for.
 
 ## Test plan and evidence
 
