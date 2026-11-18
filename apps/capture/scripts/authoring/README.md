@@ -10,16 +10,16 @@ ordinary hologram GLB, and review whether it reads. Run everything from `apps/ca
 |---|---|
 | `acting-report.ts <take.glb> [--against other.glb] [--json out.json]` | Per performer (found by skin): which bones and face shapes move and when, frozen spans, and whether fingers, face and eyes ever move. `--against` lists the spans where two takes differ. |
 | `avatar-audition.ts <avatar.glb\|.gltf> [--geometry] [--out dir] [--json out.json]` | Grades any avatar against the audition bar (`lib/audition-bar.ts`): one row per bar with its measured value and pass or fail, in `audition.json` (below). Exits 1 when a binding row fails. |
-| `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb] [--avatar file.glb]` | Solves the beat sheet on each performer's avatar (`--avatar` casts every performer on that file instead, relative to the working directory), writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`; with sound, each padded source in `<take>.audio/`), prints each reach's stop-short distance, each grip, put and aim's miss, each sound's place and padded length, and the acting report. Exits 1 when a grip, put or aim misses past its limit (the files are still written). |
+| `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb] [--avatar spec]` | Solves the beat sheet on each performer's avatar (`--avatar` casts every performer on that avatar instead: a spec as in a sheet, or a GLB path relative to the working directory), writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`; with sound, each padded source in `<take>.audio/`), prints each reach's stop-short distance, each grip, put and aim's miss, each sound's place and padded length, and the acting report. Exits 1 when a grip, put or aim misses past its limit (the files are still written). |
 | `house-base.ts [--params file] [--out file.glb] [--blender path] [--install-mpfb]` | Makes the house base avatar (slice 2c) from CC0 parts in headless Blender: fetches MPFB 2.0.18 and the faceunits01 pack at pinned sha256 into `output/authoring/house-base/cache/`, runs `house-base/build.py` with every value from `house-base/base.json`, and writes `public/gltf/models/house-base.glb` with its credits in `asset.copyright` and the scene's `holoimAvatar` extras. Change the look in `base.json`, never in the GLB. Re-runs give the same geometry, but Blender may order the eye and mouth triangles differently, so the sha256 can change. |
 | `import-take.ts <recorded.glb> [--out dir] [--fps n]` | Turns a capture-recorded GLB into the tool's own take (`lib/take.ts`, `<name>.take.json`): bone rotations away from bind, the hips' path, face channels and measures, resampled to 30 fps, with the beats found in its motion. Writes `<name>.import.md`. |
 | `recast-take.ts <take.json\|recorded.glb> --to <avatar> [--to …] [--out dir]` | Plays the take on each avatar (`stock`, `fixture:<name>` or a path) as an ordinary hologram GLB, and writes `<name>.recast.md` / `.json`: what survives and what is lost (hips, feet, limbs, wrist placement, face, gaze), against rotation-only retargeting on the same avatar. |
 | `edit-take.ts <edit.json> [--to <avatar>] [--out dir]` | Applies an edit file (`lib/edit.ts`: retime, hold, look) to a take, writes the edited take and both the original and edited takes on the avatar, and `<name>.edit.md` / `.json`. Exits 1 when a frame outside the edits differs from the recording. |
 | `compare-takes.ts <person.glb> <agent.glb> [--out dir]` | The acting report and motion numbers (beats, hold stillness, hand speed, hesitations and back-and-forth strokes, head range, travel) on two takes side by side, in `<a>-vs-<b>.compare.md` / `.json`. |
-| `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer (with the take's own sound, mixed from clip time 0, when it has any), frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
+| `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer (with sound: the take's own, mixed from clip time 0, and a face view per performer so the lips can be read), frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
 | `publish.ts <take.glb\|sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--production] [--no-quick-look] [--check]` | Validates a take and publishes it through the normal upload route (below). |
 | `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times; `--audio out.webm` presses the card's unmute control, records what the card sends to its speakers over one real-time pass, and prints where each sound in the file is heard (exit 1 when one is not heard within 100 ms of its place); with `--video` that recording is the video's soundtrack. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
-| `speech-report.ts <take.glb> [--json out.json]` | Reads a take with sound from the GLB alone: decodes each `KHR_audio` source as embedded (its length against the clip, where it sounds) and measures the mouth opening (mm along each face mesh's own `jawOpen`, else `mouthOpen`, else `viseme_aa`) against the voice: each phrase's mouth onset against its sound, the mouth in the voice's pauses, and how closely it follows the loudness. Exits 1 past its bars (below). |
+| `speech-report.ts <take.glb> [--json out.json]` | Reads a take with sound from the GLB alone: decodes each `KHR_audio` source as embedded (its length against the clip, where it sounds) and measures the mouth opening (mm along each face mesh's own `jawOpen`, else `mouthOpen`, else `viseme_aa`) against the voice: each phrase's mouth onset against its sound, the mouth in the voice's pauses, and how closely it follows the loudness; with the sheet beside the take, each line's first sound against its beat. Exits 1 past its bars (below). |
 
 ## Publishing a take
 
@@ -198,8 +198,9 @@ the take as `KHR_audio`, which the feed card and Quick Look already play.
   the ignored `output/authoring/tools/kokoro/` (the model, 96 MB, is cached
   there too), and each line is cached in `output/authoring/sound/` by a
   hash of the versions, voice and text. `file:<path>` takes a recording
-  instead (relative to the sheet) and needs a `credit`. `delay` (s after the
-  beat) and `gain` are optional.
+  instead (relative to the sheet) and needs a `credit`. A line is placed by
+  its first voiced sound, so a voice's lead-in silence does not make it
+  late; `delay` (s after the beat, never before) and `gain` are optional.
 - **Lips.** `lib/lips.ts` lays the line's phones (from the same
   phonemiser) over the voiced time of the audio itself, and turns them into
   the 15 Oculus visemes, which `@holoim/avatar-face` routes onto any avatar
@@ -210,7 +211,8 @@ the take as `KHR_audio`, which the feed card and Quick Look already play.
 - **Effects.** `synth:cup-clink` is generated here (CC0, this project's own);
   a file path takes a free-licence recording with its `credit`. `at` names a
   beat, optionally its `put` landing, plus a `delay`; `on` is an object, or
-  `<performer>.head`.
+  `<performer>.head`. Each place carries one sound (one emitter per node),
+  so a performer speaks one line per take for now.
 - **In the file.** KHR_audio has no start time: the viewer and the Quick Look
   converter start every source at clip time 0 and loop it with the clip. So
   each source is padded with silence to the clip length, encoded as
@@ -223,7 +225,8 @@ the take as `KHR_audio`, which the feed card and Quick Look already play.
   measurement: every source within a frame of the clip, each phrase's mouth
   onset within ±80 ms of its sound, the mouth in pauses of 0.25 s or more
   below 15 % of its speaking level, and a correlation with the loudness of at
-  least 0.4. `viewer-check.ts <take.glb> --audio heard.webm` hears the card.
+  least 0.4, and each line's first sound within a frame of its beat (when
+  the sheet is beside the take). `viewer-check.ts <take.glb> --audio heard.webm` hears the card.
 
 The example is `sheets/spoken-line.json`, which is `tallest-bar` with a line
 on its turn and a clink on its put.
