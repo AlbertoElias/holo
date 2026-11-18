@@ -165,7 +165,9 @@ function stripUikitmlSourcemapsPlugin(): Plugin {
 //   become ceilings and the avatar falls through.
 // - locomotion.glb: the clip library retargeted onto avatars without clips;
 //   the optimizer writes it out unreadable, and its keys must stay exact.
-const PRESERVED_MODEL_ASSETS = ['gltf/models/avatar.glb', 'gltf/models/scene.glb', 'gltf/animations/locomotion.glb'] as const;
+// - house-base.glb: the generated house base (slice 2c); the optimizer splits
+//   its one skin into three and quantizes it to 3.5× the audited size.
+const PRESERVED_MODEL_ASSETS = ['gltf/models/avatar.glb', 'gltf/models/house-base.glb', 'gltf/models/scene.glb', 'gltf/animations/locomotion.glb'] as const;
 
 function preserveModelAssetsPlugin(sourcePublicDir: string, tempPublicDir: string): Plugin {
   let outDir = path.resolve('dist');
