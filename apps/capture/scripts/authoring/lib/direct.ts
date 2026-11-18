@@ -7,7 +7,7 @@
  * recorded as local transforms and morph weights, ready for the writer.
  */
 import * as THREE from 'three';
-import type { FaceChannel } from '@holoim/avatar-face';
+import { gazeFromArkit, type FaceChannel } from '@holoim/avatar-face';
 import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import { LivenessFace } from '../../../src/face/LivenessFace.ts';
@@ -1175,6 +1175,9 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const k = (eyeTarget ? 1 - 0.7 * clamp01(eyeTarget.weight) : 1) * (1 - 0.7 * glancing);
     gaze = { left: { yaw: gaze.left.yaw + liveSample.gaze.left.yaw * k, pitch: gaze.left.pitch + liveSample.gaze.left.pitch * k }, right: { yaw: gaze.right.yaw + liveSample.gaze.right.yaw * k, pitch: gaze.right.pitch + liveSample.gaze.right.pitch * k } };
   }
+  // An expression's eyeLook channels (looking down) turn the eyes on top of the gaze; FaceRig.apply leaves them out of the morphs.
+  const looked = gazeFromArkit(weights);
+  gaze = { left: { yaw: gaze.left.yaw + looked.left.yaw, pitch: gaze.left.pitch + looked.left.pitch }, right: { yaw: gaze.right.yaw + looked.right.yaw, pitch: gaze.right.pitch + looked.right.pitch } };
   a.face.apply(weights, gaze);
   a.frame.updateMatrixWorld(true);
 }

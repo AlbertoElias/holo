@@ -44,8 +44,8 @@
   "gains": {
     "$comment": "Each face unit's offsets are multiplied by its gain after the proportions, to reach the audition bar's millimetres at card size (lib/audition-bar.ts). 1 when omitted.",
     "browInnerUp": 3.1,
-    "browDownLeft": 1.3,
-    "browDownRight": 1.3,
+    "browDownLeft": 2.6,
+    "browDownRight": 2.6,
     "browOuterUpLeft": 2.05,
     "browOuterUpRight": 2.05,
     "eyeWideLeft": 1.8,

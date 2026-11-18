@@ -1389,7 +1389,28 @@ reading recorded in slice 1's evidence. **Lifted on 2026-11-17** ("yes,
 lift the hold"); slice 2 is now the avatar flow, approved the same day
 (decision 5).
 
-7. **The house base's face (asked 2026-11-18, slice 2c).** The adapted
+7. **The house base's face (asked 2026-11-18, slice 2c; answered the same
+   day).** The owner's answer, in their words: "Yes, match the sheets"
+   (asked: "Rework the base's expressions to match Astra's round 2 sheets
+   now?", against commissioning a face). So:
+   - the base's face is not commissioned;
+   - the expression mixes (`EXPRESSIONS` in `lib/beats.ts`, which every
+     avatar shares) are reworked to the round 2 sheets, clay first;
+   - the base's blind reading is then run again as 2c's gate.
+
+   Outcome (2026-11-18): the mixes were reworked and the gate missed twice
+   more (1, 3, 4 and then 2, 1, 4 of 7; slice 2c evidence, "The round 2
+   mixes and the gate"). The face, not the mixes, is the limit: the base's
+   eyes and mouth are one or two device pixels at 40 px, where the sheet's
+   eyes span half the face. Matching needs a face made for big eyes, which
+   is option A (spend), so it is back with the owner. **Decided by the agent
+   in the owner's absence on 2026-11-18, for the owner to review:** the
+   reworked mixes, the scripts and the base land on `main` with the base
+   reachable only through `?avatar=` and beat sheets, marked here as not
+   yet passing 2c; `DEFAULT_AVATAR_URL` is unchanged. Reverting is one
+   commit (the mixes) and one file (the base).
+
+   The question as first asked: The adapted
    MPFB base passes every face row of the audition but not the blind
    reading. After two rounds, three readers each scored 5, 3, 3 and then
    3, 1, 1 of 7. Options:
@@ -2020,7 +2041,7 @@ parent frame (follow-up below).
 direction may be mirrored for such avatars; owner: the slice that next
 directs a VRM 0 avatar.
 
-### Slice 2c evidence (2026-11-18): stopped at the blind gate
+### Slice 2c evidence (2026-11-18): stopped at the blind gate (base landed, not yet passing)
 
 **Status: not done.** The base passes every face row of the audition. It
 fails the blind reading in two rounds, so work stopped as the slice
@@ -2201,6 +2222,45 @@ four confused expressions has been asked of Astra.
 
 The side-by-side of the sheet and the base is in the worktree's ignored
 `output/house-base-2c/clay-side-by-side.jpg`.
+
+#### The round 2 mixes and the gate (2026-11-18)
+
+Decision 7 was answered "Yes, match the sheets", so `EXPRESSIONS` in
+`lib/beats.ts` now follows Astra's round 2 clay sheet:
+
+- **Hopeful:** inner and outer brows high, eyes wide, the mouth a little
+  open, no smile.
+- **Holding something back:** lips pressed and rolled in, inner brows a
+  little raised, lids a little lowered. A first try with the sheet's
+  lowered brows read as determined to every reader.
+- **Looking down:** lids lowered and the irises low (`eyeLookDown`).
+  `FaceRig.apply` leaves `eyeLook*` out of the morphs, so `direct.ts` now
+  adds an expression's eye-look channels to the gaze it passes in.
+- **Determined:** brows fully down, eyes narrowed, mouth pressed.
+- **Sad:** a little stronger. **Smile** is unchanged.
+
+The mixes are shared, so the stock and every directed piece act the same
+way; the stock read only a smile before (3 of 7) and has no brows to show.
+The base's `browDown` gain went from 1.3 to 2.6 (12.1 to 23.9 mm), because
+determined barely moved the brows at card size. The audition still passes
+79 of 81 rows (the same two misses as above; face box 41.2 device px).
+
+The blind reading at 40 px, three fresh AI readers each round:
+
+| Round | Scores | What read |
+|---|---|---|
+| 1 | 1, 3, 4 of 7 | smile 3 of 3; holding back read as determined, determined as neutral |
+| 2 (stronger brows, new holding back) | 2, 1, 4 of 7 | determined 3 of 3; looking down, hopeful and smile mixed up |
+
+**The gate is not met, and the face is the limit.** At 40 px the base's
+eyes are a pixel or two and its mouth barely more, while the sheet's eyes
+span about half the face and its smile the full jaw. The cues that carry
+the sheet (wide or lowered lids, iris position, open mouth) are below what
+the card shows on this face. Scaling the eyes further brings back the
+glasses ring (clay look, above), and a smaller head fails the face box.
+What would meet it is a face made for big eyes: decision 7's option A, a
+commission, which is spend and so the owner's. The side-by-side is the
+worktree's ignored `output/house-base-2c/mixes-side-by-side.jpg`.
 
 ## Physical-device limits
 
