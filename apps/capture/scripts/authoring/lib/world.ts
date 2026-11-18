@@ -14,7 +14,7 @@ import { parseColor } from './props.ts';
 
 const DEG = Math.PI / 180;
 const G = 9.81;
-const WATER = '#b4e2ff'; // light enough to stand off the card's teal
+const WATER = '#d4efff'; // light enough to stand off the card's teal
 const SPARK = '#ffd877';
 const MOTE = '#f4f0d8';
 
@@ -133,8 +133,8 @@ export function solveWorld(sheet: BeatSheet, take: SolvedTake): SolvedWorld {
     const tilt = w.tilt ?? 0;
     const rate = w.rate ?? 60;
     const speed = w.speed ?? 0.8;
-    // About 5 px wide on the card (a 16 mm stream read as "thin", slice 1g).
-    const size = w.size ?? 0.03;
+    // About 8 px wide on the card (16 mm and 30 mm streams both read as "thin", slice 1g).
+    const size = w.size ?? 0.045;
     const wetRadius = w.wet === false ? 0 : typeof w.wet === 'number' ? w.wet : 0.06;
     const color = parseColor(w.color ?? WATER);
     const rnd = stream(salt);

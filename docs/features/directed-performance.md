@@ -839,6 +839,9 @@ their stretch along the fall, and their colour against the background.
   see the stream at card size without calling it thin or hard to see.
 - Two tuning tries at most, then report.
 
+**Evidence:** "Slice 1g evidence", below. The stream bar is not met after
+two tries; the stream is wider and paler, and nothing else regressed.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
@@ -2539,6 +2542,39 @@ target is sampled at departure.
 Quick Look shows it in steps (as the viewer does). Drops and motes are
 node scale and translation, which Quick Look plays. Nothing in a world
 line depends on a material animation or a shader.
+
+### Slice 1g evidence (2026-11-18)
+
+**What changed.** In `lib/world.ts`, a drop now defaults to `size` 0.045 m
+(was 0.012; about 8 px on the card) in `#d4efff` (was `#8cc4ec`). Each drop
+is stretched to 1.5 times the distance it falls in a frame, capped at
+0.12 m, so neighbouring drops overlap into one stream. `sheets/watering.json`
+drops its own `"size": 0.016`.
+
+**Checks (try 2).**
+- The build: 132 drops on 16 nodes, plant in 4 colour steps from 5.3 to 7.7 s, 115 channels, 3.8 MB.
+- `publish.ts --check`: valid, deformed 686,136 and rigid 4,817,839.
+- `check_usdz_tools.sh`: 4 of 4.
+- rest, expressions, gestures, defaults-test, goodbye, two-avatars and tallest-bar are byte-identical to `main`.
+
+**Blind reading, frames only, three fresh readers per try.**
+- Try 1 (0.03 m, `#b4e2ff`): 3 of 3 said poured and 3 of 3 said the plant revived. 0 of 3 saw the stream without calling it thin or hard to see at card size: "a thin pale-blue sliver and hard to see", "small and low contrast", "a thin pale curve and easy to miss".
+- Try 2 (0.045 m, `#d4efff`): 3 of 3 said poured and 3 of 3 said revived. 1 of 3 saw the stream at card size without qualification: "a pale, thick, curved white-grey stream", "visible as a white arc". The other two read it as "small, pale and thin" and "not obvious what it is without the close view". So the stream bar (2 of 3) is not met.
+- Two readers also saw the stream as "a solid white-grey curved tube rather than droplets".
+
+**Decision (decided by the agent in the owner's absence on 2026-11-18, for the
+owner to review).** Keep try 2: it reads better than try 1 and 1f, costs nothing in
+budget, and leaves every other sheet unchanged. The bar is not loosened; the
+stream at card size stays open. The next lever is contrast, not width: the
+drops use the lit material every effect sphere shares, so the side away from the
+key light goes grey on the teal. An unlit or emissive drop
+material in `lib/write-glb.ts`, scoped to the pour so other sheets stay
+byte-identical, is the likely fix, with a Quick Look check that it survives
+conversion.
+
+**Quick Look note.** One run of the check on try 1 failed one case on its
+CPU budget after a successful conversion. A re-run passed 4 of 4. Logged
+as B-069.
 
 ### Slice 2a evidence (2026-11-17)
 
