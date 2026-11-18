@@ -8,7 +8,7 @@
  * Voices are `file:<path>` (relative to the sheet; any format ffmpeg reads) or
  * `local:<voice>`, the local Kokoro model (Apache-2.0) run by kokoro-js
  * (Apache-2.0) from an ignored cache, `output/authoring/tools/kokoro/`, at a
- * pinned version and model revision (the model checked by sha256), with no key and no network after the first fetch. Effects
+ * pinned version, its model checked by sha256, with no key and no network after the first fetch. Effects
  * are `synth:<name>` (made here, the project's own, CC0) or a file with a
  * credit. Encoding is Opus in WebM through an ffmpeg that has libopus.
  */
@@ -43,7 +43,7 @@ import { KokoroTTS } from 'kokoro-js';
 import { phonemize } from 'phonemizer';
 const [voice, out, ...words] = process.argv.slice(2);
 const text = words.join(' ');
-const tts = await KokoroTTS.from_pretrained('${KOKORO.model}', { dtype: '${KOKORO.dtype}', device: 'cpu', revision: '${KOKORO.revision}' });
+const tts = await KokoroTTS.from_pretrained('${KOKORO.model}', { dtype: '${KOKORO.dtype}', device: 'cpu' });
 const audio = await tts.generate(text, { voice });
 await audio.save(out);
 // The phonemiser's language as kokoro-js picks it for the voice ('a…' American, else British), so the lips read the phones it spoke.
@@ -88,10 +88,17 @@ async function ensureKokoro(): Promise<void> {
   await writeFile(join(KOKORO_DIR, 'phonemize.mjs'), PHONEMIZE_SCRIPT);
 }
 
-/** The fetched model must be the pinned one: its sha256 against the revision's LFS hash. */
-function verifyKokoroModel(): void {
+/**
+ * The fetched model must be the pinned one: its sha256 against the LFS hash of
+ * `KOKORO.revision`. kokoro-js 1.2.1 cannot ask for a revision (it fetches the
+ * model's main branch), so a changed model is caught here and fails the build.
+ */
+function verifyKokoroModel(justSpoke: boolean): void {
   const file = join(KOKORO_DIR, 'node_modules', '@huggingface', 'transformers', '.cache', KOKORO.model, KOKORO.modelFile);
-  if (!existsSync(file)) throw new Error(`the voice model is not at ${file}; the transformers cache moved`);
+  if (!existsSync(file)) {
+    if (!justSpoke) return; // a cached line, and the model not fetched here
+    throw new Error(`the voice model is not at ${file}; the transformers cache moved`);
+  }
   const sha = createHash('sha256').update(readFileSync(file)).digest('hex');
   if (sha !== KOKORO.modelSha256) throw new Error(`${KOKORO.model} ${KOKORO.modelFile} is ${sha}, not the pinned ${KOKORO.modelSha256}; delete ${KOKORO_DIR} and build again`);
 }
@@ -99,7 +106,7 @@ function verifyKokoroModel(): void {
 export interface Line {
   readonly beat: string;
   readonly performer: string;
-  /** Take time the line starts (s). */
+  /** Take time the line's audio starts (s): its first voiced sound lands on the beat plus `delay`. */
   readonly at: number;
   readonly text: string;
   readonly voice: string;
@@ -124,12 +131,13 @@ export async function prepareLine(beat: Beat, sheetFile: string, cacheDir: strin
     const key = createHash('sha256').update(JSON.stringify([KOKORO.version, KOKORO.model, KOKORO.revision, KOKORO.dtype, voice, say.text])).digest('hex').slice(0, 16);
     file = join(cacheDir, `line-${key}.wav`);
     const phrasesFile = `${file}.json`;
-    if (!existsSync(file) || !existsSync(phrasesFile)) {
+    const speak = !existsSync(file) || !existsSync(phrasesFile);
+    if (speak) {
       await mkdir(cacheDir, { recursive: true });
       const out = run('node', ['speak.mjs', voice, file, say.text], KOKORO_DIR);
-      verifyKokoroModel();
       await writeFile(phrasesFile, out);
     }
+    verifyKokoroModel(speak);
     phrases = (JSON.parse(await readFile(phrasesFile, 'utf8')) as { phrases: string[] }).phrases;
     credit = `voice: Kokoro-82M ${voice} (${KOKORO.model}, Apache-2.0), made locally with kokoro-js ${KOKORO.version}`;
   } else if (say.voice.startsWith('file:')) {
@@ -139,7 +147,11 @@ export async function prepareLine(beat: Beat, sheetFile: string, cacheDir: strin
     credit = `voice: ${say.credit === undefined || say.credit === 'own' ? 'own recording' : `${say.credit.title} by ${say.credit.author} (${say.credit.licence}, ${say.credit.sourceUrl})`}`;
   } else throw new Error(`beat ${beat.id}: say.voice is local:<voice> or file:<path>`);
   const pcm = decode(file);
-  return { beat: beat.id, performer: beat.performer, at: beat.at + (say.delay ?? 0), text: say.text, voice: say.voice, gain: say.gain ?? 1, file, seconds: pcm.length / RATE, lips: lineLips(phrases, pcm, RATE), credit };
+  const lips = lineLips(phrases, pcm, RATE);
+  // The line is placed by its first voiced sound, not by the start of its file (a voice's lead-in silence, 0.3 s for Kokoro, would make it late).
+  const cue = beat.at + (say.delay ?? 0);
+  const leadIn = Math.min(lips.groups[0]?.start ?? 0, cue);
+  return { beat: beat.id, performer: beat.performer, at: cue - leadIn, text: say.text, voice: say.voice, gain: say.gain ?? 1, file, seconds: pcm.length / RATE, lips, credit };
 }
 
 /** The project's own effects, made from numbers (CC0). */

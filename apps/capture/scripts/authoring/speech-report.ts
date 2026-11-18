@@ -15,6 +15,7 @@
  * loudness with a correlation of at least 0.4.
  */
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -36,7 +37,9 @@ export interface SpeechReport {
   sources: SourceReport[];
   voice: string | null;
   mouth: { speakingP90Mm: number; phrases: PhraseReport[]; pauses: { start: number; end: number; p95Mm: number; share: number }[]; outsideShare: number; correlation: number; series: { t: number; mm: number; env: number }[] };
-  pass: { padded: boolean; onsets: boolean; rest: boolean; correlation: boolean; all: boolean };
+  /** With the sheet beside the take (`<take>.beats.json`): each spoken line's first sound against its beat (plus delay). */
+  cues: { source: string; cue: number; onset: number | null; ms: number | null }[] | null;
+  pass: { padded: boolean; onsets: boolean; rest: boolean; correlation: boolean; cues: boolean; all: boolean };
 }
 
 /**
@@ -158,10 +161,20 @@ export async function speechReport(file: string): Promise<SpeechReport> {
   const onsets = phrases.length > 0 && phrases.every((p) => p.leadMs !== null && Math.abs(p.leadMs) <= BARS.onsetMs);
   const rest = pauses.every((p) => p.share < BARS.restShare);
   const corr = correlation >= BARS.correlation;
+  const sheetFile = file.replace(/\.glb$/, '.beats.json');
+  const sheet = existsSync(sheetFile) ? JSON.parse(await readFile(sheetFile, 'utf8')) as { beats: { id: string; at: number; say?: { delay?: number } }[] } : null;
+  const cues = sheet ? sheet.beats.filter((b) => b.say).map((b) => {
+    const src = sources.find((x) => x.name === `say-${b.id}`);
+    const cue = b.at + (b.say!.delay ?? 0);
+    const onset = src?.onset ?? null;
+    return { source: `say-${b.id}`, cue, onset, ms: onset === null ? null : (onset - cue) * 1000 };
+  }) : null;
+  const cued = (cues ?? []).every((c) => c.ms !== null && Math.abs(c.ms) <= 1000 / fps);
   return {
     file, clip, fps, sources, voice,
     mouth: { speakingP90Mm: speakingP90, phrases, pauses, outsideShare: pct(outside, 0.95) / speakingP90, correlation, series: times.map((t, f) => ({ t, mm: mm[f]!, env: envAt(t) })) },
-    pass: { padded, onsets, rest, correlation: corr, all: padded && onsets && rest && corr }
+    cues,
+    pass: { padded, onsets, rest, correlation: corr, cues: cued, all: padded && onsets && rest && corr && cued }
   };
 }
 
@@ -172,7 +185,8 @@ export function summarizeSpeech(r: SpeechReport): string {
   lines.push(`  mouth while speaking: p90 ${m.speakingP90Mm.toFixed(2)} mm; follows loudness r = ${m.correlation.toFixed(2)}; outside the line p95 ${(m.outsideShare * 100).toFixed(0)} % of that`);
   for (const p of m.phrases) lines.push(`  phrase ${p.start.toFixed(2)}-${p.end.toFixed(2)} s: mouth on ${p.mouthOn?.toFixed(3) ?? '-'} s (leads the sound by ${p.leadMs ?? '-'} ms), off ${p.mouthOff?.toFixed(3) ?? '-'} s (${p.lagOffMs ?? '-'} ms after)`);
   for (const p of m.pauses) lines.push(`  pause ${p.start.toFixed(2)}-${p.end.toFixed(2)} s: mouth p95 ${p.p95Mm.toFixed(2)} mm (${(p.share * 100).toFixed(0)} % of speaking)`);
-  lines.push(`  bars: padded ${r.pass.padded ? 'pass' : 'FAIL'}, onsets ±${BARS.onsetMs} ms ${r.pass.onsets ? 'pass' : 'FAIL'}, rest <${BARS.restShare * 100} % ${r.pass.rest ? 'pass' : 'FAIL'}, r ≥ ${BARS.correlation} ${r.pass.correlation ? 'pass' : 'FAIL'}`);
+  for (const c of r.cues ?? []) lines.push(`  ${c.source}: its beat cues it at ${c.cue.toFixed(2)} s; first sound ${c.onset?.toFixed(3) ?? '-'} s (${c.ms === null ? 'not heard' : `${c.ms >= 0 ? '+' : ''}${c.ms.toFixed(0)} ms`})`);
+  lines.push(`  bars: padded ${r.pass.padded ? 'pass' : 'FAIL'}, onsets ±${BARS.onsetMs} ms ${r.pass.onsets ? 'pass' : 'FAIL'}, rest <${BARS.restShare * 100} % ${r.pass.rest ? 'pass' : 'FAIL'}, r ≥ ${BARS.correlation} ${r.pass.correlation ? 'pass' : 'FAIL'}${r.cues ? `, lines on their beat ±1 frame ${r.pass.cues ? 'pass' : 'FAIL'}` : ''}`);
   return lines.join('\n');
 }
 

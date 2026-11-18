@@ -122,7 +122,7 @@ export interface Beat {
   /** What a viewer should understand from this beat, in a viewer's words. The review compares a fresh reader's account against it. */
   readonly intent?: string;
   readonly directions: readonly Direction[];
-  /** A spoken line, starting at the beat's `at` (plus `delay`), heard from the performer's head, with the lips following it (sound brief slice 1a). */
+  /** A spoken line, its first voiced sound at the beat's `at` (plus `delay`, ≥ 0), heard from the performer's head, with the lips following it (sound brief slice 1a). */
   readonly say?: Say;
 }
 
@@ -622,6 +622,7 @@ export function soundProblems(sheet: BeatSheet): string[] {
     const what = `beat ${b.id} say`;
     if (!b.say.text?.trim()) problems.push(`${what}: no text`);
     if (!/^(local:[a-z]{2}_[a-z]+|file:.+)$/.test(b.say.voice ?? '')) problems.push(`${what}: voice is local:<voice> (e.g. local:af_heart) or file:<path>`);
+    if ((b.say.delay ?? 0) < 0) problems.push(`${what}: delay is seconds after the beat, not before`);
     if (b.say.voice?.startsWith('file:') && b.say.credit === undefined) problems.push(`${what}: a file voice needs a credit ("own" or a free licence)`);
     place(`${b.performer}.head`, what);
   }

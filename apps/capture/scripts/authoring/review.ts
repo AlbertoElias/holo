@@ -11,7 +11,10 @@
  *   camera, as a viewer scrolling the feed sees it;
  * - close: one per performer, head to hips, from the side the card sees,
  *   widening to hold the recorded objects the performer acts on while they
- *   act on them (below).
+ *   act on them (below);
+ * - face: in a take with sound, one per performer, the head alone from the
+ *   same side, so a reader can see the lips (a closed or open mouth is a
+ *   pixel or two at the other framings).
  *
  * The card stills are cropped to the cast and every recorded object on the
  * card, so a stage the card shows is never cut from the stills. A performer
@@ -25,7 +28,8 @@
  * - `reader/`: what the fresh reader is given and nothing else: `review.mp4`
  *   (H.264, card and close side by side, real time), frame sheets every
  *   `--step` seconds with the take time on each tile
- *   (`sheet-card-NN.jpg`, `sheet-close-<performer>-NN.jpg`), and
+ *   (`sheet-card-NN.jpg`, `sheet-close-<performer>-NN.jpg`, and with sound
+ *   `sheet-face-<performer>-NN.jpg`), and
  *   `README.md`, the reader's instructions. No intent, no beat names.
  * - `acting-report.json`: what moves and when (`acting-report.ts`).
  * - `on-screen.json`: each recorded object's size on the card and how much
@@ -61,6 +65,9 @@ export const CARD_PIXEL_RATIO = 1.5;
 export const MM_PER_CSS_PX = (25.4 * 3) / 460;
 const CLOSE_SIZE = 900;
 const CLOSE_FOV = 30;
+/** The face view's height at the head (m) and its size (px). */
+const FACE_SPAN = 0.34;
+const FACE_SIZE = 720;
 export const BACKGROUND = Number.parseInt(tokens.color.ground.mid.slice(1), 16);
 const STILL_PX = 1;
 
@@ -117,6 +124,14 @@ function smoothed(xs: Vec[], half: number): Vec[] {
 
 const dot = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a: Vec, b: Vec): Vec => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+/** The head alone, from the side the card sees, a little above it: the face view. */
+export function faceView(head: Vec, camera: Vec, fov = CLOSE_FOV): { position: Vec; target: Vec } {
+  const target: Vec = [head[0], head[1] + 0.07, head[2]];
+  const flat = norm([camera[0] - target[0], 0, camera[2] - target[2]]);
+  const dir = norm([flat[0], 0.1, flat[2]]);
+  return { position: add(target, dir, FACE_SPAN / 2 / Math.tan((fov * Math.PI) / 360)), target };
+}
 
 /**
  * Head to hips, from the side the card sees, a little above the eyes. With
@@ -229,6 +244,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
   const acting = actingReport(doc, basename(take));
   await writeFile(join(out, 'acting-report.json'), `${JSON.stringify(acting, null, 2)}\n`);
 
+  const takeHasSound = Boolean((parseGlb(new Uint8Array(await readFile(take))).json as { extensionsUsed?: string[] }).extensionsUsed?.includes('KHR_audio'));
   const servers = await startViewer();
   let onScreen: OnScreen;
   let init: Init;
@@ -268,6 +284,20 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
         await dataUrlTo(join(dir, `${String(f).padStart(4, '0')}.jpg`), shot.image);
       }
     }
+    // Pass 3, a take with sound: the face per performer, so the lips can be read.
+    const faces = takeHasSound ? init.performers.map((_, p) => p) : [];
+    for (const p of faces) {
+      const dir = join(frameDir, `face-${p}`);
+      await mkdir(dir, { recursive: true });
+      const plan = bodies.map((b) => faceView(b.performers[p]!.head, b.camera));
+      const pos = smoothed(plan.map((x) => x.position), Math.round(fps / 4));
+      const tgt = smoothed(plan.map((x) => x.target), Math.round(fps / 4));
+      for (let f = 0; f < frames; f += 1) {
+        await R('seek', times[f]);
+        const shot = await R('close', p, { position: pos[f], target: tgt[f], fov: CLOSE_FOV, width: FACE_SIZE, height: FACE_SIZE, background: BACKGROUND, label: `${times[f]!.toFixed(2)} s` }) as { image: string };
+        await dataUrlTo(join(dir, `${String(f).padStart(4, '0')}.jpg`), shot.image);
+      }
+    }
     await open.close();
 
     // The video: card and close views side by side, at the take's real speed.
@@ -277,11 +307,16 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       inputs.push('-framerate', String(fps), '-i', join(frameDir, `close-${p}`, '%04d.jpg'));
       scales.push(`[${p + 1}]scale=1080:1080[c${p + 1}]`);
     }
-    const stack = init.performers.length ? `;${Array.from({ length: init.performers.length + 1 }, (_, i) => `[c${i}]`).join('')}hstack=inputs=${init.performers.length + 1}[v]` : ';[c0]null[v]';
+    for (const p of faces) {
+      inputs.push('-framerate', String(fps), '-i', join(frameDir, `face-${p}`, '%04d.jpg'));
+      scales.push(`[${init.performers.length + 1 + p}]scale=1080:1080[c${init.performers.length + 1 + p}]`);
+    }
+    const views = init.performers.length + faces.length + 1;
+    const stack = views > 1 ? `;${Array.from({ length: views }, (_, i) => `[c${i}]`).join('')}hstack=inputs=${views}[v]` : ';[c0]null[v]';
     // A take with sound plays it: its sources mixed from clip time 0, as the frames are.
     const soundtrack = join(frameDir, 'sound.wav');
     const sound = takeSoundtrack(new Uint8Array(await readFile(take)), soundtrack) ? ['-i', soundtrack] : [];
-    const soundMap = sound.length ? ['-map', `${init.performers.length + 1}:a`, '-c:a', 'aac', '-b:a', '160k', '-shortest'] : [];
+    const soundMap = sound.length ? ['-map', `${views}:a`, '-c:a', 'aac', '-b:a', '160k', '-shortest'] : [];
     ffmpeg([...inputs, ...sound, '-filter_complex', scales.join(';') + stack, '-map', '[v]', ...soundMap, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-r', String(fps), '-movflags', '+faststart', join(reader, 'review.mp4')]);
 
     // Frame sheets every `step` s: the card cropped to the cast at true device pixels, and each close view.
@@ -314,6 +349,10 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       for (let p = 0; p < init.performers.length; p += 1) {
         await sheet(sheetPage, join(reader, `sheet-close-${p}-${n}.jpg`), chunk.map((f) => ({ file: join(frameDir, `close-${p}`, `${String(f).padStart(4, '0')}.jpg`), label: `${times[f]!.toFixed(2)} s` })),
           360, 360, `close view, performer ${p + 1}, ${span}`);
+      }
+      for (const p of faces) {
+        await sheet(sheetPage, join(reader, `sheet-face-${p}-${n}.jpg`), chunk.map((f) => ({ file: join(frameDir, `face-${p}`, `${String(f).padStart(4, '0')}.jpg`), label: `${times[f]!.toFixed(2)} s` })),
+          360, 360, `face, performer ${p + 1}, ${span}`);
       }
     }
     await browser.close();
@@ -358,11 +397,12 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
   await writeFile(join(reader, 'README.md'), [
     '# Review pack: what do you see?',
     '',
-    `A short hologram, ${init.duration.toFixed(1)} s, muted. You have not been told what it is meant to show; please do not guess at what the author intended, only say what you see.`,
+    `A short hologram, ${init.duration.toFixed(1)} s, ${takeHasSound ? 'with sound (the video plays it)' : 'muted'}. You have not been told what it is meant to show; please do not guess at what the author intended, only say what you see.`,
     '',
     '- `review.mp4`: the take in real time. Left: as it appears on a feed card on a phone. Right: a closer view of each performer, which widens to show what they are handling or directing attention to.',
     `- \`sheet-card-NN.jpg\`: the card framing at true size, one still every ${step} s, the time on each still.`,
     '- `sheet-close-<performer>-NN.jpg`: the close view at the same times.',
+    ...(takeHasSound ? ['- `sheet-face-<performer>-NN.jpg`: each performer\'s face at the same times; in the video, the rightmost view.'] : []),
     '',
     'Answer in three parts:',
     '',
