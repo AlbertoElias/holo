@@ -22,7 +22,7 @@ import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { loadAvatar, type LoadedAvatar } from './lib/avatar.ts';
 import { validateSheet, type BeatSheet } from './lib/beats.ts';
 import { solveTake, type ObjectReport, type SolvedTake } from './lib/direct.ts';
-import { describeLife } from './lib/life.ts';
+import { describeAttend, describeLife } from './lib/life.ts';
 import { loadSources, type LoadedSource } from './lib/props.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { writeTake } from './lib/write-glb.ts';
@@ -121,6 +121,8 @@ async function main(): Promise<void> {
   }
   for (const t of r.take.tracks) {
     if (t.life) console.log(`  ${t.spec.id} life: ${describeLife(t.life, r.take.sheet.duration)}`);
+    // Attending plays only facing someone: printed when there is someone to face.
+    if (t.attend && r.take.tracks.length > 1) console.log(`  ${t.spec.id} attending: ${describeAttend(t.attend, r.take.sheet.duration)}`);
     console.log(`  ${t.spec.id} body: ${bodyLine(t.motion)}`);
   }
   const lines = objectLines(r.take.objects);

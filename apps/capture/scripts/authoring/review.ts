@@ -150,7 +150,7 @@ export function closeView(head: Vec, hips: Vec, camera: Vec, fov = CLOSE_FOV, ob
 /** The point fields a direction names (where it reaches, looks, aims, turns toward, puts). */
 function directionPoints(d: Direction): (Point | undefined)[] {
   switch (d.kind) {
-    case 'look': case 'reach': case 'aim': return [d.at];
+    case 'look': case 'reach': case 'aim': case 'gesture': case 'state': return [d.at];
     case 'turn': return [d.toward];
     case 'put': return [d.at, d.on];
     default: return [];

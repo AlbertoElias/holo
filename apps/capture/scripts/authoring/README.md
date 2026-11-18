@@ -113,13 +113,21 @@ Each beat belongs to a performer, starts `at` a time and holds `directions`:
 
 - `look` at a point (`head` sets how much of it the head takes);
 - `expression`, a named one (`held`, `hope`, `sad`, `smile`, `small-smile`,
-  `breath`, `resolve`, `eyes-down`; `EXPRESSIONS` in `lib/beats.ts`) or face
-  channels, with a `strength`. On the stock avatar only mouth-led shapes
+  `breath`, `resolve`, `eyes-down`, and the states' faces `noticing` and
+  `concerned`; `FACE_MIXES` in `lib/beats.ts`) or face channels, with a `strength`. On the stock avatar only mouth-led shapes
   (`smile`, `sad`) read at feed-card size; brow and lip-press shapes move
   the mesh under 5 mm and do not (`face-legibility.ts`);
 - `reach` with a hand toward a point, stopping `stopShort` metres from it;
 - `hand` shape (`relaxed`, `open`, `reach`, `fist`, `point`, `grip`, `withheld`);
 - `weight` shift, `turn` (`upper` twists and returns, `whole` stays), `step`;
+- `gesture` by `name`, in one line: `nod`, `head-shake`, `shrug`, `wave`
+  (optionally `at` someone), `rub` (something between the fingers, eyes on
+  the hand) and `hand-to-chest`; a hand gesture takes a `side` (right by
+  default), a repeated one a `count`, and any a `strength`. Its timing,
+  repeats and how long it holds come from `GESTURES` in `lib/beats.ts`;
+- `state` by `name`, `noticing` (alert: a quick lift, eyes wide, the head
+  turning to an optional `at`) or `concerned` (brows knit, lips pressed, the
+  head down and tilted, the body a little forward), held for the beat's hold;
 - `take` an object by its grip (with an optional `palm`, as a reach's, for
   the hand's facing as it closes), `put` it `at` a point or `on` another
   object, and `aim` what a hand holds at a point (below).
@@ -152,9 +160,14 @@ never moves a hand that holds something or that another performer reaches
 to. Each performer's schedule
 comes from its `seed` alone, so revising a beat changes life only near that
 beat. `direct.ts` prints each performer's life events and motion-quality
-verdicts. Fresh readers call a hold facing the viewer alive, but two people
-in profile still read as mostly frozen through a long held ending, so give
-that one a beat (a glance at the other, a step) rather than relying on life.
+verdicts. Life alone moves mostly in depth, which a side view does not see,
+so a performer facing another (their head within 35° of straight ahead,
+fading out by 55°) also attends: small listening nods every few seconds and,
+now and then, the hands coming loosely together in front of the waist and
+apart again, both in the plane a side view sees. It is drawn on streams of
+its own, gives way to directions like the rest, and `"attend": false` on a
+performer turns it off; `direct.ts` prints it for takes with more than one
+performer.
 `style: "flat"` (or `--style flat`)
 plays the same blocking as straight lines with no life, face or fingers, for
 comparison.

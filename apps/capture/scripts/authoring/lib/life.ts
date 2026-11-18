@@ -333,11 +333,15 @@ export function faceAt(s: LifeSchedule, t: number, glanceK = 1): FaceWeights {
  */
 export const MASKED_BY = {
   weight: { weight: 1, step: 1, aim: 1 },
-  glance: { look: 0.65, reach: 0.8, take: 0.8, put: 0.8, aim: 0.8 },
-  hand: { hand: 1, reach: 1, take: 1, put: 1, aim: 1 },
-  /** A directed expression owns the face while it plays. */
-  face: { expression: 1 }
-} as const satisfies Record<string, Partial<Record<DirectionKind, number>>>;
+  glance: { look: 0.65, reach: 0.8, take: 0.8, put: 0.8, aim: 0.8, gesture: 1, 'state:noticing': 1, 'state:concerned': 0.5 },
+  hand: { hand: 1, reach: 1, take: 1, put: 1, aim: 1, 'gesture:shrug': 1, 'gesture:wave': 1, 'gesture:rub': 1, 'gesture:hand-to-chest': 1, 'state:noticing': 1 },
+  /** A directed expression owns the face while it plays, as a state's face and a shrug's do. */
+  face: { expression: 1, state: 1, 'gesture:shrug': 1 },
+  /** The attending layer's nods give way to whatever moves the head; under a held look they go on, smaller. */
+  nod: { look: 0.5, reach: 1, take: 1, put: 1, aim: 1, turn: 1, step: 1, gesture: 1, state: 1 },
+  /** Its arm changes need both hands free (checked per side, so a hand directed on either side masks it). */
+  arms: { hand: 1, reach: 1, take: 1, put: 1, aim: 1, turn: 1, step: 1, 'gesture:shrug': 1, 'gesture:wave': 1, 'gesture:rub': 1, 'gesture:hand-to-chest': 1, state: 1 }
+} as const satisfies Record<string, Readonly<Record<string, number>>>;
 
 /**
  * How busy a life channel is at t, 0 to 1, from the directions near t only
@@ -345,11 +349,12 @@ export const MASKED_BY = {
  * A hand's channel counts that side's directions. A persistent direction
  * (a turn, a step) is busy while it moves, not after.
  */
-export function busy(dirs: readonly Resolved[], t: number, kinds: Partial<Record<DirectionKind, number>>, side?: Side): number {
+export function busy(dirs: readonly Resolved[], t: number, kinds: Readonly<Partial<Record<DirectionKind | `${'gesture' | 'state'}:${string}`, number>>>, side?: Side): number {
   let b = 0;
   for (const r of dirs) {
     const d = r.direction;
-    const level = kinds[d.kind];
+    // A gesture or state is keyed by its name (`gesture:wave`), then by its kind.
+    const level = (d.kind === 'gesture' || d.kind === 'state' ? kinds[`${d.kind}:${d.name}`] : undefined) ?? kinds[d.kind];
     if (level === undefined) continue;
     if (side && 'side' in d && d.side !== side && d.side !== 'both') continue;
     const end = r.persistent ? r.at + r.attack + r.settle : r.end;
@@ -373,4 +378,78 @@ export function describeLife(s: LifeSchedule, duration: number): string {
   const settles = s.face.settles.filter((m) => m.at < duration).map((m) => `${m.at.toFixed(1)}${m.tug ? ` (${m.tug} corner)` : ''}`).join(', ') || 'none';
   const flashes = s.face.flashes.filter((x) => x < duration).map((x) => x.toFixed(1)).join(', ') || 'none';
   return `weight on the ${s.startWeight > 0 ? 'left' : 'right'} leg, shifts at ${at(s.weight)} s; glances at ${at(s.glances)} s; sighs at ${at(s.sighs)} s; mouth settles at ${settles} s; brow flashes at ${flashes} s`;
+}
+
+/**
+ * Attending life (brief slice 1e): what a performer facing another does through a long hold, in
+ * the plane a side view sees. Small listening nods, and the arms changing posture now and then,
+ * from hanging to the hands loosely together in front of the waist and back. Drawn from the seed
+ * on streams of its own (salts 9 and 10), so no event of `lifeSchedule` moves; how much of it
+ * plays at t is `attendGate` (facing someone) times what the directions leave free.
+ */
+export interface AttendSchedule {
+  readonly nods: readonly { readonly at: number; readonly count: number; readonly deg: number }[];
+  /** Spans with the hands together in front, eased in and out over `ATTEND_ARMS.ease`. */
+  readonly arms: readonly { readonly at: number; readonly hold: number; readonly over: Side }[];
+}
+
+/** A listening nod: down by `deg` and back over `cycle` seconds, the second of two smaller. */
+export const ATTEND_NOD = { cycle: 0.5, second: 0.65 } as const;
+const NOD_FIRST: Range = [1.2, 2.6];
+const NOD_EVERY: Range = [2.2, 4.5];
+const NOD_DEG: Range = [6, 10];
+const NOD_DOUBLE = 0.4;
+/** Hands together: how long to ease, hold and stay apart (seconds), and where (per arm length, from the hips, in the body frame). */
+export const ATTEND_ARMS = { ease: 0.8, height: 0.28, forward: 0.3, apart: 0.07 } as const;
+const ARMS_FIRST: Range = [1.0, 2.5];
+const ARMS_HOLD: Range = [2.5, 5.0];
+const ARMS_APART: Range = [1.5, 3.5];
+/** Facing someone: the other's head within this many degrees of straight ahead gives the whole layer; past the second, none. */
+export const ATTEND_FACING = { full: 35, none: 55 } as const;
+
+export function attendSchedule(seed: number, until: number): AttendSchedule {
+  const rn = stream(seed, 9);
+  const nods: { at: number; count: number; deg: number }[] = [];
+  for (let t = pick(rn, NOD_FIRST); t < until; t += pick(rn, NOD_EVERY)) nods.push({ at: t, count: rn() < NOD_DOUBLE ? 2 : 1, deg: pick(rn, NOD_DEG) });
+  const ra = stream(seed, 10);
+  const arms: { at: number; hold: number; over: Side }[] = [];
+  for (let t = pick(ra, ARMS_FIRST); t < until;) {
+    const hold = pick(ra, ARMS_HOLD);
+    arms.push({ at: t, hold, over: ra() < 0.5 ? 'left' : 'right' });
+    t += 2 * ATTEND_ARMS.ease + hold + pick(ra, ARMS_APART);
+  }
+  return { nods, arms };
+}
+
+/** How much the layer plays for a head `offDeg` degrees off straight ahead of the other performer's head. */
+export function attendGate(offDeg: number): number {
+  return 1 - smoother((Math.abs(offDeg) - ATTEND_FACING.full) / (ATTEND_FACING.none - ATTEND_FACING.full));
+}
+
+/** The nods' pitch at t, degrees down; with when the latest began. */
+export function attendNodAt(s: AttendSchedule, t: number): number {
+  let deg = 0;
+  for (const n of s.nods) {
+    if (t <= n.at) break;
+    const u = (t - n.at) / ATTEND_NOD.cycle;
+    if (u >= n.count) continue;
+    const k = u < 1 ? 1 : ATTEND_NOD.second;
+    deg += n.deg * k * (0.5 - 0.5 * Math.cos(2 * Math.PI * u));
+  }
+  return deg;
+}
+
+/** Hands together at t, 0 to 1, and which hand is over the other. */
+export function attendArmsAt(s: AttendSchedule, t: number): { k: number; over: Side } {
+  for (const a of s.arms) {
+    if (t <= a.at) break;
+    if (t < a.at + 2 * ATTEND_ARMS.ease + a.hold) return { k: pulse(t, a.at, ATTEND_ARMS.ease, a.hold, ATTEND_ARMS.ease), over: a.over };
+  }
+  return { k: 0, over: 'right' };
+}
+
+export function describeAttend(s: AttendSchedule, duration: number): string {
+  const nods = s.nods.filter((n) => n.at < duration).map((n) => `${n.at.toFixed(1)}${n.count > 1 ? '×2' : ''}`).join(', ') || 'none';
+  const arms = s.arms.filter((a) => a.at < duration).map((a) => `${a.at.toFixed(1)}–${(a.at + 2 * ATTEND_ARMS.ease + a.hold).toFixed(1)}`).join(', ') || 'none';
+  return `facing someone: nods at ${nods} s; hands together ${arms} s`;
 }

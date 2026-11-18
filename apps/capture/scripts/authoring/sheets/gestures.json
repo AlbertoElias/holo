@@ -1,0 +1,19 @@
+{
+  "title": "Gestures",
+  "intent": "One person, a little turned from us, makes each named gesture and takes each named state in turn, with a moment of standing between them; a test that each reads by itself.",
+  "duration": 25,
+  "marks": { "side": [1.8, 1.5, 1.2] },
+  "performers": [
+    { "id": "p", "avatar": "stock", "at": [0, 0], "facing": 20, "seed": 5 }
+  ],
+  "beats": [
+    { "id": "wave", "performer": "p", "at": 1.0, "intent": "Waves hello.", "directions": [ { "kind": "gesture", "name": "wave" } ] },
+    { "id": "nod", "performer": "p", "at": 4.2, "intent": "Nods yes.", "directions": [ { "kind": "gesture", "name": "nod" } ] },
+    { "id": "shake", "performer": "p", "at": 6.3, "intent": "Shakes the head no.", "directions": [ { "kind": "gesture", "name": "head-shake" } ] },
+    { "id": "shrug", "performer": "p", "at": 8.7, "intent": "Shrugs: who knows.", "directions": [ { "kind": "gesture", "name": "shrug", "hold": 0.7 } ] },
+    { "id": "notice", "performer": "p", "at": 11.1, "hold": 1.5, "intent": "Something to the side catches their eye.", "directions": [ { "kind": "state", "name": "noticing", "at": "side" } ] },
+    { "id": "rub", "performer": "p", "at": 14.2, "intent": "Feels something between the fingers.", "directions": [ { "kind": "gesture", "name": "rub" } ] },
+    { "id": "chest", "performer": "p", "at": 17.7, "intent": "Puts a hand to the chest.", "directions": [ { "kind": "gesture", "name": "hand-to-chest" } ] },
+    { "id": "concerned", "performer": "p", "at": 20.8, "hold": 1.8, "intent": "Grows worried.", "directions": [ { "kind": "state", "name": "concerned" } ] }
+  ]
+}

@@ -91,7 +91,7 @@ export interface Timing {
 
 export type Direction = Timing & (
   | { readonly kind: 'look'; readonly at: Point; /** Share of the look the head takes (0 eyes only, 1 all head); default 0.6. */ readonly head?: number }
-  | { readonly kind: 'expression'; readonly shape: ExpressionName | Partial<Record<FaceChannel, number>>; readonly strength?: number }
+  | { readonly kind: 'expression'; readonly shape: FaceMixName | Partial<Record<FaceChannel, number>>; readonly strength?: number }
   | { readonly kind: 'reach'; readonly side: Side; readonly at: Point; /** Metres the palm stops short of `at`. */ readonly stopShort: number; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
   | { readonly kind: 'hand'; readonly side: Side | 'both'; readonly shape: HandShapeName; readonly strength?: number }
   | { readonly kind: 'weight'; readonly toward: 'left' | 'right' | 'forward' | 'back'; /** 0..1, default 1 (about 6 cm). */ readonly amount?: number }
@@ -100,6 +100,14 @@ export type Direction = Timing & (
   | { readonly kind: 'take'; readonly side: Side; readonly object: string; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
   | { readonly kind: 'put'; readonly side: Side; readonly object: string; readonly at?: Point; readonly on?: string }
   | { readonly kind: 'aim'; readonly side: Side; readonly at: Point }
+  | {
+      readonly kind: 'gesture'; readonly name: GestureName;
+      /** The hand of a hand gesture (default right). */ readonly side?: Side;
+      /** Repeats of a repeated gesture (a nod's nods, a wave's sweeps). */ readonly count?: number;
+      /** 0..1 and a little past; default 1. */ readonly strength?: number;
+      /** A wave's palm faces this point (default straight ahead). */ readonly at?: Point;
+    }
+  | { readonly kind: 'state'; readonly name: StateName; readonly strength?: number; /** What the state is about: the head turns to it. */ readonly at?: Point }
 );
 export type DirectionKind = Direction['kind'];
 
@@ -128,6 +136,8 @@ export interface PerformerSpec {
   readonly seed?: number;
   /** Objects in hand from the first frame. */
   readonly hold?: Partial<Record<Side, string>>;
+  /** false: no attending life (the nods and arm changes of a performer facing another). Default true. */
+  readonly attend?: boolean;
 }
 
 export interface BeatSheet {
@@ -173,8 +183,60 @@ export const DEFAULT_TIMING: Readonly<Record<DirectionKind, Required<Omit<Timing
   step: { anticipation: 0.15, attack: 0.6, settle: 0.3 },
   take: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
   put: { anticipation: 0.15, attack: 0.8, settle: 0.8 },
-  aim: { anticipation: 0.1, attack: 0.6, settle: 0.6 }
+  aim: { anticipation: 0.1, attack: 0.6, settle: 0.6 },
+  // Per name in `GESTURES` and `STATES`; these are the fallbacks.
+  gesture: { anticipation: 0.1, attack: 0.3, settle: 0.5 },
+  state: { anticipation: 0, attack: 0.4, settle: 0.7 }
 };
+
+/**
+ * Gestures a beat directs by name (brief slice 1e). `cycle` and `count` make a
+ * repeated one: its hold is the repeats (`count × cycle`, less the attack when
+ * the repeats start with the move, `from: 'at'`), unless the direction gives a
+ * hold. `hand` gestures take a side and keep that hand from its fidgets.
+ */
+export const GESTURES = {
+  nod: { anticipation: 0.06, attack: 0.15, settle: 0.3, cycle: 0.5, count: 2, from: 'at', hand: false },
+  'head-shake': { anticipation: 0.05, attack: 0.15, settle: 0.35, cycle: 0.6, count: 2, from: 'at', hand: false },
+  shrug: { anticipation: 0.1, attack: 0.35, settle: 0.5, hold: 0.5, hand: false },
+  wave: { anticipation: 0.15, attack: 0.5, settle: 0.6, cycle: 0.42, count: 3, from: 'arrive', hand: true },
+  rub: { anticipation: 0.15, attack: 0.6, settle: 0.6, cycle: 0.3, count: 5, from: 'arrive', hand: true },
+  'hand-to-chest': { anticipation: 0.15, attack: 0.6, settle: 0.7, hold: 1.0, hand: true }
+} as const satisfies Record<string, { anticipation: number; attack: number; settle: number; cycle?: number; count?: number; from?: 'at' | 'arrive'; hold?: number; hand: boolean }>;
+export type GestureName = keyof typeof GESTURES;
+
+/** States a beat directs by name, held for the beat's hold: a body and head attitude and a face mix (`STATE_FACES`). */
+export const STATES = {
+  noticing: { anticipation: 0, attack: 0.22, settle: 0.6 },
+  concerned: { anticipation: 0, attack: 0.7, settle: 0.8 }
+} as const satisfies Record<string, Required<Omit<Timing, 'delay' | 'hold'>>>;
+export type StateName = keyof typeof STATES;
+
+/** The states' faces, also named expressions: new names only (the mixes above are unchanged). */
+export const STATE_FACES = {
+  // Eyes wide, brows up, lips just parted: something has caught the eye.
+  noticing: { eyeWideLeft: 0.55, eyeWideRight: 0.55, browOuterUpLeft: 0.45, browOuterUpRight: 0.45, browInnerUp: 0.35, jawOpen: 0.08, mouthLowerDownLeft: 0.1, mouthLowerDownRight: 0.1 },
+  // Brows drawn together and up, lips pressed, the corners a little down.
+  concerned: { browInnerUp: 0.6, browDownLeft: 0.3, browDownRight: 0.3, mouthPressLeft: 0.4, mouthPressRight: 0.4, mouthFrownLeft: 0.25, mouthFrownRight: 0.25, eyeSquintLeft: 0.15, eyeSquintRight: 0.15 }
+} as const satisfies Record<StateName, Partial<Record<FaceChannel, number>>>;
+
+/** Every named face mix an `expression` can ask for. */
+export const FACE_MIXES: Readonly<Record<FaceMixName, Readonly<Partial<Record<FaceChannel, number>>>>> = { ...EXPRESSIONS, ...STATE_FACES };
+export type FaceMixName = ExpressionName | StateName;
+
+/** A direction's default timing: per gesture or state name, else per kind. */
+export function defaultTiming(d: Direction): Required<Omit<Timing, 'delay' | 'hold'>> {
+  if (d.kind === 'gesture' && Object.hasOwn(GESTURES, d.name)) { const g = GESTURES[d.name]; return { anticipation: g.anticipation, attack: g.attack, settle: g.settle }; }
+  if (d.kind === 'state' && Object.hasOwn(STATES, d.name)) return STATES[d.name];
+  return DEFAULT_TIMING[d.kind];
+}
+
+/** A gesture's repeats, and when they start (seconds after the direction's `at`). */
+export function gestureCycle(d: Extract<Direction, { kind: 'gesture' }>, attack: number): { cycle: number; count: number; from: number } | undefined {
+  const g = GESTURES[d.name] as { cycle?: number; count?: number; from?: 'at' | 'arrive' };
+  if (g.cycle === undefined) return undefined;
+  return { cycle: g.cycle, count: Math.max(1, Math.round(d.count ?? g.count ?? 1)), from: g.from === 'arrive' ? attack : 0 };
+}
 
 /** Directions whose result stays: the performer's place and facing. */
 export const PERSISTENT = (d: Direction): boolean => d.kind === 'step' || (d.kind === 'turn' && d.body === 'whole');
@@ -195,13 +257,22 @@ export interface Resolved {
 }
 
 export function resolveTiming(beat: Beat, d: Direction): Resolved {
-  const def = DEFAULT_TIMING[d.kind];
+  const def = defaultTiming(d);
   const at = beat.at + (d.delay ?? 0);
   const anticipation = d.anticipation ?? def.anticipation;
   const attack = Math.max(1e-3, d.attack ?? def.attack);
-  const hold = Math.max(0, d.hold ?? beat.hold ?? 0.6);
+  const held = d.kind === 'gesture' && Object.hasOwn(GESTURES, d.name) ? (GESTURES[d.name] as { hold?: number }).hold : undefined;
+  const hold = Math.max(0, d.hold ?? gestureHold(d, attack) ?? beat.hold ?? held ?? 0.6);
   const settle = Math.max(1e-3, d.settle ?? def.settle);
   return { beat, direction: d, start: at - anticipation, at, anticipation, attack, hold, settle, persistent: PERSISTENT(d), end: at + attack + hold + settle };
+}
+
+/** A repeated gesture holds for its repeats (a held one takes the beat's hold, else its own default). */
+function gestureHold(d: Direction, attack: number): number | undefined {
+  if (d.kind !== 'gesture' || !Object.hasOwn(GESTURES, d.name)) return undefined;
+  const c = gestureCycle(d, attack);
+  if (c) return Math.max(0, c.from + c.count * c.cycle - attack);
+  return undefined;
 }
 
 const smoother = (u: number): number => u * u * u * (u * (u * 6 - 15) + 10);
@@ -438,7 +509,17 @@ export function validateSheet(sheet: BeatSheet): string[] {
         for (const k of Object.keys(d.shape)) if (!FACE_CHANNELS.includes(k as FaceChannel)) problems.push(`${where}: no face channel ${k}`);
       }
       if (d.kind === 'hand' && !(d.shape in HAND_SHAPES)) problems.push(`${where}: no hand shape ${d.shape} (${Object.keys(HAND_SHAPES).join(', ')})`);
-      if (d.kind === 'expression' && typeof d.shape === 'string' && !(d.shape in EXPRESSIONS)) problems.push(`${where}: no expression ${d.shape} (${Object.keys(EXPRESSIONS).join(', ')})`);
+      if (d.kind === 'expression' && typeof d.shape === 'string' && !Object.hasOwn(FACE_MIXES, d.shape)) problems.push(`${where}: no expression ${d.shape} (${Object.keys(FACE_MIXES).join(', ')})`);
+      if (d.kind === 'gesture') {
+        if (!Object.hasOwn(GESTURES, d.name)) problems.push(`${where}: no gesture ${String(d.name)} (${Object.keys(GESTURES).join(', ')})`);
+        else {
+          if (d.side !== undefined && !GESTURES[d.name].hand) problems.push(`${where} ${d.name}: takes no side (it is not a hand gesture)`);
+          if (d.count !== undefined && (!(d.count >= 1) || !gestureCycle({ ...d, count: 1 }, 0))) problems.push(`${where} ${d.name}: ${gestureCycle({ ...d, count: 1 }, 0) ? 'count is 1 or more' : 'takes no count (it is not repeated)'}`);
+          if (d.at !== undefined && d.name !== 'wave') problems.push(`${where} ${d.name}: only a wave takes at`);
+        }
+      }
+      if (d.kind === 'state' && !Object.hasOwn(STATES, d.name)) problems.push(`${where}: no state ${String(d.name)} (${Object.keys(STATES).join(', ')})`);
+      if ((d.kind === 'gesture' || d.kind === 'state') && d.strength !== undefined && !(d.strength >= 0)) problems.push(`${where}: strength is 0 or more`);
       if (d.kind === 'reach' && !(d.stopShort >= 0)) problems.push(`${where}: stopShort must be ≥ 0`);
       if (d.kind === 'turn' && d.degrees === undefined && d.toward === undefined) problems.push(`${where}: needs degrees or toward`);
       if ((d.kind === 'take' || d.kind === 'put') && !objects.has(d.object)) problems.push(`${where}: no object ${d.object}`);
@@ -482,8 +563,9 @@ export function validateSheet(sheet: BeatSheet): string[] {
         const h = holdingAt(b.performer, d.side, r.at);
         if (h && pointObjects(d.at, objects, sheet.marks).includes(h.object)) problems.push(`${where}: a hand cannot reach for the object it holds`);
       }
-      if (d.kind === 'hand') {
-        for (const side of d.side === 'both' ? (['left', 'right'] as const) : [d.side]) {
+      if (d.kind === 'hand' || (d.kind === 'gesture' && GESTURES[d.name].hand)) {
+        const sides = d.kind === 'hand' ? (d.side === 'both' ? (['left', 'right'] as const) : [d.side]) : [d.side ?? 'right'];
+        for (const side of sides) {
           const h = holdings.find((x) => x.performer === b.performer && x.side === side && x.from < r.end && r.start < x.to);
           if (h) problems.push(`${where}: the ${side} hand holds ${h.object} then; a holding hand keeps its grip`);
         }
