@@ -27,11 +27,10 @@ export function parseGlb(bytes: Uint8Array): GltfDoc {
 /** Accessor as rows of floats (normalized integers scaled as glTF says). */
 export function readAccessor(doc: GltfDoc, index: number): { data: Float64Array; size: number; count: number } {
   const acc = doc.json.accessors![index]!;
-  if (acc.sparse) throw new Error(`accessor ${index} is sparse; not supported`);
   const size = TYPE_SIZE[acc.type]!;
   const count = acc.count;
   const data = new Float64Array(count * size);
-  if (acc.bufferView === undefined) return { data, size, count };
+  if (acc.bufferView === undefined) { applySparse(doc, acc, data, size); return { data, size, count }; }
   const bv = doc.json.bufferViews![acc.bufferView]!;
   const view = new DataView(doc.bin.buffer, doc.bin.byteOffset + (bv.byteOffset ?? 0) + (acc.byteOffset ?? 0));
   const bytes = ({ 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 } as Record<number, number>)[acc.componentType]!;
@@ -52,7 +51,25 @@ export function readAccessor(doc: GltfDoc, index: number): { data: Float64Array;
       data[i * size + k] = v;
     }
   }
+  applySparse(doc, acc, data, size);
   return { data, size, count };
+}
+
+interface Sparse { count: number; indices: { bufferView: number; byteOffset?: number; componentType: number }; values: { bufferView: number; byteOffset?: number } }
+
+/** Sparse substitutions over the base values (float values only, as morph targets use). */
+function applySparse(doc: GltfDoc, acc: { componentType: number; sparse?: unknown }, data: Float64Array, size: number): void {
+  const sparse = acc.sparse as Sparse | undefined;
+  if (!sparse) return;
+  if (acc.componentType !== 5126) throw new Error('sparse accessor with non-float values; not supported');
+  const at = (view: number, offset = 0): DataView => { const bv = doc.json.bufferViews![view]!; return new DataView(doc.bin.buffer, doc.bin.byteOffset + (bv.byteOffset ?? 0) + offset); };
+  const idx = at(sparse.indices.bufferView, sparse.indices.byteOffset);
+  const val = at(sparse.values.bufferView, sparse.values.byteOffset);
+  const ib = ({ 5121: 1, 5123: 2, 5125: 4 } as Record<number, number>)[sparse.indices.componentType]!;
+  for (let i = 0; i < sparse.count; i += 1) {
+    const row = ib === 1 ? idx.getUint8(i) : ib === 2 ? idx.getUint16(i * 2, true) : idx.getUint32(i * 4, true);
+    for (let k = 0; k < size; k += 1) data[row * size + k] = val.getFloat32((i * size + k) * 4, true);
+  }
 }
 
 export type ChannelPath = 'rotation' | 'translation' | 'scale' | 'weights';

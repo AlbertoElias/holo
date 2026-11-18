@@ -123,6 +123,31 @@ export interface Beat {
   /** What a viewer should understand from this beat, in a viewer's words. The review compares a fresh reader's account against it. */
   readonly intent?: string;
   readonly directions: readonly Direction[];
+  /** A spoken line, its first voiced sound at the beat's `at` (plus `delay`, ≥ 0), heard from the performer's head, with the lips following it (sound brief slice 1a). */
+  readonly say?: Say;
+}
+
+/** A spoken line. `voice` is `local:<kokoro voice>` (made on this machine) or `file:<path>` (relative to the sheet). */
+export interface Say {
+  readonly text: string;
+  readonly voice: string;
+  readonly delay?: number;
+  readonly gain?: number;
+  /** A supplied file's credit: `own` or a free licence. */
+  readonly credit?: CreditSpec;
+}
+
+/** An effect tied to a beat or to the moment a beat's put lands, heard from an object or a performer's head. */
+export interface SoundSpec {
+  readonly id: string;
+  /** `synth:<name>` (the project's own, CC0) or a path relative to the sheet. */
+  readonly file: string;
+  readonly at: { readonly beat: string; readonly event?: 'put'; readonly delay?: number };
+  /** An object id, or `<performer>.head`. */
+  readonly on: string;
+  readonly gain?: number;
+  /** Required on a file. */
+  readonly credit?: CreditSpec;
 }
 
 /** The house base as a performer's avatar (its one finish so far, clay). */
@@ -197,6 +222,8 @@ export interface BeatSheet {
   readonly marks?: Readonly<Record<string, readonly [number, number, number] | Place>>;
   readonly objects?: Readonly<Record<string, ObjectSpec>>;
   readonly beats: readonly Beat[];
+  /** Effects (sound brief slice 1a). */
+  readonly sounds?: readonly SoundSpec[];
   /** Visible change in the set: water, particles, an object responding. */
   readonly world?: readonly WorldChange[];
 }
@@ -633,6 +660,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
       }
     }
   }
+  problems.push(...soundProblems(sheet));
   problems.push(...worldProblems(sheet, holdings));
   return problems;
 }
@@ -762,3 +790,41 @@ export function aimTargetOf(sheet: BeatSheet, holdings: readonly Holding[], obje
 }
 
 const SHAPES: readonly Shape[] = ['box', 'cylinder', 'cone', 'sphere'];
+
+const SYNTH_SOUNDS = ['cup-clink'];
+
+/** A sheet's spoken lines and effects: voices and files named, beats and puts that exist, one sound per place. */
+export function soundProblems(sheet: BeatSheet): string[] {
+  const problems: string[] = [];
+  const performers = new Set(sheet.performers.map((p) => p.id));
+  const objects = new Set(Object.keys(sheet.objects ?? {}));
+  const places = new Map<string, string>();
+  const place = (where: string, what: string): void => {
+    if (places.has(where)) problems.push(`${what}: ${where} already carries ${places.get(where)} (one sound per place)`);
+    else places.set(where, what);
+  };
+  for (const b of sheet.beats) {
+    if (!b.say) continue;
+    const what = `beat ${b.id} say`;
+    if (!b.say.text?.trim()) problems.push(`${what}: no text`);
+    if (!/^(local:[a-z]{2}_[a-z]+|file:.+)$/.test(b.say.voice ?? '')) problems.push(`${what}: voice is local:<voice> (e.g. local:af_heart) or file:<path>`);
+    if ((b.say.delay ?? 0) < 0) problems.push(`${what}: delay is seconds after the beat, not before`);
+    if (b.say.voice?.startsWith('file:') && b.say.credit === undefined) problems.push(`${what}: a file voice needs a credit ("own" or a free licence)`);
+    place(`${b.performer}.head`, what);
+  }
+  const ids = new Set<string>();
+  for (const s of sheet.sounds ?? []) {
+    const what = `sound ${s.id}`;
+    if (ids.has(s.id)) problems.push(`${what}: the id is used twice`);
+    ids.add(s.id);
+    const beat = sheet.beats.find((b) => b.id === s.at?.beat);
+    if (!beat) problems.push(`${what}: no beat ${s.at?.beat}`);
+    else if (s.at.event === 'put' && !beat.directions.some((d) => d.kind === 'put')) problems.push(`${what}: beat ${beat.id} has no put`);
+    if (s.file.startsWith('synth:')) { if (!SYNTH_SOUNDS.includes(s.file.slice(6))) problems.push(`${what}: unknown ${s.file} (${SYNTH_SOUNDS.map((n) => `synth:${n}`).join(', ')})`); }
+    else if (s.credit === undefined) problems.push(`${what}: a file needs a credit ("own" or a free licence)`);
+    const [head, tail] = s.on.split('.');
+    if (!(objects.has(s.on) || (head !== undefined && performers.has(head) && tail === 'head'))) problems.push(`${what}: on is an object or <performer>.head`);
+    place(s.on, what);
+  }
+  return problems;
+}
