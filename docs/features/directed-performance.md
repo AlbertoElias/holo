@@ -1006,6 +1006,66 @@ creator's own photo. It changes no trait and no file format: it only
 fills the card a creator can already set by hand. It starts after the
 trait card has been used in both capture flows (2e).
 
+### Slice 6: publish a take in one command (2026-11-18)
+
+Closes "Not covered yet" item 8. `apps/capture/scripts/authoring/publish.ts
+<take.glb | sheet.json> [--title …] [--description …] [--credit …] [--api
+<origin>] [--no-quick-look]` validates a take, uploads it and prints its feed
+URL.
+
+**What exists and is reused.** `scripts/showcase/upload.mjs` already does the
+upload (the normal `POST /api/holograms`), the credential order (session,
+Keychain agent token, nothing), the plain-http and redirect refusals, the
+`/auth/me` account line and the Quick Look wait. Its credential and upload
+steps move unchanged into `scripts/showcase/lib/upload.mjs`, which both
+`upload.mjs` and `publish.ts` import; `upload.mjs` behaves as before.
+
+**Behaviour.**
+
+- *Input:* a `.glb` (the sheet beside it, `<take>.beats.json`, supplies title
+  and `description`/`credit` when present) or a `.json` sheet, which is built
+  with `direct.ts`'s `build` first (refused when a grip, put or aim misses).
+- *Validation, before any network call:* the file is a GLB; at most
+  `MAX_HOLOGRAM_BYTES` (the cap the API enforces); at least one performer
+  found by skin and the file declares its humanoid (`HOLOIM_humanoid`), since
+  the viewer anchors on the declaration; every performer animated; and the
+  Quick Look extent load (the `quickLookLoad` rule of `showcase/build.mjs`,
+  moved into the shared lib) under the converter's budgets, 100 M deformed
+  and 500 M rigid point-frames, unless `--no-quick-look` (the budget only
+  binds the preview). Any failure lists every problem and exits 1.
+- *Target:* `--api` defaults to `http://127.0.0.1:3001`. A non-loopback host
+  needs `--api` spelled out, and the production origin
+  (`https://holoim-api.fly.dev`) additionally needs `--production`, so a
+  typo or a copied command cannot reach it. No upload happens without a
+  credential: `HOLOIM_AGENT_TOKEN` (the agent upload token) or
+  `HOLOIM_SESSION` from the environment, else the Keychain entry for that
+  host; none is a refusal that names the setup command.
+- *Result:* waits until the hologram is readable at its id (and, unless
+  `--no-quick-look`, until its Quick Look preview has settled), then prints
+  one JSON line with the id, title, size, preview status and the feed URL
+  (`<web origin>/h/<id>`; the web origin is `--web`, or
+  `https://localhost:3174` for a local API, and absent otherwise). A failed preview exits 2 as `upload.mjs` does.
+- *Title, description and credit:* title from `--title`, else the sheet's
+  `title`. The upload contract carries a name and a `submittedBy`; the agent
+  account's display name replaces `submittedBy`, so credit is the account's.
+  `description` and `credit` are therefore recorded in the printed result
+  (and the sheet), not stored by the API: adding fields to the upload route
+  is a product decision left open.
+
+**Decided by the agent in the owner's absence on 2026-11-18, for the owner to
+review** (each reversible): the production gate is a second flag
+(`--production`) on top of an explicit `--api`; `HOLOIM_AGENT_TOKEN` is the
+environment name; the credential/upload code is extracted from `upload.mjs`
+rather than duplicated or wrapped; description and credit are not sent to the
+API. Production is never exercised by the check.
+
+**Evidence plan.** `publish-check.ts` starts a local test API with open
+uploads off, registers a real agent token through `agent-token.ts`, directs a
+take from `sheets/goodbye.json`, publishes it, reads the feed card back
+through the API and writes `output/authoring/publish-check/report.json`; it
+also shows each refusal (no token, wrong token, take without a declared
+performer, over-budget load, oversize file, production without the flag).
+
 ### Later, each against the audition
 
 A second family (a new base with its own design language); per-style
@@ -1046,9 +1106,8 @@ and 7 (its evidence, below); the second 1c piece added item 13.
 7. **Post-processing keeps the file valid.** Re-writing a take with
    gltf-transform drops `HOLOIM_humanoid`, so the set script re-declares the
    performer by node name.
-8. **Publishing.** No publish step: the author writes a showcase `meta`
-   module, copies the GLB to `output/showcase/<slug>.glb` and runs
-   `scripts/showcase/upload.mjs` with a session.
+8. **Publishing.** Closed by slice 6: `publish.ts <take|sheet>` validates and
+   uploads through `showcase/lib/upload.mjs`, and prints the feed URL.
 9. **Review tooling.** A pack takes about eight minutes; the close view
    crops a long reach and shows the back of a performer who faces away; the
    README now documents a one-minute framing check (`viewer-check.ts
@@ -1930,6 +1989,20 @@ parent frame (follow-up below).
 (`vrm0-minus-z`: the left hand at −X). Bind data, reach targets and
 direction may be mirrored for such avatars; owner: the slice that next
 directs a VRM 0 avatar.
+
+### Slice 6 evidence (2026-11-18)
+
+`publish-check.ts` (12 of 12 rows pass; report in
+`output/authoring/publish-check/report.json`): a local API with open uploads
+off (anonymous POST answers 401), an agent token registered through
+`agent-token.ts`, and `goodbye.json` directed and published. "The goodbye"
+(3.60 MB) is on the feed as Claude (agent-authored), verified, and its stored
+GLB is the take. Refusals, each with nothing uploaded: no token; a wrong
+token; production without `--production`; a take without
+`HOLOIM_humanoid`; a Quick Look load over budget; a file over the cap; no
+title. A proof video (card on the feed after the command) was sent to the
+owner. The Quick Look preview wait was not exercised (the check API has the
+converter off); it is `upload.mjs`'s unchanged code.
 
 ## Physical-device limits
 

@@ -12,7 +12,45 @@ ordinary hologram GLB, and review whether it reads. Run everything from `apps/ca
 | `avatar-audition.ts <avatar.glb\|.gltf> [--geometry] [--out dir] [--json out.json]` | Grades any avatar against the audition bar (`lib/audition-bar.ts`): one row per bar with its measured value and pass or fail, in `audition.json` (below). Exits 1 when a binding row fails. |
 | `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb]` | Solves the beat sheet on each performer's avatar, writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`), prints each reach's stop-short distance, each grip, put and aim's miss, and the acting report. Exits 1 when a grip, put or aim misses past its limit (the files are still written). |
 | `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer, frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
+| `publish.ts <take.glb\|sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--production] [--no-quick-look] [--check]` | Validates a take and publishes it through the normal upload route (below). |
 | `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
+
+## Publishing a take
+
+```
+HOLOIM_AGENT_TOKEN=… node --conditions=development --import tsx scripts/authoring/publish.ts sheets/goodbye.json --api http://127.0.0.1:3001
+```
+
+Takes a `.glb` (title, `description` and `credit` come from the sheet beside
+it, `<take>.beats.json`) or a sheet, which it builds first. Flags win.
+Before any network call it refuses, listing every problem, a take that is
+over the API's 100 MB cap, has no declared performer (`HOLOIM_humanoid`), has
+a performer no animation reaches, or (unless `--no-quick-look`) is over the
+Quick Look converter's extent budget (100 M deformed, 500 M rigid
+point-frames). `--check` stops there.
+
+- **Target:** the local API (`http://127.0.0.1:3001`) unless `--api` says
+  otherwise; production (`https://holoim-api.fly.dev`) also needs
+  `--production`.
+- **Credential:** `HOLOIM_AGENT_TOKEN` (or `HOLOIM_SESSION`), else the
+  Keychain entry for the host (`scripts/agent-upload-token.sh setup`). With
+  none it refuses and uploads nothing. The code is
+  `scripts/showcase/lib/upload.mjs`, shared with `showcase/upload.mjs`.
+- **Result:** waits until the hologram is on the feed (and, unless
+  `--no-quick-look`, its Quick Look preview settled), then prints one JSON
+  line and `feed: <web>/h/<id>` (web origin `--web`, `https://localhost:3174`
+  for a local API, none for another host without `--web`). Exit 2 means
+  uploaded but the preview failed; do not publish it again.
+- **Credit:** the upload carries a name and `submittedBy`, and the agent
+  account's display name replaces the latter. `description` and `credit` are
+  reported in the result, not stored by the API.
+
+`publish-check.ts` is the end-to-end check: a local API that refuses
+anonymous uploads, a registered agent token, a take directed from
+`sheets/goodbye.json`, published and read back from the feed, then each
+refusal. It writes `output/authoring/publish-check/report.json` (port
+`PUBLISH_CHECK_API_PORT`, 3355). Run it by hand after changing the
+publish path; it is not in `verify:pr`.
 
 ## Auditioning an avatar
 
