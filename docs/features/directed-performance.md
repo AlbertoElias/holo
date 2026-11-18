@@ -1412,8 +1412,8 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
 
    **Then, decided by the agent in the owner's absence on 2026-11-18, for
    the owner to review:** a face for big eyes built in `house-base.ts`, with
-   no spend, instead of a commission (A). The body, skeleton and build
-   settings stay. The head is reshaped into a stylised clay-sheet face:
+   no spend, instead of a commission (A). The body, joints and build
+   settings stay (the eye bones move to the new eyes). The head is reshaped into a stylised clay-sheet face:
    - eyes about a quarter of the face wide, with a big iris and visible white;
    - upper lids with a lash line;
    - thick separate brows;
@@ -2287,8 +2287,9 @@ worktree's ignored `output/house-base-2c/mixes-side-by-side.jpg`.
 Decided by the agent with the owner away, for the owner to review
 (decision 7): rather than commission a face, `build.py` reshapes the head
 into one made for big eyes, in the clay sheet's style. All its values are
-in the `face` block of `base.json`. The body, skeleton and build settings
-are unchanged.
+in the `face` block of `base.json`. The body, joints and build settings are
+unchanged, apart from the eye bones, which now sit at the new eyes. The ears
+are MPFB's own, unchanged.
 
 - **The front of the face** is smoothed through a depth map, which takes
   off MPFB's lip and nose creases.
@@ -2307,16 +2308,20 @@ are unchanged.
 The skin keeps only faceunits01's jaw and cheek units. The shared mixes
 in `lib/beats.ts` are unchanged.
 
-The blind reading at 40 px, `face-legibility.ts` on
-`sheets/expressions.json` re-pointed at the base, three fresh AI readers
-each round:
+The blind reading at card size (`blind-05.jpg`, 43 device px; the phone
+card is 42.8 to 44.8): `face-legibility.ts` on `sheets/expressions.json`
+re-pointed at the base, three fresh AI readers each round. From f5 on,
+each round's answers and scores are in `readers.json` beside its
+`key.json`, in the worktree's ignored
+`output/authoring/house-base/face/<round>/`.
 
 | Round | Scores | What changed, what read |
 |---|---|---|
 | f1 | 2, 2, 3 of 7 | first face; smile, sad and hopeful clear |
 | f2 to f4 | 4, 2, 3 and 3, 3, 4 | lids no longer cut the eye; V brows (determined 3 of 3) |
 | f5 | 5, 3, 7 | lower neutral lid; held and looking down swap |
-| f6, f7 | 3, 3, 3 and 4, 3, 4 | wider hope brows, thinner held mouth: worse, all readers alike |
+| f6, f7 | 3, 3, 3 and 4, 4, 3 | wider hope brows, thinner held mouth: worse, all readers alike |
+| f8 | not read | checked at 96 px only: the held mouth had vanished, so it was reverted |
 | f9 | 5, 5, 4 | blink mostly the upper lid; held mouth as in f5 |
 | **f10** | **5, 5, 5** | held mouth corners tucked down |
 
@@ -2341,7 +2346,7 @@ shared mix, and its pressed mouth is small at 40 px.
   and the stock's (`stock-expr/`) are in the worktree's ignored `output/`.
 - **Quick Look.** `check_usdz_tools.sh` still cannot run its material
   challenge (no textures; see above). The f10 take converts with
-  `glb_to_usdz.py` in 3.6 s (4.2 MB USDZ). `inspect_usdz.py` passes, and
+  `glb_to_usdz.py` (4.2 MB USDZ). `inspect_usdz.py` passes, and
   `usdchecker --arkit` reports success.
 - **Not done:** the motion owner's report on the base, and people (not AI)
   as readers.

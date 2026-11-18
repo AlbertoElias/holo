@@ -293,7 +293,7 @@ def lid_point(E, r, side, u, a):
     return E + r * np.array((SIGN[side] * u, -c * math.cos(a), c * math.sin(a)))
 
 
-def lid_angles(edge, back, rows, new_edge):
+def lid_angles(back, rows, new_edge):
     t = np.linspace(0, 1, rows)
     return new_edge + t * (back - new_edge)
 
@@ -304,7 +304,7 @@ for side, E in eyes.items():
         r = L["radius"] * R
         us = np.linspace(-1, 1, ld["columns"])
         rows = L["rows"]
-        angles = lid_angles(L["edge"], L["back"], rows, L["edge"])
+        angles = lid_angles(L["back"], rows, L["edge"])
         verts = [lid_point(E, r, side, u, a) for u in us for a in angles]
         faces = grid_faces(len(us), rows)
         lash = [which == "upper" and abs(angles[j] - angles[0]) < L.get("lash", 0) for i in range(len(us) - 1) for j in range(rows - 1)]
@@ -314,7 +314,7 @@ for side, E in eyes.items():
             new = edges[0 if which == "upper" else 1]
             if new is None:
                 continue
-            moved_angles = lid_angles(L["edge"], L["back"], rows, new)
+            moved_angles = lid_angles(L["back"], rows, new)
             target = np.array([lid_point(E, r, side, u, a) for u in us for a in moved_angles])
             # A shape moves each vertex in a straight line, which cuts inside the eye halfway through a long
             # sweep, so the lid would hide behind the eye at a partial weight: the target goes out along its

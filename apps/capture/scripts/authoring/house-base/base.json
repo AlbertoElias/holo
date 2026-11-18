@@ -47,7 +47,7 @@
       "to": 0.01
     },
     "smooth": {
-      "$comment": "The front of the face as a depth map on a grid (m): holes narrower than `holes` filled, bumps narrower than `bumps` taken off, blurred by sigma; applied in an ellipse about the eyes' midline, `centre` below eye height, fading out from `fade` of it. A vertex within `tolerance` of the front surface goes onto the smoothed one, one further behind keeps its depth less that. Only head vertices in front of y frontOf move.",
+      "$comment": "The front of the face as a depth map on a grid of `grid` cells (m), halfWidth either side of the midline and from `above` the eyes to `below` them: holes up to about twice `holes` across filled, bumps up to about twice `bumps` across taken off (morphological windows of 2\u00b7round(x/grid)+1 cells), blurred by sigma; applied in the `core` ellipse about the eyes' midline, `centre` below eye height, fading out from `fade` of it. A vertex within `tolerance` of the front surface goes onto the smoothed one, one further behind keeps its depth less that. Only head vertices in front of y frontOf move.",
       "grid": 0.0015,
       "halfWidth": 0.12,
       "above": 0.08,
@@ -74,7 +74,7 @@
       "pupil": 0.3
     },
     "lids": {
-      "$comment": "Shells about each eye (radius in eye radii) from the edge angle (up from straight ahead) to the back angle; the upper lid's rows within `lash` degrees of its edge are the dark lash line. shapes: the edge angles [upper, lower] each shape moves to (null: that lid stays). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre.",
+      "$comment": "Shells about each eye (radius in eye radii), `columns` across, from the edge angle (up from straight ahead) to the back angle in `rows`; the upper lid's rows within `lash` degrees of its edge are the dark lash line. shapes: the edge angles [upper, lower] each shape moves to (null: that lid stays). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre.",
       "columns": 13,
       "upper": {
         "radius": 1.08,
@@ -143,7 +143,7 @@
       "sneer": 0.003
     },
     "mouth": {
-      "$comment": "A dark shape on the skin, halfWidth across, thick at the middle (the corners keep `corner` of it), lift in front of the skin, `raise` above the mouth corners the faceunits find.",
+      "$comment": "A dark shape on the skin, `columns` across, halfWidth across, thick at the middle (the corners keep `corner` of it), lift in front of the skin, `raise` above the mouth corners the faceunits find.",
       "columns": 17,
       "halfWidth": 0.034,
       "thick": 0.007,
@@ -152,7 +152,7 @@
       "raise": 0.0
     },
     "mouthShapes": {
-      "$comment": "Moves (m) of the mouth's edges in the face's plane. smile: the corners up and out, the middle open, the teeth row dropping `teeth` of the way; roll: corners in, the rolled lip thinner.",
+      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the middle open, the teeth row dropping `teeth` (a fraction) of the way; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in and the mouth forward (depth); roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units.",
       "smile": {
         "up": 0.022,
         "out": 0.01,
