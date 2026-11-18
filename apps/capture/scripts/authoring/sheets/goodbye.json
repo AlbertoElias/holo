@@ -125,6 +125,7 @@
       "id": "h-walk",
       "performer": "him",
       "at": 2.75,
+      "intent": "He keeps walking away.",
       "note": "He keeps walking.",
       "directions": [
         {

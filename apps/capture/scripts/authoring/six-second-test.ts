@@ -24,7 +24,7 @@
  * "yes"|"partly"|"no" }, evidence: { <id>: "the reader's words" } }, orbit: … } } }`.
  */
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +38,9 @@ const GRADE = { yes: 1, partly: 0.5, no: 0 } as const;
 type Grade = keyof typeof GRADE;
 
 /** The pass bar, fixed in the brief before the first run. */
+/** A reader sheet smaller than this is a black render, not a scene (real sheets are ~100-300 KB). */
+const MIN_SHEET_BYTES = 30_000;
+
 export const PASS_BAR = {
   hesitationReaders: 2,
   feelingReaders: 2,
@@ -102,7 +105,17 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
       await writeFile(derived, `${JSON.stringify({ ...sheet, style, performers: sheet.performers.map((p) => ({ ...p, avatar: avatarPath(avatar) })), ...(objects ? { objects } : {}) }, null, 2)}\n`);
       const built = await build(derived, join(out, 'takes', `${label}.glb`), style);
       const pack = join(out, 'packs', label);
-      await review(built.out, { sheet: derived, out: pack, until, cardOnly: true, orbit, step: 0.5 });
+      // The headless renderer sometimes returns a black sheet (seen once: a take's first card sheet, 8 KB against ~300 KB). A reader would
+      // then be graded on frames that show nothing, so render again, and refuse after three tries.
+      for (let attempt = 1; ; attempt++) {
+        await review(built.out, { sheet: derived, out: pack, until, cardOnly: true, orbit, step: 0.5 });
+        const sheets = (await readdir(join(pack, 'reader'))).filter((f) => f.endsWith('.jpg'));
+        const blank = [];
+        for (const f of sheets) if ((await stat(join(pack, 'reader', f))).size < MIN_SHEET_BYTES) blank.push(f);
+        if (!blank.length) break;
+        if (attempt === 3) throw new Error(`${label}: reader sheet(s) ${blank.join(', ')} are blank after 3 renders`);
+        console.warn(`${label}: blank reader sheet(s) ${blank.join(', ')}, rendering again`);
+      }
       const code = `t${createHash('sha1').update(`${basename(sheetPath)}|${label}`).digest('hex').slice(0, 5)}`;
       takes.push({ code, avatar, style, take: built.out, pack });
     }
