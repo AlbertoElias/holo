@@ -328,7 +328,7 @@
     ]
   },
   "builds": {
-    "$comment": "Three pre-built bodies (the build trait), each its own file: MPFB macro values over `macro`. medium is house-base.glb; the others house-base-<build>.glb. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "$comment": "Three pre-built bodies (the build trait), each its own wardrobe file (assets/house-base/wardrobe-<build>.glb, every hair style and glasses kind): MPFB macro values over `macro`. Decided by the agent in the owner's absence on 2026-11-18, for review.",
     "slight": {
       "macro": {
         "weight": 0.3,
@@ -761,5 +761,17 @@
       34,
       30
     ]
+  },
+  "defaultLook": {
+    "$comment": "The look public/gltf/models/house-base.glb is dressed in (a card, see packages/avatar-look). Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "build": "medium",
+    "skin": "caramel",
+    "eyes": "darkBrown",
+    "hair": {
+      "style": "sweptCrop",
+      "colour": "espresso"
+    },
+    "glasses": "none",
+    "clothing": "oatmealSlate"
   }
 }

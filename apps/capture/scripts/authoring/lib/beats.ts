@@ -5,6 +5,7 @@
  * turn and a step are persistent: they also move everything after them).
  */
 import { FACE_CHANNELS, type FaceChannel } from '@holoim/avatar-face';
+import { parseLook, type LookCard } from '@holoim/avatar-look';
 
 import type { HandShapeName } from './hands.ts';
 import { HAND_SHAPES } from './hands.ts';
@@ -124,10 +125,15 @@ export interface Beat {
   readonly directions: readonly Direction[];
 }
 
+/** The house base as a performer's avatar (its one finish so far, clay). */
+export const HOUSE_AVATAR = 'house:clay';
+
 export interface PerformerSpec {
   readonly id: string;
-  /** Path to the avatar GLB, relative to the beat sheet. */
+  /** Path to the avatar GLB, relative to the beat sheet; or `stock`, `fixture:<name>`, `house:clay` (the house base). */
   readonly avatar: string;
+  /** For `house:clay` only: the look card the house base is dressed in (`@holoim/avatar-look`); default its default look. */
+  readonly look?: LookCard;
   /** Stage position `[x, z]` in metres. */
   readonly at: readonly [number, number];
   /** Degrees about +Y; 0 faces +Z. */
@@ -428,6 +434,12 @@ export function validateSheet(sheet: BeatSheet): string[] {
   const marks = new Set(Object.keys(sheet.marks ?? {}));
   if (!sheet.performers.length) problems.push('no performers');
   if (!(sheet.duration > 0)) problems.push('duration must be > 0');
+  for (const p of sheet.performers) {
+    if (p.avatar.startsWith('house') && p.avatar !== HOUSE_AVATAR) problems.push(`${p.id}: avatar "${p.avatar}": the house base is "${HOUSE_AVATAR}"`);
+    if (p.look === undefined) continue;
+    if (p.avatar !== HOUSE_AVATAR) { problems.push(`${p.id}: a look needs avatar "${HOUSE_AVATAR}"`); continue; }
+    try { parseLook(p.look, `${p.id} look`); } catch (e) { problems.push((e as Error).message); }
+  }
   // One table of names: a point's first word means one thing.
   const seen = new Map<string, string>();
   for (const [kind, names] of [['performer', [...sheet.performers.map((p) => p.id)]], ['object', [...objects]], ['mark', [...marks]]] as const) {
