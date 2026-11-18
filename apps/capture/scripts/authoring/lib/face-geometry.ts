@@ -321,9 +321,11 @@ export function faceGeometry(a: LoadedAvatar, options: GeometryOptions = {}): Fa
     const hidden = new Map<number, number>();
     let visible = 0;
     const d = new Float64Array(3);
-    // A mesh the brow shapes move is the brow itself (a brow ribbon or brow cards on their own primitive), not
-    // something in front of it; hair and glasses are never moved by them.
-    const browMeshes = new Set(browAll.map((x) => x.m));
+    // A mesh the brow shapes move nearly all of is the brow itself (a brow ribbon or brow cards on their own
+    // primitive), not something in front of it. A fringe or glasses a brow shape nudges stay occluders.
+    const moved = new Map<number, number>();
+    for (const x of browAll) moved.set(x.m, (moved.get(x.m) ?? 0) + 1);
+    const browMeshes = new Set([...moved].filter(([m, n]) => n >= 0.9 * (neutral.positions[m]!.length / 3)).map(([m]) => m));
     for (const x of browAll) {
       const p = posed.positions[x.m]!;
       const o = [p[x.i * 3]!, p[x.i * 3 + 1]!, p[x.i * 3 + 2]!];

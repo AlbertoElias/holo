@@ -2046,10 +2046,12 @@ directs a VRM 0 avatar.
 **Status: not done.** The base passes every face row of the audition. It
 fails the blind reading in two rounds, so work stopped as the slice
 requires. Commissioning the face is the owner's decision (open decision
-below). The branch `feature/house-base-2c` is not merged.
+below). The base is on `main` (2026-11-18), reachable only through
+`?avatar=` and beat sheets and not yet passing 2c, by the agent's
+decision in the owner's absence (decision 7).
 
 **The base.** `house-base.ts` makes `public/gltf/models/house-base.glb`
-(1.61 MB, under the 1.8 MB budget) in headless Blender, and every value
+(1.60 MB, under the 1.8 MB budget) in headless Blender, and every value
 comes from `house-base/base.json`. Its parts and credits are in
 `asset.copyright` and in the scene's `holoimAvatar` extras:
 
@@ -2098,7 +2100,8 @@ Only the smile read for every reader. Held, resolve and neutral were
 confused with each other, and hope with eyes-down and sad. At round 1 the
 eye-scale falloff left a ring that reads as glasses at card size, and the
 dark lips read as an open mouth. Round 2 removed both, and the score
-fell. Round 1 stays on the branch. The weak expressions are mixes of
+fell. The committed base has since taken the clay look and a doubled
+`browDown` gain (below). The weak expressions are mixes of
 channels at 0.25–0.6 (`EXPRESSIONS` in `lib/beats.ts`), so a channel can
 pass its millimetres at 1 and still move too little in the mix. Making
 those mixes stronger would change every avatar, so that is not 2c's to
@@ -2177,7 +2180,7 @@ fails, and `tongueOut`, which is reported only. Key values:
 | mouthSmile | 16.5 mm | ≥ 14 |
 | jawOpen | 37.1 mm | ≥ 15 |
 | brow visibility | 100% | ≥ 90% |
-| brow contrast | 0.328 L | ≥ 0.25 |
+| brow contrast | 0.332 L | ≥ 0.25 |
 | eye opening | 4.1 device px | ≥ 3 |
 | face box | 40.4 device px | ≥ 40 |
 | file size | 1.60 MB | ≤ 1.8 |

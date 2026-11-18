@@ -181,9 +181,11 @@ it from the item below instead of duplicating its status here.
   of one expressive base read at phone-card size, a trait card, two or
   three finishes and the audition as the bar for any avatar, in
   sub-slices 2a to 2g; approved by the owner on 2026-11-17 ("Approve
-  all", open decision 5). 2a (the bar) is built. 2c (the house base, on
-  `feature/house-base-2c`, not merged) passes the audition's face rows
-  but missed the blind reading twice, so it waits for open decision 7.
+  all", open decision 5). 2a (the bar) is built. 2c (the house base) is on
+  `main` behind `?avatar=`, not yet passing: the mixes were reworked to
+  the round 2 sheets (decision 7) and the blind reading still misses
+  (1, 3, 4 and 2, 1, 4 of 7); the face's eye and mouth size is the limit,
+  so a commissioned face (spend) waits for the owner.
   Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
