@@ -557,10 +557,10 @@ export class LocomotionAnimator {
       return false;
     }
     if (profile === 'desktop-full') {
-      if (isIdleClip && parts.property === 'quaternion' && this.isLowerBodyTarget(parts.nodeName)) {
-        return false;
-      }
-      return true;
+      // The desktop body stands at rest: the idle's sway would move the hand, eyes and shoulders the desktop reach,
+      // carry, set-down and prop placement are tuned from (docs/features/realistic-avatar-motion.md, follow-ups).
+      // The idle's legs drive the VR lower body.
+      return !isIdleClip;
     }
     return parts.property === 'quaternion' && this.isLowerBodyTarget(parts.nodeName);
   }

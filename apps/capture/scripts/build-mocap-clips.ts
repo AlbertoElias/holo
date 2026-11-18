@@ -37,7 +37,7 @@ const SHIPPED = fileURLToPath(new URL('../public/gltf/models/avatar.glb', import
  * `mirror`: the loop is the first half of the range (left strike to right strike) and then that half
  * mirrored left for right, so both legs walk the same step (a recorded cycle is rarely symmetric).
  */
-export interface MocapLoop { readonly name: string; readonly take: string; readonly from: number; readonly to: number; readonly mirror?: boolean }
+export interface MocapLoop { readonly name: string; readonly take: string; readonly from: number; readonly to: number; readonly mirror?: boolean; readonly sway?: number }
 
 export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // Subject 7, trial 12, "brisk walk": a 0.9 s cycle at 1.93 m/s, near the desktop walk's 1.8. Its left
@@ -46,7 +46,9 @@ export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // Subject 113, trial 21, "standing still": breathing, a slow sway and small weight shifts, arms at
   // the sides. ("Normal waiting", 137_28, fidgets: its hands travel three times as far, in gestures that
   // replay on every stop.)
-  { name: 'Idle', take: '113_21', from: 0, to: 0 }
+  // Played at 40% of its sway about the mean pose: the full take drifts the head 5 cm in a frame of view
+  // that follows the eyes (the desktop camera and aim), where 2 cm reads as standing still and alive.
+  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.4 }
 ];
 
 // CMU bone → Mixamo name (what HumanoidSkeleton binds). Buttocks fold into
@@ -118,12 +120,26 @@ function buildSourceRig(dump: Dump): { root: THREE.Group; bones: Map<string, THR
   return { root, bones };
 }
 
+/** How far a standing take is turned from its rest facing: the mean left-to-right thigh line against the rest's. */
+function standingYaw(dump: Dump, from: number, to: number): number {
+  const at = (v: readonly number[]) => toYUpP(v[0]!, v[1]!, v[2]!);
+  const rest = at(dump.rest.lThigh!.p).sub(at(dump.rest.rThigh!.p));
+  const across = new THREE.Vector3();
+  for (let f = from; f <= to; f++) {
+    const frame = dump.frames[f]!;
+    across.add(toYUpP(frame.lThigh![4]!, frame.lThigh![5]!, frame.lThigh![6]!).sub(toYUpP(frame.rThigh![4]!, frame.rThigh![5]!, frame.rThigh![6]!)));
+  }
+  // The turn about +Y that takes the rest's thigh line onto the take's, which travel's atan2(x, z) also measures.
+  return Math.atan2(rest.z, rest.x) - Math.atan2(across.z, across.x);
+}
+
 /** Local rotations per kept bone over frames [from, to] (to included), travel turned to +Z. */
 function localTrack(dump: Dump, from: number, to: number): Map<string, THREE.Quaternion[]> {
   const hipAt = (f: number) => { const v = dump.frames[f]!.hip!; return toYUpP(v[4]!, v[5]!, v[6]!); };
   const travel = hipAt(to).sub(hipAt(from)).setY(0);
-  // A take that does not travel (idle) keeps the rest facing (+Z already).
-  const yaw = travel.length() > 0.2 ? Math.atan2(travel.x, travel.z) : 0;
+  // A take that does not travel (idle) is turned to the rest facing by its thighs: the subject of 113_21
+  // stands about 100° off the capture's axes.
+  const yaw = travel.length() > 0.2 ? Math.atan2(travel.x, travel.z) : standingYaw(dump, from, to);
   const unturn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -yaw);
   const out = new Map<string, THREE.Quaternion[]>();
   for (let f = from; f <= to; f++) {
@@ -231,6 +247,21 @@ async function loadTarget(): Promise<RetargetRig> {
   return { root: gltf.scene, humanoid };
 }
 
+/** Each bone's keys drawn toward its mean rotation: `sway` 1 keeps the take, 0 holds the mean pose. */
+function scaleSway(local: Map<string, THREE.Quaternion[]>, sway: number): Map<string, THREE.Quaternion[]> {
+  if (sway === 1) return local;
+  for (const keys of local.values()) {
+    const mean = new THREE.Vector4();
+    for (const q of keys) {
+      const sign = q.x * keys[0]!.x + q.y * keys[0]!.y + q.z * keys[0]!.z + q.w * keys[0]!.w < 0 ? -1 : 1;
+      mean.x += sign * q.x; mean.y += sign * q.y; mean.z += sign * q.z; mean.w += sign * q.w;
+    }
+    const centre = new THREE.Quaternion(mean.x, mean.y, mean.z, mean.w).normalize();
+    for (const q of keys) q.copy(centre.clone().slerp(q, sway));
+  }
+  return local;
+}
+
 /** One retargeted clip per loop, tracks named by the shipped rig's node names. */
 export async function buildMocapClips(dumpDir: string): Promise<{ clips: THREE.AnimationClip[]; ranges: MocapLoop[] }> {
   const target = await loadTarget();
@@ -243,7 +274,7 @@ export async function buildMocapClips(dumpDir: string): Promise<{ clips: THREE.A
     const { root, bones } = buildSourceRig(dump);
     const humanoid = HumanoidSkeleton.bind(root, {});
     humanoid.normalizeFacing(root);
-    const local = loopTracks(localTrack(dump, range.from, range.to), loop.mirror === true);
+    const local = scaleSway(loopTracks(localTrack(dump, range.from, range.to), loop.mirror === true), loop.sway ?? 1);
     const tracks: THREE.KeyframeTrack[] = [];
     const times = Array.from({ length: local.values().next().value!.length }, (_, i) => i / dump.fps);
     for (const [b, keys] of local) {

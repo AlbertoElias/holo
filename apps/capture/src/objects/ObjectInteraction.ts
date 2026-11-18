@@ -1094,10 +1094,7 @@ export class ObjectInteraction {
 
   private place(object: SceneObject, bodyYaw: number): void {
     const { avatar, embodyOffset } = this.deps;
-    // From the standing eyes, not the animated eye bone: the idle sways the head, and the prop would land
-    // somewhere else on each load.
-    const eye = avatar.getStandingEyeWorldPosition(this.pos2);
-    eye.y += embodyOffset;
+    const eye = avatar.getEyeAnchorWorldPosition(this.pos2, embodyOffset);
     eye.x += -Math.sin(bodyYaw) * PLACE_FORWARD_M;
     eye.z += -Math.cos(bodyYaw) * PLACE_FORWARD_M;
     eye.y -= PLACE_BELOW_EYES_M;

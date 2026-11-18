@@ -302,15 +302,6 @@ export class AvatarRig {
     this.resolveCrouchRig();
   }
 
-  /**
-   * Where the eyes stand when the avatar stands still: over its root at the neutral eye height. Unlike the eye
-   * anchor, it does not sway with the idle clip, so what is placed from it lands the same at any moment.
-   */
-  getStandingEyeWorldPosition(out: THREE.Vector3): THREE.Vector3 {
-    const root = this.avatarRoot.position;
-    return out.set(root.x, root.y + this.avatarMinLocalY + this.neutralEyeAboveBase, root.z);
-  }
-
   getEyeAnchorWorldPosition(out: THREE.Vector3, embodyOffset: number): THREE.Vector3 {
     if (this.leftEyeAnchor && this.rightEyeAnchor) {
       this.leftEyeAnchor.getWorldPosition(this.tmpVecA);
