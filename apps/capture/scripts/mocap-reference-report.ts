@@ -1,6 +1,6 @@
 // Grades a reference human motion-capture clip (BVH) with the motion-quality
 // instrument: the human anchor for the feet and pop targets in
-// docs/features/natural-avatar-motion.md. The clips are not committed; fetch
+// docs/features/archive/natural-avatar-motion.md. The clips are not committed; fetch
 // CMU walks 02_01 and 07_01 into ignored output/mocap/ from
 // https://raw.githubusercontent.com/una-dinosauria/cmu-mocap/master/data/<subject>/<clip>.bvh
 // Usage: node --import tsx scripts/mocap-reference-report.ts output/mocap/07_01.bvh

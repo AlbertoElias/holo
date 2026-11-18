@@ -25,7 +25,7 @@ import { cameraMotionFrame, cameraPointRays, lostHandPopMax } from './lib/camera
 import { judgeMotion, measureMotion } from './lib/motion-quality';
 import { readGlbJson } from './lib/pointing-score.ts';
 
-// Camera avatar, slice 1 (docs/features/archive/camera-avatar-spike.md; now gap 2 of docs/features/natural-avatar-motion.md): no models and no camera. A committed, synthetic
+// Camera avatar, slice 1 (docs/features/archive/camera-avatar-spike.md; now gap 2 of docs/features/archive/natural-avatar-motion.md): no models and no camera. A committed, synthetic
 // landmark stream (generated below from a scripted performance, in the shape MediaPipe's pose and hand landmarkers
 // deliver) goes through __setBodycamFrame on a desktop page opened with ?input=camera, under the manual clock. The
 // avatar's wrists, fingers and head follow, the take is recorded and exported, and the GLB is read back. Then an IWER
@@ -449,7 +449,7 @@ try {
     const encoded = spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-framerate', '30', '-i', path.join(frameDir, '%05d.png'), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', videoPath], { stdio: 'inherit' });
     console.log(encoded.status === 0 ? `[bodycam] video: ${videoPath}` : '[bodycam] ffmpeg unavailable; frames kept as PNGs');
   }
-  // Motion quality, the camera row's lean guard (docs/features/natural-avatar-motion.md, gap 2): bones, wrists
+  // Motion quality, the camera row's lean guard (docs/features/archive/natural-avatar-motion.md, gap 2): bones, wrists
   // against the fed wrists, and the app's right-hand ray wherever it gives one. The first 0.5 s is left out, where
   // the avatar settles onto the ground, so the rest window sees it standing. Aim needs a measured target, which
   // only a real clip has (bodycam:report --avatars); MOTION_QUALITY_REPORT_ONLY=1 reports misses without failing.

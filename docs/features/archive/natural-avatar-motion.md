@@ -1,7 +1,7 @@
 # Feature brief: The avatar moves naturally, whatever drives it
 
 **Lead:** Claude Code (Opus), session "natural avatar motion"
-**Status:** Reviewed (scope approved by the user 2026-11-13; design review below)
+**Status:** Complete (2026-11-18): every row meets its target on every supported skeleton, camera aim excepted (rough aim, Decision 4); physical-device validation stays open (Physical-device limits). Scope approved by the user 2026-11-13; design review below
 **Layer:** event (the recorded body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -38,8 +38,10 @@ can do in a take.
 ## The instrument
 
 `apps/capture/scripts/lib/motion-quality.ts` (`measureMotion`, `judgeMotion`,
-`MOTION_TARGETS`), with the CLI `scripts/motion-quality-report.ts` for saved
-samples. It measures what mocap cleanup studios clean up:
+`MOTION_TARGETS`), with the CLI `scripts/motion-quality-report.ts`: with no
+arguments it grades every source's latest saved run in one table (desktop,
+VR body, passthrough, hands, each skeleton, and the camera rows the camera
+report graded) and names any source with no saved run. It measures what mocap cleanup studios clean up:
 
 | Metric | Definition |
 |---|---|
@@ -72,7 +74,8 @@ hands-only.
 |---|---|---|---|---|---|---|
 | **Target, all bodies** | ≤ 3 cm / ≤ 10% · ≤ 1 cm · ≤ 0.5 cm | ≤ 35 m/s² | 0% | ≤ 2 mm (camera ≤ 8 mm, rays ≤ 3.5°) | wrist ≤ 1.5 cm (hands 2 cm), latency 0 (camera ≤ 100 ms), jerk ≤ 1.2, aim ≤ 3.5° | |
 | Human reference (CMU 02_01 / 07_01) | 3.9 / 16% · 07_01 2.6 / 10% | 34 / 45 | 0% | — | — | anchor |
-| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.7 cm / 4.0% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 31 (was **116**; 27.6 on the earlier whole-frame stencil) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
+| Desktop keyboard (walk, strafe, back, crouch-walk, flat floor) | 0.7 cm / 4.0% · 0.9 · 0.0 (was **8.6 / 16% · 0.3 · 5.3** at 3.24 m/s) | 32.5 on the body joints every row counts (31 when `headTop` was counted too; was **116**) | 0% | 0.1 mm | n/a | pass at 1.8 m/s (gap 1 done) |
+| Desktop keyboard, every skeleton (each of the 7 `avatars` fixtures, retargeted walk) | worst 0.8 cm (twisted T-pose) / 4.0% · 0.9 (twisted T-pose 0.90) · 0.0 | 32.5 (twisted T-pose 29.9) | 0% | 0.1 mm | n/a | pass at 1.8 m/s on all 7 (2026-11-18) |
 | Camera (`bodycam:report --avatars all`, lens-aim clip, each of the 17 `avatars` skeletons) | 0 / 0% · 0 · 0 (the camera body stands; its legs never move) | 13.5–14.5 (10.1–10.8 before gap 3's exact ±50 ms pops; same solver) | 0% | 1.0–1.1 mm (1.8–2.0 before gap 3's time-fit jitter), ray **0.88°** (wrist→tip, 0.25 s) | latency 50 ms, aim median **34.4°** (left 47, right 32; holds 18–51°); lost-hand pop max 116–119 m/s² (bar 150; 325 before the arm-release fix) | pass but aim (rough aim accepted, Decision 4) |
 | VR body, walk ramp | 1.6 cm / 5.3% · 0.0 · 0.1 (base **4.1 / 3.8% · 1.0 · 1.2**) | 34 (base **37**) | 0% | 0.3 mm (base 1.8) | — | pass (gap 3 done) |
 | VR body, walk | 2.0 cm / 3.6% · 0.0 · 0.0 (base 2.9 / 3.8% · **1.05** · 0.3) | 34 (base 35) | 0% | 0.6 mm (base 1.3) | — | pass |
@@ -232,14 +235,14 @@ report passes on it.
 
 ## Acceptance criteria
 
-- [ ] One report grades every source with the same metrics and per-source targets.
+- [x] One report grades every source with the same metrics and per-source targets (2026-11-18): `node --import tsx scripts/motion-quality-report.ts` (from `apps/capture`, no arguments) grades the saved runs of desktop, VR body, passthrough and hands on every skeleton through `measureMotion`/`judgeMotion`, and lists the camera rows `bodycam:report --avatars all` graded with the same functions (camera aim needs the clip's landmarks and holds, so those rows come from its `report.json`). Phone AR drives no avatar. The camera rows were regraded from the 2026-11-17 samples (`--regrade`), not driven again. It names any coverage gap, and `MOTION_QUALITY_STRICT=1` fails on a gap or on any miss but camera aim.
 - [x] Desktop keyboard row meets target; guard strict in `desktop-motion`.
 - [x] Camera row has measured body and aim numbers, behind `?input=camera`. Body, ray, feet and latency meet on all 17 skeletons; aim misses at 34.4° for the measured reason in gap 2, accepted as rough aim (Decision 4).
 - [x] VR body walk/ramp/turn rows meet target; strict in the body replay (2026-11-14, gap 3; crouch and small steps too).
 - [x] Real-headset wrist p95 ≤ 2 cm (2026-11-17, gap 4): 0.2 cm on all 7 skeletons (was 3.0), strict in the hand replay.
 - [x] Quest AR and phone AR rows measured; any miss fixed (2026-11-17, gap 5): Quest passthrough embodies the performer and meets every body target on all 7 skeletons, strict as `ar-quest`; phone AR has no avatar by design (camera author).
-- [ ] Each gap closes with a before/after proof video sent to the user.
-- [ ] Every supported skeleton meets each row's target: the desktop and VR motion checks grade each avatar fixture the `avatars` check loads (`scripts/ci-avatar-formats-playwright.ts`: reoriented axes, A-pose, T-pose, twisted T-pose, VRM 0 facing −Z, Z-up, Unreal centimetres), not only the default avatar (user direction, 2026-11-14). VR part done (2026-11-14): all 5 VR body rows meet target on all 7 fixtures; both VR hand rows too (2026-11-17, gap 4). Camera part done (17 skeletons, gap 2). Desktop part pending.
+- [x] Each gap closes with a before/after proof video sent to the user: gaps 1–5 each sent one (ignored `output/`, never committed). The desktop every-skeleton part changed no motion, so it has no before/after.
+- [x] Every supported skeleton meets each row's target: the desktop and VR motion checks grade each avatar fixture the `avatars` check loads (`scripts/ci-avatar-formats-playwright.ts`: reoriented axes, A-pose, T-pose, twisted T-pose, VRM 0 facing −Z, Z-up, Unreal centimetres), not only the default avatar (user direction, 2026-11-14). VR part done (2026-11-14): all 5 VR body rows meet target on all 7 fixtures; both VR hand rows too (2026-11-17, gap 4). Camera part done (17 skeletons, gap 2). Desktop part done (2026-11-18): `desktop-motion` grades the keyboard row strictly on the shipped avatar and each of the 7 fixtures, one page each in one browser (about 21 s locally, its own `CHECK_COST`, outside the `avatars` check); every fixture met every target without a solver change, and the check fails a fixture whose binding report does not show the retargeted walk, so a fixture that failed to load cannot pass as the shipped avatar.
 
 ## Failure cases considered
 
@@ -296,7 +299,8 @@ report passes on it.
 
 | Acceptance criterion | Workflow or command | Result |
 |---|---|---|
-| Desktop row | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (strict, in `test:xr`) | gap 1 (2026-11-14, with the floor-skin guard): skate 0.72 cm / 4.0%, float 0.87, penetration 0.00, pops p99 31.2 (exact ±50 ms; 27.6 on the k=2 stencil), joint limits 0%, jitter 0.07 mm, walk speed 1.799 m/s, all targets met |
+| Desktop row, every skeleton | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (strict, in `test:xr`; the shipped avatar and the 7 `avatars` fixtures; `DESKTOP_MOTION_ONLY=<substring>` narrows it) | gap 1 (2026-11-14, with the floor-skin guard): skate 0.72 cm / 4.0%, float 0.87, penetration 0.00, pops p99 31.2 (exact ±50 ms; 27.6 on the k=2 stencil), joint limits 0%, jitter 0.07 mm, walk speed 1.799 m/s, all targets met. 2026-11-18: graded on the body joints every row counts (pops 32.5), and on all 7 fixtures: all pass (table above) |
+| One report | `node --import tsx scripts/motion-quality-report.ts` (from `apps/capture`; `MOTION_QUALITY_STRICT=1` fails on a miss) after the checks above | 2026-11-18: one table over desktop × 8 avatars, VR body × 5 rows × 8, passthrough walk × 7, hands × 2 rows × 8, camera × 17, `MOTION_QUALITY_STRICT=1` exit 0; the only miss is camera aim (accepted, Decision 4). The report prints each source's runs, avatars and rows first and a GAP line for any source short of its avatars or skeleton short of its rows. The `avatars` check replays only walk-forward and crouch per skeleton by default, which leaves a GAP; the full table needs `XR_AVATAR_BODY_REPLAYS='crouch,small-steps,turn,walk-forward,walk-ramp'` on that check (or each fixture's body replay run alone with those rows) |
 | Human anchor | x | CMU reads above |
 | VR body rows | `pnpm --filter @holoim/capture run test:xr:body` (strict motion grading per row; `BODY_REPLAY_FAULTS=1` for the 12-fault matrix) | gap 3 (2026-11-14, exact ±50 ms pops): every row meets target (table above); fault matrix 12/12 caught |
 | VR body rows, every skeleton | `XR_AVATAR_ONLY=<fixture> XR_AVATAR_BODY_REPLAYS='crouch,small-steps,turn,walk-forward,walk-ramp' pnpm --filter @holoim/capture run test:xr:avatars`, one fixture per run (all five rows take ~200 s a fixture; the default run replays walk-forward and crouch) | 2026-11-14: all 7 fixtures pass every row, strict |

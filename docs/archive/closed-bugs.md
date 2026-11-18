@@ -195,7 +195,7 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   tracked eyes, head orientation) and a world-locked rig. `test:xr:body`
   measures it; its fault run shows each behavior's metric failing when broken
   (for example the old rig placement fails world lock). See
-  [`../features/room-scale-body-motion.md`](../features/room-scale-body-motion.md).
+  [`../features/archive/room-scale-body-motion.md`](../features/archive/room-scale-body-motion.md).
 
 ### B-013 — XR replay tooling: fixtures with unmoved wrists, slow and order-dependent frames
 

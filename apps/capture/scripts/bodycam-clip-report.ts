@@ -16,7 +16,7 @@ import { assignHandSides } from '../src/bodycam/convert';
 import type { HandLandmarks, Point2, Point3, Quat4 } from '../src/bodycam/types';
 import { type FingerChain, scorePointPose } from '../src/xr/pointPose';
 
-// Report-only (docs/features/natural-avatar-motion.md, gap 2; history in docs/features/archive/camera-avatar-spike.md, slice 2): runs the real MediaPipe models on a video clip played
+// Report-only (docs/features/archive/natural-avatar-motion.md, gap 2; history in docs/features/archive/camera-avatar-spike.md, slice 2): runs the real MediaPipe models on a video clip played
 // as Chromium's fake camera, in real time, on a capture page opened with ?input=camera, and measures what the
 // tracker made of it. It asserts nothing about model output and is not part of test:xr.
 //

@@ -3,7 +3,7 @@ import type { BodySample, HandSample, VrHandSide } from '../../src/types/contrac
 import { PointDetector } from '../../src/xr/PointDetector';
 import type { JointName, MotionFrame, Vec3 } from './motion-quality';
 
-// The camera avatar as the motion-quality instrument reads it (docs/features/natural-avatar-motion.md, gap 2): the
+// The camera avatar as the motion-quality instrument reads it (docs/features/archive/natural-avatar-motion.md, gap 2): the
 // avatar's bones from __sampleBody, its wrists against the camera's tracked wrists from __sampleHands, and the app's
 // own pointing ray (PointDetector over the camera's hand joints, wrist to tip). Shared by the bodycam check's guard
 // and bodycam-avatar-replay.ts, so both grade the same thing.

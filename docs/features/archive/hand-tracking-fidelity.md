@@ -1,7 +1,7 @@
 # Feature brief: Hand-tracking fidelity from real headset input
 
 **Lead:** Claude Code
-**Status:** Verifying
+**Status:** Complete (2026-11-18, folded into the natural-avatar-motion umbrella): its 3.0 cm real-headset wrist error became gap 4 of [natural-avatar-motion.md](natural-avatar-motion.md), closed 2026-11-17 (0.2 cm on all 7 skeletons). Physical-device checks stay listed there
 
 ## User outcome
 

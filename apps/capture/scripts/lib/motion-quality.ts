@@ -4,7 +4,7 @@
 // limits, jitter, and hand/aim error and latency against the input when
 // the input is known. Targets are per source (`MOTION_TARGETS`), because a
 // camera is far noisier than a headset; see
-// docs/features/natural-avatar-motion.md for where each number comes from.
+// docs/features/archive/natural-avatar-motion.md for where each number comes from.
 //
 // Input is source-agnostic: per-frame world positions of named joints, the
 // ground height under each foot, and optionally the input the avatar should
