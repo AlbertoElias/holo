@@ -40,10 +40,11 @@ export interface GaitState {
 }
 
 /**
- * The shipped walk's stride is short for a brisk 1.8 m/s walk, so its cadence would be a scurry and its swing foot
- * would whip. Laying each stride down longer, and playing the clip slower to match, keeps the planted foot still.
+ * The shipped walk (CMU 07_12) was recorded faster than the desktop's 1.8 m/s; played at that pace on its own
+ * stride its cadence is a touch quick (~130 steps/min). Laying each stride 10% longer, and playing the clip slower to match, walks at ~116
+ * steps/min with a softer swing (docs/features/realistic-avatar-motion.md).
  */
-const WALK_STRIDE_SCALE = 1.2;
+const WALK_STRIDE_SCALE = 1.1;
 
 export function inStance(gait: WalkGait, leg: GaitLeg, phase: number): boolean {
   const { land, lift } = gait.stance[leg];
@@ -73,6 +74,7 @@ const WALK_TIME_SCALE_BASE = 1.4;
 const WALK_TIME_SCALE_MIN = 0.15;
 const WALK_TIME_SCALE_MAX = 3;
 const GAIT_SAMPLES = 96;
+const HIPS_BOB_SIGMA_SEC = 0.04;
 const WALK_LOOP_QUAT_MATCH_DOT = 0.99995;
 const WALK_STATE_SPEED_THRESHOLD = 0.12;
 const WALK_FADE_SEC = 0.08;
@@ -301,12 +303,13 @@ export class LocomotionAnimator {
     if (!measured) return undefined;
     const { soles, restSole } = measured;
     const n = soles.length;
-    // Lightly smoothed (circular, ±2 samples) so a foot's roll from heel to toe does not shake the body.
-    const drop = soles.map((_, i) => {
-      let sum = 0;
-      for (let k = -2; k <= 2; k++) sum += soles[(i + k + n) % n]! - restSole;
-      return sum / 5;
-    });
+    // Smoothed (circular Gaussian, σ HIPS_BOB_SIGMA_SEC): the lower sole switches feet at each
+    // footfall, a corner a person's pelvis rounds off, and a foot's roll from heel to toe must not shake the body.
+    const sigma = Math.max(1, (HIPS_BOB_SIGMA_SEC / clip.duration) * n);
+    const reach = Math.ceil(sigma * 3);
+    const weights = Array.from({ length: 2 * reach + 1 }, (_, k) => Math.exp(-(((k - reach) / sigma) ** 2) / 2));
+    const total = weights.reduce((a, b) => a + b, 0);
+    const drop = soles.map((_, i) => weights.reduce((sum, w, k) => sum + w * (soles[(((i + k - reach) % n) + n) % n]! - restSole), 0) / total);
     root.updateWorldMatrix(true, true);
     const parentQuat = hips.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
     const parentScale = Math.abs(hips.parent.getWorldScale(new THREE.Vector3()).y) || 1;

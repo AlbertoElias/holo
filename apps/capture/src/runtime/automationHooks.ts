@@ -50,6 +50,8 @@ export interface AutomationHooks {
   __respawnCharacter: () => boolean;
   __sampleHands: () => Record<VrHandSide, HandSample>;
   __sampleBody: () => BodySample;
+  /** Median and p95 per-frame cost (ms) of animation + body IK over the last frames; `reset` starts a new window. */
+  __samplePoseCost: (reset?: boolean) => { frames: number; medianMs: number; p95Ms: number };
   __setBodyFaults: (faults: readonly string[]) => void;
   __setHandOverlay: (enabled: boolean) => void;
   __setHeightEvidenceView: (enabled: boolean) => void;

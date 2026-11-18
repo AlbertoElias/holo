@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TerrainHeightIndex, WALKABLE_NORMAL_Y } from '../animation/TerrainHeightIndex';
 import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
@@ -625,21 +626,13 @@ export class AvatarRig {
   }
 
   // Ground height at (x, z), ignoring steep faces and the world's ceiling;
-  // outNormal, when given, receives the upward surface normal there.
-  sampleTerrainYAt(x: number, z: number, raycaster: THREE.Raycaster, outNormal?: THREE.Vector3): number | undefined {
+  // outNormal, when given, receives the upward surface normal there. `belowY`:
+  // only surfaces under that height count (the ground under a foot, not a rock
+  // edge overhead).
+  sampleTerrainYAt(x: number, z: number, _raycaster: THREE.Raycaster, outNormal?: THREE.Vector3, belowY = Infinity): number | undefined {
     if (!this.worldModel) return undefined;
-    this.tmpVecA.set(x, this.worldTopRayY, z);
-    raycaster.set(this.tmpVecA, new THREE.Vector3(0, -1, 0));
-    const hits = raycaster.intersectObject(this.worldModel, true);
-    for (const hit of hits) {
-      if (!hit.face) continue;
-      const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-      if (normal.y > 0.2 && hit.point.y <= this.terrainCeilingY) {
-        outNormal?.copy(normal);
-        return hit.point.y + 0.01;
-      }
-    }
-    return undefined;
+    const y = TerrainHeightIndex.of(this.worldModel).heightAt(x, z, Math.min(this.worldTopRayY, belowY, this.terrainCeilingY), -Infinity, WALKABLE_NORMAL_Y - 1e-9, outNormal);
+    return y === undefined ? undefined : y + 0.01;
   }
 
   private centerModelOnGround(model: THREE.Object3D): void {

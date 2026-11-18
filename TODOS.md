@@ -34,6 +34,13 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Realistic avatar motion, slice 2 (follow-up to
+  [`docs/features/realistic-avatar-motion.md`](docs/features/realistic-avatar-motion.md)):
+  directional (back, strafe) and crouch mocap clips with phase-synced blending,
+  foot pitch/roll to the slope sampled under heel and toe, pelvis drop to the
+  lower foot, and the walk's knee swing (p99 77° against the CMU source's
+  57–66°). Slice 1 replaced only Idle and Walk.
+
 - [x] "The way down", version 2 (agent-authored, 2026-11-12): the same
   introspection, made to go inside and hit harder. Version 1 (scene
   `introspection`, live as `cmwcte5x20005oeiqsmobz8mf`) reads as a diorama

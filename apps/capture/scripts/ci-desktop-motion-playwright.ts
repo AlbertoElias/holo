@@ -7,6 +7,9 @@
 // Samples and reports go to output/ci-desktop-motion/ (<avatar>-samples.json,
 // <avatar>-report.json, summary.json). MOTION_QUALITY_REPORT_ONLY=1 reports
 // misses without failing; DESKTOP_MOTION_ONLY=<substring> keeps matching avatars.
+// The shipped avatar also walks the default terrain (row "shipped-terrain"), judged
+// on its feet against the slopes (no sinking, no floating), and every row reports
+// the per-frame cost of animation + body IK (__samplePoseCost).
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright';
@@ -17,7 +20,8 @@ import {
 import type {} from '../src/runtime/automationHooks';
 import type { BodySample } from '../src/types/contracts';
 import { generateAvatarFixtures } from './lib/avatar-fixtures.ts';
-import { framesFromBodySamples, judgeMotion, measureMotion } from './lib/motion-quality';
+import { judgeGait, measureGait } from './lib/gait-metrics';
+import { framesFromBodySamples, judgeMotion, measureMotion, type MotionFrame } from './lib/motion-quality';
 
 type Input = { forward: boolean; back: boolean; left: boolean; right: boolean; crouch: boolean };
 const idle: Input = { forward: false, back: false, left: false, right: false, crouch: false };
@@ -36,7 +40,8 @@ function floorGltf(): string {
 // Phases: [label, seconds, input].
 const SCRIPT: Array<[string, number, Input]> = [
   ['idle', 1, idle],
-  ['walk', 3, { ...idle, forward: true }],
+  // Long enough for three steady strides after the start, for the gait metrics.
+  ['walk', 5, { ...idle, forward: true }],
   ['stop', 1.5, idle],
   ['strafe', 2, { ...idle, left: true }],
   ['stop', 1.5, idle],
@@ -46,10 +51,47 @@ const SCRIPT: Array<[string, number, Input]> = [
   ['stop', 1.5, idle]
 ];
 
+// On the default terrain: straight ahead over its slopes, then diagonally (forward and left).
+const TERRAIN_SCRIPT: Array<[string, number, Input]> = [
+  ['idle', 1, idle],
+  ['walk', 5, { ...idle, forward: true }],
+  ['stop', 1.5, idle],
+  ['diagonal', 3, { ...idle, forward: true, left: true }],
+  ['stop', 1.5, idle]
+];
+// Feet on slopes (brief acceptance): toe and ankle at most 1.5 cm under the ground under each of them
+// (`footBelowGroundCm`), planted feet within 2 cm above it. The shared penetration metric measures the
+// lower foot joint against one ground height per foot, from its resting height, so on a slope a toe
+// planted downhill of the ankle reads as sunk; on terrain each joint is judged against its own ground.
+const TERRAIN_TARGETS = { footBelowGroundCm: { max: 1.5 }, footFloatP95Cm: { max: 2 } } as const;
+const FOOT_JOINTS = ['leftToe', 'rightToe', 'leftAnkle', 'rightAnkle'] as const;
+// The body is in the air (walked off a ledge) while its hips stand this far (m) above their standing height
+// over the ground under it; the leg solver lets the feet go then, so those frames are counted, not judged.
+const AIRBORNE_M = 0.25;
+
+/** The deepest any toe or ankle went under the ground straight below it, in cm (0 when never under), on the ground. */
+function footBelowGround(samples: Array<{ phase: string; body: BodySample }>): { cm: number; airborneFrames: number } {
+  const hipsOverGround = (body: BodySample) => body.bones.hips && body.ground.root ? body.bones.hips[1] - body.ground.root.y : undefined;
+  const standing = samples.filter((s) => s.phase === 'idle').map((s) => hipsOverGround(s.body)).filter((h): h is number => h !== undefined).sort((a, b) => a - b);
+  const stand = standing[Math.floor(standing.length / 2)] ?? Infinity;
+  let deepest = 0, airborneFrames = 0;
+  for (const { body } of samples) {
+    const over = hipsOverGround(body);
+    if (over !== undefined && over > stand + AIRBORNE_M) { airborneFrames++; continue; }
+    for (const joint of FOOT_JOINTS) {
+      const at = body.bones[joint], ground = body.ground[joint];
+      if (at && ground) deepest = Math.max(deepest, ground.y - at[1]);
+    }
+  }
+  return { cm: deepest * 100, airborneFrames };
+}
+// Animation + body IK per avatar per frame, median (brief acceptance: 0.25 ms on the desktop test machine).
+const POSE_COST_MEDIAN_MS = 0.25;
+
 // The geometric skeletons the avatars check replays (bone axes, bind pose, facing, scale).
 const SKELETONS = ['reoriented-axes', 'a-pose', 't-pose', 't-pose-twisted', 'vrm0-minus-z', 'z-up', 'unreal-cm'];
 
-async function run(page: Page, avatarUrl: string | null) {
+async function run(page: Page, avatarUrl: string | null, terrain = false) {
   await page.addInitScript(() => {
     Object.defineProperty(window, '__setManualClock', {
       configurable: true,
@@ -63,12 +105,14 @@ async function run(page: Page, avatarUrl: string | null) {
   await page.route('**/desktop-motion-floor.gltf', (route) => route.fulfill({ contentType: 'model/gltf+json', body: floorGltf() }));
   await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   const url = new URL(process.env.BASE_URL ?? 'https://127.0.0.1:5374/');
-  url.searchParams.set('scene', '/desktop-motion-floor.gltf');
-  url.searchParams.set('sceneScale', '1');
+  if (!terrain) {
+    url.searchParams.set('scene', '/desktop-motion-floor.gltf');
+    url.searchParams.set('sceneScale', '1');
+  }
   url.searchParams.set('avatarHeight', '1.8');
   if (avatarUrl) url.searchParams.set('avatar', avatarUrl);
   await page.goto(url.href, { waitUntil: 'networkidle' });
-  await waitForPageFunctions(page, ['__sampleHumanoid', '__setManualClock', '__setMockInput', '__respawnCharacter', '__sampleBody', 'advanceTime']);
+  await waitForPageFunctions(page, ['__sampleHumanoid', '__setManualClock', '__setMockInput', '__respawnCharacter', '__sampleBody', '__samplePoseCost', 'advanceTime']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   await page.evaluate(() => {
     window.__setManualClock(true);
@@ -79,7 +123,8 @@ async function run(page: Page, avatarUrl: string | null) {
   const humanoid = await page.evaluate(() => window.__sampleHumanoid());
   const samples: Array<{ timeMs: number; phase: string; body: BodySample }> = [];
   let timeMs = 0;
-  for (const [phase, seconds, input] of SCRIPT) {
+  await page.evaluate(() => window.__samplePoseCost(true));
+  for (const [phase, seconds, input] of terrain ? TERRAIN_SCRIPT : SCRIPT) {
     const frames = Math.round((seconds * 1000) / FRAME_MS);
     const chunk = await page.evaluate(
       ({ input, frames, frameMs }) => {
@@ -98,7 +143,8 @@ async function run(page: Page, avatarUrl: string | null) {
       samples.push({ timeMs, phase, body });
     }
   }
-  return { samples, walkClip: humanoid?.locomotion?.clips?.walk ?? null };
+  const poseCost = await page.evaluate(() => window.__samplePoseCost());
+  return { samples, walkClip: humanoid?.locomotion?.clips?.walk ?? null, poseCost };
 }
 
 
@@ -106,6 +152,24 @@ async function run(page: Page, avatarUrl: string | null) {
 const MIN_WALK_SPEED = 0.75 * 1.8;
 
 type Verdict = ReturnType<typeof judgeMotion>[number];
+type Sample = { timeMs: number; phase: string };
+
+// Idle and stop frames from HELD_AFTER_MS into the phase: the keys are released and
+// the avatar has settled, so any shake there is noise (jitter is judged on these).
+const HELD_AFTER_MS = 600;
+function markHeld(frames: MotionFrame[], samples: Sample[]): MotionFrame[] {
+  let start = 0;
+  return frames.map((f, i) => {
+    const phase = samples[i]!.phase;
+    if (i === 0 || samples[i - 1]!.phase !== phase) start = samples[i]!.timeMs;
+    return { ...f, held: (phase === 'idle' || phase === 'stop') && samples[i]!.timeMs - start >= HELD_AFTER_MS };
+  });
+}
+// The walk after its first second (the start-up), for the gait metrics.
+function steadyWalk(frames: MotionFrame[], samples: Sample[]): MotionFrame[] {
+  const start = samples.find((s) => s.phase === 'walk')!.timeMs;
+  return frames.filter((_, i) => samples[i]!.phase === 'walk' && samples[i]!.timeMs - start >= 1000);
+}
 function walkSpeedOf(samples: Array<{ timeMs: number; phase: string; body: BodySample }>): number {
   const start = samples.find((s) => s.phase === 'walk')!.timeMs;
   const walk = samples.filter((sample) => sample.phase === 'walk' && sample.timeMs - start >= 500);
@@ -120,8 +184,9 @@ const only = process.env.DESKTOP_MOTION_ONLY;
 const fixtures = (await generateAvatarFixtures(path.join(artifactDir, 'fixtures'))).filter((f) => SKELETONS.includes(f.name));
 // walkClip: what the binding report must say walks the avatar, so a fixture that failed to load
 // (and left the shipped avatar, which walks on its own clip) cannot pass for it.
-const avatars: Array<{ name: string; url: string | null; walkClip: string }> = [
+const avatars: Array<{ name: string; url: string | null; walkClip: string; terrain?: boolean }> = [
   { name: 'shipped', url: null, walkClip: 'own' },
+  { name: 'shipped-terrain', url: null, walkClip: 'own', terrain: true },
   ...fixtures.map((f) => ({ name: f.name, url: `/${path.relative(process.cwd(), f.file).split(path.sep).join('/')}`, walkClip: f.expect.ownClips ? 'own' : 'retargeted' }))
 ].filter((a) => !only || a.name.includes(only));
 const lost = SKELETONS.filter((name) => !fixtures.some((f) => f.name === name));
@@ -134,26 +199,42 @@ try {
   for (const avatar of avatars) {
     const context = await createXrContext(browser, { viewport: { width: 960, height: 720 } });
     consoleErrors.length = 0;
-    const { samples, walkClip } = await run(await context.newPage(), avatar.url);
+    const { samples, walkClip, poseCost } = await run(await context.newPage(), avatar.url, avatar.terrain);
     await context.close();
     const tag = `[desktop-motion] ${avatar.name}:`;
     const misses: Verdict[] = [];
     if (walkClip !== avatar.walkClip) { console.log(`${tag} walks on a ${walkClip} clip, expected ${avatar.walkClip}: the avatar did not load`); failed = true; }
     if (consoleErrors.length) { console.log(`${tag} browser errors: ${consoleErrors.join(' | ')}`); failed = true; }
     // The shared conversion, so desktop counts the same joints as every other row (not headTop, an end site).
-    const metrics = measureMotion(framesFromBodySamples(samples, 'avatar'));
-    const verdicts = judgeMotion(metrics, 'desktop');
+    const frames = markHeld(framesFromBodySamples(samples, 'avatar'), samples);
+    const metrics = measureMotion(frames);
+    const gait = measureGait(steadyWalk(frames, samples), 1.8);
+    // On terrain the slopes bend the walk, so only the feet against the ground are judged there.
+    const { cm: belowGround, airborneFrames } = footBelowGround(samples);
+    const verdicts = avatar.terrain
+      ? [
+          { metric: 'footBelowGroundCm', value: belowGround, target: TERRAIN_TARGETS.footBelowGroundCm, pass: belowGround <= TERRAIN_TARGETS.footBelowGroundCm.max } as unknown as Verdict,
+          ...judgeMotion(metrics, 'desktop').filter((v) => v.metric in TERRAIN_TARGETS).map((v) => {
+            const target = TERRAIN_TARGETS[v.metric as keyof typeof TERRAIN_TARGETS];
+            return { ...v, target, pass: v.value !== null && v.value <= target.max } as Verdict;
+          })
+        ]
+      : [...judgeMotion(metrics, 'desktop'), ...judgeGait(gait).map((v) => ({ ...v, metric: `gait.${v.metric}` }) as Verdict)];
+    verdicts.push({ metric: 'poseCostMedianMs', value: poseCost.medianMs, target: { max: POSE_COST_MEDIAN_MS }, pass: poseCost.medianMs <= POSE_COST_MEDIAN_MS } as unknown as Verdict);
     await writeFile(path.join(artifactDir, `${avatar.name}-samples.json`), JSON.stringify(samples));
-    await writeFile(path.join(artifactDir, `${avatar.name}-report.json`), JSON.stringify({ metrics, verdicts }, null, 2));
+    await writeFile(path.join(artifactDir, `${avatar.name}-report.json`), JSON.stringify({ metrics, footBelowGroundCm: belowGround, airborneFrames, gait, poseCost, verdicts }, null, 2));
     console.log(`${tag} ${JSON.stringify(metrics)}`);
+    console.log(`${tag} gait ${JSON.stringify(gait)}`);
+    console.log(`${tag} pose cost ${JSON.stringify(poseCost)}`);
+    if (avatar.terrain) console.log(`${tag} feet below ground ${belowGround.toFixed(2)} cm (${airborneFrames} airborne frames not judged)`);
     // The feet's targets get easier as the walk slows: the walk itself must stay brisk (1.8 m/s at 1.8 m, the owner's call).
     const walkSpeed = walkSpeedOf(samples);
     console.log(`${tag} walk speed ${walkSpeed.toFixed(3)} m/s`);
     misses.push(...verdicts.filter((v) => !v.pass));
-    if (walkSpeed < MIN_WALK_SPEED) misses.push({ metric: 'walk speed', value: walkSpeed, target: { min: MIN_WALK_SPEED }, pass: false } as Verdict);
+    if (!avatar.terrain && walkSpeed < MIN_WALK_SPEED) misses.push({ metric: 'walk speed', value: walkSpeed, target: { min: MIN_WALK_SPEED }, pass: false } as Verdict);
     for (const miss of misses) console.log(`${tag} MISS ${miss.metric} = ${miss.value} (target ${JSON.stringify(miss.target)})`);
     if (misses.length) failed = true;
-    summary.push({ avatar: avatar.name, walkClip, walkSpeed, metrics, misses: misses.map((m) => m.metric) });
+    summary.push({ avatar: avatar.name, walkClip, walkSpeed, metrics, gait, poseCost, misses: misses.map((m) => m.metric) });
   }
 } finally {
   await browser.close();

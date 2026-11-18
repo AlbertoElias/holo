@@ -99,7 +99,8 @@ export class BodyTracking {
     for (const key of ['root', 'leftAnkle', 'rightAnkle', 'leftToe', 'rightToe'] as const) {
       const at = key === 'root' ? tuple(root) : bones[key];
       if (!at) continue;
-      const y = avatar.sampleTerrainYAt(at[0], at[2], this.raycaster, normal);
+      // A foot's ground is the surface within half a metre over it (the leg solver's reach), not one overhead.
+      const y = avatar.sampleTerrainYAt(at[0], at[2], this.raycaster, normal, key === 'root' ? Infinity : at[1] + 0.5);
       if (y !== undefined) ground[key] = { y: y - 0.01, normal: tuple(normal) };
     }
     const debug = this.solver.getDebugSnapshot();

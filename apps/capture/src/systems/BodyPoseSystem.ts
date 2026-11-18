@@ -17,6 +17,12 @@ export class BodyPoseSystem extends createSystem() {
   }
 
   update(deltaSec: number): void {
+    const started = performance.now();
+    this.pose(deltaSec);
+    recordPoseCost(performance.now() - started);
+  }
+
+  private pose(deltaSec: number): void {
     const c = this.capture;
     const frame = c.frame;
     const character = frame.character;
@@ -51,6 +57,25 @@ export class BodyPoseSystem extends createSystem() {
       c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, c.crouch.poseAmount > 0.3, c.animator.getGaitState());
     }
   }
+}
+
+// The last frames' cost of animation + body IK (ms), for the desktop motion check's per-frame budget.
+const POSE_COST_FRAMES = 600;
+const poseCosts = new Float32Array(POSE_COST_FRAMES);
+let poseCostCount = 0;
+function recordPoseCost(ms: number): void {
+  poseCosts[poseCostCount % POSE_COST_FRAMES] = ms;
+  poseCostCount++;
+}
+
+/** Median and p95 of the last frames' animation + IK cost (ms); `reset` starts a fresh window. */
+export function samplePoseCost(reset = false): { frames: number; medianMs: number; p95Ms: number } {
+  const n = Math.min(poseCostCount, POSE_COST_FRAMES);
+  const sorted = Array.from(poseCosts.subarray(0, n)).sort((a, b) => a - b);
+  const at = (p: number) => (n ? sorted[Math.min(n - 1, Math.floor(p * n))]! : 0);
+  const out = { frames: n, medianMs: at(0.5), p95Ms: at(0.95) };
+  if (reset) poseCostCount = 0;
+  return out;
 }
 
 // Time constant for the crouch pose's eased travel speed (s).

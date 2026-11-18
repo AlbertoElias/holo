@@ -31,6 +31,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Resize and move props on every device | Complete | [object-resize-and-move.md](archive/object-resize-and-move.md) |
 | The tray on every device | Complete | [tray-everywhere.md](archive/tray-everywhere.md) |
 | Portal view on flat screens | Implementing | [portal-view.md](portal-view.md) |
+| Realistic avatar motion (mocap clips + IK) | Slice 1 delivered (mocap Idle and Walk, terrain IK); directional and crouch clips next (`TODOS.md`) | [realistic-avatar-motion.md](realistic-avatar-motion.md) |
 | A far object on the feed card (review-pack framing fixed; cap decision) | Approved 2026-11-17: B, a 75 % performer floor; review-tool fix merged, the floor not built | [card-framing-objects.md](card-framing-objects.md) |
 | Deep zoom into nested holograms ("The way down") | Complete | [deep-zoom.md](archive/deep-zoom.md) |
 | Simpler viewer chrome (control row, corner, settings) | Complete | [viewer-chrome.md](archive/viewer-chrome.md) |

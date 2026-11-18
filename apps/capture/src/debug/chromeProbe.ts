@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { markChromeTree } from '@holoim/xr-ui-core';
+import { TerrainHeightIndex } from '../animation/TerrainHeightIndex';
 
 /**
  * A check's probe for the chrome flag (docs/features/ui-redesign.md, slice
@@ -23,11 +24,13 @@ export class ChromeProbe {
     this.mesh?.geometry.dispose();
     (this.mesh?.material as THREE.Material | undefined)?.dispose();
     this.mesh = null;
+    if (worldModel) TerrainHeightIndex.invalidate(worldModel);
     if (mode === 'none' || !worldModel) return;
     if (mode === 'chrome') {
       this.moved = { chrome, parent: chrome.parent };
       worldModel.attach(chrome);
       worldModel.updateMatrixWorld(true);
+      TerrainHeightIndex.invalidate(worldModel);
       return;
     }
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshBasicMaterial());
@@ -38,6 +41,7 @@ export class ChromeProbe {
     if (mode === 'flagged') markChromeTree(mesh);
     worldModel.add(mesh);
     worldModel.updateMatrixWorld(true);
+    TerrainHeightIndex.invalidate(worldModel);
     this.mesh = mesh;
   }
 }
