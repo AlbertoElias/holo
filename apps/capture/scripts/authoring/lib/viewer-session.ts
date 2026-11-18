@@ -86,6 +86,13 @@ export interface OpenOptions {
   readonly recordVideoDir?: string;
   /** Name shown on the card. */
   readonly title?: string;
+  /**
+   * Tee everything the page sends to its speakers into a recorder
+   * (`window.__heard`), so a check can hear what the card plays: start it
+   * with `__heard.start()`, and `__heard.stop()` resolves to the recording
+   * as base64 WebM (Opus) with `Date.now()` at its start.
+   */
+  readonly recordAudio?: boolean;
 }
 
 export interface OpenTake {
@@ -96,8 +103,47 @@ export interface OpenTake {
   readonly id: string;
   /** The uploaded file's URL, the key of the card's test probe. */
   readonly url: string;
+  /** `Date.now()` when the page opened: where a recorded video starts. */
+  readonly openedAt: number;
   close(): Promise<void>;
 }
+
+/** Page script for `recordAudio`: every connection to an AudioContext's speakers also feeds that context's recorder. */
+const HEARD_SCRIPT = `(() => {
+  const connect = AudioNode.prototype.connect;
+  const tees = [];
+  AudioNode.prototype.connect = function (target, ...rest) {
+    const result = connect.call(this, target, ...rest);
+    if (typeof AudioDestinationNode !== 'undefined' && target instanceof AudioDestinationNode) {
+      const ctx = target.context;
+      if (!ctx.__heardTee) { ctx.__heardTee = ctx.createMediaStreamDestination(); tees.push(ctx.__heardTee); }
+      connect.call(this, ctx.__heardTee, rest[0] ?? 0);
+    }
+    return result;
+  };
+  let recorder = null; let chunks = []; let startedAt = 0;
+  window.__heard = {
+    ready: () => tees.length > 0,
+    start() {
+      chunks = [];
+      recorder = new MediaRecorder(tees[0].stream, { mimeType: 'audio/webm;codecs=opus' });
+      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      recorder.start(250);
+      startedAt = Date.now();
+      return startedAt;
+    },
+    stop() {
+      return new Promise((resolve) => {
+        recorder.onstop = async () => {
+          const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+          let text = ''; for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+          resolve({ base64: btoa(text), startedAt });
+        };
+        recorder.stop();
+      });
+    }
+  };
+})();`;
 
 /** Uploads a take and opens the feed narrowed to its card, rendered and probed. */
 export async function openTake(servers: ViewerServers, file: string, options: OpenOptions = {}): Promise<OpenTake> {
@@ -120,6 +166,7 @@ async function openIn(browser: Browser, servers: ViewerServers, file: string, gl
     ...(options.recordVideoDir ? { recordVideo: { dir: options.recordVideoDir, size: viewport } } : {})
   });
   const page = await context.newPage();
+  const openedAt = Date.now();
   // tsx keeps function names with an `__name` helper, which page functions then call.
   await page.addInitScript('globalThis.__name = (f) => f;');
   await page.addInitScript(() => {
@@ -127,6 +174,7 @@ async function openIn(browser: Browser, servers: ViewerServers, file: string, gl
     hooks.__feedProbes = {};
     hooks.__HOLOIM_FEED_TEST_OBSERVER__ = (p) => { hooks.__feedProbes![p.url] = p; };
   });
+  if (options.recordAudio) await page.addInitScript(HEARD_SCRIPT);
   const response = await page.request.post('/api/holograms', {
     multipart: { hologramName: options.title ?? basename(file, '.glb'), submittedBy: 'directed-performance', file: { name: basename(file), mimeType: 'model/gltf-binary', buffer: glb } }
   });
@@ -143,7 +191,7 @@ async function openIn(browser: Browser, servers: ViewerServers, file: string, gl
   await page.waitForFunction((id) => document.querySelector(`.feed-card[data-card-id="${id}"]`)?.getAttribute('data-model-state') === 'rendered', uploaded.id, { timeout: 60_000 });
   await page.waitForFunction((u) => Object.keys((window as unknown as { __feedProbes: Record<string, unknown> }).__feedProbes).some((k) => k.endsWith(u)), uploaded.url, { timeout: 30_000 });
   return {
-    browser, context, page, card, id: uploaded.id, url: uploaded.url,
+    browser, context, page, card, id: uploaded.id, url: uploaded.url, openedAt,
     close: async () => { await context.close(); await browser.close(); }
   };
 }

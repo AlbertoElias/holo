@@ -105,7 +105,8 @@ export async function speechReport(file: string): Promise<SpeechReport> {
     const bytes = doc.bin.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
     const name = s.name ?? `source-${i}`;
     const emitter = khr!.emitters.findIndex((e) => e.sources.includes(i));
-    const node = json.nodes.findIndex((n) => n.extensions?.KHR_audio?.emitter === emitter);
+    const nodes = json.nodes as { extensions?: { KHR_audio?: { emitter: number } } }[];
+    const node = nodes.findIndex((n) => n.extensions?.KHR_audio?.emitter === emitter);
     const file0 = join(dir, `${name}.webm`);
     await writeFile(file0, bytes);
     const r = spawnSync(ffmpegPath(), ['-v', 'error', '-i', file0, '-ac', '1', '-ar', String(RATE), '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });

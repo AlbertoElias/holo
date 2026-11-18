@@ -14,13 +14,15 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Beat, BeatSheet, CreditSpec } from './beats.ts';
 import type { SolvedTake } from './direct.ts';
+import { parseGlb } from './gltf-read.ts';
 import { lineLips, type LineLips } from './lips.ts';
 
 const TOOLS = fileURLToPath(new URL('../../../output/authoring/tools/', import.meta.url));
@@ -288,4 +290,31 @@ export function addAudio(glb: Uint8Array, sources: readonly AudioSource[], credi
   let p = 28 + jsonBytes.byteLength;
   for (const part of parts) { out.set(part, p); p += part.byteLength; }
   return out;
+}
+
+/**
+ * A take's sound as one track from clip time 0, for a video of the take:
+ * every `KHR_audio` source in the GLB decoded as embedded and mixed at its
+ * own level (each is already padded to the clip). Returns false and writes
+ * nothing when the take has no sound.
+ */
+export function takeSoundtrack(glb: Uint8Array, out: string): boolean {
+  const doc = parseGlb(glb) as unknown as { json: { bufferViews: { byteOffset?: number; byteLength: number }[]; extensions?: { KHR_audio?: { audio: { bufferView: number }[] } } }; bin: Uint8Array };
+  const audio = doc.json.extensions?.KHR_audio?.audio ?? [];
+  if (!audio.length) return false;
+  const dir = mkdtempSync(join(tmpdir(), 'soundtrack-'));
+  try {
+    const inputs = audio.flatMap((a, i) => {
+      const view = doc.json.bufferViews[a.bufferView]!;
+      const file = join(dir, `source-${i}.webm`);
+      writeFileSync(file, doc.bin.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength));
+      return ['-i', file];
+    });
+    const mix = audio.length > 1 ? ['-filter_complex', `amix=inputs=${audio.length}:normalize=0`] : [];
+    const r = spawnSync(ffmpegPath(), ['-y', '-loglevel', 'error', ...inputs, ...mix, '-ac', '1', '-ar', '48000', out]);
+    if (r.status !== 0) throw new Error(`soundtrack: ${r.stderr.toString()}`);
+    return true;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }

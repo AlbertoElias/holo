@@ -49,6 +49,7 @@ import { actingReport, summarize } from './acting-report.ts';
 import { beatSpan, holdingsOf, pointObjects, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
+import { takeSoundtrack } from './lib/sound.ts';
 import { openTake, startViewer } from './lib/viewer-session.ts';
 
 const OUTPUT = fileURLToPath(new URL('../../output/authoring/', import.meta.url));
@@ -277,7 +278,11 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       scales.push(`[${p + 1}]scale=1080:1080[c${p + 1}]`);
     }
     const stack = init.performers.length ? `;${Array.from({ length: init.performers.length + 1 }, (_, i) => `[c${i}]`).join('')}hstack=inputs=${init.performers.length + 1}[v]` : ';[c0]null[v]';
-    ffmpeg([...inputs, '-filter_complex', scales.join(';') + stack, '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-r', String(fps), '-movflags', '+faststart', join(reader, 'review.mp4')]);
+    // A take with sound plays it: its sources mixed from clip time 0, as the frames are.
+    const soundtrack = join(frameDir, 'sound.wav');
+    const sound = takeSoundtrack(new Uint8Array(await readFile(take)), soundtrack) ? ['-i', soundtrack] : [];
+    const soundMap = sound.length ? ['-map', `${init.performers.length + 1}:a`, '-c:a', 'aac', '-b:a', '160k', '-shortest'] : [];
+    ffmpeg([...inputs, ...sound, '-filter_complex', scales.join(';') + stack, '-map', '[v]', ...soundMap, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-r', String(fps), '-movflags', '+faststart', join(reader, 'review.mp4')]);
 
     // Frame sheets every `step` s: the card cropped to the cast at true device pixels, and each close view.
     const pr = init.pixelRatio;

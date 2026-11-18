@@ -12,7 +12,11 @@
  * defaults (VIEWER_CHECK_API_PORT 3341, VIEWER_CHECK_WEB_PORT 3214), so it
  * runs beside another agent's servers. `--video` records the card playing in
  * real time and encodes H.264 with ffmpeg; `--frames` saves twelve paused
- * stills at exact take times, framed on the cast.
+ * stills at exact take times, framed on the cast. `--audio out.webm` records
+ * what the card sends to its speakers over one real-time pass (a take
+ * without sound fails it) and finds where each `KHR_audio` source is heard,
+ * against where the file puts it; with `--video` the recording becomes the
+ * video's soundtrack.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdir, rename, writeFile } from 'node:fs/promises';
@@ -20,6 +24,9 @@ import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page } from 'playwright';
 
+import { envelopeOf, voicedSpans } from './lib/lips.ts';
+import { ffmpegPath } from './lib/sound.ts';
+import { speechReport } from './speech-report.ts';
 import { openTake, startViewer, tempDir } from './lib/viewer-session.ts';
 const FINGER = /thumb|index|middle|ring|little|pinky/i;
 // The tags viewer-web puts on the humanoid it resolved (apps/viewer-web/src/features/hologram/humanoidAnchors.ts).
@@ -50,6 +57,19 @@ export interface ViewerReading {
   readonly performers: PerformerReading[];
   /** The recorded objects the viewer loaded (`RecordedObject` wrappers): their credit and whether the take moves them. */
   readonly objects: ObjectReading[];
+  /** What the card was heard to play (`--audio`). */
+  readonly heard?: HeardReading;
+}
+
+export interface HeardReading {
+  /** Seconds recorded, and the take's motion and lead sound clocks when recording began. */
+  readonly seconds: number;
+  readonly motionAt: number;
+  readonly soundAt: number | null;
+  /** Sounding stretches of the recording, in take time. */
+  readonly spans: { start: number; end: number }[];
+  /** Each file source's first sound and the nearest heard onset (take time), and how far apart (ms). */
+  readonly sources: { name: string; fileOnset: number | null; heardOnset: number | null; deltaMs: number | null }[];
 }
 
 export interface ObjectReading {
@@ -140,18 +160,39 @@ export async function read(page: Page, url: string): Promise<ViewerReading> {
   }, [url, FINGER.source, HUMANOID_BONE_TAG, HUMANOID_SOURCE_TAG] as const);
 }
 
+/** Where the recording sounds, in take time, against where each source in the file first sounds. */
+async function hear(file: string, recording: string, motionAt: number, soundAt: number | null, duration: number): Promise<HeardReading> {
+  const RATE = 16000;
+  const r = spawnSync(ffmpegPath(), ['-v', 'error', '-i', recording, '-ac', '1', '-ar', String(RATE), '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });
+  if (r.status !== 0) throw new Error(`decode the recording: ${r.stderr.toString()}`);
+  const pcm = new Float32Array(r.stdout.buffer.slice(r.stdout.byteOffset, r.stdout.byteOffset + r.stdout.byteLength));
+  // The sound clock is what the card plays by; motion runs beside it.
+  const from = soundAt ?? motionAt;
+  const take = (t: number): number => (from + t) % duration;
+  const spans = voicedSpans(envelopeOf(pcm, RATE)).map((sp) => ({ start: take(sp.start), end: take(sp.end) }));
+  const report = await speechReport(file);
+  const sources = report.sources.map((src) => {
+    const onset = src.onset;
+    if (onset === null || !spans.length) return { name: src.name, fileOnset: onset, heardOnset: null, deltaMs: null };
+    const near = spans.reduce((best, sp) => (Math.abs(sp.start - onset) < Math.abs(best.start - onset) ? sp : best));
+    return { name: src.name, fileOnset: onset, heardOnset: near.start, deltaMs: Math.round((near.start - onset) * 1000) };
+  });
+  return { seconds: pcm.length / RATE, motionAt, soundAt, spans, sources };
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const flag = (name: string): string | undefined => { const i = args.indexOf(name); return i === -1 ? undefined : args.splice(i, 2)[1]; };
   const videoOut = flag('--video');
   const reportOut = flag('--report');
   const framesOut = flag('--frames');
+  const audioOut = flag('--audio');
   const file = args[0];
-  if (!file) { console.error('usage: viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]'); process.exit(2); }
+  if (!file) { console.error('usage: viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--audio out.webm] [--report out.json]'); process.exit(2); }
   const videoDir = videoOut ? await tempDir('viewer-check-') : undefined;
   const servers = await startViewer();
   try {
-    const open = await openTake(servers, file, { viewport: { width: 900, height: 900 }, ...(framesOut ? { deviceScaleFactor: 2 } : {}), ...(videoDir ? { recordVideoDir: videoDir.path } : {}) });
+    const open = await openTake(servers, file, { viewport: { width: 900, height: 900 }, ...(framesOut ? { deviceScaleFactor: 2 } : {}), ...(videoDir ? { recordVideoDir: videoDir.path } : {}), ...(audioOut ? { recordAudio: true } : {}) });
     const { page, card } = open;
     const uploaded = { id: open.id, url: open.url };
     const result = await read(page, uploaded.url);
@@ -177,7 +218,32 @@ async function main(): Promise<void> {
         for (const a of Object.values(p.actions)) if (a) a.paused = false;
       }, uploaded.url);
     }
-    if (videoOut) {
+    let heard: HeardReading | undefined;
+    let heardStartedAt = 0;
+    if (audioOut) {
+      // Hear one real-time pass as the card plays it. The feed starts muted, so press the card's own control, as a viewer would.
+      // Motion is not reset: the card's sound keeps its own clock, so a seek would split them.
+      // The controls unfold when a pointer comes near (as apps/viewer-web/e2e/bootstrap.ts reachFor does).
+      await card.locator('.feed-card-portal').hover({ force: true, position: { x: 40, y: 40 } });
+      await page.waitForFunction((id) => document.querySelector(`.feed-card[data-card-id="${id}"] .portal-controls`)?.getAttribute('data-reach') === 'shown', open.id, { timeout: 5_000 });
+      await card.getByRole('button', { name: 'Unmute audio' }).click();
+      await card.getByRole('button', { name: 'Mute audio' }).waitFor({ timeout: 5_000 });
+      const ready = await page.waitForFunction(() => (window as unknown as { __heard?: { ready(): boolean } }).__heard?.ready(), null, { timeout: 15_000 }).then(() => true, () => false);
+      if (!ready) throw new Error('the card sent nothing to its speakers: no sound to hear');
+      const at = await page.evaluate((u) => {
+        type Voices = { readVoices(): { offset: number | null }[] };
+        const p = Object.entries((window as unknown as { __feedProbes: Record<string, { actions: Record<string, { time: number } | null>; sound?: { current: Voices | null } }> }).__feedProbes).find(([k]) => k.endsWith(u))![1];
+        const startedAt = (window as unknown as { __heard: { start(): number } }).__heard.start();
+        const motion = Object.values(p.actions).find((a) => a)?.time ?? 0;
+        const voices = p.sound?.current?.readVoices() ?? [];
+        return { startedAt, motion, sound: voices[0]?.offset ?? null };
+      }, uploaded.url);
+      heardStartedAt = at.startedAt;
+      await new Promise((r) => setTimeout(r, (result.duration + 1) * 1000)); // wall-clock: what the card plays is heard in real time.
+      const { base64 } = await page.evaluate(() => (window as unknown as { __heard: { stop(): Promise<{ base64: string }> } }).__heard.stop());
+      await writeFile(audioOut, Buffer.from(base64, 'base64'));
+      heard = await hear(file, audioOut, at.motion, at.sound, result.duration);
+    } else if (videoOut) {
       // Let the card play the whole take once more from the start, in real time.
       await page.evaluate((u) => {
         const p = Object.entries((window as unknown as { __feedProbes: Record<string, { actions: Record<string, { time: number } | null> }> }).__feedProbes).find(([k]) => k.endsWith(u))![1];
@@ -189,7 +255,9 @@ async function main(): Promise<void> {
     await open.close();
     if (videoOut && video) {
       const webm = await video.path();
-      const enc = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', webm, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', `${videoOut}.tmp.mp4`]);
+      // With `--audio`, what the card played is the soundtrack, placed where its recording began in the page's video.
+      const sound = audioOut ? ['-itsoffset', String((heardStartedAt - open.openedAt) / 1000), '-i', audioOut, '-map', '0:v', '-map', '1:a', '-c:a', 'aac', '-b:a', '160k'] : [];
+      const enc = spawnSync(audioOut ? ffmpegPath() : 'ffmpeg', ['-y', '-loglevel', 'error', '-i', webm, ...sound, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', `${videoOut}.tmp.mp4`]);
       if (enc.status !== 0) throw new Error(`ffmpeg: ${enc.stderr.toString()}`);
       await rename(`${videoOut}.tmp.mp4`, videoOut);
     }
@@ -198,8 +266,13 @@ async function main(): Promise<void> {
       console.log(`  ${p.name}: bones ${p.bonesMoving}/${p.bones} move, fingers ${p.fingerBonesMoving}/${p.fingerBones}, face ${p.morphTargetsMoving}/${p.morphTargets} targets (peak ${p.peakInfluence}), ${p.anchoredBones} anchor bones`);
     }
     for (const o of result.objects) console.log(`  ${o.name}: ${o.meshes} mesh(es), ${o.moves ? 'moves' : 'still'}, credit ${o.credit ?? 'none'}`);
+    if (heard) {
+      console.log(`  heard ${heard.seconds.toFixed(1)} s from take time ${heard.motionAt.toFixed(2)} s (sound clock ${heard.soundAt?.toFixed(2) ?? '-'} s): sounding ${heard.spans.map((sp) => `${sp.start.toFixed(2)}-${sp.end.toFixed(2)}`).join(', ') || 'never'}`);
+      for (const h of heard.sources) console.log(`  ${h.name}: in the file from ${h.fileOnset?.toFixed(2) ?? '-'} s, heard from ${h.heardOnset?.toFixed(2) ?? '-'} s (${h.deltaMs ?? '-'} ms)`);
+    }
     console.log(`  card: ${shot}`);
-    if (reportOut) await writeFile(reportOut, `${JSON.stringify(result, null, 2)}\n`);
+    if (reportOut) await writeFile(reportOut, `${JSON.stringify({ ...result, ...(heard ? { heard } : {}) }, null, 2)}\n`);
+    if (heard && heard.sources.some((h) => h.deltaMs === null || Math.abs(h.deltaMs) > 100)) { console.error('a sound in the file was not heard where the file puts it'); process.exitCode = 1; }
   } finally {
     servers.close();
     if (videoDir) await videoDir.remove();
