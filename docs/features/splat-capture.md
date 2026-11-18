@@ -39,7 +39,7 @@ touch on an iPhone), Quest VR, Quest passthrough AR and phone AR.
   Android Chrome only; Safari has no WebXR AR, so an iPhone records on the
   flat page.
 - **Quest passthrough AR records a performer** (since 2026-11-17, gap 5 of
-  `natural-avatar-motion.md`). Any non-handheld AR session embodies the
+  `archive/natural-avatar-motion.md`). Any non-handheld AR session embodies the
   performer as VR does, with the set at the real floor's origin; only a
   handheld phone is a camera author. Q1's prerequisite for 2d is met.
 - **Much of capture leans on the set being meshes**, through

@@ -19,9 +19,9 @@ it from the item below instead of duplicating its status here.
   `apps/capture/fixtures/input-recordings/headset-open-fist-pinch-point-wave-reach.json`
   passes with the wrist-position ceiling recalibrated 2 cm → 4 cm (the tracked
   wrist out-reached the height-fitted arm; fixed 2026-11-17 by a reach stretch,
-  gap 4 of `docs/features/natural-avatar-motion.md`) after adding shoulder
+  gap 4 of `docs/features/archive/natural-avatar-motion.md`) after adding shoulder
   protraction to the arm IK. Owned by
-  [`docs/features/hand-tracking-fidelity.md`](docs/features/hand-tracking-fidelity.md).
+  [`docs/features/archive/hand-tracking-fidelity.md`](docs/features/archive/hand-tracking-fidelity.md).
 - [ ] On a physical headset, check only what IWER cannot emulate: real-tracking
   pinch stability (noise, self-occlusion, joint dropouts), Quest browser session
   events (permission prompt, system menu, headset removal or sleep,
@@ -96,7 +96,7 @@ it from the item below instead of duplicating its status here.
   [`docs/features/archive/splat-place.md`](docs/features/archive/splat-place.md). Owned by
   [`docs/features/splat-capture.md`](docs/features/splat-capture.md).
 - [x] Record a performer in Quest passthrough AR (2026-11-17, gap 5 of
-  [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md),
+  [`docs/features/archive/natural-avatar-motion.md`](docs/features/archive/natural-avatar-motion.md),
   the user's call): a non-handheld AR session now embodies the performer
   exactly as VR does (same body solver, chrome and Record, the set at the
   real floor's origin) and records avatar takes; only a handheld phone is a
@@ -147,7 +147,7 @@ it from the item below instead of duplicating its status here.
   yaw, optional snap/smooth turn about the user's head), keep the body solver
   stepping from the resulting root motion, and add a replay check from
   recorded controller input. Builds on
-  [`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md).
+  [`docs/features/archive/room-scale-body-motion.md`](docs/features/archive/room-scale-body-motion.md).
 - [x] Clean up expired direct-upload intents and their `incoming/*.glb` objects so abandoned uploads do not leak storage. In flight in [`docs/features/archive/upload-intent-cleanup.md`](docs/features/archive/upload-intent-cleanup.md).
 - [ ] Direct, preview and revise a performance, on avatars built to express
   (the user's direction and approval on 2026-11-13, after the agent-authored
@@ -184,10 +184,11 @@ it from the item below instead of duplicating its status here.
   all", open decision 5); 2a (the bar) and 2b (Astra's sheets) next, nothing built. Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
-  (in flight: [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md)
-  owns it and its measured gaps; the wishlist below feeds its fixes). The
+  ([`docs/features/archive/natural-avatar-motion.md`](docs/features/archive/natural-avatar-motion.md),
+  Complete 2026-11-18, meets its metrics on every source and skeleton, so what is left here is the
+  look beyond those numbers: the wishlist below). The
   room-scale body solver
-  ([`docs/features/room-scale-body-motion.md`](docs/features/room-scale-body-motion.md))
+  ([`docs/features/archive/room-scale-body-motion.md`](docs/features/archive/room-scale-body-motion.md))
   is correct by its metrics but still reads as robotic. Nail the IK and the
   motion around it:
   - Full-body IK with joint limits and comfort costs (spine, shoulders,

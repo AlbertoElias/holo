@@ -40,8 +40,8 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Expired upload-intent cleanup | Complete | [upload-intent-cleanup.md](archive/upload-intent-cleanup.md) |
 | Self-resolving pointing | Verifying | [self-resolving-pointing.md](self-resolving-pointing.md) |
 | VR thumbstick locomotion and snap turn | Complete | [vr-thumbstick-locomotion.md](archive/vr-thumbstick-locomotion.md) |
-| Natural full-body motion from room-scale movement | Verifying | [room-scale-body-motion.md](room-scale-body-motion.md) |
-| The avatar moves naturally, whatever drives it (umbrella) | Reviewed | [natural-avatar-motion.md](natural-avatar-motion.md) |
+| Natural full-body motion from room-scale movement | Complete (folded into the natural-motion umbrella) | [room-scale-body-motion.md](archive/room-scale-body-motion.md) |
+| The avatar moves naturally, whatever drives it (umbrella) | Complete (2026-11-18); camera aim accepted rough, physical-device checks open | [natural-avatar-motion.md](archive/natural-avatar-motion.md) |
 | Native IWSDK capture runtime refactor | Complete | [archive/iwsdk-runtime-refactor.md](archive/iwsdk-runtime-refactor.md) |
 | IWSDK runtime prototype (evaluation spike) | Complete | [archive/iwsdk-runtime-prototype.md](archive/iwsdk-runtime-prototype.md) |
 | Atlas visual narrative | Complete | [atlas-narrative.md](atlas-narrative.md) |
@@ -54,7 +54,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 | Animated Quick Look phone demo | Complete | [archive/quicklook-phone-demo.md](archive/quicklook-phone-demo.md) |
 | XR height refit and visual evidence | Complete | [archive/xr-height-refit.md](archive/xr-height-refit.md) |
 | XR avatar height adaptation | Complete | [archive/xr-height-adaptation.md](archive/xr-height-adaptation.md) |
-| Hand-tracking fidelity from real headset input | Verifying | [hand-tracking-fidelity.md](hand-tracking-fidelity.md) |
+| Hand-tracking fidelity from real headset input | Complete (folded into the natural-motion umbrella) | [hand-tracking-fidelity.md](archive/hand-tracking-fidelity.md) |
 | Capture AR recenter control | Complete | [archive/ar-recenter-control.md](archive/ar-recenter-control.md) |
 | MetaVR setup for physical Quest automation | Complete | [archive/metavr-setup.md](archive/metavr-setup.md) |
 | Live deployment (Fly + R2 + async USDZ) | Verifying | [live-deployment.md](live-deployment.md) |

@@ -20,7 +20,7 @@ const ORIGIN_TIME_CONSTANT_SEC = 0.05;
 const DIRECTION_TIME_CONSTANT_SEC = 0.09;
 // Camera hands point along wrist to index tip, smoothed longer: on the user's
 // clip that ray held 2.6 deg p95 against 4.7 at best for knuckle to tip
-// (docs/features/natural-avatar-motion.md, gap 2).
+// (docs/features/archive/natural-avatar-motion.md, gap 2).
 const CAMERA_DIRECTION_TIME_CONSTANT_SEC = 0.25;
 // After a gap this long the filter restarts instead of sliding from a stale ray.
 const FILTER_RESET_GAP_SEC = 0.25;
@@ -38,7 +38,7 @@ interface SideFilter {
  * count (`xr-hand`); controllers, the mock pose hook and held poses produce
  * nothing. `cameraHands` also admits `camera-hand`, whose ray runs from the
  * wrist: the camera grading uses it, while a take still records no points
- * from camera hands (docs/features/natural-avatar-motion.md, gap 2).
+ * from camera hands (docs/features/archive/natural-avatar-motion.md, gap 2).
  * Segmenting into points happens at export, where the whole take is known.
  */
 export class PointDetector {

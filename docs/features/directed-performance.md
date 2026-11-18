@@ -22,7 +22,7 @@ working files in the ignored `output/platform-poem/` of the
 Claude's showcase pieces (`docs/product/concepts/agent-authored-holograms.md`,
 IDEA-076); the two mandates in flight, `docs/features/phone-capture.md`
 (approved, slices 1 and 2 on `main`) and
-`docs/features/natural-avatar-motion.md` (reviewed, on branch
+`docs/features/archive/natural-avatar-motion.md` (reviewed, on branch
 `feature/natural-avatar-motion`, not on `main` yet); and the user's
 direction on avatars (2026-11-13): the shipped avatar is a stand-in found
 online; avatars should be expressive, match the hologram's style and what

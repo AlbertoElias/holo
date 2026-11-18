@@ -1,7 +1,7 @@
 # Feature brief: Natural full-body motion from room-scale movement
 
 **Lead:** Claude Code
-**Status:** Verifying
+**Status:** Complete (2026-11-18, folded into the natural-avatar-motion umbrella): its leftover feet and knee gaps became gap 3 of [natural-avatar-motion.md](natural-avatar-motion.md), closed 2026-11-14, and every VR body row meets target on all 7 skeletons there. Physical-device checks stay listed there
 
 ## User outcome
 
@@ -284,7 +284,7 @@ these synthetic fixtures; headset recordings should confirm them.
 B-009 (head pose read in the wrong space on device), B-010 (hand sensors block
 the body), B-011 (standing creep on slopes), B-012 (room-scale motion missing
 from the body), and B-013 (replay tooling) — see
-[`../archive/closed-bugs.md`](../archive/closed-bugs.md).
+[`../archive/closed-bugs.md`](../../archive/closed-bugs.md).
 
 ### Follow-ups
 

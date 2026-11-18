@@ -15,7 +15,7 @@ import { generateAvatarFixtures } from './lib/avatar-fixtures.ts';
 import { LOST_HAND_POP_MAX_MS2, cameraMotionFrame, cameraPointRays, lostHandPopMax } from './lib/camera-motion';
 import { judgeMotion, measureMotion, type MotionFrame, type Vec3 } from './lib/motion-quality';
 
-// The camera avatar on every supported skeleton (docs/features/natural-avatar-motion.md, gap 2). The landmarks a
+// The camera avatar on every supported skeleton (docs/features/archive/natural-avatar-motion.md, gap 2). The landmarks a
 // bodycam:report run saved (its landmarks.json) drive the real app's avatar frame by frame under the manual clock, with
 // no models: once on the shipped avatar and once per fixture the avatars check generates. Each run's bones and hands go
 // through the motion-quality instrument as source 'camera'. The pointing ray graded is the app's own (PointDetector on
@@ -54,7 +54,7 @@ const stepMs = ((entries.at(-1)!.clipSec - entries[0]!.clipSec) / (entries.lengt
 // The config's segments, in clip seconds.
 // The point score cannot find them on a lens clip: a finger aimed into the lens is foreshortened and reads as
 // curled, so the aim clip's holds were found from where the pose wrist sits still and checked by eye
-// (docs/features/natural-avatar-motion.md, gap 2).
+// (docs/features/archive/natural-avatar-motion.md, gap 2).
 type Hold = { label: string; side: VrHandSide; startSec: number; endSec: number; lens: boolean };
 const holds: Hold[] = (holdConfig.segments ?? []).map((g) => ({ label: g.label, side: g.hand ?? 'right', startSec: g.startSec, endSec: g.endSec, lens: g.target === 'lens' }));
 const holdAt = (i: number): Hold | undefined => holds.find((h) => entries[i]!.clipSec >= h.startSec && entries[i]!.clipSec <= h.endSec);

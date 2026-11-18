@@ -1,7 +1,7 @@
 # Feature brief: Camera-driven avatar (evaluation spike)
 
 **Lead:** Claude (Fable 5)  
-**Status:** Folded into [natural-avatar-motion.md](../natural-avatar-motion.md), gap 2 (2026-11-14), which now owns the camera row; this brief is the history. Before the fold: (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars; ray jitter meets the bar only with a wrist-to-tip ray, which the aim clip must confirm; head readings are correct, and a turn past the face model's range now keeps its yaw from the pose; **aim error is unresolved**, and a lens-only aim clip is recorded for it (2026-11-14); then slice 3)
+**Status:** Folded into [natural-avatar-motion.md](natural-avatar-motion.md), gap 2 (2026-11-14), which now owns the camera row; this brief is the history. Before the fold: (slices 1 and 2 built and re-run independently, 2026-11-10; first numbers from the user's clip, 2026-11-11: hand coverage and point detection meet the bars; ray jitter meets the bar only with a wrist-to-tip ray, which the aim clip must confirm; head readings are correct, and a turn past the face model's range now keeps its yaw from the pose; **aim error is unresolved**, and a lens-only aim clip is recorded for it (2026-11-14); then slice 3)
 **Layer:** event (the author's head, face, arms and hands over time); see
 `docs/product/concepts/what-a-hologram-is.md`
 
