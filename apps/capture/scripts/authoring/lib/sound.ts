@@ -8,7 +8,7 @@
  * Voices are `file:<path>` (relative to the sheet; any format ffmpeg reads) or
  * `local:<voice>`, the local Kokoro model (Apache-2.0) run by kokoro-js
  * (Apache-2.0) from an ignored cache, `output/authoring/tools/kokoro/`, at a
- * pinned version, with no key and no network after the first fetch. Effects
+ * pinned version and model revision (the model checked by sha256), with no key and no network after the first fetch. Effects
  * are `synth:<name>` (made here, the project's own, CC0) or a file with a
  * credit. Encoding is Opus in WebM through an ffmpeg that has libopus.
  */
@@ -27,7 +27,7 @@ import { lineLips, type LineLips } from './lips.ts';
 
 const TOOLS = fileURLToPath(new URL('../../../output/authoring/tools/', import.meta.url));
 const KOKORO_DIR = join(TOOLS, 'kokoro');
-export const KOKORO = { package: 'kokoro-js', version: '1.2.1', model: 'onnx-community/Kokoro-82M-v1.0-ONNX', dtype: 'q8', licence: 'Apache-2.0 (kokoro-js, phonemizer, @huggingface/transformers; Kokoro-82M weights and voices); onnxruntime-node MIT' } as const;
+export const KOKORO = { package: 'kokoro-js', version: '1.2.1', model: 'onnx-community/Kokoro-82M-v1.0-ONNX', revision: '1939ad2a8e416c0acfeecc08a694d14ef25f2231', dtype: 'q8', modelFile: 'onnx/model_quantized.onnx', modelSha256: 'fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478', licence: 'Apache-2.0 (kokoro-js, phonemizer, @huggingface/transformers; Kokoro-82M weights and voices); onnxruntime-node MIT' } as const;
 /** PCM rate the lips read. */
 const RATE = 16000;
 /** Opus bitrate per source: mono speech and effects. */
@@ -43,7 +43,7 @@ import { KokoroTTS } from 'kokoro-js';
 import { phonemize } from 'phonemizer';
 const [voice, out, ...words] = process.argv.slice(2);
 const text = words.join(' ');
-const tts = await KokoroTTS.from_pretrained('${KOKORO.model}', { dtype: '${KOKORO.dtype}', device: 'cpu' });
+const tts = await KokoroTTS.from_pretrained('${KOKORO.model}', { dtype: '${KOKORO.dtype}', device: 'cpu', revision: '${KOKORO.revision}' });
 const audio = await tts.generate(text, { voice });
 await audio.save(out);
 process.stdout.write(JSON.stringify({ phrases: await phonemize(text) }));
@@ -87,6 +87,14 @@ async function ensureKokoro(): Promise<void> {
   await writeFile(join(KOKORO_DIR, 'phonemize.mjs'), PHONEMIZE_SCRIPT);
 }
 
+/** The fetched model must be the pinned one: its sha256 against the revision's LFS hash. */
+function verifyKokoroModel(): void {
+  const file = join(KOKORO_DIR, 'node_modules', '@huggingface', 'transformers', '.cache', KOKORO.model, KOKORO.modelFile);
+  if (!existsSync(file)) throw new Error(`the voice model is not at ${file}; the transformers cache moved`);
+  const sha = createHash('sha256').update(readFileSync(file)).digest('hex');
+  if (sha !== KOKORO.modelSha256) throw new Error(`${KOKORO.model} ${KOKORO.modelFile} is ${sha}, not the pinned ${KOKORO.modelSha256}; delete ${KOKORO_DIR} and build again`);
+}
+
 export interface Line {
   readonly beat: string;
   readonly performer: string;
@@ -118,6 +126,7 @@ export async function prepareLine(beat: Beat, sheetFile: string, cacheDir: strin
     if (!existsSync(file) || !existsSync(phrasesFile)) {
       await mkdir(cacheDir, { recursive: true });
       const out = run('node', ['speak.mjs', voice, file, say.text], KOKORO_DIR);
+      verifyKokoroModel();
       await writeFile(phrasesFile, out);
     }
     phrases = (JSON.parse(await readFile(phrasesFile, 'utf8')) as { phrases: string[] }).phrases;
@@ -211,7 +220,7 @@ export async function prepareEffects(take: SolvedTake, sheetFile: string, cacheD
 export function padAndEncode(file: string, onset: number, clip: number, out: string): Uint8Array {
   const delay = Math.max(0, Math.round(onset * 1000));
   run(ffmpegPath(), ['-y', '-v', 'error', '-i', file, '-af', `aformat=channel_layouts=mono,aresample=48000,adelay=${delay}:all=1,apad,atrim=0:${clip.toFixed(3)}`,
-    '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-application', 'audio', '-f', 'webm', out]);
+    '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-application', 'audio', '-fflags', '+bitexact', '-flags:a', '+bitexact', '-f', 'webm', out]);
   return new Uint8Array(readFileSync(out));
 }
 

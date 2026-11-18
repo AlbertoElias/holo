@@ -2,9 +2,12 @@
 
 **Lead:** Claude (Opus), session "Slice 4: a person's take as input", for the
 directed-performance lead (2026-11-18)
-**Status:** Draft (design only; nothing built). Written while the owner was
-away on 2026-11-18; every choice below is a recommendation for the owner, and
-the open decisions at the end are theirs.
+**Status:** Slice 1a built in the authoring tool (2026-11-18,
+`feature/sound-1a`); slices 1b to 6 not started. Written and built while the
+owner was away on 2026-11-18; every choice below is a recommendation for the
+owner, and the open decisions at the end are theirs. Where slice 1a could not
+proceed without one, the agent took the recommended option, reversibly, and
+recorded it under "Slice 1a: built" for the owner's review.
 **Layer:** Event for voice and effects: a sound has a time and a place in the
 recorded event, like a gesture (`docs/product/concepts/what-a-hologram-is.md`).
 Meaning (read) for captions of speech: a reading of the event offered to a
@@ -262,7 +265,75 @@ capture, it is a meaning edit (undone out of the take), to be specified there.
 6. **A paid voice (owner's call).** Only if the owner asks after hearing
    slice 1's local voice.
 
-## Acceptance criteria (slice 1a, the one to build next)
+## Slice 1a: built (2026-11-18)
+
+How to use it: `apps/capture/scripts/authoring/README.md`, "Sound". The
+example sheet is `sheets/spoken-line.json`: `tallest-bar` with a line on its
+turn and a clink on its put.
+
+**Decided by the agent in the owner's absence on 2026-11-18, for review
+(each is reversible; none spends or needs a key):**
+
+1. **The voice is local Kokoro, not a supplied file** (the parent session's
+   instruction, ahead of slice 1b): `local:af_heart`, Kokoro-82M through
+   kokoro-js 1.2.1, model `onnx-community/Kokoro-82M-v1.0-ONNX` at revision
+   `1939ad2a`, q8, its file checked by sha256 after the fetch. Licences:
+   kokoro-js, the weights and voices, `@huggingface/transformers` and
+   phonemizer Apache-2.0; onnxruntime-node MIT; the phonemiser runs eSpeak
+   NG, **GPL-3.0**, as WASM in a separate process from the ignored cache
+   (`output/authoring/tools/kokoro/`), so nothing GPL is committed or
+   shipped, only audio it helped make. `file:` voices work too and need a
+   credit. This leans on open decision 1 (local, the recommended option);
+   the owner can swap the voice per line.
+2. **Lips come from an in-repo driver, not Rhubarb.** The pinned Rhubarb
+   1.14.0 macOS build crashed on this machine (segfault), and running a
+   downloaded binary was then refused by the session's safety policy. So
+   `lib/lips.ts` lays the phonemiser's phones over the voiced time of the
+   line's own audio (RMS envelope) and maps them onto the 15 Oculus visemes,
+   which the avatar-face routing already sends to any avatar that passes the
+   audition. It works for every voice that has text, in any language eSpeak
+   speaks; a line without text (a person's take) still needs an
+   audio-only path (Rhubarb or whisper.cpp) in slice 5. Reverting to Rhubarb
+   is a swap of one function.
+3. **The effect is `synth:cup-clink`**, made procedurally by the tool (this
+   project's own, CC0), instead of a fetched CC0 recording: nothing to
+   fetch, credit or pin. It leans on open decision 4 (CC0 only).
+4. **No hand-labelled phones, no lip-distance on p/b/m.** There are no
+   recorded lines to label (the voice is synthesised). The written bars were
+   replaced, before measuring, by ones read from the GLB alone
+   (`speech-report.ts`): each phrase's mouth onset within ±80 ms of its
+   sound, the mouth in pauses of 0.25 s or more below 15 % of its speaking
+   level, correlation with loudness at least 0.4, every source within a
+   frame of the clip. Bilabial closure is not measured; the frame readers
+   judge closing between phrases.
+
+**Evidence (all local; no upload anywhere but a local API):**
+
+| Check | Stock avatar | House base |
+|---|---|---|
+| Sources decoded (`speech-report.ts`) | voice and clink each 10.500 s = clip; voice sounds from 4.90 s, clink at 8.40 s (the put) | same |
+| Mouth onset vs. sound, per phrase | mouth leads 33 ms, 33 ms | leads 33 ms, 67 ms |
+| Mouth in the pause, share of speaking | 0 to 3 % | 0 to 2 % |
+| Mouth follows loudness (Pearson r) | 0.52 | 0.54 |
+| Mouth opening p90 while speaking | 5.5 mm | 18.3 mm |
+
+- Feed card, local API (`viewer-check.ts --audio`): after unmute, the card's
+  sound heard at 4.97 to 5.95 s, 6.38 to 7.44 s and 8.47 to 8.62 s take time;
+  each sound 72 ms after its place in the file (the recorder's start, the
+  same for both).
+- Quick Look (`glb_to_usdz.py`, `inspect_usdz.py`, `check_usdz_tools.sh`:
+  passed): `audio_0` under `…/Neck/Head`, `audio_1` under the recorded
+  object, both spatial, 10.508 s, looping from the stage; jaw and mouth-open
+  weights above 0.1 from 4.87 to 7.47 s, 0 in the pause at 6.15 s.
+- The eight existing sheets build byte-identical to `214e3b0a`; a take with
+  sound builds byte-identical twice (bit-exact WebM).
+- Frame readers: see "Frame readers" below.
+
+**Follow-ups:** the house base misses `tallest-bar`'s aim and put (88.5°)
+with or without sound, a pre-existing house-base solve issue; captions
+(slice 2); an audio-only lip path for takes without text (slice 5).
+
+## Acceptance criteria (slice 1a)
 
 - [ ] A beat sheet with a `say` line (a supplied file) and a `sound` on a
       put produces a GLB whose sources are each as long as the clip, whose
