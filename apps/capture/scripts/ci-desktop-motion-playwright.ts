@@ -68,6 +68,10 @@ const FOOT_JOINTS = ['leftToe', 'rightToe', 'leftAnkle', 'rightAnkle'] as const;
 // The body is in the air (walked off a ledge) while its hips stand this far (m) above their standing height
 // over the ground under it; the leg solver lets the feet go then, so those frames are counted, not judged.
 const AIRBORNE_M = 0.25;
+// At most this share of the terrain run may be airborne, and the walk must still cover ground: a body stuck
+// against a rock, or one floating over the terrain, would otherwise skip every frame and read 0 cm.
+const MAX_AIRBORNE_SHARE = 0.1;
+const MIN_TERRAIN_WALK_SPEED = 1.0;
 
 /** The deepest any toe or ankle went under the ground straight below it, in cm (0 when never under), on the ground. */
 function footBelowGround(samples: Array<{ phase: string; body: BodySample }>): { cm: number; airborneFrames: number } {
@@ -232,6 +236,8 @@ try {
     console.log(`${tag} walk speed ${walkSpeed.toFixed(3)} m/s`);
     misses.push(...verdicts.filter((v) => !v.pass));
     if (!avatar.terrain && walkSpeed < MIN_WALK_SPEED) misses.push({ metric: 'walk speed', value: walkSpeed, target: { min: MIN_WALK_SPEED }, pass: false } as Verdict);
+    if (avatar.terrain && walkSpeed < MIN_TERRAIN_WALK_SPEED) misses.push({ metric: 'walk speed', value: walkSpeed, target: { min: MIN_TERRAIN_WALK_SPEED }, pass: false } as Verdict);
+    if (avatar.terrain && airborneFrames > samples.length * MAX_AIRBORNE_SHARE) misses.push({ metric: 'airborneFrames', value: airborneFrames, target: { max: Math.floor(samples.length * MAX_AIRBORNE_SHARE) }, pass: false } as Verdict);
     for (const miss of misses) console.log(`${tag} MISS ${miss.metric} = ${miss.value} (target ${JSON.stringify(miss.target)})`);
     if (misses.length) failed = true;
     summary.push({ avatar: avatar.name, walkClip, walkSpeed, metrics, gait, poseCost, misses: misses.map((m) => m.metric) });

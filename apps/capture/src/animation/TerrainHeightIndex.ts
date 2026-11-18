@@ -52,6 +52,7 @@ export class TerrainHeightIndex {
     this.builtFor.copy(world.matrixWorld);
     const corners: number[] = [];
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const toWorld = new THREE.Matrix4();
     world.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return;
@@ -59,12 +60,19 @@ export class TerrainHeightIndex {
       if (!position) return;
       const index = mesh.geometry.getIndex();
       const count = index ? index.count : position.count;
-      for (let i = 0; i + 2 < count; i += 3) {
-        const [ia, ib, ic] = index ? [index.getX(i), index.getX(i + 1), index.getX(i + 2)] : [i, i + 1, i + 2];
-        a.fromBufferAttribute(position, ia).applyMatrix4(mesh.matrixWorld);
-        b.fromBufferAttribute(position, ib).applyMatrix4(mesh.matrixWorld);
-        c.fromBufferAttribute(position, ic).applyMatrix4(mesh.matrixWorld);
-        corners.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      // An instanced mesh (EXT_mesh_gpu_instancing) is its geometry at every instance's transform.
+      const instanced = mesh as THREE.InstancedMesh;
+      const instances = instanced.isInstancedMesh ? instanced.count : 1;
+      for (let n = 0; n < instances; n++) {
+        if (instanced.isInstancedMesh) { instanced.getMatrixAt(n, toWorld); toWorld.premultiply(mesh.matrixWorld); }
+        else toWorld.copy(mesh.matrixWorld);
+        for (let i = 0; i + 2 < count; i += 3) {
+          const ia = index ? index.getX(i) : i, ib = index ? index.getX(i + 1) : i + 1, ic = index ? index.getX(i + 2) : i + 2;
+          a.fromBufferAttribute(position, ia).applyMatrix4(toWorld);
+          b.fromBufferAttribute(position, ib).applyMatrix4(toWorld);
+          c.fromBufferAttribute(position, ic).applyMatrix4(toWorld);
+          corners.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+        }
       }
     });
     this.corners = new Float32Array(corners);

@@ -37,13 +37,16 @@ type Target = { min?: number; max?: number };
 // textbook's: they read mid-stance knee 16-37°, swing knee 68-73°, stance share
 // (speed-based contact) 0.38-0.52, arm swing 31-59 cm. The bent-kneed FBX
 // conversion of the same takes reads 53° at mid-stance.
+// Swing knee allows 78°: the retargeted clip reads 77° (slice 2 brings it to the
+// takes' range); mid-stance allows 40° for the same reason. A locked knee (under
+// 10°) fails.
 export const GAIT_TARGETS: Partial<Record<keyof GaitMetrics, Target>> = {
-  armSwingCm: { min: 15, max: 55 },
+  armSwingCm: { min: 30, max: 55 },
   armLegCorrelation: { max: -0.5 },
   kneeSwingFlexDeg: { min: 45, max: 78 },
-  kneeMidStanceFlexDeg: { max: 40 },
-  stanceShareLeft: { min: 0.35, max: 0.62 },
-  stanceShareRight: { min: 0.35, max: 0.62 },
+  kneeMidStanceFlexDeg: { min: 10, max: 40 },
+  stanceShareLeft: { min: 0.38, max: 0.55 },
+  stanceShareRight: { min: 0.38, max: 0.55 },
   stepAsymmetry: { max: 0.08 },
   cadenceStepsPerMin: { min: 100, max: 140 }
 };

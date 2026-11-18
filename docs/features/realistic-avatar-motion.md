@@ -60,7 +60,7 @@ procedural gait.
   circular average.
 - Terrain: `TerrainHeightIndex`, an XZ grid of the world's triangles for
   vertical ground queries (allocation-free, built lazily, rebuilt when the
-  world moves). The leg solver, the character's ground probe and object
+  world moves; instanced meshes are indexed at every instance). The leg solver, the character's ground probe and object
   interaction use it; the toe is lifted against the ground under the toe.
 - Grading: `scripts/lib/gait-metrics.ts` measures cadence, arm swing and its
   leg correlation, knee swing/mid-stance flexion, stance share and step
@@ -72,7 +72,8 @@ procedural gait.
 (back/strafe) and crouch mocap clips with phase-synced blending; foot
 pitch/roll to the terrain normal and heel sampling; pelvis drop to the lower
 foot; the remaining knee-swing excess (walk p99 77° against the source's
-57–66°).
+57–66°); an allocation-free leg solver (slice 1 removed its per-probe raycasts,
+but `TerrainLegSolver` still makes Vector3/Quaternion temporaries each frame).
 
 **Excluded:** run/sprint; physical Quest validation (owner, in New York);
 facial animation; the directed-performance cast (it imports these modules
@@ -107,7 +108,9 @@ Targets are anchored on the CMU source walks (02_01, 07_01, 08_01, 07_12 at
       and camera still pass (feet slide/float/sink, pops, eye error).
 - [ ] Cost: animation + IK per avatar per frame ≤ 0.25 ms median on the
       desktop test machine (measured in-page), no per-frame allocation in the
-      IK path.
+      IK path. *Slice 1 meets the cost; the leg solver still allocates
+      temporaries per frame (deferred to slice 2), while the ground query it
+      calls is allocation-free.*
 - [ ] Strafe, back and crouch keep their existing clips and still pass the
       foot-slide target (new clips deferred).
 - [ ] Proof video: real-time desktop walk on terrain, before and after, and

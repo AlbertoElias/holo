@@ -392,8 +392,9 @@ export class TerrainLegSolver {
     if (!leg.toe) return;
     const ankle = leg.foot.getWorldPosition(new THREE.Vector3());
     const toe = leg.toe.getWorldPosition(new THREE.Vector3());
-    // Any face counts under the toe, from just above the toe itself: a rock edge too steep to stand on still
-    // stops it, and so does a ledge the body is stepping down from.
+    // Any upward face counts under the toe, in the same window as the ankle's probe (from about a quarter of
+    // the height above the base): a rock edge too steep to stand on still stops it, and so does a ledge the
+    // body is stepping down from.
     const groundY = this.surface(model, toe.x, Math.max(baseY, toe.y + height * 0.05 - height * 0.28), toe.z, height, 0)?.point.y ?? ankleGroundY;
     const floorY = Math.max(groundY, ankleGroundY) + height * leg.toeRatio;
     if (toe.y >= floorY) return;
