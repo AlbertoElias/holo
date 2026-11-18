@@ -1034,9 +1034,10 @@ steps move unchanged into `scripts/showcase/lib/upload.mjs`, which both
   and 500 M rigid point-frames, unless `--no-quick-look` (the budget only
   binds the preview). Any failure lists every problem and exits 1.
 - *Target:* `--api` defaults to `http://127.0.0.1:3001`. A non-loopback host
-  needs `--api` spelled out, and the production origin
-  (`https://holoim-api.fly.dev`) additionally needs `--production`, so a
-  typo or a copied command cannot reach it. No upload happens without a
+  needs `--api` spelled out and `--production` as well (production is
+  `https://holoim-api.fly.dev`; any non-loopback spelling counts, found by
+  review: a trailing-dot host slipped past an origin match), so a typo or a
+  copied command cannot reach it. No upload happens without a
   credential: `HOLOIM_AGENT_TOKEN` (the agent upload token) or
   `HOLOIM_SESSION` from the environment, else the Keychain entry for that
   host; none is a refusal that names the setup command.

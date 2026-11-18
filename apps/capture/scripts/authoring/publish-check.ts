@@ -82,6 +82,7 @@ try {
   await refused('wrong token', () => publish({ input: takeFile, api: origin, quickLook: false }), /refused the agent token|refused HOLOIM_AGENT_TOKEN/);
   process.env.HOLOIM_AGENT_TOKEN = token;
   await refused('production without --production', () => publish({ input: takeFile, api: PRODUCTION_API, quickLook: false }), /needs --production/);
+  await refused('production spelled with a trailing dot', () => publish({ input: takeFile, api: 'https://holoim-api.fly.dev.', quickLook: false }), /needs --production/);
   const undeclared = join(OUT, 'undeclared.glb');
   await writeFile(undeclared, editGlb(take, (j) => stripKey(j, 'HOLOIM_humanoid')));
   await refused('no declared performer', () => publish({ input: undeclared, api: origin, title: 'x', quickLook: false }), /no declared performer/);

@@ -11,8 +11,8 @@
  * if any; flags win. `--check` validates and stops, with no network call.
  *
  * The target defaults to the local API (http://127.0.0.1:3001). Anything else
- * needs `--api`, and production (https://holoim-api.fly.dev) also needs
- * `--production`. Credential: HOLOIM_AGENT_TOKEN (the agent upload token) or
+ * needs `--api` and `--production` (any non-loopback host; production is
+ * https://holoim-api.fly.dev). Credential: HOLOIM_AGENT_TOKEN (the agent upload token) or
  * HOLOIM_SESSION from the environment, else the Keychain entry for the host
  * (`scripts/agent-upload-token.sh setup`); with none the command refuses.
  * The upload code is `scripts/showcase/lib/upload.mjs`, shared with
@@ -28,7 +28,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { MAX_HOLOGRAM_BYTES } from '@holoim/contracts';
 
-import { checkAccount, findCredential, insecureTarget, QUICK_LOOK_BUDGET, quickLookLoad, setupHint, uploadHologram, waitForPreview } from '../showcase/lib/upload.mjs';
+import { checkAccount, findCredential, insecureTarget, isLoopback, QUICK_LOOK_BUDGET, quickLookLoad, setupHint, uploadHologram, waitForPreview } from '../showcase/lib/upload.mjs';
 import { build } from './direct.ts';
 import { findPerformers, parseGlb, readChannels } from './lib/gltf-read.ts';
 
@@ -119,8 +119,9 @@ export async function publish(options: PublishOptions): Promise<PublishReport | 
   const apiUrl = new URL(options.api ?? LOCAL_API);
 
   // 1. The target, before anything is read.
-  if (apiUrl.origin === PRODUCTION_API && !options.production) {
-    throw new Refusal(`${PRODUCTION_API} is production; publishing there needs --production as well as --api. Nothing was uploaded.`);
+  // Only a loopback host is local; every other spelling (a trailing dot, an alias, a custom domain) could be production.
+  if (!isLoopback(apiUrl) && !options.production) {
+    throw new Refusal(`${apiUrl.origin} is not a local API; publishing to a remote host (production is ${PRODUCTION_API}) needs --production as well as --api. Nothing was uploaded.`);
   }
 
   // 2. The take.
@@ -167,7 +168,7 @@ export async function publish(options: PublishOptions): Promise<PublishReport | 
   }
   let previewStatus = 'not requested';
   if (quickLook) previewStatus = (await waitForPreview(apiUrl, dto.id)).usdzStatus;
-  const web = options.web ?? (['localhost', '127.0.0.1', '[::1]'].includes(apiUrl.hostname) ? LOCAL_WEB : null);
+  const web = options.web ?? (isLoopback(apiUrl) ? LOCAL_WEB : null);
   return {
     id: dto.id, title: dto.hologramName, description, credit, uploadedAs: account.account.displayName, sizeBytes: dto.sizeBytes,
     seconds: facts!.seconds, quickLook: previewStatus, api: apiUrl.origin, glbUrl: dto.url,
@@ -196,7 +197,7 @@ async function main(): Promise<void> {
     }
     console.log(JSON.stringify(result));
     if (result.feedUrl) console.error(`feed: ${result.feedUrl}`);
-    if (!result.appearsOnFeed) { console.error('uploaded, but not on the feed within 60 s; check the API'); process.exit(1); }
+    if (!result.appearsOnFeed) { console.error('uploaded, but not on the feed within 60 s; check the API, and do not publish it again'); process.exit(1); }
     if (options.quickLook && result.quickLook !== 'ready') {
       console.error(`uploaded, but its Quick Look preview is ${result.quickLook}; the API log has the reason; do not publish it again.`);
       process.exit(2);

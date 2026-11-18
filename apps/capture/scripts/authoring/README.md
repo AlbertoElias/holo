@@ -30,8 +30,8 @@ Quick Look converter's extent budget (100 M deformed, 500 M rigid
 point-frames). `--check` stops there.
 
 - **Target:** the local API (`http://127.0.0.1:3001`) unless `--api` says
-  otherwise; production (`https://holoim-api.fly.dev`) also needs
-  `--production`.
+  otherwise; any non-loopback host (production is
+  `https://holoim-api.fly.dev`) also needs `--production`.
 - **Credential:** `HOLOIM_AGENT_TOKEN` (or `HOLOIM_SESSION`), else the
   Keychain entry for the host (`scripts/agent-upload-token.sh setup`). With
   none it refuses and uploads nothing. The code is
