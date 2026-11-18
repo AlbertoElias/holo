@@ -279,8 +279,8 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     }
     // The card's moments again from a camera swung about the cast: its centre is the mean of every performer's head-to-hips midpoint,
     // the camera keeps the card's height, distance and field of view, and is turned `orbit` degrees about the vertical through that centre.
-    const orbitFrames = options.orbit === undefined ? [] : Array.from({ length: Math.floor(span / step + 1e-6) + 1 }, (_, k) => Math.min(frames - 1, Math.round(k * step * fps)));
-    if (options.orbit !== undefined) {
+    const orbitFrames = options.orbit === undefined || !init.performers.length ? [] : Array.from({ length: Math.floor(span / step + 1e-6) + 1 }, (_, k) => Math.min(frames - 1, Math.round(k * step * fps)));
+    if (options.orbit !== undefined && init.performers.length) {
       await mkdir(orbitDir, { recursive: true });
       const turn = (options.orbit * Math.PI) / 180;
       for (const f of orbitFrames) {
@@ -298,11 +298,11 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
 
     // The video: card and close views side by side, at the take's real speed.
     if (!options.cardOnly) {
-    const inputs = ['-framerate', String(fps), '-i', join(frameDir, 'card', '%04d.jpg')];
-    const scales = ['[0]scale=-2:1080[c0]'];
-    for (let p = 0; p < init.performers.length; p += 1) {
-      inputs.push('-framerate', String(fps), '-i', join(frameDir, `close-${p}`, '%04d.jpg'));
-      scales.push(`[${p + 1}]scale=1080:1080[c${p + 1}]`);
+      const inputs = ['-framerate', String(fps), '-i', join(frameDir, 'card', '%04d.jpg')];
+      const scales = ['[0]scale=-2:1080[c0]'];
+      for (let p = 0; p < init.performers.length; p += 1) {
+        inputs.push('-framerate', String(fps), '-i', join(frameDir, `close-${p}`, '%04d.jpg'));
+        scales.push(`[${p + 1}]scale=1080:1080[c${p + 1}]`);
     }
     const stack = init.performers.length ? `;${Array.from({ length: init.performers.length + 1 }, (_, i) => `[c${i}]`).join('')}hstack=inputs=${init.performers.length + 1}[v]` : ';[c0]null[v]';
     ffmpeg([...inputs, '-filter_complex', scales.join(';') + stack, '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-r', String(fps), '-movflags', '+faststart', join(reader, 'review.mp4')]);

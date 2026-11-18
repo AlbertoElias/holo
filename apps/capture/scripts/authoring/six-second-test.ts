@@ -69,6 +69,8 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
   const avatars = options.avatars ?? ['stock', 'house-base'];
   const until = options.until ?? 6;
   const orbit = options.orbit ?? 90;
+  if (!Number.isFinite(until) || until <= 0) throw new Error(`--until must be a positive number of seconds, got ${until}`);
+  if (!Number.isFinite(orbit)) throw new Error(`--orbit must be a number of degrees, got ${orbit}`);
   const out = resolve(options.out ?? join(OUTPUT, basename(sheetPath, '.json')));
   const sidecarName = basename(sheetPath).replace(/\.json$/, '.six-second.json');
   const sidecar = await readFile(join(dirname(sheetPath), sidecarName), 'utf8').then((t) => JSON.parse(t) as Sidecar, () => {
@@ -86,6 +88,9 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
   await mkdir(join(out, 'sheets'), { recursive: true });
 
   const takes: Manifest['takes'] = [];
+  // Loaded here, once, so `score` runs without the renderer's dependencies built.
+  const { build } = await import('./direct.ts');
+  const { review } = await import('./review.ts');
   for (const avatar of avatars) {
     for (const style of ['flat', 'directed'] as const) {
       const label = `${avatar.replace(/[^\w-]+/g, '_')}-${style}`;
@@ -94,9 +99,6 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
         ? Object.fromEntries(Object.entries(sheet.objects).map(([k, o]) => [k, typeof (o as { source?: unknown }).source === 'string' && !isAbsolute((o as { source: string }).source) ? { ...o, source: resolve(dirname(sheetPath), (o as { source: string }).source) } : o]))
         : undefined;
       await writeFile(derived, `${JSON.stringify({ ...sheet, style, performers: sheet.performers.map((p) => ({ ...p, avatar: avatarPath(avatar) })), ...(objects ? { objects } : {}) }, null, 2)}\n`);
-      // Loaded here so `score` runs without the renderer's dependencies built.
-      const { build } = await import('./direct.ts');
-      const { review } = await import('./review.ts');
       const built = await build(derived, join(out, 'takes', `${label}.glb`), style);
       const pack = join(out, 'packs', label);
       await review(built.out, { sheet: derived, out: pack, until, cardOnly: true, orbit, step: 0.5 });

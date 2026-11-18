@@ -296,7 +296,7 @@ A take reads when someone who was not told the intent sees it. The loop:
 1. **Build:** `direct.ts sheets/<piece>.json`.
 2. **Review:** `review.ts output/authoring/<piece>.glb`. The pack goes to
    `output/authoring/review/<piece>/`:
-   - `reader/`: `review.mp4` (card left, close views right, real time),
+   - `reader/`: `review.mp4` (card left, close views right, real time; not written with `--card-only`, which also skips the close sheets, and `--until` cuts the take short),
      `sheet-card-NN.jpg` (the card framing cropped to the cast at the
      phone's true device pixels), `sheet-close-<n>-NN.jpg`, one still every
      0.2 s labelled with the time only, and the reader's `README.md`;
