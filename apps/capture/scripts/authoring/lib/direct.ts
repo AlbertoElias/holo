@@ -17,7 +17,7 @@ import { resetPose, type LoadedAvatar } from './avatar.ts';
 import { EXPRESSIONS, envelope, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { armRestOffset, bodyUp, hangArm, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
-import { busy, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, type LifeSchedule } from './life.ts';
+import { busy, faceAt, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, type LifeSchedule } from './life.ts';
 import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
 
@@ -1125,7 +1125,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   a.frame.updateMatrixWorld(true);
   moveHeld(cast, c, t);
 
-  // 9. Face: expressions summed, then blinks (always, and on a big look shift), then gaze.
+  // 9. Face: expressions summed, life's face under them, then blinks (always, and on a big look shift), then gaze.
   const weights: FaceWeights = {};
   for (const r of c.dirs) {
     const d = r.direction;
@@ -1133,6 +1133,11 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const e = Math.max(0, env(r, t, flat)) * (d.strength ?? 1);
     const shape = typeof d.shape === 'string' ? EXPRESSIONS[d.shape] : d.shape;
     for (const [k, v] of Object.entries(shape) as [FaceChannel, number][]) weights[k] = Math.min(1, (weights[k] ?? 0) + v * e);
+  }
+  if (life) {
+    // Life's face (a sigh's mouth and brows, the mouth settling under a weight shift, a brow flash as a glance comes back), under any directed expression.
+    const k = 1 - busy(c.dirs, t, MASKED_BY.face);
+    if (k > 0) for (const [ch, v] of Object.entries(faceAt(c.events, t, glanceK)) as [FaceChannel, number][]) weights[ch] = Math.min(1, (weights[ch] ?? 0) + v * k);
   }
   const liveSample = life ? c.live.sample(t, dt, 0) : undefined;
   if (liveSample) {

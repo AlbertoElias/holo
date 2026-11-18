@@ -98,10 +98,14 @@ neutral rest), and unless `life` is false a held pose keeps living through
 seeded events (`lib/life.ts`): the weight moves to the other leg and the
 posture resettles, the eyes and then the head glance away and back (a large
 glance turns the chest too), a sigh lifts and drops the shoulders, and a
-hanging hand lifts and fidgets. Under them run quiet breath, sway, head
-drift, blinks and eye movement. Life gives way to directions (fully while
-one moves, partly while it holds) and never moves a hand that holds
-something or that another performer reaches to. Each performer's schedule
+hanging hand lifts and fidgets. The face rides those events: the lips part
+on a sigh's in-breath and round as it goes out, the lips press or a corner
+tugs as a weight shift settles, and the brows lift through a sigh and flash
+as a glance comes back. Under them run quiet breath, sway, head drift,
+blinks and eye movement. Life gives way to directions (fully while one
+moves, partly while it holds; a directed `expression` owns the face) and
+never moves a hand that holds something or that another performer reaches
+to. Each performer's schedule
 comes from its `seed` alone, so revising a beat changes life only near that
 beat. `direct.ts` prints each performer's life events and motion-quality
 verdicts. Fresh readers call a hold facing the viewer alive, but two people
