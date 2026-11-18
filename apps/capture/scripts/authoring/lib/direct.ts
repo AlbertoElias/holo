@@ -1026,7 +1026,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       if (d.name === 'nod' || d.name === 'head-shake') {
         const cyc = gestureCycle(d, r.attack)!;
         const tau = t - r.at - cyc.from;
-        const on = tau > 0 && tau < cyc.count * cyc.cycle;
+        const on = tau > 0 && tau < Math.min(cyc.count * cyc.cycle, r.attack + r.hold - cyc.from); // a shorter authored hold ends the repeats with it
         const wave = (2 * Math.PI * tau) / cyc.cycle;
         if (d.name === 'nod') pitch += NOD_DEG * k * (0.3 * e + (on ? 0.7 * (0.5 - 0.5 * Math.cos(wave)) * (tau < cyc.cycle ? 1 : 0.7) : 0));
         else {
@@ -1273,7 +1273,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       else if (d.name === 'rub') {
         const cyc = gestureCycle(d, r.attack)!;
         const tau = t - r.at - cyc.from;
-        const on = tau > 0 && tau < cyc.count * cyc.cycle;
+        const on = tau > 0 && tau < Math.min(cyc.count * cyc.cycle, r.attack + r.hold - cyc.from); // a shorter authored hold ends the repeats with it
         const u = on ? 0.5 - 0.5 * Math.cos((2 * Math.PI * tau) / cyc.cycle) : 0;
         const { low, high } = RUB_HAND;
         target = { curl: { thumb: lerp(low.thumb, high.thumb, u), index: lerp(low.index, high.index, u), middle: lerp(low.middle, high.middle, u), ring: RUB_HAND.ring, little: RUB_HAND.little }, spread: RUB_HAND.spread };
