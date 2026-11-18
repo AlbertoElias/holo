@@ -280,7 +280,7 @@ and in `manifest.json`.
    hesitation and feeling beat ids (see `goodbye.six-second.json`).
 2. `six-second-test.ts prepare sheets/goodbye.json` builds each avatar x
    {flat, directed} take, reviews it with `review.ts --until 6 --card-only
-   --orbit 90`, and writes blind frame sheets (`blind/<code>/card`, `/orbit`;
+   --orbit 90`, and writes blind frame sheets (`../readers/<code>/card`, `/orbit`, outside the sheet's folder so the path and the key stay out of a reader's reach;
    the code hides style and avatar), `manifest.json` (the key) and
    `prompts.md`.
 3. Follow `prompts.md`: three fresh Sonnet readers per code (card question,

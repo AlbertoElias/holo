@@ -436,9 +436,13 @@ async function main(): Promise<void> {
   const out = flag('--out');
   const step = flag('--step');
   const fps = flag('--fps');
+  const until = flag('--until');
+  const orbit = flag('--orbit');
+  const cardOnly = args.includes('--card-only');
+  if (cardOnly) args.splice(args.indexOf('--card-only'), 1);
   const take = args[0];
-  if (!take) { console.error('usage: review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30]'); process.exit(2); }
-  const r = await review(take, { ...(sheet ? { sheet } : {}), ...(out ? { out } : {}), ...(step ? { step: Number(step) } : {}), ...(fps ? { fps: Number(fps) } : {}) });
+  if (!take) { console.error('usage: review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30] [--until s] [--card-only] [--orbit deg]'); process.exit(2); }
+  const r = await review(take, { ...(sheet ? { sheet } : {}), ...(out ? { out } : {}), ...(step ? { step: Number(step) } : {}), ...(fps ? { fps: Number(fps) } : {}), ...(until ? { until: Number(until) } : {}), ...(orbit ? { orbit: Number(orbit) } : {}), ...(cardOnly ? { cardOnly } : {}) });
   const acting = JSON.parse(await readFile(join(r.out, 'acting-report.json'), 'utf8'));
   console.log(summarize(acting));
   for (const p of r.onScreen.performers) {

@@ -10,7 +10,7 @@
  * first `--until` seconds of each take muted at the feed card's framing and
  * again from a camera swung `--orbit` degrees about the cast (`review.ts`, its
  * `--until`, `--card-only` and `--orbit` options), and writes
- * `<dir>/blind/<code>/{card,orbit}/` (frames only) for fresh readers,
+ * `<dir>/../readers/<code>/{card,orbit}/` (frames only) for fresh readers,
  * `prompts.md` (what to give readers and graders), the beat table and the
  * pass bar in `manifest.json` (the key from code to avatar and style).
  * `score` reads `answers/<code>/reader-N.json` ({ card, orbit }: the
@@ -54,13 +54,14 @@ export interface Manifest {
   readonly orbit: number;
   readonly readers: number;
   readonly question: string;
+  readonly blind: string;
   readonly sidecar: Sidecar;
   readonly beats: { id: string; performer: string; from: number; to: number; intent: string | null }[];
   readonly takes: { code: string; avatar: string; style: 'flat' | 'directed'; take: string; pack: string }[];
   readonly passBar: typeof PASS_BAR;
 }
 
-const QUESTION = 'What is happening, and what does the person feel?';
+const questionFor = (performers: number): string => `What is happening, and what ${performers > 1 ? 'do the people' : 'does the person'} feel?`;
 
 const avatarPath = (avatar: string): string => (avatar === 'house-base' ? HOUSE_BASE : avatar);
 
@@ -107,19 +108,21 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
     }
   }
 
-  // The readers' folders: frames only, under a code that says nothing about the take.
+  // The readers' folders: frames only, under a code that says nothing about the take, and outside the sheet's folder so neither the path
+  // (it names the piece) nor the neighbours (the key, the derived sheets) reach a reader.
+  const blind = join(dirname(out), 'readers');
   for (const t of takes) {
     const files = await readdir(join(t.pack, 'reader'));
-    await mkdir(join(out, 'blind', t.code, 'card'), { recursive: true });
-    await mkdir(join(out, 'blind', t.code, 'orbit'), { recursive: true });
+    await mkdir(join(blind, t.code, 'card'), { recursive: true });
+    await mkdir(join(blind, t.code, 'orbit'), { recursive: true });
     for (const f of files) {
-      if (f.startsWith('sheet-card-')) await cp(join(t.pack, 'reader', f), join(out, 'blind', t.code, 'card', f));
-      else if (f.startsWith('sheet-orbit-')) await cp(join(t.pack, 'reader', f), join(out, 'blind', t.code, 'orbit', f));
+      if (f.startsWith('sheet-card-')) await cp(join(t.pack, 'reader', f), join(blind, t.code, 'card', f));
+      else if (f.startsWith('sheet-orbit-')) await cp(join(t.pack, 'reader', f), join(blind, t.code, 'orbit', f));
     }
   }
 
   const window = sheet.beats.filter((b) => beatSpan(b).from < until).map((b) => ({ id: b.id, performer: b.performer, from: beatSpan(b).from, to: beatSpan(b).to, intent: b.intent ?? null }));
-  const manifest: Manifest = { sheet: sheetPath, intent: sheet.intent ?? null, until, orbit, readers: READERS, question: QUESTION, sidecar, beats: window, takes: takes.sort((a, b) => a.code.localeCompare(b.code)), passBar: PASS_BAR };
+  const manifest: Manifest = { sheet: sheetPath, intent: sheet.intent ?? null, until, orbit, readers: READERS, question: questionFor(sheet.performers.length), blind, sidecar, beats: window, takes: takes.sort((a, b) => a.code.localeCompare(b.code)), passBar: PASS_BAR };
   await writeFile(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(join(out, 'prompts.md'), prompts(manifest, out));
   console.log(`prepared ${takes.length} takes in ${out}\nreaders: ${takes.length * READERS}; see ${join(out, 'prompts.md')}`);
@@ -135,11 +138,11 @@ function prompts(m: Manifest, out: string): string {
     '',
     '## Reader, question 1 (card framing)',
     '',
-    `> Read the images in \`${join(out, 'blind', '<code>', 'card')}\` (frame sheets of a short, silent animation of people, as it would show on a phone, one still every 0.5 s with the time on each). You have been told nothing else; do not guess what the author intended. Answer: ${m.question} Then: what does each person do, in order, with the time? Use only what you see. Write the answer, and nothing else, in a few short paragraphs.`,
+    `> Read the images in \`${join(m.blind, '<code>', 'card')}\` (frame sheets of a short, silent animation of people, as it would show on a phone, one still every 0.5 s with the time on each). You have been told nothing else; do not guess what the author intended. Answer: ${m.question} Then: what does each person do, in order, with the time? Use only what you see. Write the answer, and nothing else, in a few short paragraphs.`,
     '',
     '## Reader, question 2 (after the orbit), sent as a follow-up to the same reader once question 1 is answered and recorded',
     '',
-    `> Now read the images in \`${join(out, 'blind', '<code>', 'orbit')}\`: the same moments, the camera swung ${m.orbit} degrees around the people. Answer the same: ${m.question} What does each person do, in order, with the time? Say whether anything you said before changes.`,
+    `> Now read the images in \`${join(m.blind, '<code>', 'orbit')}\`: the same moments, the camera swung ${m.orbit} degrees around the people. Answer the same: ${m.question} What does each person do, in order, with the time? Say whether anything you said before changes.`,
     '',
     '## Grader (one per code, blind to the style and the avatar)',
     '',
@@ -154,13 +157,15 @@ function prompts(m: Manifest, out: string): string {
   ].join('\n');
 }
 
-export interface ViewScore { readonly beatScore: number; readonly hesitation: number; readonly feeling: number; readonly readers: number }
+export interface ViewScore { readonly beatScore: number; readonly beatScoreExact: number; readonly hesitation: number; readonly feeling: number; readonly readers: number }
 export interface TakeScore { readonly code: string; readonly avatar: string; readonly style: 'flat' | 'directed'; readonly card: ViewScore; readonly orbit: ViewScore }
 export interface Row { readonly id: string; readonly avatar: string; readonly pass: boolean; readonly detail: string }
 
 type ReaderGrade = { beats: Record<string, Grade> };
 const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const round = (x: number): number => Math.round(x * 100) / 100;
+/** A comparison with the bar that floating-point error cannot flip. */
+const atLeast = (x: number, bar: number): boolean => x >= bar - 1e-9;
 
 /** One reader's score for one account: the beat score, and whether the two named points of the piece read. */
 function scoreReader(g: ReaderGrade, m: Manifest): { beatScore: number; hesitation: boolean; feeling: boolean } {
@@ -176,7 +181,8 @@ function scoreReader(g: ReaderGrade, m: Manifest): { beatScore: number; hesitati
 
 export function scoreTake(grades: { readers: Record<string, { card: ReaderGrade; orbit: ReaderGrade }> }, m: Manifest, view: 'card' | 'orbit'): ViewScore {
   const readers = Object.values(grades.readers).map((r) => scoreReader(r[view], m));
-  return { beatScore: round(mean(readers.map((r) => r.beatScore))), hesitation: readers.filter((r) => r.hesitation).length, feeling: readers.filter((r) => r.feeling).length, readers: readers.length };
+  const exact = mean(readers.map((r) => r.beatScore));
+  return { beatScore: round(exact), beatScoreExact: exact, hesitation: readers.filter((r) => r.hesitation).length, feeling: readers.filter((r) => r.feeling).length, readers: readers.length };
 }
 
 /** The pass bar, per avatar. */
@@ -189,9 +195,9 @@ export function evaluate(takes: TakeScore[]): Row[] {
     const row = (id: string, pass: boolean, detail: string) => rows.push({ id, avatar, pass, detail });
     row('directed names the hesitation', directed.card.hesitation >= PASS_BAR.hesitationReaders, `${directed.card.hesitation} of ${directed.card.readers} readers (bar ${PASS_BAR.hesitationReaders}); flat: ${flat.card.hesitation}`);
     row('directed names the feeling', directed.card.feeling >= PASS_BAR.feelingReaders, `${directed.card.feeling} of ${directed.card.readers} readers (bar ${PASS_BAR.feelingReaders}); flat: ${flat.card.feeling}`);
-    row('directed scores above flat', directed.card.beatScore - flat.card.beatScore >= PASS_BAR.directedOverFlat, `directed ${directed.card.beatScore}, flat ${flat.card.beatScore}, margin ${round(directed.card.beatScore - flat.card.beatScore)} (bar ${PASS_BAR.directedOverFlat})`);
-    row('directed scores at least the minimum', directed.card.beatScore >= PASS_BAR.directedMinimum, `${directed.card.beatScore} (bar ${PASS_BAR.directedMinimum})`);
-    row('orbiting keeps the reading', directed.card.beatScore - directed.orbit.beatScore <= PASS_BAR.orbitMaxDrop, `card ${directed.card.beatScore}, orbit ${directed.orbit.beatScore} (drop at most ${PASS_BAR.orbitMaxDrop})`);
+    row('directed scores above flat', atLeast(directed.card.beatScoreExact - flat.card.beatScoreExact, PASS_BAR.directedOverFlat), `directed ${directed.card.beatScore}, flat ${flat.card.beatScore}, margin ${round(directed.card.beatScore - flat.card.beatScore)} (bar ${PASS_BAR.directedOverFlat})`);
+    row('directed scores at least the minimum', atLeast(directed.card.beatScoreExact, PASS_BAR.directedMinimum), `${directed.card.beatScore} (bar ${PASS_BAR.directedMinimum})`);
+    row('orbiting keeps the reading', atLeast(PASS_BAR.orbitMaxDrop, directed.card.beatScoreExact - directed.orbit.beatScoreExact), `card ${directed.card.beatScore}, orbit ${directed.orbit.beatScore} (drop at most ${PASS_BAR.orbitMaxDrop})`);
   }
   return rows;
 }

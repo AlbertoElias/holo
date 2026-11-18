@@ -2702,6 +2702,21 @@ on import and recast; the untouched check was circular; edit overlap
 depended on list order; leg length was measured two ways; hold lengths
 were one frame short.
 
+### Slice 3 evidence: caveats found by the verifier (2026-11-18)
+
+The recorded goodbye run was not cleanly blind and asked the singular question.
+Its readers were given `.../six-second/goodbye/blind/<code>/…`, so the path
+named the piece (five of twelve answers contain "goodbye") and the key sat in
+the folder above; and they were asked "what does the person feel?" for two
+performers. Both can only help a take read, so the FAIL stands, but the run is
+not a clean measurement. The tool now writes reader folders to an opaque
+`readers/` beside the sheet's folder, asks "people" for two performers, and
+compares to the bar with float tolerance on unrounded scores; the goodbye run
+was not repeated (no spend). The hesitation column counts a take as naming it
+with "reach yes, stop no" (mean 0.5 with one yes), so it mostly measures the
+reach, not the stop. `review.ts` now takes `--until`, `--card-only` and
+`--orbit` on the command line too.
+
 ### Slice 3 evidence (2026-11-18, run by the agent in the owner's absence)
 
 `six-second-test.ts prepare sheets/goodbye.json --avatars stock,house-base`,
